@@ -22,12 +22,27 @@ impl SelectionScopeId {
     }
 }
 
-/// The window-coordinate endpoints of a selection.
+/// A selection endpoint anchored to a region's content coordinates.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SelectionEndpointSnapshot {
+    pub region_id: Option<EntityId>,
+    pub point: Point<Pixels>,
+}
+
+/// Region-relative selection endpoints with an optional rendering projection.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SelectionSnapshot {
-    pub anchor: Point<Pixels>,
-    pub cursor: Point<Pixels>,
+    pub anchor: SelectionEndpointSnapshot,
+    pub cursor: SelectionEndpointSnapshot,
     pub is_selecting: bool,
+    resolved_points: Option<(Point<Pixels>, Point<Pixels>)>,
+}
+
+impl SelectionSnapshot {
+    /// Returns the window-coordinate endpoints for renderers that need them.
+    pub fn resolved_points(&self) -> Option<(Point<Pixels>, Point<Pixels>)> {
+        self.resolved_points
+    }
 }
 
 /// Per-frame geometry reported by a selectable region.
@@ -183,6 +198,7 @@ impl TextSelectionRegion {
 struct RegionRegistration {
     region: WeakEntity<TextSelectionRegionState>,
     frame: Rc<SelectionRegionFrame>,
+    generation: u64,
 }
 
 #[derive(Clone)]
@@ -194,6 +210,13 @@ struct SelectionEndpoint {
 }
 
 impl SelectionEndpoint {
+    fn snapshot(&self) -> SelectionEndpointSnapshot {
+        SelectionEndpointSnapshot {
+            region_id: self.region_id(),
+            point: self.point,
+        }
+    }
+
     fn resolve(&self, regions: &HashMap<EntityId, RegionRegistration>) -> Option<Point<Pixels>> {
         let region = self.region.as_ref()?;
         let frame = regions.get(&region.entity_id())?;
@@ -215,6 +238,7 @@ pub struct TextSelectionHost {
     pending_extension_anchor: Option<SelectionEndpoint>,
     is_selecting: bool,
     did_hit_text: bool,
+    frame_generation: u64,
 }
 
 impl Default for TextSelectionHost {
@@ -227,13 +251,18 @@ impl Default for TextSelectionHost {
             pending_extension_anchor: None,
             is_selecting: false,
             did_hit_text: false,
+            frame_generation: 0,
         }
     }
 }
 
 impl TextSelectionHost {
-    /// Returns (and lazily installs) the host for `window`.
-    pub fn for_window(window: &Window, cx: &mut App) -> Entity<Self> {
+    /// Explicitly installs a base selection host for `window`.
+    ///
+    /// This must be called by a root/controller owner. Window extension calls
+    /// deliberately do not install a second host beside an existing renderer's
+    /// selection state during the staged migration.
+    pub fn install(window: &Window, cx: &mut App) -> Entity<Self> {
         if !cx.has_global::<TextSelectionHosts>() {
             cx.set_global(TextSelectionHosts::default());
         }
@@ -256,9 +285,45 @@ impl TextSelectionHost {
         host
     }
 
+    fn installed(window: &Window, cx: &App) -> Option<Entity<Self>> {
+        if !cx.has_global::<TextSelectionHosts>() {
+            return None;
+        }
+        cx.global::<TextSelectionHosts>()
+            .0
+            .get(&window.window_handle().window_id())
+            .cloned()
+    }
+
     /// Updates the active scope. Regions from other scopes cannot participate.
-    pub fn set_active_scope(&mut self, scope: SelectionScopeId) {
+    pub fn set_active_scope(&mut self, scope: SelectionScopeId, cx: &mut App) {
+        if self.active_scope == scope {
+            return;
+        }
+        self.clear(cx);
         self.active_scope = scope;
+        self.publish_snapshots(cx);
+    }
+
+    /// Starts a new render frame and removes still-live regions that were not
+    /// registered in the previous one.
+    pub fn begin_frame(&mut self, cx: &mut App) {
+        self.frame_generation = self.frame_generation.wrapping_add(1);
+        let stale = self
+            .regions
+            .iter()
+            .filter_map(|(id, registration)| {
+                (registration.generation != self.frame_generation)
+                    .then(|| (*id, registration.region.clone()))
+            })
+            .collect::<Vec<_>>();
+        for (id, region) in stale {
+            self.regions.remove(&id);
+            if let Some(region) = region.upgrade() {
+                region.update(cx, |state, cx| state.set_snapshot(None, cx));
+            }
+        }
+        self.publish_snapshots(cx);
     }
 
     /// Registers this frame's geometry for a region.
@@ -274,6 +339,7 @@ impl TextSelectionHost {
             RegionRegistration {
                 region: region.downgrade(),
                 frame: Rc::new(frame),
+                generation: self.frame_generation,
             },
         );
         self.publish_snapshots(cx);
@@ -306,6 +372,7 @@ impl TextSelectionHost {
 
     /// Clears both host selection and every region's local selection.
     pub fn clear(&mut self, cx: &mut App) {
+        self.stop_anchor_auto_scroll(cx);
         self.anchor = None;
         self.cursor = None;
         self.pending_extension_anchor = None;
@@ -353,12 +420,16 @@ impl TextSelectionHost {
 
     /// Returns the current resolved selection endpoints.
     pub fn snapshot(&self) -> Option<SelectionSnapshot> {
+        if !self.did_hit_text {
+            return None;
+        }
         let anchor = self.anchor.as_ref()?.resolve(&self.regions)?;
         let cursor = self.cursor.as_ref()?.resolve(&self.regions)?;
         (anchor != cursor).then_some(SelectionSnapshot {
-            anchor,
-            cursor,
+            anchor: self.anchor.as_ref()?.snapshot(),
+            cursor: self.cursor.as_ref()?.snapshot(),
             is_selecting: self.is_selecting,
+            resolved_points: Some((anchor, cursor)),
         })
     }
 
@@ -470,16 +541,19 @@ impl TextSelectionHost {
                 }
             }
             if frame.bounds.top() <= position.y
-                && predecessor
-                    .as_ref()
-                    .is_none_or(|(_, best)| frame.bounds.top() > best.bounds.top())
+                && predecessor.as_ref().is_none_or(|(_, best)| {
+                    frame.bounds.top() > best.bounds.top()
+                        || (frame.bounds.top() == best.bounds.top()
+                            && frame.document_order < best.document_order)
+                })
             {
                 predecessor = Some((registration.region.clone(), frame.clone()));
             }
-            if first
-                .as_ref()
-                .is_none_or(|(_, best)| frame.bounds.top() < best.bounds.top())
-            {
+            if first.as_ref().is_none_or(|(_, best)| {
+                frame.bounds.top() < best.bounds.top()
+                    || (frame.bounds.top() == best.bounds.top()
+                        && frame.document_order < best.document_order)
+            }) {
                 first = Some((registration.region.clone(), frame.clone()));
             }
         }
@@ -520,6 +594,7 @@ impl TextSelectionHost {
                 continue;
             };
             let region_snapshot = (registration.frame.scope == self.active_scope
+                && self.participates(*id, registration)
                 && single_region.is_none_or(|single| single == *id))
             .then_some(snapshot)
             .flatten();
@@ -531,6 +606,30 @@ impl TextSelectionHost {
         let anchor = self.anchor.as_ref()?.region_id()?;
         let cursor = self.cursor.as_ref()?.region_id()?;
         (anchor == cursor).then_some(anchor)
+    }
+
+    fn participates(&self, id: EntityId, registration: &RegionRegistration) -> bool {
+        let Some(anchor) = self.anchor.as_ref().and_then(SelectionEndpoint::region_id) else {
+            return false;
+        };
+        let Some(cursor) = self.cursor.as_ref().and_then(SelectionEndpoint::region_id) else {
+            return false;
+        };
+        let Some(anchor_frame) = self.regions.get(&anchor) else {
+            return false;
+        };
+        let Some(cursor_frame) = self.regions.get(&cursor) else {
+            return false;
+        };
+        let start = anchor_frame
+            .frame
+            .document_order
+            .min(cursor_frame.frame.document_order);
+        let end = anchor_frame
+            .frame
+            .document_order
+            .max(cursor_frame.frame.document_order);
+        (start..=end).contains(&registration.frame.document_order) || id == anchor || id == cursor
     }
 
     fn update_anchor_auto_scroll(&self, position: Point<Pixels>, cx: &mut App) {
@@ -625,13 +724,14 @@ impl Element for TextSelectionController {
         window: &mut Window,
         cx: &mut App,
     ) {
-        let _ = TextSelectionHost::for_window(window, cx);
+        TextSelectionHost::install(window, cx).update(cx, |host, cx| host.begin_frame(cx));
         window.on_mouse_event(move |event: &MouseDownEvent, phase, window, cx| {
             if event.button != MouseButton::Left {
                 return;
             }
-            let host = TextSelectionHost::for_window(window, cx);
+            let host = TextSelectionHost::install(window, cx);
             if phase.capture() {
+                GlobalState::init(cx);
                 GlobalState::reset_text_selection_suppression(cx);
                 host.update(cx, |host, cx| {
                     host.prepare_for_mouse_down(event.click_count == 1 && event.modifiers.shift, cx)
@@ -648,7 +748,7 @@ impl Element for TextSelectionController {
         });
         window.on_mouse_event(move |event: &MouseMoveEvent, phase, window, cx| {
             if phase.bubble() {
-                let host = TextSelectionHost::for_window(window, cx);
+                let host = TextSelectionHost::install(window, cx);
                 host.update(cx, |host, cx| {
                     host.update_in_window(event.position, window, cx)
                 });
@@ -656,21 +756,25 @@ impl Element for TextSelectionController {
         });
         window.on_mouse_event(move |_: &MouseUpEvent, phase, window, cx| {
             if phase.bubble() {
-                let host = TextSelectionHost::for_window(window, cx);
+                let host = TextSelectionHost::install(window, cx);
                 host.update(cx, |host, cx| host.end(cx));
             }
         });
         window.on_mouse_event(move |_: &ScrollWheelEvent, phase, window, cx| {
             if phase.bubble() {
                 let position = window.mouse_position();
-                let host = TextSelectionHost::for_window(window, cx);
+                let host = TextSelectionHost::install(window, cx);
                 host.update(cx, |host, cx| host.update_in_window(position, window, cx));
             }
         });
     }
 }
 
-/// Window helpers backed by the base-owned selection host.
+/// Window helpers backed by an explicitly installed base-owned selection host.
+///
+/// Until [`TextSelectionHost::install`] has been called (normally by
+/// [`TextSelectionController`]), every method is a safe no-op. This avoids
+/// creating competing selection state while renderer migrations are staged.
 pub trait WindowTextSelectionExt {
     fn selected_text(&mut self, cx: &mut App) -> String;
     fn has_text_selection(&mut self, cx: &mut App) -> bool;
@@ -680,23 +784,26 @@ pub trait WindowTextSelectionExt {
 
 impl WindowTextSelectionExt for Window {
     fn selected_text(&mut self, cx: &mut App) -> String {
-        TextSelectionHost::for_window(self, cx)
-            .read(cx)
-            .selected_text(cx)
+        TextSelectionHost::installed(self, cx)
+            .map(|host| host.read(cx).selected_text(cx))
+            .unwrap_or_default()
     }
 
     fn has_text_selection(&mut self, cx: &mut App) -> bool {
-        TextSelectionHost::for_window(self, cx)
-            .read(cx)
-            .has_text_selection(cx)
+        TextSelectionHost::installed(self, cx)
+            .is_some_and(|host| host.read(cx).has_text_selection(cx))
     }
 
     fn clear_text_selection(&mut self, cx: &mut App) {
-        TextSelectionHost::for_window(self, cx).update(cx, |host, cx| host.clear(cx));
+        if let Some(host) = TextSelectionHost::installed(self, cx) {
+            host.update(cx, |host, cx| host.clear(cx));
+        }
     }
 
     fn end_text_selection(&mut self, cx: &mut App) {
-        TextSelectionHost::for_window(self, cx).update(cx, |host, cx| host.end(cx));
+        if let Some(host) = TextSelectionHost::installed(self, cx) {
+            host.update(cx, |host, cx| host.end(cx));
+        }
     }
 }
 
@@ -704,9 +811,11 @@ impl WindowTextSelectionExt for Window {
 mod tests {
     use super::*;
     use gpui::{
-        Bounds, ContentMask, Context, Hitbox, HitboxBehavior, HitboxId, IntoElement, Render,
-        TestAppContext, Window, div, point, px, size,
+        Bounds, ContentMask, Context, Hitbox, HitboxBehavior, HitboxId, InteractiveElement as _,
+        IntoElement, ParentElement as _, Render, Styled as _, TestAppContext, Window, div, point,
+        px, size,
     };
+    use std::{cell::RefCell, rc::Rc};
 
     struct FakeRegion {
         region: TextSelectionRegion,
@@ -716,9 +825,26 @@ mod tests {
         region: TextSelectionRegion,
     }
 
+    struct ControllerOnlyView;
+
     impl Render for WindowRegionView {
         fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
             div()
+        }
+    }
+
+    impl Render for ControllerOnlyView {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div()
+                .size_full()
+                .child(TextSelectionController)
+                .child(
+                    div()
+                        .size_full()
+                        .on_mouse_down(MouseButton::Left, |_, _, cx| {
+                            GlobalState::suppress_text_selection(cx);
+                        }),
+                )
         }
     }
 
@@ -793,7 +919,7 @@ mod tests {
             host.end(cx);
             let reversed = host.snapshot().unwrap();
             assert_eq!(reversed.anchor, first_anchor);
-            assert!(reversed.cursor.x < reversed.anchor.x);
+            assert!(reversed.cursor.point.x < reversed.anchor.point.x);
         });
     }
 
@@ -806,7 +932,7 @@ mod tests {
             base.register(&mut host, 0., SelectionScopeId::default(), 0, cx);
             modal.register(&mut host, 20., SelectionScopeId(1), 1, cx);
 
-            host.set_active_scope(SelectionScopeId(1));
+            host.set_active_scope(SelectionScopeId(1), cx);
             host.begin(point(px(1.), px(21.)), false, cx);
             host.update(point(px(8.), px(21.)), cx);
             host.end(cx);
@@ -850,7 +976,7 @@ mod tests {
         });
         cx.update(|window, cx| {
             let region = view.read(cx).region.clone();
-            let host = TextSelectionHost::for_window(window, cx);
+            let host = TextSelectionHost::install(window, cx);
             host.update(cx, |host, cx| {
                 FakeRegion { region }.register(host, 0., SelectionScopeId::default(), 0, cx);
                 host.begin(point(px(1.), px(1.)), false, cx);
@@ -864,6 +990,159 @@ mod tests {
             window.clear_text_selection(cx);
             assert!(!window.has_text_selection(cx));
             assert_eq!(window.selected_text(cx), "");
+        });
+    }
+
+    #[gpui::test]
+    fn cross_region_selection_excludes_regions_outside_its_document_interval(
+        cx: &mut TestAppContext,
+    ) {
+        cx.update(|cx| {
+            let mut host = TextSelectionHost::default();
+            let first = FakeRegion::new("first", cx);
+            let second = FakeRegion::new("second", cx);
+            let third = FakeRegion::new("third", cx);
+            first.register(&mut host, 0., SelectionScopeId::default(), 0, cx);
+            second.register(&mut host, 20., SelectionScopeId::default(), 1, cx);
+            third.register(&mut host, 40., SelectionScopeId::default(), 2, cx);
+
+            host.begin(point(px(1.), px(1.)), false, cx);
+            host.update(point(px(1.), px(25.)), cx);
+            host.end(cx);
+
+            assert_eq!(host.selected_text(cx), "first\nsecond");
+            assert!(third.region.state().read(cx).snapshot().is_none());
+        });
+    }
+
+    #[gpui::test]
+    fn changing_scope_clears_the_previous_scope_selection(cx: &mut TestAppContext) {
+        cx.update(|cx| {
+            let mut host = TextSelectionHost::default();
+            let base = FakeRegion::new("base", cx);
+            let modal = FakeRegion::new("modal", cx);
+            base.register(&mut host, 0., SelectionScopeId::default(), 0, cx);
+            modal.register(&mut host, 20., SelectionScopeId::new(1), 1, cx);
+
+            host.begin(point(px(1.), px(1.)), false, cx);
+            host.update(point(px(8.), px(1.)), cx);
+            host.end(cx);
+            host.set_active_scope(SelectionScopeId::new(1), cx);
+
+            assert!(!host.has_text_selection(cx));
+            assert!(base.region.state().read(cx).snapshot().is_none());
+        });
+    }
+
+    #[gpui::test]
+    fn blank_only_drag_never_publishes_or_copies_selection(cx: &mut TestAppContext) {
+        cx.update(|cx| {
+            let mut host = TextSelectionHost::default();
+            let region = FakeRegion::new("region", cx);
+            region.register(&mut host, 0., SelectionScopeId::default(), 0, cx);
+
+            host.begin(point(px(200.), px(1.)), false, cx);
+            host.update(point(px(200.), px(8.)), cx);
+            host.end(cx);
+
+            assert!(!host.has_text_selection(cx));
+            assert_eq!(host.selected_text(cx), "");
+            assert!(region.region.state().read(cx).snapshot().is_none());
+        });
+    }
+
+    #[gpui::test]
+    fn stale_live_regions_are_removed_when_the_next_frame_begins(cx: &mut TestAppContext) {
+        cx.update(|cx| {
+            let mut host = TextSelectionHost::default();
+            let region = FakeRegion::new("stale", cx);
+            host.begin_frame(cx);
+            region.register(&mut host, 0., SelectionScopeId::default(), 0, cx);
+            host.begin(point(px(1.), px(1.)), false, cx);
+            host.update(point(px(8.), px(1.)), cx);
+            host.end(cx);
+
+            host.begin_frame(cx);
+            assert_eq!(host.selected_text(cx), "");
+            assert!(region.region.state().read(cx).snapshot().is_none());
+        });
+    }
+
+    #[gpui::test]
+    fn clear_stops_anchor_auto_scroll_before_discarding_the_anchor(cx: &mut TestAppContext) {
+        cx.update(|cx| {
+            let mut host = TextSelectionHost::default();
+            let region = FakeRegion::new("scroll", cx);
+            let commands = Rc::new(RefCell::new(Vec::new()));
+            let observed = commands.clone();
+            region.region.state().update(cx, |state, _| {
+                state.on_auto_scroll(move |delta, _| observed.borrow_mut().push(delta));
+            });
+            region.register(&mut host, 0., SelectionScopeId::default(), 0, cx);
+
+            host.begin(point(px(1.), px(1.)), false, cx);
+            host.update(point(px(1.), px(25.)), cx);
+            host.clear(cx);
+
+            assert!(commands.borrow().iter().any(Option::is_some));
+            assert_eq!(commands.borrow().last(), Some(&None));
+        });
+    }
+
+    #[gpui::test]
+    fn proxy_endpoints_break_equal_position_ties_by_document_order(cx: &mut TestAppContext) {
+        cx.update(|cx| {
+            let mut host = TextSelectionHost::default();
+            let later = FakeRegion::new("later", cx);
+            let earlier = FakeRegion::new("earlier", cx);
+            later.register(&mut host, 0., SelectionScopeId::default(), 2, cx);
+            earlier.register(&mut host, 0., SelectionScopeId::default(), 1, cx);
+
+            host.begin(point(px(1.), px(1.)), false, cx);
+            host.update(point(px(200.), px(25.)), cx);
+            let endpoint = host.snapshot().unwrap().cursor;
+
+            assert_eq!(endpoint.region_id, Some(earlier.region.state().entity_id()));
+        });
+    }
+
+    #[gpui::test]
+    fn window_extension_is_a_safe_no_op_until_a_host_is_explicitly_installed(
+        cx: &mut TestAppContext,
+    ) {
+        let (_, cx) = cx.add_window_view(|_, cx| WindowRegionView {
+            region: TextSelectionRegion::new("not installed", cx),
+        });
+        cx.update(|window, cx| {
+            assert!(!window.has_text_selection(cx));
+            assert_eq!(window.selected_text(cx), "");
+            window.clear_text_selection(cx);
+            window.end_text_selection(cx);
+            assert!(!window.has_text_selection(cx));
+        });
+    }
+
+    #[gpui::test]
+    fn controller_initializes_suppression_before_capture_and_respects_bubble_suppression(
+        cx: &mut TestAppContext,
+    ) {
+        let (_, cx) = cx.add_window_view(|_, _| ControllerOnlyView);
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+        cx.simulate_mouse_down(
+            point(px(1.), px(1.)),
+            MouseButton::Left,
+            gpui::Modifiers::default(),
+        );
+        cx.simulate_mouse_up(
+            point(px(1.), px(1.)),
+            MouseButton::Left,
+            gpui::Modifiers::default(),
+        );
+        cx.update(|window, cx| {
+            assert!(GlobalState::is_text_selection_suppressed(cx));
+            assert!(!window.has_text_selection(cx));
         });
     }
 }
