@@ -272,9 +272,12 @@ pub(crate) fn init(cx: &mut App) {
 /// [`crate::input::TextareaState`] and [`crate::input::EditorState`].
 ///
 /// `M` is the mode marker: it carries no data and only decides which methods
-/// exist, so an ordinary input cannot reach the editor's language features. The
-/// three states are aliases of this type; this name is not part of the public
-/// API.
+/// exist, so an ordinary input cannot reach the editor's language features.
+///
+/// The three states are type aliases of this one, which is why this name is
+/// public: an alias is only as usable as the type behind it, so hiding this
+/// would leave `InputState` unable to do anything. Prefer naming the aliases
+/// — write `InputState`, not `InputBaseState<InputMode>`.
 pub struct InputBaseState<M: InputModeKind> {
     /// State only this mode needs. See [`InputModeKind::Extras`].
     pub(crate) extras: M::Extras,

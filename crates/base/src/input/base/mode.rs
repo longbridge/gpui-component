@@ -11,8 +11,7 @@ use crate::input::{
 };
 
 /// What changed, handed to the syntax highlighter.
-#[doc(hidden)]
-pub struct HighlighterUpdate<'a> {
+pub(crate) struct HighlighterUpdate<'a> {
     pub(super) selected_range: &'a Range<usize>,
     pub(super) old_text: &'a Rope,
     pub(super) new_text: &'a Rope,
