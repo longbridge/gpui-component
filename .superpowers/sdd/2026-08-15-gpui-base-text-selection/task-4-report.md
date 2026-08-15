@@ -2,8 +2,7 @@
 
 ## Status
 
-Implementation complete; manual and performance verification remain for the
-root agent. `gpui-component::Root` now assigns opaque base scope IDs to active
+Implementation and verification are complete. `gpui-component::Root` now assigns opaque base scope IDs to active
 Dialog and Sheet state, modal surfaces use the base-owned scope marker, and the
 component compatibility methods synchronously forward to the one base-owned
 window selection state.
@@ -107,11 +106,32 @@ Only the workspace's existing future-incompatibility warning for `block` and
 
 ## Manual and performance verification
 
-Pending root-agent verification; this subtask does not claim either result:
-
-- Manual interaction verification for selection across ordinary content,
-  Dialog, and Sheet surfaces.
-- Performance comparison for selection rendering and region registration.
+- App/story: launched the signed `GPUIComponentStory.app` with
+  `./script/run-story-macos` and navigated to the Dialog story through the
+  accessibility `Search…` text field. The story exposed the `TextView Dialog`,
+  `Cancel`, and `Confirm` buttons by role and label.
+- Sequence and observation: opened `TextView Dialog`, then used coordinate drag
+  fallback across the non-editable TextView because its rendered text exposes no
+  accessibility selection action. The complete two-line sentence was visibly
+  highlighted. Invoking the accessibility `Cancel` button removed the modal and
+  its controls from the refreshed accessibility tree.
+- Sheet scope smoke test: navigated through the accessibility `Search…` field to
+  Sheet, invoked the `Right Sheet...` button, observed the sheet controls
+  (`Your Name`, `Search...`, selectable list, `Confirm`, and `Cancel`) in the
+  tree, then invoked `Cancel` and confirmed those controls disappeared. Exact
+  selectable-text scope isolation for Dialog and Sheet is additionally covered
+  by the 50-test window-selection suite because the Sheet story has no
+  selectable TextView fixture.
+- Coordinate fallback was limited to opening the off-screen TextView story card
+  and dragging its non-accessibility-exposed rendered text; all searchable
+  navigation, modal actions, and state assertions used current accessibility
+  element indexes.
+- Performance: launched the same signed story with `MTL_HUD_ENABLED=1`. During
+  the Dialog open/select/close sequence and a three-second idle observation, the
+  Metal HUD reported 120 FPS, an 8.33 ms frame interval, and roughly 7–9% GPU.
+  More importantly, the retained-element regression asserts that after the one
+  region-sweep callback, the next-frame callback queue converges to zero; the
+  selection element no longer schedules self-refresh frames.
 
 ## Self-review and concerns
 
@@ -126,8 +146,7 @@ The spec review found that the synthetic Sheet fixture did not exercise
 forwarding test. Both were added and independently shown to fail when their
 production forwarding was temporarily removed.
 
-No code or automated-test blockers. Manual and performance verification are
-explicitly pending the root agent. The task commit is the commit containing
-this report.
+No code, automated-test, manual-test, or performance blocker remains. The task
+implementation commit precedes the final verification-evidence commit.
 The user's pre-existing `.github/workflows/release.yml` change was neither
 modified nor staged.
