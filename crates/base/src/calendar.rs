@@ -500,6 +500,12 @@ impl CalendarItem {
     pub fn item_state(&self) -> CalendarItemState {
         self.state
     }
+
+    /// Remove the default label so a styled facade can provide custom content.
+    pub fn clear_children(mut self) -> Self {
+        self.children.clear();
+        self
+    }
 }
 impl ParentElement for CalendarItem {
     fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
@@ -665,9 +671,12 @@ impl RenderOnce for Calendar {
             for offset in 0..count {
                 let (y, m) = self.state.read(cx).offset_year_month(offset);
                 header = header.child(
-                    div()
-                        .child((self.label)(CalendarItemKind::MonthToggle, m as i32))
-                        .child(y.to_string()),
+                    div().text_sm().font_medium().child(
+                        v_flex()
+                            .items_center()
+                            .child((self.label)(CalendarItemKind::MonthToggle, m as i32))
+                            .child(y.to_string()),
+                    ),
                 );
             }
         }
