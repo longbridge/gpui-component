@@ -157,7 +157,21 @@ single private window state.
   ordinary click, Shift-click, and drag. It verifies one clear per gesture and
   an `on_clear` callback that safely reenters selection state.
 - Final targeted totals: `gpui-component` 406 unit tests plus 40 compatibility
-  tests; `gpui-base` 331 unit tests plus 1 integration test.
+  tests; `gpui-base` 332 unit tests plus 1 integration test.
+
+## Retained lifecycle follow-up
+
+- Replaced the frame-callback heartbeat with GPUI retained element state keyed
+  by each `TextSelection` element's global identity. Element state strongly owns
+  an opaque token while window state stores only weak tokens.
+- Query, mutation, and registration paths prune expired tokens and perform one
+  complete two-phase clear before accepting a newly mounted token, preventing
+  old selection from resurfacing after removal and re-addition.
+- Removed lifecycle-driven `on_next_frame` and `refresh` work. An idle mounted
+  element now drains the ordinary region-sweep callback and leaves the frame
+  queue empty while remaining queryable.
+- Centralized clear callback dispatch and kept it outside mutable window-state
+  leases for expiry, stale-region sweep, gestures, and public clear operations.
 
 The user-owned `.github/workflows/release.yml` change was neither modified nor
 staged.

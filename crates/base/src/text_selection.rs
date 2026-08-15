@@ -2,7 +2,7 @@ use std::{
     cell::Cell,
     collections::{HashMap, HashSet},
     ops::Range,
-    rc::Rc,
+    rc::{Rc, Weak as RcWeak},
 };
 
 use gpui::{
@@ -213,6 +213,12 @@ type RegionFocusCallback = Rc<dyn Fn(&mut Window, &mut App)>;
 type RegionCopyCallback = Rc<dyn Fn(&App) -> String>;
 type RegionVirtualKeyCallback = Rc<dyn Fn(Point<Pixels>, &App) -> Option<u64>>;
 type RegionClearCallbacks = (Option<RegionVoidCallback>, Option<RegionSelectionCallback>);
+
+fn dispatch_clear_callbacks(callbacks: Vec<RegionClearCallbacks>, cx: &mut App) {
+    for callbacks in callbacks {
+        TextSelectionRegionState::dispatch_clear(callbacks, cx);
+    }
+}
 
 /// Renderer-owned state associated with a selectable region.
 ///
@@ -451,8 +457,7 @@ impl SelectionEndpoint {
 
 /// Window-local generic text-selection state.
 struct TextSelectionState {
-    enabled: bool,
-    enabled_heartbeat: u64,
+    lifecycle_tokens: Vec<RcWeak<()>>,
     regions: HashMap<EntityId, RegionRegistration>,
     active_scope: SelectionScopeId,
     anchor: Option<SelectionEndpoint>,
@@ -468,8 +473,7 @@ struct TextSelectionState {
 impl Default for TextSelectionState {
     fn default() -> Self {
         Self {
-            enabled: false,
-            enabled_heartbeat: 0,
+            lifecycle_tokens: Vec::new(),
             regions: HashMap::new(),
             active_scope: SelectionScopeId::default(),
             anchor: None,
@@ -485,6 +489,37 @@ impl Default for TextSelectionState {
 }
 
 impl TextSelectionState {
+    fn renew_lifecycle(&mut self, token: &Rc<()>, cx: &mut App) -> Vec<RegionClearCallbacks> {
+        let callbacks = self.prune_lifecycle(cx);
+        if !self
+            .lifecycle_tokens
+            .iter()
+            .any(|candidate| candidate.ptr_eq(&Rc::downgrade(token)))
+        {
+            self.lifecycle_tokens.push(Rc::downgrade(token));
+        }
+        callbacks
+    }
+
+    fn prune_lifecycle(&mut self, cx: &mut App) -> Vec<RegionClearCallbacks> {
+        if self.lifecycle_tokens.is_empty() {
+            return Vec::new();
+        }
+        self.lifecycle_tokens
+            .retain(|token| token.strong_count() > 0);
+        if self.lifecycle_tokens.is_empty() {
+            self.clear_state(cx)
+        } else {
+            Vec::new()
+        }
+    }
+
+    fn lifecycle_is_live(&self) -> bool {
+        self.lifecycle_tokens
+            .iter()
+            .any(|token| token.strong_count() > 0)
+    }
+
     fn resolve_virtual_keys(state: &Entity<Self>, cx: &mut App) {
         let pending = state.update(cx, |state, _| {
             [
@@ -550,9 +585,7 @@ impl TextSelectionState {
     #[cfg(test)]
     fn set_active_scope(&mut self, scope: SelectionScopeId, cx: &mut App) {
         let callbacks = self.set_active_scope_state(scope, cx);
-        for callbacks in callbacks {
-            TextSelectionRegionState::dispatch_clear(callbacks, cx);
-        }
+        dispatch_clear_callbacks(callbacks, cx);
     }
 
     fn set_active_scope_state(
@@ -653,9 +686,7 @@ impl TextSelectionState {
     /// Clears both window selection and every region's local selection.
     pub fn clear(&mut self, cx: &mut App) {
         let callbacks = self.clear_state(cx);
-        for callbacks in callbacks {
-            TextSelectionRegionState::dispatch_clear(callbacks, cx);
-        }
+        dispatch_clear_callbacks(callbacks, cx);
     }
 
     fn clear_state(&mut self, cx: &mut App) -> Vec<RegionClearCallbacks> {
@@ -1035,6 +1066,10 @@ impl Global for WindowTextSelections {}
 /// A zero-sized element which enables text selection for a window root.
 pub struct TextSelection;
 
+struct TextSelectionElementState {
+    token: Rc<()>,
+}
+
 impl IntoElement for TextSelection {
     type Element = Self;
 
@@ -1048,7 +1083,7 @@ impl Element for TextSelection {
     type PrepaintState = ();
 
     fn id(&self) -> Option<ElementId> {
-        None
+        Some("window-text-selection".into())
     }
 
     fn source_location(&self) -> Option<&'static std::panic::Location<'static>> {
@@ -1078,7 +1113,7 @@ impl Element for TextSelection {
 
     fn paint(
         &mut self,
-        _: Option<&GlobalElementId>,
+        global_id: Option<&GlobalElementId>,
         _: Option<&InspectorElementId>,
         _: Bounds<Pixels>,
         _: &mut Self::RequestLayoutState,
@@ -1086,38 +1121,22 @@ impl Element for TextSelection {
         window: &mut Window,
         cx: &mut App,
     ) {
+        let token = window.with_element_state::<TextSelectionElementState, _>(
+            global_id.expect("TextSelection has a stable element id"),
+            |element_state, _| {
+                let element_state = element_state
+                    .unwrap_or_else(|| TextSelectionElementState { token: Rc::new(()) });
+                (element_state.token.clone(), element_state)
+            },
+        );
         let state = TextSelectionState::ensure(window, cx);
-        let heartbeat = state.update(cx, |state, _| {
-            state.enabled = true;
-            state.enabled_heartbeat = state.enabled_heartbeat.wrapping_add(1);
-            state.enabled_heartbeat
-        });
-        let enabled_state = state.clone();
-        window.on_next_frame(move |window, cx| {
-            if enabled_state.read(cx).enabled_heartbeat != heartbeat {
-                return;
-            }
-            window.on_next_frame(move |_, cx| {
-                let callbacks = enabled_state.update(cx, |state, cx| {
-                    if !state.enabled || state.enabled_heartbeat != heartbeat {
-                        return Vec::new();
-                    }
-                    state.enabled = false;
-                    state.clear_state(cx)
-                });
-                for callbacks in callbacks {
-                    TextSelectionRegionState::dispatch_clear(callbacks, cx);
-                }
-            });
-            window.refresh();
-        });
+        let callbacks = state.update(cx, |state, cx| state.renew_lifecycle(&token, cx));
+        dispatch_clear_callbacks(callbacks, cx);
         if state.update(cx, |state, _| state.schedule_finish_frame()) {
             let state = state.clone();
             window.on_next_frame(move |_, cx| {
                 let callbacks = state.update(cx, |state, cx| state.finish_frame(cx));
-                for callbacks in callbacks {
-                    TextSelectionRegionState::dispatch_clear(callbacks, cx);
-                }
+                dispatch_clear_callbacks(callbacks, cx);
             });
         }
         window.on_mouse_event(move |event: &MouseDownEvent, phase, window, cx| {
@@ -1136,9 +1155,7 @@ impl Element for TextSelection {
                     state
                         .prepare_for_mouse_down(event.click_count == 1 && event.modifiers.shift, cx)
                 });
-                for callbacks in callbacks {
-                    TextSelectionRegionState::dispatch_clear(callbacks, cx);
-                }
+                dispatch_clear_callbacks(callbacks, cx);
             } else if event.click_count == 1 {
                 if GlobalState::is_text_selection_suppressed(cx) {
                     state.update(cx, |state, _| state.pending_extension_anchor = None);
@@ -1201,44 +1218,37 @@ pub trait WindowTextSelection {
 
 impl WindowTextSelection for Window {
     fn selected_text(&mut self, cx: &mut App) -> String {
-        TextSelectionState::existing(self, cx)
-            .filter(|state| state.read(cx).enabled)
+        live_text_selection_state(self, cx)
             .map(|state| state.read(cx).selected_text(cx))
             .unwrap_or_default()
     }
 
     fn has_text_selection(&mut self, cx: &mut App) -> bool {
-        TextSelectionState::existing(self, cx)
-            .is_some_and(|state| state.read(cx).enabled && state.read(cx).has_text_selection(cx))
+        live_text_selection_state(self, cx)
+            .is_some_and(|state| state.read(cx).has_text_selection(cx))
     }
 
     fn clear_text_selection(&mut self, cx: &mut App) {
-        if let Some(state) = TextSelectionState::existing(self, cx) {
-            if !state.read(cx).enabled {
-                return;
-            }
+        if let Some(state) = live_text_selection_state(self, cx) {
             let callbacks = state.update(cx, |state, cx| state.clear_state(cx));
-            for callbacks in callbacks {
-                TextSelectionRegionState::dispatch_clear(callbacks, cx);
-            }
+            dispatch_clear_callbacks(callbacks, cx);
         }
     }
 
     fn end_text_selection(&mut self, cx: &mut App) {
-        if let Some(state) = TextSelectionState::existing(self, cx) {
-            if !state.read(cx).enabled {
-                return;
-            }
+        if let Some(state) = live_text_selection_state(self, cx) {
             state.update(cx, |state, cx| state.end(cx));
         }
     }
 
     fn set_text_selection_scope(&mut self, scope: SelectionScopeId, cx: &mut App) {
         let state = TextSelectionState::ensure(self, cx);
-        let callbacks = state.update(cx, |state, cx| state.set_active_scope_state(scope, cx));
-        for callbacks in callbacks {
-            TextSelectionRegionState::dispatch_clear(callbacks, cx);
-        }
+        let callbacks = state.update(cx, |state, cx| {
+            let mut callbacks = state.prune_lifecycle(cx);
+            callbacks.extend(state.set_active_scope_state(scope, cx));
+            callbacks
+        });
+        dispatch_clear_callbacks(callbacks, cx);
     }
 
     fn register_text_selection_region(
@@ -1247,9 +1257,21 @@ impl WindowTextSelection for Window {
         frame: SelectionRegionFrame,
         cx: &mut App,
     ) {
-        TextSelectionState::ensure(self, cx)
-            .update(cx, |state, cx| state.register_region(region, frame, cx));
+        let state = TextSelectionState::ensure(self, cx);
+        let callbacks = state.update(cx, |state, cx| {
+            let callbacks = state.prune_lifecycle(cx);
+            state.register_region(region, frame, cx);
+            callbacks
+        });
+        dispatch_clear_callbacks(callbacks, cx);
     }
+}
+
+fn live_text_selection_state(window: &Window, cx: &mut App) -> Option<Entity<TextSelectionState>> {
+    let state = TextSelectionState::existing(window, cx)?;
+    let callbacks = state.update(cx, |state, cx| state.prune_lifecycle(cx));
+    dispatch_clear_callbacks(callbacks, cx);
+    state.read(cx).lifecycle_is_live().then_some(state)
 }
 
 #[doc(hidden)]
@@ -1265,13 +1287,13 @@ pub fn clear_window_text_selection(window_id: gpui::WindowId, cx: &mut App) {
     else {
         return;
     };
-    if !state.read(cx).enabled {
+    let callbacks = state.update(cx, |state, cx| state.prune_lifecycle(cx));
+    dispatch_clear_callbacks(callbacks, cx);
+    if !state.read(cx).lifecycle_is_live() {
         return;
     }
     let callbacks = state.update(cx, |state, cx| state.clear_state(cx));
-    for callbacks in callbacks {
-        TextSelectionRegionState::dispatch_clear(callbacks, cx);
-    }
+    dispatch_clear_callbacks(callbacks, cx);
 }
 
 #[cfg(test)]
@@ -1856,8 +1878,9 @@ mod tests {
         cx.update(|window, cx| {
             let region = view.read(cx).region.clone();
             let host = TextSelectionState::ensure(window, cx);
+            let lifecycle = Rc::new(());
             host.update(cx, |host, cx| {
-                host.enabled = true;
+                host.renew_lifecycle(&lifecycle, cx);
                 FakeRegion { region }.register(host, 0., SelectionScopeId::default(), 0, cx);
                 host.begin(point(px(1.), px(1.)), false, cx);
                 host.update(point(px(8.), px(1.)), cx);
@@ -2086,6 +2109,18 @@ mod tests {
             let _ = window.draw(cx);
             assert!(!window.has_text_selection(cx));
             assert_eq!(window.selected_text(cx), "");
+        });
+    }
+
+    #[gpui::test]
+    fn mounted_selection_element_does_not_keep_an_idle_frame_queue_alive(cx: &mut TestAppContext) {
+        let (_, cx) = cx.add_window_view(|_, _| SelectionElementOnlyView);
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+            assert!(window.simulate_next_frame(cx) > 0);
+            assert_eq!(window.simulate_next_frame(cx), 0);
+            assert_eq!(window.simulate_next_frame(cx), 0);
+            assert!(live_text_selection_state(window, cx).is_some());
         });
     }
 
