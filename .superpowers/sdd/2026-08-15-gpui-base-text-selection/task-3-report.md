@@ -63,10 +63,10 @@ cargo test -p gpui-component text::window_selection::tests -- --nocapture
 46 passed
 
 cargo test -p gpui-component
-405 unit + 40 compatibility tests passed
+406 unit + 40 compatibility tests passed
 
 cargo test -p gpui-base
-329 unit + 1 integration test passed
+330 unit + 1 integration test passed
 
 cargo check --workspace --all-targets
 passed
@@ -128,6 +128,19 @@ single private window state.
   closures while detecting semantic heading-size changes.
 - Added synchronous deprecated-forwarding and lazy-registration/local-selection
   regressions; duplicate capture/bubble preparation remains event-idempotent.
+
+## Review fix round 4
+
+- Split queued parse mode from `ParsedUpdate` outcome metadata: full parse,
+  baseline acknowledgement, and selection compatibility are independent.
+  Full-baseline plus append is compatible and preserves a newer select-all.
+- Replaced persistent element enablement with a paint heartbeat that expires
+  when `TextSelection` disappears on the next frame.
+- Removed the no-self bridge from public `WindowTextSelection`; deprecated Root
+  forwarding uses a hidden free function keyed by `WindowId`.
+- Added removal-heartbeat and forced full-parse/append/select-all regressions.
+- Updated remaining selection comments and plan language to element/window-state
+  terminology.
 
 The user-owned `.github/workflows/release.yml` change was neither modified nor
 staged.

@@ -126,7 +126,8 @@ impl TextViewState {
                         if parsed_update.revision != state.revision {
                             return;
                         }
-                        if parsed_update.mode == ParseMode::BaselineAck {
+                        if parsed_update.baseline_ack {
+                            debug_assert!(parsed_update.full_parse);
                             return;
                         }
 
@@ -134,7 +135,7 @@ impl TextViewState {
                             Ok(content) => {
                                 state.parsed_content = content;
                                 state.parsed_error = None;
-                                state.compatible_layout_update = parsed_update.append;
+                                state.compatible_layout_update = parsed_update.selection_compatible;
                             }
                             Err(err) => {
                                 state.parsed_error = Some(err);
@@ -143,7 +144,7 @@ impl TextViewState {
                         // Don't interrupt an active drag-selection; the stored
                         // positions remain valid for append-only updates and will
                         // self-correct on the next mouse-move event.
-                        if !parsed_update.append && !state.is_selecting {
+                        if !parsed_update.selection_compatible && !state.is_selecting {
                             state.reset_selection_and_adapter(cx);
                         }
                         cx.notify();
@@ -335,7 +336,7 @@ impl TextViewState {
             revision: self.revision,
             append,
             mode: if append {
-                ParseMode::Update
+                ParseMode::Compatible
             } else {
                 ParseMode::BaselineAck
             },
@@ -659,8 +660,9 @@ impl Future for UpdateFuture {
                     }
                     _ = self.tx_result.try_send(ParsedUpdate {
                         revision: options.revision,
-                        append: options.append,
-                        mode: options.mode,
+                        full_parse: !options.append,
+                        selection_compatible: options.mode == ParseMode::Compatible,
+                        baseline_ack: options.mode == ParseMode::BaselineAck,
                         result: res,
                     });
                     if hit_coalesce_budget {
@@ -690,7 +692,7 @@ impl UpdateOptions {
         if next.append {
             self.pending_text.push_str(&next.pending_text);
             self.revision = next.revision;
-            self.mode = ParseMode::Update;
+            self.mode = ParseMode::Compatible;
         } else {
             *self = next;
         }
@@ -699,15 +701,16 @@ impl UpdateOptions {
 
 struct ParsedUpdate {
     revision: usize,
-    append: bool,
-    mode: ParseMode,
+    full_parse: bool,
+    selection_compatible: bool,
+    baseline_ack: bool,
     result: Result<ParsedContent, SharedString>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ParseMode {
     BaselineAck,
-    Update,
+    Compatible,
 }
 
 fn merge_pending_options(options: &mut UpdateOptions, rx: &Receiver<UpdateOptions>) -> bool {
@@ -800,13 +803,32 @@ mod tests {
         });
     }
 
+    #[gpui::test]
+    fn full_parse_coalesced_with_append_preserves_new_select_all(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let state = cx.update(|cx| cx.new(|cx| TextViewState::markdown("old", cx)));
+        cx.run_until_parked();
+
+        state.update(cx, |state, cx| {
+            state.set_text("new", cx);
+            state.push_str(" text", cx);
+            state.select_all(cx);
+        });
+        cx.run_until_parked();
+
+        state.read_with(cx, |state, _| {
+            assert!(state.select_all);
+            assert_eq!(state.selected_text().trim(), "new text");
+        });
+    }
+
     #[test]
     fn update_options_merge_keeps_latest_full_text() {
         let mut options = UpdateOptions {
             revision: 1,
             pending_text: "old".to_string(),
             append: true,
-            mode: ParseMode::Update,
+            mode: ParseMode::Compatible,
             markdown_extensions: Arc::default(),
         };
 
@@ -821,7 +843,7 @@ mod tests {
             revision: 3,
             pending_text: " text".to_string(),
             append: true,
-            mode: ParseMode::Update,
+            mode: ParseMode::Compatible,
             markdown_extensions: Arc::default(),
         });
 
@@ -844,7 +866,7 @@ mod tests {
                 mode: if revision == 1 {
                     ParseMode::BaselineAck
                 } else {
-                    ParseMode::Update
+                    ParseMode::Compatible
                 },
                 markdown_extensions: Arc::default(),
             })

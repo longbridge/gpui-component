@@ -452,6 +452,7 @@ impl SelectionEndpoint {
 /// Window-local generic text-selection state.
 struct TextSelectionState {
     enabled: bool,
+    enabled_heartbeat: u64,
     regions: HashMap<EntityId, RegionRegistration>,
     active_scope: SelectionScopeId,
     anchor: Option<SelectionEndpoint>,
@@ -468,6 +469,7 @@ impl Default for TextSelectionState {
     fn default() -> Self {
         Self {
             enabled: false,
+            enabled_heartbeat: 0,
             regions: HashMap::new(),
             active_scope: SelectionScopeId::default(),
             anchor: None,
@@ -571,7 +573,7 @@ impl TextSelectionState {
     ///
     /// Registrations are stamped with the current generation while any sibling
     /// is painting. Sweeping only after paint makes registration independent of
-    /// whether a region or the controller paints first.
+    /// whether a region or the lifecycle element paints first.
     pub fn finish_frame(&mut self, cx: &mut App) {
         self.finish_frame_scheduled = false;
         let stale = self
@@ -1083,7 +1085,19 @@ impl Element for TextSelection {
         cx: &mut App,
     ) {
         let state = TextSelectionState::ensure(window, cx);
-        state.update(cx, |state, _| state.enabled = true);
+        let heartbeat = state.update(cx, |state, _| {
+            state.enabled = true;
+            state.enabled_heartbeat = state.enabled_heartbeat.wrapping_add(1);
+            state.enabled_heartbeat
+        });
+        let enabled_state = state.clone();
+        window.on_next_frame(move |_, cx| {
+            enabled_state.update(cx, |state, _| {
+                if state.enabled_heartbeat == heartbeat {
+                    state.enabled = false;
+                }
+            });
+        });
         if state.update(cx, |state, _| state.schedule_finish_frame()) {
             let state = state.clone();
             window.on_next_frame(move |_, cx| {
@@ -1159,8 +1173,6 @@ pub trait WindowTextSelection {
     fn clear_text_selection(&mut self, cx: &mut App);
     fn end_text_selection(&mut self, cx: &mut App);
     #[doc(hidden)]
-    fn clear_text_selection_for_window(window_id: gpui::WindowId, cx: &mut App);
-    #[doc(hidden)]
     fn set_text_selection_scope(&mut self, scope: SelectionScopeId, cx: &mut App);
     #[doc(hidden)]
     fn register_text_selection_region(
@@ -1205,27 +1217,6 @@ impl WindowTextSelection for Window {
         }
     }
 
-    fn clear_text_selection_for_window(window_id: gpui::WindowId, cx: &mut App) {
-        if !cx.has_global::<WindowTextSelections>() {
-            return;
-        }
-        let Some(state) = cx
-            .global::<WindowTextSelections>()
-            .0
-            .get(&window_id)
-            .cloned()
-        else {
-            return;
-        };
-        if !state.read(cx).enabled {
-            return;
-        }
-        let callbacks = state.update(cx, |state, cx| state.clear_state(cx));
-        for callbacks in callbacks {
-            TextSelectionRegionState::dispatch_clear(callbacks, cx);
-        }
-    }
-
     fn set_text_selection_scope(&mut self, scope: SelectionScopeId, cx: &mut App) {
         let state = TextSelectionState::ensure(self, cx);
         let callbacks = state.update(cx, |state, cx| state.set_active_scope_state(scope, cx));
@@ -1245,13 +1236,35 @@ impl WindowTextSelection for Window {
     }
 }
 
+#[doc(hidden)]
+pub fn clear_window_text_selection(window_id: gpui::WindowId, cx: &mut App) {
+    if !cx.has_global::<WindowTextSelections>() {
+        return;
+    }
+    let Some(state) = cx
+        .global::<WindowTextSelections>()
+        .0
+        .get(&window_id)
+        .cloned()
+    else {
+        return;
+    };
+    if !state.read(cx).enabled {
+        return;
+    }
+    let callbacks = state.update(cx, |state, cx| state.clear_state(cx));
+    for callbacks in callbacks {
+        TextSelectionRegionState::dispatch_clear(callbacks, cx);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use gpui::{
         Bounds, ContentMask, Context, Hitbox, HitboxBehavior, HitboxId, InteractiveElement as _,
         IntoElement, ParentElement as _, Render, SharedString, Styled as _, StyledText,
-        TestAppContext, TextLayout, Window, div, point, px, size,
+        TestAppContext, TextLayout, Window, div, point, prelude::FluentBuilder as _, px, size,
     };
     use std::{
         cell::{Cell, RefCell},
@@ -1266,9 +1279,12 @@ mod tests {
         region: TextSelectionRegion,
     }
 
-    struct ControllerOnlyView;
+    struct SelectionElementOnlyView;
+    struct ToggleSelectionElementView {
+        enabled: bool,
+    }
 
-    struct DoubleControllerView {
+    struct DoubleSelectionElementView {
         region: TextSelectionRegion,
     }
 
@@ -1283,7 +1299,7 @@ mod tests {
         }
     }
 
-    impl Render for ControllerOnlyView {
+    impl Render for SelectionElementOnlyView {
         fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
             div()
                 .size_full()
@@ -1298,7 +1314,13 @@ mod tests {
         }
     }
 
-    impl Render for DoubleControllerView {
+    impl Render for ToggleSelectionElementView {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div().when(self.enabled, |this| this.child(TextSelection))
+        }
+    }
+
+    impl Render for DoubleSelectionElementView {
         fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
             div().size_full().child(TextSelection).child(TextSelection)
         }
@@ -1958,10 +1980,40 @@ mod tests {
     }
 
     #[gpui::test]
-    fn controller_initializes_suppression_before_capture_and_respects_bubble_suppression(
+    fn removing_the_element_expires_window_selection_enablement(cx: &mut TestAppContext) {
+        let (view, cx) = cx.add_window_view(|_, _| ToggleSelectionElementView { enabled: true });
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+            let state = TextSelectionState::ensure(window, cx);
+            let region = TextSelectionRegion::new("local", cx);
+            region
+                .state()
+                .update(cx, |region, _| region.set_local_selection(true));
+            state.update(cx, |state, cx| {
+                FakeRegion { region }.register(state, 0., SelectionScopeId::default(), 0, cx)
+            });
+            assert!(window.has_text_selection(cx));
+        });
+        view.update(cx, |view, cx| {
+            view.enabled = false;
+            cx.notify();
+        });
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            assert!(!window.has_text_selection(cx));
+            assert_eq!(window.selected_text(cx), "");
+            window.clear_text_selection(cx);
+        });
+    }
+
+    #[gpui::test]
+    fn selection_element_initializes_suppression_and_respects_bubble_suppression(
         cx: &mut TestAppContext,
     ) {
-        let (_, cx) = cx.add_window_view(|_, _| ControllerOnlyView);
+        let (_, cx) = cx.add_window_view(|_, _| SelectionElementOnlyView);
         cx.update(|window, cx| {
             let _ = window.draw(cx);
         });
@@ -1982,7 +2034,9 @@ mod tests {
     }
 
     #[gpui::test]
-    fn frame_sweep_keeps_a_region_registered_before_the_controller_paints(cx: &mut TestAppContext) {
+    fn frame_sweep_keeps_a_region_registered_before_the_selection_element_paints(
+        cx: &mut TestAppContext,
+    ) {
         cx.update(|cx| {
             let mut host = TextSelectionState::default();
             let region = FakeRegion::new("painted first", cx);
@@ -1999,8 +2053,8 @@ mod tests {
     }
 
     #[gpui::test]
-    fn two_controllers_schedule_only_one_post_frame_sweep(cx: &mut TestAppContext) {
-        let (view, cx) = cx.add_window_view(|_, cx| DoubleControllerView {
+    fn two_selection_elements_schedule_only_one_post_frame_sweep(cx: &mut TestAppContext) {
+        let (view, cx) = cx.add_window_view(|_, cx| DoubleSelectionElementView {
             region: TextSelectionRegion::new("once", cx),
         });
         cx.update(|window, cx| {

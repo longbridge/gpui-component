@@ -144,6 +144,8 @@ pub use switch::{
 };
 pub use table::{Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow};
 pub use tabs::{Tab, TabStyles, Tabs};
+#[doc(hidden)]
+pub use text_selection::clear_window_text_selection;
 pub use text_selection::{
     SelectionEndpointSnapshot, SelectionRegionCoverage, SelectionRegionFrame, SelectionRunFrame,
     SelectionRunState, SelectionScopeId, SelectionSnapshot, TextSelection, TextSelectionRegion,

@@ -88,10 +88,7 @@ impl Root {
     /// Clears window-owned text selection synchronously.
     #[deprecated(note = "call gpui_base::WindowTextSelection::clear_text_selection instead")]
     pub fn clear_text_selection(&mut self, cx: &mut Context<Self>) {
-        <Window as gpui_base::WindowTextSelection>::clear_text_selection_for_window(
-            self.window_id,
-            cx,
-        );
+        gpui_base::clear_window_text_selection(self.window_id, cx);
     }
 
     /// Create a new Root view.

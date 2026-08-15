@@ -198,7 +198,7 @@ clear, and virtual block lookup.
 - [ ] **Step 4: Remove the old authoritative state**
 
 Delete Root's `WindowTextSelection`, selectable-view map, and inline-bounds map.
-Move the old controller implementation to base, retain only TextView adapter
+Move the old event lifecycle implementation to base, retain only TextView adapter
 logic in `selection_adapter.rs`, and make every TextView selection query read the
 window selection.
 
@@ -249,7 +249,7 @@ the base extension.
 - [ ] **Step 3: Implement scope and forwarding**
 
 Map Root modal state to opaque scope IDs, move the scope marker to base, render
-the base controller automatically, and mark old selection methods deprecated
+the base selection element automatically, and mark old selection methods deprecated
 with migration notes. Use fully-qualified calls internally to avoid extension
 trait ambiguity.
 

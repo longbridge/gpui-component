@@ -161,7 +161,7 @@ impl Inline {
         // auto-scroll) copied only the portion that happened to be on screen.
         //
         // This does not resurrect the #2156 clipped-hit-testing behavior: a
-        // selection can only START on visible text (the base host resolves
+        // selection can only START on visible text (window selection resolves
         // endpoints with hitbox hover testing against visible Inline bounds),
         // so the band's endpoints are always anchored to on-screen text.
         // Content that is merely `overflow_hidden`
