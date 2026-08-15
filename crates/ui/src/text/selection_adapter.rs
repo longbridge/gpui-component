@@ -64,6 +64,7 @@ impl VirtualBlockSelection {
 pub(super) struct TextViewSelectionAdapter {
     region: TextSelectionRegion,
     text_bounds: Vec<Bounds<Pixels>>,
+    layout_revision: Option<usize>,
 }
 
 impl TextViewSelectionAdapter {
@@ -136,7 +137,16 @@ impl TextViewSelectionAdapter {
         Self {
             region,
             text_bounds: Vec::new(),
+            layout_revision: None,
         }
+    }
+
+    pub(super) fn update_layout_revision(&mut self, revision: usize) -> bool {
+        let changed = self
+            .layout_revision
+            .is_some_and(|previous| previous != revision);
+        self.layout_revision = Some(revision);
+        changed
     }
 
     pub(super) fn begin_frame(&mut self) {
@@ -192,6 +202,10 @@ impl TextViewSelectionAdapter {
             .is_some_and(|snapshot| {
                 snapshot.anchor.region_id == Some(id) || snapshot.cursor.region_id == Some(id)
             })
+    }
+
+    pub(super) fn has_selection_snapshot(&self, cx: &App) -> bool {
+        self.region.state().read(cx).snapshot().is_some()
     }
 
     #[cfg(test)]

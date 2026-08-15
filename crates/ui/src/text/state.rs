@@ -564,16 +564,26 @@ impl Render for TextViewState {
                 ),
             })
             .on_prepaint(move |bounds, window, cx| {
-                let size_changed = state.read(cx).bounds().size != bounds.size;
-                let selection_involves_view = state
-                    .read(cx)
-                    .selection_adapter
-                    .selection_involves_region(cx);
-                let is_selecting = state.read(cx).is_selecting;
+                let (size_changed, selection_involves_view, has_selection_snapshot, is_selecting) = {
+                    let state = state.read(cx);
+                    (
+                        state.bounds().size != bounds.size,
+                        state.selection_adapter.selection_involves_region(cx),
+                        state.selection_adapter.has_selection_snapshot(cx),
+                        state.is_selecting,
+                    )
+                };
+                let mut revision_changed = false;
                 state.update(cx, |state, cx| {
+                    revision_changed = state
+                        .selection_adapter
+                        .update_layout_revision(state.revision);
                     state.update_bounds(bounds, cx);
                 });
-                if size_changed && selection_involves_view && !is_selecting {
+                if !is_selecting
+                    && ((size_changed && selection_involves_view)
+                        || (revision_changed && has_selection_snapshot))
+                {
                     gpui_base::WindowTextSelectionExt::clear_text_selection(window, cx);
                 }
             })

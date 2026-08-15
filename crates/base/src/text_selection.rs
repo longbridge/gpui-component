@@ -196,6 +196,7 @@ type RegionVoidCallback = Rc<dyn Fn(&mut App)>;
 type RegionFocusCallback = Rc<dyn Fn(&mut Window, &mut App)>;
 type RegionCopyCallback = Rc<dyn Fn(&App) -> String>;
 type RegionVirtualKeyCallback = Rc<dyn Fn(Point<Pixels>, &App) -> Option<u64>>;
+type RegionClearCallbacks = (Option<RegionVoidCallback>, Option<RegionSelectionCallback>);
 
 /// Renderer-owned state associated with a selectable region.
 ///
@@ -314,32 +315,41 @@ impl TextSelectionRegionState {
         }
         self.snapshot = snapshot;
         self.projected_selected_text = None;
-        if let Some(callback) = &self.on_selection {
-            callback(snapshot, cx);
+        if let Some(callback) = self.on_selection.clone() {
+            cx.defer(move |cx| callback(snapshot, cx));
         }
     }
 
     fn clear(&mut self, cx: &mut App) {
+        let callbacks = self.clear_state();
+        cx.defer(move |cx| Self::dispatch_clear(callbacks, cx));
+    }
+
+    fn clear_state(&mut self) -> RegionClearCallbacks {
         self.snapshot = None;
         self.projected_selected_text = None;
         self.local_selection = false;
-        if let Some(callback) = &self.on_clear {
+        (self.on_clear.clone(), self.on_selection.clone())
+    }
+
+    fn dispatch_clear(callbacks: RegionClearCallbacks, cx: &mut App) {
+        if let Some(callback) = callbacks.0 {
             callback(cx);
         }
-        if let Some(callback) = &self.on_selection {
+        if let Some(callback) = callbacks.1 {
             callback(None, cx);
         }
     }
 
     fn set_auto_scroll(&self, delta: Option<Pixels>, cx: &mut App) {
-        if let Some(callback) = &self.on_auto_scroll {
-            callback(delta, cx);
+        if let Some(callback) = self.on_auto_scroll.clone() {
+            cx.defer(move |cx| callback(delta, cx));
         }
     }
 
     fn focus(&self, window: &mut Window, cx: &mut App) {
-        if let Some(callback) = &self.on_focus {
-            callback(window, cx);
+        if let Some(callback) = self.on_focus.clone() {
+            window.defer(cx, move |window, cx| callback(window, cx));
         }
     }
 
@@ -639,10 +649,23 @@ impl TextSelectionHost {
         self.is_selecting
     }
 
-    fn prepare_for_mouse_down(&mut self, extend: bool, cx: &mut App) {
+    fn prepare_for_mouse_down(&mut self, extend: bool, cx: &mut App) -> Vec<RegionClearCallbacks> {
         let pending_extension_anchor = extend.then(|| self.anchor.clone()).flatten();
-        self.clear(cx);
+        self.stop_anchor_auto_scroll(cx);
+        self.anchor = None;
+        self.cursor = None;
+        self.pending_extension_anchor = None;
+        self.is_selecting = false;
+        self.did_hit_text = false;
+        self.prune_dead_regions();
+        let callbacks = self
+            .regions
+            .values()
+            .filter_map(|registration| registration.region.upgrade())
+            .map(|region| region.update(cx, |state, _| state.clear_state()))
+            .collect();
         self.pending_extension_anchor = pending_extension_anchor;
+        callbacks
     }
 
     fn begin_in_window(
@@ -656,7 +679,9 @@ impl TextSelectionHost {
     }
 
     fn update_in_window(&mut self, position: Point<Pixels>, window: &Window, cx: &mut App) {
-        self.update_impl(position, Some(window), cx);
+        if !cx.has_active_drag() {
+            self.update_impl(position, Some(window), cx);
+        }
     }
 
     fn begin_impl(
@@ -682,16 +707,15 @@ impl TextSelectionHost {
             self.clear(cx);
         }
         let endpoint = self.endpoint(position, window.as_deref(), cx);
+        let focus_region = endpoint.inside.then(|| endpoint.region.clone()).flatten();
         let anchor = previous_anchor.unwrap_or_else(|| endpoint.clone());
         self.anchor = Some(anchor.clone());
         self.cursor = Some(endpoint.clone());
         self.did_hit_text = anchor.inside_text || endpoint.inside_text;
         self.is_selecting = true;
-        if anchor.inside {
-            if let Some(region) = anchor.region.and_then(|region| region.upgrade()) {
-                if let Some(window) = window.as_deref_mut() {
-                    region.update(cx, |state, cx| state.focus(window, cx));
-                }
+        if let Some(region) = focus_region.and_then(|region| region.upgrade()) {
+            if let Some(window) = window.as_deref_mut() {
+                region.update(cx, |state, cx| state.focus(window, cx));
             }
         }
         self.publish_snapshots(cx);
@@ -956,9 +980,12 @@ impl Element for TextSelectionController {
             if phase.capture() {
                 GlobalState::init(cx);
                 GlobalState::reset_text_selection_suppression(cx);
-                host.update(cx, |host, cx| {
+                let callbacks = host.update(cx, |host, cx| {
                     host.prepare_for_mouse_down(event.click_count == 1 && event.modifiers.shift, cx)
                 });
+                for callbacks in callbacks {
+                    TextSelectionRegionState::dispatch_clear(callbacks, cx);
+                }
             } else if event.click_count == 1 {
                 if GlobalState::is_text_selection_suppressed(cx) {
                     host.update(cx, |host, _| host.pending_extension_anchor = None);
@@ -1038,7 +1065,10 @@ mod tests {
         IntoElement, ParentElement as _, Render, SharedString, Styled as _, StyledText,
         TestAppContext, TextLayout, Window, div, point, px, size,
     };
-    use std::{cell::RefCell, rc::Rc};
+    use std::{
+        cell::{Cell, RefCell},
+        rc::Rc,
+    };
 
     struct FakeRegion {
         region: TextSelectionRegion,
@@ -1176,6 +1206,31 @@ mod tests {
             is_selecting: false,
             resolved_points: Some((anchor, cursor)),
         }
+    }
+
+    #[gpui::test]
+    fn selection_callback_can_reenter_its_host(cx: &mut TestAppContext) {
+        let called = Rc::new(Cell::new(false));
+        let called_from_callback = called.clone();
+        cx.update(|cx| {
+            let host = cx.new(|_| TextSelectionHost::default());
+            let host_for_callback = host.clone();
+            let region = FakeRegion::new("region", cx);
+            region.region.state().update(cx, |state, _| {
+                state.on_selection(move |snapshot, cx| {
+                    if snapshot.is_some() {
+                        host_for_callback.update(cx, |_, _| called_from_callback.set(true));
+                    }
+                });
+            });
+            host.update(cx, |host, cx| {
+                region.register(host, 0., SelectionScopeId::default(), 0, cx);
+                host.begin(point(px(1.), px(1.)), false, cx);
+                host.update(point(px(20.), px(1.)), cx);
+            });
+        });
+        cx.run_until_parked();
+        assert!(called.get());
     }
 
     fn run_frame(order: u64, text: SharedString, layout: TextLayout) -> SelectionRunFrame {
@@ -1540,11 +1595,11 @@ mod tests {
 
     #[gpui::test]
     fn clear_stops_anchor_auto_scroll_before_discarding_the_anchor(cx: &mut TestAppContext) {
+        let commands = Rc::new(RefCell::new(Vec::new()));
+        let observed = commands.clone();
         cx.update(|cx| {
             let mut host = TextSelectionHost::default();
             let region = FakeRegion::new("scroll", cx);
-            let commands = Rc::new(RefCell::new(Vec::new()));
-            let observed = commands.clone();
             region.region.state().update(cx, |state, _| {
                 state.on_auto_scroll(move |delta, _| observed.borrow_mut().push(delta));
             });
@@ -1553,10 +1608,10 @@ mod tests {
             host.begin(point(px(1.), px(1.)), false, cx);
             host.update(point(px(1.), px(25.)), cx);
             host.clear(cx);
-
-            assert!(commands.borrow().iter().any(Option::is_some));
-            assert_eq!(commands.borrow().last(), Some(&None));
         });
+        cx.run_until_parked();
+        assert!(commands.borrow().iter().any(Option::is_some));
+        assert_eq!(commands.borrow().last(), Some(&None));
     }
 
     #[gpui::test]

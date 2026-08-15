@@ -264,7 +264,6 @@ mod tests {
             div()
                 .size_full()
                 .pt(px(10.))
-                .child(gpui_base::TextSelectionController)
                 .child(div().h(px(40.)).child(PlainSelectableText::new(
                     self.plain_region.clone(),
                     "Plain adapter",
@@ -291,15 +290,11 @@ mod tests {
 
     impl Render for BaseOwnedTextViewSelection {
         fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-            div()
-                .size_full()
-                .pt(px(10.))
-                .child(gpui_base::TextSelectionController)
-                .child(
-                    div()
-                        .h(px(40.))
-                        .child(TextView::new(&self.text_view).selectable(true)),
-                )
+            div().size_full().pt(px(10.)).child(
+                div()
+                    .h(px(40.))
+                    .child(TextView::new(&self.text_view).selectable(true)),
+            )
         }
     }
 
@@ -683,6 +678,90 @@ mod tests {
         );
     }
 
+    #[gpui::test]
+    fn shrinking_virtual_selection_drops_blocks_beyond_the_new_cursor(cx: &mut TestAppContext) {
+        use gpui::ListOffset;
+
+        const BLOCKS: usize = 20;
+        let source = (0..BLOCKS)
+            .map(|ix| format!("Paragraph{ix}"))
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        cx.update(crate::init);
+        let (root, cx) = cx.add_window_view(|window, cx| {
+            let view = cx.new(|cx| ScrollableTextViewTest {
+                text_view: cx.new(|cx| TextViewState::markdown(&source, cx)),
+            });
+            Root::new(view, window, cx)
+        });
+        let view = root.read_with(cx, |root, _| {
+            root.view()
+                .clone()
+                .downcast::<ScrollableTextViewTest>()
+                .unwrap()
+        });
+        let cx: &mut VisualTestContext = cx;
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        cx.simulate_mouse_down(
+            point(px(0.), px(1.)),
+            MouseButton::Left,
+            Modifiers::default(),
+        );
+        let list_state = view.read_with(cx, |view, cx| view.text_view.read(cx).list_state.clone());
+        list_state.scroll_to(ListOffset {
+            item_ix: BLOCKS - 1,
+            offset_in_item: px(0.),
+        });
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+        cx.simulate_mouse_move(
+            point(px(150.), px(30.)),
+            Some(MouseButton::Left),
+            Modifiers::default(),
+        );
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+        let expanded = window_selected_text(cx);
+        assert!(
+            expanded.contains("Paragraph18"),
+            "failed to expand near the last block: {expanded:?}"
+        );
+
+        list_state.scroll_to(ListOffset {
+            item_ix: 5,
+            offset_in_item: px(0.),
+        });
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+        cx.simulate_mouse_move(
+            point(px(150.), px(10.)),
+            Some(MouseButton::Left),
+            Modifiers::default(),
+        );
+        cx.simulate_mouse_up(
+            point(px(150.), px(10.)),
+            MouseButton::Left,
+            Modifiers::default(),
+        );
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        let text = window_selected_text(cx);
+        assert!(text.contains("Paragraph5"), "got: {text:?}");
+        assert!(
+            !text.contains("Paragraph18"),
+            "stale blocks beyond the new cursor were copied: {text:?}"
+        );
+    }
+
     /// A multi-click selection has to come back as source too. The click stores
     /// the plain word it selected as a shortcut, which has lost its markup.
     #[gpui::test]
@@ -936,6 +1015,45 @@ mod tests {
         });
         assert!(!first_selecting);
         assert!(!second_selecting);
+    }
+
+    #[gpui::test]
+    fn shift_click_focuses_the_new_endpoint_view(cx: &mut TestAppContext) {
+        let (chat, cx) = setup(true, cx);
+
+        click(cx, point(px(0.), px(15.)), Modifiers::default());
+        click(cx, point(px(300.), px(70.)), shift_modifiers());
+
+        let second_is_focused = cx.update(|window, cx| {
+            chat.read(cx)
+                .second
+                .read(cx)
+                .focus_handle
+                .is_focused(window)
+        });
+        assert!(
+            second_is_focused,
+            "Shift-click left focus on the anchor view"
+        );
+    }
+
+    #[gpui::test]
+    fn same_size_content_replacement_invalidates_finished_selection(cx: &mut TestAppContext) {
+        let (chat, cx) = setup(true, cx);
+
+        drag(cx, point(px(0.), px(15.)), point(px(300.), px(15.)));
+        assert_eq!(window_selected_text(cx).trim(), "Hello world");
+
+        let first = chat.read_with(cx, |chat, _| chat.first.clone());
+        cx.update(|_, cx| {
+            first.update(cx, |state, cx| state.set_text("Other words", cx));
+        });
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        assert_eq!(window_selected_text(cx), "");
     }
 
     #[gpui::test]
