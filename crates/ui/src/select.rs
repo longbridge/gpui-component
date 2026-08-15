@@ -6,7 +6,7 @@ use gpui::{
 };
 use rust_i18n::t;
 
-use crate::styled::FocusRingStyleExt as _;
+use crate::ThemeStyled as _;
 use crate::{
     ActiveTheme, Disableable, ElementExt as _, Icon, IconName, IndexPath, Sizable, Size,
     StyleSized, StyledExt,
@@ -493,13 +493,11 @@ where
                     .input_text_size(self.state.size)
                     .refine_style(&self.state.style)
                     .when(outline_visible && self.state.appearance, |this| {
-                        this.focused_border(cx)
+                        this.border_1().border_color(cx.theme().ring)
                     })
-                    .draw_focus_ring(
+                    .when(
                         outline_visible && self.state.appearance && self.focus_ring_enabled,
-                        px(0.),
-                        window,
-                        cx,
+                        |this| this.focus_ring_style(window, cx),
                     )
                     .when(allow_open, |this| {
                         this.on_click(cx.listener(Self::toggle_menu))

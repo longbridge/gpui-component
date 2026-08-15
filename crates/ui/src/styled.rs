@@ -8,22 +8,44 @@ use crate::ActiveTheme as _;
 const FOCUS_RING_WIDTH: Pixels = px(3.);
 const FOCUS_RING_OPACITY: f32 = 0.5;
 
-pub(crate) trait FocusRingStyleExt<T: ParentElement + Styled + Sized> {
-    fn focused_border(self, cx: &App) -> Self;
+/// Finished styles that read the theme.
+///
+/// Separate from [`StyledExt`], which holds neutral helpers that make no
+/// visual decisions. Everything here does: it reaches into the theme and
+/// produces a specific look, which is why it belongs above the base layer.
+pub trait ThemeStyled: Styled + Sized {
+    /// Give this element the focus appearance the framework's own controls
+    /// use: its border tinted with the focus colour, and the ring outside it.
+    ///
+    /// Calling this turns the ring on; gate it with `when` for the conditions
+    /// that decide whether the control shows one at all — its focus state,
+    /// [`FocusableExt::focus_ring`], appearance, and so on.
+    ///
+    /// The ring sits outside the element's border, so an ancestor that clips
+    /// its content will cut it off — leave it a few pixels of room, or don't
+    /// clip.
+    fn focus_ring_style(self, window: &Window, cx: &App) -> Self
+    where
+        Self: ParentElement;
 
-    fn draw_focus_ring(self, visible: bool, margin: Pixels, window: &Window, cx: &App) -> Self;
+    /// Give this element the surface, border, shadow and radius of a popover.
+    fn popover_style(self, cx: &App) -> Self;
 }
 
-impl<T: ParentElement + Styled + Sized> FocusRingStyleExt<T> for T {
-    fn focused_border(self, cx: &App) -> Self {
-        self.border_1().border_color(cx.theme().ring)
-    }
-
-    fn draw_focus_ring(mut self, visible: bool, margin: Pixels, window: &Window, cx: &App) -> Self {
-        if !visible {
-            return self;
-        }
-
+impl<T: Styled + Sized> ThemeStyled for T {
+    /// Draw the focus ring the framework's own controls use.
+    ///
+    /// Calling this turns the ring on; gate it with `when` for the conditions
+    /// that decide whether the control shows one at all — its focus state,
+    /// [`crate::FocusableExt::focus_ring`], appearance, and so on.
+    ///
+    /// The ring sits outside the element's border, so an ancestor that clips
+    /// its content will cut it off — leave it a few pixels of room, or don't
+    /// clip.
+    fn focus_ring_style(mut self, window: &Window, cx: &App) -> Self
+    where
+        Self: ParentElement,
+    {
         let rem_size = window.rem_size();
         let style = self.style();
         let border_widths = Edges::<Pixels> {
@@ -76,9 +98,9 @@ impl<T: ParentElement + Styled + Sized> FocusRingStyleExt<T> for T {
         ring_style.corner_radii.top_right = Some(radius.top_right.into());
         ring_style.corner_radii.bottom_left = Some(radius.bottom_left.into());
         ring_style.corner_radii.bottom_right = Some(radius.bottom_right.into());
-        let inset = FOCUS_RING_WIDTH + margin;
+        let inset = FOCUS_RING_WIDTH;
 
-        self.child(
+        self.border_color(cx.theme().ring).child(
             div()
                 .flex_none()
                 .absolute()
@@ -90,5 +112,15 @@ impl<T: ParentElement + Styled + Sized> FocusRingStyleExt<T> for T {
                 .border_color(cx.theme().ring.alpha(FOCUS_RING_OPACITY))
                 .refine_style(&ring_style),
         )
+    }
+
+    fn popover_style(self, cx: &App) -> Self {
+        let theme = cx.theme();
+        self.bg(theme.popover)
+            .text_color(theme.popover_foreground)
+            .border_1()
+            .border_color(theme.border)
+            .shadow_lg()
+            .rounded(theme.radius)
     }
 }

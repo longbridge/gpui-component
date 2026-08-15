@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use crate::styled::FocusRingStyleExt as _;
+use crate::ThemeStyled as _;
 use crate::{
     ActiveTheme, AxisExt, Sizable, Size, StyledExt, checkbox::checkbox_check_icon, h_flex,
     text::Text, tooltip::ComponentTooltip, v_flex,
@@ -8,7 +8,7 @@ use crate::{
 use gpui::{
     AnyElement, App, Axis, ElementId, InteractiveElement, IntoElement, ParentElement, RenderOnce,
     SharedString, StatefulInteractiveElement, StyleRefinement, Styled, Window, div,
-    prelude::FluentBuilder, px, relative, rems,
+    prelude::FluentBuilder, relative, rems,
 };
 use gpui_base::{Radio as BaseRadio, RadioGroup as BaseRadioGroup};
 
@@ -182,7 +182,9 @@ impl RenderOnce for Radio {
             .items_start()
             .line_height(relative(1.))
             .rounded(cx.theme().radius * 0.5)
-            .draw_focus_ring(is_focused && self.focus_ring_enabled, px(2.), window, cx)
+            .when(is_focused && self.focus_ring_enabled, |this| {
+                this.focus_ring_style(window, cx)
+            })
             .map(|this| match self.size {
                 Size::XSmall => this.text_xs(),
                 Size::Small => this.text_sm(),

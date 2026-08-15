@@ -5,6 +5,7 @@ use gpui::{
 };
 use std::rc::Rc;
 
+use crate::ThemeStyled as _;
 use crate::{Selectable, StyledExt as _, v_flex};
 use gpui_base::Popover as BasePopover;
 pub use gpui_base::PopoverState;

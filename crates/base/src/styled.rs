@@ -31,8 +31,6 @@ impl From<Option<Role>> for RoleOverride {
     }
 }
 
-use crate::theme::ActiveTheme as _;
-
 pub fn h_flex() -> Div {
     div().h_flex()
 }
@@ -161,16 +159,6 @@ pub trait StyledExt: Styled + Sized {
     font_weight!(font_bold, BOLD);
     font_weight!(font_extrabold, EXTRA_BOLD);
     font_weight!(font_black, BLACK);
-
-    fn popover_style(self, cx: &App) -> Self {
-        let tokens = cx.theme().tokens;
-        self.bg(tokens.colors.surface)
-            .text_color(tokens.colors.surface_foreground)
-            .border_1()
-            .border_color(tokens.colors.border)
-            .shadow_lg()
-            .rounded(tokens.radius.md)
-    }
 
     fn corner_radii(self, radius: Corners<Pixels>) -> Self {
         self.rounded_tl(radius.top_left)

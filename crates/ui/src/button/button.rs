@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use crate::styled::FocusRingStyleExt as _;
+use crate::ThemeStyled as _;
 use crate::{
     ActiveTheme, Colorize as _, Disableable, Icon, RoleOverride, Selectable, Sizable, Size,
     StyleSized, StyledExt,
@@ -13,7 +13,7 @@ use gpui::{
     AnyElement, App, Background, ClickEvent, Corners, Edges, ElementId, Hsla, InteractiveElement,
     Interactivity, IntoElement, MouseButton, ParentElement, Pixels, RenderOnce, Role, SharedString,
     StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
-    prelude::FluentBuilder as _, px, relative, transparent_white,
+    prelude::FluentBuilder as _, relative, transparent_white,
 };
 
 #[derive(Default, Clone, Copy)]
@@ -717,7 +717,9 @@ impl RenderOnce for Button {
                 this
             }
         })
-        .draw_focus_ring(is_focused && self.focus_ring_enabled, px(0.), window, cx)
+        .when(is_focused && self.focus_ring_enabled, |this| {
+            this.focus_ring_style(window, cx)
+        })
     }
 }
 
@@ -1209,7 +1211,7 @@ impl ButtonVariant {
 mod tests {
     use super::*;
     use crate::IconName;
-    use gpui::{linear_color_stop, linear_gradient};
+    use gpui::{linear_color_stop, linear_gradient, px};
 
     #[gpui::test]
     fn disabled_legacy_button_keeps_existing_pointer_blocking(cx: &mut gpui::TestAppContext) {
