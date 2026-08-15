@@ -20,6 +20,36 @@ struct PlainSelectableText {
     styled_text: StyledText,
 }
 
+fn selection_quad_bounds(
+    start: Point<Pixels>,
+    end: Point<Pixels>,
+    bounds: Bounds<Pixels>,
+    line_height: Pixels,
+) -> Vec<Bounds<Pixels>> {
+    if start.y == end.y {
+        return vec![Bounds::from_corners(
+            start,
+            Point::new(end.x, end.y + line_height),
+        )];
+    }
+
+    let mut quads = vec![Bounds::from_corners(
+        start,
+        Point::new(bounds.right(), start.y + line_height),
+    )];
+    if end.y > start.y + line_height {
+        quads.push(Bounds::from_corners(
+            Point::new(bounds.left(), start.y + line_height),
+            Point::new(bounds.right(), end.y),
+        ));
+    }
+    quads.push(Bounds::from_corners(
+        Point::new(bounds.left(), end.y),
+        Point::new(end.x, end.y + line_height),
+    ));
+    quads
+}
+
 impl PlainSelectableText {
     fn new(region: TextSelectionRegion, text: impl Into<SharedString>) -> Self {
         let text = text.into();
@@ -55,23 +85,8 @@ impl PlainSelectableText {
             });
         };
 
-        if start.y == end.y {
-            paint(
-                Bounds::from_corners(start, Point::new(end.x, end.y + line_height)),
-                window,
-            );
-        } else {
-            paint(
-                Bounds::from_corners(start, Point::new(bounds.right(), start.y + line_height)),
-                window,
-            );
-            paint(
-                Bounds::from_corners(
-                    Point::new(bounds.left(), end.y),
-                    Point::new(end.x, end.y + line_height),
-                ),
-                window,
-            );
+        for bounds in selection_quad_bounds(start, end, bounds, line_height) {
+            paint(bounds, window);
         }
     }
 }
@@ -197,4 +212,30 @@ fn main() {
             .expect("failed to open selectable text example window");
         cx.activate(true);
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::selection_quad_bounds;
+    use gpui::{Bounds, point, px, size};
+
+    #[test]
+    fn wrapped_selection_paints_full_width_middle_lines() {
+        let bounds = Bounds::new(point(px(10.), px(20.)), size(px(100.), px(100.)));
+        let quads = selection_quad_bounds(
+            point(px(40.), px(20.)),
+            point(px(30.), px(80.)),
+            bounds,
+            px(20.),
+        );
+
+        assert_eq!(
+            quads,
+            vec![
+                Bounds::from_corners(point(px(40.), px(20.)), point(px(110.), px(40.))),
+                Bounds::from_corners(point(px(10.), px(40.)), point(px(110.), px(80.))),
+                Bounds::from_corners(point(px(10.), px(80.)), point(px(30.), px(100.))),
+            ]
+        );
+    }
 }

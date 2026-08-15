@@ -114,7 +114,9 @@ fn selection_range_for_run(
     selection_start: Point<Pixels>,
     selection_end: Point<Pixels>,
 ) -> Option<Range<usize>> {
-    debug_assert_eq!(run.text.len(), run.layout.len());
+    if run.text.len() != run.layout.len() {
+        return None;
+    }
 
     let line_height = run.layout.line_height();
     let mut range = None;
@@ -191,6 +193,7 @@ type RegionCopyCallback = Rc<dyn Fn(&App) -> String>;
 /// their projection, highlights, and optional focus/scroll hooks here.
 pub struct TextSelectionRegionState {
     selected_text: String,
+    projected_selected_text: Option<String>,
     local_selection: bool,
     snapshot: Option<SelectionSnapshot>,
     on_selection: Option<RegionSelectionCallback>,
@@ -204,6 +207,7 @@ impl TextSelectionRegionState {
     fn new(selected_text: impl Into<String>) -> Self {
         Self {
             selected_text: selected_text.into(),
+            projected_selected_text: None,
             local_selection: false,
             snapshot: None,
             on_selection: None,
@@ -222,6 +226,7 @@ impl TextSelectionRegionState {
     /// Sets the text copied by this region when it participates in selection.
     pub fn set_selected_text(&mut self, text: impl Into<String>) {
         self.selected_text = text.into();
+        self.projected_selected_text = None;
     }
 
     /// Marks renderer-local selection (for example select-all) as active.
@@ -231,6 +236,10 @@ impl TextSelectionRegionState {
 
     /// Projects this region's current snapshot onto plain-text runs and caches
     /// their selected substrings for [`TextSelectionHost::selected_text`].
+    ///
+    /// Call this once per painted run frame. A snapshot change or
+    /// [`TextSelectionHost::clear`] invalidates the cache immediately, so copy
+    /// never returns text from a previous projection while waiting to repaint.
     pub fn project_selection_runs(&mut self, runs: &[SelectionRunFrame]) -> Vec<SelectionRunState> {
         let states = project_selection_runs(self.snapshot, runs);
         let mut selected_runs = runs
@@ -246,7 +255,8 @@ impl TextSelectionRegionState {
             })
             .collect::<Vec<_>>();
         selected_runs.sort_by_key(|(order, index, _)| (*order, *index));
-        self.selected_text = selected_runs.into_iter().map(|(_, _, text)| text).collect();
+        self.projected_selected_text =
+            Some(selected_runs.into_iter().map(|(_, _, text)| text).collect());
         states
     }
 
@@ -283,6 +293,7 @@ impl TextSelectionRegionState {
             return;
         }
         self.snapshot = snapshot;
+        self.projected_selected_text = None;
         if let Some(callback) = &self.on_selection {
             callback(snapshot, cx);
         }
@@ -290,6 +301,7 @@ impl TextSelectionRegionState {
 
     fn clear(&mut self, cx: &mut App) {
         self.snapshot = None;
+        self.projected_selected_text = None;
         self.local_selection = false;
         if let Some(callback) = &self.on_clear {
             callback(cx);
@@ -315,7 +327,11 @@ impl TextSelectionRegionState {
         self.copy
             .as_ref()
             .map(|callback| callback(cx))
-            .unwrap_or_else(|| self.selected_text.clone())
+            .unwrap_or_else(|| {
+                self.projected_selected_text
+                    .clone()
+                    .unwrap_or_else(|| self.selected_text.clone())
+            })
     }
 }
 
@@ -1210,6 +1226,90 @@ mod tests {
 
             assert_eq!(host.selected_text(cx), "tw\nne");
         });
+    }
+
+    #[gpui::test]
+    fn plain_projection_invalidates_cached_copy_when_the_snapshot_changes(cx: &mut TestAppContext) {
+        let (text, layout) = laid_out_runs(&["first"], cx).pop().unwrap();
+        let first_snapshot = plain_snapshot(
+            layout.position_for_index(1).unwrap(),
+            layout.position_for_index(3).unwrap(),
+        );
+        let changed_snapshot = plain_snapshot(
+            layout.position_for_index(3).unwrap(),
+            layout.position_for_index(5).unwrap(),
+        );
+        let run = run_frame(0, text, layout);
+        cx.update(|cx| {
+            let mut host = TextSelectionHost::default();
+            let region = FakeRegion::new("", cx);
+            region.register(&mut host, 0., SelectionScopeId::default(), 0, cx);
+            region.region.state().update(cx, |state, cx| {
+                state.set_snapshot(Some(first_snapshot), cx);
+                state.project_selection_runs(&[run.clone()]);
+            });
+            assert_eq!(host.selected_text(cx), "ir");
+
+            region.region.state().update(cx, |state, cx| {
+                state.set_snapshot(Some(changed_snapshot), cx);
+            });
+            assert_eq!(host.selected_text(cx), "");
+
+            region.region.state().update(cx, |state, _| {
+                state.project_selection_runs(&[run]);
+            });
+            assert_eq!(host.selected_text(cx), "st");
+            host.clear(cx);
+            region
+                .region
+                .state()
+                .update(cx, |state, _| state.set_local_selection(true));
+            assert_eq!(host.selected_text(cx), "");
+        });
+    }
+
+    #[gpui::test]
+    fn plain_projection_orders_cached_runs_by_frame_order_not_input_order(cx: &mut TestAppContext) {
+        let mut runs = laid_out_runs(&["one", "two"], cx);
+        let (first_text, first_layout) = runs.remove(0);
+        let (second_text, second_layout) = runs.remove(0);
+        let snapshot = plain_snapshot(
+            first_layout.position_for_index(1).unwrap(),
+            second_layout.position_for_index(2).unwrap(),
+        );
+        cx.update(|cx| {
+            let mut host = TextSelectionHost::default();
+            let region = FakeRegion::new("", cx);
+            region.register(&mut host, 0., SelectionScopeId::default(), 0, cx);
+            region.region.state().update(cx, |state, cx| {
+                state.set_snapshot(Some(snapshot), cx);
+                state.project_selection_runs(&[
+                    run_frame(1, first_text, first_layout),
+                    run_frame(0, second_text, second_layout),
+                ]);
+            });
+
+            assert_eq!(host.selected_text(cx), "twne");
+        });
+    }
+
+    #[gpui::test]
+    fn plain_projection_safely_rejects_a_text_layout_length_mismatch(cx: &mut TestAppContext) {
+        let (_, layout) = laid_out_runs(&["short"], cx).pop().unwrap();
+        let start = layout.position_for_index(0).unwrap();
+        let end = layout.position_for_index(5).unwrap();
+        let states = project_selection_runs(
+            Some(plain_snapshot(start, end)),
+            &[run_frame(0, SharedString::from("longer"), layout)],
+        );
+
+        assert_eq!(
+            states,
+            vec![SelectionRunState {
+                byte_range: None,
+                active: true,
+            }]
+        );
     }
 
     #[gpui::test]
