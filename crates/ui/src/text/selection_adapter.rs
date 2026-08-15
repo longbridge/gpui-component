@@ -2,8 +2,8 @@ use std::{cell::RefCell, ops::RangeInclusive, rc::Rc};
 
 use gpui::{App, Bounds, EntityId, Hitbox, Pixels, Point, WeakEntity, Window};
 use gpui_base::{
-    SelectionEndpointSnapshot, SelectionRegionCoverage, SelectionRegionFrame, SelectionScopeId,
-    SelectionSnapshot, TextSelectionRegion, WindowTextSelection as _,
+    SelectionEndpointSnapshot, SelectionRegionCoverage, SelectionRegionFrame, SelectionSnapshot,
+    TextSelectionRegion, WindowTextSelection as _,
 };
 
 use super::TextViewState;
@@ -174,7 +174,6 @@ impl TextViewSelectionAdapter {
         hitbox: Hitbox,
         bounds: Bounds<Pixels>,
         scroll_offset: Point<Pixels>,
-        scope: SelectionScopeId,
         document_order: u64,
         window: &mut Window,
         cx: &mut App,
@@ -185,7 +184,7 @@ impl TextViewSelectionAdapter {
                 hitbox,
                 bounds,
                 scroll_offset,
-                scope,
+                scope: Default::default(),
                 document_order,
                 text_bounds: self.text_bounds.clone(),
             },

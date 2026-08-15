@@ -13,7 +13,7 @@ use gpui::{
 };
 
 use crate::{
-    ActiveTheme, WindowExt as _,
+    ActiveTheme,
     global_state::UiGlobalState,
     input::Selection,
     text::TextViewMultiClickKind,
@@ -539,7 +539,7 @@ impl Element for Inline {
                     if let Some(link) =
                         Self::link_for_position(&text_layout, &links, event.position)
                     {
-                        window.end_text_selection(cx);
+                        gpui_base::WindowTextSelection::end_text_selection(window, cx);
                         cx.stop_propagation();
                         let click = ClickEvent::Mouse(MouseClickEvent {
                             down: MouseDownEvent {

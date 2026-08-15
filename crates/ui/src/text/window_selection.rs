@@ -1,129 +1,5 @@
-use gpui::{
-    App, Bounds, Element, ElementId, GlobalElementId, InspectorElementId, IntoElement, LayoutId,
-    Pixels, Window,
-};
-use gpui_base::SelectionScopeId;
-
-use crate::{Root, global_state::UiGlobalState};
-
-/// The modal layer a selectable TextView belongs to.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(crate) enum SelectionScope {
-    Base,
-    Dialog(usize),
-    Sheet,
-}
-
-impl SelectionScope {
-    pub(crate) fn base_id(self) -> SelectionScopeId {
-        match self {
-            Self::Base => SelectionScopeId::default(),
-            Self::Dialog(layer_ix) => SelectionScopeId::new(layer_ix as u64 + 1),
-            Self::Sheet => SelectionScopeId::new(u64::MAX),
-        }
-    }
-}
-
-/// Marks an element subtree with the base selection scope used by TextViews
-/// painted inside it.
-pub(crate) trait SelectionScopeElement: IntoElement + Sized {
-    fn selection_scope(self, scope: SelectionScope) -> SelectionScopeMarker<Self::Element> {
-        SelectionScopeMarker {
-            scope,
-            element: self.into_element(),
-        }
-    }
-}
-
-impl<E: IntoElement> SelectionScopeElement for E {}
-
-pub(crate) struct SelectionScopeMarker<E> {
-    scope: SelectionScope,
-    element: E,
-}
-
-impl<E: Element> IntoElement for SelectionScopeMarker<E> {
-    type Element = Self;
-
-    fn into_element(self) -> Self::Element {
-        self
-    }
-}
-
-impl<E: Element> Element for SelectionScopeMarker<E> {
-    type RequestLayoutState = E::RequestLayoutState;
-    type PrepaintState = E::PrepaintState;
-
-    fn id(&self) -> Option<ElementId> {
-        self.element.id()
-    }
-
-    fn source_location(&self) -> Option<&'static std::panic::Location<'static>> {
-        self.element.source_location()
-    }
-
-    fn request_layout(
-        &mut self,
-        id: Option<&GlobalElementId>,
-        inspector_id: Option<&InspectorElementId>,
-        window: &mut Window,
-        cx: &mut App,
-    ) -> (LayoutId, Self::RequestLayoutState) {
-        self.element.request_layout(id, inspector_id, window, cx)
-    }
-
-    fn prepaint(
-        &mut self,
-        id: Option<&GlobalElementId>,
-        inspector_id: Option<&InspectorElementId>,
-        bounds: Bounds<Pixels>,
-        request_layout: &mut Self::RequestLayoutState,
-        window: &mut Window,
-        cx: &mut App,
-    ) -> Self::PrepaintState {
-        self.element
-            .prepaint(id, inspector_id, bounds, request_layout, window, cx)
-    }
-
-    fn paint(
-        &mut self,
-        id: Option<&GlobalElementId>,
-        inspector_id: Option<&InspectorElementId>,
-        bounds: Bounds<Pixels>,
-        request_layout: &mut Self::RequestLayoutState,
-        prepaint: &mut Self::PrepaintState,
-        window: &mut Window,
-        cx: &mut App,
-    ) {
-        UiGlobalState::global_mut(cx).push_selection_scope(self.scope);
-        self.element.paint(
-            id,
-            inspector_id,
-            bounds,
-            request_layout,
-            prepaint,
-            window,
-            cx,
-        );
-        UiGlobalState::global_mut(cx).pop_selection_scope();
-    }
-}
-
-impl Root {
-    pub(crate) fn active_selection_scope(&self) -> SelectionScope {
-        if !self.active_dialogs.is_empty() {
-            SelectionScope::Dialog(self.active_dialogs.len() - 1)
-        } else if self.active_sheet.is_some() {
-            SelectionScope::Sheet
-        } else {
-            SelectionScope::Base
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{SelectionScope, SelectionScopeElement};
     use crate::global_state::GlobalState;
     use crate::{
         Placement, Root,
@@ -137,7 +13,8 @@ mod tests {
         div, point, px,
     };
     use gpui_base::{
-        SelectionRegionFrame, SelectionRunFrame, SelectionScopeId, TextSelectionRegion,
+        SelectionRegionFrame, SelectionRunFrame, SelectionScopeId, TextSelection,
+        TextSelectionRegion,
     };
     use std::cell::Cell;
     use std::rc::Rc;
@@ -607,7 +484,7 @@ mod tests {
     }
 
     #[gpui::test]
-    fn clearing_base_host_leaves_no_root_owned_text_view_selection(cx: &mut TestAppContext) {
+    fn clearing_base_state_leaves_no_root_owned_text_view_selection(cx: &mut TestAppContext) {
         cx.update(crate::init);
         let (root, cx) = cx.add_window_view(|window, cx| {
             let content = cx.new(BaseOwnedTextViewSelection::new);
@@ -709,6 +586,86 @@ mod tests {
             root.update(cx, |root, cx| root.clear_text_selection(cx));
             assert_eq!(text_view.read(cx).selected_text(), "");
         });
+    }
+
+    #[gpui::test]
+    #[allow(deprecated)]
+    fn deprecated_component_window_methods_share_the_base_selection(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (root, cx) = cx.add_window_view(|window, cx| {
+            let content = cx.new(BaseOwnedTextViewSelection::new);
+            Root::new(content, window, cx)
+        });
+        let content = root.read_with(cx, |root, _| {
+            root.view()
+                .clone()
+                .downcast::<BaseOwnedTextViewSelection>()
+                .unwrap()
+        });
+        let text_view = content.read_with(cx, |content, _| content.text_view.clone());
+        let cx: &mut VisualTestContext = cx;
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+            text_view.update(cx, |state, cx| state.select_all(cx));
+
+            assert_eq!(
+                crate::WindowExt::selected_text(window, cx),
+                gpui_base::WindowTextSelection::selected_text(window, cx)
+            );
+            assert_eq!(
+                crate::WindowExt::has_text_selection(window, cx),
+                gpui_base::WindowTextSelection::has_text_selection(window, cx)
+            );
+
+            crate::WindowExt::clear_text_selection(window, cx);
+            assert!(!gpui_base::WindowTextSelection::has_text_selection(
+                window, cx
+            ));
+
+            text_view.update(cx, |state, cx| state.select_all(cx));
+            gpui_base::WindowTextSelection::clear_text_selection(window, cx);
+            assert!(!crate::WindowExt::has_text_selection(window, cx));
+        });
+    }
+
+    #[gpui::test]
+    #[allow(deprecated)]
+    fn deprecated_component_end_stops_the_base_drag(cx: &mut TestAppContext) {
+        let (_, cx) = setup(true, cx);
+
+        cx.simulate_mouse_down(
+            point(px(1.), px(15.)),
+            MouseButton::Left,
+            Modifiers::default(),
+        );
+        cx.simulate_mouse_move(
+            point(px(60.), px(15.)),
+            Some(MouseButton::Left),
+            Modifiers::default(),
+        );
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+        let before = window_selected_text(cx);
+        assert!(!before.is_empty());
+
+        cx.update(|window, cx| crate::WindowExt::end_text_selection(window, cx));
+        cx.simulate_mouse_move(
+            point(px(300.), px(70.)),
+            Some(MouseButton::Left),
+            Modifiers::default(),
+        );
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        assert_eq!(window_selected_text(cx), before);
+        cx.simulate_mouse_up(
+            point(px(300.), px(70.)),
+            MouseButton::Left,
+            Modifiers::default(),
+        );
     }
 
     #[gpui::test]
@@ -1248,8 +1205,7 @@ mod tests {
     }
 
     fn window_selected_text(cx: &mut VisualTestContext) -> String {
-        use crate::WindowExt as _;
-        cx.update(|window, cx| window.selected_text(cx))
+        cx.update(|window, cx| gpui_base::WindowTextSelection::selected_text(window, cx))
     }
 
     fn click(
@@ -1865,6 +1821,28 @@ mod tests {
         state
     }
 
+    fn open_sheet_with_text(
+        cx: &mut VisualTestContext,
+        text: &'static str,
+    ) -> Entity<TextViewState> {
+        let state = cx.update(|_, cx| cx.new(|cx| TextViewState::markdown(text, cx)));
+        let state_for_builder = state.clone();
+        cx.update(|window, cx| {
+            Root::update(window, cx, |root, window, cx| {
+                root.open_sheet_at(
+                    Placement::Right,
+                    move |sheet, _, _| {
+                        sheet.child(TextView::new(&state_for_builder).selectable(true))
+                    },
+                    window,
+                    cx,
+                );
+            });
+        });
+        settle(cx);
+        state
+    }
+
     #[gpui::test]
     fn drag_inside_dialog_still_selects_its_text(cx: &mut TestAppContext) {
         let (_, cx) = setup_modal(cx);
@@ -1883,6 +1861,25 @@ mod tests {
         assert!(
             text.contains("Dialog text"),
             "dialog text was not selectable: {text:?}"
+        );
+    }
+
+    #[gpui::test]
+    fn drag_inside_sheet_still_selects_its_text(cx: &mut TestAppContext) {
+        let (_, cx) = setup_modal(cx);
+        let sheet_state = open_sheet_with_text(cx, "Sheet text");
+
+        let bounds = sheet_state.read_with(cx, |state, _| state.bounds());
+        drag(
+            cx,
+            point(bounds.origin.x + px(1.), bounds.center().y),
+            point(bounds.right() + px(80.), bounds.center().y),
+        );
+
+        let text = window_selected_text(cx);
+        assert!(
+            text.contains("Sheet text"),
+            "sheet text was not selectable: {text:?}"
         );
     }
 
@@ -1909,7 +1906,7 @@ mod tests {
 
     /// A behind-the-modal selectable TextView covered by a full-window
     /// occluding overlay (mirroring a Dialog/Sheet overlay), plus a `front`
-    /// TextView marked with a modal [`SelectionScope`] and painted on top of the
+    /// TextView marked with an opaque modal scope and painted on top of the
     /// overlay. This reproduces the modal stacking at fixed coordinates without a
     /// real modal's open animation (which cannot be settled under the test
     /// clock).
@@ -1917,16 +1914,16 @@ mod tests {
         focus_handle: FocusHandle,
         behind: Entity<TextViewState>,
         front: Entity<TextViewState>,
-        front_scope: SelectionScope,
+        front_scope: SelectionScopeId,
     }
 
     impl SyntheticModalView {
-        fn new(front_scope: SelectionScope, cx: &mut Context<Self>) -> Self {
+        fn new(cx: &mut Context<Self>) -> Self {
             Self {
                 focus_handle: cx.focus_handle(),
                 behind: cx.new(|cx| TextViewState::markdown("Behind text", cx)),
                 front: cx.new(|cx| TextViewState::markdown("Front text", cx)),
-                front_scope,
+                front_scope: SelectionScopeId::default(),
             }
         }
     }
@@ -1944,7 +1941,8 @@ mod tests {
                 )
                 // A full-window occluding overlay (mirrors the modal overlay)
                 // with modal-scoped content painted on top of it.
-                .child(
+                .child(TextSelection::scope(
+                    self.front_scope,
                     div()
                         .absolute()
                         .top_0()
@@ -1957,20 +1955,18 @@ mod tests {
                                 .top(px(100.))
                                 .left_0()
                                 .h(px(40.))
-                                .child(TextView::new(&self.front).selectable(true))
-                                .selection_scope(self.front_scope),
+                                .child(TextView::new(&self.front).selectable(true)),
                         ),
-                )
+                ))
         }
     }
 
     fn setup_synthetic(
-        front_scope: SelectionScope,
         cx: &mut TestAppContext,
     ) -> (Entity<SyntheticModalView>, &mut VisualTestContext) {
         cx.update(crate::init);
         let (root, cx) = cx.add_window_view(|window, cx| {
-            let view = cx.new(|cx| SyntheticModalView::new(front_scope, cx));
+            let view = cx.new(SyntheticModalView::new);
             Root::new(view, window, cx)
         });
         let view = root.read_with(cx, |root, _| {
@@ -1986,12 +1982,19 @@ mod tests {
         (view, cx)
     }
 
-    /// Open an empty dialog (its layer is not mounted, so nothing renders) purely
-    /// to make `active_selection_scope()` return `Dialog(0)`.
-    fn activate_dialog_scope(cx: &mut VisualTestContext) {
-        cx.update(|window, cx| {
+    /// Open an empty dialog (its layer is not mounted, so nothing renders), then
+    /// mark the synthetic front content with Root's opaque active scope.
+    fn activate_dialog_scope(view: &Entity<SyntheticModalView>, cx: &mut VisualTestContext) {
+        let scope = cx.update(|window, cx| {
             Root::update(window, cx, |root, window, cx| {
                 root.open_dialog(|dialog, _, _| dialog, window, cx);
+            });
+            Root::read(window, cx).active_text_selection_scope()
+        });
+        cx.update(|_, cx| {
+            view.update(cx, |view, cx| {
+                view.front_scope = scope;
+                cx.notify();
             });
         });
         cx.update(|window, cx| {
@@ -1999,12 +2002,19 @@ mod tests {
         });
     }
 
-    /// Open an empty sheet purely to make `active_selection_scope()` return
-    /// `Sheet`.
-    fn activate_sheet_scope(cx: &mut VisualTestContext) {
-        cx.update(|window, cx| {
+    /// Open an empty sheet and mark the synthetic front content with Root's
+    /// opaque active scope.
+    fn activate_sheet_scope(view: &Entity<SyntheticModalView>, cx: &mut VisualTestContext) {
+        let scope = cx.update(|window, cx| {
             Root::update(window, cx, |root, window, cx| {
                 root.open_sheet_at(Placement::Right, |sheet, _, _| sheet, window, cx);
+            });
+            Root::read(window, cx).active_text_selection_scope()
+        });
+        cx.update(|_, cx| {
+            view.update(cx, |view, cx| {
+                view.front_scope = scope;
+                cx.notify();
             });
         });
         cx.update(|window, cx| {
@@ -2017,8 +2027,8 @@ mod tests {
     /// the TextView behind the overlay.
     #[gpui::test]
     fn selection_behind_active_dialog_is_excluded(cx: &mut TestAppContext) {
-        let (view, cx) = setup_synthetic(SelectionScope::Dialog(0), cx);
-        activate_dialog_scope(cx);
+        let (view, cx) = setup_synthetic(cx);
+        activate_dialog_scope(&view, cx);
 
         // Anchor inside the modal-scoped content, then drag up onto the behind
         // view's glyphs (left side; the behind view spans the full window width,
@@ -2040,8 +2050,8 @@ mod tests {
     /// The same guard for a Sheet (#2501 de-guarded both Dialog and Sheet).
     #[gpui::test]
     fn selection_behind_active_sheet_is_excluded(cx: &mut TestAppContext) {
-        let (view, cx) = setup_synthetic(SelectionScope::Sheet, cx);
-        activate_sheet_scope(cx);
+        let (view, cx) = setup_synthetic(cx);
+        activate_sheet_scope(&view, cx);
 
         let from = view.read_with(cx, |v, cx| v.front.read(cx).bounds().center());
         let to = view.read_with(cx, |v, cx| {
@@ -2061,8 +2071,8 @@ mod tests {
     /// stays selectable.
     #[gpui::test]
     fn front_view_in_active_scope_is_selectable(cx: &mut TestAppContext) {
-        let (view, cx) = setup_synthetic(SelectionScope::Dialog(0), cx);
-        activate_dialog_scope(cx);
+        let (view, cx) = setup_synthetic(cx);
+        activate_dialog_scope(&view, cx);
 
         let b = view.read_with(cx, |v, cx| v.front.read(cx).bounds());
         drag(

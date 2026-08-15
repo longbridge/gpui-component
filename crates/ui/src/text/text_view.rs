@@ -356,8 +356,9 @@ impl Element for TextView {
             })
             .relative()
             .on_action(move |_: &crate::input::Copy, window, cx| {
-                use crate::WindowExt as _;
-                let text = window.selected_text(cx).trim().to_string();
+                let text = gpui_base::WindowTextSelection::selected_text(window, cx)
+                    .trim()
+                    .to_string();
                 if text.is_empty() {
                     cx.propagate();
                     return;
@@ -415,14 +416,11 @@ impl Element for TextView {
                     state.bounds(),
                 )
             };
-            let global = UiGlobalState::global_mut(cx);
-            let scope = global.current_selection_scope().base_id();
-            let document_order = global.next_selection_document_order();
+            let document_order = UiGlobalState::global_mut(cx).next_selection_document_order();
             adapter.register_frame(
                 hitbox.clone(),
                 content_bounds,
                 scroll_offset,
-                scope,
                 document_order,
                 window,
                 cx,

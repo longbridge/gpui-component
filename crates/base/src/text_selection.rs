@@ -1063,8 +1063,128 @@ struct WindowTextSelections(HashMap<gpui::WindowId, Entity<TextSelectionState>>)
 
 impl Global for WindowTextSelections {}
 
+#[derive(Default)]
+struct TextSelectionScopeStack(Vec<SelectionScopeId>);
+
+impl Global for TextSelectionScopeStack {}
+
+fn push_text_selection_scope(scope: SelectionScopeId, cx: &mut App) {
+    if !cx.has_global::<TextSelectionScopeStack>() {
+        cx.set_global(TextSelectionScopeStack::default());
+    }
+    cx.global_mut::<TextSelectionScopeStack>().0.push(scope);
+}
+
+fn pop_text_selection_scope(cx: &mut App) {
+    cx.global_mut::<TextSelectionScopeStack>().0.pop();
+}
+
+fn current_text_selection_scope(cx: &App) -> Option<SelectionScopeId> {
+    cx.has_global::<TextSelectionScopeStack>()
+        .then(|| cx.global::<TextSelectionScopeStack>().0.last().copied())
+        .flatten()
+}
+
+fn with_text_selection_scope<T>(
+    scope: SelectionScopeId,
+    cx: &mut App,
+    callback: impl FnOnce(&mut App) -> T,
+) -> T {
+    push_text_selection_scope(scope, cx);
+    let result = callback(cx);
+    pop_text_selection_scope(cx);
+    result
+}
+
 /// A zero-sized element which enables text selection for a window root.
 pub struct TextSelection;
+
+impl TextSelection {
+    /// Marks an element subtree as belonging to `scope`.
+    #[doc(hidden)]
+    pub fn scope(scope: SelectionScopeId, element: impl IntoElement) -> impl IntoElement {
+        TextSelectionScopeMarker {
+            scope,
+            element: element.into_element(),
+        }
+    }
+}
+
+struct TextSelectionScopeMarker<E> {
+    scope: SelectionScopeId,
+    element: E,
+}
+
+impl<E: Element> IntoElement for TextSelectionScopeMarker<E> {
+    type Element = Self;
+
+    fn into_element(self) -> Self::Element {
+        self
+    }
+}
+
+impl<E: Element> Element for TextSelectionScopeMarker<E> {
+    type RequestLayoutState = E::RequestLayoutState;
+    type PrepaintState = E::PrepaintState;
+
+    fn id(&self) -> Option<ElementId> {
+        self.element.id()
+    }
+
+    fn source_location(&self) -> Option<&'static std::panic::Location<'static>> {
+        self.element.source_location()
+    }
+
+    fn request_layout(
+        &mut self,
+        id: Option<&GlobalElementId>,
+        inspector_id: Option<&InspectorElementId>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> (LayoutId, Self::RequestLayoutState) {
+        with_text_selection_scope(self.scope, cx, |cx| {
+            self.element.request_layout(id, inspector_id, window, cx)
+        })
+    }
+
+    fn prepaint(
+        &mut self,
+        id: Option<&GlobalElementId>,
+        inspector_id: Option<&InspectorElementId>,
+        bounds: Bounds<Pixels>,
+        request_layout: &mut Self::RequestLayoutState,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Self::PrepaintState {
+        with_text_selection_scope(self.scope, cx, |cx| {
+            self.element
+                .prepaint(id, inspector_id, bounds, request_layout, window, cx)
+        })
+    }
+
+    fn paint(
+        &mut self,
+        id: Option<&GlobalElementId>,
+        inspector_id: Option<&InspectorElementId>,
+        bounds: Bounds<Pixels>,
+        request_layout: &mut Self::RequestLayoutState,
+        prepaint: &mut Self::PrepaintState,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        with_text_selection_scope(self.scope, cx, |cx| {
+            self.element.paint(
+                id,
+                inspector_id,
+                bounds,
+                request_layout,
+                prepaint,
+                window,
+                cx,
+            );
+        });
+    }
+}
 
 struct TextSelectionElementState {
     token: Rc<()>,
@@ -1254,9 +1374,12 @@ impl WindowTextSelection for Window {
     fn register_text_selection_region(
         &mut self,
         region: TextSelectionRegion,
-        frame: SelectionRegionFrame,
+        mut frame: SelectionRegionFrame,
         cx: &mut App,
     ) {
+        if let Some(scope) = current_text_selection_scope(cx) {
+            frame.scope = scope;
+        }
         let state = TextSelectionState::ensure(self, cx);
         let callbacks = state.update(cx, |state, cx| {
             let callbacks = state.prune_lifecycle(cx);

@@ -15,7 +15,7 @@ use markdown::mdast;
 use ropey::Rope;
 
 use crate::{
-    ActiveTheme as _, Icon, IconName, StyledExt, WindowExt as _, h_flex,
+    ActiveTheme as _, Icon, IconName, StyledExt, h_flex,
     highlighter::{HighlightTheme, LanguageRegistry, SyntaxHighlighter},
     input::{InputEdit, Point, RopeExt as _},
     scroll::horizontal_scroll_area,
@@ -1356,7 +1356,7 @@ impl Paragraph {
                                     Tooltip::new(title.clone()).build(window, cx)
                                 })
                                 .on_click(move |event, window, cx| {
-                                    window.end_text_selection(cx);
+                                    gpui_base::WindowTextSelection::end_text_selection(window, cx);
                                     cx.stop_propagation();
                                     handle_link_click(
                                         &link_click_handler,
@@ -1367,7 +1367,7 @@ impl Paragraph {
                                     );
                                 })
                                 .on_aux_click(move |event, window, cx| {
-                                    window.end_text_selection(cx);
+                                    gpui_base::WindowTextSelection::end_text_selection(window, cx);
                                     cx.stop_propagation();
                                     handle_link_click(
                                         &aux_link_click_handler,

@@ -12,7 +12,6 @@ use gpui::{
 };
 
 use crate::{
-    WindowExt as _,
     text::text_view::{LinkClickHandlerFn, handle_link_click},
     tooltip::Tooltip,
 };
@@ -139,7 +138,7 @@ impl InlineFlow {
                 this.cursor_pointer()
                     .tooltip(move |window, cx| Tooltip::new(title.clone()).build(window, cx))
                     .on_click(move |event, window, cx| {
-                        window.end_text_selection(cx);
+                        gpui_base::WindowTextSelection::end_text_selection(window, cx);
                         cx.stop_propagation();
                         handle_link_click(
                             &link_click_handler,
@@ -150,7 +149,7 @@ impl InlineFlow {
                         );
                     })
                     .on_aux_click(move |event, window, cx| {
-                        window.end_text_selection(cx);
+                        gpui_base::WindowTextSelection::end_text_selection(window, cx);
                         cx.stop_propagation();
                         handle_link_click(
                             &aux_link_click_handler,

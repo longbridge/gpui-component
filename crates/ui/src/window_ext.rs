@@ -89,17 +89,21 @@ pub trait WindowExt: Sized {
     /// this window, ordered top to bottom and joined with `\n`.
     ///
     /// Returns an empty string if the window root is not a [`Root`].
+    #[deprecated(note = "use gpui_base::WindowTextSelection::selected_text instead")]
     fn selected_text(&mut self, cx: &mut App) -> String;
 
     /// Returns true if there is an active text selection in this window
     /// (either a window-level drag selection or a view-local selection such
     /// as select-all or a double-click word selection).
+    #[deprecated(note = "use gpui_base::WindowTextSelection::has_text_selection instead")]
     fn has_text_selection(&mut self, cx: &mut App) -> bool;
 
     /// Clears the window-level text selection and all view-local selections.
+    #[deprecated(note = "use gpui_base::WindowTextSelection::clear_text_selection instead")]
     fn clear_text_selection(&mut self, cx: &mut App);
 
     /// Ends the in-progress window-level text selection drag (if any).
+    #[deprecated(note = "use gpui_base::WindowTextSelection::end_text_selection instead")]
     fn end_text_selection(&mut self, cx: &mut App);
 }
 

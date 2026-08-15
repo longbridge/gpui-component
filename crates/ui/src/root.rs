@@ -5,7 +5,6 @@ use crate::{
     native_menu::FallbackMenuOverlay,
     notification::{Notification, NotificationList},
     sheet::Sheet,
-    text::TextSelection,
     tooltip::render_tooltip,
     window_border,
 };
@@ -14,7 +13,7 @@ use gpui::{
     FocusHandle, InteractiveElement, IntoElement, KeyBinding, ParentElement as _, Pixels, Render,
     StyleRefinement, Styled, WeakFocusHandle, Window, actions, div, prelude::FluentBuilder as _,
 };
-use gpui_base::WindowTextSelection as _;
+use gpui_base::{SelectionScopeId, TextSelection};
 use std::{any::TypeId, rc::Rc};
 
 actions!(root, [Tab, TabPrev]);
@@ -51,6 +50,7 @@ pub struct Root {
     /// Used to handle rapid dialog opening/closing to maintain correct focus chain.
     pending_focus_restore: Option<WeakFocusHandle>,
     window_id: gpui::WindowId,
+    next_text_selection_scope: u64,
 }
 
 #[derive(Clone)]
@@ -59,6 +59,7 @@ pub(crate) struct ActiveSheet {
     /// The previous focused handle before opening the Sheet.
     previous_focused_handle: Option<WeakFocusHandle>,
     placement: Placement,
+    selection_scope: SelectionScopeId,
     builder: Rc<dyn Fn(Sheet, &mut Window, &mut App) -> Sheet + 'static>,
 }
 
@@ -67,6 +68,7 @@ pub(crate) struct ActiveDialog {
     focus_handle: FocusHandle,
     /// The previous focused handle before opening the Dialog.
     previous_focused_handle: Option<WeakFocusHandle>,
+    selection_scope: SelectionScopeId,
     builder: Rc<dyn Fn(Dialog, &mut Window, &mut App) -> Dialog + 'static>,
 }
 
@@ -74,11 +76,13 @@ impl ActiveDialog {
     pub(crate) fn new(
         focus_handle: FocusHandle,
         previous_focused_handle: Option<WeakFocusHandle>,
+        selection_scope: SelectionScopeId,
         builder: impl Fn(Dialog, &mut Window, &mut App) -> Dialog + 'static,
     ) -> Self {
         Self {
             focus_handle,
             previous_focused_handle,
+            selection_scope,
             builder: Rc::new(builder),
         }
     }
@@ -86,7 +90,7 @@ impl ActiveDialog {
 
 impl Root {
     /// Clears window-owned text selection synchronously.
-    #[deprecated(note = "call gpui_base::WindowTextSelection::clear_text_selection instead")]
+    #[deprecated(note = "use gpui_base::WindowTextSelection::clear_text_selection instead")]
     pub fn clear_text_selection(&mut self, cx: &mut Context<Self>) {
         gpui_base::clear_window_text_selection(self.window_id, cx);
     }
@@ -111,7 +115,26 @@ impl Root {
             bordered: true,
             pending_focus_restore: None,
             window_id: window.window_handle().window_id(),
+            next_text_selection_scope: 1,
         }
+    }
+
+    fn allocate_text_selection_scope(&mut self) -> SelectionScopeId {
+        let scope = SelectionScopeId::new(self.next_text_selection_scope);
+        self.next_text_selection_scope = self.next_text_selection_scope.wrapping_add(1).max(1);
+        scope
+    }
+
+    pub(crate) fn active_text_selection_scope(&self) -> SelectionScopeId {
+        self.active_dialogs
+            .last()
+            .map(|dialog| dialog.selection_scope)
+            .or_else(|| {
+                self.active_sheet
+                    .as_ref()
+                    .map(|sheet| sheet.selection_scope)
+            })
+            .unwrap_or_default()
     }
 
     /// Enable or disable the Linux client-side window border wrapper.
@@ -201,6 +224,7 @@ impl Root {
             sheet = (active_sheet.builder)(sheet, window, cx);
             sheet.focus_handle = active_sheet.focus_handle.clone();
             sheet.placement = active_sheet.placement;
+            sheet.selection_scope = active_sheet.selection_scope;
 
             let size = sheet.size;
 
@@ -243,6 +267,7 @@ impl Root {
                 //
                 // So we keep the focus handle in the `active_dialog`, this is owned by the `Root`.
                 dialog.focus_handle = active_dialog.focus_handle.clone();
+                dialog.selection_scope = active_dialog.selection_scope;
 
                 dialog.layer_ix = i;
                 // Find the dialog which one needs to show overlay.
@@ -278,14 +303,16 @@ impl Root {
         let focus_handle = cx.focus_handle();
         focus_handle.focus(window, cx);
 
+        let selection_scope = self.allocate_text_selection_scope();
         self.active_dialogs.push(ActiveDialog::new(
             focus_handle,
             previous_focused_handle,
+            selection_scope,
             build,
         ));
         // Opening a modal confines selection to it; drop any background
         // selection so it cannot linger (or be copied) under the modal.
-        window.clear_text_selection(cx);
+        gpui_base::WindowTextSelection::clear_text_selection(window, cx);
         cx.notify();
     }
 
@@ -301,7 +328,7 @@ impl Root {
         if let Some(handle) = self.close_dialog_internal() {
             window.focus(&handle, cx);
         }
-        window.clear_text_selection(cx);
+        gpui_base::WindowTextSelection::clear_text_selection(window, cx);
         cx.notify();
     }
 
@@ -325,7 +352,7 @@ impl Root {
             })
             .detach();
         }
-        window.clear_text_selection(cx);
+        gpui_base::WindowTextSelection::clear_text_selection(window, cx);
         cx.notify();
     }
 
@@ -339,7 +366,7 @@ impl Root {
         if let Some(handle) = previous_focused_handle.and_then(|h| h.upgrade()) {
             window.focus(&handle, cx);
         }
-        window.clear_text_selection(cx);
+        gpui_base::WindowTextSelection::clear_text_selection(window, cx);
         cx.notify();
     }
 
@@ -360,15 +387,17 @@ impl Root {
 
         let focus_handle = cx.focus_handle();
         focus_handle.focus(window, cx);
+        let selection_scope = self.allocate_text_selection_scope();
         self.active_sheet = Some(ActiveSheet {
             focus_handle,
             previous_focused_handle,
             placement,
+            selection_scope,
             builder: Rc::new(build),
         });
         // Opening a modal confines selection to it; drop any background
         // selection so it cannot linger (or be copied) under the modal.
-        window.clear_text_selection(cx);
+        gpui_base::WindowTextSelection::clear_text_selection(window, cx);
         cx.notify();
     }
 
@@ -383,7 +412,7 @@ impl Root {
             window.focus(&previous_handle, cx);
         }
         self.active_sheet = None;
-        window.clear_text_selection(cx);
+        gpui_base::WindowTextSelection::clear_text_selection(window, cx);
         cx.notify();
     }
 
@@ -525,7 +554,9 @@ impl Root {
     }
 
     fn on_action_copy(&mut self, _: &Copy, window: &mut Window, cx: &mut Context<Self>) {
-        let text = window.selected_text(cx).trim().to_string();
+        let text = gpui_base::WindowTextSelection::selected_text(window, cx)
+            .trim()
+            .to_string();
         if text.is_empty() {
             cx.propagate();
             return;
@@ -547,8 +578,8 @@ impl Render for Root {
             crate::global_state::init(cx);
         }
         crate::global_state::UiGlobalState::global_mut(cx).begin_selection_frame();
-        let active_scope = self.active_selection_scope().base_id();
-        window.set_text_selection_scope(active_scope, cx);
+        let active_scope = self.active_text_selection_scope();
+        gpui_base::WindowTextSelection::set_text_selection_scope(window, active_scope, cx);
 
         let inner = div()
             .id("root")

@@ -10,15 +10,14 @@ mod state;
 mod style;
 mod text_view;
 mod utils;
+#[cfg(test)]
 mod window_selection;
 
 use gpui::{App, ElementId, IntoElement, RenderOnce, SharedString, Window};
-pub(crate) use gpui_base::TextSelection;
 pub use markdown_ext::*;
 pub use state::*;
 pub use style::*;
 pub use text_view::*;
-pub(crate) use window_selection::{SelectionScope, SelectionScopeElement};
 
 pub(crate) fn init(cx: &mut App) {
     state::init(cx);
