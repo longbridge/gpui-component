@@ -2,7 +2,7 @@ use std::{collections::HashMap, ops::Range, sync::LazyLock};
 
 use gpui::{Context, HighlightStyle, SharedString, Window, rgb};
 use gpui_base::input::{
-    FoldRange, HighlightStyleResolver, InputBaseState, InputEdit, InputHighlighter, Rope,
+    EditorState, FoldRange, HighlightStyleResolver, InputEdit, InputHighlighter, Rope,
 };
 use syntect::{
     parsing::{ParseState, Scope, ScopeStack, SyntaxReference, SyntaxSet},
@@ -72,7 +72,7 @@ impl InputHighlighter for SyntectHighlighter {
         text: &Rope,
         folding: bool,
         _window: &mut Window,
-        _cx: &mut Context<InputBaseState>,
+        _cx: &mut Context<EditorState>,
     ) {
         // `syntect` has no incremental mode, so the whole document is reparsed.
         // Read the rope once and reuse that string for folding too.

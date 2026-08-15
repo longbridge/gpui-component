@@ -5,7 +5,7 @@ use gpui::{
 use ropey::Rope;
 use std::{ops::Range, rc::Rc};
 
-use crate::input::{GoToDefinition, InputBaseState, RopeExt, element::TextElement};
+use crate::input::{EditorMode, GoToDefinition, InputBaseState, RopeExt};
 
 /// Definition provider
 ///
@@ -60,18 +60,18 @@ impl HoverDefinition {
     }
 }
 
-impl InputBaseState {
+impl InputBaseState<EditorMode> {
     pub(crate) fn handle_hover_definition(
         &mut self,
         offset: usize,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let Some(provider) = self.lsp.definition_provider.clone() else {
+        let Some(provider) = self.extras.lsp.definition_provider.clone() else {
             return;
         };
 
-        if self.hover_definition.is_same(offset) {
+        if self.extras.hover_definition.is_same(offset) {
             return;
         }
 
@@ -79,12 +79,12 @@ impl InputBaseState {
         let task = provider.definitions(&self.text, offset, window, cx);
         let mut symbol_range = self.text.word_range(offset).unwrap_or(offset..offset);
         let editor = cx.entity();
-        self.lsp._hover_task = cx.spawn_in(window, async move |_, cx| {
+        self.extras.lsp._hover_task = cx.spawn_in(window, async move |_, cx| {
             let locations = task.await?;
 
             _ = editor.update(cx, |editor, cx| {
                 if locations.is_empty() {
-                    editor.hover_definition.clear();
+                    editor.extras.hover_definition.clear();
                 } else {
                     if let Some(location) = locations.first() {
                         if let Some(range) = location.origin_selection_range {
@@ -95,6 +95,7 @@ impl InputBaseState {
                     }
 
                     editor
+                        .extras
                         .hover_definition
                         .update(symbol_range.clone(), locations.clone());
                 }
@@ -112,7 +113,8 @@ impl InputBaseState {
         cx: &mut Context<Self>,
     ) {
         let offset = self.cursor();
-        if let Some((symbol_range, locations)) = self.hover_definition.last_location.clone() {
+        if let Some((symbol_range, locations)) = self.extras.hover_definition.last_location.clone()
+        {
             if !(symbol_range.start..=symbol_range.end).contains(&offset) {
                 return;
             }
@@ -129,20 +131,20 @@ impl InputBaseState {
         event: &MouseDownEvent,
         offset: usize,
         window: &mut Window,
-        cx: &mut Context<InputBaseState>,
+        cx: &mut Context<InputBaseState<EditorMode>>,
     ) -> bool {
         if !event.modifiers.secondary() {
             return false;
         }
 
-        if self.hover_definition.is_empty() {
+        if self.extras.hover_definition.is_empty() {
             return false;
         };
-        if !self.hover_definition.is_same(offset) {
+        if !self.extras.hover_definition.is_same(offset) {
             return false;
         }
 
-        let Some(location) = self.hover_definition.locations.first().cloned() else {
+        let Some(location) = self.extras.hover_definition.locations.first().cloned() else {
             return false;
         };
 
@@ -165,7 +167,7 @@ impl InputBaseState {
 
         // Give the host a chance to show the document first (window/showDocument),
         // e.g. to open virtual/external documents (stdlib docs) in an app window.
-        if let Some(handler) = self.lsp.show_document.clone() {
+        if let Some(handler) = self.extras.lsp.show_document.clone() {
             let params = lsp_types::ShowDocumentParams {
                 uri: location.target_uri.clone(),
                 external: Some(external),
@@ -191,17 +193,13 @@ impl InputBaseState {
     }
 }
 
-impl TextElement {
-    pub(crate) fn layout_hover_definition(
-        &self,
-        cx: &App,
-    ) -> Option<(Range<usize>, HighlightStyle)> {
-        let editor = self.state.read(cx);
-        if !editor.mode.is_code_editor() {
-            return None;
-        }
-
-        if editor.hover_definition.is_empty() {
+/// These read the editor's own state; they sit here rather than on the element
+/// because the element has nothing to do with the answer.
+impl InputBaseState<EditorMode> {
+    /// The range highlighted while Cmd-hovering a symbol, with its style.
+    pub(crate) fn hover_definition_style(&self) -> Option<(Range<usize>, HighlightStyle)> {
+        let editor = self;
+        if editor.extras.hover_definition.is_empty() {
             return None;
         };
 
@@ -213,26 +211,20 @@ impl TextElement {
         });
 
         Some((
-            editor.hover_definition.symbol_range.clone(),
+            editor.extras.hover_definition.symbol_range.clone(),
             highlight_style,
         ))
     }
 
-    pub(crate) fn layout_hover_definition_hitbox(
-        &self,
-        editor: &InputBaseState,
-        window: &mut Window,
-        _cx: &App,
-    ) -> Option<Hitbox> {
-        if !editor.mode.is_code_editor() {
-            return None;
-        }
-
-        if editor.hover_definition.is_empty() {
+    /// The hitbox that makes a Cmd-hovered symbol clickable.
+    pub(crate) fn hover_definition_hitbox(&self, window: &mut Window) -> Option<Hitbox> {
+        let editor = self;
+        if editor.extras.hover_definition.is_empty() {
             return None;
         };
 
-        let Some(bounds) = editor.range_to_bounds(&editor.hover_definition.symbol_range) else {
+        let Some(bounds) = editor.range_to_bounds(&editor.extras.hover_definition.symbol_range)
+        else {
             return None;
         };
 

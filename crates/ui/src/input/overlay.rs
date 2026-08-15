@@ -4,29 +4,258 @@ use gpui::{AnyElement, App, Entity, EntityId, Global, IntoElement, WeakEntity, W
 use ropey::Rope;
 
 use super::{
-    InputBaseState,
+    InputBaseState, InputModeKind,
     popovers::{CodeActionMenu, CompletionMenu, DiagnosticPopover, HoverPopover},
     search::SearchPanel,
 };
 
-#[derive(Default)]
-struct InputOverlayRegistry {
-    hosts: HashMap<EntityId, (WeakEntity<InputBaseState>, InputOverlayHost)>,
+struct InputOverlayRegistry<M: OverlayMode> {
+    hosts: HashMap<EntityId, (WeakEntity<InputBaseState<M>>, InputOverlayHost<M>)>,
 }
 
-impl Global for InputOverlayRegistry {}
+impl<M: OverlayMode> Default for InputOverlayRegistry<M> {
+    fn default() -> Self {
+        Self {
+            hosts: HashMap::default(),
+        }
+    }
+}
 
-struct InputOverlayHost {
-    search: Entity<SearchPanel>,
+impl<M: OverlayMode> Global for InputOverlayRegistry<M> {}
+
+struct InputOverlayHost<M: OverlayMode> {
+    search: Entity<SearchPanel<M>>,
+    search_signature: (bool, bool, String, Option<usize>),
+    /// The language-feature popovers. Only a code editor has them.
+    lsp: Option<LspOverlays>,
+}
+
+/// Identifies one version of an overlay's content.
+///
+/// Sync runs on every frame, so the check for "did this change" must not touch
+/// the content itself: the completion list can hold hundreds of items, each
+/// with its own documentation. The engine bumps a revision when it swaps the
+/// content, and the popovers are keyed by cheap identity instead — a revision,
+/// an `Rc` pointer, or a range.
+#[derive(PartialEq, Eq, Default)]
+struct OverlaySignature {
+    open: bool,
+    revision: u64,
+}
+
+/// The popovers driven by language features: completion, code actions, hover
+/// and diagnostics. They belong to a code editor, so they are built and synced
+/// by [`OverlayMode`], where the state's kind is concrete.
+pub(crate) struct LspOverlays {
     completion: Entity<CompletionMenu>,
     code_actions: Entity<CodeActionMenu>,
     hover: Option<Entity<HoverPopover>>,
     diagnostic: Option<Entity<DiagnosticPopover>>,
-    search_signature: (bool, bool, String, Option<usize>),
-    completion_signature: String,
-    code_action_signature: String,
-    hover_signature: String,
-    diagnostic_signature: String,
+    completion_signature: OverlaySignature,
+    code_action_signature: OverlaySignature,
+    hover_signature: Option<std::ops::Range<usize>>,
+    diagnostic_signature: Option<std::rc::Rc<gpui_base::input::DiagnosticEntry>>,
+}
+
+/// What the state read out of the engine for one sync pass.
+///
+/// Deliberately free of content: only what is needed to decide whether a
+/// popover is shown and whether it changed. The content is read from the state
+/// again, on the frames where it actually did.
+pub(crate) struct LspSnapshot {
+    completion: OverlaySignature,
+    completion_start: Option<usize>,
+    code_action: OverlaySignature,
+    hover: Option<std::ops::Range<usize>>,
+    diagnostic: Option<std::rc::Rc<gpui_base::input::DiagnosticEntry>>,
+    cursor: usize,
+}
+
+impl LspSnapshot {
+    fn has_overlay(&self) -> bool {
+        self.completion.open
+            || self.code_action.open
+            || self.hover.is_some()
+            || self.diagnostic.is_some()
+    }
+}
+
+/// What the UI layer needs from each kind of input.
+///
+/// The UI layer is generic over the mode, so it cannot name the editor's state
+/// type. This trait is the seam: the code-editor implementation is the only one
+/// that builds language-feature popovers, and inside it the state is an
+/// `Entity<EditorState>`, which those popovers take.
+///
+/// Entirely internal: nothing public is generic over the mode any more.
+pub(crate) trait OverlayMode: InputModeKind + Sized {
+    /// Reads the language-feature state this mode shows, if any.
+    fn lsp_snapshot(_state: &InputBaseState<Self>, _cx: &App) -> Option<LspSnapshot> {
+        None
+    }
+
+    /// Installs the routing that lets an open menu consume actions first.
+    fn install_action_handler(_state: &Entity<InputBaseState<Self>>, _cx: &mut App) {}
+
+    fn build_lsp(
+        _state: &Entity<InputBaseState<Self>>,
+        _window: &mut Window,
+        _cx: &mut App,
+    ) -> Option<LspOverlays> {
+        None
+    }
+
+    fn sync_lsp(
+        _lsp: &mut LspOverlays,
+        _state: &Entity<InputBaseState<Self>>,
+        _snapshot: &LspSnapshot,
+        _window: &mut Window,
+        _cx: &mut App,
+    ) {
+    }
+}
+
+impl OverlayMode for crate::input::InputMode {}
+impl OverlayMode for crate::input::TextareaMode {}
+
+impl OverlayMode for crate::input::EditorMode {
+    fn install_action_handler(state: &Entity<InputBaseState<Self>>, cx: &mut App) {
+        let id = state.entity_id();
+        state.update(cx, move |state, _| {
+            state.set_overlay_action_handler(move |kind, action, window, cx| {
+                let menus = cx
+                    .try_global::<InputOverlayRegistry<Self>>()
+                    .and_then(|registry| registry.hosts.get(&id))
+                    .and_then(|(_, host)| host.lsp.as_ref())
+                    .map(|lsp| (lsp.completion.clone(), lsp.code_actions.clone()));
+                let Some((completion, code_actions)) = menus else {
+                    return false;
+                };
+                match kind {
+                    gpui_base::input::InputOverlayKind::Completion => {
+                        completion.update(cx, |menu, cx| menu.handle_action(action, window, cx))
+                    }
+                    gpui_base::input::InputOverlayKind::CodeAction => {
+                        code_actions.update(cx, |menu, cx| menu.handle_action(action, window, cx))
+                    }
+                }
+            });
+        });
+    }
+
+    fn lsp_snapshot(state: &InputBaseState<Self>, _cx: &App) -> Option<LspSnapshot> {
+        let completion = state.completion_menu_state();
+        let code_actions = state.code_action_menu_state();
+        Some(LspSnapshot {
+            completion: OverlaySignature {
+                open: completion.open,
+                revision: completion.revision(),
+            },
+            completion_start: completion.trigger_start_offset,
+            code_action: OverlaySignature {
+                open: code_actions.open,
+                revision: code_actions.revision(),
+            },
+            hover: state
+                .hover_popover()
+                .map(|popover| popover.symbol_range.clone()),
+            diagnostic: state.diagnostic_popover(),
+            cursor: state.cursor(),
+        })
+    }
+
+    fn build_lsp(
+        state: &Entity<InputBaseState<Self>>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Option<LspOverlays> {
+        Some(LspOverlays {
+            completion: CompletionMenu::new(state.clone(), window, cx),
+            code_actions: CodeActionMenu::new(state.clone(), window, cx),
+            hover: None,
+            diagnostic: None,
+            completion_signature: OverlaySignature::default(),
+            code_action_signature: OverlaySignature::default(),
+            hover_signature: None,
+            diagnostic_signature: None,
+        })
+    }
+
+    fn sync_lsp(
+        lsp: &mut LspOverlays,
+        state: &Entity<InputBaseState<Self>>,
+        snapshot: &LspSnapshot,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        let cursor = snapshot.cursor;
+
+        if snapshot.completion != lsp.completion_signature {
+            lsp.completion_signature = OverlaySignature {
+                open: snapshot.completion.open,
+                revision: snapshot.completion.revision,
+            };
+            let open = snapshot.completion.open;
+            let start = snapshot.completion_start;
+            // Read the items only now, on a frame where they changed.
+            let (query, items) = {
+                let menu = state.read(cx).completion_menu_state();
+                (menu.query.clone(), menu.items.clone())
+            };
+            lsp.completion.update(cx, |menu, cx| {
+                if open {
+                    menu.update_query(start.unwrap_or(cursor), query);
+                    menu.show(cursor, items, window, cx);
+                } else {
+                    menu.hide(cx);
+                }
+            });
+        }
+
+        if snapshot.code_action != lsp.code_action_signature {
+            lsp.code_action_signature = OverlaySignature {
+                open: snapshot.code_action.open,
+                revision: snapshot.code_action.revision,
+            };
+            let open = snapshot.code_action.open;
+            let items = state.read(cx).code_action_menu_state().items.clone();
+            lsp.code_actions.update(cx, |menu, cx| {
+                if open {
+                    menu.show(cursor, items, window, cx);
+                } else {
+                    menu.hide(cx);
+                }
+            });
+        }
+
+        // A hover popover is anchored to one symbol, so a new range means new
+        // content and the same range means the same content.
+        if snapshot.hover != lsp.hover_signature {
+            lsp.hover_signature = snapshot.hover.clone();
+            let popover = state
+                .read(cx)
+                .hover_popover()
+                .map(|popover| (popover.symbol_range.clone(), popover.hover.clone()));
+            lsp.hover = popover.map(|(symbol_range, hover)| {
+                HoverPopover::new(state.clone(), symbol_range, &hover, cx)
+            });
+        }
+
+        // The engine hands out the diagnostic behind an `Rc`, so pointer
+        // identity already answers "is this the same entry".
+        let diagnostic_changed = match (&snapshot.diagnostic, &lsp.diagnostic_signature) {
+            (Some(new), Some(old)) => !std::rc::Rc::ptr_eq(new, old),
+            (None, None) => false,
+            _ => true,
+        };
+        if diagnostic_changed {
+            lsp.diagnostic_signature = snapshot.diagnostic.clone();
+            lsp.diagnostic = snapshot
+                .diagnostic
+                .as_deref()
+                .map(|entry| DiagnosticPopover::new(entry, state.clone(), cx));
+        }
+    }
 }
 
 #[derive(Default)]
@@ -47,63 +276,26 @@ impl InputOverlays {
     }
 }
 
-impl InputOverlayHost {
-    fn new(state: Entity<InputBaseState>, window: &mut Window, cx: &mut App) -> Self {
-        let search = SearchPanel::new(state.clone(), window, cx);
-        let completion = CompletionMenu::new(state.clone(), window, cx);
-        let code_actions = CodeActionMenu::new(state.clone(), window, cx);
+impl<M: OverlayMode> InputOverlayHost<M> {
+    fn new(state: Entity<InputBaseState<M>>, window: &mut Window, cx: &mut App) -> Self {
         Self {
-            search,
-            completion,
-            code_actions,
-            hover: None,
-            diagnostic: None,
+            search: SearchPanel::new(state.clone(), window, cx),
             search_signature: (false, false, String::new(), None),
-            completion_signature: String::new(),
-            code_action_signature: String::new(),
-            hover_signature: String::new(),
-            diagnostic_signature: String::new(),
+            lsp: M::build_lsp(&state, window, cx),
         }
     }
 
     fn sync(
         &mut self,
-        state: &Entity<InputBaseState>,
+        state: &Entity<InputBaseState<M>>,
         window: &mut Window,
         cx: &mut App,
     ) -> InputOverlays {
-        let (
-            search_open,
-            replace_mode,
-            completion_open,
-            completion_start,
-            completion_query,
-            completion_items,
-            code_action_open,
-            code_action_items,
-            hover,
-            diagnostic,
-            cursor,
-            search_session,
-        ) = {
+        let snapshot = M::lsp_snapshot(state.read(cx), cx);
+        let (search_open, replace_mode, search_session) = {
             let state = state.read(cx);
             let search = state.search_session();
-            let completion = state.completion_menu_state();
-            let code_actions = state.code_action_menu_state();
-            (
-                search.open,
-                search.replace_mode,
-                completion.open,
-                completion.trigger_start_offset,
-                completion.query.clone(),
-                completion.items.clone(),
-                code_actions.open,
-                code_actions.items.clone(),
-                state.hover_popover().cloned(),
-                state.diagnostic_popover(),
-                state.cursor(),
-                search.clone(),
-            )
+            (search.open, search.replace_mode, search.clone())
         };
 
         self.search
@@ -135,84 +327,44 @@ impl InputOverlayHost {
             });
         }
 
-        let completion_signature = format!(
-            "{completion_open}:{completion_start:?}:{completion_query}:{completion_items:?}"
-        );
-        if completion_signature != self.completion_signature {
-            self.completion_signature = completion_signature;
-            self.completion.update(cx, |menu, cx| {
-                if completion_open {
-                    menu.update_query(completion_start.unwrap_or(cursor), completion_query);
-                    menu.show(cursor, completion_items, window, cx);
-                } else {
-                    menu.hide(cx);
-                }
-            });
-        }
-
-        let code_action_signature = format!("{code_action_open}:{code_action_items:?}");
-        if code_action_signature != self.code_action_signature {
-            self.code_action_signature = code_action_signature;
-            self.code_actions.update(cx, |menu, cx| {
-                if code_action_open {
-                    menu.show(cursor, code_action_items, window, cx);
-                } else {
-                    menu.hide(cx);
-                }
-            });
-        }
-
-        let hover_signature = format!("{hover:?}");
-        if hover_signature != self.hover_signature {
-            self.hover_signature = hover_signature;
-            self.hover = hover.map(|popover| {
-                HoverPopover::new(state.clone(), popover.symbol_range, &popover.hover, cx)
-            });
-        }
-
-        let diagnostic_signature = format!("{diagnostic:?}");
-        if diagnostic_signature != self.diagnostic_signature {
-            self.diagnostic_signature = diagnostic_signature;
-            self.diagnostic = diagnostic
-                .as_deref()
-                .map(|entry| DiagnosticPopover::new(entry, state.clone(), cx));
+        if let (Some(lsp), Some(snapshot)) = (self.lsp.as_mut(), snapshot.as_ref()) {
+            M::sync_lsp(lsp, state, snapshot, window, cx);
         }
 
         let search = search_open.then(|| self.search.clone().into_any_element());
         let mut floating = Vec::with_capacity(4);
-        if completion_open {
-            floating.push(self.completion.clone().into_any_element());
-        }
-        if code_action_open {
-            floating.push(self.code_actions.clone().into_any_element());
-        }
-        if let Some(hover) = self.hover.as_ref() {
-            floating.push(hover.clone().into_any_element());
-        }
-        if let Some(diagnostic) = self.diagnostic.as_ref() {
-            floating.push(diagnostic.clone().into_any_element());
+        if let (Some(lsp), Some(snapshot)) = (self.lsp.as_ref(), snapshot.as_ref()) {
+            if snapshot.completion.open {
+                floating.push(lsp.completion.clone().into_any_element());
+            }
+            if snapshot.code_action.open {
+                floating.push(lsp.code_actions.clone().into_any_element());
+            }
+            if let Some(hover) = lsp.hover.as_ref() {
+                floating.push(hover.clone().into_any_element());
+            }
+            if let Some(diagnostic) = lsp.diagnostic.as_ref() {
+                floating.push(diagnostic.clone().into_any_element());
+            }
         }
         InputOverlays { search, floating }
     }
 }
 
-pub(super) fn render_overlays(
-    state: &Entity<InputBaseState>,
+pub(super) fn render_overlays<M: OverlayMode>(
+    state: &Entity<InputBaseState<M>>,
     window: &mut Window,
     cx: &mut App,
 ) -> InputOverlays {
-    install_action_handler(state, cx);
+    M::install_action_handler(state, cx);
     let has_overlay = {
         let state = state.read(cx);
         state.search_session().open
-            || state.completion_menu_state().open
-            || state.code_action_menu_state().open
-            || state.hover_popover().is_some()
-            || state.diagnostic_popover().is_some()
+            || M::lsp_snapshot(state, cx).is_some_and(|lsp| lsp.has_overlay())
     };
     if !has_overlay {
-        if cx.has_global::<InputOverlayRegistry>() {
-            let registry = cx.global_mut::<InputOverlayRegistry>();
+        if cx.has_global::<InputOverlayRegistry<M>>() {
+            let registry = cx.global_mut::<InputOverlayRegistry<M>>();
             registry.hosts.remove(&state.entity_id());
             registry
                 .hosts
@@ -221,45 +373,22 @@ pub(super) fn render_overlays(
         return InputOverlays::default();
     }
 
-    if !cx.has_global::<InputOverlayRegistry>() {
-        cx.set_global(InputOverlayRegistry::default());
+    if !cx.has_global::<InputOverlayRegistry<M>>() {
+        cx.set_global(InputOverlayRegistry::<M>::default());
     }
 
     let id = state.entity_id();
     let mut host = cx
-        .global_mut::<InputOverlayRegistry>()
+        .global_mut::<InputOverlayRegistry<M>>()
         .hosts
         .remove(&id)
         .map(|(_, host)| host)
         .unwrap_or_else(|| InputOverlayHost::new(state.clone(), window, cx));
     let overlays = host.sync(state, window, cx);
-    cx.global_mut::<InputOverlayRegistry>()
+    cx.global_mut::<InputOverlayRegistry<M>>()
         .hosts
         .insert(id, (state.downgrade(), host));
     overlays
-}
-
-fn install_action_handler(state: &Entity<InputBaseState>, cx: &mut App) {
-    let id = state.entity_id();
-    state.update(cx, move |state, _| {
-        state.set_overlay_action_handler(move |kind, action, window, cx| {
-            let menus = cx
-                .try_global::<InputOverlayRegistry>()
-                .and_then(|registry| registry.hosts.get(&id))
-                .map(|(_, host)| (host.completion.clone(), host.code_actions.clone()));
-            let Some((completion, code_actions)) = menus else {
-                return false;
-            };
-            match kind {
-                gpui_base::input::InputOverlayKind::Completion => {
-                    completion.update(cx, |menu, cx| menu.handle_action(action, window, cx))
-                }
-                gpui_base::input::InputOverlayKind::CodeAction => {
-                    code_actions.update(cx, |menu, cx| menu.handle_action(action, window, cx))
-                }
-            }
-        });
-    });
 }
 
 #[cfg(test)]
@@ -271,7 +400,7 @@ mod tests {
     use lsp_types::{CodeAction, CompletionItem, Hover, HoverContents, MarkedString};
 
     struct OverlayProbe {
-        state: Entity<InputBaseState>,
+        state: Entity<crate::input::EditorState>,
     }
 
     impl Render for OverlayProbe {
@@ -284,13 +413,73 @@ mod tests {
         }
     }
 
+    /// A frame that changed nothing must not rebuild the popovers.
+    ///
+    /// Sync runs every frame, so the change check has to be cheap and stable.
+    /// It is keyed on a revision the engine bumps when it swaps the content;
+    /// forgetting to bump, or comparing the content itself again, both show up
+    /// here.
+    #[gpui::test]
+    fn unchanged_content_keeps_the_overlay_signature(cx: &mut gpui::TestAppContext) {
+        cx.update(crate::init);
+        let (probe, cx) = cx.add_window_view(|window, cx| OverlayProbe {
+            state: cx.new(|cx| crate::input::EditorState::new(window, cx).language("sql")),
+        });
+        let state = probe.read_with(cx, |probe, _| probe.state.clone());
+
+        cx.update(|window, cx| {
+            state.update(cx, |state, cx| {
+                state.present_completion_items(
+                    0,
+                    "f",
+                    vec![CompletionItem {
+                        label: "foo".into(),
+                        ..Default::default()
+                    }],
+                    cx,
+                );
+            });
+
+            let mut host = InputOverlayHost::new(state.clone(), window, cx);
+            host.sync(&state, window, cx);
+            let after_first = host.lsp.as_ref().unwrap().completion_signature.revision;
+
+            // A second pass over untouched content.
+            host.sync(&state, window, cx);
+            assert_eq!(
+                host.lsp.as_ref().unwrap().completion_signature.revision,
+                after_first,
+                "an unchanged frame must not bump the signature"
+            );
+
+            // Swapping the items must be noticed.
+            state.update(cx, |state, cx| {
+                state.present_completion_items(
+                    0,
+                    "f",
+                    vec![CompletionItem {
+                        label: "bar".into(),
+                        ..Default::default()
+                    }],
+                    cx,
+                );
+            });
+            host.sync(&state, window, cx);
+            assert_ne!(
+                host.lsp.as_ref().unwrap().completion_signature.revision,
+                after_first,
+                "new items must be noticed"
+            );
+        });
+    }
+
     #[gpui::test]
     fn facade_materializes_all_base_overlay_sessions(cx: &mut gpui::TestAppContext) {
         cx.update(crate::init);
         let (probe, cx) = cx.add_window_view(|window, cx| OverlayProbe {
             state: cx.new(|cx| {
-                InputBaseState::new(window, cx)
-                    .multi_line(true)
+                crate::input::EditorState::new(window, cx)
+                    .language("sql")
                     .searchable(true)
                     .replaceable(true)
             }),
@@ -342,7 +531,7 @@ mod tests {
             assert_eq!(overlays.len(), 5);
             assert_eq!(render_overlays(&state, window, cx).len(), 5);
             assert!(
-                cx.global::<InputOverlayRegistry>()
+                cx.global::<InputOverlayRegistry<crate::input::EditorMode>>()
                     .hosts
                     .contains_key(&state.entity_id())
             );
@@ -358,7 +547,7 @@ mod tests {
             assert!(host.sync(&state, window, cx).is_empty());
             assert!(render_overlays(&state, window, cx).is_empty());
             assert!(
-                !cx.global::<InputOverlayRegistry>()
+                !cx.global::<InputOverlayRegistry<crate::input::EditorMode>>()
                     .hosts
                     .contains_key(&state.entity_id())
             );
@@ -366,8 +555,8 @@ mod tests {
 
         let dropped_owner = cx.update(|window, cx| {
             let ephemeral = cx.new(|cx| {
-                InputBaseState::new(window, cx)
-                    .multi_line(true)
+                crate::input::EditorState::new(window, cx)
+                    .language("sql")
                     .searchable(true)
             });
             ephemeral.update(cx, |state, cx| state.open_search(false, cx));
@@ -375,7 +564,7 @@ mod tests {
             ephemeral.update(cx, |state, cx| state.close_search(cx));
             assert!(render_overlays(&ephemeral, window, cx).is_empty());
             assert!(
-                !cx.global::<InputOverlayRegistry>()
+                !cx.global::<InputOverlayRegistry<crate::input::EditorMode>>()
                     .hosts
                     .contains_key(&ephemeral.entity_id())
             );

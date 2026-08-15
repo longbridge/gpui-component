@@ -44,7 +44,7 @@ pub(super) struct WrapPoint {
 }
 
 impl WrapPoint {
-    pub fn new(row: usize, col: usize) -> Self {
+    pub(super) fn new(row: usize, col: usize) -> Self {
         Self { row, col }
     }
 }

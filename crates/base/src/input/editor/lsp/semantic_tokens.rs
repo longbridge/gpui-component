@@ -6,7 +6,7 @@ use instant::Duration;
 use lsp_types::{Position, SemanticTokens, SemanticTokensLegend};
 use ropey::Rope;
 
-use crate::input::{HighlightStyleResolver, InputBaseState, Lsp, RopeExt};
+use crate::input::{EditorMode, HighlightStyleResolver, InputBaseState, Lsp, RopeExt};
 
 /// A provider of semantic highlighting tokens, layered on top of the
 /// built-in tree-sitter [`SyntaxHighlighter`](crate::highlighter::SyntaxHighlighter).
@@ -109,7 +109,7 @@ impl Lsp {
         &mut self,
         text: &Rope,
         window: &mut Window,
-        cx: &mut Context<InputBaseState>,
+        cx: &mut Context<InputBaseState<EditorMode>>,
     ) {
         let Some(provider) = self.semantic_tokens_provider.as_ref() else {
             return;
@@ -138,8 +138,8 @@ impl Lsp {
                 if let Ok(tokens) = task.await {
                     let decoded = decode_semantic_tokens(&tokens, &legend);
                     let _ = input_state.update(cx, |input_state, cx| {
-                        if decoded != input_state.lsp.semantic_tokens {
-                            input_state.lsp.semantic_tokens = decoded;
+                        if decoded != input_state.extras.lsp.semantic_tokens {
+                            input_state.extras.lsp.semantic_tokens = decoded;
                             cx.notify();
                         }
                     });

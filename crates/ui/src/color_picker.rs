@@ -184,11 +184,7 @@ impl ColorPicker {
                                 .size_5()
                                 .rounded(cx.theme().radius),
                         )
-                        .child(
-                            Input::from_base(self.state.read(cx).hex_input())
-                                .small()
-                                .px_2p5(),
-                        ),
+                        .child(Input::new(self.state.read(cx).hex_input()).small().px_2p5()),
                 )
             })
     }

@@ -489,7 +489,7 @@ pub(crate) struct WrapDisplayPoint {
 }
 
 impl WrapDisplayPoint {
-    pub fn new(row: usize, local_row: usize, column: usize) -> Self {
+    pub(crate) fn new(row: usize, local_row: usize, column: usize) -> Self {
         Self {
             row,
             local_row,

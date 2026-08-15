@@ -3,7 +3,7 @@ use gpui_component::{
     ActiveTheme as _, Sizable as _,
     button::{Button, ButtonVariants as _},
     highlighter::Language,
-    input::{Input, InputBaseState, TabSize},
+    input::{Editor, EditorState, TabSize},
     resizable::h_resizable,
     status_bar::StatusBar,
     text::{SelectionFormat, html},
@@ -12,7 +12,7 @@ use gpui_component::{
 use gpui_component_assets::Assets;
 
 pub struct Example {
-    input_state: Entity<InputBaseState>,
+    input_state: Entity<EditorState>,
     /// Whether copying a selection yields the rendered text or its source.
     selection_format: SelectionFormat,
     _subscribe: Subscription,
@@ -23,8 +23,8 @@ const EXAMPLE: &str = include_str!("./fixtures/test.html");
 impl Example {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let input_state = cx.new(|cx| {
-            InputBaseState::new(window, cx)
-                .code_editor(Language::Html)
+            EditorState::new(window, cx)
+                .language(Language::Html)
                 .tab_size(TabSize {
                     tab_size: 4,
                     hard_tabs: false,
@@ -66,15 +66,14 @@ impl Render for Example {
                                 .font_family(cx.theme().mono_font_family.clone())
                                 .text_size(cx.theme().mono_font_size)
                                 .child(
-                                    Input::from_base(&self.input_state)
-                                        .h_full()
-                                        .appearance(false)
-                                        .focus_bordered(false),
+                                    Editor::new(&self.input_state)
+                                        .h(relative(1.))
+                                        .appearance(false),
                                 )
                                 .into_any(),
                         )
                         .child(
-                            html(self.input_state.read(cx).value().clone())
+                            html(self.input_state.read(cx).value())
                                 .p_5()
                                 .scrollable(true)
                                 .selectable(true)

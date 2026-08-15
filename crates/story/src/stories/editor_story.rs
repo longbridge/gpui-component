@@ -39,7 +39,8 @@ impl EditorStory {
 
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let editor_state = cx.new(|cx| {
-            EditorState::new("rust", window, cx)
+            EditorState::new(window, cx)
+                .language("rust")
                 .folding(true)
                 .tab_size(TabSize {
                     tab_size: 4,
@@ -53,8 +54,7 @@ impl EditorStory {
         // which parses incrementally on a background thread.
         #[cfg(target_family = "wasm")]
         {
-            let base_state = editor_state.read(cx).base_state().clone();
-            base_state.update(cx, |state, cx| {
+            editor_state.update(cx, |state, cx| {
                 state.set_highlighter_factory(
                     std::rc::Rc::new(|language| {
                         syntect_highlighter::SyntectHighlighter::new(language)
@@ -66,9 +66,11 @@ impl EditorStory {
         }
 
         let decoration_text = "Decoration styles\nColor highlights important text.\nItalic adds emphasis.\nUnderline marks a review range.";
-        let decorations_state =
-            cx.new(|cx| EditorState::new("text", window, cx).default_value(decoration_text));
-        decorations_state.update(cx, |state, cx| state.prepare(window, cx));
+        let decorations_state = cx.new(|cx| {
+            EditorState::new(window, cx)
+                .language("text")
+                .default_value(decoration_text)
+        });
 
         let marker = "Decoration styles";
         let color_range = "Color";
@@ -187,7 +189,7 @@ impl Render for EditorStory {
 mod syntect_highlighter {
     use std::{collections::HashMap, ops::Range, sync::LazyLock};
 
-    use gpui::{Context, HighlightStyle, SharedString, Window};
+    use gpui::{App, HighlightStyle, SharedString, Window};
     use gpui_component::input::*;
     use syntect::{
         parsing::{ParseState, Scope, ScopeStack, SyntaxSet},
@@ -248,7 +250,7 @@ mod syntect_highlighter {
             text: &Rope,
             folding: bool,
             _window: &mut Window,
-            _cx: &mut Context<InputBaseState>,
+            _cx: &mut App,
         ) {
             // `syntect` has no incremental mode, so the whole document is
             // reparsed. Read the rope once and reuse it for folding too.

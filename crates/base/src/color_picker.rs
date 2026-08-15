@@ -1,3 +1,4 @@
+use crate::input::InputState;
 use std::rc::Rc;
 
 use gpui::{
@@ -12,7 +13,7 @@ use smallvec::SmallVec;
 use crate::{
     RoleOverride, StyledExt as _,
     actions::{Cancel, Confirm},
-    input::{InputBaseState, InputEvent},
+    input::InputEvent,
     slider::{SliderEvent, SliderState},
 };
 
@@ -179,7 +180,7 @@ pub struct ColorPickerState {
     preview: Option<Hsla>,
     open: bool,
     active_tab: usize,
-    hex_input: Entity<InputBaseState>,
+    hex_input: Entity<InputState>,
     sliders: HslaSliders,
     /// A builder-supplied value cannot reach the sliders without a `Window`,
     /// so the first render flushes it through [`Self::sync_pending_value`].
@@ -191,9 +192,8 @@ pub struct ColorPickerState {
 impl ColorPickerState {
     /// Creates an empty, closed picker.
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let hex_input = cx.new(|cx| {
-            InputBaseState::new(window, cx).pattern(regex::Regex::new(HEX_PATTERN).unwrap())
-        });
+        let hex_input = cx
+            .new(|cx| InputState::new(window, cx).pattern(regex::Regex::new(HEX_PATTERN).unwrap()));
         let sliders = HslaSliders::new(cx);
 
         let mut subscriptions = vec![cx.subscribe_in(
@@ -274,7 +274,7 @@ impl ColorPickerState {
     }
 
     /// The hex text field. Render it with an application-owned input element.
-    pub fn hex_input(&self) -> &Entity<InputBaseState> {
+    pub fn hex_input(&self) -> &Entity<InputState> {
         &self.hex_input
     }
 

@@ -1,3 +1,4 @@
+use crate::input::EditorMode;
 use std::ops::Range;
 
 use gpui::{App, Context, HighlightStyle, WeakEntity};
@@ -32,7 +33,7 @@ struct TextDecorationCollectionId(usize);
 /// [`IEditorDecorationsCollection`](https://microsoft.github.io/monaco-editor/typedoc/interfaces/editor_editor_api.editor.IEditorDecorationsCollection.html).
 #[derive(Clone, Debug)]
 pub struct TextDecorationCollection {
-    state: WeakEntity<InputBaseState>,
+    state: WeakEntity<InputBaseState<EditorMode>>,
     id: TextDecorationCollectionId,
 }
 
@@ -44,7 +45,7 @@ impl TextDecorationCollection {
     pub fn set(&self, decorations: Vec<TextDecoration>, cx: &mut App) {
         let _ = self.state.update(cx, |state, cx| {
             let decorations = normalize(&state.text, decorations);
-            if state.decorations.set(self.id, decorations) {
+            if state.extras.decorations.set(self.id, decorations) {
                 cx.notify();
             }
         });
@@ -57,7 +58,7 @@ impl TextDecorationCollection {
     pub fn append(&self, decorations: Vec<TextDecoration>, cx: &mut App) {
         let _ = self.state.update(cx, |state, cx| {
             let decorations = normalize(&state.text, decorations);
-            if state.decorations.append(self.id, decorations) {
+            if state.extras.decorations.append(self.id, decorations) {
                 cx.notify();
             }
         });
@@ -79,6 +80,7 @@ impl TextDecorationCollection {
         self.state
             .read_with(cx, |state, _| {
                 state
+                    .extras
                     .decorations
                     .get(self.id)
                     .unwrap_or_default()
@@ -91,7 +93,7 @@ impl TextDecorationCollection {
 }
 
 #[derive(Default)]
-pub(super) struct DecorationCollections {
+pub(crate) struct DecorationCollections {
     entries: Vec<(TextDecorationCollectionId, Vec<TextDecoration>)>,
 }
 
@@ -216,7 +218,7 @@ fn normalize(text: &Rope, decorations: Vec<TextDecoration>) -> Vec<TextDecoratio
         .collect()
 }
 
-impl InputBaseState {
+impl InputBaseState<EditorMode> {
     /// Create an independently managed collection of text decorations.
     ///
     /// This follows Monaco's
@@ -239,7 +241,7 @@ impl InputBaseState {
         cx: &mut Context<Self>,
     ) -> TextDecorationCollection {
         let decorations = normalize(&self.text, decorations);
-        let id = self.decorations.create(decorations);
+        let id = self.extras.decorations.create(decorations);
         cx.notify();
         TextDecorationCollection {
             state: cx.entity().downgrade(),

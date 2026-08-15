@@ -3,7 +3,7 @@ use std::{ops::Range, rc::Rc, sync::Arc};
 use gpui::{AnyElement, Context, HighlightStyle, Hsla, SharedString, Window};
 use ropey::Rope;
 
-use super::{FoldRange, InputBaseState, InputEdit};
+use super::{EditorState, FoldRange, InputEdit};
 
 /// Resolves semantic highlight names into renderable GPUI styles.
 ///
@@ -35,7 +35,7 @@ pub trait InputHighlighter {
         text: &Rope,
         folding: bool,
         window: &mut Window,
-        cx: &mut Context<InputBaseState>,
+        cx: &mut Context<EditorState>,
     );
 
     /// Return ordered, non-overlapping style runs that fully cover `range`.

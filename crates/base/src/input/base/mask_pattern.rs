@@ -425,7 +425,7 @@ fn is_sign(ch: &char) -> bool {
 /// shrink (3 bytes to 1), the caller must use the normalized string for all
 /// byte-offset calculations.
 #[doc(hidden)]
-pub fn normalize_number_input(text: &str) -> Cow<'_, str> {
+pub(super) fn normalize_number_input(text: &str) -> Cow<'_, str> {
     #[inline]
     fn normalize_char(ch: char) -> Option<char> {
         match ch {
