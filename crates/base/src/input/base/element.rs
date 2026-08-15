@@ -1,4 +1,4 @@
-use crate::input::InputModeKind;
+use crate::input::{InputExtras as _, InputModeKind};
 use gpui::Corners;
 use gpui::Half;
 use gpui::{
@@ -794,7 +794,7 @@ impl<M: InputModeKind> TextElement<M> {
         cx: &mut App,
     ) -> Option<Path<Pixels>> {
         let state = self.state.read(cx);
-        let Some(symbol_range) = M::hover_symbol_range(&state.extras) else {
+        let Some(symbol_range) = state.extras.hover_symbol_range() else {
             return None;
         };
 
@@ -1045,7 +1045,7 @@ impl<M: InputModeKind> TextElement<M> {
             return (None, vec![]);
         }
 
-        let Some(completion_item) = M::inline_completion_item(&state.extras) else {
+        let Some(completion_item) = state.extras.inline_completion_item() else {
             return (None, vec![]);
         };
 
@@ -1421,7 +1421,7 @@ impl<M: InputModeKind> TextElement<M> {
                     .then(|| {
                         compose_decoration_collections(
                             Vec::new(),
-                            M::decoration_layers(&state.extras).into_iter(),
+                            state.extras.decoration_layers().into_iter(),
                             visible_byte_range,
                         )
                     })
@@ -1433,7 +1433,7 @@ impl<M: InputModeKind> TextElement<M> {
                 .then(|| {
                     compose_decoration_collections(
                         Vec::new(),
-                        M::decoration_layers(&state.extras).into_iter(),
+                        state.extras.decoration_layers().into_iter(),
                         visible_byte_range,
                     )
                 })
@@ -1511,8 +1511,7 @@ impl<M: InputModeKind> TextElement<M> {
         // result through the active highlight theme so it shares the same
         // colour vocabulary as the tree-sitter path. Empty Vec when no
         // provider is set, so `combine_highlights` short-circuits.
-        let custom_styles = M::semantic_token_styles(
-            &state.extras,
+        let custom_styles = state.extras.semantic_token_styles(
             text,
             &visible_byte_range,
             state.editor_style.highlight_styles.as_ref(),
@@ -1528,7 +1527,7 @@ impl<M: InputModeKind> TextElement<M> {
         if !state.masked {
             styles = compose_decoration_collections(
                 styles,
-                M::decoration_layers(&state.extras).into_iter(),
+                state.extras.decoration_layers().into_iter(),
                 visible_byte_range.clone(),
             )
             .unwrap_or_default();
@@ -1844,8 +1843,9 @@ impl<M: InputModeKind> Element for TextElement<M> {
             .into_vec()
         };
 
-        let document_colors =
-            M::document_color_swatches(&state.extras, &text, &last_layout.visible_range);
+        let document_colors = state
+            .extras
+            .document_color_swatches(&text, &last_layout.visible_range);
 
         // Create shaped lines for whitespace indicators before layout
         let whitespace_indicators =

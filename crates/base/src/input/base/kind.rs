@@ -63,6 +63,61 @@ pub trait MultiLineMode: InputModeKind {}
 impl MultiLineMode for TextareaMode {}
 impl MultiLineMode for EditorMode {}
 
+/// What the renderer may read out of a mode's extra state.
+///
+/// Kept apart from [`InputModeKind`] on purpose. This trait is *data*: the
+/// renderer is generic over the mode, so it cannot name `EditorExtras` and
+/// reach its fields directly, and these are the accessors it goes through
+/// instead. Every one of them has an empty answer, which is what a plain input
+/// and a textarea give.
+///
+/// [`InputModeKind`] is *behavior*: points where the engine hands control back
+/// during an edit. Adding a field an editor renders belongs here and leaves
+/// the engine's callbacks alone.
+pub trait InputExtras: Default + 'static {
+    /// Decoration ranges to paint, innermost collection first.
+    fn decoration_layers(&self) -> Vec<&[TextDecoration]> {
+        Vec::new()
+    }
+
+    /// Semantic-token styles for a visible range, when an LSP supplies them.
+    fn semantic_token_styles(
+        &self,
+        _text: &Rope,
+        _range: &std::ops::Range<usize>,
+        _resolver: &dyn HighlightStyleResolver,
+    ) -> Vec<(std::ops::Range<usize>, gpui::HighlightStyle)> {
+        Vec::new()
+    }
+
+    /// Document colours to paint as swatches, when an LSP supplies them.
+    fn document_color_swatches(
+        &self,
+        _text: &Rope,
+        _range: &std::ops::Range<usize>,
+    ) -> Vec<(std::ops::Range<usize>, gpui::Hsla)> {
+        Vec::new()
+    }
+
+    /// The symbol range the hover popover is anchored to.
+    fn hover_symbol_range(&self) -> Option<std::ops::Range<usize>> {
+        None
+    }
+
+    /// The inline completion to paint as ghost text.
+    fn inline_completion_item(&self) -> Option<&lsp_types::InlineCompletionItem> {
+        None
+    }
+
+    /// What this mode can offer its context menu: go-to-definition, code actions.
+    fn context_menu_capabilities(&self) -> (bool, bool) {
+        (false, false)
+    }
+}
+
+/// A mode with nothing extra to render.
+impl InputExtras for () {}
+
 /// Hooks the shared engine calls back into for mode-specific work.
 ///
 /// The engine's render path is generic over the mode, so it cannot name a
@@ -90,7 +145,7 @@ pub trait InputModeKind: sealed::Sealed + Sized + 'static {
     /// use for an LSP client or a search session, and an editor has no use for
     /// number stepping. Keeping those here means a form full of text fields
     /// does not carry an editor's worth of machinery.
-    type Extras: Default + 'static;
+    type Extras: InputExtras;
 
     /// Drives the syntax highlighter after the text changed.
     ///
@@ -107,40 +162,6 @@ pub trait InputModeKind: sealed::Sealed + Sized + 'static {
     ) {
     }
 
-    /// The LSP client, for the mode that has one.
-    fn lsp(_extras: &Self::Extras) -> Option<&Lsp> {
-        None
-    }
-
-    /// The LSP client, mutably.
-    fn lsp_mut(_extras: &mut Self::Extras) -> Option<&mut Lsp> {
-        None
-    }
-
-    /// Decoration ranges to paint, innermost collection first.
-    fn decoration_layers(_extras: &Self::Extras) -> Vec<&[TextDecoration]> {
-        Vec::new()
-    }
-
-    /// Semantic-token styles for a visible range, when an LSP supplies them.
-    fn semantic_token_styles(
-        _extras: &Self::Extras,
-        _text: &Rope,
-        _range: &std::ops::Range<usize>,
-        _resolver: &dyn HighlightStyleResolver,
-    ) -> Vec<(std::ops::Range<usize>, gpui::HighlightStyle)> {
-        Vec::new()
-    }
-
-    /// Document colours to paint as swatches, when an LSP supplies them.
-    fn document_color_swatches(
-        _extras: &Self::Extras,
-        _text: &Rope,
-        _range: &std::ops::Range<usize>,
-    ) -> Vec<(std::ops::Range<usize>, gpui::Hsla)> {
-        Vec::new()
-    }
-
     /// The range highlighted while Cmd-hovering a symbol, with its style.
     fn hover_definition_style(
         _state: &InputBaseState<Self>,
@@ -155,21 +176,6 @@ pub trait InputModeKind: sealed::Sealed + Sized + 'static {
         _window: &mut Window,
         _cx: &gpui::App,
     ) -> Option<gpui::Hitbox> {
-        None
-    }
-
-    /// The symbol range the hover popover is anchored to.
-    fn hover_symbol_range(_extras: &Self::Extras) -> Option<std::ops::Range<usize>> {
-        None
-    }
-
-    /// The inline completion to paint as ghost text.
-    fn inline_completion_item(_extras: &Self::Extras) -> Option<&lsp_types::InlineCompletionItem> {
-        None
-    }
-
-    /// The hover popover currently shown, if any.
-    fn hover_popover(_extras: &Self::Extras) -> Option<&HoverPopoverState> {
         None
     }
 
@@ -249,11 +255,6 @@ pub trait InputModeKind: sealed::Sealed + Sized + 'static {
         _state: &mut InputBaseState<Self>,
         _cx: &mut gpui::Context<InputBaseState<Self>>,
     ) {
-    }
-
-    /// What this mode can offer its context menu: go-to-definition, code actions.
-    fn context_menu_capabilities(_extras: &Self::Extras) -> (bool, bool) {
-        (false, false)
     }
 
     /// Whether a completion or code-action menu is currently open.

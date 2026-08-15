@@ -5,7 +5,7 @@ use gpui::{
 use ropey::Rope;
 use std::{ops::Range, rc::Rc};
 
-use crate::input::{EditorMode, GoToDefinition, InputBaseState, RopeExt, element::TextElement};
+use crate::input::{EditorMode, GoToDefinition, InputBaseState, RopeExt};
 
 /// Definition provider
 ///
@@ -193,11 +193,12 @@ impl InputBaseState<EditorMode> {
     }
 }
 
-impl TextElement<EditorMode> {
+/// These read the editor's own state; they sit here rather than on the element
+/// because the element has nothing to do with the answer.
+impl InputBaseState<EditorMode> {
     /// The range highlighted while Cmd-hovering a symbol, with its style.
-    pub(crate) fn hover_definition_style(
-        editor: &InputBaseState<EditorMode>,
-    ) -> Option<(Range<usize>, HighlightStyle)> {
+    pub(crate) fn hover_definition_style(&self) -> Option<(Range<usize>, HighlightStyle)> {
+        let editor = self;
         if editor.extras.hover_definition.is_empty() {
             return None;
         };
@@ -216,10 +217,8 @@ impl TextElement<EditorMode> {
     }
 
     /// The hitbox that makes a Cmd-hovered symbol clickable.
-    pub(crate) fn hover_definition_hitbox(
-        editor: &InputBaseState<EditorMode>,
-        window: &mut Window,
-    ) -> Option<Hitbox> {
+    pub(crate) fn hover_definition_hitbox(&self, window: &mut Window) -> Option<Hitbox> {
+        let editor = self;
         if editor.extras.hover_definition.is_empty() {
             return None;
         };

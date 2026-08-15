@@ -68,7 +68,9 @@ pub use highlighting::{
 };
 pub use indent::TabSize;
 pub use input::{Input, InputState};
-pub use kind::{EditorExtras, EditorMode, InputMode, InputModeKind, MultiLineMode, TextareaMode};
+pub use kind::{
+    EditorExtras, EditorMode, InputExtras, InputMode, InputModeKind, MultiLineMode, TextareaMode,
+};
 pub use lsp::{
     CodeActionItem, CodeActionMenuState, CodeActionProvider, CompletionMenuOptions,
     CompletionMenuState, CompletionProvider, DefinitionProvider, DocumentColorProvider,

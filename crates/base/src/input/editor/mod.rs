@@ -16,40 +16,11 @@ impl InputModeKind for EditorMode {
 
     type Extras = super::EditorExtras;
 
-    fn lsp(extras: &Self::Extras) -> Option<&super::Lsp> {
-        Some(&extras.lsp)
-    }
-
-    fn lsp_mut(extras: &mut Self::Extras) -> Option<&mut super::Lsp> {
-        Some(&mut extras.lsp)
-    }
-
-    fn decoration_layers(extras: &Self::Extras) -> Vec<&[super::TextDecoration]> {
-        extras.decorations.iter().collect()
-    }
-
-    fn semantic_token_styles(
-        extras: &Self::Extras,
-        text: &ropey::Rope,
-        range: &std::ops::Range<usize>,
-        resolver: &dyn super::HighlightStyleResolver,
-    ) -> Vec<(std::ops::Range<usize>, gpui::HighlightStyle)> {
-        extras.lsp.semantic_tokens_for_range(text, range, resolver)
-    }
-
-    fn document_color_swatches(
-        extras: &Self::Extras,
-        text: &ropey::Rope,
-        range: &std::ops::Range<usize>,
-    ) -> Vec<(std::ops::Range<usize>, gpui::Hsla)> {
-        extras.lsp.document_colors_for_range(text, range)
-    }
-
     fn hover_definition_style(
         state: &InputBaseState<Self>,
         _cx: &App,
     ) -> Option<(std::ops::Range<usize>, gpui::HighlightStyle)> {
-        crate::input::element::TextElement::<Self>::hover_definition_style(state)
+        state.hover_definition_style()
     }
 
     fn hover_definition_hitbox(
@@ -57,22 +28,7 @@ impl InputModeKind for EditorMode {
         window: &mut Window,
         _cx: &App,
     ) -> Option<gpui::Hitbox> {
-        crate::input::element::TextElement::<Self>::hover_definition_hitbox(state, window)
-    }
-
-    fn hover_symbol_range(extras: &Self::Extras) -> Option<std::ops::Range<usize>> {
-        extras
-            .hover_popover
-            .as_ref()
-            .map(|session| session.symbol_range.clone())
-    }
-
-    fn inline_completion_item(extras: &Self::Extras) -> Option<&lsp_types::InlineCompletionItem> {
-        extras.inline_completion.item.as_ref()
-    }
-
-    fn hover_popover(extras: &Self::Extras) -> Option<&super::HoverPopoverState> {
-        extras.hover_popover.as_ref()
+        state.hover_definition_hitbox(window)
     }
 
     fn reset_language_features(state: &mut InputBaseState<Self>) {
@@ -152,13 +108,6 @@ impl InputModeKind for EditorMode {
         cx: &mut gpui::Context<InputBaseState<Self>>,
     ) {
         state.hide_context_menu(cx);
-    }
-
-    fn context_menu_capabilities(extras: &Self::Extras) -> (bool, bool) {
-        (
-            extras.lsp.definition_provider.is_some(),
-            !extras.lsp.code_action_providers.is_empty(),
-        )
     }
 
     fn is_context_menu_open(state: &InputBaseState<Self>, cx: &App) -> bool {
@@ -251,5 +200,46 @@ impl Editor {
 impl RenderOnce for Editor {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         self.state
+    }
+}
+
+/// What a code editor exposes to the renderer. See [`crate::input::InputExtras`].
+impl crate::input::InputExtras for super::EditorExtras {
+    fn decoration_layers(&self) -> Vec<&[super::TextDecoration]> {
+        self.decorations.iter().collect()
+    }
+
+    fn semantic_token_styles(
+        &self,
+        text: &ropey::Rope,
+        range: &std::ops::Range<usize>,
+        resolver: &dyn crate::input::HighlightStyleResolver,
+    ) -> Vec<(std::ops::Range<usize>, gpui::HighlightStyle)> {
+        self.lsp.semantic_tokens_for_range(text, range, resolver)
+    }
+
+    fn document_color_swatches(
+        &self,
+        text: &ropey::Rope,
+        range: &std::ops::Range<usize>,
+    ) -> Vec<(std::ops::Range<usize>, gpui::Hsla)> {
+        self.lsp.document_colors_for_range(text, range)
+    }
+
+    fn hover_symbol_range(&self) -> Option<std::ops::Range<usize>> {
+        self.hover_popover
+            .as_ref()
+            .map(|session| session.symbol_range.clone())
+    }
+
+    fn inline_completion_item(&self) -> Option<&lsp_types::InlineCompletionItem> {
+        self.inline_completion.item.as_ref()
+    }
+
+    fn context_menu_capabilities(&self) -> (bool, bool) {
+        (
+            self.lsp.definition_provider.is_some(),
+            !self.lsp.code_action_providers.is_empty(),
+        )
     }
 }

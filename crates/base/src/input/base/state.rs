@@ -32,7 +32,9 @@ use super::{
 use crate::actions::{SelectDown, SelectLeft, SelectRight, SelectUp};
 use crate::input::blink_cursor::CURSOR_WIDTH;
 use crate::input::movement::MoveDirection;
-use crate::input::{Position, RopeExt as _, Selection, element::RIGHT_MARGIN, layout::LastLayout};
+use crate::input::{
+    InputExtras as _, Position, RopeExt as _, Selection, element::RIGHT_MARGIN, layout::LastLayout,
+};
 use crate::{AutoScroll, History, StepAction};
 
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
@@ -519,7 +521,7 @@ impl<M: InputModeKind> InputBaseState<M> {
     }
 
     pub fn context_menu_capabilities(&self) -> InputContextMenuCapabilities {
-        let (go_to_definition, code_actions) = M::context_menu_capabilities(&self.extras);
+        let (go_to_definition, code_actions) = self.extras.context_menu_capabilities();
         InputContextMenuCapabilities::new()
             .disabled(self.disabled)
             .readonly(self.readonly)
@@ -3792,7 +3794,7 @@ mod tests {
                     state.hover_popover().is_none(),
                     "blur should hide the hover popover"
                 );
-                let decorations = EditorMode::decoration_layers(&state.extras);
+                let decorations = state.extras.decoration_layers();
                 assert!(
                     decorations.iter().any(|layer| !layer.is_empty()),
                     "blur must not discard decorations"
