@@ -189,7 +189,7 @@ impl Render for EditorStory {
 mod syntect_highlighter {
     use std::{collections::HashMap, ops::Range, sync::LazyLock};
 
-    use gpui::{App, HighlightStyle, SharedString, Window};
+    use gpui::{Context, HighlightStyle, SharedString, Window};
     use gpui_component::input::*;
     use syntect::{
         parsing::{ParseState, Scope, ScopeStack, SyntaxSet},
@@ -250,7 +250,7 @@ mod syntect_highlighter {
             text: &Rope,
             folding: bool,
             _window: &mut Window,
-            _cx: &mut App,
+            _cx: &mut Context<EditorState>,
         ) {
             // `syntect` has no incremental mode, so the whole document is
             // reparsed. Read the rope once and reuse it for folding too.
