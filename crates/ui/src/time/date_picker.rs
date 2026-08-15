@@ -2,10 +2,10 @@ use std::rc::Rc;
 
 use chrono::{NaiveDate, Weekday};
 use gpui::{
-    App, AppContext, ClickEvent, Context, ElementId, Empty, Entity, EventEmitter, FocusHandle,
-    Focusable, InteractiveElement as _, IntoElement, KeyBinding, MouseButton, ParentElement as _,
-    Render, RenderOnce, SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled,
-    Subscription, Window, anchored, deferred, div, prelude::FluentBuilder as _, px,
+    App, AppContext, Bounds, ClickEvent, Context, ElementId, Empty, Entity, EventEmitter,
+    FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyBinding, MouseButton,
+    ParentElement as _, Pixels, Render, RenderOnce, SharedString, StatefulInteractiveElement as _,
+    StyleRefinement, Styled, Subscription, Window, deferred, div, prelude::FluentBuilder as _, px,
 };
 use rust_i18n::t;
 
@@ -20,7 +20,7 @@ use crate::{
 };
 
 use super::calendar::{Calendar, CalendarEvent, CalendarState, Date, Matcher};
-use gpui_base::DatePicker as BaseDatePicker;
+use gpui_base::{DatePicker as BaseDatePicker, ElementExt as _};
 
 const CONTEXT: &'static str = "DatePicker";
 pub(crate) fn init(cx: &mut App) {
@@ -81,6 +81,7 @@ pub struct DatePickerState {
     _subscriptions: Vec<Subscription>,
     /// The first day of the week. Defaults to Sunday.
     first_day_of_week: Weekday,
+    bounds: Bounds<Pixels>,
 }
 
 impl Focusable for DatePickerState {
@@ -135,6 +136,7 @@ impl DatePickerState {
             disabled_matcher: None,
             _subscriptions,
             first_day_of_week: Weekday::Sun,
+            bounds: Bounds::default(),
         }
     }
 
@@ -416,6 +418,10 @@ impl RenderOnce for DatePicker {
             .flex_none()
             .w_full()
             .relative()
+            .on_prepaint({
+                let state = self.state.clone();
+                move |bounds, _, cx| state.update(cx, |state, _| state.bounds = bounds)
+            })
             .input_text_size(self.size)
             .refine_style(&self.style)
             .child(
@@ -482,34 +488,38 @@ impl RenderOnce for DatePicker {
             .when(state.open, |this| {
                 this.child(
                     deferred(
-                        anchored().snap_to_window_with_margin(px(8.)).child(
-                            div()
-                                .occlude()
-                                .mt_1p5()
-                                .p_3()
-                                .border_1()
-                                .border_color(cx.theme().border)
-                                .shadow_lg()
-                                .rounded((cx.theme().radius * 2.).min(px(8.)))
-                                .bg(cx.theme().tokens.popover)
-                                .text_color(cx.theme().popover_foreground)
-                                .on_mouse_up_out(
-                                    MouseButton::Left,
-                                    window.listener_for(&self.state, |view, _, window, cx| {
-                                        view.on_escape(&Cancel, window, cx);
-                                    }),
-                                )
-                                .child(
-                                    h_flex()
-                                        .gap_3()
-                                        .h_full()
-                                        .items_start()
-                                        .when_some(self.presets.clone(), |this, presets| {
-                                            this.child(
-                                                v_flex().my_1().gap_2().justify_end().children(
-                                                    presets.into_iter().enumerate().map(
-                                                        |(i, preset)| {
-                                                            Button::new(("preset", i))
+                        gpui_base::Positioner::side(state.bounds)
+                            .placement(gpui_base::Placement::Bottom)
+                            .align(gpui_base::Align::Start)
+                            .offset(px(6.))
+                            .margin(px(8.))
+                            .child(
+                                div()
+                                    .occlude()
+                                    .p_3()
+                                    .border_1()
+                                    .border_color(cx.theme().border)
+                                    .shadow_lg()
+                                    .rounded((cx.theme().radius * 2.).min(px(8.)))
+                                    .bg(cx.theme().tokens.popover)
+                                    .text_color(cx.theme().popover_foreground)
+                                    .on_mouse_up_out(
+                                        MouseButton::Left,
+                                        window.listener_for(&self.state, |view, _, window, cx| {
+                                            view.on_escape(&Cancel, window, cx);
+                                        }),
+                                    )
+                                    .child(
+                                        h_flex()
+                                            .gap_3()
+                                            .h_full()
+                                            .items_start()
+                                            .when_some(self.presets.clone(), |this, presets| {
+                                                this.child(
+                                                    v_flex().my_1().gap_2().justify_end().children(
+                                                        presets.into_iter().enumerate().map(
+                                                            |(i, preset)| {
+                                                                Button::new(("preset", i))
                                                                 .small()
                                                                 .ghost()
                                                                 .tab_stop(false)
@@ -522,22 +532,22 @@ impl RenderOnce for DatePicker {
                                                                         );
                                                                     },
                                                                 ))
-                                                        },
+                                                            },
+                                                        ),
                                                     ),
-                                                ),
-                                            )
-                                        })
-                                        .child(
-                                            Calendar::new(&state.calendar)
-                                                .number_of_months(self.number_of_months)
-                                                .first_day_of_week(state.first_day_of_week)
-                                                .border_0()
-                                                .rounded_none()
-                                                .p_0()
-                                                .with_size(self.size),
-                                        ),
-                                ),
-                        ),
+                                                )
+                                            })
+                                            .child(
+                                                Calendar::new(&state.calendar)
+                                                    .number_of_months(self.number_of_months)
+                                                    .first_day_of_week(state.first_day_of_week)
+                                                    .border_0()
+                                                    .rounded_none()
+                                                    .p_0()
+                                                    .with_size(self.size),
+                                            ),
+                                    ),
+                            ),
                     )
                     .with_priority(gpui_base::POPUP_PRIORITY),
                 )

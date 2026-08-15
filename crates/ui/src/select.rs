@@ -2,7 +2,7 @@ use gpui::{
     AnyElement, App, ClickEvent, Context, DismissEvent, Edges, ElementId, Entity, EventEmitter,
     FocusHandle, Focusable, Hsla, InteractiveElement, IntoElement, Length, ParentElement, Render,
     RenderOnce, SharedString, StatefulInteractiveElement, StyleRefinement, Styled, Window,
-    anchored, deferred, div, prelude::FluentBuilder, px, rems,
+    deferred, div, prelude::FluentBuilder, px, rems,
 };
 use rust_i18n::t;
 
@@ -470,123 +470,128 @@ where
             list.delegate_mut().size = self.state.size;
         });
 
-        div()
-            .size_full()
-            .relative()
-            .child(
-                div()
-                    .id("input")
-                    .relative()
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    .border_1()
-                    .border_color(cx.theme().transparent)
-                    .when(self.state.appearance, |this| {
-                        this.bg(bg)
-                            .text_color(fg)
-                            .when(self.state.disabled, |this| this.opacity(0.5))
-                            .border_color(cx.theme().input)
-                            .rounded(cx.theme().radius)
-                    })
-                    .input_size(self.state.size)
-                    .input_text_size(self.state.size)
-                    .refine_style(&self.state.style)
-                    .when(outline_visible && self.state.appearance, |this| {
-                        this.border_1().border_color(cx.theme().ring)
-                    })
-                    .when(
-                        outline_visible && self.state.appearance && self.focus_ring_enabled,
-                        |this| this.focus_ring_style(window, cx),
-                    )
-                    .when(allow_open, |this| {
-                        this.on_click(cx.listener(Self::toggle_menu))
-                    })
-                    .child(
-                        h_flex()
-                            .id("inner")
-                            .w_full()
-                            .overflow_hidden()
-                            .items_center()
-                            .justify_between()
-                            .gap_1()
-                            .child(
-                                div()
-                                    .id("title")
-                                    .w_full()
-                                    .overflow_hidden()
-                                    .whitespace_nowrap()
-                                    .truncate()
-                                    .child(self.display_title(window, cx)),
-                            )
-                            .when(show_clean, |this| {
-                                this.child(clear_button(cx).map(|this| {
-                                    if self.state.disabled {
-                                        this.disabled(true)
-                                    } else {
-                                        this.on_click(cx.listener(Self::clean))
-                                    }
-                                }))
-                            })
-                            .when(!show_clean, |this| {
-                                let icon = match self.icon.clone() {
-                                    Some(icon) => icon
-                                        .xsmall()
-                                        .text_color(cx.theme().muted_foreground)
-                                        .into_any_element(),
-                                    None => Caret::new(self.state.size)
-                                        .text_color(cx.theme().muted_foreground)
-                                        .into_any_element(),
-                                };
-
-                                this.child(icon)
-                            }),
-                    )
-                    .on_prepaint({
-                        let state = cx.entity();
-                        move |bounds, _, cx| state.update(cx, |r, _| r.state.bounds = bounds)
-                    }),
-            )
-            .when(self.state.open, |this| {
-                this.child(
-                    deferred(
-                        anchored().snap_to_window_with_margin(px(8.)).child(
-                            div()
-                                .occlude()
-                                .map(|this| match self.state.menu_width {
-                                    Length::Auto => this.w(bounds.size.width + px(2.)),
-                                    Length::Definite(w) => this.w(w),
-                                })
+        div().size_full().relative().child(
+            div()
+                .relative()
+                .on_prepaint({
+                    let state = cx.entity();
+                    move |bounds, _, cx| state.update(cx, |r, _| r.state.bounds = bounds)
+                })
+                .child(
+                    div()
+                        .id("input")
+                        .relative()
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .border_1()
+                        .border_color(cx.theme().transparent)
+                        .when(self.state.appearance, |this| {
+                            this.bg(bg)
+                                .text_color(fg)
+                                .when(self.state.disabled, |this| this.opacity(0.5))
+                                .border_color(cx.theme().input)
+                                .rounded(cx.theme().radius)
+                        })
+                        .input_size(self.state.size)
+                        .input_text_size(self.state.size)
+                        .refine_style(&self.state.style)
+                        .when(outline_visible && self.state.appearance, |this| {
+                            this.border_1().border_color(cx.theme().ring)
+                        })
+                        .when(
+                            outline_visible && self.state.appearance && self.focus_ring_enabled,
+                            |this| this.focus_ring_style(window, cx),
+                        )
+                        .when(allow_open, |this| {
+                            this.on_click(cx.listener(Self::toggle_menu))
+                        })
+                        .child(
+                            h_flex()
+                                .id("inner")
+                                .w_full()
+                                .overflow_hidden()
+                                .items_center()
+                                .justify_between()
+                                .gap_1()
                                 .child(
-                                    v_flex()
-                                        .occlude()
-                                        .mt_1p5()
-                                        .bg(cx.theme().tokens.popover)
-                                        .border_1()
-                                        .border_color(cx.theme().border)
-                                        .rounded(popup_radius)
-                                        .shadow_md()
-                                        .child(
-                                            List::new(&self.state.list)
-                                                .when_some(
-                                                    self.state.search_placeholder.clone(),
-                                                    |this, placeholder| {
-                                                        this.search_placeholder(placeholder)
-                                                    },
-                                                )
-                                                .with_size(self.state.size)
-                                                .max_h(self.state.menu_max_h)
-                                                .paddings(Edges::all(px(4.))),
-                                        ),
+                                    div()
+                                        .id("title")
+                                        .w_full()
+                                        .overflow_hidden()
+                                        .whitespace_nowrap()
+                                        .truncate()
+                                        .child(self.display_title(window, cx)),
                                 )
-                                .on_mouse_down_out(cx.listener(|this, _, window, cx| {
-                                    this.escape(&Cancel, window, cx);
-                                })),
+                                .when(show_clean, |this| {
+                                    this.child(clear_button(cx).map(|this| {
+                                        if self.state.disabled {
+                                            this.disabled(true)
+                                        } else {
+                                            this.on_click(cx.listener(Self::clean))
+                                        }
+                                    }))
+                                })
+                                .when(!show_clean, |this| {
+                                    let icon = match self.icon.clone() {
+                                        Some(icon) => icon
+                                            .xsmall()
+                                            .text_color(cx.theme().muted_foreground)
+                                            .into_any_element(),
+                                        None => Caret::new(self.state.size)
+                                            .text_color(cx.theme().muted_foreground)
+                                            .into_any_element(),
+                                    };
+
+                                    this.child(icon)
+                                }),
                         ),
-                    )
-                    .with_priority(gpui_base::POPUP_PRIORITY),
                 )
-            })
+                .when(self.state.open, |this| {
+                    this.child(
+                        deferred(
+                            gpui_base::Positioner::side(bounds)
+                                .placement(gpui_base::Placement::Bottom)
+                                .align(gpui_base::Align::Start)
+                                .offset(px(6.))
+                                .margin(px(8.))
+                                .child(
+                                    div()
+                                        .occlude()
+                                        .map(|this| match self.state.menu_width {
+                                            Length::Auto => this.w(bounds.size.width + px(2.)),
+                                            Length::Definite(w) => this.w(w),
+                                        })
+                                        .child(
+                                            v_flex()
+                                                .occlude()
+                                                .bg(cx.theme().tokens.popover)
+                                                .border_1()
+                                                .border_color(cx.theme().border)
+                                                .rounded(popup_radius)
+                                                .shadow_md()
+                                                .child(
+                                                    List::new(&self.state.list)
+                                                        .when_some(
+                                                            self.state.search_placeholder.clone(),
+                                                            |this, placeholder| {
+                                                                this.search_placeholder(placeholder)
+                                                            },
+                                                        )
+                                                        .with_size(self.state.size)
+                                                        .max_h(self.state.menu_max_h)
+                                                        .paddings(Edges::all(px(4.))),
+                                                ),
+                                        )
+                                        .on_mouse_down_out(cx.listener(|this, _, window, cx| {
+                                            this.escape(&Cancel, window, cx);
+                                        })),
+                                ),
+                        )
+                        .with_priority(gpui_base::POPUP_PRIORITY),
+                    )
+                }),
+        )
     }
 }
 

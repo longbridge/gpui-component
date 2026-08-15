@@ -2,7 +2,7 @@ use gpui::{
     AnyElement, App, Bounds, ClickEvent, Context, DismissEvent, Edges, ElementId, Entity,
     EventEmitter, FocusHandle, Focusable, Hsla, InteractiveElement, IntoElement, Length,
     MouseDownEvent, ParentElement, Pixels, Render, RenderOnce, SharedString,
-    StatefulInteractiveElement, StyleRefinement, Styled, Window, anchored, deferred, div,
+    StatefulInteractiveElement, StyleRefinement, Styled, Window, deferred, div,
     prelude::FluentBuilder, px, rems,
 };
 
@@ -661,52 +661,55 @@ where
                 None
             };
 
-        let prepaint_handler: Box<dyn Fn(Bounds<Pixels>, &mut Window, &mut App) + 'static> = {
-            let state = cx.entity();
-            Box::new(move |bounds, _, cx| state.update(cx, |r, _| r.state.bounds = bounds))
-        };
+        let prepaint_handler: Box<dyn Fn(Bounds<Pixels>, &mut Window, &mut App) + 'static> =
+            Box::new(|_, _, _| {});
 
         let footer_el = self.footer.as_ref().map(|f| f(window, cx));
 
         let dismiss_handler: Box<dyn Fn(&MouseDownEvent, &mut Window, &mut App) + 'static> =
             Box::new(cx.listener(Self::dismiss));
 
-        div()
-            .size_full()
-            .relative()
-            .child(render_trigger_container(
-                disabled,
-                self.state.appearance,
-                self.focus_ring_enabled,
-                self.state.size,
-                &self.state.style,
-                bg,
-                fg,
-                outline_visible,
-                allow_open,
-                trigger_body,
-                trailing,
-                toggle_handler,
-                prepaint_handler,
-                window,
-                cx,
-            ))
-            .when(self.state.open, |this| {
-                this.child(
-                    deferred(render_popup_shell(
-                        &self.state.list,
-                        self.state.menu_width,
-                        self.state.search_placeholder.clone(),
-                        self.state.size,
-                        self.state.menu_max_h,
-                        bounds,
-                        footer_el,
-                        dismiss_handler,
-                        cx,
-                    ))
-                    .with_priority(gpui_base::POPUP_PRIORITY),
-                )
-            })
+        div().size_full().relative().child(
+            div()
+                .relative()
+                .on_prepaint({
+                    let state = cx.entity();
+                    move |bounds, _, cx| state.update(cx, |r, _| r.state.bounds = bounds)
+                })
+                .child(render_trigger_container(
+                    disabled,
+                    self.state.appearance,
+                    self.focus_ring_enabled,
+                    self.state.size,
+                    &self.state.style,
+                    bg,
+                    fg,
+                    outline_visible,
+                    allow_open,
+                    trigger_body,
+                    trailing,
+                    toggle_handler,
+                    prepaint_handler,
+                    window,
+                    cx,
+                ))
+                .when(self.state.open, |this| {
+                    this.child(
+                        deferred(render_popup_shell(
+                            &self.state.list,
+                            self.state.menu_width,
+                            self.state.search_placeholder.clone(),
+                            self.state.size,
+                            self.state.menu_max_h,
+                            bounds,
+                            footer_el,
+                            dismiss_handler,
+                            cx,
+                        ))
+                        .with_priority(gpui_base::POPUP_PRIORITY),
+                    )
+                }),
+        )
     }
 }
 
@@ -1034,8 +1037,11 @@ fn render_popup_shell<D: SearchableListDelegate + 'static>(
     let has_footer = footer_el.is_some();
     let popup_radius = cx.theme().radius.min(px(8.));
 
-    anchored()
-        .snap_to_window_with_margin(px(8.))
+    gpui_base::Positioner::side(bounds)
+        .placement(gpui_base::Placement::Bottom)
+        .align(gpui_base::Align::Start)
+        .offset(px(6.))
+        .margin(px(8.))
         .child(
             div()
                 .occlude()
@@ -1046,7 +1052,6 @@ fn render_popup_shell<D: SearchableListDelegate + 'static>(
                 .child(
                     v_flex()
                         .occlude()
-                        .mt_1p5()
                         .bg(cx.theme().tokens.popover)
                         .border_1()
                         .border_color(cx.theme().border)

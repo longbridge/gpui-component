@@ -5,7 +5,7 @@
 //! tooltips, and menus.
 
 use gpui::{
-    Anchor, AnyElement, App, Bounds, Display, Element, GlobalElementId, Half as _,
+    Anchor, AnyElement, App, Axis, Bounds, Display, Element, GlobalElementId, Half as _,
     InspectorElementId, IntoElement, LayoutId, ParentElement, Pixels, Point, Position, Size, Style,
     Window, point, px,
 };
@@ -88,8 +88,8 @@ impl Positioner {
     /// Places `anchor`'s corner of the popup at `position`.
     ///
     /// This is the corner-anchoring path used by triggers that were written
-    /// against GPUI's `anchored` element. It clamps into the viewport but never
-    /// flips to another side.
+    /// against GPUI's `anchored` element. It flips to the opposite corner when
+    /// the preferred side would overflow, then clamps into the viewport.
     pub fn corner(anchor: Anchor, position: Point<Pixels>) -> Self {
         Self {
             strategy: Strategy::Corner { anchor, position },
@@ -146,14 +146,35 @@ fn resolve(
     margin: Pixels,
 ) -> ResolvedPosition {
     match strategy {
-        Strategy::Corner { anchor, position } => ResolvedPosition {
-            bounds: clamp(
-                Bounds::from_anchor_and_size(anchor, position, popup_size),
-                viewport_size,
-                margin,
-            ),
-            placement: None,
-        },
+        Strategy::Corner { anchor, position } => {
+            let limits = Bounds::new(
+                point(margin, margin),
+                Size::new(
+                    viewport_size.width - margin * 2.,
+                    viewport_size.height - margin * 2.,
+                ),
+            );
+            let mut anchor = anchor;
+            let mut bounds = Bounds::from_anchor_and_size(anchor, position, popup_size);
+
+            let horizontal = anchor.other_side_along(Axis::Horizontal);
+            let switched = Bounds::from_anchor_and_size(horizontal, position, popup_size);
+            if !fits_horizontal(bounds, limits) && fits_horizontal(switched, limits) {
+                anchor = horizontal;
+                bounds = switched;
+            }
+
+            let vertical = anchor.other_side_along(Axis::Vertical);
+            let switched = Bounds::from_anchor_and_size(vertical, position, popup_size);
+            if !fits_vertical(bounds, limits) && fits_vertical(switched, limits) {
+                bounds = switched;
+            }
+
+            ResolvedPosition {
+                bounds: clamp(bounds, viewport_size, margin),
+                placement: None,
+            }
+        }
         Strategy::Side {
             trigger_bounds,
             placement,
@@ -169,6 +190,14 @@ fn resolve(
             }
         }
     }
+}
+
+fn fits_horizontal(bounds: Bounds<Pixels>, limits: Bounds<Pixels>) -> bool {
+    bounds.left() >= limits.left() && bounds.right() <= limits.right()
+}
+
+fn fits_vertical(bounds: Bounds<Pixels>, limits: Bounds<Pixels>) -> bool {
+    bounds.top() >= limits.top() && bounds.bottom() <= limits.bottom()
 }
 
 fn resolve_placement(
@@ -486,7 +515,7 @@ mod tests {
     }
 
     #[test]
-    fn corner_positioning_clamps_but_does_not_flip() {
+    fn corner_positioning_flips_before_clamping() {
         let position = resolve(
             Strategy::Corner {
                 anchor: Anchor::TopLeft,
@@ -498,8 +527,7 @@ mod tests {
         );
 
         assert_eq!(position.placement, None);
-        assert_eq!(position.bounds.right(), viewport().width - MARGIN);
-        assert_eq!(position.bounds.bottom(), viewport().height - MARGIN);
+        assert_eq!(position.bounds.origin, point(px(440.), px(360.)));
     }
 
     // Migrated from the tooltip module when its private positioning logic was
