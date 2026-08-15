@@ -44,6 +44,10 @@ impl ActiveTheme for App {
     }
 }
 
+fn default_true() -> bool {
+    true
+}
+
 /// The global theme configuration.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct Theme {
@@ -78,6 +82,14 @@ pub struct Theme {
     /// Radius for the large elements, e.g.: Dialog, Notification border radius.
     pub radius_lg: Pixels,
     pub shadow: bool,
+    /// Whether focused controls draw a ring outside their border, default true.
+    ///
+    /// The ring is painted outside the element, so any ancestor that clips its
+    /// content will cut it off. An application whose layout clips heavily can
+    /// turn it off here: focused controls then show only their tinted border,
+    /// which costs no space and cannot be clipped.
+    #[serde(default = "default_true")]
+    pub focus_ring: bool,
     pub transparent: Hsla,
     /// Show the scrollbar mode, default: Scrolling
     #[serde(alias = "scrollbar_show")]
@@ -447,6 +459,7 @@ impl From<&ThemeColor> for Theme {
             radius: px(6.),
             radius_lg: px(8.),
             shadow: true,
+            focus_ring: true,
             scrollbar_mode: ScrollbarMode::default(),
             notification: NotificationSettings::default(),
             tile_grid_size: px(8.),
