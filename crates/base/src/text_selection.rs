@@ -305,10 +305,12 @@ impl TextSelectionHost {
         self.publish_snapshots(cx);
     }
 
-    /// Starts a new render frame and removes still-live regions that were not
-    /// registered in the previous one.
-    pub fn begin_frame(&mut self, cx: &mut App) {
-        self.frame_generation = self.frame_generation.wrapping_add(1);
+    /// Sweeps regions after a rendered frame has completed.
+    ///
+    /// Registrations are stamped with the current generation while any sibling
+    /// is painting. Sweeping only after paint makes registration independent of
+    /// whether a region or the controller paints first.
+    pub fn finish_frame(&mut self, cx: &mut App) {
         let stale = self
             .regions
             .iter()
@@ -324,6 +326,7 @@ impl TextSelectionHost {
             }
         }
         self.publish_snapshots(cx);
+        self.frame_generation = self.frame_generation.wrapping_add(1);
     }
 
     /// Registers this frame's geometry for a region.
@@ -724,7 +727,10 @@ impl Element for TextSelectionController {
         window: &mut Window,
         cx: &mut App,
     ) {
-        TextSelectionHost::install(window, cx).update(cx, |host, cx| host.begin_frame(cx));
+        let host = TextSelectionHost::install(window, cx);
+        window.on_next_frame(move |_, cx| {
+            host.update(cx, |host, cx| host.finish_frame(cx));
+        });
         window.on_mouse_event(move |event: &MouseDownEvent, phase, window, cx| {
             if event.button != MouseButton::Left {
                 return;
@@ -1056,13 +1062,13 @@ mod tests {
         cx.update(|cx| {
             let mut host = TextSelectionHost::default();
             let region = FakeRegion::new("stale", cx);
-            host.begin_frame(cx);
             region.register(&mut host, 0., SelectionScopeId::default(), 0, cx);
             host.begin(point(px(1.), px(1.)), false, cx);
             host.update(point(px(8.), px(1.)), cx);
             host.end(cx);
 
-            host.begin_frame(cx);
+            host.finish_frame(cx);
+            host.finish_frame(cx);
             assert_eq!(host.selected_text(cx), "");
             assert!(region.region.state().read(cx).snapshot().is_none());
         });
@@ -1143,6 +1149,23 @@ mod tests {
         cx.update(|window, cx| {
             assert!(GlobalState::is_text_selection_suppressed(cx));
             assert!(!window.has_text_selection(cx));
+        });
+    }
+
+    #[gpui::test]
+    fn frame_sweep_keeps_a_region_registered_before_the_controller_paints(cx: &mut TestAppContext) {
+        cx.update(|cx| {
+            let mut host = TextSelectionHost::default();
+            let region = FakeRegion::new("painted first", cx);
+            region.register(&mut host, 0., SelectionScopeId::default(), 0, cx);
+            host.begin(point(px(1.), px(1.)), false, cx);
+            host.update(point(px(8.), px(1.)), cx);
+            host.end(cx);
+
+            host.finish_frame(cx);
+
+            assert_eq!(host.selected_text(cx), "painted first");
+            assert!(region.region.state().read(cx).snapshot().is_some());
         });
     }
 }
