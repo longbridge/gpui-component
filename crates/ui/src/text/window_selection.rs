@@ -143,8 +143,19 @@ impl<E: Element> Element for SelectionScopeMarker<E> {
 pub struct WindowTextSelection {
     pub(crate) anchor: Option<SelectionEndpoint>,
     pub(crate) cursor: Option<SelectionEndpoint>,
+    /// Anchor staged during capture for a Shift+click. Capture still clears the
+    /// visible selection so a component that stops bubble propagation cannot
+    /// leave stale highlights; an unsuppressed bubble handler consumes this to
+    /// extend the selection.
+    pending_extension_anchor: Option<SelectionEndpoint>,
     pub(crate) is_selecting: bool,
     pub(crate) did_hit_text: bool,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum SelectionStart {
+    Begin,
+    Extend,
 }
 
 /// A selection endpoint, content-anchored to a TextView.
@@ -374,6 +385,7 @@ impl Root {
         let had_window_selection = self.text_selection.anchor.is_some();
         self.text_selection.anchor = None;
         self.text_selection.cursor = None;
+        self.text_selection.pending_extension_anchor = None;
         self.text_selection.is_selecting = false;
         self.text_selection.did_hit_text = false;
         self.selectable_text_views.retain(|_, (view, _, _)| {
@@ -423,9 +435,10 @@ impl Root {
         }
     }
 
-    pub(crate) fn start_text_selection(
+    fn start_text_selection(
         &mut self,
         position: Point<Pixels>,
+        start: SelectionStart,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -441,18 +454,38 @@ impl Root {
         if endpoint.inside {
             if let Some(view) = endpoint.view.as_ref().and_then(|v| v.upgrade()) {
                 view.update(cx, |state, cx| {
-                    state.is_selecting = true;
                     state.focus_handle.focus(window, cx);
                 });
             }
         }
-        self.text_selection.anchor = Some(endpoint.clone());
+        let extension_anchor = (start == SelectionStart::Extend)
+            .then(|| self.text_selection.pending_extension_anchor.take())
+            .flatten()
+            .filter(|anchor| anchor.resolve(cx).is_some());
+        self.text_selection.pending_extension_anchor = None;
+
+        self.text_selection.anchor = Some(extension_anchor.unwrap_or_else(|| endpoint.clone()));
         self.text_selection.cursor = Some(endpoint);
+        if let Some(view) = self
+            .text_selection
+            .anchor
+            .as_ref()
+            .filter(|endpoint| endpoint.inside)
+            .and_then(|endpoint| endpoint.view.as_ref())
+            .and_then(|view| view.upgrade())
+        {
+            view.update(cx, |state, _| state.is_selecting = true);
+        }
         self.text_selection.did_hit_text = self
             .text_selection
             .anchor
             .as_ref()
-            .is_some_and(|endpoint| endpoint.inside_text);
+            .is_some_and(|endpoint| endpoint.inside_text)
+            || self
+                .text_selection
+                .cursor
+                .as_ref()
+                .is_some_and(|endpoint| endpoint.inside_text);
         self.text_selection.is_selecting = true;
     }
 
@@ -505,6 +538,7 @@ impl Root {
     }
 
     pub(crate) fn end_text_selection(&mut self, cx: &mut Context<Self>) {
+        self.text_selection.pending_extension_anchor = None;
         if !self.text_selection.is_selecting {
             return;
         }
@@ -821,20 +855,35 @@ impl Element for TextSelectionController {
             }
             if phase.capture() {
                 // Reset the suppression flag at the start of every press, then
-                // clear the previous selection (browser behavior), even when an
-                // interactive component consumes the event in the bubble phase.
+                // stage the anchor needed by Shift+click before clearing the
+                // previous selection. Clearing in capture preserves the existing
+                // behavior even when a component stops bubble propagation.
                 GlobalState::reset_text_selection_suppression(cx);
-                Root::update(window, cx, |root, _, cx| root.clear_text_selection(cx));
+                Root::update(window, cx, |root, _, cx| {
+                    let extension_anchor = (event.click_count == 1 && event.modifiers.shift)
+                        .then(|| root.text_selection.anchor.clone())
+                        .flatten();
+                    root.clear_text_selection(cx);
+                    root.text_selection.pending_extension_anchor = extension_anchor;
+                });
             } else if event.click_count == 1 {
                 // Reaching bubble phase means no component stopped propagation.
                 // Components that own their own press (Button, Input, etc.) set
                 // `suppress_text_selection` in their bubble handler; if set, the
                 // press is theirs and must not start a window selection.
                 if GlobalState::is_text_selection_suppressed(cx) {
+                    Root::update(window, cx, |root, _, _| {
+                        root.text_selection.pending_extension_anchor = None;
+                    });
                     return;
                 }
                 Root::update(window, cx, |root, window, cx| {
-                    root.start_text_selection(event.position, window, cx);
+                    let start = if event.modifiers.shift {
+                        SelectionStart::Extend
+                    } else {
+                        SelectionStart::Begin
+                    };
+                    root.start_text_selection(event.position, start, window, cx);
                 });
             }
         });
@@ -1313,6 +1362,138 @@ mod tests {
     fn window_selected_text(cx: &mut VisualTestContext) -> String {
         use crate::WindowExt as _;
         cx.update(|window, cx| window.selected_text(cx))
+    }
+
+    fn click(
+        cx: &mut VisualTestContext,
+        position: gpui::Point<gpui::Pixels>,
+        modifiers: Modifiers,
+    ) {
+        cx.simulate_mouse_down(position, MouseButton::Left, modifiers);
+        cx.simulate_mouse_up(position, MouseButton::Left, modifiers);
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+    }
+
+    fn shift_modifiers() -> Modifiers {
+        Modifiers {
+            shift: true,
+            ..Modifiers::default()
+        }
+    }
+
+    #[gpui::test]
+    fn shift_click_extends_from_previous_plain_click(cx: &mut TestAppContext) {
+        let (_, cx) = setup(true, cx);
+
+        click(cx, point(px(0.), px(15.)), Modifiers::default());
+        click(cx, point(px(300.), px(15.)), shift_modifiers());
+
+        assert_eq!(window_selected_text(cx).trim(), "Hello world");
+    }
+
+    #[gpui::test]
+    fn shift_click_reuses_anchor_for_repeated_extension(cx: &mut TestAppContext) {
+        let (_, cx) = setup(true, cx);
+        let anchor = point(px(0.), px(15.));
+
+        click(cx, anchor, Modifiers::default());
+        click(cx, point(px(300.), px(15.)), shift_modifiers());
+        assert_eq!(window_selected_text(cx).trim(), "Hello world");
+
+        click(cx, anchor, shift_modifiers());
+        assert_eq!(window_selected_text(cx), "");
+    }
+
+    #[gpui::test]
+    fn shift_click_keeps_anchor_when_cursor_crosses_it(cx: &mut TestAppContext) {
+        let (_, cx) = setup(true, cx);
+        let anchor = point(px(20.), px(15.));
+
+        click(cx, anchor, Modifiers::default());
+        click(cx, point(px(300.), px(15.)), shift_modifiers());
+        assert_eq!(window_selected_text(cx).trim(), "llo world");
+
+        click(cx, point(px(0.), px(15.)), shift_modifiers());
+        assert_eq!(window_selected_text(cx).trim(), "He");
+    }
+
+    #[gpui::test]
+    fn shift_drag_keeps_previous_plain_click_as_anchor(cx: &mut TestAppContext) {
+        let (_, cx) = setup(true, cx);
+        let modifiers = shift_modifiers();
+
+        click(cx, point(px(0.), px(15.)), Modifiers::default());
+        cx.simulate_mouse_down(point(px(20.), px(15.)), MouseButton::Left, modifiers);
+        cx.simulate_mouse_move(point(px(300.), px(70.)), Some(MouseButton::Left), modifiers);
+        cx.simulate_mouse_up(point(px(300.), px(70.)), MouseButton::Left, modifiers);
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        assert_eq!(
+            window_selected_text(cx).trim(),
+            "Hello world\n\nSecond message"
+        );
+    }
+
+    #[gpui::test]
+    fn shift_click_uses_anchor_established_by_latest_plain_click(cx: &mut TestAppContext) {
+        let (_, cx) = setup(true, cx);
+        let start = point(px(0.), px(15.));
+        let end = point(px(300.), px(15.));
+        let new_anchor = point(px(20.), px(15.));
+
+        click(cx, start, Modifiers::default());
+        click(cx, end, shift_modifiers());
+        assert_eq!(window_selected_text(cx).trim(), "Hello world");
+
+        click(cx, new_anchor, Modifiers::default());
+        click(cx, start, shift_modifiers());
+        assert_eq!(window_selected_text(cx).trim(), "He");
+    }
+
+    #[gpui::test]
+    fn shift_click_without_anchor_falls_back_to_plain_click(cx: &mut TestAppContext) {
+        let (_, cx) = setup(true, cx);
+
+        click(cx, point(px(20.), px(15.)), shift_modifiers());
+
+        assert_eq!(window_selected_text(cx), "");
+    }
+
+    #[gpui::test]
+    fn shift_click_extends_across_text_views(cx: &mut TestAppContext) {
+        let (chat, cx) = setup(true, cx);
+
+        click(cx, point(px(0.), px(15.)), Modifiers::default());
+        click(cx, point(px(300.), px(70.)), shift_modifiers());
+
+        let text = window_selected_text(cx);
+        assert!(text.contains("Hello world"), "got: {text:?}");
+        assert!(text.contains("Second message"), "got: {text:?}");
+        let (first_selecting, second_selecting) = cx.update(|_, cx| {
+            let chat = chat.read(cx);
+            (
+                chat.first.read(cx).is_selecting,
+                chat.second.read(cx).is_selecting,
+            )
+        });
+        assert!(!first_selecting);
+        assert!(!second_selecting);
+    }
+
+    #[gpui::test]
+    fn shift_click_on_suppressing_control_clears_text_view_selection(cx: &mut TestAppContext) {
+        let (_, cx) = setup(true, cx);
+
+        drag(cx, point(px(0.), px(15.)), point(px(300.), px(70.)));
+        assert!(!window_selected_text(cx).is_empty());
+
+        click(cx, point(px(20.), px(100.)), shift_modifiers());
+
+        assert_eq!(window_selected_text(cx), "");
     }
 
     #[gpui::test]
