@@ -17,6 +17,10 @@ pub trait ThemeStyled: Styled + Sized {
     /// Give this element the focus appearance the framework's own controls
     /// use: its border tinted with the focus colour, and the ring outside it.
     ///
+    /// The ring is dropped when [`crate::Theme::focus_ring`] is off, leaving
+    /// the tinted border — an application whose layout clips its containers can
+    /// turn it off rather than finding room for the ring in each of them.
+    ///
     /// Calling this turns the ring on; gate it with `when` for the conditions
     /// that decide whether the control shows one at all — its focus state,
     /// [`FocusableExt::focus_ring`], appearance, and so on.
@@ -46,6 +50,13 @@ impl<T: Styled + Sized> ThemeStyled for T {
     where
         Self: ParentElement,
     {
+        // The ring is painted outside the border, so a clipping ancestor cuts
+        // it off. An application whose layout clips heavily turns it off in the
+        // theme and keeps the tinted border, which takes no space.
+        if !cx.theme().focus_ring {
+            return self.border_color(cx.theme().ring);
+        }
+
         let rem_size = window.rem_size();
         let style = self.style();
         let border_widths = Edges::<Pixels> {
