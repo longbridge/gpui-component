@@ -239,6 +239,7 @@ pub struct TextSelectionHost {
     is_selecting: bool,
     did_hit_text: bool,
     frame_generation: u64,
+    finish_frame_scheduled: bool,
 }
 
 impl Default for TextSelectionHost {
@@ -252,6 +253,7 @@ impl Default for TextSelectionHost {
             is_selecting: false,
             did_hit_text: false,
             frame_generation: 0,
+            finish_frame_scheduled: false,
         }
     }
 }
@@ -311,6 +313,7 @@ impl TextSelectionHost {
     /// is painting. Sweeping only after paint makes registration independent of
     /// whether a region or the controller paints first.
     pub fn finish_frame(&mut self, cx: &mut App) {
+        self.finish_frame_scheduled = false;
         let stale = self
             .regions
             .iter()
@@ -327,6 +330,14 @@ impl TextSelectionHost {
         }
         self.publish_snapshots(cx);
         self.frame_generation = self.frame_generation.wrapping_add(1);
+    }
+
+    fn schedule_finish_frame(&mut self) -> bool {
+        if self.finish_frame_scheduled {
+            return false;
+        }
+        self.finish_frame_scheduled = true;
+        true
     }
 
     /// Registers this frame's geometry for a region.
@@ -728,9 +739,11 @@ impl Element for TextSelectionController {
         cx: &mut App,
     ) {
         let host = TextSelectionHost::install(window, cx);
-        window.on_next_frame(move |_, cx| {
-            host.update(cx, |host, cx| host.finish_frame(cx));
-        });
+        if host.update(cx, |host, _| host.schedule_finish_frame()) {
+            window.on_next_frame(move |_, cx| {
+                host.update(cx, |host, cx| host.finish_frame(cx));
+            });
+        }
         window.on_mouse_event(move |event: &MouseDownEvent, phase, window, cx| {
             if event.button != MouseButton::Left {
                 return;
@@ -833,6 +846,10 @@ mod tests {
 
     struct ControllerOnlyView;
 
+    struct DoubleControllerView {
+        region: TextSelectionRegion,
+    }
+
     impl Render for WindowRegionView {
         fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
             div()
@@ -851,6 +868,15 @@ mod tests {
                             GlobalState::suppress_text_selection(cx);
                         }),
                 )
+        }
+    }
+
+    impl Render for DoubleControllerView {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div()
+                .size_full()
+                .child(TextSelectionController)
+                .child(TextSelectionController)
         }
     }
 
@@ -1166,6 +1192,28 @@ mod tests {
 
             assert_eq!(host.selected_text(cx), "painted first");
             assert!(region.region.state().read(cx).snapshot().is_some());
+        });
+    }
+
+    #[gpui::test]
+    fn two_controllers_schedule_only_one_post_frame_sweep(cx: &mut TestAppContext) {
+        let (view, cx) = cx.add_window_view(|_, cx| DoubleControllerView {
+            region: TextSelectionRegion::new("once", cx),
+        });
+        cx.update(|window, cx| {
+            let host = TextSelectionHost::install(window, cx);
+            let region = view.read(cx).region.clone();
+            host.update(cx, |host, cx| {
+                FakeRegion { region }.register(host, 0., SelectionScopeId::default(), 0, cx);
+                host.begin(point(px(1.), px(1.)), false, cx);
+                host.update(point(px(8.), px(1.)), cx);
+                host.end(cx);
+            });
+
+            let _ = window.draw(cx);
+            window.simulate_next_frame(cx);
+
+            assert_eq!(host.read(cx).selected_text(cx), "once");
         });
     }
 }
