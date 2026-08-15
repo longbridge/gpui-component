@@ -189,7 +189,7 @@ impl Render for EditorStory {
 mod syntect_highlighter {
     use std::{collections::HashMap, ops::Range, sync::LazyLock};
 
-    use gpui::{Context, HighlightStyle, SharedString, Window};
+    use gpui::{App, HighlightStyle, SharedString, Window};
     use gpui_component::input::*;
     use syntect::{
         parsing::{ParseState, Scope, ScopeStack, SyntaxSet},
