@@ -17,13 +17,13 @@ use crate::input::RopeExt;
 /// WrapMap manages soft-wrapping and provides buffer ↔ wrap coordinate mapping.
 ///
 /// Buffer line ↔ wrap row mapping is backed by the [`TextWrapper`]'s `SumTree`.
-pub struct WrapMap {
+pub(super) struct WrapMap {
     /// The underlying text wrapper (reuses existing implementation)
     wrapper: TextWrapper,
 }
 
 impl WrapMap {
-    pub fn new(font: Font, font_size: Pixels, wrap_width: Option<Pixels>) -> Self {
+    pub(super) fn new(font: Font, font_size: Pixels, wrap_width: Option<Pixels>) -> Self {
         Self {
             wrapper: TextWrapper::new(font, font_size, wrap_width),
         }
@@ -31,13 +31,13 @@ impl WrapMap {
 
     /// Get total number of wrap rows (visual rows after soft-wrapping)
     #[inline]
-    pub fn wrap_row_count(&self) -> usize {
+    pub(super) fn wrap_row_count(&self) -> usize {
         self.wrapper.len()
     }
 
     /// Get total number of buffer lines (logical lines)
     #[inline]
-    pub fn buffer_line_count(&self) -> usize {
+    pub(super) fn buffer_line_count(&self) -> usize {
         self.wrapper.lines_count()
     }
 
@@ -85,22 +85,22 @@ impl WrapMap {
     }
 
     /// Get the buffer line for a given wrap row
-    pub fn wrap_row_to_buffer_line(&self, wrap_row: usize) -> usize {
+    pub(super) fn wrap_row_to_buffer_line(&self, wrap_row: usize) -> usize {
         self.wrapper.wrap_row_to_buffer_line(wrap_row)
     }
 
     /// Get the first wrap row for a given buffer line
-    pub fn buffer_line_to_first_wrap_row(&self, line: usize) -> usize {
+    pub(super) fn buffer_line_to_first_wrap_row(&self, line: usize) -> usize {
         self.wrapper.buffer_line_to_first_wrap_row(line)
     }
 
     /// Get the wrap row range for a buffer line: [start, end)
-    pub fn buffer_line_to_wrap_row_range(&self, line: usize) -> Range<usize> {
+    pub(super) fn buffer_line_to_wrap_row_range(&self, line: usize) -> Range<usize> {
         self.wrapper.buffer_line_to_wrap_row_range(line)
     }
 
     /// Update text (incremental or full)
-    pub fn on_text_changed(
+    pub(super) fn on_text_changed(
         &mut self,
         changed_text: &Rope,
         range: &Range<usize>,
@@ -111,27 +111,27 @@ impl WrapMap {
     }
 
     /// Update layout parameters (wrap width or font)
-    pub fn on_layout_changed(&mut self, wrap_width: Option<Pixels>, cx: &mut App) {
+    pub(super) fn on_layout_changed(&mut self, wrap_width: Option<Pixels>, cx: &mut App) {
         self.wrapper.set_wrap_width(wrap_width, cx);
     }
 
     /// Set the wrapping indent mode for continuation lines.
-    pub fn set_wrapping_indent(&mut self, wrapping_indent: WrappingIndent, cx: &mut App) {
+    pub(super) fn set_wrapping_indent(&mut self, wrapping_indent: WrappingIndent, cx: &mut App) {
         self.wrapper.set_wrapping_indent(wrapping_indent, cx);
     }
 
     /// Set font parameters
-    pub fn set_font(&mut self, font: Font, font_size: Pixels, cx: &mut App) {
+    pub(super) fn set_font(&mut self, font: Font, font_size: Pixels, cx: &mut App) {
         self.wrapper.set_font(font, font_size, cx);
     }
 
     /// Ensure text is prepared (initializes wrapper if needed)
-    pub fn ensure_text_prepared(&mut self, text: &Rope, cx: &mut App) -> bool {
+    pub(super) fn ensure_text_prepared(&mut self, text: &Rope, cx: &mut App) -> bool {
         self.wrapper.prepare_if_need(text, cx)
     }
 
     /// Initialize with text
-    pub fn set_text(&mut self, text: &Rope, cx: &mut App) {
+    pub(super) fn set_text(&mut self, text: &Rope, cx: &mut App) {
         self.wrapper.set_default_text(text);
         self.wrapper.prepare_if_need(text, cx);
     }
@@ -148,12 +148,12 @@ impl WrapMap {
     }
 
     /// Get the rope text
-    pub fn text(&self) -> &Rope {
+    pub(super) fn text(&self) -> &Rope {
         self.wrapper.text()
     }
 
     /// Calculate how many wrap rows of a buffer line are visible (not folded)
-    pub fn visible_wrap_row_count_for_line(&self, line: usize, fold_map: &FoldMap) -> usize {
+    pub(super) fn visible_wrap_row_count_for_line(&self, line: usize, fold_map: &FoldMap) -> usize {
         let wrap_range = self.buffer_line_to_wrap_row_range(line);
         wrap_range
             .filter(|&wr| fold_map.wrap_row_to_display_row(wr).is_some())

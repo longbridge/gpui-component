@@ -170,7 +170,7 @@ impl BaseShowcase {
                 .rows(3)
                 .default_value("Build focused interfaces.\nKeep behavior composable.")
         });
-        let textarea_base = textarea.read(cx).base_state().clone();
+        let textarea_base = textarea.clone();
         textarea_base.update(cx, |state, _| {
             state.set_editor_style(InputEditorStyle {
                 foreground: rgb(0x171717).into(),
@@ -181,13 +181,14 @@ impl BaseShowcase {
             });
         });
         let editor = cx.new(|cx| {
-            EditorState::new("rust", window, cx)
+            EditorState::new(window, cx)
+                .language("rust")
                 .line_number(true)
                 .folding(true)
                 .show_whitespaces(true)
                 .default_value(EDITOR_EXAMPLE)
         });
-        let editor_base = editor.read(cx).base_state().clone();
+        let editor_base = editor.clone();
         editor_base.update(cx, |state, cx| {
             state.set_highlighter_factory(
                 Rc::new(|language| {

@@ -1,6 +1,6 @@
 use crate::{
     StyledExt as _,
-    input::{InputEvent, InputState, blink_cursor::BlinkCursor},
+    input::{InputEvent, blink_cursor::BlinkCursor},
 };
 use gpui::{
     AnyElement, App, AppContext as _, Context, Empty, Entity, EventEmitter, FocusHandle, Focusable,
@@ -15,7 +15,6 @@ pub struct OtpState {
     blink_cursor: Entity<BlinkCursor>,
     masked: bool,
     length: usize,
-    compat_input_state: Entity<InputState>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -23,7 +22,6 @@ impl OtpState {
     pub fn new(length: usize, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let focus_handle = cx.focus_handle();
         let blink_cursor = cx.new(|_| BlinkCursor::new());
-        let compat_input_state = cx.new(|cx| InputState::new(window, cx));
         let subscriptions = vec![
             cx.observe(&blink_cursor, |_, _, cx| cx.notify()),
             cx.observe_window_activation(window, |this, window, cx| {
@@ -40,7 +38,6 @@ impl OtpState {
             blink_cursor,
             masked: false,
             length,
-            compat_input_state,
             _subscriptions: subscriptions,
         }
     }
@@ -53,13 +50,10 @@ impl OtpState {
     pub fn set_value(
         &mut self,
         value: impl Into<SharedString>,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut Context<Self>,
     ) {
         self.value = value.into();
-        self.compat_input_state.update(cx, |state, cx| {
-            state.set_value(self.value.clone(), window, cx);
-        });
         cx.notify();
     }
 
@@ -77,9 +71,6 @@ impl OtpState {
     }
     pub fn cursor_visible(&self, cx: &App) -> bool {
         self.blink_cursor.read(cx).visible()
-    }
-    pub fn compat_input_state(&self) -> Entity<InputState> {
-        self.compat_input_state.clone()
     }
     pub fn masked(mut self, masked: bool) -> Self {
         self.masked = masked;
@@ -132,10 +123,6 @@ impl OtpState {
         cx.stop_propagation();
         self.blink_cursor.update(cx, |cursor, cx| cursor.pause(cx));
         self.value = value.into();
-        let value = self.value.clone();
-        self.compat_input_state.update(cx, |state, cx| {
-            state.set_value(value, window, cx);
-        });
         if self.value.chars().count() == self.length {
             cx.emit(InputEvent::Change);
         }

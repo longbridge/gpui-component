@@ -90,10 +90,8 @@ impl Styled for Editor {
 }
 
 impl RenderOnce for Editor {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        self.state.update(cx, |state, cx| state.prepare(window, cx));
-        let base = self.state.read(cx).base_state().clone();
-        Input::from_base(&base)
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+        Input::from_state(self.state.clone())
             .appearance(self.appearance)
             .bordered(self.bordered)
             .focus_bordered(false)

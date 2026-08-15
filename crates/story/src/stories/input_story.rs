@@ -565,7 +565,7 @@ impl Render for InputStory {
                     .overflow_hidden()
                     .child(div().child(format!(
                         "Value: {:?}",
-                        window.focused_input(cx).map(|input| input.read(cx).value())
+                        window.focused_input(cx).map(|input| input.value(cx))
                     ))),
             )
             .child(

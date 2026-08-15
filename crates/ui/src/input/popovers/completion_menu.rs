@@ -14,7 +14,7 @@ const POPOVER_GAP: Pixels = px(4.);
 use crate::{
     ActiveTheme, IndexPath, Selectable, actions, h_flex,
     input::{
-        self, InputBaseState,
+        self, EditorState,
         popovers::{editor_popover, render_markdown},
     },
     label::Label,
@@ -169,7 +169,7 @@ impl ListDelegate for ContextMenuDelegate {
 /// A context menu for code completions and code actions.
 pub struct CompletionMenu {
     offset: usize,
-    editor: WeakEntity<InputBaseState>,
+    editor: WeakEntity<EditorState>,
     list: Entity<ListState<ContextMenuDelegate>>,
     open: bool,
 
@@ -182,9 +182,9 @@ pub struct CompletionMenu {
 impl CompletionMenu {
     /// Creates a new `CompletionMenu` with the given offset and completion items.
     ///
-    /// NOTE: This element should not call from InputBaseState::new, unless that will stack overflow.
+    /// NOTE: This element should not call from EditorState::new, unless that will stack overflow.
     pub(crate) fn new(
-        editor: Entity<InputBaseState>,
+        editor: Entity<EditorState>,
         window: &mut Window,
         cx: &mut App,
     ) -> Entity<Self> {
@@ -380,7 +380,7 @@ impl Render for CompletionMenu {
         let Some(editor) = self.editor.upgrade() else {
             return Empty.into_any_element();
         };
-        let configured_max = editor.read(cx).lsp.completion_menu.max_width;
+        let configured_max = editor.read(cx).lsp().completion_menu.max_width;
         let max_width = configured_max.min(window.bounds().size.width - pos.x);
         let abs_pos = editor.read(cx).input_bounds().origin + pos;
         let vertical_layout =

@@ -1,7 +1,7 @@
 use crate::{
     Placement, Root,
     dialog::{AlertDialog, Dialog},
-    input::InputState,
+    input::AnyInputState,
     notification::Notification,
     sheet::Sheet,
 };
@@ -77,8 +77,11 @@ pub trait WindowExt: Sized {
     /// Returns number of notifications.
     fn notifications(&mut self, cx: &mut App) -> Rc<Vec<Entity<Notification>>>;
 
-    /// Return current focused Input entity.
-    fn focused_input(&mut self, cx: &mut App) -> Option<Entity<InputState>>;
+    /// Return the currently focused input state.
+    ///
+    /// Covers `Input`, `Textarea`, `Editor` and `OtpInput`, use
+    /// [`AnyInputState::as_input`] and friends to get the concrete state.
+    fn focused_input(&mut self, cx: &mut App) -> Option<AnyInputState>;
     /// Returns true if there is a focused Input entity.
     fn has_focused_input(&mut self, cx: &mut App) -> bool;
 
@@ -215,7 +218,7 @@ impl WindowExt for Window {
     }
 
     #[inline]
-    fn focused_input(&mut self, cx: &mut App) -> Option<Entity<InputState>> {
+    fn focused_input(&mut self, cx: &mut App) -> Option<AnyInputState> {
         Root::read(self, cx).focused_input.clone()
     }
 

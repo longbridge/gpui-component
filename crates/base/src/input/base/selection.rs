@@ -1,3 +1,4 @@
+use crate::input::InputModeKind;
 use std::ops::Range;
 
 use gpui::{Context, Window};
@@ -6,7 +7,7 @@ use sum_tree::Bias;
 
 use super::{InputBaseState, RopeExt as _};
 
-impl InputBaseState {
+impl<M: InputModeKind> InputBaseState<M> {
     /// Select the word at the given offset on double-click.
     ///
     /// The offset is the UTF-8 offset.
@@ -38,7 +39,7 @@ impl TextSelector {
     /// The offset is the UTF-8 offset.
     ///
     /// Returns the start and end offsets of the selected line.
-    pub fn line_range(text: &Rope, offset: usize) -> Range<usize> {
+    pub(crate) fn line_range(text: &Rope, offset: usize) -> Range<usize> {
         let offset = text.clip_offset(offset, Bias::Left);
         let row = text.offset_to_point(offset).row;
         let start = text.line_start_offset(row);
@@ -52,7 +53,7 @@ impl TextSelector {
     /// The offset is the UTF-8 offset.
     ///
     /// Returns the start and end offsets of the selected word.
-    pub fn word_range(text: &Rope, offset: usize) -> Option<Range<usize>> {
+    pub(crate) fn word_range(text: &Rope, offset: usize) -> Option<Range<usize>> {
         let offset = text.clip_offset(offset, Bias::Left);
         let Some(char) = text.char_at(offset) else {
             return None;

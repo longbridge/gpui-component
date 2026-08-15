@@ -3,7 +3,7 @@ use gpui::{App, Context, Entity, SharedString, Task, Window};
 use lsp_types::CodeAction;
 use std::ops::Range;
 
-use crate::input::{InputBaseState, ToggleCodeActions};
+use crate::input::{EditorMode, EditorState, InputBaseState, ToggleCodeActions};
 
 pub trait CodeActionProvider {
     /// The id for this CodeAction.
@@ -16,7 +16,7 @@ pub trait CodeActionProvider {
     /// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_codeAction
     fn code_actions(
         &self,
-        state: Entity<InputBaseState>,
+        state: Entity<EditorState>,
         range: Range<usize>,
         window: &mut Window,
         cx: &mut App,
@@ -25,7 +25,7 @@ pub trait CodeActionProvider {
     /// Performs the specified code action.
     fn perform_code_action(
         &self,
-        state: Entity<InputBaseState>,
+        state: Entity<EditorState>,
         action: CodeAction,
         push_to_history: bool,
         window: &mut Window,
@@ -39,7 +39,7 @@ pub struct CodeActionItem {
     pub action: CodeAction,
 }
 
-impl InputBaseState {
+impl InputBaseState<EditorMode> {
     pub(crate) fn on_action_toggle_code_actions(
         &mut self,
         _: &ToggleCodeActions,
@@ -55,11 +55,11 @@ impl InputBaseState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let providers = self.lsp.code_action_providers.clone();
+        let providers = self.extras.lsp.code_action_providers.clone();
         let range = self.selected_range.start..self.selected_range.end;
 
         let state = cx.entity();
-        self._context_menu_task = cx.spawn_in(window, async move |editor, cx| {
+        self.extras.context_menu_task = cx.spawn_in(window, async move |editor, cx| {
             let mut provider_responses = vec![];
             _ = cx.update(|window, cx| {
                 for provider in providers {
@@ -80,8 +80,8 @@ impl InputBaseState {
 
             if code_actions.is_empty() {
                 editor.update(cx, |editor, cx| {
-                    editor.context_menu_content.code_action.open = false;
-                    editor.context_menu_content.code_action.items.clear();
+                    editor.extras.context_menu_content.code_action.open = false;
+                    editor.extras.context_menu_content.code_action.items.clear();
                     cx.notify();
                 })?;
                 return Ok(());
@@ -92,9 +92,13 @@ impl InputBaseState {
                         return;
                     }
 
-                    editor.context_menu_content.code_action.items = code_actions;
-                    editor.context_menu_content.code_action.open =
-                        !editor.context_menu_content.code_action.items.is_empty();
+                    editor.extras.context_menu_content.code_action.items = code_actions;
+                    editor.extras.context_menu_content.code_action.open = !editor
+                        .extras
+                        .context_menu_content
+                        .code_action
+                        .items
+                        .is_empty();
 
                     cx.notify();
                 })
@@ -110,7 +114,7 @@ impl InputBaseState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let providers = self.lsp.code_action_providers.clone();
+        let providers = self.extras.lsp.code_action_providers.clone();
         let Some(provider) = providers
             .iter()
             .find(|provider| provider.id() == item.provider_id)

@@ -3,7 +3,8 @@ use gpui::{
     ParentElement as _, RenderOnce, Styled as _, Window, div, prelude::FluentBuilder, px,
 };
 
-use super::input::{input_style, sync_focused_input_registry};
+use super::input::input_style;
+use super::state::sync_focused_input_registry;
 use crate::styled::FocusRingStyleExt as _;
 use crate::{ActiveTheme, Disableable, Icon, IconName, Sizable, Size, h_flex, v_flex};
 use gpui_base::OtpInput as BaseOtpInput;
@@ -72,13 +73,7 @@ impl Sizable for OtpInput {
 }
 impl RenderOnce for OtpInput {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let compat_input = self.state.read(cx).compat_input_state();
-        sync_focused_input_registry(
-            self.state.read(cx).focus_handle(cx).is_focused(window),
-            compat_input,
-            window,
-            cx,
-        );
+        sync_focused_input_registry(self.state.clone(), window, cx);
         let state = self.state.read(cx);
         let blink_show = state.cursor_visible(cx);
         let is_focused = state.focus_handle(cx).is_focused(window);

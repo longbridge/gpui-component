@@ -8,7 +8,7 @@ use super::folding::FoldRange;
 use super::wrap_map::WrapMap;
 
 /// FoldMap projects wrap rows to display rows by hiding folded regions.
-pub struct FoldMap {
+pub(super) struct FoldMap {
     /// Mapping: display_row → wrap_row
     /// index = display_row, value = actual wrap_row
     visible_wrap_rows: Vec<usize>,
@@ -35,7 +35,7 @@ pub struct FoldMap {
 }
 
 impl FoldMap {
-    pub fn new() -> Self {
+    pub(super) fn new() -> Self {
         Self {
             visible_wrap_rows: Vec::new(),
             wrap_row_to_display_row: Vec::new(),
@@ -54,7 +54,7 @@ impl FoldMap {
     }
 
     /// Get total number of visible display rows
-    pub fn display_row_count(&self) -> usize {
+    pub(super) fn display_row_count(&self) -> usize {
         if self.folded.is_empty() {
             return self.cached_wrap_row_count;
         }
@@ -63,7 +63,7 @@ impl FoldMap {
 
     /// Convert wrap_row to display_row
     /// Returns None if the wrap_row is hidden by folding
-    pub fn wrap_row_to_display_row(&self, wrap_row: usize) -> Option<usize> {
+    pub(super) fn wrap_row_to_display_row(&self, wrap_row: usize) -> Option<usize> {
         if self.folded.is_empty() {
             return if wrap_row < self.cached_wrap_row_count {
                 Some(wrap_row)
@@ -78,7 +78,7 @@ impl FoldMap {
     }
 
     /// Convert display_row to wrap_row
-    pub fn display_row_to_wrap_row(&self, display_row: usize) -> Option<usize> {
+    pub(super) fn display_row_to_wrap_row(&self, display_row: usize) -> Option<usize> {
         if self.folded.is_empty() {
             return if display_row < self.cached_wrap_row_count {
                 Some(display_row)
@@ -90,7 +90,7 @@ impl FoldMap {
     }
 
     /// Find the nearest visible display_row for a given wrap_row
-    pub fn nearest_visible_display_row(&self, wrap_row: usize) -> usize {
+    pub(super) fn nearest_visible_display_row(&self, wrap_row: usize) -> usize {
         if self.folded.is_empty() {
             return wrap_row.min(self.cached_wrap_row_count.saturating_sub(1));
         }
@@ -106,7 +106,7 @@ impl FoldMap {
     }
 
     /// Set fold candidates (from tree-sitter/LSP), full replacement.
-    pub fn set_candidates(&mut self, mut candidates: Vec<FoldRange>) {
+    pub(super) fn set_candidates(&mut self, mut candidates: Vec<FoldRange>) {
         // Sort and deduplicate by start_line
         candidates.sort_by_key(|r| r.start_line);
         candidates.dedup_by_key(|r| r.start_line);
@@ -124,7 +124,7 @@ impl FoldMap {
     ///
     /// Replaces candidates within [edit_start_line, edit_end_line] with `new_candidates`,
     /// keeping candidates outside the edit range intact.
-    pub fn merge_candidates_for_edit(
+    pub(super) fn merge_candidates_for_edit(
         &mut self,
         edit_start_line: usize,
         edit_end_line: usize,
@@ -142,7 +142,7 @@ impl FoldMap {
     }
 
     /// Set a fold at the given start_line (must be in candidates)
-    pub fn set_folded(&mut self, start_line: usize, folded: bool) {
+    pub(super) fn set_folded(&mut self, start_line: usize, folded: bool) {
         if folded {
             // Find the candidate range for this start_line
             if let Some(candidate) = self.candidates.iter().find(|c| c.start_line == start_line) {
@@ -161,36 +161,36 @@ impl FoldMap {
     }
 
     /// Toggle fold at the given start_line
-    pub fn toggle_fold(&mut self, start_line: usize) {
+    pub(super) fn toggle_fold(&mut self, start_line: usize) {
         let is_folded = self.is_folded_at(start_line);
         self.set_folded(start_line, !is_folded);
     }
 
     /// Check if a line is currently folded
-    pub fn is_folded_at(&self, start_line: usize) -> bool {
+    pub(super) fn is_folded_at(&self, start_line: usize) -> bool {
         self.folded.iter().any(|f| f.start_line == start_line)
     }
 
     /// Check if a line is a fold candidate
-    pub fn is_fold_candidate(&self, start_line: usize) -> bool {
+    pub(super) fn is_fold_candidate(&self, start_line: usize) -> bool {
         self.candidates.iter().any(|c| c.start_line == start_line)
     }
 
     /// Get all fold candidates
     #[inline]
-    pub fn fold_candidates(&self) -> &[FoldRange] {
+    pub(super) fn fold_candidates(&self) -> &[FoldRange] {
         &self.candidates
     }
 
     /// Get all currently folded ranges
     #[inline]
-    pub fn folded_ranges(&self) -> &[FoldRange] {
+    pub(super) fn folded_ranges(&self) -> &[FoldRange] {
         &self.folded
     }
 
     /// Clear all folds
     #[inline]
-    pub fn clear_folds(&mut self) {
+    pub(super) fn clear_folds(&mut self) {
         self.folded.clear();
     }
 
@@ -200,7 +200,7 @@ impl FoldMap {
     /// - Folds/candidates after the edit are shifted by line_delta
     ///
     /// This avoids expensive full tree traversal on every keystroke.
-    pub fn adjust_folds_for_edit(
+    pub(super) fn adjust_folds_for_edit(
         &mut self,
         edit_start_line: usize,
         edit_end_line: usize,
@@ -243,7 +243,7 @@ impl FoldMap {
     /// Rebuild the fold mapping after wrap_map or fold state changes
     ///
     /// This is the core algorithm that projects wrap rows to display rows.
-    pub fn rebuild(&mut self, wrap_map: &WrapMap) {
+    pub(super) fn rebuild(&mut self, wrap_map: &WrapMap) {
         let wrap_row_count = wrap_map.wrap_row_count();
 
         // Performance optimization: skip rebuild if nothing changed

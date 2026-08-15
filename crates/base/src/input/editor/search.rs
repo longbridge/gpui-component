@@ -1,3 +1,4 @@
+use crate::input::InputModeKind;
 use aho_corasick::AhoCorasick;
 use gpui::{Context, Window};
 use ropey::Rope;
@@ -57,7 +58,7 @@ impl SearchSession {
     }
 }
 
-impl InputBaseState {
+impl<M: InputModeKind> InputBaseState<M> {
     pub fn open_search(&mut self, replace_mode: bool, cx: &mut Context<Self>) {
         if !self.searchable {
             return;
