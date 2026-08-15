@@ -14,7 +14,7 @@ use gpui::{
 };
 
 use crate::{
-    ActiveTheme, StyledExt as _,
+    ActiveTheme, ThemeStyled as _,
     text::{TextView, TextViewStyle},
 };
 

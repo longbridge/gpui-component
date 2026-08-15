@@ -20,7 +20,7 @@ use rust_i18n::t;
 
 use super::state::{TextInputState, sync_focused_input_registry};
 use super::{InputContentType, InputState, sync_native_content_type};
-use crate::styled::FocusRingStyleExt as _;
+use crate::ThemeStyled as _;
 
 fn accessibility_role(
     is_multi_line: bool,
@@ -585,11 +585,9 @@ impl RenderOnce for Input {
             .items_center()
             .gap(gap_x)
             .refine_style(&self.style)
-            .draw_focus_ring(
+            .when(
                 focused && self.appearance && self.bordered && self.focus_bordered,
-                px(0.),
-                window,
-                cx,
+                |this| this.focus_ring_style(window, cx),
             )
             .children(prefix.map(|p| {
                 div()

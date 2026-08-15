@@ -1,10 +1,10 @@
 use std::{rc::Rc, time::Duration};
 
-use crate::styled::FocusRingStyleExt as _;
 use crate::{
-    ActiveTheme, Disableable, IconName, RoleOverride, Selectable, Sizable, Size, StyledExt as _,
-    icon::IconNamed, text::Text, tooltip::ComponentTooltip, v_flex,
+    ActiveTheme, Disableable, IconName, RoleOverride, Selectable, Sizable, Size, icon::IconNamed,
+    text::Text, tooltip::ComponentTooltip, v_flex,
 };
+use crate::{StyledExt as _, ThemeStyled as _};
 use gpui::{
     Animation, AnimationExt, AnyElement, App, ElementId, InteractiveElement, IntoElement,
     MouseButton, ParentElement, RenderOnce, SharedString, StatefulInteractiveElement,
@@ -269,7 +269,9 @@ impl RenderOnce for Checkbox {
                 _ => this,
             })
             .rounded(cx.theme().radius * 0.5)
-            .draw_focus_ring(is_focused && self.focus_ring_enabled, px(2.), window, cx)
+            .when(is_focused && self.focus_ring_enabled, |this| {
+                this.focus_ring_style(window, cx)
+            })
             .refine_style(&self.style)
             .child(
                 CheckboxIndicator::new()

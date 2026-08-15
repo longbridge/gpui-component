@@ -9,7 +9,7 @@ use gpui::{
 };
 use rust_i18n::t;
 
-use crate::styled::FocusRingStyleExt as _;
+use crate::ThemeStyled as _;
 use crate::{
     ActiveTheme, Disableable, Icon, IconName, Sizable, Size, StyleSized as _, StyledExt as _,
     actions::{Cancel, Confirm},
@@ -432,13 +432,13 @@ impl RenderOnce for DatePicker {
                             .border_1()
                             .border_color(cx.theme().input)
                             .rounded(cx.theme().radius)
-                            .when(is_focused, |this| this.focused_border(cx))
+                            .when(is_focused, |this| {
+                                this.border_1().border_color(cx.theme().ring)
+                            })
                     })
-                    .draw_focus_ring(
+                    .when(
                         is_focused && self.appearance && !self.disabled && self.focus_ring_enabled,
-                        px(0.),
-                        window,
-                        cx,
+                        |this| this.focus_ring_style(window, cx),
                     )
                     .input_text_size(self.size)
                     .input_size(self.size)

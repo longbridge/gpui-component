@@ -3,6 +3,7 @@ use gpui::{
     SharedString, Size, StyleRefinement, Styled, Window, deferred, div, prelude::FluentBuilder, px,
 };
 
+use crate::ThemeStyled as _;
 use crate::{ActiveTheme, Colorize, StyledExt, h_flex, v_flex};
 
 #[derive(Default)]

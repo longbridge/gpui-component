@@ -10,7 +10,7 @@ use rust_i18n::t;
 
 pub use crate::select::Caret;
 
-use crate::styled::FocusRingStyleExt as _;
+use crate::ThemeStyled as _;
 use crate::{
     ActiveTheme, Disableable, ElementExt as _, Icon, IconName, IndexPath, Sizable, Size,
     StyleSized, StyledExt, h_flex,
@@ -995,13 +995,11 @@ fn render_trigger_container(
         .input_text_size(size)
         .refine_style(style)
         .when(outline_visible && appearance, |this| {
-            this.focused_border(cx)
+            this.border_1().border_color(cx.theme().ring)
         })
-        .draw_focus_ring(
+        .when(
             outline_visible && appearance && focus_ring_enabled,
-            px(0.),
-            window,
-            cx,
+            |this| this.focus_ring_style(window, cx),
         )
         .when(allow_open, |this| {
             this.when_some(toggle_handler, |this, handler| this.on_click(handler))

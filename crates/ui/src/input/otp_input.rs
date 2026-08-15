@@ -5,7 +5,7 @@ use gpui::{
 
 use super::input::input_style;
 use super::state::sync_focused_input_registry;
-use crate::styled::FocusRingStyleExt as _;
+use crate::ThemeStyled as _;
 use crate::{ActiveTheme, Disableable, Icon, IconName, Sizable, Size, h_flex, v_flex};
 use gpui_base::OtpInput as BaseOtpInput;
 pub use gpui_base::OtpState;
@@ -130,7 +130,7 @@ impl RenderOnce for OtpInput {
                         Size::Large => this.w_11().h_11(),
                         Size::Size(px) => this.w(px).h(px),
                     })
-                    .draw_focus_ring(focus_visible, px(0.), window, cx)
+                    .when(focus_visible, |this| this.focus_ring_style(window, cx))
                     .on_mouse_down(MouseButton::Left, {
                         let state = self.state.clone();
                         move |_, window, cx| state.read(cx).focus_handle(cx).focus(window, cx)
