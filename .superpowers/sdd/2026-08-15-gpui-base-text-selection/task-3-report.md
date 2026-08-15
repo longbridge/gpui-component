@@ -57,16 +57,16 @@ Each review finding was reproduced before implementation:
 
 ```text
 cargo test -p gpui-base text_selection::tests -- --nocapture
-25 passed
+30 passed
 
 cargo test -p gpui-component text::window_selection::tests -- --nocapture
-46 passed
+47 passed
 
 cargo test -p gpui-component
 406 unit + 40 compatibility tests passed
 
 cargo test -p gpui-base
-330 unit + 1 integration test passed
+332 unit + 1 integration test passed
 
 cargo check --workspace --all-targets
 passed
@@ -156,7 +156,7 @@ single private window state.
 - Added a real window-event regression with two `TextSelection` elements across
   ordinary click, Shift-click, and drag. It verifies one clear per gesture and
   an `on_clear` callback that safely reenters selection state.
-- Final targeted totals: `gpui-component` 406 unit tests plus 40 compatibility
+- Final full-suite totals: `gpui-component` 406 unit tests plus 40 compatibility
   tests; `gpui-base` 332 unit tests plus 1 integration test.
 
 ## Retained lifecycle follow-up
