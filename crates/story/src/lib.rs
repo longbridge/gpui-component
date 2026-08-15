@@ -6,8 +6,8 @@ use gpui::{
     prelude::FluentBuilder as _, px, rems, size,
 };
 use gpui_component::{
-    ActiveTheme, IconName, Root, Sizable as _, Size as ComponentSize, StyledExt as _, TitleBar,
-    WindowExt,
+    ActiveTheme, IconName, Root, Sizable as _, Size as ComponentSize, StyledExt as _,
+    TITLE_BAR_HEIGHT, TitleBar, WindowExt,
     button::Button,
     dock::{Panel, PanelControl, PanelEvent, PanelInfo, PanelState, TitleStyle, register_panel},
     group_box::{GroupBox, GroupBoxVariants as _},
@@ -916,16 +916,25 @@ impl Render for StoryRoot {
                             .relative()
                             .flex_1()
                             .overflow_hidden()
-                            .child(self.view.clone())
-                            // Rendered inside the content area rather than the
-                            // window root so the HUD's top right corner clears
-                            // the title bar's own controls.
-                            .when(show_fps, |this| this.child(fps_monitor(window, cx))),
+                            .child(self.view.clone()),
                     )
                     .children(sheet_layer)
                     .children(dialog_layer)
                     .children(notification_layer),
             )
+            .relative()
+            // FPS must be the last sibling so notification/toast layers cannot
+            // paint over the HUD.
+            .when(show_fps, |this| {
+                this.child(
+                    div()
+                        .absolute()
+                        .top(TITLE_BAR_HEIGHT)
+                        .left_0()
+                        .right_0()
+                        .child(fps_monitor(window, cx)),
+                )
+            })
     }
 }
 

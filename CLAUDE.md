@@ -48,6 +48,10 @@ cargo machete
 
 **Note**: Per user configuration, tests do not need to be run.
 
+For pure UI visual or sizing adjustments, do not add automated tests solely to
+assert presentation dimensions. Add tests when the change affects behavior,
+interaction, data flow, or prevents a meaningful regression.
+
 ```bash
 # Run all tests
 cargo test --all
