@@ -281,6 +281,31 @@ fn wants_visible(
         || last_scroll_time.is_some_and(|last| now.saturating_duration_since(last) < IDLE_DURATION)
 }
 
+fn update_visibility(
+    animation: &mut VisibilityAnimation,
+    visible: bool,
+    immediate: bool,
+    now: Instant,
+) -> VisibilitySample {
+    if immediate {
+        let progress = if visible { 1.0 } else { 0.0 };
+        *animation = VisibilityAnimation {
+            from_opacity: progress,
+            from_position: progress,
+            target: progress,
+            started_at: now,
+        };
+        VisibilitySample {
+            opacity: progress,
+            position: progress,
+            running: false,
+        }
+    } else {
+        animation.set_visible(visible, now);
+        animation.sample(now)
+    }
+}
+
 impl Deref for ScrollbarState {
     type Target = Rc<Cell<ScrollbarStateInner>>;
 
@@ -309,12 +334,10 @@ impl ScrollbarStateInner {
         state
     }
 
-    fn with_hovered(&self, axis: Option<Axis>) -> Self {
+    fn with_hovered(&self, axis: Option<Axis>, now: Instant) -> Self {
         let mut state = *self;
         state.hovered_axis = axis;
-        if axis.is_some() {
-            state.last_scroll_time = Some(Instant::now());
-        }
+        state.last_scroll_time = Some(now);
         state
     }
 
@@ -955,23 +978,12 @@ impl Element for Scrollbar {
         let is_hovered = inner.hovered_axis.is_some() || inner.hovered_on_thumb.is_some();
         let is_dragging = inner.dragged_axis.is_some();
         let visible = wants_visible(mode, is_hovered, is_dragging, inner.last_scroll_time, now);
-        let visibility = if mode.is_always() || cx.reduce_motion() {
-            let progress = if visible { 1.0 } else { 0.0 };
-            inner.visibility = VisibilityAnimation {
-                from_opacity: progress,
-                from_position: progress,
-                target: progress,
-                started_at: now,
-            };
-            VisibilitySample {
-                opacity: progress,
-                position: progress,
-                running: false,
-            }
-        } else {
-            inner.visibility.set_visible(visible, now);
-            inner.visibility.sample(now)
-        };
+        let visibility = update_visibility(
+            &mut inner.visibility,
+            visible,
+            mode.is_always() || cx.reduce_motion(),
+            now,
+        );
 
         if visibility.running {
             window.request_animation_frame();
@@ -1316,10 +1328,10 @@ impl Element for Scrollbar {
                             // Update hovered state for scrollbar
                             if bounds.contains(&event.position) && need_hover_to_update {
                                 let hover_changed = state.get().hovered_axis != Some(axis);
-                                state.set(state.get().with_hovered(Some(axis)));
+                                state.set(state.get().with_hovered(Some(axis), Instant::now()));
                                 notify |= hover_changed;
                             } else if state.get().hovered_axis == Some(axis) {
-                                state.set(state.get().with_hovered(None));
+                                state.set(state.get().with_hovered(None, Instant::now()));
                                 notify = true;
                             }
 
@@ -1539,6 +1551,66 @@ mod tests {
         assert!(!settled.sample(now).running, "idle hold must not animate");
     }
 
+    #[test]
+    fn leaving_hover_starts_a_fresh_idle_hold() {
+        let entered_at = Instant::now();
+        let left_at = entered_at + Duration::from_secs(5);
+        let state = ScrollbarState::default().get();
+
+        let hovered = state.with_hovered(Some(Axis::Vertical), entered_at);
+        assert_eq!(hovered.last_scroll_time, Some(entered_at));
+        let left = hovered.with_hovered(None, left_at);
+        assert_eq!(left.last_scroll_time, Some(left_at));
+        assert!(wants_visible(
+            ScrollbarMode::Hover,
+            false,
+            false,
+            left.last_scroll_time,
+            left_at + IDLE_DURATION - Duration::from_millis(1),
+        ));
+    }
+
+    #[test]
+    fn idle_boundary_starts_the_exit_without_a_jump() {
+        let activity = Instant::now();
+        let exit_start = activity + IDLE_DURATION;
+        let mut animation = VisibilityAnimation::hidden(activity - ENTER_DURATION);
+        animation.set_visible(true, activity - ENTER_DURATION);
+        assert!(!wants_visible(
+            ScrollbarMode::Scrolling,
+            false,
+            false,
+            Some(activity),
+            exit_start,
+        ));
+
+        animation.set_visible(false, exit_start);
+        let start = animation.sample(exit_start);
+        assert_eq!(start.opacity, 1.0);
+        assert_eq!(start.position, 1.0);
+        assert_eq!(animation.sample(exit_start + EXIT_DURATION).opacity, 0.0);
+    }
+
+    #[test]
+    fn immediate_visibility_is_stationary_and_requests_no_frames() {
+        let now = Instant::now();
+        let mut animation = VisibilityAnimation::hidden(now);
+
+        let shown = update_visibility(&mut animation, true, true, now);
+        assert_eq!(shown.opacity, 1.0);
+        assert_eq!(shown.position, 1.0);
+        assert!(!shown.running);
+        assert_eq!(
+            visibility_translation(Axis::Vertical, px(16.), shown.position),
+            Point::default()
+        );
+
+        let hidden = update_visibility(&mut animation, false, true, now);
+        assert_eq!(hidden.opacity, 0.0);
+        assert_eq!(hidden.position, 0.0);
+        assert!(!hidden.running);
+    }
+
     #[derive(Clone)]
     struct TestHandle {
         offset: Rc<Cell<Point<Pixels>>>,
@@ -1749,6 +1821,34 @@ mod tests {
             size(px(100.), px(500.)),
         );
         cx.simulate_click(point(px(95.), px(80.)), Modifiers::default());
+        assert_eq!(handle.offset(), Point::default());
+    }
+
+    #[gpui::test]
+    fn hidden_hover_scrollbar_ignores_thumb_drag(cx: &mut TestAppContext) {
+        let (cx, handle) = harness(
+            cx,
+            ScrollbarAxis::Vertical,
+            ScrollbarMode::Hover,
+            size(px(100.), px(500.)),
+        );
+        cx.simulate_mouse_down(
+            point(px(95.), px(20.)),
+            MouseButton::Left,
+            Modifiers::default(),
+        );
+        cx.simulate_mouse_move(
+            point(px(95.), px(70.)),
+            Some(MouseButton::Left),
+            Modifiers::default(),
+        );
+        cx.simulate_mouse_up(
+            point(px(95.), px(70.)),
+            MouseButton::Left,
+            Modifiers::default(),
+        );
+
+        assert_eq!(handle.drag_starts.get(), 0);
         assert_eq!(handle.offset(), Point::default());
     }
 
