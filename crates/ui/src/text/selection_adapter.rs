@@ -2,8 +2,8 @@ use std::{cell::RefCell, ops::RangeInclusive, rc::Rc};
 
 use gpui::{App, Bounds, EntityId, Hitbox, Pixels, Point, WeakEntity, Window};
 use gpui_base::{
-    SelectionEndpointSnapshot, SelectionRegionCoverage, SelectionRegionFrame, SelectionSnapshot,
-    TextSelectionRegion, WindowTextSelection as _,
+    SelectableText, SelectableTextFrame, SelectionEndpointSnapshot, SelectionRegionCoverage,
+    SelectionSnapshot, WindowTextSelection as _,
 };
 
 use super::TextViewState;
@@ -71,14 +71,14 @@ impl VirtualBlockSelection {
 /// TextView's renderer-specific bridge to base-owned window selection.
 #[derive(Clone)]
 pub(super) struct TextViewSelectionAdapter {
-    region: TextSelectionRegion,
+    region: SelectableText,
     text_bounds: Vec<Bounds<Pixels>>,
     layout_revision: Option<usize>,
 }
 
 impl TextViewSelectionAdapter {
     pub(super) fn new(view: WeakEntity<TextViewState>, cx: &mut App) -> Self {
-        let region = TextSelectionRegion::new("", cx);
+        let region = SelectableText::new("", cx);
         let region_id = region.entity_id();
         let virtual_blocks = Rc::new(RefCell::new(VirtualBlockSelection::default()));
 
@@ -194,9 +194,9 @@ impl TextViewSelectionAdapter {
         window: &mut Window,
         cx: &mut App,
     ) {
-        window.register_text_selection_region(
+        window.register_selectable_text(
             self.region.clone(),
-            SelectionRegionFrame::new(hitbox, bounds)
+            SelectableTextFrame::new(hitbox, bounds)
                 .with_scroll_offset(scroll_offset)
                 .with_document_order(document_order)
                 .with_text_bounds(self.text_bounds.clone()),

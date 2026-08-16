@@ -13,22 +13,21 @@ mod tests {
         div, point, px,
     };
     use gpui_base::{
-        SelectionRegionFrame, SelectionRunFrame, SelectionScopeId, TextSelection,
-        TextSelectionRegion,
+        SelectableText, SelectableTextFrame, SelectionRunFrame, SelectionScopeId, TextSelection,
     };
     use std::cell::Cell;
     use std::rc::Rc;
     use std::time::Duration;
 
     struct PlainSelectableText {
-        region: TextSelectionRegion,
+        region: SelectableText,
         text: SharedString,
         styled_text: StyledText,
         document_order: u64,
     }
 
     impl PlainSelectableText {
-        fn new(region: TextSelectionRegion, text: impl Into<SharedString>) -> Self {
+        fn new(region: SelectableText, text: impl Into<SharedString>) -> Self {
             let text = text.into();
             Self {
                 region,
@@ -87,10 +86,10 @@ mod tests {
             self.styled_text
                 .prepaint(id, inspector_id, bounds, &mut (), window, cx);
             let hitbox = window.insert_hitbox(bounds, gpui::HitboxBehavior::Normal);
-            gpui_base::WindowTextSelection::register_text_selection_region(
+            gpui_base::WindowTextSelection::register_selectable_text(
                 window,
                 self.region.clone(),
-                SelectionRegionFrame::new(hitbox.clone(), bounds)
+                SelectableTextFrame::new(hitbox.clone(), bounds)
                     .with_document_order(self.document_order)
                     .with_text_bounds(vec![bounds]),
                 cx,
@@ -119,14 +118,14 @@ mod tests {
     }
 
     struct MixedAdapterView {
-        plain_region: TextSelectionRegion,
+        plain_region: SelectableText,
         text_view: Entity<TextViewState>,
     }
 
     impl MixedAdapterView {
         fn new(cx: &mut Context<Self>) -> Self {
             Self {
-                plain_region: TextSelectionRegion::new("", cx),
+                plain_region: SelectableText::new("", cx),
                 text_view: cx.new(|cx| TextViewState::markdown("TextView adapter", cx)),
             }
         }
@@ -154,8 +153,8 @@ mod tests {
     }
 
     struct CrossRegionVirtualView {
-        top_region: TextSelectionRegion,
-        bottom_region: TextSelectionRegion,
+        top_region: SelectableText,
+        bottom_region: SelectableText,
         text_view: Entity<TextViewState>,
         format: crate::text::SelectionFormat,
     }
@@ -167,8 +166,8 @@ mod tests {
                 .collect::<Vec<_>>()
                 .join("\n\n");
             Self {
-                top_region: TextSelectionRegion::new("", cx),
-                bottom_region: TextSelectionRegion::new("", cx),
+                top_region: SelectableText::new("", cx),
+                bottom_region: SelectableText::new("", cx),
                 text_view: cx.new(|cx| TextViewState::markdown(&source, cx)),
                 format,
             }

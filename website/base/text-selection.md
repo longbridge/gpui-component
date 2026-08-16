@@ -15,7 +15,7 @@ Use it when you render text yourself with `StyledText`, `TextLayout`, a virtuali
 A selectable window has three parts:
 
 1. One `TextSelection` element owns the selection state and window pointer handlers.
-2. Each independently selectable document or label owns a stable `TextSelectionRegion`.
+2. Each independently selectable document or label owns a stable `SelectableText`.
 3. During rendering, the region reports its current geometry and projects the selection onto its laid-out text runs.
 
 The selection state belongs to the retained `TextSelection` element. Regions and callbacks never receive or own that internal state.
@@ -62,15 +62,15 @@ Create one region for the semantic lifetime of the text. Do not create a new reg
 
 ```rust
 use gpui::Context;
-use gpui_base::TextSelectionRegion;
+use gpui_base::SelectableText;
 
 struct DocumentView {
-    selection: TextSelectionRegion,
+    selection: SelectableText,
 }
 
 impl DocumentView {
     fn new(cx: &mut Context<Self>) -> Self {
-        let selection = TextSelectionRegion::new("", cx);
+        let selection = SelectableText::new("", cx);
 
         // Repaint when the window selection projected onto this region changes.
         selection.on_selection(|_, cx| cx.refresh_windows(), cx);
@@ -88,18 +88,18 @@ Register the region once per rendered frame, after its bounds and hitbox are kno
 
 ```rust
 use gpui::{Bounds, Hitbox, Pixels, Window};
-use gpui_base::{SelectionRegionFrame, WindowTextSelection as _};
+use gpui_base::{SelectableTextFrame, WindowTextSelection as _};
 
 fn register_selection(
-    selection: &TextSelectionRegion,
+    selection: &SelectableText,
     hitbox: Hitbox,
     bounds: Bounds<Pixels>,
     window: &mut Window,
     cx: &mut gpui::App,
 ) {
-    window.register_text_selection_region(
+    window.register_selectable_text(
         selection.clone(),
-        SelectionRegionFrame::new(hitbox, bounds)
+        SelectableTextFrame::new(hitbox, bounds)
             .with_document_order(0)
             .with_text_bounds(vec![bounds]),
         cx,
@@ -124,7 +124,7 @@ use gpui::{Bounds, Pixels, SharedString, TextLayout};
 use gpui_base::SelectionRunFrame;
 
 fn selected_range(
-    selection: &TextSelectionRegion,
+    selection: &SelectableText,
     text: SharedString,
     layout: TextLayout,
     bounds: Bounds<Pixels>,
@@ -225,7 +225,7 @@ The compatibility methods do not own a second selection state, so migration can 
 ## Integration checklist
 
 - Retain one `TextSelection` element as the first child of each custom window root.
-- Keep every `TextSelectionRegion` stable across renders.
+- Keep every `SelectableText` stable across renders.
 - Register current geometry every rendered frame.
 - Use explicit document order and window-local scopes.
 - Pass the exact UTF-8 text used by each `TextLayout`.

@@ -154,8 +154,8 @@ pub use switch::{
 pub use table::{Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow};
 pub use tabs::{Tab, TabStyles, Tabs};
 pub use text_selection::{
-    SelectionEndpointSnapshot, SelectionRegionCoverage, SelectionRegionFrame, SelectionRunFrame,
-    SelectionRunState, SelectionScopeId, SelectionSnapshot, TextSelection, TextSelectionRegion,
+    SelectableText, SelectableTextFrame, SelectionEndpointSnapshot, SelectionRegionCoverage,
+    SelectionRunFrame, SelectionRunState, SelectionScopeId, SelectionSnapshot, TextSelection,
     WindowTextSelection, project_selection_runs,
 };
 pub use theme::{ResizableTheme, ScrollbarTheme, Theme};

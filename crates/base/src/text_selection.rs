@@ -139,8 +139,8 @@ impl SelectionSnapshot {
     }
 }
 
-/// Per-frame geometry reported by a selectable region.
-pub struct SelectionRegionFrame {
+/// Per-frame geometry reported by a [`SelectableText`] participant.
+pub struct SelectableTextFrame {
     hitbox: Hitbox,
     bounds: Bounds<Pixels>,
     scroll_offset: Point<Pixels>,
@@ -149,7 +149,7 @@ pub struct SelectionRegionFrame {
     text_bounds: Vec<Bounds<Pixels>>,
 }
 
-impl SelectionRegionFrame {
+impl SelectableTextFrame {
     /// Creates a region frame with default scope, order, and scroll offset.
     pub fn new(hitbox: Hitbox, bounds: Bounds<Pixels>) -> Self {
         Self {
@@ -439,11 +439,11 @@ fn resolve_copy_items(mut items: Vec<RegionCopyItem>, cx: &mut App) -> String {
 
 fn dispatch_clear_callbacks(callbacks: Vec<RegionClearCallbacks>, cx: &mut App) {
     for callbacks in callbacks {
-        TextSelectionRegionState::dispatch_clear(callbacks, cx);
+        SelectableTextState::dispatch_clear(callbacks, cx);
     }
 }
 
-struct TextSelectionRegionState {
+struct SelectableTextState {
     selected_text: String,
     projected_selected_text: Option<String>,
     local_selection: bool,
@@ -457,7 +457,7 @@ struct TextSelectionRegionState {
     callback_epoch: Rc<Cell<u64>>,
 }
 
-impl TextSelectionRegionState {
+impl SelectableTextState {
     fn new(selected_text: impl Into<String>) -> Self {
         Self {
             selected_text: selected_text.into(),
@@ -612,14 +612,14 @@ impl TextSelectionRegionState {
     }
 }
 
-/// A renderer-neutral selectable region backed by GPUI entity state.
+/// A stable, renderer-neutral handle for text that participates in window selection.
 #[derive(Clone)]
-pub struct TextSelectionRegion(Entity<TextSelectionRegionState>);
+pub struct SelectableText(Entity<SelectableTextState>);
 
-impl TextSelectionRegion {
-    /// Creates a selectable region with a default copy string.
+impl SelectableText {
+    /// Creates selectable text with a default copy string.
     pub fn new(selected_text: impl Into<String>, cx: &mut App) -> Self {
-        Self(cx.new(|_| TextSelectionRegionState::new(selected_text)))
+        Self(cx.new(|_| SelectableTextState::new(selected_text)))
     }
 
     /// Returns this region's stable identity.
@@ -700,21 +700,21 @@ impl TextSelectionRegion {
         self.0.update(cx, |state, _| state.on_virtual_key(callback));
     }
 
-    fn downgrade(&self) -> WeakEntity<TextSelectionRegionState> {
+    fn downgrade(&self) -> WeakEntity<SelectableTextState> {
         self.0.downgrade()
     }
 }
 
 #[derive(Clone)]
 struct RegionRegistration {
-    region: WeakEntity<TextSelectionRegionState>,
-    frame: Rc<SelectionRegionFrame>,
+    region: WeakEntity<SelectableTextState>,
+    frame: Rc<SelectableTextFrame>,
     generation: u64,
 }
 
 #[derive(Clone)]
 struct SelectionEndpoint {
-    region: Option<WeakEntity<TextSelectionRegionState>>,
+    region: Option<WeakEntity<SelectableTextState>>,
     point: Point<Pixels>,
     inside: bool,
     inside_text: bool,
@@ -900,8 +900,8 @@ impl TextSelectionState {
     /// Registers this frame's geometry for a region.
     pub fn register_region(
         &mut self,
-        region: TextSelectionRegion,
-        frame: SelectionRegionFrame,
+        region: SelectableText,
+        frame: SelectableTextFrame,
         cx: &mut App,
     ) {
         self.prune_dead_regions();
@@ -1115,18 +1115,13 @@ impl TextSelectionState {
     ) -> SelectionEndpoint {
         self.prune_dead_regions();
         let mut hit: Option<(
-            WeakEntity<TextSelectionRegionState>,
-            Rc<SelectionRegionFrame>,
+            WeakEntity<SelectableTextState>,
+            Rc<SelectableTextFrame>,
             f32,
         )> = None;
-        let mut predecessor: Option<(
-            WeakEntity<TextSelectionRegionState>,
-            Rc<SelectionRegionFrame>,
-        )> = None;
-        let mut first: Option<(
-            WeakEntity<TextSelectionRegionState>,
-            Rc<SelectionRegionFrame>,
-        )> = None;
+        let mut predecessor: Option<(WeakEntity<SelectableTextState>, Rc<SelectableTextFrame>)> =
+            None;
+        let mut first: Option<(WeakEntity<SelectableTextState>, Rc<SelectableTextFrame>)> = None;
 
         for registration in self.regions.values() {
             if registration.frame.scope != self.active_scope
@@ -1733,11 +1728,11 @@ pub trait WindowTextSelection {
     /// Sets the active opaque selection scope for this window.
     fn set_text_selection_scope(&mut self, scope: SelectionScopeId, cx: &mut App);
 
-    /// Registers a selectable region's geometry for the current frame.
-    fn register_text_selection_region(
+    /// Registers selectable text and its geometry for the current frame.
+    fn register_selectable_text(
         &mut self,
-        region: TextSelectionRegion,
-        frame: SelectionRegionFrame,
+        region: SelectableText,
+        frame: SelectableTextFrame,
         cx: &mut App,
     );
 }
@@ -1777,10 +1772,10 @@ impl WindowTextSelection for Window {
         dispatch_clear_callbacks(callbacks, cx);
     }
 
-    fn register_text_selection_region(
+    fn register_selectable_text(
         &mut self,
-        region: TextSelectionRegion,
-        mut frame: SelectionRegionFrame,
+        region: SelectableText,
+        mut frame: SelectableTextFrame,
         cx: &mut App,
     ) {
         if let Some(scope) = current_text_selection_scope(self.window_handle().window_id(), cx) {
@@ -1828,29 +1823,29 @@ mod tests {
     };
 
     struct FakeRegion {
-        region: TextSelectionRegion,
+        region: SelectableText,
     }
 
     struct WindowRegionView {
-        region: TextSelectionRegion,
+        region: SelectableText,
     }
 
     struct SelectionElementOnlyView;
     struct ToggleSelectionElementView {
         enabled: bool,
-        region: TextSelectionRegion,
+        region: SelectableText,
     }
 
     struct DoubleSelectionElementView {
-        region: TextSelectionRegion,
+        region: SelectableText,
     }
 
     struct WindowOwnedSelectionView {
-        region: TextSelectionRegion,
+        region: SelectableText,
     }
 
     struct FirstFrameScopedSelectionView {
-        region: TextSelectionRegion,
+        region: SelectableText,
     }
 
     struct PlainRunLayoutView {
@@ -1886,10 +1881,9 @@ mod tests {
                 this.child(TextSelection)
                     .child(div().size_full().on_prepaint(move |bounds, window, cx| {
                         let hitbox = window.insert_hitbox(bounds, HitboxBehavior::Normal);
-                        window.register_text_selection_region(
+                        window.register_selectable_text(
                             region,
-                            SelectionRegionFrame::new(hitbox, bounds)
-                                .with_text_bounds(vec![bounds]),
+                            SelectableTextFrame::new(hitbox, bounds).with_text_bounds(vec![bounds]),
                             cx,
                         );
                     }))
@@ -1906,9 +1900,9 @@ mod tests {
                 .child(TextSelection)
                 .on_prepaint(move |bounds, window, cx| {
                     let hitbox = window.insert_hitbox(bounds, HitboxBehavior::Normal);
-                    window.register_text_selection_region(
+                    window.register_selectable_text(
                         region,
-                        SelectionRegionFrame::new(hitbox, bounds).with_text_bounds(vec![bounds]),
+                        SelectableTextFrame::new(hitbox, bounds).with_text_bounds(vec![bounds]),
                         cx,
                     );
                 })
@@ -1923,9 +1917,9 @@ mod tests {
                 .child(TextSelection)
                 .child(div().size_full().on_prepaint(move |bounds, window, cx| {
                     let hitbox = window.insert_hitbox(bounds, HitboxBehavior::Normal);
-                    window.register_text_selection_region(
+                    window.register_selectable_text(
                         region,
-                        SelectionRegionFrame::new(hitbox, bounds).with_text_bounds(vec![bounds]),
+                        SelectableTextFrame::new(hitbox, bounds).with_text_bounds(vec![bounds]),
                         cx,
                     );
                 }))
@@ -1943,9 +1937,9 @@ mod tests {
                 scope,
                 div().size_full().on_prepaint(move |bounds, window, cx| {
                     let hitbox = window.insert_hitbox(bounds, HitboxBehavior::Normal);
-                    window.register_text_selection_region(
+                    window.register_selectable_text(
                         region,
-                        SelectionRegionFrame::new(hitbox, bounds).with_text_bounds(vec![bounds]),
+                        SelectableTextFrame::new(hitbox, bounds).with_text_bounds(vec![bounds]),
                         cx,
                     );
                 }),
@@ -1972,7 +1966,7 @@ mod tests {
 
     impl FakeRegion {
         fn new(text: &str, cx: &mut gpui::App) -> Self {
-            let region = TextSelectionRegion::new(text, cx);
+            let region = SelectableText::new(text, cx);
             Self { region }
         }
 
@@ -1987,7 +1981,7 @@ mod tests {
             let bounds = Bounds::new(point(px(0.), px(y)), size(px(100.), px(10.)));
             host.register_region(
                 self.region.clone(),
-                SelectionRegionFrame::new(
+                SelectableTextFrame::new(
                     Hitbox {
                         id: HitboxId::placeholder(),
                         bounds,
@@ -2104,7 +2098,7 @@ mod tests {
         let observed = Rc::new(RefCell::new(Vec::new()));
         let observed_for_callback = observed.clone();
         cx.update(|cx| {
-            let region = TextSelectionRegion::new("region", cx);
+            let region = SelectableText::new("region", cx);
             region.on_selection(
                 move |snapshot, _| {
                     observed_for_callback.borrow_mut().push(snapshot.is_some());
@@ -2117,7 +2111,7 @@ mod tests {
                     cx,
                 );
                 let callbacks = state.clear_state();
-                TextSelectionRegionState::dispatch_clear(callbacks, cx);
+                SelectableTextState::dispatch_clear(callbacks, cx);
             });
         });
         cx.run_until_parked();
@@ -2144,7 +2138,7 @@ mod tests {
             .with_selecting(true)
             .with_resolved_points(Some((bounds.origin, bounds.bottom_right())))
             .with_region_coverage(SelectionRegionCoverage::Full);
-        let region_frame = SelectionRegionFrame::new(hitbox, bounds)
+        let region_frame = SelectableTextFrame::new(hitbox, bounds)
             .with_scroll_offset(point(px(3.), px(4.)))
             .with_scope(scope)
             .with_document_order(9)
@@ -2186,7 +2180,7 @@ mod tests {
         let selected = Rc::new(Cell::new(false));
         let selected_from_callback = selected.clone();
         cx.update(|cx| {
-            let region = TextSelectionRegion::new("initial", cx);
+            let region = SelectableText::new("initial", cx);
             let region_id = region.entity_id();
             region.set_selected_text("updated", cx);
             region.set_local_selection(true, cx);
@@ -2445,7 +2439,7 @@ mod tests {
     #[gpui::test]
     fn active_dnd_does_not_move_a_text_selection_cursor(cx: &mut TestAppContext) {
         let window = cx.add_window(|_, cx| WindowRegionView {
-            region: TextSelectionRegion::new("unused", cx),
+            region: SelectableText::new("unused", cx),
         });
         window
             .update(cx, |_, window, cx| {
@@ -2531,7 +2525,7 @@ mod tests {
     #[gpui::test]
     fn window_extension_reports_copies_ends_and_clears_host_selection(cx: &mut TestAppContext) {
         let (view, cx) = cx.add_window_view(|_, cx| WindowRegionView {
-            region: TextSelectionRegion::new("copied", cx),
+            region: SelectableText::new("copied", cx),
         });
         cx.update(|window, cx| {
             let region = view.read(cx).region.clone();
@@ -2555,10 +2549,10 @@ mod tests {
     #[gpui::test]
     fn two_windows_isolate_selection_copy_clear_and_release_ownership(cx: &mut TestAppContext) {
         let first = cx.add_window(|_, cx| WindowOwnedSelectionView {
-            region: TextSelectionRegion::new("first", cx),
+            region: SelectableText::new("first", cx),
         });
         let second = cx.add_window(|_, cx| WindowOwnedSelectionView {
-            region: TextSelectionRegion::new("second", cx),
+            region: SelectableText::new("second", cx),
         });
         let first_region = cx.update(|cx| first.read(cx).unwrap().region.clone());
         let second_region = cx.update(|cx| second.read(cx).unwrap().region.clone());
@@ -2610,7 +2604,7 @@ mod tests {
         cx.update(|window, cx| {
             let _ = window.draw(cx);
             let state = TextSelectionState::existing(window, cx).unwrap();
-            let region = TextSelectionRegion::new("fallback", cx);
+            let region = SelectableText::new("fallback", cx);
             let state_for_copy = state.clone();
             let region_for_copy = region.clone();
             region.copy_with(
@@ -2777,7 +2771,7 @@ mod tests {
     #[gpui::test]
     fn window_extension_is_a_safe_no_op_until_the_element_is_rendered(cx: &mut TestAppContext) {
         let (_, cx) = cx.add_window_view(|_, cx| WindowRegionView {
-            region: TextSelectionRegion::new("not enabled", cx),
+            region: SelectableText::new("not enabled", cx),
         });
         cx.update(|window, cx| {
             assert!(!window.has_text_selection(cx));
@@ -2793,7 +2787,7 @@ mod tests {
         cx: &mut TestAppContext,
     ) {
         let (view, cx) = cx.add_window_view(|_, cx| FirstFrameScopedSelectionView {
-            region: TextSelectionRegion::new("first frame", cx),
+            region: SelectableText::new("first frame", cx),
         });
         let region = cx.update(|_, cx| view.read(cx).region.clone());
 
@@ -2808,10 +2802,10 @@ mod tests {
     #[gpui::test]
     fn lazy_registration_does_not_enable_queries_without_the_element(cx: &mut TestAppContext) {
         let (_, cx) = cx.add_window_view(|_, cx| WindowRegionView {
-            region: TextSelectionRegion::new("registered", cx),
+            region: SelectableText::new("registered", cx),
         });
         cx.update(|window, cx| {
-            let region = TextSelectionRegion::new("registered", cx);
+            let region = SelectableText::new("registered", cx);
             region.set_local_selection(true, cx);
             let bounds = Bounds::new(point(px(0.), px(0.)), size(px(100.), px(20.)));
             let hitbox = Hitbox {
@@ -2820,9 +2814,9 @@ mod tests {
                 content_mask: ContentMask { bounds },
                 behavior: HitboxBehavior::Normal,
             };
-            window.register_text_selection_region(
+            window.register_selectable_text(
                 region,
-                SelectionRegionFrame::new(hitbox, bounds).with_text_bounds(vec![bounds]),
+                SelectableTextFrame::new(hitbox, bounds).with_text_bounds(vec![bounds]),
                 cx,
             );
             assert_eq!(window.selected_text(cx), "");
@@ -2836,7 +2830,7 @@ mod tests {
     fn retained_selection_state_releases_and_does_not_resurrect_selection(cx: &mut TestAppContext) {
         let (view, cx) = cx.add_window_view(|_, cx| ToggleSelectionElementView {
             enabled: true,
-            region: TextSelectionRegion::new("local", cx),
+            region: SelectableText::new("local", cx),
         });
         let region = cx.update(|_, cx| view.read(cx).region.clone());
         cx.update(|window, cx| {
@@ -2939,7 +2933,7 @@ mod tests {
     #[gpui::test]
     fn two_selection_elements_schedule_only_one_post_frame_sweep(cx: &mut TestAppContext) {
         let (view, cx) = cx.add_window_view(|_, cx| DoubleSelectionElementView {
-            region: TextSelectionRegion::new("once", cx),
+            region: SelectableText::new("once", cx),
         });
         cx.update(|window, cx| {
             let host = TextSelectionState::ensure(window, cx);
@@ -2964,7 +2958,7 @@ mod tests {
         cx: &mut TestAppContext,
     ) {
         let (view, cx) = cx.add_window_view(|_, cx| DoubleSelectionElementView {
-            region: TextSelectionRegion::new("once", cx),
+            region: SelectableText::new("once", cx),
         });
         let clear_count = Rc::new(Cell::new(0));
         cx.update(|window, cx| {

@@ -33,7 +33,7 @@ The first layer owns the selection session and window interaction:
 TextSelectionHost
 TextSelectionController
 SelectionScopeId
-TextSelectionRegion
+SelectableText
 WindowTextSelectionExt
 ```
 

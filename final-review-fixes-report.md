@@ -10,14 +10,14 @@ window scope/registration methods. Window selection state is retained by the
 
 ## Changes
 
-- Made `TextSelectionRegionState` private, removed its re-export and
-  `TextSelectionRegion::state()`, and moved snapshot, projection, callback,
-  local-selection, and copy configuration onto `TextSelectionRegion` methods.
+- Made `SelectableTextState` private, removed its re-export and
+  `SelectableText::state()`, and moved snapshot, projection, callback,
+  local-selection, and copy configuration onto `SelectableText` methods.
 - Made `TextSelection::scope` and the `WindowTextSelection` scope/registration
   methods part of the documented custom-renderer interface. The deprecated
   component bridge remains under the hidden `gpui_base::__private` namespace.
 - Privatized every field on `SelectionEndpointSnapshot`, `SelectionSnapshot`,
-  `SelectionRegionFrame`, `SelectionRunFrame`, and `SelectionRunState`; added
+  `SelectableTextFrame`, `SelectionRunFrame`, and `SelectionRunState`; added
   minimal constructors, builders, and readers; migrated the UI adapter,
   example, implementation, and tests.
 - Split copy into a lease-bound collection phase and a callback-resolution

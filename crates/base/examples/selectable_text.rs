@@ -10,12 +10,11 @@ use gpui::{
     WindowOptions, div, transparent_black,
 };
 use gpui_base::{
-    SelectionRegionFrame, SelectionRunFrame, TextSelection, TextSelectionRegion,
-    WindowTextSelection as _,
+    SelectableText, SelectableTextFrame, SelectionRunFrame, TextSelection, WindowTextSelection as _,
 };
 
 struct PlainSelectableText {
-    region: TextSelectionRegion,
+    region: SelectableText,
     text: SharedString,
     styled_text: StyledText,
 }
@@ -51,7 +50,7 @@ fn selection_quad_bounds(
 }
 
 impl PlainSelectableText {
-    fn new(region: TextSelectionRegion, text: impl Into<SharedString>) -> Self {
+    fn new(region: SelectableText, text: impl Into<SharedString>) -> Self {
         let text = text.into();
         Self {
             region,
@@ -134,9 +133,9 @@ impl Element for PlainSelectableText {
         self.styled_text
             .prepaint(id, inspector_id, bounds, &mut (), window, cx);
         let hitbox = window.insert_hitbox(bounds, gpui::HitboxBehavior::Normal);
-        window.register_text_selection_region(
+        window.register_selectable_text(
             self.region.clone(),
-            SelectionRegionFrame::new(hitbox.clone(), bounds).with_text_bounds(vec![bounds]),
+            SelectableTextFrame::new(hitbox.clone(), bounds).with_text_bounds(vec![bounds]),
             cx,
         );
         hitbox
@@ -175,12 +174,12 @@ impl Element for PlainSelectableText {
 }
 
 struct Example {
-    region: TextSelectionRegion,
+    region: SelectableText,
 }
 
 impl Example {
     fn new(cx: &mut Context<Self>) -> Self {
-        let region = TextSelectionRegion::new("", cx);
+        let region = SelectableText::new("", cx);
         region.on_selection(|_, cx| cx.refresh_windows(), cx);
         Self { region }
     }
