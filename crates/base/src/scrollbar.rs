@@ -875,7 +875,9 @@ pub struct AxisPrepaintState {
     container_size: Pixels,
     thumb_size: Pixels,
     margin_end: Pixels,
+    track_width: Pixels,
     visibility_progress: f32,
+    visibility_requested: bool,
 }
 
 impl Element for Scrollbar {
@@ -1122,7 +1124,9 @@ impl Element for Scrollbar {
                 container_size,
                 thumb_size: thumb_length,
                 margin_end,
+                track_width,
                 visibility_progress: visibility.progress,
+                visibility_requested: visible,
             })
         }
 
@@ -1148,7 +1152,6 @@ impl Element for Scrollbar {
         let mode = self.mode.unwrap_or(theme.scrollbar.mode);
         let view_id = window.current_view();
         let hitbox_bounds = prepaint.hitbox.bounds;
-        let is_visible = scrollbar_state.get().is_scrollbar_visible() || mode.is_always();
         let is_hover_to_show = mode.is_hover();
 
         window.with_content_mask(
@@ -1170,14 +1173,23 @@ impl Element for Scrollbar {
                     let thumb_size = state.thumb_size;
                     let margin_end = state.margin_end;
                     let is_vertical = axis.is_vertical();
+                    let visibility_progress = state.visibility_progress;
+                    let is_visible = state.visibility_requested || visibility_progress > 0.0;
+                    let translation =
+                        visibility_translation(axis, state.track_width, visibility_progress);
+                    let painted_bounds = state.bounds + translation;
+                    let painted_thumb_bounds = state.thumb_fill_bounds + translation;
+                    let painted_track_bg = state.bg.opacity(visibility_progress);
+                    let painted_border = state.border.opacity(visibility_progress);
+                    let painted_thumb_bg = state.thumb_bg.clone().opacity(visibility_progress);
 
                     window.set_cursor_style(CursorStyle::default(), &state.bar_hitbox);
 
                     window.paint_layer(hitbox_bounds, |cx| {
-                        cx.paint_quad(fill(state.bounds, state.bg));
+                        cx.paint_quad(fill(painted_bounds, painted_track_bg));
 
                         cx.paint_quad(PaintQuad {
-                            bounds,
+                            bounds: painted_bounds,
                             corner_radii: (0.).into(),
                             background: gpui::transparent_black().into(),
                             border_widths: if is_vertical {
@@ -1195,12 +1207,12 @@ impl Element for Scrollbar {
                                     left: px(0.),
                                 }
                             },
-                            border_color: state.border,
+                            border_color: painted_border,
                             border_style: BorderStyle::default(),
                         });
 
                         cx.paint_quad(
-                            fill(state.thumb_fill_bounds, state.thumb_bg).corner_radii(radius),
+                            fill(painted_thumb_bounds, painted_thumb_bg).corner_radii(radius),
                         );
                     });
 
@@ -1223,7 +1235,7 @@ impl Element for Scrollbar {
 
                     let safe_range = (-scroll_area_size + container_size)..px(0.);
 
-                    if is_hover_to_show || is_visible {
+                    if is_visible {
                         window.on_mouse_event({
                             let state = scrollbar_state.clone();
                             let scroll_handle = self.scroll_handle.clone();
@@ -1284,18 +1296,12 @@ impl Element for Scrollbar {
                             let need_hover_to_update = is_hover_to_show || is_visible;
                             // Update hovered state for scrollbar
                             if bounds.contains(&event.position) && need_hover_to_update {
+                                let hover_changed = state.get().hovered_axis != Some(axis);
                                 state.set(state.get().with_hovered(Some(axis)));
-
-                                if state.get().hovered_axis != Some(axis) {
-                                    notify = true;
-                                }
-                            } else {
-                                if state.get().hovered_axis == Some(axis) {
-                                    if state.get().hovered_axis.is_some() {
-                                        state.set(state.get().with_hovered(None));
-                                        notify = true;
-                                    }
-                                }
+                                notify |= hover_changed;
+                            } else if state.get().hovered_axis == Some(axis) {
+                                state.set(state.get().with_hovered(None));
+                                notify = true;
                             }
 
                             // Update hovered state for scrollbar thumb
@@ -1547,27 +1553,28 @@ mod tests {
     struct ScrollbarHarness {
         handle: TestHandle,
         axis: ScrollbarAxis,
+        mode: ScrollbarMode,
     }
 
     impl Render for ScrollbarHarness {
         fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-            div().relative().size(px(100.)).child(
-                Scrollbar::new(&self.handle)
-                    .axis(self.axis)
-                    .mode(ScrollbarMode::Always),
-            )
+            div()
+                .relative()
+                .size(px(100.))
+                .child(Scrollbar::new(&self.handle).axis(self.axis).mode(self.mode))
         }
     }
 
     fn harness(
         cx: &mut TestAppContext,
         axis: ScrollbarAxis,
+        mode: ScrollbarMode,
         content_size: Size<Pixels>,
     ) -> (&mut VisualTestContext, TestHandle) {
         let handle = TestHandle::new(content_size);
         let (_, cx) = cx.add_window_view({
             let handle = handle.clone();
-            move |_, _| ScrollbarHarness { handle, axis }
+            move |_, _| ScrollbarHarness { handle, axis, mode }
         });
         cx.update(|window, cx| window.draw(cx).clear(cx));
         (cx, handle)
@@ -1663,7 +1670,12 @@ mod tests {
 
     #[gpui::test]
     fn vertical_track_click_updates_vertical_offset(cx: &mut TestAppContext) {
-        let (cx, vertical) = harness(cx, ScrollbarAxis::Vertical, size(px(100.), px(500.)));
+        let (cx, vertical) = harness(
+            cx,
+            ScrollbarAxis::Vertical,
+            ScrollbarMode::Always,
+            size(px(100.), px(500.)),
+        );
         cx.simulate_click(point(px(95.), px(80.)), Modifiers::default());
         assert!(vertical.offset().y < px(0.));
         assert_eq!(vertical.offset().x, px(0.));
@@ -1671,7 +1683,12 @@ mod tests {
 
     #[gpui::test]
     fn horizontal_track_click_updates_horizontal_offset(cx: &mut TestAppContext) {
-        let (cx, horizontal) = harness(cx, ScrollbarAxis::Horizontal, size(px(500.), px(100.)));
+        let (cx, horizontal) = harness(
+            cx,
+            ScrollbarAxis::Horizontal,
+            ScrollbarMode::Always,
+            size(px(500.), px(100.)),
+        );
         cx.simulate_click(point(px(80.), px(95.)), Modifiers::default());
         assert!(horizontal.offset().x < px(0.));
         assert_eq!(horizontal.offset().y, px(0.));
@@ -1679,14 +1696,53 @@ mod tests {
 
     #[gpui::test]
     fn no_overflow_has_no_interactive_track(cx: &mut TestAppContext) {
-        let (cx, handle) = harness(cx, ScrollbarAxis::Both, size(px(100.), px(100.)));
+        let (cx, handle) = harness(
+            cx,
+            ScrollbarAxis::Both,
+            ScrollbarMode::Always,
+            size(px(100.), px(100.)),
+        );
         cx.simulate_click(point(px(95.), px(80.)), Modifiers::default());
         assert_eq!(handle.offset(), Point::default());
     }
 
     #[gpui::test]
+    fn hidden_hover_scrollbar_ignores_track_click(cx: &mut TestAppContext) {
+        let (cx, handle) = harness(
+            cx,
+            ScrollbarAxis::Vertical,
+            ScrollbarMode::Hover,
+            size(px(100.), px(500.)),
+        );
+        cx.simulate_click(point(px(95.), px(80.)), Modifiers::default());
+        assert_eq!(handle.offset(), Point::default());
+    }
+
+    #[gpui::test]
+    fn hovering_reveals_scrollbar_for_track_interaction(cx: &mut TestAppContext) {
+        let (cx, handle) = harness(
+            cx,
+            ScrollbarAxis::Vertical,
+            ScrollbarMode::Hover,
+            size(px(100.), px(500.)),
+        );
+        cx.simulate_mouse_move(point(px(95.), px(50.)), None, Modifiers::default());
+        cx.run_until_parked();
+        cx.executor().advance_clock(ENTER_DURATION);
+        cx.run_until_parked();
+
+        cx.simulate_click(point(px(95.), px(80.)), Modifiers::default());
+        assert!(handle.offset().y < px(0.));
+    }
+
+    #[gpui::test]
     fn thumb_drag_notifies_handle_start_and_end(cx: &mut TestAppContext) {
-        let (cx, handle) = harness(cx, ScrollbarAxis::Vertical, size(px(100.), px(500.)));
+        let (cx, handle) = harness(
+            cx,
+            ScrollbarAxis::Vertical,
+            ScrollbarMode::Always,
+            size(px(100.), px(500.)),
+        );
         cx.simulate_mouse_down(
             point(px(95.), px(20.)),
             MouseButton::Left,
