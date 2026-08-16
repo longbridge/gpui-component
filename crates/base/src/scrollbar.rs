@@ -158,7 +158,8 @@ struct ScrollbarStateInner {
     last_update: Instant,
     idle_timer_scheduled: bool,
     visibility: VisibilityAnimation,
-    expansion: ExpansionAnimation,
+    vertical_width: WidthAnimation,
+    horizontal_width: WidthAnimation,
 }
 
 impl Default for ScrollbarState {
@@ -174,50 +175,51 @@ impl Default for ScrollbarState {
             last_update: now,
             idle_timer_scheduled: false,
             visibility: VisibilityAnimation::hidden(now),
-            expansion: ExpansionAnimation::collapsed(now),
+            vertical_width: WidthAnimation::new(now),
+            horizontal_width: WidthAnimation::new(now),
         })))
     }
 }
 
 #[derive(Debug, Clone, Copy)]
-struct ExpansionAnimation {
-    from: f32,
-    target: f32,
+struct WidthAnimation {
+    from: Pixels,
+    target: Pixels,
     started_at: Instant,
+    initialized: bool,
 }
 
-impl ExpansionAnimation {
-    fn collapsed(now: Instant) -> Self {
+impl WidthAnimation {
+    fn new(now: Instant) -> Self {
         Self {
-            from: 0.0,
-            target: 0.0,
+            from: Pixels::ZERO,
+            target: Pixels::ZERO,
             started_at: now,
+            initialized: false,
         }
     }
 
-    fn sample(&self, now: Instant) -> (f32, bool) {
-        let distance = (self.target - self.from).abs();
-        if distance == 0.0 {
+    fn sample(&self, now: Instant) -> (Pixels, bool) {
+        if self.from == self.target {
             return (self.target, false);
         }
-        let duration = EXPAND_DURATION.mul_f32(distance);
-        let linear =
-            now.saturating_duration_since(self.started_at).as_secs_f32() / duration.as_secs_f32();
+        let linear = now.saturating_duration_since(self.started_at).as_secs_f32()
+            / EXPAND_DURATION.as_secs_f32();
         let complete = linear >= 1.0;
-        let progress = if complete {
+        let width = if complete {
             self.target
         } else {
             self.from + (self.target - self.from) * ease_out_cubic(linear)
         };
-        (progress, !complete)
+        (width, !complete)
     }
 
-    fn set_expanded(&mut self, expanded: bool, immediate: bool, now: Instant) -> (f32, bool) {
-        let target = if expanded { 1.0 } else { 0.0 };
-        if immediate {
+    fn set_target(&mut self, target: Pixels, immediate: bool, now: Instant) -> (Pixels, bool) {
+        if immediate || !self.initialized {
             self.from = target;
             self.target = target;
             self.started_at = now;
+            self.initialized = true;
         } else if self.target != target {
             self.from = self.sample(now).0;
             self.target = target;
@@ -1055,13 +1057,7 @@ impl Element for Scrollbar {
             mode.is_always() || cx.reduce_motion(),
             now,
         );
-        let (expansion, expansion_running) = inner.expansion.set_expanded(
-            mode == ScrollbarMode::Scrolling && (is_hovered || is_dragging),
-            cx.reduce_motion(),
-            now,
-        );
-
-        if visibility.running || expansion_running {
+        if visibility.running {
             window.request_animation_frame();
         }
 
@@ -1179,13 +1175,24 @@ impl Element for Scrollbar {
                 };
 
             if mode == ScrollbarMode::Scrolling {
-                let normal_width = self.style_for_normal(cx).3;
-                let expanded_width = if is_hovered_on_thumb {
-                    self.style_for_hovered_thumb(cx).3
+                let mut width_animation = if is_vertical {
+                    state.get().vertical_width
                 } else {
-                    self.style_for_hovered_bar(cx).3
+                    state.get().horizontal_width
                 };
-                thumb_width = normal_width + (expanded_width - normal_width) * expansion;
+                let (animated_width, running) =
+                    width_animation.set_target(thumb_width, cx.reduce_motion(), now);
+                let mut updated = state.get();
+                if is_vertical {
+                    updated.vertical_width = width_animation;
+                } else {
+                    updated.horizontal_width = width_animation;
+                }
+                state.set(updated);
+                thumb_width = animated_width;
+                if running {
+                    window.request_animation_frame();
+                }
             }
 
             let thumb_size = (container_size / scroll_area_size * container_size).max(min_length);
@@ -1597,27 +1604,28 @@ mod tests {
     #[test]
     fn scrolling_hover_expansion_animates_in_both_directions() {
         let start = Instant::now();
-        let mut animation = ExpansionAnimation::collapsed(start);
+        let mut animation = WidthAnimation::new(start);
+        assert_eq!(animation.set_target(px(6.), false, start), (px(6.), false));
 
-        let (initial, running) = animation.set_expanded(true, false, start);
-        assert_eq!(initial, 0.0);
+        let (initial, running) = animation.set_target(px(8.), false, start);
+        assert_eq!(initial, px(6.));
         assert!(running);
         let (expanded_halfway, _) = animation.sample(start + EXPAND_DURATION / 2);
-        assert!(expanded_halfway > 0.5);
+        assert!(expanded_halfway > px(7.));
 
         let reversal = start + EXPAND_DURATION / 2;
         let before = animation.sample(reversal).0;
-        let (after_reversal, running) = animation.set_expanded(false, false, reversal);
+        let (after_reversal, running) = animation.set_target(px(6.), false, reversal);
         assert_eq!(after_reversal, before);
         assert!(running);
-        assert_eq!(animation.sample(reversal + EXPAND_DURATION).0, 0.0);
+        assert_eq!(animation.sample(reversal + EXPAND_DURATION).0, px(6.));
     }
 
     #[test]
     fn reduced_motion_snaps_scrolling_hover_expansion() {
         let now = Instant::now();
-        let mut animation = ExpansionAnimation::collapsed(now);
-        assert_eq!(animation.set_expanded(true, true, now), (1.0, false));
+        let mut animation = WidthAnimation::new(now);
+        assert_eq!(animation.set_target(px(8.), true, now), (px(8.), false));
     }
 
     #[test]
