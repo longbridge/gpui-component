@@ -17,7 +17,8 @@ use gpui_component::input::{Editor, EditorState, TabSize};
 
 ```rust
 let editor = cx.new(|cx| {
-    EditorState::new("rust", window, cx)
+    EditorState::new(window, cx)
+        .language("rust")
         .line_number(true)
         .folding(true)
         .tab_size(TabSize {
@@ -30,13 +31,14 @@ let editor = cx.new(|cx| {
 Editor::new(&editor).h(px(320.))
 ```
 
-`EditorState::new` 的第一个参数指定语法高亮语言。应用需要启用对应的 Cargo feature，例如 `tree-sitter-rust` 或 `tree-sitter-markdown`；也可以使用 `tree-sitter-languages` 包含全部内置语法。
+使用 `.language()` 指定语法高亮语言。应用需要启用对应的 Cargo feature，例如 `tree-sitter-rust` 或 `tree-sitter-markdown`；也可以使用 `tree-sitter-languages` 包含全部内置语法。
 
 ## 编辑器选项
 
 ```rust
 let editor = cx.new(|cx| {
-    EditorState::new("json", window, cx)
+    EditorState::new(window, cx)
+        .language("json")
         .line_number(true)
         .folding(true)
         .show_whitespaces(true)
