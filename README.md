@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="website/public/logo.svg" width="112" alt="GPUI Component logo" />
+  <img src="https://raw.githubusercontent.com/longbridge/gpui-component/main/website/public/logo.svg" width="112" alt="GPUI Component logo" />
   <br>
   <strong>GPUI Component</strong>
 </p>
