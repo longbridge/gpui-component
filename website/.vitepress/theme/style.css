@@ -1179,7 +1179,7 @@ html[lang^="ja"] :is(h1, h2, h3, h4) {
 /* The base showcase is a deliberately unstyled demo with hard-coded light
    colours, so its frame stays light in dark mode too. */
 .component-example--base iframe {
-  height: 420px;
+  height: 600px;
   color-scheme: light;
   @apply bg-white;
 }
@@ -1194,7 +1194,7 @@ html[lang^="ja"] :is(h1, h2, h3, h4) {
   }
 
   .component-example--base iframe {
-    height: 380px;
+    height: min(520px, 75vh);
   }
 }
 

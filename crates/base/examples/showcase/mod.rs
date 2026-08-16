@@ -149,6 +149,8 @@ pub struct BaseShowcase {
     text_selection_auto_scroll: AutoScroll,
     text_selection_active: bool,
     text_selection_text: String,
+    #[cfg(test)]
+    text_selection_footer_bounds: Rc<std::cell::RefCell<Option<gpui::Bounds<gpui::Pixels>>>>,
 }
 
 impl BaseShowcase {
@@ -334,6 +336,8 @@ impl BaseShowcase {
             text_selection_auto_scroll: AutoScroll::default(),
             text_selection_active: false,
             text_selection_text: String::new(),
+            #[cfg(test)]
+            text_selection_footer_bounds: Rc::new(std::cell::RefCell::new(None)),
         }
     }
 

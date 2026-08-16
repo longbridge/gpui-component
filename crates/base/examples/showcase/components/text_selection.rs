@@ -5,6 +5,8 @@ use gpui::{
     InspectorElementId, IntoElement, LayoutId, PaintQuad, ParentElement as _, Pixels, Point,
     SharedString, Styled as _, StyledText, Window, transparent_black,
 };
+#[cfg(test)]
+use gpui_base::ElementExt as _;
 use gpui_base::{TextSelection, TextSelectionHandle, TextSelectionRegistration, TextSelectionRun};
 
 use super::*;
@@ -191,96 +193,149 @@ impl BaseShowcase {
         };
         let entity = cx.entity().downgrade();
 
+        let footer = div()
+            .id("text-selection-footer")
+            .h(px(150.))
+            .flex_none()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .p_3()
+            .bg(rgb(0xf5f5f5))
+            .border_1()
+            .border_color(rgb(0xe5e5e5))
+            .child(
+                div()
+                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .child(if active {
+                        "Selection active"
+                    } else {
+                        "No selection"
+                    }),
+            )
+            .child(
+                div()
+                    .id("text-selection-preview")
+                    .flex_1()
+                    .min_h_0()
+                    .overflow_y_scroll()
+                    .text_color(rgb(0x525252))
+                    .child(selected_text),
+            )
+            .child(
+                Button::new("clear-text-selection")
+                    .h_7()
+                    .px_2()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .self_start()
+                    .border_1()
+                    .border_color(rgb(0x171717))
+                    .child("Clear selection")
+                    .on_click(move |_, window, cx| {
+                        TextSelection::clear(window, cx);
+                        _ = entity.update(cx, |this, cx| {
+                            this.text_selection_active = false;
+                            this.text_selection_text.clear();
+                            cx.notify();
+                        });
+                    }),
+            );
+        #[cfg(test)]
+        let footer = {
+            let bounds = self.text_selection_footer_bounds.clone();
+            footer.on_prepaint(move |value, _, _| *bounds.borrow_mut() = Some(value))
+        };
+
         div()
-            .id("text-selection-scroll")
+            .id("text-selection-example")
             .w(px(620.))
             .max_w_full()
-            .h(px(300.))
-            .overflow_y_scroll()
-            .track_scroll(&self.text_selection_scroll)
+            .h(px(520.))
+            .max_h_full()
             .flex()
             .flex_col()
             .gap_3()
-            .p_4()
             .child(
                 div()
-                    .text_lg()
-                    .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .child(PlainSelectableText::new(
-                        self.text_selection_handles[0].clone(),
-                        0,
-                        "Text selection across renderers",
-                    )),
-            )
-            .child(div().text_color(rgb(0x525252)).line_height(px(22.)).child(
-                PlainSelectableText::new(
-                    self.text_selection_handles[1].clone(),
-                    1,
-                    PRODUCT_PARAGRAPH,
-                ),
-            ))
-            .child(div().text_color(rgb(0x525252)).line_height(px(22.)).child(
-                PlainSelectableText::new(
-                    self.text_selection_handles[2].clone(),
-                    2,
-                    IMPLEMENTATION_PARAGRAPH,
-                ),
-            ))
-            .child(div().text_color(rgb(0x525252)).line_height(px(22.)).child(
-                PlainSelectableText::new(
-                    self.text_selection_handles[3].clone(),
-                    3,
-                    INTERNATIONAL_PARAGRAPH,
-                ),
-            ))
-            .child(
-                div()
-                    .mt_1()
+                    .id("text-selection-scroll")
+                    .flex_1()
+                    .min_h_0()
+                    .overflow_y_scroll()
+                    .track_scroll(&self.text_selection_scroll)
                     .flex()
                     .flex_col()
-                    .gap_2()
-                    .p_3()
-                    .bg(rgb(0xf5f5f5))
-                    .border_1()
-                    .border_color(rgb(0xe5e5e5))
+                    .gap_3()
+                    .p_4()
                     .child(
                         div()
+                            .text_lg()
                             .font_weight(gpui::FontWeight::SEMIBOLD)
-                            .child(if active {
-                                "Selection active"
-                            } else {
-                                "No selection"
-                            }),
+                            .child(PlainSelectableText::new(
+                                self.text_selection_handles[0].clone(),
+                                0,
+                                "Text selection across renderers",
+                            )),
                     )
-                    .child(div().text_color(rgb(0x525252)).child(selected_text))
-                    .child(
-                        Button::new("clear-text-selection")
-                            .h_7()
-                            .px_2()
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .self_start()
-                            .border_1()
-                            .border_color(rgb(0x171717))
-                            .child("Clear selection")
-                            .on_click(move |_, window, cx| {
-                                TextSelection::clear(window, cx);
-                                _ = entity.update(cx, |this, cx| {
-                                    this.text_selection_active = false;
-                                    this.text_selection_text.clear();
-                                    cx.notify();
-                                });
-                            }),
-                    ),
+                    .child(div().text_color(rgb(0x525252)).line_height(px(22.)).child(
+                        PlainSelectableText::new(
+                            self.text_selection_handles[1].clone(),
+                            1,
+                            PRODUCT_PARAGRAPH,
+                        ),
+                    ))
+                    .child(div().text_color(rgb(0x525252)).line_height(px(22.)).child(
+                        PlainSelectableText::new(
+                            self.text_selection_handles[2].clone(),
+                            2,
+                            IMPLEMENTATION_PARAGRAPH,
+                        ),
+                    ))
+                    .child(div().text_color(rgb(0x525252)).line_height(px(22.)).child(
+                        PlainSelectableText::new(
+                            self.text_selection_handles[3].clone(),
+                            3,
+                            INTERNATIONAL_PARAGRAPH,
+                        ),
+                    )),
             )
+            .child(footer)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::selection_quad_bounds;
-    use gpui::{Bounds, point, px, size};
+    use gpui::{Bounds, TestAppContext, point, px, size};
+
+    use crate::showcase::BaseShowcase;
+
+    #[gpui::test]
+    fn text_selection_footer_stays_fixed_when_document_scrolls(cx: &mut TestAppContext) {
+        let (view, window) =
+            cx.add_window_view(|window, cx| BaseShowcase::new("text-selection", window, cx));
+        window.update(|window, cx| window.draw(cx).clear(cx));
+
+        let (footer_bounds, scroll) = view.read_with(window, |view, _| {
+            (
+                view.text_selection_footer_bounds
+                    .borrow()
+                    .expect("footer should be painted"),
+                view.text_selection_scroll.clone(),
+            )
+        });
+        scroll.set_offset(point(px(0.), px(-80.)));
+        view.update(window, |_, cx| cx.notify());
+        window.update(|window, cx| window.draw(cx).clear(cx));
+
+        let scrolled_footer_bounds = view.read_with(window, |view, _| {
+            view.text_selection_footer_bounds
+                .borrow()
+                .expect("footer should be painted after scrolling")
+        });
+        assert_eq!(scrolled_footer_bounds, footer_bounds);
+    }
 
     #[test]
     fn wrapped_selection_paints_full_width_middle_lines() {
