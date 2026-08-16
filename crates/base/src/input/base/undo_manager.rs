@@ -298,7 +298,6 @@ fn is_adjacent(intent: EditIntent, previous: &Change, current: &Change) -> bool 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::input::Selection;
 
     fn typing_change(offset: usize, text: &str) -> Change {
         let end = offset + text.len();
@@ -307,8 +306,8 @@ mod tests {
             "",
             offset..end,
             text,
-            Selection::new(offset, offset),
-            Selection::new(end, end),
+            (offset..offset).into(),
+            (end..end).into(),
         )
     }
 

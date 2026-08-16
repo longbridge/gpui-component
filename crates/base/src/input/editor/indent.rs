@@ -237,9 +237,9 @@ impl<M: InputModeKind> InputBaseState<M> {
         };
 
         let tab_indent = self.mode.tab_size().to_string();
-        let selected_range = self.selected_range;
+        let selected_range = *self.active_selection();
         let mut added_len = 0;
-        let is_selected = !self.selected_range.is_empty();
+        let is_selected = !self.active_selection().is_empty();
 
         if is_selected || block {
             let start_offset = self.start_of_line_of_selection(window, cx);
@@ -267,14 +267,16 @@ impl<M: InputModeKind> InputBaseState<M> {
             }
 
             if is_selected {
-                self.selected_range = (start_offset..selected_range.end + added_len).into();
+                self.set_selection(start_offset, selected_range.end + added_len);
             } else {
-                self.selected_range =
-                    (selected_range.start + added_len..selected_range.end + added_len).into();
+                self.set_selection(
+                    selected_range.start + added_len,
+                    selected_range.end + added_len,
+                );
             }
         } else {
             // Selected none
-            let offset = self.selected_range.start;
+            let offset = selected_range.start;
             self.replace_text_in_range_silent(
                 Some(self.range_to_utf16(&(offset..offset))),
                 &tab_indent,
@@ -283,8 +285,10 @@ impl<M: InputModeKind> InputBaseState<M> {
             );
             added_len = tab_indent.len();
 
-            self.selected_range =
-                (selected_range.start + added_len..selected_range.end + added_len).into();
+            self.set_selection(
+                selected_range.start + added_len,
+                selected_range.end + added_len,
+            );
         }
     }
 
@@ -295,9 +299,9 @@ impl<M: InputModeKind> InputBaseState<M> {
         };
 
         let tab_indent = self.mode.tab_size().to_string();
-        let selected_range = self.selected_range;
+        let selected_range = *self.active_selection();
         let mut removed_len = 0;
-        let is_selected = !self.selected_range.is_empty();
+        let is_selected = !self.active_selection().is_empty();
 
         if is_selected || block {
             let start_offset = self.start_of_line_of_selection(window, cx);
@@ -330,16 +334,16 @@ impl<M: InputModeKind> InputBaseState<M> {
             }
 
             if is_selected {
-                self.selected_range =
-                    (start_offset..selected_range.end.saturating_sub(removed_len)).into();
+                self.set_selection(start_offset, selected_range.end.saturating_sub(removed_len));
             } else {
-                self.selected_range = (selected_range.start.saturating_sub(removed_len)
-                    ..selected_range.end.saturating_sub(removed_len))
-                    .into();
+                self.set_selection(
+                    selected_range.start.saturating_sub(removed_len),
+                    selected_range.end.saturating_sub(removed_len),
+                );
             }
         } else {
             // Selected none
-            let start_offset = self.selected_range.start;
+            let start_offset = selected_range.start;
             let offset = self.start_of_line_of_selection(window, cx);
             let offset = self.offset_from_utf16(self.offset_to_utf16(offset));
 
@@ -358,7 +362,7 @@ impl<M: InputModeKind> InputBaseState<M> {
                 );
                 removed_len = tab_indent.len();
                 let new_offset = start_offset.saturating_sub(removed_len);
-                self.selected_range = (new_offset..new_offset).into();
+                self.set_selection(new_offset, new_offset);
             }
         }
     }

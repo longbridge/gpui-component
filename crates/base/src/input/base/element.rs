@@ -457,7 +457,7 @@ impl<M: InputModeKind> TextElement<M> {
         let lines = &last_layout.lines;
         let line_number_width = last_layout.line_number_width;
 
-        let mut selected_range = state.selected_range;
+        let mut selected_range = *state.active_selection();
 
         if let Some(ime_marked_range) = &state.ime_marked_range {
             selected_range = (ime_marked_range.end..ime_marked_range.end).into();
@@ -552,7 +552,7 @@ impl<M: InputModeKind> TextElement<M> {
                 }
 
                 // For selection to move scroll
-                if state.selection_reversed {
+                if state.active_selection().reversed {
                     if scroll_offset.x + cursor_start.x < px(0.) {
                         // selection start is out of left
                         scroll_offset.x = -cursor_start.x;
@@ -830,7 +830,7 @@ impl<M: InputModeKind> TextElement<M> {
             return None;
         }
 
-        let mut selected_range = state.selected_range;
+        let mut selected_range = *state.active_selection();
         if let Some(ime_marked_range) = &state.ime_marked_range {
             if !ime_marked_range.is_empty() {
                 selected_range = (ime_marked_range.end..ime_marked_range.end).into();
@@ -2090,7 +2090,7 @@ impl<M: InputModeKind> Element for TextElement<M> {
                 state.focus_handle.clone(),
                 state.show_cursor(window, cx),
                 state.disabled,
-                state.selected_range,
+                *state.active_selection(),
                 state.editor_style.clone(),
                 state.editor_paddings,
             )

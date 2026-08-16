@@ -13,25 +13,26 @@ pub(crate) enum MoveDirection {
 }
 
 impl<M: InputModeKind> InputBaseState<M> {
-    /// Called after moving the cursor. Updates preferred_column if we know where the cursor now is.
+    /// Called after moving the cursor. Updates the active selection's
+    /// `column_anchor` if we know where the cursor now is.
     pub(super) fn update_preferred_column(&mut self) {
         let Some(last_layout) = &self.last_layout else {
-            self.preferred_column = None;
+            self.active_selection_mut().column_anchor = None;
             return;
         };
 
         let point = self.text.offset_to_point(self.cursor());
         let Some(line) = last_layout.line(point.row) else {
-            self.preferred_column = None;
+            self.active_selection_mut().column_anchor = None;
             return;
         };
 
         let Some(pos) = line.position_for_index(point.column, last_layout, false) else {
-            self.preferred_column = None;
+            self.active_selection_mut().column_anchor = None;
             return;
         };
 
-        self.preferred_column = Some((pos.x, point.column));
+        self.active_selection_mut().column_anchor = Some((pos.x, point.column));
     }
 
     /// Move the cursor to the given offset.
@@ -48,7 +49,7 @@ impl<M: InputModeKind> InputBaseState<M> {
         self.undo_manager.break_transaction_coalescing();
         let offset = offset.clamp(0, self.text.len());
         self.cursor_line_end_affinity = false;
-        self.selected_range = (offset..offset).into();
+        self.set_cursor_to(offset);
         self.scroll_to(offset, direction, cx);
         self.pause_blink_cursor(cx);
         self.update_preferred_column();
@@ -74,7 +75,7 @@ impl<M: InputModeKind> InputBaseState<M> {
         };
 
         let offset = self.cursor();
-        let was_preferred_column = self.preferred_column;
+        let was_preferred_column = self.active_selection().column_anchor;
 
         let mut display_point = self.display_map.offset_to_wrap_display_point(offset);
 
@@ -133,26 +134,26 @@ impl<M: InputModeKind> InputBaseState<M> {
             MoveDirection::Down
         };
         self.move_to(new_offset, Some(direction), cx);
-        // Set back the preferred_column
-        self.preferred_column = was_preferred_column;
+        // Set back the preferred column
+        self.active_selection_mut().column_anchor = was_preferred_column;
         cx.notify();
     }
 
     pub(super) fn left(&mut self, _: &MoveLeft, _: &mut Window, cx: &mut Context<Self>) {
         self.pause_blink_cursor(cx);
-        if self.selected_range.is_empty() {
+        if self.active_selection().is_empty() {
             self.move_to(self.previous_boundary(self.cursor()), None, cx);
         } else {
-            self.move_to(self.selected_range.start, None, cx)
+            self.move_to(self.active_selection().start, None, cx)
         }
     }
 
     pub(super) fn right(&mut self, _: &MoveRight, _: &mut Window, cx: &mut Context<Self>) {
         self.pause_blink_cursor(cx);
-        if self.selected_range.is_empty() {
-            self.move_to(self.next_boundary(self.selected_range.end), None, cx);
+        if self.active_selection().is_empty() {
+            self.move_to(self.next_boundary(self.active_selection().end), None, cx);
         } else {
-            self.move_to(self.selected_range.end, None, cx)
+            self.move_to(self.active_selection().end, None, cx)
         }
     }
 
@@ -165,9 +166,9 @@ impl<M: InputModeKind> InputBaseState<M> {
             return;
         }
 
-        if !self.selected_range.is_empty() {
+        if !self.active_selection().is_empty() {
             self.move_to(
-                self.previous_boundary(self.selected_range.start.saturating_sub(1)),
+                self.previous_boundary(self.active_selection().start.saturating_sub(1)),
                 Some(MoveDirection::Up),
                 cx,
             );
@@ -185,9 +186,9 @@ impl<M: InputModeKind> InputBaseState<M> {
             return;
         }
 
-        if !self.selected_range.is_empty() {
+        if !self.active_selection().is_empty() {
             self.move_to(
-                self.next_boundary(self.selected_range.end.saturating_sub(1)),
+                self.next_boundary(self.active_selection().end.saturating_sub(1)),
                 Some(MoveDirection::Down),
                 cx,
             );
