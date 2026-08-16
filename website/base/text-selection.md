@@ -71,14 +71,22 @@ struct DocumentView {
 impl DocumentView {
     fn new(cx: &mut Context<Self>) -> Self {
         let selection = SelectableText::new("", cx);
+        let view = cx.entity().downgrade();
 
         // Repaint when the window selection projected onto this region changes.
-        selection.on_selection(|_, cx| cx.refresh_windows(), cx);
+        selection.on_selection(
+            move |_, cx| {
+                let _ = view.update(cx, |_, cx| cx.notify());
+            },
+            cx,
+        );
 
         Self { selection }
     }
 }
 ```
+
+Notify only the entity that paints this selectable text. Calling `cx.refresh_windows()` also works, but unnecessarily redraws every window in the application.
 
 The initial string is the region's fallback copy value. A plain renderer normally lets `project_selection_runs` maintain the copied substring automatically. Use `set_selected_text` when the fallback is produced elsewhere.
 

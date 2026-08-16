@@ -180,7 +180,13 @@ struct Example {
 impl Example {
     fn new(cx: &mut Context<Self>) -> Self {
         let region = SelectableText::new("", cx);
-        region.on_selection(|_, cx| cx.refresh_windows(), cx);
+        let view = cx.entity().downgrade();
+        region.on_selection(
+            move |_, cx| {
+                let _ = view.update(cx, |_, cx| cx.notify());
+            },
+            cx,
+        );
         Self { region }
     }
 }
