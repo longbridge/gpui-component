@@ -1,6 +1,6 @@
 use gpui::{App, Global};
 
-use crate::{ScrollbarMode, ScrollbarStyles, SemanticThemeTokens};
+use crate::{ScrollbarMode, ScrollbarMotion, ScrollbarStyles, SemanticThemeTokens};
 
 /// Application-wide defaults for Base behavior modules.
 #[derive(Clone, Default)]
@@ -38,9 +38,13 @@ impl ActiveTheme for App {
 }
 
 /// Global defaults used by [`crate::Scrollbar`].
+///
+/// `motion` defaults to motionless. Styled layers project their own timing;
+/// Base never installs a fade or slide of its own.
 #[derive(Clone, Default)]
 pub struct ScrollbarTheme {
     pub mode: ScrollbarMode,
+    pub motion: ScrollbarMotion,
     pub styles: ScrollbarStyles,
 }
 

@@ -29,10 +29,12 @@ const THUMB_ACTIVE_WIDTH: Pixels = px(8.);
 const THUMB_ACTIVE_RADIUS: Pixels = Pixels::ZERO;
 const THUMB_ACTIVE_INSET: Pixels = px(4.);
 
-const IDLE_DURATION: Duration = Duration::from_secs(2);
-const ENTER_DURATION: Duration = Duration::from_millis(300);
-const EXIT_DURATION: Duration = Duration::from_millis(500);
-const EXPAND_DURATION: Duration = Duration::from_millis(300);
+/// How long visibility is held after the last activity, when the styled layer
+/// projects no [`ScrollbarMotion`] of its own.
+///
+/// This is a visibility hold rather than motion: without it [`ScrollbarMode::Scrolling`]
+/// could never reveal the scrollbar.
+const DEFAULT_IDLE: Duration = Duration::from_secs(2);
 
 fn clamp_thumb_radius(radius: Pixels, bounds: Bounds<Pixels>) -> Pixels {
     radius
@@ -186,6 +188,7 @@ struct WidthAnimation {
     from: Pixels,
     target: Pixels,
     started_at: Instant,
+    duration: Duration,
     initialized: bool,
 }
 
@@ -195,16 +198,17 @@ impl WidthAnimation {
             from: Pixels::ZERO,
             target: Pixels::ZERO,
             started_at: now,
+            duration: Duration::ZERO,
             initialized: false,
         }
     }
 
     fn sample(&self, now: Instant) -> (Pixels, bool) {
-        if self.from == self.target {
+        if self.from == self.target || self.duration.is_zero() {
             return (self.target, false);
         }
         let linear = now.saturating_duration_since(self.started_at).as_secs_f32()
-            / EXPAND_DURATION.as_secs_f32();
+            / self.duration.as_secs_f32();
         let complete = linear >= 1.0;
         let width = if complete {
             self.target
@@ -214,18 +218,112 @@ impl WidthAnimation {
         (width, !complete)
     }
 
-    fn set_target(&mut self, target: Pixels, immediate: bool, now: Instant) -> (Pixels, bool) {
-        if immediate || !self.initialized {
+    /// Move toward `target` over `duration`. A zero duration adopts the target
+    /// immediately, which is how reduced motion and a motionless theme arrive here.
+    fn set_target(&mut self, target: Pixels, duration: Duration, now: Instant) -> (Pixels, bool) {
+        if duration.is_zero() || !self.initialized {
             self.from = target;
             self.target = target;
             self.started_at = now;
+            self.duration = duration;
             self.initialized = true;
         } else if self.target != target {
             self.from = self.sample(now).0;
             self.target = target;
             self.started_at = now;
+            self.duration = duration;
         }
         self.sample(now)
+    }
+}
+
+/// How a scrollbar becomes visible.
+///
+/// The styled layer chooses the choreography; Base only plays it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ScrollbarEntrance {
+    /// Fade in without moving.
+    #[default]
+    Fade,
+    /// Slide in from the nearest edge while fading.
+    SlideAndFade,
+}
+
+/// Motion tokens used by [`Scrollbar`].
+///
+/// Base installs no motion of its own: every transition duration defaults to
+/// zero, so visibility and thumb width snap. Product timing belongs to the
+/// styled layer, which projects it through [`crate::ScrollbarTheme`].
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ScrollbarMotion {
+    idle: Duration,
+    enter: Duration,
+    exit: Duration,
+    expand: Duration,
+    entrance: ScrollbarEntrance,
+}
+
+impl Default for ScrollbarMotion {
+    fn default() -> Self {
+        Self {
+            idle: DEFAULT_IDLE,
+            enter: Duration::ZERO,
+            exit: Duration::ZERO,
+            expand: Duration::ZERO,
+            entrance: ScrollbarEntrance::Fade,
+        }
+    }
+}
+
+impl ScrollbarMotion {
+    /// How long visibility is held after the last scroll, drag, or hover.
+    pub fn with_idle(mut self, idle: Duration) -> Self {
+        self.idle = idle;
+        self
+    }
+
+    /// How long the scrollbar takes to become fully visible.
+    pub fn with_enter(mut self, enter: Duration) -> Self {
+        self.enter = enter;
+        self
+    }
+
+    /// How long the scrollbar takes to fade away once the idle hold expires.
+    pub fn with_exit(mut self, exit: Duration) -> Self {
+        self.exit = exit;
+        self
+    }
+
+    /// How long the thumb takes to reach a new width.
+    pub fn with_expand(mut self, expand: Duration) -> Self {
+        self.expand = expand;
+        self
+    }
+
+    /// Which entrance choreography to play.
+    pub fn with_entrance(mut self, entrance: ScrollbarEntrance) -> Self {
+        self.entrance = entrance;
+        self
+    }
+
+    pub fn idle(&self) -> Duration {
+        self.idle
+    }
+
+    pub fn enter(&self) -> Duration {
+        self.enter
+    }
+
+    pub fn exit(&self) -> Duration {
+        self.exit
+    }
+
+    pub fn expand(&self) -> Duration {
+        self.expand
+    }
+
+    pub fn entrance(&self) -> ScrollbarEntrance {
+        self.entrance
     }
 }
 
@@ -235,6 +333,7 @@ struct VisibilityAnimation {
     from_position: f32,
     target: f32,
     started_at: Instant,
+    duration: Duration,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -244,20 +343,6 @@ struct VisibilitySample {
     running: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum EntranceMotion {
-    FadeOnly,
-    SlideAndFade,
-}
-
-fn entrance_motion(mode: ScrollbarMode) -> EntranceMotion {
-    if mode == ScrollbarMode::Scrolling {
-        EntranceMotion::FadeOnly
-    } else {
-        EntranceMotion::SlideAndFade
-    }
-}
-
 impl VisibilityAnimation {
     fn hidden(now: Instant) -> Self {
         Self {
@@ -265,6 +350,7 @@ impl VisibilityAnimation {
             from_position: 0.0,
             target: 0.0,
             started_at: now,
+            duration: Duration::ZERO,
         }
     }
 
@@ -272,7 +358,7 @@ impl VisibilityAnimation {
         let distance = (self.target - self.from_opacity)
             .abs()
             .max((self.target - self.from_position).abs());
-        if distance == 0.0 {
+        if distance == 0.0 || self.duration.is_zero() {
             return VisibilitySample {
                 opacity: self.target,
                 position: self.target,
@@ -281,14 +367,8 @@ impl VisibilityAnimation {
         }
 
         let is_entering = self.target > self.from_opacity || self.target > self.from_position;
-        let full_duration = if is_entering {
-            ENTER_DURATION
-        } else {
-            EXIT_DURATION
-        };
-        let duration = full_duration.mul_f32(distance);
-        let linear =
-            now.saturating_duration_since(self.started_at).as_secs_f32() / duration.as_secs_f32();
+        let linear = now.saturating_duration_since(self.started_at).as_secs_f32()
+            / self.duration.as_secs_f32();
         let complete = linear >= 1.0;
         let (opacity_factor, position_factor) = if is_entering {
             (linear.clamp(0.0, 1.0), ease_out_cubic(linear))
@@ -312,21 +392,48 @@ impl VisibilityAnimation {
         }
     }
 
-    fn set_visible(&mut self, visible: bool, entrance_motion: EntranceMotion, now: Instant) {
+    /// Reverse or start a transition toward `visible`.
+    ///
+    /// The leg runs for `enter` or `exit` scaled by the distance still to cover,
+    /// so an interrupted transition keeps its speed instead of restarting.
+    fn set_visible(
+        &mut self,
+        visible: bool,
+        entrance: ScrollbarEntrance,
+        enter: Duration,
+        exit: Duration,
+        now: Instant,
+    ) {
         let target = if visible { 1.0 } else { 0.0 };
+        let full_duration = if visible { enter } else { exit };
+        if full_duration.is_zero() {
+            // A motionless policy — reduced motion, an always-visible scrollbar,
+            // or a theme that projects no motion — adopts the target outright,
+            // even if a transition was in flight when the policy changed.
+            self.from_opacity = target;
+            self.from_position = target;
+            self.target = target;
+            self.started_at = now;
+            self.duration = Duration::ZERO;
+            return;
+        }
         if self.target == target {
             return;
         }
 
         let sample = self.sample(now);
         self.from_opacity = sample.opacity;
-        self.from_position = if visible && entrance_motion == EntranceMotion::FadeOnly {
+        self.from_position = if visible && entrance == ScrollbarEntrance::Fade {
             1.0
         } else {
             sample.position
         };
+        let distance = (target - self.from_opacity)
+            .abs()
+            .max((target - self.from_position).abs());
         self.target = target;
         self.started_at = now;
+        self.duration = full_duration.mul_f32(distance);
     }
 }
 
@@ -344,38 +451,13 @@ fn wants_visible(
     is_hovered: bool,
     is_dragging: bool,
     last_scroll_time: Option<Instant>,
+    idle: Duration,
     now: Instant,
 ) -> bool {
     mode.is_always()
         || is_dragging
         || (mode.is_hover() && is_hovered)
-        || last_scroll_time.is_some_and(|last| now.saturating_duration_since(last) < IDLE_DURATION)
-}
-
-fn update_visibility(
-    animation: &mut VisibilityAnimation,
-    visible: bool,
-    entrance_motion: EntranceMotion,
-    immediate: bool,
-    now: Instant,
-) -> VisibilitySample {
-    if immediate {
-        let progress = if visible { 1.0 } else { 0.0 };
-        *animation = VisibilityAnimation {
-            from_opacity: progress,
-            from_position: progress,
-            target: progress,
-            started_at: now,
-        };
-        VisibilitySample {
-            opacity: progress,
-            position: progress,
-            running: false,
-        }
-    } else {
-        animation.set_visible(visible, entrance_motion, now);
-        animation.sample(now)
-    }
+        || last_scroll_time.is_some_and(|last| now.saturating_duration_since(last) < idle)
 }
 
 impl Deref for ScrollbarState {
@@ -1040,7 +1122,18 @@ impl Element for Scrollbar {
             .clone();
 
         let now = Instant::now();
-        let mode = self.mode.unwrap_or(cx.theme().scrollbar.mode);
+        let base_theme = cx.theme();
+        let mode = self.mode.unwrap_or(base_theme.scrollbar.mode);
+        let motion = base_theme.scrollbar.motion;
+        // Always-visible scrollbars never transition, and reduced motion snaps
+        // every transition to its target.
+        let animates = !mode.is_always() && !cx.reduce_motion();
+        let (enter, exit, expand) = if animates {
+            (motion.enter(), motion.exit(), motion.expand())
+        } else {
+            (Duration::ZERO, Duration::ZERO, Duration::ZERO)
+        };
+
         let mut inner = state.get();
         let current_offset = self.scroll_handle.offset();
         if current_offset != inner.last_scroll_offset {
@@ -1049,14 +1142,18 @@ impl Element for Scrollbar {
 
         let is_hovered = inner.hovered_axis.is_some() || inner.hovered_on_thumb.is_some();
         let is_dragging = inner.dragged_axis.is_some();
-        let visible = wants_visible(mode, is_hovered, is_dragging, inner.last_scroll_time, now);
-        let visibility = update_visibility(
-            &mut inner.visibility,
-            visible,
-            entrance_motion(mode),
-            mode.is_always() || cx.reduce_motion(),
+        let visible = wants_visible(
+            mode,
+            is_hovered,
+            is_dragging,
+            inner.last_scroll_time,
+            motion.idle(),
             now,
         );
+        inner
+            .visibility
+            .set_visible(visible, motion.entrance(), enter, exit, now);
+        let visibility = inner.visibility.sample(now);
         if visibility.running {
             window.request_animation_frame();
         }
@@ -1064,11 +1161,11 @@ impl Element for Scrollbar {
         if !mode.is_always() && !is_hovered && !is_dragging {
             if let Some(last_time) = inner.last_scroll_time {
                 let elapsed = now.saturating_duration_since(last_time);
-                if elapsed < IDLE_DURATION && !inner.idle_timer_scheduled {
+                if elapsed < motion.idle() && !inner.idle_timer_scheduled {
                     inner.idle_timer_scheduled = true;
                     let state = state.clone();
                     let current_view = window.current_view();
-                    let next_delay = IDLE_DURATION - elapsed;
+                    let next_delay = motion.idle() - elapsed;
                     window
                         .spawn(cx, async move |cx| {
                             cx.background_executor().timer(next_delay).await;
@@ -1181,7 +1278,7 @@ impl Element for Scrollbar {
                     state.get().horizontal_width
                 };
                 let (animated_width, running) =
-                    width_animation.set_target(thumb_width, cx.reduce_motion(), now);
+                    width_animation.set_target(thumb_width, expand, now);
                 let mut updated = state.get();
                 if is_vertical {
                     updated.vertical_width = width_animation;
@@ -1535,97 +1632,154 @@ mod tests {
         );
     }
 
+    /// Timing standing in for what a styled layer projects. Base itself ships
+    /// none of these; see [`motionless_base_snaps_every_transition`].
+    const ENTER: Duration = Duration::from_millis(300);
+    const EXIT: Duration = Duration::from_millis(500);
+    const EXPAND: Duration = Duration::from_millis(300);
+
     #[test]
     fn visibility_animation_uses_direction_specific_curves_and_durations() {
-        assert_eq!(ENTER_DURATION, Duration::from_millis(300));
-        assert_eq!(EXIT_DURATION, Duration::from_millis(500));
-
         let start = Instant::now();
         let mut animation = VisibilityAnimation::hidden(start);
 
-        animation.set_visible(true, EntranceMotion::SlideAndFade, start);
+        animation.set_visible(true, ScrollbarEntrance::SlideAndFade, ENTER, EXIT, start);
         assert_eq!(animation.sample(start).opacity, 0.0);
-        let entering = animation.sample(start + ENTER_DURATION / 2).position;
+        let entering = animation.sample(start + ENTER / 2).position;
         assert!(entering > 0.5, "ease-out must advance quickly");
-        let entered = animation.sample(start + ENTER_DURATION);
+        let entered = animation.sample(start + ENTER);
         assert_eq!(entered.opacity, 1.0);
         assert_eq!(entered.position, 1.0);
 
-        animation.set_visible(false, EntranceMotion::SlideAndFade, start + ENTER_DURATION);
-        let exiting = animation
-            .sample(start + ENTER_DURATION + EXIT_DURATION / 2)
-            .opacity;
-        assert!(exiting > 0.5, "ease-in must remain visible early in exit");
-        assert_eq!(
-            animation
-                .sample(start + ENTER_DURATION + EXIT_DURATION)
-                .opacity,
-            0.0
+        animation.set_visible(
+            false,
+            ScrollbarEntrance::SlideAndFade,
+            ENTER,
+            EXIT,
+            start + ENTER,
         );
+        let exiting = animation.sample(start + ENTER + EXIT / 2).opacity;
+        assert!(exiting > 0.5, "ease-in must remain visible early in exit");
+        assert_eq!(animation.sample(start + ENTER + EXIT).opacity, 0.0);
     }
 
     #[test]
     fn entrance_fades_linearly_while_position_eases_out() {
         let start = Instant::now();
         let mut animation = VisibilityAnimation::hidden(start);
-        animation.set_visible(true, EntranceMotion::SlideAndFade, start);
+        animation.set_visible(true, ScrollbarEntrance::SlideAndFade, ENTER, EXIT, start);
 
-        let halfway = animation.sample(start + ENTER_DURATION / 2);
+        let halfway = animation.sample(start + ENTER / 2);
         assert!((halfway.opacity - 0.5).abs() < 0.001);
         assert!(halfway.position > halfway.opacity);
     }
 
     #[test]
-    fn fade_only_entrance_snaps_position_and_animates_opacity() {
+    fn fade_entrance_snaps_position_and_animates_opacity() {
         let start = Instant::now();
         let mut animation = VisibilityAnimation::hidden(start);
-        animation.set_visible(true, EntranceMotion::FadeOnly, start);
+        animation.set_visible(true, ScrollbarEntrance::Fade, ENTER, EXIT, start);
 
         let initial = animation.sample(start);
         assert_eq!(initial.opacity, 0.0);
         assert_eq!(initial.position, 1.0);
-        let halfway = animation.sample(start + ENTER_DURATION / 2);
+        let halfway = animation.sample(start + ENTER / 2);
         assert!((halfway.opacity - 0.5).abs() < 0.001);
         assert_eq!(halfway.position, 1.0);
     }
 
     #[test]
-    fn scrolling_fades_in_while_hover_slides_and_fades() {
+    fn base_ships_no_motion_of_its_own() {
+        let motion = ScrollbarMotion::default();
+        assert_eq!(motion.enter(), Duration::ZERO);
+        assert_eq!(motion.exit(), Duration::ZERO);
+        assert_eq!(motion.expand(), Duration::ZERO);
+        assert_eq!(motion.entrance(), ScrollbarEntrance::Fade);
         assert_eq!(
-            entrance_motion(ScrollbarMode::Scrolling),
-            EntranceMotion::FadeOnly
-        );
-        assert_eq!(
-            entrance_motion(ScrollbarMode::Hover),
-            EntranceMotion::SlideAndFade
+            motion.idle(),
+            DEFAULT_IDLE,
+            "the visibility hold is behavior, not motion, and must stay usable"
         );
     }
 
     #[test]
-    fn scrolling_hover_expansion_animates_in_both_directions() {
+    fn motionless_base_snaps_every_transition() {
+        let now = Instant::now();
+        let motion = ScrollbarMotion::default();
+        let mut visibility = VisibilityAnimation::hidden(now);
+
+        visibility.set_visible(true, motion.entrance(), motion.enter(), motion.exit(), now);
+        let shown = visibility.sample(now);
+        assert_eq!(shown.opacity, 1.0);
+        assert_eq!(shown.position, 1.0);
+        assert!(!shown.running, "a motionless theme must request no frames");
+        assert_eq!(
+            visibility_translation(Axis::Vertical, px(16.), shown.position),
+            Point::default()
+        );
+
+        visibility.set_visible(false, motion.entrance(), motion.enter(), motion.exit(), now);
+        let hidden = visibility.sample(now);
+        assert_eq!(hidden.opacity, 0.0);
+        assert_eq!(hidden.position, 0.0);
+        assert!(!hidden.running);
+
+        let mut width = WidthAnimation::new(now);
+        assert_eq!(
+            width.set_target(px(8.), motion.expand(), now),
+            (px(8.), false)
+        );
+    }
+
+    #[test]
+    fn a_zero_duration_settles_a_transition_already_in_flight() {
+        let start = Instant::now();
+        let mut animation = VisibilityAnimation::hidden(start);
+        animation.set_visible(true, ScrollbarEntrance::SlideAndFade, ENTER, EXIT, start);
+
+        // Reduced motion turns on midway through the entrance.
+        let midway = start + ENTER / 2;
+        animation.set_visible(
+            true,
+            ScrollbarEntrance::SlideAndFade,
+            Duration::ZERO,
+            Duration::ZERO,
+            midway,
+        );
+        let settled = animation.sample(midway);
+        assert_eq!(settled.opacity, 1.0);
+        assert_eq!(settled.position, 1.0);
+        assert!(!settled.running);
+    }
+
+    #[test]
+    fn thumb_expansion_animates_in_both_directions() {
         let start = Instant::now();
         let mut animation = WidthAnimation::new(start);
-        assert_eq!(animation.set_target(px(6.), false, start), (px(6.), false));
+        assert_eq!(animation.set_target(px(6.), EXPAND, start), (px(6.), false));
 
-        let (initial, running) = animation.set_target(px(8.), false, start);
+        let (initial, running) = animation.set_target(px(8.), EXPAND, start);
         assert_eq!(initial, px(6.));
         assert!(running);
-        let (expanded_halfway, _) = animation.sample(start + EXPAND_DURATION / 2);
+        let (expanded_halfway, _) = animation.sample(start + EXPAND / 2);
         assert!(expanded_halfway > px(7.));
 
-        let reversal = start + EXPAND_DURATION / 2;
+        let reversal = start + EXPAND / 2;
         let before = animation.sample(reversal).0;
-        let (after_reversal, running) = animation.set_target(px(6.), false, reversal);
+        let (after_reversal, running) = animation.set_target(px(6.), EXPAND, reversal);
         assert_eq!(after_reversal, before);
         assert!(running);
-        assert_eq!(animation.sample(reversal + EXPAND_DURATION).0, px(6.));
+        assert_eq!(animation.sample(reversal + EXPAND).0, px(6.));
     }
 
     #[test]
-    fn reduced_motion_snaps_scrolling_hover_expansion() {
+    fn reduced_motion_snaps_thumb_expansion() {
         let now = Instant::now();
         let mut animation = WidthAnimation::new(now);
-        assert_eq!(animation.set_target(px(8.), true, now), (px(8.), false));
+        assert_eq!(
+            animation.set_target(px(8.), Duration::ZERO, now),
+            (px(8.), false)
+        );
     }
 
     #[test]
@@ -1648,11 +1802,17 @@ mod tests {
     fn visibility_animation_reverses_from_current_progress() {
         let start = Instant::now();
         let mut animation = VisibilityAnimation::hidden(start);
-        animation.set_visible(true, EntranceMotion::SlideAndFade, start);
+        animation.set_visible(true, ScrollbarEntrance::SlideAndFade, ENTER, EXIT, start);
         let reversal_time = start + Duration::from_millis(60);
         let before = animation.sample(reversal_time);
 
-        animation.set_visible(false, EntranceMotion::SlideAndFade, reversal_time);
+        animation.set_visible(
+            false,
+            ScrollbarEntrance::SlideAndFade,
+            ENTER,
+            EXIT,
+            reversal_time,
+        );
         let reversed = animation.sample(reversal_time);
         assert_eq!(reversed.opacity, before.opacity);
         assert_eq!(reversed.position, before.position);
@@ -1664,38 +1824,56 @@ mod tests {
     #[test]
     fn always_hover_drag_and_recent_scroll_request_visibility() {
         let now = Instant::now();
+        let idle = DEFAULT_IDLE;
         assert!(wants_visible(
             ScrollbarMode::Always,
             false,
             false,
             None,
+            idle,
             now
         ));
-        assert!(wants_visible(ScrollbarMode::Hover, true, false, None, now));
+        assert!(wants_visible(
+            ScrollbarMode::Hover,
+            true,
+            false,
+            None,
+            idle,
+            now
+        ));
         assert!(wants_visible(
             ScrollbarMode::Scrolling,
             false,
             true,
             None,
+            idle,
             now
         ));
         assert!(wants_visible(
             ScrollbarMode::Scrolling,
             false,
             false,
-            Some(now - IDLE_DURATION + Duration::from_millis(1)),
+            Some(now - idle + Duration::from_millis(1)),
+            idle,
             now,
         ));
         assert!(!wants_visible(
             ScrollbarMode::Scrolling,
             false,
             false,
-            Some(now - IDLE_DURATION),
+            Some(now - idle),
+            idle,
             now,
         ));
 
-        let mut settled = VisibilityAnimation::hidden(now - ENTER_DURATION);
-        settled.set_visible(true, EntranceMotion::SlideAndFade, now - ENTER_DURATION);
+        let mut settled = VisibilityAnimation::hidden(now - ENTER);
+        settled.set_visible(
+            true,
+            ScrollbarEntrance::SlideAndFade,
+            ENTER,
+            EXIT,
+            now - ENTER,
+        );
         assert!(!settled.sample(now).running, "idle hold must not animate");
     }
 
@@ -1714,61 +1892,31 @@ mod tests {
             false,
             false,
             left.last_scroll_time,
-            left_at + IDLE_DURATION - Duration::from_millis(1),
+            DEFAULT_IDLE,
+            left_at + DEFAULT_IDLE - Duration::from_millis(1),
         ));
     }
 
     #[test]
     fn idle_boundary_starts_the_exit_without_a_jump() {
         let activity = Instant::now();
-        let exit_start = activity + IDLE_DURATION;
-        let mut animation = VisibilityAnimation::hidden(activity - ENTER_DURATION);
-        animation.set_visible(true, EntranceMotion::FadeOnly, activity - ENTER_DURATION);
+        let exit_start = activity + DEFAULT_IDLE;
+        let mut animation = VisibilityAnimation::hidden(activity - ENTER);
+        animation.set_visible(true, ScrollbarEntrance::Fade, ENTER, EXIT, activity - ENTER);
         assert!(!wants_visible(
             ScrollbarMode::Scrolling,
             false,
             false,
             Some(activity),
+            DEFAULT_IDLE,
             exit_start,
         ));
 
-        animation.set_visible(false, EntranceMotion::FadeOnly, exit_start);
+        animation.set_visible(false, ScrollbarEntrance::Fade, ENTER, EXIT, exit_start);
         let start = animation.sample(exit_start);
         assert_eq!(start.opacity, 1.0);
         assert_eq!(start.position, 1.0);
-        assert_eq!(animation.sample(exit_start + EXIT_DURATION).opacity, 0.0);
-    }
-
-    #[test]
-    fn immediate_visibility_is_stationary_and_requests_no_frames() {
-        let now = Instant::now();
-        let mut animation = VisibilityAnimation::hidden(now);
-
-        let shown = update_visibility(
-            &mut animation,
-            true,
-            EntranceMotion::SlideAndFade,
-            true,
-            now,
-        );
-        assert_eq!(shown.opacity, 1.0);
-        assert_eq!(shown.position, 1.0);
-        assert!(!shown.running);
-        assert_eq!(
-            visibility_translation(Axis::Vertical, px(16.), shown.position),
-            Point::default()
-        );
-
-        let hidden = update_visibility(
-            &mut animation,
-            false,
-            EntranceMotion::SlideAndFade,
-            true,
-            now,
-        );
-        assert_eq!(hidden.opacity, 0.0);
-        assert_eq!(hidden.position, 0.0);
-        assert!(!hidden.running);
+        assert_eq!(animation.sample(exit_start + EXIT).opacity, 0.0);
     }
 
     #[derive(Clone)]
@@ -1918,6 +2066,7 @@ mod tests {
 
             crate::Theme::global_mut(cx).scrollbar = crate::ScrollbarTheme {
                 mode: ScrollbarMode::Always,
+                motion: ScrollbarMotion::default(),
                 styles: ScrollbarStyles::default()
                     .track(|style| style.width(px(13.)).bg(theme_track))
                     .thumb(|style| style.width(px(7.)).bg(theme_thumb)),
@@ -2021,9 +2170,8 @@ mod tests {
             ScrollbarMode::Hover,
             size(px(100.), px(500.)),
         );
+        // Base ships no motion, so the reveal is immediate.
         cx.simulate_mouse_move(point(px(95.), px(50.)), None, Modifiers::default());
-        cx.run_until_parked();
-        cx.executor().advance_clock(ENTER_DURATION);
         cx.run_until_parked();
 
         cx.simulate_click(point(px(95.), px(80.)), Modifiers::default());
