@@ -6,7 +6,7 @@ use gpui::{
     StyleRefinement, Styled, Window, WindowControlArea, anchored, div, hsla, point,
     prelude::FluentBuilder, px,
 };
-use gpui_base::{SelectionScopeId, TextSelection};
+use gpui_base::{ElementExt as _, TextSelectionScopeId};
 use rust_i18n::t;
 
 use crate::{
@@ -249,7 +249,7 @@ pub struct Dialog {
     /// This will be change when open the dialog, the focus handle is create when open the dialog.
     pub(crate) focus_handle: FocusHandle,
     pub(crate) layer_ix: usize,
-    pub(crate) selection_scope: SelectionScopeId,
+    pub(crate) selection_scope: TextSelectionScopeId,
 }
 
 pub(crate) fn overlay_color(overlay: bool, cx: &App) -> Hsla {
@@ -275,7 +275,7 @@ impl Dialog {
             props: DialogProps::default(),
             children: Vec::new(),
             layer_ix: 0,
-            selection_scope: SelectionScopeId::default(),
+            selection_scope: TextSelectionScopeId::default(),
             button_props: DialogButtonProps::default(),
         }
     }
@@ -560,8 +560,7 @@ impl RenderOnce for Dialog {
                                     window.close_dialog(cx);
                                 }
                             })
-                            .popup(TextSelection::scope(
-                                selection_scope,
+                            .popup(
                                 v_flex()
                                     .id(layer_ix)
                                     .bg(cx.theme().tokens.background)
@@ -673,8 +672,9 @@ impl RenderOnce for Dialog {
                                             ];
                                             this.top(y * delta).shadow(shadow)
                                         },
-                                    ),
-                            )),
+                                    )
+                                    .text_selection_scope(selection_scope),
+                            ),
                     )
                     .with_animation("fade-in", animation, move |this, delta| this.opacity(delta)),
             )

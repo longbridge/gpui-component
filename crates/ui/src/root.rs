@@ -13,7 +13,7 @@ use gpui::{
     FocusHandle, InteractiveElement, IntoElement, KeyBinding, ParentElement as _, Pixels, Render,
     StyleRefinement, Styled, WeakFocusHandle, Window, actions, div, prelude::FluentBuilder as _,
 };
-use gpui_base::{SelectionScopeId, TextSelection};
+use gpui_base::{TextSelection, TextSelectionLayer, TextSelectionScopeId};
 use std::{any::TypeId, rc::Rc};
 
 actions!(root, [Tab, TabPrev]);
@@ -50,7 +50,6 @@ pub struct Root {
     /// Used to handle rapid dialog opening/closing to maintain correct focus chain.
     pending_focus_restore: Option<WeakFocusHandle>,
     window_id: gpui::WindowId,
-    next_text_selection_scope: u64,
 }
 
 #[derive(Clone)]
@@ -59,7 +58,7 @@ pub(crate) struct ActiveSheet {
     /// The previous focused handle before opening the Sheet.
     previous_focused_handle: Option<WeakFocusHandle>,
     placement: Placement,
-    selection_scope: SelectionScopeId,
+    selection_scope: TextSelectionScopeId,
     builder: Rc<dyn Fn(Sheet, &mut Window, &mut App) -> Sheet + 'static>,
 }
 
@@ -68,7 +67,7 @@ pub(crate) struct ActiveDialog {
     focus_handle: FocusHandle,
     /// The previous focused handle before opening the Dialog.
     previous_focused_handle: Option<WeakFocusHandle>,
-    selection_scope: SelectionScopeId,
+    selection_scope: TextSelectionScopeId,
     builder: Rc<dyn Fn(Dialog, &mut Window, &mut App) -> Dialog + 'static>,
 }
 
@@ -76,7 +75,7 @@ impl ActiveDialog {
     pub(crate) fn new(
         focus_handle: FocusHandle,
         previous_focused_handle: Option<WeakFocusHandle>,
-        selection_scope: SelectionScopeId,
+        selection_scope: TextSelectionScopeId,
         builder: impl Fn(Dialog, &mut Window, &mut App) -> Dialog + 'static,
     ) -> Self {
         Self {
@@ -90,9 +89,9 @@ impl ActiveDialog {
 
 impl Root {
     /// Clears window-owned text selection synchronously.
-    #[deprecated(note = "use gpui_base::WindowTextSelection::clear_text_selection instead")]
+    #[deprecated(note = "use gpui_base::TextSelection::clear instead")]
     pub fn clear_text_selection(&mut self, cx: &mut Context<Self>) {
-        gpui_base::__private::clear_window_text_selection(self.window_id, cx);
+        gpui_base::TextSelection::clear_for_window(self.window_id, cx);
     }
 
     /// Create a new Root view.
@@ -115,17 +114,14 @@ impl Root {
             bordered: true,
             pending_focus_restore: None,
             window_id: window.window_handle().window_id(),
-            next_text_selection_scope: 1,
         }
     }
 
-    fn allocate_text_selection_scope(&mut self) -> SelectionScopeId {
-        let scope = SelectionScopeId::new(self.next_text_selection_scope);
-        self.next_text_selection_scope = self.next_text_selection_scope.wrapping_add(1).max(1);
-        scope
+    fn allocate_text_selection_scope(&mut self) -> TextSelectionScopeId {
+        TextSelectionScopeId::new()
     }
 
-    pub(crate) fn active_text_selection_scope(&self) -> SelectionScopeId {
+    pub(crate) fn active_text_selection_scope(&self) -> TextSelectionScopeId {
         self.active_dialogs
             .last()
             .map(|dialog| dialog.selection_scope)
@@ -312,7 +308,7 @@ impl Root {
         ));
         // Opening a modal confines selection to it; drop any background
         // selection so it cannot linger (or be copied) under the modal.
-        gpui_base::WindowTextSelection::clear_text_selection(window, cx);
+        gpui_base::TextSelection::clear(window, cx);
         cx.notify();
     }
 
@@ -328,7 +324,7 @@ impl Root {
         if let Some(handle) = self.close_dialog_internal() {
             window.focus(&handle, cx);
         }
-        gpui_base::WindowTextSelection::clear_text_selection(window, cx);
+        gpui_base::TextSelection::clear(window, cx);
         cx.notify();
     }
 
@@ -352,7 +348,7 @@ impl Root {
             })
             .detach();
         }
-        gpui_base::WindowTextSelection::clear_text_selection(window, cx);
+        gpui_base::TextSelection::clear(window, cx);
         cx.notify();
     }
 
@@ -366,7 +362,7 @@ impl Root {
         if let Some(handle) = previous_focused_handle.and_then(|h| h.upgrade()) {
             window.focus(&handle, cx);
         }
-        gpui_base::WindowTextSelection::clear_text_selection(window, cx);
+        gpui_base::TextSelection::clear(window, cx);
         cx.notify();
     }
 
@@ -397,7 +393,7 @@ impl Root {
         });
         // Opening a modal confines selection to it; drop any background
         // selection so it cannot linger (or be copied) under the modal.
-        gpui_base::WindowTextSelection::clear_text_selection(window, cx);
+        gpui_base::TextSelection::clear(window, cx);
         cx.notify();
     }
 
@@ -412,7 +408,7 @@ impl Root {
             window.focus(&previous_handle, cx);
         }
         self.active_sheet = None;
-        gpui_base::WindowTextSelection::clear_text_selection(window, cx);
+        gpui_base::TextSelection::clear(window, cx);
         cx.notify();
     }
 
@@ -554,7 +550,7 @@ impl Root {
     }
 
     fn on_action_copy(&mut self, _: &Copy, window: &mut Window, cx: &mut Context<Self>) {
-        let text = gpui_base::WindowTextSelection::selected_text(window, cx)
+        let text = gpui_base::TextSelection::selected_text(window, cx)
             .trim()
             .to_string();
         if text.is_empty() {
@@ -578,9 +574,8 @@ impl Render for Root {
             crate::global_state::init(cx);
         }
         crate::global_state::UiGlobalState::global_mut(cx).begin_selection_frame();
-        let text_selection = TextSelection::new(window, cx);
         let active_scope = self.active_text_selection_scope();
-        gpui_base::WindowTextSelection::set_text_selection_scope(window, active_scope, cx);
+        TextSelection::activate_scope(active_scope, window, cx);
 
         let inner = div()
             .id("root")
@@ -594,7 +589,7 @@ impl Render for Root {
             .bg(cx.theme().tokens.background)
             .text_color(cx.theme().foreground)
             .refine_style(&self.style)
-            .child(text_selection)
+            .child(TextSelectionLayer)
             .child(self.view.clone())
             .child(self.tooltip_overlay.clone())
             .child(self.native_menu_overlay.clone());

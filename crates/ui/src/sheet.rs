@@ -6,7 +6,7 @@ use gpui::{
     RenderOnce, StyleRefinement, Styled, Window, anchored, div, point, prelude::FluentBuilder as _,
     px,
 };
-use gpui_base::{SelectionScopeId, Sheet as BaseSheet, TextSelection, actions::Cancel};
+use gpui_base::{ElementExt as _, Sheet as BaseSheet, TextSelectionScopeId, actions::Cancel};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -43,7 +43,7 @@ pub struct Sheet {
     pub(crate) focus_handle: FocusHandle,
     pub(crate) placement: Placement,
     pub(crate) size: DefiniteLength,
-    pub(crate) selection_scope: SelectionScopeId,
+    pub(crate) selection_scope: TextSelectionScopeId,
     resizable: bool,
     on_close: Rc<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>,
     title: Option<AnyElement>,
@@ -61,7 +61,7 @@ impl Sheet {
             focus_handle: cx.focus_handle(),
             placement: Placement::Right,
             size: DefiniteLength::Absolute(px(350.).into()),
-            selection_scope: SelectionScopeId::default(),
+            selection_scope: TextSelectionScopeId::default(),
             resizable: true,
             title: None,
             footer: None,
@@ -241,7 +241,7 @@ impl RenderOnce for Sheet {
                     })
                 },
             );
-        let surface = TextSelection::scope(selection_scope, surface);
+        let surface = surface.text_selection_scope(selection_scope);
 
         anchored()
             .position(point(window_paddings.left, window_paddings.top))

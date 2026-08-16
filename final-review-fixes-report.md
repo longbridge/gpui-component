@@ -4,34 +4,34 @@
 
 The final text-selection architecture findings are addressed in `gpui-base` and
 the `gpui-component` adapter. The public seam now consists of opaque selection
-data with builders/readers, a renderer-neutral region handle, and documented
+data with builders/readers, a renderer-neutral selection handle, and documented
 window scope/registration methods. Window selection state is retained by the
 `TextSelection` element; the application registry is only a weak locator.
 
 ## Changes
 
-- Made `SelectableTextState` private, removed its re-export and
-  `SelectableText::state()`, and moved snapshot, projection, callback,
-  local-selection, and copy configuration onto `SelectableText` methods.
-- Made `TextSelection::scope` and the `WindowTextSelection` scope/registration
-  methods part of the documented custom-renderer interface. The deprecated
+- Made `TextSelectionHandleState` private, removed its re-export and
+  `TextSelectionHandle::state()`, and moved snapshot, projection, callback,
+  local-selection, and copy configuration onto `TextSelectionHandle` methods.
+- Made `TextSelection::scope`, its window-level associated functions, and
+  `TextSelectionHandle::register` part of the documented custom-renderer interface. The deprecated
   component bridge remains under the hidden `gpui_base::__private` namespace.
-- Privatized every field on `SelectionEndpointSnapshot`, `SelectionSnapshot`,
-  `SelectableTextFrame`, `SelectionRunFrame`, and `SelectionRunState`; added
+- Privatized every field on `TextSelectionEndpoint`, `TextSelectionSnapshot`,
+  `TextSelectionRegistration`, `TextSelectionRun`, and `TextSelectionRunState`; added
   minimal constructors, builders, and readers; migrated the UI adapter,
   example, implementation, and tests.
 - Split copy into a lease-bound collection phase and a callback-resolution
   phase. Renderer copy callbacks run only after both the window-state and
-  region-state guards have been dropped and receive `&mut App` for legitimate
+  handle-state guards have been dropped and receive `&mut App` for legitimate
   reentrant selection operations.
 - Replaced the strong application-global window registry with weak locators.
   GPUI retained element state holds the strong entity, release cleanup clears
-  region-local state and removes the matching weak locator, and event/frame
-  closures capture weak entities. `TextSelection::new(window, cx)` gives custom
-  roots a public element constructor which binds the opaque state before
-  same-render scope changes; `Root` uses it and mounts the element first.
+  handle-local state and removes the matching weak locator, and event/frame
+  closures capture weak entities. The zero-sized `TextSelection` element binds
+  the opaque state during prepaint; same-render scope changes are retained until
+  that binding occurs, and `Root` mounts the element first.
 - Added `document_order` as the stable tie-break for equally sized hovered
-  regions.
+  participants.
 - Derived `Default` where appropriate and resolved strict Clippy findings,
   including needless dereference and cloned single-item slice patterns.
 
@@ -41,15 +41,15 @@ Each behavioral/API change started with a focused failing test or compile
 failure, then passed after the implementation:
 
 - `public_selection_data_uses_builders_and_readers`
-- `region_handle_is_the_public_adapter_seam`
-- `copy_callback_can_reenter_window_and_region_selection`
+- `selection_handle_is_the_public_adapter_seam`
+- `copy_callback_can_reenter_window_and_handle_selection`
 - `equal_area_hovered_regions_break_ties_by_document_order`
 - `two_windows_isolate_selection_copy_clear_and_release_ownership`
-- `constructed_selection_element_supports_scope_and_registration_on_the_first_frame`
+- `unit_selection_element_supports_scope_and_registration_on_the_first_frame`
 
 The ownership regression covers independent selection, copy, and clear for two
 windows, closes one window, verifies the other remains usable, and verifies the
-closed window's weak locator is pruned. Existing lifecycle, duplicate-host,
+closed window's weak locator is pruned. Existing lifecycle, duplicate-element,
 scope, virtualization, and component compatibility tests remain in the full
 suite.
 
@@ -62,11 +62,10 @@ confirmed the finding is resolved. It retained one low-severity judgement call
 about the similar public/prebound `Element` implementations, which share state
 retention and paint helpers but keep distinct acquisition paths.
 
-The Spec review found that the first version exposed its first-frame prebinding
-only through a hidden component path. `TextSelection::new(window, cx)` is now a
-documented public constructor and a RED/GREEN test covers same-render scope plus
-first-draw registration. Follow-up review confirmed the lifecycle finding is
-resolved. No other Standards or Spec findings remained.
+The Spec review found a first-frame scope-registration gap. The public unit
+`TextSelection` element now consumes pending same-render scope state during its
+first prepaint, and a RED/GREEN test covers same-render scope plus first-draw
+registration. No other Standards or Spec findings remained.
 
 ## Verification
 

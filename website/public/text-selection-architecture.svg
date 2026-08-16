@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="540" viewBox="0 0 1200 540" role="img" aria-labelledby="title description">
+  <title id="title">Text selection module responsibilities</title>
+  <description id="description">GPUI Base exposes one TextSelectionLayer window element and a separate TextSelection API, owns window selection state and snapshots, and projects runs through TextSelectionHandle. The application owns stable handles, reports geometry and text runs, and paints or copies projected ranges.</description>
+  <style>
+    :root { color-scheme: light dark; }
+    text { font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #18202d; font-weight: 400; }
+    .label { font-size: 21px; }
+    .detail { font-size: 17px; fill: #596579; }
+    .small-detail { font-size: 15px; fill: #596579; }
+    .code-detail { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 14px; fill: #596579; }
+    .group-label { font-size: 17px; letter-spacing: .1em; fill: #596579; }
+    .group { fill: none; stroke: #c9ced8; stroke-width: 1.5; stroke-dasharray: 5 6; rx: 18; }
+    .box { fill: #ffffff; stroke: #c9ced8; stroke-width: 1.5; rx: 12; }
+    .accent { fill: #eef3ff; stroke: #486ee8; stroke-width: 2; rx: 12; }
+    .label-bg { fill: #f7f8fa; }
+    .arrow { fill: none; stroke: #788397; stroke-width: 2; marker-end: url(#arrow); }
+    .accent-arrow { fill: none; stroke: #486ee8; stroke-width: 2.25; marker-end: url(#accent-arrow); }
+    @media (prefers-color-scheme: dark) {
+      svg > rect:first-of-type { fill: #17191d; }
+      .group { stroke: #424956; }
+      .box { fill: #22252b; stroke: #424956; }
+      .accent { fill: #202a45; stroke: #85a4ff; }
+      .label-bg { fill: #17191d; }
+      text { fill: #eef1f6; }
+      .detail, .small-detail, .code-detail, .group-label { fill: #abb4c3; }
+      .arrow { stroke: #8792a6; }
+      .accent-arrow { stroke: #85a4ff; }
+      #arrow path { fill: #8792a6; }
+      #accent-arrow path { fill: #85a4ff; }
+    }
+  </style>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#788397"/>
+    </marker>
+    <marker id="accent-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#486ee8"/>
+    </marker>
+  </defs>
+
+  <rect width="1200" height="540" rx="20" fill="#f7f8fa"/>
+
+  <rect class="group" x="28" y="24" width="1144" height="300"/>
+  <text class="group-label" x="52" y="55">GPUI BASE</text>
+
+  <rect class="box" x="55" y="82" width="220" height="86"/>
+  <text class="label" x="165" y="110" text-anchor="middle">TextSelectionLayer</text>
+  <text class="small-detail" x="165" y="137" text-anchor="middle">Only window element</text>
+  <text class="small-detail" x="165" y="157" text-anchor="middle">Pointer lifecycle</text>
+
+  <rect class="accent" x="350" y="74" width="300" height="102"/>
+  <text class="label" x="500" y="106" text-anchor="middle">Window state</text>
+  <text class="detail" x="500" y="134" text-anchor="middle">Anchor · Cursor · Scope</text>
+  <text class="code-detail" x="500" y="158" text-anchor="middle">TextSelection API</text>
+
+  <rect class="box" x="725" y="82" width="220" height="86"/>
+  <text class="label" x="835" y="116" text-anchor="middle">Events</text>
+  <text class="detail" x="835" y="144" text-anchor="middle">Snapshot · Auto-scroll</text>
+
+  <rect class="accent" x="725" y="218" width="220" height="76"/>
+  <text class="label" x="835" y="252" text-anchor="middle">TextSelectionHandle</text>
+  <text class="code-detail" x="835" y="278" text-anchor="middle">::update → Projection</text>
+
+  <path class="accent-arrow" d="M275 125 H350"/>
+  <path class="accent-arrow" d="M650 125 H725"/>
+  <path class="arrow" d="M835 168 V218"/>
+
+  <rect class="group" x="28" y="354" width="1144" height="158"/>
+  <text class="group-label" x="52" y="385">APP · CUSTOM RENDERER</text>
+
+  <rect class="box" x="55" y="412" width="220" height="72"/>
+  <text class="label" x="165" y="456" text-anchor="middle">TextSelectionHandle</text>
+
+  <rect class="box" x="350" y="412" width="220" height="72"/>
+  <text class="label" x="460" y="456" text-anchor="middle">Geometry</text>
+
+  <rect class="box" x="650" y="412" width="220" height="72"/>
+  <text class="label" x="760" y="456" text-anchor="middle">Text runs</text>
+
+  <rect class="box" x="945" y="412" width="200" height="72"/>
+  <text class="label" x="1045" y="456" text-anchor="middle">Paint + Copy</text>
+
+  <path class="accent-arrow" d="M165 412 V338 H440 V176"/>
+  <path class="accent-arrow" d="M460 412 V338 H560 V176"/>
+  <rect class="label-bg" x="120" y="326" width="490" height="24" rx="5"/>
+  <text class="code-detail" x="365" y="344" text-anchor="middle">TextSelectionHandle::register(registration, window, cx)</text>
+
+  <path class="accent-arrow" d="M835 168 C1040 190 1110 300 275 448"/>
+  <text class="detail" x="1020" y="198" text-anchor="middle">subscribe</text>
+
+  <path class="arrow" d="M760 412 V330 H835 V294"/>
+  <path class="accent-arrow" d="M945 256 H1045 V412"/>
+</svg>

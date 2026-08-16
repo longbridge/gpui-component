@@ -13,24 +13,25 @@ mod tests {
         div, point, px,
     };
     use gpui_base::{
-        SelectableText, SelectableTextFrame, SelectionRunFrame, SelectionScopeId, TextSelection,
+        ElementExt as _, TextSelectionHandle, TextSelectionRegistration, TextSelectionRun,
+        TextSelectionScopeId,
     };
     use std::cell::Cell;
     use std::rc::Rc;
     use std::time::Duration;
 
     struct PlainSelectableText {
-        region: SelectableText,
+        selection: TextSelectionHandle,
         text: SharedString,
         styled_text: StyledText,
         document_order: u64,
     }
 
     impl PlainSelectableText {
-        fn new(region: SelectableText, text: impl Into<SharedString>) -> Self {
+        fn new(selection: TextSelectionHandle, text: impl Into<SharedString>) -> Self {
             let text = text.into();
             Self {
-                region,
+                selection,
                 styled_text: StyledText::new(text.clone()),
                 text,
                 document_order: 0,
@@ -86,12 +87,11 @@ mod tests {
             self.styled_text
                 .prepaint(id, inspector_id, bounds, &mut (), window, cx);
             let hitbox = window.insert_hitbox(bounds, gpui::HitboxBehavior::Normal);
-            gpui_base::WindowTextSelection::register_selectable_text(
-                window,
-                self.region.clone(),
-                SelectableTextFrame::new(hitbox.clone(), bounds)
+            self.selection.register(
+                TextSelectionRegistration::new(hitbox.clone(), bounds)
                     .with_document_order(self.document_order)
                     .with_text_bounds(vec![bounds]),
+                window,
                 cx,
             );
             hitbox
@@ -108,8 +108,8 @@ mod tests {
             cx: &mut App,
         ) {
             let layout = self.styled_text.layout().clone();
-            self.region.project_selection_runs(
-                &[SelectionRunFrame::new(0, self.text.clone(), layout, bounds)],
+            self.selection.update_runs(
+                &[TextSelectionRun::new(self.text.clone(), layout, bounds).with_document_order(0)],
                 cx,
             );
             self.styled_text
@@ -118,14 +118,14 @@ mod tests {
     }
 
     struct MixedAdapterView {
-        plain_region: SelectableText,
+        plain_selection: TextSelectionHandle,
         text_view: Entity<TextViewState>,
     }
 
     impl MixedAdapterView {
         fn new(cx: &mut Context<Self>) -> Self {
             Self {
-                plain_region: SelectableText::new("", cx),
+                plain_selection: TextSelectionHandle::new("", cx),
                 text_view: cx.new(|cx| TextViewState::markdown("TextView adapter", cx)),
             }
         }
@@ -137,7 +137,7 @@ mod tests {
                 .size_full()
                 .pt(px(10.))
                 .child(div().h(px(40.)).child(PlainSelectableText::new(
-                    self.plain_region.clone(),
+                    self.plain_selection.clone(),
                     "Plain adapter",
                 )))
                 .child(
@@ -152,36 +152,36 @@ mod tests {
         text_view: Entity<TextViewState>,
     }
 
-    struct CrossRegionVirtualView {
-        top_region: SelectableText,
-        bottom_region: SelectableText,
+    struct CrossRendererVirtualView {
+        top_selection: TextSelectionHandle,
+        bottom_selection: TextSelectionHandle,
         text_view: Entity<TextViewState>,
         format: crate::text::SelectionFormat,
     }
 
-    impl CrossRegionVirtualView {
+    impl CrossRendererVirtualView {
         fn new(format: crate::text::SelectionFormat, cx: &mut Context<Self>) -> Self {
             let source = (0..20)
                 .map(|ix| format!("**Paragraph{ix}**"))
                 .collect::<Vec<_>>()
                 .join("\n\n");
             Self {
-                top_region: SelectableText::new("", cx),
-                bottom_region: SelectableText::new("", cx),
+                top_selection: TextSelectionHandle::new("", cx),
+                bottom_selection: TextSelectionHandle::new("", cx),
                 text_view: cx.new(|cx| TextViewState::markdown(&source, cx)),
                 format,
             }
         }
     }
 
-    impl Render for CrossRegionVirtualView {
+    impl Render for CrossRendererVirtualView {
         fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
             div()
                 .size_full()
                 .pt(px(10.))
                 .child(
                     div().h(px(40.)).child(
-                        PlainSelectableText::new(self.top_region.clone(), "Top plain")
+                        PlainSelectableText::new(self.top_selection.clone(), "Top plain")
                             .document_order(0),
                     ),
                 )
@@ -195,35 +195,35 @@ mod tests {
                 )
                 .child(
                     div().h(px(40.)).child(
-                        PlainSelectableText::new(self.bottom_region.clone(), "Bottom plain")
+                        PlainSelectableText::new(self.bottom_selection.clone(), "Bottom plain")
                             .document_order(2),
                     ),
                 )
         }
     }
 
-    enum CrossRegionVirtualScenario {
+    enum CrossRendererVirtualScenario {
         PlainToVirtualTail,
         VirtualHeadToPlain,
         VirtualInMiddle,
     }
 
-    fn assert_cross_region_virtual_export(
+    fn assert_cross_renderer_virtual_export(
         format: crate::text::SelectionFormat,
-        scenario: CrossRegionVirtualScenario,
+        scenario: CrossRendererVirtualScenario,
         cx: &mut TestAppContext,
     ) {
         use gpui::ListOffset;
 
         cx.update(crate::init);
         let (root, cx) = cx.add_window_view(move |window, cx| {
-            let content = cx.new(|cx| CrossRegionVirtualView::new(format, cx));
+            let content = cx.new(|cx| CrossRendererVirtualView::new(format, cx));
             Root::new(content, window, cx)
         });
         let content = root.read_with(cx, |root, _| {
             root.view()
                 .clone()
-                .downcast::<CrossRegionVirtualView>()
+                .downcast::<CrossRendererVirtualView>()
                 .unwrap()
         });
         let cx: &mut VisualTestContext = cx;
@@ -239,7 +239,7 @@ mod tests {
         let bottom_plain = point(px(1.), bounds.bottom() + px(20.));
 
         match scenario {
-            CrossRegionVirtualScenario::PlainToVirtualTail => {
+            CrossRendererVirtualScenario::PlainToVirtualTail => {
                 list_state.scroll_to(ListOffset {
                     item_ix: 19,
                     offset_in_item: px(0.),
@@ -253,10 +253,10 @@ mod tests {
                     point(bounds.right() - px(1.), bounds.bottom() - px(1.)),
                 );
             }
-            CrossRegionVirtualScenario::VirtualHeadToPlain => {
+            CrossRendererVirtualScenario::VirtualHeadToPlain => {
                 drag(cx, bounds.origin + point(px(1.), px(1.)), bottom_plain);
             }
-            CrossRegionVirtualScenario::VirtualInMiddle => {
+            CrossRendererVirtualScenario::VirtualInMiddle => {
                 drag(cx, top_plain, bottom_plain);
             }
         }
@@ -270,61 +270,61 @@ mod tests {
             };
             assert!(
                 text.contains(&expected),
-                "missing {expected:?} for cross-region virtual selection: {text:?}"
+                "missing {expected:?} for cross-selection virtual selection: {text:?}"
             );
         }
     }
 
     #[gpui::test]
     fn plain_to_virtual_tail_exports_unpainted_plain_blocks(cx: &mut TestAppContext) {
-        assert_cross_region_virtual_export(
+        assert_cross_renderer_virtual_export(
             crate::text::SelectionFormat::Plain,
-            CrossRegionVirtualScenario::PlainToVirtualTail,
+            CrossRendererVirtualScenario::PlainToVirtualTail,
             cx,
         );
     }
 
     #[gpui::test]
     fn plain_to_virtual_tail_exports_unpainted_source_blocks(cx: &mut TestAppContext) {
-        assert_cross_region_virtual_export(
+        assert_cross_renderer_virtual_export(
             crate::text::SelectionFormat::Source,
-            CrossRegionVirtualScenario::PlainToVirtualTail,
+            CrossRendererVirtualScenario::PlainToVirtualTail,
             cx,
         );
     }
 
     #[gpui::test]
     fn virtual_head_to_plain_exports_unpainted_plain_blocks(cx: &mut TestAppContext) {
-        assert_cross_region_virtual_export(
+        assert_cross_renderer_virtual_export(
             crate::text::SelectionFormat::Plain,
-            CrossRegionVirtualScenario::VirtualHeadToPlain,
+            CrossRendererVirtualScenario::VirtualHeadToPlain,
             cx,
         );
     }
 
     #[gpui::test]
     fn virtual_head_to_plain_exports_unpainted_source_blocks(cx: &mut TestAppContext) {
-        assert_cross_region_virtual_export(
+        assert_cross_renderer_virtual_export(
             crate::text::SelectionFormat::Source,
-            CrossRegionVirtualScenario::VirtualHeadToPlain,
+            CrossRendererVirtualScenario::VirtualHeadToPlain,
             cx,
         );
     }
 
     #[gpui::test]
-    fn middle_virtual_region_exports_all_plain_blocks(cx: &mut TestAppContext) {
-        assert_cross_region_virtual_export(
+    fn middle_virtual_renderer_exports_all_plain_blocks(cx: &mut TestAppContext) {
+        assert_cross_renderer_virtual_export(
             crate::text::SelectionFormat::Plain,
-            CrossRegionVirtualScenario::VirtualInMiddle,
+            CrossRendererVirtualScenario::VirtualInMiddle,
             cx,
         );
     }
 
     #[gpui::test]
-    fn middle_virtual_region_exports_all_source_blocks(cx: &mut TestAppContext) {
-        assert_cross_region_virtual_export(
+    fn middle_virtual_renderer_exports_all_source_blocks(cx: &mut TestAppContext) {
+        assert_cross_renderer_virtual_export(
             crate::text::SelectionFormat::Source,
-            CrossRegionVirtualScenario::VirtualInMiddle,
+            CrossRendererVirtualScenario::VirtualInMiddle,
             cx,
         );
     }
@@ -404,7 +404,7 @@ mod tests {
                         .h(px(40.))
                         .child(TextView::new(&self.second).selectable(self.second_selectable)),
                 )
-                // A 20px region below the views that owns its press the way
+                // A 20px selection below the views that owns its press the way
                 // Input/Button do: its bubble-phase handler sets the suppress
                 // flag, so a press starting here must not start a selection.
                 .child(
@@ -437,7 +437,9 @@ mod tests {
     }
 
     #[gpui::test]
-    fn base_plain_region_and_text_view_share_one_cross_region_selection(cx: &mut TestAppContext) {
+    fn base_plain_selection_and_text_view_share_one_cross_renderer_selection(
+        cx: &mut TestAppContext,
+    ) {
         cx.update(crate::init);
         let (_, cx) = cx.add_window_view(|window, cx| {
             let content = cx.new(MixedAdapterView::new);
@@ -468,8 +470,7 @@ mod tests {
             let _ = window.draw(cx);
         });
 
-        let selected =
-            cx.update(|window, cx| gpui_base::WindowTextSelection::selected_text(window, cx));
+        let selected = cx.update(|window, cx| gpui_base::TextSelection::selected_text(window, cx));
         assert_eq!(selected.trim(), "Plain adapter\nTextView adapter");
     }
 
@@ -518,14 +519,14 @@ mod tests {
         );
 
         cx.update(|window, cx| {
-            gpui_base::WindowTextSelection::clear_text_selection(window, cx);
+            gpui_base::TextSelection::clear(window, cx);
             let _ = window.draw(cx);
         });
 
         let selected = content.read_with(cx, |view, cx| view.text_view.read(cx).selected_text());
         assert!(
             selected.is_empty(),
-            "TextView retained selection outside the base host: {selected:?}"
+            "TextView retained selection outside the window selection state: {selected:?}"
         );
     }
 
@@ -548,7 +549,7 @@ mod tests {
         cx.update(|window, cx| {
             let _ = window.draw(cx);
             text_view.update(cx, |state, cx| state.select_all(cx));
-            gpui_base::WindowTextSelection::clear_text_selection(window, cx);
+            gpui_base::TextSelection::clear(window, cx);
             assert_eq!(text_view.read(cx).selected_text(), "");
         });
     }
@@ -601,20 +602,18 @@ mod tests {
 
             assert_eq!(
                 crate::WindowExt::selected_text(window, cx),
-                gpui_base::WindowTextSelection::selected_text(window, cx)
+                gpui_base::TextSelection::selected_text(window, cx)
             );
             assert_eq!(
                 crate::WindowExt::has_text_selection(window, cx),
-                gpui_base::WindowTextSelection::has_text_selection(window, cx)
+                gpui_base::TextSelection::has_selection(window, cx)
             );
 
             crate::WindowExt::clear_text_selection(window, cx);
-            assert!(!gpui_base::WindowTextSelection::has_text_selection(
-                window, cx
-            ));
+            assert!(!gpui_base::TextSelection::has_selection(window, cx));
 
             text_view.update(cx, |state, cx| state.select_all(cx));
-            gpui_base::WindowTextSelection::clear_text_selection(window, cx);
+            gpui_base::TextSelection::clear(window, cx);
             assert!(!crate::WindowExt::has_text_selection(window, cx));
         });
     }
@@ -677,15 +676,15 @@ mod tests {
         cx.update(|window, cx| {
             let _ = window.draw(cx);
             text_view.update(cx, |state, cx| state.select_all(cx));
-            gpui_base::WindowTextSelection::clear_text_selection(window, cx);
+            gpui_base::TextSelection::clear(window, cx);
             text_view.update(cx, |state, cx| state.select_all(cx));
         });
         cx.run_until_parked();
 
         let (has_selection, selected) = cx.update(|window, cx| {
             (
-                gpui_base::WindowTextSelection::has_text_selection(window, cx),
-                gpui_base::WindowTextSelection::selected_text(window, cx),
+                gpui_base::TextSelection::has_selection(window, cx),
+                gpui_base::TextSelection::selected_text(window, cx),
             )
         });
         assert!(has_selection);
@@ -1195,7 +1194,7 @@ mod tests {
     }
 
     fn window_selected_text(cx: &mut VisualTestContext) -> String {
-        cx.update(|window, cx| gpui_base::WindowTextSelection::selected_text(window, cx))
+        cx.update(|window, cx| gpui_base::TextSelection::selected_text(window, cx))
     }
 
     fn click(
@@ -1574,7 +1573,7 @@ mod tests {
     fn suppressed_mouse_down_does_not_start_selection(cx: &mut TestAppContext) {
         let (_, cx) = setup(true, cx);
 
-        // The suppress region sits below the two views (root pt=10, two 40px
+        // The suppress selection sits below the two views (root pt=10, two 40px
         // view rows -> y in [90, 110)). Pressing inside it makes its bubble
         // handler set the suppress flag, so dragging up across both views must
         // not produce any window selection.
@@ -1904,7 +1903,7 @@ mod tests {
         focus_handle: FocusHandle,
         behind: Entity<TextViewState>,
         front: Entity<TextViewState>,
-        front_scope: SelectionScopeId,
+        front_scope: TextSelectionScopeId,
     }
 
     impl SyntheticModalView {
@@ -1913,7 +1912,7 @@ mod tests {
                 focus_handle: cx.focus_handle(),
                 behind: cx.new(|cx| TextViewState::markdown("Behind text", cx)),
                 front: cx.new(|cx| TextViewState::markdown("Front text", cx)),
-                front_scope: SelectionScopeId::default(),
+                front_scope: TextSelectionScopeId::default(),
             }
         }
     }
@@ -1931,8 +1930,7 @@ mod tests {
                 )
                 // A full-window occluding overlay (mirrors the modal overlay)
                 // with modal-scoped content painted on top of it.
-                .child(TextSelection::scope(
-                    self.front_scope,
+                .child(
                     div()
                         .absolute()
                         .top_0()
@@ -1946,8 +1944,9 @@ mod tests {
                                 .left_0()
                                 .h(px(40.))
                                 .child(TextView::new(&self.front).selectable(true)),
-                        ),
-                ))
+                        )
+                        .text_selection_scope(self.front_scope),
+                )
         }
     }
 

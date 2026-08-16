@@ -87,20 +87,20 @@ pub trait WindowExt: Sized {
 
     /// Returns the merged selected text across registered selectable regions
     /// in this window, in logical document order and joined with `\n`.
-    #[deprecated(note = "use gpui_base::WindowTextSelection::selected_text instead")]
+    #[deprecated(note = "use gpui_base::TextSelection::selected_text instead")]
     fn selected_text(&mut self, cx: &mut App) -> String;
 
     /// Returns true if any registered region has an active text selection in
     /// this window, including renderer-local selections such as select-all.
-    #[deprecated(note = "use gpui_base::WindowTextSelection::has_text_selection instead")]
+    #[deprecated(note = "use gpui_base::TextSelection::has_selection instead")]
     fn has_text_selection(&mut self, cx: &mut App) -> bool;
 
     /// Clears the window text selection and all registered renderer-local selections.
-    #[deprecated(note = "use gpui_base::WindowTextSelection::clear_text_selection instead")]
+    #[deprecated(note = "use gpui_base::TextSelection::clear instead")]
     fn clear_text_selection(&mut self, cx: &mut App);
 
     /// Ends the in-progress window-level text selection drag (if any).
-    #[deprecated(note = "use gpui_base::WindowTextSelection::end_text_selection instead")]
+    #[deprecated(note = "use gpui_base::TextSelection::end instead")]
     fn end_text_selection(&mut self, cx: &mut App);
 }
 
@@ -225,21 +225,21 @@ impl WindowExt for Window {
 
     #[inline]
     fn selected_text(&mut self, cx: &mut App) -> String {
-        gpui_base::WindowTextSelection::selected_text(self, cx)
+        gpui_base::TextSelection::selected_text(self, cx)
     }
 
     #[inline]
     fn has_text_selection(&mut self, cx: &mut App) -> bool {
-        gpui_base::WindowTextSelection::has_text_selection(self, cx)
+        gpui_base::TextSelection::has_selection(self, cx)
     }
 
     #[inline]
     fn clear_text_selection(&mut self, cx: &mut App) {
-        gpui_base::WindowTextSelection::clear_text_selection(self, cx);
+        gpui_base::TextSelection::clear(self, cx);
     }
 
     #[inline]
     fn end_text_selection(&mut self, cx: &mut App) {
-        gpui_base::WindowTextSelection::end_text_selection(self, cx);
+        gpui_base::TextSelection::end(self, cx);
     }
 }

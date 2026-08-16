@@ -4,7 +4,7 @@
 
 **Goal:** Implement renderer-neutral window text selection in `gpui-base`, prove it with a plain adapter, and migrate TextView without changing its behavior.
 
-**Architecture:** An implementation-private window `TextSelectionState` owns generic region endpoints and event coordination. A public `TextSelection` element owns lifecycle wiring, and `WindowTextSelection` exposes operations without revealing state. Base-owned `TextSelectionRegion` entities erase renderer types; plain runs use base geometry while TextView attaches advanced copy, focus, scrolling, and virtual-block adapters.
+**Architecture:** An implementation-private `WindowSelectionState` owns participant endpoints and event coordination. A public `TextSelectionLayer` owns lifecycle wiring, while the `TextSelection` namespace exposes window operations without revealing state. Each participant owns a `TextSelectionHandle`; plain runs use base geometry while TextView attaches advanced copy, focus, scrolling, and virtual-content adapters.
 
 **Tech Stack:** Rust, GPUI entities/elements/hitboxes/TextLayout, `gpui::test` visual tests.
 

@@ -783,36 +783,48 @@ html[lang^="ja"] :is(h1, h2, h3, h4) {
   table {
     display: table;
     width: 100%;
-    border-collapse: collapse;
-    font-size: 0.84rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    border-collapse: separate;
+    border-spacing: 0;
+    overflow: hidden;
+    background: var(--background);
+    font-size: 0.82rem;
   }
 
   tr {
     border-top: 0;
-    border-bottom: 1px solid var(--border);
   }
 
   /* table.head.background from the default theme. */
   thead tr {
-    background: var(--sidebar);
+    background: color-mix(in srgb, var(--secondary) 10%, transparent);
   }
 
   th {
     color: var(--vp-c-text-2);
-    font: 620 0.7rem/1.4 var(--vp-font-family-mono);
+    font: 620 0.67rem/1.35 var(--vp-font-family-mono);
     letter-spacing: 0.06em;
     text-transform: uppercase;
   }
 
   th,
   td {
-    padding: 0.7rem 0.75rem;
+    padding: 0.52rem 0.65rem;
     border: 0;
+    border-bottom: 1px solid var(--border);
+    line-height: 1.5;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  tbody tr:last-child td {
+    border-bottom: 0;
   }
 
   th:first-child,
   td:first-child {
-    padding-left: 0.9rem;
+    padding-left: 0.75rem;
   }
 
   blockquote {

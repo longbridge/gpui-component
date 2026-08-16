@@ -356,7 +356,7 @@ impl Element for TextView {
             })
             .relative()
             .on_action(move |_: &crate::input::Copy, window, cx| {
-                let text = gpui_base::WindowTextSelection::selected_text(window, cx)
+                let text = gpui_base::TextSelection::selected_text(window, cx)
                     .trim()
                     .to_string();
                 if text.is_empty() {
@@ -417,7 +417,7 @@ impl Element for TextView {
                 )
             };
             let document_order = UiGlobalState::global_mut(cx).next_selection_document_order();
-            adapter.register_frame(
+            adapter.register(
                 hitbox.clone(),
                 content_bounds,
                 scroll_offset,

@@ -478,6 +478,10 @@ impl Element for Inline {
 
                     let selected_text = text[range.clone()].to_string();
 
+                    // This renderer owns multi-click selection. Prevent the
+                    // window selection layer from handling the same press.
+                    gpui_base::GlobalState::suppress_text_selection(cx);
+
                     if let Ok(mut inline_state) = inline_state.lock() {
                         inline_state.selection = Some(range.into());
                     }
@@ -539,7 +543,7 @@ impl Element for Inline {
                     if let Some(link) =
                         Self::link_for_position(&text_layout, &links, event.position)
                     {
-                        gpui_base::WindowTextSelection::end_text_selection(window, cx);
+                        gpui_base::TextSelection::end(window, cx);
                         cx.stop_propagation();
                         let click = ClickEvent::Mouse(MouseClickEvent {
                             down: MouseDownEvent {

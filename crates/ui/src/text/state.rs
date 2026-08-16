@@ -592,7 +592,7 @@ impl Render for TextViewState {
                     let state = state.read(cx);
                     (
                         state.bounds().size != bounds.size,
-                        state.selection_adapter.selection_involves_region(cx),
+                        state.selection_adapter.is_part_of_window_selection(cx),
                         state.selection_adapter.has_selection_snapshot(cx),
                         state.is_selecting,
                         state.compatible_layout_update,
@@ -610,7 +610,7 @@ impl Render for TextViewState {
                     && ((size_changed && selection_involves_view && !compatible_layout_update)
                         || (revision_changed && has_selection_snapshot))
                 {
-                    gpui_base::WindowTextSelection::clear_text_selection(window, cx);
+                    gpui_base::TextSelection::clear(window, cx);
                 }
             })
     }
