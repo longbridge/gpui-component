@@ -1964,6 +1964,24 @@ impl<M: InputModeKind> InputBaseState<M> {
         }
     }
 
+    /// Where a cursor stood before an edit made with this intent.
+    ///
+    /// Backspace and forward delete expand a collapsed cursor over the text
+    /// they are about to remove, so the recorded cursor has to collapse back to
+    /// the side it came from for undo to restore it where the user left it.
+    fn collapse_for_intent(
+        intent: EditIntent,
+        mut selection: CursorSelection,
+        range: &Range<usize>,
+    ) -> CursorSelection {
+        match intent {
+            EditIntent::Backspace => selection.place_at(range.end, None),
+            EditIntent::DeleteForward => selection.place_at(range.start, None),
+            EditIntent::Typing | EditIntent::Atomic => {}
+        }
+        selection
+    }
+
     fn push_history(
         &mut self,
         text: &Rope,
@@ -1994,51 +2012,67 @@ impl<M: InputModeKind> InputBaseState<M> {
             }
         });
 
-        let selection_before = match intent {
-            EditIntent::Backspace => (range.end..range.end).into(),
-            EditIntent::DeleteForward => (range.start..range.start).into(),
-            EditIntent::Typing | EditIntent::Atomic => selection_before,
-        };
+        let selection_before = Self::collapse_for_intent(intent, selection_before, &range);
         let selection_after =
             selection_after.unwrap_or_else(|| (new_range.end..new_range.end).into());
 
-        self.undo_manager.record_transaction(
-            Change::new(
-                range,
-                &old_text,
-                new_range,
-                new_text,
-                selection_before,
-                selection_after,
-            ),
-            intent,
-        );
+        let open_transaction = self.undo_manager.has_open_transaction();
+        let recorded = self
+            .undo_manager
+            .record_transaction(Change::new(range, &old_text, new_range, new_text), intent);
+        // A batch records its own cursor sets. This covers a change that is a
+        // transaction on its own.
+        if recorded && !open_transaction {
+            self.undo_manager
+                .record_selections(vec![selection_before], vec![selection_after]);
+        }
     }
 
     pub(super) fn undo(&mut self, _: &Undo, window: &mut Window, cx: &mut Context<Self>) {
         self.undo_manager.set_ignoring(true);
-        if let Some(changes) = self.undo_manager.undo() {
-            let selection = changes.last().unwrap().selection_before;
-            for change in &changes {
+        // The manager hands the changes back in reverse application order.
+        if let Some(replay) = self.undo_manager.undo() {
+            for change in &replay.changes {
                 let range_utf16 = self.range_to_utf16(&change.new_range.into());
                 self.replace_text_in_range_silent(Some(range_utf16), &change.old_text, window, cx);
             }
-            self.set_selection(selection.start, selection.end);
+            self.restore_selections(replay.selections);
         }
         self.undo_manager.set_ignoring(false);
     }
 
     pub(super) fn redo(&mut self, _: &Redo, window: &mut Window, cx: &mut Context<Self>) {
         self.undo_manager.set_ignoring(true);
-        if let Some(changes) = self.undo_manager.redo() {
-            let selection = changes.last().unwrap().selection_after;
-            for change in &changes {
+        // Redo replays in forward application order.
+        if let Some(replay) = self.undo_manager.redo() {
+            for change in &replay.changes {
                 let range_utf16 = self.range_to_utf16(&change.old_range.into());
                 self.replace_text_in_range_silent(Some(range_utf16), &change.new_text, window, cx);
             }
-            self.set_selection(selection.start, selection.end);
+            self.restore_selections(replay.selections);
         }
         self.undo_manager.set_ignoring(false);
+    }
+
+    /// Restore a set of selections captured in a transaction, clamping offsets
+    /// to the current text length. `None` leaves the current selections as the
+    /// replay left them.
+    fn restore_selections(&mut self, selections: Option<Vec<CursorSelection>>) {
+        let Some(selections) = selections else {
+            return;
+        };
+
+        let len = self.text.len();
+        let restored: Vec<CursorSelection> = selections
+            .into_iter()
+            .map(|mut sel| {
+                sel.start = sel.start.min(len);
+                sel.end = sel.end.min(len);
+                sel
+            })
+            .collect();
+        self.selections.replace_all(restored);
+        self.selections.merge_overlapping();
     }
 
     /// Get byte offset of the cursor.
@@ -2648,6 +2682,21 @@ impl<M: InputModeKind> InputBaseState<M> {
         // the undo manager's typing coalescing.
         let requested_intent = self.undo_manager.take_pending_intent();
         let selection_before = *self.active_selection();
+        let original_selections: Vec<CursorSelection> = self.selections.iter().copied().collect();
+        // Snapshot the cursors before applying, so undo can restore them. A
+        // delete has already expanded them over the text it removes, so they
+        // collapse back to where the user left them.
+        let selections_before: Vec<CursorSelection> = self
+            .selections
+            .iter()
+            .map(|selection| {
+                Self::collapse_for_intent(
+                    requested_intent.unwrap_or(EditIntent::Atomic),
+                    *selection,
+                    &(selection.start..selection.end),
+                )
+            })
+            .collect();
         let group = sorted.len() > 1;
         if group {
             self.undo_manager.begin_transaction();
@@ -2687,10 +2736,6 @@ impl<M: InputModeKind> InputBaseState<M> {
             self.update_fold_candidates_incremental(range, new_text);
         }
 
-        if group {
-            self.undo_manager.commit_transaction();
-        }
-
         // One observable update per batch instead of one per edit.
         if let Some(diagnostics) = self.mode.diagnostics_mut() {
             diagnostics.reset(&self.text)
@@ -2698,10 +2743,53 @@ impl<M: InputModeKind> InputBaseState<M> {
         M::refresh_language_features(self, window, cx);
         self.update_search(cx);
 
-        // Place the cursor at the end of the primary (topmost in document) edit.
-        let primary = sorted.last().expect("edits is non-empty");
-        let new_offset = (primary.0.start + primary.1.len()).min(self.text.len());
-        self.set_cursor_to(new_offset);
+        // Compute the resulting cursors.
+        // One collapsed cursor per edit, at the end of its inserted text.
+        let mut ascending: Vec<(Range<usize>, &str)> = sorted.clone();
+        ascending.sort_by_key(|edit| edit.0.start);
+        let text_len = self.text.len();
+        let mut delta: isize = 0;
+        let mut edit_results = Vec::with_capacity(ascending.len());
+        for (range, new_text) in &ascending {
+            let offset = ((range.start as isize + delta) as usize + new_text.len()).min(text_len);
+            edit_results.push((range.clone(), offset));
+            delta += new_text.len() as isize - (range.end as isize - range.start as isize);
+        }
+
+        let mut used = vec![false; edit_results.len()];
+        let mut new_selections: Vec<CursorSelection> = Vec::with_capacity(ascending.len());
+        for selection in original_selections {
+            if let Some((index, (_, offset))) =
+                edit_results.iter().enumerate().find(|(index, (range, _))| {
+                    !used[*index] && range.start == selection.start && range.end == selection.end
+                })
+            {
+                used[index] = true;
+                let mut selection = selection;
+                selection.place_at(*offset, None);
+                new_selections.push(selection);
+            }
+        }
+        for (index, (_, offset)) in edit_results.into_iter().enumerate() {
+            if !used[index] {
+                new_selections.push(CursorSelection::new(
+                    self.selections.generate_id(),
+                    offset,
+                    offset,
+                ));
+            }
+        }
+        self.selections.replace_all(new_selections);
+        self.selections.merge_overlapping();
+
+        // Record the cursor snapshots for undo/redo restore.
+        let selections_after: Vec<CursorSelection> = self.selections.iter().copied().collect();
+        self.undo_manager
+            .record_selections(selections_before, selections_after);
+        if group {
+            self.undo_manager.commit_transaction();
+        }
+
         self.ime_marked_range.take();
         self.update_preferred_column();
         if self.is_multi_line() {
@@ -2814,6 +2902,9 @@ impl<M: InputModeKind> EntityInputHandler for InputBaseState<M> {
             return;
         }
         let selection_before = *self.active_selection();
+        // Committing a composition ends the transaction it opened, whether or
+        // not the platform follows up with `unmark_text`.
+        let ends_composition = self.ime_marked_range.is_some();
 
         if self.blink_cursor.read(cx).visible() {
             self.pause_blink_cursor(cx);
@@ -2927,6 +3018,9 @@ impl<M: InputModeKind> EntityInputHandler for InputBaseState<M> {
         M::refresh_language_features(self, window, cx);
         self.set_cursor_to(new_offset);
         self.ime_marked_range.take();
+        if ends_composition {
+            self.undo_manager.commit_transaction();
+        }
         self.update_preferred_column();
         self.update_search(cx);
         if self.is_multi_line() {
@@ -4605,6 +4699,142 @@ mod tests {
                 // clamped + collapsed
                 s.set_selected_range(100..100, cx);
                 assert_eq!(s.selected_range(), 11..11);
+            });
+        });
+    }
+
+    /// A single-edit batch round-trips through undo/redo.
+    #[gpui::test]
+    fn test_replace_text_in_ranges_single_edit(cx: &mut TestAppContext) {
+        let input_view = InputView::build_textarea(cx, |state| state.default_value("hello world"));
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |s, cx| {
+                s.replace_text_in_ranges(&[(0..5, "HELLO".to_string())], window, cx);
+                assert_eq!(s.value(), "HELLO world");
+
+                s.undo(&Undo, window, cx);
+                assert_eq!(s.value(), "hello world");
+
+                s.redo(&Redo, window, cx);
+                assert_eq!(s.value(), "HELLO world");
+            });
+        });
+    }
+
+    /// A single undo restores the exact original text and a single redo
+    /// re-applies all edits, verifying the back-to-front application ordering.
+    #[gpui::test]
+    fn test_replace_text_in_ranges_multi_edit_transaction(cx: &mut TestAppContext) {
+        let input_view = InputView::build_textarea(cx, |state| state.default_value("aaa bbb ccc"));
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |s, cx| {
+                // Two edits at different positions, given in pre-edit
+                // coordinates and in arbitrary (non-sorted) order.
+                s.replace_text_in_ranges(
+                    &[(0..3, "X".to_string()), (8..11, "Y".to_string())],
+                    window,
+                    cx,
+                );
+                assert_eq!(s.value(), "X bbb Y");
+
+                // One collapsed cursor per edit, at the end of each inserted text.
+                let cursors: Vec<usize> =
+                    s.selections.iter().map(|sel| sel.cursor_offset()).collect();
+                assert_eq!(cursors, vec![1, 7]);
+
+                // The whole batch is a single undo transaction.
+                assert_eq!(s.undo_manager.undo_count(), 1);
+
+                // One undo restores the exact original text.
+                s.undo(&Undo, window, cx);
+                assert_eq!(s.value(), "aaa bbb ccc");
+
+                // One redo re-applies all edits.
+                s.redo(&Redo, window, cx);
+                assert_eq!(s.value(), "X bbb Y");
+            });
+        });
+    }
+
+    /// An IME composition (marking then commit) undoes as a single unit.
+    #[gpui::test]
+    fn test_ime_composition_undoes_as_one_unit(cx: &mut TestAppContext) {
+        let input_view = InputView::build_textarea(cx, |state| state.default_value(""));
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |s, cx| {
+                // Simulate an IME composition: mark, refine, then commit.
+                s.replace_and_mark_text_in_range(None, "n", Some(1..1), window, cx);
+                s.replace_and_mark_text_in_range(None, "ni", Some(2..2), window, cx);
+                s.replace_text_in_range(None, "你", window, cx);
+                assert_eq!(s.value(), "你");
+
+                // The entire composition is one undo transaction.
+                assert_eq!(s.undo_manager.undo_count(), 1);
+
+                s.undo(&Undo, window, cx);
+                assert_eq!(s.value(), "");
+
+                s.redo(&Redo, window, cx);
+                assert_eq!(s.value(), "你");
+            });
+        });
+    }
+
+    /// A keystroke right after a committed composition must be its own undo
+    /// entry, not merged into the (finalized) composition transaction.
+    #[gpui::test]
+    fn test_edit_after_composition_is_separate_undo(cx: &mut TestAppContext) {
+        let input_view = InputView::build_textarea(cx, |state| state.default_value(""));
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |s, cx| {
+                s.replace_and_mark_text_in_range(None, "n", Some(1..1), window, cx);
+                s.replace_text_in_range(None, "你", window, cx);
+                assert_eq!(s.value(), "你");
+                assert_eq!(s.undo_manager.undo_count(), 1);
+
+                // Typing after the commit is a distinct transaction.
+                s.replace_text_in_range(None, "x", window, cx);
+                assert_eq!(s.value(), "你x");
+                assert_eq!(s.undo_manager.undo_count(), 2);
+
+                s.undo(&Undo, window, cx);
+                assert_eq!(s.value(), "你");
+                s.undo(&Undo, window, cx);
+                assert_eq!(s.value(), "");
+            });
+        });
+    }
+
+    /// Canceling a composition via `unmark_text` closes its transaction so it
+    /// does not leak and swallow a later edit.
+    #[gpui::test]
+    fn test_composition_cancel_via_unmark_does_not_leak(cx: &mut TestAppContext) {
+        let input_view = InputView::build_textarea(cx, |state| state.default_value(""));
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |s, cx| {
+                // Start a composition, then cancel it via unmark.
+                s.replace_and_mark_text_in_range(None, "n", Some(1..1), window, cx);
+                s.unmark_text(window, cx);
+                let after_cancel = s.undo_manager.undo_count();
+
+                // A later edit is recorded independently.
+                s.replace_text_in_range(None, "x", window, cx);
+                assert_eq!(s.undo_manager.undo_count(), after_cancel + 1);
             });
         });
     }

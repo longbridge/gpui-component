@@ -1,5 +1,7 @@
 use crate::input::change::Change;
 
+use super::cursor::CursorSelection;
+
 const MAX_UNDO_TRANSACTIONS: usize = 1000;
 const MAX_CHANGES_PER_TRANSACTION: usize = 1000;
 
@@ -19,6 +21,10 @@ struct UndoTransaction {
     /// is one logical edit with one change per cursor. Only a following batch
     /// of the same length can coalesce into this transaction.
     last_batch_len: usize,
+    /// The cursors as they stood before this transaction, restored on undo.
+    selections_before: Option<Vec<CursorSelection>>,
+    /// The cursors as they stood after it, restored on redo.
+    selections_after: Option<Vec<CursorSelection>>,
 }
 
 /// A batch of changes being collected between `begin_transaction` and the
@@ -27,6 +33,15 @@ struct UndoTransaction {
 struct PendingTransaction {
     intent: EditIntent,
     changes: Vec<Change>,
+    selections_before: Option<Vec<CursorSelection>>,
+    selections_after: Option<Vec<CursorSelection>>,
+}
+
+/// One transaction handed back to be replayed, with the cursors to restore
+/// once the changes have been applied.
+pub(crate) struct Replay {
+    pub(super) changes: Vec<Change>,
+    pub(super) selections: Option<Vec<CursorSelection>>,
 }
 
 /// Coordinates undo and redo as explicit editing transactions.
@@ -72,19 +87,20 @@ impl UndoManager {
         self.pending_intent = Some(intent);
     }
 
-    pub(super) fn record_transaction(&mut self, change: Change, intent: EditIntent) {
+    pub(super) fn record_transaction(&mut self, change: Change, intent: EditIntent) -> bool {
         if self.ignoring {
-            return;
+            return false;
         }
         if change.old_range == change.new_range && change.old_text == change.new_text {
             self.break_transaction_coalescing();
-            return;
+            return false;
         }
 
         match self.pending.as_mut() {
             Some(pending) => pending.changes.push(change),
             None => self.push_batch(vec![change], intent),
         }
+        true
     }
 
     /// Open a transaction whose changes commit as one atomic undo entry.
@@ -104,6 +120,8 @@ impl UndoManager {
             self.pending = Some(PendingTransaction {
                 intent,
                 changes: Vec::new(),
+                selections_before: None,
+                selections_after: None,
             });
         }
     }
@@ -127,6 +145,12 @@ impl UndoManager {
             return;
         }
         self.push_batch(pending.changes, pending.intent);
+        if let Some(before) = pending.selections_before {
+            self.record_selections_before(before);
+        }
+        if let Some(after) = pending.selections_after {
+            self.record_selections_after(after);
+        }
     }
 
     /// Push one logical edit, which is one or more changes in application
@@ -163,8 +187,48 @@ impl UndoManager {
             intent,
             last_batch_len: changes.len(),
             changes,
+            selections_before: None,
+            selections_after: None,
         });
         self.coalescing_boundary = intent == EditIntent::Atomic;
+    }
+
+    /// Record the cursors around the transaction being built, or around the
+    /// most recent one when no bracket is open.
+    ///
+    /// A transaction keeps the cursors it was entered with, so a coalescing
+    /// burst of keystrokes still undoes to where the burst began.
+    pub(super) fn record_selections(
+        &mut self,
+        before: Vec<CursorSelection>,
+        after: Vec<CursorSelection>,
+    ) {
+        if self.ignoring {
+            return;
+        }
+        self.record_selections_before(before);
+        self.record_selections_after(after);
+    }
+
+    fn record_selections_before(&mut self, before: Vec<CursorSelection>) {
+        if let Some(pending) = self.pending.as_mut() {
+            pending.selections_before.get_or_insert(before);
+        } else if let Some(transaction) = self.undo_transactions.last_mut() {
+            transaction.selections_before.get_or_insert(before);
+        }
+    }
+
+    fn record_selections_after(&mut self, after: Vec<CursorSelection>) {
+        if let Some(pending) = self.pending.as_mut() {
+            pending.selections_after = Some(after);
+        } else if let Some(transaction) = self.undo_transactions.last_mut() {
+            transaction.selections_after = Some(after);
+        }
+    }
+
+    /// True while a `begin_transaction` bracket is collecting changes.
+    pub(super) fn has_open_transaction(&self) -> bool {
+        self.transaction_depth > 0
     }
 
     pub(super) fn break_transaction_coalescing(&mut self) {
@@ -205,27 +269,38 @@ impl UndoManager {
         self.coalescing_boundary = false;
     }
 
-    pub(super) fn undo(&mut self) -> Option<Vec<Change>> {
+    pub(super) fn undo(&mut self) -> Option<Replay> {
         self.commit_all_transactions();
         let transaction = self.undo_transactions.pop()?;
-        let changes = transaction.changes.iter().rev().cloned().collect();
+        let replay = Replay {
+            changes: transaction.changes.iter().rev().cloned().collect(),
+            selections: transaction.selections_before.clone(),
+        };
         self.redo_transactions.push(transaction);
         self.coalescing_boundary = true;
-        Some(changes)
+        Some(replay)
     }
 
-    pub(super) fn redo(&mut self) -> Option<Vec<Change>> {
+    pub(super) fn redo(&mut self) -> Option<Replay> {
         self.commit_all_transactions();
         let transaction = self.redo_transactions.pop()?;
-        let changes = transaction.changes.clone();
+        let replay = Replay {
+            changes: transaction.changes.clone(),
+            selections: transaction.selections_after.clone(),
+        };
         self.undo_transactions.push(transaction);
         self.coalescing_boundary = true;
-        Some(changes)
+        Some(replay)
     }
 
     #[cfg(test)]
     pub(super) fn has_undos(&self) -> bool {
         !self.undo_transactions.is_empty()
+    }
+
+    #[cfg(test)]
+    pub(super) fn undo_count(&self) -> usize {
+        self.undo_transactions.len()
     }
 }
 
@@ -264,12 +339,27 @@ fn is_noop_batch(changes: &[Change]) -> bool {
 
 /// True when every change in `current` continues the change at the same
 /// position in `previous`, so the two batches are one editing gesture.
+///
+/// A batch applies from the highest offset down, so each of its changes is
+/// still to be shifted by the ones that follow it before the next batch, made
+/// against the settled document, can line up with it.
 fn is_adjacent_batch(intent: EditIntent, previous: &[Change], current: &[Change]) -> bool {
-    previous.len() == current.len()
-        && previous
-            .iter()
-            .zip(current)
-            .all(|(previous, current)| is_adjacent(intent, previous, current))
+    if previous.len() != current.len() {
+        return false;
+    }
+
+    let mut shifts = vec![0isize; previous.len()];
+    let mut shift = 0isize;
+    for (index, change) in previous.iter().enumerate().rev() {
+        shifts[index] = shift;
+        shift += change.new_text.len() as isize - change.old_text.len() as isize;
+    }
+
+    previous
+        .iter()
+        .zip(current)
+        .zip(shifts)
+        .all(|((previous, current), shift)| is_adjacent(intent, &previous.shifted(shift), current))
 }
 
 fn is_adjacent(intent: EditIntent, previous: &Change, current: &Change) -> bool {
@@ -301,14 +391,7 @@ mod tests {
 
     fn typing_change(offset: usize, text: &str) -> Change {
         let end = offset + text.len();
-        Change::new(
-            offset..offset,
-            "",
-            offset..end,
-            text,
-            (offset..offset).into(),
-            (end..end).into(),
-        )
+        Change::new(offset..offset, "", offset..end, text)
     }
 
     #[test]
@@ -317,7 +400,7 @@ mod tests {
         manager.record_transaction(typing_change(0, "a"), EditIntent::Typing);
         manager.record_transaction(typing_change(1, "b"), EditIntent::Typing);
 
-        assert_eq!(manager.undo().unwrap().len(), 2);
+        assert_eq!(manager.undo().unwrap().changes.len(), 2);
         assert!(manager.undo().is_none());
     }
 
@@ -331,7 +414,7 @@ mod tests {
 
         // One undo entry that replays its changes in reverse application
         // order.
-        let transaction = manager.undo().unwrap();
+        let transaction = manager.undo().unwrap().changes;
         assert_eq!(transaction.len(), 2);
         assert_eq!(transaction[0].new_text, "b");
         assert_eq!(transaction[1].new_text, "a");
@@ -351,7 +434,7 @@ mod tests {
         manager.record_transaction(typing_change(2, "c"), EditIntent::Typing);
         manager.commit_transaction();
 
-        assert_eq!(manager.undo().unwrap().len(), 3);
+        assert_eq!(manager.undo().unwrap().changes.len(), 3);
         assert!(manager.undo().is_none());
     }
 
@@ -360,16 +443,18 @@ mod tests {
         let mut manager = UndoManager::new();
 
         // Two cursors typing "a" then "b", as a multi-cursor keystroke burst.
+        // A batch applies from the highest offset down, and the second burst
+        // sees the offsets the first one left behind.
         manager.begin_transaction_with(EditIntent::Typing);
-        manager.record_transaction(typing_change(0, "a"), EditIntent::Typing);
         manager.record_transaction(typing_change(5, "a"), EditIntent::Typing);
+        manager.record_transaction(typing_change(0, "a"), EditIntent::Typing);
         manager.commit_transaction();
         manager.begin_transaction_with(EditIntent::Typing);
+        manager.record_transaction(typing_change(7, "b"), EditIntent::Typing);
         manager.record_transaction(typing_change(1, "b"), EditIntent::Typing);
-        manager.record_transaction(typing_change(6, "b"), EditIntent::Typing);
         manager.commit_transaction();
 
-        assert_eq!(manager.undo().unwrap().len(), 4);
+        assert_eq!(manager.undo().unwrap().changes.len(), 4);
         assert!(manager.undo().is_none());
     }
 
@@ -378,14 +463,14 @@ mod tests {
         let mut manager = UndoManager::new();
 
         manager.begin_transaction_with(EditIntent::Typing);
-        manager.record_transaction(typing_change(0, "a"), EditIntent::Typing);
         manager.record_transaction(typing_change(5, "a"), EditIntent::Typing);
+        manager.record_transaction(typing_change(0, "a"), EditIntent::Typing);
         manager.commit_transaction();
         // One cursor left: a single change cannot continue a two-cursor batch.
         manager.record_transaction(typing_change(1, "b"), EditIntent::Typing);
 
-        assert_eq!(manager.undo().unwrap().len(), 1);
-        assert_eq!(manager.undo().unwrap().len(), 2);
+        assert_eq!(manager.undo().unwrap().changes.len(), 1);
+        assert_eq!(manager.undo().unwrap().changes.len(), 2);
     }
 
     #[test]
@@ -397,8 +482,8 @@ mod tests {
         manager.commit_transaction();
         manager.record_transaction(typing_change(1, "b"), EditIntent::Typing);
 
-        assert_eq!(manager.undo().unwrap().len(), 1);
-        assert_eq!(manager.undo().unwrap().len(), 1);
+        assert_eq!(manager.undo().unwrap().changes.len(), 1);
+        assert_eq!(manager.undo().unwrap().changes.len(), 1);
     }
 
     #[test]
@@ -423,8 +508,11 @@ mod tests {
             manager.record_transaction(typing_change(offset, "a"), EditIntent::Typing);
         }
 
-        assert_eq!(manager.undo().unwrap().len(), 100);
-        assert_eq!(manager.undo().unwrap().len(), MAX_CHANGES_PER_TRANSACTION);
+        assert_eq!(manager.undo().unwrap().changes.len(), 100);
+        assert_eq!(
+            manager.undo().unwrap().changes.len(),
+            MAX_CHANGES_PER_TRANSACTION
+        );
         assert!(manager.undo().is_none());
     }
 }
