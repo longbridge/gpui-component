@@ -201,11 +201,11 @@ TextSelection::clear(window, cx); // Clear window and participant-local ranges.
 
 ## Advanced participant adapters
 
-Plain text usually needs only `refresh` and `update_runs`. Rich or virtualized participants can configure additional behavior directly on the handle:
+Plain text usually needs only `refresh_window_on_change` and `update_runs`. Rich or virtualized participants can configure additional behavior directly on the handle:
 
 | Method | Use |
 | --- | --- |
-| `refresh` | Redraw only the owning window when this handle's selection changes. |
+| `refresh_window_on_change` | Redraw only the owning window when this handle's selection changes. |
 | `subscribe` | Receive `TextSelectionEvent` values for selection changes, clearing, and auto-scroll. |
 | `copy_with` | Export source text or include virtualized content that is not currently painted. |
 | `set_fallback_copy_text` | Replace the participant's fallback copy text. |
