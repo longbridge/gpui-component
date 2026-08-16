@@ -256,7 +256,7 @@ impl BaseShowcase {
         ];
         let text_selection_scroll = ScrollHandle::new();
         for selection in &text_selection_handles {
-            selection.refresh(window, cx);
+            selection.refresh_window_on_change(window, cx).detach();
             let view = cx.entity().downgrade();
             selection
                 .subscribe(

@@ -726,8 +726,9 @@ impl TextSelectionHandle {
         cx.subscribe(&self.0, move |_, event, cx| callback(event, cx))
     }
 
-    /// Refreshes only `window` whenever this participant's selection changes.
-    pub fn refresh(&self, window: &Window, cx: &mut App) {
+    /// Subscribes `window` to refresh whenever this participant's selection changes.
+    #[must_use = "retain the subscription or explicitly detach it"]
+    pub fn refresh_window_on_change(&self, window: &Window, cx: &mut App) -> Subscription {
         let window = window.window_handle();
         self.subscribe(
             move |event, cx| {
@@ -737,7 +738,6 @@ impl TextSelectionHandle {
             },
             cx,
         )
-        .detach();
     }
 
     /// Sets the callback which focuses the participant when a drag begins in it.
@@ -2319,13 +2319,13 @@ mod tests {
     }
 
     #[gpui::test]
-    fn selection_handle_can_refresh_only_its_window(cx: &mut TestAppContext) {
+    fn selection_handle_can_subscribe_its_window_to_refresh(cx: &mut TestAppContext) {
         let (_, cx) = cx.add_window_view(|_, cx| WindowSelectionView {
             selection: TextSelectionHandle::new("refresh", cx),
         });
         cx.update(|window, cx| {
             let selection = TextSelectionHandle::new("refresh", cx);
-            selection.refresh(window, cx);
+            selection.refresh_window_on_change(window, cx).detach();
         });
     }
 

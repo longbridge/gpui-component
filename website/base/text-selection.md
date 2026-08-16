@@ -83,24 +83,28 @@ impl Render for AppView {
 Create one handle for the semantic lifetime of the participant. Do not create a new handle every frame.
 
 ```rust
-use gpui::{Context, Window};
+use gpui::{Context, Subscription, Window};
 use gpui_base::TextSelectionHandle;
 
 struct DocumentView {
     selection: TextSelectionHandle,
+    _selection_refresh: Subscription,
 }
 
 impl DocumentView {
     fn new(window: &Window, cx: &mut Context<Self>) -> Self {
         let selection = TextSelectionHandle::new("", cx);
-        selection.refresh(window, cx);
+        let selection_refresh = selection.refresh_window_on_change(window, cx);
 
-        Self { selection }
+        Self {
+            selection,
+            _selection_refresh: selection_refresh,
+        }
     }
 }
 ```
 
-`refresh` redraws only the owning window when this handle's selection changes. Use `subscribe` instead when the participant needs events or more targeted invalidation.
+`refresh_window_on_change` redraws only the owning window when this handle's selection changes. Retain the returned subscription for as long as the participant is rendered, or explicitly call `.detach()` when the subscription should live for the rest of the participant entity's lifetime. Use `subscribe` instead when the participant needs events or more targeted invalidation.
 
 The `fallback_copy_text` passed to `TextSelectionHandle::new` is used until the participant projects laid-out runs or supplies custom copy behavior. Use `set_fallback_copy_text` to replace it.
 
