@@ -2,7 +2,11 @@ use std::{cell::Cell, ops::Deref, panic::Location, rc::Rc};
 
 use instant::{Duration, Instant};
 
-use crate::{AxisExt, theme::ActiveTheme as _};
+use crate::{
+    AxisExt,
+    animation::{ease_in_cubic, ease_out_cubic},
+    theme::ActiveTheme as _,
+};
 use gpui::{
     Anchor, App, Axis, Background, BorderStyle, Bounds, ContentMask, CursorStyle, Edges, Element,
     ElementId, GlobalElementId, Hitbox, HitboxBehavior, Hsla, InspectorElementId, IntoElement,
@@ -25,6 +29,9 @@ const THUMB_ACTIVE_WIDTH: Pixels = px(8.);
 const THUMB_ACTIVE_RADIUS: Pixels = Pixels::ZERO;
 const THUMB_ACTIVE_INSET: Pixels = px(4.);
 
+const IDLE_DURATION: Duration = Duration::from_secs(2);
+const ENTER_DURATION: Duration = Duration::from_millis(150);
+const EXIT_DURATION: Duration = Duration::from_millis(250);
 const FADE_OUT_DURATION: f32 = 3.0;
 const FADE_OUT_DELAY: f32 = 2.0;
 
@@ -151,10 +158,12 @@ struct ScrollbarStateInner {
     // Last update offset
     last_update: Instant,
     idle_timer_scheduled: bool,
+    visibility: VisibilityAnimation,
 }
 
 impl Default for ScrollbarState {
     fn default() -> Self {
+        let now = Instant::now();
         Self(Rc::new(Cell::new(ScrollbarStateInner {
             hovered_axis: None,
             hovered_on_thumb: None,
@@ -162,9 +171,87 @@ impl Default for ScrollbarState {
             drag_pos: point(px(0.), px(0.)),
             last_scroll_offset: point(px(0.), px(0.)),
             last_scroll_time: None,
-            last_update: Instant::now(),
+            last_update: now,
             idle_timer_scheduled: false,
+            visibility: VisibilityAnimation::hidden(now),
         })))
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct VisibilityAnimation {
+    from: f32,
+    target: f32,
+    started_at: Instant,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct VisibilitySample {
+    progress: f32,
+    running: bool,
+}
+
+impl VisibilityAnimation {
+    fn hidden(now: Instant) -> Self {
+        Self {
+            from: 0.0,
+            target: 0.0,
+            started_at: now,
+        }
+    }
+
+    fn sample(&self, now: Instant) -> VisibilitySample {
+        let distance = (self.target - self.from).abs();
+        if distance == 0.0 {
+            return VisibilitySample {
+                progress: self.target,
+                running: false,
+            };
+        }
+
+        let full_duration = if self.target > self.from {
+            ENTER_DURATION
+        } else {
+            EXIT_DURATION
+        };
+        let duration = full_duration.mul_f32(distance);
+        let linear =
+            now.saturating_duration_since(self.started_at).as_secs_f32() / duration.as_secs_f32();
+        let complete = linear >= 1.0;
+        let eased = if self.target > self.from {
+            ease_out_cubic(linear)
+        } else {
+            ease_in_cubic(linear)
+        };
+
+        VisibilitySample {
+            progress: if complete {
+                self.target
+            } else {
+                self.from + (self.target - self.from) * eased
+            },
+            running: !complete,
+        }
+    }
+
+    fn set_visible(&mut self, visible: bool, now: Instant) {
+        let target = if visible { 1.0 } else { 0.0 };
+        if self.target == target {
+            return;
+        }
+
+        self.from = self.sample(now).progress;
+        self.target = target;
+        self.started_at = now;
+    }
+}
+
+fn visibility_translation(axis: Axis, track_width: Pixels, progress: f32) -> Point<Pixels> {
+    let offset = track_width * (1.0 - progress.clamp(0.0, 1.0));
+    if axis.is_vertical() {
+        point(offset, px(0.))
+    } else {
+        point(px(0.), offset)
     }
 }
 
@@ -1346,6 +1433,64 @@ mod tests {
         assert_eq!(
             clamp_thumb_radius(Pixels::ZERO, vertical_thumb),
             Pixels::ZERO
+        );
+    }
+
+    #[test]
+    fn visibility_animation_uses_direction_specific_curves_and_durations() {
+        let start = Instant::now();
+        let mut animation = VisibilityAnimation::hidden(start);
+
+        animation.set_visible(true, start);
+        assert_eq!(animation.sample(start).progress, 0.0);
+        let entering = animation.sample(start + ENTER_DURATION / 2).progress;
+        assert!(entering > 0.5, "ease-out must advance quickly");
+        assert_eq!(animation.sample(start + ENTER_DURATION).progress, 1.0);
+
+        animation.set_visible(false, start + ENTER_DURATION);
+        let exiting = animation
+            .sample(start + ENTER_DURATION + EXIT_DURATION / 2)
+            .progress;
+        assert!(exiting > 0.5, "ease-in must remain visible early in exit");
+        assert_eq!(
+            animation
+                .sample(start + ENTER_DURATION + EXIT_DURATION)
+                .progress,
+            0.0
+        );
+    }
+
+    #[test]
+    fn visibility_translation_moves_toward_the_nearest_edge() {
+        assert_eq!(
+            visibility_translation(Axis::Vertical, px(16.), 0.0),
+            point(px(16.), px(0.))
+        );
+        assert_eq!(
+            visibility_translation(Axis::Horizontal, px(16.), 0.0),
+            point(px(0.), px(16.))
+        );
+        assert_eq!(
+            visibility_translation(Axis::Vertical, px(16.), 1.0),
+            Point::default()
+        );
+    }
+
+    #[test]
+    fn visibility_animation_reverses_from_current_progress() {
+        let start = Instant::now();
+        let mut animation = VisibilityAnimation::hidden(start);
+        animation.set_visible(true, start);
+        let reversal_time = start + Duration::from_millis(60);
+        let before = animation.sample(reversal_time).progress;
+
+        animation.set_visible(false, reversal_time);
+        assert_eq!(animation.sample(reversal_time).progress, before);
+        assert!(
+            animation
+                .sample(reversal_time + Duration::from_millis(10))
+                .progress
+                < before
         );
     }
 
