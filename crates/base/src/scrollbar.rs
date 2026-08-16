@@ -32,8 +32,6 @@ const THUMB_ACTIVE_INSET: Pixels = px(4.);
 const IDLE_DURATION: Duration = Duration::from_secs(2);
 const ENTER_DURATION: Duration = Duration::from_millis(150);
 const EXIT_DURATION: Duration = Duration::from_millis(250);
-const FADE_OUT_DURATION: f32 = 3.0;
-const FADE_OUT_DELAY: f32 = 2.0;
 
 fn clamp_thumb_radius(radius: Pixels, bounds: Bounds<Pixels>) -> Pixels {
     radius
@@ -255,6 +253,19 @@ fn visibility_translation(axis: Axis, track_width: Pixels, progress: f32) -> Poi
     }
 }
 
+fn wants_visible(
+    mode: ScrollbarMode,
+    is_hovered: bool,
+    is_dragging: bool,
+    last_scroll_time: Option<Instant>,
+    now: Instant,
+) -> bool {
+    mode.is_always()
+        || is_dragging
+        || (mode.is_hover() && is_hovered)
+        || last_scroll_time.is_some_and(|last| now.saturating_duration_since(last) < IDLE_DURATION)
+}
+
 impl Deref for ScrollbarState {
     type Target = Rc<Cell<ScrollbarStateInner>>;
 
@@ -276,9 +287,10 @@ impl ScrollbarStateInner {
         state
     }
 
-    fn with_unset_drag_pos(&self) -> Self {
+    fn with_unset_drag_pos(&self, now: Instant) -> Self {
         let mut state = *self;
         state.dragged_axis = None;
+        state.last_scroll_time = Some(now);
         state
     }
 
@@ -313,12 +325,6 @@ impl ScrollbarStateInner {
         state
     }
 
-    fn with_last_scroll_time(&self, t: Option<Instant>) -> Self {
-        let mut state = *self;
-        state.last_scroll_time = t;
-        state
-    }
-
     fn with_last_update(&self, t: Instant) -> Self {
         let mut state = *self;
         state.last_update = t;
@@ -332,17 +338,7 @@ impl ScrollbarStateInner {
     }
 
     fn is_scrollbar_visible(&self) -> bool {
-        // On drag
-        if self.dragged_axis.is_some() {
-            return true;
-        }
-
-        if let Some(last_time) = self.last_scroll_time {
-            let elapsed = Instant::now().duration_since(last_time).as_secs_f32();
-            elapsed < FADE_OUT_DURATION
-        } else {
-            false
-        }
+        self.dragged_axis.is_some() || self.visibility.sample(Instant::now()).progress > 0.0
     }
 }
 
@@ -731,14 +727,6 @@ impl Scrollbar {
         )
     }
 
-    fn normal_thumb_background(&self, cx: &App) -> Background {
-        self.styles
-            .thumb
-            .background
-            .or(cx.theme().scrollbar.styles.thumb.background)
-            .unwrap_or_else(|| gpui::black().alpha(0.35).into())
-    }
-
     fn thumb_defaults(
         background: Background,
         width: Pixels,
@@ -854,31 +842,6 @@ impl Scrollbar {
         );
         (thumb, track, border, width, inset, radius, min_length)
     }
-
-    fn style_for_idle(&self, cx: &App) -> (Background, Hsla, Hsla, Pixels, Pixels, Pixels, Pixels) {
-        let global = cx.theme().scrollbar.styles;
-        let mode = self.mode.unwrap_or_else(|| cx.theme().scrollbar.mode);
-        let (width, inset, radius) = match mode {
-            ScrollbarMode::Scrolling => (THUMB_WIDTH, THUMB_INSET, THUMB_RADIUS),
-            _ => (THUMB_ACTIVE_WIDTH, THUMB_ACTIVE_INSET, THUMB_ACTIVE_RADIUS),
-        };
-
-        let (_, width, inset, radius, min_length) = self.resolve_thumb(
-            cx,
-            &self.styles.thumb,
-            &global.thumb,
-            Self::thumb_defaults(gpui::transparent_black().into(), width, inset, radius),
-        );
-        (
-            gpui::transparent_black().into(),
-            gpui::transparent_black(),
-            gpui::transparent_black(),
-            width,
-            inset,
-            radius,
-            min_length,
-        )
-    }
 }
 
 impl IntoElement for Scrollbar {
@@ -912,6 +875,7 @@ pub struct AxisPrepaintState {
     container_size: Pixels,
     thumb_size: Pixels,
     margin_end: Pixels,
+    visibility_progress: f32,
 }
 
 impl Element for Scrollbar {
@@ -961,6 +925,57 @@ impl Element for Scrollbar {
             .use_state(cx, |_, _| ScrollbarState::default())
             .read(cx)
             .clone();
+
+        let now = Instant::now();
+        let mode = self.mode.unwrap_or(cx.theme().scrollbar.mode);
+        let mut inner = state.get();
+        let current_offset = self.scroll_handle.offset();
+        if current_offset != inner.last_scroll_offset {
+            inner = inner.with_last_scroll(current_offset, Some(now));
+        }
+
+        let is_hovered = inner.hovered_axis.is_some() || inner.hovered_on_thumb.is_some();
+        let is_dragging = inner.dragged_axis.is_some();
+        let visible = wants_visible(mode, is_hovered, is_dragging, inner.last_scroll_time, now);
+        let visibility = if mode.is_always() || cx.reduce_motion() {
+            let progress = if visible { 1.0 } else { 0.0 };
+            inner.visibility = VisibilityAnimation {
+                from: progress,
+                target: progress,
+                started_at: now,
+            };
+            VisibilitySample {
+                progress,
+                running: false,
+            }
+        } else {
+            inner.visibility.set_visible(visible, now);
+            inner.visibility.sample(now)
+        };
+
+        if visibility.running {
+            window.request_animation_frame();
+        }
+
+        if !mode.is_always() && !is_hovered && !is_dragging {
+            if let Some(last_time) = inner.last_scroll_time {
+                let elapsed = now.saturating_duration_since(last_time);
+                if elapsed < IDLE_DURATION && !inner.idle_timer_scheduled {
+                    inner.idle_timer_scheduled = true;
+                    let state = state.clone();
+                    let current_view = window.current_view();
+                    let next_delay = IDLE_DURATION - elapsed;
+                    window
+                        .spawn(cx, async move |cx| {
+                            cx.background_executor().timer(next_delay).await;
+                            state.set(state.get().with_idle_timer_scheduled(false));
+                            cx.update(|_, cx| cx.notify(current_view)).ok();
+                        })
+                        .detach();
+                }
+            }
+        }
+        state.set(inner);
 
         let mut states = vec![];
         let mut has_both = self.axis.is_both();
@@ -1029,12 +1044,10 @@ impl Element for Scrollbar {
                 },
             };
 
-            let mode = self.mode.unwrap_or(cx.theme().scrollbar.mode);
             let is_always_to_show = mode.is_always();
             let is_hover_to_show = mode.is_hover();
             let is_hovered_on_bar = state.get().hovered_axis == Some(axis);
             let is_hovered_on_thumb = state.get().hovered_on_thumb == Some(axis);
-            let is_offset_changed = state.get().last_scroll_offset != self.scroll_handle.offset();
 
             let (thumb_bg, bar_bg, bar_border, thumb_width, inset, radius, min_length) =
                 if state.get().dragged_axis == Some(axis) {
@@ -1045,8 +1058,6 @@ impl Element for Scrollbar {
                     } else {
                         self.style_for_hovered_bar(cx)
                     }
-                } else if is_offset_changed {
-                    self.style_for_normal(cx)
                 } else if is_always_to_show {
                     if is_hovered_on_thumb {
                         self.style_for_hovered_thumb(cx)
@@ -1054,42 +1065,7 @@ impl Element for Scrollbar {
                         self.style_for_hovered_bar(cx)
                     }
                 } else {
-                    let mut idle_state = self.style_for_idle(cx);
-                    // Delay 2s to fade out the scrollbar thumb (in 1s)
-                    if let Some(last_time) = state.get().last_scroll_time {
-                        let elapsed = Instant::now().duration_since(last_time).as_secs_f32();
-                        if is_hovered_on_bar {
-                            state.set(state.get().with_last_scroll_time(Some(Instant::now())));
-                            idle_state = if is_hovered_on_thumb {
-                                self.style_for_hovered_thumb(cx)
-                            } else {
-                                self.style_for_hovered_bar(cx)
-                            };
-                        } else if elapsed < FADE_OUT_DELAY {
-                            idle_state.0 = self.normal_thumb_background(cx);
-
-                            if !state.get().idle_timer_scheduled {
-                                let state = state.clone();
-                                state.set(state.get().with_idle_timer_scheduled(true));
-                                let current_view = window.current_view();
-                                let next_delay = Duration::from_secs_f32(FADE_OUT_DELAY - elapsed);
-                                window
-                                    .spawn(cx, async move |cx| {
-                                        cx.background_executor().timer(next_delay).await;
-                                        state.set(state.get().with_idle_timer_scheduled(false));
-                                        cx.update(|_, cx| cx.notify(current_view)).ok();
-                                    })
-                                    .detach();
-                            }
-                        } else if elapsed < FADE_OUT_DURATION {
-                            let opacity = 1.0 - (elapsed - FADE_OUT_DELAY).powi(10);
-                            idle_state.0 = self.normal_thumb_background(cx).opacity(opacity);
-
-                            window.request_animation_frame();
-                        }
-                    }
-
-                    idle_state
+                    self.style_for_normal(cx)
                 };
 
             let thumb_size = (container_size / scroll_area_size * container_size).max(min_length);
@@ -1146,6 +1122,7 @@ impl Element for Scrollbar {
                 container_size,
                 thumb_size: thumb_length,
                 margin_end,
+                visibility_progress: visibility.progress,
             })
         }
 
@@ -1173,16 +1150,6 @@ impl Element for Scrollbar {
         let hitbox_bounds = prepaint.hitbox.bounds;
         let is_visible = scrollbar_state.get().is_scrollbar_visible() || mode.is_always();
         let is_hover_to_show = mode.is_hover();
-
-        // Update last_scroll_time when offset is changed.
-        if self.scroll_handle.offset() != scrollbar_state.get().last_scroll_offset {
-            scrollbar_state.set(
-                scrollbar_state
-                    .get()
-                    .with_last_scroll(self.scroll_handle.offset(), Some(Instant::now())),
-            );
-            cx.notify(view_id);
-        }
 
         window.with_content_mask(
             Some(ContentMask {
@@ -1401,7 +1368,7 @@ impl Element for Scrollbar {
                         move |_event: &MouseUpEvent, phase, _, cx| {
                             if phase.bubble() {
                                 scroll_handle.end_drag();
-                                state.set(state.get().with_unset_drag_pos());
+                                state.set(state.get().with_unset_drag_pos(Instant::now()));
                                 cx.notify(view_id);
                             }
                         }
@@ -1492,6 +1459,44 @@ mod tests {
                 .progress
                 < before
         );
+    }
+
+    #[test]
+    fn always_hover_drag_and_recent_scroll_request_visibility() {
+        let now = Instant::now();
+        assert!(wants_visible(
+            ScrollbarMode::Always,
+            false,
+            false,
+            None,
+            now
+        ));
+        assert!(wants_visible(ScrollbarMode::Hover, true, false, None, now));
+        assert!(wants_visible(
+            ScrollbarMode::Scrolling,
+            false,
+            true,
+            None,
+            now
+        ));
+        assert!(wants_visible(
+            ScrollbarMode::Scrolling,
+            false,
+            false,
+            Some(now - IDLE_DURATION + Duration::from_millis(1)),
+            now,
+        ));
+        assert!(!wants_visible(
+            ScrollbarMode::Scrolling,
+            false,
+            false,
+            Some(now - IDLE_DURATION),
+            now,
+        ));
+
+        let mut settled = VisibilityAnimation::hidden(now - ENTER_DURATION);
+        settled.set_visible(true, now - ENTER_DURATION);
+        assert!(!settled.sample(now).running, "idle hold must not animate");
     }
 
     #[derive(Clone)]
