@@ -25,6 +25,9 @@ use crate::{
 const CONTEXT: &'static str = "TextView";
 // Keep coalescing bounded so sustained streams still render intermediate updates.
 const MAX_COALESCED_UPDATES_PER_PARSE: usize = 64;
+// Preserve exact first-layout height for small documents while bounding the
+// amount of source parsed synchronously on the UI thread.
+const MAX_SYNC_FULL_REPLACE_BYTES: usize = 4 * 1024;
 
 pub(crate) fn init(cx: &mut App) {
     cx.bind_keys(vec![
@@ -88,8 +91,8 @@ pub struct TextViewState {
     pub(super) selection_adapter: TextViewSelectionAdapter,
 
     pub(super) parsed_content: ParsedContent,
-    /// Content format (markdown / html), used to parse synchronously on the
-    /// main thread for full-replace updates.
+    /// Content format (markdown / html), used for bounded synchronous parsing
+    /// of small full-replace updates.
     format: TextViewFormat,
     text: String,
     revision: usize,
@@ -332,28 +335,25 @@ impl TextViewState {
         if !append {
             self.selection_revision = self.selection_revision.wrapping_add(1);
         }
+        let parse_synchronously = !append && text.len() <= MAX_SYNC_FULL_REPLACE_BYTES;
         let update_options = UpdateOptions {
             revision: self.revision,
             append,
             mode: if append {
                 ParseMode::Compatible
-            } else {
+            } else if parse_synchronously {
                 ParseMode::BaselineAck
+            } else {
+                ParseMode::Replace
             },
             pending_text: text.to_string(),
             markdown_extensions: self.markdown_extensions.clone(),
         };
 
-        // Full-replace updates (initial content / `set_text`) parse
-        // synchronously on the main thread so the first layout already has the
-        // correct height. Otherwise parsing finishes later on a background task
-        // and the first layout sees an empty `parsed_content` (~0 height); when
-        // this `TextView` is an item inside an outer `list` with `measure_all`,
-        // off-screen items get measured at that empty height and the total
-        // content height keeps growing as items scroll into view; the scrollbar
-        // thumb jitters. Streaming appends stay async to avoid re-parsing the
-        // whole document on every chunk.
-        if !append {
+        // Keep small full replacements synchronous so their first layout has
+        // the exact content height. Larger replacements use the existing
+        // background parser, bounding synchronous parser input on the UI thread.
+        if parse_synchronously {
             match parse_content(self.format, ParsedContent::default(), &update_options) {
                 Ok(content) => {
                     self.parsed_content = content;
@@ -692,7 +692,9 @@ impl UpdateOptions {
         if next.append {
             self.pending_text.push_str(&next.pending_text);
             self.revision = next.revision;
-            self.mode = ParseMode::Compatible;
+            if self.mode != ParseMode::Replace {
+                self.mode = ParseMode::Compatible;
+            }
         } else {
             *self = next;
         }
@@ -710,6 +712,7 @@ struct ParsedUpdate {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ParseMode {
     BaselineAck,
+    Replace,
     Compatible,
 }
 
@@ -773,6 +776,78 @@ mod tests {
     use super::*;
     use crate::text::MarkdownNode;
     use gpui::TestAppContext;
+
+    #[gpui::test]
+    fn small_full_replace_parses_before_background_executor_runs(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let markdown = "# ready";
+        let state = cx.update(|cx| cx.new(|cx| TextViewState::markdown(markdown, cx)));
+
+        state.read_with(cx, |state, _| {
+            assert_eq!(state.source().as_str(), markdown);
+            assert_eq!(state.parsed_content.document.blocks.len(), 1);
+        });
+    }
+
+    #[gpui::test]
+    fn large_markdown_and_html_full_replacements_wait_for_background_executor(
+        cx: &mut TestAppContext,
+    ) {
+        cx.update(crate::init);
+        let markdown = "# x\n\n".repeat(MAX_SYNC_FULL_REPLACE_BYTES / 5 + 1);
+        let html = format!("<p>{}</p>", "x".repeat(MAX_SYNC_FULL_REPLACE_BYTES + 1));
+        assert!(markdown.len() > MAX_SYNC_FULL_REPLACE_BYTES);
+        assert!(html.len() > MAX_SYNC_FULL_REPLACE_BYTES);
+
+        let (markdown_state, html_state) = cx.update(|cx| {
+            (
+                cx.new(|cx| TextViewState::markdown(&markdown, cx)),
+                cx.new(|cx| TextViewState::html(&html, cx)),
+            )
+        });
+
+        markdown_state.read_with(cx, |state, _| {
+            assert_eq!(state.text.as_str(), markdown.as_str());
+            assert!(state.source().as_str().is_empty());
+            assert!(state.parsed_content.document.blocks.is_empty());
+        });
+        html_state.read_with(cx, |state, _| {
+            assert_eq!(state.text.as_str(), html.as_str());
+            assert!(state.source().as_str().is_empty());
+            assert!(state.parsed_content.document.blocks.is_empty());
+        });
+
+        cx.run_until_parked();
+
+        markdown_state.read_with(cx, |state, _| {
+            assert_eq!(state.source().as_str(), markdown.as_str());
+            assert!(!state.parsed_content.document.blocks.is_empty());
+        });
+        html_state.read_with(cx, |state, _| {
+            assert_eq!(state.source().as_str(), html.as_str());
+            assert!(!state.parsed_content.document.blocks.is_empty());
+        });
+    }
+
+    #[gpui::test]
+    fn async_full_replace_then_push_str_preserves_complete_source(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let state = cx.update(|cx| cx.new(|cx| TextViewState::markdown("old", cx)));
+        cx.run_until_parked();
+
+        let replacement = "x".repeat(MAX_SYNC_FULL_REPLACE_BYTES + 1);
+        let expected = format!("{replacement} tail");
+        state.update(cx, |state, cx| {
+            state.set_text(&replacement, cx);
+            state.push_str(" tail", cx);
+        });
+        cx.run_until_parked();
+
+        state.read_with(cx, |state, _| {
+            assert_eq!(state.text.as_str(), expected.as_str());
+            assert_eq!(state.source().as_str(), expected.as_str());
+        });
+    }
 
     #[gpui::test]
     fn set_text_then_push_str_appends_to_replaced_content(cx: &mut TestAppContext) {
@@ -850,6 +925,30 @@ mod tests {
         assert_eq!(options.revision, 3);
         assert_eq!(options.pending_text, "new text");
         assert!(!options.append);
+    }
+
+    #[test]
+    fn append_merged_into_async_replace_remains_a_replacement() {
+        let mut options = UpdateOptions {
+            revision: 1,
+            pending_text: "new".to_string(),
+            append: false,
+            mode: ParseMode::Replace,
+            markdown_extensions: Arc::default(),
+        };
+
+        options.merge(UpdateOptions {
+            revision: 2,
+            pending_text: " text".to_string(),
+            append: true,
+            mode: ParseMode::Compatible,
+            markdown_extensions: Arc::default(),
+        });
+
+        assert_eq!(options.revision, 2);
+        assert_eq!(options.pending_text, "new text");
+        assert!(!options.append);
+        assert_eq!(options.mode, ParseMode::Replace);
     }
 
     #[test]
