@@ -83,6 +83,8 @@ actions!(
         MoveEnd,
         MovePageUp,
         MovePageDown,
+        AddCursorAbove,
+        AddCursorBelow,
         SelectAll,
         SelectToStartOfLine,
         SelectToEndOfLine,
@@ -185,6 +187,8 @@ pub(crate) fn init(cx: &mut App) {
         KeyBinding::new("shift-right", SelectRight, Some(CONTEXT)),
         KeyBinding::new("shift-up", SelectUp, Some(CONTEXT)),
         KeyBinding::new("shift-down", SelectDown, Some(CONTEXT)),
+        KeyBinding::new("shift-alt-up", AddCursorAbove, Some(CONTEXT)),
+        KeyBinding::new("shift-alt-down", AddCursorBelow, Some(CONTEXT)),
         KeyBinding::new("home", MoveHome, Some(CONTEXT)),
         KeyBinding::new("end", MoveEnd, Some(CONTEXT)),
         KeyBinding::new("shift-home", SelectToStartOfLine, Some(CONTEXT)),
@@ -313,6 +317,8 @@ pub struct InputBaseState<M: InputModeKind> {
     pub(super) last_bounds: Option<Bounds<Pixels>>,
     pub(super) last_selected_range: Option<CursorSelection>,
     pub(super) selecting: bool,
+    /// Anchor offset for an in-progress columnar (block) selection.
+    pub(super) column_select_start: Option<usize>,
     pub(crate) disabled: bool,
     pub(crate) readonly: bool,
     pub(crate) text_align: TextAlign,
@@ -527,7 +533,7 @@ impl<M: InputModeKind> InputBaseState<M> {
     ///
     /// A masked input keeps its value out of the clipboard.
     pub fn is_copyable(&self) -> bool {
-        !self.active_selection().is_empty() && !self.masked
+        self.selections.iter().any(|sel| !sel.is_empty()) && !self.masked
     }
 
     pub fn context_menu_capabilities(&self) -> InputContextMenuCapabilities {
@@ -632,6 +638,7 @@ impl<M: InputModeKind> InputBaseState<M> {
             last_layout: None,
             last_bounds: None,
             last_selected_range: None,
+            column_select_start: None,
             last_cursor: None,
             scroll_handle: ScrollHandle::new(),
             scroll_size: gpui::size(px(0.), px(0.)),
@@ -915,6 +922,8 @@ impl<M: InputModeKind> InputBaseState<M> {
     }
 
     fn reset_selection(&mut self) {
+        self.selections.remove_all_but_active();
+
         // For single-line inputs the caret is placed at the end of the text
         // (matching HTML `<input>`); multi-line inputs reset the selection to
         // `0..0`.
@@ -1191,12 +1200,11 @@ impl<M: InputModeKind> InputBaseState<M> {
 
     pub(super) fn select_left(&mut self, _: &SelectLeft, _: &mut Window, cx: &mut Context<Self>) {
         self.undo_manager.break_transaction_coalescing();
-        self.select_to(self.previous_boundary(self.cursor()), cx);
+        self.select_all_cursors_to(|s, sel| s.previous_boundary(sel.cursor_offset()), cx);
     }
 
     pub(super) fn select_right(&mut self, _: &SelectRight, _: &mut Window, cx: &mut Context<Self>) {
-        self.undo_manager.break_transaction_coalescing();
-        self.select_to(self.next_boundary(self.cursor()), cx);
+        self.select_all_cursors_to(|s, sel| s.next_boundary(sel.cursor_offset()), cx);
     }
 
     pub(super) fn select_up(&mut self, _: &SelectUp, _: &mut Window, cx: &mut Context<Self>) {
@@ -1204,8 +1212,13 @@ impl<M: InputModeKind> InputBaseState<M> {
             return;
         }
         self.undo_manager.break_transaction_coalescing();
-        let offset = self.start_of_line().saturating_sub(1);
-        self.select_to(self.previous_boundary(offset), cx);
+        self.select_all_cursors_to(
+            |s, sel| {
+                let offset = s.start_of_line_at(sel.cursor_offset()).saturating_sub(1);
+                s.previous_boundary(offset)
+            },
+            cx,
+        );
     }
 
     pub(super) fn select_down(&mut self, _: &SelectDown, _: &mut Window, cx: &mut Context<Self>) {
@@ -1213,8 +1226,14 @@ impl<M: InputModeKind> InputBaseState<M> {
             return;
         }
         self.undo_manager.break_transaction_coalescing();
-        let offset = (self.end_of_line() + 1).min(self.text.len());
-        self.select_to(self.next_boundary(offset), cx);
+        let len = self.text.len();
+        self.select_all_cursors_to(
+            |s, sel| {
+                let offset = (s.end_of_line_at(sel.cursor_offset()) + 1).min(len);
+                s.next_boundary(offset)
+            },
+            cx,
+        );
     }
 
     pub(super) fn on_action_select_all(
@@ -1233,7 +1252,7 @@ impl<M: InputModeKind> InputBaseState<M> {
         cx: &mut Context<Self>,
     ) {
         self.undo_manager.break_transaction_coalescing();
-        self.select_to(0, cx);
+        self.select_all_cursors_to(|_, _| 0, cx);
     }
 
     pub(super) fn select_to_end(
@@ -1244,7 +1263,7 @@ impl<M: InputModeKind> InputBaseState<M> {
     ) {
         self.undo_manager.break_transaction_coalescing();
         let end = self.text.len();
-        self.select_to(end, cx);
+        self.select_all_cursors_to(move |_, _| end, cx);
     }
 
     pub(super) fn select_to_start_of_line(
@@ -1254,8 +1273,7 @@ impl<M: InputModeKind> InputBaseState<M> {
         cx: &mut Context<Self>,
     ) {
         self.undo_manager.break_transaction_coalescing();
-        let offset = self.start_of_line();
-        self.select_to(offset, cx);
+        self.select_all_cursors_to(|s, sel| s.start_of_line_at(sel.cursor_offset()), cx);
     }
 
     pub(super) fn select_to_end_of_line(
@@ -1265,8 +1283,7 @@ impl<M: InputModeKind> InputBaseState<M> {
         cx: &mut Context<Self>,
     ) {
         self.undo_manager.break_transaction_coalescing();
-        let offset = self.end_of_line();
-        self.select_to(offset, cx);
+        self.select_all_cursors_to(|s, sel| s.end_of_line_at(sel.cursor_offset()), cx);
     }
 
     pub(super) fn select_to_previous_word(
@@ -1276,8 +1293,10 @@ impl<M: InputModeKind> InputBaseState<M> {
         cx: &mut Context<Self>,
     ) {
         self.undo_manager.break_transaction_coalescing();
-        let offset = self.previous_start_of_word();
-        self.select_to(offset, cx);
+        self.select_all_cursors_to(
+            |s, sel| s.previous_start_of_word_at(sel.cursor_offset()),
+            cx,
+        );
     }
 
     pub(super) fn select_to_next_word(
@@ -1287,12 +1306,12 @@ impl<M: InputModeKind> InputBaseState<M> {
         cx: &mut Context<Self>,
     ) {
         self.undo_manager.break_transaction_coalescing();
-        let offset = self.next_end_of_word();
-        self.select_to(offset, cx);
+        self.select_all_cursors_to(|s, sel| s.next_end_of_word_at(sel.cursor_offset()), cx);
     }
 
     /// Return the start offset of the previous word.
-    pub(super) fn previous_start_of_word(&mut self) -> usize {
+    /// Return the previous start offset of the word before `offset`.
+    pub(super) fn previous_start_of_word_at(&self, offset: usize) -> usize {
         if self.masked {
             // The mask replaces every character, so the displayed text has no
             // word boundaries to move or delete by. Collapse the word to the
@@ -1300,7 +1319,6 @@ impl<M: InputModeKind> InputBaseState<M> {
             return 0;
         }
 
-        let offset = self.active_selection().start;
         let offset = self.offset_from_utf16(self.offset_to_utf16(offset));
         // FIXME: Avoid to_string
         let left_part = self.text.slice(0..offset).to_string();
@@ -1311,14 +1329,13 @@ impl<M: InputModeKind> InputBaseState<M> {
             .unwrap_or(0)
     }
 
-    /// Return the next end offset of the next word.
-    pub(super) fn next_end_of_word(&mut self) -> usize {
+    /// Return the next end offset of the word after `offset`.
+    pub(super) fn next_end_of_word_at(&self, offset: usize) -> usize {
         if self.masked {
-            // See `previous_start_of_word`.
+            // See `previous_start_of_word_at`.
             return self.text.len();
         }
 
-        let offset = self.cursor();
         let offset = self.offset_from_utf16(self.offset_to_utf16(offset));
         let right_part = self.text.slice(offset..self.text.len()).to_string();
 
@@ -1328,25 +1345,25 @@ impl<M: InputModeKind> InputBaseState<M> {
             .unwrap_or(self.text.len())
     }
 
-    /// Get start of line byte offset of cursor.
+    /// Get start of line byte offset for the given `offset`.
     ///
     /// When soft wrap is active, first press goes to visual line start,
     /// second press (already at visual start) goes to logical line start.
-    pub(super) fn start_of_line(&self) -> usize {
+    pub(super) fn start_of_line_at(&self, offset: usize) -> usize {
         if self.is_single_line() {
             return 0;
         }
 
-        let row = self.text.offset_to_point(self.cursor()).row;
+        let row = self.text.offset_to_point(offset).row;
         let logical_start = self.text.line_start_offset(row);
 
         if self.soft_wrap && self.is_code_editor() {
-            let wrap_point = self.display_map.offset_to_wrap_display_point(self.cursor());
+            let wrap_point = self.display_map.offset_to_wrap_display_point(offset);
             if let Some(line) = self.display_map.line(row)
                 && let Some(range) = line.wrapped_lines.get(wrap_point.local_row)
             {
                 let visual_start = logical_start + range.start;
-                if self.cursor() != visual_start {
+                if offset != visual_start {
                     return visual_start;
                 }
             }
@@ -1355,26 +1372,26 @@ impl<M: InputModeKind> InputBaseState<M> {
         logical_start
     }
 
-    /// Get end of line byte offset of cursor.
+    /// Get end of line byte offset for the given `offset`.
     ///
     /// When soft wrap is active, first press goes to visual line end,
     /// second press (already at visual end) goes to logical line end.
-    pub(super) fn end_of_line(&self) -> usize {
+    pub(super) fn end_of_line_at(&self, offset: usize) -> usize {
         if self.is_single_line() {
             return self.text.len();
         }
 
-        let row = self.text.offset_to_point(self.cursor()).row;
+        let row = self.text.offset_to_point(offset).row;
         let logical_start = self.text.line_start_offset(row);
         let logical_end = self.text.line_end_offset(row);
 
         if self.soft_wrap && self.is_code_editor() {
-            let wrap_point = self.display_map.offset_to_wrap_display_point(self.cursor());
+            let wrap_point = self.display_map.offset_to_wrap_display_point(offset);
             if let Some(line) = self.display_map.line(row)
                 && let Some(range) = line.wrapped_lines.get(wrap_point.local_row)
             {
                 let visual_end = logical_start + range.end;
-                if self.cursor() != visual_end {
+                if offset != visual_end {
                     return visual_end;
                 }
             }
@@ -1383,45 +1400,23 @@ impl<M: InputModeKind> InputBaseState<M> {
         logical_end
     }
 
-    /// Get start line of selection start or end (The min value).
-    ///
-    /// This is means is always get the first line of selection.
-    pub(super) fn start_of_line_of_selection(
-        &mut self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> usize {
-        if self.is_single_line() {
-            return 0;
-        }
-
-        let active = self.active_selection();
-        let mut offset = self.previous_boundary(active.start.min(active.end));
-        if self.text.char_at(offset) == Some('\r') {
-            offset += 1;
-        }
-
-        let line = self
-            .text_for_range(self.range_to_utf16(&(0..offset + 1)), &mut None, window, cx)
-            .unwrap_or_default()
-            .rfind('\n')
-            .map(|i| i + 1)
-            .unwrap_or(0);
-        line
-    }
-
     /// Get indent string of next line.
     ///
     /// To get current and next line indent, to return more depth one.
     pub(super) fn indent_of_next_line(&mut self) -> String {
+        self.indent_of_next_line_at(self.cursor())
+    }
+
+    /// Get indent string of the next line, relative to the given `offset`.
+    pub(super) fn indent_of_next_line_at(&mut self, offset: usize) -> String {
         if self.is_single_line() {
             return "".into();
         }
 
         let mut current_indent = String::new();
         let mut next_indent = String::new();
-        let current_line_start_pos = self.start_of_line();
-        let next_line_start_pos = self.end_of_line();
+        let current_line_start_pos = self.start_of_line_at(offset);
+        let next_line_start_pos = self.end_of_line_at(offset);
         for c in self.text.slice(current_line_start_pos..).chars() {
             if !c.is_whitespace() {
                 break;
@@ -1449,28 +1444,82 @@ impl<M: InputModeKind> InputBaseState<M> {
         }
     }
 
-    pub(super) fn backspace(&mut self, _: &Backspace, window: &mut Window, cx: &mut Context<Self>) {
-        let intent = if self.active_selection().is_empty() {
-            self.select_to(self.previous_boundary(self.cursor()), cx);
-            EditIntent::Backspace
+    /// Delete every selection as one batch. Collapsed cursors are first
+    /// expanded to a deletion range by `collapsed_target` and non-empty
+    /// selections delete their own range.
+    ///
+    /// `collapsed_intent` is the intent to record when every cursor is
+    /// collapsed, which is what makes a run of single-character deletes undo
+    /// as one gesture. Deleting a real selection is always atomic.
+    fn delete_selections(
+        &mut self,
+        silent: bool,
+        collapsed_intent: EditIntent,
+        mut collapsed_target: impl FnMut(&mut Self, usize) -> Range<usize>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if !self.is_editable() {
+            return;
+        }
+        let cursors: Vec<CursorSelection> = self.selections.iter().copied().collect();
+        let intent = if cursors.iter().all(|sel| sel.is_empty()) {
+            collapsed_intent
         } else {
             EditIntent::Atomic
         };
+        let mut new_selections: Vec<CursorSelection> = Vec::with_capacity(cursors.len());
+        for sel in &cursors {
+            let range = if sel.is_empty() {
+                collapsed_target(self, sel.cursor_offset())
+            } else {
+                sel.start..sel.end
+            };
+            let (start, end) = (range.start.min(range.end), range.start.max(range.end));
+            new_selections.push(CursorSelection::new(
+                self.selections.generate_id(),
+                start,
+                end,
+            ));
+        }
+        self.selections.replace_all(new_selections);
         self.undo_manager.set_pending_intent(intent);
+
+        let was_silent = self.silent_replace_text;
+        self.silent_replace_text = silent;
         self.replace_text_in_range(None, "", window, cx);
+        self.silent_replace_text = was_silent;
         self.pause_blink_cursor(cx);
     }
 
+    pub(super) fn backspace(&mut self, _: &Backspace, window: &mut Window, cx: &mut Context<Self>) {
+        // Nothing to delete at the start of the text. Propagate so an ancestor
+        // (e.g. a command palette navigating back a level) can act on it.
+        // This is harmless when nothing upstream is bound to backspace. With multiple
+        // cursors the others can still delete, so only the lone-cursor case
+        // propagates.
+        if self.selections.is_single() && self.active_selection().is_empty() && self.cursor() == 0 {
+            cx.propagate();
+            return;
+        }
+
+        self.delete_selections(
+            false,
+            EditIntent::Backspace,
+            |s, offset| s.previous_boundary(offset)..offset,
+            window,
+            cx,
+        );
+    }
+
     pub(super) fn delete(&mut self, _: &Delete, window: &mut Window, cx: &mut Context<Self>) {
-        let intent = if self.active_selection().is_empty() {
-            self.select_to(self.next_boundary(self.cursor()), cx);
-            EditIntent::DeleteForward
-        } else {
-            EditIntent::Atomic
-        };
-        self.undo_manager.set_pending_intent(intent);
-        self.replace_text_in_range(None, "", window, cx);
-        self.pause_blink_cursor(cx);
+        self.delete_selections(
+            false,
+            EditIntent::DeleteForward,
+            |s, offset| offset..s.next_boundary(offset),
+            window,
+            cx,
+        );
     }
 
     pub(super) fn delete_to_beginning_of_line(
@@ -1479,23 +1528,19 @@ impl<M: InputModeKind> InputBaseState<M> {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if !self.active_selection().is_empty() {
-            self.replace_text_in_range(None, "", window, cx);
-            self.pause_blink_cursor(cx);
-            return;
-        }
-
-        let mut offset = self.start_of_line();
-        if offset == self.cursor() {
-            offset = offset.saturating_sub(1);
-        }
-        self.replace_text_in_range_silent(
-            Some(self.range_to_utf16(&(offset..self.cursor()))),
-            "",
+        self.delete_selections(
+            true,
+            EditIntent::Atomic,
+            |s, offset| {
+                let mut start = s.start_of_line_at(offset);
+                if start == offset {
+                    start = start.saturating_sub(1);
+                }
+                start..offset
+            },
             window,
             cx,
         );
-        self.pause_blink_cursor(cx);
     }
 
     pub(super) fn delete_to_end_of_line(
@@ -1504,23 +1549,19 @@ impl<M: InputModeKind> InputBaseState<M> {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if !self.active_selection().is_empty() {
-            self.replace_text_in_range(None, "", window, cx);
-            self.pause_blink_cursor(cx);
-            return;
-        }
-
-        let mut offset = self.end_of_line();
-        if offset == self.cursor() {
-            offset = (offset + 1).clamp(0, self.text.len());
-        }
-        self.replace_text_in_range_silent(
-            Some(self.range_to_utf16(&(self.cursor()..offset))),
-            "",
+        self.delete_selections(
+            true,
+            EditIntent::Atomic,
+            |s, offset| {
+                let mut end = s.end_of_line_at(offset);
+                if end == offset {
+                    end = (end + 1).clamp(0, s.text.len());
+                }
+                offset..end
+            },
             window,
             cx,
         );
-        self.pause_blink_cursor(cx);
     }
 
     pub(super) fn delete_previous_word(
@@ -1529,20 +1570,13 @@ impl<M: InputModeKind> InputBaseState<M> {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if !self.active_selection().is_empty() {
-            self.replace_text_in_range(None, "", window, cx);
-            self.pause_blink_cursor(cx);
-            return;
-        }
-
-        let offset = self.previous_start_of_word();
-        self.replace_text_in_range_silent(
-            Some(self.range_to_utf16(&(offset..self.cursor()))),
-            "",
+        self.delete_selections(
+            true,
+            EditIntent::Atomic,
+            |s, offset| s.previous_start_of_word_at(offset)..offset,
             window,
             cx,
         );
-        self.pause_blink_cursor(cx);
     }
 
     pub(super) fn delete_next_word(
@@ -1551,20 +1585,13 @@ impl<M: InputModeKind> InputBaseState<M> {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if !self.active_selection().is_empty() {
-            self.replace_text_in_range(None, "", window, cx);
-            self.pause_blink_cursor(cx);
-            return;
-        }
-
-        let offset = self.next_end_of_word();
-        self.replace_text_in_range_silent(
-            Some(self.range_to_utf16(&(self.cursor()..offset))),
-            "",
+        self.delete_selections(
+            true,
+            EditIntent::Atomic,
+            |s, offset| offset..s.next_end_of_word_at(offset),
             window,
             cx,
         );
-        self.pause_blink_cursor(cx);
     }
 
     pub(super) fn enter(&mut self, action: &Enter, window: &mut Window, cx: &mut Context<Self>) {
@@ -1584,17 +1611,35 @@ impl<M: InputModeKind> InputBaseState<M> {
         let insert_newline = self.is_multi_line() && (!self.submit_on_enter || action.shift);
 
         if insert_newline {
-            // Get current line indent
-            let indent = if self.is_code_editor() {
-                self.indent_of_next_line()
+            if !self.selections.is_single() {
+                // Insert a newline (with per-line indent) at every cursor.
+                self.selections.merge_overlapping();
+                let selections: Vec<CursorSelection> = self.selections.iter().copied().collect();
+                let mut edits: Vec<(Range<usize>, String)> = Vec::with_capacity(selections.len());
+                for sel in &selections {
+                    let indent = if self.is_code_editor() {
+                        self.indent_of_next_line_at(sel.cursor_offset())
+                    } else {
+                        String::new()
+                    };
+                    edits.push((sel.start..sel.end, format!("\n{}", indent)));
+                }
+                edits.sort_by_key(|(range, _)| range.start);
+                self.replace_text_in_ranges(&edits, window, cx);
+                self.pause_blink_cursor(cx);
             } else {
-                "".to_string()
-            };
+                // Get current line indent
+                let indent = if self.is_code_editor() {
+                    self.indent_of_next_line()
+                } else {
+                    "".to_string()
+                };
 
-            // Add newline and indent
-            let new_line_text = format!("\n{}", indent);
-            self.replace_text_in_range_silent(None, &new_line_text, window, cx);
-            self.pause_blink_cursor(cx);
+                // Add newline and indent
+                let new_line_text = format!("\n{}", indent);
+                self.replace_text_in_range_silent(None, &new_line_text, window, cx);
+                self.pause_blink_cursor(cx);
+            }
         } else {
             // Single line input or submit-on-enter: just emit the event
             // (e.g.: in a dialog to confirm, or a chat textarea to send).
@@ -1616,6 +1661,14 @@ impl<M: InputModeKind> InputBaseState<M> {
 
     pub(super) fn escape(&mut self, action: &Escape, window: &mut Window, cx: &mut Context<Self>) {
         if M::handle_context_menu_action(self, Box::new(action.clone()), window, cx) {
+            return;
+        }
+
+        // Collapse extra cursors back to the active one first.
+        if !self.selections.is_single() {
+            self.undo_manager.break_transaction_coalescing();
+            self.selections.remove_all_but_active();
+            cx.notify();
             return;
         }
 
@@ -1665,6 +1718,152 @@ impl<M: InputModeKind> InputBaseState<M> {
                 handler(NativeMenu::new(), capabilities, position, window, cx);
             });
         }
+    }
+
+    pub(super) fn add_cursor_above(
+        &mut self,
+        _: &AddCursorAbove,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.add_cursor_vertical(-1, cx);
+    }
+
+    pub(super) fn add_cursor_below(
+        &mut self,
+        _: &AddCursorBelow,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.add_cursor_vertical(1, cx);
+    }
+
+    /// Add a new cursor one display line above (`move_lines < 0`) or below each
+    /// existing cursor, preserving the column. Cursors that would not move (at
+    /// the first/last display row) or that would duplicate an existing cursor
+    /// are skipped.
+    fn add_cursor_vertical(&mut self, move_lines: isize, cx: &mut Context<Self>) {
+        if !self.is_multi_line() {
+            return;
+        }
+
+        // Changing the cursor set ends the editing gesture that came before it.
+        self.undo_manager.break_transaction_coalescing();
+
+        let sources: Vec<(usize, Option<(Pixels, usize)>)> = self
+            .selections
+            .iter()
+            .map(|sel| (sel.cursor_offset(), sel.column_anchor))
+            .collect();
+        let mut offsets: std::collections::HashSet<usize> =
+            sources.iter().map(|(offset, _)| *offset).collect();
+
+        let mut newest: Option<usize> = None;
+        for (offset, anchor) in sources {
+            let anchor = anchor.or_else(|| self.preferred_column_for(offset));
+            let target = self.vertical_target(offset, anchor, move_lines);
+            if target == offset || offsets.contains(&target) {
+                continue;
+            }
+            offsets.insert(target);
+            let id = self.selections.generate_id();
+            let mut cursor = CursorSelection::new(id, target, target);
+            cursor.column_anchor = anchor;
+            self.selections.add(cursor);
+            newest = Some(target);
+        }
+
+        if let Some(newest) = newest {
+            self.scroll_to(newest, None, cx);
+        }
+        cx.notify();
+    }
+
+    /// Add an additional collapsed cursor at `offset`.
+    ///
+    /// Rejected when `offset` lands inside an existing selection or exactly on
+    /// an existing cursor.
+    pub(super) fn add_cursor_at(&mut self, offset: usize, cx: &mut Context<Self>) {
+        if !self.is_multi_line() {
+            return;
+        }
+
+        for sel in self.selections.iter() {
+            if sel.contains(offset) {
+                return;
+            }
+            if sel.is_collapsed() && sel.cursor_offset() == offset {
+                return;
+            }
+        }
+
+        self.undo_manager.break_transaction_coalescing();
+        let id = self.selections.generate_id();
+        self.selections
+            .add(CursorSelection::new(id, offset, offset));
+        cx.notify();
+    }
+
+    /// Build a columnar (block) selection spanning the rows between the two
+    /// offsets, one selection per display row at the same column span.
+    pub(super) fn build_columnar_selection(
+        &mut self,
+        start_offset: usize,
+        end_offset: usize,
+        cx: &mut Context<Self>,
+    ) {
+        if !self.is_multi_line() {
+            return;
+        }
+
+        self.undo_manager.break_transaction_coalescing();
+        let (start, end) = if start_offset <= end_offset {
+            (start_offset, end_offset)
+        } else {
+            (end_offset, start_offset)
+        };
+
+        let start_point = self.display_map.offset_to_wrap_display_point(start);
+        let end_point = self.display_map.offset_to_wrap_display_point(end);
+
+        let start_col = start_point.column;
+        let end_col = end_point.column;
+        let (start_col, end_col) = if start_col <= end_col {
+            (start_col, end_col)
+        } else {
+            (end_col, start_col)
+        };
+
+        let start_row = self
+            .display_map
+            .wrap_row_to_display_row(start_point.row)
+            .unwrap_or_else(|| {
+                self.display_map
+                    .nearest_visible_display_row(start_point.row)
+            });
+        let end_row = self
+            .display_map
+            .wrap_row_to_display_row(end_point.row)
+            .unwrap_or_else(|| self.display_map.nearest_visible_display_row(end_point.row));
+        let (start_row, end_row) = (start_row.min(end_row), start_row.max(end_row));
+
+        let mut new_selections = Vec::with_capacity(end_row - start_row + 1);
+        for row in start_row..=end_row {
+            let sel_start = self
+                .display_map
+                .display_row_column_to_offset(row, start_col);
+            let sel_end = self.display_map.display_row_column_to_offset(row, end_col);
+            let id = self.selections.generate_id();
+            new_selections.push(CursorSelection::new(id, sel_start, sel_end));
+        }
+
+        if new_selections.is_empty() {
+            let id = self.selections.generate_id();
+            new_selections.push(CursorSelection::new(id, end, end));
+        }
+
+        self.selections.replace_all(new_selections);
+        cx.notify();
     }
 
     pub(super) fn on_mouse_down(
@@ -1719,6 +1918,21 @@ impl<M: InputModeKind> InputBaseState<M> {
             return;
         }
 
+        // Multi-cursor placement, multi-line only.
+        if self.is_multi_line() && event.button == MouseButton::Left {
+            if event.modifiers.alt && event.modifiers.shift {
+                // Begin an alt+shift columnar selection. Mark selecting so the
+                // drag handler extends the block instead of bailing early.
+                self.column_select_start = Some(offset);
+                self.selecting = true;
+                self.move_to(offset, None, cx);
+                return;
+            } else if event.modifiers.alt {
+                self.add_cursor_at(offset, cx);
+                return;
+            }
+        }
+
         if event.modifiers.shift {
             self.select_to(offset, cx);
         } else {
@@ -1742,6 +1956,7 @@ impl<M: InputModeKind> InputBaseState<M> {
         }
         self.selecting = false;
         self.selected_word_range = None;
+        self.column_select_start = None;
         self.auto_scroll.stop();
     }
 
@@ -1934,13 +2149,29 @@ impl<M: InputModeKind> InputBaseState<M> {
         window.show_character_palette();
     }
 
+    /// The text of every non-empty selection, in document order.
+    fn selected_texts(&self) -> Vec<String> {
+        let mut selections: Vec<CursorSelection> = self
+            .selections
+            .iter()
+            .copied()
+            .filter(|sel| !sel.is_empty())
+            .collect();
+        selections.sort_by_key(|sel| sel.start);
+        selections
+            .iter()
+            .map(|sel| self.text.slice(*sel).to_string())
+            .collect()
+    }
+
     pub(super) fn copy(&mut self, _: &Copy, _: &mut Window, cx: &mut Context<Self>) {
         if !self.is_copyable() {
             return;
         }
 
-        let selected_text = self.text.slice(*self.active_selection()).to_string();
-        cx.write_to_clipboard(ClipboardItem::new_string(selected_text));
+        let texts = self.selected_texts();
+
+        cx.write_to_clipboard(ClipboardItem::new_string(texts.join("\n")));
     }
 
     pub(super) fn cut(&mut self, _: &Cut, window: &mut Window, cx: &mut Context<Self>) {
@@ -1948,19 +2179,64 @@ impl<M: InputModeKind> InputBaseState<M> {
             return;
         }
 
-        let selected_text = self.text.slice(*self.active_selection()).to_string();
-        cx.write_to_clipboard(ClipboardItem::new_string(selected_text));
+        let texts = self.selected_texts();
+
+        cx.write_to_clipboard(ClipboardItem::new_string(texts.join("\n")));
 
         self.undo_manager.set_pending_intent(EditIntent::Atomic);
         self.replace_text_in_range_silent(None, "", window, cx);
     }
 
     pub(super) fn paste(&mut self, _: &Paste, window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(clipboard) = cx.read_from_clipboard() {
-            let new_text = clipboard.text().unwrap_or_default();
-            self.undo_manager.set_pending_intent(EditIntent::Atomic);
+        if !self.is_editable() {
+            return;
+        }
+        let Some(clipboard) = cx.read_from_clipboard() else {
+            return;
+        };
+        let mut new_text = clipboard.text().unwrap_or_default();
+        // A paste is one atomic edit, never part of a typing run.
+        self.undo_manager.set_pending_intent(EditIntent::Atomic);
+
+        if !self.is_multi_line() {
+            new_text = new_text.replace('\n', "");
             self.replace_text_in_range_silent(None, &new_text, window, cx);
             self.scroll_to(self.cursor(), None, cx);
+            return;
+        }
+
+        // Distribute one clipboard line per selection when the counts match.
+        // Otherwise insert the whole clipboard text at each cursor.
+        if !self.selections.is_single() {
+            self.selections.merge_overlapping();
+        }
+        let lines: Vec<String> = new_text.split('\n').map(|s| s.to_string()).collect();
+        let count = self.selections.len();
+        if count > 1 && lines.len() == count {
+            let mut selections: Vec<CursorSelection> = self.selections.iter().copied().collect();
+            selections.sort_by_key(|sel| sel.start);
+            let edits: Vec<(Range<usize>, String)> = selections
+                .iter()
+                .zip(lines)
+                .map(|(sel, line)| (sel.start..sel.end, line))
+                .collect();
+            self.replace_text_in_ranges(&edits, window, cx);
+        } else {
+            self.replace_text_in_range_silent(None, &new_text, window, cx);
+        }
+        self.scroll_to(self.cursor(), None, cx);
+    }
+
+    /// The intent of a batch the caller did not label: inserting text at
+    /// collapsed cursors is typing, anything else stands on its own.
+    fn typing_intent(&self, edits: &[(Range<usize>, String)], new_text: &str) -> EditIntent {
+        if !new_text.is_empty()
+            && !new_text.contains(['\n', '\r'])
+            && edits.iter().all(|(range, _)| range.is_empty())
+        {
+            EditIntent::Typing
+        } else {
+            EditIntent::Atomic
         }
     }
 
@@ -2147,6 +2423,7 @@ impl<M: InputModeKind> InputBaseState<M> {
 
     pub fn select_all(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         self.undo_manager.break_transaction_coalescing();
+        self.selections.remove_all_but_active();
         self.set_selection(0, self.text.len());
         cx.notify();
     }
@@ -2254,35 +2531,77 @@ impl<M: InputModeKind> InputBaseState<M> {
     /// The offset is the UTF-8 offset.
     ///
     /// Ensure the offset use self.next_boundary or self.previous_boundary to get the correct offset.
+    /// Extend a single selection so its moving end lands at `offset`, flipping
+    /// `reversed` when the ends cross. When a sticky `word_range` is given the
+    /// selection is kept covering it.
+    fn extend_selection(
+        sel: &mut CursorSelection,
+        offset: usize,
+        word_range: Option<CursorSelection>,
+    ) {
+        if sel.reversed {
+            sel.start = offset;
+        } else {
+            sel.end = offset;
+        }
+
+        if sel.end < sel.start {
+            sel.reversed = !sel.reversed;
+            std::mem::swap(&mut sel.start, &mut sel.end);
+        }
+
+        if let Some(word_range) = word_range {
+            if sel.start > word_range.start {
+                sel.start = word_range.start;
+            }
+            if sel.end < word_range.end {
+                sel.end = word_range.end;
+            }
+        }
+    }
+
+    /// Extend only the active selection to `offset`. Used by mouse drag.
     pub(crate) fn select_to(&mut self, offset: usize, cx: &mut Context<Self>) {
         M::clear_inline_completion(self, cx);
 
         let offset = offset.clamp(0, self.text.len());
         let word_range = self.selected_word_range;
-        let active = self.active_selection_mut();
-        if active.reversed {
-            active.start = offset
-        } else {
-            active.end = offset
-        };
+        Self::extend_selection(self.active_selection_mut(), offset, word_range);
 
-        if active.end < active.start {
-            active.reversed = !active.reversed;
-            std::mem::swap(&mut active.start, &mut active.end);
-        }
-
-        // Ensure keep word selected range
-        if let Some(word_range) = word_range {
-            if active.start > word_range.start {
-                active.start = word_range.start;
-            }
-            if active.end < word_range.end {
-                active.end = word_range.end;
-            }
-        }
-        if active.is_empty() {
+        if self.active_selection().is_empty() {
             self.update_preferred_column();
         }
+        cx.notify()
+    }
+
+    /// Extend every selection to the offset produced by `f`, then merge any
+    /// selections that now overlap. Used by keyboard selection commands.
+    fn select_all_cursors_to(
+        &mut self,
+        f: impl Fn(&Self, &CursorSelection) -> usize,
+        cx: &mut Context<Self>,
+    ) {
+        self.undo_manager.break_transaction_coalescing();
+        M::clear_inline_completion(self, cx);
+
+        let len = self.text.len();
+        let new_selections: Vec<CursorSelection> = self
+            .selections
+            .iter()
+            .map(|sel| {
+                let offset = f(self, sel).clamp(0, len);
+                let mut new_sel = *sel;
+                Self::extend_selection(&mut new_sel, offset, None);
+                new_sel
+            })
+            .collect();
+        self.selections.replace_all(new_selections);
+        self.selections.merge_overlapping();
+
+        if self.active_selection().is_empty() {
+            self.update_preferred_column();
+        }
+        self.scroll_to(self.cursor(), None, cx);
         cx.notify()
     }
 
@@ -2470,7 +2789,11 @@ impl<M: InputModeKind> InputBaseState<M> {
 
         self.auto_scroll.last_drag_position = Some(event.position);
         let offset = self.index_for_mouse_position(event.position);
-        self.select_to(offset, cx);
+        if let Some(start) = self.column_select_start {
+            self.build_columnar_selection(start, offset, cx);
+        } else {
+            self.select_to(offset, cx);
+        }
 
         if !self.is_single_line() {
             let delta = AutoScroll::compute_delta(event.position.y, self.input_bounds);
@@ -2481,7 +2804,11 @@ impl<M: InputModeKind> InputBaseState<M> {
                 state.update_scroll_offset(Some(point(current.x, current.y + delta)), cx);
                 if let Some(pos) = state.auto_scroll.last_drag_position {
                     let offset = state.index_for_mouse_position(pos);
-                    state.select_to(offset, cx);
+                    if let Some(start) = state.column_select_start {
+                        state.build_columnar_selection(start, offset, cx);
+                    } else {
+                        state.select_to(offset, cx);
+                    }
                 }
             });
         }
@@ -2657,7 +2984,7 @@ impl<M: InputModeKind> InputBaseState<M> {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.disabled || edits.is_empty() {
+        if !self.is_editable() || edits.is_empty() {
             return;
         }
 
@@ -2736,6 +3063,10 @@ impl<M: InputModeKind> InputBaseState<M> {
             self.update_fold_candidates_incremental(range, new_text);
         }
 
+        if group {
+            self.undo_manager.commit_transaction();
+        }
+
         // One observable update per batch instead of one per edit.
         if let Some(diagnostics) = self.mode.diagnostics_mut() {
             diagnostics.reset(&self.text)
@@ -2786,9 +3117,6 @@ impl<M: InputModeKind> InputBaseState<M> {
         let selections_after: Vec<CursorSelection> = self.selections.iter().copied().collect();
         self.undo_manager
             .record_selections(selections_before, selections_after);
-        if group {
-            self.undo_manager.commit_transaction();
-        }
 
         self.ime_marked_range.take();
         self.update_preferred_column();
@@ -2925,6 +3253,47 @@ impl<M: InputModeKind> EntityInputHandler for InputBaseState<M> {
             }))
             .unwrap_or(self.selected_range());
 
+        if self.is_multi_line() {
+            let multi_cursor = range_utf16.is_none()
+                && self.ime_marked_range.is_none()
+                && !self.selections.is_single();
+            if multi_cursor {
+                self.selections.merge_overlapping();
+                let mut edits: Vec<(Range<usize>, String)> = self
+                    .selections
+                    .iter()
+                    .map(|sel| (sel.start..sel.end, new_text.to_string()))
+                    .collect();
+                edits.sort_by_key(|(range, _)| range.start);
+                // One keystroke across several cursors is one batch, committed
+                // with the intent of the keystroke so a run of them coalesces
+                // into one undo just like single-cursor typing.
+                let intent =
+                    requested_intent.unwrap_or_else(|| self.typing_intent(&edits, new_text));
+                self.undo_manager.begin_transaction_with(intent);
+                self.undo_manager.set_pending_intent(intent);
+                self.replace_text_in_ranges(&edits, window, cx);
+                self.undo_manager.commit_transaction();
+            } else {
+                if range_utf16.is_some() {
+                    self.selections.remove_all_but_active();
+                }
+                if let Some(intent) = requested_intent {
+                    self.undo_manager.set_pending_intent(intent);
+                }
+                self.replace_text_in_ranges(&[(range.clone(), new_text.to_string())], window, cx);
+            }
+            if ends_composition {
+                self.undo_manager.commit_transaction();
+            }
+
+            if !self.silent_replace_text {
+                M::on_text_typed(self, &range, new_text, window, cx);
+            }
+            return;
+        }
+
+        // Single-line path
         let old_text = self.text.clone();
         self.text.replace(range.clone(), new_text);
 
@@ -3054,6 +3423,9 @@ impl<M: InputModeKind> EntityInputHandler for InputBaseState<M> {
         if starts_composition {
             self.undo_manager.begin_transaction();
         }
+
+        // Collapse any extra cursors so we never leave stale secondary cursors behind.
+        self.selections.remove_all_but_active();
 
         M::reset_language_features(self);
 
@@ -3288,6 +3660,8 @@ impl<M: InputModeKind> Render for InputBaseState<M> {
                     .on_action(window.listener_for(&entity, InputBaseState::select_down))
                     .on_action(window.listener_for(&entity, InputBaseState::page_up))
                     .on_action(window.listener_for(&entity, InputBaseState::page_down))
+                    .on_action(window.listener_for(&entity, InputBaseState::add_cursor_above))
+                    .on_action(window.listener_for(&entity, InputBaseState::add_cursor_below))
             })
             .on_action(window.listener_for(&entity, InputBaseState::on_action_select_all))
             .on_action(window.listener_for(&entity, InputBaseState::select_to_start_of_line))
@@ -5052,10 +5426,34 @@ mod tests {
         cx.update(|window, cx| {
             input.update(cx, |state, cx| {
                 state.replace_text_in_range(None, "a", window, cx);
+                state.move_to(0, None, cx);
+                state.replace_text_in_range(None, "", window, cx);
                 state.undo(&Undo, window, cx);
-                state.backspace(&Backspace, window, cx);
+                assert_eq!(state.value(), "");
                 state.redo(&Redo, window, cx);
                 assert_eq!(state.value(), "a");
+                assert_eq!(state.cursor(), 1);
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_cursor_round_trip_stops_typing_coalescing(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| state);
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.replace_text_in_range(None, "a", window, cx);
+                state.left(&MoveLeft, window, cx);
+                state.right(&MoveRight, window, cx);
+                state.replace_text_in_range(None, "b", window, cx);
+
+                state.undo(&Undo, window, cx);
+                assert_eq!(state.value(), "a");
+                state.undo(&Undo, window, cx);
+                assert_eq!(state.value(), "");
             });
         });
     }
@@ -5191,6 +5589,668 @@ mod tests {
         editor
             .input
             .read_with(&mut editor_cx, |state, _| assert!(state.soft_wrap));
+    }
+
+    /// Parse a cursor spec into `(text, cursor_offsets)`. Non-empty lines are
+    /// joined with `\n` plus a trailing `\n`. `|` marks a cursor. Leading
+    /// whitespace is kept, so a spec can express indentation.
+    fn parse_cursor_spec(input: &str) -> (String, Vec<usize>) {
+        let mut full_text = String::new();
+        let mut cursor_offsets = Vec::new();
+        let non_empty_lines: Vec<&str> = input.lines().filter(|l| !l.is_empty()).collect();
+
+        for (line_idx, line) in non_empty_lines.iter().enumerate() {
+            let mut positions = Vec::new();
+            let mut text = String::new();
+            for ch in line.chars() {
+                if ch == '|' {
+                    positions.push(text.len());
+                } else {
+                    text.push(ch);
+                }
+            }
+
+            if line_idx > 0 {
+                full_text.push('\n');
+            }
+            let line_start = full_text.len();
+            for pos in positions {
+                cursor_offsets.push(line_start + pos);
+            }
+            full_text.push_str(&text);
+        }
+        full_text.push('\n');
+
+        (full_text, cursor_offsets)
+    }
+
+    /// Build a multi-line input for multi-cursor tests.
+    fn multi_line(cx: &mut TestAppContext) -> InputView<TextareaMode> {
+        InputView::build_textarea(cx, |state| state)
+    }
+
+    /// Set the text and cursor positions from a spec (see [`parse_cursor_spec`]).
+    fn setup_cursors<M: InputModeKind>(
+        cx: &mut VisualTestContext,
+        input: &Entity<InputBaseState<M>>,
+        spec: &str,
+    ) {
+        let (full_text, offsets) = parse_cursor_spec(spec);
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.set_value(&full_text, window, cx);
+                let selections = offsets
+                    .into_iter()
+                    .map(|offset| {
+                        CursorSelection::new(state.selections.generate_id(), offset, offset)
+                    })
+                    .collect();
+                state.selections.replace_all(selections);
+                cx.notify();
+            });
+        });
+    }
+
+    /// Assert the text and cursor positions match a spec.
+    #[track_caller]
+    fn assert_cursors<M: InputModeKind>(
+        cx: &mut VisualTestContext,
+        input: &Entity<InputBaseState<M>>,
+        spec: &str,
+    ) {
+        let (expected_text, mut expected_cursors) = parse_cursor_spec(spec);
+        expected_cursors.sort();
+
+        let (actual_text, mut actual_cursors) = input.read_with(cx, |state, _| {
+            (
+                state.text.to_string(),
+                state
+                    .selections
+                    .iter()
+                    .map(|s| s.cursor_offset())
+                    .collect::<Vec<_>>(),
+            )
+        });
+        actual_cursors.sort();
+
+        assert_eq!(
+            actual_text, expected_text,
+            "Text mismatch:\nExpected: {expected_text:?}\nActual:   {actual_text:?}"
+        );
+        assert_eq!(
+            actual_cursors, expected_cursors,
+            "Cursor mismatch:\nExpected: {expected_cursors:?}\nActual:   {actual_cursors:?}"
+        );
+    }
+
+    #[gpui::test]
+    fn test_multi_cursor_insert_text(cx: &mut TestAppContext) {
+        let view = multi_line(cx);
+        let mut cx = VisualTestContext::from_window(view.window_handle.into(), cx);
+        let input = view.input;
+
+        setup_cursors(&mut cx, &input, "|hello |world|");
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.replace_text_in_range(None, ">>>", window, cx);
+            });
+        });
+        assert_cursors(&mut cx, &input, ">>>|hello >>>|world>>>|");
+    }
+
+    #[gpui::test]
+    fn test_multi_cursor_delete_backward(cx: &mut TestAppContext) {
+        let view = multi_line(cx);
+        let mut cx = VisualTestContext::from_window(view.window_handle.into(), cx);
+        let input = view.input;
+
+        setup_cursors(&mut cx, &input, "|islands| cars|");
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.backspace(&Backspace, window, cx);
+            });
+        });
+        // The first cursor has nothing to delete. The others delete an `s`.
+        assert_cursors(&mut cx, &input, "|island| car|");
+    }
+
+    #[gpui::test]
+    fn test_multi_cursor_delete_forward_merges(cx: &mut TestAppContext) {
+        let view = multi_line(cx);
+        let mut cx = VisualTestContext::from_window(view.window_handle.into(), cx);
+        let input = view.input;
+
+        setup_cursors(&mut cx, &input, "hello| |world");
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.delete(&Delete, window, cx);
+            });
+        });
+        // Adjacent deletions merge into a single cursor.
+        assert_cursors(&mut cx, &input, "hello|orld");
+    }
+
+    #[gpui::test]
+    fn test_multi_cursor_multiline_insert_and_delete(cx: &mut TestAppContext) {
+        let view = multi_line(cx);
+        let mut cx = VisualTestContext::from_window(view.window_handle.into(), cx);
+        let input = view.input;
+
+        setup_cursors(&mut cx, &input, "|1\n|2\n|3");
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.replace_text_in_range(None, "a", window, cx);
+            });
+        });
+        assert_cursors(&mut cx, &input, "a|1\na|2\na|3");
+
+        // The whole multi-edit insert is a single undo transaction.
+        input.read_with(&cx, |state, _| {
+            assert_eq!(state.undo_manager.undo_count(), 1);
+        });
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.backspace(&Backspace, window, cx);
+            });
+        });
+        assert_cursors(&mut cx, &input, "|1\n|2\n|3");
+    }
+
+    #[gpui::test]
+    fn test_add_cursor_below_preserves_column(cx: &mut TestAppContext) {
+        let view = multi_line(cx);
+        let mut cx = VisualTestContext::from_window(view.window_handle.into(), cx);
+        let input = view.input;
+
+        setup_cursors(&mut cx, &input, "ab|cd\nabcd");
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.add_cursor_below(&AddCursorBelow, window, cx);
+            });
+        });
+        assert_cursors(&mut cx, &input, "ab|cd\nab|cd");
+    }
+
+    #[gpui::test]
+    fn test_add_cursor_at_rejects_duplicates(cx: &mut TestAppContext) {
+        let view = multi_line(cx);
+        let mut cx = VisualTestContext::from_window(view.window_handle.into(), cx);
+        let input = view.input;
+
+        setup_cursors(&mut cx, &input, "he|llo");
+        cx.update(|_, cx| {
+            input.update(cx, |state, cx| {
+                // Duplicate of the existing cursor is rejected.
+                state.add_cursor_at(2, cx);
+                assert_eq!(state.selections.len(), 1);
+                // A distinct offset adds a cursor.
+                state.add_cursor_at(4, cx);
+                assert_eq!(state.selections.len(), 2);
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_multi_cursor_undo_redo_restores_selections(cx: &mut TestAppContext) {
+        let view = multi_line(cx);
+        let mut cx = VisualTestContext::from_window(view.window_handle.into(), cx);
+        let input = view.input;
+
+        setup_cursors(&mut cx, &input, "|1\n|2\n|3");
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.replace_text_in_range(None, "a", window, cx);
+            });
+        });
+        assert_cursors(&mut cx, &input, "a|1\na|2\na|3");
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.undo(&Undo, window, cx);
+            });
+        });
+        assert_cursors(&mut cx, &input, "|1\n|2\n|3");
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.redo(&Redo, window, cx);
+            });
+        });
+        assert_cursors(&mut cx, &input, "a|1\na|2\na|3");
+    }
+
+    #[gpui::test]
+    fn test_multi_cursor_undo_redo_different_line_lengths(cx: &mut TestAppContext) {
+        let view = multi_line(cx);
+        let mut cx = VisualTestContext::from_window(view.window_handle.into(), cx);
+        let input = view.input;
+
+        setup_cursors(&mut cx, &input, "abc123|\nabc12345|\nabc1234567|");
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.replace_text_in_range(None, "a", window, cx);
+            });
+        });
+        assert_cursors(&mut cx, &input, "abc123a|\nabc12345a|\nabc1234567a|");
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.undo(&Undo, window, cx);
+            });
+        });
+        assert_cursors(&mut cx, &input, "abc123|\nabc12345|\nabc1234567|");
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.redo(&Redo, window, cx);
+            });
+        });
+        assert_cursors(&mut cx, &input, "abc123a|\nabc12345a|\nabc1234567a|");
+    }
+
+    #[gpui::test]
+    fn test_multi_cursor_undo_multiple_inserts(cx: &mut TestAppContext) {
+        let view = multi_line(cx);
+        let mut cx = VisualTestContext::from_window(view.window_handle.into(), cx);
+        let input = view.input;
+
+        setup_cursors(&mut cx, &input, "|1\n|2\n|3");
+        for ch in ['a', 'b', 'c'] {
+            cx.update(|window, cx| {
+                input.update(cx, |state, cx| {
+                    state.replace_text_in_range(None, &ch.to_string(), window, cx);
+                });
+            });
+        }
+        assert_cursors(&mut cx, &input, "abc|1\nabc|2\nabc|3");
+
+        // The repeated keystrokes form one typing gesture.
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                assert_eq!(state.undo_manager.undo_count(), 1);
+                state.undo(&Undo, window, cx);
+            });
+        });
+        assert_cursors(&mut cx, &input, "|1\n|2\n|3");
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.redo(&Redo, window, cx);
+            });
+        });
+        assert_cursors(&mut cx, &input, "abc|1\nabc|2\nabc|3");
+    }
+
+    #[gpui::test]
+    fn test_multi_cursor_backspace_run_is_one_undo(cx: &mut TestAppContext) {
+        let view = multi_line(cx);
+        let mut cx = VisualTestContext::from_window(view.window_handle.into(), cx);
+        let input = view.input;
+
+        setup_cursors(&mut cx, &input, "abc|1\nabc|2\nabc|3");
+        for _ in 0..3 {
+            cx.update(|window, cx| {
+                input.update(cx, |state, cx| {
+                    state.backspace(&Backspace, window, cx);
+                });
+            });
+        }
+        assert_cursors(&mut cx, &input, "|1\n|2\n|3");
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                assert_eq!(state.undo_manager.undo_count(), 1);
+                state.undo(&Undo, window, cx);
+            });
+        });
+        assert_cursors(&mut cx, &input, "abc|1\nabc|2\nabc|3");
+    }
+
+    #[gpui::test]
+    fn test_adding_a_cursor_splits_the_typing_gesture(cx: &mut TestAppContext) {
+        let view = multi_line(cx);
+        let mut cx = VisualTestContext::from_window(view.window_handle.into(), cx);
+        let input = view.input;
+
+        setup_cursors(&mut cx, &input, "|1\n2\n3");
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.replace_text_in_range(None, "a", window, cx);
+                state.add_cursor_below(&AddCursorBelow, window, cx);
+                state.replace_text_in_range(None, "b", window, cx);
+            });
+        });
+        assert_cursors(&mut cx, &input, "ab|1\n2b|\n3");
+
+        // The keystroke after the cursor was added is its own undo entry.
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.undo(&Undo, window, cx);
+            });
+        });
+        assert_cursors(&mut cx, &input, "a|1\n2|\n3");
+    }
+
+    #[gpui::test]
+    fn test_multi_cursor_indent_is_one_undo(cx: &mut TestAppContext) {
+        let view = multi_line(cx);
+        let mut cx = VisualTestContext::from_window(view.window_handle.into(), cx);
+        let input = view.input;
+
+        setup_cursors(&mut cx, &input, "|1\n|2\n|3");
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.indent_inline(&IndentInline, window, cx);
+                assert_eq!(state.undo_manager.undo_count(), 1);
+                state.undo(&Undo, window, cx);
+            });
+        });
+        assert_cursors(&mut cx, &input, "|1\n|2\n|3");
+    }
+
+    #[gpui::test]
+    fn test_multi_cursor_indent_then_outdent_roundtrips(cx: &mut TestAppContext) {
+        let view = multi_line(cx);
+        let mut cx = VisualTestContext::from_window(view.window_handle.into(), cx);
+        let input = view.input;
+
+        // Cursors at line starts.
+        setup_cursors(&mut cx, &input, "|1\n|2\n|3");
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.indent(false, window, cx);
+            });
+        });
+        assert_cursors(&mut cx, &input, "  |1\n  |2\n  |3");
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.outdent(false, window, cx);
+            });
+        });
+        assert_cursors(&mut cx, &input, "|1\n|2\n|3");
+    }
+
+    #[gpui::test]
+    fn test_inline_outdent_only_removes_line_indentation(cx: &mut TestAppContext) {
+        let view = multi_line(cx);
+        let mut cx = VisualTestContext::from_window(view.window_handle.into(), cx);
+        let input = view.input;
+
+        // A mid-line indent lands at the cursor, and the outdent does not
+        // take it back: it only ever removes leading line indentation.
+        setup_cursors(&mut cx, &input, "1|2\n1|2");
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.indent(false, window, cx);
+            });
+        });
+        assert_cursors(&mut cx, &input, "1  |2\n1  |2");
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.outdent(false, window, cx);
+            });
+        });
+        assert_cursors(&mut cx, &input, "1  |2\n1  |2");
+
+        // A line with leading indentation loses that, wherever the cursor is.
+        setup_cursors(&mut cx, &input, "  1|2\n  1|2");
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.outdent(false, window, cx);
+            });
+        });
+        assert_cursors(&mut cx, &input, "1|2\n1|2");
+    }
+
+    #[gpui::test]
+    fn test_readonly_multi_cursor_commands_leave_state_unchanged(cx: &mut TestAppContext) {
+        let view = multi_line(cx);
+        let mut cx = VisualTestContext::from_window(view.window_handle.into(), cx);
+        let input = view.input;
+
+        setup_cursors(&mut cx, &input, "a|b\nc|d");
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                let before: Vec<_> = state.selections.iter().copied().collect();
+                state.set_readonly(true, cx);
+                state.backspace(&Backspace, window, cx);
+                state.indent_inline(&IndentInline, window, cx);
+
+                assert_eq!(state.value(), "ab\ncd\n");
+                assert_eq!(state.selections.iter().copied().collect::<Vec<_>>(), before);
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_multi_cursor_edit_preserves_the_active_cursor(cx: &mut TestAppContext) {
+        let view = multi_line(cx);
+        let mut cx = VisualTestContext::from_window(view.window_handle.into(), cx);
+        let input = view.input;
+
+        setup_cursors(&mut cx, &input, "x|\n|y");
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                let mut selections: Vec<_> = state.selections.iter().copied().collect();
+                selections.swap(0, 1);
+                state.selections.replace_all(selections);
+                let active_id = state.active_selection().id;
+                state.replace_text_in_range(None, "!", window, cx);
+                assert_eq!(state.active_selection().id, active_id);
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_block_indent_outdent_with_selection(cx: &mut TestAppContext) {
+        let view = multi_line(cx);
+        let mut cx = VisualTestContext::from_window(view.window_handle.into(), cx);
+        let input = view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.set_value("line1\nline2\nline3", window, cx);
+                let id = state.selections.generate_id();
+                state
+                    .selections
+                    .replace_all(vec![CursorSelection::new(id, 0, 17)]);
+                cx.notify();
+            });
+        });
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.indent(true, window, cx);
+            });
+        });
+        input.read_with(&cx, |state, _| {
+            assert_eq!(state.text.to_string(), "  line1\n  line2\n  line3");
+        });
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.outdent(true, window, cx);
+            });
+        });
+        input.read_with(&cx, |state, _| {
+            assert_eq!(state.text.to_string(), "line1\nline2\nline3");
+        });
+    }
+
+    #[gpui::test]
+    fn test_multi_cursor_word_movement(cx: &mut TestAppContext) {
+        let view = multi_line(cx);
+        let mut cx = VisualTestContext::from_window(view.window_handle.into(), cx);
+        let input = view.input;
+
+        setup_cursors(
+            &mut cx,
+            &input,
+            "on|e two three\none t|wo three\non|e two three",
+        );
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.move_to_next_word(&MoveToNextWord, window, cx);
+            });
+        });
+        assert_cursors(
+            &mut cx,
+            &input,
+            "one| two three\none two| three\none| two three",
+        );
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.move_to_previous_word(&MoveToPreviousWord, window, cx);
+            });
+        });
+        assert_cursors(
+            &mut cx,
+            &input,
+            "|one two three\none |two three\n|one two three",
+        );
+
+        // Move to end/start of document collapses to a single cursor.
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.move_to_end(&MoveToEnd, window, cx);
+            });
+        });
+        input.read_with(&cx, |state, _| {
+            let cursors: Vec<usize> = state.selections.iter().map(|s| s.cursor_offset()).collect();
+            assert_eq!(cursors, vec![state.text.len()]);
+        });
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.move_to_start(&MoveToStart, window, cx);
+            });
+        });
+        input.read_with(&cx, |state, _| {
+            let cursors: Vec<usize> = state.selections.iter().map(|s| s.cursor_offset()).collect();
+            assert_eq!(cursors, vec![0]);
+        });
+    }
+
+    #[gpui::test]
+    fn test_multi_cursor_selection_commands(cx: &mut TestAppContext) {
+        let view = multi_line(cx);
+        let mut cx = VisualTestContext::from_window(view.window_handle.into(), cx);
+        let input = view.input;
+
+        setup_cursors(
+            &mut cx,
+            &input,
+            "on|e two three\none t|wo three\non|e two three",
+        );
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.select_to_start_of_line(&SelectToStartOfLine, window, cx);
+            });
+        });
+        assert_cursors(
+            &mut cx,
+            &input,
+            "|one two three\n|one two three\n|one two three",
+        );
+
+        // Select to document start collapses to the active cursor only.
+        setup_cursors(
+            &mut cx,
+            &input,
+            "on|e two three\none t|wo three\non|e two three",
+        );
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.select_to_start(&SelectToStart, window, cx);
+            });
+        });
+        input.read_with(&cx, |state, _| {
+            let cursors: Vec<usize> = state.selections.iter().map(|s| s.cursor_offset()).collect();
+            assert_eq!(cursors, vec![0]);
+        });
+    }
+
+    #[gpui::test]
+    fn test_multi_cursor_replace_selection(cx: &mut TestAppContext) {
+        let view = multi_line(cx);
+        let mut cx = VisualTestContext::from_window(view.window_handle.into(), cx);
+        let input = view.input;
+
+        setup_cursors(&mut cx, &input, "|a\n|b\n|c");
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.select_right(&SelectRight, window, cx);
+            });
+        });
+        input.read_with(&cx, |state, _| {
+            let ranges: Vec<_> = state.selections.iter().map(|s| (s.start, s.end)).collect();
+            assert_eq!(ranges, vec![(0, 1), (2, 3), (4, 5)]);
+        });
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.replace_text_in_range(None, "x", window, cx);
+            });
+        });
+        assert_cursors(&mut cx, &input, "x|\nx|\nx|");
+    }
+
+    #[gpui::test]
+    fn test_multi_cursor_escape_collapses(cx: &mut TestAppContext) {
+        let view = multi_line(cx);
+        let mut cx = VisualTestContext::from_window(view.window_handle.into(), cx);
+        let input = view.input;
+
+        setup_cursors(&mut cx, &input, "|a\n|b\n|c");
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.escape(&Escape, window, cx);
+            });
+        });
+        input.read_with(&cx, |state, _| {
+            assert_eq!(state.selections.len(), 1);
+        });
+    }
+
+    #[gpui::test]
+    fn test_build_columnar_selection(cx: &mut TestAppContext) {
+        let view = multi_line(cx);
+        let mut cx = VisualTestContext::from_window(view.window_handle.into(), cx);
+        let input = view.input;
+
+        setup_cursors(&mut cx, &input, "abcd\nabcd\nabcd");
+        cx.update(|_, cx| {
+            input.update(cx, |state, cx| {
+                // From row 0 col 1 to row 2 col 3.
+                state.build_columnar_selection(1, 13, cx);
+                let ranges: Vec<_> = state.selections.iter().map(|s| (s.start, s.end)).collect();
+                assert_eq!(ranges, vec![(1, 3), (6, 8), (11, 13)]);
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_multi_cursor_paste_distributes_lines(cx: &mut TestAppContext) {
+        let view = multi_line(cx);
+        let mut cx = VisualTestContext::from_window(view.window_handle.into(), cx);
+        let input = view.input;
+
+        setup_cursors(&mut cx, &input, "|1\n|2\n|3");
+        cx.update(|_, cx| {
+            cx.write_to_clipboard(ClipboardItem::new_string("x\ny\nz".to_string()));
+        });
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.paste(&Paste, window, cx);
+            });
+        });
+        // One clipboard line per cursor.
+        assert_cursors(&mut cx, &input, "x|1\ny|2\nz|3");
     }
 }
 

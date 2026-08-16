@@ -167,11 +167,21 @@ impl Selections {
         self.selections.len()
     }
 
+    /// Returns true when there is exactly one selection.
+    pub(super) fn is_single(&self) -> bool {
+        self.selections.len() == 1
+    }
+
     /// Generates a new unique cursor id.
     pub(super) fn generate_id(&mut self) -> CursorId {
         let id = CursorId::new(self.next_id);
         self.next_id += 1;
         id
+    }
+
+    /// Adds an additional selection.
+    pub(super) fn add(&mut self, selection: CursorSelection) {
+        self.selections.push(selection);
     }
 
     /// Replaces all selections. Ignores an empty vec to keep the
