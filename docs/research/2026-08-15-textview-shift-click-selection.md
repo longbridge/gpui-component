@@ -52,7 +52,7 @@ No dedicated Shift+mouse regression test was found in `crates/base/src/input`; t
 
 ## Current TextView behavior and gap
 
-Window-level TextView selection is stored in `WindowTextSelection` in [`crates/ui/src/text/window_selection.rs`](../../crates/ui/src/text/window_selection.rs) (currently lines 137–179). It already has exactly the needed representation: a separate `anchor`, `cursor`, and `is_selecting` flag. A zero-length click remains represented internally by coincident endpoints even though `resolved_points` returns no visible selection for equal points (currently lines 204–217).
+Window-level TextView selection is stored in `TextSelection` in [`crates/ui/src/text/window_selection.rs`](../../crates/ui/src/text/window_selection.rs) (currently lines 137–179). It already has exactly the needed representation: a separate `anchor`, `cursor`, and `is_selecting` flag. A zero-length click remains represented internally by coincident endpoints even though `resolved_points` returns no visible selection for equal points (currently lines 204–217).
 
 The missing behavior is in the root mouse controller in the same file (currently lines 818–840):
 
@@ -76,7 +76,7 @@ Zed therefore confirms the same interaction architecture: ordinary click begins;
 
 ## Recommended TextView implementation boundary
 
-Use the existing `WindowTextSelection.anchor` and `.cursor`; do not add a parallel `last_click_endpoint`. The new behavior should be expressed as two start modes:
+Use the existing `TextSelection.anchor` and `.cursor`; do not add a parallel `last_click_endpoint`. The new behavior should be expressed as two start modes:
 
 - **Begin:** clear old local/window selection, set `anchor = endpoint`, set `cursor = endpoint`.
 - **Extend:** when a usable anchor exists, preserve it and set `cursor = endpoint`; otherwise fall back to Begin. Then set `is_selecting = true`, so a following drag continues to update only the cursor.

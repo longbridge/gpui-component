@@ -335,6 +335,9 @@ impl Element for TextView {
             state.selectable = self.selectable;
             state.selection_format = self.selection_format;
             state.scrollable = self.scrollable;
+            if state.text_view_style != self.text_view_style {
+                state.selection_revision = state.selection_revision.wrapping_add(1);
+            }
             state.text_view_style = self.text_view_style.clone();
 
             if let Some(text) = self.text.clone() {
@@ -353,8 +356,9 @@ impl Element for TextView {
             })
             .relative()
             .on_action(move |_: &crate::input::Copy, window, cx| {
-                use crate::WindowExt as _;
-                let text = window.selected_text(cx).trim().to_string();
+                let text = gpui_base::TextSelection::selected_text(window, cx)
+                    .trim()
+                    .to_string();
                 if text.is_empty() {
                     cx.propagate();
                     return;
@@ -394,9 +398,7 @@ impl Element for TextView {
     ) {
         let state = &request_layout.state;
         if self.selectable {
-            // Register before painting children so this frame's Inline paint can
-            // repopulate the text bounds after stale ones are cleared.
-            crate::Root::register_selectable_text_view(state, hitbox, window, cx);
+            state.update(cx, |state, _| state.selection_adapter.begin_frame());
         }
 
         UiGlobalState::global_mut(cx)
@@ -404,6 +406,26 @@ impl Element for TextView {
             .push(state.clone());
         request_layout.element.paint(window, cx);
         UiGlobalState::global_mut(cx).text_view_state_stack.pop();
+
+        if self.selectable {
+            let (adapter, scroll_offset, content_bounds) = {
+                let state = state.read(cx);
+                (
+                    state.selection_adapter.clone(),
+                    state.scroll_offset(),
+                    state.bounds(),
+                )
+            };
+            let document_order = UiGlobalState::global_mut(cx).next_selection_document_order();
+            adapter.register(
+                hitbox.clone(),
+                content_bounds,
+                scroll_offset,
+                document_order,
+                window,
+                cx,
+            );
+        }
     }
 }
 
@@ -479,9 +501,15 @@ mod tests {
     #[gpui::test]
     fn inline_image_keeps_surrounding_text_on_same_line(cx: &mut TestAppContext) {
         cx.update(crate::init);
-        let (_, cx) = cx.add_window_view(|window, cx| {
+        let (root, cx) = cx.add_window_view(|window, cx| {
             let content = cx.new(|cx| InlineImageTextViewTestRoot::new(cx));
             crate::Root::new(content, window, cx)
+        });
+        let content = root.read_with(cx, |root, _| {
+            root.view()
+                .clone()
+                .downcast::<InlineImageTextViewTestRoot>()
+                .unwrap()
         });
         let cx: &mut VisualTestContext = cx;
 
@@ -490,13 +518,8 @@ mod tests {
             let _ = window.draw(cx);
         });
 
-        let inline_bounds = cx.update(|window, cx| {
-            crate::Root::read(window, cx)
-                .selectable_text_inlines
-                .values()
-                .next()
-                .cloned()
-                .unwrap_or_default()
+        let inline_bounds = content.read_with(cx, |content, cx| {
+            content.text_view.read(cx).selection_adapter.text_bounds()
         });
 
         assert_eq!(inline_bounds.len(), 2);
@@ -736,7 +759,7 @@ mod tests {
         cx.update(crate::init);
         let clicks = Arc::new(Mutex::new(Vec::new()));
         let captured = clicks.clone();
-        let (_, cx) = cx.add_window_view(move |window, cx| {
+        let (root, cx) = cx.add_window_view(move |window, cx| {
             let content = cx.new(|cx| LinkedImageRoot {
                 text_view: cx.new(|cx| {
                     TextViewState::markdown(
@@ -748,19 +771,17 @@ mod tests {
             });
             crate::Root::new(content, window, cx)
         });
+        let content = root.read_with(cx, |root, _| {
+            root.view().clone().downcast::<LinkedImageRoot>().unwrap()
+        });
         let cx: &mut VisualTestContext = cx;
         cx.run_until_parked();
         cx.update(|window, cx| {
             let _ = window.draw(cx);
         });
 
-        let inline_bounds = cx.update(|window, cx| {
-            crate::Root::read(window, cx)
-                .selectable_text_inlines
-                .values()
-                .next()
-                .cloned()
-                .unwrap_or_default()
+        let inline_bounds = content.read_with(cx, |content, cx| {
+            content.text_view.read(cx).selection_adapter.text_bounds()
         });
         assert!(
             inline_bounds.len() >= 2,

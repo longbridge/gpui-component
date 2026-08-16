@@ -6,6 +6,7 @@ use gpui::{
     StyleRefinement, Styled, Window, WindowControlArea, anchored, div, hsla, point,
     prelude::FluentBuilder, px,
 };
+use gpui_base::{ElementExt as _, TextSelectionScopeId};
 use rust_i18n::t;
 
 use crate::{
@@ -14,7 +15,6 @@ use crate::{
     button::{Button, ButtonVariant, ButtonVariants as _},
     dialog::{DialogContent, DialogTitle},
     scroll::ScrollableElement as _,
-    text::{SelectionScope, SelectionScopeElement as _},
     v_flex,
 };
 
@@ -249,6 +249,7 @@ pub struct Dialog {
     /// This will be change when open the dialog, the focus handle is create when open the dialog.
     pub(crate) focus_handle: FocusHandle,
     pub(crate) layer_ix: usize,
+    pub(crate) selection_scope: TextSelectionScopeId,
 }
 
 pub(crate) fn overlay_color(overlay: bool, cx: &App) -> Hsla {
@@ -274,6 +275,7 @@ impl Dialog {
             props: DialogProps::default(),
             children: Vec::new(),
             layer_ix: 0,
+            selection_scope: TextSelectionScopeId::default(),
             button_props: DialogButtonProps::default(),
         }
     }
@@ -482,6 +484,7 @@ impl RenderOnce for Dialog {
         }
 
         let layer_ix = self.layer_ix;
+        let selection_scope = self.selection_scope;
         let on_close = self.button_props.on_close.clone();
         let on_ok = self.button_props.on_ok.clone();
         let on_cancel = self.button_props.on_cancel.clone();
@@ -670,7 +673,7 @@ impl RenderOnce for Dialog {
                                             this.top(y * delta).shadow(shadow)
                                         },
                                     )
-                                    .selection_scope(SelectionScope::Dialog(layer_ix)),
+                                    .text_selection_scope(selection_scope),
                             ),
                     )
                     .with_animation("fade-in", animation, move |this, delta| this.opacity(delta)),

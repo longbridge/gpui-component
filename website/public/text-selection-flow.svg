@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="560" viewBox="0 0 1200 560" role="img" aria-labelledby="title description">
+  <title id="title">Add a GPUI text-selection participant in four steps</title>
+  <description id="description">Mount the window's only TextSelectionLayer element and create stable handles, register each handle's geometry during prepaint, let GPUI Base process pointer gestures, then ask each handle for ranges to paint.</description>
+  <style>
+    :root { color-scheme: light dark; }
+    text { font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #18202d; font-weight: 400; }
+    .step { font-size: 19px; fill: #486ee8; }
+    .title { font-size: 25px; }
+    .detail { font-size: 18px; fill: #596579; }
+    .code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 17px; fill: #273248; }
+    .tag { font-size: 15px; letter-spacing: .08em; fill: #596579; }
+    .card { fill: #ffffff; stroke: #c9ced8; stroke-width: 1.5; rx: 16; }
+    .base-card { fill: #eef3ff; stroke: #486ee8; stroke-width: 2; rx: 16; }
+    .arrow { fill: none; stroke: #486ee8; stroke-width: 2.5; marker-end: url(#arrow); }
+    @media (prefers-color-scheme: dark) {
+      svg > rect:first-of-type { fill: #17191d; }
+      .card { fill: #22252b; stroke: #424956; }
+      .base-card { fill: #202a45; stroke: #85a4ff; }
+      text { fill: #eef1f6; }
+      .step { fill: #85a4ff; }
+      .detail, .tag { fill: #abb4c3; }
+      .code { fill: #d9e2f5; }
+      .arrow { stroke: #85a4ff; }
+      #arrow path { fill: #85a4ff; }
+    }
+  </style>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#486ee8"/>
+    </marker>
+  </defs>
+
+  <rect width="1200" height="560" rx="20" fill="#f7f8fa"/>
+
+  <rect class="card" x="42" y="42" width="500" height="190"/>
+  <text class="step" x="72" y="78">01</text>
+  <text class="tag" x="508" y="78" text-anchor="end">APP · ONCE</text>
+  <text class="title" x="72" y="120">Set up window selection</text>
+  <text class="code" x="72" y="158">.child(TextSelectionLayer)</text>
+  <text class="code" x="72" y="192">TextSelectionHandle::new(...)</text>
+
+  <rect class="card" x="658" y="42" width="500" height="190"/>
+  <text class="step" x="688" y="78">02</text>
+  <text class="tag" x="1128" y="78" text-anchor="end">APP · PREPAINT</text>
+  <text class="title" x="688" y="120">Register current geometry</text>
+  <text class="code" x="688" y="158">TextSelectionHandle::register(</text>
+  <text class="code" x="714" y="192">registration, window, cx)</text>
+
+  <rect class="base-card" x="42" y="326" width="500" height="154"/>
+  <text class="step" x="72" y="362">03</text>
+  <text class="tag" x="508" y="362" text-anchor="end">GPUI BASE</text>
+  <text class="title" x="72" y="404">User selects text</text>
+  <text class="detail" x="72" y="444">Pointer gestures produce a snapshot.</text>
+
+  <rect class="card" x="658" y="292" width="500" height="222"/>
+  <text class="step" x="688" y="328">04</text>
+  <text class="tag" x="1128" y="328" text-anchor="end">APP · PAINT</text>
+  <text class="title" x="688" y="370">Project and paint</text>
+  <text class="code" x="688" y="408">TextSelectionHandle::update_runs(...)</text>
+  <text class="detail" x="688" y="446">Paint projection.ranges().</text>
+  <text class="code" x="688" y="486">TextSelection::selected_text(...)</text>
+
+  <path class="arrow" d="M542 137 H658"/>
+  <path class="arrow" d="M908 232 V260 H292 V326"/>
+  <path class="arrow" d="M542 403 H658"/>
+
+</svg>

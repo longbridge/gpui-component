@@ -17,6 +17,7 @@ use crate::{
         document::ParsedDocument,
         format,
         node::{self, NodeContext},
+        selection_adapter::TextViewSelectionAdapter,
     },
     v_flex,
 };
@@ -66,7 +67,6 @@ pub enum SelectionFormat {
 /// The state of a TextView.
 pub struct TextViewState {
     pub(super) focus_handle: FocusHandle,
-    pub(super) entity_id: gpui::EntityId,
     pub(super) list_state: ListState,
 
     /// The bounds of the text view
@@ -85,6 +85,7 @@ pub struct TextViewState {
     selected_text_override: Option<String>,
     select_all: bool,
     pub(super) auto_scroll: AutoScroll,
+    pub(super) selection_adapter: TextViewSelectionAdapter,
 
     pub(super) parsed_content: ParsedContent,
     /// Content format (markdown / html), used to parse synchronously on the
@@ -92,6 +93,8 @@ pub struct TextViewState {
     format: TextViewFormat,
     text: String,
     revision: usize,
+    pub(super) selection_revision: usize,
+    compatible_layout_update: bool,
     parsed_error: Option<SharedString>,
     tx: Sender<UpdateOptions>,
     _parse_task: Task<()>,
@@ -112,7 +115,7 @@ impl TextViewState {
     /// Create a new TextViewState.
     fn new(format: TextViewFormat, text: &str, cx: &mut Context<Self>) -> Self {
         let focus_handle = cx.focus_handle();
-        let entity_id = cx.entity_id();
+        let selection_adapter = TextViewSelectionAdapter::new(cx.entity().downgrade(), cx);
 
         let (tx, rx) = unbounded::<UpdateOptions>();
         let (tx_result, rx_result) = unbounded::<ParsedUpdate>();
@@ -123,11 +126,16 @@ impl TextViewState {
                         if parsed_update.revision != state.revision {
                             return;
                         }
+                        if parsed_update.baseline_ack {
+                            debug_assert!(parsed_update.full_parse);
+                            return;
+                        }
 
                         match parsed_update.result {
                             Ok(content) => {
                                 state.parsed_content = content;
                                 state.parsed_error = None;
+                                state.compatible_layout_update = parsed_update.selection_compatible;
                             }
                             Err(err) => {
                                 state.parsed_error = Some(err);
@@ -136,8 +144,8 @@ impl TextViewState {
                         // Don't interrupt an active drag-selection; the stored
                         // positions remain valid for append-only updates and will
                         // self-correct on the next mouse-move event.
-                        if !state.is_selecting {
-                            state.reset_selection();
+                        if !parsed_update.selection_compatible && !state.is_selecting {
+                            state.reset_selection_and_adapter(cx);
                         }
                         cx.notify();
                     });
@@ -149,7 +157,6 @@ impl TextViewState {
 
         let mut this = Self {
             focus_handle,
-            entity_id,
             bounds: Bounds::default(),
             multi_click_selection: None,
             selected_text_override: None,
@@ -168,11 +175,14 @@ impl TextViewState {
             markdown_extensions: Arc::default(),
             is_selecting: false,
             auto_scroll: AutoScroll::default(),
+            selection_adapter,
             parsed_content: Default::default(),
             format,
             parsed_error: None,
             text: text.to_string(),
             revision: 0,
+            selection_revision: 0,
+            compatible_layout_update: false,
             tx,
             _parse_task,
             _receive_task,
@@ -223,7 +233,7 @@ impl TextViewState {
     /// Set whether the text is selectable, default false.
     pub fn set_scrollable(&mut self, scrollable: bool, cx: &mut Context<Self>) {
         if !scrollable {
-            self.reset_selection();
+            self.reset_selection_and_adapter(cx);
         }
         self.scrollable = scrollable;
         cx.notify();
@@ -319,9 +329,17 @@ impl TextViewState {
 
     fn increment_update(&mut self, text: &str, append: bool, cx: &mut Context<Self>) {
         self.revision += 1;
+        if !append {
+            self.selection_revision = self.selection_revision.wrapping_add(1);
+        }
         let update_options = UpdateOptions {
             revision: self.revision,
             append,
+            mode: if append {
+                ParseMode::Compatible
+            } else {
+                ParseMode::BaselineAck
+            },
             pending_text: text.to_string(),
             markdown_extensions: self.markdown_extensions.clone(),
         };
@@ -341,13 +359,17 @@ impl TextViewState {
                     self.parsed_content = content;
                     self.parsed_error = None;
                     if !self.is_selecting {
-                        self.reset_selection();
+                        self.reset_selection_and_adapter(cx);
                     }
                 }
                 Err(err) => {
                     self.parsed_error = Some(err);
                 }
             }
+            // Keep the background parser's accumulated document in sync so a
+            // later append extends this baseline instead of parsing the delta
+            // as a standalone document.
+            _ = self.tx.try_send(update_options);
             cx.notify();
             return;
         }
@@ -356,22 +378,17 @@ impl TextViewState {
     }
 
     /// Save bounds and unselect if bounds changed.
-    pub(super) fn update_bounds(&mut self, bounds: Bounds<Pixels>) {
-        if self.bounds.size != bounds.size {
-            self.reset_selection();
-        }
+    pub(super) fn update_bounds(&mut self, bounds: Bounds<Pixels>, _cx: &mut App) {
         self.bounds = bounds;
     }
 
     /// The index of the top-level block at `content_y`, in this view's content
-    /// coordinates (the same space [`SelectionEndpoint`] stores its point in).
+    /// coordinates (the same space the base selection endpoint stores its point in).
     ///
     /// Only laid-out blocks can be located, which is enough for a selection
     /// endpoint: the user can only put one where they can see it. Returns
     /// `None` for a view that is not virtualized, where every block paints and
     /// the range is not needed.
-    ///
-    /// [`SelectionEndpoint`]: crate::text::window_selection::SelectionEndpoint
     pub(super) fn block_ix_at(&self, content_y: Pixels) -> Option<usize> {
         if !self.scrollable {
             return None;
@@ -407,7 +424,7 @@ impl TextViewState {
         self.auto_scroll.stop();
     }
 
-    fn reset_selection(&mut self) {
+    pub(super) fn reset_selection(&mut self) {
         self.multi_click_selection = None;
         self.selected_text_override = None;
         self.select_all = false;
@@ -419,9 +436,14 @@ impl TextViewState {
         self.parsed_content.document.clear_selection();
     }
 
+    fn reset_selection_and_adapter(&mut self, cx: &mut App) {
+        self.reset_selection();
+        self.selection_adapter.set_local_selection(false, cx);
+    }
+
     /// Clear the current text selection.
     pub fn clear_selection(&mut self, cx: &mut Context<Self>) {
-        self.reset_selection();
+        self.reset_selection_and_adapter(cx);
         cx.notify();
     }
 
@@ -440,6 +462,7 @@ impl TextViewState {
         self.select_all = true;
         self.is_selecting = false;
         self.auto_scroll.stop();
+        self.selection_adapter.set_local_selection(true, cx);
         cx.notify();
     }
 
@@ -448,6 +471,7 @@ impl TextViewState {
         pos: Point<Pixels>,
         kind: TextViewMultiClickKind,
         selected_text: String,
+        cx: &mut App,
     ) {
         let scroll_offset = self.scroll_offset();
         let pos = pos - self.bounds.origin - scroll_offset;
@@ -456,6 +480,7 @@ impl TextViewState {
         self.select_all = false;
         self.is_selecting = false;
         self.auto_scroll.stop();
+        self.selection_adapter.set_local_selection(true, cx);
     }
 
     pub(super) fn set_auto_scroll(&mut self, delta: Option<Pixels>, cx: &mut Context<Self>) {
@@ -471,26 +496,15 @@ impl TextViewState {
     /// Single-view fast path: when both endpoints are anchored inside one
     /// TextView, only that view participates (identical to the previous
     /// per-view behavior).
-    pub(crate) fn selection_points(
-        &self,
-        window: &Window,
-        cx: &App,
-    ) -> Option<(Point<Pixels>, Point<Pixels>)> {
+    pub(crate) fn selection_points(&self, cx: &App) -> Option<(Point<Pixels>, Point<Pixels>)> {
         if !self.selectable {
             return None;
         }
-        let root = window.root::<crate::Root>().flatten()?;
-        let selection = &root.read(cx).text_selection;
-        if let Some(view_id) = selection.single_view() {
-            if view_id != self.entity_id {
-                return None;
-            }
-        }
-        selection.resolved_points(cx)
+        self.selection_adapter.selection_points(cx)
     }
 
-    pub(crate) fn has_selection(&self, window: &Window, cx: &App) -> bool {
-        self.has_view_selection() || self.selection_points(window, cx).is_some()
+    pub(crate) fn has_selection(&self, cx: &App) -> bool {
+        self.has_view_selection() || self.selection_points(cx).is_some()
     }
 
     pub(super) fn on_action_select_all(
@@ -568,17 +582,35 @@ impl Render for TextViewState {
                 ),
             })
             .on_prepaint(move |bounds, window, cx| {
-                let size_changed = state.read(cx).bounds().size != bounds.size;
-                let id = state.entity_id();
-                state.update(cx, |state, _| {
-                    state.update_bounds(bounds);
+                let (
+                    size_changed,
+                    selection_involves_view,
+                    has_selection_snapshot,
+                    is_selecting,
+                    compatible_layout_update,
+                ) = {
+                    let state = state.read(cx);
+                    (
+                        state.bounds().size != bounds.size,
+                        state.selection_adapter.is_part_of_window_selection(cx),
+                        state.selection_adapter.has_selection_snapshot(cx),
+                        state.is_selecting,
+                        state.compatible_layout_update,
+                    )
+                };
+                let mut revision_changed = false;
+                state.update(cx, |state, cx| {
+                    revision_changed = state
+                        .selection_adapter
+                        .update_layout_revision(state.selection_revision, state.is_selecting);
+                    state.update_bounds(bounds, cx);
+                    state.compatible_layout_update = false;
                 });
-                if size_changed {
-                    if let Some(root) = window.root::<crate::Root>().flatten() {
-                        root.update(cx, |root, cx| {
-                            root.clear_text_selection_for_resized_view(id, cx);
-                        });
-                    }
+                if !is_selecting
+                    && ((size_changed && selection_involves_view && !compatible_layout_update)
+                        || (revision_changed && has_selection_snapshot))
+                {
+                    gpui_base::TextSelection::clear(window, cx);
                 }
             })
     }
@@ -628,6 +660,9 @@ impl Future for UpdateFuture {
                     }
                     _ = self.tx_result.try_send(ParsedUpdate {
                         revision: options.revision,
+                        full_parse: !options.append,
+                        selection_compatible: options.mode == ParseMode::Compatible,
+                        baseline_ack: options.mode == ParseMode::BaselineAck,
                         result: res,
                     });
                     if hit_coalesce_budget {
@@ -648,6 +683,7 @@ struct UpdateOptions {
     revision: usize,
     pending_text: String,
     append: bool,
+    mode: ParseMode,
     markdown_extensions: Arc<MarkdownExtensions>,
 }
 
@@ -656,6 +692,7 @@ impl UpdateOptions {
         if next.append {
             self.pending_text.push_str(&next.pending_text);
             self.revision = next.revision;
+            self.mode = ParseMode::Compatible;
         } else {
             *self = next;
         }
@@ -664,7 +701,16 @@ impl UpdateOptions {
 
 struct ParsedUpdate {
     revision: usize,
+    full_parse: bool,
+    selection_compatible: bool,
+    baseline_ack: bool,
     result: Result<ParsedContent, SharedString>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ParseMode {
+    BaselineAck,
+    Compatible,
 }
 
 fn merge_pending_options(options: &mut UpdateOptions, rx: &Receiver<UpdateOptions>) -> bool {
@@ -757,12 +803,32 @@ mod tests {
         });
     }
 
+    #[gpui::test]
+    fn full_parse_coalesced_with_append_preserves_new_select_all(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let state = cx.update(|cx| cx.new(|cx| TextViewState::markdown("old", cx)));
+        cx.run_until_parked();
+
+        state.update(cx, |state, cx| {
+            state.set_text("new", cx);
+            state.push_str(" text", cx);
+            state.select_all(cx);
+        });
+        cx.run_until_parked();
+
+        state.read_with(cx, |state, _| {
+            assert!(state.select_all);
+            assert_eq!(state.selected_text().trim(), "new text");
+        });
+    }
+
     #[test]
     fn update_options_merge_keeps_latest_full_text() {
         let mut options = UpdateOptions {
             revision: 1,
             pending_text: "old".to_string(),
             append: true,
+            mode: ParseMode::Compatible,
             markdown_extensions: Arc::default(),
         };
 
@@ -770,12 +836,14 @@ mod tests {
             revision: 2,
             pending_text: "new".to_string(),
             append: false,
+            mode: ParseMode::BaselineAck,
             markdown_extensions: Arc::default(),
         });
         options.merge(UpdateOptions {
             revision: 3,
             pending_text: " text".to_string(),
             append: true,
+            mode: ParseMode::Compatible,
             markdown_extensions: Arc::default(),
         });
 
@@ -795,6 +863,11 @@ mod tests {
                 revision,
                 pending_text: format!("{revision}\n"),
                 append: revision != 1,
+                mode: if revision == 1 {
+                    ParseMode::BaselineAck
+                } else {
+                    ParseMode::Compatible
+                },
                 markdown_extensions: Arc::default(),
             })
             .unwrap();

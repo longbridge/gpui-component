@@ -55,6 +55,8 @@ mod styled;
 mod switch;
 mod table;
 mod tabs;
+mod text_boundary;
+mod text_selection;
 mod theme;
 pub mod theme_tokens;
 mod toast;
@@ -143,6 +145,12 @@ pub use switch::{
 };
 pub use table::{Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow};
 pub use tabs::{Tab, TabStyles, Tabs};
+pub use text_selection::{
+    TextSelection, TextSelectionContentKey, TextSelectionCoverage, TextSelectionEndpoint,
+    TextSelectionEvent, TextSelectionHandle, TextSelectionLayer, TextSelectionProjection,
+    TextSelectionRegistration, TextSelectionRun, TextSelectionScopeId, TextSelectionSnapshot,
+    TextSelectionWindowPoints,
+};
 pub use theme::{ResizableTheme, ScrollbarTheme, Theme};
 pub use theme_tokens::{
     ColorTokens, RadiusTokens, SemanticThemeTokens, ShadowTokens, SpacingTokens, TextStyleToken,
