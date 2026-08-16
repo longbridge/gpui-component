@@ -19,23 +19,24 @@ reflow or make pointer targeting follow a moving control.
 
 ## Motion
 
-Scrollbar painting has a normalized visibility progress from `0.0` (hidden)
-to `1.0` (fully shown). Opacity follows that progress. Translation is one
-resolved track width at `0.0` and zero at `1.0`:
+Scrollbar painting has opacity and position progress values from `0.0`
+(hidden) to `1.0` (fully shown). Translation is one resolved track width at
+position `0.0` and zero at `1.0`:
 
 - Vertical scrollbar: translate right when hidden and move left into place.
 - Horizontal scrollbar: translate down when hidden and move up into place.
 
-Entrance lasts 150 ms and uses cubic ease-out. Exit begins after the existing
-two-second idle hold, lasts 250 ms, and uses cubic ease-in. Thumb, track
+Entrance lasts 300 ms: opacity advances linearly so the fade stays perceptible,
+while position uses cubic ease-out. Exit begins after the existing two-second
+idle hold, lasts 500 ms, and uses cubic ease-in for both channels. Thumb, track
 background, and track border share the same opacity and translation so custom
 styling remains visually coherent.
 
 ## State and Interruptions
 
-The scrollbar state records animation progress, its target visibility, and the
-time at which the current transition began. Visibility triggers are derived
-from the existing mode, scrolling, hover, and drag state.
+The scrollbar state records opacity and position progress, its target
+visibility, and the time at which the current transition began. Visibility
+triggers are derived from the existing mode, scrolling, hover, and drag state.
 
 When a trigger changes during an animation, the target reverses from the
 current visual progress. It does not restart at an endpoint. In particular:

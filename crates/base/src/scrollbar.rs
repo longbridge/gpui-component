@@ -30,8 +30,8 @@ const THUMB_ACTIVE_RADIUS: Pixels = Pixels::ZERO;
 const THUMB_ACTIVE_INSET: Pixels = px(4.);
 
 const IDLE_DURATION: Duration = Duration::from_secs(2);
-const ENTER_DURATION: Duration = Duration::from_millis(150);
-const EXIT_DURATION: Duration = Duration::from_millis(250);
+const ENTER_DURATION: Duration = Duration::from_millis(300);
+const EXIT_DURATION: Duration = Duration::from_millis(500);
 
 fn clamp_thumb_radius(radius: Pixels, bounds: Bounds<Pixels>) -> Pixels {
     radius
@@ -178,36 +178,43 @@ impl Default for ScrollbarState {
 
 #[derive(Debug, Clone, Copy)]
 struct VisibilityAnimation {
-    from: f32,
+    from_opacity: f32,
+    from_position: f32,
     target: f32,
     started_at: Instant,
 }
 
 #[derive(Debug, Clone, Copy)]
 struct VisibilitySample {
-    progress: f32,
+    opacity: f32,
+    position: f32,
     running: bool,
 }
 
 impl VisibilityAnimation {
     fn hidden(now: Instant) -> Self {
         Self {
-            from: 0.0,
+            from_opacity: 0.0,
+            from_position: 0.0,
             target: 0.0,
             started_at: now,
         }
     }
 
     fn sample(&self, now: Instant) -> VisibilitySample {
-        let distance = (self.target - self.from).abs();
+        let distance = (self.target - self.from_opacity)
+            .abs()
+            .max((self.target - self.from_position).abs());
         if distance == 0.0 {
             return VisibilitySample {
-                progress: self.target,
+                opacity: self.target,
+                position: self.target,
                 running: false,
             };
         }
 
-        let full_duration = if self.target > self.from {
+        let is_entering = self.target > self.from_opacity || self.target > self.from_position;
+        let full_duration = if is_entering {
             ENTER_DURATION
         } else {
             EXIT_DURATION
@@ -216,17 +223,23 @@ impl VisibilityAnimation {
         let linear =
             now.saturating_duration_since(self.started_at).as_secs_f32() / duration.as_secs_f32();
         let complete = linear >= 1.0;
-        let eased = if self.target > self.from {
-            ease_out_cubic(linear)
+        let (opacity_factor, position_factor) = if is_entering {
+            (linear.clamp(0.0, 1.0), ease_out_cubic(linear))
         } else {
-            ease_in_cubic(linear)
+            let eased = ease_in_cubic(linear);
+            (eased, eased)
         };
 
         VisibilitySample {
-            progress: if complete {
+            opacity: if complete {
                 self.target
             } else {
-                self.from + (self.target - self.from) * eased
+                self.from_opacity + (self.target - self.from_opacity) * opacity_factor
+            },
+            position: if complete {
+                self.target
+            } else {
+                self.from_position + (self.target - self.from_position) * position_factor
             },
             running: !complete,
         }
@@ -238,7 +251,9 @@ impl VisibilityAnimation {
             return;
         }
 
-        self.from = self.sample(now).progress;
+        let sample = self.sample(now);
+        self.from_opacity = sample.opacity;
+        self.from_position = sample.position;
         self.target = target;
         self.started_at = now;
     }
@@ -338,7 +353,7 @@ impl ScrollbarStateInner {
     }
 
     fn is_scrollbar_visible(&self) -> bool {
-        self.dragged_axis.is_some() || self.visibility.sample(Instant::now()).progress > 0.0
+        self.dragged_axis.is_some() || self.visibility.sample(Instant::now()).opacity > 0.0
     }
 }
 
@@ -876,7 +891,8 @@ pub struct AxisPrepaintState {
     thumb_size: Pixels,
     margin_end: Pixels,
     track_width: Pixels,
-    visibility_progress: f32,
+    visibility_opacity: f32,
+    visibility_position: f32,
     visibility_requested: bool,
 }
 
@@ -942,12 +958,14 @@ impl Element for Scrollbar {
         let visibility = if mode.is_always() || cx.reduce_motion() {
             let progress = if visible { 1.0 } else { 0.0 };
             inner.visibility = VisibilityAnimation {
-                from: progress,
+                from_opacity: progress,
+                from_position: progress,
                 target: progress,
                 started_at: now,
             };
             VisibilitySample {
-                progress,
+                opacity: progress,
+                position: progress,
                 running: false,
             }
         } else {
@@ -1125,7 +1143,8 @@ impl Element for Scrollbar {
                 thumb_size: thumb_length,
                 margin_end,
                 track_width,
-                visibility_progress: visibility.progress,
+                visibility_opacity: visibility.opacity,
+                visibility_position: visibility.position,
                 visibility_requested: visible,
             })
         }
@@ -1173,15 +1192,15 @@ impl Element for Scrollbar {
                     let thumb_size = state.thumb_size;
                     let margin_end = state.margin_end;
                     let is_vertical = axis.is_vertical();
-                    let visibility_progress = state.visibility_progress;
-                    let is_visible = state.visibility_requested || visibility_progress > 0.0;
+                    let visibility_opacity = state.visibility_opacity;
+                    let is_visible = state.visibility_requested || visibility_opacity > 0.0;
                     let translation =
-                        visibility_translation(axis, state.track_width, visibility_progress);
+                        visibility_translation(axis, state.track_width, state.visibility_position);
                     let painted_bounds = state.bounds + translation;
                     let painted_thumb_bounds = state.thumb_fill_bounds + translation;
-                    let painted_track_bg = state.bg.opacity(visibility_progress);
-                    let painted_border = state.border.opacity(visibility_progress);
-                    let painted_thumb_bg = state.thumb_bg.clone().opacity(visibility_progress);
+                    let painted_track_bg = state.bg.opacity(visibility_opacity);
+                    let painted_border = state.border.opacity(visibility_opacity);
+                    let painted_thumb_bg = state.thumb_bg.clone().opacity(visibility_opacity);
 
                     window.set_cursor_style(CursorStyle::default(), &state.bar_hitbox);
 
@@ -1411,26 +1430,42 @@ mod tests {
 
     #[test]
     fn visibility_animation_uses_direction_specific_curves_and_durations() {
+        assert_eq!(ENTER_DURATION, Duration::from_millis(300));
+        assert_eq!(EXIT_DURATION, Duration::from_millis(500));
+
         let start = Instant::now();
         let mut animation = VisibilityAnimation::hidden(start);
 
         animation.set_visible(true, start);
-        assert_eq!(animation.sample(start).progress, 0.0);
-        let entering = animation.sample(start + ENTER_DURATION / 2).progress;
+        assert_eq!(animation.sample(start).opacity, 0.0);
+        let entering = animation.sample(start + ENTER_DURATION / 2).position;
         assert!(entering > 0.5, "ease-out must advance quickly");
-        assert_eq!(animation.sample(start + ENTER_DURATION).progress, 1.0);
+        let entered = animation.sample(start + ENTER_DURATION);
+        assert_eq!(entered.opacity, 1.0);
+        assert_eq!(entered.position, 1.0);
 
         animation.set_visible(false, start + ENTER_DURATION);
         let exiting = animation
             .sample(start + ENTER_DURATION + EXIT_DURATION / 2)
-            .progress;
+            .opacity;
         assert!(exiting > 0.5, "ease-in must remain visible early in exit");
         assert_eq!(
             animation
                 .sample(start + ENTER_DURATION + EXIT_DURATION)
-                .progress,
+                .opacity,
             0.0
         );
+    }
+
+    #[test]
+    fn entrance_fades_linearly_while_position_eases_out() {
+        let start = Instant::now();
+        let mut animation = VisibilityAnimation::hidden(start);
+        animation.set_visible(true, start);
+
+        let halfway = animation.sample(start + ENTER_DURATION / 2);
+        assert!((halfway.opacity - 0.5).abs() < 0.001);
+        assert!(halfway.position > halfway.opacity);
     }
 
     #[test]
@@ -1455,16 +1490,15 @@ mod tests {
         let mut animation = VisibilityAnimation::hidden(start);
         animation.set_visible(true, start);
         let reversal_time = start + Duration::from_millis(60);
-        let before = animation.sample(reversal_time).progress;
+        let before = animation.sample(reversal_time);
 
         animation.set_visible(false, reversal_time);
-        assert_eq!(animation.sample(reversal_time).progress, before);
-        assert!(
-            animation
-                .sample(reversal_time + Duration::from_millis(10))
-                .progress
-                < before
-        );
+        let reversed = animation.sample(reversal_time);
+        assert_eq!(reversed.opacity, before.opacity);
+        assert_eq!(reversed.position, before.position);
+        let after = animation.sample(reversal_time + Duration::from_millis(10));
+        assert!(after.opacity < before.opacity);
+        assert!(after.position < before.position);
     }
 
     #[test]
