@@ -881,7 +881,7 @@ impl<M: InputModeKind> InputBaseState<M> {
     ) {
         let text: SharedString = text.into();
         self.with_edits_allowed(|this| {
-            this.undo_manager.pending_intent = Some(EditIntent::Atomic);
+            this.undo_manager.set_pending_intent(EditIntent::Atomic);
             let range_utf16 = this.range_to_utf16(&(this.cursor()..this.cursor()));
             this.replace_text_in_range_silent(Some(range_utf16), &text, window, cx);
             this.selected_range = (this.selected_range.end..this.selected_range.end).into();
@@ -899,7 +899,7 @@ impl<M: InputModeKind> InputBaseState<M> {
     ) {
         let text: SharedString = text.into();
         self.with_edits_allowed(|this| {
-            this.undo_manager.pending_intent = Some(EditIntent::Atomic);
+            this.undo_manager.set_pending_intent(EditIntent::Atomic);
             this.replace_text_in_range_silent(None, &text, window, cx);
             this.selected_range = (this.selected_range.end..this.selected_range.end).into();
         });
@@ -913,7 +913,7 @@ impl<M: InputModeKind> InputBaseState<M> {
     ) {
         let text: SharedString = text.into();
         self.with_edits_allowed(|this| {
-            this.undo_manager.pending_intent = Some(EditIntent::Atomic);
+            this.undo_manager.set_pending_intent(EditIntent::Atomic);
             let range = 0..this.text.chars().map(|c| c.len_utf16()).sum();
             this.replace_text_in_range_silent(Some(range), &text, window, cx);
             this.reset_highlighter(cx);
@@ -1462,7 +1462,7 @@ impl<M: InputModeKind> InputBaseState<M> {
         } else {
             EditIntent::Atomic
         };
-        self.undo_manager.pending_intent = Some(intent);
+        self.undo_manager.set_pending_intent(intent);
         self.replace_text_in_range(None, "", window, cx);
         self.pause_blink_cursor(cx);
     }
@@ -1474,7 +1474,7 @@ impl<M: InputModeKind> InputBaseState<M> {
         } else {
             EditIntent::Atomic
         };
-        self.undo_manager.pending_intent = Some(intent);
+        self.undo_manager.set_pending_intent(intent);
         self.replace_text_in_range(None, "", window, cx);
         self.pause_blink_cursor(cx);
     }
@@ -1957,14 +1957,14 @@ impl<M: InputModeKind> InputBaseState<M> {
         let selected_text = self.text.slice(self.selected_range).to_string();
         cx.write_to_clipboard(ClipboardItem::new_string(selected_text));
 
-        self.undo_manager.pending_intent = Some(EditIntent::Atomic);
+        self.undo_manager.set_pending_intent(EditIntent::Atomic);
         self.replace_text_in_range_silent(None, "", window, cx);
     }
 
     pub(super) fn paste(&mut self, _: &Paste, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(clipboard) = cx.read_from_clipboard() {
             let new_text = clipboard.text().unwrap_or_default();
-            self.undo_manager.pending_intent = Some(EditIntent::Atomic);
+            self.undo_manager.set_pending_intent(EditIntent::Atomic);
             self.replace_text_in_range_silent(None, &new_text, window, cx);
             self.scroll_to(self.cursor(), None, cx);
         }
@@ -2690,7 +2690,7 @@ impl<M: InputModeKind> EntityInputHandler for InputBaseState<M> {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let requested_intent = self.undo_manager.pending_intent.take();
+        let requested_intent = self.undo_manager.take_pending_intent();
         if !self.is_editable() {
             return;
         }
@@ -2831,7 +2831,7 @@ impl<M: InputModeKind> EntityInputHandler for InputBaseState<M> {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let requested_intent = self.undo_manager.pending_intent.take();
+        let requested_intent = self.undo_manager.take_pending_intent();
         if !self.is_editable() {
             return;
         }
@@ -4597,9 +4597,9 @@ mod tests {
             input.update(cx, |state, cx| {
                 state.replace_and_mark_text_in_range(None, "n", None, window, cx);
                 state.replace_text_in_range(None, "你", window, cx);
-                state.undo_manager.pending_intent = Some(EditIntent::Typing);
+                state.undo_manager.set_pending_intent(EditIntent::Typing);
                 state.replace_text_in_range(None, "a", window, cx);
-                state.undo_manager.pending_intent = Some(EditIntent::Typing);
+                state.undo_manager.set_pending_intent(EditIntent::Typing);
                 state.replace_text_in_range(None, "b", window, cx);
                 assert_eq!(state.value(), "你ab");
 
