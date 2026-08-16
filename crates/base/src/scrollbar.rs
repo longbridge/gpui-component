@@ -191,6 +191,20 @@ struct VisibilitySample {
     running: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum EntranceMotion {
+    FadeOnly,
+    SlideAndFade,
+}
+
+fn entrance_motion(mode: ScrollbarMode) -> EntranceMotion {
+    if mode == ScrollbarMode::Scrolling {
+        EntranceMotion::FadeOnly
+    } else {
+        EntranceMotion::SlideAndFade
+    }
+}
+
 impl VisibilityAnimation {
     fn hidden(now: Instant) -> Self {
         Self {
@@ -245,7 +259,7 @@ impl VisibilityAnimation {
         }
     }
 
-    fn set_visible(&mut self, visible: bool, now: Instant) {
+    fn set_visible(&mut self, visible: bool, entrance_motion: EntranceMotion, now: Instant) {
         let target = if visible { 1.0 } else { 0.0 };
         if self.target == target {
             return;
@@ -253,7 +267,11 @@ impl VisibilityAnimation {
 
         let sample = self.sample(now);
         self.from_opacity = sample.opacity;
-        self.from_position = sample.position;
+        self.from_position = if visible && entrance_motion == EntranceMotion::FadeOnly {
+            1.0
+        } else {
+            sample.position
+        };
         self.target = target;
         self.started_at = now;
     }
@@ -284,6 +302,7 @@ fn wants_visible(
 fn update_visibility(
     animation: &mut VisibilityAnimation,
     visible: bool,
+    entrance_motion: EntranceMotion,
     immediate: bool,
     now: Instant,
 ) -> VisibilitySample {
@@ -301,7 +320,7 @@ fn update_visibility(
             running: false,
         }
     } else {
-        animation.set_visible(visible, now);
+        animation.set_visible(visible, entrance_motion, now);
         animation.sample(now)
     }
 }
@@ -981,6 +1000,7 @@ impl Element for Scrollbar {
         let visibility = update_visibility(
             &mut inner.visibility,
             visible,
+            entrance_motion(mode),
             mode.is_always() || cx.reduce_motion(),
             now,
         );
@@ -1448,7 +1468,7 @@ mod tests {
         let start = Instant::now();
         let mut animation = VisibilityAnimation::hidden(start);
 
-        animation.set_visible(true, start);
+        animation.set_visible(true, EntranceMotion::SlideAndFade, start);
         assert_eq!(animation.sample(start).opacity, 0.0);
         let entering = animation.sample(start + ENTER_DURATION / 2).position;
         assert!(entering > 0.5, "ease-out must advance quickly");
@@ -1456,7 +1476,7 @@ mod tests {
         assert_eq!(entered.opacity, 1.0);
         assert_eq!(entered.position, 1.0);
 
-        animation.set_visible(false, start + ENTER_DURATION);
+        animation.set_visible(false, EntranceMotion::SlideAndFade, start + ENTER_DURATION);
         let exiting = animation
             .sample(start + ENTER_DURATION + EXIT_DURATION / 2)
             .opacity;
@@ -1473,11 +1493,37 @@ mod tests {
     fn entrance_fades_linearly_while_position_eases_out() {
         let start = Instant::now();
         let mut animation = VisibilityAnimation::hidden(start);
-        animation.set_visible(true, start);
+        animation.set_visible(true, EntranceMotion::SlideAndFade, start);
 
         let halfway = animation.sample(start + ENTER_DURATION / 2);
         assert!((halfway.opacity - 0.5).abs() < 0.001);
         assert!(halfway.position > halfway.opacity);
+    }
+
+    #[test]
+    fn fade_only_entrance_snaps_position_and_animates_opacity() {
+        let start = Instant::now();
+        let mut animation = VisibilityAnimation::hidden(start);
+        animation.set_visible(true, EntranceMotion::FadeOnly, start);
+
+        let initial = animation.sample(start);
+        assert_eq!(initial.opacity, 0.0);
+        assert_eq!(initial.position, 1.0);
+        let halfway = animation.sample(start + ENTER_DURATION / 2);
+        assert!((halfway.opacity - 0.5).abs() < 0.001);
+        assert_eq!(halfway.position, 1.0);
+    }
+
+    #[test]
+    fn scrolling_fades_in_while_hover_slides_and_fades() {
+        assert_eq!(
+            entrance_motion(ScrollbarMode::Scrolling),
+            EntranceMotion::FadeOnly
+        );
+        assert_eq!(
+            entrance_motion(ScrollbarMode::Hover),
+            EntranceMotion::SlideAndFade
+        );
     }
 
     #[test]
@@ -1500,11 +1546,11 @@ mod tests {
     fn visibility_animation_reverses_from_current_progress() {
         let start = Instant::now();
         let mut animation = VisibilityAnimation::hidden(start);
-        animation.set_visible(true, start);
+        animation.set_visible(true, EntranceMotion::SlideAndFade, start);
         let reversal_time = start + Duration::from_millis(60);
         let before = animation.sample(reversal_time);
 
-        animation.set_visible(false, reversal_time);
+        animation.set_visible(false, EntranceMotion::SlideAndFade, reversal_time);
         let reversed = animation.sample(reversal_time);
         assert_eq!(reversed.opacity, before.opacity);
         assert_eq!(reversed.position, before.position);
@@ -1547,7 +1593,7 @@ mod tests {
         ));
 
         let mut settled = VisibilityAnimation::hidden(now - ENTER_DURATION);
-        settled.set_visible(true, now - ENTER_DURATION);
+        settled.set_visible(true, EntranceMotion::SlideAndFade, now - ENTER_DURATION);
         assert!(!settled.sample(now).running, "idle hold must not animate");
     }
 
@@ -1575,7 +1621,7 @@ mod tests {
         let activity = Instant::now();
         let exit_start = activity + IDLE_DURATION;
         let mut animation = VisibilityAnimation::hidden(activity - ENTER_DURATION);
-        animation.set_visible(true, activity - ENTER_DURATION);
+        animation.set_visible(true, EntranceMotion::FadeOnly, activity - ENTER_DURATION);
         assert!(!wants_visible(
             ScrollbarMode::Scrolling,
             false,
@@ -1584,7 +1630,7 @@ mod tests {
             exit_start,
         ));
 
-        animation.set_visible(false, exit_start);
+        animation.set_visible(false, EntranceMotion::FadeOnly, exit_start);
         let start = animation.sample(exit_start);
         assert_eq!(start.opacity, 1.0);
         assert_eq!(start.position, 1.0);
@@ -1596,7 +1642,13 @@ mod tests {
         let now = Instant::now();
         let mut animation = VisibilityAnimation::hidden(now);
 
-        let shown = update_visibility(&mut animation, true, true, now);
+        let shown = update_visibility(
+            &mut animation,
+            true,
+            EntranceMotion::SlideAndFade,
+            true,
+            now,
+        );
         assert_eq!(shown.opacity, 1.0);
         assert_eq!(shown.position, 1.0);
         assert!(!shown.running);
@@ -1605,7 +1657,13 @@ mod tests {
             Point::default()
         );
 
-        let hidden = update_visibility(&mut animation, false, true, now);
+        let hidden = update_visibility(
+            &mut animation,
+            false,
+            EntranceMotion::SlideAndFade,
+            true,
+            now,
+        );
         assert_eq!(hidden.opacity, 0.0);
         assert_eq!(hidden.position, 0.0);
         assert!(!hidden.running);
