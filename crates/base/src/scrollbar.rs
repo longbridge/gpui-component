@@ -1403,7 +1403,7 @@ impl Element for Scrollbar {
                         let scroll_handle = self.scroll_handle.clone();
 
                         move |_event: &MouseUpEvent, phase, _, cx| {
-                            if phase.bubble() {
+                            if phase.bubble() && state.get().dragged_axis == Some(axis) {
                                 scroll_handle.end_drag();
                                 state.set(state.get().with_unset_drag_pos(Instant::now()));
                                 cx.notify(view_id);
@@ -1849,6 +1849,7 @@ mod tests {
         );
 
         assert_eq!(handle.drag_starts.get(), 0);
+        assert_eq!(handle.drag_ends.get(), 0);
         assert_eq!(handle.offset(), Point::default());
     }
 
