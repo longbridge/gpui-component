@@ -26,11 +26,14 @@ position `0.0` and zero at `1.0`:
 - Vertical scrollbar: translate right when hidden and move left into place.
 - Horizontal scrollbar: translate down when hidden and move up into place.
 
-Entrance lasts 300 ms: opacity advances linearly so the fade stays perceptible,
-while position uses cubic ease-out. Exit begins after the existing two-second
-idle hold, lasts 500 ms, and uses cubic ease-in for both channels. Thumb, track
-background, and track border share the same opacity and translation so custom
-styling remains visually coherent.
+Entrance lasts 300 ms and is mode-specific. In `Scrolling` mode, position
+snaps to `1.0` and only opacity advances linearly, so scrolling reveals the
+bar with a fade but no slide. In `Hover` mode, opacity advances linearly while
+position uses cubic ease-out, preserving the slide-and-fade entrance. Exit
+begins after the existing two-second idle hold, lasts 500 ms, and uses cubic
+ease-in for both channels in both modes. Thumb, track background, and track
+border share the same opacity and translation so custom styling remains
+visually coherent.
 
 ## State and Interruptions
 
@@ -50,6 +53,10 @@ Animation frames are requested only while progress is changing. The existing
 idle timer wakes the view when the hold expires; no continuous frames are
 requested during the hold.
 
+When `Scrolling` mode interrupts an exit, position snaps back to its resting
+location while opacity fades in from its current value. `Hover` mode reverses
+both channels continuously from their current values.
+
 ## Painting and Interaction
 
 Resolved styles and thumb geometry continue to use the current normal, hover,
@@ -68,8 +75,9 @@ not add an interaction region outside those stable bounds.
 Unit tests cover the pure visibility animation calculations:
 
 - entrance endpoints, duration, monotonic opacity, and translation direction;
+- fade-only `Scrolling` entrance and slide-and-fade `Hover` entrance;
 - idle hold followed by exit endpoints and duration;
-- smooth reversal from an in-progress value;
+- mode-specific interruption from in-progress opacity and position values;
 - vertical and horizontal translation vectors;
 - stationary, opaque behavior in `Always` mode.
 
