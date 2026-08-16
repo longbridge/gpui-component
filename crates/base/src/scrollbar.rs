@@ -32,6 +32,7 @@ const THUMB_ACTIVE_INSET: Pixels = px(4.);
 const IDLE_DURATION: Duration = Duration::from_secs(2);
 const ENTER_DURATION: Duration = Duration::from_millis(300);
 const EXIT_DURATION: Duration = Duration::from_millis(500);
+const EXPAND_DURATION: Duration = Duration::from_millis(300);
 
 fn clamp_thumb_radius(radius: Pixels, bounds: Bounds<Pixels>) -> Pixels {
     radius
@@ -157,6 +158,7 @@ struct ScrollbarStateInner {
     last_update: Instant,
     idle_timer_scheduled: bool,
     visibility: VisibilityAnimation,
+    expansion: ExpansionAnimation,
 }
 
 impl Default for ScrollbarState {
@@ -172,7 +174,56 @@ impl Default for ScrollbarState {
             last_update: now,
             idle_timer_scheduled: false,
             visibility: VisibilityAnimation::hidden(now),
+            expansion: ExpansionAnimation::collapsed(now),
         })))
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ExpansionAnimation {
+    from: f32,
+    target: f32,
+    started_at: Instant,
+}
+
+impl ExpansionAnimation {
+    fn collapsed(now: Instant) -> Self {
+        Self {
+            from: 0.0,
+            target: 0.0,
+            started_at: now,
+        }
+    }
+
+    fn sample(&self, now: Instant) -> (f32, bool) {
+        let distance = (self.target - self.from).abs();
+        if distance == 0.0 {
+            return (self.target, false);
+        }
+        let duration = EXPAND_DURATION.mul_f32(distance);
+        let linear =
+            now.saturating_duration_since(self.started_at).as_secs_f32() / duration.as_secs_f32();
+        let complete = linear >= 1.0;
+        let progress = if complete {
+            self.target
+        } else {
+            self.from + (self.target - self.from) * ease_out_cubic(linear)
+        };
+        (progress, !complete)
+    }
+
+    fn set_expanded(&mut self, expanded: bool, immediate: bool, now: Instant) -> (f32, bool) {
+        let target = if expanded { 1.0 } else { 0.0 };
+        if immediate {
+            self.from = target;
+            self.target = target;
+            self.started_at = now;
+        } else if self.target != target {
+            self.from = self.sample(now).0;
+            self.target = target;
+            self.started_at = now;
+        }
+        self.sample(now)
     }
 }
 
@@ -1004,8 +1055,13 @@ impl Element for Scrollbar {
             mode.is_always() || cx.reduce_motion(),
             now,
         );
+        let (expansion, expansion_running) = inner.expansion.set_expanded(
+            mode == ScrollbarMode::Scrolling && (is_hovered || is_dragging),
+            cx.reduce_motion(),
+            now,
+        );
 
-        if visibility.running {
+        if visibility.running || expansion_running {
             window.request_animation_frame();
         }
 
@@ -1101,10 +1157,12 @@ impl Element for Scrollbar {
             let is_hovered_on_bar = state.get().hovered_axis == Some(axis);
             let is_hovered_on_thumb = state.get().hovered_on_thumb == Some(axis);
 
-            let (thumb_bg, bar_bg, bar_border, thumb_width, inset, radius, min_length) =
+            let (thumb_bg, bar_bg, bar_border, mut thumb_width, inset, radius, min_length) =
                 if state.get().dragged_axis == Some(axis) {
                     self.style_for_active(cx)
-                } else if is_hover_to_show && (is_hovered_on_bar || is_hovered_on_thumb) {
+                } else if (is_hover_to_show || mode == ScrollbarMode::Scrolling)
+                    && (is_hovered_on_bar || is_hovered_on_thumb)
+                {
                     if is_hovered_on_thumb {
                         self.style_for_hovered_thumb(cx)
                     } else {
@@ -1119,6 +1177,16 @@ impl Element for Scrollbar {
                 } else {
                     self.style_for_normal(cx)
                 };
+
+            if mode == ScrollbarMode::Scrolling {
+                let normal_width = self.style_for_normal(cx).3;
+                let expanded_width = if is_hovered_on_thumb {
+                    self.style_for_hovered_thumb(cx).3
+                } else {
+                    self.style_for_hovered_bar(cx).3
+                };
+                thumb_width = normal_width + (expanded_width - normal_width) * expansion;
+            }
 
             let thumb_size = (container_size / scroll_area_size * container_size).max(min_length);
             let thumb_start = -(scroll_position / (scroll_area_size - container_size)
@@ -1524,6 +1592,32 @@ mod tests {
             entrance_motion(ScrollbarMode::Hover),
             EntranceMotion::SlideAndFade
         );
+    }
+
+    #[test]
+    fn scrolling_hover_expansion_animates_in_both_directions() {
+        let start = Instant::now();
+        let mut animation = ExpansionAnimation::collapsed(start);
+
+        let (initial, running) = animation.set_expanded(true, false, start);
+        assert_eq!(initial, 0.0);
+        assert!(running);
+        let (expanded_halfway, _) = animation.sample(start + EXPAND_DURATION / 2);
+        assert!(expanded_halfway > 0.5);
+
+        let reversal = start + EXPAND_DURATION / 2;
+        let before = animation.sample(reversal).0;
+        let (after_reversal, running) = animation.set_expanded(false, false, reversal);
+        assert_eq!(after_reversal, before);
+        assert!(running);
+        assert_eq!(animation.sample(reversal + EXPAND_DURATION).0, 0.0);
+    }
+
+    #[test]
+    fn reduced_motion_snaps_scrolling_hover_expansion() {
+        let now = Instant::now();
+        let mut animation = ExpansionAnimation::collapsed(now);
+        assert_eq!(animation.set_expanded(true, true, now), (1.0, false));
     }
 
     #[test]
