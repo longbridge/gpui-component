@@ -11,10 +11,6 @@ version = "0.5.2"
 publish = false
 edition.workspace = true
 
-[[bin]]
-name = "base_components"
-path = "examples/base_components.rs"
-
 [lib]
 doctest = false
 
