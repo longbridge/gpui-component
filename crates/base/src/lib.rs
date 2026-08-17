@@ -130,8 +130,8 @@ pub use resizable::{
     resizable_panel, v_resizable,
 };
 pub use scrollbar::{
-    Scrollbar, ScrollbarAxis, ScrollbarHandle, ScrollbarMode, ScrollbarStyles, ScrollbarThumbStyle,
-    ScrollbarTrackStyle,
+    Scrollbar, ScrollbarAxis, ScrollbarEntrance, ScrollbarHandle, ScrollbarMode, ScrollbarMotion,
+    ScrollbarStyles, ScrollbarThumbStyle, ScrollbarTrackStyle,
 };
 pub use select::Select;
 pub use sheet::Sheet;

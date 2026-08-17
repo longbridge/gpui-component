@@ -188,6 +188,16 @@ their internal layout lifecycle coherent. `ToastStack`, for example, combines
 measurement, overlap, expansion, and collapse through `ToastMotion`. This does
 not give base ownership of toast colors, typography, borders, or content.
 
+`Scrollbar` follows the same rule through `ScrollbarMotion`. A scrollbar is a
+custom element that paints its own track and thumb, so no caller can apply an
+opacity or offset to it from outside. Base therefore plays the transition, but
+owns none of its timing: `ScrollbarMotion::default()` has zero enter, exit, and
+expand durations, so an unstyled scrollbar appears and disappears without
+motion. The styled layer projects product timing and the entrance choreography
+through `ScrollbarTheme::motion`. A zero duration always means "adopt the
+target now", which is also how reduced motion and always-visible scrollbars
+reach the same code path.
+
 ## Transition Identity
 
 A transition ID identifies one independently animated value. Use a stable
