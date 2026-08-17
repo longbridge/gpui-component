@@ -146,7 +146,7 @@ impl RenderOnce for Popup {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gpui::{Context, Render};
+    use gpui::{Context, Render, px};
 
     #[test]
     fn resolved_corner_preserves_existing_anchor_math() {

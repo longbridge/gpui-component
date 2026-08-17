@@ -88,8 +88,8 @@ impl Positioner {
     /// Places `anchor`'s corner of the popup at `position`.
     ///
     /// This is the corner-anchoring path used by triggers that were written
-    /// against GPUI's `anchored` element. It clamps into the viewport but never
-    /// flips to another side.
+    /// against GPUI's `anchored` element. It clamps into the viewport without
+    /// changing the requested anchor.
     pub fn corner(anchor: Anchor, position: Point<Pixels>) -> Self {
         Self {
             strategy: Strategy::Corner { anchor, position },

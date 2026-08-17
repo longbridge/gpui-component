@@ -2,10 +2,10 @@ use std::rc::Rc;
 
 use chrono::{NaiveDate, Weekday};
 use gpui::{
-    App, AppContext, ClickEvent, Context, ElementId, Empty, Entity, EventEmitter, FocusHandle,
-    Focusable, InteractiveElement as _, IntoElement, KeyBinding, MouseButton, ParentElement as _,
-    Render, RenderOnce, SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled,
-    Subscription, Window, anchored, deferred, div, prelude::FluentBuilder as _, px,
+    App, AppContext, Bounds, ClickEvent, Context, ElementId, Empty, Entity, EventEmitter,
+    FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyBinding, MouseButton,
+    ParentElement as _, Pixels, Render, RenderOnce, SharedString, StatefulInteractiveElement as _,
+    StyleRefinement, Styled, Subscription, Window, deferred, div, prelude::FluentBuilder as _, px,
 };
 use rust_i18n::t;
 
@@ -20,7 +20,7 @@ use crate::{
 };
 
 use super::calendar::{Calendar, CalendarEvent, CalendarState, Date, Matcher};
-use gpui_base::DatePicker as BaseDatePicker;
+use gpui_base::{DatePicker as BaseDatePicker, ElementExt as _};
 
 const CONTEXT: &'static str = "DatePicker";
 pub(crate) fn init(cx: &mut App) {
@@ -81,6 +81,7 @@ pub struct DatePickerState {
     _subscriptions: Vec<Subscription>,
     /// The first day of the week. Defaults to Sunday.
     first_day_of_week: Weekday,
+    bounds: Bounds<Pixels>,
 }
 
 impl Focusable for DatePickerState {
@@ -135,6 +136,7 @@ impl DatePickerState {
             disabled_matcher: None,
             _subscriptions,
             first_day_of_week: Weekday::Sun,
+            bounds: Bounds::default(),
         }
     }
 
@@ -417,6 +419,10 @@ impl RenderOnce for DatePicker {
             .flex_none()
             .w_full()
             .relative()
+            .on_prepaint({
+                let state = self.state.clone();
+                move |bounds, _, cx| state.update(cx, |state, _| state.bounds = bounds)
+            })
             .input_text_size(self.size)
             .refine_style(&self.style)
             .child(
@@ -483,10 +489,9 @@ impl RenderOnce for DatePicker {
             .when(state.open, |this| {
                 this.child(
                     deferred(
-                        anchored().snap_to_window_with_margin(px(8.)).child(
+                        crate::popover::dropdown_positioner(state.bounds).child(
                             div()
                                 .occlude()
-                                .mt_1p5()
                                 .p_3()
                                 .border_1()
                                 .border_color(cx.theme().border)
