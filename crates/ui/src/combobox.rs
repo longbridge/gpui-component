@@ -661,9 +661,6 @@ where
                 None
             };
 
-        let prepaint_handler: Box<dyn Fn(Bounds<Pixels>, &mut Window, &mut App) + 'static> =
-            Box::new(|_, _, _| {});
-
         let footer_el = self.footer.as_ref().map(|f| f(window, cx));
 
         let dismiss_handler: Box<dyn Fn(&MouseDownEvent, &mut Window, &mut App) + 'static> =
@@ -689,7 +686,6 @@ where
                     trigger_body,
                     trailing,
                     toggle_handler,
-                    prepaint_handler,
                     window,
                     cx,
                 ))
@@ -975,7 +971,6 @@ fn render_trigger_container(
     trigger_body: AnyElement,
     trailing: AnyElement,
     toggle_handler: Option<Box<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>>,
-    prepaint_handler: Box<dyn Fn(Bounds<Pixels>, &mut Window, &mut App) + 'static>,
     window: &Window,
     cx: &mut App,
 ) -> impl IntoElement {
@@ -1018,7 +1013,6 @@ fn render_trigger_container(
                 .child(trigger_body)
                 .child(trailing),
         )
-        .on_prepaint(prepaint_handler)
 }
 
 /// Renders the deferred anchored popup shell containing the searchable list and optional footer.
@@ -1037,11 +1031,7 @@ fn render_popup_shell<D: SearchableListDelegate + 'static>(
     let has_footer = footer_el.is_some();
     let popup_radius = cx.theme().radius.min(px(8.));
 
-    gpui_base::Positioner::side(bounds)
-        .placement(gpui_base::Placement::Bottom)
-        .align(gpui_base::Align::Start)
-        .offset(px(6.))
-        .margin(px(8.))
+    crate::popup_position::dropdown_positioner(bounds)
         .child(
             div()
                 .occlude()
