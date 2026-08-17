@@ -60,18 +60,18 @@ const SCROLLBAR_EXPAND: Duration = Duration::from_millis(300);
 
 /// The scrollbar motion this design system projects onto Base.
 ///
-/// A scrollbar revealed by scrolling fades in place, because the pointer is
-/// nowhere near the edge it would slide from. One revealed by pointing at the
-/// edge slides in from that edge as it fades.
+/// Scrolling and track hover reveal a scrollbar by fading it in place. In hover
+/// mode, pointing at the thumb slides it in from the nearest edge as it fades.
 fn scrollbar_motion(mode: ScrollbarMode) -> gpui_base::ScrollbarMotion {
     gpui_base::ScrollbarMotion::default()
         .with_idle(SCROLLBAR_IDLE)
         .with_enter(SCROLLBAR_ENTER)
         .with_exit(SCROLLBAR_EXIT)
         .with_expand(SCROLLBAR_EXPAND)
-        .with_entrance(match mode {
-            ScrollbarMode::Scrolling => gpui_base::ScrollbarEntrance::Fade,
-            _ => gpui_base::ScrollbarEntrance::SlideAndFade,
+        .with_entrance(gpui_base::ScrollbarEntrance::Fade)
+        .with_thumb_hover_entrance(match mode {
+            ScrollbarMode::Scrolling | ScrollbarMode::Always => gpui_base::ScrollbarEntrance::Fade,
+            ScrollbarMode::Hover => gpui_base::ScrollbarEntrance::SlideAndFade,
         })
 }
 
@@ -211,9 +211,12 @@ impl Theme {
     /// Changes the scrollbar display mode and synchronizes the Base projection.
     pub fn set_scrollbar_mode(mode: ScrollbarMode, cx: &mut App) {
         Theme::global_mut(cx).scrollbar_mode = mode;
-        let scrollbar = &mut gpui_base::Theme::global_mut(cx).scrollbar;
-        scrollbar.mode = mode;
-        scrollbar.motion = scrollbar_motion(mode);
+        let base_theme = gpui_base::Theme::global_mut(cx);
+        base_theme.scrollbar = base_theme
+            .scrollbar
+            .clone()
+            .with_mode(mode)
+            .with_motion(scrollbar_motion(mode));
     }
 
     /// Change the theme mode.
@@ -236,25 +239,26 @@ impl Theme {
 
         let base_theme = gpui_base::Theme {
             tokens: theme.semantic_tokens(),
-            scrollbar: gpui_base::ScrollbarTheme {
-                mode: theme.scrollbar_mode,
-                motion: scrollbar_motion(theme.scrollbar_mode),
-                styles: gpui_base::ScrollbarStyles::default()
-                    .track(|style| style.bg(theme.scrollbar))
-                    .track_hover(|style| style.bg(theme.scrollbar))
-                    .track_active(|style| style.bg(theme.scrollbar).border_color(theme.border))
-                    .thumb(|style| style.bg(theme.tokens.scrollbar_thumb).radius(theme.radius))
-                    .thumb_hover(|style| {
-                        style
-                            .bg(theme.tokens.scrollbar_thumb_hover)
-                            .radius(theme.radius)
-                    })
-                    .thumb_active(|style| {
-                        style
-                            .bg(theme.tokens.scrollbar_thumb_hover)
-                            .radius(theme.radius)
-                    }),
-            },
+            scrollbar: gpui_base::ScrollbarTheme::new()
+                .with_mode(theme.scrollbar_mode)
+                .with_motion(scrollbar_motion(theme.scrollbar_mode))
+                .with_styles(
+                    gpui_base::ScrollbarStyles::default()
+                        .track(|style| style.bg(theme.scrollbar))
+                        .track_hover(|style| style.bg(theme.scrollbar))
+                        .track_active(|style| style.bg(theme.scrollbar).border_color(theme.border))
+                        .thumb(|style| style.bg(theme.tokens.scrollbar_thumb).radius(theme.radius))
+                        .thumb_hover(|style| {
+                            style
+                                .bg(theme.tokens.scrollbar_thumb_hover)
+                                .radius(theme.radius)
+                        })
+                        .thumb_active(|style| {
+                            style
+                                .bg(theme.tokens.scrollbar_thumb_hover)
+                                .radius(theme.radius)
+                        }),
+                ),
             resizable: gpui_base::ResizableTheme {
                 handle: theme.border,
                 active_handle: theme.drag_border,
@@ -568,7 +572,7 @@ mod base_theme_projection_tests {
             Theme::set_scrollbar_mode(ScrollbarMode::Always, cx);
             assert_eq!(Theme::global(cx).scrollbar_mode, ScrollbarMode::Always);
             assert_eq!(
-                gpui_base::Theme::global(cx).scrollbar.mode,
+                gpui_base::Theme::global(cx).scrollbar.mode(),
                 gpui_base::ScrollbarMode::Always
             );
             assert_styled_projection(cx);
@@ -587,7 +591,7 @@ mod base_theme_projection_tests {
             assert_eq!(bare.expand(), Duration::ZERO);
 
             Theme::set_scrollbar_mode(ScrollbarMode::Scrolling, cx);
-            let motion = gpui_base::Theme::global(cx).scrollbar.motion;
+            let motion = gpui_base::Theme::global(cx).scrollbar.motion();
             assert_eq!(motion.idle(), SCROLLBAR_IDLE);
             assert_eq!(motion.enter(), SCROLLBAR_ENTER);
             assert_eq!(motion.exit(), SCROLLBAR_EXIT);
@@ -595,12 +599,14 @@ mod base_theme_projection_tests {
             assert_eq!(
                 motion.entrance(),
                 gpui_base::ScrollbarEntrance::Fade,
-                "a scroll-revealed scrollbar has no edge to slide from"
+                "scroll-revealed scrollbars fade in without sliding"
             );
 
             Theme::set_scrollbar_mode(ScrollbarMode::Hover, cx);
+            let motion = gpui_base::Theme::global(cx).scrollbar.motion();
+            assert_eq!(motion.entrance(), gpui_base::ScrollbarEntrance::Fade);
             assert_eq!(
-                gpui_base::Theme::global(cx).scrollbar.motion.entrance(),
+                motion.thumb_hover_entrance(),
                 gpui_base::ScrollbarEntrance::SlideAndFade
             );
         });
@@ -611,9 +617,9 @@ mod base_theme_projection_tests {
         let base = gpui_base::Theme::global(cx);
 
         assert_eq!(base.tokens, theme.semantic_tokens());
-        assert_eq!(base.scrollbar.mode, theme.scrollbar_mode);
+        assert_eq!(base.scrollbar.mode(), theme.scrollbar_mode);
         assert_eq!(
-            base.scrollbar.motion,
+            base.scrollbar.motion(),
             scrollbar_motion(theme.scrollbar_mode)
         );
         assert_eq!(base.resizable.handle, theme.border);
