@@ -21,7 +21,7 @@ use gpui_component::{
 };
 use gpui_fps::fps_monitor;
 use serde::{Deserialize, Serialize};
-use std::rc::Rc;
+use std::{rc::Rc, time::Duration};
 
 mod app_menus;
 mod embedded_themes;
@@ -130,6 +130,8 @@ pub fn create_new_window_with_size<F, E>(
                 width: px(480.),
                 height: px(320.),
             }),
+            // 500 ms between inactive frames caps background animation at 2 FPS.
+            inactive_frame_interval: Some(Duration::from_millis(500)),
             kind: WindowKind::Normal,
             #[cfg(target_os = "linux")]
             window_background: gpui::WindowBackgroundAppearance::Transparent,
