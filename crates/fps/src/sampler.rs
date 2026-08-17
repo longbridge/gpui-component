@@ -1,6 +1,9 @@
 use std::{collections::VecDeque, time::Duration};
 
-use gpui::{FrameTiming, FrameTimingCollector, WindowId};
+use gpui::{
+    WindowId,
+    profiler::{FrameEvent, FrameTiming, FrameTimingCollector},
+};
 use instant::Instant;
 
 /// Frames older than this stop contributing to the FPS readout.
@@ -46,7 +49,15 @@ impl FrameSampler {
     /// Drains the frames drawn since the previous call. Call once per rendered
     /// frame.
     pub(crate) fn tick(&mut self) {
-        let timings = self.collector.collect_unseen();
+        let timings = self
+            .collector
+            .collect_unseen()
+            .into_iter()
+            .filter_map(|event| match event {
+                FrameEvent::Draw(timing) => Some(timing),
+                FrameEvent::Present(_) => None,
+            })
+            .collect();
         self.ingest(timings, Instant::now());
     }
 
