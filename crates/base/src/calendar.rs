@@ -702,7 +702,7 @@ impl RenderOnce for Calendar {
         });
 
         let mut body = if view.is_day() {
-            v_flex()
+            h_flex()
         } else {
             h_flex().flex_wrap()
         };
