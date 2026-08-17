@@ -15,6 +15,10 @@ const route = useRoute();
 const { frontmatter } = useData();
 
 const component = computed(() => {
+    if (typeof frontmatter.value.example === "string") {
+        return frontmatter.value.example;
+    }
+
     const match = route.path.match(
         /\/(?:docs\/components|base\/primitives)\/([^/]+)$/,
     );
@@ -22,7 +26,10 @@ const component = computed(() => {
 });
 
 const kind = computed(() =>
-    route.path.includes("/base/primitives/") ? "base" : "component",
+    frontmatter.value.exampleKind === "base" ||
+    route.path.includes("/base/primitives/")
+        ? "base"
+        : "component",
 );
 
 const storyNames: Record<string, string> = {

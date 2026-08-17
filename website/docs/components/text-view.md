@@ -7,6 +7,8 @@ description: Renders Markdown and HTML text with optional custom Markdown plugin
 
 `TextView` renders formatted text in GPUI. It supports Markdown and simple HTML, text selection, code block actions, and custom Markdown plugins for project-specific syntax.
 
+`TextView::selectable(true)` uses the shared window selection engine from `gpui-base`. See [GPUI Base Text Selection](/base/text-selection.md) when integrating plain text or a custom renderer with the same selection.
+
 ## Import
 
 ```rust

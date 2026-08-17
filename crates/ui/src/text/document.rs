@@ -72,12 +72,13 @@ impl ParsedDocument {
         format: SelectionFormat,
         blocks: Option<RangeInclusive<usize>>,
     ) -> String {
+        let requested_blocks = blocks.clone();
         let painted = self
             .blocks
             .iter()
             .map(|block| block.has_selection())
             .collect::<Vec<_>>();
-        let (Some(first), Some(last)) = (
+        let (Some(painted_first), Some(painted_last)) = (
             painted.iter().position(|painted| *painted),
             painted.iter().rposition(|painted| *painted),
         ) else {
@@ -86,18 +87,20 @@ impl ParsedDocument {
 
         let last_ix = self.blocks.len().saturating_sub(1);
         let (first, last) = match blocks {
-            Some(blocks) => (
-                first.min(*blocks.start()),
-                last.max(*blocks.end()).min(last_ix),
-            ),
-            None => (first, last),
+            Some(blocks) => (*blocks.start().min(&last_ix), *blocks.end().min(&last_ix)),
+            None => (painted_first, painted_last),
         };
 
         if format == SelectionFormat::Plain {
             let mut text = String::new();
             for (ix, block) in self.blocks.iter().enumerate().take(last + 1).skip(first) {
                 let selected = block.selected_text(format);
-                if !selected.is_empty() {
+                let is_virtual_endpoint = requested_blocks
+                    .as_ref()
+                    .is_some_and(|blocks| ix == *blocks.start() || ix == *blocks.end());
+                if requested_blocks.is_some() && !is_virtual_endpoint {
+                    text.push_str(&block.text());
+                } else if !selected.is_empty() {
                     text.push_str(&selected);
                 } else if !painted[ix] {
                     // Never painted, so it cannot report a selection of its own

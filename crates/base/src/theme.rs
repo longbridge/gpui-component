@@ -1,6 +1,6 @@
 use gpui::{App, Global};
 
-use crate::{ScrollbarMode, ScrollbarStyles, SemanticThemeTokens};
+use crate::{ScrollbarMode, ScrollbarMotion, ScrollbarStyles, SemanticThemeTokens};
 
 /// Application-wide defaults for Base behavior modules.
 #[derive(Clone, Default)]
@@ -38,10 +38,47 @@ impl ActiveTheme for App {
 }
 
 /// Global defaults used by [`crate::Scrollbar`].
+///
+/// `motion` defaults to motionless. Styled layers project their own timing;
+/// Base never installs a fade or slide of its own.
 #[derive(Clone, Default)]
 pub struct ScrollbarTheme {
-    pub mode: ScrollbarMode,
-    pub styles: ScrollbarStyles,
+    mode: ScrollbarMode,
+    motion: ScrollbarMotion,
+    styles: ScrollbarStyles,
+}
+
+impl ScrollbarTheme {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_mode(mut self, mode: ScrollbarMode) -> Self {
+        self.mode = mode;
+        self
+    }
+
+    pub fn with_motion(mut self, motion: ScrollbarMotion) -> Self {
+        self.motion = motion;
+        self
+    }
+
+    pub fn with_styles(mut self, styles: ScrollbarStyles) -> Self {
+        self.styles = styles;
+        self
+    }
+
+    pub fn mode(&self) -> ScrollbarMode {
+        self.mode
+    }
+
+    pub fn motion(&self) -> ScrollbarMotion {
+        self.motion
+    }
+
+    pub fn styles(&self) -> &ScrollbarStyles {
+        &self.styles
+    }
 }
 
 /// Global visual defaults used by resizable panel handles.
@@ -52,4 +89,24 @@ pub struct ScrollbarTheme {
 pub struct ResizableTheme {
     pub handle: gpui::Hsla,
     pub active_handle: gpui::Hsla,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn scrollbar_theme_supports_builder_construction() {
+        let mode = ScrollbarMode::Hover;
+        let motion = ScrollbarMotion::default().with_enter(std::time::Duration::from_millis(120));
+        let styles = ScrollbarStyles::default();
+        let theme = ScrollbarTheme::new()
+            .with_mode(mode)
+            .with_motion(motion)
+            .with_styles(styles);
+
+        assert_eq!(theme.mode(), mode);
+        assert_eq!(theme.motion(), motion);
+        let _ = theme.styles();
+    }
 }

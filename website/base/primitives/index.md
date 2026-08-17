@@ -1,7 +1,7 @@
 ---
 title: Primitives
 description: The complete catalog of user-facing gpui-base primitives.
-order: 3
+order: 4
 ---
 
 # Primitives

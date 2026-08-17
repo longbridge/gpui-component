@@ -6,7 +6,7 @@ use gpui::{
     RenderOnce, StyleRefinement, Styled, Window, anchored, div, point, prelude::FluentBuilder as _,
     px,
 };
-use gpui_base::{Sheet as BaseSheet, actions::Cancel};
+use gpui_base::{ElementExt as _, Sheet as BaseSheet, TextSelectionScopeId, actions::Cancel};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -16,7 +16,6 @@ use crate::{
     dialog::overlay_color,
     h_flex,
     scroll::ScrollableElement as _,
-    text::{SelectionScope, SelectionScopeElement as _},
     title_bar::TITLE_BAR_HEIGHT,
     v_flex,
 };
@@ -44,6 +43,7 @@ pub struct Sheet {
     pub(crate) focus_handle: FocusHandle,
     pub(crate) placement: Placement,
     pub(crate) size: DefiniteLength,
+    pub(crate) selection_scope: TextSelectionScopeId,
     resizable: bool,
     on_close: Rc<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>,
     title: Option<AnyElement>,
@@ -61,6 +61,7 @@ impl Sheet {
             focus_handle: cx.focus_handle(),
             placement: Placement::Right,
             size: DefiniteLength::Absolute(px(350.).into()),
+            selection_scope: TextSelectionScopeId::default(),
             resizable: true,
             title: None,
             footer: None,
@@ -133,6 +134,7 @@ impl Styled for Sheet {
 impl RenderOnce for Sheet {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let placement = self.placement;
+        let selection_scope = self.selection_scope;
         let window_paddings = crate::window_border::window_paddings(window);
         let size = window.viewport_size()
             - gpui::size(
@@ -238,8 +240,8 @@ impl RenderOnce for Sheet {
                         Placement::Left => this.left(y),
                     })
                 },
-            )
-            .selection_scope(SelectionScope::Sheet);
+            );
+        let surface = surface.text_selection_scope(selection_scope);
 
         anchored()
             .position(point(window_paddings.left, window_paddings.top))

@@ -101,7 +101,7 @@ impl Disableable for Rating {
     }
 }
 
-struct RaingState {
+struct RaitingState {
     /// To save the default value on init state, to detect external value changes.
     default_value: usize,
     /// To store the current selected value.
@@ -120,7 +120,7 @@ impl RenderOnce for Rating {
         let active_color = self.color.unwrap_or(cx.theme().yellow);
         let on_click = self.on_click.clone();
 
-        let state = window.use_keyed_state(id.clone(), cx, |_, _| RaingState {
+        let state = window.use_keyed_state(id.clone(), cx, |_, _| RaitingState {
             default_value,
             value: default_value,
             hovered_value: 0,

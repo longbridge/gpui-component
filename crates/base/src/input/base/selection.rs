@@ -6,6 +6,7 @@ use ropey::Rope;
 use sum_tree::Bias;
 
 use super::{InputBaseState, RopeExt as _};
+use crate::text_boundary::word_range_from_chars;
 
 impl<M: InputModeKind> InputBaseState<M> {
     /// Select the word at the given offset on double-click.
@@ -66,55 +67,6 @@ impl TextSelector {
         let next_chars = text.chars_at(end).take(128);
         Some(word_range_from_chars(offset, char, prev_chars, next_chars))
     }
-}
-
-#[derive(Clone, Copy)]
-enum CharType {
-    Word,
-    Whitespace,
-    Newline,
-    Other,
-}
-
-impl From<char> for CharType {
-    fn from(c: char) -> Self {
-        if c == '_'
-            || c.is_ascii_alphanumeric()
-            || matches!(c, '\u{00C0}'..='\u{024F}' | '\u{0400}'..='\u{04FF}' | '\u{1E00}'..='\u{1EFF}' | '\u{0300}'..='\u{036F}')
-        {
-            Self::Word
-        } else if matches!(c, '\n' | '\r') {
-            Self::Newline
-        } else if c.is_whitespace() {
-            Self::Whitespace
-        } else {
-            Self::Other
-        }
-    }
-}
-
-fn word_range_from_chars(
-    offset: usize,
-    c: char,
-    prev: impl Iterator<Item = char>,
-    next: impl Iterator<Item = char>,
-) -> Range<usize> {
-    let kind = CharType::from(c);
-    let connects = |next| {
-        matches!(
-            (kind, CharType::from(next)),
-            (CharType::Word, CharType::Word) | (CharType::Whitespace, CharType::Whitespace)
-        )
-    };
-    let start = prev
-        .take(128)
-        .take_while(|c| connects(*c))
-        .fold(offset, |offset, c| offset - c.len_utf8());
-    let end = next
-        .take(128)
-        .take_while(|c| connects(*c))
-        .fold(offset + c.len_utf8(), |offset, c| offset + c.len_utf8());
-    start..end
 }
 
 #[cfg(test)]

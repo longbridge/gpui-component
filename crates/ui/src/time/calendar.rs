@@ -192,9 +192,9 @@ impl RenderOnce for Calendar {
             .p_3()
             .gap_0p5()
             .map(|this| match size {
-                Size::Small => this.w(px(232.) * month_count),
-                Size::Large => this.w(px(316.) * month_count),
-                _ => this.w(px(288.) * month_count),
+                Size::Small => this.w(px(220.) * month_count),
+                Size::Large => this.w(px(304.) * month_count),
+                _ => this.w(px(248.) * month_count),
             })
             .refine_style(&self.style)
     }
