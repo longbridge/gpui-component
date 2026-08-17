@@ -381,6 +381,7 @@ impl RenderOnce for DatePicker {
         self.state.update(cx, |state, cx| {
             state.set_canlendar_disabled_matcher(window, cx);
         });
+        let month_count = self.number_of_months.max(1) as f32;
 
         // This for keep focus border style, when click on the popup.
         let is_focused = self.focus_handle(cx).contains_focused(window, cx);
@@ -534,6 +535,11 @@ impl RenderOnce for DatePicker {
                                                 .border_0()
                                                 .rounded_none()
                                                 .p_0()
+                                                .map(|this| match self.size {
+                                                    Size::Small => this.w(px(196.) * month_count),
+                                                    Size::Large => this.w(px(280.) * month_count),
+                                                    _ => this.w(px(224.) * month_count),
+                                                })
                                                 .with_size(self.size),
                                         ),
                                 ),
