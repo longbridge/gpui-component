@@ -1,7 +1,7 @@
 use gpui::{
-    Anchor, AnyElement, App, Context, Div, ElementId, FocusHandle, InteractiveElement as _,
-    IntoElement, MouseButton, ParentElement, RenderOnce, Stateful, StyleRefinement, Styled, Window,
-    prelude::FluentBuilder as _,
+    Anchor, AnyElement, App, Bounds, Context, Div, ElementId, FocusHandle, InteractiveElement as _,
+    IntoElement, MouseButton, ParentElement, Pixels, RenderOnce, Stateful, StyleRefinement, Styled,
+    Window, prelude::FluentBuilder as _, px,
 };
 use std::rc::Rc;
 
@@ -11,6 +11,14 @@ use gpui_base::Popover as BasePopover;
 pub use gpui_base::PopoverState;
 
 pub(crate) fn init(_: &mut App) {}
+
+pub(crate) fn dropdown_positioner(bounds: Bounds<Pixels>) -> gpui_base::Positioner {
+    gpui_base::Positioner::side(bounds)
+        .placement(gpui_base::Placement::Bottom)
+        .align(gpui_base::Align::Start)
+        .offset(px(6.))
+        .margin(px(8.))
+}
 
 /// A popover element that can be triggered by a button or any other element.
 #[derive(IntoElement)]

@@ -489,7 +489,7 @@ impl RenderOnce for DatePicker {
             .when(state.open, |this| {
                 this.child(
                     deferred(
-                        crate::popup_position::dropdown_positioner(state.bounds).child(
+                        crate::popover::dropdown_positioner(state.bounds).child(
                             div()
                                 .occlude()
                                 .p_3()

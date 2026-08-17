@@ -550,7 +550,7 @@ where
                 .when(self.state.open, |this| {
                     this.child(
                         deferred(
-                            crate::popup_position::dropdown_positioner(bounds).child(
+                            crate::popover::dropdown_positioner(bounds).child(
                                 div()
                                     .occlude()
                                     .map(|this| match self.state.menu_width {

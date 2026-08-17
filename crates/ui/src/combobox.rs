@@ -1031,7 +1031,7 @@ fn render_popup_shell<D: SearchableListDelegate + 'static>(
     let has_footer = footer_el.is_some();
     let popup_radius = cx.theme().radius.min(px(8.));
 
-    crate::popup_position::dropdown_positioner(bounds)
+    crate::popover::dropdown_positioner(bounds)
         .child(
             div()
                 .occlude()
