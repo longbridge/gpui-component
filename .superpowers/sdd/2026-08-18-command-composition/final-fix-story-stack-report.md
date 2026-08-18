@@ -44,3 +44,29 @@ fixture; neighboring tests retain the full Gallery fixture.
 - `cargo fmt --all -- --check` passed.
 - `cargo check -p gpui-component-story` passed.
 - `git diff --check` and `git diff --cached --check` passed.
+
+## Repeated component-palette opens
+
+### Reproduction and root cause
+
+Invoking `OpenCommandPalette` again while its dialog was already focused always
+rebuilt the entries, reset the query to empty, and opened another dialog. The
+second palette shared the same `CommandState`; Escape therefore dismissed only
+the top dialog and left the original palette behind.
+
+### Fix and regression coverage
+
+`StoryRoot` now tracks whether it owns an open component-palette dialog. A
+repeat action focuses the existing palette and leaves its query untouched. The
+marker is cleared before the Confirm handler's imperative dialog close and by
+the Dialog `on_close` callback after Escape dismissal.
+
+The real-window regression opens over a background dialog, invokes the global
+`Ctrl+Shift+P` action twice, confirms the query and focus are preserved, then
+verifies the normal two-step Escape behavior (clear query, then dismiss),
+ownership release, a clean subsequent reopen, and Confirm cleanup.
+
+### Verification
+
+- `cargo test -p gpui-component-story --lib repeated_component_palette_open_keeps_one_dialog_and_preserves_query -- --nocapture` passed.
+- `cargo fmt --check`, `cargo check -p gpui-component-story`, and `cargo test -p gpui-component-story --lib` passed (16 Story library tests).

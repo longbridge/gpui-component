@@ -844,6 +844,8 @@ pub struct StoryRoot {
     theme_palette: Entity<CommandState>,
     /// The component palette for Gallery windows.
     component_palette: Entity<CommandState>,
+    /// Whether this root currently owns an open component palette dialog.
+    component_palette_open: bool,
     gallery: Option<Entity<Gallery>>,
     /// The theme in force when the palette opened, put back if the user
     /// cancels out of the preview.
@@ -892,6 +894,7 @@ impl StoryRoot {
             embedded,
             theme_palette,
             component_palette,
+            component_palette_open: false,
             gallery,
             theme_before_preview: None,
             _subscriptions,
@@ -912,6 +915,7 @@ impl StoryRoot {
                         gallery.select_story(name, window, cx);
                     });
                 }
+                self.component_palette_open = false;
                 window.close_dialog(cx);
             }
             // `CommandState` propagates Cancel to the hosting Dialog, which
@@ -1025,19 +1029,33 @@ impl StoryRoot {
             cx.propagate();
             return;
         };
+        if self.component_palette_open {
+            self.component_palette
+                .read(cx)
+                .focus_handle(cx)
+                .focus(window, cx);
+            return;
+        }
+
         let entries = gallery.read(cx).command_entries(cx);
+        self.component_palette_open = true;
         self.component_palette.update(cx, |palette, cx| {
             palette.set_query("", window, cx);
             palette.set_entries(entries, cx);
         });
 
         let component_palette = self.component_palette.clone();
+        let story_root = cx.weak_entity();
         window.open_dialog(cx, move |dialog, _, _| {
             let component_palette = component_palette.clone();
+            let story_root = story_root.clone();
             dialog
                 .close_button(false)
                 .overlay_closable(false)
                 .p_0()
+                .on_close(move |_, _, cx| {
+                    _ = story_root.update(cx, |root, _| root.component_palette_open = false);
+                })
                 .content(move |content, _, _| {
                     content.child(
                         gpui_component::command::Command::new(&component_palette)
@@ -1446,6 +1464,93 @@ mod tests {
         window
             .update(cx, |_, window, cx| window.close_dialog(cx))
             .unwrap();
+        assert!(
+            !window
+                .update(cx, |_, window, cx| window.has_active_dialog(cx))
+                .unwrap()
+        );
+    }
+
+    #[gpui::test]
+    fn repeated_component_palette_open_keeps_one_dialog_and_preserves_query(
+        cx: &mut TestAppContext,
+    ) {
+        let (window, story_root, _) = gallery_window(cx, true);
+        window
+            .update(cx, |_, window, cx| {
+                window.open_dialog(cx, |dialog, _, _| dialog.title("Background"));
+            })
+            .unwrap();
+        cx.simulate_keystrokes(window, "ctrl-shift-p");
+        window
+            .update(cx, |_, window, cx| {
+                window.draw(cx).clear(cx);
+                story_root.update(cx, |root, cx| {
+                    root.component_palette.update(cx, |palette, cx| {
+                        palette.set_query("command", window, cx);
+                    });
+                });
+            })
+            .unwrap();
+
+        cx.simulate_keystrokes(window, "ctrl-shift-p");
+
+        story_root.read_with(cx, |root, cx| {
+            assert_eq!(root.component_palette.read(cx).query(cx), "command");
+        });
+        assert!(
+            window
+                .update(cx, |_, window, cx| {
+                    story_root
+                        .read(cx)
+                        .component_palette
+                        .read(cx)
+                        .focus_handle(cx)
+                        .is_focused(window)
+                })
+                .unwrap()
+        );
+
+        cx.simulate_keystrokes(window, "escape");
+        story_root.read_with(cx, |root, cx| {
+            assert_eq!(root.component_palette.read(cx).query(cx), "");
+            assert!(root.component_palette_open);
+        });
+        cx.simulate_keystrokes(window, "escape");
+        story_root.read_with(cx, |root, _| {
+            assert!(!root.component_palette_open);
+        });
+        assert!(
+            window
+                .update(cx, |_, window, cx| window.has_active_dialog(cx))
+                .unwrap()
+        );
+        window
+            .update(cx, |_, window, cx| window.close_dialog(cx))
+            .unwrap();
+        assert!(
+            !window
+                .update(cx, |_, window, cx| window.has_active_dialog(cx))
+                .unwrap()
+        );
+
+        window
+            .update(cx, |_, window, cx| {
+                story_root.read(cx).focus_handle(cx).focus(window, cx);
+            })
+            .unwrap();
+        cx.simulate_keystrokes(window, "ctrl-shift-p");
+        story_root.read_with(cx, |root, _| {
+            assert!(root.component_palette_open);
+        });
+        story_root.update(cx, |root, cx| {
+            root.component_palette.update(cx, |_, cx| {
+                cx.emit(CommandEvent::Confirm("Command".into()));
+            });
+        });
+        story_root.read_with(cx, |root, _| {
+            assert!(!root.component_palette_open);
+        });
         assert!(
             !window
                 .update(cx, |_, window, cx| window.has_active_dialog(cx))
