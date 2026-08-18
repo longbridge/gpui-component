@@ -1,11 +1,18 @@
-use std::collections::HashSet;
+use std::rc::{Rc, Weak};
 
-use gpui::{App, ElementId, FocusHandle, Global, OwnedMenu};
+use gpui::{App, Global, OwnedMenu};
+
+/// Holds the deferred interaction context open for as long as it is alive.
+///
+/// Handed out by [`GlobalState::register_deferred_popover`]; drop it to close
+/// the context again. The registry only ever weighs the token's liveness, so
+/// there is nothing inside to read.
+pub struct DeferredPopover(#[allow(dead_code)] Rc<()>);
 
 /// Application-wide state shared by Base behaviors.
 pub struct GlobalState {
     app_menus: Vec<OwnedMenu>,
-    deferred_popovers: HashSet<ElementId>,
+    deferred_popovers: Vec<Weak<()>>,
     suppress_text_selection: bool,
 }
 
@@ -15,7 +22,7 @@ impl GlobalState {
     fn new() -> Self {
         Self {
             app_menus: Vec::new(),
-            deferred_popovers: HashSet::new(),
+            deferred_popovers: Vec::new(),
             suppress_text_selection: false,
         }
     }
@@ -69,20 +76,31 @@ impl GlobalState {
     /// Returns whether any deferred popup currently owns an open interaction
     /// context.
     pub fn is_in_deferred_context(cx: &App) -> bool {
-        !Self::global(cx).deferred_popovers.is_empty()
-    }
-
-    /// Registers an open deferred popup by its focus identity.
-    pub fn register_deferred_popover(focus_handle: &FocusHandle, cx: &mut App) {
-        Self::global_mut(cx)
+        Self::global(cx)
             .deferred_popovers
-            .insert(format!("{focus_handle:?}").into());
+            .iter()
+            .any(|popover| popover.strong_count() > 0)
     }
 
-    /// Removes a deferred popup from the open interaction context.
-    pub fn unregister_deferred_popover(focus_handle: &FocusHandle, cx: &mut App) {
-        let id: ElementId = format!("{focus_handle:?}").into();
-        Self::global_mut(cx).deferred_popovers.remove(&id);
+    /// Registers an open deferred popup, which stays registered for as long as
+    /// the returned token is held.
+    ///
+    /// A token rather than an identifier, because popup state is routinely
+    /// dropped without ever being closed: state that stops being rendered — a
+    /// popover scrolled out of a virtual list, a panel closed while its menu is
+    /// open — is collected at the end of the frame, with no chance to
+    /// deregister. A registration that outlived its popup would leave the
+    /// application believing a popup is open forever, and everything that
+    /// steps aside for open popups (the native context menu of a text input,
+    /// say) would stay disabled for the rest of the session.
+    pub fn register_deferred_popover(cx: &mut App) -> DeferredPopover {
+        let token = Rc::new(());
+        let state = Self::global_mut(cx);
+        state
+            .deferred_popovers
+            .retain(|popover| popover.strong_count() > 0);
+        state.deferred_popovers.push(Rc::downgrade(&token));
+        DeferredPopover(token)
     }
 }
 
@@ -101,11 +119,36 @@ mod tests {
             GlobalState::reset_text_selection_suppression(cx);
             assert!(!GlobalState::is_text_selection_suppressed(cx));
 
-            let focus_handle = cx.focus_handle();
             assert!(!GlobalState::is_in_deferred_context(cx));
-            GlobalState::register_deferred_popover(&focus_handle, cx);
+            let popover = GlobalState::register_deferred_popover(cx);
             assert!(GlobalState::is_in_deferred_context(cx));
-            GlobalState::unregister_deferred_popover(&focus_handle, cx);
+            drop(popover);
+            assert!(!GlobalState::is_in_deferred_context(cx));
+        });
+    }
+
+    /// Popup state is routinely dropped without being closed first, and a
+    /// registration that survived it would disable everything that steps aside
+    /// for an open popup, permanently.
+    #[gpui::test]
+    fn a_dropped_registration_closes_the_deferred_context(cx: &mut gpui::TestAppContext) {
+        cx.update(|cx| {
+            GlobalState::init(cx);
+
+            let outer = GlobalState::register_deferred_popover(cx);
+            {
+                let _inner = GlobalState::register_deferred_popover(cx);
+                assert!(GlobalState::is_in_deferred_context(cx));
+            }
+            assert!(GlobalState::is_in_deferred_context(cx));
+
+            drop(outer);
+            assert!(!GlobalState::is_in_deferred_context(cx));
+
+            // Registering again must not resurrect the collected ones.
+            let popover = GlobalState::register_deferred_popover(cx);
+            assert_eq!(GlobalState::global(cx).deferred_popovers.len(), 1);
+            drop(popover);
             assert!(!GlobalState::is_in_deferred_context(cx));
         });
     }

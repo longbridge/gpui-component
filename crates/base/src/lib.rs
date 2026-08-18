@@ -97,7 +97,7 @@ pub use focus_trap::FocusTrapElement;
 #[doc(hidden)]
 pub use focus_trap::active_focus_trap;
 pub use geometry::*;
-pub use global_state::GlobalState;
+pub use global_state::{DeferredPopover, GlobalState};
 pub use history::{History, HistoryItem};
 pub use hover_card::{HoverCard, HoverCardState};
 pub use index_path::IndexPath;
