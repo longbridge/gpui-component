@@ -1,15 +1,15 @@
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, App, AppContext as _, Context, Entity, EventEmitter, FocusHandle, Focusable,
-    InteractiveElement, IntoElement, KeyBinding, ListAlignment, ListSizingBehavior, ListState,
-    ParentElement, Render, Role, SharedString, StatefulInteractiveElement as _, Styled,
-    Subscription, Window, div, list, prelude::FluentBuilder as _, px,
+    AnyElement, App, AppContext as _, AvailableSpace, Context, Entity, EventEmitter, FocusHandle,
+    Focusable, InteractiveElement, IntoElement, KeyBinding, ListSizingBehavior, ParentElement,
+    Pixels, Render, Role, ScrollStrategy, SharedString, Size, StatefulInteractiveElement as _,
+    Styled, Subscription, Window, div, prelude::FluentBuilder as _, px, size,
 };
 use rust_i18n::t;
 
 use crate::{
-    ActiveTheme as _, Icon, IconName, StyledExt as _,
+    ActiveTheme as _, Icon, IconName, StyledExt as _, VirtualListScrollHandle,
     actions::{Cancel, Confirm, SelectDown, SelectUp},
     command::{
         command::CommandOptions,
@@ -17,11 +17,15 @@ use crate::{
     },
     h_flex,
     input::{Input, InputEvent, InputState},
-    scroll::ScrollableElement,
-    v_flex,
+    scroll::Scrollbar,
+    v_flex, v_virtual_list,
 };
 
 pub(crate) const CONTEXT: &str = "Command";
+
+/// The row a separator occupies: a one-pixel rule with a little air on
+/// either side. Fixed, so that only the item and heading rows need measuring.
+const SEPARATOR_ROW_HEIGHT: f32 = 9.;
 
 type CommandFilter = dyn Fn(&CommandItem, &str) -> bool;
 
@@ -73,14 +77,25 @@ struct MatchedItem {
     disabled: bool,
 }
 
+/// The heights the row sizes are built from, remeasured every frame so that a
+/// theme or font change resizes the rows.
+#[derive(Clone, Copy, PartialEq, Default)]
+struct RowHeights {
+    item: Pixels,
+    heading: Pixels,
+}
+
 /// The state of a [`crate::command::Command`] palette: its commands, its query
 /// and which command is highlighted.
 pub struct CommandState {
     focus_handle: FocusHandle,
     query_input: Entity<InputState>,
-    list_state: ListState,
+    scroll_handle: VirtualListScrollHandle,
     entries: Vec<CommandEntry>,
     rows: Vec<CommandRow>,
+    row_sizes: Rc<Vec<Size<Pixels>>>,
+    row_heights: RowHeights,
+    needs_measure: bool,
     matched: Vec<MatchedItem>,
     selected_index: usize,
     /// Set by the builders, which run before the entity exists and so cannot
@@ -102,16 +117,18 @@ impl CommandState {
     /// Create an empty palette.
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let query_input = cx.new(|cx| InputState::new(window, cx));
-        let overdraw = px(window.viewport_size().height.as_f32() * 0.3);
 
         let _subscriptions = vec![cx.subscribe(&query_input, Self::on_query_input_event)];
 
         Self {
             focus_handle: cx.focus_handle(),
             query_input,
-            list_state: ListState::new(0, ListAlignment::Top, overdraw),
+            scroll_handle: VirtualListScrollHandle::new(),
             entries: Vec::new(),
             rows: Vec::new(),
+            row_sizes: Rc::new(Vec::new()),
+            row_heights: RowHeights::default(),
+            needs_measure: true,
             matched: Vec::new(),
             selected_index: 0,
             needs_update: true,
@@ -329,10 +346,11 @@ impl CommandState {
 
         self.rows = rows;
         self.matched = matched;
-        self.list_state.reset(self.rows.len());
+        self.needs_measure = true;
         self.selected_index = self
             .selected_index
             .min(self.matched.len().saturating_sub(1));
+        self.rebuild_row_sizes();
     }
 
     /// Move the highlight to the first item that can be confirmed.
@@ -443,6 +461,61 @@ impl CommandState {
         }
 
         cx.emit(CommandEvent::Confirm(value));
+    }
+
+    // MARK: Row sizing
+
+    /// Measure one item row and one heading row.
+    ///
+    /// The first matching item stands in for all of them — the palette is a
+    /// virtual list, so measuring each row would undo the virtualization. A
+    /// design built with [`CommandItem::element`] can be as tall as it likes,
+    /// as long as every row is the same height.
+    fn measure_row_heights(&self, window: &mut Window, cx: &mut Context<Self>) -> RowHeights {
+        let available = size(AvailableSpace::MinContent, AvailableSpace::MinContent);
+        let sample: SharedString = "A".into();
+
+        let item = if self.matched.is_empty() {
+            self.item_row(false, cx)
+                .child(
+                    h_flex()
+                        .flex_1()
+                        .gap_2()
+                        .items_center()
+                        .child(Icon::new(IconName::Search).size_4())
+                        .child(sample.clone()),
+                )
+                .into_any_element()
+        } else {
+            self.render_item(0, window, cx)
+        }
+        .layout_as_root(available, window, cx)
+        .height;
+
+        let heading = self
+            .heading_row(sample, cx)
+            .into_any_element()
+            .layout_as_root(available, window, cx)
+            .height;
+
+        RowHeights { item, heading }
+    }
+
+    fn rebuild_row_sizes(&mut self) {
+        self.row_sizes = Rc::new(
+            self.rows
+                .iter()
+                .map(|row| {
+                    let height = match row {
+                        CommandRow::Item(_) => self.row_heights.item,
+                        CommandRow::Heading(_) => self.row_heights.heading,
+                        CommandRow::Separator => px(SEPARATOR_ROW_HEIGHT),
+                    };
+
+                    size(px(0.), height)
+                })
+                .collect(),
+        );
     }
 
     // MARK: Rendering
@@ -609,17 +682,28 @@ impl Render for CommandState {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.sync_placeholder(window, cx);
 
+        // Matching first: the row heights are measured from a real item.
         if self.needs_update {
             self.needs_update = false;
             self.update_matches(cx);
         }
 
+        if self.needs_measure {
+            self.needs_measure = false;
+            let row_heights = self.measure_row_heights(window, cx);
+            if self.row_heights != row_heights {
+                self.row_heights = row_heights;
+                self.rebuild_row_sizes();
+            }
+        }
+
         if let Some(row_ix) = self.pending_scroll.take() {
-            self.list_state.scroll_to_reveal_item(row_ix);
+            self.scroll_handle
+                .scroll_to_item(row_ix, ScrollStrategy::Top);
         }
 
         let rows_count = self.rows.len();
-        let command_state = cx.entity();
+        let row_sizes = self.row_sizes.clone();
 
         v_flex()
             .id("command")
@@ -672,16 +756,21 @@ impl Render for CommandState {
                         this.child(self.render_empty(cx))
                     })
                     .when(rows_count > 0, |this| {
-                        let command_state = command_state.clone();
                         this.child(
-                            list(self.list_state.clone(), move |row_ix, window, cx| {
-                                command_state
-                                    .update(cx, |this, cx| this.render_row(row_ix, window, cx))
-                            })
+                            v_virtual_list(
+                                cx.entity(),
+                                "command-list",
+                                row_sizes,
+                                move |this, visible_range, window, cx| {
+                                    visible_range
+                                        .map(|row_ix| this.render_row(row_ix, window, cx))
+                                        .collect::<Vec<_>>()
+                                },
+                            )
                             .with_sizing_behavior(ListSizingBehavior::Infer)
-                            .size_full(),
+                            .track_scroll(&self.scroll_handle),
                         )
-                        .vertical_scrollbar(&self.list_state)
+                        .child(Scrollbar::vertical(&self.scroll_handle))
                     }),
             )
     }
@@ -691,11 +780,14 @@ impl Render for CommandState {
 
 #[cfg(test)]
 mod tests {
-    use std::{cell::RefCell, rc::Rc};
+    use std::{
+        cell::{Cell, RefCell},
+        rc::Rc,
+    };
 
     use gpui::{
-        AppContext as _, Entity, IntoElement, ParentElement as _, Render, Styled as _,
-        TestAppContext, Window, div, px,
+        AppContext as _, Entity, IntoElement, ParentElement as _, Render, SharedString,
+        Styled as _, TestAppContext, Window, div, px,
     };
 
     use super::{CommandRow, CommandState};
@@ -950,30 +1042,69 @@ mod tests {
         }
     }
 
+    /// A custom row design decides the row height, so a two-line result row
+    /// gets two lines rather than being squeezed into the standard one.
     #[gpui::test]
-    fn custom_rows_keep_independent_heights(cx: &mut TestAppContext) {
+    fn a_custom_item_element_sets_the_row_height(cx: &mut TestAppContext) {
         cx.update(crate::init);
 
         let (harness, cx) = cx.add_window_view(|window, cx| Harness {
             state: cx.new(|cx| {
-                CommandState::new(window, cx)
-                    .item(CommandItem::new("short").element(|_, _| div().h(px(32.))))
-                    .item(CommandItem::new("tall").element(|_, _| div().h(px(72.))))
+                CommandState::new(window, cx).item(CommandItem::new("standard").label("Standard"))
             }),
         });
 
         cx.run_until_parked();
         cx.update(|window, cx| _ = window.draw(cx));
-        let (short, tall) = cx.update(|_, cx| {
-            let state = harness.read(cx).state.read(cx);
-            (
-                state.list_state.bounds_for_item(0).unwrap().size.height,
-                state.list_state.bounds_for_item(1).unwrap().size.height,
-            )
+        let standard = cx.update(|_, cx| harness.read(cx).state.read(cx).row_heights.item);
+
+        cx.update(|_, cx| {
+            let state = harness.read(cx).state.clone();
+            state.update(cx, |state, cx| {
+                state.set_entries(
+                    [CommandItem::new("two-line")
+                        .element(|_, _| {
+                            crate::v_flex()
+                                .child(SharedString::from("Symbol"))
+                                .child(SharedString::from("Name"))
+                        })
+                        .into()],
+                    cx,
+                )
+            });
+        });
+        cx.update(|window, cx| _ = window.draw(cx));
+
+        let custom = cx.update(|_, cx| harness.read(cx).state.read(cx).row_heights.item);
+        assert!(
+            custom > standard,
+            "a two-line row should measure taller than the standard one ({custom:?} vs {standard:?})",
+        );
+    }
+
+    #[gpui::test]
+    fn an_unchanged_custom_row_is_not_remeasured_on_every_frame(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let renders = Rc::new(Cell::new(0));
+        let count = renders.clone();
+
+        let (_, cx) = cx.add_window_view(|window, cx| Harness {
+            state: cx.new(|cx| {
+                CommandState::new(window, cx).item(CommandItem::new("custom").element(
+                    move |_, _| {
+                        count.set(count.get() + 1);
+                        div().child("Custom")
+                    },
+                ))
+            }),
         });
 
-        assert_eq!(short, px(44.));
-        assert_eq!(tall, px(84.));
+        cx.run_until_parked();
+        cx.update(|window, cx| _ = window.draw(cx));
+        let after_first_draw = renders.get();
+        cx.update(|window, cx| _ = window.draw(cx));
+
+        assert_eq!(renders.get() - after_first_draw, 2);
     }
 
     #[gpui::test]
@@ -993,10 +1124,7 @@ mod tests {
 
         let state = cx.update(|_, cx| harness.read(cx).state.clone());
         assert_eq!(
-            state.read_with(cx, |state, _| state
-                .list_state
-                .scroll_px_offset_for_scrollbar()
-                .y),
+            state.read_with(cx, |state, _| state.scroll_handle.base_handle().offset().y),
             px(0.),
         );
 
@@ -1013,11 +1141,7 @@ mod tests {
 
         assert_eq!(state.read_with(cx, |state, _| state.selected_index()), 49);
         assert!(
-            state.read_with(cx, |state, _| state
-                .list_state
-                .scroll_px_offset_for_scrollbar()
-                .y)
-                < px(0.),
+            state.read_with(cx, |state, _| state.scroll_handle.base_handle().offset().y) < px(0.),
             "selecting the last row should have scrolled the list",
         );
     }
