@@ -4,9 +4,9 @@
 
 **Goal:** Add custom filtering, optional search, header/footer slots, and independently sized Command rows.
 
-**Architecture:** Keep `CommandState` as the interaction/data entity and `Command` as its presentation element. Store construction-time search policy and filter behavior in `CommandState`, store header/footer render callbacks in `CommandOptions`, and replace the uniform `v_virtual_list` implementation with GPUI's variable-height `list` and `ListState`.
+**Architecture:** Keep `CommandState` as the interaction/data entity and `Command` as its presentation element. Store construction-time search policy and filter behavior in `CommandState`, store header/footer render callbacks in `CommandOptions`, and retain `v_virtual_list` with independently measured per-row sizes.
 
-**Tech Stack:** Rust, GPUI, gpui-component, `gpui::list`, cargo test.
+**Tech Stack:** Rust, GPUI, gpui-component, `v_virtual_list`, cargo test.
 
 **Spec:** `docs/superpowers/specs/2026-08-18-command-composition-design.md`
 
@@ -173,19 +173,19 @@ git add crates/ui/src/command/state.rs
 git commit -m "command: Support palettes without a search input"
 ```
 
-### Task 3: Migrate rows to variable-height `gpui::list`
+### Task 3: Provide independent row sizes to `v_virtual_list`
 
 **Files:**
 - Modify: `crates/ui/src/command/state.rs`
 
 **Interfaces:**
 - Consumes: flattened `Vec<CommandRow>` and each `MatchedItem::row_ix`
-- Produces: internal `gpui::ListState` reset to `rows.len()` after every match rebuild
-- Uses: `ListState::scroll_to_reveal_item(row_ix)` for keyboard navigation
+- Produces: internal `row_sizes` with one measured size for each flattened row
+- Preserves: `VirtualListScrollHandle` and its existing keyboard navigation
 
 - [ ] **Step 1: Replace the old uniform-height test with a failing variable-height test**
 
-Render two custom items with intrinsic heights `px(32.)` and `px(72.)`. Draw the harness and inspect the GPUI list's measured item bounds or total measured height, asserting both heights contribute independently. Delete `an_unchanged_custom_row_is_not_remeasured_on_every_frame`; the new backend makes that implementation-specific test obsolete.
+Render two custom items with intrinsic heights `px(32.)` and `px(72.)`. Draw the harness and assert the sizes supplied to `v_virtual_list` retain both final row heights independently.
 
 - [ ] **Step 2: Run the variable-height test and verify failure**
 
@@ -193,47 +193,27 @@ Run: `cargo test -p gpui-component command::state::tests::custom_rows_keep_indep
 
 Expected: failure because the current virtual list assigns both rows the first row's height.
 
-- [ ] **Step 3: Replace virtual-list state and imports**
+- [ ] **Step 3: Measure each flattened row**
 
-Remove `VirtualListScrollHandle`, `RowHeights`, `row_sizes`, `needs_measure`, `measure_row_heights`, and `rebuild_row_sizes`. Add:
+Retain `VirtualListScrollHandle`, `row_sizes`, and `needs_measure`. Replace the
+single sampled `RowHeights` with a measurement pass over flattened rows. Keep
+fixed separator sizing, and use each heading or item row's root layout size for
+its corresponding `row_sizes` entry.
 
-```rust
-use gpui::{ListAlignment, ListState, list};
+- [ ] **Step 4: Rebuild existing virtual-list sizes**
 
-pub struct CommandState {
-    // existing fields
-    list_state: ListState,
-}
-```
-
-Initialize it with a viewport-relative overdraw:
-
-```rust
-let overdraw = px(window.viewport_size().height.as_f32() * 0.3);
-let list_state = ListState::new(0, ListAlignment::Top, overdraw);
-```
-
-- [ ] **Step 4: Reset and render the GPUI list**
-
-At the end of `update_matches`, call `self.list_state.reset(self.rows.len())`. Replace `v_virtual_list` with:
-
-```rust
-list(self.list_state.clone(), move |row_ix, window, cx| {
-    this.render_row(row_ix, window, cx)
-})
-.with_sizing_behavior(ListSizingBehavior::Infer)
-.size_full()
-```
-
-Attach the existing vertical scrollbar using the GPUI `ListState` implementation of `ScrollbarHandle`. When selection changes, store the target row and invoke `list_state.scroll_to_reveal_item(row_ix)` before rendering.
+When a match rebuild invalidates sizing, replace `row_sizes` with the result of
+the per-row measurement pass before rendering. Keep the existing
+`v_virtual_list`, `VirtualListScrollHandle`, `Scrollbar::vertical`, and
+`scroll_handle.scroll_to_item(row_ix, ScrollStrategy::Top)` paths unchanged.
 
 - [ ] **Step 5: Run variable-height, scrolling, and all Command tests**
 
 Run: `cargo test -p gpui-component command:: --lib`
 
-Expected: variable-height and keyboard scrolling tests pass with all existing tests.
+Expected: independent row-size and keyboard scrolling tests pass with all existing tests.
 
-- [ ] **Step 6: Commit the list migration**
+- [ ] **Step 6: Commit independent row sizing**
 
 ```bash
 git add crates/ui/src/command/state.rs
@@ -308,13 +288,14 @@ Add focused demonstrations:
 - A no-search quick-actions palette built with `.searchable(false)`.
 - A custom filter that matches stock symbols before names.
 - A dialog Command with a header showing match count and a footer showing `↑↓`, Enter, and Escape hints.
-- Two custom rows with visibly different heights to demonstrate `gpui::list` measurement.
+- Two custom rows with visibly different heights to demonstrate independent
+  `v_virtual_list` row sizes.
 
 Reuse existing story helpers and theme tokens. Do not reintroduce a Command-specific dialog API.
 
 - [ ] **Step 2: Update English documentation**
 
-Document exact signatures, defaults, focus behavior, default versus custom matching, slot placement, and variable-height constraints. Replace the old uniform-row statement with the GPUI list rule: offscreen rows must not change height without the list being reset.
+Document exact signatures, defaults, focus behavior, default versus custom matching, slot placement, and variable-height constraints. Explain that Command measures each flattened row when rebuilding its `v_virtual_list` sizes, so custom rows may have independent intrinsic heights.
 
 - [ ] **Step 3: Mirror the changes in Chinese documentation**
 

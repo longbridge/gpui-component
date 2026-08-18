@@ -40,27 +40,26 @@ not impose a special footer component or keybinding model.
 
 ## Internal Structure
 
-Replace `v_virtual_list` and `VirtualListScrollHandle` with `gpui::list` and
-`gpui::ListState`. The rendered hierarchy becomes:
+Retain `v_virtual_list` and `VirtualListScrollHandle`. The rendered hierarchy
+becomes:
 
 ```text
 Command frame
 ├── header (optional)
 ├── search input (when searchable)
-├── variable-height gpui::list
+├── variable-height virtual list
 └── footer (optional)
 ```
 
 The flattened `CommandRow` model remains: headings, items, and separators are
-individual list rows. `gpui::list` measures each rendered row and caches its
-height, so custom item elements may differ in height. Command no longer stores
-`RowHeights`, `row_sizes`, or a measurement sample.
+individual list rows. `CommandState` measures every flattened row when its
+contents change, then supplies the resulting independent `row_sizes` to
+`v_virtual_list`; custom item elements may therefore differ in height.
 
-`CommandState` owns a `gpui::ListState`. When filtering or replacing entries
-changes the flattened rows, it resets or splices the list state to the new row
-count. Selection stores matched-item indices as today; the corresponding
-`row_ix` is used to scroll the GPUI list when keyboard navigation moves beyond
-the viewport.
+`CommandState` retains its `VirtualListScrollHandle`. Selection stores
+matched-item indices as today; the corresponding `row_ix` is used with that
+handle to scroll the virtual list when keyboard navigation moves beyond the
+viewport.
 
 ## Filtering and State Changes
 
@@ -79,10 +78,11 @@ hidden input, so arrow, Enter, and Escape actions continue to work. The public
 
 ## Rendering and Performance
 
-`gpui::list` renders and measures visible variable-height rows, with overdraw
-for smooth scrolling. It avoids the current extra root-layout measurement on
-every invalidation and removes the requirement that all custom rows share the
-first row's height.
+`v_virtual_list` continues to render only its visible range and uses the
+independent per-row sizes to calculate offsets and scrollbars. Measuring the
+flattened rows after an invalidation is eager work, but removes the requirement
+that all custom rows share the first row's height while preserving the existing
+scroll behavior.
 
 Header and footer callbacks run when Command renders. They must follow normal
 GPUI render-callback expectations and should not perform external side effects.
@@ -107,9 +107,9 @@ Add focused tests that verify:
    keyboard selection through the Command focus handle.
 3. Header and footer callbacks render outside the scrolling list and can read
    current state.
-4. Two custom rows with different intrinsic heights receive different measured
-   heights under `gpui::list`.
-5. Filtering and `set_entries` reset the GPUI list row count and keyboard
+4. Two custom rows with different intrinsic heights receive different sizes in
+   `v_virtual_list`.
+5. Filtering and `set_entries` rebuild the virtual-list row sizes, and keyboard
    navigation scrolls variable-height rows into view.
 6. Existing grouping, disabled-item, confirmation, empty-state, and async
    loading behavior continues to pass.

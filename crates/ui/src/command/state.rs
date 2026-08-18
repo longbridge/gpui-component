@@ -77,14 +77,6 @@ struct MatchedItem {
     disabled: bool,
 }
 
-/// The heights the row sizes are built from, remeasured every frame so that a
-/// theme or font change resizes the rows.
-#[derive(Clone, Copy, PartialEq, Default)]
-struct RowHeights {
-    item: Pixels,
-    heading: Pixels,
-}
-
 /// The state of a [`crate::command::Command`] palette: its commands, its query
 /// and which command is highlighted.
 pub struct CommandState {
@@ -94,7 +86,6 @@ pub struct CommandState {
     entries: Vec<CommandEntry>,
     rows: Vec<CommandRow>,
     row_sizes: Rc<Vec<Size<Pixels>>>,
-    row_heights: RowHeights,
     needs_measure: bool,
     matched: Vec<MatchedItem>,
     selected_index: usize,
@@ -127,7 +118,6 @@ impl CommandState {
             entries: Vec::new(),
             rows: Vec::new(),
             row_sizes: Rc::new(Vec::new()),
-            row_heights: RowHeights::default(),
             needs_measure: true,
             matched: Vec::new(),
             selected_index: 0,
@@ -350,7 +340,6 @@ impl CommandState {
         self.selected_index = self
             .selected_index
             .min(self.matched.len().saturating_sub(1));
-        self.rebuild_row_sizes();
     }
 
     /// Move the highlight to the first item that can be confirmed.
@@ -465,57 +454,23 @@ impl CommandState {
 
     // MARK: Row sizing
 
-    /// Measure one item row and one heading row.
-    ///
-    /// The first matching item stands in for all of them — the palette is a
-    /// virtual list, so measuring each row would undo the virtualization. A
-    /// design built with [`CommandItem::element`] can be as tall as it likes,
-    /// as long as every row is the same height.
-    fn measure_row_heights(&self, window: &mut Window, cx: &mut Context<Self>) -> RowHeights {
+    /// Measure each row before passing the sizes to the virtual list. Custom
+    /// item elements can have independent intrinsic heights.
+    fn measure_row_sizes(&self, window: &mut Window, cx: &mut Context<Self>) -> Vec<Size<Pixels>> {
         let available = size(AvailableSpace::MinContent, AvailableSpace::MinContent);
-        let sample: SharedString = "A".into();
-
-        let item = if self.matched.is_empty() {
-            self.item_row(false, cx)
-                .child(
-                    h_flex()
-                        .flex_1()
-                        .gap_2()
-                        .items_center()
-                        .child(Icon::new(IconName::Search).size_4())
-                        .child(sample.clone()),
-                )
-                .into_any_element()
-        } else {
-            self.render_item(0, window, cx)
-        }
-        .layout_as_root(available, window, cx)
-        .height;
-
-        let heading = self
-            .heading_row(sample, cx)
-            .into_any_element()
-            .layout_as_root(available, window, cx)
-            .height;
-
-        RowHeights { item, heading }
-    }
-
-    fn rebuild_row_sizes(&mut self) {
-        self.row_sizes = Rc::new(
-            self.rows
-                .iter()
-                .map(|row| {
-                    let height = match row {
-                        CommandRow::Item(_) => self.row_heights.item,
-                        CommandRow::Heading(_) => self.row_heights.heading,
-                        CommandRow::Separator => px(SEPARATOR_ROW_HEIGHT),
-                    };
-
-                    size(px(0.), height)
-                })
-                .collect(),
-        );
+        self.rows
+            .iter()
+            .enumerate()
+            .map(|(row_ix, row)| match row {
+                CommandRow::Separator => size(px(0.), px(SEPARATOR_ROW_HEIGHT)),
+                CommandRow::Heading(_) | CommandRow::Item(_) => {
+                    let row_size = self
+                        .render_row(row_ix, window, cx)
+                        .layout_as_root(available, window, cx);
+                    size(px(0.), row_size.height)
+                }
+            })
+            .collect()
     }
 
     // MARK: Rendering
@@ -690,11 +645,7 @@ impl Render for CommandState {
 
         if self.needs_measure {
             self.needs_measure = false;
-            let row_heights = self.measure_row_heights(window, cx);
-            if self.row_heights != row_heights {
-                self.row_heights = row_heights;
-                self.rebuild_row_sizes();
-            }
+            self.row_sizes = Rc::new(self.measure_row_sizes(window, cx));
         }
 
         if let Some(row_ix) = self.pending_scroll.take() {
@@ -786,11 +737,11 @@ mod tests {
     };
 
     use gpui::{
-        AppContext as _, Entity, IntoElement, ParentElement as _, Render, SharedString,
-        Styled as _, TestAppContext, Window, div, px,
+        AppContext as _, Entity, IntoElement, ParentElement as _, Render, Styled as _,
+        TestAppContext, Window, div, px,
     };
 
-    use super::{CommandRow, CommandState};
+    use super::{CommandRow, CommandState, SEPARATOR_ROW_HEIGHT};
     use crate::{
         Disableable as _,
         actions::{Confirm, SelectDown},
@@ -1042,44 +993,35 @@ mod tests {
         }
     }
 
-    /// A custom row design decides the row height, so a two-line result row
-    /// gets two lines rather than being squeezed into the standard one.
     #[gpui::test]
-    fn a_custom_item_element_sets_the_row_height(cx: &mut TestAppContext) {
+    fn custom_rows_keep_independent_heights(cx: &mut TestAppContext) {
         cx.update(crate::init);
 
         let (harness, cx) = cx.add_window_view(|window, cx| Harness {
             state: cx.new(|cx| {
-                CommandState::new(window, cx).item(CommandItem::new("standard").label("Standard"))
+                CommandState::new(window, cx)
+                    .group(
+                        CommandGroup::new("Short")
+                            .item(CommandItem::new("short").element(|_, _| div().h(px(32.)))),
+                    )
+                    .separator()
+                    .group(
+                        CommandGroup::new("Tall")
+                            .item(CommandItem::new("tall").element(|_, _| div().h(px(72.)))),
+                    )
             }),
         });
 
         cx.run_until_parked();
         cx.update(|window, cx| _ = window.draw(cx));
-        let standard = cx.update(|_, cx| harness.read(cx).state.read(cx).row_heights.item);
+        let row_sizes = cx.update(|_, cx| harness.read(cx).state.read(cx).row_sizes.clone());
 
-        cx.update(|_, cx| {
-            let state = harness.read(cx).state.clone();
-            state.update(cx, |state, cx| {
-                state.set_entries(
-                    [CommandItem::new("two-line")
-                        .element(|_, _| {
-                            crate::v_flex()
-                                .child(SharedString::from("Symbol"))
-                                .child(SharedString::from("Name"))
-                        })
-                        .into()],
-                    cx,
-                )
-            });
-        });
-        cx.update(|window, cx| _ = window.draw(cx));
-
-        let custom = cx.update(|_, cx| harness.read(cx).state.read(cx).row_heights.item);
-        assert!(
-            custom > standard,
-            "a two-line row should measure taller than the standard one ({custom:?} vs {standard:?})",
-        );
+        assert_eq!(row_sizes.len(), 5);
+        assert!(row_sizes[0].height > px(0.));
+        assert_eq!(row_sizes[1].height, px(44.));
+        assert_eq!(row_sizes[2].height, px(SEPARATOR_ROW_HEIGHT));
+        assert!(row_sizes[3].height > px(0.));
+        assert_eq!(row_sizes[4].height, px(84.));
     }
 
     #[gpui::test]
