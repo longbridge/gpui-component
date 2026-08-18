@@ -64,7 +64,7 @@ DropdownButton::new("dropdown")
     })
 ```
 
-Leaving the variant or size unset on the DropdownButton keeps whatever the inner button was given.
+Leaving the variant unset on the DropdownButton uses the inner button's variant for both halves. Leaving the size unset keeps the inner button's own size.
 
 ### With custom anchor
 

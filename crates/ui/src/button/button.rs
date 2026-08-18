@@ -261,6 +261,10 @@ impl Button {
         }
     }
 
+    pub(super) fn variant(&self) -> ButtonVariant {
+        self.variant
+    }
+
     pub fn role(mut self, role: impl Into<RoleOverride>) -> Self {
         self.role = role.into();
         self

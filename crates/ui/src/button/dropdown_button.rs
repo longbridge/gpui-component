@@ -63,11 +63,19 @@ impl DropdownButton {
         }
     }
 
+    fn effective_variant(&self) -> ButtonVariant {
+        self.variant
+            .or_else(|| self.button.as_ref().map(Button::variant))
+            .unwrap_or_default()
+    }
+
     /// Set the left button of the dropdown button.
     ///
     /// The button keeps its own label, icon, tooltip and click handler. A
     /// variant or size set on the [`DropdownButton`] applies to both halves and
-    /// overrides the one set here; leave it unset to keep this button's own.
+    /// overrides the one set here. When the outer variant is unset, this
+    /// button's variant becomes the shared variant for both halves; an unset
+    /// outer size leaves this button's size unchanged.
     pub fn button(mut self, button: Button) -> Self {
         self.button = Some(button);
         self
@@ -147,10 +155,8 @@ impl RenderOnce for DropdownButton {
             "a DropdownButton needs a `button`, a `dropdown_menu`, or both"
         );
 
-        let is_ghost = self
-            .variant
-            .as_ref()
-            .is_some_and(|variant| variant.is_ghost());
+        let variant = self.effective_variant();
+        let is_ghost = variant.is_ghost();
 
         ButtonGroup::new(self.id)
             // The halves run an action and open a menu; neither is a toggle,
@@ -159,7 +165,7 @@ impl RenderOnce for DropdownButton {
             .attached(!(is_ghost && !self.selected))
             .disabled(self.disabled)
             .when(self.outline, |this| this.outline())
-            .when_some(self.variant, |this, variant| this.with_variant(variant))
+            .with_variant(variant)
             .when_some(self.size, |this, size| this.with_size(size))
             .refine_style(&self.style)
             .when_some(self.button, |this, button| {
@@ -212,5 +218,14 @@ mod tests {
 
         assert_eq!(dropdown.variant, None);
         assert_eq!(dropdown.size, None);
+    }
+
+    #[gpui::test]
+    fn inner_ghost_becomes_the_split_variant(_cx: &mut gpui::TestAppContext) {
+        let dropdown = DropdownButton::new("dropdown")
+            .button(Button::new("inner").label("Action").ghost())
+            .dropdown_menu(|menu, _, _| menu);
+
+        assert_eq!(dropdown.effective_variant(), ButtonVariant::Ghost);
     }
 }

@@ -64,7 +64,7 @@ DropdownButton::new("dropdown")
     })
 ```
 
-DropdownButton 上不设置变体或尺寸时，内层按钮自己的设置会被保留。
+DropdownButton 上不设置变体时，内层按钮的变体会应用到两半；不设置尺寸时，内层按钮自己的尺寸会被保留。
 
 ### 自定义锚点
 

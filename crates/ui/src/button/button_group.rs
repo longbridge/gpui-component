@@ -15,69 +15,72 @@ use crate::{
     menu::DropdownMenuPopover,
 };
 
-/// A member of a [`ButtonGroup`]: a plain [`Button`], or a button that opens a
-/// dropdown menu.
-///
-/// Both forms convert on their own, so a group takes either one directly:
-///
-/// ```ignore
-/// ButtonGroup::new("save")
-///     .child(Button::new("save").label("Save"))
-///     .child(
-///         Button::new("save-options")
-///             .dropdown_caret(true)
-///             .dropdown_menu(|menu, _, _| menu.menu("Save as…", Box::new(SaveAs))),
-///     )
-/// ```
-pub struct ButtonGroupChild(ButtonGroupChildKind);
-
 // Both variants are a Button-sized builder — boxing the popover would trade a
 // move for an allocation and leave the enum just as large.
 #[allow(clippy::large_enum_variant)]
-enum ButtonGroupChildKind {
+enum ButtonGroupMember {
     Button(Button),
     Menu(DropdownMenuPopover<Button>),
 }
 
-impl From<Button> for ButtonGroupChild {
-    fn from(button: Button) -> Self {
-        Self(ButtonGroupChildKind::Button(button))
+#[allow(private_interfaces)]
+mod private {
+    use super::*;
+
+    pub trait SealedButtonGroupChild {
+        fn into_button_group_member(self) -> ButtonGroupMember;
+    }
+
+    impl SealedButtonGroupChild for Button {
+        fn into_button_group_member(self) -> ButtonGroupMember {
+            ButtonGroupMember::Button(self)
+        }
+    }
+
+    impl SealedButtonGroupChild for DropdownMenuPopover<Button> {
+        fn into_button_group_member(self) -> ButtonGroupMember {
+            ButtonGroupMember::Menu(self)
+        }
     }
 }
 
-impl From<DropdownMenuPopover<Button>> for ButtonGroupChild {
-    fn from(menu: DropdownMenuPopover<Button>) -> Self {
-        Self(ButtonGroupChildKind::Menu(menu))
-    }
-}
+/// Conversion accepted by [`ButtonGroup::child`].
+///
+/// This trait is sealed; callers use it through `Button` and the value returned
+/// by [`crate::menu::DropdownMenu::dropdown_menu`].
+#[doc(hidden)]
+pub trait IntoButtonGroupChild: private::SealedButtonGroupChild {}
 
-impl ButtonGroupChild {
+impl IntoButtonGroupChild for Button {}
+impl IntoButtonGroupChild for DropdownMenuPopover<Button> {}
+
+impl ButtonGroupMember {
     /// Rebuilds the member's button, reaching through the popover for a member
     /// that opens a menu.
     fn map_button(self, f: impl FnOnce(Button) -> Button) -> Self {
-        Self(match self.0 {
-            ButtonGroupChildKind::Button(button) => ButtonGroupChildKind::Button(f(button)),
-            ButtonGroupChildKind::Menu(menu) => ButtonGroupChildKind::Menu(menu.map_trigger(f)),
-        })
+        match self {
+            Self::Button(button) => Self::Button(f(button)),
+            Self::Menu(menu) => Self::Menu(menu.map_trigger(f)),
+        }
     }
 
     fn is_selected(&self) -> bool {
-        match &self.0 {
-            ButtonGroupChildKind::Button(button) => button.is_selected(),
-            ButtonGroupChildKind::Menu(menu) => menu.is_selected(),
+        match self {
+            Self::Button(button) => button.is_selected(),
+            Self::Menu(menu) => menu.is_selected(),
         }
     }
 
     /// Whether clicking this member opens a menu, in which case the group must
     /// leave its click handling alone.
     fn opens_menu(&self) -> bool {
-        matches!(self.0, ButtonGroupChildKind::Menu(_))
+        matches!(self, Self::Menu(_))
     }
 
     fn into_any_element(self) -> AnyElement {
-        match self.0 {
-            ButtonGroupChildKind::Button(button) => button.into_any_element(),
-            ButtonGroupChildKind::Menu(menu) => menu.into_any_element(),
+        match self {
+            Self::Button(button) => button.into_any_element(),
+            Self::Menu(menu) => menu.into_any_element(),
         }
     }
 }
@@ -87,7 +90,7 @@ impl ButtonGroupChild {
 pub struct ButtonGroup {
     id: ElementId,
     style: StyleRefinement,
-    children: Vec<ButtonGroupChild>,
+    children: Vec<ButtonGroupMember>,
     pub(super) multiple: bool,
     pub(super) disabled: bool,
     pub(super) layout: Axis,
@@ -131,19 +134,19 @@ impl ButtonGroup {
     }
 
     /// Adds a button as a child to the ButtonGroup.
-    pub fn child(mut self, child: impl Into<ButtonGroupChild>) -> Self {
+    pub fn child(mut self, child: impl IntoButtonGroupChild) -> Self {
         let disabled = self.disabled;
-        self.children
-            .push(child.into().map_button(|child| child.disabled(disabled)));
+        self.children.push(
+            private::SealedButtonGroupChild::into_button_group_member(child)
+                .map_button(|child| child.disabled(disabled)),
+        );
         self
     }
 
     /// Adds multiple buttons as children to the ButtonGroup.
-    pub fn children(
-        mut self,
-        children: impl IntoIterator<Item = impl Into<ButtonGroupChild>>,
-    ) -> Self {
-        self.children.extend(children.into_iter().map(Into::into));
+    pub fn children(mut self, children: impl IntoIterator<Item = Button>) -> Self {
+        self.children
+            .extend(children.into_iter().map(ButtonGroupMember::Button));
         self
     }
 
@@ -365,9 +368,9 @@ impl RenderOnce for ButtonGroup {
                                 selected_ixs.clear();
                                 selected_ixs.push(ix);
                             }
-                        }
 
-                        on_click(&selected_ixs, window, cx);
+                            on_click(&selected_ixs, window, cx);
+                        }
                     })
                 },
             )
@@ -377,6 +380,7 @@ impl RenderOnce for ButtonGroup {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::menu::DropdownMenu as _;
     use gpui::{
         Axis, Context, KeyDownEvent, KeyUpEvent, Keystroke, Modifiers, Render, TestAppContext,
         VisualTestContext, point, px,
@@ -456,9 +460,9 @@ mod tests {
     fn a_menu_member_is_recognized_and_styled_through_its_popover() {
         use crate::{Selectable as _, menu::DropdownMenu as _};
 
-        assert!(!ButtonGroupChild::from(Button::new("plain")).opens_menu());
+        assert!(!ButtonGroupMember::Button(Button::new("plain")).opens_menu());
 
-        let menu = ButtonGroupChild::from(
+        let menu = ButtonGroupMember::Menu(
             Button::new("menu")
                 .dropdown_caret(true)
                 .dropdown_menu(|menu, _, _| menu),
@@ -574,5 +578,70 @@ mod tests {
         assert_eq!(group.layout, Axis::Vertical);
         assert!(!group.disabled);
         assert!(group.on_click.is_some());
+    }
+
+    #[test]
+    fn empty_children_keeps_button_item_inference() {
+        let group = ButtonGroup::new("empty-group").children([]);
+
+        assert!(group.children.is_empty());
+    }
+
+    #[gpui::test]
+    fn menu_child_does_not_invoke_group_callback(cx: &mut TestAppContext) {
+        struct MenuGroupHarness(Rc<Cell<usize>>);
+
+        impl Render for MenuGroupHarness {
+            fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+                let group_clicks = self.0.clone();
+                ButtonGroup::new("menu-group")
+                    .size(px(120.))
+                    .child(
+                        Button::new("menu")
+                            .label("Menu")
+                            .dropdown_menu(|menu, _, _| menu),
+                    )
+                    .on_click(move |_, _, _| group_clicks.set(group_clicks.get() + 1))
+            }
+        }
+
+        cx.update(crate::init);
+        let clicks = Rc::new(Cell::new(0));
+        let (_, cx) = cx.add_window_view({
+            let clicks = clicks.clone();
+            move |_, _| MenuGroupHarness(clicks)
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        click_first(cx);
+
+        assert_eq!(clicks.get(), 0);
+    }
+
+    #[gpui::test]
+    fn group_background_does_not_invoke_group_callback(cx: &mut TestAppContext) {
+        struct GroupBackgroundHarness(Rc<Cell<usize>>);
+
+        impl Render for GroupBackgroundHarness {
+            fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+                let group_clicks = self.0.clone();
+                ButtonGroup::new("wide-group")
+                    .w(px(240.))
+                    .child(Button::new("button").label("Button").size(px(80.)))
+                    .on_click(move |_, _, _| group_clicks.set(group_clicks.get() + 1))
+            }
+        }
+
+        cx.update(crate::init);
+        let clicks = Rc::new(Cell::new(0));
+        let (_, cx) = cx.add_window_view({
+            let clicks = clicks.clone();
+            move |_, _| GroupBackgroundHarness(clicks)
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        cx.simulate_click(point(px(200.), px(20.)), Modifiers::default());
+
+        assert_eq!(clicks.get(), 0);
     }
 }
