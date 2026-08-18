@@ -260,9 +260,9 @@ mod tests {
     use super::cubic_bezier;
 
     #[test]
-    fn cubic_bezier_matches_css_ease() {
-        let ease = cubic_bezier(0.25, 0.1, 0.25, 1.);
+    fn cubic_bezier_matches_engine_published_values() {
         // Reference values sampled from the CSS `ease` curve.
+        let ease = cubic_bezier(0.25, 0.1, 0.25, 1.);
         for (t, expected) in [
             (0.0, 0.0),
             (0.2, 0.295),
@@ -274,6 +274,37 @@ mod tests {
                 (ease(t) - expected).abs() < 1e-3,
                 "ease({t}) = {}, expected {expected}",
                 ease(t)
+            );
+        }
+
+        // Chromium's CubicBezier(0.25, 0, 0.75, 1) expectations, from
+        // ui/gfx/geometry/cubic_bezier_unittest.cc (epsilon 0.00015 there;
+        // widened for our f32 arithmetic).
+        let curve = cubic_bezier(0.25, 0., 0.75, 1.);
+        for (t, expected) in [
+            (0.05, 0.01136),
+            (0.1, 0.03978),
+            (0.15, 0.07978),
+            (0.2, 0.12803),
+            (0.25, 0.18235),
+            (0.3, 0.24115),
+            (0.35, 0.30323),
+            (0.4, 0.36761),
+            (0.45, 0.43345),
+            (0.5, 0.5),
+            (0.6, 0.63238),
+            (0.65, 0.69676),
+            (0.7, 0.75884),
+            (0.75, 0.81764),
+            (0.8, 0.87196),
+            (0.85, 0.92021),
+            (0.9, 0.96021),
+            (0.95, 0.98863),
+        ] {
+            assert!(
+                (curve(t) - expected).abs() < 3e-4,
+                "curve({t}) = {}, Chromium says {expected}",
+                curve(t)
             );
         }
     }
@@ -297,14 +328,53 @@ mod tests {
     }
 
     #[test]
-    fn cubic_bezier_stays_within_unit_range() {
-        // GPUI panics when an easing delta leaves [0, 1]; sweep the curves
-        // used in-repo densely to catch solver overshoot and rounding error.
-        for (x1, y1, x2, y2) in [(0.25, 0.1, 0.25, 1.), (0.32, 0.72, 0., 1.)] {
+    fn cubic_bezier_matches_the_css_definition() {
+        // Reference solver written straight off the CSS Easing Functions
+        // definition — solve `x(s) = t` by bisection in f64, then sample
+        // `y(s)` — independent of the production Newton solver.
+        fn css_reference(x1: f64, y1: f64, x2: f64, y2: f64, t: f64) -> f64 {
+            let sample = |p1: f64, p2: f64, s: f64| {
+                3. * p1 * (1. - s) * (1. - s) * s + 3. * p2 * (1. - s) * s * s + s * s * s
+            };
+            let (mut low, mut high) = (0f64, 1f64);
+            for _ in 0..64 {
+                let mid = (low + high) / 2.;
+                if sample(x1, x2, mid) < t {
+                    low = mid;
+                } else {
+                    high = mid;
+                }
+            }
+            sample(y1, y2, (low + high) / 2.)
+        }
+
+        let curves = [
+            // The runtime curves in this repo.
+            (0.25, 0.1, 0.25, 1.),
+            (1. / 3., 0.72, 2. / 3., 1.),
+            // CSS keyword curves.
+            (0.42, 0., 1., 1.),
+            (0., 0., 0.58, 1.),
+            (0.42, 0., 0.58, 1.),
+            (0., 0., 1., 1.),
+            // Degenerate x slopes: zero at s = 0.5, 0, and 1, forcing the
+            // Newton solve to fall back to bisection.
+            (1., 0., 0., 1.),
+            (0., 0., 0., 1.),
+            (1., 0.5, 1., 0.5),
+        ];
+        for (x1, y1, x2, y2) in curves {
             let ease = cubic_bezier(x1, y1, x2, y2);
-            for step in 0..=10_000 {
-                let t = step as f32 / 10_000.;
+            for step in 0..=1000 {
+                let t = step as f32 / 1000.;
                 let y = ease(t);
+                let expected =
+                    css_reference(x1 as f64, y1 as f64, x2 as f64, y2 as f64, t as f64) as f32;
+                assert!(
+                    (y - expected).abs() < 5e-4,
+                    "cubic_bezier({x1}, {y1}, {x2}, {y2})({t}) = {y}, CSS = {expected}"
+                );
+                // GPUI panics when an easing delta leaves [0, 1].
                 assert!((0.0..=1.0).contains(&y), "ease({t}) = {y} out of range");
             }
         }
