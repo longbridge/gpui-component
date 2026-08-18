@@ -204,7 +204,6 @@ impl CommandState {
         self.entries = entries.into_iter().collect();
         self.update_matches(cx);
         self.reset_selection();
-        self.pending_scroll = Some(0);
         cx.notify();
     }
 
@@ -375,6 +374,11 @@ impl CommandState {
             .iter()
             .position(|matched| !matched.disabled)
             .unwrap_or(0);
+        self.pending_scroll = self
+            .matched
+            .get(self.selected_index)
+            .map(|matched| matched.row_ix)
+            .or(Some(0));
     }
 
     fn on_query_input_event(
@@ -394,7 +398,6 @@ impl CommandState {
     fn on_query_changed(&mut self, cx: &mut Context<Self>) {
         self.update_matches(cx);
         self.reset_selection();
-        self.pending_scroll = Some(0);
         cx.emit(CommandEvent::Query(self.query(cx)));
         cx.notify();
     }
@@ -694,7 +697,6 @@ impl Render for CommandState {
             self.needs_update = false;
             self.update_matches(cx);
             self.reset_selection();
-            self.pending_scroll = Some(0);
         }
 
         if self.needs_measure {
@@ -839,7 +841,7 @@ mod tests {
     use crate::{
         Disableable as _,
         actions::{Cancel, Confirm, SelectDown},
-        command::{Command, CommandEvent, CommandGroup, CommandItem},
+        command::{Command, CommandEntry, CommandEvent, CommandGroup, CommandItem},
     };
 
     fn suggestions(state: CommandState) -> CommandState {
@@ -1300,6 +1302,83 @@ mod tests {
         assert!(footer_calls > 0);
         assert_eq!(header_matched_count, Some(2));
         assert_eq!(footer_matched_count, Some(2));
+    }
+
+    fn entries_with_late_first_enabled_item() -> Vec<CommandEntry> {
+        vec![
+            CommandGroup::new("Disabled")
+                .items((0..30).map(|ix| {
+                    CommandItem::new(format!("disabled-{ix}"))
+                        .keywords(["match"])
+                        .disabled(true)
+                }))
+                .into(),
+            CommandEntry::Separator,
+            CommandGroup::new("Enabled")
+                .item(CommandItem::new("enabled").keywords(["match"]))
+                .into(),
+        ]
+    }
+
+    fn state_with_late_first_enabled_item(
+        window: &mut Window,
+        cx: &mut gpui::Context<CommandState>,
+    ) -> CommandState {
+        CommandState::new(window, cx)
+            .group(CommandGroup::new("Disabled").items((0..30).map(|ix| {
+                CommandItem::new(format!("disabled-{ix}"))
+                    .keywords(["match"])
+                    .disabled(true)
+            })))
+            .separator()
+            .group(
+                CommandGroup::new("Enabled").item(CommandItem::new("enabled").keywords(["match"])),
+            )
+    }
+
+    fn assert_first_enabled_row_is_scrolled_into_view(
+        state: &Entity<CommandState>,
+        cx: &mut TestAppContext,
+    ) {
+        let (selected_row, offset) = state.read_with(cx, |state, _| {
+            (
+                state.matched[state.selected_index()].row_ix,
+                state.scroll_handle.base_handle().offset().y,
+            )
+        });
+
+        assert!(selected_row > 30);
+        assert!(
+            offset < px(-900.),
+            "the list should scroll to the selected row, not row zero ({offset:?})",
+        );
+    }
+
+    #[gpui::test]
+    fn first_enabled_selection_resets_scroll_to_its_late_row(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (harness, cx) = cx.add_window_view(|window, cx| Harness {
+            state: cx.new(|cx| state_with_late_first_enabled_item(window, cx)),
+        });
+        let state = cx.update(|_, cx| harness.read(cx).state.clone());
+
+        cx.run_until_parked();
+        cx.update(|window, cx| _ = window.draw(cx));
+        assert_first_enabled_row_is_scrolled_into_view(&state, cx);
+
+        cx.update(|window, cx| {
+            state.update(cx, |state, cx| state.set_query("match", window, cx));
+            _ = window.draw(cx);
+        });
+        assert_first_enabled_row_is_scrolled_into_view(&state, cx);
+
+        cx.update(|window, cx| {
+            state.update(cx, |state, cx| {
+                state.set_entries(entries_with_late_first_enabled_item(), cx)
+            });
+            _ = window.draw(cx);
+        });
+        assert_first_enabled_row_is_scrolled_into_view(&state, cx);
     }
 
     struct HeaderFooterHarness {
