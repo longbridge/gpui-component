@@ -461,7 +461,6 @@ where
         let bounds = self.state.bounds;
         let allow_open = !(self.state.open || self.state.disabled);
         let outline_visible = self.state.open || (is_focused && !self.state.disabled);
-        let popup_radius = cx.theme().radius.min(px(8.));
 
         let (bg, fg) = input_style(self.state.disabled, cx);
 
@@ -549,40 +548,33 @@ where
                 )
                 .when(self.state.open, |this| {
                     this.child(
-                        deferred(
-                            crate::popover::dropdown_positioner(bounds).child(
-                                div()
-                                    .occlude()
-                                    .map(|this| match self.state.menu_width {
-                                        Length::Auto => this.w(bounds.size.width + px(2.)),
-                                        Length::Definite(w) => this.w(w),
-                                    })
-                                    .child(
-                                        v_flex()
-                                            .occlude()
-                                            .bg(cx.theme().tokens.popover)
-                                            .border_1()
-                                            .border_color(cx.theme().border)
-                                            .rounded(popup_radius)
-                                            .shadow_md()
-                                            .child(
-                                                List::new(&self.state.list)
-                                                    .when_some(
-                                                        self.state.search_placeholder.clone(),
-                                                        |this, placeholder| {
-                                                            this.search_placeholder(placeholder)
-                                                        },
-                                                    )
-                                                    .with_size(self.state.size)
-                                                    .max_h(self.state.menu_max_h)
-                                                    .paddings(Edges::all(px(4.))),
-                                            ),
-                                    )
-                                    .on_mouse_down_out(cx.listener(|this, _, window, cx| {
-                                        this.escape(&Cancel, window, cx);
-                                    })),
-                            ),
-                        )
+                        deferred(crate::popover::dropdown_popup(
+                            ("select-popup", cx.entity_id()),
+                            bounds,
+                            v_flex()
+                                .occlude()
+                                .map(|this| match self.state.menu_width {
+                                    Length::Auto => this.w(bounds.size.width + px(2.)),
+                                    Length::Definite(w) => this.w(w),
+                                })
+                                .popover_style(cx)
+                                .child(
+                                    List::new(&self.state.list)
+                                        .when_some(
+                                            self.state.search_placeholder.clone(),
+                                            |this, placeholder| {
+                                                this.search_placeholder(placeholder)
+                                            },
+                                        )
+                                        .with_size(self.state.size)
+                                        .max_h(self.state.menu_max_h)
+                                        .paddings(Edges::all(px(4.))),
+                                )
+                                .on_mouse_down_out(cx.listener(|this, _, window, cx| {
+                                    this.escape(&Cancel, window, cx);
+                                })),
+                            cx,
+                        ))
                         .with_priority(gpui_base::POPUP_PRIORITY),
                     )
                 }),

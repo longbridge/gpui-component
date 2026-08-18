@@ -692,6 +692,7 @@ where
                 .when(self.state.open, |this| {
                     this.child(
                         deferred(render_popup_shell(
+                            ("combobox-popup", cx.entity_id()),
                             &self.state.list,
                             self.state.menu_width,
                             self.state.search_placeholder.clone(),
@@ -1018,6 +1019,7 @@ fn render_trigger_container(
 /// Renders the deferred anchored popup shell containing the searchable list and optional footer.
 #[allow(clippy::too_many_arguments)]
 fn render_popup_shell<D: SearchableListDelegate + 'static>(
+    id: impl Into<ElementId>,
     list: &Entity<ListState<SearchableListAdapter<D>>>,
     menu_width: Length,
     search_placeholder: Option<SharedString>,
@@ -1029,46 +1031,39 @@ fn render_popup_shell<D: SearchableListDelegate + 'static>(
     cx: &mut App,
 ) -> AnyElement {
     let has_footer = footer_el.is_some();
-    let popup_radius = cx.theme().radius.min(px(8.));
 
-    crate::popover::dropdown_positioner(bounds)
-        .child(
-            div()
-                .occlude()
-                .map(|this| match menu_width {
-                    Length::Auto => this.w(bounds.size.width + px(2.)),
-                    Length::Definite(w) => this.w(w),
-                })
-                .child(
-                    v_flex()
-                        .occlude()
-                        .bg(cx.theme().tokens.popover)
-                        .border_1()
+    crate::popover::dropdown_popup(
+        id,
+        bounds,
+        v_flex()
+            .occlude()
+            .map(|this| match menu_width {
+                Length::Auto => this.w(bounds.size.width + px(2.)),
+                Length::Definite(w) => this.w(w),
+            })
+            .popover_style(cx)
+            .child(
+                List::new(list)
+                    .when_some(search_placeholder, |this, placeholder| {
+                        this.search_placeholder(placeholder)
+                    })
+                    .with_size(size)
+                    .max_h(menu_max_h)
+                    .paddings(Edges::all(px(4.))),
+            )
+            .when(has_footer, |this| {
+                this.child(
+                    div()
+                        .border_t_1()
                         .border_color(cx.theme().border)
-                        .rounded(popup_radius)
-                        .shadow_md()
-                        .child(
-                            List::new(list)
-                                .when_some(search_placeholder, |this, placeholder| {
-                                    this.search_placeholder(placeholder)
-                                })
-                                .with_size(size)
-                                .max_h(menu_max_h)
-                                .paddings(Edges::all(px(4.))),
-                        )
-                        .when(has_footer, |this| {
-                            this.child(
-                                div()
-                                    .border_t_1()
-                                    .border_color(cx.theme().border)
-                                    .p_1()
-                                    .when_some(footer_el, |this, el| this.child(el)),
-                            )
-                        }),
+                        .p_1()
+                        .when_some(footer_el, |this, el| this.child(el)),
                 )
-                .on_mouse_down_out(dismiss_handler),
-        )
-        .into_any_element()
+            })
+            .on_mouse_down_out(dismiss_handler),
+        cx,
+    )
+    .into_any_element()
 }
 
 // MARK: Tests
