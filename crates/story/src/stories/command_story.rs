@@ -217,7 +217,7 @@ impl CommandStory {
         self.search.update(cx, |search, cx| {
             search.set_query("", window, cx);
             search.set_loading(false, window, cx);
-            search.set_entries([], cx);
+            search.set_entries(popular_entries(), cx);
         });
 
         window.open_command_dialog(&self.search, cx, |command, _, _| {
@@ -245,10 +245,12 @@ impl CommandStory {
 
         let query = query.trim().to_lowercase();
         if query.is_empty() {
+            // Nothing typed is not the same as nothing found: fall back to the
+            // list people would otherwise have to search for.
             self._search_task = None;
             return state.update(cx, |state, cx| {
                 state.set_loading(false, window, cx);
-                state.set_entries([], cx);
+                state.set_entries(popular_entries(), cx);
             });
         }
 
@@ -275,6 +277,15 @@ impl CommandStory {
             });
         }));
     }
+}
+
+/// What the panel shows before anything has been typed.
+fn popular_entries() -> Vec<CommandEntry> {
+    vec![
+        CommandGroup::new("Popular")
+            .items(STOCKS.iter().take(5).map(|stock| stock_item(*stock)))
+            .into(),
+    ]
 }
 
 /// A two-line search result: symbol and name on the left, quote on the right.
