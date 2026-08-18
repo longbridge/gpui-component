@@ -3,6 +3,8 @@ use gpui::{
     Pixels, StyleRefinement, Subscription, Window,
 };
 
+use gpui_base::DeferredPopover;
+
 use crate::{IndexPath, Size, list::ListState, searchable_list::adapter::SearchableListAdapter};
 
 use super::delegate::{SearchableListDelegate, SearchableListItem};
@@ -20,6 +22,9 @@ where
     pub(crate) list: Entity<ListState<SearchableListAdapter<D>>>,
     pub(crate) selection: Vec<(IndexPath, D::Item)>,
     pub(crate) open: bool,
+    /// Held while the popup is open, so that a component dropped without
+    /// closing it first takes its registration with it.
+    pub(crate) deferred_context: Option<DeferredPopover>,
     pub(crate) bounds: Bounds<Pixels>,
 
     // Shared options
@@ -108,6 +113,7 @@ where
             list,
             selection,
             open: false,
+            deferred_context: None,
             bounds: Bounds::default(),
             size: Size::default(),
             style: StyleRefinement::default(),
