@@ -17,6 +17,7 @@ gpui-component = { workspace = true }
 gpui-component-assets.workspace = true
 gpui-fps.workspace = true
 
+async-channel = "2.3.1"
 autocorrect = "2.14.2"
 chrono = "0.4"
 csv = "1.4"

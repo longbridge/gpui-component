@@ -518,6 +518,9 @@ where
     /// Dump table data.
     ///
     /// Returns a tuple of (headers, rows) where each row is a vector of cell values.
+    ///
+    /// This materializes the complete table in memory. For large tables, prefer
+    /// [`Self::dump_range`] and process rows in batches.
     pub fn dump(&self, cx: &App) -> (Vec<String>, Vec<Vec<String>>) {
         // Get header row
         let columns_count = self.delegate.columns_count(cx);
@@ -531,6 +534,38 @@ where
         let rows_count = self.delegate.rows_count(cx);
         let mut rows = Vec::with_capacity(rows_count);
         for row_ix in 0..rows_count {
+            let mut row = Vec::with_capacity(columns_count);
+            for col_ix in 0..columns_count {
+                row.push(self.delegate.cell_text(row_ix, col_ix, cx));
+            }
+            rows.push(row);
+        }
+
+        (headers, rows)
+    }
+
+    /// Dump table data for the specified row range.
+    ///
+    /// Returns the same `(headers, rows)` shape as [`Self::dump`], with only
+    /// the rows inside the clamped range.
+    ///
+    /// The requested range is clamped to the table's current row count. For
+    /// large tables, callers can invoke this repeatedly with bounded ranges.
+    pub fn dump_range(&self, range: Range<usize>, cx: &App) -> (Vec<String>, Vec<Vec<String>>) {
+        let columns_count = self.delegate.columns_count(cx);
+
+        let mut headers = Vec::with_capacity(columns_count);
+        for col_ix in 0..columns_count {
+            let column = self.delegate.column(col_ix, cx);
+            headers.push(column.name.to_string());
+        }
+
+        let rows_count = self.delegate.rows_count(cx);
+        let start = range.start.min(rows_count);
+        let end = range.end.min(rows_count).max(start);
+
+        let mut rows = Vec::with_capacity(end - start);
+        for row_ix in start..end {
             let mut row = Vec::with_capacity(columns_count);
             for col_ix in 0..columns_count {
                 row.push(self.delegate.cell_text(row_ix, col_ix, cx));
