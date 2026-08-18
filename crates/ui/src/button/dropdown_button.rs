@@ -1,6 +1,7 @@
+use gpui::Corners;
 use gpui::{
-    Anchor, App, Context, ElementId, IntoElement, RenderOnce, StyleRefinement, Styled, Window,
-    prelude::FluentBuilder,
+    Anchor, App, Context, Edges, ElementId, InteractiveElement as _, IntoElement, ParentElement,
+    RenderOnce, StyleRefinement, Styled, Window, div, prelude::FluentBuilder,
 };
 
 use crate::{
@@ -8,7 +9,7 @@ use crate::{
     menu::{DropdownMenu, PopupMenu},
 };
 
-use super::{Button, ButtonGroup, ButtonVariant, ButtonVariants};
+use super::{Button, ButtonVariant, ButtonVariants};
 
 /// A split button: an action button with an attached menu trigger.
 ///
@@ -16,19 +17,6 @@ use super::{Button, ButtonGroup, ButtonVariant, ButtonVariants};
 /// selected — a toolbar reads better when an idle ghost pair looks like two
 /// separate buttons.
 ///
-/// This is a thin wrapper over [`ButtonGroup`], which can hold a button that
-/// opens a menu directly. Reach for the group when the split needs more than
-/// two members, or when the halves need unrelated styling:
-///
-/// ```ignore
-/// ButtonGroup::new("save")
-///     .child(Button::new("save").label("Save"))
-///     .child(
-///         Button::new("save-options")
-///             .dropdown_caret(true)
-///             .dropdown_menu(|menu, _, _| menu.menu("Save as…", Box::new(SaveAs))),
-///     )
-/// ```
 #[derive(IntoElement)]
 pub struct DropdownButton {
     id: ElementId,
@@ -69,13 +57,18 @@ impl DropdownButton {
             .unwrap_or_default()
     }
 
+    fn effective_size(&self) -> Size {
+        self.size
+            .or_else(|| self.button.as_ref().map(Button::button_size))
+            .unwrap_or_default()
+    }
+
     /// Set the left button of the dropdown button.
     ///
     /// The button keeps its own label, icon, tooltip and click handler. A
     /// variant or size set on the [`DropdownButton`] applies to both halves and
-    /// overrides the one set here. When the outer variant is unset, this
-    /// button's variant becomes the shared variant for both halves; an unset
-    /// outer size leaves this button's size unchanged.
+    /// overrides the one set here. When either outer value is unset, this
+    /// button's value becomes the shared value for both halves.
     pub fn button(mut self, button: Button) -> Self {
         self.button = Some(button);
         self
@@ -156,26 +149,54 @@ impl RenderOnce for DropdownButton {
         );
 
         let variant = self.effective_variant();
+        let size = self.effective_size();
+        let selected = self.selected || self.button.as_ref().is_some_and(Selectable::is_selected);
         let is_ghost = variant.is_ghost();
+        let attached = !(is_ghost && !selected);
 
-        ButtonGroup::new(self.id)
-            // The halves run an action and open a menu; neither is a toggle,
-            // and `selected` only styles them.
-            .no_toggle()
-            .attached(!(is_ghost && !self.selected))
-            .disabled(self.disabled)
-            .when(self.outline, |this| this.outline())
-            .with_variant(variant)
-            .when_some(self.size, |this, size| this.with_size(size))
+        div()
+            .id(self.id)
+            .h_flex()
             .refine_style(&self.style)
             .when_some(self.button, |this, button| {
-                this.child(button.selected(self.selected))
+                let disabled = self.disabled || button.is_disabled();
+                this.child(
+                    button
+                        .border_corners(Corners {
+                            top_left: true,
+                            top_right: !attached,
+                            bottom_left: true,
+                            bottom_right: !attached,
+                        })
+                        .border_edges(Edges::all(true))
+                        .selected(selected)
+                        .disabled(disabled)
+                        .when(self.outline, |this| this.outline())
+                        .with_size(size)
+                        .with_variant(variant),
+                )
             })
             .when_some(self.menu, |this, menu| {
                 this.child(
                     Button::new("popup")
                         .dropdown_caret(true)
-                        .selected(self.selected)
+                        .border_corners(Corners {
+                            top_left: !attached,
+                            top_right: true,
+                            bottom_left: !attached,
+                            bottom_right: true,
+                        })
+                        .border_edges(Edges {
+                            left: !attached,
+                            top: true,
+                            right: true,
+                            bottom: true,
+                        })
+                        .selected(selected)
+                        .disabled(self.disabled)
+                        .when(self.outline, |this| this.outline())
+                        .with_size(size)
+                        .with_variant(variant)
                         .dropdown_menu_with_anchor(self.anchor, menu),
                 )
             })
@@ -227,5 +248,14 @@ mod tests {
             .dropdown_menu(|menu, _, _| menu);
 
         assert_eq!(dropdown.effective_variant(), ButtonVariant::Ghost);
+    }
+
+    #[gpui::test]
+    fn inner_size_becomes_the_split_size(_cx: &mut gpui::TestAppContext) {
+        let dropdown = DropdownButton::new("dropdown")
+            .button(Button::new("inner").label("Action").small())
+            .dropdown_menu(|menu, _, _| menu);
+
+        assert_eq!(dropdown.effective_size(), Size::Small);
     }
 }

@@ -1,4 +1,3 @@
-use gpui::AnyElement;
 use gpui::Corners;
 use gpui::InteractiveElement;
 use gpui::ParentElement;
@@ -10,92 +9,19 @@ use gpui::{
 use std::{cell::Cell, rc::Rc};
 
 use crate::{
-    Disableable, Selectable as _, Sizable, Size, StyledExt,
+    Disableable, Sizable, Size, StyledExt,
     button::{Button, ButtonVariant, ButtonVariants},
-    menu::DropdownMenuPopover,
 };
-
-// Both variants are a Button-sized builder — boxing the popover would trade a
-// move for an allocation and leave the enum just as large.
-#[allow(clippy::large_enum_variant)]
-enum ButtonGroupMember {
-    Button(Button),
-    Menu(DropdownMenuPopover<Button>),
-}
-
-#[allow(private_interfaces)]
-mod private {
-    use super::*;
-
-    pub trait SealedButtonGroupChild {
-        fn into_button_group_member(self) -> ButtonGroupMember;
-    }
-
-    impl SealedButtonGroupChild for Button {
-        fn into_button_group_member(self) -> ButtonGroupMember {
-            ButtonGroupMember::Button(self)
-        }
-    }
-
-    impl SealedButtonGroupChild for DropdownMenuPopover<Button> {
-        fn into_button_group_member(self) -> ButtonGroupMember {
-            ButtonGroupMember::Menu(self)
-        }
-    }
-}
-
-/// Conversion accepted by [`ButtonGroup::child`].
-///
-/// This trait is sealed; callers use it through `Button` and the value returned
-/// by [`crate::menu::DropdownMenu::dropdown_menu`].
-#[doc(hidden)]
-pub trait IntoButtonGroupChild: private::SealedButtonGroupChild {}
-
-impl IntoButtonGroupChild for Button {}
-impl IntoButtonGroupChild for DropdownMenuPopover<Button> {}
-
-impl ButtonGroupMember {
-    /// Rebuilds the member's button, reaching through the popover for a member
-    /// that opens a menu.
-    fn map_button(self, f: impl FnOnce(Button) -> Button) -> Self {
-        match self {
-            Self::Button(button) => Self::Button(f(button)),
-            Self::Menu(menu) => Self::Menu(menu.map_trigger(f)),
-        }
-    }
-
-    fn is_selected(&self) -> bool {
-        match self {
-            Self::Button(button) => button.is_selected(),
-            Self::Menu(menu) => menu.is_selected(),
-        }
-    }
-
-    /// Whether clicking this member opens a menu, in which case the group must
-    /// leave its click handling alone.
-    fn opens_menu(&self) -> bool {
-        matches!(self, Self::Menu(_))
-    }
-
-    fn into_any_element(self) -> AnyElement {
-        match self {
-            Self::Button(button) => button.into_any_element(),
-            Self::Menu(menu) => menu.into_any_element(),
-        }
-    }
-}
 
 /// A ButtonGroup element, to wrap multiple buttons in a group.
 #[derive(IntoElement)]
 pub struct ButtonGroup {
     id: ElementId,
     style: StyleRefinement,
-    children: Vec<ButtonGroupMember>,
+    children: Vec<Button>,
     pub(super) multiple: bool,
     pub(super) disabled: bool,
     pub(super) layout: Axis,
-    attached: bool,
-    toggle: bool,
 
     // The button props
     pub(super) compact: bool,
@@ -127,45 +53,19 @@ impl ButtonGroup {
             multiple: false,
             disabled: false,
             layout: Axis::Horizontal,
-            attached: true,
-            toggle: true,
             on_click: None,
         }
     }
 
     /// Adds a button as a child to the ButtonGroup.
-    pub fn child(mut self, child: impl IntoButtonGroupChild) -> Self {
-        let disabled = self.disabled;
-        self.children.push(
-            private::SealedButtonGroupChild::into_button_group_member(child)
-                .map_button(|child| child.disabled(disabled)),
-        );
+    pub fn child(mut self, child: Button) -> Self {
+        self.children.push(child.disabled(self.disabled));
         self
     }
 
     /// Adds multiple buttons as children to the ButtonGroup.
     pub fn children(mut self, children: impl IntoIterator<Item = Button>) -> Self {
-        self.children
-            .extend(children.into_iter().map(ButtonGroupMember::Button));
-        self
-    }
-
-    /// Whether the members share their inner edges, default: true.
-    ///
-    /// With `false` every member keeps the borders and radii it would have on
-    /// its own, which is how a ghost group reads as separate buttons.
-    pub(crate) fn attached(mut self, attached: bool) -> Self {
-        self.attached = attached;
-        self
-    }
-
-    /// Stops the group from advertising its members as toggle buttons.
-    ///
-    /// A group is a toggle control by default, so every member reports its
-    /// pressed state. A split button is not: its halves run an action and open
-    /// a menu, and `selected` there is presentation only.
-    pub(crate) fn no_toggle(mut self) -> Self {
-        self.toggle = false;
+        self.children.extend(children);
         self
     }
 
@@ -256,16 +156,12 @@ impl RenderOnce for ButtonGroup {
         let state = Rc::new(Cell::new(None));
 
         for (ix, child) in self.children.iter().enumerate() {
-            if child.is_selected() {
+            if child.selected {
                 selected_ixs.push(ix);
             }
         }
 
         let vertical = self.layout == Axis::Vertical;
-        let (attached, toggle) = (self.attached, self.toggle);
-        let (size, variant) = (self.size, self.variant);
-        let (compact, outline) = (self.compact, self.outline);
-        let has_group_click = self.on_click.is_some();
 
         div()
             .id(self.id)
@@ -279,77 +175,69 @@ impl RenderOnce for ButtonGroup {
                     .enumerate()
                     .map(|(child_index, child)| {
                         let state = Rc::clone(&state);
-                        let selected = child.is_selected();
-                        // A member that opens a menu keeps its own click
-                        // handling: the popover listens for the press itself.
-                        let child_click = has_group_click && !child.opens_menu();
+                        // The group as a whole is a toggle control, so every
+                        // child advertises its pressed state.
+                        let selected = child.selected;
+                        let child = child.toggled(selected);
+                        let child = if children_len == 1 {
+                            child
+                        } else if child_index == 0 {
+                            // First
+                            child
+                                .border_corners(Corners {
+                                    top_left: true,
+                                    top_right: vertical,
+                                    bottom_left: !vertical,
+                                    bottom_right: false,
+                                })
+                                .border_edges(Edges {
+                                    left: true,
+                                    top: true,
+                                    right: true,
+                                    bottom: true,
+                                })
+                        } else if child_index == children_len - 1 {
+                            // Last
+                            child
+                                .border_edges(Edges {
+                                    left: vertical,
+                                    top: !vertical,
+                                    right: true,
+                                    bottom: true,
+                                })
+                                .border_corners(Corners {
+                                    top_left: false,
+                                    top_right: !vertical,
+                                    bottom_left: vertical,
+                                    bottom_right: true,
+                                })
+                        } else {
+                            // Middle
+                            child
+                                .border_corners(Corners {
+                                    top_left: false,
+                                    top_right: false,
+                                    bottom_left: false,
+                                    bottom_right: false,
+                                })
+                                .border_edges(Edges {
+                                    left: vertical,
+                                    top: !vertical,
+                                    right: true,
+                                    bottom: true,
+                                })
+                        }
+                        .when_some(self.size, |this, size| this.with_size(size))
+                        .when_some(self.variant, |this, variant| this.with_variant(variant))
+                        .when(self.compact, |this| this.compact())
+                        .when(self.outline, |this| this.outline())
+                        .when(self.on_click.is_some(), |this| {
+                            this.on_click(move |_, _, _| {
+                                state.set(Some(child_index));
+                            })
+                        });
 
                         child
-                            .map_button(|child| {
-                                // A group is a toggle control by default, so every
-                                // child advertises its pressed state.
-                                let child = child.when(toggle, |this| this.toggled(selected));
-                                let child = if children_len == 1 || !attached {
-                                    child
-                                } else if child_index == 0 {
-                                    // First
-                                    child
-                                        .border_corners(Corners {
-                                            top_left: true,
-                                            top_right: vertical,
-                                            bottom_left: !vertical,
-                                            bottom_right: false,
-                                        })
-                                        .border_edges(Edges {
-                                            left: true,
-                                            top: true,
-                                            right: true,
-                                            bottom: true,
-                                        })
-                                } else if child_index == children_len - 1 {
-                                    // Last
-                                    child
-                                        .border_edges(Edges {
-                                            left: vertical,
-                                            top: !vertical,
-                                            right: true,
-                                            bottom: true,
-                                        })
-                                        .border_corners(Corners {
-                                            top_left: false,
-                                            top_right: !vertical,
-                                            bottom_left: vertical,
-                                            bottom_right: true,
-                                        })
-                                } else {
-                                    // Middle
-                                    child
-                                        .border_corners(Corners {
-                                            top_left: false,
-                                            top_right: false,
-                                            bottom_left: false,
-                                            bottom_right: false,
-                                        })
-                                        .border_edges(Edges {
-                                            left: vertical,
-                                            top: !vertical,
-                                            right: true,
-                                            bottom: true,
-                                        })
-                                }
-                                .when_some(size, |this, size| this.with_size(size))
-                                .when_some(variant, |this, variant| this.with_variant(variant))
-                                .when(compact, |this| this.compact())
-                                .when(outline, |this| this.outline())
-                                .when(child_click, |this| {
-                                    this.on_click(move |_, _, _| {
-                                        state.set(Some(child_index));
-                                    })
-                                });
-
-                                child
-                            })
-                            .into_any_element()
                     }),
             )
             .when_some(
@@ -368,9 +256,9 @@ impl RenderOnce for ButtonGroup {
                                 selected_ixs.clear();
                                 selected_ixs.push(ix);
                             }
-
-                            on_click(&selected_ixs, window, cx);
                         }
+
+                        on_click(&selected_ixs, window, cx);
                     })
                 },
             )
@@ -380,7 +268,7 @@ impl RenderOnce for ButtonGroup {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::menu::DropdownMenu as _;
+    use crate::Selectable as _;
     use gpui::{
         Axis, Context, KeyDownEvent, KeyUpEvent, Keystroke, Modifiers, Render, TestAppContext,
         VisualTestContext, point, px,
@@ -452,26 +340,6 @@ mod tests {
 
     fn click_first(cx: &mut VisualTestContext) {
         cx.simulate_click(point(px(10.), px(60.)), Modifiers::default());
-    }
-
-    /// A member that opens a menu is styled through its popover, and is left
-    /// out of the group's click handling.
-    #[test]
-    fn a_menu_member_is_recognized_and_styled_through_its_popover() {
-        use crate::{Selectable as _, menu::DropdownMenu as _};
-
-        assert!(!ButtonGroupMember::Button(Button::new("plain")).opens_menu());
-
-        let menu = ButtonGroupMember::Menu(
-            Button::new("menu")
-                .dropdown_caret(true)
-                .dropdown_menu(|menu, _, _| menu),
-        );
-        assert!(menu.opens_menu());
-        assert!(
-            menu.map_button(|button| button.selected(true))
-                .is_selected()
-        );
     }
 
     #[gpui::test]
@@ -578,70 +446,5 @@ mod tests {
         assert_eq!(group.layout, Axis::Vertical);
         assert!(!group.disabled);
         assert!(group.on_click.is_some());
-    }
-
-    #[test]
-    fn empty_children_keeps_button_item_inference() {
-        let group = ButtonGroup::new("empty-group").children([]);
-
-        assert!(group.children.is_empty());
-    }
-
-    #[gpui::test]
-    fn menu_child_does_not_invoke_group_callback(cx: &mut TestAppContext) {
-        struct MenuGroupHarness(Rc<Cell<usize>>);
-
-        impl Render for MenuGroupHarness {
-            fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-                let group_clicks = self.0.clone();
-                ButtonGroup::new("menu-group")
-                    .size(px(120.))
-                    .child(
-                        Button::new("menu")
-                            .label("Menu")
-                            .dropdown_menu(|menu, _, _| menu),
-                    )
-                    .on_click(move |_, _, _| group_clicks.set(group_clicks.get() + 1))
-            }
-        }
-
-        cx.update(crate::init);
-        let clicks = Rc::new(Cell::new(0));
-        let (_, cx) = cx.add_window_view({
-            let clicks = clicks.clone();
-            move |_, _| MenuGroupHarness(clicks)
-        });
-        cx.update(|window, cx| window.draw(cx).clear(cx));
-
-        click_first(cx);
-
-        assert_eq!(clicks.get(), 0);
-    }
-
-    #[gpui::test]
-    fn group_background_does_not_invoke_group_callback(cx: &mut TestAppContext) {
-        struct GroupBackgroundHarness(Rc<Cell<usize>>);
-
-        impl Render for GroupBackgroundHarness {
-            fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-                let group_clicks = self.0.clone();
-                ButtonGroup::new("wide-group")
-                    .w(px(240.))
-                    .child(Button::new("button").label("Button").size(px(80.)))
-                    .on_click(move |_, _, _| group_clicks.set(group_clicks.get() + 1))
-            }
-        }
-
-        cx.update(crate::init);
-        let clicks = Rc::new(Cell::new(0));
-        let (_, cx) = cx.add_window_view({
-            let clicks = clicks.clone();
-            move |_, _| GroupBackgroundHarness(clicks)
-        });
-        cx.update(|window, cx| window.draw(cx).clear(cx));
-
-        cx.simulate_click(point(px(200.), px(20.)), Modifiers::default());
-
-        assert_eq!(clicks.get(), 0);
     }
 }

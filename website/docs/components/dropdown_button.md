@@ -7,7 +7,7 @@ description: A DropdownButton is a combination of a button and a trigger button.
 
 A [DropdownButton] is a combination of a button and a trigger button. It allows us to display a dropdown menu when the trigger is clicked, but the left Button can still respond to independent events.
 
-The variant set with [ButtonVariants] and the size set with [Sizable] apply to both halves. Everything else — label, icon, tooltip, loading state, click handler — belongs to the inner [Button].
+Shared variant and size can be set on the DropdownButton. Action-specific options such as its label, icon, tooltip, loading state and click handler belong to the inner [Button].
 
 ## Import
 
@@ -43,11 +43,9 @@ DropdownButton::new("dropdown")
     })
 ```
 
-A `ghost` button that is not selected renders as two separate buttons instead of a joined pair, which reads better in a toolbar.
+Leaving the variant or size unset on the DropdownButton uses the inner button's value for both halves.
 
 ### Inner button options
-
-Options that belong to the action itself go on the inner [Button]:
 
 ```rust
 DropdownButton::new("dropdown")
@@ -64,8 +62,6 @@ DropdownButton::new("dropdown")
     })
 ```
 
-Leaving the variant unset on the DropdownButton uses the inner button's variant for both halves. Leaving the size unset keeps the inner button's own size.
-
 ### With custom anchor
 
 ```rust
@@ -76,22 +72,6 @@ DropdownButton::new("dropdown")
     })
 ```
 
-### Composing with ButtonGroup
-
-A DropdownButton is a thin wrapper over [ButtonGroup], which holds a button that opens a menu directly. Use the group when the split needs more than two members, or when the halves need unrelated styling:
-
-```rust
-ButtonGroup::new("save")
-    .child(Button::new("save").label("Save").on_click(|_, _, _| {}))
-    .child(
-        Button::new("save-options")
-            .dropdown_caret(true)
-            .dropdown_menu(|menu, _, _| menu.menu("Save as…", Box::new(MyAction))),
-    )
-```
-
 [Button]: https://docs.rs/gpui-component/latest/gpui_component/button/struct.Button.html
-[ButtonGroup]: https://docs.rs/gpui-component/latest/gpui_component/button/struct.ButtonGroup.html
-[ButtonVariants]: https://docs.rs/gpui-component/latest/gpui_component/button/trait.ButtonVariants.html
 [DropdownButton]: https://docs.rs/gpui-component/latest/gpui_component/button/struct.DropdownButton.html
 [Sizable]: https://docs.rs/gpui-component/latest/gpui_component/trait.Sizable.html

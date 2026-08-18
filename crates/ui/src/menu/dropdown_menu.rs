@@ -71,31 +71,6 @@ where
         self.style = style;
         self
     }
-
-    /// Rebuilds the trigger through `f`.
-    ///
-    /// A container that has to reach the trigger after the popover is built —
-    /// [`crate::button::ButtonGroup`] adjusting a member's borders, for
-    /// instance — goes through here instead of reconstructing the popover.
-    pub(crate) fn map_trigger(mut self, f: impl FnOnce(T) -> T) -> Self {
-        self.trigger = f(self.trigger);
-        self
-    }
-}
-
-/// A popover's selected state is its trigger's: the popover paints nothing of
-/// its own around the trigger.
-impl<T> Selectable for DropdownMenuPopover<T>
-where
-    T: Selectable + IntoElement + 'static,
-{
-    fn selected(self, selected: bool) -> Self {
-        self.map_trigger(|trigger| trigger.selected(selected))
-    }
-
-    fn is_selected(&self) -> bool {
-        self.trigger.is_selected()
-    }
 }
 
 #[derive(Default)]

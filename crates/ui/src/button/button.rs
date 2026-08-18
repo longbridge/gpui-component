@@ -265,6 +265,14 @@ impl Button {
         self.variant
     }
 
+    pub(super) fn button_size(&self) -> Size {
+        self.size
+    }
+
+    pub(super) fn is_disabled(&self) -> bool {
+        self.disabled
+    }
+
     pub fn role(mut self, role: impl Into<RoleOverride>) -> Self {
         self.role = role.into();
         self
