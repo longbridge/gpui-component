@@ -974,6 +974,14 @@ impl StoryRoot {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if self.theme_before_preview.is_some() {
+            self.theme_palette
+                .read(cx)
+                .focus_handle(cx)
+                .focus(window, cx);
+            return;
+        }
+
         let entries = themes::theme_entries(cx);
         self.theme_before_preview = Some(cx.theme().theme_name().clone());
         themes::begin_theme_preview(cx);
@@ -1331,6 +1339,9 @@ mod tests {
             assert_eq!(cx.theme().theme_name(), &selected);
             assert!(!AppState::global(cx).previewing_theme);
         });
+        story_root.read_with(cx, |root, _| {
+            assert!(root.theme_before_preview.is_none());
+        });
         window
             .update(cx, |_, window, cx| window.close_dialog(cx))
             .unwrap();
@@ -1339,6 +1350,56 @@ mod tests {
                 .update(cx, |_, window, cx| window.has_active_dialog(cx))
                 .unwrap()
         );
+    }
+
+    #[gpui::test]
+    fn repeated_select_theme_keeps_one_dialog_and_the_original_rollback_owner(
+        cx: &mut TestAppContext,
+    ) {
+        let (window, story_root) = theme_window(cx);
+        let (original, previewed) = another_theme(cx);
+        open_theme_palette(cx, window, &story_root);
+        story_root.update(cx, |root, cx| {
+            root.theme_palette.update(cx, |_, cx| {
+                cx.emit(CommandEvent::Select(previewed.clone()));
+            });
+        });
+
+        open_theme_palette(cx, window, &story_root);
+
+        story_root.read_with(cx, |root, _| {
+            assert_eq!(root.theme_before_preview.as_ref(), Some(&original));
+        });
+        cx.simulate_keystrokes(window, "escape");
+        assert!(
+            !window
+                .update(cx, |_, window, cx| window.has_active_dialog(cx))
+                .unwrap()
+        );
+        cx.read(|cx| {
+            assert_eq!(cx.theme().theme_name(), &original);
+            assert!(!AppState::global(cx).previewing_theme);
+        });
+        story_root.read_with(cx, |root, _| {
+            assert!(root.theme_before_preview.is_none());
+        });
+
+        open_theme_palette(cx, window, &story_root);
+        assert!(
+            window
+                .update(cx, |_, window, cx| window.has_active_dialog(cx))
+                .unwrap()
+        );
+        cx.read(|cx| assert!(AppState::global(cx).previewing_theme));
+        cx.simulate_keystrokes(window, "escape");
+        assert!(
+            !window
+                .update(cx, |_, window, cx| window.has_active_dialog(cx))
+                .unwrap()
+        );
+        story_root.read_with(cx, |root, _| {
+            assert!(root.theme_before_preview.is_none());
+        });
     }
 
     #[gpui::test]

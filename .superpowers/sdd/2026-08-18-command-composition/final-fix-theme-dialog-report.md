@@ -3,6 +3,8 @@
 ## Scope
 
 - Fixed theme preview cleanup when the theme Command palette is dismissed.
+- Prevented repeated SelectTheme actions from stacking theme dialogs or
+  replacing the original rollback owner.
 - Kept Dialog as the sole owner of Escape/Cancel dismissal.
 - Preserved Confirm behavior: the selected theme is committed and exactly one dialog is closed.
 
@@ -21,6 +23,12 @@ and `AppState::previewing_theme` set.
 The component palette already uses the correct Cancel ownership: its subscriber
 does nothing and the hosting Dialog performs the single dismissal.
 
+A follow-up review found a second ownership path: invoking SelectTheme again
+while the palette was open pushed another Dialog and replaced
+`theme_before_preview` with the currently previewed theme. Closing the top
+Dialog then restored that preview instead of the original theme, cleared the
+preview flag, and left the first palette underneath without a rollback owner.
+
 ## Fix
 
 - `CommandEvent::Cancel` no longer closes the dialog or owns cleanup.
@@ -29,6 +37,8 @@ does nothing and the hosting Dialog performs the single dismissal.
   the preview.
 - `CommandEvent::Confirm` clears the rollback marker, finishes the preview, and
   calls `window.close_dialog` once.
+- SelectTheme now detects the existing rollback marker, refocuses the current
+  palette, and returns without resetting its state or opening another Dialog.
 
 The Confirm path deliberately retains explicit finalization. The current
 imperative `WindowExt::close_dialog` API pops the Root dialog directly and does
@@ -36,6 +46,12 @@ not invoke `Dialog::on_close`; `CommandState` also consumes Confirm rather than
 propagating it to Dialog. Expanding the Dialog API is outside this Story fix, so
 Escape/Cancel cleanup uses `on_close`, while Confirm performs its one explicit
 commit finalization and close.
+
+Generic imperative dialog closure bypassing `Dialog::on_close` remains the
+existing global Dialog contract. The theme palette has no production
+imperative-close route except Confirm, which finalizes explicitly before its
+single close. Changing the global Dialog API is therefore residual and outside
+this Story-scoped correction.
 
 ## TDD evidence
 
@@ -59,6 +75,21 @@ The Confirm test was then tightened to assert the stacked one-pop route; with
 subscriber and Dialog both closing, it failed because no background dialog
 remained.
 
+The repeated-open follow-up was also written before its guard. Its red run
+showed the rollback owner being overwritten by the previewed theme:
+
+```text
+tests::repeated_select_theme_keeps_one_dialog_and_the_original_rollback_owner ... FAILED
+left: Some("Default Dark")
+right: Some("Default Light")
+```
+
+The green test invokes SelectTheme twice through the real window, verifies one
+Escape removes the only palette and restores the original theme, verifies the
+ownership marker and preview flag are cleared, then opens and closes the palette
+again successfully. The Confirm regression also asserts that its commit path
+clears the same marker.
+
 After the fix:
 
 ```text
@@ -70,7 +101,7 @@ cargo test -p gpui-component-story --lib --no-default-features theme -- --nocapt
 
 ```text
 cargo test -p gpui-component-story --lib
-14 passed; 0 failed
+15 passed; 0 failed
 
 cargo check -p gpui-component-story
 Finished `dev` profile
