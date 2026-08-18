@@ -78,7 +78,7 @@ Command::new(&actions).w(px(380.))
 
 ### 在对话框中
 
-使用现有的 [`WindowExt::open_dialog`] API 组合命令面板。订阅 [`CommandEvent`]，在收到 `Confirm` 或 `Cancel` 时关闭对话框；Command 不提供对话框专用 API。`header` 渲染在可选搜索框和列表之上，`footer` 渲染在列表之下。
+使用现有的 [`WindowExt::open_dialog`] API 组合命令面板。订阅 [`CommandEvent`]，只在收到 `Confirm` 时显式关闭对话框。`CommandState` 会传播 `Cancel`，因此宿主 Dialog 负责 Escape/Cancel 的关闭；不要再次关闭。Command 不提供对话框专用 API。`header` 渲染在可选搜索框和列表之上，`footer` 渲染在列表之下。
 
 ```rust
 use gpui_component::WindowExt as _;

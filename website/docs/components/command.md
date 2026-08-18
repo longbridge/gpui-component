@@ -85,9 +85,11 @@ With the default `.searchable(true)`, `state.focus(window, cx)` and
 ### In a Dialog
 
 Compose the palette with the existing [`WindowExt::open_dialog`] API. Subscribe
-to [`CommandEvent`] and close the dialog on `Confirm` or `Cancel`; Command does
-not provide a dialog-specific API. `header` renders above the optional search
-field and list, while `footer` renders below the list.
+to [`CommandEvent`] and explicitly close the dialog only on `Confirm`.
+`CommandState` propagates `Cancel`, so the hosting Dialog owns Escape/Cancel
+dismissal; do not close it again. Command does not provide a dialog-specific
+API. `header` renders above the optional search field and list, while `footer`
+renders below the list.
 
 ```rust
 use gpui_component::WindowExt as _;

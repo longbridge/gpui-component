@@ -277,7 +277,7 @@ impl CommandStory {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if matches!(event, CommandEvent::Confirm(_) | CommandEvent::Cancel) {
+        if matches!(event, CommandEvent::Confirm(_)) {
             window.close_dialog(cx);
         }
         self.on_command_event(state.clone(), event, cx);
