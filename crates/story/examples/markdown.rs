@@ -19,11 +19,12 @@ use gpui_component::{
         DocumentRangeSemanticTokensProvider, Editor, EditorState, InputEvent, Rope, RopeExt,
         TabSize,
     },
+    menu::{DropdownMenu as _, PopupMenuItem},
     resizable::{h_resizable, resizable_panel},
     status_bar::StatusBar,
     text::{
-        MarkdownNode, MarkdownParseContext, MarkdownPlugin, SelectionFormat, TextViewStyle,
-        markdown, markdown_ast,
+        MarkdownNode, MarkdownParseContext, MarkdownPlugin, SelectionFormat, TableData,
+        TextViewStyle, markdown, markdown_ast,
     },
     v_flex,
 };
@@ -1029,6 +1030,46 @@ fn svg_color(color: Hsla) -> (String, f32) {
     )
 }
 
+/// Serialize a [`TableData`] to CSV: `,` separated, quoting only cells that
+/// contain `"`, `,` or a newline, with `"` doubled inside quotes.
+fn table_to_csv(table: &TableData) -> String {
+    let field = |cell: &str| {
+        if cell.contains(['"', ',', '\n']) {
+            format!("\"{}\"", cell.replace('"', "\"\""))
+        } else {
+            cell.to_string()
+        }
+    };
+    let line = |cells: &[String]| cells.iter().map(|c| field(c)).collect::<Vec<_>>().join(",");
+
+    std::iter::once(line(&table.headers))
+        .chain(table.rows.iter().map(|row| line(row)))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Serialize a [`TableData`] to TSV: tab separated, never quoted; tabs and
+/// newlines inside a cell become literal `\t` / `\n` so rows stay intact.
+fn table_to_tsv(table: &TableData) -> String {
+    let field = |cell: &str| {
+        cell.replace('\t', "\\t")
+            .replace('\n', "\\n")
+            .replace('\r', "\\r")
+    };
+    let line = |cells: &[String]| {
+        cells
+            .iter()
+            .map(|c| field(c))
+            .collect::<Vec<_>>()
+            .join("\t")
+    };
+
+    std::iter::once(line(&table.headers))
+        .chain(table.rows.iter().map(|row| line(row)))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 /// Example [`DocumentRangeSemanticTokensProvider`]: tags `TODO` / `FIXME` /
 /// `XXX` / `HACK` / `NOTE` markers anywhere in the document, each with its
 /// own semantic token type so they render in distinct theme colors.
@@ -1266,6 +1307,78 @@ impl Render for Example {
                                                             this
                                                         }
                                                     })
+                                            })
+                                            .table_actions(|table, _window, cx| {
+                                                // The hook hands over the table as plain data:
+                                                // header cells, body rows, and the table
+                                                // re-serialized to GFM Markdown.
+                                                let markdown = table.markdown.clone();
+                                                let csv = table_to_csv(table);
+                                                let tsv = table_to_tsv(table);
+                                                // `span.start` is stable while streaming (only
+                                                // `end` grows), so it is a safe element id seed
+                                                // when a document holds several tables.
+                                                let seed =
+                                                    table.span.as_ref().map_or(0, |s| s.start);
+                                                let shape = format!(
+                                                    "{} × {}",
+                                                    table.rows.len(),
+                                                    table.headers.len()
+                                                );
+
+                                                h_flex()
+                                                    .w_full()
+                                                    .justify_end()
+                                                    .items_center()
+                                                    .gap_1()
+                                                    .child(
+                                                        div()
+                                                            .text_xs()
+                                                            .text_color(cx.theme().muted_foreground)
+                                                            .child(shape),
+                                                    )
+                                                    .child(
+                                                        Clipboard::new(("copy-table", seed))
+                                                            .value(markdown.clone())
+                                                            .tooltip("Copy as Markdown"),
+                                                    )
+                                                    .child(
+                                                        Button::new(("export-table", seed))
+                                                            .icon(IconName::Ellipsis)
+                                                            .ghost()
+                                                            .xsmall()
+                                                            .dropdown_menu_with_anchor(
+                                                                Anchor::TopRight,
+                                                                move |menu, _window, _cx| {
+                                                                    // The builder is a `Fn`, so
+                                                                    // captured values are cloned
+                                                                    // on every rebuild.
+                                                                    let csv = csv.clone();
+                                                                    let tsv = tsv.clone();
+
+                                                                    menu.item(
+                                                                        PopupMenuItem::new(
+                                                                            "Copy as CSV",
+                                                                        )
+                                                                        .on_click(
+                                                                            move |_, _, cx| {
+                                                                                cx.write_to_clipboard(ClipboardItem::new_string(csv.clone()));
+                                                                            },
+                                                                        ),
+                                                                    )
+                                                                    .item(
+                                                                        PopupMenuItem::new(
+                                                                            "Copy as TSV",
+                                                                        )
+                                                                        .on_click(
+                                                                            move |_, _, cx| {
+                                                                                cx.write_to_clipboard(ClipboardItem::new_string(tsv.clone()));
+                                                                            },
+                                                                        ),
+                                                                    )
+                                                                },
+                                                            ),
+                                                    )
                                             })
                                             .plugin(TickerPlugin::new(
                                                 TickerQuote {
