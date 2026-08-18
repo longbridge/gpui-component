@@ -7,7 +7,7 @@ use gpui::{
     StatefulInteractiveElement as _, StyleRefinement, Styled, TextAlign, Window, div, px, relative,
 };
 
-use crate::button::{Button, ButtonVariants as _};
+use crate::button::{Button, ButtonRounded, ButtonVariants as _};
 use crate::input::clear_button;
 use crate::native_menu::NativeMenu;
 use crate::spinner::Spinner;
@@ -400,7 +400,7 @@ impl RenderOnce for Input {
                             IconName::ChevronDown
                         })
                         .xsmall()
-                        .rounded_xs()
+                        .rounded(ButtonRounded::Small)
                         .size(px(14.))
                         .selected(is_folded)
                         .into_any_element()

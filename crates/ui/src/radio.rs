@@ -204,7 +204,7 @@ impl RenderOnce for Radio {
                         _ => this.size_4(),
                     })
                     .flex_shrink_0()
-                    .rounded_full()
+                    .rounded_full_style(cx)
                     .border_1()
                     .border_color(border_color)
                     .map(|this| match self.checked {

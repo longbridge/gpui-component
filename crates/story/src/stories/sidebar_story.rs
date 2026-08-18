@@ -7,7 +7,7 @@ use gpui::{
 };
 
 use gpui_component::{
-    ActiveTheme, Icon, IconName, Side, Sizable, StyledExt,
+    ActiveTheme, Icon, IconName, Side, Sizable, StyledExt, ThemeStyled as _,
     badge::Badge,
     breadcrumb::{Breadcrumb, BreadcrumbItem},
     button::Button,
@@ -232,7 +232,7 @@ impl SidebarStory {
                                         .flex()
                                         .items_center()
                                         .justify_center()
-                                        .rounded_full()
+                                        .rounded_full_style(cx)
                                         .bg(cx.theme().muted)
                                         .child(Icon::new(icon).small()),
                                 )

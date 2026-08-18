@@ -1,6 +1,6 @@
 use gpui::{prelude::*, *};
 use gpui_component::{
-    Icon, IconName,
+    Icon, IconName, ThemeStyled as _,
     button::{Button, ButtonVariants as _},
     h_flex,
     input::{Input, InputEvent, InputState},
@@ -268,11 +268,8 @@ impl Render for Gallery {
                                     .child(
                                         div()
                                             .bg(cx.theme().sidebar_accent)
-                                            .rounded_full()
+                                            .rounded_full_style(cx)
                                             .px_1()
-                                            .when(cx.theme().radius.is_zero(), |this| {
-                                                this.rounded(px(0.))
-                                            })
                                             .flex_1()
                                             .mx_1()
                                             .child(

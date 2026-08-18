@@ -350,7 +350,7 @@ impl CollapsibleStory {
                                 Button::new("toggle-usage")
                                     .outline()
                                     .xsmall()
-                                    .rounded_full()
+                                    .rounded(cx.theme().radius_full())
                                     .bg(cx.theme().background)
                                     .icon(if open {
                                         IconName::ChevronUp

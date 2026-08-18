@@ -122,6 +122,17 @@ pub trait ThemeStyled: Styled + Sized {
     /// Combobox, DatePicker and the editor's hover popovers — so they cannot
     /// drift apart. See [`popover_shadow`] for what the shadow is modelled on.
     fn popover_style(self, cx: &App) -> Self;
+
+    /// Round this element as far as its size allows — a circle if it is square,
+    /// a pill if it is not — unless the theme squares its corners.
+    ///
+    /// Use this instead of [`gpui::Styled::rounded_full`] on anything the theme
+    /// owns. A hardcoded `rounded_full` survives [`crate::Theme::radius`] being
+    /// set to zero, which leaves avatars, badge dots and slider thumbs round in
+    /// a UI that is square everywhere else. See [`crate::Theme::radius_full`].
+    fn rounded_full_style(self, cx: &App) -> Self {
+        self.rounded(cx.theme().radius_full())
+    }
 }
 
 impl<T: Styled + Sized> ThemeStyled for T {

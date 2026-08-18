@@ -9,7 +9,7 @@ use gpui::{
 };
 
 use gpui_component::{
-    ActiveTheme, Icon, IconName, IndexPath, Selectable,
+    ActiveTheme, Icon, IconName, IndexPath, Selectable, ThemeStyled as _,
     button::Button,
     h_flex,
     label::Label,
@@ -187,7 +187,7 @@ impl RenderOnce for CompanyListItem {
                                 .left_0()
                                 .right_0()
                                 .h(px(2.))
-                                .rounded_full()
+                                .rounded_full_style(cx)
                                 .bg(cx.theme().blue);
 
                             this.child(match position {

@@ -380,6 +380,7 @@ impl Render for ChartStory {
                             .label({
                                 let muted_foreground = cx.theme().muted_foreground;
                                 let accent = cx.theme().chart_2;
+                                let badge_radius = cx.theme().radius_full();
 
                                 move |d: &RadarDevice| {
                                     let grade = match d.desktop {
@@ -401,7 +402,7 @@ impl Render for ChartStory {
                                             h_flex()
                                                 .justify_center()
                                                 .size_6()
-                                                .rounded_full()
+                                                .rounded(badge_radius)
                                                 .bg(accent.opacity(0.1))
                                                 .text_sm()
                                                 .font_weight(FontWeight::SEMIBOLD)
