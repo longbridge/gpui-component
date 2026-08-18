@@ -236,6 +236,7 @@ impl CommandState {
     /// The value of the highlighted item, when the query matched anything.
     pub fn selected_value(&self) -> Option<SharedString> {
         self.item_at(self.selected_index)
+            .filter(|item| !item.is_disabled())
             .map(|item| item.value().clone())
     }
 
@@ -463,7 +464,7 @@ impl CommandState {
     /// Escape clears a non-empty query first, and only then leaves the palette
     /// — the dialog that hosts it closes on the second press.
     fn on_action_cancel(&mut self, _: &Cancel, window: &mut Window, cx: &mut Context<Self>) {
-        if !self.query(cx).is_empty() {
+        if self.searchable && !self.query(cx).is_empty() {
             self.set_query("", window, cx);
             return;
         }
@@ -692,6 +693,8 @@ impl Render for CommandState {
         if self.needs_update {
             self.needs_update = false;
             self.update_matches(cx);
+            self.reset_selection();
+            self.pending_scroll = Some(0);
         }
 
         if self.needs_measure {
@@ -835,7 +838,7 @@ mod tests {
     use super::{CommandRow, CommandState, SEPARATOR_ROW_HEIGHT};
     use crate::{
         Disableable as _,
-        actions::{Confirm, SelectDown},
+        actions::{Cancel, Confirm, SelectDown},
         command::{Command, CommandEvent, CommandGroup, CommandItem},
     };
 
@@ -1014,6 +1017,115 @@ mod tests {
         });
 
         assert_eq!(*confirmed.borrow(), Some("beta".into()));
+    }
+
+    #[gpui::test]
+    fn initially_rendered_disabled_first_item_selects_and_confirms_the_first_enabled_item(
+        cx: &mut TestAppContext,
+    ) {
+        cx.update(crate::init);
+        let (harness, cx) = cx.add_window_view(|window, cx| Harness {
+            state: cx.new(|cx| {
+                CommandState::new(window, cx)
+                    .item(CommandItem::new("disabled").disabled(true))
+                    .item(CommandItem::new("enabled"))
+            }),
+        });
+        let state = cx.update(|_, cx| harness.read(cx).state.clone());
+        let confirmed = Rc::new(RefCell::new(None));
+        let confirmed_value = confirmed.clone();
+        let _subscription = cx.update(|_, cx| {
+            cx.subscribe(&state, move |_, event: &CommandEvent, _| {
+                if let CommandEvent::Confirm(value) = event {
+                    *confirmed_value.borrow_mut() = Some(value.clone());
+                }
+            })
+        });
+
+        cx.run_until_parked();
+        cx.update(|window, cx| _ = window.draw(cx));
+        cx.update(|window, cx| {
+            state.update(cx, |state, cx| state.focus(window, cx));
+            window.dispatch_action(Box::new(Confirm { secondary: false }), cx);
+        });
+
+        assert_eq!(
+            state.read_with(cx, |state, _| state.selected_value()),
+            Some("enabled".into())
+        );
+        assert_eq!(*confirmed.borrow(), Some("enabled".into()));
+    }
+
+    #[gpui::test]
+    fn initially_rendered_all_disabled_items_have_no_selected_value_and_ignore_enter(
+        cx: &mut TestAppContext,
+    ) {
+        cx.update(crate::init);
+        let (harness, cx) = cx.add_window_view(|window, cx| Harness {
+            state: cx.new(|cx| {
+                CommandState::new(window, cx)
+                    .item(CommandItem::new("one").disabled(true))
+                    .item(CommandItem::new("two").disabled(true))
+            }),
+        });
+        let state = cx.update(|_, cx| harness.read(cx).state.clone());
+        let confirmed = Rc::new(RefCell::new(None));
+        let confirmed_value = confirmed.clone();
+        let _subscription = cx.update(|_, cx| {
+            cx.subscribe(&state, move |_, event: &CommandEvent, _| {
+                if let CommandEvent::Confirm(value) = event {
+                    *confirmed_value.borrow_mut() = Some(value.clone());
+                }
+            })
+        });
+
+        cx.run_until_parked();
+        cx.update(|window, cx| _ = window.draw(cx));
+        cx.update(|window, cx| {
+            state.update(cx, |state, cx| state.focus(window, cx));
+            window.dispatch_action(Box::new(Confirm { secondary: false }), cx);
+        });
+
+        assert_eq!(state.read_with(cx, |state, _| state.selected_value()), None);
+        assert_eq!(*confirmed.borrow(), None);
+    }
+
+    #[gpui::test]
+    fn non_searchable_command_cancels_without_clearing_a_hidden_query(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (harness, cx) = cx.add_window_view(|window, cx| Harness {
+            state: cx.new(|cx| {
+                CommandState::new(window, cx)
+                    .searchable(false)
+                    .item(CommandItem::new("alpha"))
+            }),
+        });
+        let state = cx.update(|_, cx| harness.read(cx).state.clone());
+        let cancelled = Rc::new(Cell::new(false));
+        let cancelled_value = cancelled.clone();
+        let _subscription = cx.update(|_, cx| {
+            cx.subscribe(&state, move |_, event: &CommandEvent, _| {
+                if matches!(event, CommandEvent::Cancel) {
+                    cancelled_value.set(true);
+                }
+            })
+        });
+
+        cx.run_until_parked();
+        cx.update(|window, cx| _ = window.draw(cx));
+        cx.update(|window, cx| {
+            state.update(cx, |state, cx| {
+                state.set_query("hidden query", window, cx);
+                state.focus(window, cx);
+            });
+            window.dispatch_action(Box::new(Cancel), cx);
+        });
+
+        assert!(cancelled.get());
+        assert_eq!(
+            state.read_with(cx, |state, cx| state.query(cx)),
+            "hidden query"
+        );
     }
 
     #[gpui::test]
