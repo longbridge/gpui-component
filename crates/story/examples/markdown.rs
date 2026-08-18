@@ -19,6 +19,7 @@ use gpui_component::{
         DocumentRangeSemanticTokensProvider, Editor, EditorState, InputEvent, Rope, RopeExt,
         TabSize,
     },
+    menu::{DropdownMenu as _, PopupMenuItem},
     resizable::{h_resizable, resizable_panel},
     status_bar::StatusBar,
     text::{
@@ -1029,6 +1030,46 @@ fn svg_color(color: Hsla) -> (String, f32) {
     )
 }
 
+/// Serialize a table to CSV: `,` separated, quoting only cells that contain
+/// `"`, `,` or a newline, with `"` doubled inside quotes.
+fn table_to_csv(headers: &[String], rows: &[Vec<String>]) -> String {
+    let field = |cell: &str| {
+        if cell.contains(['"', ',', '\n']) {
+            format!("\"{}\"", cell.replace('"', "\"\""))
+        } else {
+            cell.to_string()
+        }
+    };
+    let line = |cells: &[String]| cells.iter().map(|c| field(c)).collect::<Vec<_>>().join(",");
+
+    std::iter::once(line(headers))
+        .chain(rows.iter().map(|row| line(row)))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Serialize a table to TSV: tab separated, never quoted; tabs and newlines
+/// inside a cell become literal `\t` / `\n` so rows stay intact.
+fn table_to_tsv(headers: &[String], rows: &[Vec<String>]) -> String {
+    let field = |cell: &str| {
+        cell.replace('\t', "\\t")
+            .replace('\n', "\\n")
+            .replace('\r', "\\r")
+    };
+    let line = |cells: &[String]| {
+        cells
+            .iter()
+            .map(|c| field(c))
+            .collect::<Vec<_>>()
+            .join("\t")
+    };
+
+    std::iter::once(line(headers))
+        .chain(rows.iter().map(|row| line(row)))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 /// Example [`DocumentRangeSemanticTokensProvider`]: tags `TODO` / `FIXME` /
 /// `XXX` / `HACK` / `NOTE` markers anywhere in the document, each with its
 /// own semantic token type so they render in distinct theme colors.
@@ -1266,6 +1307,83 @@ impl Render for Example {
                                                             this
                                                         }
                                                     })
+                                            })
+                                            .table_actions(|table, _window, cx| {
+                                                // The hook hands over the table as plain data:
+                                                // header cells, body rows, and the table
+                                                // re-serialized to GFM Markdown.
+                                                //
+                                                // This runs on every render, so only cheap
+                                                // clones belong here — CSV / TSV are built
+                                                // inside the click handlers instead.
+                                                let markdown = table.markdown.clone();
+                                                let headers = table.headers.clone();
+                                                let rows = table.rows.clone();
+                                                // Plain ids are fine: the actions row is scoped
+                                                // per table by the component.
+                                                let shape = format!(
+                                                    "{} × {}",
+                                                    table.rows.len(),
+                                                    table.headers.len()
+                                                );
+
+                                                h_flex()
+                                                    .w_full()
+                                                    .justify_end()
+                                                    .items_center()
+                                                    .gap_1()
+                                                    .child(
+                                                        div()
+                                                            .text_xs()
+                                                            .text_color(cx.theme().muted_foreground)
+                                                            .child(shape),
+                                                    )
+                                                    .child(
+                                                        Clipboard::new("copy-table")
+                                                            .value(markdown.clone())
+                                                            .tooltip("Copy as Markdown"),
+                                                    )
+                                                    .child(
+                                                        Button::new("export-table")
+                                                            .icon(IconName::Ellipsis)
+                                                            .ghost()
+                                                            .xsmall()
+                                                            .dropdown_menu_with_anchor(
+                                                                Anchor::TopRight,
+                                                                move |menu, _window, _cx| {
+                                                                    // The builder is a `Fn`, so
+                                                                    // captured values are cloned
+                                                                    // on every rebuild.
+                                                                    let (csv_headers, csv_rows) =
+                                                                        (headers.clone(), rows.clone());
+                                                                    let (tsv_headers, tsv_rows) =
+                                                                        (headers.clone(), rows.clone());
+
+                                                                    menu.item(
+                                                                        PopupMenuItem::new(
+                                                                            "Copy as CSV",
+                                                                        )
+                                                                        .on_click(
+                                                                            move |_, _, cx| {
+                                                                                let csv = table_to_csv(&csv_headers, &csv_rows);
+                                                                                cx.write_to_clipboard(ClipboardItem::new_string(csv));
+                                                                            },
+                                                                        ),
+                                                                    )
+                                                                    .item(
+                                                                        PopupMenuItem::new(
+                                                                            "Copy as TSV",
+                                                                        )
+                                                                        .on_click(
+                                                                            move |_, _, cx| {
+                                                                                let tsv = table_to_tsv(&tsv_headers, &tsv_rows);
+                                                                                cx.write_to_clipboard(ClipboardItem::new_string(tsv));
+                                                                            },
+                                                                        ),
+                                                                    )
+                                                                },
+                                                            ),
+                                                    )
                                             })
                                             .plugin(TickerPlugin::new(
                                                 TickerQuote {
