@@ -1120,6 +1120,7 @@ mod tests {
 
     fn gallery_window(
         cx: &mut TestAppContext,
+        test_gallery: bool,
     ) -> (AnyWindowHandle, Entity<StoryRoot>, Entity<Gallery>) {
         cx.update(|cx| {
             gpui_component::init(cx);
@@ -1134,7 +1135,11 @@ mod tests {
             let story_root_slot = story_root.clone();
             let gallery_slot = gallery.clone();
             move |window, cx| {
-                let gallery = Gallery::view(None, window, cx);
+                let gallery = if test_gallery {
+                    Gallery::test_view(window, cx)
+                } else {
+                    Gallery::view(None, window, cx)
+                };
                 let story_root = cx.new(|cx| StoryRoot::new("Story", gallery.clone(), window, cx));
                 *gallery_slot.borrow_mut() = Some(gallery);
                 *story_root_slot.borrow_mut() = Some(story_root.clone());
@@ -1152,7 +1157,7 @@ mod tests {
 
     #[gpui::test]
     fn escape_closes_component_palette_with_non_empty_query(cx: &mut TestAppContext) {
-        let (window, story_root, _) = gallery_window(cx);
+        let (window, story_root, _) = gallery_window(cx, false);
         cx.simulate_keystrokes(window, "ctrl-shift-p");
         window
             .update(cx, |_, window, cx| {
@@ -1176,7 +1181,7 @@ mod tests {
 
     #[gpui::test]
     fn escape_closes_only_component_palette_when_dialogs_are_stacked(cx: &mut TestAppContext) {
-        let (window, _, _) = gallery_window(cx);
+        let (window, _, _) = gallery_window(cx, false);
         window
             .update(cx, |_, window, cx| {
                 window.open_dialog(cx, |dialog, _, _| dialog.title("Background"));
@@ -1203,7 +1208,7 @@ mod tests {
 
     #[gpui::test]
     fn confirm_navigates_and_clears_sidebar_search(cx: &mut TestAppContext) {
-        let (window, story_root, gallery) = gallery_window(cx);
+        let (window, story_root, gallery) = gallery_window(cx, true);
         window
             .update(cx, |_, window, cx| {
                 gallery.update(cx, |gallery, cx| {
