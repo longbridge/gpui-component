@@ -914,7 +914,10 @@ impl StoryRoot {
                 }
                 window.close_dialog(cx);
             }
-            CommandEvent::Cancel => window.close_dialog(cx),
+            // `CommandState` propagates Cancel to the hosting Dialog, which
+            // owns Escape dismissal. Closing here as well would pop two
+            // dialogs when palettes are stacked over another modal.
+            CommandEvent::Cancel => {}
             CommandEvent::Query(_) | CommandEvent::Select(_) => {}
         }
     }
@@ -1109,6 +1112,133 @@ impl Render for StoryRoot {
 
 #[cfg(test)]
 mod tests {
+    use std::{cell::RefCell, rc::Rc};
+
+    use gpui::{AnyWindowHandle, Entity, TestAppContext};
+
+    use super::*;
+
+    fn gallery_window(
+        cx: &mut TestAppContext,
+    ) -> (AnyWindowHandle, Entity<StoryRoot>, Entity<Gallery>) {
+        cx.update(|cx| {
+            gpui_component::init(cx);
+            AppState::init(cx);
+            themes::init(cx);
+            stories::init(cx);
+            cx.bind_keys([KeyBinding::new("ctrl-shift-p", OpenCommandPalette, None)]);
+        });
+        let story_root = Rc::new(RefCell::new(None));
+        let gallery = Rc::new(RefCell::new(None));
+        let window = cx.add_window({
+            let story_root_slot = story_root.clone();
+            let gallery_slot = gallery.clone();
+            move |window, cx| {
+                let gallery = Gallery::view(None, window, cx);
+                let story_root = cx.new(|cx| StoryRoot::new("Story", gallery.clone(), window, cx));
+                *gallery_slot.borrow_mut() = Some(gallery);
+                *story_root_slot.borrow_mut() = Some(story_root.clone());
+                Root::new(story_root, window, cx)
+            }
+        });
+        let window = window.into();
+        cx.update_window(window, |_, window, cx| window.draw(cx).clear(cx))
+            .unwrap();
+
+        let story_root = story_root.borrow_mut().take().unwrap();
+        let gallery = gallery.borrow_mut().take().unwrap();
+        (window, story_root, gallery)
+    }
+
+    #[gpui::test]
+    fn escape_closes_component_palette_with_non_empty_query(cx: &mut TestAppContext) {
+        let (window, story_root, _) = gallery_window(cx);
+        cx.simulate_keystrokes(window, "ctrl-shift-p");
+        window
+            .update(cx, |_, window, cx| {
+                window.draw(cx).clear(cx);
+                story_root.update(cx, |root, cx| {
+                    root.component_palette.update(cx, |palette, cx| {
+                        palette.set_query("command", window, cx);
+                    });
+                });
+            })
+            .unwrap();
+
+        cx.simulate_keystrokes(window, "escape");
+
+        assert!(
+            !window
+                .update(cx, |_, window, cx| window.has_active_dialog(cx))
+                .unwrap()
+        );
+    }
+
+    #[gpui::test]
+    fn escape_closes_only_component_palette_when_dialogs_are_stacked(cx: &mut TestAppContext) {
+        let (window, _, _) = gallery_window(cx);
+        window
+            .update(cx, |_, window, cx| {
+                window.open_dialog(cx, |dialog, _, _| dialog.title("Background"));
+            })
+            .unwrap();
+        cx.simulate_keystrokes(window, "ctrl-shift-p");
+
+        cx.simulate_keystrokes(window, "escape");
+
+        assert!(
+            window
+                .update(cx, |_, window, cx| window.has_active_dialog(cx))
+                .unwrap()
+        );
+        window
+            .update(cx, |_, window, cx| window.close_dialog(cx))
+            .unwrap();
+        assert!(
+            !window
+                .update(cx, |_, window, cx| window.has_active_dialog(cx))
+                .unwrap()
+        );
+    }
+
+    #[gpui::test]
+    fn confirm_navigates_and_clears_sidebar_search(cx: &mut TestAppContext) {
+        let (window, story_root, gallery) = gallery_window(cx);
+        window
+            .update(cx, |_, window, cx| {
+                gallery.update(cx, |gallery, cx| {
+                    gallery.set_sidebar_query_for_test("button", window, cx);
+                });
+            })
+            .unwrap();
+        cx.simulate_keystrokes(window, "ctrl-shift-p");
+        window
+            .update(cx, |_, window, cx| {
+                story_root.update(cx, |root, cx| {
+                    root.component_palette.update(cx, |palette, cx| {
+                        palette.set_query("command", window, cx);
+                    });
+                });
+            })
+            .unwrap();
+
+        story_root.update(cx, |root, cx| {
+            root.component_palette.update(cx, |_, cx| {
+                cx.emit(CommandEvent::Confirm("Command".into()));
+            });
+        });
+
+        gallery.update(cx, |gallery, cx| {
+            assert_eq!(gallery.sidebar_query_for_test(cx), "");
+            assert_eq!(gallery.selected_story_name_for_test(cx), "Command");
+        });
+        assert!(
+            !window
+                .update(cx, |_, window, cx| window.has_active_dialog(cx))
+                .unwrap()
+        );
+    }
+
     #[test]
     fn extends_component_translations_with_story_locales() {
         rust_i18n::extend!(gpui_component);

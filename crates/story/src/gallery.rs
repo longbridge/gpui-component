@@ -211,6 +211,30 @@ impl Gallery {
         true
     }
 
+    #[cfg(test)]
+    pub(crate) fn set_sidebar_query_for_test(
+        &mut self,
+        query: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.search_input
+            .update(cx, |input, cx| input.set_value(query, window, cx));
+    }
+
+    #[cfg(test)]
+    pub(crate) fn sidebar_query_for_test(&self, cx: &App) -> SharedString {
+        self.search_input.read(cx).value()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn selected_story_name_for_test(&self, cx: &App) -> SharedString {
+        self.stories[self.active_group_index.unwrap()].1[self.active_index.unwrap()]
+            .read(cx)
+            .name
+            .clone()
+    }
+
     pub fn view(init_story: Option<&str>, window: &mut Window, cx: &mut App) -> Entity<Self> {
         cx.new(|cx| Self::new(init_story, window, cx))
     }

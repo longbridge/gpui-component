@@ -47,3 +47,34 @@ The attempted full no-default-features test also builds examples and failed on p
 
 - The shortcut is intentionally only `ctrl-shift-p`, including macOS, per the approved requirement.
 - Component lookup is case-insensitive and currently performs small temporary name-vector allocations on confirmation; the Gallery contains only dozens of stories, so this is outside a meaningful hot path.
+
+## Review follow-up
+
+Real window/dialog regression tests were added for the reviewed Escape and
+navigation paths. The red run showed:
+
+```text
+tests::escape_closes_component_palette_with_non_empty_query ... ok
+tests::escape_closes_only_component_palette_when_dialogs_are_stacked ... FAILED
+```
+
+This demonstrates that the existing Command/Dialog action propagation already
+closes a non-empty-query palette with one Escape. It also reproduced the valid
+double-pop bug: Story closed on `CommandEvent::Cancel`, then the propagated
+Dialog Cancel closed the underlying dialog. Story no longer closes on Cancel;
+the hosting Dialog is the single Escape dismissal owner.
+
+The final regression suite covers the real `ctrl-shift-p` binding, one-Escape
+closure with a non-empty query, exactly one pop with stacked dialogs, and
+Confirm-driven navigation/sidebar clearing:
+
+```text
+RUST_MIN_STACK=16777216 cargo test -p gpui-component-story
+9 passed; 0 failed
+
+cargo check -p gpui-component-story
+Finished `dev` profile
+```
+
+The larger stack is required by the Story test harness's deeply nested render
+types; it is not needed for the application build.
