@@ -1,7 +1,7 @@
 use chrono::Weekday;
 use gpui::{
     App, ElementId, Entity, InteractiveElement, IntoElement, ParentElement, RenderOnce,
-    SharedString, StyleRefinement, Styled, Window, prelude::FluentBuilder as _, px, relative,
+    SharedString, StyleRefinement, Styled, Window, prelude::FluentBuilder as _, px,
 };
 use rust_i18n::t;
 
@@ -27,6 +27,10 @@ fn month_name(month: i32) -> SharedString {
         _ => "".into(),
     }
     .into()
+}
+
+fn uses_compact_text(kind: CalendarItemKind) -> bool {
+    kind == CalendarItemKind::Month
 }
 
 /// Styled facade for the complete behavior and structure in `gpui-base`.
@@ -122,6 +126,7 @@ impl RenderOnce for Calendar {
                         .font_normal()
                         .text_color(cx.theme().muted_foreground)
                 })
+                .when(uses_compact_text(state.kind()), |this| this.text_xs())
                 .when(
                     matches!(
                         state.kind(),
@@ -136,7 +141,7 @@ impl RenderOnce for Calendar {
                     ),
                     |this| {
                         this.when(state.kind() == CalendarItemKind::Month, |this| {
-                            this.w(relative(0.3)).m_1()
+                            this.w_full().my_1()
                         })
                         .when(state.kind() == CalendarItemKind::MonthToggle, |this| {
                             this.w_auto().px_2()
@@ -150,7 +155,7 @@ impl RenderOnce for Calendar {
                     ),
                     |this| {
                         this.when(state.kind() == CalendarItemKind::Year, |this| {
-                            this.w(relative(0.16)).m_1()
+                            this.w_full().my_1()
                         })
                         .when(state.kind() == CalendarItemKind::YearToggle, |this| {
                             this.w_auto().px_2()
@@ -202,7 +207,7 @@ impl RenderOnce for Calendar {
 
 #[cfg(test)]
 mod tests {
-    use super::Date;
+    use super::{CalendarItemKind, Date, uses_compact_text};
     use chrono::NaiveDate;
 
     #[test]
@@ -212,5 +217,12 @@ mod tests {
             "2024-08-03"
         );
         assert_eq!(Date::Single(None).to_string(), "nil");
+    }
+
+    #[test]
+    fn only_month_options_use_compact_text() {
+        assert!(uses_compact_text(CalendarItemKind::Month));
+        assert!(!uses_compact_text(CalendarItemKind::MonthToggle));
+        assert!(!uses_compact_text(CalendarItemKind::Day));
     }
 }
