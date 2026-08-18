@@ -12,17 +12,53 @@ use smallvec::SmallVec;
 ///
 /// https://cubic-bezier.com
 pub fn cubic_bezier(x1: f32, y1: f32, x2: f32, y2: f32) -> impl Fn(f32) -> f32 {
+    // Polynomial form of the unit bezier, where p0 = (0, 0) and p3 = (1, 1).
+    let (cx, cy) = (3.0 * x1, 3.0 * y1);
+    let (bx, by) = (3.0 * (x2 - x1) - cx, 3.0 * (y2 - y1) - cy);
+    let (ax, ay) = (1.0 - cx - bx, 1.0 - cy - by);
+    let sample_x = move |t: f32| ((ax * t + bx) * t + cx) * t;
+    let sample_y = move |t: f32| ((ay * t + by) * t + cy) * t;
+    let slope_x = move |t: f32| (3.0 * ax * t + 2.0 * bx) * t + cx;
+
+    // Solve `x(s) = t` for the curve parameter `s`.
+    let solve_s = move |t: f32| {
+        let mut s = t;
+        for _ in 0..8 {
+            let error = sample_x(s) - t;
+            if error.abs() < 1e-6 {
+                return s;
+            }
+            let slope = slope_x(s);
+            if slope.abs() < 1e-6 {
+                break;
+            }
+            s = (s - error / slope).clamp(0.0, 1.0);
+        }
+
+        let (mut low, mut high) = (0.0, 1.0);
+        let mut s = t;
+        for _ in 0..32 {
+            let x = sample_x(s);
+            if (x - t).abs() < 1e-6 {
+                break;
+            }
+            if x < t {
+                low = s;
+            } else {
+                high = s;
+            }
+            s = (low + high) / 2.0;
+        }
+        s
+    };
+
     move |t: f32| {
-        let one_t = 1.0 - t;
-        let one_t2 = one_t * one_t;
-        let t2 = t * t;
-        let t3 = t2 * t;
-
-        // The Bezier curve function for x and y, where x0 = 0, y0 = 0, x3 = 1, y3 = 1
-        let _x = 3.0 * x1 * one_t2 * t + 3.0 * x2 * one_t * t2 + t3;
-        let y = 3.0 * y1 * one_t2 * t + 3.0 * y2 * one_t * t2 + t3;
-
-        y
+        let t = t.clamp(0.0, 1.0);
+        // `t` is elapsed progress along x, not the curve parameter: solve
+        // `x(s) = t` before sampling y, otherwise the curve reads much slower
+        // than the same control points do in CSS. GPUI asserts easing deltas
+        // stay within [0, 1], so clamp away solver and rounding error.
+        sample_y(solve_s(t)).clamp(0.0, 1.0)
     }
 }
 
@@ -218,3 +254,55 @@ impl FluentBuilder for EffectTransition {}
 /// concepts sharing one name.
 #[deprecated(since = "0.5.2", note = "renamed to `EffectTransition`")]
 pub type Transition = EffectTransition;
+
+#[cfg(test)]
+mod tests {
+    use super::cubic_bezier;
+
+    #[test]
+    fn cubic_bezier_matches_css_ease() {
+        let ease = cubic_bezier(0.25, 0.1, 0.25, 1.);
+        // Reference values sampled from the CSS `ease` curve.
+        for (t, expected) in [
+            (0.0, 0.0),
+            (0.2, 0.295),
+            (0.5, 0.802),
+            (0.8, 0.976),
+            (1.0, 1.0),
+        ] {
+            assert!(
+                (ease(t) - expected).abs() < 1e-3,
+                "ease({t}) = {}, expected {expected}",
+                ease(t)
+            );
+        }
+    }
+
+    #[test]
+    fn cubic_bezier_stays_within_unit_range() {
+        // GPUI panics when an easing delta leaves [0, 1]; sweep the curves
+        // used in-repo densely to catch solver overshoot and rounding error.
+        for (x1, y1, x2, y2) in [(0.25, 0.1, 0.25, 1.), (0.32, 0.72, 0., 1.)] {
+            let ease = cubic_bezier(x1, y1, x2, y2);
+            for step in 0..=10_000 {
+                let t = step as f32 / 10_000.;
+                let y = ease(t);
+                assert!((0.0..=1.0).contains(&y), "ease({t}) = {y} out of range");
+            }
+        }
+    }
+
+    #[test]
+    fn cubic_bezier_is_monotonic_and_clamped() {
+        let ease = cubic_bezier(0.32, 0.72, 0., 1.);
+        assert_eq!(ease(-1.), 0.);
+        assert_eq!(ease(2.), 1.);
+
+        let mut previous = 0.;
+        for step in 0..=100 {
+            let current = ease(step as f32 / 100.);
+            assert!(current >= previous - 1e-4, "not monotonic at {step}");
+            previous = current;
+        }
+    }
+}
