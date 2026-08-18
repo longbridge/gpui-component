@@ -9,7 +9,7 @@ use gpui::{
 use rust_i18n::t;
 
 use crate::{
-    ActiveTheme as _, Icon, IconName, StyledExt as _, VirtualListScrollHandle,
+    ActiveTheme as _, ElementExt as _, Icon, IconName, StyledExt as _, VirtualListScrollHandle,
     actions::{Cancel, Confirm, SelectDown, SelectUp},
     command::{
         command::CommandOptions,
@@ -86,6 +86,7 @@ pub struct CommandState {
     entries: Vec<CommandEntry>,
     rows: Vec<CommandRow>,
     row_sizes: Rc<Vec<Size<Pixels>>>,
+    list_content_width: Option<Pixels>,
     needs_measure: bool,
     matched: Vec<MatchedItem>,
     selected_index: usize,
@@ -118,6 +119,7 @@ impl CommandState {
             entries: Vec::new(),
             rows: Vec::new(),
             row_sizes: Rc::new(Vec::new()),
+            list_content_width: None,
             needs_measure: true,
             matched: Vec::new(),
             selected_index: 0,
@@ -373,6 +375,16 @@ impl CommandState {
         cx.notify();
     }
 
+    fn set_list_content_width(&mut self, width: Pixels, cx: &mut Context<Self>) {
+        if self.list_content_width == Some(width) {
+            return;
+        }
+
+        self.list_content_width = Some(width);
+        self.needs_measure = true;
+        cx.notify();
+    }
+
     // MARK: Actions
 
     fn select(&mut self, matched_ix: usize, cx: &mut Context<Self>) {
@@ -457,7 +469,11 @@ impl CommandState {
     /// Measure each row before passing the sizes to the virtual list. Custom
     /// item elements can have independent intrinsic heights.
     fn measure_row_sizes(&self, window: &mut Window, cx: &mut Context<Self>) -> Vec<Size<Pixels>> {
-        let available = size(AvailableSpace::MinContent, AvailableSpace::MinContent);
+        let available = size(
+            self.list_content_width
+                .map_or(AvailableSpace::MinContent, AvailableSpace::Definite),
+            AvailableSpace::MinContent,
+        );
         self.rows
             .iter()
             .enumerate()
@@ -655,6 +671,7 @@ impl Render for CommandState {
 
         let rows_count = self.rows.len();
         let row_sizes = self.row_sizes.clone();
+        let command_state = cx.entity();
 
         v_flex()
             .id("command")
@@ -699,6 +716,17 @@ impl Render for CommandState {
                     .relative()
                     .flex_1()
                     .p_1()
+                    .on_prepaint({
+                        let measure_state = command_state.clone();
+                        move |bounds, _, cx| {
+                            measure_state.update(cx, |state, cx| {
+                                state.set_list_content_width(
+                                    (bounds.size.width - px(8.)).max(px(0.)),
+                                    cx,
+                                )
+                            })
+                        }
+                    })
                     .max_h(self.options.max_h())
                     .overflow_hidden()
                     // While a search is in flight the list is empty because the
@@ -709,7 +737,7 @@ impl Render for CommandState {
                     .when(rows_count > 0, |this| {
                         this.child(
                             v_virtual_list(
-                                cx.entity(),
+                                command_state.clone(),
                                 "command-list",
                                 row_sizes,
                                 move |this, visible_range, window, cx| {
@@ -737,7 +765,7 @@ mod tests {
     };
 
     use gpui::{
-        AppContext as _, Entity, IntoElement, ParentElement as _, Render, Styled as _,
+        AppContext as _, Entity, IntoElement, ParentElement as _, Pixels, Render, Styled as _,
         TestAppContext, Window, div, px,
     };
 
@@ -1058,6 +1086,63 @@ mod tests {
                 .size_full()
                 .child(Command::new(&self.state).max_h(px(200.)))
         }
+    }
+
+    struct WrappingHarness {
+        state: Entity<CommandState>,
+        width: Pixels,
+    }
+
+    impl Render for WrappingHarness {
+        fn render(&mut self, _: &mut Window, _: &mut gpui::Context<Self>) -> impl IntoElement {
+            div().size_full().child(
+                div()
+                    .w(self.width)
+                    .child(Command::new(&self.state).max_h(px(200.))),
+            )
+        }
+    }
+
+    fn wrapping_state(window: &mut Window, cx: &mut gpui::Context<CommandState>) -> CommandState {
+        CommandState::new(window, cx).item(CommandItem::new("wrapped").element(|_, _| {
+            div()
+                .w_full()
+                .child("A command row whose content wraps at narrow list widths")
+        }))
+    }
+
+    #[gpui::test]
+    fn wrapping_rows_remeasure_for_the_list_content_width(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+
+        let (harness, cx) = cx.add_window_view(|window, cx| WrappingHarness {
+            state: cx.new(|cx| wrapping_state(window, cx)),
+            width: px(360.),
+        });
+
+        cx.run_until_parked();
+        cx.update(|window, cx| _ = window.draw(cx));
+        cx.run_until_parked();
+        cx.update(|window, cx| _ = window.draw(cx));
+
+        let wide = cx.update(|_, cx| harness.read(cx).state.read(cx).row_sizes[0].height);
+
+        cx.update(|_, cx| {
+            harness.update(cx, |harness, cx| {
+                harness.width = px(120.);
+                cx.notify();
+            })
+        });
+        cx.run_until_parked();
+        cx.update(|window, cx| _ = window.draw(cx));
+        cx.run_until_parked();
+        cx.update(|window, cx| _ = window.draw(cx));
+        let narrow = cx.update(|_, cx| harness.read(cx).state.read(cx).row_sizes[0].height);
+
+        assert!(
+            narrow > wide,
+            "the narrow list should cache a taller wrapped row ({narrow:?} vs {wide:?})",
+        );
     }
 
     #[gpui::test]
