@@ -27,6 +27,8 @@ pub(crate) const CONTEXT: &str = "Command";
 /// either side. Fixed, so that only the item and heading rows need measuring.
 const SEPARATOR_ROW_HEIGHT: f32 = 9.;
 
+type CommandFilter = dyn Fn(&CommandItem, &str) -> bool;
+
 pub(crate) fn init(cx: &mut App) {
     let context: Option<&str> = Some(CONTEXT);
     cx.bind_keys([
@@ -99,6 +101,8 @@ pub struct CommandState {
     /// Set by the builders, which run before the entity exists and so cannot
     /// filter yet; consumed by the first render.
     needs_update: bool,
+    searchable: bool,
+    filter: Option<Rc<CommandFilter>>,
     loading: bool,
     pending_scroll: Option<usize>,
     /// The placeholder last written to the query input, so that `render` only
@@ -128,6 +132,8 @@ impl CommandState {
             matched: Vec::new(),
             selected_index: 0,
             needs_update: true,
+            searchable: true,
+            filter: None,
             loading: false,
             pending_scroll: None,
             applied_placeholder: SharedString::default(),
@@ -153,6 +159,23 @@ impl CommandState {
     /// Add a separator between the previous and the next group.
     pub fn separator(mut self) -> Self {
         self.entries.push(CommandEntry::Separator);
+        self.needs_update = true;
+        self
+    }
+
+    /// Enable or disable local filtering of items as the query changes.
+    pub fn searchable(mut self, searchable: bool) -> Self {
+        self.searchable = searchable;
+        self.needs_update = true;
+        self
+    }
+
+    /// Set the predicate used to decide whether an item matches the query.
+    pub fn filter<F>(mut self, filter: F) -> Self
+    where
+        F: Fn(&CommandItem, &str) -> bool + 'static,
+    {
+        self.filter = Some(Rc::new(filter));
         self.needs_update = true;
         self
     }
@@ -229,6 +252,16 @@ impl CommandState {
 
     // MARK: Matching
 
+    fn item_matches(&self, item: &CommandItem, query: &str) -> bool {
+        if !self.searchable || query.is_empty() {
+            true
+        } else if let Some(filter) = &self.filter {
+            filter(item, query)
+        } else {
+            item.matches(query)
+        }
+    }
+
     fn item_at(&self, matched_ix: usize) -> Option<&CommandItem> {
         let matched = self.matched.get(matched_ix)?;
 
@@ -255,7 +288,7 @@ impl CommandState {
             match entry {
                 CommandEntry::Separator => pending_separator = !rows.is_empty(),
                 CommandEntry::Item(item) => {
-                    if !item.matches(query) {
+                    if !self.item_matches(item, query) {
                         continue;
                     }
 
@@ -277,7 +310,7 @@ impl CommandState {
                         .items
                         .iter()
                         .enumerate()
-                        .filter(|(_, item)| item.matches(query))
+                        .filter(|(_, item)| self.item_matches(item, query))
                         .map(|(item_ix, item)| (item_ix, item.is_disabled()))
                         .collect::<Vec<_>>();
 
@@ -851,6 +884,43 @@ mod tests {
                 state.update_matches(cx);
 
                 assert_eq!(state.matched_count(), 1);
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn custom_filter_controls_visible_items(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let cx = cx.add_empty_window();
+        cx.update(|window, cx| {
+            let state = cx.new(|cx| {
+                CommandState::new(window, cx)
+                    .filter(|item, query| item.value().starts_with(query))
+                    .item(CommandItem::new("alpha"))
+                    .item(CommandItem::new("beta-alpha"))
+            });
+            state.update(cx, |state, cx| {
+                state.set_query("alpha", window, cx);
+                assert_eq!(state.matched_count(), 1);
+                assert_eq!(state.selected_value(), Some("alpha".into()));
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn non_searchable_command_keeps_every_item(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let cx = cx.add_empty_window();
+        cx.update(|window, cx| {
+            let state = cx.new(|cx| {
+                CommandState::new(window, cx)
+                    .searchable(false)
+                    .item(CommandItem::new("alpha"))
+                    .item(CommandItem::new("beta"))
+            });
+            state.update(cx, |state, cx| {
+                state.set_query("missing", window, cx);
+                assert_eq!(state.matched_count(), 2);
             });
         });
     }
