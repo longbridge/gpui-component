@@ -2,8 +2,6 @@
 //! groups, shortcut hints and keyboard navigation.
 //!
 //! [`CommandState`] holds the commands and the query; [`Command`] renders it.
-//! [`crate::WindowExt::open_command_dialog`] presents the same palette in a
-//! dialog.
 #[allow(clippy::module_inception)]
 mod command;
 mod item;

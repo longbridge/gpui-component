@@ -43,6 +43,10 @@ impl Default for State {
 
 #[cfg(not(target_family = "wasm"))]
 fn save_state(cx: &mut App) {
+    if AppState::global(cx).previewing_theme {
+        return;
+    }
+
     let state = State {
         theme: cx.theme().theme_name().clone(),
         radius: Some(cx.theme().radius.as_f32()),
@@ -54,6 +58,14 @@ fn save_state(cx: &mut App) {
         // Ignore write errors - if STATE_FILE doesn't exist or can't be written, do nothing
         let _ = std::fs::write(STATE_FILE, json);
     }
+}
+
+pub(crate) fn begin_theme_preview(cx: &mut App) {
+    AppState::global_mut(cx).previewing_theme = true;
+}
+
+pub(crate) fn finish_theme_preview(cx: &mut App) {
+    AppState::global_mut(cx).previewing_theme = false;
 }
 
 fn apply_persisted_radius(state: &State, cx: &mut App) {

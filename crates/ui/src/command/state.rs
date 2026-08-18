@@ -9,7 +9,7 @@ use gpui::{
 use rust_i18n::t;
 
 use crate::{
-    ActiveTheme as _, Icon, IconName, StyledExt as _, VirtualListScrollHandle, WindowExt as _,
+    ActiveTheme as _, Icon, IconName, StyledExt as _, VirtualListScrollHandle,
     actions::{Cancel, Confirm, SelectDown, SelectUp},
     command::{
         command::CommandOptions,
@@ -42,9 +42,9 @@ pub(crate) fn init(cx: &mut App) {
 pub enum CommandEvent {
     /// The search query changed.
     ///
-    /// A palette built with [`crate::command::Command::filterable`] off
-    /// answers this by fetching results and calling
-    /// [`CommandState::set_entries`].
+    /// Applications can answer this by fetching results and calling
+    /// [`CommandState::set_entries`]. Returned items still participate in the
+    /// command palette's local matching.
     Query(SharedString),
     /// The highlighted item moved to the item with this value.
     Select(SharedString),
@@ -93,14 +93,12 @@ pub struct CommandState {
     rows: Vec<CommandRow>,
     row_sizes: Rc<Vec<Size<Pixels>>>,
     row_heights: RowHeights,
+    needs_measure: bool,
     matched: Vec<MatchedItem>,
     selected_index: usize,
     /// Set by the builders, which run before the entity exists and so cannot
     /// filter yet; consumed by the first render.
     needs_update: bool,
-    /// Set when a confirmation is what closed the hosting dialog, so that the
-    /// close is not also reported as a cancel.
-    confirmed: bool,
     loading: bool,
     pending_scroll: Option<usize>,
     /// The placeholder last written to the query input, so that `render` only
@@ -126,10 +124,10 @@ impl CommandState {
             rows: Vec::new(),
             row_sizes: Rc::new(Vec::new()),
             row_heights: RowHeights::default(),
+            needs_measure: true,
             matched: Vec::new(),
             selected_index: 0,
             needs_update: true,
-            confirmed: false,
             loading: false,
             pending_scroll: None,
             applied_placeholder: SharedString::default(),
@@ -243,15 +241,9 @@ impl CommandState {
 
     /// Recompute the visible rows and the matching items for the current query.
     ///
-    /// A palette that is not [`crate::command::Command::filterable`] keeps
-    /// every entry: whoever set them has already done the searching.
     fn update_matches(&mut self, cx: &App) {
         let query = self.query(cx);
-        let query = if self.options.is_filterable() {
-            query.trim()
-        } else {
-            ""
-        };
+        let query = query.trim();
 
         let mut rows: Vec<CommandRow> = Vec::new();
         let mut matched: Vec<MatchedItem> = Vec::new();
@@ -317,6 +309,7 @@ impl CommandState {
 
         self.rows = rows;
         self.matched = matched;
+        self.needs_measure = true;
         self.selected_index = self
             .selected_index
             .min(self.matched.len().saturating_sub(1));
@@ -410,25 +403,9 @@ impl CommandState {
             return;
         }
 
-        // Inside a dialog the close itself reports the cancel, so that clicking
-        // the backdrop is not a silent third way out.
-        if !self.options.closes_on_confirm() {
-            cx.emit(CommandEvent::Cancel);
-        }
+        cx.emit(CommandEvent::Cancel);
 
         cx.propagate();
-    }
-
-    /// Report that the dialog hosting this palette has closed.
-    ///
-    /// Every close that is not a confirmation is a cancel, however it was
-    /// triggered — Escape, the backdrop, or the host closing it itself.
-    pub(crate) fn dialog_closed(&mut self, cx: &mut Context<Self>) {
-        if std::mem::take(&mut self.confirmed) {
-            return;
-        }
-
-        cx.emit(CommandEvent::Cancel);
     }
 
     fn confirm(&mut self, matched_ix: usize, window: &mut Window, cx: &mut Context<Self>) {
@@ -441,13 +418,6 @@ impl CommandState {
 
         let value = item.value().clone();
         let handler = item.handler.clone();
-
-        // Close first, so a handler that opens a dialog of its own is not the
-        // one that gets closed.
-        if self.options.closes_on_confirm() {
-            self.confirmed = true;
-            window.close_dialog(cx);
-        }
 
         if let Some(handler) = handler {
             handler(window, cx);
@@ -677,10 +647,13 @@ impl Render for CommandState {
             self.update_matches(cx);
         }
 
-        let row_heights = self.measure_row_heights(window, cx);
-        if self.row_heights != row_heights {
-            self.row_heights = row_heights;
-            self.rebuild_row_sizes();
+        if self.needs_measure {
+            self.needs_measure = false;
+            let row_heights = self.measure_row_heights(window, cx);
+            if self.row_heights != row_heights {
+                self.row_heights = row_heights;
+                self.rebuild_row_sizes();
+            }
         }
 
         if let Some(row_ix) = self.pending_scroll.take() {
@@ -763,6 +736,8 @@ impl Render for CommandState {
 
 #[cfg(test)]
 mod tests {
+    use std::{cell::Cell, rc::Rc};
+
     use gpui::{
         AppContext as _, Entity, IntoElement, ParentElement as _, Render, SharedString,
         Styled as _, TestAppContext, Window, div, px,
@@ -986,6 +961,31 @@ mod tests {
             custom > standard,
             "a two-line row should measure taller than the standard one ({custom:?} vs {standard:?})",
         );
+    }
+
+    #[gpui::test]
+    fn an_unchanged_custom_row_is_not_remeasured_on_every_frame(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let renders = Rc::new(Cell::new(0));
+        let count = renders.clone();
+
+        let (_, cx) = cx.add_window_view(|window, cx| Harness {
+            state: cx.new(|cx| {
+                CommandState::new(window, cx).item(CommandItem::new("custom").element(
+                    move |_, _| {
+                        count.set(count.get() + 1);
+                        div().child("Custom")
+                    },
+                ))
+            }),
+        });
+
+        cx.run_until_parked();
+        cx.update(|window, cx| _ = window.draw(cx));
+        let after_first_draw = renders.get();
+        cx.update(|window, cx| _ = window.draw(cx));
+
+        assert_eq!(renders.get() - after_first_draw, 2);
     }
 
     #[gpui::test]

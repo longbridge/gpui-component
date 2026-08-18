@@ -62,13 +62,23 @@ Command::new(&state)
 
 ### In a Dialog
 
-[`WindowExt::open_command_dialog`] presents the same palette in a dialog: it drops the border, hides the close button, moves focus to the search field, and closes the dialog when an item is confirmed.
+Compose the palette with the existing [`WindowExt::open_dialog`] API. Subscribe
+to [`CommandEvent`] and close the dialog when the application receives
+`Confirm` or `Cancel`.
 
 ```rust
 use gpui_component::WindowExt as _;
 
-window.open_command_dialog(&self.command_state, cx, |command, _, _| {
-    command.placeholder("Type a command or search...")
+let state = self.command_state.clone();
+window.open_dialog(cx, move |dialog, _, _| {
+    let state = state.clone();
+    dialog.close_button(false).p_0().content(move |content, _, _| {
+        content.child(
+            Command::new(&state)
+                .bordered(false)
+                .placeholder("Type a command or search..."),
+        )
+    })
 });
 ```
 
@@ -112,11 +122,12 @@ state.update(cx, |state, cx| {
 
 ### As a Search Panel
 
-Turn `filterable` off when the entries already are the results — a remote search, for instance. The palette then shows everything it was given, and the query arrives as `CommandEvent::Query`:
+For remote search, listen for `CommandEvent::Query` and replace the entries
+with the returned results. Returned entries still participate in local
+matching, so include the query terms in their value, label, or keywords.
 
 ```rust
 Command::new(&self.search)
-    .filterable(false)
     .placeholder("Search stocks...")
     .empty("No stock found.")
 ```
@@ -184,8 +195,6 @@ A group whose items are all filtered out hides its heading, and a separator that
 | `empty`         | The message shown when no command matches the query.           |
 | `max_h`         | The max height of the list. Default: `18.75rem` (300px).       |
 | `bordered`      | Draw the surrounding border and rounding. Default: `true`.     |
-| `close_on_confirm` | Close the hosting dialog when an item is confirmed. Default: `false`, and `true` under `open_command_dialog`. |
-| `filterable`    | Filter the entries by the query. Default: `true`; turn off for a remote search. |
 
 `Command` implements [`Styled`], so `w`, `max_w`, `bg` and the rest apply to the palette's frame.
 
@@ -236,10 +245,10 @@ The palette measures its first row and draws every item at that height, which is
 2. **Add Keywords**: A command people search for by another name needs `keywords`.
 3. **Shortcut Hints Only**: `shortcut` renders a hint — bind the keystroke yourself.
 4. **Keep Rows Uniform**: A custom `element` row sets the height for every row, so give them all the same design.
-5. **One State Per Palette**: Reuse the same [`CommandState`] for the inline and dialog forms of the same menu.
+5. **One State Per Palette**: Give each rendered palette its own [`CommandState`].
 
 [Command]: https://docs.rs/gpui-component/latest/gpui_component/command/struct.Command.html
 [CommandState]: https://docs.rs/gpui-component/latest/gpui_component/command/struct.CommandState.html
 [CommandGroup]: https://docs.rs/gpui-component/latest/gpui_component/command/struct.CommandGroup.html
-[WindowExt::open_command_dialog]: https://docs.rs/gpui-component/latest/gpui_component/trait.WindowExt.html#tymethod.open_command_dialog
+[WindowExt::open_dialog]: https://docs.rs/gpui-component/latest/gpui_component/trait.WindowExt.html#tymethod.open_dialog
 [Styled]: https://docs.rs/gpui/latest/gpui/trait.Styled.html

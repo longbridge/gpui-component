@@ -62,13 +62,22 @@ Command::new(&state)
 
 ### 在对话框中
 
-[`WindowExt::open_command_dialog`] 会把同一个面板放进对话框：去掉外框、隐藏关闭按钮、把焦点移到搜索框，并在确认某个条目后关闭对话框。
+使用现有的 [`WindowExt::open_dialog`] 组合命令面板。应用订阅
+[`CommandEvent`]，并在收到 `Confirm` 或 `Cancel` 时关闭对话框。
 
 ```rust
 use gpui_component::WindowExt as _;
 
-window.open_command_dialog(&self.command_state, cx, |command, _, _| {
-    command.placeholder("Type a command or search...")
+let state = self.command_state.clone();
+window.open_dialog(cx, move |dialog, _, _| {
+    let state = state.clone();
+    dialog.close_button(false).p_0().content(move |content, _, _| {
+        content.child(
+            Command::new(&state)
+                .bordered(false)
+                .placeholder("Type a command or search..."),
+        )
+    })
 });
 ```
 
@@ -112,11 +121,11 @@ state.update(cx, |state, cx| {
 
 ### 作为搜索面板
 
-当条目本身就是搜索结果（例如来自远程接口）时，关闭 `filterable`。此时面板会原样展示传入的条目，查询词通过 `CommandEvent::Query` 送达：
+远程搜索时，监听 `CommandEvent::Query` 并用返回结果替换 entries。返回的
+entries 仍会参与本地匹配，因此应在 value、label 或 keywords 中包含查询词。
 
 ```rust
 Command::new(&self.search)
-    .filterable(false)
     .placeholder("Search stocks...")
     .empty("No stock found.")
 ```
@@ -184,8 +193,6 @@ CommandItem::new("profile")
 | `empty`         | 没有命令匹配查询时显示的文案。                     |
 | `max_h`         | 列表的最大高度，默认 `18.75rem`（300px）。         |
 | `bordered`      | 是否绘制外边框与圆角，默认 `true`。                |
-| `close_on_confirm` | 确认条目后是否关闭所在对话框，默认 `false`；`open_command_dialog` 会置为 `true`。 |
-| `filterable`    | 是否按查询词过滤条目，默认 `true`；远程搜索时关闭。 |
 
 `Command` 实现了 [`Styled`]，因此 `w`、`max_w`、`bg` 等样式方法都可以作用于面板外框。
 
@@ -236,10 +243,10 @@ CommandItem::new("profile")
 2. **补充关键词**：用户可能用别的名字搜索的命令要设置 `keywords`。
 3. **快捷键仅是提示**：`shortcut` 只渲染提示文本，按键绑定需要自己完成。
 4. **保持行高一致**：`element` 自定义的行会决定所有行的高度，因此各行应使用同一套设计。
-5. **共用同一个状态**：同一个菜单的内嵌形态与对话框形态应复用同一个 [`CommandState`]。
+5. **一个面板一个状态**：每个正在渲染的命令面板使用独立的 [`CommandState`]。
 
 [Command]: https://docs.rs/gpui-component/latest/gpui_component/command/struct.Command.html
 [CommandState]: https://docs.rs/gpui-component/latest/gpui_component/command/struct.CommandState.html
 [CommandGroup]: https://docs.rs/gpui-component/latest/gpui_component/command/struct.CommandGroup.html
-[WindowExt::open_command_dialog]: https://docs.rs/gpui-component/latest/gpui_component/trait.WindowExt.html#tymethod.open_command_dialog
+[WindowExt::open_dialog]: https://docs.rs/gpui-component/latest/gpui_component/trait.WindowExt.html#tymethod.open_dialog
 [Styled]: https://docs.rs/gpui/latest/gpui/trait.Styled.html

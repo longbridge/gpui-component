@@ -13,8 +13,6 @@ pub(crate) struct CommandOptions {
     empty_message: Option<SharedString>,
     max_h: DefiniteLength,
     bordered: bool,
-    close_on_confirm: bool,
-    filterable: bool,
 }
 
 impl Default for CommandOptions {
@@ -25,8 +23,6 @@ impl Default for CommandOptions {
             empty_message: None,
             max_h: rems(18.75).into(),
             bordered: true,
-            close_on_confirm: false,
-            filterable: true,
         }
     }
 }
@@ -50,14 +46,6 @@ impl CommandOptions {
 
     pub(crate) fn is_bordered(&self) -> bool {
         self.bordered
-    }
-
-    pub(crate) fn closes_on_confirm(&self) -> bool {
-        self.close_on_confirm
-    }
-
-    pub(crate) fn is_filterable(&self) -> bool {
-        self.filterable
     }
 }
 
@@ -112,33 +100,9 @@ impl Command {
     /// Set whether to draw the surrounding border and rounding, default: `true`.
     ///
     /// Turn it off when the palette already sits inside a frame of its own,
-    /// which is what [`crate::WindowExt::open_command_dialog`] does.
+    /// such as a [`crate::Dialog`].
     pub fn bordered(mut self, bordered: bool) -> Self {
         self.options.bordered = bordered;
-        self
-    }
-
-    /// Set whether confirming an item closes the dialog the palette sits in,
-    /// default: `false`.
-    ///
-    /// The dialog is closed before the item's handler runs, so a handler is
-    /// free to open one of its own. [`crate::WindowExt::open_command_dialog`]
-    /// turns this on; leave it off for a palette that is not in a dialog, or it
-    /// will close whichever dialog happens to be open.
-    pub fn close_on_confirm(mut self, close_on_confirm: bool) -> Self {
-        self.options.close_on_confirm = close_on_confirm;
-        self
-    }
-
-    /// Set whether the palette filters its own entries by the query, default:
-    /// `true`.
-    ///
-    /// Turn it off when the entries already are the search results — a remote
-    /// search, say. The palette then shows every entry it was given and leaves
-    /// the searching to the application, which drives it from
-    /// [`crate::command::CommandEvent::Query`].
-    pub fn filterable(mut self, filterable: bool) -> Self {
-        self.options.filterable = filterable;
         self
     }
 }

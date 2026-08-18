@@ -170,7 +170,7 @@ impl CommandStory {
 
         let _subscriptions = vec![
             cx.subscribe(&inline, Self::on_command_event),
-            cx.subscribe(&dialog, Self::on_command_event),
+            cx.subscribe_in(&dialog, window, Self::on_dialog_command_event),
             cx.subscribe(&scrollable_state, Self::on_command_event),
             cx.subscribe_in(&search, window, Self::on_search_event),
         ];
@@ -203,6 +203,19 @@ impl CommandStory {
         }
     }
 
+    fn on_dialog_command_event(
+        &mut self,
+        state: &Entity<CommandState>,
+        event: &CommandEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if matches!(event, CommandEvent::Confirm(_) | CommandEvent::Cancel) {
+            window.close_dialog(cx);
+        }
+        self.on_command_event(state.clone(), event, cx);
+    }
+
     /// Open the stock search as a dialog, starting from an empty query.
     ///
     /// The palette keeps a fixed height so that results arriving, and the
@@ -220,14 +233,25 @@ impl CommandStory {
             search.set_entries(popular_entries(), cx);
         });
 
-        window.open_command_dialog(&self.search, cx, |command, _, _| {
-            command
-                .filterable(false)
-                .placeholder("Search stocks...")
-                .empty("No stock found.")
-                .min_h(px(320.))
-                .max_h(px(320.))
+        let search = self.search.clone();
+        window.open_dialog(cx, move |dialog, _, _| {
+            let search = search.clone();
+            dialog
+                .close_button(false)
+                .p_0()
+                .content(move |content, _, _| {
+                    content.child(
+                        Command::new(&search)
+                            .bordered(false)
+                            .placeholder("Search stocks...")
+                            .empty("No stock found.")
+                            .min_h(px(320.))
+                            .max_h(px(320.)),
+                    )
+                })
         });
+        let focus_handle = self.search.read(cx).focus_handle(cx);
+        focus_handle.focus(window, cx);
     }
 
     /// Answer the search panel's queries the way a remote search would: spin
@@ -240,6 +264,9 @@ impl CommandStory {
         cx: &mut Context<Self>,
     ) {
         let CommandEvent::Query(query) = event else {
+            if matches!(event, CommandEvent::Confirm(_) | CommandEvent::Cancel) {
+                window.close_dialog(cx);
+            }
             return self.on_command_event(state.clone(), event, cx);
         };
 
@@ -357,9 +384,21 @@ impl Render for CommandStory {
                             .outline()
                             .label("Open Menu")
                             .on_click(cx.listener(move |_, _, window, cx| {
-                                window.open_command_dialog(&dialog_state, cx, |command, _, _| {
-                                    command.placeholder("Type a command or search...")
+                                let command = dialog_state.clone();
+                                window.open_dialog(cx, move |dialog, _, _| {
+                                    let command = command.clone();
+                                    dialog.close_button(false).p_0().content(
+                                        move |content, _, _| {
+                                            content.child(
+                                                Command::new(&command)
+                                                    .bordered(false)
+                                                    .placeholder("Type a command or search..."),
+                                            )
+                                        },
+                                    )
                                 });
+                                let focus_handle = dialog_state.read(cx).focus_handle(cx);
+                                focus_handle.focus(window, cx);
                             })),
                     ),
             )

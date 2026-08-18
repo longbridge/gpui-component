@@ -1,12 +1,11 @@
 use crate::{
     Placement, Root,
-    command::{Command, CommandState},
     dialog::{AlertDialog, Dialog},
     input::AnyInputState,
     notification::Notification,
     sheet::Sheet,
 };
-use gpui::{App, ElementId, Entity, Focusable as _, ParentElement as _, Styled as _, Window};
+use gpui::{App, ElementId, Entity, Window};
 use std::rc::Rc;
 
 /// Extension trait for [`Window`] to add dialog, sheet .. functionality.
@@ -52,22 +51,6 @@ pub trait WindowExt: Sized {
     fn open_alert_dialog<F>(&mut self, cx: &mut App, build: F)
     where
         F: Fn(AlertDialog, &mut Window, &mut App) -> AlertDialog + 'static;
-
-    /// Opens a command palette in a Dialog, and moves focus to its search field.
-    ///
-    /// The commands come from `state`; `build` styles the palette the same way
-    /// it would be styled inline.
-    ///
-    /// # Examples
-    ///
-    /// ```ignore
-    /// window.open_command_dialog(&self.command_state, cx, |command, _, _| {
-    ///     command.placeholder("Type a command or search...")
-    /// });
-    /// ```
-    fn open_command_dialog<F>(&mut self, state: &Entity<CommandState>, cx: &mut App, build: F)
-    where
-        F: Fn(Command, &mut Window, &mut App) -> Command + 'static;
 
     /// Return true, if there is an active Dialog.
     fn has_active_dialog(&mut self, cx: &mut App) -> bool;
@@ -170,44 +153,6 @@ impl WindowExt for Window {
         self.open_dialog(cx, move |_, window, cx| {
             build(AlertDialog::new(cx), window, cx).build_surface(window, cx)
         })
-    }
-
-    fn open_command_dialog<F>(&mut self, state: &Entity<CommandState>, cx: &mut App, build: F)
-    where
-        F: Fn(Command, &mut Window, &mut App) -> Command + 'static,
-    {
-        let state = state.clone();
-        let build = Rc::new(build);
-
-        self.open_dialog(cx, {
-            let state = state.clone();
-            move |dialog, _, _| {
-                let state = state.clone();
-                let build = build.clone();
-
-                dialog
-                    .close_button(false)
-                    .p_0()
-                    .on_close({
-                        let state = state.clone();
-                        move |_, _, cx| {
-                            state.update(cx, |state, cx| state.dialog_closed(cx));
-                        }
-                    })
-                    .content(move |content, window, cx| {
-                        content.child(build(
-                            Command::new(&state).bordered(false).close_on_confirm(true),
-                            window,
-                            cx,
-                        ))
-                    })
-            }
-        });
-
-        // `Root::open_dialog` focuses the dialog itself; the palette is only
-        // usable with its search field focused, so claim it back afterwards.
-        let focus_handle = state.read(cx).focus_handle(cx);
-        focus_handle.focus(self, cx);
     }
 
     #[inline]

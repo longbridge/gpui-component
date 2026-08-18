@@ -80,12 +80,14 @@ pub struct AppState {
     /// Whether the window root renders the performance HUD. Toggled from the
     /// title bar's settings menu, read by [`StoryRoot`].
     pub show_fps_monitor: bool,
+    pub(crate) previewing_theme: bool,
 }
 impl AppState {
     fn init(cx: &mut App) {
         let state = Self {
             invisible_panels: cx.new(|_| Vec::new()),
             show_fps_monitor: false,
+            previewing_theme: false,
         };
         cx.set_global::<AppState>(state);
     }
@@ -870,7 +872,8 @@ impl StoryRoot {
         cx: &mut Context<Self>,
     ) -> Self {
         let theme_palette = cx.new(|cx| CommandState::new(window, cx));
-        let _subscriptions = vec![cx.subscribe(&theme_palette, Self::on_theme_palette_event)];
+        let _subscriptions =
+            vec![cx.subscribe_in(&theme_palette, window, Self::on_theme_palette_event)];
 
         Self {
             focus_handle: cx.focus_handle(),
@@ -888,19 +891,24 @@ impl StoryRoot {
     /// that was in force when the palette opened.
     fn on_theme_palette_event(
         &mut self,
-        _: Entity<CommandState>,
+        _: &Entity<CommandState>,
         event: &CommandEvent,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         match event {
             CommandEvent::Select(name) => themes::apply_theme(name, cx),
             CommandEvent::Confirm(_) => {
                 self.theme_before_preview = None;
+                themes::finish_theme_preview(cx);
+                window.close_dialog(cx);
             }
             CommandEvent::Cancel => {
                 if let Some(name) = self.theme_before_preview.take() {
                     themes::apply_theme(&name, cx);
                 }
+                themes::finish_theme_preview(cx);
+                window.close_dialog(cx);
             }
             // The palette filters the registry itself.
             CommandEvent::Query(_) => {}
@@ -931,14 +939,30 @@ impl StoryRoot {
     ) {
         let entries = themes::theme_entries(cx);
         self.theme_before_preview = Some(cx.theme().theme_name().clone());
+        themes::begin_theme_preview(cx);
         self.theme_palette.update(cx, |palette, cx| {
             palette.set_query("", window, cx);
             palette.set_entries(entries, cx);
         });
 
-        window.open_command_dialog(&self.theme_palette, cx, |command, _, _| {
-            command.placeholder("Search themes...").max_h(px(400.))
+        let theme_palette = self.theme_palette.clone();
+        window.open_dialog(cx, move |dialog, _, _| {
+            let theme_palette = theme_palette.clone();
+            dialog
+                .close_button(false)
+                .overlay_closable(false)
+                .p_0()
+                .content(move |content, _, _| {
+                    content.child(
+                        gpui_component::command::Command::new(&theme_palette)
+                            .bordered(false)
+                            .placeholder("Search themes...")
+                            .max_h(px(400.)),
+                    )
+                })
         });
+        let focus_handle = self.theme_palette.read(cx).focus_handle(cx);
+        focus_handle.focus(window, cx);
     }
 
     fn on_action_toggle_search(
