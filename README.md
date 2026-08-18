@@ -10,6 +10,23 @@
 
 UI components for building fantastic desktop applications using [GPUI](https://gpui.rs).
 
+## GFM Callouts (Here purely to show off the renderer)
+
+> [!NOTE]
+> Useful information that users should know, even when skimming content.
+
+> [!TIP]
+> Helpful advice for doing things better or more easily.
+
+> [!IMPORTANT]
+> Key information users need to know to achieve their goal.
+
+> [!WARNING]
+> Urgent info that needs immediate user attention to avoid problems.
+
+> [!CAUTION]
+> Advises about certain risks or negative potential outcomes.
+
 ## Features
 
 - **Richness**: 60+ cross-platform desktop UI components.

@@ -575,6 +575,7 @@ fn parse_node(
                 Some(BlockNode::Blockquote {
                     children,
                     span: None,
+                    callout: None,
                 })
             }
             local_name!("style") | local_name!("script") => None,

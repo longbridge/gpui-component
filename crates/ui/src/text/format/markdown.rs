@@ -7,8 +7,8 @@ use crate::text::{
     document::ParsedDocument,
     markdown_ext::MarkdownParseContext,
     node::{
-        self, BlockNode, CodeBlock, ImageNode, InlineNode, LinkMark, NodeContext, Paragraph, Span,
-        Table, TableRow, TextMark,
+        self, BlockNode, CalloutKind, CodeBlock, ImageNode, InlineNode, LinkMark, NodeContext,
+        Paragraph, Span, Table, TableRow, TextMark,
     },
 };
 
@@ -318,6 +318,72 @@ fn new_span(pos: Option<markdown::unist::Position>, cx: &NodeContext) -> Option<
     })
 }
 
+/// Detect whether a blockquote's first paragraph is a GitHub callout (e.g.
+/// `> [!WARNING]`). Returns the callout kind and any text on that first line
+/// that follows the `]` (usually empty).
+fn callout_of(children: &[Node]) -> Option<(CalloutKind, String)> {
+    let first = children.first()?;
+    let mdast::Node::Paragraph(paragraph) = first else {
+        return None;
+    };
+    let text = paragraph_plain_text(paragraph);
+    callout_kind_and_remainder(&text)
+}
+
+fn callout_kind_and_remainder(text: &str) -> Option<(CalloutKind, String)> {
+    let trimmed = text.trim_start();
+    let lower = trimmed.to_ascii_lowercase();
+
+    let kinds = [
+        ("note", CalloutKind::Note),
+        ("tip", CalloutKind::Tip),
+        ("important", CalloutKind::Important),
+        ("warning", CalloutKind::Warning),
+        ("caution", CalloutKind::Caution),
+    ];
+
+    for (keyword, kind) in kinds {
+        let token = format!("[!{}]", keyword);
+        if lower.starts_with(&token) {
+            let rest = trimmed[token.len()..].trim_start();
+            return Some((kind, rest.to_string()));
+        }
+    }
+    None
+}
+
+/// Concatenate the plain text of a paragraph's inline children (enough to
+/// detect a leading callout token).
+fn paragraph_plain_text(paragraph: &mdast::Paragraph) -> String {
+    let mut out = String::new();
+    for child in &paragraph.children {
+        match child {
+            mdast::Node::Text(t) => out.push_str(&t.value),
+            mdast::Node::InlineCode(c) => out.push_str(&c.value),
+            mdast::Node::Strong(s) => {
+                for c in &s.children {
+                    out.push_str(&paragraph_plain_text_of_node(c));
+                }
+            }
+            mdast::Node::Emphasis(s) => {
+                for c in &s.children {
+                    out.push_str(&paragraph_plain_text_of_node(c));
+                }
+            }
+            _ => {}
+        }
+    }
+    out
+}
+
+fn paragraph_plain_text_of_node(node: &mdast::Node) -> String {
+    match node {
+        mdast::Node::Text(t) => t.value.clone(),
+        mdast::Node::InlineCode(c) => c.value.clone(),
+        _ => String::new(),
+    }
+}
+
 fn ast_to_node(source: &str, value: mdast::Node, cx: &mut NodeContext) -> BlockNode {
     let span = new_span(value.position().cloned(), cx);
     let parse_cx = MarkdownParseContext::new(source, cx.offset);
@@ -337,14 +403,34 @@ fn ast_to_node(source: &str, value: mdast::Node, cx: &mut NodeContext) -> BlockN
             BlockNode::Paragraph(paragraph)
         }
         Node::Blockquote(val) => {
-            let children = val
-                .children
-                .into_iter()
-                .map(|c| ast_to_node(source, c, cx))
-                .collect();
-            BlockNode::Blockquote {
-                children,
-                span: new_span(val.position, cx),
+            if let Some((kind, remainder)) = callout_of(&val.children) {
+                let mut children: Vec<BlockNode> = Vec::new();
+                if !remainder.is_empty() {
+                    children.push(BlockNode::Paragraph(Paragraph::new(remainder)));
+                }
+                children.extend(
+                    val.children
+                        .into_iter()
+                        .skip(1)
+                        .map(|c| ast_to_node(source, c, cx))
+                        .filter(|n| !matches!(n, BlockNode::Unknown)),
+                );
+                BlockNode::Blockquote {
+                    children,
+                    span: new_span(val.position, cx),
+                    callout: Some(kind),
+                }
+            } else {
+                let children = val
+                    .children
+                    .into_iter()
+                    .map(|c| ast_to_node(source, c, cx))
+                    .collect();
+                BlockNode::Blockquote {
+                    children,
+                    span: new_span(val.position, cx),
+                    callout: None,
+                }
             }
         }
         Node::List(list) => {

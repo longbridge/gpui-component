@@ -40,6 +40,29 @@ thread_local! {
         RefCell::new(HashMap::new());
 }
 
+/// GitHub-flavored markdown callout/alerts inside a blockquote
+/// (e.g. `> [!NOTE]`, `> [!WARNING]`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum CalloutKind {
+    Note,
+    Tip,
+    Important,
+    Warning,
+    Caution,
+}
+
+impl CalloutKind {
+    pub(crate) fn label(&self) -> &'static str {
+        match self {
+            Self::Note => "NOTE",
+            Self::Tip => "TIP",
+            Self::Important => "IMPORTANT",
+            Self::Warning => "WARNING",
+            Self::Caution => "CAUTION",
+        }
+    }
+}
+
 /// The block-level nodes.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum BlockNode {
@@ -57,6 +80,8 @@ pub(crate) enum BlockNode {
     Blockquote {
         children: Vec<BlockNode>,
         span: Option<Span>,
+        /// When `Some`, this is a GitHub-flavored callout (e.g. `[!NOTE]`).
+        callout: Option<CalloutKind>,
     },
     List {
         /// Only contains ListItem, others will be ignored
@@ -1726,18 +1751,25 @@ impl BlockNode {
                 let hashes = "#".repeat(*level as usize);
                 format!("{} {}", hashes, children.to_markdown())
             }
-            BlockNode::Blockquote { children, .. } => {
+            BlockNode::Blockquote {
+                children, callout, ..
+            } => {
                 let content = children
                     .iter()
                     .map(|child| child.to_markdown())
                     .collect::<Vec<_>>()
                     .join("\n\n");
 
-                content
-                    .lines()
-                    .map(|line| format!("> {}", line))
-                    .collect::<Vec<_>>()
-                    .join("\n")
+                let mut lines: Vec<String> = Vec::new();
+                if let Some(kind) = callout {
+                    lines.push(format!("> [{}]", kind.label()));
+                }
+                lines.extend(
+                    content
+                        .lines()
+                        .map(|line| format!("> {}", line)),
+                );
+                lines.join("\n")
             }
             BlockNode::List {
                 children, ordered, ..
@@ -2348,26 +2380,94 @@ impl BlockNode {
                     .child(children.render(node_cx, window, cx))
                     .into_any_element()
             }
-            BlockNode::Blockquote { children, .. } => div()
-                .w_full()
-                .pb(mb)
-                .child(
+            BlockNode::Blockquote {
+                children, callout, ..
+            } => {
+                if let Some(kind) = callout {
+                    let color = match kind {
+                        CalloutKind::Note => cx.theme().blue,
+                        CalloutKind::Tip => cx.theme().success,
+                        CalloutKind::Important => cx.theme().warning,
+                        CalloutKind::Warning | CalloutKind::Caution => cx.theme().danger,
+                    };
                     div()
-                        .id(("blockquote", ix))
                         .w_full()
-                        .text_color(cx.theme().muted_foreground)
-                        .border_l_3()
-                        .border_color(cx.theme().secondary_active)
-                        .px_4()
-                        .children({
-                            let children_len = children.len();
-                            children.into_iter().enumerate().map(move |(index, c)| {
-                                let is_last = index == children_len - 1;
-                                c.render_block(options.is_last(is_last), node_cx, window, cx)
-                            })
-                        }),
-                )
-                .into_any_element(),
+                        .pb(mb)
+                        .child(
+                            div()
+                                .id(("callout", ix))
+                                .w_full()
+                                .flex()
+                                .flex_col()
+                                .gap_1()
+                                .px_4()
+                                .py_3()
+                                .rounded_md()
+                                .border_1()
+                                .border_color(color.opacity(0.4))
+                                .bg(color.opacity(0.08))
+                                .child(
+                                    div()
+                                        .flex()
+                                        .flex_row()
+                                        .items_center()
+                                        .gap_2()
+                                        .child(
+                                            div()
+                                                .text_sm()
+                                                .font_weight(FontWeight::BOLD)
+                                                .text_color(color)
+                                                .child(kind.label()),
+                                        ),
+                                )
+                                .child(
+                                    div()
+                                        .flex()
+                                        .flex_col()
+                                        .gap_1()
+                                        .children({
+                                            let children_len = children.len();
+                                            children.into_iter().enumerate().map(move |(index, c)| {
+                                                let is_last = index == children_len - 1;
+                                                c.render_block(
+                                                    options.is_last(is_last),
+                                                    node_cx,
+                                                    window,
+                                                    cx,
+                                                )
+                                            })
+                                        }),
+                                ),
+                        )
+                        .into_any_element()
+                } else {
+                    div()
+                        .w_full()
+                        .pb(mb)
+                        .child(
+                            div()
+                                .id(("blockquote", ix))
+                                .w_full()
+                                .text_color(cx.theme().muted_foreground)
+                                .border_l_3()
+                                .border_color(cx.theme().secondary_active)
+                                .px_4()
+                                .children({
+                                    let children_len = children.len();
+                                    children.into_iter().enumerate().map(move |(index, c)| {
+                                        let is_last = index == children_len - 1;
+                                        c.render_block(
+                                            options.is_last(is_last),
+                                            node_cx,
+                                            window,
+                                            cx,
+                                        )
+                                    })
+                                }),
+                        )
+                        .into_any_element()
+                }
+            }
             BlockNode::List {
                 children, ordered, ..
             } => v_flex()
@@ -2685,6 +2785,7 @@ mod tests {
         let quote = BlockNode::Blockquote {
             span: None,
             children: vec![BlockNode::Paragraph(selected_paragraph("quoted text"))],
+            callout: None,
         };
         assert_eq!(
             quote.selected_text(SelectionFormat::Source),
