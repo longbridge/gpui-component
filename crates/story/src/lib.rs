@@ -939,16 +939,17 @@ impl StoryRoot {
                 themes::finish_theme_preview(cx);
                 window.close_dialog(cx);
             }
-            CommandEvent::Cancel => {
-                if let Some(name) = self.theme_before_preview.take() {
-                    themes::apply_theme(&name, cx);
-                }
-                themes::finish_theme_preview(cx);
-                window.close_dialog(cx);
-            }
+            CommandEvent::Cancel => {}
             // The palette filters the registry itself.
             CommandEvent::Query(_) => {}
         }
+    }
+
+    fn finish_theme_preview(&mut self, cx: &mut Context<Self>) {
+        if let Some(name) = self.theme_before_preview.take() {
+            themes::apply_theme(&name, cx);
+        }
+        themes::finish_theme_preview(cx);
     }
 
     fn on_action_panel_info(
@@ -982,12 +983,17 @@ impl StoryRoot {
         });
 
         let theme_palette = self.theme_palette.clone();
+        let story_root = cx.weak_entity();
         window.open_dialog(cx, move |dialog, _, _| {
             let theme_palette = theme_palette.clone();
+            let story_root = story_root.clone();
             dialog
                 .close_button(false)
                 .overlay_closable(false)
                 .p_0()
+                .on_close(move |_, _, cx| {
+                    _ = story_root.update(cx, |root, cx| root.finish_theme_preview(cx));
+                })
                 .content(move |content, _, _| {
                     content.child(
                         gpui_component::command::Command::new(&theme_palette)
@@ -1153,6 +1159,186 @@ mod tests {
         let story_root = story_root.borrow_mut().take().unwrap();
         let gallery = gallery.borrow_mut().take().unwrap();
         (window, story_root, gallery)
+    }
+
+    fn theme_window(cx: &mut TestAppContext) -> (AnyWindowHandle, Entity<StoryRoot>) {
+        cx.update(|cx| {
+            gpui_component::init(cx);
+            AppState::init(cx);
+            stories::init(cx);
+        });
+        let story_root = Rc::new(RefCell::new(None));
+        let window = cx.add_window({
+            let story_root_slot = story_root.clone();
+            move |window, cx| {
+                let gallery = Gallery::view(None, window, cx);
+                let story_root = cx.new(|cx| StoryRoot::new("Story", gallery, window, cx));
+                *story_root_slot.borrow_mut() = Some(story_root.clone());
+                Root::new(story_root, window, cx)
+            }
+        });
+        let window = window.into();
+        cx.update_window(window, |_, window, cx| window.draw(cx).clear(cx))
+            .unwrap();
+
+        let story_root = story_root.borrow_mut().take().unwrap();
+        (window, story_root)
+    }
+
+    fn another_theme(cx: &TestAppContext) -> (SharedString, SharedString) {
+        cx.read(|cx| {
+            let original = cx.theme().theme_name().clone();
+            let selected = gpui_component::ThemeRegistry::global(cx)
+                .sorted_themes()
+                .into_iter()
+                .find(|theme| theme.name != original)
+                .expect("the story registry should contain another theme")
+                .name
+                .clone();
+            (original, selected)
+        })
+    }
+
+    fn open_theme_palette(
+        cx: &mut TestAppContext,
+        window: AnyWindowHandle,
+        story_root: &Entity<StoryRoot>,
+    ) {
+        window
+            .update(cx, |_, window, cx| {
+                story_root.update(cx, |root, cx| {
+                    root.on_action_select_theme(&SelectTheme, window, cx);
+                });
+                window.draw(cx).clear(cx);
+                story_root
+                    .read(cx)
+                    .theme_palette
+                    .read(cx)
+                    .focus_handle(cx)
+                    .focus(window, cx);
+            })
+            .unwrap();
+    }
+
+    #[gpui::test]
+    fn escape_with_non_empty_theme_query_restores_theme_and_finishes_preview(
+        cx: &mut TestAppContext,
+    ) {
+        let (window, story_root) = theme_window(cx);
+        let (original, previewed) = another_theme(cx);
+        open_theme_palette(cx, window, &story_root);
+        window
+            .update(cx, |_, window, cx| {
+                window.draw(cx).clear(cx);
+                story_root.update(cx, |root, cx| {
+                    root.theme_palette.update(cx, |palette, cx| {
+                        palette.set_query("filtered", window, cx);
+                        cx.emit(CommandEvent::Select(previewed.clone()));
+                    });
+                });
+            })
+            .unwrap();
+        cx.read(|cx| {
+            assert_eq!(cx.theme().theme_name(), &previewed);
+            assert!(AppState::global(cx).previewing_theme);
+        });
+
+        cx.simulate_keystrokes(window, "escape");
+        assert!(
+            window
+                .update(cx, |_, window, cx| window.has_active_dialog(cx))
+                .unwrap()
+        );
+        cx.read(|cx| assert!(AppState::global(cx).previewing_theme));
+        cx.simulate_keystrokes(window, "escape");
+
+        assert!(
+            !window
+                .update(cx, |_, window, cx| window.has_active_dialog(cx))
+                .unwrap()
+        );
+        cx.read(|cx| {
+            assert_eq!(cx.theme().theme_name(), &original);
+            assert!(!AppState::global(cx).previewing_theme);
+        });
+    }
+
+    #[gpui::test]
+    fn empty_query_escape_closes_only_theme_palette_when_dialogs_are_stacked(
+        cx: &mut TestAppContext,
+    ) {
+        let (window, story_root) = theme_window(cx);
+        window
+            .update(cx, |_, window, cx| {
+                window.open_dialog(cx, |dialog, _, _| dialog.title("Background"));
+            })
+            .unwrap();
+        open_theme_palette(cx, window, &story_root);
+
+        cx.simulate_keystrokes(window, "escape");
+
+        assert!(
+            window
+                .update(cx, |_, window, cx| window.has_active_dialog(cx))
+                .unwrap()
+        );
+        cx.read(|cx| assert!(!AppState::global(cx).previewing_theme));
+        window
+            .update(cx, |_, window, cx| window.close_dialog(cx))
+            .unwrap();
+        assert!(
+            !window
+                .update(cx, |_, window, cx| window.has_active_dialog(cx))
+                .unwrap()
+        );
+    }
+
+    #[gpui::test]
+    fn confirm_commits_theme_and_closes_only_theme_palette(cx: &mut TestAppContext) {
+        let (window, story_root) = theme_window(cx);
+        let (_, selected) = another_theme(cx);
+        window
+            .update(cx, |_, window, cx| {
+                window.open_dialog(cx, |dialog, _, _| dialog.title("Background"));
+            })
+            .unwrap();
+        open_theme_palette(cx, window, &story_root);
+        window
+            .update(cx, |_, window, cx| {
+                window.draw(cx).clear(cx);
+                story_root.update(cx, |root, cx| {
+                    root.theme_palette.update(cx, |palette, cx| {
+                        palette.set_query(selected.clone(), window, cx);
+                        assert_eq!(palette.selected_value().as_ref(), Some(&selected));
+                    });
+                });
+            })
+            .unwrap();
+
+        story_root.update(cx, |root, cx| {
+            root.theme_palette.update(cx, |_, cx| {
+                cx.emit(CommandEvent::Select(selected.clone()));
+                cx.emit(CommandEvent::Confirm(selected.clone()));
+            });
+        });
+
+        assert!(
+            window
+                .update(cx, |_, window, cx| window.has_active_dialog(cx))
+                .unwrap()
+        );
+        cx.read(|cx| {
+            assert_eq!(cx.theme().theme_name(), &selected);
+            assert!(!AppState::global(cx).previewing_theme);
+        });
+        window
+            .update(cx, |_, window, cx| window.close_dialog(cx))
+            .unwrap();
+        assert!(
+            !window
+                .update(cx, |_, window, cx| window.has_active_dialog(cx))
+                .unwrap()
+        );
     }
 
     #[gpui::test]
