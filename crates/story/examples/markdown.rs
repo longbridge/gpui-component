@@ -23,8 +23,8 @@ use gpui_component::{
     resizable::{h_resizable, resizable_panel},
     status_bar::StatusBar,
     text::{
-        MarkdownNode, MarkdownParseContext, MarkdownPlugin, SelectionFormat, TableData,
-        TextViewStyle, markdown, markdown_ast,
+        MarkdownNode, MarkdownParseContext, MarkdownPlugin, SelectionFormat, TextViewStyle,
+        markdown, markdown_ast,
     },
     v_flex,
 };
@@ -1030,9 +1030,9 @@ fn svg_color(color: Hsla) -> (String, f32) {
     )
 }
 
-/// Serialize a [`TableData`] to CSV: `,` separated, quoting only cells that
-/// contain `"`, `,` or a newline, with `"` doubled inside quotes.
-fn table_to_csv(table: &TableData) -> String {
+/// Serialize a table to CSV: `,` separated, quoting only cells that contain
+/// `"`, `,` or a newline, with `"` doubled inside quotes.
+fn table_to_csv(headers: &[String], rows: &[Vec<String>]) -> String {
     let field = |cell: &str| {
         if cell.contains(['"', ',', '\n']) {
             format!("\"{}\"", cell.replace('"', "\"\""))
@@ -1042,15 +1042,15 @@ fn table_to_csv(table: &TableData) -> String {
     };
     let line = |cells: &[String]| cells.iter().map(|c| field(c)).collect::<Vec<_>>().join(",");
 
-    std::iter::once(line(&table.headers))
-        .chain(table.rows.iter().map(|row| line(row)))
+    std::iter::once(line(headers))
+        .chain(rows.iter().map(|row| line(row)))
         .collect::<Vec<_>>()
         .join("\n")
 }
 
-/// Serialize a [`TableData`] to TSV: tab separated, never quoted; tabs and
-/// newlines inside a cell become literal `\t` / `\n` so rows stay intact.
-fn table_to_tsv(table: &TableData) -> String {
+/// Serialize a table to TSV: tab separated, never quoted; tabs and newlines
+/// inside a cell become literal `\t` / `\n` so rows stay intact.
+fn table_to_tsv(headers: &[String], rows: &[Vec<String>]) -> String {
     let field = |cell: &str| {
         cell.replace('\t', "\\t")
             .replace('\n', "\\n")
@@ -1064,8 +1064,8 @@ fn table_to_tsv(table: &TableData) -> String {
             .join("\t")
     };
 
-    std::iter::once(line(&table.headers))
-        .chain(table.rows.iter().map(|row| line(row)))
+    std::iter::once(line(headers))
+        .chain(rows.iter().map(|row| line(row)))
         .collect::<Vec<_>>()
         .join("\n")
 }
@@ -1312,9 +1312,13 @@ impl Render for Example {
                                                 // The hook hands over the table as plain data:
                                                 // header cells, body rows, and the table
                                                 // re-serialized to GFM Markdown.
+                                                //
+                                                // This runs on every render, so only cheap
+                                                // clones belong here — CSV / TSV are built
+                                                // inside the click handlers instead.
                                                 let markdown = table.markdown.clone();
-                                                let csv = table_to_csv(table);
-                                                let tsv = table_to_tsv(table);
+                                                let headers = table.headers.clone();
+                                                let rows = table.rows.clone();
                                                 // `span.start` is stable while streaming (only
                                                 // `end` grows), so it is a safe element id seed
                                                 // when a document holds several tables.
@@ -1353,8 +1357,10 @@ impl Render for Example {
                                                                     // The builder is a `Fn`, so
                                                                     // captured values are cloned
                                                                     // on every rebuild.
-                                                                    let csv = csv.clone();
-                                                                    let tsv = tsv.clone();
+                                                                    let (csv_headers, csv_rows) =
+                                                                        (headers.clone(), rows.clone());
+                                                                    let (tsv_headers, tsv_rows) =
+                                                                        (headers.clone(), rows.clone());
 
                                                                     menu.item(
                                                                         PopupMenuItem::new(
@@ -1362,7 +1368,8 @@ impl Render for Example {
                                                                         )
                                                                         .on_click(
                                                                             move |_, _, cx| {
-                                                                                cx.write_to_clipboard(ClipboardItem::new_string(csv.clone()));
+                                                                                let csv = table_to_csv(&csv_headers, &csv_rows);
+                                                                                cx.write_to_clipboard(ClipboardItem::new_string(csv));
                                                                             },
                                                                         ),
                                                                     )
@@ -1372,7 +1379,8 @@ impl Render for Example {
                                                                         )
                                                                         .on_click(
                                                                             move |_, _, cx| {
-                                                                                cx.write_to_clipboard(ClipboardItem::new_string(tsv.clone()));
+                                                                                let tsv = table_to_tsv(&tsv_headers, &tsv_rows);
+                                                                                cx.write_to_clipboard(ClipboardItem::new_string(tsv));
                                                                             },
                                                                         ),
                                                                     )
