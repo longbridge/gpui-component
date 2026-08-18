@@ -597,7 +597,7 @@ impl CommandState {
                 // The shortcut owns the trailing slot, so only an item without
                 // one can show its check there.
                 None => this.when(item.checked, |this| {
-                    this.child(Icon::new(IconName::Check).ml_auto().size_4())
+                    this.child(crate::Sizable::xsmall(Icon::new(IconName::Check).ml_auto()))
                 }),
             })
             .into_any_element()
@@ -979,6 +979,73 @@ mod tests {
                 assert_eq!(state.selected_index(), 0);
             });
         });
+    }
+
+    #[gpui::test]
+    fn a_checked_item_uses_an_xsmall_trailing_check_icon(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let cx = cx.add_empty_window();
+        let unchecked_width = Rc::new(Cell::new(None));
+        let checked_width = Rc::new(Cell::new(None));
+        let (unchecked, checked) = cx.update(|window, cx| {
+            let unchecked_state =
+                cx.new(|cx| CommandState::new(window, cx).item(CommandItem::new("theme")));
+            let checked_state = cx.new(|cx| {
+                CommandState::new(window, cx).item(CommandItem::new("theme").checked(true))
+            });
+            let unchecked_width = unchecked_width.clone();
+            let checked_width = checked_width.clone();
+            (
+                cx.new(|_| CheckIconWidthHarness {
+                    state: unchecked_state,
+                    width: unchecked_width,
+                }),
+                cx.new(|_| CheckIconWidthHarness {
+                    state: checked_state,
+                    width: checked_width,
+                }),
+            )
+        });
+
+        cx.draw(
+            gpui::point(px(0.), px(0.)),
+            gpui::AvailableSpace::min_size(),
+            move |_, _| unchecked.into_any_element(),
+        );
+
+        cx.draw(
+            gpui::point(px(0.), px(0.)),
+            gpui::AvailableSpace::min_size(),
+            move |_, _| checked.into_any_element(),
+        );
+
+        assert_eq!(
+            checked_width.get().unwrap() - unchecked_width.get().unwrap(),
+            px(20.)
+        );
+    }
+
+    struct CheckIconWidthHarness {
+        state: Entity<CommandState>,
+        width: Rc<Cell<Option<gpui::Pixels>>>,
+    }
+
+    impl Render for CheckIconWidthHarness {
+        fn render(
+            &mut self,
+            window: &mut Window,
+            cx: &mut gpui::Context<Self>,
+        ) -> impl IntoElement {
+            let width = self.width.clone();
+            let item = self.state.update(cx, |state, cx| {
+                state.update_matches(cx);
+                state.render_item(0, window, cx)
+            });
+
+            div()
+                .on_children_prepainted(move |bounds, _, _| width.set(Some(bounds[0].size.width)))
+                .child(item)
+        }
     }
 
     struct Harness {
