@@ -68,6 +68,13 @@ enum CommandRow {
     Separator,
 }
 
+#[derive(Clone, Copy, PartialEq)]
+struct ListMeasurementKey {
+    content_width: Pixels,
+    rem_size: Pixels,
+    line_height: Pixels,
+}
+
 /// An item that survived the current query, and where it landed.
 #[derive(Clone)]
 struct MatchedItem {
@@ -86,7 +93,7 @@ pub struct CommandState {
     entries: Vec<CommandEntry>,
     rows: Vec<CommandRow>,
     row_sizes: Rc<Vec<Size<Pixels>>>,
-    list_content_width: Option<Pixels>,
+    list_measurement_key: Option<ListMeasurementKey>,
     needs_measure: bool,
     matched: Vec<MatchedItem>,
     selected_index: usize,
@@ -119,7 +126,7 @@ impl CommandState {
             entries: Vec::new(),
             rows: Vec::new(),
             row_sizes: Rc::new(Vec::new()),
-            list_content_width: None,
+            list_measurement_key: None,
             needs_measure: true,
             matched: Vec::new(),
             selected_index: 0,
@@ -375,12 +382,16 @@ impl CommandState {
         cx.notify();
     }
 
-    fn set_list_content_width(&mut self, width: Pixels, cx: &mut Context<Self>) {
-        if self.list_content_width == Some(width) {
+    fn set_list_measurement_key(
+        &mut self,
+        measurement_key: ListMeasurementKey,
+        cx: &mut Context<Self>,
+    ) {
+        if self.list_measurement_key == Some(measurement_key) {
             return;
         }
 
-        self.list_content_width = Some(width);
+        self.list_measurement_key = Some(measurement_key);
         self.needs_measure = true;
         cx.notify();
     }
@@ -470,8 +481,10 @@ impl CommandState {
     /// item elements can have independent intrinsic heights.
     fn measure_row_sizes(&self, window: &mut Window, cx: &mut Context<Self>) -> Vec<Size<Pixels>> {
         let available = size(
-            self.list_content_width
-                .map_or(AvailableSpace::MinContent, AvailableSpace::Definite),
+            self.list_measurement_key
+                .map_or(AvailableSpace::MinContent, |key| {
+                    AvailableSpace::Definite(key.content_width)
+                }),
             AvailableSpace::MinContent,
         );
         self.rows
@@ -718,10 +731,19 @@ impl Render for CommandState {
                     .p_1()
                     .on_prepaint({
                         let measure_state = command_state.clone();
-                        move |bounds, _, cx| {
+                        move |bounds, window, cx| {
                             measure_state.update(cx, |state, cx| {
-                                state.set_list_content_width(
-                                    (bounds.size.width - px(8.)).max(px(0.)),
+                                // `p_1` is one quarter rem on each side. Its
+                                // rem-dependent padding and text line height
+                                // both participate in the row-size cache key.
+                                state.set_list_measurement_key(
+                                    ListMeasurementKey {
+                                        content_width: (bounds.size.width
+                                            - window.rem_size() * 0.5)
+                                            .max(px(0.)),
+                                        rem_size: window.rem_size(),
+                                        line_height: window.line_height(),
+                                    },
                                     cx,
                                 )
                             })
@@ -1142,6 +1164,38 @@ mod tests {
         assert!(
             narrow > wide,
             "the narrow list should cache a taller wrapped row ({narrow:?} vs {wide:?})",
+        );
+    }
+
+    #[gpui::test]
+    fn wrapping_rows_remeasure_when_rem_size_changes(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+
+        let (harness, cx) = cx.add_window_view(|window, cx| {
+            window.set_rem_size(px(20.));
+            WrappingHarness {
+                state: cx.new(|cx| wrapping_state(window, cx)),
+                width: px(160.),
+            }
+        });
+
+        cx.run_until_parked();
+        cx.update(|window, cx| _ = window.draw(cx));
+        cx.run_until_parked();
+        cx.update(|window, cx| _ = window.draw(cx));
+        let smaller_rem = cx.update(|_, cx| harness.read(cx).state.read(cx).row_sizes[0].height);
+
+        cx.update(|window, cx| {
+            window.set_rem_size(px(28.));
+            _ = window.draw(cx);
+        });
+        cx.run_until_parked();
+        cx.update(|window, cx| _ = window.draw(cx));
+        let larger_rem = cx.update(|_, cx| harness.read(cx).state.read(cx).row_sizes[0].height);
+
+        assert!(
+            larger_rem > smaller_rem,
+            "a larger rem should remeasure the fixed-width wrapped row ({larger_rem:?} vs {smaller_rem:?})",
         );
     }
 
