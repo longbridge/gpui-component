@@ -63,6 +63,7 @@ collapsed: false
 ### Advanced Components
 
 - [Calendar](calendar) - Calendar display and navigation
+- [Command](command) - Command palette for search and quick actions
 - [Chart](chart) - Data visualization charts (Line, Bar, Area, Pie, Candlestick)
 - [List](list) - List display with items
 - [Menu](menu) - Menu and context menu and dropdown menu.

@@ -34,6 +34,7 @@ pub mod clipboard;
 pub mod collapsible;
 pub mod color_picker;
 pub mod combobox;
+pub mod command;
 pub mod description_list;
 pub mod dialog;
 pub mod dock;
@@ -130,6 +131,7 @@ pub fn init(cx: &mut App) {
     dock::init(cx);
     sheet::init(cx);
     list::init(cx);
+    command::init(cx);
     popover::init(cx);
     menu::init(cx);
     table::init(cx);

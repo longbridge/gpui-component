@@ -61,6 +61,7 @@ impl Gallery {
                 StoryContainer::panel::<CollapsibleStory>(window, cx),
                 StoryContainer::panel::<ColorPickerStory>(window, cx),
                 StoryContainer::panel::<ComboboxStory>(window, cx),
+                StoryContainer::panel::<CommandStory>(window, cx),
                 StoryContainer::panel::<DataTableStory>(window, cx),
                 StoryContainer::panel::<DatePickerStory>(window, cx),
                 StoryContainer::panel::<DescriptionListStory>(window, cx),

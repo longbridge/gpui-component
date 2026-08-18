@@ -2,13 +2,14 @@ use gpui::{
     Action, Anchor, AnyElement, AnyView, App, AppContext, Bounds, Context, DismissEvent, Div,
     Entity, EventEmitter, FocusHandle, Focusable, Global, Hsla, InteractiveElement, IntoElement,
     KeyBinding, ParentElement, Pixels, Render, RenderOnce, SharedString, Size, StyleRefinement,
-    Styled, Window, WindowBounds, WindowKind, WindowOptions, actions, div,
+    Styled, Subscription, Window, WindowBounds, WindowKind, WindowOptions, actions, div,
     prelude::FluentBuilder as _, px, rems, size,
 };
 use gpui_component::{
     ActiveTheme, IconName, Root, Sizable as _, Size as ComponentSize, StyledExt as _,
     TITLE_BAR_HEIGHT, TitleBar, WindowExt,
     button::Button,
+    command::{CommandEvent, CommandState},
     dock::{Panel, PanelControl, PanelEvent, PanelInfo, PanelState, TitleStyle, register_panel},
     group_box::{GroupBox, GroupBoxVariants as _},
     h_flex,
@@ -29,6 +30,7 @@ mod gallery;
 mod stories;
 mod themes;
 mod title_bar;
+use crate::themes::SelectTheme;
 pub use crate::title_bar::AppTitleBar;
 pub use gallery::Gallery;
 pub use stories::*;
@@ -219,6 +221,10 @@ pub fn init(cx: &mut App) {
         KeyBinding::new("cmd-q", Quit, None),
         #[cfg(not(target_os = "macos"))]
         KeyBinding::new("alt-f4", Quit, None),
+        #[cfg(target_os = "macos")]
+        KeyBinding::new("cmd-k", SelectTheme, None),
+        #[cfg(not(target_os = "macos"))]
+        KeyBinding::new("ctrl-k", SelectTheme, None),
     ]);
 
     cx.on_action(|_: &Quit, cx: &mut App| {
@@ -830,6 +836,12 @@ pub struct StoryRoot {
     pub(crate) title_bar: Entity<AppTitleBar>,
     pub(crate) view: AnyView,
     pub(crate) embedded: bool,
+    /// The palette behind [`SelectTheme`], rebuilt every time it opens.
+    theme_palette: Entity<CommandState>,
+    /// The theme in force when the palette opened, put back if the user
+    /// cancels out of the preview.
+    theme_before_preview: Option<SharedString>,
+    _subscriptions: Vec<Subscription>,
 }
 
 impl StoryRoot {
@@ -840,21 +852,58 @@ impl StoryRoot {
         cx: &mut Context<Self>,
     ) -> Self {
         let title_bar = cx.new(|cx| AppTitleBar::new(title, window, cx));
-        Self {
-            focus_handle: cx.focus_handle(),
-            title_bar,
-            view: view.into(),
-            embedded: false,
-        }
+
+        Self::with_title_bar(title_bar, view, false, window, cx)
     }
 
     pub fn embedded(view: impl Into<AnyView>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let title_bar = cx.new(|cx| AppTitleBar::new("", window, cx));
+
+        Self::with_title_bar(title_bar, view, true, window, cx)
+    }
+
+    fn with_title_bar(
+        title_bar: Entity<AppTitleBar>,
+        view: impl Into<AnyView>,
+        embedded: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
+        let theme_palette = cx.new(|cx| CommandState::new(window, cx));
+        let _subscriptions = vec![cx.subscribe(&theme_palette, Self::on_theme_palette_event)];
+
         Self {
             focus_handle: cx.focus_handle(),
             title_bar,
             view: view.into(),
-            embedded: true,
+            embedded,
+            theme_palette,
+            theme_before_preview: None,
+            _subscriptions,
+        }
+    }
+
+    /// Preview the highlighted theme while the palette is open: moving the
+    /// highlight applies the theme, Enter keeps it, Escape puts back the one
+    /// that was in force when the palette opened.
+    fn on_theme_palette_event(
+        &mut self,
+        _: Entity<CommandState>,
+        event: &CommandEvent,
+        cx: &mut Context<Self>,
+    ) {
+        match event {
+            CommandEvent::Select(name) => themes::apply_theme(name, cx),
+            CommandEvent::Confirm(_) => {
+                self.theme_before_preview = None;
+            }
+            CommandEvent::Cancel => {
+                if let Some(name) = self.theme_before_preview.take() {
+                    themes::apply_theme(&name, cx);
+                }
+            }
+            // The palette filters the registry itself.
+            CommandEvent::Query(_) => {}
         }
     }
 
@@ -869,6 +918,27 @@ impl StoryRoot {
             .message("You have clicked panel info.")
             .id::<Info>();
         window.push_notification(note, cx);
+    }
+
+    /// Opens the theme Command palette, refreshed from the registry so that a
+    /// theme added while the app is running shows up, and reset to an empty
+    /// query.
+    fn on_action_select_theme(
+        &mut self,
+        _: &SelectTheme,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let entries = themes::theme_entries(cx);
+        self.theme_before_preview = Some(cx.theme().theme_name().clone());
+        self.theme_palette.update(cx, |palette, cx| {
+            palette.set_query("", window, cx);
+            palette.set_entries(entries, cx);
+        });
+
+        window.open_command_dialog(&self.theme_palette, cx, |command, _, _| {
+            command.placeholder("Search themes...").max_h(px(400.))
+        });
     }
 
     fn on_action_toggle_search(
@@ -906,6 +976,7 @@ impl Render for StoryRoot {
         div()
             .id("story-root")
             .on_action(cx.listener(Self::on_action_panel_info))
+            .on_action(cx.listener(Self::on_action_select_theme))
             .on_action(cx.listener(Self::on_action_toggle_search))
             .size_full()
             .child(
