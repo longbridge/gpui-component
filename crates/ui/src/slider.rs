@@ -1,6 +1,6 @@
 use std::{sync::Arc, time::Duration};
 
-use crate::{ActiveTheme, AxisExt, StyledExt, animation::ease_out_cubic};
+use crate::{ActiveTheme, AxisExt, StyledExt, ThemeStyled as _, animation::ease_out_cubic};
 pub use gpui_base::slider::{SliderEvent, SliderScale, SliderState, SliderValue};
 use gpui_base::{
     Slider as BaseSlider, SliderIndicator, SliderThumb, SliderTrack, Transition, transition,
@@ -8,8 +8,8 @@ use gpui_base::{
 
 use gpui::{
     App, Axis, Background, Corners, DefiniteLength, ElementId, Entity, EntityId, Hsla,
-    InteractiveElement as _, IntoElement, IsZero, MouseButton, ParentElement as _, Pixels,
-    RenderOnce, StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
+    InteractiveElement as _, IntoElement, MouseButton, ParentElement as _, Pixels, RenderOnce,
+    StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
     prelude::FluentBuilder as _, px, relative,
 };
 
@@ -174,8 +174,10 @@ impl RenderOnce for Slider {
             .map(Into::into)
             .unwrap_or_else(|| cx.theme().tokens.slider_thumb.into());
         let corner_radii = self.style.corner_radii.clone();
-        let default_radius = px(999.);
-        let mut radius = Corners {
+        // The track is a pill by default, and square when the theme squares its
+        // corners. A caller's own corner radii still win.
+        let default_radius = cx.theme().radius_full();
+        let radius = Corners {
             top_left: corner_radii
                 .top_left
                 .map(|v| v.to_pixels(rem_size))
@@ -193,12 +195,6 @@ impl RenderOnce for Slider {
                 .map(|v| v.to_pixels(rem_size))
                 .unwrap_or(default_radius),
         };
-        if cx.theme().radius.is_zero() {
-            radius.top_left = px(0.);
-            radius.top_right = px(0.);
-            radius.bottom_left = px(0.);
-            radius.bottom_right = px(0.);
-        }
 
         let ring_color = cx.theme().ring;
         let entity_id = self.state.entity_id();
@@ -222,7 +218,7 @@ impl RenderOnce for Slider {
                         .items_center()
                         .justify_center()
                         .flex_shrink_0()
-                        .rounded_full()
+                        .rounded_full_style(cx)
                         .bg(bar_color.opacity(0.5))
                         .size_4()
                         .p(px(1.))
@@ -253,7 +249,7 @@ impl RenderOnce for Slider {
                                 .left(-ring.width)
                                 .right(-ring.width)
                                 .bottom(-ring.width)
-                                .rounded_full()
+                                .rounded_full_style(cx)
                                 .border(ring.width)
                                 .border_color(ring.color),
                         )
@@ -261,7 +257,7 @@ impl RenderOnce for Slider {
                             div()
                                 .flex_shrink_0()
                                 .size_full()
-                                .rounded_full()
+                                .rounded_full_style(cx)
                                 .bg(thumb_bg),
                         )
                 })
@@ -309,7 +305,7 @@ impl RenderOnce for Slider {
                                         this.w_full().bottom(bar_start).top(bar_end)
                                     })
                                     .bg(bar_color)
-                                    .when(!cx.theme().radius.is_zero(), |this| this.rounded_full()),
+                                    .rounded_full_style(cx),
                             )
                             .when_some(start_ring, |this, ring| {
                                 this.child(thumb(relative(percentage.start), true, ring))

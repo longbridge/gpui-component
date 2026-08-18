@@ -1,7 +1,8 @@
 use crate::{ActiveTheme, Sizable, Size, StyledExt};
 use gpui::{
-    Animation, AnimationExt as _, App, Background, ElementId, Hsla, IntoElement, ParentElement,
-    RenderOnce, StyleRefinement, Styled, Window, ease_in_out, prelude::FluentBuilder, px, relative,
+    Animation, AnimationExt as _, App, Background, ElementId, Hsla, IntoElement, IsZero as _,
+    ParentElement, RenderOnce, StyleRefinement, Styled, Window, ease_in_out,
+    prelude::FluentBuilder, px, relative,
 };
 use gpui_base::{Progress as BaseProgress, ProgressIndicator, ProgressTrack};
 use instant::Duration;
@@ -82,12 +83,19 @@ impl RenderOnce for Progress {
         let mut inner_style = StyleRefinement::default();
         inner_style.corner_radii = radius;
 
-        let (height, radius) = match self.size {
+        let (height, pill_radius) = match self.size {
             Size::XSmall => (px(4.), px(2.)),
             Size::Small => (px(6.), px(3.)),
             Size::Medium => (px(8.), px(4.)),
             Size::Large => (px(10.), px(5.)),
             Size::Size(s) => (s, s / 2.),
+        };
+        // The bar reads as a pill of half its own height, and squares off with
+        // the rest of the UI when the theme has no radius.
+        let radius = if cx.theme().radius.is_zero() {
+            px(0.)
+        } else {
+            pill_radius
         };
 
         let state = window.use_keyed_state(self.id.clone(), cx, |_, _| ProgressState::new(value));

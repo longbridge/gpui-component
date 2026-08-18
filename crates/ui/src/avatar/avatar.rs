@@ -5,7 +5,7 @@ use gpui::{
 use gpui_base::{Avatar as BaseAvatar, AvatarFallback, AvatarImage};
 
 use crate::{
-    ActiveTheme, Colorize, Icon, IconName, Sizable, Size, StyledExt,
+    ActiveTheme, Colorize, Icon, IconName, Sizable, Size, StyledExt, ThemeStyled as _,
     avatar::{AvatarSized as _, avatar_size},
 };
 
@@ -97,7 +97,7 @@ impl RenderOnce for Avatar {
             .flex()
             .items_center()
             .justify_center()
-            .rounded_full()
+            .rounded_full_style(cx)
             .overflow_hidden()
             .when(self.name.is_none(), |this| {
                 this.text_size(avatar_size(self.size) * 0.6)
@@ -115,7 +115,7 @@ impl RenderOnce for Avatar {
         self.base
             .size(avatar_size(self.size))
             .flex_shrink_0()
-            .rounded_full()
+            .rounded_full_style(cx)
             .overflow_hidden()
             .bg(cx.theme().tokens.secondary)
             .text_color(cx.theme().background)
@@ -126,7 +126,7 @@ impl RenderOnce for Avatar {
                 this.image(
                     AvatarImage::new(src)
                         .size_full()
-                        .rounded_full()
+                        .rounded_full_style(cx)
                         .refine_style(&inner_style),
                 )
             })

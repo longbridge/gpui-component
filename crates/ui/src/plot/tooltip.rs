@@ -1,5 +1,5 @@
 use gpui::{
-    AnyElement, App, Div, Hsla, IntoElement, ParentElement, Pixels, Point, RenderOnce,
+    AnyElement, App, Div, Half as _, Hsla, IntoElement, ParentElement, Pixels, Point, RenderOnce,
     SharedString, Size, StyleRefinement, Styled, Window, deferred, div, prelude::FluentBuilder, px,
 };
 
@@ -380,7 +380,12 @@ impl RenderOnce for Tooltip {
                             h_flex()
                                 .items_center()
                                 .gap_1p5()
-                                .child(div().size_2().rounded_sm().bg(row.color))
+                                .child(
+                                    div()
+                                        .size_2()
+                                        .rounded(cx.theme().radius.half())
+                                        .bg(row.color),
+                                )
                                 .child(
                                     div()
                                         .text_color(cx.theme().muted_foreground)

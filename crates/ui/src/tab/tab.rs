@@ -345,7 +345,7 @@ impl TabVariant {
 
     fn radius(&self, size: Size, cx: &App) -> Pixels {
         match self {
-            TabVariant::Outline | TabVariant::Pill => px(99.),
+            TabVariant::Outline | TabVariant::Pill => cx.theme().radius_full(),
             TabVariant::Segmented => match size {
                 Size::XSmall | Size::Small => cx.theme().radius,
                 Size::Large => cx.theme().radius_lg,
@@ -357,9 +357,12 @@ impl TabVariant {
 
     pub(super) fn inner_radius(&self, size: Size, cx: &App) -> Pixels {
         match self {
+            // The inset the active pill sits at, taken off the bar's own radius
+            // so the two curves stay concentric. Floored at zero: a square bar
+            // has nothing to inset from.
             TabVariant::Segmented => match size {
-                Size::Large => self.tab_bar_radius(size, cx) - px(3.),
-                _ => self.tab_bar_radius(size, cx) - px(2.),
+                Size::Large => (self.tab_bar_radius(size, cx) - px(3.)).max(px(0.)),
+                _ => (self.tab_bar_radius(size, cx) - px(2.)).max(px(0.)),
             },
             _ => px(0.),
         }

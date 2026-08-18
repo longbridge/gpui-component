@@ -283,7 +283,7 @@ impl RenderOnce for DescriptionList {
             .gap(gap)
             .overflow_hidden()
             .when(self.bordered, |this| {
-                this.rounded(padding_x)
+                this.rounded(cx.theme().radius)
                     .border_1()
                     .border_color(cx.theme().border)
             })

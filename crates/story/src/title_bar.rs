@@ -111,6 +111,7 @@ impl FontSizeSelector {
         cx: &mut Context<Self>,
     ) {
         Theme::global_mut(cx).font_size = px(font_size.0 as f32);
+        Theme::sync_base(cx);
         window.refresh();
     }
 
@@ -126,6 +127,8 @@ impl FontSizeSelector {
         } else {
             px(0.)
         };
+        // The scrollbar paints from the Base layer's own copy of the theme.
+        Theme::sync_base(cx);
         window.refresh();
     }
 

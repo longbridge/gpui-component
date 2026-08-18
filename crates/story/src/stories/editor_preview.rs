@@ -14,7 +14,7 @@ impl ProjectOverview {
         v_flex()
             .gap_1()
             .p_4()
-            .rounded_lg()
+            .rounded(cx.theme().radius_lg)
             .border_1()
             .child(div().text_sm().child(label))
             .child(div().text_2xl().font_semibold().child(value))
@@ -50,7 +50,7 @@ impl Render for ProjectOverview {
                 v_flex()
                     .gap_3()
                     .p_4()
-                    .rounded_lg()
+                    .rounded(cx.theme().radius_lg)
                     .bg(cx.theme().muted)
                     .child(
                         h_flex()

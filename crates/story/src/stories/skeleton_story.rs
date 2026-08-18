@@ -2,7 +2,7 @@ use gpui::{
     App, AppContext, Context, Entity, Focusable, IntoElement, ParentElement, Render, Styled,
     Window, px,
 };
-use gpui_component::{ActiveTheme as _, skeleton::Skeleton, v_flex};
+use gpui_component::{ActiveTheme as _, ThemeStyled as _, skeleton::Skeleton, v_flex};
 
 use crate::section;
 
@@ -62,7 +62,7 @@ impl Render for SkeletonStory {
                         gpui_component::h_flex()
                             .w_full()
                             .gap_3()
-                            .child(Skeleton::new().size_12().rounded_full())
+                            .child(Skeleton::new().size_12().rounded_full_style(cx))
                             .child(
                                 v_flex()
                                     .flex_1()

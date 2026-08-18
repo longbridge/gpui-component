@@ -113,7 +113,7 @@ impl NativeMenuStory {
             .h_24()
             .border_1()
             .border_color(cx.theme().border)
-            .rounded_lg()
+            .rounded(cx.theme().radius_lg)
             .text_color(cx.theme().muted_foreground)
             .child(SharedString::from(label.to_string()))
     }
