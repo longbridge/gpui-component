@@ -229,9 +229,13 @@ impl CommandState {
         self.matched.len()
     }
 
-    /// Move focus to the search field.
+    /// Move focus to the palette's active control.
     pub fn focus(&self, window: &mut Window, cx: &mut App) {
-        self.query_input.focus_handle(cx).focus(window, cx);
+        if self.searchable {
+            self.query_input.focus_handle(cx).focus(window, cx);
+        } else {
+            self.focus_handle.focus(window, cx);
+        }
     }
 
     /// Show or hide the search field's spinner, and suppress the empty message
@@ -666,7 +670,11 @@ impl EventEmitter<CommandEvent> for CommandState {}
 
 impl Focusable for CommandState {
     fn focus_handle(&self, cx: &App) -> FocusHandle {
-        self.query_input.focus_handle(cx)
+        if self.searchable {
+            self.query_input.focus_handle(cx)
+        } else {
+            self.focus_handle.clone()
+        }
     }
 }
 
@@ -715,21 +723,24 @@ impl Render for CommandState {
                     .border_color(cx.theme().border)
             })
             .refine_style(self.options.style())
-            .child(
-                div()
-                    .flex_none()
-                    .px_3()
-                    .border_b_1()
-                    .border_color(cx.theme().border)
-                    .child(
-                        Input::new(&self.query_input)
-                            .prefix(
-                                Icon::new(IconName::Search).text_color(cx.theme().muted_foreground),
-                            )
-                            .appearance(false)
-                            .p_0(),
-                    ),
-            )
+            .when(self.searchable, |this| {
+                this.child(
+                    div()
+                        .flex_none()
+                        .px_3()
+                        .border_b_1()
+                        .border_color(cx.theme().border)
+                        .child(
+                            Input::new(&self.query_input)
+                                .prefix(
+                                    Icon::new(IconName::Search)
+                                        .text_color(cx.theme().muted_foreground),
+                                )
+                                .appearance(false)
+                                .p_0(),
+                        ),
+                )
+            })
             .child(
                 v_flex()
                     .id("command-list-container")
@@ -769,7 +780,10 @@ impl Render for CommandState {
 
 #[cfg(test)]
 mod tests {
-    use std::{cell::Cell, rc::Rc};
+    use std::{
+        cell::{Cell, RefCell},
+        rc::Rc,
+    };
 
     use gpui::{
         AppContext as _, Entity, IntoElement, ParentElement as _, Render, SharedString,
@@ -779,7 +793,8 @@ mod tests {
     use super::{CommandRow, CommandState};
     use crate::{
         Disableable as _,
-        command::{Command, CommandGroup, CommandItem},
+        actions::{Confirm, SelectDown},
+        command::{Command, CommandEvent, CommandGroup, CommandItem},
     };
 
     fn suggestions(state: CommandState) -> CommandState {
@@ -923,6 +938,40 @@ mod tests {
                 assert_eq!(state.matched_count(), 2);
             });
         });
+    }
+
+    #[gpui::test]
+    fn non_searchable_command_uses_frame_focus(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (harness, cx) = cx.add_window_view(|window, cx| Harness {
+            state: cx.new(|cx| {
+                CommandState::new(window, cx)
+                    .searchable(false)
+                    .item(CommandItem::new("alpha"))
+                    .item(CommandItem::new("beta"))
+            }),
+        });
+        let state = cx.update(|_, cx| harness.read(cx).state.clone());
+        let confirmed = Rc::new(RefCell::new(None));
+        let confirmed_value = confirmed.clone();
+        let _subscription = cx.update(|_, cx| {
+            cx.subscribe(&state, move |_, event: &CommandEvent, _| {
+                if let CommandEvent::Confirm(value) = event {
+                    *confirmed_value.borrow_mut() = Some(value.clone());
+                }
+            })
+        });
+
+        cx.run_until_parked();
+        cx.update(|window, cx| _ = window.draw(cx));
+        cx.update(|window, cx| {
+            state.update(cx, |state, cx| state.focus(window, cx));
+            assert!(state.read(cx).focus_handle.is_focused(window));
+            window.dispatch_action(Box::new(SelectDown), cx);
+            window.dispatch_action(Box::new(Confirm { secondary: false }), cx);
+        });
+
+        assert_eq!(*confirmed.borrow(), Some("beta".into()));
     }
 
     #[gpui::test]
