@@ -1,12 +1,90 @@
-use crate::{ActiveTheme, AxisExt, StyledExt};
+use std::{sync::Arc, time::Duration};
+
+use crate::{ActiveTheme, AxisExt, StyledExt, animation::ease_out_cubic};
 pub use gpui_base::slider::{SliderEvent, SliderScale, SliderState, SliderValue};
-use gpui_base::{Slider as BaseSlider, SliderIndicator, SliderThumb, SliderTrack};
+use gpui_base::{
+    Slider as BaseSlider, SliderIndicator, SliderThumb, SliderTrack, Transition, transition,
+};
 
 use gpui::{
-    Axis, Background, Corners, DefiniteLength, Entity, IntoElement, IsZero, ParentElement as _,
+    App, Axis, Background, Corners, DefiniteLength, ElementId, Entity, EntityId, Hsla,
+    InteractiveElement as _, IntoElement, IsZero, MouseButton, ParentElement as _, Pixels,
     RenderOnce, StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
     prelude::FluentBuilder as _, px, relative,
 };
+
+/// Width of the translucent ring that grows outside a hovered thumb.
+const THUMB_RING_WIDTH: Pixels = px(3.);
+/// Opacity of the fully grown thumb ring.
+const THUMB_RING_OPACITY: f32 = 0.5;
+/// Duration of the thumb ring grow/shrink animation.
+const THUMB_RING_DURATION: Duration = Duration::from_millis(150);
+
+/// The animated hover ring of one thumb.
+struct ThumbRing {
+    interaction: Entity<ThumbInteraction>,
+    width: Pixels,
+    color: Hsla,
+}
+
+/// Pointer state of one thumb, written by its own listeners and read on the
+/// next frame to size the ring.
+#[derive(Default)]
+struct ThumbInteraction {
+    hovered: bool,
+    pressed: bool,
+}
+
+impl ThumbInteraction {
+    /// The ring shows while the pointer is over the thumb, and stays while the
+    /// thumb is dragged: dragging moves the thumb under the pointer, so hover
+    /// alone drops out for a frame on every move and the ring would flicker.
+    fn is_active(&self) -> bool {
+        self.hovered || self.pressed
+    }
+}
+
+impl ThumbRing {
+    /// Samples the ring for the `start` or end thumb of the slider `id`.
+    fn new(id: EntityId, start: bool, color: Hsla, window: &mut Window, cx: &mut App) -> Self {
+        let channel = if start { "start" } else { "end" };
+        let interaction = window.use_keyed_state(
+            ElementId::NamedChild(Arc::new(("slider-thumb-ring", id).into()), channel.into()),
+            cx,
+            |_, _| ThumbInteraction::default(),
+        );
+        let progress = transition(
+            (("slider-thumb-ring", id), channel),
+            if interaction.read(cx).is_active() {
+                1.
+            } else {
+                0.
+            },
+            Transition::new(THUMB_RING_DURATION).ease(ease_out_cubic),
+            window,
+            cx,
+        );
+
+        Self {
+            interaction,
+            width: THUMB_RING_WIDTH * progress,
+            color: color.alpha(THUMB_RING_OPACITY * progress),
+        }
+    }
+
+    /// Returns a listener that records whether the thumb is being pressed.
+    fn press_listener<E>(&self, pressed: bool) -> impl Fn(&E, &mut Window, &mut App) + use<E> {
+        let interaction = self.interaction.clone();
+        move |_, _, cx| {
+            interaction.update(cx, |interaction, cx| {
+                if interaction.pressed != pressed {
+                    interaction.pressed = pressed;
+                    cx.notify();
+                }
+            });
+        }
+    }
+}
 
 /// A Slider element.
 #[derive(IntoElement)]
@@ -70,7 +148,7 @@ impl Styled for Slider {
 }
 
 impl RenderOnce for Slider {
-    fn render(self, window: &mut Window, cx: &mut gpui::App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let axis = self.axis;
         let state = self.state.read(cx);
         let is_range = state.value().is_range();
@@ -122,7 +200,12 @@ impl RenderOnce for Slider {
             radius.bottom_right = px(0.);
         }
 
-        let thumb = |position: DefiniteLength, start: bool| {
+        let ring_color = cx.theme().ring;
+        let entity_id = self.state.entity_id();
+        let start_ring = is_range.then(|| ThumbRing::new(entity_id, true, ring_color, window, cx));
+        let end_ring = ThumbRing::new(entity_id, false, ring_color, window, cx);
+
+        let thumb = |position: DefiniteLength, start: bool, ring: ThumbRing| {
             SliderThumb::new(&self.state)
                 .axis(axis)
                 .start(start)
@@ -143,6 +226,37 @@ impl RenderOnce for Slider {
                         .bg(bar_color.opacity(0.5))
                         .size_4()
                         .p(px(1.))
+                        .on_hover({
+                            let interaction = ring.interaction.clone();
+                            move |entered, _, cx| {
+                                let entered = *entered;
+                                interaction.update(cx, |interaction, cx| {
+                                    if interaction.hovered != entered {
+                                        interaction.hovered = entered;
+                                        cx.notify();
+                                    }
+                                });
+                            }
+                        })
+                        // The base thumb stops propagation on mouse down to own
+                        // the drag, so the press is read in the capture phase.
+                        .capture_any_mouse_down(ring.press_listener(true))
+                        .capture_any_mouse_up(ring.press_listener(false))
+                        .on_mouse_up_out(MouseButton::Left, ring.press_listener(false))
+                        // The ring grows outward from the thumb's edge: inset by
+                        // its own width so its inner edge sits flush against it.
+                        .child(
+                            div()
+                                .flex_none()
+                                .absolute()
+                                .top(-ring.width)
+                                .left(-ring.width)
+                                .right(-ring.width)
+                                .bottom(-ring.width)
+                                .rounded_full()
+                                .border(ring.width)
+                                .border_color(ring.color),
+                        )
                         .child(
                             div()
                                 .flex_shrink_0()
@@ -197,10 +311,10 @@ impl RenderOnce for Slider {
                                     .bg(bar_color)
                                     .when(!cx.theme().radius.is_zero(), |this| this.rounded_full()),
                             )
-                            .when(is_range, |this| {
-                                this.child(thumb(relative(percentage.start), true))
+                            .when_some(start_ring, |this, ring| {
+                                this.child(thumb(relative(percentage.start), true, ring))
                             })
-                            .child(thumb(relative(percentage.end), false)),
+                            .child(thumb(relative(percentage.end), false, end_ring)),
                     ),
             )
     }
