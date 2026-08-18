@@ -36,7 +36,9 @@ pub(super) struct Probe {
     /// Reused across samples so a reading twice a second does not reallocate.
     /// PDH writes the instance name strings into the tail of the same buffer,
     /// past the array it fills, so this is sized in bytes rather than items.
-    buffer: Vec<PDH_FMT_COUNTERVALUE_ITEM_W>,
+    /// 64-bit words provide the array's required alignment without retaining
+    /// the non-`Send` pointers in `PDH_FMT_COUNTERVALUE_ITEM_W` between calls.
+    buffer: Vec<u64>,
 }
 
 impl Probe {
@@ -112,9 +114,15 @@ impl Probe {
             return None;
         }
 
-        let items = (bytes as usize).div_ceil(size_of::<PDH_FMT_COUNTERVALUE_ITEM_W>());
+        const {
+            assert!(
+                align_of::<u64>() >= align_of::<PDH_FMT_COUNTERVALUE_ITEM_W>(),
+                "PDH buffer word must satisfy the counter item alignment"
+            );
+        }
+        let words = (bytes as usize).div_ceil(size_of::<u64>());
         self.buffer.clear();
-        self.buffer.resize_with(items, Default::default);
+        self.buffer.resize(words, 0);
 
         // SAFETY: the buffer holds at least the `bytes` PDH asked for, so it
         // can write both the array and the names that follow it.
@@ -124,14 +132,22 @@ impl Probe {
                 PDH_FMT_DOUBLE,
                 &mut bytes,
                 &mut count,
-                Some(self.buffer.as_mut_ptr()),
+                Some(self.buffer.as_mut_ptr().cast()),
             )
         };
         if read != PDH_SUCCESS {
             return None;
         }
 
-        let readings = self.buffer[..count as usize]
+        // SAFETY: PDH filled `count` items at the start of this suitably
+        // aligned buffer, and `read` above succeeded.
+        let items = unsafe {
+            std::slice::from_raw_parts(
+                self.buffer.as_ptr().cast::<PDH_FMT_COUNTERVALUE_ITEM_W>(),
+                count as usize,
+            )
+        };
+        let readings = items
             .iter()
             .filter_map(|item| {
                 // SAFETY: PDH filled `count` items, each naming its instance in
