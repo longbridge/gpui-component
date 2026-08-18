@@ -4,8 +4,9 @@ use gpui::{
     AbsoluteLength, AnyElement, App, AppContext as _, AvailableSpace, Context, Entity,
     EventEmitter, FocusHandle, Focusable, FontFallbacks, FontFeatures, FontStyle, FontWeight,
     InteractiveElement, IntoElement, KeyBinding, ListSizingBehavior, ParentElement, Pixels, Render,
-    Role, ScrollStrategy, SharedString, Size, StatefulInteractiveElement as _, Styled,
-    Subscription, TextOverflow, WhiteSpace, Window, div, prelude::FluentBuilder as _, px, size,
+    Role, ScrollStrategy, SharedString, Size, StatefulInteractiveElement as _, StyleRefinement,
+    Styled, Subscription, TextOverflow, WhiteSpace, Window, div, prelude::FluentBuilder as _, px,
+    size,
 };
 use rust_i18n::t;
 
@@ -503,6 +504,9 @@ impl CommandState {
                 }),
             AvailableSpace::MinContent,
         );
+        let mut text_style = StyleRefinement::default();
+        text_style.text = self.options.style().text.clone();
+
         self.rows
             .iter()
             .enumerate()
@@ -510,7 +514,7 @@ impl CommandState {
                 CommandRow::Separator => size(px(0.), px(SEPARATOR_ROW_HEIGHT)),
                 CommandRow::Heading(_) | CommandRow::Item(_) => {
                     let row_size = div()
-                        .refine_style(self.options.style())
+                        .refine_style(&text_style)
                         .child(self.render_row(row_ix, window, cx))
                         .into_any_element()
                         .layout_as_root(available, window, cx);
@@ -1141,6 +1145,18 @@ mod tests {
         }
     }
 
+    struct PaddedHarness {
+        state: Entity<CommandState>,
+    }
+
+    impl Render for PaddedHarness {
+        fn render(&mut self, _: &mut Window, _: &mut gpui::Context<Self>) -> impl IntoElement {
+            div()
+                .size_full()
+                .child(Command::new(&self.state).max_h(px(200.)).p_4())
+        }
+    }
+
     struct WrappingHarness {
         state: Entity<CommandState>,
         width: Pixels,
@@ -1265,6 +1281,26 @@ mod tests {
             no_wrap_height < wrapped_height,
             "a changed inherited typography should remeasure the fixed-width row ({no_wrap_height:?} vs {wrapped_height:?})",
         );
+    }
+
+    #[gpui::test]
+    fn outer_command_padding_does_not_inflate_measured_row_heights(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+
+        let (harness, cx) = cx.add_window_view(|window, cx| PaddedHarness {
+            state: cx.new(|cx| {
+                CommandState::new(window, cx)
+                    .item(CommandItem::new("fixed").element(|_, _| div().h(px(32.))))
+            }),
+        });
+
+        cx.run_until_parked();
+        cx.update(|window, cx| _ = window.draw(cx));
+        cx.run_until_parked();
+        cx.update(|window, cx| _ = window.draw(cx));
+        let height = cx.update(|_, cx| harness.read(cx).state.read(cx).row_sizes[0].height);
+
+        assert_eq!(height, px(44.));
     }
 
     #[gpui::test]
