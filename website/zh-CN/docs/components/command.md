@@ -1,13 +1,11 @@
 ---
 title: Command
-description: 命令面板 —— 在搜索框下过滤命令与快捷操作的列表。
+description: 命令面板 —— 经过过滤的命令与快捷操作列表。
 ---
 
 # Command
 
-命令面板：在搜索框下过滤命令列表，支持分组、快捷键提示与键盘导航。可以内嵌使用，也可以放进对话框，作为 `⌘K` 风格的菜单。
-
-列表使用了虚拟滚动，因此即使有上千条命令，也只渲染可见的行。
+命令面板是带有分组、快捷键提示和键盘导航的命令过滤列表。可以内嵌使用，也可以组合到现有对话框中，作为 `⌘K` 风格的菜单。列表使用虚拟滚动，因此大型面板只渲染可见行。
 
 ## 引入
 
@@ -19,7 +17,7 @@ use gpui_component::command::{
 
 ## 组合方式
 
-命令保存在 [`CommandState`] 实体中，由 [`Command`] 元素负责渲染。
+命令保存在 [`CommandState`] 实体中；由 [`Command`] 渲染该状态。
 
 ```text
 CommandState
@@ -60,10 +58,27 @@ Command::new(&state)
     .w(px(380.))
 ```
 
+### 无搜索的快捷操作
+
+为紧凑的操作面板关闭搜索。它没有搜索框，不会过滤条目，并且 `state.focus(window, cx)` 会聚焦 Command 外框，因此仍可使用方向键、Enter 和 Escape 操作。
+
+```rust
+let actions = cx.new(|cx| {
+    CommandState::new(window, cx)
+        .searchable(false)
+        .item(CommandItem::new("New File").icon(IconName::Plus))
+        .item(CommandItem::new("Duplicate").icon(IconName::Copy))
+        .item(CommandItem::new("Move to Trash").icon(IconName::Delete))
+});
+
+Command::new(&actions).w(px(380.))
+```
+
+默认的 `.searchable(true)` 下，`state.focus(window, cx)` 和 [`Focusable::focus_handle`] 会改为聚焦搜索输入框。
+
 ### 在对话框中
 
-使用现有的 [`WindowExt::open_dialog`] 组合命令面板。应用订阅
-[`CommandEvent`]，并在收到 `Confirm` 或 `Cancel` 时关闭对话框。
+使用现有的 [`WindowExt::open_dialog`] API 组合命令面板。订阅 [`CommandEvent`]，在收到 `Confirm` 或 `Cancel` 时关闭对话框；Command 不提供对话框专用 API。`header` 渲染在可选搜索框和列表之上，`footer` 渲染在列表之下。
 
 ```rust
 use gpui_component::WindowExt as _;
@@ -75,7 +90,28 @@ window.open_dialog(cx, move |dialog, _, _| {
         content.child(
             Command::new(&state)
                 .bordered(false)
-                .placeholder("Type a command or search..."),
+                .placeholder("Type a command or search...")
+                .header(|state, _, cx| {
+                    h_flex()
+                        .justify_between()
+                        .px_3()
+                        .py_2()
+                        .border_b_1()
+                        .border_color(cx.theme().border)
+                        .child("Commands")
+                        .child(format!("{} matches", state.matched_count()))
+                })
+                .footer(|_, _, cx| {
+                    h_flex()
+                        .gap_3()
+                        .px_3()
+                        .py_2()
+                        .border_t_1()
+                        .border_color(cx.theme().border)
+                        .child("↑↓ Navigate")
+                        .child("Enter Select")
+                        .child("Escape Close")
+                }),
         )
     })
 });
@@ -98,10 +134,10 @@ CommandItem::new("profile")
 ```rust
 cx.subscribe(&state, |this, _, event: &CommandEvent, cx| {
     match event {
-        CommandEvent::Select(value) => { /* 高亮项发生变化 */ }
-        CommandEvent::Confirm(value) => { /* 点击或按下 Enter */ }
-        CommandEvent::Query(query) => { /* 查询词发生变化 */ }
-        CommandEvent::Cancel => { /* 查询为空时按下 Escape */ }
+        CommandEvent::Select(value) => { /* highlight moved */ }
+        CommandEvent::Confirm(value) => { /* clicked or Enter */ }
+        CommandEvent::Query(query) => { /* the query changed */ }
+        CommandEvent::Cancel => { /* Escape on an empty query */ }
     }
 })
 ```
@@ -119,62 +155,9 @@ state.update(cx, |state, cx| {
 });
 ```
 
-### 作为搜索面板
-
-远程搜索时，监听 `CommandEvent::Query` 并用返回结果替换 entries。返回的
-entries 仍会参与本地匹配，因此应在 value、label 或 keywords 中包含查询词。
-
-```rust
-Command::new(&self.search)
-    .placeholder("Search stocks...")
-    .empty("No stock found.")
-```
-
-```rust
-fn on_search_event(
-    &mut self,
-    state: &Entity<CommandState>,
-    event: &CommandEvent,
-    window: &mut Window,
-    cx: &mut Context<Self>,
-) {
-    let CommandEvent::Query(query) = event else {
-        return;
-    };
-
-    let query = query.trim().to_string();
-    state.update(cx, |state, cx| state.set_loading(true, window, cx));
-
-    let state = state.clone();
-    // 保存在视图上，下一次查询会取消上一次。
-    self._search_task = Some(cx.spawn_in(window, async move |_, cx| {
-        let results = fetch(query).await;
-
-        _ = state.update_in(cx, |state, window, cx| {
-            state.set_loading(false, window, cx);
-            state.set_entries(results.into_iter().map(CommandEntry::Item), cx);
-        });
-    }));
-}
-```
-
-`set_loading` 会让搜索框转起加载动画，并在结果返回前不显示空状态文案，避免"请求中"被误读成"没有结果"。
-
-行内容也可以完全自定义 —— 用 `CommandItem::element` 构建行，面板会测量第一行来确定所有行的高度，因此两行的结果行同样能保持虚拟滚动：
-
-```rust
-CommandItem::new(symbol).element(move |_, cx| {
-    h_flex()
-        .w_full()
-        .justify_between()
-        .child(v_flex().child(symbol).child(name))
-        .child(v_flex().items_end().child(price).child(change))
-})
-```
-
 ## 搜索
 
-当查询词（忽略大小写）是条目 label、value 或任意 keyword 的子串时，该命令即被匹配：
+默认情况下，`CommandItem::matches(&self, query: &str) -> bool` 会在条目的 label、value 和 keywords 中进行忽略大小写的子串匹配。空查询会匹配全部条目。分组中的条目全被过滤时，其标题会隐藏；过滤后位于首尾或相邻的分隔线不会显示。
 
 ```rust
 CommandItem::new("profile")
@@ -182,71 +165,103 @@ CommandItem::new("profile")
     .keywords(["account", "user"])
 ```
 
-分组中所有条目都被过滤掉时，分组标题会一并隐藏；过滤后位于首尾或与另一个分隔线相邻的分隔线不会绘制。
+当应用需要不同的匹配策略时，可使用自定义过滤器。这个股票搜索先检查股票代码，再检查公司名称：
+
+```rust
+let stocks = cx.new(|cx| {
+    CommandState::new(window, cx)
+        .filter(|item, query| {
+            let query = query.to_lowercase();
+            item.value().to_lowercase().contains(&query)
+                || item.title().to_lowercase().contains(&query)
+        })
+        .item(CommandItem::new("AAPL.US").label("Apple Inc."))
+        .item(CommandItem::new("NVDA.US").label("NVIDIA Corporation"))
+});
+```
+
+自定义谓词只会在搜索开启且查询非空时运行；否则全部条目保持可见。远程搜索时，监听 `CommandEvent::Query`，用返回结果替换条目；若仍需本地过滤，请把查询词保留在条目的 value 或 label 中。等待结果时使用 `set_loading`，以隐藏空状态文案。
+
+## 自定义行与虚拟滚动
+
+`CommandItem::element` 会替换条目的图标和 label 内容。Command 在重建 `v_virtual_list` 的尺寸时，会测量每一条扁平化的行，因此自定义行可以拥有各自的固有高度。应按列表可用宽度构建行，并在状态更新前保持渲染内容稳定，因为虚拟列表会复用已保存的尺寸。
+
+```rust
+CommandState::new(window, cx)
+    .item(CommandItem::new("compact").element(|_, _| {
+        h_flex().w_full().py_1().child("Compact custom row")
+    }))
+    .item(CommandItem::new("expanded").element(|_, cx| {
+        v_flex()
+            .w_full()
+            .py_4()
+            .child("Expanded custom row")
+            .child(div().text_xs().text_color(cx.theme().muted_foreground).child("Extra detail"))
+    }))
+```
 
 ## Command
 
-| 方法            | 说明                                              |
-| --------------- | ------------------------------------------------- |
-| `new(&state)`   | 渲染给定 [`CommandState`] 中的面板。               |
-| `placeholder`   | 搜索框的占位文本。                                 |
-| `empty`         | 没有命令匹配查询时显示的文案。                     |
-| `max_h`         | 列表的最大高度，默认 `18.75rem`（300px）。         |
-| `bordered`      | 是否绘制外边框与圆角，默认 `true`。                |
+| 方法 | 签名与说明 |
+| --- | --- |
+| `new` | `new(&Entity<CommandState>) -> Command` 渲染状态。 |
+| `placeholder` | `placeholder(impl Into<SharedString>) -> Self` 设置搜索框占位文本。 |
+| `empty` | `empty(impl Into<SharedString>) -> Self` 设置无匹配时的文案。 |
+| `max_h` | `max_h(impl Into<DefiniteLength>) -> Self` 设置列表最大高度。默认：`18.75rem`（300px）。 |
+| `bordered` | `bordered(bool) -> Self` 绘制外边框和圆角。默认：`true`。 |
+| `header` | `header<F, E>(F) -> Self`，其中 `F: Fn(&CommandState, &mut Window, &mut App) -> E + 'static`、`E: IntoElement`；渲染在搜索框和列表之上。 |
+| `footer` | `footer<F, E>(F) -> Self`，使用相同的回调约束；渲染在列表之下。 |
 
-`Command` 实现了 [`Styled`]，因此 `w`、`max_w`、`bg` 等样式方法都可以作用于面板外框。
+`Command` 实现了 [`Styled`]，因此 `w`、`max_w`、`bg` 和其他样式可作用于面板外框。
 
 ## CommandItem
 
-| 方法         | 说明                                                             |
-| ------------ | ---------------------------------------------------------------- |
-| `new(value)` | value 是条目的标识，在未设置 `label` 时也作为显示文本。            |
-| `label`      | 行内显示的文本。                                                  |
-| `icon`       | 前置图标。                                                        |
-| `shortcut`   | 尾部的快捷键提示，实际按键绑定由应用自行完成。                     |
-| `checked`    | 在行尾绘制勾选标记；若设置了 `shortcut`，该位置由快捷键占用。       |
-| `keywords`   | 参与搜索匹配的额外关键词。                                        |
-| `disabled`   | 渲染为不可交互，并在键盘导航时跳过。                              |
-| `element`    | 用自定义元素替换行内容。                                          |
-| `on_select`  | 点击或按下 Enter 确认时执行。                                     |
-
-面板会测量第一行并让所有条目使用该高度，这正是虚拟滚动得以成立的前提。用 `element` 自定义的行可以任意高，只要每一行高度一致即可。
+| 方法 | 说明 |
+| --- | --- |
+| `new(value)` | value 标识条目，在 `label` 设置前也作为其 label。 |
+| `label` | 设置可见 label。 |
+| `icon` | 设置前置图标。 |
+| `shortcut` | 设置尾部快捷键提示；实际按键由应用绑定。 |
+| `checked` | 绘制尾部勾选；`shortcut` 会占用该位置。 |
+| `keywords` | 添加默认匹配词。 |
+| `disabled` | 使条目不可交互，并在键盘导航时跳过。 |
+| `element` | 用自定义元素替换行内容。 |
+| `on_select` | 点击或 Enter 确认时运行。 |
 
 ## CommandState
 
-| 方法              | 说明                                          |
-| ----------------- | --------------------------------------------- |
-| `new(window, cx)` | 创建一个空面板。                               |
-| `item`            | 添加一个未分组的条目。                         |
-| `group`           | 添加一个 [`CommandGroup`]。                    |
-| `separator`       | 在前后两个分组之间添加分隔线。                 |
-| `set_entries`     | 替换全部条目。                                 |
-| `query`           | 当前的搜索关键词。                             |
-| `set_query`       | 设置搜索关键词。                               |
-| `selected_index`  | 高亮项在匹配结果中的下标。                     |
-| `selected_value`  | 高亮项的 value。                               |
-| `matched_count`   | 当前查询下匹配到的条目数量。                   |
-| `focus`           | 把焦点移到搜索框。                             |
-| `set_loading`     | 显示搜索框的加载动画，并在此期间隐藏空状态文案。 |
+| 方法 | 签名与说明 |
+| --- | --- |
+| `new` | `new(&mut Window, &mut Context<Self>) -> Self` 创建一个空的、可搜索的面板。 |
+| `item` / `group` / `separator` | 添加未分组条目、分组或分隔线。 |
+| `searchable` | `searchable(bool) -> Self` 开启本地过滤和搜索框。默认：`true`。 |
+| `filter` | `filter<F>(F) -> Self`，其中 `F: Fn(&CommandItem, &str) -> bool + 'static`，替换默认匹配。 |
+| `set_entries` | 替换全部条目。 |
+| `query` / `set_query` | 读取或替换搜索词。 |
+| `selected_index` / `selected_value` | 读取当前高亮的匹配条目。 |
+| `matched_count` | 返回匹配条目数。 |
+| `focus` | `focus(&self, &mut Window, &mut App)`：可搜索时聚焦输入框，否则聚焦 Command 外框。 |
+| `set_loading` | 显示搜索加载动画，并在加载时隐藏空状态文案。 |
 
 ## 键盘快捷键
 
-| 按键      | 行为                                       |
-| --------- | ------------------------------------------ |
-| `↑` / `↓` | 移动高亮，循环并跳过禁用项                  |
-| `Enter`   | 确认当前高亮项                              |
-| `Escape`  | 清空搜索词；若已为空则退出面板              |
+| 按键 | 行为 |
+| --- | --- |
+| `↑` / `↓` | 移动高亮，循环并跳过禁用项。 |
+| `Enter` | 确认当前高亮项。 |
+| `Escape` | 清空搜索词；若已为空则发出 `Cancel`。 |
 
 ## 最佳实践
 
-1. **对命令分组**：为每个分组设置标题，并用分隔线区分。
-2. **补充关键词**：用户可能用别的名字搜索的命令要设置 `keywords`。
-3. **快捷键仅是提示**：`shortcut` 只渲染提示文本，按键绑定需要自己完成。
-4. **保持行高一致**：`element` 自定义的行会决定所有行的高度，因此各行应使用同一套设计。
-5. **一个面板一个状态**：每个正在渲染的命令面板使用独立的 [`CommandState`]。
+1. 对相关命令分组，并为别名补充关键词。
+2. 对紧凑、可用键盘导航的快捷操作使用 `searchable(false)`。
+3. 将 `shortcut` 视为视觉提示，在应用中绑定实际按键。
+4. 使用插槽承载应用自有的状态和提示，不要增加 Command 专用对话框层。
+5. 每个正在渲染的面板使用独立的 [`CommandState`]。
 
 [Command]: https://docs.rs/gpui-component/latest/gpui_component/command/struct.Command.html
 [CommandState]: https://docs.rs/gpui-component/latest/gpui_component/command/struct.CommandState.html
 [CommandGroup]: https://docs.rs/gpui-component/latest/gpui_component/command/struct.CommandGroup.html
 [WindowExt::open_dialog]: https://docs.rs/gpui-component/latest/gpui_component/trait.WindowExt.html#tymethod.open_dialog
+[Focusable::focus_handle]: https://docs.rs/gpui/latest/gpui/trait.Focusable.html#tymethod.focus_handle
 [Styled]: https://docs.rs/gpui/latest/gpui/trait.Styled.html

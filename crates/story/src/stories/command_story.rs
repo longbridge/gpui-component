@@ -1,14 +1,17 @@
 use std::time::Duration;
 
 use gpui::{
-    App, AppContext as _, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement as _,
-    Render, Styled as _, Subscription, Task, Window, div, prelude::FluentBuilder as _, px,
+    AnyElement, App, AppContext as _, Context, Entity, FocusHandle, Focusable, IntoElement,
+    Keystroke, ParentElement as _, Render, Styled as _, Subscription, Task, Window, div,
+    prelude::FluentBuilder as _, px,
 };
 use gpui_component::{
     ActiveTheme as _, Disableable as _, IconName, WindowExt as _,
     button::Button,
     command::{Command, CommandEntry, CommandEvent, CommandGroup, CommandItem, CommandState},
-    h_flex, v_flex,
+    h_flex,
+    kbd::Kbd,
+    v_flex,
 };
 
 use crate::section;
@@ -17,7 +20,9 @@ pub struct CommandStory {
     focus_handle: FocusHandle,
     inline: Entity<CommandState>,
     dialog: Entity<CommandState>,
+    quick_actions: Entity<CommandState>,
     scrollable: Entity<CommandState>,
+    variable_rows: Entity<CommandState>,
     search: Entity<CommandState>,
     /// Held so that a query that arrives while the last one is still in flight
     /// cancels it, instead of racing it.
@@ -145,6 +150,55 @@ fn scrollable(state: CommandState) -> CommandState {
         )
 }
 
+/// Actions that can be navigated without a search field, such as a compact
+/// context menu.
+fn quick_actions(state: CommandState) -> CommandState {
+    state
+        .searchable(false)
+        .item(CommandItem::new("New File").icon(IconName::Plus))
+        .item(CommandItem::new("Duplicate").icon(IconName::Copy))
+        .item(CommandItem::new("Move to Trash").icon(IconName::Delete))
+}
+
+/// Two custom rows with different intrinsic heights. The Command list measures
+/// each flattened row, so both retain their own height while virtualized.
+fn variable_rows(state: CommandState) -> CommandState {
+    state
+        .item(CommandItem::new("small-row").element(|_, _| {
+            h_flex()
+                .w_full()
+                .py_1()
+                .child(div().text_sm().child("Compact custom row"))
+                .into_any_element()
+        }))
+        .item(CommandItem::new("large-row").element(|_, cx| {
+            v_flex()
+                .w_full()
+                .py_4()
+                .gap_1()
+                .child(div().text_sm().child("Expanded custom row"))
+                .child(
+                    div()
+                        .text_xs()
+                        .text_color(cx.theme().muted_foreground)
+                        .child("Its extra detail gives this row a different height."),
+                )
+                .into_any_element()
+        }))
+}
+
+fn key_hint(keys: &[&str], label: &'static str) -> AnyElement {
+    h_flex()
+        .gap_1()
+        .items_center()
+        .children(
+            keys.iter()
+                .map(|key| Kbd::new(Keystroke::parse(key).expect("static key hint must be valid"))),
+        )
+        .child(label)
+        .into_any_element()
+}
+
 /// The stock universe the search panel queries.
 ///
 /// Stands in for whatever a real application would go and fetch.
@@ -165,13 +219,24 @@ impl CommandStory {
     pub(crate) fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let inline = cx.new(|cx| suggestions(CommandState::new(window, cx)));
         let dialog = cx.new(|cx| suggestions(CommandState::new(window, cx)));
+        let quick_actions = cx.new(|cx| quick_actions(CommandState::new(window, cx)));
         let scrollable_state = cx.new(|cx| scrollable(CommandState::new(window, cx)));
-        let search = cx.new(|cx| CommandState::new(window, cx));
+        let variable_rows = cx.new(|cx| variable_rows(CommandState::new(window, cx)));
+        let search = cx.new(|cx| {
+            CommandState::new(window, cx).filter(|item, query| {
+                let query = query.to_lowercase();
+
+                item.value().to_lowercase().contains(&query)
+                    || item.title().to_lowercase().contains(&query)
+            })
+        });
 
         let _subscriptions = vec![
             cx.subscribe(&inline, Self::on_command_event),
             cx.subscribe_in(&dialog, window, Self::on_dialog_command_event),
+            cx.subscribe(&quick_actions, Self::on_command_event),
             cx.subscribe(&scrollable_state, Self::on_command_event),
+            cx.subscribe(&variable_rows, Self::on_command_event),
             cx.subscribe_in(&search, window, Self::on_search_event),
         ];
 
@@ -179,7 +244,9 @@ impl CommandStory {
             focus_handle: cx.focus_handle(),
             inline,
             dialog,
+            quick_actions,
             scrollable: scrollable_state,
+            variable_rows,
             search,
             _search_task: None,
             last_command: None,
@@ -319,7 +386,7 @@ fn popular_entries() -> Vec<CommandEntry> {
 fn stock_item(stock: (&'static str, &'static str, &'static str, f32)) -> CommandItem {
     let (symbol, name, price, change) = stock;
 
-    CommandItem::new(symbol).element(move |_, cx| {
+    CommandItem::new(symbol).label(name).element(move |_, cx| {
         let change_color = if change < 0. {
             cx.theme().chart_bearish
         } else {
@@ -378,7 +445,9 @@ impl Render for CommandStory {
             )
             .child(
                 section("Dialog")
-                    .description("The same palette in a dialog, with its search field focused.")
+                    .description(
+                        "A dialog palette with its search field focused, a live match count and key hints.",
+                    )
                     .child(
                         Button::new("open-command-dialog")
                             .outline()
@@ -392,7 +461,39 @@ impl Render for CommandStory {
                                             content.child(
                                                 Command::new(&command)
                                                     .bordered(false)
-                                                    .placeholder("Type a command or search..."),
+                                                    .placeholder("Type a command or search...")
+                                                    .header(|state, _, cx| {
+                                                        h_flex()
+                                                            .justify_between()
+                                                            .px_3()
+                                                            .py_2()
+                                                            .border_b_1()
+                                                            .border_color(cx.theme().border)
+                                                            .text_sm()
+                                                            .child("Commands")
+                                                            .child(format!(
+                                                                "{} matches",
+                                                                state.matched_count()
+                                                            ))
+                                                    })
+                                                    .footer(|_, _, cx| {
+                                                        h_flex()
+                                                            .gap_3()
+                                                            .items_center()
+                                                            .flex_wrap()
+                                                            .px_3()
+                                                            .py_2()
+                                                            .border_t_1()
+                                                            .border_color(cx.theme().border)
+                                                            .text_xs()
+                                                            .text_color(cx.theme().muted_foreground)
+                                                            .child(key_hint(
+                                                                &["up", "down"],
+                                                                "Navigate",
+                                                            ))
+                                                            .child(key_hint(&["enter"], "Select"))
+                                                            .child(key_hint(&["escape"], "Close"))
+                                                    }),
                                             )
                                         },
                                     )
@@ -400,7 +501,12 @@ impl Render for CommandStory {
                                 let focus_handle = dialog_state.read(cx).focus_handle(cx);
                                 focus_handle.focus(window, cx);
                             })),
-                    ),
+                ),
+            )
+            .child(
+                section("Quick actions")
+                    .description("A no-search palette focused on arrow-key navigation.")
+                    .child(Command::new(&self.quick_actions).w(px(380.))),
             )
             .child(
                 section("Scrollable")
@@ -408,10 +514,17 @@ impl Render for CommandStory {
                     .child(Command::new(&self.scrollable).max_h(px(220.)).w(px(380.))),
             )
             .child(
+                section("Variable-height rows")
+                    .description(
+                        "Each custom row keeps its own intrinsic height while the list remains virtualized.",
+                    )
+                    .child(Command::new(&self.variable_rows).w(px(380.))),
+            )
+            .child(
                 section("Search panel")
                     .description(
-                        "A palette used as a search panel: its own filtering is off, and \
-                         every query is answered asynchronously — try \"a\", \"hk\" or \"tesla\".",
+                        "A palette used as a search panel whose custom filter checks symbols \
+                         before company names — try \"a\", \"hk\" or \"tesla\".",
                     )
                     .child(
                         Button::new("open-stock-search")
