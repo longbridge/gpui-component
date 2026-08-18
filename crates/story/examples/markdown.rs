@@ -1319,11 +1319,8 @@ impl Render for Example {
                                                 let markdown = table.markdown.clone();
                                                 let headers = table.headers.clone();
                                                 let rows = table.rows.clone();
-                                                // `span.start` is stable while streaming (only
-                                                // `end` grows), so it is a safe element id seed
-                                                // when a document holds several tables.
-                                                let seed =
-                                                    table.span.as_ref().map_or(0, |s| s.start);
+                                                // Plain ids are fine: the actions row is scoped
+                                                // per table by the component.
                                                 let shape = format!(
                                                     "{} × {}",
                                                     table.rows.len(),
@@ -1342,12 +1339,12 @@ impl Render for Example {
                                                             .child(shape),
                                                     )
                                                     .child(
-                                                        Clipboard::new(("copy-table", seed))
+                                                        Clipboard::new("copy-table")
                                                             .value(markdown.clone())
                                                             .tooltip("Copy as Markdown"),
                                                     )
                                                     .child(
-                                                        Button::new(("export-table", seed))
+                                                        Button::new("export-table")
                                                             .icon(IconName::Ellipsis)
                                                             .ghost()
                                                             .xsmall()

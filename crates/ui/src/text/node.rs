@@ -972,9 +972,12 @@ pub struct TableData {
     pub rows: Vec<Vec<String>>,
     /// The table serialized back to GFM pipe-table Markdown, alignments kept.
     pub markdown: String,
-    /// Byte range of the table in the Markdown source. `start` is stable
-    /// across re-renders while streaming (only `end` grows), so it is safe
-    /// to use as an element id seed.
+    /// Byte range of the table in the Markdown source, for callers that need
+    /// to map the table back to the document.
+    ///
+    /// Not needed to keep element ids apart: the actions row is wrapped in its
+    /// own identified element, so plain ids like `"copy"` are already scoped
+    /// per table.
     pub span: Option<Range<usize>>,
 }
 
@@ -2193,13 +2196,16 @@ impl BlockNode {
             // Custom actions row (e.g. copy / download) rendered below the
             // table. The hook's element spans full width; alignment is up to
             // the caller (e.g. `h_flex().justify_end()`). The gap keeps hover
-            // backgrounds of the action buttons off the table border.
-            .children(
-                node_cx
-                    .table_actions
-                    .clone()
-                    .map(|f| div().mt_1().child(f(&table.table_data(), window, cx))),
-            )
+            // backgrounds of the action buttons off the table border, and the
+            // id scopes the caller's element ids per table, so plain ids like
+            // `"copy"` don't collide across tables (same as code blocks).
+            .children(node_cx.table_actions.clone().map(|f| {
+                div().id(("table-actions", options.ix)).mt_1().child(f(
+                    &table.table_data(),
+                    window,
+                    cx,
+                ))
+            }))
             .into_any_element()
     }
 
@@ -2276,13 +2282,16 @@ impl BlockNode {
             // Custom actions row (e.g. copy / download) rendered below the
             // table. The hook's element spans full width; alignment is up to
             // the caller (e.g. `h_flex().justify_end()`). The gap keeps hover
-            // backgrounds of the action buttons off the table border.
-            .children(
-                node_cx
-                    .table_actions
-                    .clone()
-                    .map(|f| div().mt_1().child(f(&table.table_data(), window, cx))),
-            )
+            // backgrounds of the action buttons off the table border, and the
+            // id scopes the caller's element ids per table, so plain ids like
+            // `"copy"` don't collide across tables (same as code blocks).
+            .children(node_cx.table_actions.clone().map(|f| {
+                div().id(("table-actions", options.ix)).mt_1().child(f(
+                    &table.table_data(),
+                    window,
+                    cx,
+                ))
+            }))
             .into_any_element()
     }
 
