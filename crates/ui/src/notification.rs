@@ -15,6 +15,7 @@ use crate::{
     ActiveTheme as _, Edges, Icon, IconName, Sizable as _, StyledExt, TITLE_BAR_HEIGHT,
     animation::cubic_bezier,
     button::{Button, ButtonVariants as _},
+    styled::toast_shadow,
     v_flex,
 };
 
@@ -338,7 +339,7 @@ impl Render for Notification {
             .border_color(cx.theme().border)
             .bg(cx.theme().tokens.popover)
             .rounded(cx.theme().radius_lg)
-            .shadow_md()
+            .shadow(toast_shadow(1.))
             .py_3p5()
             .px_4()
             .gap_3()
@@ -400,7 +401,7 @@ impl Render for Notification {
                 move |this, delta| {
                     if closing {
                         let opacity = 1. - delta;
-                        let that = this.opacity(opacity);
+                        let that = this.opacity(opacity).shadow(toast_shadow(opacity.powi(3)));
                         let y_offset = match placement {
                             Anchor::TopLeft | Anchor::TopRight | Anchor::TopCenter => {
                                 -delta * NOTIFICATION_TRANSITION_OFFSET
@@ -424,9 +425,16 @@ impl Render for Notification {
                             _ => px(0.),
                         };
                         let opacity = delta;
+                        // GPUI paints a drop shadow *under* the card and has no
+                        // group compositing, so a card that is still translucent
+                        // does not hide its own shadow and it shows through as a
+                        // dark slab. Ramping the ink by the cube of the fade
+                        // keeps it out of sight until the card can cover it —
+                        // where this used to drop the shadow outright past a
+                        // threshold, which popped.
                         this.top(px(0.) + y_offset)
                             .opacity(opacity)
-                            .when(opacity < 0.85, |this| this.shadow_none())
+                            .shadow(toast_shadow(opacity.powi(3)))
                     }
                 },
             )

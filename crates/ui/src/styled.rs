@@ -1,8 +1,8 @@
 pub use crate::component_traits::{Collapsible, Disableable, Selectable};
 pub use crate::sizing::{Sizable, Size, StyleSized};
 use gpui::{
-    App, BoxShadow, Corners, Edges, ParentElement, Pixels, StyleRefinement, Styled, Window, div,
-    hsla, px,
+    App, BoxShadow, Corners, Edges, Hsla, ParentElement, Pixels, StyleRefinement, Styled, Window,
+    div, hsla, px,
 };
 pub use gpui_base::{FocusableExt, RoleOverride, StyledExt, box_shadow, h_flex, v_flex};
 
@@ -11,9 +11,9 @@ use crate::ActiveTheme as _;
 const FOCUS_RING_WIDTH: Pixels = px(3.);
 const FOCUS_RING_OPACITY: f32 = 0.5;
 
-/// Ink of a popover's shadow — the alpha shadcn/ui's `shadow-md` layers carry,
-/// `rgb(0 0 0 / 0.1)`.
-const POPOVER_SHADOW_INK: f32 = 0.1;
+/// Ink every layer of a surface's shadow carries — the `rgb(0 0 0 / 0.1)`
+/// shadcn/ui spends at each elevation.
+const SURFACE_SHADOW_INK: f32 = 0.1;
 
 /// Ink of the hairline ring standing in for a popover's border.
 ///
@@ -30,7 +30,8 @@ const POPOVER_RING_INK: f32 = 0.1;
 /// shadcn spends black on it in light mode and white in dark
 /// (`oklch(1 0 0 / 10%)`), so it follows the foreground rather than the border
 /// token: a fixed black ring would all but vanish on a dark surface.
-pub(crate) fn popover_ring(cx: &App) -> gpui::Hsla {
+///
+pub(crate) fn popover_ring(cx: &App) -> Hsla {
     cx.theme().foreground.alpha(POPOVER_RING_INK)
 }
 
@@ -50,9 +51,12 @@ pub(crate) fn popover_ring(cx: &App) -> gpui::Hsla {
 ///
 /// Measured against shadcn's own render, this lands within a luminance step of
 /// it the whole way down the falloff.
-pub(crate) fn popover_shadow(ring: gpui::Hsla, strength: f32) -> Vec<BoxShadow> {
+///
+/// The ring is taken as a colour rather than read from the theme here so that an
+/// animation can hold it across frames, where no `App` is in hand.
+pub(crate) fn popover_shadow(ring: Hsla, strength: f32) -> Vec<BoxShadow> {
     let strength = strength.clamp(0., 1.);
-    let ink = hsla(0., 0., 0., POPOVER_SHADOW_INK * strength);
+    let ink = hsla(0., 0., 0., SURFACE_SHADOW_INK * strength);
     vec![
         // The ring, sitting in the 1px band outside the surface. No blur, so it
         // takes the shader's crisp path rather than the gaussian one.
@@ -65,6 +69,26 @@ pub(crate) fn popover_shadow(ring: gpui::Hsla, strength: f32) -> Vec<BoxShadow> 
         BoxShadow::new(px(0.), px(2.), ink)
             .blur_radius(px(2.))
             .spread_radius(px(-2.)),
+    ]
+}
+
+/// shadcn/ui's `shadow-lg`, the elevation it lifts a toast to, at `strength` of
+/// its full ink.
+///
+/// A toast sits higher than a popover and is built differently: shadcn gives it
+/// a real 1px border rather than the translucent ring it puts on a popup, so
+/// there is no ring layer here. Its corner radius is left to the caller.
+///
+/// The radii are Tailwind's halved, for the reason [`popover_shadow`] explains.
+pub(crate) fn toast_shadow(strength: f32) -> Vec<BoxShadow> {
+    let ink = hsla(0., 0., 0., SURFACE_SHADOW_INK * strength.clamp(0., 1.));
+    vec![
+        BoxShadow::new(px(0.), px(10.), ink)
+            .blur_radius(px(7.5))
+            .spread_radius(px(-3.)),
+        BoxShadow::new(px(0.), px(4.), ink)
+            .blur_radius(px(3.))
+            .spread_radius(px(-4.)),
     ]
 }
 
