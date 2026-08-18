@@ -1,12 +1,72 @@
 pub use crate::component_traits::{Collapsible, Disableable, Selectable};
 pub use crate::sizing::{Sizable, Size, StyleSized};
-use gpui::{App, Corners, Edges, ParentElement, Pixels, StyleRefinement, Styled, Window, div, px};
+use gpui::{
+    App, BoxShadow, Corners, Edges, ParentElement, Pixels, StyleRefinement, Styled, Window, div,
+    hsla, px,
+};
 pub use gpui_base::{FocusableExt, RoleOverride, StyledExt, box_shadow, h_flex, v_flex};
 
 use crate::ActiveTheme as _;
 
 const FOCUS_RING_WIDTH: Pixels = px(3.);
 const FOCUS_RING_OPACITY: f32 = 0.5;
+
+/// Ink of a popover's shadow — the alpha shadcn/ui's `shadow-md` layers carry,
+/// `rgb(0 0 0 / 0.1)`.
+const POPOVER_SHADOW_INK: f32 = 0.1;
+
+/// Ink of the hairline ring standing in for a popover's border.
+///
+/// shadcn/ui draws no border on a popup surface at all: its edge is a 1px
+/// `rgb(0 0 0 / 0.1)` ring spent as a shadow layer. Because the ring is
+/// translucent the shadow shows *through* it, which is what makes the edge read
+/// as part of one grounded surface rather than as an outline with a separate
+/// shadow below it. An opaque border cannot reproduce that — a border composites
+/// over the element's own background, not over the shadow.
+const POPOVER_RING_INK: f32 = 0.1;
+
+/// The colour of a popup surface's hairline ring in this theme.
+///
+/// shadcn spends black on it in light mode and white in dark
+/// (`oklch(1 0 0 / 10%)`), so it follows the foreground rather than the border
+/// token: a fixed black ring would all but vanish on a dark surface.
+pub(crate) fn popover_ring(cx: &App) -> gpui::Hsla {
+    cx.theme().foreground.alpha(POPOVER_RING_INK)
+}
+
+/// shadcn/ui's popup surface shadow — a hairline `ring` plus `shadow-md` — at
+/// `strength` of its full ink.
+///
+/// Callers animating a surface in pass a rising `strength`; a resting surface
+/// passes `1.0`.
+///
+/// The two blurred layers use Tailwind's radii **halved**, which is the
+/// conversion CSS requires and not a taste adjustment. CSS defines a box
+/// shadow's blur radius as twice the gaussian's standard deviation, while GPUI's
+/// shader takes the field as the deviation itself (`gaussian(y, sigma)`).
+/// Copying Tailwind's `6px` and `4px` across therefore spreads the shadow over
+/// twice the distance, which is why [`Styled::shadow_md`] reads as a wide grey
+/// haze next to a browser's compact one.
+///
+/// Measured against shadcn's own render, this lands within a luminance step of
+/// it the whole way down the falloff.
+pub(crate) fn popover_shadow(ring: gpui::Hsla, strength: f32) -> Vec<BoxShadow> {
+    let strength = strength.clamp(0., 1.);
+    let ink = hsla(0., 0., 0., POPOVER_SHADOW_INK * strength);
+    vec![
+        // The ring, sitting in the 1px band outside the surface. No blur, so it
+        // takes the shader's crisp path rather than the gaussian one.
+        BoxShadow::new(px(0.), px(0.), ring.alpha(ring.a * strength))
+            .blur_radius(px(0.))
+            .spread_radius(px(1.)),
+        BoxShadow::new(px(0.), px(4.), ink)
+            .blur_radius(px(3.))
+            .spread_radius(px(-1.)),
+        BoxShadow::new(px(0.), px(2.), ink)
+            .blur_radius(px(2.))
+            .spread_radius(px(-2.)),
+    ]
+}
 
 /// Finished styles that read the theme.
 ///
@@ -32,7 +92,11 @@ pub trait ThemeStyled: Styled + Sized {
     where
         Self: ParentElement;
 
-    /// Give this element the surface, border, shadow and radius of a popover.
+    /// Give this element the surface, edge, shadow and radius of a popover.
+    ///
+    /// This is the one surface every popup shares — Popover, PopupMenu, Select,
+    /// Combobox, DatePicker and the editor's hover popovers — so they cannot
+    /// drift apart. See [`popover_shadow`] for what the shadow is modelled on.
     fn popover_style(self, cx: &App) -> Self;
 }
 
@@ -127,11 +191,11 @@ impl<T: Styled + Sized> ThemeStyled for T {
 
     fn popover_style(self, cx: &App) -> Self {
         let theme = cx.theme();
+        // No border: the edge is the ring inside `popover_shadow`, which is how
+        // shadcn draws it and the only way the shadow can show through it.
         self.bg(theme.popover)
             .text_color(theme.popover_foreground)
-            .border_1()
-            .border_color(theme.border)
-            .shadow_lg()
+            .shadow(popover_shadow(popover_ring(cx), 1.))
             .rounded(theme.radius)
     }
 }

@@ -488,68 +488,58 @@ impl RenderOnce for DatePicker {
             )
             .when(state.open, |this| {
                 this.child(
-                    deferred(
-                        crate::popover::dropdown_positioner(state.bounds).child(
-                            div()
-                                .occlude()
-                                .p_3()
-                                .border_1()
-                                .border_color(cx.theme().border)
-                                .shadow_lg()
-                                .rounded((cx.theme().radius * 2.).min(px(8.)))
-                                .bg(cx.theme().tokens.popover)
-                                .text_color(cx.theme().popover_foreground)
-                                .on_mouse_up_out(
-                                    MouseButton::Left,
-                                    window.listener_for(&self.state, |view, _, window, cx| {
-                                        view.on_escape(&Cancel, window, cx);
-                                    }),
-                                )
-                                .child(
-                                    h_flex()
-                                        .gap_3()
-                                        .h_full()
-                                        .items_start()
-                                        .when_some(self.presets.clone(), |this, presets| {
-                                            this.child(
-                                                v_flex().my_1().gap_2().justify_end().children(
-                                                    presets.into_iter().enumerate().map(
-                                                        |(i, preset)| {
-                                                            Button::new(("preset", i))
-                                                                .small()
-                                                                .ghost()
-                                                                .tab_stop(false)
-                                                                .label(preset.label.clone())
-                                                                .on_click(window.listener_for(
-                                                                    &self.state,
-                                                                    move |this, _, window, cx| {
-                                                                        this.select_preset(
-                                                                            &preset, window, cx,
-                                                                        );
-                                                                    },
-                                                                ))
+                    deferred(crate::popover::dropdown_popup(
+                        ("date-picker-popup", self.state.entity_id()),
+                        state.bounds,
+                        div()
+                            .occlude()
+                            .p_3()
+                            .popover_style(cx)
+                            .on_mouse_up_out(
+                                MouseButton::Left,
+                                window.listener_for(&self.state, |view, _, window, cx| {
+                                    view.on_escape(&Cancel, window, cx);
+                                }),
+                            )
+                            .child(
+                                h_flex()
+                                    .gap_3()
+                                    .h_full()
+                                    .items_start()
+                                    .when_some(self.presets.clone(), |this, presets| {
+                                        this.child(v_flex().my_1().gap_2().justify_end().children(
+                                            presets.into_iter().enumerate().map(|(i, preset)| {
+                                                Button::new(("preset", i))
+                                                    .small()
+                                                    .ghost()
+                                                    .tab_stop(false)
+                                                    .label(preset.label.clone())
+                                                    .on_click(window.listener_for(
+                                                        &self.state,
+                                                        move |this, _, window, cx| {
+                                                            this.select_preset(&preset, window, cx);
                                                         },
-                                                    ),
-                                                ),
-                                            )
-                                        })
-                                        .child(
-                                            Calendar::new(&state.calendar)
-                                                .number_of_months(self.number_of_months)
-                                                .first_day_of_week(state.first_day_of_week)
-                                                .border_0()
-                                                .rounded_none()
-                                                .p_0()
-                                                .map(|this| match self.size {
-                                                    Size::Small => this.w(px(196.) * month_count),
-                                                    Size::Large => this.w(px(280.) * month_count),
-                                                    _ => this.w(px(224.) * month_count),
-                                                })
-                                                .with_size(self.size),
-                                        ),
-                                ),
-                        ),
-                    )
+                                                    ))
+                                            }),
+                                        ))
+                                    })
+                                    .child(
+                                        Calendar::new(&state.calendar)
+                                            .number_of_months(self.number_of_months)
+                                            .first_day_of_week(state.first_day_of_week)
+                                            .border_0()
+                                            .rounded_none()
+                                            .p_0()
+                                            .map(|this| match self.size {
+                                                Size::Small => this.w(px(196.) * month_count),
+                                                Size::Large => this.w(px(280.) * month_count),
+                                                _ => this.w(px(224.) * month_count),
+                                            })
+                                            .with_size(self.size),
+                                    ),
+                            ),
+                        cx,
+                    ))
                     .with_priority(gpui_base::POPUP_PRIORITY),
                 )
             })
