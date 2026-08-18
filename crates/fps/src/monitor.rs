@@ -76,7 +76,7 @@ const DEFAULT_FONT: &str = "Consolas";
 const DEFAULT_FONT: &str = "monospace";
 
 /// A realtime performance HUD: frames per second, a rolling frame time chart,
-/// and this process' CPU and memory usage.
+/// and this process' GPU, CPU and memory usage.
 ///
 /// This is a view rather than a stateless component on purpose. Driving
 /// continuous redraws goes through [`Window::request_animation_frame`], which
@@ -165,14 +165,17 @@ impl FpsMonitor {
         self
     }
 
-    /// Whether to sample and show this process' CPU and memory usage.
-    /// Defaults to `true`, and is always off on the web.
+    /// Whether to sample and show CPU, memory and GPU usage. Defaults to
+    /// `true`, and is always off on the web.
+    ///
+    /// The GPU reading is left out on its own where the platform publishes no
+    /// counter for it, so turning this on does not guarantee three readings.
     pub fn show_resources(mut self, show_resources: bool) -> Self {
         self.show_resources = show_resources;
         self
     }
 
-    /// How often CPU and memory are resampled. Defaults to 500ms, and is
+    /// How often CPU, memory and GPU are resampled. Defaults to 500ms, and is
     /// clamped up to the shortest interval that yields a meaningful CPU delta.
     pub fn resource_interval(mut self, interval: Duration) -> Self {
         self.resource_interval = interval;
@@ -437,7 +440,12 @@ impl Render for FpsMonitor {
                         .child(reading(
                             "FRAME",
                             format!("{frame_millis:.1} ms"),
-                            style.foreground,
+                            // Graded against the budget, not against the frame
+                            // rate. An idle window draws a handful of frames a
+                            // second, so the headline goes red while every one
+                            // of those frames was in fact drawn well inside the
+                            // budget; this row is what says so.
+                            style.level_color(frame_millis / 1000., budget.as_secs_f32()),
                             style,
                         ))
                         .child(reading(
@@ -446,6 +454,17 @@ impl Render for FpsMonitor {
                             style.level_color(if dropped > 0. { 1. } else { 0. }, 0.5),
                             style,
                         ))
+                        .when_some(
+                            resources.and_then(|resources| resources.gpu_percent),
+                            |this, gpu| {
+                                this.child(reading(
+                                    "GPU",
+                                    format!("{gpu:.1}%"),
+                                    style.foreground,
+                                    style,
+                                ))
+                            },
+                        )
                         .when_some(resources, |this, resources| {
                             this.child(
                                 // CPU and memory share a row: both are coarse

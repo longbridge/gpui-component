@@ -1,21 +1,24 @@
 # gpui-fps
 
 A realtime performance HUD for [GPUI](https://gpui.rs) applications: frames per
-second, frame time, dropped frame rate, and this process' CPU and memory usage.
+second, frame time, dropped frame rate, and this process' GPU, CPU and memory
+usage.
 
 ```
 ┌──────────────────────────┐
 │  ﹋﹏  118 FPS  ﹋︿﹏﹋   │  ← the trace runs behind the headline
 │ FRAME             8.4 ms │
 │ DROP                0.0% │
+│ GPU                31.0% │
 │ CPU 12.4%      MEM 84 MB │
 └──────────────────────────┘
 ```
 
 Frame data comes from GPUI's own frame trace (`gpui::FrameTimingCollector`), so
 the numbers are what the framework actually spent in `Window::draw` rather than
-an estimate measured from the outside. The trace is colored against the frame
-budget — green within budget, amber up to twice the budget, red beyond.
+an estimate measured from the outside. Both the trace and the `FRAME` reading
+are colored against the frame budget — green within budget, amber up to twice
+the budget, red beyond.
 
 It does not depend on `gpui-component`, so it works in any GPUI application.
 
@@ -107,7 +110,7 @@ let monitor = cx.new(|cx| {
         .capacity(240)                                  // frames kept in the trace (default 120)
         .frame_budget(Duration::from_micros(6_944))     // 144Hz (default is 60Hz)
         .continuous(true)                               // default true, see below
-        .show_resources(true)                           // CPU / memory row (default true)
+        .show_resources(true)                           // GPU, CPU and memory (default true)
         .resource_interval(Duration::from_millis(500))  // default 500ms
 });
 
@@ -153,9 +156,32 @@ window redraws for its own reasons, and reads zero while the window is idle.
 - Frame tracing is a global switch that clears its buffer when disabled, so
   monitors reference count it and never turn it off while another monitor — or
   the host application's own profiling — still needs it.
+- The headline is graded on the frame *rate* and `FRAME` on the frame *time*,
+  which is why they can disagree. A window that is idle draws a handful of
+  frames a second, so the headline goes red while every one of those frames was
+  in fact drawn well inside the budget — `FRAME` staying green is what says the
+  application is fine and simply has nothing to redraw.
 - CPU and memory are sampled with `sysinfo` on a background thread; the values
   are for this process, and CPU is normalized so 100 means every logical core is
   saturated. Resource sampling is unavailable on the web.
+- `GPU` is this process' own share, like the CPU beside it and unlike a
+  device-wide reading, which would move for work the application cannot act on.
+  Each platform is read where it attributes GPU time per process, and none of
+  them needs a vendor SDK or elevated privileges:
+  - **macOS** — `accumulatedGPUTime` on the accelerator clients this process
+    owns in the IO registry, which is what Activity Monitor's GPU column shows.
+  - **Windows** — the `GPU Engine` PDH counters, filtered to this process' own
+    instances, which is what Task Manager's GPU column shows.
+  - **Linux** — `drm-engine-*` in `/proc/self/fdinfo`, which is what `nvtop` and
+    `intel_gpu_top` read.
+
+  Where several engines can run at once — Windows and Linux — the reading is the
+  busiest engine type rather than their sum, so it stays inside 100% while the
+  GPU still has headroom.
+- **The GPU row is left out entirely where no per-process counter is reachable**,
+  rather than reading a flat zero: the web, an Intel Mac, whose accelerator
+  clients do not publish `AppUsage`, and a Linux driver such as nvidia's
+  proprietary one, which keeps its accounting in NVML instead of `fdinfo`.
 
 ## Example
 

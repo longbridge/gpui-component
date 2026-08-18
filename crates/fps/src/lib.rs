@@ -1,5 +1,5 @@
 //! A realtime performance HUD for GPUI applications: frames per second, a
-//! rolling frame time chart, and this process' CPU and memory usage.
+//! rolling frame time chart, and this process' GPU, CPU and memory usage.
 //!
 //! Frame data comes from GPUI's own frame trace
 //! ([`gpui::FrameTimingCollector`]), so the numbers are what the framework
@@ -30,6 +30,8 @@
 //! This crate depends only on `gpui`, so it can be used from any GPUI
 //! application.
 
+#[cfg(not(target_family = "wasm"))]
+mod gpu;
 mod monitor;
 mod overlay;
 mod sampler;
