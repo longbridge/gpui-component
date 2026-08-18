@@ -1,10 +1,11 @@
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, App, AppContext as _, AvailableSpace, Context, Entity, EventEmitter, FocusHandle,
-    Focusable, InteractiveElement, IntoElement, KeyBinding, ListSizingBehavior, ParentElement,
-    Pixels, Render, Role, ScrollStrategy, SharedString, Size, StatefulInteractiveElement as _,
-    Styled, Subscription, Window, div, prelude::FluentBuilder as _, px, size,
+    AbsoluteLength, AnyElement, App, AppContext as _, AvailableSpace, Context, Entity,
+    EventEmitter, FocusHandle, Focusable, FontFallbacks, FontFeatures, FontStyle, FontWeight,
+    InteractiveElement, IntoElement, KeyBinding, ListSizingBehavior, ParentElement, Pixels, Render,
+    Role, ScrollStrategy, SharedString, Size, StatefulInteractiveElement as _, Styled,
+    Subscription, TextOverflow, WhiteSpace, Window, div, prelude::FluentBuilder as _, px, size,
 };
 use rust_i18n::t;
 
@@ -68,11 +69,25 @@ enum CommandRow {
     Separator,
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, PartialEq)]
+struct TextShapeKey {
+    font_family: SharedString,
+    font_features: FontFeatures,
+    font_fallbacks: Option<FontFallbacks>,
+    font_size: AbsoluteLength,
+    font_weight: FontWeight,
+    font_style: FontStyle,
+    white_space: WhiteSpace,
+    text_overflow: Option<TextOverflow>,
+    line_clamp: Option<usize>,
+}
+
+#[derive(Clone, PartialEq)]
 struct ListMeasurementKey {
     content_width: Pixels,
     rem_size: Pixels,
     line_height: Pixels,
+    text_shape: TextShapeKey,
 }
 
 /// An item that survived the current query, and where it landed.
@@ -387,7 +402,7 @@ impl CommandState {
         measurement_key: ListMeasurementKey,
         cx: &mut Context<Self>,
     ) {
-        if self.list_measurement_key == Some(measurement_key) {
+        if self.list_measurement_key.as_ref() == Some(&measurement_key) {
             return;
         }
 
@@ -482,6 +497,7 @@ impl CommandState {
     fn measure_row_sizes(&self, window: &mut Window, cx: &mut Context<Self>) -> Vec<Size<Pixels>> {
         let available = size(
             self.list_measurement_key
+                .as_ref()
                 .map_or(AvailableSpace::MinContent, |key| {
                     AvailableSpace::Definite(key.content_width)
                 }),
@@ -493,8 +509,10 @@ impl CommandState {
             .map(|(row_ix, row)| match row {
                 CommandRow::Separator => size(px(0.), px(SEPARATOR_ROW_HEIGHT)),
                 CommandRow::Heading(_) | CommandRow::Item(_) => {
-                    let row_size = self
-                        .render_row(row_ix, window, cx)
+                    let row_size = div()
+                        .refine_style(self.options.style())
+                        .child(self.render_row(row_ix, window, cx))
+                        .into_any_element()
                         .layout_as_root(available, window, cx);
                     size(px(0.), row_size.height)
                 }
@@ -734,8 +752,10 @@ impl Render for CommandState {
                         move |bounds, window, cx| {
                             measure_state.update(cx, |state, cx| {
                                 // `p_1` is one quarter rem on each side. Its
-                                // rem-dependent padding and text line height
-                                // both participate in the row-size cache key.
+                                // rem-dependent padding and inherited
+                                // layout-relevant text style participate in
+                                // the row-size cache key.
+                                let text_style = window.text_style();
                                 state.set_list_measurement_key(
                                     ListMeasurementKey {
                                         content_width: (bounds.size.width
@@ -743,6 +763,17 @@ impl Render for CommandState {
                                             .max(px(0.)),
                                         rem_size: window.rem_size(),
                                         line_height: window.line_height(),
+                                        text_shape: TextShapeKey {
+                                            font_family: text_style.font_family,
+                                            font_features: text_style.font_features,
+                                            font_fallbacks: text_style.font_fallbacks,
+                                            font_size: text_style.font_size,
+                                            font_weight: text_style.font_weight,
+                                            font_style: text_style.font_style,
+                                            white_space: text_style.white_space,
+                                            text_overflow: text_style.text_overflow,
+                                            line_clamp: text_style.line_clamp,
+                                        },
                                     },
                                     cx,
                                 )
@@ -788,7 +819,7 @@ mod tests {
 
     use gpui::{
         AppContext as _, Entity, IntoElement, ParentElement as _, Pixels, Render, Styled as _,
-        TestAppContext, Window, div, px,
+        TestAppContext, Window, div, prelude::FluentBuilder as _, px,
     };
 
     use super::{CommandRow, CommandState, SEPARATOR_ROW_HEIGHT};
@@ -1113,14 +1144,17 @@ mod tests {
     struct WrappingHarness {
         state: Entity<CommandState>,
         width: Pixels,
+        no_wrap: bool,
     }
 
     impl Render for WrappingHarness {
         fn render(&mut self, _: &mut Window, _: &mut gpui::Context<Self>) -> impl IntoElement {
             div().size_full().child(
-                div()
-                    .w(self.width)
-                    .child(Command::new(&self.state).max_h(px(200.))),
+                div().w(self.width).child(
+                    Command::new(&self.state)
+                        .max_h(px(200.))
+                        .when(self.no_wrap, |this| this.whitespace_nowrap()),
+                ),
             )
         }
     }
@@ -1140,6 +1174,7 @@ mod tests {
         let (harness, cx) = cx.add_window_view(|window, cx| WrappingHarness {
             state: cx.new(|cx| wrapping_state(window, cx)),
             width: px(360.),
+            no_wrap: false,
         });
 
         cx.run_until_parked();
@@ -1176,6 +1211,7 @@ mod tests {
             WrappingHarness {
                 state: cx.new(|cx| wrapping_state(window, cx)),
                 width: px(160.),
+                no_wrap: false,
             }
         });
 
@@ -1196,6 +1232,38 @@ mod tests {
         assert!(
             larger_rem > smaller_rem,
             "a larger rem should remeasure the fixed-width wrapped row ({larger_rem:?} vs {smaller_rem:?})",
+        );
+    }
+
+    #[gpui::test]
+    fn wrapping_rows_remeasure_when_inherited_typography_changes(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+
+        let (harness, cx) = cx.add_window_view(|window, cx| WrappingHarness {
+            state: cx.new(|cx| wrapping_state(window, cx)),
+            width: px(160.),
+            no_wrap: false,
+        });
+
+        cx.run_until_parked();
+        cx.update(|window, cx| _ = window.draw(cx));
+        cx.run_until_parked();
+        cx.update(|window, cx| _ = window.draw(cx));
+        let wrapped_height = cx.update(|_, cx| harness.read(cx).state.read(cx).row_sizes[0].height);
+
+        cx.update(|window, cx| {
+            harness.update(cx, |harness, cx| {
+                harness.no_wrap = true;
+                cx.notify();
+            });
+            _ = window.draw(cx);
+        });
+        cx.run_until_parked();
+        cx.update(|window, cx| _ = window.draw(cx));
+        let no_wrap_height = cx.update(|_, cx| harness.read(cx).state.read(cx).row_sizes[0].height);
+        assert!(
+            no_wrap_height < wrapped_height,
+            "a changed inherited typography should remeasure the fixed-width row ({no_wrap_height:?} vs {wrapped_height:?})",
         );
     }
 
