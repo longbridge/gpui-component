@@ -331,7 +331,7 @@ impl CommandStory {
         cx: &mut Context<Self>,
     ) {
         let CommandEvent::Query(query) = event else {
-            if matches!(event, CommandEvent::Confirm(_) | CommandEvent::Cancel) {
+            if matches!(event, CommandEvent::Confirm(_)) {
                 window.close_dialog(cx);
             }
             return self.on_command_event(state.clone(), event, cx);
