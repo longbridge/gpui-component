@@ -182,7 +182,9 @@ impl SomeDelegate for MyAdapter {
             parent.update(cx, |this, cx| { /* … */ });
 
             // Sync list state directly after parent update
-            list_state.delegate_mut().update_snapshot(new_val);
+            list_state
+                .delegate_mut()
+                .update_selection_snapshot(new_val);
         });
     }
 }
@@ -192,13 +194,20 @@ impl SomeDelegate for MyAdapter {
 
 ```rust
 // ❌ Panic in render_item — ListState is already locked
-fn render_item(&mut self, ix: IndexPath, window: &mut Window, cx: &mut Context<ListState<Self>>) -> … {
-    let checked = parent_entity.read(cx).selection.contains(&ix); // PANIC
+fn render_item(&mut self, ix: IndexPath, item: &MyItem, window: &mut Window, cx: &mut Context<ListState<Self>>) -> … {
+    let checked = parent_entity
+        .read(cx)
+        .selection
+        .iter()
+        .any(|selected_item| selected_item.value() == item.value()); // PANIC
 }
 
 // ✅ Read from a plain snapshot field — no entity access
-fn render_item(&mut self, ix: IndexPath, window: &mut Window, cx: &mut Context<ListState<Self>>) -> … {
-    let checked = self.selection_snapshot.iter().any(|(sel_ix, _)| sel_ix == &ix);
+fn render_item(&mut self, ix: IndexPath, item: &MyItem, window: &mut Window, cx: &mut Context<ListState<Self>>) -> … {
+    let checked = self
+        .selection_snapshot
+        .iter()
+        .any(|selected_item| selected_item.value() == item.value());
 }
 ```
 

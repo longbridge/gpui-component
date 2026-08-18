@@ -192,7 +192,9 @@ fn confirm(&mut self, _: bool, window: &mut Window, cx: &mut Context<ListState<S
         parent.update(cx, |this, cx| { /* … */ });
 
         // Sync list state directly after parent update — no lock needed
-        list_state.delegate_mut().update_snapshot(new_val);
+        list_state
+            .delegate_mut()
+            .update_selection_snapshot(new_val);
     });
 }
 ```
@@ -223,4 +225,3 @@ cx.background_spawn(async move { data })
     }))
     .detach();
 ```
-

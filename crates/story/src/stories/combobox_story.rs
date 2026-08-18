@@ -98,18 +98,18 @@ impl SearchableListItem for Industry {
 
 // MARK: Max2Delegate — allows at most 2 items to be selected simultaneously
 
-/// Shadows the current selection indices so `is_item_enabled` can disable unselected items
+/// Shadows the current selection values so `is_item_enabled` can disable unselected items
 /// when the capacity is reached, providing visual feedback without `current_selection` access.
 struct Max2Delegate {
     items: SearchableVec<&'static str>,
-    selected_indices: Vec<IndexPath>,
+    selected_values: Vec<&'static str>,
 }
 
 impl Max2Delegate {
     fn new(items: SearchableVec<&'static str>) -> Self {
         Self {
             items,
-            selected_indices: Vec::new(),
+            selected_values: Vec::new(),
         }
     }
 }
@@ -133,28 +133,38 @@ impl SearchableListDelegate for Max2Delegate {
         self.items.position(value)
     }
 
-    fn is_item_enabled(&self, ix: IndexPath, _item: &&'static str, _cx: &App) -> bool {
-        let at_capacity = self.selected_indices.len() >= 2;
-        let is_selected = self.selected_indices.contains(&ix);
+    fn item_by_value<V>(&self, value: &V) -> Option<Self::Item>
+    where
+        &'static str: SearchableListItem<Value = V>,
+        V: PartialEq,
+    {
+        self.items.item_by_value(value)
+    }
+
+    fn is_item_enabled(&self, _ix: IndexPath, item: &&'static str, _cx: &App) -> bool {
+        let at_capacity = self.selected_values.len() >= 2;
+        let is_selected = self.selected_values.contains(item);
 
         !at_capacity || is_selected
     }
 
     fn on_will_change(
         &mut self,
-        selection: &mut Vec<(IndexPath, &'static str)>,
+        selection: &mut Vec<&'static str>,
         changes: &[SearchableListChange],
     ) {
         for change in changes {
             match change {
                 SearchableListChange::Deselect { index } => {
-                    selection.retain(|(ix, _)| ix != index);
+                    if let Some(item) = self.item(*index) {
+                        selection.retain(|selected_item| *selected_item != *item);
+                    }
                 }
                 SearchableListChange::Select { index } => {
                     if selection.len() < 2 {
                         if let Some(item) = self.item(*index) {
-                            if !selection.iter().any(|(ix, _)| ix == index) {
-                                selection.push((*index, *item));
+                            if !selection.contains(item) {
+                                selection.push(*item);
                             }
                         }
                     }
@@ -163,7 +173,7 @@ impl SearchableListDelegate for Max2Delegate {
         }
 
         // Keep the shadow in sync for is_item_enabled.
-        self.selected_indices = selection.iter().map(|(ix, _)| *ix).collect();
+        self.selected_values = selection.clone();
     }
 }
 
@@ -190,6 +200,14 @@ impl SearchableListDelegate for PinnedDelegate {
         self.0.position(value)
     }
 
+    fn item_by_value<V>(&self, value: &V) -> Option<Self::Item>
+    where
+        &'static str: SearchableListItem<Value = V>,
+        V: PartialEq,
+    {
+        self.0.item_by_value(value)
+    }
+
     fn is_item_enabled(&self, ix: IndexPath, _item: &&'static str, _cx: &App) -> bool {
         // Pinned items are non-interactive — their checked state is fixed.
         ix != IndexPath::new(0) && ix != IndexPath::new(1)
@@ -198,15 +216,13 @@ impl SearchableListDelegate for PinnedDelegate {
     fn is_item_checked(
         &self,
         ix: IndexPath,
-        _item: &&'static str,
-        current_selection: &[(IndexPath, &'static str)],
+        item: &&'static str,
+        current_selection: &[&'static str],
         _cx: &App,
     ) -> bool {
         // First two items are always rendered checked (externally pinned),
         // regardless of what is in the normal selection.
-        ix == IndexPath::new(0)
-            || ix == IndexPath::new(1)
-            || current_selection.iter().any(|(sel_ix, _)| sel_ix == &ix)
+        ix == IndexPath::new(0) || ix == IndexPath::new(1) || current_selection.contains(item)
     }
 }
 
@@ -231,6 +247,14 @@ impl SearchableListDelegate for FeaturedDelegate {
         V: PartialEq,
     {
         self.0.position(value)
+    }
+
+    fn item_by_value<V>(&self, value: &V) -> Option<Self::Item>
+    where
+        &'static str: SearchableListItem<Value = V>,
+        V: PartialEq,
+    {
+        self.0.item_by_value(value)
     }
 
     fn render_item(
@@ -576,9 +600,7 @@ impl Render for ComboboxStory {
                             .render_trigger(|trigger, _, cx| {
                                 let (icon, title) = match trigger.selection() {
                                     [] => (None, None),
-                                    [(_index, item)] => {
-                                        (Some(item.icon.clone()), Some(item.title().clone()))
-                                    }
+                                    [item] => (Some(item.icon.clone()), Some(item.title().clone())),
                                     items => (
                                         None,
                                         Some(SharedString::new(format!(
@@ -681,7 +703,7 @@ impl Render for ComboboxStory {
                             .render_trigger(|trigger, _, cx| {
                                 let title = match trigger.selection() {
                                     [] => None,
-                                    [(_index, item)] => Some(item.title().clone()),
+                                    [item] => Some(item.title().clone()),
                                     items => {
                                         Some(SharedString::new(format!("{} selected", items.len())))
                                     }
@@ -760,40 +782,34 @@ impl Render for ComboboxStory {
                                             .min_w_0()
                                             .items_center()
                                             .gap_1()
-                                            .children(items.iter().take(1).cloned().map(
-                                                |(index, item)| {
-                                                    let state = multi_badges_state.clone();
-                                                    h_flex()
-                                                        .min_w_0()
-                                                        .gap_0p5()
-                                                        .items_center()
-                                                        .rounded_sm()
-                                                        .border_1()
-                                                        .border_color(cx.theme().border)
-                                                        .px_1()
-                                                        .text_xs()
-                                                        .child(div().truncate().child(item))
-                                                        .child(
-                                                            Button::new(SharedString::from(
-                                                                format!("remove-{item}"),
-                                                            ))
-                                                            .ghost()
-                                                            .xsmall()
-                                                            .icon(
-                                                                Icon::new(IconName::Close).xsmall(),
-                                                            )
-                                                            .tab_stop(false)
-                                                            .on_click(move |_ev, _window, cx| {
-                                                                cx.stop_propagation();
-                                                                state.update(cx, |s, cx| {
-                                                                    s.remove_selected_index(
-                                                                        index, cx,
-                                                                    );
-                                                                });
-                                                            }),
-                                                        )
-                                                },
-                                            ))
+                                            .children(items.iter().take(1).cloned().map(|item| {
+                                                let state = multi_badges_state.clone();
+                                                h_flex()
+                                                    .min_w_0()
+                                                    .gap_0p5()
+                                                    .items_center()
+                                                    .rounded_sm()
+                                                    .border_1()
+                                                    .border_color(cx.theme().border)
+                                                    .px_1()
+                                                    .text_xs()
+                                                    .child(div().truncate().child(item))
+                                                    .child(
+                                                        Button::new(SharedString::from(format!(
+                                                            "remove-{item}"
+                                                        )))
+                                                        .ghost()
+                                                        .xsmall()
+                                                        .icon(Icon::new(IconName::Close).xsmall())
+                                                        .tab_stop(false)
+                                                        .on_click(move |_ev, _window, cx| {
+                                                            cx.stop_propagation();
+                                                            state.update(cx, |s, cx| {
+                                                                s.remove_selected_value(&item, cx);
+                                                            });
+                                                        }),
+                                                    )
+                                            }))
                                             .when(hidden > 0, |this| {
                                                 this.child(
                                                     div()
@@ -871,7 +887,7 @@ impl Render for ComboboxStory {
                                     .flex_wrap()
                                     .gap_1()
                                     .children(trigger.selection().iter().take(MAX_SHOWN).map(
-                                        |(_index, item)| {
+                                        |item| {
                                             div()
                                                 .rounded_sm()
                                                 .border_1()

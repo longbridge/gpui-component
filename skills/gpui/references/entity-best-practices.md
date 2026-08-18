@@ -60,7 +60,9 @@ fn confirm(&mut self, _: bool, window: &mut Window, cx: &mut Context<ListState<S
 
         // Step 3: sync list state directly — no entity lock
         if let Ok(sel) = new_sel {
-            list_state.delegate_mut().update_snapshot(sel.clone());
+            list_state
+                .delegate_mut()
+                .update_selection_snapshot(sel.clone());
             list_state.delegate_mut().on_confirm(&sel);
         }
     });
@@ -75,16 +77,25 @@ fn confirm(&mut self, _: bool, window: &mut Window, cx: &mut Context<ListState<S
 
 ```rust
 // ❌ Panic — called during ListState render; external entity access re-enters
-fn render_item(&mut self, ix: IndexPath, …) -> … {
-    let checked = parent.read(cx).selection.contains(&ix); // PANIC
+fn render_item(&mut self, ix: IndexPath, item: &MyItem, …) -> … {
+    let checked = parent
+        .read(cx)
+        .selection
+        .iter()
+        .any(|selected_item| selected_item.value() == item.value()); // PANIC
 }
 
 // ✅ Read from snapshot field — no entity access at all
-fn render_item(&mut self, ix: IndexPath, …) -> … {
-    let checked = self.selection_snapshot.iter().any(|(sel_ix, _)| sel_ix == &ix);
+fn render_item(&mut self, ix: IndexPath, item: &MyItem, …) -> … {
+    let checked = self
+        .selection_snapshot
+        .iter()
+        .any(|selected_item| selected_item.value() == item.value());
 }
 // After every mutation from outside render:
-list.update(cx, |l, _| l.delegate_mut().update_snapshot(new_snapshot));
+list.update(cx, |l, _| {
+    l.delegate_mut().update_selection_snapshot(new_snapshot)
+});
 ```
 
 ### Use Weak References in Closures

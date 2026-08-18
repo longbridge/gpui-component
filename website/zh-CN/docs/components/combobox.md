@@ -23,7 +23,7 @@ description: 带有可搜索下拉列表的自动补全输入组件。
 
 ```rust
 use gpui_component::combobox::{
-    Combobox, ComboboxState, ComboboxEvent, ComboboxTriggerCtx,
+    Combobox, ComboboxState, ComboboxEvent, ComboboxTriggerContext,
 };
 use gpui_component::searchable_list::{
     SearchableListItem, SearchableVec, SearchableGroup,
@@ -171,20 +171,21 @@ Combobox::new(&state)
 
 ### 自定义触发器
 
-完全覆盖触发器元素的渲染。`ComboboxTriggerCtx` 包含当前选中状态、开关标志和尺寸信息：
+完全覆盖触发器元素的渲染。`ComboboxTriggerContext` 通过访问器方法提供当前选中状态、
+占位内容、开关标志和尺寸信息：
 
 ```rust
 Combobox::new(&state)
-    .render_trigger(|ctx, _, cx| {
+    .render_trigger(|trigger, _, cx| {
         h_flex()
             .w_full()
             .items_center()
             .gap_2()
-            .when(ctx.selection.is_empty(), |this| {
+            .when(trigger.selection().is_empty(), |this| {
                 this.text_color(cx.theme().muted_foreground)
                     .child("请选择...")
             })
-            .children(ctx.selection.iter().map(|(_, item)| {
+            .children(trigger.selection().iter().map(|item| {
                 div()
                     .bg(cx.theme().accent)
                     .rounded_sm()
@@ -196,6 +197,10 @@ Combobox::new(&state)
             .into_any_element()
     })
 ```
+
+`trigger.selection()` 包含按选中顺序排列的选中项。选项的 `Value` 用于身份比较；其中不包含
+`IndexPath`，因此列表过滤时选中状态仍然有效。其他访问器包括 `placeholder()`、
+`is_open()`、`is_disabled()` 和 `size()`。
 
 ### 尺寸
 
@@ -255,6 +260,12 @@ state.update(cx, |s, cx| {
     s.remove_selected_index(IndexPath::new(0), cx);
 });
 
+// 按值增加 / 移除
+state.update(cx, |s, cx| {
+    s.add_selected_value(&"React", cx);
+    s.remove_selected_value(&"Angular", cx);
+});
+
 // 清空选中
 state.update(cx, |s, cx| {
     s.clear_selection(cx);
@@ -266,6 +277,10 @@ let values = state.read(cx).selected_values(); // Vec<Value>
 // 读取第一个选中值（单选便利方法）
 let value = state.read(cx).selected_value(); // Option<Value>
 ```
+
+按索引操作的方法只作用于当前可见列表。按值操作的方法通过
+`SearchableListDelegate::item_by_value` 解析选项。`SearchableVec` 会搜索完整数据源，因此能
+解析当前搜索隐藏的选项；自定义 delegate 必须覆盖 `item_by_value` 才能提供相同行为。
 
 ## 键盘快捷键
 

@@ -22,7 +22,7 @@ pub(crate) struct SearchableListAdapter<D: SearchableListDelegate + 'static> {
     /// Snapshot of the parent's committed selection, kept in sync by the parent state after every
     /// selection change. `render_item` reads this directly so it never touches the parent entity
     /// (which would panic — the `ListState` entity is already locked during render).
-    pub(crate) selection_snapshot: Vec<(IndexPath, D::Item)>,
+    pub(crate) selection_snapshot: Vec<D::Item>,
     /// Called when the user confirms an item (click or Enter).
     on_confirm:
         Box<dyn Fn(Option<IndexPath>, bool, &mut Window, &mut Context<ListState<Self>>) + 'static>,
@@ -57,7 +57,7 @@ impl<D: SearchableListDelegate + 'static> SearchableListAdapter<D> {
 
     /// Replace the selection snapshot. Call this after every selection mutation so that
     /// `render_item` sees up-to-date check state without touching any external entity.
-    pub(crate) fn update_selection_snapshot(&mut self, snapshot: Vec<(IndexPath, D::Item)>) {
+    pub(crate) fn update_selection_snapshot(&mut self, snapshot: Vec<D::Item>) {
         self.selection_snapshot = snapshot;
     }
 }

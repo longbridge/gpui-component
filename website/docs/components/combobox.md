@@ -23,7 +23,7 @@ Use `Select` for simple single-value picking. Use `Combobox` when you need multi
 
 ```rust
 use gpui_component::combobox::{
-    Combobox, ComboboxState, ComboboxEvent, ComboboxTriggerCtx,
+    Combobox, ComboboxState, ComboboxEvent, ComboboxTriggerContext,
 };
 use gpui_component::searchable_list::{
     SearchableListItem, SearchableVec, SearchableGroup,
@@ -171,20 +171,21 @@ Combobox::new(&state)
 
 ### Custom Trigger
 
-Override the entire trigger element. `ComboboxTriggerCtx` exposes the current selection, open/disabled flags, and size:
+Override the entire trigger element. `ComboboxTriggerContext` exposes the current selection,
+placeholder, open/disabled flags, and size through accessor methods:
 
 ```rust
 Combobox::new(&state)
-    .render_trigger(|ctx, _, cx| {
+    .render_trigger(|trigger, _, cx| {
         h_flex()
             .w_full()
             .items_center()
             .gap_2()
-            .when(ctx.selection.is_empty(), |this| {
+            .when(trigger.selection().is_empty(), |this| {
                 this.text_color(cx.theme().muted_foreground)
                     .child("Select...")
             })
-            .children(ctx.selection.iter().map(|(_, item)| {
+            .children(trigger.selection().iter().map(|item| {
                 div()
                     .bg(cx.theme().accent)
                     .rounded_sm()
@@ -196,6 +197,10 @@ Combobox::new(&state)
             .into_any_element()
     })
 ```
+
+`trigger.selection()` contains the selected items in selection order. The item's `Value` is used
+for identity; it does not include an `IndexPath`, so a selection remains valid while the list is
+filtered. The other accessors are `placeholder()`, `is_open()`, `is_disabled()`, and `size()`.
 
 ### Sizes
 
@@ -255,6 +260,12 @@ state.update(cx, |s, cx| {
     s.remove_selected_index(IndexPath::new(0), cx);
 });
 
+// Add / remove by value
+state.update(cx, |s, cx| {
+    s.add_selected_value(&"React", cx);
+    s.remove_selected_value(&"Angular", cx);
+});
+
 // Clear all selections
 state.update(cx, |s, cx| {
     s.clear_selection(cx);
@@ -266,6 +277,11 @@ let values = state.read(cx).selected_values(); // Vec<Value>
 // Read the first selected value (single-select convenience)
 let value = state.read(cx).selected_value(); // Option<Value>
 ```
+
+Index-based methods operate on the current visible list. Value-based methods resolve through
+`SearchableListDelegate::item_by_value`. `SearchableVec` searches its complete data source, so it
+can resolve items hidden by the current search. Custom delegates must override `item_by_value` to
+provide the same behavior.
 
 ## Keyboard Shortcuts
 
