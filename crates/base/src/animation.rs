@@ -279,6 +279,24 @@ mod tests {
     }
 
     #[test]
+    fn cubic_bezier_with_thirds_x_maps_time_identically() {
+        // x1 = 1/3, x2 = 2/3 collapse the x solve to the identity, making the
+        // output the plain y polynomial; Dialog relies on this to keep the
+        // trajectory it was tuned with before `cubic_bezier` solved for x.
+        let ease = cubic_bezier(1. / 3., 0.72, 2. / 3., 1.);
+        for step in 0..=100 {
+            let t = step as f32 / 100.;
+            let one_t = 1. - t;
+            let expected = 3. * 0.72 * one_t * one_t * t + 3. * one_t * t * t + t * t * t;
+            assert!(
+                (ease(t) - expected).abs() < 1e-4,
+                "ease({t}) = {}, expected {expected}",
+                ease(t)
+            );
+        }
+    }
+
+    #[test]
     fn cubic_bezier_stays_within_unit_range() {
         // GPUI panics when an easing delta leaves [0, 1]; sweep the curves
         // used in-repo densely to catch solver overshoot and rounding error.
