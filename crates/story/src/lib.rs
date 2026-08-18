@@ -62,6 +62,7 @@ actions!(
     [
         About,
         Open,
+        OpenCommandPalette,
         Quit,
         ToggleSearch,
         TestAction,
@@ -215,6 +216,7 @@ pub fn init(cx: &mut App) {
 
     cx.bind_keys([
         KeyBinding::new("/", ToggleSearch, None),
+        KeyBinding::new("ctrl-shift-p", OpenCommandPalette, None),
         #[cfg(target_os = "macos")]
         KeyBinding::new("cmd-o", Open, None),
         #[cfg(not(target_os = "macos"))]
@@ -840,6 +842,9 @@ pub struct StoryRoot {
     pub(crate) embedded: bool,
     /// The palette behind [`SelectTheme`], rebuilt every time it opens.
     theme_palette: Entity<CommandState>,
+    /// The component palette for Gallery windows.
+    component_palette: Entity<CommandState>,
+    gallery: Option<Entity<Gallery>>,
     /// The theme in force when the palette opened, put back if the user
     /// cancels out of the preview.
     theme_before_preview: Option<SharedString>,
@@ -871,18 +876,46 @@ impl StoryRoot {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
+        let view = view.into();
+        let gallery = view.clone().downcast::<Gallery>().ok();
         let theme_palette = cx.new(|cx| CommandState::new(window, cx));
-        let _subscriptions =
-            vec![cx.subscribe_in(&theme_palette, window, Self::on_theme_palette_event)];
+        let component_palette = cx.new(|cx| CommandState::new(window, cx));
+        let _subscriptions = vec![
+            cx.subscribe_in(&theme_palette, window, Self::on_theme_palette_event),
+            cx.subscribe_in(&component_palette, window, Self::on_component_palette_event),
+        ];
 
         Self {
             focus_handle: cx.focus_handle(),
             title_bar,
-            view: view.into(),
+            view,
             embedded,
             theme_palette,
+            component_palette,
+            gallery,
             theme_before_preview: None,
             _subscriptions,
+        }
+    }
+
+    fn on_component_palette_event(
+        &mut self,
+        _: &Entity<CommandState>,
+        event: &CommandEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        match event {
+            CommandEvent::Confirm(name) => {
+                if let Some(gallery) = self.gallery.clone() {
+                    gallery.update(cx, |gallery, cx| {
+                        gallery.select_story(name, window, cx);
+                    });
+                }
+                window.close_dialog(cx);
+            }
+            CommandEvent::Cancel => window.close_dialog(cx),
+            CommandEvent::Query(_) | CommandEvent::Select(_) => {}
         }
     }
 
@@ -965,6 +998,44 @@ impl StoryRoot {
         focus_handle.focus(window, cx);
     }
 
+    fn on_action_open_command_palette(
+        &mut self,
+        _: &OpenCommandPalette,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(gallery) = self.gallery.as_ref() else {
+            cx.propagate();
+            return;
+        };
+        let entries = gallery.read(cx).command_entries(cx);
+        self.component_palette.update(cx, |palette, cx| {
+            palette.set_query("", window, cx);
+            palette.set_entries(entries, cx);
+        });
+
+        let component_palette = self.component_palette.clone();
+        window.open_dialog(cx, move |dialog, _, _| {
+            let component_palette = component_palette.clone();
+            dialog
+                .close_button(false)
+                .overlay_closable(false)
+                .p_0()
+                .content(move |content, _, _| {
+                    content.child(
+                        gpui_component::command::Command::new(&component_palette)
+                            .bordered(false)
+                            .placeholder("Search components...")
+                            .max_h(px(400.)),
+                    )
+                })
+        });
+        self.component_palette
+            .read(cx)
+            .focus_handle(cx)
+            .focus(window, cx);
+    }
+
     fn on_action_toggle_search(
         &mut self,
         _: &ToggleSearch,
@@ -1001,6 +1072,7 @@ impl Render for StoryRoot {
             .id("story-root")
             .on_action(cx.listener(Self::on_action_panel_info))
             .on_action(cx.listener(Self::on_action_select_theme))
+            .on_action(cx.listener(Self::on_action_open_command_palette))
             .on_action(cx.listener(Self::on_action_toggle_search))
             .size_full()
             .child(
