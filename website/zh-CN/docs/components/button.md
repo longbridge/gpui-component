@@ -247,6 +247,23 @@ ButtonGroup::new("toggle-group")
     })
 ```
 
+### 拆分按钮
+
+按钮组的成员可以打开下拉菜单，拆分按钮就是这样组合出来的：第一个成员执行动作，最后一个
+成员打开菜单。打开菜单的成员保留自己的点击处理，因此按钮组级别的 `on_click` 不会为它触发。
+
+```rust
+ButtonGroup::new("save")
+    .child(Button::new("save").label("Save").on_click(|_, _, _| {}))
+    .child(
+        Button::new("save-options")
+            .dropdown_caret(true)
+            .dropdown_menu(|menu, _, _| menu.menu("Save as…", Box::new(MyAction))),
+    )
+```
+
+共享变体与尺寸的两成员写法见 [DropdownButton](dropdown_button)。
+
 ## 自定义变体
 
 ```rust

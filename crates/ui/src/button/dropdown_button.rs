@@ -1,17 +1,34 @@
-use gpui::Corners;
 use gpui::{
-    Anchor, App, Context, Edges, ElementId, InteractiveElement as _, IntoElement, ParentElement,
-    RenderOnce, SharedString, StyleRefinement, Styled, Window, div, prelude::FluentBuilder,
+    Anchor, App, Context, ElementId, IntoElement, RenderOnce, StyleRefinement, Styled, Window,
+    prelude::FluentBuilder,
 };
 
 use crate::{
     Disableable, Selectable, Sizable, Size, StyledExt as _,
     menu::{DropdownMenu, PopupMenu},
-    tooltip::ComponentTooltip,
 };
 
-use super::{Button, ButtonRounded, ButtonVariant, ButtonVariants};
+use super::{Button, ButtonGroup, ButtonVariant, ButtonVariants};
 
+/// A split button: an action button with an attached menu trigger.
+///
+/// The two halves stay visually joined, except for a `ghost` button that is not
+/// selected — a toolbar reads better when an idle ghost pair looks like two
+/// separate buttons.
+///
+/// This is a thin wrapper over [`ButtonGroup`], which can hold a button that
+/// opens a menu directly. Reach for the group when the split needs more than
+/// two members, or when the halves need unrelated styling:
+///
+/// ```ignore
+/// ButtonGroup::new("save")
+///     .child(Button::new("save").label("Save"))
+///     .child(
+///         Button::new("save-options")
+///             .dropdown_caret(true)
+///             .dropdown_menu(|menu, _, _| menu.menu("Save as…", Box::new(SaveAs))),
+///     )
+/// ```
 #[derive(IntoElement)]
 pub struct DropdownButton {
     id: ElementId,
@@ -21,15 +38,12 @@ pub struct DropdownButton {
         Option<Box<dyn Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static>>,
     selected: bool,
     disabled: bool,
-    // The button props
-    compact: bool,
+    // The button props, applied to both halves. Unset means the inner
+    // [`Button`] keeps whatever it was given.
     outline: bool,
-    loading: bool,
-    variant: ButtonVariant,
-    size: Size,
-    rounded: ButtonRounded,
+    variant: Option<ButtonVariant>,
+    size: Option<Size>,
     anchor: Anchor,
-    tooltip: ComponentTooltip,
 }
 
 impl DropdownButton {
@@ -42,24 +56,18 @@ impl DropdownButton {
             menu: None,
             selected: false,
             disabled: false,
-            compact: false,
             outline: false,
-            loading: false,
-            variant: ButtonVariant::default(),
-            size: Size::default(),
-            rounded: ButtonRounded::default(),
+            variant: None,
+            size: None,
             anchor: Anchor::TopRight,
-            tooltip: ComponentTooltip::default(),
         }
     }
 
-    /// Set tooltip text for the dropdown button.
-    pub fn tooltip(mut self, tooltip: impl Into<SharedString>) -> Self {
-        self.tooltip.text = Some((tooltip.into(), None));
-        self
-    }
-
     /// Set the left button of the dropdown button.
+    ///
+    /// The button keeps its own label, icon, tooltip and click handler. A
+    /// variant or size set on the [`DropdownButton`] applies to both halves and
+    /// overrides the one set here; leave it unset to keep this button's own.
     pub fn button(mut self, button: Button) -> Self {
         self.button = Some(button);
         self
@@ -85,31 +93,11 @@ impl DropdownButton {
         self
     }
 
-    /// Set the rounded style of the button.
-    pub fn rounded(mut self, rounded: impl Into<ButtonRounded>) -> Self {
-        self.rounded = rounded.into();
-        self
-    }
-
-    /// Set the button to compact style.
-    ///
-    /// See also: [`Button::compact`]
-    pub fn compact(mut self) -> Self {
-        self.compact = true;
-        self
-    }
-
     /// Set the button to outline style.
     ///
     /// See also: [`Button::outline`]
     pub fn outline(mut self) -> Self {
         self.outline = true;
-        self
-    }
-
-    /// Set the button to loading state.
-    pub fn loading(mut self, loading: bool) -> Self {
-        self.loading = loading;
         self
     }
 }
@@ -129,14 +117,14 @@ impl Styled for DropdownButton {
 
 impl Sizable for DropdownButton {
     fn with_size(mut self, size: impl Into<Size>) -> Self {
-        self.size = size.into();
+        self.size = Some(size.into());
         self
     }
 }
 
 impl ButtonVariants for DropdownButton {
     fn with_variant(mut self, variant: ButtonVariant) -> Self {
-        self.variant = variant;
+        self.variant = Some(variant);
         self
     }
 }
@@ -154,64 +142,37 @@ impl Selectable for DropdownButton {
 
 impl RenderOnce for DropdownButton {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
-        let rounded = self.variant.is_ghost() && !self.selected;
+        debug_assert!(
+            self.button.is_some() || self.menu.is_some(),
+            "a DropdownButton needs a `button`, a `dropdown_menu`, or both"
+        );
 
-        div()
-            .id(self.id)
-            .h_flex()
+        let is_ghost = self
+            .variant
+            .as_ref()
+            .is_some_and(|variant| variant.is_ghost());
+
+        ButtonGroup::new(self.id)
+            // The halves run an action and open a menu; neither is a toggle,
+            // and `selected` only styles them.
+            .no_toggle()
+            .attached(!(is_ghost && !self.selected))
+            .disabled(self.disabled)
+            .when(self.outline, |this| this.outline())
+            .when_some(self.variant, |this, variant| this.with_variant(variant))
+            .when_some(self.size, |this, size| this.with_size(size))
             .refine_style(&self.style)
             .when_some(self.button, |this, button| {
-                this.child(
-                    button
-                        .rounded(self.rounded)
-                        .border_corners(Corners {
-                            top_left: true,
-                            top_right: rounded,
-                            bottom_left: true,
-                            bottom_right: rounded,
-                        })
-                        .border_edges(Edges {
-                            left: true,
-                            top: true,
-                            right: true,
-                            bottom: true,
-                        })
-                        .loading(self.loading)
-                        .selected(self.selected)
-                        .disabled(self.disabled || self.loading)
-                        .when(self.compact, |this| this.compact())
-                        .when(self.outline, |this| this.outline())
-                        .with_size(self.size)
-                        .with_variant(self.variant),
-                )
-                .when_some(self.menu, |this, menu| {
-                    this.child(
-                        Button::new("popup")
-                            .dropdown_caret(true)
-                            .rounded(self.rounded)
-                            .border_edges(Edges {
-                                left: rounded,
-                                top: true,
-                                right: true,
-                                bottom: true,
-                            })
-                            .border_corners(Corners {
-                                top_left: rounded,
-                                top_right: true,
-                                bottom_left: rounded,
-                                bottom_right: true,
-                            })
-                            .selected(self.selected)
-                            .disabled(self.disabled || self.loading)
-                            .when(self.compact, |this| this.compact())
-                            .when(self.outline, |this| this.outline())
-                            .with_size(self.size)
-                            .with_variant(self.variant)
-                            .dropdown_menu_with_anchor(self.anchor, menu),
-                    )
-                })
+                this.child(button.selected(self.selected))
             })
-            .map(|this| self.tooltip.apply(this))
+            .when_some(self.menu, |this, menu| {
+                this.child(
+                    Button::new("popup")
+                        .dropdown_caret(true)
+                        .selected(self.selected)
+                        .dropdown_menu_with_anchor(self.anchor, menu),
+                )
+            })
     }
 }
 
@@ -227,23 +188,29 @@ mod tests {
             .primary()
             .outline()
             .large()
-            .compact()
-            .loading(false)
             .disabled(false)
             .selected(false)
-            .rounded(ButtonRounded::Medium)
             .dropdown_menu_with_anchor(Anchor::BottomLeft, |menu, _, _| menu);
 
         assert!(dropdown.button.is_some());
-        assert_eq!(dropdown.variant, ButtonVariant::Primary);
+        assert_eq!(dropdown.variant, Some(ButtonVariant::Primary));
         assert!(dropdown.outline);
-        assert_eq!(dropdown.size, Size::Large);
-        assert!(dropdown.compact);
-        assert!(!dropdown.loading);
+        assert_eq!(dropdown.size, Some(Size::Large));
         assert!(!dropdown.disabled);
         assert!(!dropdown.selected);
-        assert!(matches!(dropdown.rounded, ButtonRounded::Medium));
         assert!(dropdown.menu.is_some());
         assert_eq!(dropdown.anchor, Anchor::BottomLeft);
+    }
+
+    /// An unset variant or size leaves the inner button's own to survive, so a
+    /// caller can style the halves from either level.
+    #[gpui::test]
+    fn inner_button_keeps_its_own_variant_and_size(_cx: &mut gpui::TestAppContext) {
+        let dropdown = DropdownButton::new("dropdown")
+            .button(Button::new("inner").label("Action").danger().small())
+            .dropdown_menu(|menu, _, _| menu);
+
+        assert_eq!(dropdown.variant, None);
+        assert_eq!(dropdown.size, None);
     }
 }

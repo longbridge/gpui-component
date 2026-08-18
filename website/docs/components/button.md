@@ -276,6 +276,24 @@ ButtonGroup::new("toggle-group")
     })
 ```
 
+### Split Button
+
+A group member can open a dropdown menu, which is how a split button is built: the first
+member runs the action, the last one opens the menu. The member that opens a menu keeps
+its own click handling, so a group-level `on_click` never fires for it.
+
+```rust
+ButtonGroup::new("save")
+    .child(Button::new("save").label("Save").on_click(|_, _, _| {}))
+    .child(
+        Button::new("save-options")
+            .dropdown_caret(true)
+            .dropdown_menu(|menu, _, _| menu.menu("Save as…", Box::new(MyAction))),
+    )
+```
+
+See [DropdownButton](dropdown_button) for the two-member case with a shared variant and size.
+
 ## Custom Variant
 
 ```rust
