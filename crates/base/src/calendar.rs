@@ -5,7 +5,7 @@ use chrono::{Datelike, Local, NaiveDate, Weekday};
 use gpui::{
     AnyElement, App, Context, ElementId, Empty, Entity, EventEmitter, FocusHandle,
     InteractiveElement, IntoElement, ParentElement, Render, RenderOnce, SharedString,
-    StatefulInteractiveElement, StyleRefinement, Styled, Window, div,
+    StatefulInteractiveElement, StyleRefinement, Styled, Window, div, px,
 };
 
 /// A controlled calendar value.
@@ -150,6 +150,14 @@ impl CalendarView {
     }
     pub fn is_year(self) -> bool {
         self == Self::Year
+    }
+}
+
+fn picker_grid_layout(view: CalendarView) -> Option<(u16, f32)> {
+    match view {
+        CalendarView::Day => None,
+        CalendarView::Month => Some((3, 4.)),
+        CalendarView::Year => Some((5, 4.)),
     }
 }
 
@@ -701,10 +709,11 @@ impl RenderOnce for Calendar {
             (self.item)(item, st, window, cx)
         });
 
-        let mut body = if view.is_day() {
-            h_flex().justify_around()
-        } else {
-            h_flex().flex_wrap()
+        let mut body = match picker_grid_layout(view) {
+            None => h_flex().justify_around(),
+            Some((columns, horizontal_gap)) => {
+                div().grid().grid_cols(columns).gap_x(px(horizontal_gap))
+            }
         };
         if view.is_day() {
             for offset in 0..count {
@@ -943,6 +952,13 @@ mod tests {
             s.select_year(2032);
             assert_eq!((s.view(), s.current_year()), (CalendarView::Day, 2032));
         });
+    }
+
+    #[test]
+    fn picker_views_use_stable_grid_layouts() {
+        assert_eq!(picker_grid_layout(CalendarView::Month), Some((3, 4.)));
+        assert_eq!(picker_grid_layout(CalendarView::Year), Some((5, 4.)));
+        assert_eq!(picker_grid_layout(CalendarView::Day), None);
     }
 
     #[gpui::test]
