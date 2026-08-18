@@ -726,6 +726,9 @@ impl Render for CommandState {
                     .border_color(cx.theme().border)
             })
             .refine_style(self.options.style())
+            .when_some(self.options.header(), |this, header| {
+                this.child(header(self, window, cx))
+            })
             .when(self.searchable, |this| {
                 this.child(
                     div()
@@ -809,6 +812,9 @@ impl Render for CommandState {
                         .child(Scrollbar::vertical(&self.scroll_handle))
                     }),
             )
+            .when_some(self.options.footer(), |this, footer| {
+                this.child(footer(self, window, cx))
+            })
     }
 }
 
@@ -1142,6 +1148,77 @@ mod tests {
             div()
                 .size_full()
                 .child(Command::new(&self.state).max_h(px(200.)))
+        }
+    }
+
+    #[gpui::test]
+    fn header_and_footer_render_with_current_state(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let header_calls = Rc::new(Cell::new(0));
+        let footer_calls = Rc::new(Cell::new(0));
+        let header_matched_count = Rc::new(Cell::new(None));
+        let footer_matched_count = Rc::new(Cell::new(None));
+
+        let (harness, cx) = cx.add_window_view(|window, cx| HeaderFooterHarness {
+            state: cx.new(|cx| {
+                CommandState::new(window, cx)
+                    .item(CommandItem::new("Calendar"))
+                    .item(CommandItem::new("Calculator"))
+            }),
+            header_calls,
+            footer_calls,
+            header_matched_count,
+            footer_matched_count,
+        });
+
+        cx.run_until_parked();
+        cx.update(|window, cx| _ = window.draw(cx));
+
+        let (header_calls, footer_calls, header_matched_count, footer_matched_count) =
+            cx.update(|_, cx| {
+                let harness = harness.read(cx);
+                (
+                    harness.header_calls.get(),
+                    harness.footer_calls.get(),
+                    harness.header_matched_count.get(),
+                    harness.footer_matched_count.get(),
+                )
+            });
+        assert!(header_calls > 0);
+        assert!(footer_calls > 0);
+        assert_eq!(header_matched_count, Some(2));
+        assert_eq!(footer_matched_count, Some(2));
+    }
+
+    struct HeaderFooterHarness {
+        state: Entity<CommandState>,
+        header_calls: Rc<Cell<usize>>,
+        footer_calls: Rc<Cell<usize>>,
+        header_matched_count: Rc<Cell<Option<usize>>>,
+        footer_matched_count: Rc<Cell<Option<usize>>>,
+    }
+
+    impl Render for HeaderFooterHarness {
+        fn render(&mut self, _: &mut Window, _: &mut gpui::Context<Self>) -> impl IntoElement {
+            let header_calls = self.header_calls.clone();
+            let header_matched_count = self.header_matched_count.clone();
+            let footer_calls = self.footer_calls.clone();
+            let footer_matched_count = self.footer_matched_count.clone();
+
+            div().size_full().child(
+                Command::new(&self.state)
+                    .max_h(px(200.))
+                    .header(move |state, _, _| {
+                        header_calls.set(header_calls.get() + 1);
+                        header_matched_count.set(Some(state.matched_count()));
+                        div()
+                    })
+                    .footer(move |state, _, _| {
+                        footer_calls.set(footer_calls.get() + 1);
+                        footer_matched_count.set(Some(state.matched_count()));
+                        div()
+                    }),
+            )
         }
     }
 

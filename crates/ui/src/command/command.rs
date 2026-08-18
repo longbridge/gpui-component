@@ -1,9 +1,13 @@
+use std::rc::Rc;
+
 use gpui::{
-    App, DefiniteLength, Entity, IntoElement, RenderOnce, SharedString, StyleRefinement, Styled,
-    Window, rems,
+    AnyElement, App, DefiniteLength, Entity, IntoElement, RenderOnce, SharedString,
+    StyleRefinement, Styled, Window, rems,
 };
 
 use crate::command::state::CommandState;
+
+pub(crate) type CommandSlot = dyn Fn(&CommandState, &mut Window, &mut App) -> AnyElement;
 
 /// Presentation of a [`Command`], pushed into its state on every render.
 #[derive(Clone)]
@@ -13,6 +17,8 @@ pub(crate) struct CommandOptions {
     empty_message: Option<SharedString>,
     max_h: DefiniteLength,
     bordered: bool,
+    header: Option<Rc<CommandSlot>>,
+    footer: Option<Rc<CommandSlot>>,
 }
 
 impl Default for CommandOptions {
@@ -23,6 +29,8 @@ impl Default for CommandOptions {
             empty_message: None,
             max_h: rems(18.75).into(),
             bordered: true,
+            header: None,
+            footer: None,
         }
     }
 }
@@ -46,6 +54,14 @@ impl CommandOptions {
 
     pub(crate) fn is_bordered(&self) -> bool {
         self.bordered
+    }
+
+    pub(crate) fn header(&self) -> Option<&Rc<CommandSlot>> {
+        self.header.as_ref()
+    }
+
+    pub(crate) fn footer(&self) -> Option<&Rc<CommandSlot>> {
+        self.footer.as_ref()
     }
 }
 
@@ -103,6 +119,30 @@ impl Command {
     /// such as a [`crate::Dialog`].
     pub fn bordered(mut self, bordered: bool) -> Self {
         self.options.bordered = bordered;
+        self
+    }
+
+    /// Render a custom element above the search field and command list.
+    pub fn header<F, E>(mut self, f: F) -> Self
+    where
+        F: Fn(&CommandState, &mut Window, &mut App) -> E + 'static,
+        E: IntoElement,
+    {
+        self.options.header = Some(Rc::new(move |state, window, cx| {
+            f(state, window, cx).into_any_element()
+        }));
+        self
+    }
+
+    /// Render a custom element below the command list.
+    pub fn footer<F, E>(mut self, f: F) -> Self
+    where
+        F: Fn(&CommandState, &mut Window, &mut App) -> E + 'static,
+        E: IntoElement,
+    {
+        self.options.footer = Some(Rc::new(move |state, window, cx| {
+            f(state, window, cx).into_any_element()
+        }));
         self
     }
 }
