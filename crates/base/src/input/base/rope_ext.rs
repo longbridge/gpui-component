@@ -329,12 +329,9 @@ impl RopeExt for Rope {
 
     fn position_to_offset(&self, pos: &Position) -> usize {
         let line = self.slice_line(pos.line as usize);
+        // Clamp out-of-range columns, then use Ropey's index to avoid rescanning long lines.
         self.line_start_offset(pos.line as usize)
-            + line
-                .chars()
-                .take(pos.character as usize)
-                .map(|c| c.len_utf8())
-                .sum::<usize>()
+            + line.char_to_byte_idx((pos.character as usize).min(line.len_chars()))
     }
 
     fn offset_to_position(&self, offset: usize) -> Position {
@@ -551,6 +548,10 @@ mod tests {
         assert_eq!(
             rope.position_to_offset(&Position::new(1, 1)),
             "a 中文🎉 test\nR".len()
+        );
+        assert_eq!(
+            rope.position_to_offset(&Position::new(0, u32::MAX)),
+            "a 中文🎉 test".len()
         );
 
         assert_eq!(

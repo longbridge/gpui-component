@@ -3,7 +3,9 @@ use gpui::{
     ParentElement as _, RenderOnce, Styled as _, Window, div, prelude::FluentBuilder, px,
 };
 
-use super::input::{input_style, sync_focused_input_registry};
+use super::input::input_style;
+use super::state::sync_focused_input_registry;
+use crate::ThemeStyled as _;
 use crate::{ActiveTheme, Disableable, Icon, IconName, Sizable, Size, h_flex, v_flex};
 use gpui_base::OtpInput as BaseOtpInput;
 pub use gpui_base::OtpState;
@@ -21,6 +23,7 @@ pub struct OtpInput {
     state: Entity<OtpState>,
     number_of_groups: usize,
     size: Size,
+    focus_ring_enabled: bool,
     disabled: bool,
 }
 
@@ -31,6 +34,7 @@ impl OtpInput {
             state: state.clone(),
             number_of_groups: 2,
             size: Size::Medium,
+            focus_ring_enabled: true,
             disabled: false,
         }
     }
@@ -51,6 +55,16 @@ impl Disableable for OtpInput {
         self
     }
 }
+impl crate::FocusableExt for OtpInput {
+    fn focus_ring(mut self, enabled: bool) -> Self {
+        self.focus_ring_enabled = enabled;
+        self
+    }
+
+    fn is_focus_ring_enabled(&self) -> bool {
+        self.focus_ring_enabled
+    }
+}
 impl Sizable for OtpInput {
     fn with_size(mut self, size: impl Into<crate::Size>) -> Self {
         self.size = size.into();
@@ -59,13 +73,7 @@ impl Sizable for OtpInput {
 }
 impl RenderOnce for OtpInput {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let compat_input = self.state.read(cx).compat_input_state();
-        sync_focused_input_registry(
-            self.state.read(cx).focus_handle(cx).is_focused(window),
-            compat_input,
-            window,
-            cx,
-        );
+        sync_focused_input_registry(self.state.clone(), window, cx);
         let state = self.state.read(cx);
         let blink_show = state.cursor_visible(cx);
         let is_focused = state.focus_handle(cx).is_focused(window);
@@ -100,6 +108,7 @@ impl RenderOnce for OtpInput {
             }
 
             let is_input_focused = ix == cursor_ix && is_focused;
+            let focus_visible = is_input_focused && !self.disabled && self.focus_ring_enabled;
 
             groups[group_ix].push(
                 h_flex()
@@ -109,7 +118,7 @@ impl RenderOnce for OtpInput {
                     .bg(bg)
                     .text_color(fg)
                     .when(self.disabled, |this| this.opacity(0.5))
-                    .when(is_input_focused, |this| this.border_color(cx.theme().ring))
+                    .when(focus_visible, |this| this.border_color(cx.theme().ring))
                     .items_center()
                     .justify_center()
                     .rounded(cx.theme().radius)
@@ -121,6 +130,7 @@ impl RenderOnce for OtpInput {
                         Size::Large => this.w_11().h_11(),
                         Size::Size(px) => this.w(px).h(px),
                     })
+                    .when(focus_visible, |this| this.focus_ring_style(window, cx))
                     .on_mouse_down(MouseButton::Left, {
                         let state = self.state.clone();
                         move |_, window, cx| state.read(cx).focus_handle(cx).focus(window, cx)

@@ -55,6 +55,8 @@ mod styled;
 mod switch;
 mod table;
 mod tabs;
+mod text_boundary;
+mod text_selection;
 mod theme;
 pub mod theme_tokens;
 mod toast;
@@ -82,6 +84,7 @@ pub use checkbox::{
 pub use collapsible::Collapsible;
 pub use color_picker::{ColorPicker, ColorPickerEvent, ColorPickerState, ColorSwatch, HslaSliders};
 pub use combobox::Combobox;
+pub use component_traits::FocusableExt;
 pub use component_traits::{Disableable, Selectable};
 pub use date_picker::DatePicker;
 pub use dialog::{
@@ -94,7 +97,7 @@ pub use focus_trap::FocusTrapElement;
 #[doc(hidden)]
 pub use focus_trap::active_focus_trap;
 pub use geometry::*;
-pub use global_state::GlobalState;
+pub use global_state::{DeferredPopover, GlobalState};
 pub use history::{History, HistoryItem};
 pub use hover_card::{HoverCard, HoverCardState};
 pub use index_path::IndexPath;
@@ -115,7 +118,7 @@ pub use number_input::{
 pub use otp_input::{OtpInput, OtpState};
 pub use pagination::{Pagination, PaginationItem, PaginationState};
 pub use popover::{Popover, PopoverState};
-pub use popup::Popup;
+pub use popup::{POPUP_PRIORITY, Popup};
 pub use positioner::{Align, Positioner, ResolvedPosition};
 pub use progress::{Progress, ProgressIndicator, ProgressTrack};
 pub use radio::{Radio, RadioStyles};
@@ -127,8 +130,8 @@ pub use resizable::{
     resizable_panel, v_resizable,
 };
 pub use scrollbar::{
-    Scrollbar, ScrollbarAxis, ScrollbarHandle, ScrollbarMode, ScrollbarStyles, ScrollbarThumbStyle,
-    ScrollbarTrackStyle,
+    Scrollbar, ScrollbarAxis, ScrollbarEntrance, ScrollbarHandle, ScrollbarMode, ScrollbarMotion,
+    ScrollbarStyles, ScrollbarThumbStyle, ScrollbarTrackStyle,
 };
 pub use select::Select;
 pub use sheet::Sheet;
@@ -136,12 +139,18 @@ pub use slider::{Slider, SliderIndicator, SliderThumb, SliderTrack};
 pub use state_style::StateStyle;
 #[cfg(any(feature = "inspector", debug_assertions))]
 pub use styled::styled_ext_reflection_methods;
-pub use styled::{FocusableExt, RoleOverride, StyledExt, box_shadow, h_flex, v_flex};
+pub use styled::{RoleOverride, StyledExt, box_shadow, h_flex, v_flex};
 pub use switch::{
     Switch, SwitchStyles, SwitchThumb, SwitchThumbStyles, SwitchTrack, SwitchTrackStyles,
 };
 pub use table::{Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow};
 pub use tabs::{Tab, TabStyles, Tabs};
+pub use text_selection::{
+    TextSelection, TextSelectionContentKey, TextSelectionCoverage, TextSelectionEndpoint,
+    TextSelectionEvent, TextSelectionHandle, TextSelectionLayer, TextSelectionProjection,
+    TextSelectionRegistration, TextSelectionRun, TextSelectionScopeId, TextSelectionSnapshot,
+    TextSelectionWindowPoints,
+};
 pub use theme::{ResizableTheme, ScrollbarTheme, Theme};
 pub use theme_tokens::{
     ColorTokens, RadiusTokens, SemanticThemeTokens, ShadowTokens, SpacingTokens, TextStyleToken,

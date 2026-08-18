@@ -179,6 +179,21 @@ impl ChartStory {
         }
     }
 
+    /// The monthly figures recentred on their mean, so the bar charts have a mix
+    /// of positive and negative values to draw around the zero line.
+    fn monthly_variations(&self) -> Vec<MonthlyDevice> {
+        let mean = self.monthly_devices.iter().map(|d| d.desktop).sum::<f64>()
+            / self.monthly_devices.len().max(1) as f64;
+        self.monthly_devices
+            .iter()
+            .map(|d| MonthlyDevice {
+                month: d.month.clone(),
+                desktop: (d.desktop - mean).round(),
+                color_alpha: d.color_alpha,
+            })
+            .collect()
+    }
+
     pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
         cx.new(|cx| Self::new(window, cx))
     }
@@ -513,6 +528,18 @@ impl Render for ChartStory {
                             .value(|d| d.desktop)
                             .label(|d| d.desktop.to_string())
                             .alignment(BarAlignment::Right),
+                        false,
+                        cx,
+                    ))
+                    .child(chart_container(
+                        "Bar Chart - Negative values",
+                        BarChart::new(self.monthly_variations())
+                            .id("bar-chart-negative")
+                            .name("Variation")
+                            .band(|d| d.month.clone())
+                            .value(|d| d.desktop)
+                            .label(|d| format!("{:.0}", d.desktop))
+                            .value_axis(true),
                         false,
                         cx,
                     ))

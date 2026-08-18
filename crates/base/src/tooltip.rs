@@ -8,6 +8,7 @@ use gpui::{
 
 use crate::{Placement, Positioner};
 
+const TOOLTIP_PRIORITY: usize = 200;
 const WINDOW_MARGIN: Pixels = px(4.);
 const GRACE_PERIOD: Duration = Duration::from_millis(300);
 const SHOW_DELAY: Duration = Duration::from_millis(500);
@@ -231,7 +232,7 @@ impl Render for TooltipOverlay {
                 })
                 .child(rendered),
         )
-        .with_priority(2)
+        .with_priority(TOOLTIP_PRIORITY)
         .into_any_element()
     }
 }
@@ -298,5 +299,10 @@ mod tests {
             state.update(cx, |tooltip, cx| tooltip.hide(cx));
         });
         cx.update(|_, cx| assert!(state.read(cx).content.is_none()));
+    }
+
+    #[test]
+    fn tooltip_priority_exceeds_popup_layer() {
+        assert!(TOOLTIP_PRIORITY > crate::POPUP_PRIORITY);
     }
 }

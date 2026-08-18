@@ -1,15 +1,105 @@
 use gpui::{
-    Anchor, AnyElement, App, Context, Div, ElementId, FocusHandle, InteractiveElement as _,
-    IntoElement, MouseButton, ParentElement, RenderOnce, Stateful, StyleRefinement, Styled, Window,
-    prelude::FluentBuilder as _,
+    Anchor, Animation, AnimationExt as _, AnyElement, App, Bounds, Context, Div, ElementId,
+    FocusHandle, InteractiveElement as _, IntoElement, MouseButton, ParentElement, Pixels,
+    RenderOnce, Stateful, StyleRefinement, Styled, Window, prelude::FluentBuilder as _, px,
 };
-use std::rc::Rc;
+use std::{rc::Rc, time::Duration};
 
-use crate::{Selectable, StyledExt as _, v_flex};
+use crate::ThemeStyled as _;
+use crate::{
+    Selectable, StyledExt as _,
+    animation::ease_out_cubic,
+    styled::{popover_ring, popover_shadow},
+    v_flex,
+};
 use gpui_base::Popover as BasePopover;
 pub use gpui_base::PopoverState;
 
 pub(crate) fn init(_: &mut App) {}
+
+/// How long a dropdown takes to settle into place after it opens.
+///
+/// This is shadcn/ui's figure: its popup surfaces carry `animate-in`, whose
+/// duration is 150ms.
+const DROPDOWN_ENTER_DURATION: Duration = Duration::from_millis(150);
+
+/// Where a dropdown starts out, relative to where it comes to rest.
+///
+/// Negative is above, so the surface slides *down* out of the trigger's edge —
+/// what shadcn/ui expresses as `data-[side=bottom]:slide-in-from-top-2`. Its
+/// `2` is `0.5rem`, which is 8px at the default root size.
+const DROPDOWN_ENTER_OFFSET: Pixels = px(-8.);
+
+fn dropdown_positioner(bounds: Bounds<Pixels>) -> gpui_base::Positioner {
+    gpui_base::Positioner::side(bounds)
+        .placement(gpui_base::Placement::Bottom)
+        .align(gpui_base::Align::Start)
+        .offset(px(6.))
+        .margin(px(8.))
+}
+
+/// Positions a dropdown surface under its trigger and animates it in.
+///
+/// This is the shared open motion for Select, Combobox and DatePicker, modelled
+/// on shadcn/ui: over 150ms the surface fades up from nothing while sliding the
+/// last 8px out of the trigger's edge, on an ease-out curve so it decelerates
+/// into place.
+///
+/// `surface` must be the panel itself — the element carrying
+/// [`ThemeStyled::popover_style`] — and not a wrapper around it. GPUI takes a
+/// shadow's shape from the element it is set on, so a wrapper of a different
+/// size would throw the shadow out of register with the panel.
+///
+/// # Why the shadow is animated too
+///
+/// GPUI has no group compositing: `opacity` multiplies into each primitive's
+/// alpha separately rather than fading a composited subtree. A drop shadow is
+/// painted as a full blurred rect *under* the element — the shader only cuts the
+/// element out of `inset` shadows — so a translucent panel does not hide its own
+/// shadow, and mid-fade the shadow shows straight through the panel as a dark
+/// slab. Ramping the ink by the cube of the fade keeps it out of sight until the
+/// panel is opaque enough to cover it, and still lands on the resting shadow
+/// [`popover_shadow`] gives every other popup.
+///
+/// # Departures from shadcn
+///
+/// - shadcn also scales the surface up from 95% (`zoom-in-95`). GPUI has no
+///   element transform — only images and SVGs take a `TransformationMatrix` —
+///   so there is nothing to scale a subtree with, and the fade and slide carry
+///   the motion on their own.
+/// - There is no exit motion. A closing dropdown stops being rendered in the
+///   same frame its state flips, so playing one would mean keeping the surface
+///   mounted past the close, which is a change to how each of these components
+///   tracks `open`.
+/// - The slide always comes from above. [`gpui_base::Positioner`] resolves the
+///   side the surface actually lands on during layout and does not report it
+///   back, so a dropdown that flips above its trigger for want of room below
+///   slides the opposite way — 8px over 150ms, in the rare case where it
+///   happens.
+///
+/// Reduced motion needs no handling here: GPUI's animation element adopts the
+/// final value on the first frame when the system asks for it.
+pub(crate) fn dropdown_popup(
+    id: impl Into<ElementId>,
+    bounds: Bounds<Pixels>,
+    surface: impl IntoElement + Styled + 'static,
+    cx: &App,
+) -> gpui_base::Positioner {
+    let travel: f32 = DROPDOWN_ENTER_OFFSET.into();
+    // Read out here: the animation runs long after `cx` is gone.
+    let ring = popover_ring(cx);
+
+    dropdown_positioner(bounds).child(surface.with_animation(
+        id,
+        Animation::new(DROPDOWN_ENTER_DURATION).with_easing(ease_out_cubic),
+        move |surface, delta| {
+            surface
+                .top(px(travel * (1. - delta)))
+                .opacity(delta)
+                .shadow(popover_shadow(ring, delta * delta * delta))
+        },
+    ))
+}
 
 /// A popover element that can be triggered by a button or any other element.
 #[derive(IntoElement)]
@@ -237,7 +327,7 @@ impl RenderOnce for Popover {
 mod tests {
     use super::*;
     use crate::{button::Button, theme::Theme};
-    use gpui::{Bounds, Context, MouseButton, Point, Render, div, point, px};
+    use gpui::{Bounds, Context, MouseButton, Point, Render, div, point, px, size};
     use gpui_base::Popup as BasePopup;
     use std::{cell::RefCell, rc::Rc};
 
@@ -368,5 +458,64 @@ mod tests {
         cx.update(|window, cx| window.draw(cx).clear(cx));
         cx.update(|window, cx| window.draw(cx).clear(cx));
         assert!(cx.debug_bounds("default-open-content").is_some());
+    }
+
+    struct Harness {
+        open: bool,
+    }
+
+    impl Render for Harness {
+        fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+            div().size_full().when(self.open, |this| {
+                this.child(dropdown_popup(
+                    "dropdown",
+                    Bounds::new(point(px(0.), px(100.)), size(px(120.), px(30.))),
+                    div().debug_selector(|| "surface".into()).size(px(50.)),
+                    cx,
+                ))
+            })
+        }
+    }
+
+    /// A dropdown that reused one animation key across opens would play its
+    /// enter motion the first time and then appear already settled on every
+    /// open after that. That is invisible in any single frame and easy to
+    /// reintroduce by giving the animation a constant id, so it is pinned here.
+    #[gpui::test]
+    fn the_enter_motion_starts_over_every_time_the_dropdown_opens(cx: &mut gpui::TestAppContext) {
+        cx.update(crate::init);
+        let (view, window) = cx.add_window_view(|_, _| Harness { open: true });
+
+        window.update(|window, cx| window.draw(cx).clear(cx));
+        let opening = window.debug_bounds("surface").unwrap().origin;
+
+        // The animation runs off the wall clock, so settling is waited out
+        // rather than stepped. Several times the duration leaves room for a
+        // loaded machine.
+        std::thread::sleep(DROPDOWN_ENTER_DURATION * 4);
+        window.update(|window, cx| window.draw(cx).clear(cx));
+        let settled = window.debug_bounds("surface").unwrap().origin;
+
+        assert!(
+            opening.y < settled.y,
+            "the surface should slide down into place, from {opening:?} to {settled:?}",
+        );
+
+        for open in [false, true] {
+            window.update(|window, cx| {
+                view.update(cx, |this, cx| {
+                    this.open = open;
+                    cx.notify();
+                });
+                window.draw(cx).clear(cx);
+            });
+        }
+
+        let reopening = window.debug_bounds("surface").unwrap().origin;
+        assert!(
+            reopening.y < settled.y,
+            "reopening should start the motion over at {opening:?} rather than showing a \
+             settled surface, but the first frame was already at {reopening:?}",
+        );
     }
 }

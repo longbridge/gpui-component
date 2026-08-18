@@ -231,6 +231,45 @@ BarChart::new(data)
     })
 ```
 
+#### Bar Chart Negative Values
+
+Bars grow from zero rather than from the edge of the plot, so negative values
+extend to the opposite side of the zero line. The band-axis line follows zero,
+and each category label moves to whichever side its own bar leaves empty. No
+configuration is needed — a data set containing negative values renders this way.
+
+```rust
+// `growth` may be negative; bars below the zero line are drawn downward
+BarChart::new(data)
+    .band(|d| d.quarter.clone())
+    .value(|d| d.growth)
+    .label(|d| format!("{:+.0}%", d.growth))
+```
+
+#### Bar Chart Value Axis
+
+Show tick labels for the value scale with `value_axis`, and control how many even
+intervals the scale is divided into with `value_tick_count`. The count drives both
+the grid line spacing and the tick labels, so the two always agree.
+
+Note that `value_tick_count` is a count, whereas `tick_margin` is a stride over
+the band-axis categories — `tick_margin(2)` keeps every second category label.
+
+```rust
+// Value labels left of vertical bars, below horizontal ones
+BarChart::new(data)
+    .band(|d| d.category.clone())
+    .value(|d| d.value)
+    .value_axis(true)
+
+// Divide the value scale into 6 intervals instead of the default 4
+BarChart::new(data)
+    .band(|d| d.category.clone())
+    .value(|d| d.value)
+    .value_axis(true)
+    .value_tick_count(6)
+```
+
 ### AreaChart
 
 An area chart displays quantitative data visually, similar to a line chart but with the area below the line filled.

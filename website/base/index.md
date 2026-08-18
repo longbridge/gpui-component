@@ -26,4 +26,4 @@ The dependency points one way: `gpui-component` builds on `gpui-base`. Applicati
 
 ## Start building
 
-Follow [Getting started](./getting-started.md), then explore the [primitive catalog](./primitives/index.md). Each primitive page includes a Rust snippet and a live WASM example backed by the same example crate that can run natively.
+Follow [Getting started](./getting-started.md), learn how to add [window-level text selection](./text-selection.md) to custom renderers, then explore the [primitive catalog](./primitives/index.md). Each primitive page includes a Rust snippet and a live WASM example backed by the same example crate that can run natively.

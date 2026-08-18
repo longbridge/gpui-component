@@ -3,6 +3,7 @@ description = "Behavior, interaction, and infrastructure foundations for GPUI ap
 keywords = ["desktop", "gpui", "ui", "foundation"]
 license = "Apache-2.0"
 name = "gpui-base"
+default-run = "base_components"
 repository = "https://github.com/longbridge/gpui-component"
 homepage = "https://longbridge.github.io/gpui-component"
 documentation = "https://docs.rs/gpui-base"
@@ -34,9 +35,11 @@ sum-tree.workspace = true
 tracing.workspace = true
 unicode-segmentation = "1.12.0"
 web-time = "1"
+syntect.workspace = true
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 smol.workspace = true
+gpui_platform.workspace = true
 
 [target.'cfg(target_family = "wasm")'.dependencies]
 async-channel = "2.3.1"
@@ -49,9 +52,7 @@ objc2-foundation = { version = "0.3", features = ["NSGeometry", "NSString"] }
 
 [dev-dependencies]
 gpui = { workspace = true, features = ["test-support"] }
-gpui_platform.workspace = true
 indoc = "2"
-syntect.workspace = true
 
 [lints]
 workspace = true

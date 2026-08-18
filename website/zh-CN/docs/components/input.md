@@ -101,6 +101,14 @@ Input::new(&input).small()
 Input::new(&input).disabled(true)
 ```
 
+### 只读态
+
+与 `disabled` 不同，只读输入框保持正常外观，仍然可以聚焦、选中和复制，只是拒绝用户对内容的修改。
+
+```rust
+Input::new(&input).readonly(true)
+```
+
 ### 按 ESC 清空
 
 ```rust

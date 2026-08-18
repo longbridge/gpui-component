@@ -1,3 +1,5 @@
+use gpui::{ImageSource, SharedUri};
+
 const NUMBERED_PREFIXES_1: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const NUMBERED_PREFIXES_2: &str = "abcdefghijklmnopqrstuvwxyz";
 
@@ -34,9 +36,47 @@ pub(super) fn list_item_prefix(ix: usize, ordered: bool, depth: usize) -> String
     }
 }
 
+/// Converts a document image URL into an [`ImageSource`] without granting
+/// implicit filesystem access.
+///
+/// Document-provided values remain URI-backed, including `file://` and
+/// scheme-less strings.
+pub(super) fn image_source(url: &SharedUri) -> ImageSource {
+    url.clone().into()
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::text::utils::list_item_prefix;
+    use gpui::{ImageSource, Resource};
+
+    use crate::text::utils::{image_source, list_item_prefix};
+
+    #[test]
+    fn test_image_source() {
+        fn source(url: &str) -> Resource {
+            match image_source(&url.to_string().into()) {
+                ImageSource::Resource(resource) => resource,
+                _ => panic!("expected a resource for {url:?}"),
+            }
+        }
+        fn assert_uri(url: &str) {
+            match source(url) {
+                Resource::Uri(uri) => assert_eq!(uri.as_ref(), url),
+                other => panic!("expected Uri for {url:?}, got {other:?}"),
+            }
+        }
+        assert_uri("https://example.com/logo.png");
+        assert_uri("http://example.com/logo.png");
+        assert_uri("data:image/png;base64,iVBORw0KGgo=");
+
+        assert_uri("website/public/logo.svg");
+        assert_uri("./images/a.png");
+        assert_uri("../images/a.png");
+        assert_uri("/absolute/path/logo.svg");
+        assert_uri("file:///absolute/path/logo.svg");
+        assert_uri(r"C:\images\logo.png");
+        assert_uri("docs/a:b.png");
+    }
 
     #[test]
     fn test_list_item_prefix() {

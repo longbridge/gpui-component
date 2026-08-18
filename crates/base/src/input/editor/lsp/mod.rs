@@ -3,7 +3,7 @@ use gpui::{App, Context, Hsla, SharedString, Task, Window};
 use ropey::Rope;
 use std::rc::Rc;
 
-use crate::input::{InputBaseState, RopeExt};
+use crate::input::{EditorMode, InputBaseState, RopeExt};
 
 mod code_actions;
 mod completions;
@@ -94,7 +94,7 @@ impl Lsp {
         &mut self,
         text: &Rope,
         window: &mut Window,
-        cx: &mut Context<InputBaseState>,
+        cx: &mut Context<InputBaseState<EditorMode>>,
     ) {
         self.update_document_colors(text, window, cx);
         self.update_semantic_tokens(text, window, cx);
@@ -110,7 +110,7 @@ impl Lsp {
     }
 }
 
-impl InputBaseState {
+impl InputBaseState<EditorMode> {
     /// Apply a list of [`lsp_types::TextEdit`] to mutate the text.
     pub fn apply_lsp_edits(
         &mut self,

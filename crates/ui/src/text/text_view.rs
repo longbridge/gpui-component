@@ -11,13 +11,17 @@ use crate::StyledExt;
 use crate::scroll::ScrollableElement;
 use crate::text::TextViewFormat;
 use crate::text::markdown_ext::{MarkdownExtensions, MarkdownNode, MarkdownPlugin};
-use crate::text::node::CodeBlock;
+use crate::text::node::{CodeBlock, TableData};
 use crate::text::state::{SelectionFormat, TextViewState};
 use crate::{global_state::UiGlobalState, text::TextViewStyle};
 
 /// Type for code block actions generator function.
 pub(crate) type CodeBlockActionsFn =
     dyn Fn(&CodeBlock, &mut Window, &mut App) -> AnyElement + Send + Sync;
+
+/// Type for the table actions generator function.
+pub(crate) type TableActionsFn =
+    dyn Fn(&TableData, &mut Window, &mut App) -> AnyElement + Send + Sync;
 
 pub(crate) type LinkClickHandlerFn =
     dyn Fn(&SharedString, &ClickEvent, &mut Window, &mut App) + Send + Sync;
@@ -70,6 +74,7 @@ pub struct TextView {
     selection_format: SelectionFormat,
     scrollable: bool,
     code_block_actions: Option<Arc<CodeBlockActionsFn>>,
+    table_actions: Option<Arc<TableActionsFn>>,
     link_click_handler: Option<Arc<LinkClickHandlerFn>>,
     markdown_extensions: Arc<MarkdownExtensions>,
 }
@@ -111,6 +116,7 @@ impl TextView {
             selection_format: SelectionFormat::default(),
             scrollable: false,
             code_block_actions: None,
+            table_actions: None,
             link_click_handler: None,
             markdown_extensions: Arc::default(),
         }
@@ -129,6 +135,7 @@ impl TextView {
             selection_format: SelectionFormat::default(),
             scrollable: false,
             code_block_actions: None,
+            table_actions: None,
             link_click_handler: None,
             markdown_extensions: Arc::default(),
         }
@@ -147,6 +154,7 @@ impl TextView {
             selection_format: SelectionFormat::default(),
             scrollable: false,
             code_block_actions: None,
+            table_actions: None,
             link_click_handler: None,
             markdown_extensions: Arc::default(),
         }
@@ -201,6 +209,21 @@ impl TextView {
     {
         self.code_block_actions = Some(Arc::new(move |code_block, window, cx| {
             f(&code_block, window, cx).into_any_element()
+        }));
+        self
+    }
+
+    /// Set custom actions to be rendered below each Markdown table.
+    ///
+    /// The closure receives the [`TableData`],
+    /// and returns an element to display.
+    pub fn table_actions<F, E>(mut self, f: F) -> Self
+    where
+        F: Fn(&TableData, &mut Window, &mut App) -> E + Send + Sync + 'static,
+        E: IntoElement,
+    {
+        self.table_actions = Some(Arc::new(move |table, window, cx| {
+            f(table, window, cx).into_any_element()
         }));
         self
     }
@@ -330,11 +353,15 @@ impl Element for TextView {
 
         state.update(cx, |state, cx| {
             state.code_block_actions = self.code_block_actions.clone();
+            state.table_actions = self.table_actions.clone();
             state.link_click_handler = self.link_click_handler.clone();
             state.set_markdown_extensions(self.markdown_extensions.clone(), cx);
             state.selectable = self.selectable;
             state.selection_format = self.selection_format;
             state.scrollable = self.scrollable;
+            if state.text_view_style != self.text_view_style {
+                state.selection_revision = state.selection_revision.wrapping_add(1);
+            }
             state.text_view_style = self.text_view_style.clone();
 
             if let Some(text) = self.text.clone() {
@@ -353,8 +380,9 @@ impl Element for TextView {
             })
             .relative()
             .on_action(move |_: &crate::input::Copy, window, cx| {
-                use crate::WindowExt as _;
-                let text = window.selected_text(cx).trim().to_string();
+                let text = gpui_base::TextSelection::selected_text(window, cx)
+                    .trim()
+                    .to_string();
                 if text.is_empty() {
                     cx.propagate();
                     return;
@@ -394,9 +422,7 @@ impl Element for TextView {
     ) {
         let state = &request_layout.state;
         if self.selectable {
-            // Register before painting children so this frame's Inline paint can
-            // repopulate the text bounds after stale ones are cleared.
-            crate::Root::register_selectable_text_view(state, hitbox, window, cx);
+            state.update(cx, |state, _| state.selection_adapter.begin_frame());
         }
 
         UiGlobalState::global_mut(cx)
@@ -404,17 +430,38 @@ impl Element for TextView {
             .push(state.clone());
         request_layout.element.paint(window, cx);
         UiGlobalState::global_mut(cx).text_view_state_stack.pop();
+
+        if self.selectable {
+            let (adapter, scroll_offset, content_bounds) = {
+                let state = state.read(cx);
+                (
+                    state.selection_adapter.clone(),
+                    state.scroll_offset(),
+                    state.bounds(),
+                )
+            };
+            let document_order = UiGlobalState::global_mut(cx).next_selection_document_order();
+            adapter.register(
+                hitbox.clone(),
+                content_bounds,
+                scroll_offset,
+                document_order,
+                window,
+                cx,
+            );
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{TextView, TextViewPlugin};
-    use crate::text::TextViewState;
+    use crate::text::{TableData, TextViewState, TextViewStyle};
     use gpui::{
-        AppContext as _, ClickEvent, Context, Entity, InteractiveElement as _, IntoElement,
-        Modifiers, MouseButton, MouseDownEvent, MouseUpEvent, ParentElement as _, Render,
-        SharedString, Styled as _, TestAppContext, VisualTestContext, Window, div, point, px,
+        AppContext as _, Bounds, ClickEvent, Context, Entity, InteractiveElement as _, IntoElement,
+        Modifiers, MouseButton, MouseDownEvent, MouseUpEvent, Overflow, ParentElement as _, Pixels,
+        Render, SharedString, StyleRefinement, Styled as _, TestAppContext, VisualTestContext,
+        Window, div, point, px,
     };
 
     struct TextViewTestRoot {
@@ -479,9 +526,15 @@ mod tests {
     #[gpui::test]
     fn inline_image_keeps_surrounding_text_on_same_line(cx: &mut TestAppContext) {
         cx.update(crate::init);
-        let (_, cx) = cx.add_window_view(|window, cx| {
+        let (root, cx) = cx.add_window_view(|window, cx| {
             let content = cx.new(|cx| InlineImageTextViewTestRoot::new(cx));
             crate::Root::new(content, window, cx)
+        });
+        let content = root.read_with(cx, |root, _| {
+            root.view()
+                .clone()
+                .downcast::<InlineImageTextViewTestRoot>()
+                .unwrap()
         });
         let cx: &mut VisualTestContext = cx;
 
@@ -490,13 +543,8 @@ mod tests {
             let _ = window.draw(cx);
         });
 
-        let inline_bounds = cx.update(|window, cx| {
-            crate::Root::read(window, cx)
-                .selectable_text_inlines
-                .values()
-                .next()
-                .cloned()
-                .unwrap_or_default()
+        let inline_bounds = content.read_with(cx, |content, cx| {
+            content.text_view.read(cx).selection_adapter.text_bounds()
         });
 
         assert_eq!(inline_bounds.len(), 2);
@@ -583,6 +631,95 @@ mod tests {
             top_level_action.right() - nested_action.right() < px(32.),
             "nested code block should fill the list item's available width"
         );
+    }
+
+    /// Draw a Markdown table with a `table_actions` hook installed, and return
+    /// the painted bounds of the actions element plus the data it received.
+    /// `scroll` opts into the horizontally scrollable table layout.
+    fn draw_table_with_actions(
+        cx: &mut TestAppContext,
+        scroll: bool,
+    ) -> (Bounds<Pixels>, TableData) {
+        use std::sync::{Arc, Mutex};
+
+        struct TableRoot {
+            scroll: bool,
+            captured: Arc<Mutex<Vec<TableData>>>,
+        }
+
+        impl Render for TableRoot {
+            fn render(
+                &mut self,
+                _window: &mut Window,
+                _cx: &mut Context<Self>,
+            ) -> impl IntoElement {
+                let captured = self.captured.clone();
+                let mut table_style = StyleRefinement::default();
+                if self.scroll {
+                    table_style.overflow.x = Some(Overflow::Scroll);
+                }
+
+                div().w(px(320.)).child(
+                    TextView::markdown(
+                        "table-actions",
+                        "| Name | Age |\n|:--|--:|\n| Alice | 30 |\n| Bob | 41 |",
+                    )
+                    .style(TextViewStyle::default().table(table_style))
+                    .table_actions(move |table, _, _| {
+                        if let Ok(mut captured) = captured.lock() {
+                            captured.push(table.clone());
+                        }
+                        div().debug_selector(|| "table-action".into()).child("Copy")
+                    }),
+                )
+            }
+        }
+
+        cx.update(crate::init);
+        let captured = Arc::new(Mutex::new(Vec::new()));
+        let (_, cx) = cx.add_window_view({
+            let captured = captured.clone();
+            move |_, _| TableRoot { scroll, captured }
+        });
+        let cx: &mut VisualTestContext = cx;
+
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        let bounds = cx
+            .debug_bounds("table-action")
+            .expect("table actions should be painted");
+        let data = captured
+            .lock()
+            .expect("captured table data")
+            .last()
+            .cloned()
+            .expect("table actions hook should receive the table");
+
+        (bounds, data)
+    }
+
+    #[gpui::test]
+    fn table_actions_render_below_the_table(cx: &mut TestAppContext) {
+        for scroll in [false, true] {
+            let (bounds, data) = draw_table_with_actions(cx, scroll);
+
+            // Header plus two data rows are painted above the actions row.
+            assert!(
+                bounds.top() > px(40.),
+                "actions should sit below the table (scroll: {scroll}), got {:?}",
+                bounds.top()
+            );
+            assert_eq!(data.headers, vec!["Name", "Age"]);
+            assert_eq!(data.rows, vec![vec!["Alice", "30"], vec!["Bob", "41"]]);
+            assert_eq!(
+                data.markdown,
+                "| Name | Age |\n| :-- | --: |\n| Alice | 30 |\n| Bob | 41 |"
+            );
+            assert_eq!(data.span, Some(0..52));
+        }
     }
 
     #[test]
@@ -736,7 +873,7 @@ mod tests {
         cx.update(crate::init);
         let clicks = Arc::new(Mutex::new(Vec::new()));
         let captured = clicks.clone();
-        let (_, cx) = cx.add_window_view(move |window, cx| {
+        let (root, cx) = cx.add_window_view(move |window, cx| {
             let content = cx.new(|cx| LinkedImageRoot {
                 text_view: cx.new(|cx| {
                     TextViewState::markdown(
@@ -748,19 +885,17 @@ mod tests {
             });
             crate::Root::new(content, window, cx)
         });
+        let content = root.read_with(cx, |root, _| {
+            root.view().clone().downcast::<LinkedImageRoot>().unwrap()
+        });
         let cx: &mut VisualTestContext = cx;
         cx.run_until_parked();
         cx.update(|window, cx| {
             let _ = window.draw(cx);
         });
 
-        let inline_bounds = cx.update(|window, cx| {
-            crate::Root::read(window, cx)
-                .selectable_text_inlines
-                .values()
-                .next()
-                .cloned()
-                .unwrap_or_default()
+        let inline_bounds = content.read_with(cx, |content, cx| {
+            content.text_view.read(cx).selection_adapter.text_bounds()
         });
         assert!(
             inline_bounds.len() >= 2,

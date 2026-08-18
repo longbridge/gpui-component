@@ -1,3 +1,4 @@
+use crate::input::InputModeKind;
 use std::rc::Rc;
 use std::{cell::RefCell, ops::Range};
 
@@ -9,7 +10,8 @@ use crate::input::{
     DiagnosticSet, InputEdit, InputHighlighter, InputHighlighterFactory, RopeExt as _, TabSize,
 };
 
-pub(super) struct HighlighterUpdate<'a> {
+/// What changed, handed to the syntax highlighter.
+pub(crate) struct HighlighterUpdate<'a> {
     pub(super) selected_range: &'a Range<usize>,
     pub(super) old_text: &'a Rope,
     pub(super) new_text: &'a Rope,
@@ -17,14 +19,15 @@ pub(super) struct HighlighterUpdate<'a> {
     pub(super) force: bool,
 }
 
+/// How the input lays its text out: rows, growth, and the code-editor extras.
+///
+/// This does not say what *kind* of input this is — that is fixed at the type
+/// level by [`crate::input::InputModeKind`], and asking it here is what used to
+/// let the two disagree.
 #[derive(Clone)]
-pub(crate) enum InputMode {
+pub(crate) enum LayoutMode {
     /// A plain text input mode.
-    PlainText {
-        multi_line: bool,
-        tab: TabSize,
-        rows: usize,
-    },
+    PlainText { tab: TabSize, rows: usize },
     /// An auto grow input mode.
     AutoGrow {
         rows: usize,
@@ -33,7 +36,6 @@ pub(crate) enum InputMode {
     },
     /// A code editor input mode.
     CodeEditor {
-        multi_line: bool,
         tab: TabSize,
         rows: usize,
         /// Show line number
@@ -47,30 +49,30 @@ pub(crate) enum InputMode {
     },
 }
 
-impl Default for InputMode {
+impl Default for LayoutMode {
     fn default() -> Self {
-        InputMode::plain_text()
+        LayoutMode::plain_text()
     }
 }
 
 #[allow(unused)]
-impl InputMode {
+impl LayoutMode {
     /// Create a plain input mode with default settings.
     pub(super) fn plain_text() -> Self {
-        InputMode::PlainText {
-            multi_line: false,
+        LayoutMode::PlainText {
             tab: TabSize::default(),
             rows: 1,
         }
     }
 
     /// Create a code editor input mode with default settings.
-    pub(super) fn code_editor(language: impl Into<SharedString>) -> Self {
-        InputMode::CodeEditor {
+    ///
+    /// Starts with no language; the state sets one through its own builder.
+    pub(super) fn code_editor() -> Self {
+        LayoutMode::CodeEditor {
             rows: 2,
-            multi_line: true,
             tab: TabSize::default(),
-            language: language.into(),
+            language: SharedString::default(),
             highlighter: Rc::new(RefCell::new(None)),
             highlighter_factory: None,
             line_number: true,
@@ -82,72 +84,37 @@ impl InputMode {
 
     /// Create an auto grow input mode with given min and max rows.
     pub(super) fn auto_grow(min_rows: usize, max_rows: usize) -> Self {
-        InputMode::AutoGrow {
+        LayoutMode::AutoGrow {
             rows: min_rows,
             min_rows,
             max_rows,
         }
     }
 
-    pub(super) fn multi_line(mut self, multi_line: bool) -> Self {
-        match &mut self {
-            InputMode::PlainText { multi_line: ml, .. } => *ml = multi_line,
-            InputMode::CodeEditor { multi_line: ml, .. } => *ml = multi_line,
-            InputMode::AutoGrow { .. } => {}
-        }
-        self
-    }
-
-    #[inline]
-    pub(super) fn is_single_line(&self) -> bool {
-        !self.is_multi_line()
-    }
-
-    #[inline]
-    pub(super) fn is_code_editor(&self) -> bool {
-        matches!(self, InputMode::CodeEditor { .. })
-    }
-
-    /// Return true if the mode is code editor and `folding: true`, `multi_line: true`.
+    /// Return true if this layout is a code editor with folding enabled.
     #[inline]
     pub(crate) fn is_folding(&self) -> bool {
         if cfg!(target_family = "wasm") {
             return false;
         }
 
-        matches!(
-            self,
-            InputMode::CodeEditor {
-                folding: true,
-                multi_line: true,
-                ..
-            }
-        )
+        matches!(self, LayoutMode::CodeEditor { folding: true, .. })
     }
 
     #[inline]
     pub(super) fn is_auto_grow(&self) -> bool {
-        matches!(self, InputMode::AutoGrow { .. })
-    }
-
-    #[inline]
-    pub(super) fn is_multi_line(&self) -> bool {
-        match self {
-            InputMode::PlainText { multi_line, .. } => *multi_line,
-            InputMode::CodeEditor { multi_line, .. } => *multi_line,
-            InputMode::AutoGrow { max_rows, .. } => *max_rows > 1,
-        }
+        matches!(self, LayoutMode::AutoGrow { .. })
     }
 
     pub(super) fn set_rows(&mut self, new_rows: usize) {
         match self {
-            InputMode::PlainText { rows, .. } => {
+            LayoutMode::PlainText { rows, .. } => {
                 *rows = new_rows;
             }
-            InputMode::CodeEditor { rows, .. } => {
+            LayoutMode::CodeEditor { rows, .. } => {
                 *rows = new_rows;
             }
-            InputMode::AutoGrow {
+            LayoutMode::AutoGrow {
                 rows,
                 min_rows,
                 max_rows,
@@ -157,25 +124,21 @@ impl InputMode {
         }
     }
 
+    /// Grow the row count to fit the content.
+    ///
+    /// Callers gate this on the input being multi-line; a single-line field
+    /// keeps its one row.
     pub(super) fn update_auto_grow(&mut self, display_map: &DisplayMap) {
-        if self.is_single_line() {
-            return;
-        }
-
         let wrapped_lines = display_map.wrap_row_count();
         self.set_rows(wrapped_lines);
     }
 
     /// At least 1 row be return.
     pub(super) fn rows(&self) -> usize {
-        if !self.is_multi_line() {
-            return 1;
-        }
-
         match self {
-            InputMode::PlainText { rows, .. } => *rows,
-            InputMode::CodeEditor { rows, .. } => *rows,
-            InputMode::AutoGrow { rows, .. } => *rows,
+            LayoutMode::PlainText { rows, .. } => *rows,
+            LayoutMode::CodeEditor { rows, .. } => *rows,
+            LayoutMode::AutoGrow { rows, .. } => *rows,
         }
         .max(1)
     }
@@ -184,7 +147,7 @@ impl InputMode {
     #[allow(unused)]
     pub(super) fn min_rows(&self) -> usize {
         match self {
-            InputMode::AutoGrow { min_rows, .. } => *min_rows,
+            LayoutMode::AutoGrow { min_rows, .. } => *min_rows,
             _ => 1,
         }
         .max(1)
@@ -192,39 +155,31 @@ impl InputMode {
 
     #[allow(unused)]
     pub(super) fn max_rows(&self) -> usize {
-        if !self.is_multi_line() {
-            return 1;
-        }
-
         match self {
-            InputMode::AutoGrow { max_rows, .. } => *max_rows,
+            LayoutMode::AutoGrow { max_rows, .. } => *max_rows,
             _ => usize::MAX,
         }
     }
 
-    /// Return false if the mode is not [`InputMode::CodeEditor`].
+    /// Return false if the mode is not [`LayoutMode::CodeEditor`].
     #[inline]
     pub(super) fn line_number(&self) -> bool {
         match self {
-            InputMode::CodeEditor {
-                line_number,
-                multi_line,
-                ..
-            } => *line_number && *multi_line,
+            LayoutMode::CodeEditor { line_number, .. } => *line_number,
             _ => false,
         }
     }
 
     /// Update the syntax highlighter with new text.
     ///
-    pub(super) fn update_highlighter(
+    pub(crate) fn update_highlighter<M: InputModeKind>(
         &mut self,
         update: HighlighterUpdate<'_>,
         window: &mut Window,
-        cx: &mut Context<crate::input::InputBaseState>,
+        cx: &mut Context<crate::input::InputBaseState<M>>,
     ) {
         match &self {
-            InputMode::CodeEditor {
+            LayoutMode::CodeEditor {
                 language,
                 highlighter,
                 highlighter_factory,
@@ -243,9 +198,10 @@ impl InputMode {
                     *highlighter_ref = factory(language);
                 }
 
-                let Some(h) = highlighter_ref.as_mut() else {
+                if highlighter_ref.is_none() {
                     return;
-                };
+                }
+                drop(highlighter_ref);
 
                 let edit = replacement_input_edit(
                     update.old_text,
@@ -253,7 +209,7 @@ impl InputMode {
                     update.selected_range,
                     update.change_text,
                 );
-                h.update(Some(edit), update.new_text, *folding, window, cx);
+                M::drive_highlighter(highlighter, edit, update.new_text, *folding, window, cx);
             }
             _ => {}
         }
@@ -262,14 +218,14 @@ impl InputMode {
     #[allow(unused)]
     pub(super) fn diagnostics(&self) -> Option<&DiagnosticSet> {
         match self {
-            InputMode::CodeEditor { diagnostics, .. } => Some(diagnostics),
+            LayoutMode::CodeEditor { diagnostics, .. } => Some(diagnostics),
             _ => None,
         }
     }
 
     pub(super) fn diagnostics_mut(&mut self) -> Option<&mut DiagnosticSet> {
         match self {
-            InputMode::CodeEditor { diagnostics, .. } => Some(diagnostics),
+            LayoutMode::CodeEditor { diagnostics, .. } => Some(diagnostics),
             _ => None,
         }
     }
@@ -277,13 +233,13 @@ impl InputMode {
     /// Get a reference to the highlighter (if available)
     pub(super) fn highlighter(&self) -> Option<&Rc<RefCell<Option<Box<dyn InputHighlighter>>>>> {
         match self {
-            InputMode::CodeEditor { highlighter, .. } => Some(highlighter),
+            LayoutMode::CodeEditor { highlighter, .. } => Some(highlighter),
             _ => None,
         }
     }
 
     pub(super) fn set_highlighter_factory(&mut self, factory: InputHighlighterFactory) {
-        if let InputMode::CodeEditor {
+        if let LayoutMode::CodeEditor {
             highlighter_factory,
             highlighter,
             ..
@@ -295,7 +251,7 @@ impl InputMode {
     }
 
     pub(super) fn ensure_highlighter_factory(&mut self, factory: InputHighlighterFactory) {
-        if let InputMode::CodeEditor {
+        if let LayoutMode::CodeEditor {
             highlighter_factory,
             ..
         } = self
@@ -336,7 +292,7 @@ mod tests {
     use ropey::Rope;
 
     use super::replacement_input_edit;
-    use crate::input::{DiagnosticSet, Point, TabSize, mode::InputMode};
+    use crate::input::{DiagnosticSet, Point, TabSize, mode::LayoutMode};
 
     #[test]
     fn test_replacement_input_edit_backspace_at_end_uses_old_range() {
@@ -354,21 +310,17 @@ mod tests {
 
     #[test]
     fn test_code_editor() {
-        let mode = InputMode::code_editor("rust");
-        assert_eq!(mode.is_code_editor(), true);
-        assert_eq!(mode.is_multi_line(), true);
-        assert_eq!(mode.is_single_line(), false);
+        let mode = LayoutMode::code_editor();
         assert_eq!(mode.line_number(), true);
         assert_eq!(mode.has_indent_guides(), true);
         assert_eq!(mode.max_rows(), usize::MAX);
         assert_eq!(mode.min_rows(), 1);
         assert_eq!(mode.is_folding(), true);
 
-        let mode = InputMode::CodeEditor {
-            multi_line: false,
-            line_number: true,
-            indent_guides: true,
-            folding: true,
+        let mode = LayoutMode::CodeEditor {
+            line_number: false,
+            indent_guides: false,
+            folding: false,
             rows: 0,
             tab: Default::default(),
             language: "rust".into(),
@@ -376,46 +328,32 @@ mod tests {
             highlighter_factory: None,
             diagnostics: DiagnosticSet::new(&Rope::new()),
         };
-        assert_eq!(mode.is_code_editor(), true);
-        assert_eq!(mode.is_multi_line(), false);
-        assert_eq!(mode.is_single_line(), true);
         assert_eq!(mode.line_number(), false);
         assert_eq!(mode.has_indent_guides(), false);
-        assert_eq!(mode.max_rows(), 1);
         assert_eq!(mode.min_rows(), 1);
         assert_eq!(mode.is_folding(), false);
     }
 
     #[test]
     fn test_plain() {
-        let mode = InputMode::PlainText {
-            multi_line: true,
+        let mode = LayoutMode::PlainText {
             tab: TabSize::default(),
             rows: 5,
         };
-        assert_eq!(mode.is_code_editor(), false);
-        assert_eq!(mode.is_multi_line(), true);
-        assert_eq!(mode.is_single_line(), false);
         assert_eq!(mode.line_number(), false);
         assert_eq!(mode.rows(), 5);
         assert_eq!(mode.max_rows(), usize::MAX);
         assert_eq!(mode.min_rows(), 1);
 
-        let mode = InputMode::plain_text();
-        assert_eq!(mode.is_code_editor(), false);
-        assert_eq!(mode.is_multi_line(), false);
-        assert_eq!(mode.is_single_line(), true);
+        let mode = LayoutMode::plain_text();
         assert_eq!(mode.line_number(), false);
-        assert_eq!(mode.max_rows(), 1);
+        assert_eq!(mode.rows(), 1);
         assert_eq!(mode.min_rows(), 1);
     }
 
     #[test]
     fn test_auto_grow() {
-        let mut mode = InputMode::auto_grow(2, 5);
-        assert_eq!(mode.is_code_editor(), false);
-        assert_eq!(mode.is_multi_line(), true);
-        assert_eq!(mode.is_single_line(), false);
+        let mut mode = LayoutMode::auto_grow(2, 5);
         assert_eq!(mode.line_number(), false);
         assert_eq!(mode.rows(), 2);
         assert_eq!(mode.max_rows(), 5);

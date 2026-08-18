@@ -191,6 +191,76 @@ Compound and stateful modules expose explicit presentation seams:
 - style refinements for internal virtualized containers;
 - presentation snapshots such as `InputPresentation`.
 
+## Public Data Types Across the Seam
+
+A public struct that crosses the base/application seam must not expose `pub`
+fields. Every field a caller can name is a field that cannot be added later:
+adding one breaks any struct literal, and removing or renaming one breaks every
+reader. The seam types are the ones that grow the most, because each new
+capability of a control shows up as another flag in the state it hands out.
+
+The shape to use instead:
+
+- private fields;
+- a builder for construction — `new()` plus one chained setter per field;
+- a reader per field.
+
+Setters and readers must not collide, which decides the naming:
+
+- a type whose fields are all boolean names its setters after the field and its
+  readers `is_`/`has_`/`can_`, matching how elements read — `CalendarItemState`,
+  `InputContextMenuCapabilities`;
+- a type carrying non-boolean fields prefixes every setter with `with_`, so the
+  readers keep the plain field name — `RenderOptions::with_item_ix` against
+  `RenderOptions::item_ix`. This follows `Sizable::with_size`.
+
+A `with_`-style setter that takes `self` by value also replaces functional
+update syntax, which stops compiling once the fields are private:
+
+```rust
+// was: RenderOptions { item_ix, ..*options }
+item.render_item(&options.with_item_ix(item_ix), window, cx)
+```
+
+A type that is only ever built inside its own module — `InputPresentation` is
+built by `InputBaseState::presentation` and nowhere else — needs the private
+fields and the readers, but not a public builder. Private fields already close
+the breaking-change hole, and a public builder there would hand out a
+construction path the seam does not want. Such a type reads its non-boolean
+fields under the plain field name, which is why it cannot also carry
+field-named setters.
+
+```rust
+let capabilities = InputContextMenuCapabilities::new()
+    .code_editor(true)
+    .selection(true);
+
+if capabilities.is_editable() && capabilities.has_selection() { /* ... */ }
+```
+
+Derived answers belong on the type rather than at each call site. When several
+readers are always combined the same way — `!disabled && !readonly` — publish
+that combination as its own reader (`is_editable`) so the rule has one
+definition and new inputs to it stay invisible to callers.
+
+Name such a type in full: `ComboboxTriggerContext`, never `…Ctx`. In a GPUI
+codebase `cx` is reserved for `App`, `Context<T>`, and `AsyncApp`, so an
+abbreviated `ctx` for anything else reads as a second, competing context. A
+callback that receives both takes the GPUI one as `cx` and gives the other a
+name describing what it holds.
+
+This applies to state snapshots (`InputPresentation`, `CalendarItemState`),
+capability sets (`InputContextMenuCapabilities`), render contexts
+(`ComboboxTriggerContext`), and option sets (`RenderOptions`). It does not
+apply to value types whose fields *are* the definition and cannot grow, such as
+`Point`, `Selection`, `Edges`, `IndexPath`, or `FoldRange`, nor to types that
+mirror an external schema, such as the LSP `Diagnostic`.
+
+Design-token records (`ColorTokens`, `RadiusTokens`, and the rest of
+`theme_tokens`) still carry `pub` fields. They have the same growth problem, and
+converting them is tracked separately because every theme in `gpui-component`
+constructs them.
+
 ## Input, Textarea, and Editor Architecture
 
 Text editing is intentionally deeper than the semantic elements, but callers do
@@ -408,5 +478,8 @@ Changes to `gpui-base` should preserve these invariants:
 10. One scroll handle represents one logical viewport.
 11. Platform differences are isolated behind explicit adapters or conditional
     implementations.
-12. Long-lived architectural facts belong here; progress logs and temporary
+12. Public types that cross the seam keep their fields private, are built with a
+    builder, and are read through methods, so a new field is not a breaking
+    change.
+13. Long-lived architectural facts belong here; progress logs and temporary
     reviews belong in issues and pull requests.

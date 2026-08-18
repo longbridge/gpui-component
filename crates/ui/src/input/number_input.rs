@@ -1,7 +1,7 @@
 use crate::theme::ActiveTheme;
 use gpui::{
     AnyElement, App, Entity, FocusHandle, Focusable, InteractiveElement as _,
-    StatefulInteractiveElement as _, Window, px,
+    StatefulInteractiveElement as _, Window, div, px,
 };
 use gpui::{
     IntoElement, ParentElement, RenderOnce, SharedString, StyleRefinement, Styled, TextAlign,
@@ -11,6 +11,7 @@ use gpui::{
 use crate::{Disableable, Icon, IconName, Sizable, Size, StyleSized as _, StyledExt as _};
 
 use super::{Input, InputState, input::input_style};
+use crate::ThemeStyled as _;
 use gpui_base::NumberInput as BaseNumberInput;
 pub use gpui_base::{NumberInputEvent, NumberStep, StepAction};
 use rust_i18n::t;
@@ -24,6 +25,7 @@ pub struct NumberInput {
     prefix: Option<AnyElement>,
     suffix: Option<AnyElement>,
     appearance: bool,
+    focus_ring_enabled: bool,
     disabled: bool,
     style: StyleRefinement,
 }
@@ -38,6 +40,7 @@ impl NumberInput {
             prefix: None,
             suffix: None,
             appearance: true,
+            focus_ring_enabled: true,
             disabled: false,
             style: StyleRefinement::default(),
         }
@@ -72,6 +75,17 @@ impl Disableable for NumberInput {
     fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
         self
+    }
+}
+
+impl crate::FocusableExt for NumberInput {
+    fn focus_ring(mut self, enabled: bool) -> Self {
+        self.focus_ring_enabled = enabled;
+        self
+    }
+
+    fn is_focus_ring_enabled(&self) -> bool {
+        self.focus_ring_enabled
     }
 }
 
@@ -115,23 +129,10 @@ impl RenderOnce for NumberInput {
         } else {
             cx.theme().radius
         };
-        let base_state = self.state.read(cx).base_state().clone();
-
-        BaseNumberInput::new(&base_state)
+        let base_state = self.state.clone();
+        let content = BaseNumberInput::new(&base_state)
             .disabled(self.disabled)
-            .flex_1()
-            .input_h(self.size)
-            .rounded(cx.theme().radius)
-            // The buttons are ghost, so the frame around the whole control is
-            // drawn here instead of by each of its parts.
-            .when(self.appearance, |this| {
-                this.bg(bg)
-                    .border_1()
-                    .border_color(border_color)
-                    .when(focused, |this| this.focused_border(cx))
-            })
-            .refine_style(&self.style)
-            .when(self.disabled, |this| this.opacity(0.5))
+            .size_full()
             .decrement_button(move |this| {
                 this.accessibility_label(t!("Input.Decrement"))
                     .flex()
@@ -182,7 +183,30 @@ impl RenderOnce for NumberInput {
                     .rounded_tr(button_radius)
                     .rounded_br(button_radius)
                     .child(Icon::new(IconName::Plus).with_size(button_size))
+            });
+
+        // The visual frame wraps the complete spinbutton. BaseNumberInput routes
+        // application children into its text slot, so putting the ring on that
+        // element would incorrectly surround only the editable middle region.
+        div()
+            .flex_1()
+            .input_h(self.size)
+            .rounded(cx.theme().radius)
+            .when(self.appearance, |this| {
+                this.bg(bg)
+                    .border_1()
+                    .border_color(border_color)
+                    .when(focused, |this| {
+                        this.border_1().border_color(cx.theme().ring)
+                    })
             })
+            .refine_style(&self.style)
+            .when(self.disabled, |this| this.opacity(0.5))
+            .child(content)
+            .when(
+                focused && self.appearance && self.focus_ring_enabled,
+                |this| this.focus_ring_style(window, cx),
+            )
     }
 }
 

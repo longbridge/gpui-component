@@ -14,13 +14,14 @@ use gpui_base::slider::SliderState;
 use gpui_base::{
     Accordion, AccordionHeader, AccordionItem, AccordionPanel, AccordionTrigger, AlertDialog,
     AlertDialogAction, AlertDialogBackdrop, AlertDialogCancel, AlertDialogDescription,
-    AlertDialogPopup, AlertDialogTitle, Avatar, AvatarFallback, Button, Calendar, CalendarItemKind,
-    CalendarState, Checkbox, CheckboxIndicator, CheckboxState, Collapsible, ColorPicker,
-    ColorPickerState, ColorSwatch, Combobox, DatePicker, Dialog, DialogBackdrop, DialogDescription,
-    DialogPopup, DialogTitle, Editor, HoverCard, Input, InputBase, OtpState, Popup, Scrollbar,
-    ScrollbarMode, Select, Sheet, Slider, SliderIndicator, SliderThumb, SliderTrack, Switch,
-    SwitchThumb, SwitchTrack, Tab, Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-    Tabs, Textarea, Toast, ToastTransitionStatus, Toggle, ToggleGroup, Tooltip, Tree, TreeItem,
+    AlertDialogPopup, AlertDialogTitle, AutoScroll, Avatar, AvatarFallback, Button, Calendar,
+    CalendarItemKind, CalendarState, Checkbox, CheckboxIndicator, CheckboxState, Collapsible,
+    ColorPicker, ColorPickerState, ColorSwatch, Combobox, DatePicker, Dialog, DialogBackdrop,
+    DialogDescription, DialogPopup, DialogTitle, Editor, HoverCard, Input, InputBase, OtpState,
+    Popup, Scrollbar, ScrollbarMode, Select, Sheet, Slider, SliderIndicator, SliderThumb,
+    SliderTrack, Switch, SwitchThumb, SwitchTrack, Tab, Table, TableBody, TableCell, TableHead,
+    TableHeader, TableRow, Tabs, TextSelectionEvent, TextSelectionHandle, TextSelectionLayer,
+    Textarea, Toast, ToastTransitionStatus, Toggle, ToggleGroup, Tooltip, Tree, TreeItem,
     TreeState, VirtualListScrollHandle, v_virtual_list,
 };
 #[cfg(target_family = "wasm")]
@@ -97,6 +98,7 @@ pub const COMPONENTS: &[&str] = &[
     "switch",
     "table",
     "tabs",
+    "text-selection",
     "textarea",
     "toast",
     "toggle",
@@ -142,6 +144,13 @@ pub struct BaseShowcase {
     scroll: ScrollHandle,
     example_scroll: ScrollHandle,
     virtual_scroll: VirtualListScrollHandle,
+    text_selection_handles: [TextSelectionHandle; 4],
+    text_selection_scroll: ScrollHandle,
+    text_selection_auto_scroll: AutoScroll,
+    text_selection_active: bool,
+    text_selection_text: String,
+    #[cfg(test)]
+    text_selection_footer_bounds: Rc<std::cell::RefCell<Option<gpui::Bounds<gpui::Pixels>>>>,
 }
 
 impl BaseShowcase {
@@ -170,7 +179,7 @@ impl BaseShowcase {
                 .rows(3)
                 .default_value("Build focused interfaces.\nKeep behavior composable.")
         });
-        let textarea_base = textarea.read(cx).base_state().clone();
+        let textarea_base = textarea.clone();
         textarea_base.update(cx, |state, _| {
             state.set_editor_style(InputEditorStyle {
                 foreground: rgb(0x171717).into(),
@@ -181,13 +190,14 @@ impl BaseShowcase {
             });
         });
         let editor = cx.new(|cx| {
-            EditorState::new("rust", window, cx)
+            EditorState::new(window, cx)
+                .language("rust")
                 .line_number(true)
                 .folding(true)
                 .show_whitespaces(true)
                 .default_value(EDITOR_EXAMPLE)
         });
-        let editor_base = editor.read(cx).base_state().clone();
+        let editor_base = editor.clone();
         editor_base.update(cx, |state, cx| {
             state.set_highlighter_factory(
                 Rc::new(|language| {
@@ -237,6 +247,38 @@ impl BaseShowcase {
         let color_picker =
             cx.new(|cx| ColorPickerState::new(window, cx).default_value(rgb(0x2563eb)));
         cx.observe(&color_picker, |_, _, cx| cx.notify()).detach();
+
+        let text_selection_handles = [
+            TextSelectionHandle::new("", cx),
+            TextSelectionHandle::new("", cx),
+            TextSelectionHandle::new("", cx),
+            TextSelectionHandle::new("", cx),
+        ];
+        let text_selection_scroll = ScrollHandle::new();
+        for selection in &text_selection_handles {
+            selection.refresh_window_on_change(window, cx).detach();
+            let view = cx.entity().downgrade();
+            selection
+                .subscribe(
+                    move |event, cx| {
+                        let TextSelectionEvent::AutoScroll(delta) = event else {
+                            return;
+                        };
+                        let delta = *delta;
+                        _ = view.update(cx, |this, cx| {
+                            this.text_selection_auto_scroll
+                                .set(delta, cx, |delta, this, cx| {
+                                    let offset = this.text_selection_scroll.offset();
+                                    this.text_selection_scroll
+                                        .set_offset(gpui::point(offset.x, offset.y - delta));
+                                    cx.notify();
+                                });
+                        });
+                    },
+                    cx,
+                )
+                .detach();
+        }
 
         Self {
             navigation_enabled: component == "overview",
@@ -289,6 +331,13 @@ impl BaseShowcase {
             scroll: ScrollHandle::new(),
             example_scroll: ScrollHandle::new(),
             virtual_scroll: VirtualListScrollHandle::new(),
+            text_selection_handles,
+            text_selection_scroll,
+            text_selection_auto_scroll: AutoScroll::default(),
+            text_selection_active: false,
+            text_selection_text: String::new(),
+            #[cfg(test)]
+            text_selection_footer_bounds: Rc::new(std::cell::RefCell::new(None)),
         }
     }
 
@@ -377,6 +426,7 @@ impl Render for BaseShowcase {
             "switch" => self.switch(cx).into_any_element(),
             "table" => self.table().into_any_element(),
             "tabs" => self.tabs(cx).into_any_element(),
+            "text-selection" => self.text_selection(window, cx).into_any_element(),
             "textarea" => self.textarea().into_any_element(),
             "toast" => self.toast(cx).into_any_element(),
             "toggle" => self.toggle(cx).into_any_element(),
@@ -396,6 +446,7 @@ impl Render for BaseShowcase {
             .text_color(rgb(0x171717))
             .text_xs()
             .font_family("Inter Variable")
+            .child(TextSelectionLayer)
             .when(show_back, |this| {
                 this.child(
                     div()

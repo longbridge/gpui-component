@@ -1,21 +1,20 @@
 use crate::{
     ActiveTheme, ElementExt, Placement, StyledExt,
     dialog::{ANIMATION_DURATION, Dialog},
-    input::{Copy, InputState},
+    input::{AnyInputState, Copy},
     native_menu::FallbackMenuOverlay,
     notification::{Notification, NotificationList},
     sheet::Sheet,
-    text::{SelectionScope, TextSelectionController, TextViewState, WindowTextSelection},
     tooltip::render_tooltip,
     window_border,
 };
 use gpui::{
-    Anchor, AnyView, App, AppContext, Bounds, ClipboardItem, Context, DefiniteLength, ElementId,
-    Entity, EntityId, FocusHandle, Hitbox, InteractiveElement, IntoElement, KeyBinding,
-    ParentElement as _, Pixels, Render, StyleRefinement, Styled, WeakEntity, WeakFocusHandle,
-    Window, actions, div, prelude::FluentBuilder as _,
+    AnyView, App, AppContext, ClipboardItem, Context, DefiniteLength, ElementId, Entity,
+    FocusHandle, InteractiveElement, IntoElement, KeyBinding, ParentElement as _, Pixels, Render,
+    StyleRefinement, Styled, WeakFocusHandle, Window, actions, div, prelude::FluentBuilder as _,
 };
-use std::{any::TypeId, collections::HashMap, rc::Rc};
+use gpui_base::{TextSelection, TextSelectionLayer, TextSelectionScopeId};
+use std::{any::TypeId, rc::Rc};
 
 actions!(root, [Tab, TabPrev]);
 
@@ -39,7 +38,7 @@ pub struct Root {
     view: AnyView,
     pub(crate) active_sheet: Option<ActiveSheet>,
     pub(crate) active_dialogs: Vec<ActiveDialog>,
-    pub(super) focused_input: Option<Entity<InputState>>,
+    pub(super) focused_input: Option<AnyInputState>,
     pub notification: Entity<NotificationList>,
     pub(crate) tooltip_overlay: Entity<gpui_base::TooltipOverlay>,
     pub(crate) native_menu_overlay: Entity<FallbackMenuOverlay>,
@@ -50,13 +49,7 @@ pub struct Root {
     /// The focus handle that will be restored after a dialog is closed with animation.
     /// Used to handle rapid dialog opening/closing to maintain correct focus chain.
     pending_focus_restore: Option<WeakFocusHandle>,
-    /// Window-level text selection state. See `text::window_selection`.
-    pub(crate) text_selection: WindowTextSelection,
-    /// Selectable TextViews registered this frame, keyed by entity id.
-    pub(crate) selectable_text_views:
-        HashMap<EntityId, (WeakEntity<TextViewState>, Hitbox, SelectionScope)>,
-    /// Inline text bounds for selectable TextViews, keyed by parent TextView id.
-    pub(crate) selectable_text_inlines: HashMap<EntityId, Vec<Bounds<Pixels>>>,
+    window_id: gpui::WindowId,
 }
 
 #[derive(Clone)]
@@ -65,6 +58,7 @@ pub(crate) struct ActiveSheet {
     /// The previous focused handle before opening the Sheet.
     previous_focused_handle: Option<WeakFocusHandle>,
     placement: Placement,
+    selection_scope: TextSelectionScopeId,
     builder: Rc<dyn Fn(Sheet, &mut Window, &mut App) -> Sheet + 'static>,
 }
 
@@ -73,6 +67,7 @@ pub(crate) struct ActiveDialog {
     focus_handle: FocusHandle,
     /// The previous focused handle before opening the Dialog.
     previous_focused_handle: Option<WeakFocusHandle>,
+    selection_scope: TextSelectionScopeId,
     builder: Rc<dyn Fn(Dialog, &mut Window, &mut App) -> Dialog + 'static>,
 }
 
@@ -80,17 +75,25 @@ impl ActiveDialog {
     pub(crate) fn new(
         focus_handle: FocusHandle,
         previous_focused_handle: Option<WeakFocusHandle>,
+        selection_scope: TextSelectionScopeId,
         builder: impl Fn(Dialog, &mut Window, &mut App) -> Dialog + 'static,
     ) -> Self {
         Self {
             focus_handle,
             previous_focused_handle,
+            selection_scope,
             builder: Rc::new(builder),
         }
     }
 }
 
 impl Root {
+    /// Clears window-owned text selection synchronously.
+    #[deprecated(note = "use gpui_base::TextSelection::clear instead")]
+    pub fn clear_text_selection(&mut self, cx: &mut Context<Self>) {
+        gpui_base::TextSelection::clear_for_window(self.window_id, cx);
+    }
+
     /// Create a new Root view.
     pub fn new(view: impl Into<AnyView>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         #[cfg(all(target_os = "macos", not(test)))]
@@ -110,10 +113,24 @@ impl Root {
             window_shadow_size: window_border::SHADOW_SIZE,
             bordered: true,
             pending_focus_restore: None,
-            text_selection: WindowTextSelection::default(),
-            selectable_text_views: HashMap::new(),
-            selectable_text_inlines: HashMap::new(),
+            window_id: window.window_handle().window_id(),
         }
+    }
+
+    fn allocate_text_selection_scope(&mut self) -> TextSelectionScopeId {
+        TextSelectionScopeId::new()
+    }
+
+    pub(crate) fn active_text_selection_scope(&self) -> TextSelectionScopeId {
+        self.active_dialogs
+            .last()
+            .map(|dialog| dialog.selection_scope)
+            .or_else(|| {
+                self.active_sheet
+                    .as_ref()
+                    .map(|sheet| sheet.selection_scope)
+            })
+            .unwrap_or_default()
     }
 
     /// Enable or disable the Linux client-side window border wrapper.
@@ -179,56 +196,15 @@ impl Root {
             _ => (None, None, None, None),
         };
 
-        let placement = cx.theme().notification.placement;
-        let margins = &cx.theme().notification.margins;
-
         Some(
             div()
                 .absolute()
-                .when(matches!(placement, Anchor::TopRight), |this| {
-                    this.top_0().right_0()
-                })
-                .when(matches!(placement, Anchor::TopLeft), |this| {
-                    this.top_0().left_0()
-                })
-                .when(matches!(placement, Anchor::TopCenter), |this| {
-                    this.top_0().mx_auto()
-                })
-                .when(matches!(placement, Anchor::BottomRight), |this| {
-                    this.bottom_0().right_0()
-                })
-                .when(matches!(placement, Anchor::BottomLeft), |this| {
-                    this.bottom_0().left_0()
-                })
-                .when(matches!(placement, Anchor::BottomCenter), |this| {
-                    this.bottom_0().mx_auto()
-                })
+                .inset_0()
                 .when_some(mt, |this, offset| this.mt(offset))
                 .when_some(mr, |this, offset| this.mr(offset))
                 .when_some(mb, |this, offset| this.mb(offset))
                 .when_some(ml, |this, offset| this.ml(offset))
-                .child(
-                    div()
-                        .when(matches!(placement, Anchor::TopRight), |this| {
-                            this.mt(margins.top).mr(margins.right)
-                        })
-                        .when(matches!(placement, Anchor::TopLeft), |this| {
-                            this.mt(margins.top).ml(margins.left)
-                        })
-                        .when(matches!(placement, Anchor::TopCenter), |this| {
-                            this.mt(margins.top)
-                        })
-                        .when(matches!(placement, Anchor::BottomRight), |this| {
-                            this.mb(margins.bottom).mr(margins.right)
-                        })
-                        .when(matches!(placement, Anchor::BottomLeft), |this| {
-                            this.mb(margins.bottom).ml(margins.left)
-                        })
-                        .when(matches!(placement, Anchor::BottomCenter), |this| {
-                            this.mb(margins.bottom)
-                        })
-                        .child(root.read(cx).notification.clone()),
-                ),
+                .child(root.read(cx).notification.clone()),
         )
     }
 
@@ -244,6 +220,7 @@ impl Root {
             sheet = (active_sheet.builder)(sheet, window, cx);
             sheet.focus_handle = active_sheet.focus_handle.clone();
             sheet.placement = active_sheet.placement;
+            sheet.selection_scope = active_sheet.selection_scope;
 
             let size = sheet.size;
 
@@ -286,6 +263,7 @@ impl Root {
                 //
                 // So we keep the focus handle in the `active_dialog`, this is owned by the `Root`.
                 dialog.focus_handle = active_dialog.focus_handle.clone();
+                dialog.selection_scope = active_dialog.selection_scope;
 
                 dialog.layer_ix = i;
                 // Find the dialog which one needs to show overlay.
@@ -321,14 +299,16 @@ impl Root {
         let focus_handle = cx.focus_handle();
         focus_handle.focus(window, cx);
 
+        let selection_scope = self.allocate_text_selection_scope();
         self.active_dialogs.push(ActiveDialog::new(
             focus_handle,
             previous_focused_handle,
+            selection_scope,
             build,
         ));
         // Opening a modal confines selection to it; drop any background
         // selection so it cannot linger (or be copied) under the modal.
-        self.clear_text_selection(cx);
+        gpui_base::TextSelection::clear(window, cx);
         cx.notify();
     }
 
@@ -344,7 +324,7 @@ impl Root {
         if let Some(handle) = self.close_dialog_internal() {
             window.focus(&handle, cx);
         }
-        self.clear_text_selection(cx);
+        gpui_base::TextSelection::clear(window, cx);
         cx.notify();
     }
 
@@ -368,7 +348,7 @@ impl Root {
             })
             .detach();
         }
-        self.clear_text_selection(cx);
+        gpui_base::TextSelection::clear(window, cx);
         cx.notify();
     }
 
@@ -382,7 +362,7 @@ impl Root {
         if let Some(handle) = previous_focused_handle.and_then(|h| h.upgrade()) {
             window.focus(&handle, cx);
         }
-        self.clear_text_selection(cx);
+        gpui_base::TextSelection::clear(window, cx);
         cx.notify();
     }
 
@@ -403,15 +383,17 @@ impl Root {
 
         let focus_handle = cx.focus_handle();
         focus_handle.focus(window, cx);
+        let selection_scope = self.allocate_text_selection_scope();
         self.active_sheet = Some(ActiveSheet {
             focus_handle,
             previous_focused_handle,
             placement,
+            selection_scope,
             builder: Rc::new(build),
         });
         // Opening a modal confines selection to it; drop any background
         // selection so it cannot linger (or be copied) under the modal.
-        self.clear_text_selection(cx);
+        gpui_base::TextSelection::clear(window, cx);
         cx.notify();
     }
 
@@ -426,7 +408,7 @@ impl Root {
             window.focus(&previous_handle, cx);
         }
         self.active_sheet = None;
-        self.clear_text_selection(cx);
+        gpui_base::TextSelection::clear(window, cx);
         cx.notify();
     }
 
@@ -567,8 +549,10 @@ impl Root {
         window.focus_prev(cx);
     }
 
-    fn on_action_copy(&mut self, _: &Copy, _: &mut Window, cx: &mut Context<Self>) {
-        let text = self.window_selected_text(cx).trim().to_string();
+    fn on_action_copy(&mut self, _: &Copy, window: &mut Window, cx: &mut Context<Self>) {
+        let text = gpui_base::TextSelection::selected_text(window, cx)
+            .trim()
+            .to_string();
         if text.is_empty() {
             cx.propagate();
             return;
@@ -586,6 +570,12 @@ impl Styled for Root {
 impl Render for Root {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         window.set_rem_size(cx.theme().font_size);
+        if !cx.has_global::<crate::global_state::UiGlobalState>() {
+            crate::global_state::init(cx);
+        }
+        crate::global_state::UiGlobalState::global_mut(cx).begin_selection_frame();
+        let active_scope = self.active_text_selection_scope();
+        TextSelection::activate_scope(active_scope, window, cx);
 
         let inner = div()
             .id("root")
@@ -599,7 +589,7 @@ impl Render for Root {
             .bg(cx.theme().tokens.background)
             .text_color(cx.theme().foreground)
             .refine_style(&self.style)
-            .child(TextSelectionController)
+            .child(TextSelectionLayer)
             .child(self.view.clone())
             .child(self.tooltip_overlay.clone())
             .child(self.native_menu_overlay.clone());

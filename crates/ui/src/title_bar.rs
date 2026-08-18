@@ -4,9 +4,10 @@ use crate::{
     ActiveTheme, Icon, IconName, InteractiveElementExt as _, Sizable as _, StyledExt, h_flex,
 };
 use gpui::{
-    AnyElement, App, ClickEvent, Context, Decorations, Hsla, InteractiveElement, IntoElement,
-    MouseButton, ParentElement, Pixels, Render, RenderOnce, StatefulInteractiveElement as _,
-    StyleRefinement, Styled, TitlebarOptions, Window, WindowControlArea, WindowOptions, div,
+    AnyElement, App, Background, ClickEvent, Context, Decorations, Hsla, InteractiveElement,
+    IntoElement, MouseButton, ParentElement, Pixels, Render, RenderOnce, Rgba,
+    StatefulInteractiveElement as _, StyleRefinement, Styled, TitlebarOptions, Window,
+    WindowControlArea, WindowOptions, div, linear_color_stop, linear_gradient,
     prelude::FluentBuilder as _, px,
 };
 use smallvec::SmallVec;
@@ -16,6 +17,23 @@ pub const TITLE_BAR_HEIGHT: Pixels = px(34.);
 const TITLE_BAR_LEFT_PADDING: Pixels = px(80.);
 #[cfg(not(target_os = "macos"))]
 const TITLE_BAR_LEFT_PADDING: Pixels = px(12.);
+
+fn default_title_bar_background(title_bar: Hsla, background: Hsla) -> Background {
+    let title_bar_rgb = title_bar.to_rgb();
+    let background_rgb = background.to_rgb();
+    let mixed = Hsla::from(Rgba {
+        r: title_bar_rgb.r * 0.55 + background_rgb.r * 0.45,
+        g: title_bar_rgb.g * 0.55 + background_rgb.g * 0.45,
+        b: title_bar_rgb.b * 0.55 + background_rgb.b * 0.45,
+        a: title_bar_rgb.a * 0.55 + background_rgb.a * 0.45,
+    });
+
+    linear_gradient(
+        180.,
+        linear_color_stop(mixed, 0.),
+        linear_color_stop(title_bar, 1.),
+    )
+}
 
 /// TitleBar used to customize the appearance of the title bar.
 ///
@@ -303,7 +321,10 @@ impl RenderOnce for TitleBar {
                 .pl(TITLE_BAR_LEFT_PADDING)
                 .border_b_1()
                 .border_color(cx.theme().title_bar_border)
-                .bg(cx.theme().tokens.title_bar)
+                .bg(default_title_bar_background(
+                    cx.theme().title_bar,
+                    cx.theme().background,
+                ))
                 .refine_style(&self.style)
                 .when(is_linux, |this| {
                     this.on_double_click(|_, window, _| window.zoom_window())
@@ -365,5 +386,34 @@ impl RenderOnce for TitleBar {
                     on_close_window: self.on_close_window,
                 }),
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gpui::{Rgba, linear_color_stop, linear_gradient};
+
+    #[test]
+    fn test_default_title_bar_background() {
+        let title_bar = Hsla::black();
+        let background = Hsla::white();
+
+        assert_eq!(
+            default_title_bar_background(title_bar, background),
+            linear_gradient(
+                180.,
+                linear_color_stop(
+                    Hsla::from(Rgba {
+                        r: 0.45,
+                        g: 0.45,
+                        b: 0.45,
+                        a: 1.,
+                    }),
+                    0.,
+                ),
+                linear_color_stop(title_bar, 1.),
+            )
+        );
     }
 }

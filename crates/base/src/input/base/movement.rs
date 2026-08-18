@@ -1,3 +1,4 @@
+use crate::input::InputModeKind;
 use gpui::{Context, Point, Window};
 
 use crate::input::{
@@ -11,7 +12,7 @@ pub(crate) enum MoveDirection {
     Down,
 }
 
-impl InputBaseState {
+impl<M: InputModeKind> InputBaseState<M> {
     /// Called after moving the cursor. Updates preferred_column if we know where the cursor now is.
     pub(super) fn update_preferred_column(&mut self) {
         let Some(last_layout) = &self.last_layout else {
@@ -44,14 +45,15 @@ impl InputBaseState {
         direction: Option<MoveDirection>,
         cx: &mut Context<Self>,
     ) {
+        self.undo_manager.break_transaction_coalescing();
         let offset = offset.clamp(0, self.text.len());
         self.cursor_line_end_affinity = false;
         self.selected_range = (offset..offset).into();
         self.scroll_to(offset, direction, cx);
         self.pause_blink_cursor(cx);
         self.update_preferred_column();
-        self.hide_context_menu(cx);
-        self.clear_inline_completion(cx);
+        M::hide_context_menu(self, cx);
+        M::clear_inline_completion(self, cx);
         cx.notify()
     }
 
@@ -64,7 +66,7 @@ impl InputBaseState {
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.mode.is_single_line() {
+        if self.is_single_line() {
             return;
         }
         let Some(last_layout) = &self.last_layout else {
@@ -155,11 +157,11 @@ impl InputBaseState {
     }
 
     pub(super) fn up(&mut self, action: &MoveUp, window: &mut Window, cx: &mut Context<Self>) {
-        if self.handle_action_for_context_menu(Box::new(action.clone()), window, cx) {
+        if M::handle_context_menu_action(self, Box::new(action.clone()), window, cx) {
             return;
         }
 
-        if self.mode.is_single_line() {
+        if self.is_single_line() {
             return;
         }
 
@@ -175,11 +177,11 @@ impl InputBaseState {
     }
 
     pub(super) fn down(&mut self, action: &MoveDown, window: &mut Window, cx: &mut Context<Self>) {
-        if self.handle_action_for_context_menu(Box::new(action.clone()), window, cx) {
+        if M::handle_context_menu_action(self, Box::new(action.clone()), window, cx) {
             return;
         }
 
-        if self.mode.is_single_line() {
+        if self.is_single_line() {
             return;
         }
 
@@ -196,7 +198,7 @@ impl InputBaseState {
     }
 
     pub(super) fn page_up(&mut self, _: &MovePageUp, window: &mut Window, cx: &mut Context<Self>) {
-        if self.mode.is_single_line() {
+        if self.is_single_line() {
             return;
         }
 
@@ -214,7 +216,7 @@ impl InputBaseState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.mode.is_single_line() {
+        if self.is_single_line() {
             return;
         }
 

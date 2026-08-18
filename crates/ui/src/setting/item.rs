@@ -253,7 +253,7 @@ impl SettingItem {
         cx: &mut App,
     ) -> Stateful<Div> {
         div()
-            .id(SharedString::from(format!("item-{}", options.item_ix)))
+            .id(SharedString::from(format!("item-{}", options.item_ix())))
             .w_full()
             .child(match self {
                 SettingItem::Item {
@@ -264,7 +264,7 @@ impl SettingItem {
                     field,
                     ..
                 } => {
-                    let layout = if options.layout.is_vertical() {
+                    let layout = if options.layout().is_vertical() {
                         Axis::Vertical
                     } else {
                         layout
@@ -272,7 +272,6 @@ impl SettingItem {
 
                     div()
                         .w_full()
-                        .overflow_hidden()
                         .when(disabled, |this| this.opacity(0.5))
                         .map(|this| {
                             if layout.is_horizontal() {
@@ -305,11 +304,7 @@ impl SettingItem {
                         )
                         .child(div().id("field").child(Self::render_field(
                             field,
-                            RenderOptions {
-                                layout,
-                                disabled,
-                                ..*options
-                            },
+                            options.with_layout(layout).with_disabled(disabled),
                             window,
                             cx,
                         )))
@@ -320,14 +315,7 @@ impl SettingItem {
                 } => div()
                     .w_full()
                     .when(disabled, |this| this.opacity(0.5))
-                    .child((render)(
-                        &RenderOptions {
-                            disabled,
-                            ..*options
-                        },
-                        window,
-                        cx,
-                    ))
+                    .child((render)(&options.with_disabled(disabled), window, cx))
                     .into_any_element(),
             })
     }

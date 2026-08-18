@@ -38,6 +38,14 @@ For Windows, you can run the following command in PowerShell:
 .\script\install-window.ps1
 ```
 
+### Accessibility-driven UI testing
+
+Use accessibility-driven interaction as the default manual UI testing method
+for focus, keyboard, selection, menu, and input behavior. See
+[Accessibility-driven UI testing](docs/ACCESSIBILITY-UI-TESTING.md) for the
+required Story app launch method, accessibility-tree workflow, and completion
+evidence.
+
 ### Run story
 
 There are a lot of UI test cases in the `crates/story` folder, if you change the existing features you can run the tests to make sure they are working.

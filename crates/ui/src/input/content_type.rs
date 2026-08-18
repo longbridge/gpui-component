@@ -149,12 +149,17 @@ impl InputContentType {
     }
 }
 
+/// Tells the OS what the focused input is used for, to let the autofill offer
+/// the matched value.
+///
+/// The `editable` is false when the input is `disabled` or `readonly`, in that
+/// case the autofill has nothing to fill in, so the content type is not synced.
 pub(super) fn sync_native_content_type(
     window: &mut Window,
     content_type: Option<InputContentType>,
-    disabled: bool,
+    editable: bool,
 ) {
-    if disabled {
+    if !editable {
         return;
     }
 

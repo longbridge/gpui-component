@@ -3,13 +3,12 @@ use gpui::{
     IntoElement, ParentElement as _, Render, Styled, Window, div, prelude::FluentBuilder as _, px,
 };
 use gpui_component::{
-    ActiveTheme, AxisExt, IndexPath, Sizable, Size,
+    AxisExt, IndexPath, Sizable, Size,
     button::Button,
     checkbox::Checkbox,
     color_picker::{ColorPicker, ColorPickerState},
     date_picker::{DatePicker, DatePickerState},
     form::{field, v_form},
-    h_flex,
     input::{Input, InputState, Textarea, TextareaState},
     select::{Select, SelectState},
     separator::Separator,
@@ -172,24 +171,13 @@ impl Render for FormStory {
                     .label_width(px(if is_multi_column { 100. } else { 140. }))
                     .child(
                         field().label_fn(|_, _| "Name").child(
-                            h_flex()
-                                .gap_2()
-                                .border_1()
-                                .border_color(cx.theme().input)
-                                .bg(cx.theme().input_background())
-                                .rounded(cx.theme().radius)
-                                .child(
-                                    div().w(px(90.)).child(
-                                        Select::new(&self.name_prefix_state)
-                                            .pr_0()
-                                            .appearance(false),
-                                    ),
-                                )
-                                .child(
-                                    div().flex_1().child(
-                                        Input::new(&self.name_input).pl_0().appearance(false),
-                                    ),
+                            Input::new(&self.name_input).pl_0().prefix(
+                                div().w(px(90.)).child(
+                                    Select::new(&self.name_prefix_state)
+                                        .pr_0()
+                                        .appearance(false),
                                 ),
+                            ),
                         ),
                     )
                     .child(

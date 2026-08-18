@@ -1,3 +1,10 @@
+//! Text input: the shared editing engine and the three states built on it.
+//!
+//! Nothing here should be `pub` unless it is reachable from outside the crate.
+//! A `pub` on an item behind a private module says something the module path
+//! contradicts, and it hides the real API surface from anyone reading it.
+#![warn(unreachable_pub)]
+
 use gpui::App;
 
 /// Character used by masked editor modes.
@@ -24,6 +31,8 @@ mod highlighting;
 #[path = "editor/indent.rs"]
 mod indent;
 mod input;
+#[path = "base/kind.rs"]
+mod kind;
 #[path = "base/layout.rs"]
 mod layout;
 #[path = "editor/lsp/mod.rs"]
@@ -45,6 +54,8 @@ mod selection;
 #[path = "base/state.rs"]
 mod state;
 mod textarea;
+#[path = "base/undo_manager.rs"]
+mod undo_manager;
 
 pub(crate) fn init(cx: &mut App) {
     state::init(cx);
@@ -66,13 +77,15 @@ pub use highlighting::{
 };
 pub use indent::TabSize;
 pub use input::{Input, InputState};
+pub use kind::{
+    EditorExtras, EditorMode, InputExtras, InputMode, InputModeKind, MultiLineMode, TextareaMode,
+};
 pub use lsp::{
     CodeActionItem, CodeActionMenuState, CodeActionProvider, CompletionMenuOptions,
     CompletionMenuState, CompletionProvider, DefinitionProvider, DocumentColorProvider,
     DocumentRangeSemanticTokensProvider, HoverPopoverState, HoverProvider, InputOverlayKind, Lsp,
     ShowDocumentHandler,
 };
-pub(super) use lsp::{HoverDefinition, InlineCompletion};
 pub use lsp_types::Position;
 pub use mask_pattern::MaskPattern;
 #[cfg(target_os = "macos")]

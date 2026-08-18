@@ -15,6 +15,7 @@ gpui.workspace = true
 gpui_platform.workspace = true
 gpui-component = { workspace = true }
 gpui-component-assets.workspace = true
+gpui-fps.workspace = true
 
 autocorrect = "2.14.2"
 chrono = "0.4"
@@ -50,6 +51,10 @@ getrandom = { version = "0.2", features = ["js"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = { version = "0.18" }
+
+[dev-dependencies]
+gpui = { workspace = true, features = ["test-support"] }
+gpui-base.workspace = true
 
 [lints]
 workspace = true

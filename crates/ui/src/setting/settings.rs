@@ -253,15 +253,106 @@ pub(super) struct SettingsState {
 }
 
 /// Options for rendering setting item.
+///
+/// The fields are private and reached through the methods below, so that a new
+/// one can be added without breaking the item renderers. The setters take
+/// `self` by value, so a nested renderer narrows a copy of its parent options:
+///
+/// ```ignore
+/// item.render_item(&options.with_item_ix(item_ix), window, cx)
+/// ```
 #[derive(Clone, Copy)]
 pub struct RenderOptions {
-    pub page_ix: usize,
-    pub group_ix: usize,
-    pub item_ix: usize,
-    pub size: Size,
-    pub group_variant: GroupBoxVariant,
-    pub layout: Axis,
-    pub disabled: bool,
+    page_ix: usize,
+    group_ix: usize,
+    item_ix: usize,
+    size: Size,
+    group_variant: GroupBoxVariant,
+    layout: Axis,
+    disabled: bool,
+}
+
+impl RenderOptions {
+    pub fn new() -> Self {
+        Self {
+            page_ix: 0,
+            group_ix: 0,
+            item_ix: 0,
+            size: Size::default(),
+            group_variant: GroupBoxVariant::default(),
+            layout: Axis::Horizontal,
+            disabled: false,
+        }
+    }
+
+    pub fn with_page_ix(mut self, page_ix: usize) -> Self {
+        self.page_ix = page_ix;
+        self
+    }
+
+    pub fn with_group_ix(mut self, group_ix: usize) -> Self {
+        self.group_ix = group_ix;
+        self
+    }
+
+    pub fn with_item_ix(mut self, item_ix: usize) -> Self {
+        self.item_ix = item_ix;
+        self
+    }
+
+    pub fn with_size(mut self, size: Size) -> Self {
+        self.size = size;
+        self
+    }
+
+    pub fn with_group_variant(mut self, group_variant: GroupBoxVariant) -> Self {
+        self.group_variant = group_variant;
+        self
+    }
+
+    pub fn with_layout(mut self, layout: Axis) -> Self {
+        self.layout = layout;
+        self
+    }
+
+    pub fn with_disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
+
+    pub fn page_ix(&self) -> usize {
+        self.page_ix
+    }
+
+    pub fn group_ix(&self) -> usize {
+        self.group_ix
+    }
+
+    pub fn item_ix(&self) -> usize {
+        self.item_ix
+    }
+
+    pub fn size(&self) -> Size {
+        self.size
+    }
+
+    pub fn group_variant(&self) -> GroupBoxVariant {
+        self.group_variant
+    }
+
+    pub fn layout(&self) -> Axis {
+        self.layout
+    }
+
+    pub fn is_disabled(&self) -> bool {
+        self.disabled
+    }
+}
+
+impl Default for RenderOptions {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[derive(Clone, Copy, Default)]
@@ -288,15 +379,9 @@ impl RenderOnce for Settings {
 
         let query = state.read(cx).search_input.read(cx).value();
         let filtered_pages = self.filtered_pages(&query, cx);
-        let options = RenderOptions {
-            page_ix: 0,
-            group_ix: 0,
-            item_ix: 0,
-            size: self.size,
-            group_variant: self.group_variant,
-            layout: Axis::Horizontal,
-            disabled: false,
-        };
+        let options = RenderOptions::new()
+            .with_size(self.size)
+            .with_group_variant(self.group_variant);
         let sidebar_size_range = self.sidebar_size_range.clone();
         let sidebar = self
             .render_sidebar(&state, &filtered_pages, window, cx)
@@ -311,14 +396,11 @@ impl RenderOnce for Settings {
             )
             .child(
                 resizable_panel().child(container_query(move |size, window, cx| {
-                    let options = RenderOptions {
-                        layout: if size.width <= STACKED_LAYOUT_MAX_WIDTH {
-                            Axis::Vertical
-                        } else {
-                            Axis::Horizontal
-                        },
-                        ..options
-                    };
+                    let options = options.with_layout(if size.width <= STACKED_LAYOUT_MAX_WIDTH {
+                        Axis::Vertical
+                    } else {
+                        Axis::Horizontal
+                    });
                     self.render_active_page(&state, &filtered_pages, &options, window, cx)
                 })),
             )

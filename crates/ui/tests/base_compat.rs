@@ -26,6 +26,14 @@ fn legacy_foundation_exports_remain_available() {
 }
 
 #[test]
+fn focus_ring_api_exposes_component_state_without_visual_options() {
+    use gpui_component::FocusableExt as _;
+
+    let button = gpui_component::button::Button::new("focus-ring-state").focus_ring(false);
+    assert!(!button.is_focus_ring_enabled());
+}
+
+#[test]
 fn base_crate_exports_the_same_foundation_types() {
     let legacy = gpui_component::Edges::all(1_u8);
     let base: gpui_base::Edges<u8> = legacy;
@@ -225,7 +233,7 @@ fn base_combobox_accepts_application_owned_content() {
 #[test]
 fn base_input_frames_accept_application_owned_content() {
     let _ = gpui_base::InputBase::new("input").child(gpui::div());
-    fn build_number(state: &gpui::Entity<gpui_base::input::InputBaseState>) {
+    fn build_number(state: &gpui::Entity<gpui_base::input::InputState>) {
         let _ = gpui_base::NumberInput::new(state)
             .on_step(|_, _, _| {})
             .decrement_button(|button| button.child("-"))
@@ -254,7 +262,7 @@ fn base_input_accepts_application_owned_highlighters() {
             _: &gpui_base::input::Rope,
             _: bool,
             _: &mut gpui::Window,
-            _: &mut gpui::Context<gpui_base::input::InputBaseState>,
+            _: &mut gpui::Context<gpui_base::input::EditorState>,
         ) {
         }
 

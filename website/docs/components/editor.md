@@ -18,7 +18,8 @@ use gpui_component::input::{Editor, EditorState, TabSize};
 
 ```rust
 let editor = cx.new(|cx| {
-    EditorState::new("rust", window, cx)
+    EditorState::new(window, cx)
+        .language("rust")
         .line_number(true)
         .folding(true)
         .tab_size(TabSize {
@@ -31,16 +32,16 @@ let editor = cx.new(|cx| {
 Editor::new(&editor).h(px(320.))
 ```
 
-The language passed to `EditorState::new` selects syntax highlighting. Enable
-the matching Cargo feature, such as `tree-sitter-rust` or
-`tree-sitter-markdown`; use `tree-sitter-languages` to bundle all built-in
-grammars.
+The language set via `.language()` selects syntax highlighting. Enable the
+matching Cargo feature, such as `tree-sitter-rust` or `tree-sitter-markdown`;
+use `tree-sitter-languages` to bundle all built-in grammars.
 
 ## Editor options
 
 ```rust
 let editor = cx.new(|cx| {
-    EditorState::new("json", window, cx)
+    EditorState::new(window, cx)
+        .language("json")
         .line_number(true)
         .folding(true)
         .show_whitespaces(true)
@@ -83,7 +84,17 @@ Editor::new(&editor)
     .h(px(480.))
     .bordered(true)
     .disabled(false)
+    .readonly(false)
     .aria_label("Rust source")
+```
+
+Use `readonly` to preview a file without allowing changes. Unlike `disabled`,
+a read-only editor keeps the normal appearance and still can be focused,
+selected, copied and searched, it only rejects the changes made by the user.
+The programmatic APIs such as `set_value` keep working.
+
+```rust
+Editor::new(&editor).readonly(true)
 ```
 
 Editor focus does not add the single-line Input focus-border treatment. The

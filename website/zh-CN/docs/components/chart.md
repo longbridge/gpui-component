@@ -223,6 +223,43 @@ BarChart::new(data)
     })
 ```
 
+#### 柱状图负值
+
+柱条从零点而非绘图区边缘开始生长，因此负值会向零线的另一侧延伸。
+分类轴线跟随零点位置，每个分类标签也会移动到自身柱条未占用的那一侧。
+无需任何配置——数据中包含负值时即以此方式渲染。
+
+```rust
+// `growth` 可为负值；零线以下的柱条向下绘制
+BarChart::new(data)
+    .band(|d| d.quarter.clone())
+    .value(|d| d.growth)
+    .label(|d| format!("{:+.0}%", d.growth))
+```
+
+#### 柱状图数值轴
+
+使用 `value_axis` 显示数值刻度标签，并通过 `value_tick_count` 控制数值轴被
+均分为多少个区间。该数量同时决定网格线间距和刻度标签，两者始终保持一致。
+
+注意 `value_tick_count` 是一个数量，而 `tick_margin` 是分类轴上的步长——
+`tick_margin(2)` 表示每隔一个分类保留一个标签。
+
+```rust
+// 纵向柱状图的数值标签位于左侧，横向柱状图位于下方
+BarChart::new(data)
+    .band(|d| d.category.clone())
+    .value(|d| d.value)
+    .value_axis(true)
+
+// 将数值轴均分为 6 个区间（默认为 4）
+BarChart::new(data)
+    .band(|d| d.category.clone())
+    .value(|d| d.value)
+    .value_axis(true)
+    .value_tick_count(6)
+```
+
 ### AreaChart
 
 面积图类似折线图，但会填充曲线下方的区域。

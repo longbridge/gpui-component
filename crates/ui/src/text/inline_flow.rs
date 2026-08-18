@@ -12,7 +12,6 @@ use gpui::{
 };
 
 use crate::{
-    WindowExt as _,
     text::text_view::{LinkClickHandlerFn, handle_link_click},
     tooltip::Tooltip,
 };
@@ -20,6 +19,7 @@ use crate::{
 use super::{
     inline::{Inline, InlineState},
     node::LinkMark,
+    utils::image_source,
 };
 
 const IMAGE_LEN: usize = 1;
@@ -125,7 +125,7 @@ impl InlineFlow {
         size: Size<Pixels>,
         link_click_handler: Option<Arc<LinkClickHandlerFn>>,
     ) -> AnyElement {
-        img(url.clone())
+        img(image_source(url))
             .id(ix)
             .object_fit(ObjectFit::Contain)
             .max_w(relative(1.))
@@ -138,7 +138,7 @@ impl InlineFlow {
                 this.cursor_pointer()
                     .tooltip(move |window, cx| Tooltip::new(title.clone()).build(window, cx))
                     .on_click(move |event, window, cx| {
-                        window.end_text_selection(cx);
+                        gpui_base::TextSelection::end(window, cx);
                         cx.stop_propagation();
                         handle_link_click(
                             &link_click_handler,
@@ -149,7 +149,7 @@ impl InlineFlow {
                         );
                     })
                     .on_aux_click(move |event, window, cx| {
-                        window.end_text_selection(cx);
+                        gpui_base::TextSelection::end(window, cx);
                         cx.stop_propagation();
                         handle_link_click(
                             &aux_link_click_handler,
@@ -629,7 +629,7 @@ fn intrinsic_image_size(
     window: &mut Window,
     cx: &mut App,
 ) -> Option<Size<Pixels>> {
-    let mut element = img(url.clone())
+    let mut element = img(image_source(url))
         .id(ix)
         .object_fit(ObjectFit::Contain)
         .max_w(relative(1.))

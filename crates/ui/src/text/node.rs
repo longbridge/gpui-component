@@ -15,12 +15,12 @@ use markdown::mdast;
 use ropey::Rope;
 
 use crate::{
-    ActiveTheme as _, Icon, IconName, StyledExt, WindowExt as _, h_flex,
+    ActiveTheme as _, Icon, IconName, StyledExt, h_flex,
     highlighter::{HighlightTheme, LanguageRegistry, SyntaxHighlighter},
     input::{InputEdit, Point, RopeExt as _},
     scroll::horizontal_scroll_area,
     text::{
-        CodeBlockActionsFn, LinkClickHandlerFn, MarkdownExtensions, MarkdownNode,
+        CodeBlockActionsFn, LinkClickHandlerFn, MarkdownExtensions, MarkdownNode, TableActionsFn,
         document::NodeRenderOptions,
         inline::{Inline, InlineState},
         inline_flow::{InlineFlow, InlineFlowItem},
@@ -30,7 +30,10 @@ use crate::{
     v_flex,
 };
 
-use super::{SelectionFormat, TextViewStyle, utils::list_item_prefix};
+use super::{
+    SelectionFormat, TextViewStyle,
+    utils::{image_source, list_item_prefix},
+};
 
 thread_local! {
     static CODE_BLOCK_HIGHLIGHTERS: RefCell<HashMap<SharedString, SyntaxHighlighter>> =
@@ -958,9 +961,90 @@ pub(crate) struct Table {
     pub(crate) span: Option<Span>,
 }
 
+/// Plain snapshot of a rendered Markdown table, passed to the
+/// [`crate::text::TextView::table_actions`] hook.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct TableData {
+    /// First table row (header cells) as plain text.
+    pub headers: Vec<String>,
+    /// Rows after the header as plain text cells. May be ragged while
+    /// a table is still streaming in.
+    pub rows: Vec<Vec<String>>,
+    /// The table serialized back to GFM pipe-table Markdown, alignments kept.
+    pub markdown: String,
+    /// Byte range of the table in the Markdown source, for callers that need
+    /// to map the table back to the document.
+    ///
+    /// Not needed to keep element ids apart: the actions row is wrapped in its
+    /// own identified element, so plain ids like `"copy"` are already scoped
+    /// per table.
+    pub span: Option<Range<usize>>,
+}
+
 impl Table {
     pub(crate) fn column_align(&self, index: usize) -> ColumnumnAlign {
         self.column_aligns.get(index).copied().unwrap_or_default()
+    }
+
+    /// Serialize the table back to GFM pipe-table Markdown (`| a | b |`),
+    /// preserving column alignments. Cell newlines collapse to spaces and
+    /// `|` is escaped so rows stay intact.
+    ///
+    /// Mirrors [`table_selected_source`], which does the same for the selected
+    /// cells only.
+    pub(crate) fn to_markdown(&self) -> String {
+        let mut lines: Vec<String> = Vec::with_capacity(self.children.len() + 1);
+
+        for (row_ix, row) in self.children.iter().enumerate() {
+            let cells: Vec<String> = row
+                .children
+                .iter()
+                .map(|cell| {
+                    cell.children
+                        .to_markdown()
+                        .trim()
+                        .replace('\n', " ")
+                        .replace('|', "\\|")
+                })
+                .collect();
+            lines.push(format!("| {} |", cells.join(" | ")));
+
+            // The Markdown delimiter row carries the column alignments and must
+            // follow the header row.
+            if row_ix == 0 {
+                let aligns: Vec<String> = (0..row.children.len())
+                    .map(|ix| {
+                        match self.column_align(ix) {
+                            ColumnumnAlign::Left => ":--",
+                            ColumnumnAlign::Center => ":-:",
+                            ColumnumnAlign::Right => "--:",
+                        }
+                        .to_string()
+                    })
+                    .collect();
+                lines.push(format!("| {} |", aligns.join(" | ")));
+            }
+        }
+
+        lines.join("\n")
+    }
+
+    /// Snapshot of this table for the [`crate::text::TextView::table_actions`]
+    /// hook.
+    pub(crate) fn table_data(&self) -> TableData {
+        let row_text = |row: &TableRow| {
+            row.children
+                .iter()
+                .map(|cell| cell.children.text().trim().to_string())
+                .collect::<Vec<_>>()
+        };
+
+        TableData {
+            headers: self.children.first().map(row_text).unwrap_or_default(),
+            rows: self.children.iter().skip(1).map(row_text).collect(),
+            markdown: self.to_markdown(),
+            span: self.span.map(|span| span.start..span.end),
+        }
     }
 }
 
@@ -1276,6 +1360,7 @@ pub(crate) struct NodeContext {
     pub(crate) link_refs: HashMap<SharedString, LinkMark>,
     pub(crate) style: TextViewStyle,
     pub(crate) code_block_actions: Option<Arc<CodeBlockActionsFn>>,
+    pub(crate) table_actions: Option<Arc<TableActionsFn>>,
     pub(crate) link_click_handler: Option<Arc<LinkClickHandlerFn>>,
     pub(crate) markdown_extensions: Arc<MarkdownExtensions>,
 }
@@ -1289,8 +1374,8 @@ impl NodeContext {
 impl PartialEq for NodeContext {
     fn eq(&self, other: &Self) -> bool {
         self.link_refs == other.link_refs && self.style == other.style
-        // Note: code_block_actions and markdown_extensions are intentionally
-        // not compared (closures can't be compared)
+        // Note: code_block_actions, table_actions and markdown_extensions are
+        // intentionally not compared (closures can't be compared)
     }
 }
 
@@ -1338,7 +1423,7 @@ impl Paragraph {
                 }
                 let link_click_handler = node_cx.link_click_handler.clone();
                 child_nodes.push(
-                    img(image.url.clone())
+                    img(image_source(&image.url))
                         .id(ix)
                         .object_fit(ObjectFit::Contain)
                         .max_w(relative(1.))
@@ -1353,7 +1438,7 @@ impl Paragraph {
                                     Tooltip::new(title.clone()).build(window, cx)
                                 })
                                 .on_click(move |event, window, cx| {
-                                    window.end_text_selection(cx);
+                                    gpui_base::TextSelection::end(window, cx);
                                     cx.stop_propagation();
                                     handle_link_click(
                                         &link_click_handler,
@@ -1364,7 +1449,7 @@ impl Paragraph {
                                     );
                                 })
                                 .on_aux_click(move |event, window, cx| {
-                                    window.end_text_selection(cx);
+                                    gpui_base::TextSelection::end(window, cx);
                                     cx.stop_propagation();
                                     handle_link_click(
                                         &aux_link_click_handler,
@@ -1694,46 +1779,7 @@ impl BlockNode {
                     code_block.code()
                 )
             }
-            BlockNode::Table(table) => {
-                let header = table
-                    .children
-                    .first()
-                    .map(|row| {
-                        row.children
-                            .iter()
-                            .map(|cell| cell.children.to_markdown())
-                            .collect::<Vec<_>>()
-                            .join(" | ")
-                    })
-                    .unwrap_or_default();
-                let alignments = table
-                    .column_aligns
-                    .iter()
-                    .map(|align| {
-                        match align {
-                            ColumnumnAlign::Left => ":--",
-                            ColumnumnAlign::Center => ":-:",
-                            ColumnumnAlign::Right => "--:",
-                        }
-                        .to_string()
-                    })
-                    .collect::<Vec<_>>()
-                    .join(" | ");
-                let rows = table
-                    .children
-                    .iter()
-                    .skip(1)
-                    .map(|row| {
-                        row.children
-                            .iter()
-                            .map(|cell| cell.children.to_markdown())
-                            .collect::<Vec<_>>()
-                            .join(" | ")
-                    })
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                format!("{}\n{}\n{}", header, alignments, rows)
-            }
+            BlockNode::Table(table) => table.to_markdown(),
             BlockNode::Break { html, .. } => {
                 if *html {
                     "<br>".to_string()
@@ -2147,6 +2193,19 @@ impl BlockNode {
                         .children(rows),
                 ),
             )
+            // Custom actions row (e.g. copy / download) rendered below the
+            // table. The hook's element spans full width; alignment is up to
+            // the caller (e.g. `h_flex().justify_end()`). The gap keeps hover
+            // backgrounds of the action buttons off the table border, and the
+            // id scopes the caller's element ids per table, so plain ids like
+            // `"copy"` don't collide across tables (same as code blocks).
+            .children(node_cx.table_actions.clone().map(|f| {
+                div().id(("table-actions", options.ix)).mt_1().child(f(
+                    &table.table_data(),
+                    window,
+                    cx,
+                ))
+            }))
             .into_any_element()
     }
 
@@ -2220,6 +2279,19 @@ impl BlockNode {
                     .children(rows)
                     .refine_style(&style.table),
             )
+            // Custom actions row (e.g. copy / download) rendered below the
+            // table. The hook's element spans full width; alignment is up to
+            // the caller (e.g. `h_flex().justify_end()`). The gap keeps hover
+            // backgrounds of the action buttons off the table border, and the
+            // id scopes the caller's element ids per table, so plain ids like
+            // `"copy"` don't collide across tables (same as code blocks).
+            .children(node_cx.table_actions.clone().map(|f| {
+                div().id(("table-actions", options.ix)).mt_1().child(f(
+                    &table.table_data(),
+                    window,
+                    cx,
+                ))
+            }))
             .into_any_element()
     }
 
@@ -2643,6 +2715,117 @@ mod tests {
             block.selected_text(SelectionFormat::Source),
             "| Name | Age |\n| :-- | --: |\n| Alice | 30 |\n"
         );
+    }
+
+    /// A cell holding plain text, as `Table::to_markdown` and
+    /// `Table::table_data` see it (neither needs a selection).
+    fn plain_cell(text: &str) -> TableCell {
+        TableCell {
+            children: Paragraph::new(text.to_string()),
+            width: None,
+        }
+    }
+
+    fn table_of(rows: Vec<Vec<TableCell>>, column_aligns: Vec<ColumnumnAlign>) -> Table {
+        Table {
+            children: rows
+                .into_iter()
+                .map(|children| TableRow { children })
+                .collect(),
+            column_aligns,
+            span: None,
+        }
+    }
+
+    #[test]
+    fn table_to_markdown_pipes_cells_with_alignment_row() {
+        let table = table_of(
+            vec![
+                vec![plain_cell("Name"), plain_cell("Age"), plain_cell("Score")],
+                vec![plain_cell("Alice"), plain_cell("30"), plain_cell("9.5")],
+            ],
+            vec![
+                ColumnumnAlign::Left,
+                ColumnumnAlign::Center,
+                ColumnumnAlign::Right,
+            ],
+        );
+
+        assert_eq!(
+            table.to_markdown(),
+            "| Name | Age | Score |\n| :-- | :-: | --: |\n| Alice | 30 | 9.5 |"
+        );
+        // The block arm delegates to it.
+        assert_eq!(
+            BlockNode::Table(table.clone()).to_markdown(),
+            table.to_markdown()
+        );
+    }
+
+    #[test]
+    fn table_to_markdown_keeps_outer_pipes_for_a_single_column() {
+        let table = table_of(
+            vec![vec![plain_cell("Symbol")], vec![plain_cell("TSLA.US")]],
+            vec![ColumnumnAlign::Left],
+        );
+
+        assert_eq!(table.to_markdown(), "| Symbol |\n| :-- |\n| TSLA.US |");
+    }
+
+    #[test]
+    fn table_to_markdown_escapes_pipes_and_keeps_inline_marks() {
+        let bold = TableCell {
+            children: paragraph_with_children(vec![
+                InlineNode::new("bold").marks(vec![(0..4, TextMark::default().bold())]),
+            ]),
+            width: None,
+        };
+        let table = table_of(
+            vec![
+                vec![plain_cell("a | b"), plain_cell("plain")],
+                vec![plain_cell("c"), bold],
+            ],
+            vec![ColumnumnAlign::Left, ColumnumnAlign::Left],
+        );
+
+        assert_eq!(
+            table.to_markdown(),
+            "| a \\| b | plain |\n| :-- | :-- |\n| c | **bold** |"
+        );
+    }
+
+    #[test]
+    fn table_data_snapshots_plain_cells_and_markdown() {
+        let mut table = table_of(
+            vec![
+                vec![plain_cell("  Name  "), plain_cell("Age")],
+                vec![plain_cell("Alice"), plain_cell("30")],
+            ],
+            vec![ColumnumnAlign::Left, ColumnumnAlign::Right],
+        );
+        table.span = Some(Span { start: 4, end: 42 });
+
+        let data = table.table_data();
+        assert_eq!(data.headers, vec!["Name", "Age"]);
+        assert_eq!(data.rows, vec![vec!["Alice", "30"]]);
+        assert_eq!(data.markdown, table.to_markdown());
+        assert_eq!(data.span, Some(4..42));
+    }
+
+    #[test]
+    fn table_data_handles_tables_without_rows() {
+        // Header only: still a valid table, with no data rows.
+        let header_only = table_of(
+            vec![vec![plain_cell("Name"), plain_cell("Age")]],
+            vec![ColumnumnAlign::Left, ColumnumnAlign::Left],
+        );
+        let data = header_only.table_data();
+        assert_eq!(data.headers, vec!["Name", "Age"]);
+        assert!(data.rows.is_empty());
+        assert_eq!(data.markdown, "| Name | Age |\n| :-- | :-- |");
+
+        // No rows at all (a table still streaming in): an empty snapshot.
+        assert_eq!(Table::default().table_data(), TableData::default());
     }
 
     fn image_paragraph(alt: &str, url: &str) -> Paragraph {

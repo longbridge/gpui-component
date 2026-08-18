@@ -25,7 +25,7 @@ pub(crate) struct BlinkCursor {
 }
 
 impl BlinkCursor {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             visible: false,
             paused: false,
@@ -35,11 +35,11 @@ impl BlinkCursor {
     }
 
     /// Start the blinking
-    pub fn start(&mut self, cx: &mut Context<Self>) {
+    pub(crate) fn start(&mut self, cx: &mut Context<Self>) {
         self.blink(self.epoch, cx);
     }
 
-    pub fn stop(&mut self, cx: &mut Context<Self>) {
+    pub(crate) fn stop(&mut self, cx: &mut Context<Self>) {
         self.epoch = 0;
         cx.notify();
     }
@@ -68,13 +68,13 @@ impl BlinkCursor {
         });
     }
 
-    pub fn visible(&self) -> bool {
+    pub(crate) fn visible(&self) -> bool {
         // Keep showing the cursor if paused
         self.paused || self.visible
     }
 
     /// Pause the blinking, and delay 500ms to resume the blinking.
-    pub fn pause(&mut self, cx: &mut Context<Self>) {
+    pub(crate) fn pause(&mut self, cx: &mut Context<Self>) {
         self.paused = true;
         self.visible = true;
         cx.notify();

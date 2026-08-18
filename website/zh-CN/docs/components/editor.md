@@ -17,7 +17,8 @@ use gpui_component::input::{Editor, EditorState, TabSize};
 
 ```rust
 let editor = cx.new(|cx| {
-    EditorState::new("rust", window, cx)
+    EditorState::new(window, cx)
+        .language("rust")
         .line_number(true)
         .folding(true)
         .tab_size(TabSize {
@@ -30,13 +31,14 @@ let editor = cx.new(|cx| {
 Editor::new(&editor).h(px(320.))
 ```
 
-`EditorState::new` 的第一个参数指定语法高亮语言。应用需要启用对应的 Cargo feature，例如 `tree-sitter-rust` 或 `tree-sitter-markdown`；也可以使用 `tree-sitter-languages` 包含全部内置语法。
+使用 `.language()` 指定语法高亮语言。应用需要启用对应的 Cargo feature，例如 `tree-sitter-rust` 或 `tree-sitter-markdown`；也可以使用 `tree-sitter-languages` 包含全部内置语法。
 
 ## 编辑器选项
 
 ```rust
 let editor = cx.new(|cx| {
-    EditorState::new("json", window, cx)
+    EditorState::new(window, cx)
+        .language("json")
         .line_number(true)
         .folding(true)
         .show_whitespaces(true)
@@ -73,7 +75,14 @@ Editor::new(&editor)
     .h(px(480.))
     .bordered(true)
     .disabled(false)
+    .readonly(false)
     .aria_label("Rust 源代码")
+```
+
+预览文件但不允许修改时使用 `readonly`。与 `disabled` 不同，只读编辑器保持正常外观，仍然可以聚焦、选中、复制和搜索，只是拒绝用户对内容的修改。`set_value` 等程序调用不受影响。
+
+```rust
+Editor::new(&editor).readonly(true)
 ```
 
 Editor 聚焦时不会应用单行 Input 的焦点边框效果。gutter、当前行背景和滚动条会作为同一个编辑器表面对齐绘制。
