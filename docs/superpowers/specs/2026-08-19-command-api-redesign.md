@@ -150,9 +150,11 @@ preserved.
 
 The render model persists inside the state so query, selection, and scrolling
 updates can redraw the virtual list without requiring the owner view to render
-again. When a subsequent `Command` render installs a new model, state preserves
-the selected value when it still exists, otherwise selects the first enabled
-match. Row measurement is invalidated when the model changes.
+again. A subsequent owner render constructs a new `Command` and installs its
+new model; state preserves the selected value when it still exists, otherwise
+selects the first enabled match, and invalidates row measurement. This accepts
+an eager O(n) remeasurement on owner-view renders in exchange for keeping the
+public API free of revision keys or comparable render closures.
 
 ## Groups, Separators, and Filtering
 
@@ -207,6 +209,6 @@ Tests will cover:
 
 Filtering remains linear. Visible rows are still created lazily by
 `v_virtual_list`; only measurement invalidation eagerly invokes row factories.
-Installing an unchanged model should avoid unnecessary selection resets and
-remeasurement. The implementation may use a private structural revision or
-entry signature, but this mechanism is not part of the public API.
+Owner-view renders reinstall the model and invalidate measurement. Command's
+own query, selection, and scrolling redraws reuse the installed model and do
+not cause another installation.
