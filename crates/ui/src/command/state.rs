@@ -29,7 +29,23 @@ pub(crate) const CONTEXT: &str = "Command";
 /// either side. Fixed, so that only the item and heading rows need measuring.
 const SEPARATOR_ROW_HEIGHT: f32 = 9.;
 
-type CommandFilter = dyn Fn(&CommandItem, &str) -> bool;
+pub(crate) type CommandFilter = dyn Fn(&CommandItem, &str) -> bool;
+
+pub(crate) struct CommandModel {
+    pub(crate) entries: Vec<CommandEntry>,
+    pub(crate) searchable: bool,
+    pub(crate) filter: Option<Rc<CommandFilter>>,
+}
+
+impl Default for CommandModel {
+    fn default() -> Self {
+        Self {
+            entries: Vec::new(),
+            searchable: true,
+            filter: None,
+        }
+    }
+}
 
 pub(crate) fn init(cx: &mut App) {
     let context: Option<&str> = Some(CONTEXT);
@@ -46,9 +62,9 @@ pub(crate) fn init(cx: &mut App) {
 pub enum CommandEvent {
     /// The search query changed.
     ///
-    /// Applications can answer this by fetching results and calling
-    /// [`CommandState::set_entries`]. Returned items still participate in the
-    /// command palette's local matching.
+    /// Applications can answer this by fetching results, updating owner data,
+    /// and rebuilding the [`crate::command::Command`]. Returned items still
+    /// participate in the command palette's local matching.
     Query(SharedString),
     /// The highlighted item moved to the item with this value.
     Select(SharedString),
@@ -100,24 +116,19 @@ struct MatchedItem {
     disabled: bool,
 }
 
-/// The state of a [`crate::command::Command`] palette: its commands, its query
-/// and which command is highlighted.
+/// The interaction state of a [`crate::command::Command`] palette: its query,
+/// focus, scrolling, and highlighted command.
 pub struct CommandState {
     focus_handle: FocusHandle,
     query_input: Entity<InputState>,
     scroll_handle: VirtualListScrollHandle,
-    entries: Vec<CommandEntry>,
+    model: CommandModel,
     rows: Vec<CommandRow>,
     row_sizes: Rc<Vec<Size<Pixels>>>,
     list_measurement_key: Option<ListMeasurementKey>,
     needs_measure: bool,
     matched: Vec<MatchedItem>,
     selected_index: usize,
-    /// Set by the builders, which run before the entity exists and so cannot
-    /// filter yet; consumed by the first render.
-    needs_update: bool,
-    searchable: bool,
-    filter: Option<Rc<CommandFilter>>,
     loading: bool,
     pending_scroll: Option<usize>,
     /// The placeholder last written to the query input, so that `render` only
@@ -139,16 +150,13 @@ impl CommandState {
             focus_handle: cx.focus_handle(),
             query_input,
             scroll_handle: VirtualListScrollHandle::new(),
-            entries: Vec::new(),
+            model: CommandModel::default(),
             rows: Vec::new(),
             row_sizes: Rc::new(Vec::new()),
             list_measurement_key: None,
             needs_measure: true,
             matched: Vec::new(),
             selected_index: 0,
-            needs_update: true,
-            searchable: true,
-            filter: None,
             loading: false,
             pending_scroll: None,
             applied_placeholder: SharedString::default(),
@@ -157,54 +165,32 @@ impl CommandState {
         }
     }
 
-    /// Add an ungrouped item.
-    pub fn item(mut self, item: CommandItem) -> Self {
-        self.entries.push(CommandEntry::Item(item));
-        self.needs_update = true;
-        self
-    }
-
-    /// Add a group of items.
-    pub fn group(mut self, group: impl Into<CommandEntry>) -> Self {
-        self.entries.push(group.into());
-        self.needs_update = true;
-        self
-    }
-
-    /// Add a separator between the previous and the next group.
-    pub fn separator(mut self) -> Self {
-        self.entries.push(CommandEntry::Separator);
-        self.needs_update = true;
-        self
-    }
-
-    /// Enable or disable local filtering of items as the query changes.
-    pub fn searchable(mut self, searchable: bool) -> Self {
-        self.searchable = searchable;
-        self.needs_update = true;
-        self
-    }
-
-    /// Set the predicate used to decide whether an item matches the query.
-    pub fn filter<F>(mut self, filter: F) -> Self
-    where
-        F: Fn(&CommandItem, &str) -> bool + 'static,
-    {
-        self.filter = Some(Rc::new(filter));
-        self.needs_update = true;
-        self
-    }
-
-    /// Replace every entry in the palette.
-    pub fn set_entries(
-        &mut self,
-        entries: impl IntoIterator<Item = CommandEntry>,
-        cx: &mut Context<Self>,
-    ) {
-        self.entries = entries.into_iter().collect();
+    pub(crate) fn install_model(&mut self, model: CommandModel, cx: &mut Context<Self>) {
+        let selected_value = self.selected_value();
+        self.model = model;
         self.update_matches(cx);
-        self.reset_selection();
-        cx.notify();
+
+        let preserved_selection = selected_value.and_then(|selected_value| {
+            self.matched
+                .iter()
+                .enumerate()
+                .find_map(|(matched_ix, matched)| {
+                    (!matched.disabled
+                        && self
+                            .item_at(matched_ix)
+                            .is_some_and(|item| item.value() == &selected_value))
+                    .then_some(matched_ix)
+                })
+        });
+
+        if let Some(matched_ix) = preserved_selection {
+            self.selected_index = matched_ix;
+            self.pending_scroll = self.matched.get(matched_ix).map(|matched| matched.row_ix);
+        } else {
+            self.reset_selection();
+        }
+
+        self.needs_measure = true;
     }
 
     /// The current search query.
@@ -246,7 +232,7 @@ impl CommandState {
 
     /// Move focus to the palette's active control.
     pub fn focus(&self, window: &mut Window, cx: &mut App) {
-        if self.searchable {
+        if self.model.searchable {
             self.query_input.focus_handle(cx).focus(window, cx);
         } else {
             self.focus_handle.focus(window, cx);
@@ -272,9 +258,9 @@ impl CommandState {
     // MARK: Matching
 
     fn item_matches(&self, item: &CommandItem, query: &str) -> bool {
-        if !self.searchable || query.is_empty() {
+        if !self.model.searchable || query.is_empty() {
             true
-        } else if let Some(filter) = &self.filter {
+        } else if let Some(filter) = &self.model.filter {
             filter(item, query)
         } else {
             item.matches(query)
@@ -284,7 +270,7 @@ impl CommandState {
     fn item_at(&self, matched_ix: usize) -> Option<&CommandItem> {
         let matched = self.matched.get(matched_ix)?;
 
-        match self.entries.get(matched.entry_ix)? {
+        match self.model.entries.get(matched.entry_ix)? {
             CommandEntry::Item(item) => Some(item),
             CommandEntry::Group(group) => group.items.get(matched.item_ix),
             CommandEntry::Separator => None,
@@ -303,7 +289,7 @@ impl CommandState {
         // leading, trailing and doubled separators a filtered list leaves behind.
         let mut pending_separator = false;
 
-        for (entry_ix, entry) in self.entries.iter().enumerate() {
+        for (entry_ix, entry) in self.model.entries.iter().enumerate() {
             match entry {
                 CommandEntry::Separator => pending_separator = !rows.is_empty(),
                 CommandEntry::Item(item) => {
@@ -467,7 +453,7 @@ impl CommandState {
     /// Escape clears a non-empty query first, and only then leaves the palette
     /// — the dialog that hosts it closes on the second press.
     fn on_action_cancel(&mut self, _: &Cancel, window: &mut Window, cx: &mut Context<Self>) {
-        if self.searchable && !self.query(cx).is_empty() {
+        if self.model.searchable && !self.query(cx).is_empty() {
             self.set_query("", window, cx);
             return;
         }
@@ -611,7 +597,7 @@ impl CommandState {
             muted_foreground
         };
 
-        let content = match &item.render {
+        let content = match &item.content {
             Some(render) => render(window, cx),
             None => h_flex()
                 .flex_1()
@@ -680,7 +666,7 @@ impl EventEmitter<CommandEvent> for CommandState {}
 
 impl Focusable for CommandState {
     fn focus_handle(&self, cx: &App) -> FocusHandle {
-        if self.searchable {
+        if self.model.searchable {
             self.query_input.focus_handle(cx)
         } else {
             self.focus_handle.clone()
@@ -691,13 +677,6 @@ impl Focusable for CommandState {
 impl Render for CommandState {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.sync_placeholder(window, cx);
-
-        // Matching first: the row heights are measured from a real item.
-        if self.needs_update {
-            self.needs_update = false;
-            self.update_matches(cx);
-            self.reset_selection();
-        }
 
         if self.needs_measure {
             self.needs_measure = false;
@@ -734,7 +713,7 @@ impl Render for CommandState {
             .when_some(self.options.header(), |this, header| {
                 this.child(header(self, window, cx))
             })
-            .when(self.searchable, |this| {
+            .when(self.model.searchable, |this| {
                 this.child(
                     div()
                         .flex_none()
@@ -837,27 +816,124 @@ mod tests {
         TestAppContext, Window, div, prelude::FluentBuilder as _, px,
     };
 
-    use super::{CommandRow, CommandState, SEPARATOR_ROW_HEIGHT};
+    use super::{CommandFilter, CommandModel, CommandRow, CommandState, SEPARATOR_ROW_HEIGHT};
     use crate::{
         Disableable as _,
         actions::{Cancel, Confirm, SelectDown},
         command::{Command, CommandEntry, CommandEvent, CommandGroup, CommandItem},
     };
 
-    fn suggestions(state: CommandState) -> CommandState {
+    struct CommandOwnedEntriesHarness {
+        state: Entity<CommandState>,
+    }
+
+    impl Render for CommandOwnedEntriesHarness {
+        fn render(&mut self, _: &mut Window, _: &mut gpui::Context<Self>) -> impl IntoElement {
+            Command::new(&self.state)
+                .searchable(false)
+                .item(CommandItem::new("alpha"))
+                .group(CommandGroup::new("Settings").item(CommandItem::new("beta")))
+                .separator()
+                .item(CommandItem::new("custom").child(|_, _| div().h(px(72.)).child("Custom")))
+        }
+    }
+
+    #[gpui::test]
+    fn command_owns_entries_and_lazy_item_content(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (harness, cx) = cx.add_window_view(|window, cx| CommandOwnedEntriesHarness {
+            state: cx.new(|cx| CommandState::new(window, cx)),
+        });
+
+        cx.run_until_parked();
+        cx.update(|window, cx| _ = window.draw(cx));
+
+        let (values, rows, row_sizes) = cx.update(|_, cx| {
+            let state = harness.read(cx).state.read(cx);
+            (
+                (0..state.matched_count())
+                    .map(|matched_ix| state.item_at(matched_ix).unwrap().value().clone())
+                    .collect::<Vec<_>>(),
+                state.rows.clone(),
+                state.row_sizes.clone(),
+            )
+        });
+
+        assert_eq!(values, ["alpha", "beta", "custom"]);
+        assert!(matches!(
+            rows.as_slice(),
+            [
+                CommandRow::Item(_),
+                CommandRow::Heading(heading),
+                CommandRow::Item(_),
+                CommandRow::Separator,
+                CommandRow::Item(_),
+            ] if heading == "Settings"
+        ));
+        assert_eq!(row_sizes[4].height, px(84.));
+    }
+
+    fn command_with_entries(
+        state: &Entity<CommandState>,
+        entries: impl IntoIterator<Item = CommandEntry>,
+    ) -> Command {
+        entries
+            .into_iter()
+            .fold(Command::new(state), |command, entry| match entry {
+                CommandEntry::Item(item) => command.item(item),
+                CommandEntry::Group(group) => command.group(group),
+                CommandEntry::Separator => command.separator(),
+            })
+    }
+
+    fn command_state(
+        window: &mut Window,
+        cx: &mut gpui::Context<CommandState>,
+        entries: impl IntoIterator<Item = CommandEntry>,
+    ) -> CommandState {
+        let mut state = CommandState::new(window, cx);
+        state.install_model(
+            CommandModel {
+                entries: entries.into_iter().collect(),
+                ..CommandModel::default()
+            },
+            cx,
+        );
         state
-            .group(
-                CommandGroup::new("Suggestions")
-                    .item(CommandItem::new("Calendar"))
-                    .item(CommandItem::new("Search Emoji"))
-                    .item(CommandItem::new("Calculator").disabled(true)),
-            )
-            .separator()
-            .group(
-                CommandGroup::new("Settings")
-                    .item(CommandItem::new("profile").label("Profile"))
-                    .item(CommandItem::new("billing").label("Billing")),
-            )
+    }
+
+    fn command_state_with_options(
+        window: &mut Window,
+        cx: &mut gpui::Context<CommandState>,
+        entries: impl IntoIterator<Item = CommandEntry>,
+        searchable: bool,
+        filter: Option<Rc<CommandFilter>>,
+    ) -> CommandState {
+        let mut state = CommandState::new(window, cx);
+        state.install_model(
+            CommandModel {
+                entries: entries.into_iter().collect(),
+                searchable,
+                filter,
+            },
+            cx,
+        );
+        state
+    }
+
+    fn suggestion_entries() -> Vec<CommandEntry> {
+        vec![
+            CommandGroup::new("Suggestions")
+                .item(CommandItem::new("Calendar"))
+                .item(CommandItem::new("Search Emoji"))
+                .item(CommandItem::new("Calculator").disabled(true))
+                .into(),
+            CommandEntry::Separator,
+            CommandGroup::new("Settings")
+                .item(CommandItem::new("profile").label("Profile"))
+                .item(CommandItem::new("billing").label("Billing"))
+                .into(),
+        ]
     }
 
     #[gpui::test]
@@ -866,7 +942,7 @@ mod tests {
         let cx = cx.add_empty_window();
 
         cx.update(|window, cx| {
-            let state = cx.new(|cx| suggestions(CommandState::new(window, cx)));
+            let state = cx.new(|cx| command_state(window, cx, suggestion_entries()));
 
             state.update(cx, |state, cx| {
                 state.update_matches(cx);
@@ -914,7 +990,7 @@ mod tests {
         let cx = cx.add_empty_window();
 
         cx.update(|window, cx| {
-            let state = cx.new(|cx| suggestions(CommandState::new(window, cx)));
+            let state = cx.new(|cx| command_state(window, cx, suggestion_entries()));
 
             state.update(cx, |state, cx| {
                 state.set_query("zzz", window, cx);
@@ -934,10 +1010,14 @@ mod tests {
 
         cx.update(|window, cx| {
             let state = cx.new(|cx| {
-                CommandState::new(window, cx).item(
-                    CommandItem::new("profile")
-                        .label("Profile")
-                        .keywords(["account"]),
+                command_state(
+                    window,
+                    cx,
+                    [CommandEntry::Item(
+                        CommandItem::new("profile")
+                            .label("Profile")
+                            .keywords(["account"]),
+                    )],
                 )
             });
 
@@ -953,14 +1033,19 @@ mod tests {
     #[gpui::test]
     fn custom_filter_controls_visible_items(cx: &mut TestAppContext) {
         cx.update(crate::init);
-        let cx = cx.add_empty_window();
-        cx.update(|window, cx| {
-            let state = cx.new(|cx| {
-                CommandState::new(window, cx)
+        let (harness, cx) = cx.add_window_view(|window, cx| Harness {
+            state: cx.new(|cx| CommandState::new(window, cx)),
+            command: Rc::new(|state| {
+                Command::new(state)
                     .filter(|item, query| item.value().starts_with(query))
-                    .item(CommandItem::new("alpha"))
-                    .item(CommandItem::new("beta-alpha"))
-            });
+                    .items([CommandItem::new("alpha"), CommandItem::new("beta-alpha")])
+            }),
+        });
+        let state = cx.update(|_, cx| harness.read(cx).state.clone());
+
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            _ = window.draw(cx);
             state.update(cx, |state, cx| {
                 state.set_query("alpha", window, cx);
                 assert_eq!(state.matched_count(), 1);
@@ -975,10 +1060,16 @@ mod tests {
         let cx = cx.add_empty_window();
         cx.update(|window, cx| {
             let state = cx.new(|cx| {
-                CommandState::new(window, cx)
-                    .searchable(false)
-                    .item(CommandItem::new("alpha"))
-                    .item(CommandItem::new("beta"))
+                command_state_with_options(
+                    window,
+                    cx,
+                    [
+                        CommandEntry::Item(CommandItem::new("alpha")),
+                        CommandEntry::Item(CommandItem::new("beta")),
+                    ],
+                    false,
+                    None,
+                )
             });
             state.update(cx, |state, cx| {
                 state.set_query("missing", window, cx);
@@ -991,8 +1082,9 @@ mod tests {
     fn non_searchable_command_uses_frame_focus(cx: &mut TestAppContext) {
         cx.update(crate::init);
         let (harness, cx) = cx.add_window_view(|window, cx| Harness {
-            state: cx.new(|cx| {
-                CommandState::new(window, cx)
+            state: cx.new(|cx| CommandState::new(window, cx)),
+            command: Rc::new(|state| {
+                Command::new(state)
                     .searchable(false)
                     .item(CommandItem::new("alpha"))
                     .item(CommandItem::new("beta"))
@@ -1027,8 +1119,9 @@ mod tests {
     ) {
         cx.update(crate::init);
         let (harness, cx) = cx.add_window_view(|window, cx| Harness {
-            state: cx.new(|cx| {
-                CommandState::new(window, cx)
+            state: cx.new(|cx| CommandState::new(window, cx)),
+            command: Rc::new(|state| {
+                Command::new(state)
                     .item(CommandItem::new("disabled").disabled(true))
                     .item(CommandItem::new("enabled"))
             }),
@@ -1064,8 +1157,9 @@ mod tests {
     ) {
         cx.update(crate::init);
         let (harness, cx) = cx.add_window_view(|window, cx| Harness {
-            state: cx.new(|cx| {
-                CommandState::new(window, cx)
+            state: cx.new(|cx| CommandState::new(window, cx)),
+            command: Rc::new(|state| {
+                Command::new(state)
                     .item(CommandItem::new("one").disabled(true))
                     .item(CommandItem::new("two").disabled(true))
             }),
@@ -1096,8 +1190,9 @@ mod tests {
     fn non_searchable_command_cancels_without_clearing_a_hidden_query(cx: &mut TestAppContext) {
         cx.update(crate::init);
         let (harness, cx) = cx.add_window_view(|window, cx| Harness {
-            state: cx.new(|cx| {
-                CommandState::new(window, cx)
+            state: cx.new(|cx| CommandState::new(window, cx)),
+            command: Rc::new(|state| {
+                Command::new(state)
                     .searchable(false)
                     .item(CommandItem::new("alpha"))
             }),
@@ -1136,7 +1231,7 @@ mod tests {
         let cx = cx.add_empty_window();
 
         cx.update(|window, cx| {
-            let state = cx.new(|cx| suggestions(CommandState::new(window, cx)));
+            let state = cx.new(|cx| command_state(window, cx, suggestion_entries()));
 
             state.update(cx, |state, cx| {
                 state.update_matches(cx);
@@ -1169,9 +1264,14 @@ mod tests {
 
         cx.update(|window, cx| {
             let state = cx.new(|cx| {
-                CommandState::new(window, cx)
-                    .item(CommandItem::new("enabled"))
-                    .item(CommandItem::new("disabled").disabled(true))
+                command_state(
+                    window,
+                    cx,
+                    [
+                        CommandEntry::Item(CommandItem::new("enabled")),
+                        CommandEntry::Item(CommandItem::new("disabled").disabled(true)),
+                    ],
+                )
             });
 
             state.update(cx, |state, cx| {
@@ -1193,10 +1293,15 @@ mod tests {
         let unchecked_width = Rc::new(Cell::new(None));
         let checked_width = Rc::new(Cell::new(None));
         let (unchecked, checked) = cx.update(|window, cx| {
-            let unchecked_state =
-                cx.new(|cx| CommandState::new(window, cx).item(CommandItem::new("theme")));
+            let unchecked_state = cx.new(|cx| {
+                command_state(window, cx, [CommandEntry::Item(CommandItem::new("theme"))])
+            });
             let checked_state = cx.new(|cx| {
-                CommandState::new(window, cx).item(CommandItem::new("theme").checked(true))
+                command_state(
+                    window,
+                    cx,
+                    [CommandEntry::Item(CommandItem::new("theme").checked(true))],
+                )
             });
             let unchecked_width = unchecked_width.clone();
             let checked_width = checked_width.clone();
@@ -1255,13 +1360,14 @@ mod tests {
 
     struct Harness {
         state: Entity<CommandState>,
+        command: Rc<dyn Fn(&Entity<CommandState>) -> Command>,
     }
 
     impl Render for Harness {
         fn render(&mut self, _: &mut Window, _: &mut gpui::Context<Self>) -> impl IntoElement {
             div()
                 .size_full()
-                .child(Command::new(&self.state).max_h(px(200.)))
+                .child((self.command)(&self.state).max_h(px(200.)))
         }
     }
 
@@ -1274,11 +1380,7 @@ mod tests {
         let footer_matched_count = Rc::new(Cell::new(None));
 
         let (harness, cx) = cx.add_window_view(|window, cx| HeaderFooterHarness {
-            state: cx.new(|cx| {
-                CommandState::new(window, cx)
-                    .item(CommandItem::new("Calendar"))
-                    .item(CommandItem::new("Calculator"))
-            }),
+            state: cx.new(|cx| CommandState::new(window, cx)),
             header_calls,
             footer_calls,
             header_matched_count,
@@ -1320,22 +1422,6 @@ mod tests {
         ]
     }
 
-    fn state_with_late_first_enabled_item(
-        window: &mut Window,
-        cx: &mut gpui::Context<CommandState>,
-    ) -> CommandState {
-        CommandState::new(window, cx)
-            .group(CommandGroup::new("Disabled").items((0..30).map(|ix| {
-                CommandItem::new(format!("disabled-{ix}"))
-                    .keywords(["match"])
-                    .disabled(true)
-            })))
-            .separator()
-            .group(
-                CommandGroup::new("Enabled").item(CommandItem::new("enabled").keywords(["match"])),
-            )
-    }
-
     fn assert_first_enabled_row_is_scrolled_into_view(
         state: &Entity<CommandState>,
         cx: &mut TestAppContext,
@@ -1358,7 +1444,10 @@ mod tests {
     fn first_enabled_selection_resets_scroll_to_its_late_row(cx: &mut TestAppContext) {
         cx.update(crate::init);
         let (harness, cx) = cx.add_window_view(|window, cx| Harness {
-            state: cx.new(|cx| state_with_late_first_enabled_item(window, cx)),
+            state: cx.new(|cx| CommandState::new(window, cx)),
+            command: Rc::new(|state| {
+                command_with_entries(state, entries_with_late_first_enabled_item())
+            }),
         });
         let state = cx.update(|_, cx| harness.read(cx).state.clone());
 
@@ -1373,8 +1462,8 @@ mod tests {
         assert_first_enabled_row_is_scrolled_into_view(&state, cx);
 
         cx.update(|window, cx| {
-            state.update(cx, |state, cx| {
-                state.set_entries(entries_with_late_first_enabled_item(), cx)
+            harness.update(cx, |_, cx| {
+                cx.notify();
             });
             _ = window.draw(cx);
         });
@@ -1398,6 +1487,7 @@ mod tests {
 
             div().size_full().child(
                 Command::new(&self.state)
+                    .items([CommandItem::new("Calendar"), CommandItem::new("Calculator")])
                     .max_h(px(200.))
                     .header(move |state, _, _| {
                         header_calls.set(header_calls.get() + 1);
@@ -1419,9 +1509,12 @@ mod tests {
 
     impl Render for PaddedHarness {
         fn render(&mut self, _: &mut Window, _: &mut gpui::Context<Self>) -> impl IntoElement {
-            div()
-                .size_full()
-                .child(Command::new(&self.state).max_h(px(200.)).p_4())
+            div().size_full().child(
+                Command::new(&self.state)
+                    .item(CommandItem::new("fixed").child(|_, _| div().h(px(32.))))
+                    .max_h(px(200.))
+                    .p_4(),
+            )
         }
     }
 
@@ -1436,6 +1529,11 @@ mod tests {
             div().size_full().child(
                 div().w(self.width).child(
                     Command::new(&self.state)
+                        .item(CommandItem::new("wrapped").child(|_, _| {
+                            div()
+                                .w_full()
+                                .child("A command row whose content wraps at narrow list widths")
+                        }))
                         .max_h(px(200.))
                         .when(self.no_wrap, |this| this.whitespace_nowrap()),
                 ),
@@ -1443,20 +1541,12 @@ mod tests {
         }
     }
 
-    fn wrapping_state(window: &mut Window, cx: &mut gpui::Context<CommandState>) -> CommandState {
-        CommandState::new(window, cx).item(CommandItem::new("wrapped").element(|_, _| {
-            div()
-                .w_full()
-                .child("A command row whose content wraps at narrow list widths")
-        }))
-    }
-
     #[gpui::test]
     fn wrapping_rows_remeasure_for_the_list_content_width(cx: &mut TestAppContext) {
         cx.update(crate::init);
 
         let (harness, cx) = cx.add_window_view(|window, cx| WrappingHarness {
-            state: cx.new(|cx| wrapping_state(window, cx)),
+            state: cx.new(|cx| CommandState::new(window, cx)),
             width: px(360.),
             no_wrap: false,
         });
@@ -1493,7 +1583,7 @@ mod tests {
         let (harness, cx) = cx.add_window_view(|window, cx| {
             window.set_rem_size(px(20.));
             WrappingHarness {
-                state: cx.new(|cx| wrapping_state(window, cx)),
+                state: cx.new(|cx| CommandState::new(window, cx)),
                 width: px(160.),
                 no_wrap: false,
             }
@@ -1524,7 +1614,7 @@ mod tests {
         cx.update(crate::init);
 
         let (harness, cx) = cx.add_window_view(|window, cx| WrappingHarness {
-            state: cx.new(|cx| wrapping_state(window, cx)),
+            state: cx.new(|cx| CommandState::new(window, cx)),
             width: px(160.),
             no_wrap: false,
         });
@@ -1556,10 +1646,7 @@ mod tests {
         cx.update(crate::init);
 
         let (harness, cx) = cx.add_window_view(|window, cx| PaddedHarness {
-            state: cx.new(|cx| {
-                CommandState::new(window, cx)
-                    .item(CommandItem::new("fixed").element(|_, _| div().h(px(32.))))
-            }),
+            state: cx.new(|cx| CommandState::new(window, cx)),
         });
 
         cx.run_until_parked();
@@ -1576,16 +1663,17 @@ mod tests {
         cx.update(crate::init);
 
         let (harness, cx) = cx.add_window_view(|window, cx| Harness {
-            state: cx.new(|cx| {
-                CommandState::new(window, cx)
+            state: cx.new(|cx| CommandState::new(window, cx)),
+            command: Rc::new(|state| {
+                Command::new(state)
                     .group(
                         CommandGroup::new("Short")
-                            .item(CommandItem::new("short").element(|_, _| div().h(px(32.)))),
+                            .item(CommandItem::new("short").child(|_, _| div().h(px(32.)))),
                     )
                     .separator()
                     .group(
                         CommandGroup::new("Tall")
-                            .item(CommandItem::new("tall").element(|_, _| div().h(px(72.)))),
+                            .item(CommandItem::new("tall").child(|_, _| div().h(px(72.)))),
                     )
             }),
         });
@@ -1603,26 +1691,94 @@ mod tests {
     }
 
     #[gpui::test]
-    fn an_unchanged_custom_row_is_not_remeasured_on_every_frame(cx: &mut TestAppContext) {
+    fn reinstalling_a_model_preserves_selection_by_value_and_remeasures_rows(
+        cx: &mut TestAppContext,
+    ) {
         cx.update(crate::init);
-        let renders = Rc::new(Cell::new(0));
-        let count = renders.clone();
-
-        let (_, cx) = cx.add_window_view(|window, cx| Harness {
-            state: cx.new(|cx| {
-                CommandState::new(window, cx).item(CommandItem::new("custom").element(
-                    move |_, _| {
-                        count.set(count.get() + 1);
-                        div().child("Custom")
-                    },
-                ))
+        let reversed = Rc::new(Cell::new(false));
+        let reversed_for_render = reversed.clone();
+        let (harness, cx) = cx.add_window_view(|window, cx| Harness {
+            state: cx.new(|cx| CommandState::new(window, cx)),
+            command: Rc::new(move |state| {
+                if reversed_for_render.get() {
+                    Command::new(state)
+                        .item(CommandItem::new("beta").child(|_, _| div().h(px(72.))))
+                        .item(CommandItem::new("alpha").child(|_, _| div().h(px(32.))))
+                } else {
+                    Command::new(state)
+                        .item(CommandItem::new("alpha").child(|_, _| div().h(px(32.))))
+                        .item(CommandItem::new("beta").child(|_, _| div().h(px(72.))))
+                }
             }),
         });
+        let state = cx.update(|_, cx| harness.read(cx).state.clone());
 
         cx.run_until_parked();
         cx.update(|window, cx| _ = window.draw(cx));
+        state.update(cx, |state, cx| state.select_by(1, cx));
+        assert_eq!(
+            state.read_with(cx, |state, _| state.selected_value()),
+            Some("beta".into()),
+        );
+
+        reversed.set(true);
+        cx.update(|window, cx| {
+            harness.update(cx, |_, cx| cx.notify());
+            _ = window.draw(cx);
+        });
+
+        let (selected_index, selected_value, row_sizes) = state.read_with(cx, |state, _| {
+            (
+                state.selected_index(),
+                state.selected_value(),
+                state.row_sizes.clone(),
+            )
+        });
+        assert_eq!(selected_index, 0);
+        assert_eq!(selected_value, Some("beta".into()));
+        assert_eq!(row_sizes[0].height, px(84.));
+        assert_eq!(row_sizes[1].height, px(44.));
+    }
+
+    #[gpui::test]
+    fn a_state_redraw_reuses_the_installed_custom_row_measurement(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let renders = Rc::new(Cell::new(0));
+        let count = renders.clone();
+        let cx = cx.add_empty_window();
+        let state = cx.update(|window, cx| {
+            cx.new(|cx| {
+                command_state(
+                    window,
+                    cx,
+                    [CommandEntry::Item(CommandItem::new("custom").child(
+                        move |_, _| {
+                            count.set(count.get() + 1);
+                            div().child("Custom")
+                        },
+                    ))],
+                )
+            })
+        });
+
+        let first_state = state.clone();
+        cx.draw(
+            gpui::point(px(0.), px(0.)),
+            gpui::AvailableSpace::min_size(),
+            move |_, _| first_state.into_any_element(),
+        );
+        let settled_state = state.clone();
+        cx.draw(
+            gpui::point(px(0.), px(0.)),
+            gpui::AvailableSpace::min_size(),
+            move |_, _| settled_state.into_any_element(),
+        );
         let after_first_draw = renders.get();
-        cx.update(|window, cx| _ = window.draw(cx));
+        cx.draw(
+            gpui::point(px(0.), px(0.)),
+            gpui::AvailableSpace::min_size(),
+            move |_, _| state.into_any_element(),
+        );
 
         assert_eq!(renders.get() - after_first_draw, 2);
     }
@@ -1632,10 +1788,9 @@ mod tests {
         cx.update(crate::init);
 
         let (harness, cx) = cx.add_window_view(|window, cx| Harness {
-            state: cx.new(|cx| {
-                (0..50).fold(CommandState::new(window, cx), |state, ix| {
-                    state.item(CommandItem::new(format!("Item {ix}")))
-                })
+            state: cx.new(|cx| CommandState::new(window, cx)),
+            command: Rc::new(|state| {
+                Command::new(state).items((0..50).map(|ix| CommandItem::new(format!("Item {ix}"))))
             }),
         });
 

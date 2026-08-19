@@ -1,7 +1,8 @@
 //! A command palette: a search field over a filtered list of commands, with
 //! groups, shortcut hints and keyboard navigation.
 //!
-//! [`CommandState`] holds the commands and the query; [`Command`] renders it.
+//! [`Command`] owns the entries and rendering policy; [`CommandState`] holds
+//! interaction state such as the query, focus, selection, and scrolling.
 #[allow(clippy::module_inception)]
 mod command;
 mod item;

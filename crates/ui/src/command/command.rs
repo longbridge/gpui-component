@@ -5,7 +5,10 @@ use gpui::{
     StyleRefinement, Styled, Window, rems,
 };
 
-use crate::command::state::CommandState;
+use crate::command::{
+    item::{CommandEntry, CommandGroup, CommandItem},
+    state::{CommandFilter, CommandModel, CommandState},
+};
 
 pub(crate) type CommandSlot = dyn Fn(&CommandState, &mut Window, &mut App) -> AnyElement;
 
@@ -67,22 +70,25 @@ impl CommandOptions {
 
 /// A command palette: a search field over a filtered list of commands.
 ///
-/// The commands live in the [`CommandState`] this renders; the builders here
-/// only decide how the palette looks.
+/// Entries and rendering policy are configured on each `Command`; interaction
+/// state such as the query and highlighted item lives in [`CommandState`].
 ///
 /// ```ignore
-/// let state = cx.new(|cx| {
-///     CommandState::new(window, cx).group(
+/// let state = cx.new(|cx| CommandState::new(window, cx));
+///
+/// Command::new(&state)
+///     .group(
 ///         CommandGroup::new("Suggestions")
 ///             .item(CommandItem::new("Calendar").icon(IconName::Calendar)),
 ///     )
-/// });
-///
-/// Command::new(&state).placeholder("Type a command or search...")
+///     .placeholder("Type a command or search...")
 /// ```
 #[derive(IntoElement)]
 pub struct Command {
     state: Entity<CommandState>,
+    entries: Vec<CommandEntry>,
+    searchable: bool,
+    filter: Option<Rc<CommandFilter>>,
     options: CommandOptions,
 }
 
@@ -91,8 +97,51 @@ impl Command {
     pub fn new(state: &Entity<CommandState>) -> Self {
         Self {
             state: state.clone(),
+            entries: Vec::new(),
+            searchable: true,
+            filter: None,
             options: CommandOptions::default(),
         }
+    }
+
+    /// Add an ungrouped command item.
+    pub fn item(mut self, item: CommandItem) -> Self {
+        self.entries.push(CommandEntry::Item(item));
+        self
+    }
+
+    /// Add multiple ungrouped command items.
+    pub fn items(mut self, items: impl IntoIterator<Item = CommandItem>) -> Self {
+        self.entries
+            .extend(items.into_iter().map(CommandEntry::Item));
+        self
+    }
+
+    /// Add a group of command items.
+    pub fn group(mut self, group: CommandGroup) -> Self {
+        self.entries.push(CommandEntry::Group(group));
+        self
+    }
+
+    /// Add a separator between the preceding and following entries.
+    pub fn separator(mut self) -> Self {
+        self.entries.push(CommandEntry::Separator);
+        self
+    }
+
+    /// Show or hide the query field and local filtering.
+    pub fn searchable(mut self, searchable: bool) -> Self {
+        self.searchable = searchable;
+        self
+    }
+
+    /// Set the predicate used to decide whether an item matches the query.
+    pub fn filter<F>(mut self, filter: F) -> Self
+    where
+        F: Fn(&CommandItem, &str) -> bool + 'static,
+    {
+        self.filter = Some(Rc::new(filter));
+        self
     }
 
     /// Set the placeholder of the search field.
@@ -156,7 +205,15 @@ impl Styled for Command {
 impl RenderOnce for Command {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let options = self.options;
-        self.state.update(cx, |state, _| state.options = options);
+        let model = CommandModel {
+            entries: self.entries,
+            searchable: self.searchable,
+            filter: self.filter,
+        };
+        self.state.update(cx, |state, cx| {
+            state.options = options;
+            state.install_model(model, cx);
+        });
 
         self.state
     }

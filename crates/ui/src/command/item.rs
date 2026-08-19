@@ -18,7 +18,7 @@ pub struct CommandItem {
     pub(crate) shortcut: Option<SharedString>,
     pub(crate) checked: bool,
     disabled: bool,
-    pub(crate) render: Option<Rc<dyn Fn(&mut Window, &mut App) -> AnyElement>>,
+    pub(crate) content: Option<Rc<CommandItemContent>>,
     pub(crate) handler: Option<Rc<dyn Fn(&mut Window, &mut App)>>,
 }
 
@@ -35,7 +35,7 @@ impl CommandItem {
             shortcut: None,
             checked: false,
             disabled: false,
-            render: None,
+            content: None,
             handler: None,
         }
     }
@@ -80,15 +80,17 @@ impl CommandItem {
         self
     }
 
-    /// Replace the row content (icon and label) with a custom element.
+    /// Replace the row content (icon and label) with a lazily built child.
     ///
     /// The shortcut, when set, is still rendered after the custom element.
-    pub fn element<F, E>(mut self, builder: F) -> Self
+    /// The builder may run more than once for measurement and rendering, so it
+    /// must be side-effect-free.
+    pub fn child<F, E>(mut self, builder: F) -> Self
     where
         F: Fn(&mut Window, &mut App) -> E + 'static,
         E: IntoElement,
     {
-        self.render = Some(Rc::new(move |window, cx| {
+        self.content = Some(Rc::new(move |window, cx| {
             builder(window, cx).into_any_element()
         }));
         self
@@ -138,6 +140,8 @@ impl CommandItem {
                 .any(|keyword| keyword.to_lowercase().contains(&query))
     }
 }
+
+pub(crate) type CommandItemContent = dyn Fn(&mut Window, &mut App) -> AnyElement;
 
 impl Disableable for CommandItem {
     fn disabled(mut self, disabled: bool) -> Self {
@@ -189,7 +193,7 @@ impl CommandGroup {
     }
 }
 
-/// A top-level entry in a [`crate::command::CommandState`].
+/// A top-level entry in a [`crate::command::Command`].
 pub enum CommandEntry {
     /// A single ungrouped item.
     Item(CommandItem),
