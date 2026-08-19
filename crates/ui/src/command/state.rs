@@ -542,7 +542,7 @@ impl CommandState {
             AvailableSpace::MinContent,
         );
         let mut text_style = StyleRefinement::default();
-        text_style.text = self.options.style().text.clone();
+        text_style.text = self.options.style.text.clone();
 
         self.rows
             .iter()
@@ -566,7 +566,8 @@ impl CommandState {
     fn sync_placeholder(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let placeholder = self
             .options
-            .placeholder()
+            .placeholder
+            .as_ref()
             .cloned()
             .unwrap_or_else(|| t!("Command.placeholder").to_string().into());
 
@@ -694,7 +695,7 @@ impl CommandState {
     }
 
     fn render_empty(&self, window: &mut Window, cx: &mut App) -> AnyElement {
-        if let Some(empty) = self.options.empty() {
+        if let Some(empty) = self.options.empty.as_ref() {
             return empty(self, window, cx);
         }
 
@@ -751,13 +752,13 @@ impl Render for CommandState {
             .overflow_hidden()
             .bg(cx.theme().popover)
             .text_color(cx.theme().popover_foreground)
-            .when(self.options.is_bordered(), |this| {
+            .when(self.options.bordered, |this| {
                 this.rounded(cx.theme().radius_lg)
                     .border_1()
                     .border_color(cx.theme().border)
             })
-            .refine_style(self.options.style())
-            .when_some(self.options.header(), |this, header| {
+            .refine_style(&self.options.style)
+            .when_some(self.options.header.as_ref(), |this, header| {
                 this.child(header(self, window, cx))
             })
             .when(self.model.searchable, |this| {
@@ -818,7 +819,7 @@ impl Render for CommandState {
                             })
                         }
                     })
-                    .max_h(self.options.max_h())
+                    .max_h(self.options.max_h)
                     .overflow_hidden()
                     // While a search is in flight the list is empty because the
                     // answer has not arrived, which is not the same as no match.
@@ -843,7 +844,7 @@ impl Render for CommandState {
                         .child(Scrollbar::vertical(&self.scroll_handle))
                     }),
             )
-            .when_some(self.options.footer(), |this, footer| {
+            .when_some(self.options.footer.as_ref(), |this, footer| {
                 this.child(footer(self, window, cx))
             })
     }

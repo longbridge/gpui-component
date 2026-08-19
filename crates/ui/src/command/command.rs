@@ -16,13 +16,13 @@ pub(crate) type CommandSlot = dyn Fn(&CommandState, &mut Window, &mut App) -> An
 /// Presentation of a [`Command`], pushed into its state on every render.
 #[derive(Clone)]
 pub(crate) struct CommandOptions {
-    style: StyleRefinement,
-    placeholder: Option<SharedString>,
-    empty: Option<Rc<CommandSlot>>,
-    max_h: DefiniteLength,
-    bordered: bool,
-    header: Option<Rc<CommandSlot>>,
-    footer: Option<Rc<CommandSlot>>,
+    pub(crate) style: StyleRefinement,
+    pub(crate) placeholder: Option<SharedString>,
+    pub(crate) empty: Option<Rc<CommandSlot>>,
+    pub(crate) max_h: DefiniteLength,
+    pub(crate) bordered: bool,
+    pub(crate) header: Option<Rc<CommandSlot>>,
+    pub(crate) footer: Option<Rc<CommandSlot>>,
 }
 
 impl Default for CommandOptions {
@@ -36,36 +36,6 @@ impl Default for CommandOptions {
             header: None,
             footer: None,
         }
-    }
-}
-
-impl CommandOptions {
-    pub(crate) fn style(&self) -> &StyleRefinement {
-        &self.style
-    }
-
-    pub(crate) fn placeholder(&self) -> Option<&SharedString> {
-        self.placeholder.as_ref()
-    }
-
-    pub(crate) fn empty(&self) -> Option<&Rc<CommandSlot>> {
-        self.empty.as_ref()
-    }
-
-    pub(crate) fn max_h(&self) -> DefiniteLength {
-        self.max_h
-    }
-
-    pub(crate) fn is_bordered(&self) -> bool {
-        self.bordered
-    }
-
-    pub(crate) fn header(&self) -> Option<&Rc<CommandSlot>> {
-        self.header.as_ref()
-    }
-
-    pub(crate) fn footer(&self) -> Option<&Rc<CommandSlot>> {
-        self.footer.as_ref()
     }
 }
 
