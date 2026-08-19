@@ -121,7 +121,8 @@ pub struct CommandState {
     list_measurement_key: Option<ListMeasurementKey>,
     needs_measure: bool,
     matched: Vec<MatchedItem>,
-    selected_index: usize,
+    selected_index: Option<usize>,
+    preserve_no_selection: bool,
     loading: bool,
     pending_scroll: Option<usize>,
     /// The placeholder last written to the query input, so that `render` only
@@ -151,7 +152,8 @@ impl CommandState {
             list_measurement_key: None,
             needs_measure: true,
             matched: Vec::new(),
-            selected_index: 0,
+            selected_index: None,
+            preserve_no_selection: false,
             loading: false,
             pending_scroll: None,
             applied_placeholder: SharedString::default(),
@@ -177,8 +179,12 @@ impl CommandState {
         });
 
         if let Some(matched_ix) = preserved_selection {
-            self.selected_index = matched_ix;
+            self.selected_index = Some(matched_ix);
+            self.preserve_no_selection = false;
             self.pending_scroll = self.matched.get(matched_ix).map(|matched| matched.row_ix);
+        } else if self.preserve_no_selection {
+            self.selected_index = None;
+            self.pending_scroll = None;
         } else {
             self.reset_selection();
         }
@@ -213,10 +219,47 @@ impl CommandState {
 
     /// The highlighted item's path in the original, unfiltered entries.
     pub fn selected_index(&self) -> Option<IndexPath> {
-        self.matched
-            .get(self.selected_index)
+        self.selected_index
+            .and_then(|selected_index| self.matched.get(selected_index))
             .filter(|matched| !matched.disabled)
             .map(|matched| matched.index_path)
+    }
+
+    /// Highlight an item by its original, unfiltered index path, or clear the
+    /// highlight with `None`.
+    ///
+    /// A path that is currently filtered out or disabled clears the
+    /// highlight. A visible selection is scrolled into view.
+    pub fn set_selected_index(
+        &mut self,
+        index: Option<IndexPath>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let matched_ix = index.and_then(|index| {
+            self.matched
+                .iter()
+                .position(|matched| matched.index_path == index && !matched.disabled)
+        });
+
+        let preserve_no_selection = matched_ix.is_none();
+        if self.selected_index == matched_ix {
+            self.preserve_no_selection = preserve_no_selection;
+            return;
+        }
+
+        let previous_index = self.selected_index();
+        self.selected_index = matched_ix;
+        self.preserve_no_selection = preserve_no_selection;
+        self.pending_scroll = matched_ix
+            .and_then(|matched_ix| self.matched.get(matched_ix))
+            .map(|matched| matched.row_ix);
+
+        if let Some((on_select, index)) = self.on_select_if_changed(previous_index) {
+            window.defer(cx, move |window, cx| on_select(index, window, cx));
+        }
+
+        cx.notify();
     }
 
     /// The number of items matching the current query.
@@ -344,21 +387,18 @@ impl CommandState {
         self.rows = rows;
         self.matched = matched;
         self.needs_measure = true;
-        self.selected_index = self
-            .selected_index
-            .min(self.matched.len().saturating_sub(1));
+        self.selected_index = self.selected_index.and_then(|selected_index| {
+            (selected_index < self.matched.len()).then_some(selected_index)
+        });
     }
 
     /// Move the highlight to the first item that can be confirmed.
     fn reset_selection(&mut self) {
-        self.selected_index = self
-            .matched
-            .iter()
-            .position(|matched| !matched.disabled)
-            .unwrap_or(0);
+        self.selected_index = self.matched.iter().position(|matched| !matched.disabled);
+        self.preserve_no_selection = false;
         self.pending_scroll = self
-            .matched
-            .get(self.selected_index)
+            .selected_index
+            .and_then(|selected_index| self.matched.get(selected_index))
             .map(|matched| matched.row_ix)
             .or(Some(0));
     }
@@ -438,12 +478,13 @@ impl CommandState {
     }
 
     fn select(&mut self, matched_ix: usize, window: &mut Window, cx: &mut Context<Self>) {
-        if self.selected_index == matched_ix {
+        if self.selected_index == Some(matched_ix) {
             return;
         }
 
         let previous_index = self.selected_index();
-        self.selected_index = matched_ix;
+        self.selected_index = Some(matched_ix);
+        self.preserve_no_selection = false;
         self.pending_scroll = self.matched.get(matched_ix).map(|matched| matched.row_ix);
 
         if let Some((on_select, index)) = self.on_select_if_changed(previous_index) {
@@ -461,15 +502,21 @@ impl CommandState {
             return;
         }
 
-        let mut next = self.selected_index;
+        let mut next = self
+            .selected_index
+            .unwrap_or_else(|| if step >= 0 { len.saturating_sub(1) } else { 0 });
+        let mut enabled = None;
         for _ in 0..len {
             next = (next as isize + step).rem_euclid(len as isize) as usize;
             if !self.matched[next].disabled {
+                enabled = Some(next);
                 break;
             }
         }
 
-        self.select(next, window, cx);
+        if let Some(next) = enabled {
+            self.select(next, window, cx);
+        }
     }
 
     fn on_action_select_up(&mut self, _: &SelectUp, window: &mut Window, cx: &mut Context<Self>) {
@@ -486,7 +533,9 @@ impl CommandState {
     }
 
     fn on_action_confirm(&mut self, _: &Confirm, window: &mut Window, cx: &mut Context<Self>) {
-        self.confirm(self.selected_index, window, cx);
+        if let Some(selected_index) = self.selected_index {
+            self.confirm(selected_index, window, cx);
+        }
     }
 
     /// Escape clears a non-empty query first, and only then leaves the palette
@@ -637,7 +686,7 @@ impl CommandState {
         };
 
         let disabled = item.is_disabled();
-        let selected = self.selected_index == matched_ix && !disabled;
+        let selected = self.selected_index == Some(matched_ix) && !disabled;
         let muted_foreground = cx.theme().muted_foreground;
         let icon_color = if selected {
             cx.theme().accent_foreground
@@ -989,7 +1038,7 @@ mod tests {
         cx.update(|window, cx| {
             _ = window.draw(cx);
             state.update(cx, |state, cx| {
-                state.selected_index = 1;
+                state.selected_index = Some(1);
                 state.set_query("alpha", window, cx);
             });
         });
@@ -1623,6 +1672,51 @@ mod tests {
     }
 
     #[gpui::test]
+    fn owner_can_set_and_clear_selection_by_original_index_path(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let cx = cx.add_empty_window();
+
+        cx.update(|window, cx| {
+            let initially_empty = cx.new(|cx| CommandState::new(window, cx));
+            initially_empty.update(cx, |state, cx| {
+                state.set_selected_index(None, window, cx);
+                state.install_model(
+                    CommandModel {
+                        entries: suggestion_entries().into_iter().collect(),
+                        ..CommandModel::default()
+                    },
+                    cx,
+                );
+                assert_eq!(state.selected_index(), None);
+            });
+
+            let state = cx.new(|cx| command_state(window, cx, suggestion_entries()));
+
+            state.update(cx, |state, cx| {
+                let target = IndexPath::new(1).section(2);
+                state.set_selected_index(Some(target), window, cx);
+                assert_eq!(state.selected_index(), Some(target));
+
+                state.set_selected_index(None, window, cx);
+                assert_eq!(state.selected_index(), None);
+
+                state.install_model(
+                    CommandModel {
+                        entries: suggestion_entries().into_iter().collect(),
+                        ..CommandModel::default()
+                    },
+                    cx,
+                );
+                assert_eq!(state.selected_index(), None);
+
+                state.set_query("calendar", window, cx);
+                state.set_selected_index(Some(target), window, cx);
+                assert_eq!(state.selected_index(), None);
+            });
+        });
+    }
+
+    #[gpui::test]
     fn confirming_a_disabled_item_does_nothing(cx: &mut TestAppContext) {
         cx.update(crate::init);
         let cx = cx.add_empty_window();
@@ -1646,7 +1740,7 @@ mod tests {
                 // Reaching the disabled row is only possible with the mouse or
                 // an explicit index; confirming it must be a no-op.
                 state.confirm(1, window, cx);
-                assert_eq!(state.selected_index, 0);
+                assert_eq!(state.selected_index, Some(0));
             });
         });
     }
@@ -1831,7 +1925,7 @@ mod tests {
     ) {
         let (selected_row, offset) = state.read_with(cx, |state, _| {
             (
-                state.matched[state.selected_index].row_ix,
+                state.matched[state.selected_index.unwrap()].row_ix,
                 state.scroll_handle.base_handle().offset().y,
             )
         });
@@ -2169,7 +2263,7 @@ mod tests {
                     state.row_sizes.clone(),
                 )
             });
-        assert_eq!(selected_matched_index, 1);
+        assert_eq!(selected_matched_index, Some(1));
         assert_eq!(selected_index, Some(IndexPath::new(0).section(1)));
         assert_eq!(row_sizes[0].height, px(84.));
         assert_eq!(row_sizes[1].height, px(44.));
