@@ -675,18 +675,24 @@ mod tests {
         );
     }
 
-    /// `from_state`'s forced-wrap branch (a bare, non-`Split` root gets
-    /// wrapped in a synthetic split) is gated on `RootKind::Split` and must
-    /// *not* fire under `RootKind::Any`. No production code wires a dock's
-    /// `PanelState` through `LayoutTree` yet, so this pins the shape a dock
-    /// panel would present if it did: every dock in the shipped
-    /// `fixtures/layout.json` (`left_dock`, `right_dock`, `bottom_dock`)
-    /// stores a bare `TabPanel`, exactly what `fixtures/bare_tab_panel_root.json`
-    /// mirrors. Before this test, `RootKind::Any`'s non-wrapping behavior was
-    /// pinned only by hand-built `PanelState` trees elsewhere in this file
-    /// (e.g. `a_bare_panel_leaf_is_wrapped_in_a_tab_group`, which covers the
-    /// opposite, always-wrap case for a bare *leaf*, not a bare *TabPanel*
-    /// root), never by a golden JSON fixture.
+    /// Pins that a bare `TabPanel` root — the shape every dock in the
+    /// shipped `fixtures/layout.json` (`left_dock`, `right_dock`,
+    /// `bottom_dock`) actually stores — survives a round trip under
+    /// `RootKind::Any` as a `Tabs` node, with its one panel intact.
+    ///
+    /// It does *not* pin that the forced-wrap arm in `from_state` is gated
+    /// on `RootKind::Split` and correctly skipped here. It can't: `normalize`
+    /// runs `collapse_root` on every pass, which un-wraps a single-child
+    /// `Split` root for any `root_kind != RootKind::Split` before this test
+    /// (or anything else) can observe the tree. So if the guard were deleted
+    /// and the wrap fired unconditionally, `collapse_root` would strip the
+    /// synthetic split right back off within the same `normalize()` call,
+    /// and this test would still pass — a correctly-guarded arm and a
+    /// missing guard produce byte-identical output here. The half of the
+    /// guard that *is* observable — the wrap firing and surviving — is
+    /// pinned by `a_split_root_is_forced_even_when_the_state_is_a_tab_group`,
+    /// where `RootKind::Split` makes `collapse_root` return early instead of
+    /// undoing it.
     #[test]
     fn a_bare_tab_panel_root_is_not_wrapped_under_root_kind_any() {
         let json = include_str!("fixtures/bare_tab_panel_root.json");
