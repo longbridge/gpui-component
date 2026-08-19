@@ -124,13 +124,11 @@ impl LayoutTree {
 
     /// Replace a split's slot sizes wholesale.
     ///
-    /// A no-op, like every other operation given a `NodeId` it cannot
-    /// resolve, if `new_sizes.len()` does not match the split's child count:
-    /// no rule in `normalize` repairs a length mismatch, so applying it would
-    /// otherwise leave `children.len() != sizes.len()` and trip
-    /// `normalize`'s `debug_assert!`. A caller passing the wrong length is a
-    /// programming error, not a data condition, so this only asserts in
-    /// debug builds rather than warning at runtime.
+    /// A no-op, like every other operation given input it cannot resolve, if
+    /// `new_sizes.len()` does not match the split's child count: no rule in
+    /// `normalize` repairs a length mismatch, so applying it would otherwise
+    /// leave `children.len() != sizes.len()` and trip `normalize`'s
+    /// `debug_assert!`.
     pub fn set_sizes(&mut self, node: NodeId, new_sizes: Vec<Option<Pixels>>) -> EditResult {
         self.edit(|tree| {
             if let Some(path) = tree.path_of_node(node) {
@@ -138,12 +136,6 @@ impl LayoutTree {
                     children, sizes, ..
                 } = tree.node_at_mut(&path).kind_mut()
                 {
-                    debug_assert!(
-                        new_sizes.len() == children.len(),
-                        "set_sizes: expected {} sizes for node {node:?}, got {}",
-                        children.len(),
-                        new_sizes.len(),
-                    );
                     if new_sizes.len() == children.len() {
                         *sizes = new_sizes;
                     }
@@ -645,32 +637,20 @@ mod tests {
         };
         let before_sizes = before_sizes.to_vec();
 
-        // The split has 2 children; hand it 3 sizes — a caller bug. In a
-        // debug build (as `cargo test` runs, since this workspace does not
-        // disable debug-assertions) that bug is also loud: `set_sizes`
-        // backs its no-op guard with a `debug_assert!`, so the call unwinds.
-        // Catch it so this one test exercises both halves of the contract:
-        // the debug-time assertion firing, and the release-time behavior
-        // (a no-op reporting `changed() == false`) that holds either way.
-        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            tree.set_sizes(root, vec![Some(px(10.)), Some(px(20.)), Some(px(30.))])
-        }));
+        // The split has 2 children; hand it 3 sizes.
+        let result = tree.set_sizes(root, vec![Some(px(10.)), Some(px(20.)), Some(px(30.))]);
 
-        match outcome {
-            Ok(result) => assert!(
-                !result.changed(),
-                "a mismatched vector must not report a change"
-            ),
-            Err(_) => {} // The debug_assert fired, as designed; nothing was mutated first.
-        }
-
+        assert!(
+            !result.changed(),
+            "a mismatched vector must not report a change"
+        );
         let NodeRef::Split { sizes, .. } = tree.root().kind() else {
             panic!()
         };
         assert_eq!(
             sizes,
             before_sizes.as_slice(),
-            "the mismatched vector never reaches the tree, in debug or release"
+            "the mismatched vector is rejected"
         );
     }
 
