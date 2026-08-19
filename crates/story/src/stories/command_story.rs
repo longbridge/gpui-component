@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{cell::Cell, rc::Rc, time::Duration};
 
 use gpui::{
     AnyElement, App, AppContext as _, Context, Entity, FocusHandle, Focusable, IntoElement,
@@ -322,13 +322,27 @@ impl CommandStory {
 
         let search = self.search.clone();
         let story = cx.weak_entity();
+        let focus_on_mount = Rc::new(Cell::new(true));
         window.open_dialog(cx, move |dialog, _, _| {
             let search = search.clone();
             let story = story.clone();
+            let close_owner = story.clone();
+            let focus_on_mount = focus_on_mount.clone();
             dialog
                 .close_button(false)
                 .p_0()
-                .content(move |content, _, cx| {
+                .on_close(move |_, window, cx| {
+                    _ = close_owner.update(cx, |story, cx| {
+                        story.cancel_stock_search(window, cx);
+                    });
+                })
+                .content(move |content, window, cx| {
+                    if focus_on_mount.replace(false) {
+                        let search = search.clone();
+                        window.defer(cx, move |window, cx| {
+                            search.read(cx).focus_handle(cx).focus(window, cx);
+                        });
+                    }
                     let entries = story
                         .read_with(cx, |story, _| {
                             stock_entries_for_render(&story.stock_entries)
@@ -336,7 +350,6 @@ impl CommandStory {
                         .unwrap_or_default();
                     let query_owner = story.clone();
                     let confirm_owner = story.clone();
-                    let cancel_owner = story.clone();
                     content.child(with_entries(
                         Command::new(&search)
                             .bordered(false)
@@ -358,19 +371,11 @@ impl CommandStory {
                                 _ = confirm_owner.update(cx, |story, cx| {
                                     story.on_stock_confirm(value, window, cx);
                                 });
-                            })
-                            .on_cancel(move |_, cx| {
-                                _ = cancel_owner.update(cx, |story, cx| {
-                                    story._search_task = None;
-                                    cx.notify();
-                                });
                             }),
                         entries,
                     ))
                 })
         });
-        let focus_handle = self.search.read(cx).focus_handle(cx);
-        focus_handle.focus(window, cx);
     }
 
     /// Answer the search panel's queries the way a remote search would: spin
@@ -431,8 +436,16 @@ impl CommandStory {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self._search_task = None;
+        self.cancel_stock_search(window, cx);
         self.on_dialog_confirm(value, window, cx);
+    }
+
+    fn cancel_stock_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self._search_task = None;
+        self.search.update(cx, |search, cx| {
+            search.set_loading(false, window, cx);
+        });
+        cx.notify();
     }
 }
 
@@ -551,11 +564,22 @@ impl Render for CommandStory {
                             .on_click(cx.listener(move |_, _, window, cx| {
                                 let command = dialog_state.clone();
                                 let owner = cx.weak_entity();
+                                let focus_on_mount = Rc::new(Cell::new(true));
                                 window.open_dialog(cx, move |dialog, _, _| {
                                     let command = command.clone();
                                     let owner = owner.clone();
+                                    let focus_on_mount = focus_on_mount.clone();
                                     dialog.close_button(false).p_0().content(
-                                        move |content, _, _| {
+                                        move |content, window, cx| {
+                                            if focus_on_mount.replace(false) {
+                                                let command = command.clone();
+                                                window.defer(cx, move |window, cx| {
+                                                    command
+                                                        .read(cx)
+                                                        .focus_handle(cx)
+                                                        .focus(window, cx);
+                                                });
+                                            }
                                             let confirm_owner = owner.clone();
                                             // Cancel intentionally has no local close callback:
                                             // the propagated action belongs to Dialog.
@@ -607,8 +631,6 @@ impl Render for CommandStory {
                                         },
                                     )
                                 });
-                                let focus_handle = dialog_state.read(cx).focus_handle(cx);
-                                focus_handle.focus(window, cx);
                             })),
                 ),
             )
@@ -764,7 +786,7 @@ mod tests {
     }
 
     #[gpui::test]
-    fn stock_confirm_clears_search_and_closes_only_its_dialog(cx: &mut TestAppContext) {
+    fn stock_confirm_with_query_can_reopen_without_reentering_the_story(cx: &mut TestAppContext) {
         let (window, story) = command_story_window(cx);
         window
             .update(cx, |_, window, cx| {
@@ -802,6 +824,58 @@ mod tests {
                 .update(cx, |_, window, cx| window.has_active_dialog(cx))
                 .unwrap()
         );
+
+        window
+            .update(cx, |_, window, cx| {
+                story.update(cx, |story, cx| story.open_stock_search(window, cx));
+                window.draw(cx).clear(cx);
+            })
+            .unwrap();
+        story.read_with(cx, |story, cx| {
+            assert_eq!(story.search.read(cx).query(cx), "");
+            assert!(story._search_task.is_none());
+        });
+        assert!(
+            window
+                .update(cx, |_, window, cx| window.has_active_dialog(cx))
+                .unwrap()
+        );
+    }
+
+    #[gpui::test]
+    fn stock_backdrop_dismissal_cancels_search_and_clears_loading(cx: &mut TestAppContext) {
+        let (window, story) = command_story_window(cx);
+        window
+            .update(cx, |_, window, cx| {
+                story.update(cx, |story, cx| story.open_stock_search(window, cx));
+                window.draw(cx).clear(cx);
+                let search = story.read(cx).search.clone();
+                search.update(cx, |search, cx| {
+                    search.set_query("tesla", window, cx);
+                });
+                window.draw(cx).clear(cx);
+            })
+            .unwrap();
+        cx.run_until_parked();
+
+        story.read_with(cx, |story, cx| {
+            assert!(story._search_task.is_some());
+            assert!(story.search.read(cx).is_loading());
+        });
+        let backdrop_point = gpui::point(px(50.), px(50.));
+        let mut visual = gpui::VisualTestContext::from_window(window, cx);
+        visual.simulate_mouse_move(backdrop_point, None, Default::default());
+        visual.simulate_click(backdrop_point, Default::default());
+
+        assert!(
+            !window
+                .update(cx, |_, window, cx| window.has_active_dialog(cx))
+                .unwrap()
+        );
+        story.read_with(cx, |story, cx| {
+            assert!(story._search_task.is_none());
+            assert!(!story.search.read(cx).is_loading());
+        });
     }
 
     #[gpui::test]

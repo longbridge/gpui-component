@@ -173,7 +173,7 @@ Command::new(&state)
     })
 ```
 
-`on_query` 只在可搜索查询实际变化时运行。重新过滤可能移动高亮，因此所选 value 变化时会先运行 `on_select`，再运行 `on_query`。键盘和指针导致的高亮变化会运行 `on_select`，但从不分发 Action。确认已启用条目时，会先分发其 Action，再调用 `on_confirm`；没有 Action 的条目仍会调用 `on_confirm`。在可搜索面板中，Escape 会清空非空查询。否则——包括具有隐藏的程序化查询的不可搜索面板——它会调用 `on_cancel`，然后传播 Cancel。
+`on_query` 只在可搜索查询实际变化时运行。重新过滤可能移动高亮，因此所选 value 变化时会先运行 `on_select`，再运行 `on_query`。这些回调与 `on_confirm` 都会在当前 `CommandState` 更新释放其租用后交付。键盘和指针导致的高亮变化会运行 `on_select`，但从不分发 Action。只要来源窗口仍然存活，确认已启用条目时，会先分发其 Action，再调用 `on_confirm`；如果该 Action 关闭窗口，回调将无法交付。没有 Action 的条目仍会调用 `on_confirm`。在可搜索面板中，Escape 会清空非空查询。否则——包括具有隐藏的程序化查询的不可搜索面板——它会调用 `on_cancel`，然后传播 Cancel。
 
 ### 动态条目
 
@@ -248,7 +248,7 @@ Command::new(&state)
 | `filter` | `filter<F>(F) -> Self`，其中 `F: Fn(&CommandItem, &str) -> bool + 'static`，替换默认匹配。 |
 | `on_query` | `on_query<F>(F) -> Self`，其中 `F: Fn(&str, &mut Window, &mut App) + 'static`，在可搜索查询变化后运行。 |
 | `on_select` | `on_select<F>(F) -> Self`，其中 `F: Fn(&SharedString, &mut Window, &mut App) + 'static`，在高亮 value 变化时运行。 |
-| `on_confirm` | `on_confirm<F>(F) -> Self`，使用相同的 value 回调约束；在确认的 Action 分发后运行。 |
+| `on_confirm` | `on_confirm<F>(F) -> Self`，使用相同的 value 回调约束；只要来源窗口仍然存活，就会在确认的 Action 分发后、当前 state 更新释放其租用后运行。 |
 | `on_cancel` | `on_cancel<F>(F) -> Self`，其中 `F: Fn(&mut Window, &mut App) + 'static`，在 Escape 不会清空可搜索查询时，于 Cancel 传播前运行。 |
 | `placeholder` | `placeholder(impl Into<SharedString>) -> Self` 设置搜索框占位文本。 |
 | `empty` | `empty(impl Into<SharedString>) -> Self` 设置无匹配时的文案。 |

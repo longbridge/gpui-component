@@ -195,11 +195,14 @@ Command::new(&state)
 
 `on_query` runs only when a searchable query actually changes. Refiltering can
 move the highlight, so its `on_select` runs first when the selected value
-changes; then `on_query` runs. Keyboard and pointer highlight changes run
-`on_select` but never dispatch an Action. Confirming an enabled item dispatches
-its Action first and then invokes `on_confirm`; an item without an Action still
-invokes `on_confirm`. In a searchable palette, Escape clears a non-empty
-query. Otherwise—including a non-searchable palette with a hidden programmatic
+changes; then `on_query` runs. These callbacks, and `on_confirm`, are delivered
+after the current `CommandState` update releases its lease. Keyboard and
+pointer highlight changes run `on_select` but never dispatch an Action. While
+the source window remains live, confirming an enabled item dispatches its
+Action first and then invokes `on_confirm`; if that Action closes the window,
+the callback cannot be delivered. An item without an Action still invokes
+`on_confirm`. In a searchable palette, Escape clears a non-empty query.
+Otherwise—including a non-searchable palette with a hidden programmatic
 query—it invokes `on_cancel`, then propagates Cancel.
 
 ### Dynamic Entries
@@ -294,7 +297,7 @@ Command::new(&state)
 | `filter` | `filter<F>(F) -> Self`, where `F: Fn(&CommandItem, &str) -> bool + 'static`, replaces default matching. |
 | `on_query` | `on_query<F>(F) -> Self`, where `F: Fn(&str, &mut Window, &mut App) + 'static`, runs after a searchable query changes. |
 | `on_select` | `on_select<F>(F) -> Self`, where `F: Fn(&SharedString, &mut Window, &mut App) + 'static`, runs when the highlighted value changes. |
-| `on_confirm` | `on_confirm<F>(F) -> Self`, with the same value callback bounds; runs after the confirmed Action dispatches. |
+| `on_confirm` | `on_confirm<F>(F) -> Self`, with the same value callback bounds; while the source window remains live, runs after the confirmed Action dispatches and the current state update releases its lease. |
 | `on_cancel` | `on_cancel<F>(F) -> Self`, where `F: Fn(&mut Window, &mut App) + 'static`, runs before Cancel propagates when Escape does not clear a searchable query. |
 | `placeholder` | `placeholder(impl Into<SharedString>) -> Self` sets the search-field placeholder. |
 | `empty` | `empty(impl Into<SharedString>) -> Self` sets the message for no matches. |

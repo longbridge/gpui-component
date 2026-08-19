@@ -22,7 +22,7 @@ use gpui_component::{
 };
 use gpui_fps::fps_monitor;
 use serde::{Deserialize, Serialize};
-use std::{rc::Rc, time::Duration};
+use std::{cell::Cell, rc::Rc, time::Duration};
 
 mod app_menus;
 mod embedded_themes;
@@ -989,10 +989,12 @@ impl StoryRoot {
 
         let theme_palette = self.theme_palette.clone();
         let story_root = cx.weak_entity();
+        let focus_on_mount = Rc::new(Cell::new(true));
         window.open_dialog(cx, move |dialog, _, _| {
             let theme_palette = theme_palette.clone();
             let close_owner = story_root.clone();
             let content_owner = story_root.clone();
+            let focus_on_mount = focus_on_mount.clone();
             dialog
                 .close_button(false)
                 .overlay_closable(false)
@@ -1000,7 +1002,13 @@ impl StoryRoot {
                 .on_close(move |_, _, cx| {
                     _ = close_owner.update(cx, |root, cx| root.finish_theme_preview(cx));
                 })
-                .content(move |content, _, cx| {
+                .content(move |content, window, cx| {
+                    if focus_on_mount.replace(false) {
+                        let theme_palette = theme_palette.clone();
+                        window.defer(cx, move |window, cx| {
+                            theme_palette.read(cx).focus_handle(cx).focus(window, cx);
+                        });
+                    }
                     let entries = content_owner
                         .read_with(cx, |root, _| root.theme_entries.clone())
                         .unwrap_or_default();
@@ -1025,8 +1033,6 @@ impl StoryRoot {
                     ))
                 })
         });
-        let focus_handle = self.theme_palette.read(cx).focus_handle(cx);
-        focus_handle.focus(window, cx);
     }
 
     fn on_action_open_command_palette(
@@ -1056,10 +1062,12 @@ impl StoryRoot {
 
         let component_palette = self.component_palette.clone();
         let story_root = cx.weak_entity();
+        let focus_on_mount = Rc::new(Cell::new(true));
         window.open_dialog(cx, move |dialog, _, _| {
             let component_palette = component_palette.clone();
             let close_owner = story_root.clone();
             let content_owner = story_root.clone();
+            let focus_on_mount = focus_on_mount.clone();
             dialog
                 .close_button(false)
                 .overlay_closable(false)
@@ -1067,7 +1075,16 @@ impl StoryRoot {
                 .on_close(move |_, _, cx| {
                     _ = close_owner.update(cx, |root, _| root.component_palette_open = false);
                 })
-                .content(move |content, _, cx| {
+                .content(move |content, window, cx| {
+                    if focus_on_mount.replace(false) {
+                        let component_palette = component_palette.clone();
+                        window.defer(cx, move |window, cx| {
+                            component_palette
+                                .read(cx)
+                                .focus_handle(cx)
+                                .focus(window, cx);
+                        });
+                    }
                     let entries = content_owner
                         .read_with(cx, |root, _| root.component_entries.clone())
                         .unwrap_or_default();
@@ -1086,10 +1103,6 @@ impl StoryRoot {
                     ))
                 })
         });
-        self.component_palette
-            .read(cx)
-            .focus_handle(cx)
-            .focus(window, cx);
     }
 
     fn on_action_toggle_search(
@@ -1381,6 +1394,14 @@ mod tests {
                 .update(cx, |_, window, cx| window.has_active_dialog(cx))
                 .unwrap()
         );
+
+        open_theme_palette(cx, window, &story_root);
+        assert!(
+            window
+                .update(cx, |_, window, cx| window.has_active_dialog(cx))
+                .unwrap()
+        );
+        cx.read(|cx| assert!(AppState::global(cx).previewing_theme));
     }
 
     #[gpui::test]
@@ -1432,19 +1453,51 @@ mod tests {
     }
 
     #[gpui::test]
-    fn escape_closes_component_palette_with_non_empty_query(cx: &mut TestAppContext) {
-        let (window, story_root, _) = gallery_window(cx, false);
-        cx.simulate_keystrokes(window, "ctrl-shift-p");
+    fn first_component_palette_escape_clears_typed_query_before_closing(cx: &mut TestAppContext) {
+        let (window, story_root, _) = gallery_window(cx, true);
         window
             .update(cx, |_, window, cx| {
-                window.draw(cx).clear(cx);
-                story_root.update(cx, |root, cx| {
-                    root.component_palette.update(cx, |palette, cx| {
-                        palette.set_query("command", window, cx);
-                    });
-                });
+                story_root.read(cx).focus_handle(cx).focus(window, cx);
             })
             .unwrap();
+        cx.simulate_keystrokes(window, "ctrl-shift-p");
+        assert!(
+            window
+                .update(cx, |_, window, cx| window.has_active_dialog(cx))
+                .unwrap()
+        );
+        window
+            .update(cx, |_, window, cx| window.draw(cx).clear(cx))
+            .unwrap();
+        assert!(
+            window
+                .update(cx, |_, window, cx| {
+                    story_root
+                        .read(cx)
+                        .component_palette
+                        .read(cx)
+                        .focus_handle(cx)
+                        .is_focused(window)
+                })
+                .unwrap()
+        );
+        cx.simulate_keystrokes(window, "command");
+
+        story_root.read_with(cx, |root, cx| {
+            assert_eq!(root.component_palette.read(cx).query(cx), "command");
+        });
+
+        cx.simulate_keystrokes(window, "escape");
+
+        assert!(
+            window
+                .update(cx, |_, window, cx| window.has_active_dialog(cx))
+                .unwrap()
+        );
+        story_root.read_with(cx, |root, cx| {
+            assert_eq!(root.component_palette.read(cx).query(cx), "");
+            assert!(root.component_palette_open);
+        });
 
         cx.simulate_keystrokes(window, "escape");
 
@@ -1453,6 +1506,9 @@ mod tests {
                 .update(cx, |_, window, cx| window.has_active_dialog(cx))
                 .unwrap()
         );
+        story_root.read_with(cx, |root, _| {
+            assert!(!root.component_palette_open);
+        });
     }
 
     #[gpui::test]
@@ -1591,10 +1647,10 @@ mod tests {
             .update(cx, |_, window, cx| {
                 window.draw(cx).clear(cx);
                 window.draw(cx).clear(cx);
-                component_palette.update(cx, |palette, cx| {
-                    palette.set_query("command", window, cx);
-                    assert_eq!(palette.selected_value().as_deref(), Some("Command"));
-                });
+            })
+            .unwrap();
+        window
+            .update(cx, |_, window, cx| {
                 assert!(
                     component_palette
                         .read(cx)
@@ -1603,6 +1659,11 @@ mod tests {
                 );
             })
             .unwrap();
+        cx.simulate_keystrokes(window, "command");
+        cx.simulate_keystrokes(window, "down up");
+        component_palette.read_with(cx, |palette, _| {
+            assert_eq!(palette.selected_value().as_deref(), Some("Command"));
+        });
 
         cx.simulate_keystrokes(window, "enter");
 

@@ -394,12 +394,22 @@ impl CommandState {
         self.applied_query = query.clone();
         self.update_matches(cx);
         self.reset_selection();
-        self.invoke_on_select_if_changed(previous_selection, window, cx);
+        let selection_callback = self.on_select_if_changed(previous_selection);
+        let query_callback = self
+            .model
+            .searchable
+            .then(|| self.model.on_query.clone())
+            .flatten();
 
-        if self.model.searchable {
-            if let Some(on_query) = self.model.on_query.clone() {
-                on_query(query.as_ref(), window, cx);
-            }
+        if selection_callback.is_some() || query_callback.is_some() {
+            window.defer(cx, move |window, cx| {
+                if let Some((on_select, value)) = selection_callback {
+                    on_select(&value, window, cx);
+                }
+                if let Some(on_query) = query_callback {
+                    on_query(query.as_ref(), window, cx);
+                }
+            });
         }
 
         cx.notify();
@@ -421,20 +431,16 @@ impl CommandState {
 
     // MARK: Actions
 
-    fn invoke_on_select_if_changed(
+    fn on_select_if_changed(
         &self,
         previous_value: Option<SharedString>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    ) -> Option<(Rc<OnValue>, SharedString)> {
         let value = self.selected_value();
         if value == previous_value {
-            return;
+            return None;
         }
 
-        if let (Some(value), Some(on_select)) = (value, self.model.on_select.clone()) {
-            on_select(&value, window, cx);
-        }
+        self.model.on_select.clone().zip(value)
     }
 
     fn select(&mut self, matched_ix: usize, window: &mut Window, cx: &mut Context<Self>) {
@@ -446,7 +452,9 @@ impl CommandState {
         self.selected_index = matched_ix;
         self.pending_scroll = self.matched.get(matched_ix).map(|matched| matched.row_ix);
 
-        self.invoke_on_select_if_changed(previous_value, window, cx);
+        if let Some((on_select, value)) = self.on_select_if_changed(previous_value) {
+            window.defer(cx, move |window, cx| on_select(&value, window, cx));
+        }
 
         cx.notify();
     }
@@ -495,6 +503,8 @@ impl CommandState {
             return;
         }
 
+        // Cancel is the one synchronous callback: propagation must continue in
+        // this dispatch so a hosting Dialog observes it once and owns the pop.
         if let Some(on_cancel) = self.model.on_cancel.clone() {
             on_cancel(window, cx);
         }
@@ -516,13 +526,11 @@ impl CommandState {
 
         if let Some(action) = action {
             window.dispatch_action(action, cx);
-            if let Some(on_confirm) = on_confirm {
-                window.defer(cx, move |window, cx| {
-                    on_confirm(&value, window, cx);
-                });
-            }
-        } else if let Some(on_confirm) = on_confirm {
-            on_confirm(&value, window, cx);
+        }
+        if let Some(on_confirm) = on_confirm {
+            window.defer(cx, move |window, cx| {
+                on_confirm(&value, window, cx);
+            });
         }
     }
 
@@ -730,7 +738,7 @@ impl Render for CommandState {
 
         if let Some(row_ix) = self.pending_scroll.take() {
             self.scroll_handle
-                .scroll_to_item(row_ix, ScrollStrategy::Top);
+                .scroll_to_item(row_ix, ScrollStrategy::Nearest);
         }
 
         let rows_count = self.rows.len();
@@ -928,6 +936,94 @@ mod tests {
                         }),
                 )
         }
+    }
+
+    struct ReentrantCallbackHarness {
+        state: Entity<CommandState>,
+        events: Vec<String>,
+    }
+
+    impl Render for ReentrantCallbackHarness {
+        fn render(&mut self, _: &mut Window, cx: &mut gpui::Context<Self>) -> impl IntoElement {
+            let select_owner = cx.weak_entity();
+            let query_owner = cx.weak_entity();
+            let confirm_owner = cx.weak_entity();
+
+            Command::new(&self.state)
+                .item(CommandItem::new("alpha"))
+                .item(CommandItem::new("beta"))
+                .on_select(move |value, _, cx| {
+                    _ = select_owner.update(cx, |harness, cx| {
+                        assert_eq!(
+                            harness.state.read(cx).selected_value().as_ref(),
+                            Some(value)
+                        );
+                        harness.events.push(format!("select:{value}"));
+                    });
+                })
+                .on_query(move |query, _, cx| {
+                    _ = query_owner.update(cx, |harness, cx| {
+                        assert_eq!(harness.state.read(cx).query(cx).as_ref(), query);
+                        harness.events.push(format!("query:{query}"));
+                    });
+                })
+                .on_confirm(move |value, _, cx| {
+                    _ = confirm_owner.update(cx, |harness, cx| {
+                        assert_eq!(
+                            harness.state.read(cx).selected_value().as_ref(),
+                            Some(value)
+                        );
+                        harness.events.push(format!("confirm:{value}"));
+                    });
+                })
+        }
+    }
+
+    #[gpui::test]
+    fn query_and_selection_callbacks_run_after_the_state_lease_in_defined_order(
+        cx: &mut TestAppContext,
+    ) {
+        cx.update(crate::init);
+        let (harness, cx) = cx.add_window_view(|window, cx| ReentrantCallbackHarness {
+            state: cx.new(|cx| CommandState::new(window, cx)),
+            events: Vec::new(),
+        });
+        let state = cx.update(|_, cx| harness.read(cx).state.clone());
+
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            _ = window.draw(cx);
+            state.update(cx, |state, cx| {
+                state.selected_index = 1;
+                state.set_query("alpha", window, cx);
+            });
+        });
+
+        assert_eq!(
+            harness.read_with(cx, |harness, _| harness.events.clone()),
+            ["select:alpha", "query:alpha"]
+        );
+    }
+
+    #[gpui::test]
+    fn actionless_confirm_callback_runs_after_the_state_lease(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (harness, cx) = cx.add_window_view(|window, cx| ReentrantCallbackHarness {
+            state: cx.new(|cx| CommandState::new(window, cx)),
+            events: Vec::new(),
+        });
+        let state = cx.update(|_, cx| harness.read(cx).state.clone());
+
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            _ = window.draw(cx);
+            state.update(cx, |state, cx| state.confirm(0, window, cx));
+        });
+
+        assert_eq!(
+            harness.read_with(cx, |harness, _| harness.events.clone()),
+            ["confirm:alpha"]
+        );
     }
 
     struct CommandItemWidthHarness {

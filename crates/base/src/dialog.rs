@@ -544,6 +544,8 @@ impl RenderOnce for Dialog {
                         let request_close = request_close.clone();
                         this.child(
                             div()
+                                .absolute()
+                                .size_full()
                                 .on_any_mouse_down(move |event, window, cx| {
                                     if event.position.y < dismiss_below_y {
                                         return;

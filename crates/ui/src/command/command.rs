@@ -152,7 +152,8 @@ impl Command {
         self
     }
 
-    /// Run a callback when the searchable query actually changes.
+    /// Run a callback after a searchable query actually changes and the
+    /// current [`CommandState`] update releases its lease.
     pub fn on_query<F>(mut self, callback: F) -> Self
     where
         F: Fn(&str, &mut Window, &mut App) + 'static,
@@ -161,7 +162,8 @@ impl Command {
         self
     }
 
-    /// Run a callback when the highlighted item value changes.
+    /// Run a callback after the highlighted item value changes and the current
+    /// [`CommandState`] update releases its lease.
     pub fn on_select<F>(mut self, callback: F) -> Self
     where
         F: Fn(&SharedString, &mut Window, &mut App) + 'static,
@@ -170,7 +172,9 @@ impl Command {
         self
     }
 
-    /// Run a callback after a confirmed item's Action has been dispatched.
+    /// Run a callback after a confirmed item's Action has been dispatched,
+    /// provided the source window remains live. The callback runs after the
+    /// current [`CommandState`] update releases its lease.
     pub fn on_confirm<F>(mut self, callback: F) -> Self
     where
         F: Fn(&SharedString, &mut Window, &mut App) + 'static,
@@ -179,7 +183,9 @@ impl Command {
         self
     }
 
-    /// Run a callback before an empty-query Cancel action propagates.
+    /// Run a callback synchronously before an empty-query Cancel action
+    /// propagates. A hosting Dialog should perform the dismissal after this
+    /// callback instead of being closed by the callback itself.
     pub fn on_cancel<F>(mut self, callback: F) -> Self
     where
         F: Fn(&mut Window, &mut App) + 'static,
