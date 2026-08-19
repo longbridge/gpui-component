@@ -52,9 +52,6 @@ impl LayoutTree {
         self.root_kind
     }
 
-    // Only called by `#[cfg(test)]` seeders today; edit operations become
-    // real callers in a later task.
-    #[allow(dead_code)]
     pub(crate) fn allocate_node_id(&mut self) -> NodeId {
         let id = NodeId::from_u64(self.next_node_id);
         self.next_node_id += 1;
@@ -131,9 +128,6 @@ impl LayoutTree {
         node
     }
 
-    // Only called by `#[cfg(test)]` seeders today; edit operations become
-    // real callers in a later task.
-    #[allow(dead_code)]
     pub(crate) fn node_at_mut(&mut self, path: &NodePath) -> &mut LayoutNode {
         let mut node = &mut self.root;
         for ix in path {

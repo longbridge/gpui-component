@@ -1,11 +1,14 @@
+mod edit;
 mod node;
 mod normalize;
 mod tree;
 
-// `NodeKind` and `NodePath` stay crate-private here for the edit operations
-// added in a later task; nothing in this crate reaches them through this
-// re-export yet. (`normalize.rs` imports both directly from their owning
-// submodules instead of through here.)
+pub use edit::{EditResult, InsertTarget};
+
+// `NodeKind` and `NodePath` stay crate-private here for a later task; the
+// edit operations added in this task reach `node`/`tree` directly as
+// `super::node::NodeKind` / `super::tree::NodePath` instead of through this
+// re-export, so it still has no caller.
 #[allow(unused_imports)]
 pub(crate) use node::NodeKind;
 pub use node::{LayoutNode, NodeId, NodeRef, PanelId, TilePanel};
