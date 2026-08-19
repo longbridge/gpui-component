@@ -685,6 +685,24 @@ mod tests {
 
     use super::*;
 
+    /// Mount the Story and Root-owned dialog layer together. `Root::render`
+    /// renders only its base view, so tests that exercise dialog content need
+    /// the same explicit layer composition used by the Story application.
+    struct CommandStoryTestView {
+        story: Entity<CommandStory>,
+    }
+
+    impl Render for CommandStoryTestView {
+        fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+            let dialog_layer = Root::render_dialog_layer(window, cx);
+
+            div()
+                .size_full()
+                .child(self.story.clone())
+                .children(dialog_layer)
+        }
+    }
+
     fn command_story_window(cx: &mut TestAppContext) -> (AnyWindowHandle, Entity<CommandStory>) {
         cx.update(gpui_component::init);
         let story = Rc::new(RefCell::new(None));
@@ -693,7 +711,8 @@ mod tests {
             move |window, cx| {
                 let story = CommandStory::view(window, cx);
                 *story_slot.borrow_mut() = Some(story.clone());
-                Root::new(story, window, cx)
+                let test_view = cx.new(|_| CommandStoryTestView { story });
+                Root::new(test_view, window, cx)
             }
         });
         let window = window.into();
