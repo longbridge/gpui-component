@@ -8,6 +8,7 @@ use gpui_component::{
         panel_handle, register_panel,
     },
     input::{Input, InputState},
+    scroll::ScrollbarMode,
 };
 use gpui_component_assets::Assets;
 use gpui_component_story::{ButtonStory, IconStory, StoryContainer};
@@ -153,12 +154,13 @@ struct DockAreaTab {
 
 impl StoryTiles {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let (dock_area, _skin) = DockSkin::dock_area(
+        let (dock_area, skin) = DockSkin::dock_area(
             TILES_DOCK_AREA.id,
             Some(TILES_DOCK_AREA.version),
             window,
             cx,
         );
+        skin.set_tiles_scrollbar_mode(Some(ScrollbarMode::Always), cx);
         let weak_dock_area = dock_area.downgrade();
 
         match Self::load_tiles(dock_area.clone(), window, cx) {

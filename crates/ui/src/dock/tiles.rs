@@ -4,10 +4,13 @@
 //! arithmetic, the undo stack, the zoom flag — and draws none of it. The tile
 //! frame, its title bar and its resize affordances are here.
 
+use std::rc::Rc;
+
 use gpui::{
     AnyElement, App, AppContext as _, Context, Div, DragMoveEvent, Empty, InteractiveElement as _,
-    IntoElement, MouseButton, MouseDownEvent, ParentElement as _, Render, ScrollHandle, Stateful,
-    StatefulInteractiveElement as _, Styled as _, Window, div, prelude::FluentBuilder as _, px,
+    IntoElement, MouseButton, MouseDownEvent, ParentElement as _, Pixels, Render, ScrollHandle,
+    Size, Stateful, StatefulInteractiveElement as _, Styled as _, Window, div,
+    prelude::FluentBuilder as _, px,
 };
 use gpui_base::dock::{
     DRAG_BAR_HEIGHT, HANDLE_SIZE, NodeId, ResizeSide, TileContext, TilesRenderer,
@@ -17,14 +20,15 @@ use rust_i18n::t;
 use crate::{
     ActiveTheme as _, Icon, IconName, Selectable as _, Sizable as _,
     button::{Button, ButtonVariants as _},
-    dock::{PanelHandle, tab_panel::panel_title},
+    dock::{PanelHandle, SkinShared, tab_panel::panel_title},
     h_flex,
     menu::{DropdownMenu as _, PopupMenuItem},
+    scroll::Scrollbar,
     v_flex,
 };
 
 /// How far a resize handle sticks out past the tile's edge.
-const HANDLE_OFFSET: gpui::Pixels = px(-4.);
+const HANDLE_OFFSET: Pixels = px(-4.);
 
 /// The payload a tile drag carries, so one canvas ignores another's drags.
 #[derive(Clone)]
@@ -51,12 +55,14 @@ impl Render for DragResizing {
 /// Built per canvas — `DockAreaRenderer::tiles_renderer` is called once per
 /// container — so the scroll position belongs to the canvas it scrolls.
 pub(crate) struct TilesSkin {
+    shared: Rc<SkinShared>,
     scroll_handle: ScrollHandle,
 }
 
 impl TilesSkin {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(shared: Rc<SkinShared>) -> Self {
         Self {
+            shared,
             scroll_handle: ScrollHandle::default(),
         }
     }
@@ -372,7 +378,39 @@ impl TilesRenderer for TilesSkin {
             .into_any_element()
     }
 
-    fn grid_size(&self, cx: &App) -> gpui::Pixels {
+    /// The old canvas wrapped a tile's panel in exactly this, and base draws
+    /// the panel as a plain child, so without it a panel that does not size
+    /// itself has no size.
+    fn panel_frame(&self, tile: &TileContext, _: &mut Window, _: &mut App) -> Stateful<Div> {
+        h_flex()
+            .id(("tile-panel", tile.panel_id().as_u64()))
+            .overflow_hidden()
+            .size_full()
+    }
+
+    /// The canvas scrollbar.
+    ///
+    /// It has to be an overlay rather than one of the frame's own children:
+    /// the frame is the scroll container and base appends the tiles after
+    /// whatever the frame carries, so a scrollbar placed there would paint and
+    /// hit-test underneath every tile.
+    fn render_overlay(
+        &self,
+        content: Size<Pixels>,
+        _: &mut Window,
+        _: &mut App,
+    ) -> Option<AnyElement> {
+        Some(
+            Scrollbar::new(&self.scroll_handle)
+                .scroll_size(content)
+                .when_some(self.shared.tiles_scrollbar_mode(), |this, mode| {
+                    this.mode(mode)
+                })
+                .into_any_element(),
+        )
+    }
+
+    fn grid_size(&self, cx: &App) -> Pixels {
         cx.theme().tile_grid_size
     }
 }

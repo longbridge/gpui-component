@@ -424,9 +424,41 @@ pub fn apply_boundary_constraints(origin: Point<Pixels>, dragging_width: Pixels)
     origin
 }
 
+/// The scrollable extent a set of tiles occupies, measured from the canvas
+/// origin.
+///
+/// Reproduces the fold the old `Tiles::render` did before handing the result
+/// to its scrollbar: the union runs from `min(0, left)` to `max(0, right)` on
+/// each axis, so a canvas whose tiles all sit at positive coordinates reports
+/// the far edge, and one with a tile dragged past the origin reports the
+/// distance across both.
+pub fn content_size(tiles: &[Bounds<Pixels>]) -> Size<Pixels> {
+    let mut left = px(0.);
+    let mut top = px(0.);
+    let mut right = px(0.);
+    let mut bottom = px(0.);
+    for bounds in tiles {
+        left = left.min(bounds.left());
+        top = top.min(bounds.top());
+        right = right.max(bounds.right());
+        bottom = bottom.max(bounds.bottom());
+    }
+    size(right - left, bottom - top)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn b(x: f32, y: f32, w: f32, h: f32) -> Bounds<Pixels> {
+        Bounds {
+            origin: Point { x: px(x), y: px(y) },
+            size: Size {
+                width: px(w),
+                height: px(h),
+            },
+        }
+    }
 
     #[test]
     fn test_snap_edge_within_threshold() {
@@ -450,5 +482,114 @@ mod tests {
             snap_edge(px(303.), &[px(308.), px(300.)], px(8.)),
             Some(px(300.))
         );
+    }
+
+    #[test]
+    fn test_snap_edge_empty_candidates() {
+        assert_eq!(snap_edge(px(50.), &[], px(8.)), None);
+    }
+
+    #[test]
+    fn test_resize_right_edge_snaps_to_neighbor_left() {
+        // Panel A: x=0 w=196 (right edge 196). Neighbour B starts at x=200.
+        // Dragging right edge to 197 should snap right edge to 200 -> width 200.
+        let prev = b(0., 0., 196., 100.);
+        let neighbor = b(200., 0., 100., 100.);
+        let out =
+            compute_resized_bounds(prev, None, None, Some(px(197.)), None, &[neighbor], px(8.));
+        assert_eq!(out.origin.x, px(0.));
+        assert_eq!(out.size.width, px(200.));
+    }
+
+    #[test]
+    fn test_resize_bottom_edge_snaps_to_neighbor_top() {
+        let prev = b(0., 0., 100., 196.);
+        let neighbor = b(0., 200., 100., 100.);
+        let out =
+            compute_resized_bounds(prev, None, None, None, Some(px(197.)), &[neighbor], px(8.));
+        assert_eq!(out.origin.y, px(0.));
+        assert_eq!(out.size.height, px(200.));
+    }
+
+    #[test]
+    fn test_resize_left_edge_snaps_and_pins_right() {
+        // Panel: x=200 w=100 (right edge 300). Neighbour right edge at 100.
+        // Drag left edge to 103 -> snaps to 100 -> width = 300 - 100 = 200.
+        let prev = b(200., 0., 100., 100.);
+        let neighbor = b(0., 0., 100., 100.);
+        let out = compute_resized_bounds(
+            prev,
+            Some(px(103.)),
+            None,
+            Some(px(197.)),
+            None,
+            &[neighbor],
+            px(8.),
+        );
+        assert_eq!(out.origin.x, px(100.));
+        assert_eq!(out.size.width, px(200.));
+    }
+
+    #[test]
+    fn test_resize_corner_snaps_both_edges() {
+        // Right edge -> neighbour-right at 300; bottom edge -> neighbour-bottom at 250.
+        let prev = b(0., 0., 196., 196.);
+        let right_neighbor = b(100., 0., 200., 100.); // right edge = 300
+        let bottom_neighbor = b(0., 100., 100., 150.); // bottom edge = 250
+        let out = compute_resized_bounds(
+            prev,
+            None,
+            None,
+            Some(px(298.)),
+            Some(px(248.)),
+            &[right_neighbor, bottom_neighbor],
+            px(8.),
+        );
+        assert_eq!(out.size.width, px(300.));
+        assert_eq!(out.size.height, px(250.));
+    }
+
+    #[test]
+    fn test_resize_grid_rounds_when_no_neighbor_close() {
+        // No neighbours; raw right edge 153 -> grid round to 152 (nearest multiple of 8).
+        let prev = b(0., 0., 100., 100.);
+        let out = compute_resized_bounds(prev, None, None, Some(px(153.)), None, &[], px(8.));
+        assert_eq!(out.size.width, px(152.));
+    }
+
+    #[test]
+    fn test_resize_respects_minimum_size() {
+        let prev = b(0., 0., 100., 100.);
+        let out = compute_resized_bounds(prev, None, None, Some(px(10.)), None, &[], px(8.));
+        assert_eq!(out.size.width, MINIMUM_SIZE.width);
+    }
+
+    #[test]
+    fn content_size_spans_from_the_origin_to_the_far_edge() {
+        assert_eq!(
+            content_size(&[b(20., 20., 380., 280.), b(420., 20., 380., 280.)]),
+            size(px(800.), px(300.)),
+            "the extent runs from the canvas origin, not from the first tile"
+        );
+        assert_eq!(
+            content_size(&[]),
+            size(px(0.), px(0.)),
+            "an empty canvas scrolls nowhere"
+        );
+        assert_eq!(
+            content_size(&[b(-40., -10., 100., 100.)]),
+            size(px(100.), px(100.)),
+            "a tile dragged past the origin still reports the distance across it"
+        );
+    }
+
+    #[test]
+    fn test_resize_no_change_returns_previous_geometry() {
+        let prev = b(0., 0., 100., 100.);
+        let out = compute_resized_bounds(prev, None, None, None, None, &[], px(8.));
+        assert_eq!(out.origin.x, px(0.));
+        assert_eq!(out.origin.y, px(0.));
+        assert_eq!(out.size.width, px(100.));
+        assert_eq!(out.size.height, px(100.));
     }
 }

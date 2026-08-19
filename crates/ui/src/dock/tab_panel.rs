@@ -23,7 +23,7 @@ use crate::{
     ActiveTheme as _, IconName, Selectable as _, Sizable as _,
     animation::{Lerp as _, ease_out_cubic},
     button::{Button, ButtonVariants as _},
-    dock::{ClosePanel, PanelHandle, PanelStyle, SkinShared, ToggleZoom},
+    dock::{ClosePanel, PanelControl, PanelHandle, PanelStyle, SkinShared, ToggleZoom},
     h_flex,
     menu::DropdownMenu as _,
     tab::{Tab, TabBar},
@@ -69,10 +69,42 @@ pub(crate) fn panel_title(
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
-    match PanelHandle::of(panel) {
-        Some(handle) => handle.title(window, cx),
-        None => SharedString::from(panel.panel_name(cx)).into_any_element(),
-    }
+    let Some(handle) = PanelHandle::of(panel) else {
+        let name = panel.panel_name(cx);
+        // Silent otherwise, and visual-only: the panel docks, drags and
+        // persists, it just has no title. The shorter method is the wrong one
+        // — `DockLayout::panel` and `DockArea::add_panel` accept a
+        // `gpui_component::dock::Panel` and store the bare entity — so this
+        // says which panel and what to call instead.
+        tracing::warn!(
+            panel = name,
+            "dock panel reached the tab bar without its presentation handle, \
+             so it draws its panel name instead of its title; install it with \
+             `gpui_component::dock::panel_handle(..)` and \
+             `DockLayout::panel_view` / `DockArea::add_panel_view` rather than \
+             `DockLayout::panel` / `DockArea::add_panel`"
+        );
+        return SharedString::from(name).into_any_element();
+    };
+    handle.title(window, cx)
+}
+
+/// Where the zoom affordance goes for the group's displayed panel, or `None`
+/// when there is none to offer.
+///
+/// Two questions, and both have to be asked. [`Panel::zoom_control`] says
+/// *where* the control appears; [`gpui_base::dock::Panel::zoomable`] says
+/// whether zooming happens at all, and base refuses a zoom that fails it. The
+/// old dock had a single `zoomable() -> Option<PanelControl>` that could not
+/// disagree with itself; split across the seam it can, and a panel answering
+/// `zoomable() == false` with `zoom_control() == Some(Toolbar)` would
+/// otherwise draw a button that does nothing.
+fn zoom_control(group: &TabGroupContext, cx: &App) -> Option<PanelControl> {
+    let panel = group.active_panel()?;
+    panel
+        .zoomable(cx)
+        .then(|| PanelHandle::of(panel).and_then(|handle| handle.zoom_control(cx)))
+        .flatten()
 }
 
 /// The payload for dragging the tab at `ix` out of its group, or `None` when
@@ -216,7 +248,7 @@ impl TabGroupSkin {
 
         let zoomed = group.is_zoomed();
         let handle = group.active_panel().and_then(PanelHandle::of);
-        let control = handle.and_then(|handle| handle.zoom_control(cx));
+        let control = zoom_control(group, cx);
         let toolbar_zoom = control.is_some_and(|control| control.toolbar_visible());
         let menu_zoom = control.is_some_and(|control| control.menu_visible());
         let closable = group.can_close();
@@ -571,12 +603,15 @@ impl TabGroupSkin {
 
 impl TabGroupRenderer for TabGroupSkin {
     fn frame(&self, group: &TabGroupContext, _: &mut Window, cx: &mut App) -> Stateful<Div> {
-        let zoom_control = group
-            .active_panel()
-            .and_then(PanelHandle::of)
-            .and_then(|handle| handle.zoom_control(cx));
+        let control = zoom_control(group, cx);
 
-        div()
+        // `v_flex`, not `div`: gpui's default display is Block, and in block
+        // layout a child's `flex_grow` is ignored — the content region below
+        // the tab bar would resolve to zero height, because its only
+        // descendant is the panel view, positioned absolutely by `cached` and
+        // contributing no content height. The old `TabPanel::bind_actions`
+        // returned `v_flex()` for the same reason.
+        v_flex()
             .id("tab-panel")
             .size_full()
             .overflow_hidden()
@@ -592,7 +627,7 @@ impl TabGroupRenderer for TabGroupSkin {
                         // either. Zooming out is never refused: a panel that
                         // stopped offering the control while zoomed would
                         // otherwise strand the user with no way back.
-                        if !group.is_zoomed() && zoom_control.is_none() {
+                        if !group.is_zoomed() && control.is_none() {
                             return;
                         }
                         group.toggle_zoom(window, cx);
@@ -730,7 +765,10 @@ mod tests {
     };
 
     use super::*;
-    use crate::dock::{DockSkin, Panel, panel_handle};
+    use crate::{
+        ElementExt as _,
+        dock::{DockSkin, Panel, panel_handle},
+    };
 
     struct Probe {
         focus_handle: FocusHandle,
@@ -765,10 +803,18 @@ mod tests {
         }
     }
 
-    /// Draws nothing, but runs the real gate the skin's tab bar runs and
-    /// records what it decided for every tab it was asked to draw.
+    /// Draws nothing, but runs the real gates the skin's tab bar runs and
+    /// records what they decided for every group it was asked to draw.
+    #[derive(Default)]
+    struct Recorded {
+        /// One entry per tab: whether its tab would start a drag.
+        draggable: Vec<bool>,
+        /// One entry per group: whether a zoom control would be drawn.
+        zoom: Vec<bool>,
+    }
+
     struct Recorder {
-        draggable: Rc<RefCell<Vec<bool>>>,
+        log: Rc<RefCell<Recorded>>,
     }
 
     impl TabGroupRenderer for Recorder {
@@ -778,10 +824,13 @@ mod tests {
             _: &mut Window,
             cx: &mut App,
         ) -> AnyElement {
-            let mut log = self.draggable.borrow_mut();
+            let mut log = self.log.borrow_mut();
             for ix in 0..group.panels().len() {
-                log.push(tab_drag(group, ix, cx).is_some());
+                let draggable = tab_drag(group, ix, cx).is_some();
+                log.draggable.push(draggable);
             }
+            let zoom = zoom_control(group, cx).is_some();
+            log.zoom.push(zoom);
             Empty.into_any_element()
         }
     }
@@ -799,13 +848,13 @@ mod tests {
 
         fn tab_group_renderer(&self) -> Rc<dyn TabGroupRenderer> {
             Rc::new(Recorder {
-                draggable: self.draggable.clone(),
+                log: self.log.clone(),
             })
         }
 
         fn tiles_renderer(&self) -> Rc<dyn TilesRenderer> {
             Rc::new(Recorder {
-                draggable: self.draggable.clone(),
+                log: self.log.clone(),
             })
         }
     }
@@ -814,16 +863,14 @@ mod tests {
         cx: &mut TestAppContext,
     ) -> (
         Entity<DockArea>,
-        Rc<RefCell<Vec<bool>>>,
+        Rc<RefCell<Recorded>>,
         &mut VisualTestContext,
     ) {
         cx.update(|cx| {
             crate::init(cx);
         });
-        let log = Rc::new(RefCell::new(Vec::new()));
-        let renderer = Rc::new(Recorder {
-            draggable: log.clone(),
-        });
+        let log = Rc::new(RefCell::new(Recorded::default()));
+        let renderer = Rc::new(Recorder { log: log.clone() });
         let (area, cx) = cx.add_window_view(|window, cx| {
             DockArea::new("skin", None, window, cx).with_renderer(renderer)
         });
@@ -842,11 +889,11 @@ mod tests {
             area.update(cx, |area, cx| area.set_center(layout, window, cx));
         });
         cx.run_until_parked();
-        log.borrow_mut().clear();
+        log.borrow_mut().draggable.clear();
         cx.update(|window, cx| window.draw(cx).clear(cx));
 
         assert_eq!(
-            *log.borrow(),
+            log.borrow().draggable,
             vec![false],
             "the only visible panel in the dock has nowhere to go, so its tab \
              must not start a drag"
@@ -870,13 +917,161 @@ mod tests {
             area.update(cx, |area, cx| area.set_center(layout, window, cx));
         });
         cx.run_until_parked();
-        log.borrow_mut().clear();
+        log.borrow_mut().draggable.clear();
         cx.update(|window, cx| window.draw(cx).clear(cx));
 
         assert_eq!(
-            *log.borrow(),
+            log.borrow().draggable,
             vec![true, true],
             "each group has somewhere to go, so both tabs start a drag"
+        );
+    }
+
+    /// A panel that says "never zoom" in base's half but still names a place
+    /// for the control in this crate's half.
+    struct UnzoomableProbe {
+        focus_handle: FocusHandle,
+    }
+
+    impl gpui_base::dock::Panel for UnzoomableProbe {
+        fn panel_name(&self) -> &'static str {
+            "UnzoomableProbe"
+        }
+
+        fn zoomable(&self, _: &App) -> bool {
+            false
+        }
+    }
+
+    impl Panel for UnzoomableProbe {
+        fn zoom_control(&self, _: &App) -> Option<PanelControl> {
+            Some(PanelControl::Both)
+        }
+    }
+
+    impl EventEmitter<PanelEvent> for UnzoomableProbe {}
+
+    impl Focusable for UnzoomableProbe {
+        fn focus_handle(&self, _: &App) -> FocusHandle {
+            self.focus_handle.clone()
+        }
+    }
+
+    impl Render for UnzoomableProbe {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            Empty
+        }
+    }
+
+    /// The two halves of the old `zoomable()` can now disagree, and base is
+    /// the one that decides. A control drawn against base's refusal is dead:
+    /// pressing it does nothing.
+    #[gpui::test]
+    fn a_panel_base_will_not_zoom_gets_no_zoom_control(cx: &mut TestAppContext) {
+        let (area, log, cx) = recording_area(cx);
+
+        cx.update(|window, cx| {
+            let panel = cx.new(|cx| UnzoomableProbe {
+                focus_handle: cx.focus_handle(),
+            });
+            let layout = DockLayout::tabs().panel_view(panel_handle(panel), cx);
+            area.update(cx, |area, cx| area.set_center(layout, window, cx));
+        });
+        cx.run_until_parked();
+        log.borrow_mut().zoom.clear();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        assert_eq!(
+            log.borrow().zoom,
+            vec![false],
+            "the panel names a place for the control, but base refuses the zoom"
+        );
+    }
+
+    /// The other half: a panel that allows zoom and names a place gets one.
+    #[gpui::test]
+    fn a_zoomable_panel_gets_its_zoom_control(cx: &mut TestAppContext) {
+        let (area, log, cx) = recording_area(cx);
+
+        cx.update(|window, cx| {
+            let layout = DockLayout::tabs().panel_view(panel_handle(Probe::new(cx)), cx);
+            area.update(cx, |area, cx| area.set_center(layout, window, cx));
+        });
+        cx.run_until_parked();
+        log.borrow_mut().zoom.clear();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        assert_eq!(log.borrow().zoom, vec![true]);
+    }
+
+    /// The centre and the bottom dock share the centre column, and both get
+    /// height.
+    ///
+    /// `DockSkin::center_frame` is a flex column holding the centre's root
+    /// split and the bottom dock, and the centre's split frame sits between
+    /// them. This pins that the frame carries a size at all: strip
+    /// `split_frame` of both `size_full` and `flex_1` and every panel here
+    /// measures zero. It does not pin *which* of the two does the work —
+    /// either alone passes.
+    #[gpui::test]
+    fn the_centre_and_the_bottom_dock_share_the_column(cx: &mut TestAppContext) {
+        cx.update(|cx| {
+            crate::init(cx);
+        });
+        let centre = Rc::new(Cell::new(px(0.)));
+        let bottom = Rc::new(Cell::new(px(0.)));
+        let (area, cx) = cx.add_window_view(|window, cx| {
+            let skin = DockSkin::new(cx);
+            DockArea::new("skin", None, window, cx).with_renderer(skin)
+        });
+
+        let (centre_probe, bottom_probe) = (centre.clone(), bottom.clone());
+        cx.update(|window, cx| {
+            let centre_panel = MeasuredProbe::new(centre_probe, cx);
+            let bottom_panel = MeasuredProbe::new(bottom_probe, cx);
+            area.update(cx, |area, cx| {
+                // A split inside a split, so the *nested* `split_frame` — the
+                // one that sits inside a `resizable_panel` — is exercised too,
+                // not only the centre's root.
+                area.set_center(
+                    DockLayout::v_split().child(
+                        DockLayout::h_split().child(
+                            DockLayout::tabs().panel_view(panel_handle(centre_panel), cx),
+                            None,
+                        ),
+                        None,
+                    ),
+                    window,
+                    cx,
+                );
+                area.set_dock(
+                    DockPlacement::Bottom,
+                    DockLayout::tabs().panel_view(panel_handle(bottom_panel), cx),
+                    window,
+                    cx,
+                );
+                area.set_dock_size(DockPlacement::Bottom, px(200.), window, cx);
+            });
+        });
+        cx.run_until_parked();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        let window_height = cx.update(|window, _| window.viewport_size().height);
+        assert!(
+            centre.get() > px(0.),
+            "the centre panel must receive height; it got {:?}",
+            centre.get()
+        );
+        assert!(
+            bottom.get() > px(0.),
+            "the bottom dock's panel must receive height; it got {:?}",
+            bottom.get()
+        );
+        assert!(
+            centre.get() < window_height - px(150.),
+            "the centre must give the 200px bottom dock its share; the centre \
+             got {:?} of {window_height:?}",
+            centre.get()
         );
     }
 
@@ -917,6 +1112,94 @@ mod tests {
         cx.dispatch_action(ToggleZoom);
         cx.run_until_parked();
         assert_eq!(cx.read(|cx| area.read(cx).is_zoomed()), false);
+    }
+
+    /// A panel that reports the height its content region actually gave it.
+    struct MeasuredProbe {
+        focus_handle: FocusHandle,
+        height: Rc<Cell<gpui::Pixels>>,
+    }
+
+    impl MeasuredProbe {
+        fn new(height: Rc<Cell<gpui::Pixels>>, cx: &mut App) -> Entity<Self> {
+            cx.new(|cx| Self {
+                focus_handle: cx.focus_handle(),
+                height,
+            })
+        }
+    }
+
+    impl gpui_base::dock::Panel for MeasuredProbe {
+        fn panel_name(&self) -> &'static str {
+            "MeasuredProbe"
+        }
+    }
+
+    impl Panel for MeasuredProbe {}
+    impl EventEmitter<PanelEvent> for MeasuredProbe {}
+
+    impl Focusable for MeasuredProbe {
+        fn focus_handle(&self, _: &App) -> FocusHandle {
+            self.focus_handle.clone()
+        }
+    }
+
+    impl Render for MeasuredProbe {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            let height = self.height.clone();
+            div()
+                .size_full()
+                .on_prepaint(move |bounds, _, _| height.set(bounds.size.height))
+        }
+    }
+
+    /// The tab group's own frame has to be a flex column.
+    ///
+    /// gpui's default display is Block, and block layout ignores a child's
+    /// `flex_grow`. With a plain `div()` frame the content region's `flex_1`
+    /// does nothing, `#tab-content` sizes to its content, and its only child
+    /// is the panel view positioned absolutely by `cached` — which
+    /// contributes no content height. The whole chain resolves to zero and
+    /// the dock draws a tab bar with nothing under it.
+    ///
+    /// This asserts a dimension, which the project's testing guidance
+    /// discourages, because a zero-height content region is not a cosmetic
+    /// difference: it is the panel not rendering at all, and no behavioral
+    /// test in this crate can see it. `set_active` still fires, the layout
+    /// still round-trips, and the window still opens.
+    #[gpui::test]
+    fn the_panel_content_region_gets_the_height_below_the_tab_bar(cx: &mut TestAppContext) {
+        cx.update(|cx| {
+            crate::init(cx);
+        });
+        let height = Rc::new(Cell::new(px(0.)));
+        let (area, cx) = cx.add_window_view(|window, cx| {
+            let skin = DockSkin::new(cx);
+            DockArea::new("skin", None, window, cx).with_renderer(skin)
+        });
+
+        let measured = height.clone();
+        cx.update(|window, cx| {
+            let panel = MeasuredProbe::new(measured, cx);
+            let layout = DockLayout::tabs().panel_view(panel_handle(panel), cx);
+            area.update(cx, |area, cx| area.set_center(layout, window, cx));
+        });
+        cx.run_until_parked();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        let window_height = cx.update(|window, _| window.viewport_size().height);
+        let content = height.get();
+        assert!(
+            content > px(0.),
+            "the panel must receive height; it got {content:?} in a {window_height:?} window"
+        );
+        // The tab bar is 30px and the padded content region adds none for a
+        // single tab, so the panel should get nearly the whole window.
+        assert!(
+            content > window_height - px(60.),
+            "the panel should fill what the tab bar leaves; it got {content:?} \
+             of {window_height:?}"
+        );
     }
 
     /// A collapsed group is a strip of tabs with no content, and the actions

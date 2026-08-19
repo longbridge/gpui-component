@@ -54,13 +54,14 @@ impl DockAreaRenderer for DockSkin {
     }
 
     fn split_frame(&self, node: NodeId, _: Axis, _: &mut Window, cx: &mut App) -> Stateful<Div> {
-        // The old `StackPanel::render` carried exactly this, and it is
-        // load-bearing rather than decorative: base puts the split frame
-        // between a `resizable_panel` and the resizable group, so without a
-        // size a nested split lays out against an auto-sized parent. `flex_1`
-        // covers the other case — the centre's root split, which sits in a
-        // flex column beside the bottom dock and must not claim the whole
-        // height.
+        // A split frame with no size at all collapses: base puts it between
+        // a `resizable_panel` and the resizable group, and between
+        // `center_frame` and the centre's root split, and neither parent
+        // sizes it. `the_centre_and_the_bottom_dock_share_the_column` fails
+        // without this. `size_full` is what the old `StackPanel::render`
+        // carried; `flex_1` is belt and braces — either alone passes every
+        // case I could construct, so this does not depend on which one wins
+        // in a given parent.
         div()
             .id(("dock-split-frame", node.as_u64()))
             .size_full()
@@ -128,7 +129,7 @@ impl DockAreaRenderer for DockSkin {
     }
 
     fn tiles_renderer(&self) -> Rc<dyn TilesRenderer> {
-        Rc::new(TilesSkin::new())
+        Rc::new(TilesSkin::new(self.shared().clone()))
     }
 }
 

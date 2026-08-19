@@ -4,8 +4,8 @@ use std::{rc::Rc, sync::Arc};
 
 use gpui::{
     AnyElement, App, Bounds, Context, Div, Empty, EntityId, EventEmitter, FocusHandle, Focusable,
-    InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Point, Render, Stateful,
-    Styled as _, WeakEntity, Window, div, prelude::FluentBuilder as _, px,
+    InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Point, Render, Size,
+    Stateful, Styled as _, WeakEntity, Window, div, prelude::FluentBuilder as _, px,
 };
 
 use crate::history::History;
@@ -16,7 +16,7 @@ use super::{
     panel::PanelView,
     tiles_geometry::{
         MINIMUM_SIZE, ResizeDrag, ResizeSide, TileChange, apply_boundary_constraints,
-        compute_resized_bounds, magnetic_snap,
+        compute_resized_bounds, content_size, magnetic_snap,
     },
 };
 
@@ -566,6 +566,15 @@ impl Render for TilesState {
             .into_iter()
             .filter(|tile| zoomed.is_none_or(|panel| tile.id == panel))
             .collect();
+        // Every tile, not the drawn subset: an overlay scrollbar measures the
+        // whole canvas.
+        let content = content_size(
+            &self
+                .tiles
+                .iter()
+                .map(|tile| tile.bounds)
+                .collect::<Vec<_>>(),
+        );
 
         renderer
             .frame(window, cx)
@@ -595,7 +604,11 @@ impl Render for TilesState {
                                     .h(tile.bounds.size.height)
                             })
                             .child(renderer.render_drag_bar(&tile, window, cx))
-                            .child(tile.panel.view())
+                            .child(
+                                renderer
+                                    .panel_frame(&tile, window, cx)
+                                    .child(tile.panel.view()),
+                            )
                             // Nothing to resize against while zoomed, and the
                             // canvas refuses the gesture anyway.
                             .when(!tile.zoomed, |this| {
@@ -604,6 +617,12 @@ impl Render for TilesState {
                     })
                     .collect::<Vec<_>>(),
             )
+            // Last, so it paints and hit-tests above every tile. A zoomed
+            // canvas draws one tile filling the dock, so there is no canvas
+            // for an overlay to sit over.
+            .when(zoomed.is_none(), |this| {
+                this.children(renderer.render_overlay(content, window, cx))
+            })
     }
 }
 
@@ -775,6 +794,40 @@ pub trait TilesRenderer: 'static {
         cx: &mut App,
     ) -> AnyElement {
         Empty.into_any_element()
+    }
+
+    /// The frame around one tile's panel view.
+    ///
+    /// A wrapper, unlike the other frame hooks, and for the same reason
+    /// [`DockAreaRenderer::split_frame`](super::DockAreaRenderer::split_frame)
+    /// is one: base attaches nothing to it, so there is no hit area to keep
+    /// together with the painted area. It exists because base draws the panel
+    /// as an ordinary child of the tile frame, and a panel that does not size
+    /// itself would otherwise have no size at all — the old canvas wrapped it
+    /// in `h_flex().overflow_hidden().size_full()`, and nothing else can put
+    /// that back.
+    fn panel_frame(&self, tile: &TileContext, window: &mut Window, cx: &mut App) -> Stateful<Div> {
+        div().id(("tile-panel", tile.panel_id().as_u64()))
+    }
+
+    /// An element drawn above every tile — a scrollbar, a drop hint.
+    ///
+    /// Rendered last, so it paints and hit-tests above the tiles. That
+    /// ordering is the whole point: the canvas frame is the scroll container,
+    /// so an overlay placed with the frame's own children would sit beneath
+    /// every tile. Not called while a tile is zoomed, because then the canvas
+    /// is one tile filling the dock rather than a canvas.
+    ///
+    /// `content` is the scrollable extent of every tile measured from the
+    /// canvas origin, which a scrollbar needs and a hook holding only
+    /// `&mut App` could not work out.
+    fn render_overlay(
+        &self,
+        content: Size<Pixels>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Option<AnyElement> {
+        None
     }
 
     /// The grid a tile snaps to when no neighbouring edge is close enough.
