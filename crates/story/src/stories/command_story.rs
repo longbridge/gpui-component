@@ -592,9 +592,9 @@ impl Render for CommandStory {
                     .child(with_entries(
                         Command::new(&self.inline)
                             .w(px(380.))
-                            .on_confirm(move |value, _, cx| {
+                            .on_confirm(move |index_path, _, cx| {
                                 _ = inline_owner.update(cx, |story, cx| {
-                                    story.on_command_confirm(value, cx);
+                                    story.on_command_confirm(index_path, cx);
                                 });
                             }),
                         suggestions(),
@@ -635,10 +635,10 @@ impl Render for CommandStory {
                                                 Command::new(&command)
                                                     .bordered(false)
                                                     .placeholder("Type a command or search...")
-                                                    .on_confirm(move |value, window, cx| {
+                                                    .on_confirm(move |index_path, window, cx| {
                                                         _ = confirm_owner.update(cx, |story, cx| {
                                                             story.on_dialog_confirm(
-                                                                value, window, cx,
+                                                                index_path, window, cx,
                                                             );
                                                         });
                                                     })
@@ -690,9 +690,9 @@ impl Render for CommandStory {
                             .searchable(false)
                             .items(quick_actions())
                             .w(px(380.))
-                            .on_confirm(move |value, _, cx| {
+                            .on_confirm(move |index_path, _, cx| {
                                 _ = quick_actions_owner.update(cx, |story, cx| {
-                                    story.on_command_confirm(value, cx);
+                                    story.on_command_confirm(index_path, cx);
                                 });
                             }),
                     ),
@@ -704,9 +704,9 @@ impl Render for CommandStory {
                         Command::new(&self.scrollable)
                             .max_h(px(220.))
                             .w(px(380.))
-                            .on_confirm(move |value, _, cx| {
+                            .on_confirm(move |index_path, _, cx| {
                                 _ = scrollable_owner.update(cx, |story, cx| {
-                                    story.on_command_confirm(value, cx);
+                                    story.on_command_confirm(index_path, cx);
                                 });
                             }),
                         scrollable(),
@@ -721,9 +721,9 @@ impl Render for CommandStory {
                         Command::new(&self.variable_rows)
                             .items(variable_rows())
                             .w(px(380.))
-                            .on_confirm(move |value, _, cx| {
+                            .on_confirm(move |index_path, _, cx| {
                                 _ = variable_rows_owner.update(cx, |story, cx| {
-                                    story.on_command_confirm(value, cx);
+                                    story.on_command_confirm(index_path, cx);
                                 });
                             }),
                     ),

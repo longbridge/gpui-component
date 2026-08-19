@@ -867,6 +867,9 @@ pub struct StoryRoot {
     /// The theme in force when the palette opened, put back if the user
     /// cancels out of the preview.
     theme_before_preview: Option<SharedString>,
+    /// Identifies the current preview session so deferred selection callbacks
+    /// from a closed palette cannot affect a newly opened one.
+    theme_preview_generation: u64,
 }
 
 impl StoryRoot {
@@ -911,6 +914,7 @@ impl StoryRoot {
             component_palette_open: false,
             gallery,
             theme_before_preview: None,
+            theme_preview_generation: 0,
         }
     }
 
@@ -935,8 +939,13 @@ impl StoryRoot {
     fn on_theme_palette_select(
         &mut self,
         index: gpui_component::IndexPath,
+        generation: u64,
         cx: &mut Context<Self>,
     ) {
+        if self.theme_before_preview.is_none() || self.theme_preview_generation != generation {
+            return;
+        }
+
         if let Some(name) = themes::theme_name_at(index, cx) {
             themes::apply_theme(&name, cx);
         }
@@ -987,6 +996,8 @@ impl StoryRoot {
 
         self.theme_entries = themes::theme_entries(cx);
         self.theme_before_preview = Some(cx.theme().theme_name().clone());
+        self.theme_preview_generation = self.theme_preview_generation.wrapping_add(1);
+        let theme_preview_generation = self.theme_preview_generation;
         themes::begin_theme_preview(cx);
         self.theme_palette.update(cx, |palette, cx| {
             palette.set_query("", window, cx);
@@ -1027,7 +1038,11 @@ impl StoryRoot {
                             .max_h(px(400.))
                             .on_select(move |index, _, cx| {
                                 _ = select_owner.update(cx, |root, cx| {
-                                    root.on_theme_palette_select(index, cx);
+                                    root.on_theme_palette_select(
+                                        index,
+                                        theme_preview_generation,
+                                        cx,
+                                    );
                                 });
                             })
                             .on_confirm(move |_, window, cx| {
@@ -1328,6 +1343,60 @@ mod tests {
     }
 
     #[gpui::test]
+    fn escape_ignores_a_theme_preview_queued_by_keyboard_navigation(cx: &mut TestAppContext) {
+        let (window, story_root) = theme_window(cx);
+        let original = cx.read(|cx| cx.theme().theme_name().clone());
+        open_theme_palette(cx, window, &story_root);
+
+        window
+            .update(cx, |_, window, cx| {
+                window.dispatch_action(Box::new(gpui_base::actions::SelectDown), cx);
+                window.dispatch_action(Box::new(gpui_base::actions::Cancel), cx);
+            })
+            .unwrap();
+        cx.run_until_parked();
+
+        assert!(
+            !window
+                .update(cx, |_, window, cx| window.has_active_dialog(cx))
+                .unwrap()
+        );
+        cx.read(|cx| {
+            assert_eq!(cx.theme().theme_name(), &original);
+            assert!(!AppState::global(cx).previewing_theme);
+        });
+    }
+
+    #[gpui::test]
+    fn reopening_themes_ignores_a_preview_queued_by_the_closed_session(cx: &mut TestAppContext) {
+        let (window, story_root) = theme_window(cx);
+        let original = cx.read(|cx| cx.theme().theme_name().clone());
+        open_theme_palette(cx, window, &story_root);
+
+        window
+            .update(cx, |_, window, cx| {
+                window.dispatch_action(Box::new(gpui_base::actions::SelectDown), cx);
+                story_root.update(cx, |root, cx| {
+                    window.close_dialog(cx);
+                    root.finish_theme_preview(cx);
+                    root.on_action_select_theme(&SelectTheme, window, cx);
+                });
+            })
+            .unwrap();
+        cx.run_until_parked();
+
+        assert!(
+            window
+                .update(cx, |_, window, cx| window.has_active_dialog(cx))
+                .unwrap()
+        );
+        cx.read(|cx| {
+            assert_eq!(cx.theme().theme_name(), &original);
+            assert!(AppState::global(cx).previewing_theme);
+        });
+    }
+
+    #[gpui::test]
     fn empty_query_escape_closes_only_theme_palette_when_dialogs_are_stacked(
         cx: &mut TestAppContext,
     ) {
@@ -1419,7 +1488,7 @@ mod tests {
         open_theme_palette(cx, window, &story_root);
         let previewed_index = cx.read(|cx| themes::theme_index(&previewed, cx).unwrap());
         story_root.update(cx, |root, cx| {
-            root.on_theme_palette_select(previewed_index, cx);
+            root.on_theme_palette_select(previewed_index, root.theme_preview_generation, cx);
         });
 
         open_theme_palette(cx, window, &story_root);

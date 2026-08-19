@@ -1464,8 +1464,8 @@ mod tests {
                     .searchable(false)
                     .item(CommandItem::new().label("alpha"))
                     .item(CommandItem::new().label("beta"))
-                    .on_confirm(move |value, _, _| {
-                        *confirmed.borrow_mut() = Some(value.clone());
+                    .on_confirm(move |index_path, _, _| {
+                        *confirmed.borrow_mut() = Some(index_path);
                     })
             }),
         });
@@ -1497,8 +1497,8 @@ mod tests {
                 Command::new(state)
                     .item(CommandItem::new().label("disabled").disabled(true))
                     .item(CommandItem::new().label("enabled"))
-                    .on_confirm(move |value, _, _| {
-                        *confirmed.borrow_mut() = Some(value.clone());
+                    .on_confirm(move |index_path, _, _| {
+                        *confirmed.borrow_mut() = Some(index_path);
                     })
             }),
         });
@@ -1532,8 +1532,8 @@ mod tests {
                 Command::new(state)
                     .item(CommandItem::new().label("one").disabled(true))
                     .item(CommandItem::new().label("two").disabled(true))
-                    .on_confirm(move |value, _, _| {
-                        *confirmed.borrow_mut() = Some(value.clone());
+                    .on_confirm(move |index_path, _, _| {
+                        *confirmed.borrow_mut() = Some(index_path);
                     })
             }),
         });
