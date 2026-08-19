@@ -189,10 +189,7 @@ pub struct TabGroup {
 impl TabGroup {
     /// Only a container builds groups: a group is the entity mirror of one
     /// `Tabs` node, and it is created when that node first appears in the
-    /// tree.
-    ///
-    /// `DockArea`, the only caller outside tests, lands in the next task.
-    #[allow(dead_code)]
+    /// tree. `DockArea` is the only caller outside tests.
     pub(crate) fn new(node: NodeId, _window: &mut Window, cx: &mut Context<Self>) -> Self {
         Self {
             node,
@@ -377,8 +374,7 @@ impl TabGroup {
 
 /// What the container pushes into a group, and reads back out of it.
 ///
-/// `DockArea`, which lands in the next task, is the only caller outside tests.
-#[allow(dead_code)]
+/// `DockArea` is the only caller outside tests.
 impl TabGroup {
     /// Mirror one `Tabs` node's membership and displayed index into this
     /// group. `on_added_to` fires for arrivals; departures are silent here
@@ -964,8 +960,7 @@ pub trait TabGroupRenderer: 'static {
 }
 
 /// The renderer a group starts with: the displayed panel and nothing else.
-#[allow(dead_code)]
-struct BareTabGroup;
+pub(crate) struct BareTabGroup;
 
 impl TabGroupRenderer for BareTabGroup {
     fn render_tab_bar(&self, _: &TabGroupContext, _: &mut Window, _: &mut App) -> AnyElement {

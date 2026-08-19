@@ -187,7 +187,7 @@ impl PanelState {
 ///
 /// This mirrors a persisted, on-disk schema shipped to end users: the
 /// `#[serde(rename = ...)]` tags below are frozen and must not change.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum DockPlacement {
     #[serde(rename = "center")]
     Center,

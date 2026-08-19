@@ -68,18 +68,12 @@ pub(crate) struct TestPanel {
     focus_handle: FocusHandle,
     log: Log,
     visible: bool,
-    /// Cleared by `on_removed`, so a test can assert a moved panel's entity
-    /// survived rather than being torn down and rebuilt. Read by
-    /// `moving_a_panel_reuses_its_entity` once `DockArea` lands.
-    #[allow(dead_code)]
-    pub(crate) alive: bool,
     pub(crate) group: Option<WeakEntity<TabGroup>>,
 }
 
 impl TestPanel {
     /// A panel whose deliveries go nowhere. For tests that only need a panel
-    /// to exist. Unused until `DockArea` lands in the next task.
-    #[allow(dead_code)]
+    /// to exist.
     pub(crate) fn new(name: &'static str, cx: &mut App) -> Entity<Self> {
         Self::logging(name, &log_of(), cx)
     }
@@ -91,7 +85,6 @@ impl TestPanel {
             focus_handle: cx.focus_handle(),
             log,
             visible: true,
-            alive: true,
             group: None,
         })
     }
@@ -130,7 +123,6 @@ impl Panel for TestPanel {
     }
 
     fn on_removed(&mut self, _: &mut Window, _: &mut Context<Self>) {
-        self.alive = false;
         self.group = None;
         self.record(PanelSignal::Removed);
     }

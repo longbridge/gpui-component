@@ -1,3 +1,5 @@
+use std::sync::atomic::{AtomicU64, Ordering};
+
 use smallvec::SmallVec;
 
 use super::node::{LayoutNode, NodeId, NodeKind, NodeRef, PanelId, TilePanel};
@@ -15,28 +17,37 @@ pub enum RootKind {
 /// Path from the root as a sequence of child indices.
 pub(crate) type NodePath = SmallVec<[usize; 8]>;
 
+/// Source of every [`NodeId`], shared by every tree in the process.
+///
+/// A per-tree counter would restart at the same value in each tree, and a
+/// `DockArea` owns four of them (the center plus one per dock). Its entity
+/// cache is keyed by `NodeId` alone, so two trees minting the same id would
+/// hand two different containers the same cache slot. Allocating globally is
+/// what makes `NodeId` the stable *container* identity its documentation
+/// claims, rather than an identity that is only unique within one tree.
+static NEXT_NODE_ID: AtomicU64 = AtomicU64::new(0);
+
+fn next_node_id() -> NodeId {
+    NodeId::from_u64(NEXT_NODE_ID.fetch_add(1, Ordering::Relaxed))
+}
+
 #[derive(Clone, PartialEq, Debug)]
 pub struct LayoutTree {
     root: LayoutNode,
-    next_node_id: u64,
     root_kind: RootKind,
 }
 
 impl LayoutTree {
     pub fn new(root_kind: RootKind) -> Self {
         let root = LayoutNode::new(
-            NodeId::from_u64(0),
+            next_node_id(),
             NodeKind::Split {
                 axis: gpui::Axis::Horizontal,
                 children: Vec::new(),
                 sizes: Vec::new(),
             },
         );
-        Self {
-            root,
-            next_node_id: 1,
-            root_kind,
-        }
+        Self { root, root_kind }
     }
 
     pub fn root(&self) -> &LayoutNode {
@@ -53,9 +64,7 @@ impl LayoutTree {
     }
 
     pub(crate) fn allocate_node_id(&mut self) -> NodeId {
-        let id = NodeId::from_u64(self.next_node_id);
-        self.next_node_id += 1;
-        id
+        next_node_id()
     }
 
     /// Every container id in the tree, in pre-order.

@@ -1,15 +1,16 @@
+mod builder;
 mod edit;
 mod node;
 mod normalize;
 mod tree;
 
+pub use builder::DockLayout;
 pub use edit::{EditResult, InsertTarget};
 
-// `NodeKind` and `NodePath` stay crate-private here for a later task; the
-// edit operations added in this task reach `node`/`tree` directly as
-// `super::node::NodeKind` / `super::tree::NodePath` instead of through this
-// re-export, so it still has no caller.
-#[allow(unused_imports)]
+// `NodeKind` and `NodePath` stay crate-private: `dock_area` reads through
+// `NodeKind` to resolve slot sizes before a dump, but nothing outside this
+// crate may build a node without going through `LayoutTree`, which is what
+// guarantees normalization always runs.
 pub(crate) use node::NodeKind;
 pub use node::{LayoutNode, NodeId, NodeRef, PanelId, TilePanel};
 #[allow(unused_imports)]

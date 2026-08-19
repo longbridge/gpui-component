@@ -96,9 +96,6 @@ impl ActiveTracker {
     /// moves to another group — the source tracker's own next `reconcile`
     /// prunes the entry on its own, so this type does not also need a
     /// remove-and-return accessor.
-    ///
-    /// Unused for the same reason as [`Self::seed`], its counterpart.
-    #[allow(dead_code)]
     pub(crate) fn last_notified(&self, panel: PanelId) -> Option<bool> {
         self.notified.get(&panel).copied()
     }

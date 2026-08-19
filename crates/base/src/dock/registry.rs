@@ -1,8 +1,8 @@
 use std::{collections::HashMap, sync::Arc};
 
-use gpui::{AnyView, App, Global, WeakEntity, Window};
+use gpui::{App, Global, WeakEntity, Window};
 
-use super::{DockArea, PanelInfo, PanelState};
+use super::{DockArea, PanelInfo, PanelState, PanelView};
 
 /// Everything a panel builder needs to reconstruct a panel from persisted data.
 pub struct PanelBuildContext<'a> {
@@ -40,17 +40,27 @@ impl<'a> PanelBuildContext<'a> {
 /// Global registry of panel builders, keyed by panel name, used to reconstruct
 /// a panel view from persisted [`PanelState`]/[`PanelInfo`] data.
 ///
-/// A registered builder produces a plain [`AnyView`] rather than a
-/// [`Panel`](super::Panel)/[`PanelView`](super::PanelView)-typed handle: the
-/// registry does not require a builder to depend on those traits, so it
-/// stays usable for entities that are not `Panel` implementations. A caller
-/// that needs a richer handle downcasts or wraps the `AnyView` itself.
+/// A builder returns an [`Arc<dyn PanelView>`](PanelView), not a bare
+/// `AnyView`. An earlier revision of this module returned `AnyView` so that a
+/// builder would not have to depend on the panel traits, on the reasoning
+/// that "a caller that needs a richer handle downcasts or wraps the
+/// `AnyView` itself". [`DockArea::load`](super::DockArea::load) is that
+/// caller, and it cannot: downcasting needs the concrete type, which the
+/// registry is precisely the mechanism for not knowing. Without a
+/// `PanelView` a restored panel could not be asked for its
+/// [`dump`](PanelView::dump), so every registered panel's own persisted
+/// payload would be dropped on the first save after a load.
 ///
 /// Building a panel that was never registered returns `None` rather than a
 /// placeholder view: rendering an "invalid panel" placeholder is presentation
-/// behavior that belongs above this seam, not inside `gpui-base`.
+/// behavior that belongs above this seam, not inside `gpui-base`. `DockArea`
+/// substitutes a draw-nothing placeholder that carries the original
+/// `PanelState` forward, so an unknown panel survives a round trip.
 pub struct PanelRegistry {
-    items: HashMap<String, Arc<dyn Fn(PanelBuildContext, &mut Window, &mut App) -> AnyView>>,
+    items: HashMap<
+        String,
+        Arc<dyn Fn(PanelBuildContext, &mut Window, &mut App) -> Arc<dyn PanelView>>,
+    >,
 }
 
 impl PanelRegistry {
@@ -83,7 +93,7 @@ impl PanelRegistry {
         context: PanelBuildContext,
         window: &mut Window,
         cx: &mut App,
-    ) -> Option<AnyView> {
+    ) -> Option<Arc<dyn PanelView>> {
         let build = Self::global(cx).items.get(panel_name).cloned()?;
         Some(build(context, window, cx))
     }
@@ -100,7 +110,7 @@ impl Global for PanelRegistry {}
 /// Register the Panel init by panel_name to global registry.
 pub fn register_panel<F>(cx: &mut App, panel_name: &str, deserialize: F)
 where
-    F: Fn(PanelBuildContext, &mut Window, &mut App) -> AnyView + 'static,
+    F: Fn(PanelBuildContext, &mut Window, &mut App) -> Arc<dyn PanelView> + 'static,
 {
     PanelRegistry::init(cx);
     PanelRegistry::global_mut(cx)

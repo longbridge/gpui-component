@@ -91,11 +91,9 @@ pub(crate) enum NodeKind {
         panels: Vec<PanelId>,
         active_ix: usize,
     },
-    // No non-test code builds a fresh `Tiles` node yet: `InsertTarget::Tile`
-    // only pushes a `TilePanel` into a `Tiles` node that already exists.
-    // Creating a tiles canvas from scratch is for a later task.
-    #[allow(dead_code)]
-    Tiles { panels: Vec<TilePanel> },
+    Tiles {
+        panels: Vec<TilePanel>,
+    },
 }
 
 /// Borrowed read-only projection of a node.
