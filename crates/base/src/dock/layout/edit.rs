@@ -122,11 +122,31 @@ impl LayoutTree {
         })
     }
 
+    /// Replace a split's slot sizes wholesale.
+    ///
+    /// A no-op, like every other operation given a `NodeId` it cannot
+    /// resolve, if `new_sizes.len()` does not match the split's child count:
+    /// no rule in `normalize` repairs a length mismatch, so applying it would
+    /// otherwise leave `children.len() != sizes.len()` and trip
+    /// `normalize`'s `debug_assert!`. A caller passing the wrong length is a
+    /// programming error, not a data condition, so this only asserts in
+    /// debug builds rather than warning at runtime.
     pub fn set_sizes(&mut self, node: NodeId, new_sizes: Vec<Option<Pixels>>) -> EditResult {
         self.edit(|tree| {
             if let Some(path) = tree.path_of_node(node) {
-                if let NodeKind::Split { sizes, .. } = tree.node_at_mut(&path).kind_mut() {
-                    *sizes = new_sizes;
+                if let NodeKind::Split {
+                    children, sizes, ..
+                } = tree.node_at_mut(&path).kind_mut()
+                {
+                    debug_assert!(
+                        new_sizes.len() == children.len(),
+                        "set_sizes: expected {} sizes for node {node:?}, got {}",
+                        children.len(),
+                        new_sizes.len(),
+                    );
+                    if new_sizes.len() == children.len() {
+                        *sizes = new_sizes;
+                    }
                 }
             }
             Vec::new()
@@ -504,6 +524,51 @@ mod tests {
         };
         assert_eq!(inner, Axis::Vertical);
         assert_eq!(inner_children.len(), 2);
+
+        // `Bottom` puts the new group after the original target: the
+        // wrapper's first child is still the target, the second is new.
+        let NodeRef::Tabs { panels, .. } = inner_children[0].kind() else {
+            panic!()
+        };
+        assert_eq!(panels, [panel(1)], "the original target stays first");
+        let NodeRef::Tabs { panels, .. } = inner_children[1].kind() else {
+            panic!()
+        };
+        assert_eq!(panels, [panel(2)], "the new group lands second, below");
+    }
+
+    #[test]
+    fn splitting_top_across_the_parent_axis_puts_the_new_group_first() {
+        let (mut tree, tabs) = tree_with_one_group();
+        tree.push_tabs_for_test(tree.root().id(), vec![panel(9)]);
+        tree.normalize();
+
+        tree.split(tabs, panel(2), Placement::Top, None);
+
+        let NodeRef::Split { children, .. } = tree.root().kind() else {
+            panic!()
+        };
+        let NodeRef::Split {
+            axis: inner,
+            children: inner_children,
+            ..
+        } = children[0].kind()
+        else {
+            panic!("the split target is wrapped in a vertical split")
+        };
+        assert_eq!(inner, Axis::Vertical);
+        assert_eq!(inner_children.len(), 2);
+
+        // `Top` is the mirror of `Bottom`: the new group lands first, above
+        // the original target.
+        let NodeRef::Tabs { panels, .. } = inner_children[0].kind() else {
+            panic!()
+        };
+        assert_eq!(panels, [panel(2)], "the new group lands first, above");
+        let NodeRef::Tabs { panels, .. } = inner_children[1].kind() else {
+            panic!()
+        };
+        assert_eq!(panels, [panel(1)], "the original target moves second");
     }
 
     #[test]
@@ -549,6 +614,64 @@ mod tests {
         let (mut tree, tabs) = tree_with_one_group();
         let result = tree.set_active(tabs, 0);
         assert!(!result.changed());
+    }
+
+    #[test]
+    fn set_sizes_replaces_a_matching_length_vector() {
+        let (mut tree, tabs) = tree_with_one_group();
+        tree.split(tabs, panel(2), Placement::Right, None);
+        let root = tree.root().id();
+
+        let result = tree.set_sizes(root, vec![Some(px(100.)), Some(px(200.))]);
+
+        assert!(result.changed());
+        let NodeRef::Split { sizes, .. } = tree.root().kind() else {
+            panic!()
+        };
+        assert_eq!(sizes, &[Some(px(100.)), Some(px(200.))]);
+    }
+
+    #[test]
+    fn set_sizes_ignores_a_mismatched_length_vector() {
+        let (mut tree, tabs) = tree_with_one_group();
+        tree.split(tabs, panel(2), Placement::Right, None);
+        let root = tree.root().id();
+        let NodeRef::Split {
+            sizes: before_sizes,
+            ..
+        } = tree.root().kind()
+        else {
+            panic!()
+        };
+        let before_sizes = before_sizes.to_vec();
+
+        // The split has 2 children; hand it 3 sizes — a caller bug. In a
+        // debug build (as `cargo test` runs, since this workspace does not
+        // disable debug-assertions) that bug is also loud: `set_sizes`
+        // backs its no-op guard with a `debug_assert!`, so the call unwinds.
+        // Catch it so this one test exercises both halves of the contract:
+        // the debug-time assertion firing, and the release-time behavior
+        // (a no-op reporting `changed() == false`) that holds either way.
+        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            tree.set_sizes(root, vec![Some(px(10.)), Some(px(20.)), Some(px(30.))])
+        }));
+
+        match outcome {
+            Ok(result) => assert!(
+                !result.changed(),
+                "a mismatched vector must not report a change"
+            ),
+            Err(_) => {} // The debug_assert fired, as designed; nothing was mutated first.
+        }
+
+        let NodeRef::Split { sizes, .. } = tree.root().kind() else {
+            panic!()
+        };
+        assert_eq!(
+            sizes,
+            before_sizes.as_slice(),
+            "the mismatched vector never reaches the tree, in debug or release"
+        );
     }
 
     #[test]
