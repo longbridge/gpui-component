@@ -15,23 +15,24 @@ use std::{
 };
 
 use gpui::{
-    AnyView, Bounds, Context, Empty, IntoElement, Pixels, Point, Render, Size, Window, point, px,
-    size,
+    Bounds, Context, Empty, IntoElement, Pixels, Point, Render, Size, Window, point, px, size,
 };
 
 use crate::Placement;
 
-use super::layout::NodeId;
+use super::layout::{NodeId, PanelId};
 
 /// A panel being dragged out of a tab group.
 ///
-/// The base layer has no `PanelView` trait or `TabPanel` entity of its own
-/// (those are layered above, in `gpui_component::dock`), so the dragged
-/// panel is carried as an opaque [`AnyView`] and its origin as a [`NodeId`]
-/// rather than as an `Entity<TabPanel>`.
+/// The panel is carried as a [`PanelId`] rather than a view handle: the base
+/// layer has no `PanelView` trait or `TabPanel` entity of its own (those are
+/// layered above), and the layout algebra already addresses panels this way
+/// (see `insert_panel`/`remove_panel`/`move_panel` in `layout::edit`). A
+/// consumer resolves the id back to a view through the dock area's panel
+/// map.
 #[derive(Clone)]
 pub struct DragPanel {
-    panel: AnyView,
+    panel: PanelId,
     source: NodeId,
     drag_offset: Rc<Cell<Point<Pixels>>>,
     drag_session_id: u64,
@@ -49,7 +50,7 @@ static NEXT_DRAG_SESSION_ID: AtomicU64 = AtomicU64::new(1);
 const ITEM_DRAG_SESSION_ID: u64 = 0;
 
 impl DragPanel {
-    pub fn new(panel: AnyView, source: NodeId) -> Self {
+    pub fn new(panel: PanelId, source: NodeId) -> Self {
         Self {
             panel,
             source,
@@ -58,8 +59,8 @@ impl DragPanel {
         }
     }
 
-    pub fn panel(&self) -> &AnyView {
-        &self.panel
+    pub fn panel(&self) -> PanelId {
+        self.panel
     }
 
     /// The tab group this panel was dragged out of.
