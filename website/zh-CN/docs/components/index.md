@@ -34,6 +34,7 @@ collapsed: false
 
 ## 布局与高级组件
 
+- [Command](command) - 用于搜索与快捷操作的命令面板
 - [Dialog](dialog) - 对话框与模态窗口
 - [Popover](popover) - 浮层内容
 - [Resizable](resizable) - 可调整大小的面板

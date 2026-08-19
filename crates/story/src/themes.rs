@@ -1,11 +1,12 @@
-use gpui::{Action, App, SharedString};
-use gpui_component::{Theme, ThemeConfig, ThemeMode, ThemeRegistry, scroll::ScrollbarMode};
+use gpui::{Action, App, SharedString, actions};
+use gpui_component::{
+    ActiveTheme as _, IconName, Theme, ThemeConfig, ThemeMode, ThemeRegistry,
+    command::{CommandEntry, CommandGroup, CommandItem},
+    scroll::ScrollbarMode,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::AppState;
-
-#[cfg(not(target_family = "wasm"))]
-use gpui_component::ActiveTheme;
 
 #[cfg(target_family = "wasm")]
 use crate::embedded_themes;
@@ -15,6 +16,8 @@ const STATE_FILE: &str = "target/state.json";
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct State {
     theme: SharedString,
+    #[serde(default)]
+    radius: Option<f32>,
     #[serde(alias = "scrollbar_show")]
     scrollbar_mode: Option<ScrollbarMode>,
     #[serde(default)]
@@ -31,6 +34,7 @@ impl Default for State {
     fn default() -> Self {
         Self {
             theme: "Default Light".into(),
+            radius: None,
             scrollbar_mode: None,
             show_fps_monitor: None,
         }
@@ -39,8 +43,13 @@ impl Default for State {
 
 #[cfg(not(target_family = "wasm"))]
 fn save_state(cx: &mut App) {
+    if AppState::global(cx).previewing_theme {
+        return;
+    }
+
     let state = State {
         theme: cx.theme().theme_name().clone(),
+        radius: Some(cx.theme().radius.as_f32()),
         scrollbar_mode: Some(cx.theme().scrollbar_mode),
         show_fps_monitor: Some(AppState::global(cx).show_fps_monitor),
     };
@@ -49,6 +58,29 @@ fn save_state(cx: &mut App) {
         // Ignore write errors - if STATE_FILE doesn't exist or can't be written, do nothing
         let _ = std::fs::write(STATE_FILE, json);
     }
+}
+
+pub(crate) fn begin_theme_preview(cx: &mut App) {
+    AppState::global_mut(cx).previewing_theme = true;
+}
+
+pub(crate) fn finish_theme_preview(cx: &mut App) {
+    AppState::global_mut(cx).previewing_theme = false;
+}
+
+fn apply_persisted_radius(state: &State, cx: &mut App) {
+    let Some(radius) = state.radius else {
+        return;
+    };
+
+    let theme = Theme::global_mut(cx);
+    theme.radius = gpui::px(radius);
+    theme.radius_lg = if radius > 0. {
+        gpui::px(radius + 2.)
+    } else {
+        gpui::px(0.)
+    };
+    Theme::sync_base(cx);
 }
 
 pub fn init(cx: &mut App) {
@@ -75,14 +107,17 @@ pub fn init(cx: &mut App) {
     };
 
     #[cfg(not(target_family = "wasm"))]
+    let watched_state = state.clone();
+    #[cfg(not(target_family = "wasm"))]
     if let Err(err) =
         ThemeRegistry::watch_dir(std::path::PathBuf::from("./themes"), cx, move |cx| {
             if let Some(theme) = ThemeRegistry::global(cx)
                 .themes()
-                .get(&state.theme)
+                .get(&watched_state.theme)
                 .cloned()
             {
                 apply_theme_config(theme, cx);
+                apply_persisted_radius(&watched_state, cx);
             }
         })
     {
@@ -92,6 +127,7 @@ pub fn init(cx: &mut App) {
     if let Some(scrollbar_mode) = state.scrollbar_mode {
         Theme::set_scrollbar_mode(scrollbar_mode, cx);
     }
+    apply_persisted_radius(&state, cx);
     if let Some(show_fps_monitor) = state.show_fps_monitor {
         AppState::global_mut(cx).show_fps_monitor = show_fps_monitor;
     }
@@ -126,10 +162,74 @@ pub(crate) struct SwitchTheme(pub(crate) SharedString);
 #[action(namespace = themes, no_json)]
 pub(crate) struct SwitchThemeMode(pub(crate) ThemeMode);
 
+actions!(
+    themes,
+    [
+        /// Opens the Command palette to pick a theme.
+        SelectTheme
+    ]
+);
+
+/// Apply the named theme without going through [`SwitchTheme`].
+///
+/// The palette calls this as the highlight moves, so the theme under the cursor
+/// is previewed on the whole window; cancelling puts the previous one back.
+pub(crate) fn apply_theme(name: &SharedString, cx: &mut App) {
+    let Some(theme_config) = ThemeRegistry::global(cx).themes().get(name).cloned() else {
+        return;
+    };
+
+    apply_theme_config(theme_config, cx);
+    cx.refresh_windows();
+}
+
+/// The palette entries for the [`SelectTheme`] Command palette: every
+/// registered theme, grouped by mode, with the active one checked.
+pub(crate) fn theme_entries(cx: &App) -> Vec<CommandEntry> {
+    let active_name = cx.theme().theme_name().clone();
+    let themes = ThemeRegistry::global(cx).sorted_themes();
+
+    [(ThemeMode::Light, "Light"), (ThemeMode::Dark, "Dark")]
+        .into_iter()
+        .map(|(mode, heading)| {
+            CommandGroup::new()
+                .label(heading)
+                .items(
+                    themes
+                        .iter()
+                        .filter(|theme| theme.mode == mode)
+                        .map(|theme| theme_item(theme, &active_name)),
+                )
+                .into()
+        })
+        .collect()
+}
+
+pub(crate) fn theme_name_at(index: gpui_component::IndexPath, cx: &App) -> Option<SharedString> {
+    let mode = [ThemeMode::Light, ThemeMode::Dark].get(index.section)?;
+    ThemeRegistry::global(cx)
+        .sorted_themes()
+        .into_iter()
+        .filter(|theme| theme.mode == *mode)
+        .nth(index.row)
+        .map(|theme| theme.name.clone())
+}
+
+fn theme_item(theme: &ThemeConfig, active_name: &SharedString) -> CommandItem {
+    let name = theme.name.clone();
+
+    CommandItem::new()
+        .label(name.clone())
+        .icon(IconName::Palette)
+        .checked(&name == active_name)
+        .keywords([theme.mode.name()])
+        .action(Box::new(SwitchTheme(name)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gpui::TestAppContext;
+    use gpui::{TestAppContext, px};
     use gpui_component::ThemeConfig;
     use std::rc::Rc;
 
@@ -164,6 +264,50 @@ mod tests {
             assert_eq!(base.resizable.handle, theme.border);
             assert_eq!(base.resizable.active_handle, theme.drag_border);
             assert_eq!(base.tokens.colors.ring, theme.ring);
+        });
+    }
+
+    #[test]
+    fn state_serializes_the_selected_radius() {
+        let state = State {
+            theme: "Default Light".into(),
+            radius: Some(4.),
+            scrollbar_mode: None,
+            show_fps_monitor: None,
+        };
+
+        let json = serde_json::to_value(state).unwrap();
+
+        assert_eq!(json["radius"], 4.0);
+    }
+
+    #[gpui::test]
+    fn persisted_radius_overrides_the_theme_radius(cx: &mut TestAppContext) {
+        cx.update(gpui_component::init);
+        let config = Rc::new(
+            serde_json::from_value::<ThemeConfig>(serde_json::json!({
+                "name": "Rounded Theme",
+                "mode": "light",
+                "radius": 8,
+                "radius.lg": 10
+            }))
+            .unwrap(),
+        );
+        let state = State {
+            theme: "Rounded Theme".into(),
+            radius: Some(4.),
+            scrollbar_mode: None,
+            show_fps_monitor: None,
+        };
+
+        cx.update(|cx| {
+            apply_theme_config(config, cx);
+            apply_persisted_radius(&state, cx);
+        });
+
+        cx.read(|cx| {
+            assert_eq!(cx.theme().radius, px(4.));
+            assert_eq!(cx.theme().radius_lg, px(6.));
         });
     }
 }

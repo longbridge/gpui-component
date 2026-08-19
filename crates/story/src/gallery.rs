@@ -2,6 +2,7 @@ use gpui::{prelude::*, *};
 use gpui_component::{
     Icon, IconName, ThemeStyled as _,
     button::{Button, ButtonVariants as _},
+    command::{CommandEntry, CommandItem},
     h_flex,
     input::{Input, InputEvent, InputState},
     resizable::{h_resizable, resizable_panel},
@@ -12,6 +13,25 @@ use gpui_component::{
 };
 
 use crate::*;
+
+fn component_command(name: impl Into<SharedString>) -> CommandEntry {
+    CommandItem::new().label(name).into()
+}
+
+fn find_story_index<'a>(
+    groups: impl IntoIterator<Item = impl IntoIterator<Item = &'a str>>,
+    name: &str,
+) -> Option<(usize, usize)> {
+    groups
+        .into_iter()
+        .enumerate()
+        .find_map(|(group_ix, group)| {
+            group
+                .into_iter()
+                .position(|story_name| story_name.eq_ignore_ascii_case(name))
+                .map(|story_ix| (group_ix, story_ix))
+        })
+}
 
 pub struct Gallery {
     stories: Vec<(&'static str, Vec<Entity<StoryContainer>>)>,
@@ -61,6 +81,7 @@ impl Gallery {
                 StoryContainer::panel::<CollapsibleStory>(window, cx),
                 StoryContainer::panel::<ColorPickerStory>(window, cx),
                 StoryContainer::panel::<ComboboxStory>(window, cx),
+                StoryContainer::panel::<CommandStory>(window, cx),
                 StoryContainer::panel::<DataTableStory>(window, cx),
                 StoryContainer::panel::<DatePickerStory>(window, cx),
                 StoryContainer::panel::<DescriptionListStory>(window, cx),
@@ -147,6 +168,68 @@ impl Gallery {
         });
         self.active_group_index = Some(0);
         self.active_index = Some(exact_index.unwrap_or(0));
+    }
+
+    pub(crate) fn command_entries(&self, cx: &App) -> Vec<CommandEntry> {
+        self.stories
+            .iter()
+            .flat_map(|(_, stories)| stories)
+            .map(|story| component_command(story.read(cx).name.clone()))
+            .collect()
+    }
+
+    pub(crate) fn select_story(
+        &mut self,
+        name: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        let names = self
+            .stories
+            .iter()
+            .map(|(_, stories)| {
+                stories
+                    .iter()
+                    .map(|story| story.read(cx).name.clone())
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        let Some((group_ix, story_ix)) = find_story_index(
+            names
+                .iter()
+                .map(|group| group.iter().map(|name| name.as_ref())),
+            name,
+        ) else {
+            return false;
+        };
+
+        self.search_input
+            .update(cx, |input, cx| input.set_value("", window, cx));
+        self.active_group_index = Some(group_ix);
+        self.active_index = Some(story_ix);
+        cx.notify();
+        true
+    }
+
+    pub(crate) fn select_story_index(
+        &mut self,
+        index: gpui_component::IndexPath,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        if index.section != 0 {
+            return false;
+        }
+        let Some(name) = self
+            .stories
+            .iter()
+            .flat_map(|(_, stories)| stories)
+            .nth(index.row)
+            .map(|story| story.read(cx).name.clone())
+        else {
+            return false;
+        };
+        self.select_story(&name, window, cx)
     }
 
     pub fn view(init_story: Option<&str>, window: &mut Window, cx: &mut App) -> Entity<Self> {
@@ -362,5 +445,32 @@ impl Render for Gallery {
                     ),
             )
             .into_any_element()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{component_command, find_story_index};
+    use gpui_component::command::CommandEntry;
+
+    #[test]
+    fn component_command_uses_story_name() {
+        let entry = component_command("Command");
+
+        assert!(matches!(entry, CommandEntry::Item(_)));
+    }
+
+    #[test]
+    fn story_index_matches_names_without_filtering() {
+        let groups = [vec!["Welcome", "Button"], vec!["Command", "Dialog"]];
+
+        assert_eq!(
+            find_story_index(groups.iter().map(|group| group.iter().copied()), "command"),
+            Some((1, 0))
+        );
+        assert_eq!(
+            find_story_index(groups.iter().map(|group| group.iter().copied()), "missing"),
+            None
+        );
     }
 }

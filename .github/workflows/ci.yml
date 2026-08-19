@@ -49,7 +49,7 @@ jobs:
       - name: Typo check
         if: ${{ matrix.run_on == 'macos-latest' }}
         run: |
-          cargo install typos-cli || echo "typos-cli already installed"
+          command -v typos >/dev/null || cargo install typos-cli
           typos
       - name: Lint
         if: ${{ matrix.run_on == 'macos-latest' }}
