@@ -230,6 +230,7 @@ mod tests {
     use gpui::{Bounds, point, px, size};
 
     use super::super::layout::{RootKind, TilePanel};
+    use super::super::state::DockAreaState;
     use super::*;
 
     /// A `PanelSource` backed by a fixed map, so conversion is testable
@@ -469,5 +470,175 @@ mod tests {
             panic!()
         };
         assert_eq!(panels.len(), 2, "a short metas list must not drop panels");
+    }
+
+    /// Round-trips leaves by remembering the exact `PanelState` each id came
+    /// from, which is what the production invalid-panel path must also do.
+    ///
+    /// `PanelSource::panel_name` returns `&'static str`, which a JSON-sourced
+    /// `String` can only satisfy by leaking. Rather than leak on every call
+    /// to `panel_name` (as many times as the layout is dumped), each leak
+    /// happens once, in `build`, when the id is minted; `panel_name` then
+    /// just indexes into the already-leaked slice. Still a leak, but a
+    /// bounded one, and test-only.
+    #[derive(Default)]
+    struct PreservingPanels {
+        states: Vec<PanelState>,
+        names: Vec<&'static str>,
+    }
+
+    impl PanelBuilder for PreservingPanels {
+        fn build(&mut self, state: &PanelState, _: &PanelInfo) -> PanelId {
+            self.states.push(state.clone());
+            self.names
+                .push(Box::leak(state.panel_name.clone().into_boxed_str()));
+            PanelId::from_u64(self.states.len() as u64)
+        }
+    }
+
+    impl PanelSource for PreservingPanels {
+        fn panel_name(&self, id: PanelId) -> &'static str {
+            self.names[id.as_u64() as usize - 1]
+        }
+        fn is_visible(&self, _: PanelId) -> bool {
+            true
+        }
+        fn dump(&self, id: PanelId) -> PanelState {
+            self.states[id.as_u64() as usize - 1].clone()
+        }
+    }
+
+    fn canonicalize(json: &str) -> PanelState {
+        let state: DockAreaState = serde_json::from_str(json).unwrap();
+        let mut panels = PreservingPanels::default();
+        let tree = LayoutTree::from_state(&state.center, RootKind::Split, &mut panels);
+        tree.to_state(&panels)
+    }
+
+    #[test]
+    fn canonicalization_reaches_a_fixpoint_in_one_pass() {
+        for json in [
+            include_str!("fixtures/layout.json"),
+            include_str!("fixtures/tiles.json"),
+            include_str!("fixtures/nested_splits.json"),
+            include_str!("fixtures/legacy_empty_tab_group.json"),
+            include_str!("fixtures/unregistered_panel.json"),
+            include_str!("fixtures/zero_size_sentinel.json"),
+        ] {
+            let once = canonicalize(json);
+            let twice = {
+                let wrapped = DockAreaState {
+                    center: once.clone(),
+                    ..Default::default()
+                };
+                canonicalize(&serde_json::to_string(&wrapped).unwrap())
+            };
+            assert_eq!(once, twice, "r(r(x)) != r(x)");
+        }
+    }
+
+    #[test]
+    fn an_unregistered_panel_keeps_its_payload_through_a_round_trip() {
+        let state = canonicalize(include_str!("fixtures/unregistered_panel.json"));
+        let leaf = &state.children[0].children[0];
+
+        assert_eq!(leaf.panel_name, "PanelFromTheFuture");
+        assert_eq!(
+            leaf.info,
+            PanelInfo::panel(serde_json::json!({"keep": "me"}))
+        );
+    }
+
+    #[test]
+    fn the_legacy_empty_tab_group_is_rewritten_into_the_tabs_form() {
+        let state = canonicalize(include_str!("fixtures/legacy_empty_tab_group.json"));
+
+        // The empty group collapses, leaving the mandatory split root.
+        assert_eq!(state.panel_name, "StackPanel");
+        assert!(state.children.is_empty());
+    }
+
+    #[test]
+    fn nested_same_axis_splits_are_flattened_and_single_child_splits_collapse() {
+        let state = canonicalize(include_str!("fixtures/nested_splits.json"));
+
+        assert_eq!(state.panel_name, "StackPanel");
+        assert_eq!(
+            state.children.len(),
+            3,
+            "the horizontal inner split splices in and the vertical single-child split collapses"
+        );
+        assert!(
+            state
+                .children
+                .iter()
+                .all(|child| child.panel_name == "TabPanel")
+        );
+    }
+
+    #[test]
+    fn tile_bounds_and_z_order_survive_a_round_trip() {
+        let state = canonicalize(include_str!("fixtures/tiles.json"));
+        let tiles = &state.children[0];
+
+        assert_eq!(tiles.panel_name, "Tiles");
+        let PanelInfo::Tiles { metas } = &tiles.info else {
+            panic!()
+        };
+        assert_eq!(metas.len(), 2);
+        assert_eq!(metas[1].z_index, 1);
+        assert_eq!(metas[1].bounds.origin.x, px(220.));
+    }
+
+    #[test]
+    fn a_tree_survives_a_round_trip_exactly() {
+        let json = include_str!("fixtures/nested_splits.json");
+        let state: DockAreaState = serde_json::from_str(json).unwrap();
+        let mut panels = PreservingPanels::default();
+        let tree = LayoutTree::from_state(&state.center, RootKind::Split, &mut panels);
+
+        let dumped = tree.to_state(&panels);
+        let mut rebuilt_panels = PreservingPanels::default();
+        let rebuilt = LayoutTree::from_state(&dumped, RootKind::Split, &mut rebuilt_panels);
+
+        assert_eq!(
+            tree.to_state(&panels),
+            rebuilt.to_state(&rebuilt_panels),
+            "load(dump(t)) must describe the same layout as t"
+        );
+    }
+
+    /// Pins the one value in the schema that means something different now
+    /// than it ever did before: a literal `0.0` slot size sits next to a
+    /// genuine, non-collapsing `200.0` sibling, so the fixture cannot pass by
+    /// accident of single-child-split collapse swallowing the slot. The
+    /// reader must map the `0.0` back to `None` (unconstrained) while
+    /// leaving the `200.0` sibling as `Some`, and the writer must round-trip
+    /// `None` back to the literal `0.0` sentinel.
+    #[test]
+    fn a_zero_size_slot_round_trips_through_the_none_sentinel() {
+        let json = include_str!("fixtures/zero_size_sentinel.json");
+        let state: DockAreaState = serde_json::from_str(json).unwrap();
+        let mut panels = PreservingPanels::default();
+        let tree = LayoutTree::from_state(&state.center, RootKind::Split, &mut panels);
+
+        let NodeRef::Split { sizes, .. } = tree.root().kind() else {
+            panic!("expected the root to stay a split");
+        };
+        assert_eq!(
+            sizes,
+            &[None, Some(px(200.))],
+            "the 0.0 sentinel reads back as None, not as a real zero-width panel"
+        );
+
+        let dumped = tree.to_state(&panels);
+        let PanelInfo::Stack { sizes, .. } = &dumped.info else {
+            panic!("expected Stack info");
+        };
+        assert_eq!(
+            sizes,
+            &vec![px(0.), px(200.)],
+            "the unconstrained slot writes back out as the 0.0 sentinel"
+        );
     }
 }
