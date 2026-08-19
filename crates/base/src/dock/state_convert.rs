@@ -1,4 +1,6 @@
-use super::layout::{LayoutNode, LayoutTree, NodeRef, PanelId};
+use gpui::{Axis, Pixels};
+
+use super::layout::{LayoutNode, LayoutTree, NodeKind, NodeRef, PanelId, RootKind, TilePanel};
 use super::state::{PanelInfo, PanelState, TileMeta};
 
 /// The names written to persisted layouts. These are contract, not type names:
@@ -75,6 +77,152 @@ fn node_to_state(node: &LayoutNode, source: &dyn PanelSource) -> PanelState {
             ),
         },
     }
+}
+
+/// Turns a persisted leaf into a live panel id.
+///
+/// The production implementation (at the `gpui-component` layer, above this
+/// crate) consults `PanelRegistry` and falls back to an invalid-panel
+/// placeholder that retains the original `PanelState`, so a panel type this
+/// build does not know about survives a load/save round trip instead of
+/// being erased.
+pub trait PanelBuilder {
+    fn build(&mut self, state: &PanelState, info: &PanelInfo) -> PanelId;
+}
+
+impl LayoutTree {
+    /// Read a persisted layout.
+    ///
+    /// Compatibility rules, all previously implicit in `PanelState::to_item`:
+    ///
+    /// - a `Tabs` whose children are themselves `Tabs` is flattened;
+    /// - a bare `Panel` leaf appearing where a container belongs is wrapped in
+    ///   a `Tabs`;
+    /// - a node named `TabPanel` carrying `PanelInfo::Panel` is read as an
+    ///   empty tab group, recovering data written by the old dump defect (an
+    ///   empty `TabPanel` never entered the loop that set its `info` to
+    ///   `Tabs`, so it kept `PanelState`'s default `Panel(Value::Null)`). The
+    ///   old reader had no such rule: it looked "TabPanel" up in the panel
+    ///   registry, found nothing, and rendered an `InvalidPanel` placeholder
+    ///   where an empty tab group belonged. This rule is a genuine fix, not a
+    ///   preserved behavior;
+    /// - a `Tiles` child without a matching meta keeps the default placement.
+    ///   The old writer's counterpart (`DockItem::tiles`) hard-asserted
+    ///   `items.len() == metas.len()` and panicked the whole load on a short
+    ///   `metas` list, so this rule is a new safety net, not a preserved
+    ///   graceful-degradation path.
+    pub fn from_state(
+        state: &PanelState,
+        root_kind: RootKind,
+        builder: &mut dyn PanelBuilder,
+    ) -> Self {
+        let mut tree = LayoutTree::new(root_kind);
+        let root = build_node(&mut tree, state, builder);
+
+        let root = match (root_kind, &root) {
+            (RootKind::Split, node) if !matches!(node.kind_ref(), NodeKind::Split { .. }) => {
+                let id = tree.allocate_node_id();
+                LayoutNode::new(
+                    id,
+                    NodeKind::Split {
+                        axis: Axis::Horizontal,
+                        children: vec![node.clone()],
+                        sizes: vec![None],
+                    },
+                )
+            }
+            _ => root,
+        };
+
+        tree.replace_root(root);
+        tree.normalize();
+        tree
+    }
+}
+
+fn build_node(
+    tree: &mut LayoutTree,
+    state: &PanelState,
+    builder: &mut dyn PanelBuilder,
+) -> LayoutNode {
+    let id = tree.allocate_node_id();
+
+    match &state.info {
+        PanelInfo::Stack { sizes, axis } => {
+            let axis = if *axis == 0 {
+                Axis::Horizontal
+            } else {
+                Axis::Vertical
+            };
+            let children: Vec<LayoutNode> = state
+                .children
+                .iter()
+                .map(|child| build_node(tree, child, builder))
+                .collect();
+            let sizes = (0..children.len())
+                .map(|ix| sizes.get(ix).copied().filter(|size| *size > Pixels::ZERO))
+                .collect();
+            LayoutNode::new(
+                id,
+                NodeKind::Split {
+                    axis,
+                    children,
+                    sizes,
+                },
+            )
+        }
+        PanelInfo::Tabs { active_index } => {
+            let panels = collect_tab_panels(&state.children, builder);
+            LayoutNode::new(
+                id,
+                NodeKind::Tabs {
+                    panels,
+                    active_ix: *active_index,
+                },
+            )
+        }
+        PanelInfo::Tiles { metas } => {
+            let panels = state
+                .children
+                .iter()
+                .enumerate()
+                .map(|(ix, child)| {
+                    let meta = metas.get(ix).copied().unwrap_or_default();
+                    TilePanel::new(builder.build(child, &child.info), meta.bounds)
+                        .with_z_index(meta.z_index)
+                })
+                .collect();
+            LayoutNode::new(id, NodeKind::Tiles { panels })
+        }
+        PanelInfo::Panel(_) => {
+            // A container name carrying a leaf info means the writer that
+            // produced this file had the empty-group defect.
+            let panels = if state.panel_name == TAB_PANEL_NAME {
+                Vec::new()
+            } else {
+                vec![builder.build(state, &state.info)]
+            };
+            LayoutNode::new(
+                id,
+                NodeKind::Tabs {
+                    panels,
+                    active_ix: 0,
+                },
+            )
+        }
+    }
+}
+
+/// Flatten one level of tab nesting, which the old writer could produce.
+fn collect_tab_panels(children: &[PanelState], builder: &mut dyn PanelBuilder) -> Vec<PanelId> {
+    children
+        .iter()
+        .flat_map(|child| match &child.info {
+            PanelInfo::Tabs { .. } => collect_tab_panels(&child.children, builder),
+            PanelInfo::Panel(_) if child.panel_name == TAB_PANEL_NAME => Vec::new(),
+            _ => vec![builder.build(child, &child.info)],
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -195,5 +343,131 @@ mod tests {
         };
         assert_eq!(metas[0].bounds, bounds);
         assert_eq!(metas[0].z_index, 2);
+    }
+
+    /// Assigns each leaf `PanelState` an id in encounter order, so the reader
+    /// can be tested without a registry or an `App`.
+    #[derive(Default)]
+    struct RecordingBuilder {
+        built: Vec<String>,
+    }
+
+    impl PanelBuilder for RecordingBuilder {
+        fn build(&mut self, state: &PanelState, _: &PanelInfo) -> PanelId {
+            self.built.push(state.panel_name.clone());
+            PanelId::from_u64(self.built.len() as u64)
+        }
+    }
+
+    fn tabs_state(children: Vec<PanelState>, active_index: usize) -> PanelState {
+        PanelState {
+            panel_name: TAB_PANEL_NAME.to_string(),
+            children,
+            info: PanelInfo::tabs(active_index),
+        }
+    }
+
+    fn panel_state(name: &str) -> PanelState {
+        PanelState {
+            panel_name: name.to_string(),
+            children: Vec::new(),
+            info: PanelInfo::panel(serde_json::Value::Null),
+        }
+    }
+
+    #[test]
+    fn nested_tab_groups_are_flattened() {
+        let state = tabs_state(
+            vec![
+                tabs_state(vec![panel_state("Alpha")], 0),
+                tabs_state(vec![panel_state("Beta")], 0),
+            ],
+            1,
+        );
+
+        let mut builder = RecordingBuilder::default();
+        let tree = LayoutTree::from_state(&state, RootKind::Any, &mut builder);
+
+        assert_eq!(builder.built, vec!["Alpha", "Beta"]);
+        let NodeRef::Tabs { panels, active_ix } = tree.root().kind() else {
+            panic!()
+        };
+        assert_eq!(panels.len(), 2);
+        assert_eq!(active_ix, 1);
+    }
+
+    #[test]
+    fn a_bare_panel_leaf_is_wrapped_in_a_tab_group() {
+        let mut builder = RecordingBuilder::default();
+        let tree = LayoutTree::from_state(&panel_state("Alpha"), RootKind::Any, &mut builder);
+
+        assert!(matches!(tree.root().kind(), NodeRef::Tabs { panels, .. } if panels.len() == 1));
+    }
+
+    #[test]
+    fn a_tab_panel_carrying_panel_info_is_read_as_an_empty_group() {
+        // What the old `TabPanel::dump` wrote for an empty tab group.
+        let state = PanelState {
+            panel_name: TAB_PANEL_NAME.to_string(),
+            children: Vec::new(),
+            info: PanelInfo::panel(serde_json::Value::Null),
+        };
+
+        let mut builder = RecordingBuilder::default();
+        let tree = LayoutTree::from_state(&state, RootKind::Any, &mut builder);
+
+        assert!(
+            builder.built.is_empty(),
+            "no panel is built for the phantom leaf"
+        );
+        assert!(matches!(tree.root().kind(), NodeRef::Tabs { panels, .. } if panels.is_empty()));
+    }
+
+    #[test]
+    fn a_split_root_is_forced_even_when_the_state_is_a_tab_group() {
+        let state = tabs_state(vec![panel_state("Alpha")], 0);
+        let mut builder = RecordingBuilder::default();
+        let tree = LayoutTree::from_state(&state, RootKind::Split, &mut builder);
+
+        assert!(matches!(tree.root().kind(), NodeRef::Split { .. }));
+    }
+
+    #[test]
+    fn tile_metas_are_paired_with_children_by_index() {
+        let bounds = Bounds {
+            origin: point(px(1.), px(2.)),
+            size: size(px(3.), px(4.)),
+        };
+        let state = PanelState {
+            panel_name: TILES_PANEL_NAME.to_string(),
+            children: vec![panel_state("Alpha")],
+            info: PanelInfo::tiles(vec![TileMeta { bounds, z_index: 5 }]),
+        };
+
+        let mut builder = RecordingBuilder::default();
+        let tree = LayoutTree::from_state(&state, RootKind::Any, &mut builder);
+
+        let NodeRef::Tiles { panels } = tree.root().kind() else {
+            panic!()
+        };
+        assert_eq!(panels[0].bounds(), bounds);
+        assert_eq!(panels[0].z_index(), 5);
+    }
+
+    #[test]
+    fn a_tile_child_missing_its_meta_falls_back_to_the_default_placement() {
+        let state = PanelState {
+            panel_name: TILES_PANEL_NAME.to_string(),
+            children: vec![panel_state("Alpha"), panel_state("Beta")],
+            info: PanelInfo::tiles(vec![TileMeta::default()]),
+        };
+
+        let mut builder = RecordingBuilder::default();
+        let tree = LayoutTree::from_state(&state, RootKind::Any, &mut builder);
+
+        let NodeRef::Tiles { panels } = tree.root().kind() else {
+            panic!()
+        };
+        assert_eq!(panels.len(), 2, "a short metas list must not drop panels");
     }
 }
