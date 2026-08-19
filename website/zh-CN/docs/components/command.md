@@ -5,7 +5,7 @@ description: 命令面板 —— 经过过滤的命令与快捷操作列表。
 
 # Command
 
-命令面板是带有分组、由 Action 派生的快捷键提示和键盘导航的命令过滤列表。可以内嵌使用，也可以组合到现有对话框中，作为 `⌘K` 风格的菜单。列表保持虚拟滚动，因此大型面板只创建可见行。
+命令面板是带有分组、由 Action 派生的快捷键提示和键盘导航的命令过滤列表。可以内嵌使用，也可以组合到现有对话框中，作为 `⌘K` 风格的菜单。失效时，Command 会创建并布局测量每一条扁平化的行；随后 `v_virtual_list` 只渲染和绘制视口行。
 
 `Command` 拥有条目和展示策略。`CommandState` 拥有交互状态：搜索输入、焦点、选择、滚动和加载状态。
 
@@ -102,7 +102,7 @@ Command::new(&actions)
 
 ### 在对话框中
 
-使用现有的 [`WindowExt::open_dialog`] API 组合命令面板。`header` 渲染在可选搜索框和列表之上；`footer` 渲染在列表之下。查询为空时，Command 调用 `on_cancel`，然后传播 Cancel。应由宿主 Dialog 完成关闭——不要在 `on_cancel` 中再次关闭它。
+使用现有的 [`WindowExt::open_dialog`] API 组合命令面板。`header` 渲染在可选搜索框和列表之上；`footer` 渲染在列表之下。在可搜索面板中，Escape 会清空非空查询。否则——包括具有隐藏的程序化查询的不可搜索面板——Command 会调用 `on_cancel`，然后传播 Cancel。应由宿主 Dialog 完成关闭——不要在 `on_cancel` 中再次关闭它。
 
 ```rust
 use gpui_component::WindowExt as _;
@@ -173,7 +173,7 @@ Command::new(&state)
     })
 ```
 
-`on_query` 只在可搜索查询实际变化时运行。重新过滤可能移动高亮，因此所选 value 变化时会先运行 `on_select`，再运行 `on_query`。键盘和指针导致的高亮变化会运行 `on_select`，但从不分发 Action。确认已启用条目时，会先分发其 Action，再调用 `on_confirm`；没有 Action 的条目仍会调用 `on_confirm`。Escape 会清空非空查询。查询为空时，它会调用 `on_cancel`，然后传播 Cancel。
+`on_query` 只在可搜索查询实际变化时运行。重新过滤可能移动高亮，因此所选 value 变化时会先运行 `on_select`，再运行 `on_query`。键盘和指针导致的高亮变化会运行 `on_select`，但从不分发 Action。确认已启用条目时，会先分发其 Action，再调用 `on_confirm`；没有 Action 的条目仍会调用 `on_confirm`。在可搜索面板中，Escape 会清空非空查询。否则——包括具有隐藏的程序化查询的不可搜索面板——它会调用 `on_cancel`，然后传播 Cancel。
 
 ### 动态条目
 
@@ -221,7 +221,7 @@ CommandItem::new("profile")
 
 `CommandItem::child` 会用惰性子元素工厂替换条目的图标和 label 内容。该工厂可能因测量、进入视口、排版或宽度失效而多次运行，因此必须无副作用。
 
-Command 会在向 `v_virtual_list` 提供独立尺寸前测量每一条扁平化的行。因此，在列表保持虚拟滚动时，自定义行可以拥有不同的固有高度。应按列表可用宽度构建行，并在所有者更新条目前保持其渲染内容稳定。
+失效时，Command 会在向 `v_virtual_list` 提供独立尺寸前创建并布局测量每一条扁平化的行。因此，自定义行可以拥有不同的固有高度；`v_virtual_list` 仍只渲染和绘制视口行。应按列表可用宽度构建行，并在所有者更新条目前保持其渲染内容稳定。
 
 ```rust
 Command::new(&state)
@@ -249,7 +249,7 @@ Command::new(&state)
 | `on_query` | `on_query<F>(F) -> Self`，其中 `F: Fn(&str, &mut Window, &mut App) + 'static`，在可搜索查询变化后运行。 |
 | `on_select` | `on_select<F>(F) -> Self`，其中 `F: Fn(&SharedString, &mut Window, &mut App) + 'static`，在高亮 value 变化时运行。 |
 | `on_confirm` | `on_confirm<F>(F) -> Self`，使用相同的 value 回调约束；在确认的 Action 分发后运行。 |
-| `on_cancel` | `on_cancel<F>(F) -> Self`，其中 `F: Fn(&mut Window, &mut App) + 'static`，在空查询 Cancel 传播前运行。 |
+| `on_cancel` | `on_cancel<F>(F) -> Self`，其中 `F: Fn(&mut Window, &mut App) + 'static`，在 Escape 不会清空可搜索查询时，于 Cancel 传播前运行。 |
 | `placeholder` | `placeholder(impl Into<SharedString>) -> Self` 设置搜索框占位文本。 |
 | `empty` | `empty(impl Into<SharedString>) -> Self` 设置无匹配时的文案。 |
 | `max_h` | `max_h(impl Into<DefiniteLength>) -> Self` 设置列表最大高度。默认：`18.75rem`（300px）。 |
@@ -302,7 +302,7 @@ Command::new(&state)
 | --- | --- |
 | `↑` / `↓` | 移动高亮，循环并跳过禁用项。 |
 | `Enter` | 确认当前高亮项。 |
-| `Escape` | 清空搜索词；若已为空则调用 `on_cancel` 并传播 `Cancel`。 |
+| `Escape` | 在可搜索面板中清空非空查询；否则调用 `on_cancel` 并传播 `Cancel`。 |
 
 ## 最佳实践
 

@@ -7,8 +7,9 @@ description: A command palette — a filtered list of commands and quick actions
 
 A command palette is a filtered list of commands with groups, Action-derived
 keybinding hints, and keyboard navigation. Use it inline or compose it into an
-existing dialog for a `⌘K`-style menu. The list stays virtualized, so large
-palettes create only visible rows.
+existing dialog for a `⌘K`-style menu. On invalidation, Command creates and
+layout-measures every flattened row; `v_virtual_list` then renders and paints
+only viewport rows.
 
 `Command` owns the entries and presentation policy. `CommandState` owns the
 interaction state: query input, focus, selection, scrolling, and loading.
@@ -117,8 +118,10 @@ palette never invokes `on_query`.
 
 Compose the palette with the existing [`WindowExt::open_dialog`] API. `header`
 renders above the optional search field and list; `footer` renders below the
-list. On an empty query, Command calls `on_cancel` and then propagates Cancel.
-Let the hosting Dialog perform dismissal—do not close it again in `on_cancel`.
+list. In a searchable palette, Escape clears a non-empty query. Otherwise—
+including a non-searchable palette with a hidden programmatic query—Command
+calls `on_cancel` and then propagates Cancel. Let the hosting Dialog perform
+dismissal—do not close it again in `on_cancel`.
 
 ```rust
 use gpui_component::WindowExt as _;
@@ -195,8 +198,9 @@ move the highlight, so its `on_select` runs first when the selected value
 changes; then `on_query` runs. Keyboard and pointer highlight changes run
 `on_select` but never dispatch an Action. Confirming an enabled item dispatches
 its Action first and then invokes `on_confirm`; an item without an Action still
-invokes `on_confirm`. Escape clears a non-empty query. With an empty query it
-invokes `on_cancel`, then propagates Cancel.
+invokes `on_confirm`. In a searchable palette, Escape clears a non-empty
+query. Otherwise—including a non-searchable palette with a hidden programmatic
+query—it invokes `on_cancel`, then propagates Cancel.
 
 ### Dynamic Entries
 
@@ -259,10 +263,11 @@ empty message is suppressed. Render the new entries when the response arrives.
 child factory. The factory can run more than once for measurement, viewport
 entry, and typography or width invalidation, so it must be side-effect-free.
 
-Command measures every flattened row before supplying independent sizes to
-`v_virtual_list`. Custom rows may therefore have different intrinsic heights
-while the list remains virtualized. Build them for the available list width and
-keep their rendered content stable until the owner updates the entries.
+On invalidation, Command creates and layout-measures every flattened row before
+supplying independent sizes to `v_virtual_list`. Custom rows may therefore have
+different intrinsic heights; `v_virtual_list` still renders and paints only
+viewport rows. Build them for the available list width and keep their rendered
+content stable until the owner updates the entries.
 
 ```rust
 Command::new(&state)
@@ -290,7 +295,7 @@ Command::new(&state)
 | `on_query` | `on_query<F>(F) -> Self`, where `F: Fn(&str, &mut Window, &mut App) + 'static`, runs after a searchable query changes. |
 | `on_select` | `on_select<F>(F) -> Self`, where `F: Fn(&SharedString, &mut Window, &mut App) + 'static`, runs when the highlighted value changes. |
 | `on_confirm` | `on_confirm<F>(F) -> Self`, with the same value callback bounds; runs after the confirmed Action dispatches. |
-| `on_cancel` | `on_cancel<F>(F) -> Self`, where `F: Fn(&mut Window, &mut App) + 'static`, runs before empty-query Cancel propagates. |
+| `on_cancel` | `on_cancel<F>(F) -> Self`, where `F: Fn(&mut Window, &mut App) + 'static`, runs before Cancel propagates when Escape does not clear a searchable query. |
 | `placeholder` | `placeholder(impl Into<SharedString>) -> Self` sets the search-field placeholder. |
 | `empty` | `empty(impl Into<SharedString>) -> Self` sets the message for no matches. |
 | `max_h` | `max_h(impl Into<DefiniteLength>) -> Self` sets the list maximum. Default: `18.75rem` (300px). |
@@ -346,7 +351,7 @@ a newly constructed `Command` during rendering.
 | --- | --- |
 | `↑` / `↓` | Move the highlight, wrapping around and skipping disabled items. |
 | `Enter` | Confirm the highlighted item. |
-| `Escape` | Clear the query; when it is already empty, call `on_cancel` and propagate `Cancel`. |
+| `Escape` | In a searchable palette, clear a non-empty query; otherwise call `on_cancel` and propagate `Cancel`. |
 
 ## Best Practices
 
