@@ -40,10 +40,11 @@ impl<'a> PanelBuildContext<'a> {
 /// Global registry of panel builders, keyed by panel name, used to reconstruct
 /// a panel view from persisted [`PanelState`]/[`PanelInfo`] data.
 ///
-/// The base layer has no `PanelView` trait of its own (that is layered above,
-/// in `gpui_component::dock`), so a registered builder produces a plain
-/// [`AnyView`] rather than any component-specific view type. A caller that
-/// needs a richer handle downcasts or wraps the `AnyView` itself.
+/// A registered builder produces a plain [`AnyView`] rather than a
+/// [`Panel`](super::Panel)/[`PanelView`](super::PanelView)-typed handle: the
+/// registry does not require a builder to depend on those traits, so it
+/// stays usable for entities that are not `Panel` implementations. A caller
+/// that needs a richer handle downcasts or wraps the `AnyView` itself.
 ///
 /// Building a panel that was never registered returns `None` rather than a
 /// placeholder view: rendering an "invalid panel" placeholder is presentation
