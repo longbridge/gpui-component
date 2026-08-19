@@ -35,6 +35,7 @@ pub struct DragPanel {
     panel: PanelId,
     source: NodeId,
     drag_offset: Rc<Cell<Point<Pixels>>>,
+    preview_size: Rc<Cell<Size<Pixels>>>,
     drag_session_id: u64,
 }
 
@@ -43,11 +44,7 @@ static NEXT_DRAG_SESSION_ID: AtomicU64 = AtomicU64::new(1);
 /// Stands in for [`DragPanel::drag_session_id`] on host-owned drag items, which
 /// carry no session of their own. `NEXT_DRAG_SESSION_ID` starts at 1, so 0 never
 /// collides.
-///
-/// Unused until the placeholder-animation sync logic that compares against it
-/// moves down from `crates/ui` in a later task.
-#[allow(dead_code)]
-const ITEM_DRAG_SESSION_ID: u64 = 0;
+pub(crate) const ITEM_DRAG_SESSION_ID: u64 = 0;
 
 impl DragPanel {
     pub fn new(panel: PanelId, source: NodeId) -> Self {
@@ -55,6 +52,7 @@ impl DragPanel {
             panel,
             source,
             drag_offset: Rc::new(Cell::new(Point::default())),
+            preview_size: Rc::new(Cell::new(Size::default())),
             drag_session_id: NEXT_DRAG_SESSION_ID.fetch_add(1, Ordering::Relaxed),
         }
     }
@@ -76,6 +74,21 @@ impl DragPanel {
     /// positioned relative to the cursor.
     pub fn set_drag_offset(&self, offset: Point<Pixels>) {
         self.drag_offset.set(offset);
+    }
+
+    /// How large the drag preview is on screen.
+    ///
+    /// The dock reads it to decide where a drop placeholder flies in from,
+    /// which is hit geometry rather than styling; the preview's own size is a
+    /// visual decision, so the skin that draws the preview reports it here.
+    /// Defaults to zero, which degrades to a placeholder that grows out of the
+    /// cursor rather than out of the preview.
+    pub fn preview_size(&self) -> Size<Pixels> {
+        self.preview_size.get()
+    }
+
+    pub fn set_preview_size(&self, size: Size<Pixels>) {
+        self.preview_size.set(size);
     }
 
     pub fn drag_session_id(&self) -> u64 {
@@ -127,20 +140,40 @@ pub enum DropTarget {
 }
 
 /// What the skin should draw while a drag hovers a group.
+///
+/// It carries geometry over time — where the placeholder comes from, where it
+/// settles, and which run of the animation this is — but not the tween. Easing
+/// and duration are styling and belong to the skin that draws it.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct DropIndicator {
     bounds: Bounds<Pixels>,
     placement: Option<Placement>,
+    from: DropPlaceholderBounds,
+    to: DropPlaceholderBounds,
+    drag_session_id: u64,
+    epoch: u64,
 }
 
 impl DropIndicator {
-    // Unused until the hit-testing logic that constructs one while a drag
-    // hovers a group moves down from `crates/ui` in a later task.
-    #[allow(dead_code)]
-    pub(crate) fn new(bounds: Bounds<Pixels>, placement: Option<Placement>) -> Self {
-        Self { bounds, placement }
+    pub(crate) fn new(
+        bounds: Bounds<Pixels>,
+        placement: Option<Placement>,
+        from: DropPlaceholderBounds,
+        to: DropPlaceholderBounds,
+        drag_session_id: u64,
+        epoch: u64,
+    ) -> Self {
+        Self {
+            bounds,
+            placement,
+            from,
+            to,
+            drag_session_id,
+            epoch,
+        }
     }
 
+    /// The hovered group's content bounds, in window coordinates.
     pub fn bounds(&self) -> Bounds<Pixels> {
         self.bounds
     }
@@ -148,6 +181,28 @@ impl DropIndicator {
     /// `None` means the drop merges into the tab group.
     pub fn placement(&self) -> Option<Placement> {
         self.placement
+    }
+
+    /// Where the placeholder starts, relative to [`Self::bounds`].
+    pub fn from(&self) -> DropPlaceholderBounds {
+        self.from
+    }
+
+    /// Where the placeholder settles, relative to [`Self::bounds`].
+    pub fn to(&self) -> DropPlaceholderBounds {
+        self.to
+    }
+
+    /// Which drag session this indicator belongs to. Host-owned drag items
+    /// share [`ITEM_DRAG_SESSION_ID`].
+    pub fn drag_session_id(&self) -> u64 {
+        self.drag_session_id
+    }
+
+    /// Bumped on every restart, so an animation keyed on it replays instead of
+    /// resuming when the target placement changes.
+    pub fn epoch(&self) -> u64 {
+        self.epoch
     }
 }
 
@@ -160,6 +215,10 @@ pub struct DropPlaceholderBounds {
 }
 
 impl DropPlaceholderBounds {
+    pub(crate) fn new(origin: Point<Pixels>, size: Size<Pixels>) -> Self {
+        Self { origin, size }
+    }
+
     pub fn for_placement(bounds: Bounds<Pixels>, placement: Option<Placement>) -> Self {
         let half_width = bounds.size.width * 0.5;
         let half_height = bounds.size.height * 0.5;
@@ -195,19 +254,6 @@ impl DropPlaceholderBounds {
     pub fn size(&self) -> Size<Pixels> {
         self.size
     }
-}
-
-/// The bounds a drop placeholder is animating between. Geometry over time,
-/// not styling: the actual tween (easing, duration) stays with the render
-/// logic in `crates/ui`, which owns the `TabPanel` field that stores this.
-#[allow(dead_code)]
-#[derive(Clone, Copy, Debug)]
-struct DropPlaceholderAnimation {
-    drag_session_id: u64,
-    placement: Option<Placement>,
-    from: DropPlaceholderBounds,
-    to: DropPlaceholderBounds,
-    epoch: u64,
 }
 
 /// Which split zone `position` falls into within `bounds`, or `None` for the
