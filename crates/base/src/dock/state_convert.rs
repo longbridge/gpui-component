@@ -35,9 +35,17 @@ fn node_to_state(node: &LayoutNode, source: &dyn PanelSource) -> PanelState {
                 .iter()
                 .map(|child| node_to_state(child, source))
                 .collect(),
-            // Slot sizes are persisted as concrete pixels; an unconstrained
-            // slot has never been representable in the schema and is written
-            // as zero, exactly as `ResizableState::sizes` reported it before.
+            // `None` is a representation this rewrite introduces, not
+            // something the old writer ever produced: the schema's `sizes`
+            // field is `Vec<Pixels>`, with no slot for "unconstrained". `0.0`
+            // is the sentinel this writer chooses for that case, and the
+            // corresponding reader maps a `0.0` it loads back to `None`.
+            //
+            // That makes a `None` slot safe to persist only transiently: a
+            // caller building a tree meant to be written out must resolve
+            // every slot to concrete pixels first. An older build reading a
+            // persisted `0.0` back has no notion of the sentinel and
+            // constructs a real, zero-pixel-wide panel from it.
             info: PanelInfo::stack(
                 sizes.iter().map(|size| size.unwrap_or_default()).collect(),
                 axis,
@@ -114,9 +122,36 @@ mod tests {
         let state = tree.to_state(&source);
 
         assert_eq!(state.panel_name, "StackPanel");
-        assert!(matches!(state.info, PanelInfo::Stack { .. }));
+        let PanelInfo::Stack { sizes, .. } = &state.info else {
+            panic!("expected Stack info");
+        };
+        // Both slots were pushed with no explicit size (`push_tabs_for_test`
+        // always pushes `None`), so both serialize as the zero sentinel.
+        assert_eq!(sizes, &vec![px(0.), px(0.)]);
         assert_eq!(state.children[0].panel_name, "TabPanel");
         assert_eq!(state.children[0].children[0].panel_name, "Alpha");
+    }
+
+    #[test]
+    fn an_unresolved_slot_size_serializes_as_the_zero_sentinel() {
+        let mut tree = LayoutTree::new(RootKind::Split);
+        let root = tree.root().id();
+        tree.push_sized_tabs_for_test(root, vec![PanelId::from_u64(1)], Some(px(120.)));
+        tree.push_sized_tabs_for_test(root, vec![PanelId::from_u64(2)], None);
+        tree.normalize();
+
+        let source = FakePanels(vec![
+            (PanelId::from_u64(1), "Alpha"),
+            (PanelId::from_u64(2), "Beta"),
+        ]);
+        let state = tree.to_state(&source);
+
+        let PanelInfo::Stack { sizes, .. } = state.info else {
+            panic!("expected Stack info");
+        };
+        // The `Some` slot keeps its concrete value; only the genuinely
+        // unresolved (`None`) slot is written as the `0.0` sentinel.
+        assert_eq!(sizes, vec![px(120.), px(0.)]);
     }
 
     #[test]
