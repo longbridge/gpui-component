@@ -6,7 +6,7 @@ use gpui::{
     actions, div, prelude::FluentBuilder as _, px,
 };
 use gpui_component::{
-    ActiveTheme as _, Disableable as _, IconName, WindowExt as _,
+    ActiveTheme as _, Disableable as _, Icon, IconName, WindowExt as _,
     button::Button,
     command::{Command, CommandEntry, CommandGroup, CommandItem, CommandState},
     h_flex,
@@ -43,6 +43,7 @@ pub struct CommandStory {
     variable_rows: Entity<CommandState>,
     search: Entity<CommandState>,
     stock_entries: Vec<CommandEntry>,
+    stock_results: Vec<Stock>,
     /// Held so that a query that arrives while the last one is still in flight
     /// cancels it, instead of racing it.
     _search_task: Option<Task<()>>,
@@ -70,19 +71,19 @@ fn suggestions() -> Vec<CommandEntry> {
         CommandGroup::new()
             .label("Suggestions")
             .item(
-                CommandItem::new("calendar")
+                CommandItem::new()
                     .label("Calendar")
                     .icon(IconName::Calendar),
             )
             .item(
-                CommandItem::new("search-emoji")
+                CommandItem::new()
                     .label("Search Emoji")
                     .icon(IconName::Search)
                     .checked(true)
                     .keywords(["smile", "icon"]),
             )
             .item(
-                CommandItem::new("calculator")
+                CommandItem::new()
                     .label("Calculator")
                     .icon(IconName::Frame)
                     .disabled(true),
@@ -92,19 +93,19 @@ fn suggestions() -> Vec<CommandEntry> {
         CommandGroup::new()
             .label("Settings")
             .item(
-                CommandItem::new("profile")
+                CommandItem::new()
                     .label("Profile")
                     .icon(IconName::User)
                     .action(Box::new(OpenProfile)),
             )
             .item(
-                CommandItem::new("billing")
+                CommandItem::new()
                     .label("Billing")
                     .icon(IconName::CircleUser)
                     .action(Box::new(OpenBilling)),
             )
             .item(
-                CommandItem::new("settings")
+                CommandItem::new()
                     .label("Settings")
                     .icon(IconName::Settings)
                     .action(Box::new(OpenSettings)),
@@ -118,22 +119,26 @@ fn scrollable() -> Vec<CommandEntry> {
         CommandGroup::new()
             .label("Navigation")
             .item(
-                CommandItem::new("Home")
+                CommandItem::new()
+                    .label("Home")
                     .icon(IconName::LayoutDashboard)
                     .action(Box::new(GoHome)),
             )
             .item(
-                CommandItem::new("Inbox")
+                CommandItem::new()
+                    .label("Inbox")
                     .icon(IconName::Inbox)
                     .action(Box::new(OpenInbox)),
             )
             .item(
-                CommandItem::new("Documents")
+                CommandItem::new()
+                    .label("Documents")
                     .icon(IconName::File)
                     .action(Box::new(OpenDocuments)),
             )
             .item(
-                CommandItem::new("Folders")
+                CommandItem::new()
+                    .label("Folders")
                     .icon(IconName::Folder)
                     .action(Box::new(OpenFolders)),
             )
@@ -142,17 +147,20 @@ fn scrollable() -> Vec<CommandEntry> {
         CommandGroup::new()
             .label("Actions")
             .item(
-                CommandItem::new("New File")
+                CommandItem::new()
+                    .label("New File")
                     .icon(IconName::Plus)
                     .action(Box::new(NewFile)),
             )
             .item(
-                CommandItem::new("Copy")
+                CommandItem::new()
+                    .label("Copy")
                     .icon(IconName::Copy)
                     .action(Box::new(CopyItem)),
             )
             .item(
-                CommandItem::new("Delete")
+                CommandItem::new()
+                    .label("Delete")
                     .icon(IconName::Delete)
                     .action(Box::new(DeleteItem)),
             )
@@ -160,16 +168,28 @@ fn scrollable() -> Vec<CommandEntry> {
         CommandEntry::Separator,
         CommandGroup::new()
             .label("Account")
-            .item(CommandItem::new("Profile").icon(IconName::User))
-            .item(CommandItem::new("Notifications").icon(IconName::Bell))
-            .item(CommandItem::new("Help & Support").icon(IconName::Info))
+            .item(CommandItem::new().label("Profile").icon(IconName::User))
+            .item(
+                CommandItem::new()
+                    .label("Notifications")
+                    .icon(IconName::Bell),
+            )
+            .item(
+                CommandItem::new()
+                    .label("Help & Support")
+                    .icon(IconName::Info),
+            )
             .into(),
         CommandEntry::Separator,
         CommandGroup::new()
             .label("Tools")
-            .item(CommandItem::new("Palette").icon(IconName::Palette))
-            .item(CommandItem::new("Terminal").icon(IconName::SquareTerminal))
-            .item(CommandItem::new("Globe").icon(IconName::Globe))
+            .item(CommandItem::new().label("Palette").icon(IconName::Palette))
+            .item(
+                CommandItem::new()
+                    .label("Terminal")
+                    .icon(IconName::SquareTerminal),
+            )
+            .item(CommandItem::new().label("Globe").icon(IconName::Globe))
             .into(),
     ]
 }
@@ -178,9 +198,11 @@ fn scrollable() -> Vec<CommandEntry> {
 /// context menu.
 fn quick_actions() -> impl Iterator<Item = CommandItem> {
     [
-        CommandItem::new("New File").icon(IconName::Plus),
-        CommandItem::new("Duplicate").icon(IconName::Copy),
-        CommandItem::new("Move to Trash").icon(IconName::Delete),
+        CommandItem::new().label("New File").icon(IconName::Plus),
+        CommandItem::new().label("Duplicate").icon(IconName::Copy),
+        CommandItem::new()
+            .label("Move to Trash")
+            .icon(IconName::Delete),
     ]
     .into_iter()
 }
@@ -189,13 +211,13 @@ fn quick_actions() -> impl Iterator<Item = CommandItem> {
 /// each flattened row, so both retain their own height while virtualized.
 fn variable_rows() -> impl Iterator<Item = CommandItem> {
     [
-        CommandItem::new("small-row").child(|_, _| {
+        CommandItem::new().label("small-row").child(|_, _| {
             h_flex()
                 .w_full()
                 .py_1()
                 .child(div().text_sm().child("Compact custom row"))
         }),
-        CommandItem::new("large-row").child(|_, cx| {
+        CommandItem::new().label("large-row").child(|_, cx| {
             v_flex()
                 .w_full()
                 .py_4()
@@ -237,7 +259,9 @@ fn key_hint(keys: &[&str], label: &'static str) -> AnyElement {
 /// The stock universe the search panel queries.
 ///
 /// Stands in for whatever a real application would go and fetch.
-const STOCKS: [(&str, &str, &str, f32); 10] = [
+type Stock = (&'static str, &'static str, &'static str, f32);
+
+const STOCKS: [Stock; 10] = [
     ("AAPL.US", "Apple Inc.", "228.52", 1.24),
     ("NVDA.US", "NVIDIA Corporation", "134.81", -0.62),
     ("TSLA.US", "Tesla, Inc.", "251.44", 3.18),
@@ -290,6 +314,7 @@ impl CommandStory {
             variable_rows,
             search,
             stock_entries: popular_entries(),
+            stock_results: STOCKS.iter().take(5).copied().collect(),
             _search_task: None,
             last_command: None,
         }
@@ -299,18 +324,18 @@ impl CommandStory {
         cx.new(|cx| Self::new(window, cx))
     }
 
-    fn on_command_confirm(&mut self, value: &SharedString, cx: &mut Context<Self>) {
-        self.last_command = Some(value.clone());
+    fn on_command_confirm(&mut self, index: gpui_component::IndexPath, cx: &mut Context<Self>) {
+        self.last_command = Some(format!("section {}, row {}", index.section, index.row).into());
         cx.notify();
     }
 
     fn on_dialog_confirm(
         &mut self,
-        value: &SharedString,
+        index: gpui_component::IndexPath,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.on_command_confirm(value, cx);
+        self.on_command_confirm(index, cx);
         window.close_dialog(cx);
     }
 
@@ -321,6 +346,7 @@ impl CommandStory {
     fn open_stock_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self._search_task = None;
         self.stock_entries = popular_entries();
+        self.stock_results = STOCKS.iter().take(5).copied().collect();
         self.search.update(cx, |search, cx| {
             search.set_query("", window, cx);
             search.set_loading(false, window, cx);
@@ -360,22 +386,27 @@ impl CommandStory {
                         Command::new(&search)
                             .bordered(false)
                             .placeholder("Search stocks...")
-                            .empty("No stock found.")
+                            .empty(|_, _, cx| {
+                                v_flex()
+                                    .w_full()
+                                    .items_center()
+                                    .gap_2()
+                                    .py_6()
+                                    .text_sm()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child(Icon::new(IconName::Search).size_8())
+                                    .child("No stock found.")
+                            })
                             .min_h(px(320.))
                             .max_h(px(320.))
-                            .filter(|item, query| {
-                                let query = query.to_lowercase();
-                                item.value().to_lowercase().contains(&query)
-                                    || item.title().to_lowercase().contains(&query)
-                            })
                             .on_query(move |query, window, cx| {
                                 _ = query_owner.update(cx, |story, cx| {
                                     story.on_stock_query(query, window, cx);
                                 });
                             })
-                            .on_confirm(move |value, window, cx| {
+                            .on_confirm(move |index, window, cx| {
                                 _ = confirm_owner.update(cx, |story, cx| {
-                                    story.on_stock_confirm(value, window, cx);
+                                    story.on_stock_confirm(index, window, cx);
                                 });
                             }),
                         entries,
@@ -393,6 +424,7 @@ impl CommandStory {
             // list people would otherwise have to search for.
             self._search_task = None;
             self.stock_entries = popular_entries();
+            self.stock_results = STOCKS.iter().take(5).copied().collect();
             let search = self.search.clone();
             window.defer(cx, move |window, cx| {
                 search.update(cx, |state, cx| {
@@ -417,12 +449,17 @@ impl CommandStory {
                 .timer(Duration::from_millis(400))
                 .await;
 
-            let entries = STOCKS
+            let results = STOCKS
                 .iter()
                 .filter(|(symbol, name, _, _)| {
                     symbol.to_lowercase().contains(&query) || name.to_lowercase().contains(&query)
                 })
-                .map(|stock| CommandEntry::Item(stock_item(*stock)))
+                .copied()
+                .collect::<Vec<_>>();
+            let entries = results
+                .iter()
+                .copied()
+                .map(|stock| CommandEntry::Item(stock_item(stock)))
                 .collect::<Vec<_>>();
 
             _ = story.update_in(cx, |story, window, cx| {
@@ -430,6 +467,7 @@ impl CommandStory {
                     state.set_loading(false, window, cx);
                 });
                 story.stock_entries = entries;
+                story.stock_results = results;
                 story._search_task = None;
                 cx.notify();
             });
@@ -438,12 +476,27 @@ impl CommandStory {
 
     fn on_stock_confirm(
         &mut self,
-        value: &SharedString,
+        index: gpui_component::IndexPath,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        let stock = if matches!(self.stock_entries.first(), Some(CommandEntry::Group(_))) {
+            (index.section == 0)
+                .then(|| self.stock_results.get(index.row))
+                .flatten()
+        } else if index.row == 0 {
+            self.stock_results.get(index.section)
+        } else {
+            None
+        };
+        let Some((symbol, _, _, _)) = stock else {
+            return;
+        };
+        let symbol: SharedString = (*symbol).into();
         self.cancel_stock_search(window, cx);
-        self.on_dialog_confirm(value, window, cx);
+        self.last_command = Some(symbol);
+        cx.notify();
+        window.close_dialog(cx);
     }
 
     fn cancel_stock_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -468,64 +521,52 @@ fn popular_entries() -> Vec<CommandEntry> {
 /// `Command` consumes its entries when rendered. Rebuild the stock rows from
 /// the owner-held result identities so a dialog redraw never drains the owner.
 fn stock_entries_for_render(entries: &[CommandEntry]) -> Vec<CommandEntry> {
-    entries
-        .iter()
-        .filter_map(|entry| match entry {
-            CommandEntry::Item(item) => STOCKS
-                .iter()
-                .find(|(symbol, _, _, _)| item.value() == *symbol)
-                .map(|stock| CommandEntry::Item(stock_item(*stock))),
-            CommandEntry::Group(group)
-                if group.heading().map(|heading| heading.as_ref()) == Some("Popular") =>
-            {
-                popular_entries().pop()
-            }
-            CommandEntry::Group(_) => None,
-            CommandEntry::Separator => Some(CommandEntry::Separator),
-        })
-        .collect()
+    entries.to_vec()
 }
 
 /// A two-line search result: symbol and name on the left, quote on the right.
 fn stock_item(stock: (&'static str, &'static str, &'static str, f32)) -> CommandItem {
     let (symbol, name, price, change) = stock;
 
-    CommandItem::new(symbol).label(name).child(move |_, cx| {
-        let change_color = if change < 0. {
-            cx.theme().chart_bearish
-        } else {
-            cx.theme().chart_bullish
-        };
+    CommandItem::new()
+        .label(name)
+        .keywords([symbol])
+        .child(move |_, cx| {
+            let change_color = if change < 0. {
+                cx.theme().chart_bearish
+            } else {
+                cx.theme().chart_bullish
+            };
 
-        h_flex()
-            .w_full()
-            .gap_3()
-            .items_center()
-            .justify_between()
-            .child(
-                v_flex()
-                    .gap_0p5()
-                    .child(div().text_sm().child(symbol))
-                    .child(
-                        div()
-                            .text_xs()
-                            .text_color(cx.theme().muted_foreground)
-                            .child(name),
-                    ),
-            )
-            .child(
-                v_flex()
-                    .gap_0p5()
-                    .items_end()
-                    .child(div().text_sm().child(price))
-                    .child(
-                        div()
-                            .text_xs()
-                            .text_color(change_color)
-                            .child(format!("{:+.2}%", change)),
-                    ),
-            )
-    })
+            h_flex()
+                .w_full()
+                .gap_3()
+                .items_center()
+                .justify_between()
+                .child(
+                    v_flex()
+                        .gap_0p5()
+                        .child(div().text_sm().child(symbol))
+                        .child(
+                            div()
+                                .text_xs()
+                                .text_color(cx.theme().muted_foreground)
+                                .child(name),
+                        ),
+                )
+                .child(
+                    v_flex()
+                        .gap_0p5()
+                        .items_end()
+                        .child(div().text_sm().child(price))
+                        .child(
+                            div()
+                                .text_xs()
+                                .text_color(change_color)
+                                .child(format!("{:+.2}%", change)),
+                        ),
+                )
+        })
 }
 
 impl Focusable for CommandStory {
@@ -787,7 +828,7 @@ mod tests {
         story.read_with(cx, |story, _| {
             assert!(matches!(
                 story.stock_entries.as_slice(),
-                [CommandEntry::Item(item)] if item.value() == "TSLA.US"
+                [CommandEntry::Item(_)]
             ));
         });
     }

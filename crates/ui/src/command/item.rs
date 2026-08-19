@@ -6,10 +6,7 @@ use crate::{Disableable, Icon};
 
 /// A single command in a [`crate::command::Command`] palette.
 ///
-/// The value is the item's identity: it is reported to palette callbacks and
-/// is used as the label when none is set.
 pub struct CommandItem {
-    value: SharedString,
     label: Option<SharedString>,
     keywords: Vec<SharedString>,
     /// Boxed: an [`Icon`] carries a whole `StyleRefinement`, which would make
@@ -24,7 +21,6 @@ pub struct CommandItem {
 impl Clone for CommandItem {
     fn clone(&self) -> Self {
         Self {
-            value: self.value.clone(),
             label: self.label.clone(),
             keywords: self.keywords.clone(),
             icon: self.icon.clone(),
@@ -37,12 +33,9 @@ impl Clone for CommandItem {
 }
 
 impl CommandItem {
-    /// Create a new item with the given value.
-    ///
-    /// The value doubles as the label until [`Self::label`] sets one.
-    pub fn new(value: impl Into<SharedString>) -> Self {
+    /// Create an empty command item.
+    pub fn new() -> Self {
         Self {
-            value: value.into(),
             label: None,
             keywords: Vec::new(),
             icon: None,
@@ -53,7 +46,7 @@ impl CommandItem {
         }
     }
 
-    /// Set the label to display, when it differs from the value.
+    /// Set the label to display and search.
     pub fn label(mut self, label: impl Into<SharedString>) -> Self {
         self.label = Some(label.into());
         self
@@ -83,7 +76,7 @@ impl CommandItem {
         self
     }
 
-    /// Add extra terms the search matches against, besides the value and label.
+    /// Add extra terms the search matches against, besides the label.
     pub fn keywords<I, S>(mut self, keywords: I) -> Self
     where
         I: IntoIterator<Item = S>,
@@ -110,42 +103,38 @@ impl CommandItem {
         self
     }
 
-    /// The value that identifies this item.
-    pub fn value(&self) -> &SharedString {
-        &self.value
-    }
-
-    /// The label shown in the row, falling back to the value.
-    pub fn title(&self) -> &SharedString {
-        self.label.as_ref().unwrap_or(&self.value)
-    }
-
-    /// Whether this item is marked as the chosen one.
-    pub fn is_checked(&self) -> bool {
-        self.checked
-    }
-
     /// Whether this item is non-interactive.
-    pub fn is_disabled(&self) -> bool {
+    pub(crate) fn is_disabled(&self) -> bool {
         self.disabled
     }
 
     /// Whether this item matches the search query, ignoring case.
     ///
     /// An empty query matches everything.
-    pub fn matches(&self, query: &str) -> bool {
+    pub(crate) fn matches(&self, query: &str) -> bool {
         if query.is_empty() {
             return true;
         }
 
         let query = query.to_lowercase();
 
-        self.title().to_lowercase().contains(&query)
-            || self.value.to_lowercase().contains(&query)
+        self.label
+            .as_ref()
+            .is_some_and(|label| label.to_lowercase().contains(&query))
             || self
                 .keywords
                 .iter()
                 .any(|keyword| keyword.to_lowercase().contains(&query))
+    }
+
+    pub(crate) fn label_text(&self) -> Option<&SharedString> {
+        self.label.as_ref()
+    }
+}
+
+impl Default for CommandItem {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -267,7 +256,8 @@ mod tests {
         let child_count_for_builder = child_count.clone();
         let entry = CommandEntry::Group(
             CommandGroup::new().label("Group").item(
-                CommandItem::new("cloneable")
+                CommandItem::new()
+                    .label("cloneable")
                     .action(Box::new(CloneAction))
                     .child(move |_, _| {
                         child_count_for_builder.set(child_count_for_builder.get() + 1);
@@ -293,23 +283,22 @@ mod tests {
     }
 
     #[test]
-    fn title_falls_back_to_value() {
-        assert_eq!(CommandItem::new("Calendar").title(), "Calendar");
+    fn label_is_optional_for_custom_content() {
+        assert_eq!(CommandItem::new().label_text(), None);
         assert_eq!(
-            CommandItem::new("calendar").label("Calendar").title(),
-            "Calendar"
+            CommandItem::new().label("Calendar").label_text(),
+            Some(&"Calendar".into())
         );
     }
 
     #[test]
-    fn matches_value_label_and_keywords() {
-        let item = CommandItem::new("profile")
+    fn matches_label_and_keywords() {
+        let item = CommandItem::new()
             .label("Profile")
             .keywords(["account", "user"]);
 
         assert!(item.matches(""));
         assert!(item.matches("PRO"));
-        assert!(item.matches("profile"));
         assert!(item.matches("Account"));
         assert!(!item.matches("billing"));
     }

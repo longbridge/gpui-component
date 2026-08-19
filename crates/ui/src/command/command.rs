@@ -5,9 +5,10 @@ use gpui::{
     StyleRefinement, Styled, Window, rems,
 };
 
+use crate::IndexPath;
 use crate::command::{
     item::{CommandEntry, CommandGroup, CommandItem},
-    state::{CommandFilter, CommandModel, CommandState, OnCancel, OnQuery, OnValue},
+    state::{CommandModel, CommandState, OnCancel, OnIndex, OnQuery},
 };
 
 pub(crate) type CommandSlot = dyn Fn(&CommandState, &mut Window, &mut App) -> AnyElement;
@@ -17,7 +18,7 @@ pub(crate) type CommandSlot = dyn Fn(&CommandState, &mut Window, &mut App) -> An
 pub(crate) struct CommandOptions {
     style: StyleRefinement,
     placeholder: Option<SharedString>,
-    empty_message: Option<SharedString>,
+    empty: Option<Rc<CommandSlot>>,
     max_h: DefiniteLength,
     bordered: bool,
     header: Option<Rc<CommandSlot>>,
@@ -29,7 +30,7 @@ impl Default for CommandOptions {
         Self {
             style: StyleRefinement::default(),
             placeholder: None,
-            empty_message: None,
+            empty: None,
             max_h: rems(18.75).into(),
             bordered: true,
             header: None,
@@ -47,8 +48,8 @@ impl CommandOptions {
         self.placeholder.as_ref()
     }
 
-    pub(crate) fn empty_message(&self) -> Option<&SharedString> {
-        self.empty_message.as_ref()
+    pub(crate) fn empty(&self) -> Option<&Rc<CommandSlot>> {
+        self.empty.as_ref()
     }
 
     pub(crate) fn max_h(&self) -> DefiniteLength {
@@ -79,7 +80,7 @@ impl CommandOptions {
 /// Command::new(&state)
 ///     .group(
 ///         CommandGroup::new().label("Suggestions")
-///             .item(CommandItem::new("Calendar").icon(IconName::Calendar)),
+///             .item(CommandItem::new().label("Calendar").icon(IconName::Calendar)),
 ///     )
 ///     .placeholder("Type a command or search...")
 /// ```
@@ -88,10 +89,9 @@ pub struct Command {
     state: Entity<CommandState>,
     entries: Vec<CommandEntry>,
     searchable: bool,
-    filter: Option<Rc<CommandFilter>>,
     on_query: Option<Rc<OnQuery>>,
-    on_select: Option<Rc<OnValue>>,
-    on_confirm: Option<Rc<OnValue>>,
+    on_select: Option<Rc<OnIndex>>,
+    on_confirm: Option<Rc<OnIndex>>,
     on_cancel: Option<Rc<OnCancel>>,
     options: CommandOptions,
 }
@@ -103,7 +103,6 @@ impl Command {
             state: state.clone(),
             entries: Vec::new(),
             searchable: true,
-            filter: None,
             on_query: None,
             on_select: None,
             on_confirm: None,
@@ -143,15 +142,6 @@ impl Command {
         self
     }
 
-    /// Set the predicate used to decide whether an item matches the query.
-    pub fn filter<F>(mut self, filter: F) -> Self
-    where
-        F: Fn(&CommandItem, &str) -> bool + 'static,
-    {
-        self.filter = Some(Rc::new(filter));
-        self
-    }
-
     /// Run a callback after a searchable query actually changes and the
     /// current [`CommandState`] update releases its lease.
     pub fn on_query<F>(mut self, callback: F) -> Self
@@ -162,22 +152,22 @@ impl Command {
         self
     }
 
-    /// Run a callback after the highlighted item value changes and the current
+    /// Run a callback after the highlighted item's original index path changes and the current
     /// [`CommandState`] update releases its lease.
     pub fn on_select<F>(mut self, callback: F) -> Self
     where
-        F: Fn(&SharedString, &mut Window, &mut App) + 'static,
+        F: Fn(IndexPath, &mut Window, &mut App) + 'static,
     {
         self.on_select = Some(Rc::new(callback));
         self
     }
 
-    /// Run a callback after a confirmed item's Action has been dispatched,
+    /// Run a callback with the confirmed item's original index path after its Action is dispatched,
     /// provided the source window remains live. The callback runs after the
     /// current [`CommandState`] update releases its lease.
     pub fn on_confirm<F>(mut self, callback: F) -> Self
     where
-        F: Fn(&SharedString, &mut Window, &mut App) + 'static,
+        F: Fn(IndexPath, &mut Window, &mut App) + 'static,
     {
         self.on_confirm = Some(Rc::new(callback));
         self
@@ -200,9 +190,15 @@ impl Command {
         self
     }
 
-    /// Set the message shown when no command matches the query.
-    pub fn empty(mut self, message: impl Into<SharedString>) -> Self {
-        self.options.empty_message = Some(message.into());
+    /// Render custom content when no command matches the query.
+    pub fn empty<F, E>(mut self, f: F) -> Self
+    where
+        F: Fn(&CommandState, &mut Window, &mut App) -> E + 'static,
+        E: IntoElement,
+    {
+        self.options.empty = Some(Rc::new(move |state, window, cx| {
+            f(state, window, cx).into_any_element()
+        }));
         self
     }
 
@@ -258,7 +254,6 @@ impl RenderOnce for Command {
         let model = CommandModel {
             entries: self.entries,
             searchable: self.searchable,
-            filter: self.filter,
             on_query: self.on_query,
             on_select: self.on_select,
             on_confirm: self.on_confirm,

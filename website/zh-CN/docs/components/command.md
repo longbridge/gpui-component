@@ -55,27 +55,31 @@ let state = cx.new(|cx| CommandState::new(window, cx));
 Command::new(&state)
     .group(
         CommandGroup::new().label("Suggestions")
-            .item(CommandItem::new("calendar").label("Calendar").icon(IconName::Calendar))
-            .item(CommandItem::new("search-emoji").label("Search Emoji").icon(IconName::Search))
-            .item(CommandItem::new("calculator").label("Calculator").disabled(true)),
+            .item(CommandItem::new().label("Calendar").icon(IconName::Calendar))
+            .item(CommandItem::new().label("Search Emoji").icon(IconName::Search))
+            .item(CommandItem::new().label("Calculator").disabled(true)),
     )
     .separator()
     .group(
         CommandGroup::new().label("Settings")
             .item(
-                CommandItem::new("profile")
-                    .label("Profile")
+                CommandItem::new().label("Profile")
                     .icon(IconName::User)
                     .action(Box::new(OpenProfile)),
             )
             .item(
-                CommandItem::new("billing")
-                    .label("Billing")
+                CommandItem::new().label("Billing")
                     .action(Box::new(OpenBilling)),
             ),
     )
     .placeholder("Type a command or search...")
-    .empty("No results found.")
+    .empty(|_, _, cx| {
+        v_flex()
+            .items_center()
+            .gap_2()
+            .child(Icon::new(IconName::Search).size_8())
+            .child("No results found.")
+    })
     .w(px(380.))
 ```
 
@@ -91,9 +95,9 @@ let actions = cx.new(|cx| CommandState::new(window, cx));
 Command::new(&actions)
     .searchable(false)
     .items([
-        CommandItem::new("New File").icon(IconName::Plus),
-        CommandItem::new("Duplicate").icon(IconName::Copy),
-        CommandItem::new("Move to Trash").icon(IconName::Delete),
+        CommandItem::new().label("New File").icon(IconName::Plus),
+        CommandItem::new().label("Duplicate").icon(IconName::Copy),
+        CommandItem::new().label("Move to Trash").icon(IconName::Delete),
     ])
     .w(px(380.))
 ```
@@ -116,11 +120,11 @@ window.open_dialog(cx, move |dialog, _, _| {
                 .bordered(false)
                 .placeholder("Type a command or search...")
                 .items([
-                    CommandItem::new("profile").label("Profile"),
-                    CommandItem::new("billing").label("Billing"),
+                    CommandItem::new().label("Profile"),
+                    CommandItem::new().label("Billing"),
                 ])
-                .on_confirm(|value, window, cx| {
-                    window.push_notification(format!("Selected {value}"), cx);
+                .on_confirm(|index, window, cx| {
+                    window.push_notification(format!("Selected {index}"), cx);
                 })
                 // Record local cleanup only; Dialog handles the propagated Cancel.
                 .on_cancel(|window, cx| {
@@ -162,18 +166,18 @@ Command::new(&state)
     .on_query(|query, window, cx| {
         // Start or update an application-owned search.
     })
-    .on_select(|value, window, cx| {
-        // Preview the newly highlighted value.
+    .on_select(|index, window, cx| {
+        // Preview the newly highlighted IndexPath.
     })
-    .on_confirm(|value, window, cx| {
-        // Finish with this value, whether or not it has an Action.
+    .on_confirm(|index, window, cx| {
+        // Finish with this IndexPath, whether or not it has an Action.
     })
     .on_cancel(|window, cx| {
         // Clean up local palette state before Cancel propagates.
     })
 ```
 
-`on_query` 只在可搜索查询实际变化时运行。重新过滤可能移动高亮，因此所选 value 变化时会先运行 `on_select`，再运行 `on_query`。这些回调与 `on_confirm` 都会在当前 `CommandState` 更新释放其租用后交付。键盘和指针导致的高亮变化会运行 `on_select`，但从不分发 Action。只要来源窗口仍然存活，确认已启用条目时，会先分发其 Action，再调用 `on_confirm`；如果该 Action 关闭窗口，回调将无法交付。没有 Action 的条目仍会调用 `on_confirm`。在可搜索面板中，Escape 会清空非空查询。否则——包括具有隐藏的程序化查询的不可搜索面板——它会调用 `on_cancel`，然后传播 Cancel。
+`on_query` 只在可搜索查询实际变化时运行。重新过滤可能移动高亮，因此所选 `IndexPath` 变化时会先运行 `on_select`，再运行 `on_query`。这些回调与 `on_confirm` 都会在当前 `CommandState` 更新释放其租用后交付。键盘和指针导致的高亮变化会运行 `on_select`，但从不分发 Action。只要来源窗口仍然存活，确认已启用条目时，会先分发其 Action，再调用 `on_confirm`；如果该 Action 关闭窗口，回调将无法交付。没有 Action 的条目仍会调用 `on_confirm`。在可搜索面板中，Escape 会先清空非空查询；否则调用 `on_cancel` 并继续传播 Cancel。
 
 ### 动态条目
 
@@ -191,11 +195,6 @@ impl StockSearch {
 
         Command::new(&self.state)
             .items(results)
-            .filter(|item, query| {
-                let query = query.to_lowercase();
-                item.value().to_lowercase().contains(&query)
-                    || item.title().to_lowercase().contains(&query)
-            })
             .on_query(move |query, window, cx| {
                 _ = owner.update(cx, |this, cx| this.search(query, window, cx));
             })
@@ -203,19 +202,18 @@ impl StockSearch {
 }
 ```
 
-当查询、选择和滚动改变时，已安装的模型会保留在 `CommandState` 中，因此这些交互不需要重新渲染所有者。之后的所有者渲染会安装新模型；若所选 value 仍存在则保留选择，并重新测量行。
+当查询、选择和滚动改变时，已安装的模型会保留在 `CommandState` 中，因此这些交互不需要重新渲染所有者。之后的所有者渲染会安装新模型；若所选 `IndexPath` 仍存在则保留选择，并重新测量行。
 
 ## 搜索
 
-默认情况下，`CommandItem::matches(&self, query: &str) -> bool` 会在条目的 label、value 和 keywords 中进行忽略大小写的子串匹配。空查询会匹配全部条目。分组中的条目全被过滤时，其标题会隐藏；过滤后位于首尾或相邻的分隔线不会显示。
+Command 默认在条目的 label 和 keywords 中进行忽略大小写的子串匹配。空查询会匹配全部条目。分组中的条目全被过滤时，其标题会隐藏；过滤后位于首尾或相邻的分隔线不会显示。
 
 ```rust
-CommandItem::new("profile")
-    .label("Profile")
+CommandItem::new().label("Profile")
     .keywords(["account", "user"])
 ```
 
-当应用需要不同的匹配策略时，使用 `Command::filter`。自定义谓词只会在搜索开启且查询非空时运行；否则全部条目保持可见。远程搜索时，在 `on_query` 中更新所有者持有的条目，并在等待时调用 `state.set_loading(true, window, cx)`，以隐藏空状态文案。响应到达后渲染新条目。
+自定义或远程搜索时，在 `on_query` 中更新所有者持有的条目，并在等待时调用 `state.set_loading(true, window, cx)`，以隐藏空状态文案。响应到达后渲染新条目。
 
 ## 自定义行与虚拟滚动
 
@@ -225,10 +223,10 @@ CommandItem::new("profile")
 
 ```rust
 Command::new(&state)
-    .item(CommandItem::new("compact").child(|_, _| {
+    .item(CommandItem::new().label("compact").child(|_, _| {
         h_flex().w_full().py_1().child("Compact custom row")
     }))
-    .item(CommandItem::new("expanded").child(|_, cx| {
+    .item(CommandItem::new().label("expanded").child(|_, cx| {
         v_flex()
             .w_full()
             .py_4()
@@ -245,13 +243,12 @@ Command::new(&state)
 | `item` / `items` | `item(CommandItem) -> Self` 与 `items(impl IntoIterator<Item = CommandItem>) -> Self` 添加未分组条目。 |
 | `group` / `separator` | `group(CommandGroup) -> Self` 添加分组；`separator() -> Self` 添加分隔线。 |
 | `searchable` | `searchable(bool) -> Self` 显示或隐藏搜索框和本地过滤。默认：`true`。 |
-| `filter` | `filter<F>(F) -> Self`，其中 `F: Fn(&CommandItem, &str) -> bool + 'static`，替换默认匹配。 |
 | `on_query` | `on_query<F>(F) -> Self`，其中 `F: Fn(&str, &mut Window, &mut App) + 'static`，在可搜索查询变化后运行。 |
-| `on_select` | `on_select<F>(F) -> Self`，其中 `F: Fn(&SharedString, &mut Window, &mut App) + 'static`，在高亮 value 变化时运行。 |
-| `on_confirm` | `on_confirm<F>(F) -> Self`，使用相同的 value 回调约束；只要来源窗口仍然存活，就会在确认的 Action 分发后、当前 state 更新释放其租用后运行。 |
+| `on_select` | `on_select<F>(F) -> Self`，其中 `F: Fn(IndexPath, &mut Window, &mut App) + 'static`，在高亮路径变化时运行。 |
+| `on_confirm` | `on_confirm<F>(F) -> Self`，使用相同的 `IndexPath` 回调约束；在确认的 Action 分发后运行。 |
 | `on_cancel` | `on_cancel<F>(F) -> Self`，其中 `F: Fn(&mut Window, &mut App) + 'static`，在 Escape 不会清空可搜索查询时，于 Cancel 传播前运行。 |
 | `placeholder` | `placeholder(impl Into<SharedString>) -> Self` 设置搜索框占位文本。 |
-| `empty` | `empty(impl Into<SharedString>) -> Self` 设置无匹配时的文案。 |
+| `empty` | `empty<F, E>(F) -> Self` 渲染无匹配时的自定义内容。 |
 | `max_h` | `max_h(impl Into<DefiniteLength>) -> Self` 设置列表最大高度。默认：`18.75rem`（300px）。 |
 | `bordered` | `bordered(bool) -> Self` 绘制外边框和圆角。默认：`true`。 |
 | `header` | `header<F, E>(F) -> Self`，其中 `F: Fn(&CommandState, &mut Window, &mut App) -> E + 'static`、`E: IntoElement`；渲染在搜索框和列表之上。 |
@@ -263,23 +260,21 @@ Command::new(&state)
 
 | 方法 | 说明 |
 | --- | --- |
-| `new(value)` | value 标识条目、会报告给回调，并在 `label` 设置前作为其 label。 |
-| `label` | 设置可见 label。 |
+| `new` | 创建条目；Command 在内部生成渲染 identity。 |
+| `label` | 设置可见 label 和默认搜索文本。 |
 | `icon` | 为默认行设置前置图标。 |
 | `action` | `action(Box<dyn Action>) -> Self` 设置点击或确认时分发的行为。默认行会显示其解析后的绑定。 |
 | `checked` | 绘制尾部勾选。解析后的 Action 绑定会占用该位置。 |
 | `keywords` | 添加默认匹配词。 |
 | `disabled` | `Disableable::disabled(bool) -> Self` 使条目不可交互，并在键盘导航时跳过。 |
 | `child` | `child<F, E>(F) -> Self`，其中 `F: Fn(&mut Window, &mut App) -> E + 'static`、`E: IntoElement`；惰性替换默认行内容。 |
-| `value` / `title` | 读取条目标识，或读取可见 label（若未设置则回退至 value）。 |
-| `is_checked` / `is_disabled` / `matches` | 读取勾选或禁用状态，或应用默认的忽略大小写匹配器。 |
 
 ## CommandGroup
 
 | 方法 | 说明 |
 | --- | --- |
-| `new(heading)` | 创建有标题的分组。所有条目被过滤时标题隐藏。 |
-| `unlabeled` | 创建无标题分组。 |
+| `new` | 创建无标题分组。 |
+| `label` | 设置分组标题；所有条目被过滤时标题隐藏。 |
 | `item` / `items` | 向分组添加一个或多个 `CommandItem`。 |
 | `heading` | 返回可选标题。 |
 
@@ -291,7 +286,7 @@ Command::new(&state)
 | --- | --- |
 | `new` | `new(&mut Window, &mut Context<Self>) -> Self` 创建空的交互状态。 |
 | `query` / `set_query` | 读取查询，或通过 `set_query(query, window, cx)` 模拟输入。 |
-| `selected_index` / `selected_value` | 读取当前高亮的匹配索引或 value。 |
+| `selected_index` | 返回高亮条目在原始 entries 中的 `IndexPath`；section 表示顶层 entry，row 表示分组内条目。 |
 | `matched_count` | 返回匹配条目数。 |
 | `focus` | `focus(&self, &mut Window, &mut App)`：可搜索时聚焦输入框，否则聚焦 Command 外框。 |
 | `set_loading` / `is_loading` | 显示或读取搜索加载动画；加载时隐藏空状态文案。 |

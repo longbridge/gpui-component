@@ -63,27 +63,31 @@ let state = cx.new(|cx| CommandState::new(window, cx));
 Command::new(&state)
     .group(
         CommandGroup::new().label("Suggestions")
-            .item(CommandItem::new("calendar").label("Calendar").icon(IconName::Calendar))
-            .item(CommandItem::new("search-emoji").label("Search Emoji").icon(IconName::Search))
-            .item(CommandItem::new("calculator").label("Calculator").disabled(true)),
+            .item(CommandItem::new().label("Calendar").icon(IconName::Calendar))
+            .item(CommandItem::new().label("Search Emoji").icon(IconName::Search))
+            .item(CommandItem::new().label("Calculator").disabled(true)),
     )
     .separator()
     .group(
         CommandGroup::new().label("Settings")
             .item(
-                CommandItem::new("profile")
-                    .label("Profile")
+                CommandItem::new().label("Profile")
                     .icon(IconName::User)
                     .action(Box::new(OpenProfile)),
             )
             .item(
-                CommandItem::new("billing")
-                    .label("Billing")
+                CommandItem::new().label("Billing")
                     .action(Box::new(OpenBilling)),
             ),
     )
     .placeholder("Type a command or search...")
-    .empty("No results found.")
+    .empty(|_, _, cx| {
+        v_flex()
+            .items_center()
+            .gap_2()
+            .child(Icon::new(IconName::Search).size_8())
+            .child("No results found.")
+    })
     .w(px(380.))
 ```
 
@@ -103,9 +107,9 @@ let actions = cx.new(|cx| CommandState::new(window, cx));
 Command::new(&actions)
     .searchable(false)
     .items([
-        CommandItem::new("New File").icon(IconName::Plus),
-        CommandItem::new("Duplicate").icon(IconName::Copy),
-        CommandItem::new("Move to Trash").icon(IconName::Delete),
+        CommandItem::new().label("New File").icon(IconName::Plus),
+        CommandItem::new().label("Duplicate").icon(IconName::Copy),
+        CommandItem::new().label("Move to Trash").icon(IconName::Delete),
     ])
     .w(px(380.))
 ```
@@ -135,11 +139,11 @@ window.open_dialog(cx, move |dialog, _, _| {
                 .bordered(false)
                 .placeholder("Type a command or search...")
                 .items([
-                    CommandItem::new("profile").label("Profile"),
-                    CommandItem::new("billing").label("Billing"),
+                    CommandItem::new().label("Profile"),
+                    CommandItem::new().label("Billing"),
                 ])
-                .on_confirm(|value, window, cx| {
-                    window.push_notification(format!("Selected {value}"), cx);
+                .on_confirm(|index, window, cx| {
+                    window.push_notification(format!("Selected {index}"), cx);
                 })
                 // Record local cleanup only; Dialog handles the propagated Cancel.
                 .on_cancel(|window, cx| {
@@ -182,11 +186,11 @@ Command::new(&state)
     .on_query(|query, window, cx| {
         // Start or update an application-owned search.
     })
-    .on_select(|value, window, cx| {
-        // Preview the newly highlighted value.
+    .on_select(|index, window, cx| {
+        // Preview the newly highlighted IndexPath.
     })
-    .on_confirm(|value, window, cx| {
-        // Finish with this value, whether or not it has an Action.
+    .on_confirm(|index, window, cx| {
+        // Finish with this IndexPath, whether or not it has an Action.
     })
     .on_cancel(|window, cx| {
         // Clean up local palette state before Cancel propagates.
@@ -194,7 +198,7 @@ Command::new(&state)
 ```
 
 `on_query` runs only when a searchable query actually changes. Refiltering can
-move the highlight, so its `on_select` runs first when the selected value
+move the highlight, so its `on_select` runs first when the selected `IndexPath`
 changes; then `on_query` runs. These callbacks, and `on_confirm`, are delivered
 after the current `CommandState` update releases its lease. Keyboard and
 pointer highlight changes run `on_select` but never dispatch an Action. While
@@ -223,11 +227,6 @@ impl StockSearch {
 
         Command::new(&self.state)
             .items(results)
-            .filter(|item, query| {
-                let query = query.to_lowercase();
-                item.value().to_lowercase().contains(&query)
-                    || item.title().to_lowercase().contains(&query)
-            })
             .on_query(move |query, window, cx| {
                 _ = owner.update(cx, |this, cx| this.search(query, window, cx));
             })
@@ -237,27 +236,23 @@ impl StockSearch {
 
 The installed model remains in `CommandState` while query, selection, and
 scrolling change, so those interactions do not need an owner rerender. A later
-owner render installs the new model, preserves the selected value when it is
+owner render installs the new model, preserves the selected `IndexPath` when it is
 still present, and remeasures rows.
 
 ## Searching
 
-By default, `CommandItem::matches(&self, query: &str) -> bool` uses a
-case-insensitive substring match against the item's label, value, and
+Command uses a case-insensitive substring match against each item's label and
 keywords. Empty queries match every item. A group whose items all filter out
 hides its heading; a separator left leading, trailing, or adjacent to another
 separator is omitted.
 
 ```rust
-CommandItem::new("profile")
-    .label("Profile")
+CommandItem::new().label("Profile")
     .keywords(["account", "user"])
 ```
 
-Use `Command::filter` when the application's match policy differs. The custom
-predicate runs only for non-empty queries while search is enabled; otherwise
-every item remains visible. For remote search, update owner-held entries in
-`on_query` and call `state.set_loading(true, window, cx)` while waiting so the
+For custom or remote search, update owner-held entries in `on_query` and call
+`state.set_loading(true, window, cx)` while waiting so the
 empty message is suppressed. Render the new entries when the response arrives.
 
 ## Custom Rows and Virtualization
@@ -274,10 +269,10 @@ content stable until the owner updates the entries.
 
 ```rust
 Command::new(&state)
-    .item(CommandItem::new("compact").child(|_, _| {
+    .item(CommandItem::new().label("compact").child(|_, _| {
         h_flex().w_full().py_1().child("Compact custom row")
     }))
-    .item(CommandItem::new("expanded").child(|_, cx| {
+    .item(CommandItem::new().label("expanded").child(|_, cx| {
         v_flex()
             .w_full()
             .py_4()
@@ -294,13 +289,12 @@ Command::new(&state)
 | `item` / `items` | `item(CommandItem) -> Self` and `items(impl IntoIterator<Item = CommandItem>) -> Self` add ungrouped entries. |
 | `group` / `separator` | `group(CommandGroup) -> Self` adds a group; `separator() -> Self` adds a divider. |
 | `searchable` | `searchable(bool) -> Self` shows or hides the search field and local filtering. Default: `true`. |
-| `filter` | `filter<F>(F) -> Self`, where `F: Fn(&CommandItem, &str) -> bool + 'static`, replaces default matching. |
 | `on_query` | `on_query<F>(F) -> Self`, where `F: Fn(&str, &mut Window, &mut App) + 'static`, runs after a searchable query changes. |
-| `on_select` | `on_select<F>(F) -> Self`, where `F: Fn(&SharedString, &mut Window, &mut App) + 'static`, runs when the highlighted value changes. |
-| `on_confirm` | `on_confirm<F>(F) -> Self`, with the same value callback bounds; while the source window remains live, runs after the confirmed Action dispatches and the current state update releases its lease. |
+| `on_select` | `on_select<F>(F) -> Self`, where `F: Fn(IndexPath, &mut Window, &mut App) + 'static`, runs when the highlighted path changes. |
+| `on_confirm` | `on_confirm<F>(F) -> Self`, with the same `IndexPath` callback bounds; while the source window remains live, runs after the confirmed Action dispatches. |
 | `on_cancel` | `on_cancel<F>(F) -> Self`, where `F: Fn(&mut Window, &mut App) + 'static`, runs before Cancel propagates when Escape does not clear a searchable query. |
 | `placeholder` | `placeholder(impl Into<SharedString>) -> Self` sets the search-field placeholder. |
-| `empty` | `empty(impl Into<SharedString>) -> Self` sets the message for no matches. |
+| `empty` | `empty<F, E>(F) -> Self` renders custom content when there are no matches. |
 | `max_h` | `max_h(impl Into<DefiniteLength>) -> Self` sets the list maximum. Default: `18.75rem` (300px). |
 | `bordered` | `bordered(bool) -> Self` draws the surrounding border and rounding. Default: `true`. |
 | `header` | `header<F, E>(F) -> Self`, where `F: Fn(&CommandState, &mut Window, &mut App) -> E + 'static` and `E: IntoElement`; renders above search and list. |
@@ -313,23 +307,21 @@ to the palette frame.
 
 | Method | Description |
 | --- | --- |
-| `new(value)` | The value identifies the item, is reported to callbacks, and is its label until `label` sets one. |
-| `label` | Sets the visible label. |
+| `new` | Creates an item; Command generates its internal rendering identity. |
+| `label` | Sets the visible label and default search text. |
 | `icon` | Sets the leading icon for the default row. |
 | `action` | `action(Box<dyn Action>) -> Self` sets the behavior dispatched on click or confirm. The default row displays its resolved binding. |
 | `checked` | Draws a trailing check. A resolved Action binding uses that position instead. |
 | `keywords` | Adds default-match terms. |
 | `disabled` | `Disableable::disabled(bool) -> Self` makes the item non-interactive and skips it during keyboard navigation. |
 | `child` | `child<F, E>(F) -> Self`, where `F: Fn(&mut Window, &mut App) -> E + 'static` and `E: IntoElement`; lazily replaces the default row content. |
-| `value` / `title` | Read the item identity or its visible label (falling back to its value). |
-| `is_checked` / `is_disabled` / `matches` | Read checked or disabled state, or apply the default case-insensitive matcher. |
 
 ## CommandGroup
 
 | Method | Description |
 | --- | --- |
-| `new(heading)` | Creates a titled group. The heading hides when all items filter out. |
-| `unlabeled` | Creates a group without a heading. |
+| `new` | Creates an unlabeled group. |
+| `label` | Sets the group heading, which hides when all items filter out. |
 | `item` / `items` | Add one or many `CommandItem`s to the group. |
 | `heading` | Returns the optional heading. |
 
@@ -343,7 +335,7 @@ a newly constructed `Command` during rendering.
 | --- | --- |
 | `new` | `new(&mut Window, &mut Context<Self>) -> Self` creates empty interaction state. |
 | `query` / `set_query` | Read the query, or `set_query(query, window, cx)` as if it were typed. |
-| `selected_index` / `selected_value` | Read the highlighted matching index or value. |
+| `selected_index` | Returns the highlighted item's original `IndexPath`; section identifies the top-level entry and row identifies the item within a group. |
 | `matched_count` | Returns the number of matching items. |
 | `focus` | `focus(&self, &mut Window, &mut App)` focuses the input when searchable, otherwise the Command frame. |
 | `set_loading` / `is_loading` | Show or read the search spinner; loading suppresses the empty message. |

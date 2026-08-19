@@ -10,7 +10,8 @@ use gpui::{
 use rust_i18n::t;
 
 use crate::{
-    ActiveTheme as _, ElementExt as _, Icon, IconName, StyledExt as _, VirtualListScrollHandle,
+    ActiveTheme as _, ElementExt as _, Icon, IconName, IndexPath, StyledExt as _,
+    VirtualListScrollHandle,
     actions::{Cancel, Confirm, SelectDown, SelectUp},
     command::{
         command::CommandOptions,
@@ -29,18 +30,16 @@ pub(crate) const CONTEXT: &str = "Command";
 /// either side. Fixed, so that only the item and heading rows need measuring.
 const SEPARATOR_ROW_HEIGHT: f32 = 9.;
 
-pub(crate) type CommandFilter = dyn Fn(&CommandItem, &str) -> bool;
 pub(crate) type OnQuery = dyn Fn(&str, &mut Window, &mut App);
-pub(crate) type OnValue = dyn Fn(&SharedString, &mut Window, &mut App);
+pub(crate) type OnIndex = dyn Fn(IndexPath, &mut Window, &mut App);
 pub(crate) type OnCancel = dyn Fn(&mut Window, &mut App);
 
 pub(crate) struct CommandModel {
     pub(crate) entries: Vec<CommandEntry>,
     pub(crate) searchable: bool,
-    pub(crate) filter: Option<Rc<CommandFilter>>,
     pub(crate) on_query: Option<Rc<OnQuery>>,
-    pub(crate) on_select: Option<Rc<OnValue>>,
-    pub(crate) on_confirm: Option<Rc<OnValue>>,
+    pub(crate) on_select: Option<Rc<OnIndex>>,
+    pub(crate) on_confirm: Option<Rc<OnIndex>>,
     pub(crate) on_cancel: Option<Rc<OnCancel>>,
 }
 
@@ -49,7 +48,6 @@ impl Default for CommandModel {
         Self {
             entries: Vec::new(),
             searchable: true,
-            filter: None,
             on_query: None,
             on_select: None,
             on_confirm: None,
@@ -106,6 +104,7 @@ struct ListMeasurementKey {
 struct MatchedItem {
     entry_ix: usize,
     item_ix: usize,
+    index_path: IndexPath,
     row_ix: usize,
     disabled: bool,
 }
@@ -163,20 +162,17 @@ impl CommandState {
     }
 
     pub(crate) fn install_model(&mut self, model: CommandModel, cx: &mut Context<Self>) {
-        let selected_value = self.selected_value();
+        let selected_index_path = self.selected_index();
         self.model = model;
         self.update_matches(cx);
 
-        let preserved_selection = selected_value.and_then(|selected_value| {
+        let preserved_selection = selected_index_path.and_then(|selected_index_path| {
             self.matched
                 .iter()
                 .enumerate()
                 .find_map(|(matched_ix, matched)| {
-                    (!matched.disabled
-                        && self
-                            .item_at(matched_ix)
-                            .is_some_and(|item| item.value() == &selected_value))
-                    .then_some(matched_ix)
+                    (!matched.disabled && matched.index_path == selected_index_path)
+                        .then_some(matched_ix)
                 })
         });
 
@@ -215,16 +211,12 @@ impl CommandState {
         self.on_query_changed(window, cx);
     }
 
-    /// The index of the highlighted item, among the items matching the query.
-    pub fn selected_index(&self) -> usize {
-        self.selected_index
-    }
-
-    /// The value of the highlighted item, when the query matched anything.
-    pub fn selected_value(&self) -> Option<SharedString> {
-        self.item_at(self.selected_index)
-            .filter(|item| !item.is_disabled())
-            .map(|item| item.value().clone())
+    /// The highlighted item's path in the original, unfiltered entries.
+    pub fn selected_index(&self) -> Option<IndexPath> {
+        self.matched
+            .get(self.selected_index)
+            .filter(|matched| !matched.disabled)
+            .map(|matched| matched.index_path)
     }
 
     /// The number of items matching the current query.
@@ -262,8 +254,6 @@ impl CommandState {
     fn item_matches(&self, item: &CommandItem, query: &str) -> bool {
         if !self.model.searchable || query.is_empty() {
             true
-        } else if let Some(filter) = &self.model.filter {
-            filter(item, query)
         } else {
             item.matches(query)
         }
@@ -304,9 +294,11 @@ impl CommandState {
                         pending_separator = false;
                     }
 
+                    let index_path = IndexPath::new(0).section(entry_ix);
                     matched.push(MatchedItem {
                         entry_ix,
                         item_ix: 0,
+                        index_path,
                         row_ix: rows.len(),
                         disabled: item.is_disabled(),
                     });
@@ -335,9 +327,11 @@ impl CommandState {
                     }
 
                     for (item_ix, disabled) in visible {
+                        let index_path = IndexPath::new(item_ix).section(entry_ix);
                         matched.push(MatchedItem {
                             entry_ix,
                             item_ix,
+                            index_path,
                             row_ix: rows.len(),
                             disabled,
                         });
@@ -390,7 +384,7 @@ impl CommandState {
             return;
         }
 
-        let previous_selection = self.selected_value();
+        let previous_selection = self.selected_index();
         self.applied_query = query.clone();
         self.update_matches(cx);
         self.reset_selection();
@@ -403,8 +397,8 @@ impl CommandState {
 
         if selection_callback.is_some() || query_callback.is_some() {
             window.defer(cx, move |window, cx| {
-                if let Some((on_select, value)) = selection_callback {
-                    on_select(&value, window, cx);
+                if let Some((on_select, index)) = selection_callback {
+                    on_select(index, window, cx);
                 }
                 if let Some(on_query) = query_callback {
                     on_query(query.as_ref(), window, cx);
@@ -433,14 +427,14 @@ impl CommandState {
 
     fn on_select_if_changed(
         &self,
-        previous_value: Option<SharedString>,
-    ) -> Option<(Rc<OnValue>, SharedString)> {
-        let value = self.selected_value();
-        if value == previous_value {
+        previous_index: Option<IndexPath>,
+    ) -> Option<(Rc<OnIndex>, IndexPath)> {
+        let index = self.selected_index();
+        if index == previous_index {
             return None;
         }
 
-        self.model.on_select.clone().zip(value)
+        self.model.on_select.clone().zip(index)
     }
 
     fn select(&mut self, matched_ix: usize, window: &mut Window, cx: &mut Context<Self>) {
@@ -448,12 +442,12 @@ impl CommandState {
             return;
         }
 
-        let previous_value = self.selected_value();
+        let previous_index = self.selected_index();
         self.selected_index = matched_ix;
         self.pending_scroll = self.matched.get(matched_ix).map(|matched| matched.row_ix);
 
-        if let Some((on_select, value)) = self.on_select_if_changed(previous_value) {
-            window.defer(cx, move |window, cx| on_select(&value, window, cx));
+        if let Some((on_select, index)) = self.on_select_if_changed(previous_index) {
+            window.defer(cx, move |window, cx| on_select(index, window, cx));
         }
 
         cx.notify();
@@ -520,7 +514,7 @@ impl CommandState {
             return;
         }
 
-        let value = item.value().clone();
+        let index_path = self.matched[matched_ix].index_path;
         let action = item.action.as_ref().map(|action| action.boxed_clone());
         let on_confirm = self.model.on_confirm.clone();
 
@@ -529,7 +523,7 @@ impl CommandState {
         }
         if let Some(on_confirm) = on_confirm {
             window.defer(cx, move |window, cx| {
-                on_confirm(&value, window, cx);
+                on_confirm(index_path, window, cx);
             });
         }
     }
@@ -667,12 +661,12 @@ impl CommandState {
                 .when_some(item.icon.clone(), |this, icon| {
                     this.child(icon.size_4().text_color(icon_color))
                 })
-                .child(item.title().clone())
+                .when_some(item.label_text().cloned(), |this, label| this.child(label))
                 .into_any_element(),
         };
 
         self.item_row(selected, cx)
-            .id(("command-item", matched_ix))
+            .id(self.matched[matched_ix].index_path)
             .role(Role::ListBoxOption)
             .aria_selected(selected)
             .when(disabled, |this| this.text_color(muted_foreground))
@@ -699,12 +693,12 @@ impl CommandState {
             .into_any_element()
     }
 
-    fn render_empty(&self, cx: &App) -> AnyElement {
-        let message = self
-            .options
-            .empty_message()
-            .cloned()
-            .unwrap_or_else(|| t!("Command.empty").to_string().into());
+    fn render_empty(&self, window: &mut Window, cx: &mut App) -> AnyElement {
+        if let Some(empty) = self.options.empty() {
+            return empty(self, window, cx);
+        }
+
+        let message: SharedString = t!("Command.empty").to_string().into();
 
         div()
             .py_6()
@@ -829,7 +823,7 @@ impl Render for CommandState {
                     // While a search is in flight the list is empty because the
                     // answer has not arrived, which is not the same as no match.
                     .when(rows_count == 0 && !self.loading, |this| {
-                        this.child(self.render_empty(cx))
+                        this.child(self.render_empty(window, cx))
                     })
                     .when(rows_count > 0, |this| {
                         this.child(
@@ -870,11 +864,9 @@ mod tests {
         actions, div, point, prelude::FluentBuilder as _, px,
     };
 
-    use super::{
-        CONTEXT, CommandFilter, CommandModel, CommandRow, CommandState, SEPARATOR_ROW_HEIGHT,
-    };
+    use super::{CONTEXT, CommandModel, CommandRow, CommandState, SEPARATOR_ROW_HEIGHT};
     use crate::{
-        Disableable as _,
+        Disableable as _, IndexPath,
         actions::{Cancel, Confirm, SelectDown},
         command::{Command, CommandEntry, CommandGroup, CommandItem},
     };
@@ -911,25 +903,29 @@ mod tests {
                 .child(
                     Command::new(&self.state)
                         .item(
-                            CommandItem::new("open")
+                            CommandItem::new()
                                 .label("Item")
                                 .keywords(["needle"])
                                 .action(Box::new(OpenTestItem)),
                         )
-                        .item(CommandItem::new("plain").label("Item"))
+                        .item(CommandItem::new().label("Item"))
                         .item(
-                            CommandItem::new("global")
+                            CommandItem::new()
                                 .label("Item")
                                 .action(Box::new(GlobalTestItem)),
                         )
                         .on_query(move |query, _, _| {
                             query_events.borrow_mut().push(format!("query:{query}"));
                         })
-                        .on_select(move |value, _, _| {
-                            select_events.borrow_mut().push(format!("select:{value}"));
+                        .on_select(move |index, _, _| {
+                            select_events
+                                .borrow_mut()
+                                .push(format!("select:{}:{}", index.section, index.row));
                         })
-                        .on_confirm(move |value, _, _| {
-                            confirm_events.borrow_mut().push(format!("confirm:{value}"));
+                        .on_confirm(move |index, _, _| {
+                            confirm_events
+                                .borrow_mut()
+                                .push(format!("confirm:{}:{}", index.section, index.row));
                         })
                         .on_cancel(move |_, _| {
                             cancel_events.borrow_mut().push("cancel".into());
@@ -950,15 +946,14 @@ mod tests {
             let confirm_owner = cx.weak_entity();
 
             Command::new(&self.state)
-                .item(CommandItem::new("alpha"))
-                .item(CommandItem::new("beta"))
-                .on_select(move |value, _, cx| {
+                .item(CommandItem::new().label("alpha"))
+                .item(CommandItem::new().label("beta"))
+                .on_select(move |index, _, cx| {
                     _ = select_owner.update(cx, |harness, cx| {
-                        assert_eq!(
-                            harness.state.read(cx).selected_value().as_ref(),
-                            Some(value)
-                        );
-                        harness.events.push(format!("select:{value}"));
+                        assert_eq!(harness.state.read(cx).selected_index(), Some(index));
+                        harness
+                            .events
+                            .push(format!("select:{}:{}", index.section, index.row));
                     });
                 })
                 .on_query(move |query, _, cx| {
@@ -967,13 +962,12 @@ mod tests {
                         harness.events.push(format!("query:{query}"));
                     });
                 })
-                .on_confirm(move |value, _, cx| {
+                .on_confirm(move |index, _, cx| {
                     _ = confirm_owner.update(cx, |harness, cx| {
-                        assert_eq!(
-                            harness.state.read(cx).selected_value().as_ref(),
-                            Some(value)
-                        );
-                        harness.events.push(format!("confirm:{value}"));
+                        assert_eq!(harness.state.read(cx).selected_index(), Some(index));
+                        harness
+                            .events
+                            .push(format!("confirm:{}:{}", index.section, index.row));
                     });
                 })
         }
@@ -1001,7 +995,7 @@ mod tests {
 
         assert_eq!(
             harness.read_with(cx, |harness, _| harness.events.clone()),
-            ["select:alpha", "query:alpha"]
+            ["select:0:0", "query:alpha"]
         );
     }
 
@@ -1022,7 +1016,7 @@ mod tests {
 
         assert_eq!(
             harness.read_with(cx, |harness, _| harness.events.clone()),
-            ["confirm:alpha"]
+            ["confirm:0:0"]
         );
     }
 
@@ -1070,11 +1064,15 @@ mod tests {
                 state.install_model(
                     CommandModel {
                         entries: vec![CommandEntry::Item(
-                            CommandItem::new("removed").action(Box::new(RemovePaletteTestItem)),
+                            CommandItem::new()
+                                .label("removed")
+                                .action(Box::new(RemovePaletteTestItem)),
                         )],
                         searchable: false,
-                        on_confirm: Some(Rc::new(move |value, _, _| {
-                            confirm_events.borrow_mut().push(format!("confirm:{value}"));
+                        on_confirm: Some(Rc::new(move |index, _, _| {
+                            confirm_events
+                                .borrow_mut()
+                                .push(format!("confirm:{}:{}", index.section, index.row));
                         })),
                         ..CommandModel::default()
                     },
@@ -1088,7 +1086,7 @@ mod tests {
         cx.run_until_parked();
 
         assert!(state_owner.borrow().is_none());
-        assert_eq!(events.borrow().as_slice(), ["action", "confirm:removed"]);
+        assert_eq!(events.borrow().as_slice(), ["action", "confirm:0:0"]);
     }
 
     #[gpui::test]
@@ -1180,10 +1178,10 @@ mod tests {
             [
                 "query:needle",
                 "query:",
-                "select:plain",
-                "select:open",
+                "select:1:0",
+                "select:0:0",
                 "action",
-                "confirm:open",
+                "confirm:0:0",
             ]
         );
 
@@ -1197,12 +1195,12 @@ mod tests {
             [
                 "query:needle",
                 "query:",
-                "select:plain",
-                "select:open",
+                "select:1:0",
+                "select:0:0",
                 "action",
-                "confirm:open",
+                "confirm:0:0",
                 "action",
-                "confirm:open",
+                "confirm:0:0",
                 "cancel",
                 "propagated_cancel",
             ]
@@ -1217,14 +1215,18 @@ mod tests {
         fn render(&mut self, _: &mut Window, _: &mut gpui::Context<Self>) -> impl IntoElement {
             Command::new(&self.state)
                 .searchable(false)
-                .item(CommandItem::new("alpha"))
+                .item(CommandItem::new().label("alpha"))
                 .group(
                     CommandGroup::new()
                         .label("Settings")
-                        .item(CommandItem::new("beta")),
+                        .item(CommandItem::new().label("beta")),
                 )
                 .separator()
-                .item(CommandItem::new("custom").child(|_, _| div().h(px(72.)).child("Custom")))
+                .item(
+                    CommandItem::new()
+                        .label("custom")
+                        .child(|_, _| div().h(px(72.)).child("Custom")),
+                )
         }
     }
 
@@ -1238,18 +1240,25 @@ mod tests {
         cx.run_until_parked();
         cx.update(|window, cx| _ = window.draw(cx));
 
-        let (values, rows, row_sizes) = cx.update(|_, cx| {
+        let (labels, rows, row_sizes) = cx.update(|_, cx| {
             let state = harness.read(cx).state.read(cx);
             (
                 (0..state.matched_count())
-                    .map(|matched_ix| state.item_at(matched_ix).unwrap().value().clone())
+                    .map(|matched_ix| {
+                        state
+                            .item_at(matched_ix)
+                            .unwrap()
+                            .label_text()
+                            .unwrap()
+                            .clone()
+                    })
                     .collect::<Vec<_>>(),
                 state.rows.clone(),
                 state.row_sizes.clone(),
             )
         });
 
-        assert_eq!(values, ["alpha", "beta", "custom"]);
+        assert_eq!(labels, ["alpha", "beta", "custom"]);
         assert!(matches!(
             rows.as_slice(),
             [
@@ -1297,14 +1306,12 @@ mod tests {
         cx: &mut gpui::Context<CommandState>,
         entries: impl IntoIterator<Item = CommandEntry>,
         searchable: bool,
-        filter: Option<Rc<CommandFilter>>,
     ) -> CommandState {
         let mut state = CommandState::new(window, cx);
         state.install_model(
             CommandModel {
                 entries: entries.into_iter().collect(),
                 searchable,
-                filter,
                 ..CommandModel::default()
             },
             cx,
@@ -1316,15 +1323,15 @@ mod tests {
         vec![
             CommandGroup::new()
                 .label("Suggestions")
-                .item(CommandItem::new("Calendar"))
-                .item(CommandItem::new("Search Emoji"))
-                .item(CommandItem::new("Calculator").disabled(true))
+                .item(CommandItem::new().label("Calendar"))
+                .item(CommandItem::new().label("Search Emoji"))
+                .item(CommandItem::new().label("Calculator").disabled(true))
                 .into(),
             CommandEntry::Separator,
             CommandGroup::new()
                 .label("Settings")
-                .item(CommandItem::new("profile").label("Profile"))
-                .item(CommandItem::new("billing").label("Billing"))
+                .item(CommandItem::new().label("Profile"))
+                .item(CommandItem::new().label("Billing"))
                 .into(),
         ]
     }
@@ -1363,7 +1370,7 @@ mod tests {
                 state.update_matches(cx);
 
                 assert_eq!(state.matched_count(), 1);
-                assert_eq!(state.selected_value(), Some("billing".into()));
+                assert_eq!(state.selected_index(), Some(IndexPath::new(1).section(2)));
                 assert_eq!(
                     state
                         .rows
@@ -1391,7 +1398,7 @@ mod tests {
 
                 assert_eq!(state.matched_count(), 0);
                 assert!(state.rows.is_empty());
-                assert_eq!(state.selected_value(), None);
+                assert_eq!(state.selected_index(), None);
             });
         });
     }
@@ -1407,9 +1414,7 @@ mod tests {
                     window,
                     cx,
                     [CommandEntry::Item(
-                        CommandItem::new("profile")
-                            .label("Profile")
-                            .keywords(["account"]),
+                        CommandItem::new().label("Profile").keywords(["account"]),
                     )],
                 )
             });
@@ -1424,30 +1429,6 @@ mod tests {
     }
 
     #[gpui::test]
-    fn custom_filter_controls_visible_items(cx: &mut TestAppContext) {
-        cx.update(crate::init);
-        let (harness, cx) = cx.add_window_view(|window, cx| Harness {
-            state: cx.new(|cx| CommandState::new(window, cx)),
-            command: Rc::new(|state| {
-                Command::new(state)
-                    .filter(|item, query| item.value().starts_with(query))
-                    .items([CommandItem::new("alpha"), CommandItem::new("beta-alpha")])
-            }),
-        });
-        let state = cx.update(|_, cx| harness.read(cx).state.clone());
-
-        cx.run_until_parked();
-        cx.update(|window, cx| {
-            _ = window.draw(cx);
-            state.update(cx, |state, cx| {
-                state.set_query("alpha", window, cx);
-                assert_eq!(state.matched_count(), 1);
-                assert_eq!(state.selected_value(), Some("alpha".into()));
-            });
-        });
-    }
-
-    #[gpui::test]
     fn non_searchable_command_keeps_every_item(cx: &mut TestAppContext) {
         cx.update(crate::init);
         let cx = cx.add_empty_window();
@@ -1457,11 +1438,10 @@ mod tests {
                     window,
                     cx,
                     [
-                        CommandEntry::Item(CommandItem::new("alpha")),
-                        CommandEntry::Item(CommandItem::new("beta")),
+                        CommandEntry::Item(CommandItem::new().label("alpha")),
+                        CommandEntry::Item(CommandItem::new().label("beta")),
                     ],
                     false,
-                    None,
                 )
             });
             state.update(cx, |state, cx| {
@@ -1482,8 +1462,8 @@ mod tests {
                 let confirmed = confirmed_for_render.clone();
                 Command::new(state)
                     .searchable(false)
-                    .item(CommandItem::new("alpha"))
-                    .item(CommandItem::new("beta"))
+                    .item(CommandItem::new().label("alpha"))
+                    .item(CommandItem::new().label("beta"))
                     .on_confirm(move |value, _, _| {
                         *confirmed.borrow_mut() = Some(value.clone());
                     })
@@ -1500,7 +1480,7 @@ mod tests {
             window.dispatch_action(Box::new(Confirm { secondary: false }), cx);
         });
 
-        assert_eq!(*confirmed.borrow(), Some("beta".into()));
+        assert_eq!(*confirmed.borrow(), Some(IndexPath::new(0).section(1)));
     }
 
     #[gpui::test]
@@ -1515,8 +1495,8 @@ mod tests {
             command: Rc::new(move |state| {
                 let confirmed = confirmed_for_render.clone();
                 Command::new(state)
-                    .item(CommandItem::new("disabled").disabled(true))
-                    .item(CommandItem::new("enabled"))
+                    .item(CommandItem::new().label("disabled").disabled(true))
+                    .item(CommandItem::new().label("enabled"))
                     .on_confirm(move |value, _, _| {
                         *confirmed.borrow_mut() = Some(value.clone());
                     })
@@ -1532,14 +1512,14 @@ mod tests {
         });
 
         assert_eq!(
-            state.read_with(cx, |state, _| state.selected_value()),
-            Some("enabled".into())
+            state.read_with(cx, |state, _| state.selected_index()),
+            Some(IndexPath::new(0).section(1))
         );
-        assert_eq!(*confirmed.borrow(), Some("enabled".into()));
+        assert_eq!(*confirmed.borrow(), Some(IndexPath::new(0).section(1)));
     }
 
     #[gpui::test]
-    fn initially_rendered_all_disabled_items_have_no_selected_value_and_ignore_enter(
+    fn initially_rendered_all_disabled_items_have_no_selected_index_and_ignore_enter(
         cx: &mut TestAppContext,
     ) {
         cx.update(crate::init);
@@ -1550,8 +1530,8 @@ mod tests {
             command: Rc::new(move |state| {
                 let confirmed = confirmed_for_render.clone();
                 Command::new(state)
-                    .item(CommandItem::new("one").disabled(true))
-                    .item(CommandItem::new("two").disabled(true))
+                    .item(CommandItem::new().label("one").disabled(true))
+                    .item(CommandItem::new().label("two").disabled(true))
                     .on_confirm(move |value, _, _| {
                         *confirmed.borrow_mut() = Some(value.clone());
                     })
@@ -1566,7 +1546,7 @@ mod tests {
             window.dispatch_action(Box::new(Confirm { secondary: false }), cx);
         });
 
-        assert_eq!(state.read_with(cx, |state, _| state.selected_value()), None);
+        assert_eq!(state.read_with(cx, |state, _| state.selected_index()), None);
         assert_eq!(*confirmed.borrow(), None);
     }
 
@@ -1584,7 +1564,7 @@ mod tests {
                 let query_calls = query_calls_for_render.clone();
                 Command::new(state)
                     .searchable(false)
-                    .item(CommandItem::new("alpha"))
+                    .item(CommandItem::new().label("alpha"))
                     .on_query(move |_, _, _| query_calls.set(query_calls.get() + 1))
                     .on_cancel(move |_, _| cancelled.set(true))
             }),
@@ -1620,23 +1600,23 @@ mod tests {
             state.update(cx, |state, cx| {
                 state.update_matches(cx);
                 state.reset_selection();
-                assert_eq!(state.selected_value(), Some("Calendar".into()));
+                assert_eq!(state.selected_index(), Some(IndexPath::new(0).section(0)));
 
                 state.select_by(1, window, cx);
-                assert_eq!(state.selected_value(), Some("Search Emoji".into()));
+                assert_eq!(state.selected_index(), Some(IndexPath::new(1).section(0)));
 
                 // "Calculator" is disabled, so it is stepped over.
                 state.select_by(1, window, cx);
-                assert_eq!(state.selected_value(), Some("profile".into()));
+                assert_eq!(state.selected_index(), Some(IndexPath::new(0).section(2)));
 
                 state.select_by(-1, window, cx);
-                assert_eq!(state.selected_value(), Some("Search Emoji".into()));
+                assert_eq!(state.selected_index(), Some(IndexPath::new(1).section(0)));
 
                 // Wraps around the end, skipping the disabled item again.
                 state.select_by(-1, window, cx);
-                assert_eq!(state.selected_value(), Some("Calendar".into()));
+                assert_eq!(state.selected_index(), Some(IndexPath::new(0).section(0)));
                 state.select_by(-1, window, cx);
-                assert_eq!(state.selected_value(), Some("billing".into()));
+                assert_eq!(state.selected_index(), Some(IndexPath::new(1).section(2)));
             });
         });
     }
@@ -1652,8 +1632,8 @@ mod tests {
                     window,
                     cx,
                     [
-                        CommandEntry::Item(CommandItem::new("enabled")),
-                        CommandEntry::Item(CommandItem::new("disabled").disabled(true)),
+                        CommandEntry::Item(CommandItem::new().label("enabled")),
+                        CommandEntry::Item(CommandItem::new().label("disabled").disabled(true)),
                     ],
                 )
             });
@@ -1665,7 +1645,7 @@ mod tests {
                 // Reaching the disabled row is only possible with the mouse or
                 // an explicit index; confirming it must be a no-op.
                 state.confirm(1, window, cx);
-                assert_eq!(state.selected_index(), 0);
+                assert_eq!(state.selected_index, 0);
             });
         });
     }
@@ -1678,13 +1658,19 @@ mod tests {
         let checked_width = Rc::new(Cell::new(None));
         let (unchecked, checked) = cx.update(|window, cx| {
             let unchecked_state = cx.new(|cx| {
-                command_state(window, cx, [CommandEntry::Item(CommandItem::new("theme"))])
+                command_state(
+                    window,
+                    cx,
+                    [CommandEntry::Item(CommandItem::new().label("theme"))],
+                )
             });
             let checked_state = cx.new(|cx| {
                 command_state(
                     window,
                     cx,
-                    [CommandEntry::Item(CommandItem::new("theme").checked(true))],
+                    [CommandEntry::Item(
+                        CommandItem::new().label("theme").checked(true),
+                    )],
                 )
             });
             let unchecked_width = unchecked_width.clone();
@@ -1790,12 +1776,42 @@ mod tests {
         assert_eq!(footer_matched_count, Some(2));
     }
 
+    #[gpui::test]
+    fn custom_empty_slot_renders_with_current_state(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let empty_calls = Rc::new(Cell::new(0));
+        let empty_matched_count = Rc::new(Cell::new(None));
+        let calls = empty_calls.clone();
+        let matched_count = empty_matched_count.clone();
+        let (_harness, cx) = cx.add_window_view(move |window, cx| Harness {
+            state: cx.new(|cx| CommandState::new(window, cx)),
+            command: Rc::new(move |state| {
+                let calls = calls.clone();
+                let matched_count = matched_count.clone();
+                Command::new(state).empty(
+                    move |state: &CommandState, _: &mut Window, _: &mut gpui::App| {
+                        calls.set(calls.get() + 1);
+                        matched_count.set(Some(state.matched_count()));
+                        div().child("Custom empty")
+                    },
+                )
+            }),
+        });
+
+        cx.run_until_parked();
+        cx.update(|window, cx| _ = window.draw(cx));
+
+        assert!(empty_calls.get() > 0);
+        assert_eq!(empty_matched_count.get(), Some(0));
+    }
+
     fn entries_with_late_first_enabled_item() -> Vec<CommandEntry> {
         vec![
             CommandGroup::new()
                 .label("Disabled")
                 .items((0..30).map(|ix| {
-                    CommandItem::new(format!("disabled-{ix}"))
+                    CommandItem::new()
+                        .label(format!("disabled-{ix}"))
                         .keywords(["match"])
                         .disabled(true)
                 }))
@@ -1803,7 +1819,7 @@ mod tests {
             CommandEntry::Separator,
             CommandGroup::new()
                 .label("Enabled")
-                .item(CommandItem::new("enabled").keywords(["match"]))
+                .item(CommandItem::new().label("enabled").keywords(["match"]))
                 .into(),
         ]
     }
@@ -1814,7 +1830,7 @@ mod tests {
     ) {
         let (selected_row, offset) = state.read_with(cx, |state, _| {
             (
-                state.matched[state.selected_index()].row_ix,
+                state.matched[state.selected_index].row_ix,
                 state.scroll_handle.base_handle().offset().y,
             )
         });
@@ -1873,7 +1889,10 @@ mod tests {
 
             div().size_full().child(
                 Command::new(&self.state)
-                    .items([CommandItem::new("Calendar"), CommandItem::new("Calculator")])
+                    .items([
+                        CommandItem::new().label("Calendar"),
+                        CommandItem::new().label("Calculator"),
+                    ])
                     .max_h(px(200.))
                     .header(move |state, _, _| {
                         header_calls.set(header_calls.get() + 1);
@@ -1897,7 +1916,11 @@ mod tests {
         fn render(&mut self, _: &mut Window, _: &mut gpui::Context<Self>) -> impl IntoElement {
             div().size_full().child(
                 Command::new(&self.state)
-                    .item(CommandItem::new("fixed").child(|_, _| div().h(px(32.))))
+                    .item(
+                        CommandItem::new()
+                            .label("fixed")
+                            .child(|_, _| div().h(px(32.))),
+                    )
                     .max_h(px(200.))
                     .p_4(),
             )
@@ -1915,7 +1938,7 @@ mod tests {
             div().size_full().child(
                 div().w(self.width).child(
                     Command::new(&self.state)
-                        .item(CommandItem::new("wrapped").child(|_, _| {
+                        .item(CommandItem::new().label("wrapped").child(|_, _| {
                             div()
                                 .w_full()
                                 .child("A command row whose content wraps at narrow list widths")
@@ -2053,15 +2076,19 @@ mod tests {
             command: Rc::new(|state| {
                 Command::new(state)
                     .group(
-                        CommandGroup::new()
-                            .label("Short")
-                            .item(CommandItem::new("short").child(|_, _| div().h(px(32.)))),
+                        CommandGroup::new().label("Short").item(
+                            CommandItem::new()
+                                .label("short")
+                                .child(|_, _| div().h(px(32.))),
+                        ),
                     )
                     .separator()
                     .group(
-                        CommandGroup::new()
-                            .label("Tall")
-                            .item(CommandItem::new("tall").child(|_, _| div().h(px(72.)))),
+                        CommandGroup::new().label("Tall").item(
+                            CommandItem::new()
+                                .label("tall")
+                                .child(|_, _| div().h(px(72.))),
+                        ),
                     )
             }),
         });
@@ -2079,7 +2106,7 @@ mod tests {
     }
 
     #[gpui::test]
-    fn reinstalling_a_model_preserves_selection_by_value_and_remeasures_rows(
+    fn reinstalling_a_model_preserves_selection_by_index_path_and_remeasures_rows(
         cx: &mut TestAppContext,
     ) {
         cx.update(crate::init);
@@ -2090,12 +2117,28 @@ mod tests {
             command: Rc::new(move |state| {
                 if reversed_for_render.get() {
                     Command::new(state)
-                        .item(CommandItem::new("beta").child(|_, _| div().h(px(72.))))
-                        .item(CommandItem::new("alpha").child(|_, _| div().h(px(32.))))
+                        .item(
+                            CommandItem::new()
+                                .label("beta")
+                                .child(|_, _| div().h(px(72.))),
+                        )
+                        .item(
+                            CommandItem::new()
+                                .label("alpha")
+                                .child(|_, _| div().h(px(32.))),
+                        )
                 } else {
                     Command::new(state)
-                        .item(CommandItem::new("alpha").child(|_, _| div().h(px(32.))))
-                        .item(CommandItem::new("beta").child(|_, _| div().h(px(72.))))
+                        .item(
+                            CommandItem::new()
+                                .label("alpha")
+                                .child(|_, _| div().h(px(32.))),
+                        )
+                        .item(
+                            CommandItem::new()
+                                .label("beta")
+                                .child(|_, _| div().h(px(72.))),
+                        )
                 }
             }),
         });
@@ -2107,8 +2150,8 @@ mod tests {
             state.update(cx, |state, cx| state.select_by(1, window, cx));
         });
         assert_eq!(
-            state.read_with(cx, |state, _| state.selected_value()),
-            Some("beta".into()),
+            state.read_with(cx, |state, _| state.selected_index()),
+            Some(IndexPath::new(0).section(1)),
         );
 
         reversed.set(true);
@@ -2117,15 +2160,16 @@ mod tests {
             _ = window.draw(cx);
         });
 
-        let (selected_index, selected_value, row_sizes) = state.read_with(cx, |state, _| {
-            (
-                state.selected_index(),
-                state.selected_value(),
-                state.row_sizes.clone(),
-            )
-        });
-        assert_eq!(selected_index, 0);
-        assert_eq!(selected_value, Some("beta".into()));
+        let (selected_matched_index, selected_index, row_sizes) =
+            state.read_with(cx, |state, _| {
+                (
+                    state.selected_index,
+                    state.selected_index(),
+                    state.row_sizes.clone(),
+                )
+            });
+        assert_eq!(selected_matched_index, 1);
+        assert_eq!(selected_index, Some(IndexPath::new(0).section(1)));
         assert_eq!(row_sizes[0].height, px(84.));
         assert_eq!(row_sizes[1].height, px(44.));
     }
@@ -2141,12 +2185,12 @@ mod tests {
                 command_state(
                     window,
                     cx,
-                    [CommandEntry::Item(CommandItem::new("custom").child(
-                        move |_, _| {
+                    [CommandEntry::Item(
+                        CommandItem::new().label("custom").child(move |_, _| {
                             count.set(count.get() + 1);
                             div().child("Custom")
-                        },
-                    ))],
+                        }),
+                    )],
                 )
             })
         });
@@ -2180,7 +2224,8 @@ mod tests {
         let (harness, cx) = cx.add_window_view(|window, cx| Harness {
             state: cx.new(|cx| CommandState::new(window, cx)),
             command: Rc::new(|state| {
-                Command::new(state).items((0..50).map(|ix| CommandItem::new(format!("Item {ix}"))))
+                Command::new(state)
+                    .items((0..50).map(|ix| CommandItem::new().label(format!("Item {ix}"))))
             }),
         });
 
@@ -2204,7 +2249,10 @@ mod tests {
         });
         cx.update(|window, cx| _ = window.draw(cx));
 
-        assert_eq!(state.read_with(cx, |state, _| state.selected_index()), 49);
+        assert_eq!(
+            state.read_with(cx, |state, _| state.selected_index()),
+            Some(IndexPath::new(0).section(49))
+        );
         assert!(
             state.read_with(cx, |state, _| state.scroll_handle.base_handle().offset().y) < px(0.),
             "selecting the last row should have scrolled the list",

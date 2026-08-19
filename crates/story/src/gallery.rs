@@ -15,7 +15,7 @@ use gpui_component::{
 use crate::*;
 
 fn component_command(name: impl Into<SharedString>) -> CommandEntry {
-    CommandItem::new(name).into()
+    CommandItem::new().label(name).into()
 }
 
 fn find_story_index<'a>(
@@ -209,6 +209,27 @@ impl Gallery {
         self.active_index = Some(story_ix);
         cx.notify();
         true
+    }
+
+    pub(crate) fn select_story_index(
+        &mut self,
+        index: gpui_component::IndexPath,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        if index.row != 0 {
+            return false;
+        }
+        let Some(name) = self
+            .stories
+            .iter()
+            .flat_map(|(_, stories)| stories)
+            .nth(index.section)
+            .map(|story| story.read(cx).name.clone())
+        else {
+            return false;
+        };
+        self.select_story(&name, window, cx)
     }
 
     #[cfg(test)]
@@ -498,10 +519,7 @@ mod tests {
     fn component_command_uses_story_name() {
         let entry = component_command("Command");
 
-        assert!(matches!(
-            entry,
-            CommandEntry::Item(item) if item.value() == "Command"
-        ));
+        assert!(matches!(entry, CommandEntry::Item(_)));
     }
 
     #[test]

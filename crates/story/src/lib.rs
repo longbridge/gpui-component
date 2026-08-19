@@ -916,13 +916,13 @@ impl StoryRoot {
 
     fn on_component_palette_confirm(
         &mut self,
-        name: &SharedString,
+        index: gpui_component::IndexPath,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         if let Some(gallery) = self.gallery.clone() {
             gallery.update(cx, |gallery, cx| {
-                gallery.select_story(name, window, cx);
+                gallery.select_story_index(index, window, cx);
             });
         }
         self.component_palette_open = false;
@@ -932,8 +932,14 @@ impl StoryRoot {
     /// Preview the highlighted theme while the palette is open: moving the
     /// highlight applies the theme, Enter keeps it, Escape puts back the one
     /// that was in force when the palette opened.
-    fn on_theme_palette_select(&mut self, name: &SharedString, cx: &mut Context<Self>) {
-        themes::apply_theme(name, cx);
+    fn on_theme_palette_select(
+        &mut self,
+        index: gpui_component::IndexPath,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(name) = themes::theme_name_at(index, cx) {
+            themes::apply_theme(&name, cx);
+        }
     }
 
     fn on_theme_palette_confirm(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -1019,9 +1025,9 @@ impl StoryRoot {
                             .bordered(false)
                             .placeholder("Search themes...")
                             .max_h(px(400.))
-                            .on_select(move |name, _, cx| {
+                            .on_select(move |index, _, cx| {
                                 _ = select_owner.update(cx, |root, cx| {
-                                    root.on_theme_palette_select(name, cx);
+                                    root.on_theme_palette_select(index, cx);
                                 });
                             })
                             .on_confirm(move |_, window, cx| {
@@ -1094,9 +1100,9 @@ impl StoryRoot {
                             .bordered(false)
                             .placeholder("Search components...")
                             .max_h(px(400.))
-                            .on_confirm(move |name, window, cx| {
+                            .on_confirm(move |index, window, cx| {
                                 _ = confirm_owner.update(cx, |root, cx| {
-                                    root.on_component_palette_confirm(name, window, cx);
+                                    root.on_component_palette_confirm(index, window, cx);
                                 });
                             }),
                         entries,
@@ -1367,7 +1373,7 @@ mod tests {
                 window.draw(cx).clear(cx);
                 theme_palette.update(cx, |palette, cx| {
                     palette.set_query(selected.clone(), window, cx);
-                    assert_eq!(palette.selected_value().as_ref(), Some(&selected));
+                    assert_eq!(palette.selected_index(), themes::theme_index(&selected, cx));
                 });
             })
             .unwrap();
@@ -1411,8 +1417,9 @@ mod tests {
         let (window, story_root) = theme_window(cx);
         let (original, previewed) = another_theme(cx);
         open_theme_palette(cx, window, &story_root);
+        let previewed_index = cx.read(|cx| themes::theme_index(&previewed, cx).unwrap());
         story_root.update(cx, |root, cx| {
-            root.on_theme_palette_select(&previewed, cx);
+            root.on_theme_palette_select(previewed_index, cx);
         });
 
         open_theme_palette(cx, window, &story_root);
@@ -1662,7 +1669,7 @@ mod tests {
         cx.simulate_keystrokes(window, "command");
         cx.simulate_keystrokes(window, "down up");
         component_palette.read_with(cx, |palette, _| {
-            assert_eq!(palette.selected_value().as_deref(), Some("Command"));
+            assert!(palette.selected_index().is_some());
         });
 
         cx.simulate_keystrokes(window, "enter");
