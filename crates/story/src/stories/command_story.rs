@@ -480,15 +480,9 @@ impl CommandStory {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let stock = if matches!(self.stock_entries.first(), Some(CommandEntry::Group(_))) {
-            (index.section == 0)
-                .then(|| self.stock_results.get(index.row))
-                .flatten()
-        } else if index.row == 0 {
-            self.stock_results.get(index.section)
-        } else {
-            None
-        };
+        let stock = (index.section == 0)
+            .then(|| self.stock_results.get(index.row))
+            .flatten();
         let Some((symbol, _, _, _)) = stock else {
             return;
         };

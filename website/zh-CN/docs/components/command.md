@@ -177,6 +177,11 @@ Command::new(&state)
     })
 ```
 
+`IndexPath` 始终对应最近一次 `Command` render 传入的模型，而不是内部过滤后的可见位置。
+通过 `.items(...)` 传入的条目位于 section 0，`row` 等于它在该迭代器中的位置；
+显式 group 使用其 group 与 item 位置；两种形式混用时，显式 group 排在隐式未分组 section 之后。
+搜索过滤只改变可见内容，不改变这些坐标。
+
 `on_query` 只在可搜索查询实际变化时运行。重新过滤可能移动高亮，因此所选 `IndexPath` 变化时会先运行 `on_select`，再运行 `on_query`。这些回调与 `on_confirm` 都会在当前 `CommandState` 更新释放其租用后交付。键盘和指针导致的高亮变化会运行 `on_select`，但从不分发 Action。只要来源窗口仍然存活，确认已启用条目时，会先分发其 Action，再调用 `on_confirm`；如果该 Action 关闭窗口，回调将无法交付。没有 Action 的条目仍会调用 `on_confirm`。在可搜索面板中，Escape 会先清空非空查询；否则调用 `on_cancel` 并继续传播 Cancel。
 
 ### 动态条目

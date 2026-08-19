@@ -217,7 +217,12 @@ impl CommandState {
         self.on_query_changed(window, cx);
     }
 
-    /// The highlighted item's path in the original, unfiltered entries.
+    /// The highlighted item's path in the model installed by the latest
+    /// [`crate::command::Command`] render, before local filtering.
+    ///
+    /// Ungrouped items occupy section 0 and use their input position as the
+    /// row. Explicit groups use their group and item positions; when a model
+    /// mixes both forms, the implicit ungrouped section comes first.
     pub fn selected_index(&self) -> Option<IndexPath> {
         self.selected_index
             .and_then(|selected_index| self.matched.get(selected_index))
@@ -225,7 +230,7 @@ impl CommandState {
             .map(|matched| matched.index_path)
     }
 
-    /// Highlight an item by its original, unfiltered index path, or clear the
+    /// Highlight an item by its original, unfiltered model path, or clear the
     /// highlight with `None`.
     ///
     /// A path that is currently filtered out or disabled clears the
@@ -320,6 +325,13 @@ impl CommandState {
 
         let mut rows: Vec<CommandRow> = Vec::new();
         let mut matched: Vec<MatchedItem> = Vec::new();
+        let has_ungrouped_items = self
+            .model
+            .entries
+            .iter()
+            .any(|entry| matches!(entry, CommandEntry::Item(_)));
+        let mut ungrouped_item_ix = 0;
+        let mut group_ix = 0;
         // A separator is only drawn once something follows it, which drops the
         // leading, trailing and doubled separators a filtered list leaves behind.
         let mut pending_separator = false;
@@ -328,6 +340,8 @@ impl CommandState {
             match entry {
                 CommandEntry::Separator => pending_separator = !rows.is_empty(),
                 CommandEntry::Item(item) => {
+                    let item_ix = ungrouped_item_ix;
+                    ungrouped_item_ix += 1;
                     if !self.item_matches(item, query) {
                         continue;
                     }
@@ -337,7 +351,7 @@ impl CommandState {
                         pending_separator = false;
                     }
 
-                    let index_path = IndexPath::new(0).section(entry_ix);
+                    let index_path = IndexPath::new(item_ix).section(0);
                     matched.push(MatchedItem {
                         entry_ix,
                         item_ix: 0,
@@ -348,6 +362,8 @@ impl CommandState {
                     rows.push(CommandRow::Item(matched.len() - 1));
                 }
                 CommandEntry::Group(group) => {
+                    let section_ix = group_ix + usize::from(has_ungrouped_items);
+                    group_ix += 1;
                     let visible = group
                         .items
                         .iter()
@@ -370,7 +386,7 @@ impl CommandState {
                     }
 
                     for (item_ix, disabled) in visible {
-                        let index_path = IndexPath::new(item_ix).section(entry_ix);
+                        let index_path = IndexPath::new(item_ix).section(section_ix);
                         matched.push(MatchedItem {
                             entry_ix,
                             item_ix,
@@ -1228,7 +1244,7 @@ mod tests {
             [
                 "query:needle",
                 "query:",
-                "select:1:0",
+                "select:0:1",
                 "select:0:0",
                 "action",
                 "confirm:0:0",
@@ -1245,7 +1261,7 @@ mod tests {
             [
                 "query:needle",
                 "query:",
-                "select:1:0",
+                "select:0:1",
                 "select:0:0",
                 "action",
                 "confirm:0:0",
@@ -1420,7 +1436,7 @@ mod tests {
                 state.update_matches(cx);
 
                 assert_eq!(state.matched_count(), 1);
-                assert_eq!(state.selected_index(), Some(IndexPath::new(1).section(2)));
+                assert_eq!(state.selected_index(), Some(IndexPath::new(1).section(1)));
                 assert_eq!(
                     state
                         .rows
@@ -1530,7 +1546,41 @@ mod tests {
             window.dispatch_action(Box::new(Confirm { secondary: false }), cx);
         });
 
-        assert_eq!(*confirmed.borrow(), Some(IndexPath::new(0).section(1)));
+        assert_eq!(*confirmed.borrow(), Some(IndexPath::new(1).section(0)));
+    }
+
+    #[gpui::test]
+    fn filtered_ungrouped_item_keeps_its_input_row(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let confirmed = Rc::new(RefCell::new(None));
+        let confirmed_for_render = confirmed.clone();
+        let (harness, cx) = cx.add_window_view(move |window, cx| Harness {
+            state: cx.new(|cx| CommandState::new(window, cx)),
+            command: Rc::new(move |state| {
+                let confirmed = confirmed_for_render.clone();
+                Command::new(state)
+                    .items([
+                        CommandItem::new().label("alpha"),
+                        CommandItem::new().label("beta"),
+                        CommandItem::new().label("gamma"),
+                    ])
+                    .on_confirm(move |index_path, _, _| {
+                        *confirmed.borrow_mut() = Some(index_path);
+                    })
+            }),
+        });
+        let state = cx.update(|_, cx| harness.read(cx).state.clone());
+
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            state.update(cx, |state, cx| {
+                state.set_query("gamma", window, cx);
+                state.focus(window, cx);
+            });
+            window.dispatch_action(Box::new(Confirm { secondary: false }), cx);
+        });
+
+        assert_eq!(*confirmed.borrow(), Some(IndexPath::new(2).section(0)));
     }
 
     #[gpui::test]
@@ -1563,9 +1613,9 @@ mod tests {
 
         assert_eq!(
             state.read_with(cx, |state, _| state.selected_index()),
-            Some(IndexPath::new(0).section(1))
+            Some(IndexPath::new(1).section(0))
         );
-        assert_eq!(*confirmed.borrow(), Some(IndexPath::new(0).section(1)));
+        assert_eq!(*confirmed.borrow(), Some(IndexPath::new(1).section(0)));
     }
 
     #[gpui::test]
@@ -1657,7 +1707,7 @@ mod tests {
 
                 // "Calculator" is disabled, so it is stepped over.
                 state.select_by(1, window, cx);
-                assert_eq!(state.selected_index(), Some(IndexPath::new(0).section(2)));
+                assert_eq!(state.selected_index(), Some(IndexPath::new(0).section(1)));
 
                 state.select_by(-1, window, cx);
                 assert_eq!(state.selected_index(), Some(IndexPath::new(1).section(0)));
@@ -1666,7 +1716,7 @@ mod tests {
                 state.select_by(-1, window, cx);
                 assert_eq!(state.selected_index(), Some(IndexPath::new(0).section(0)));
                 state.select_by(-1, window, cx);
-                assert_eq!(state.selected_index(), Some(IndexPath::new(1).section(2)));
+                assert_eq!(state.selected_index(), Some(IndexPath::new(1).section(1)));
             });
         });
     }
@@ -1693,7 +1743,7 @@ mod tests {
             let state = cx.new(|cx| command_state(window, cx, suggestion_entries()));
 
             state.update(cx, |state, cx| {
-                let target = IndexPath::new(1).section(2);
+                let target = IndexPath::new(1).section(1);
                 state.set_selected_index(Some(target), window, cx);
                 assert_eq!(state.selected_index(), Some(target));
 
@@ -2246,7 +2296,7 @@ mod tests {
         });
         assert_eq!(
             state.read_with(cx, |state, _| state.selected_index()),
-            Some(IndexPath::new(0).section(1)),
+            Some(IndexPath::new(1).section(0)),
         );
 
         reversed.set(true);
@@ -2264,7 +2314,7 @@ mod tests {
                 )
             });
         assert_eq!(selected_matched_index, Some(1));
-        assert_eq!(selected_index, Some(IndexPath::new(0).section(1)));
+        assert_eq!(selected_index, Some(IndexPath::new(1).section(0)));
         assert_eq!(row_sizes[0].height, px(84.));
         assert_eq!(row_sizes[1].height, px(44.));
     }
@@ -2346,7 +2396,7 @@ mod tests {
 
         assert_eq!(
             state.read_with(cx, |state, _| state.selected_index()),
-            Some(IndexPath::new(0).section(49))
+            Some(IndexPath::new(49).section(0))
         );
         assert!(
             state.read_with(cx, |state, _| state.scroll_handle.base_handle().offset().y) < px(0.),

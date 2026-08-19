@@ -197,6 +197,12 @@ Command::new(&state)
     })
 ```
 
+An `IndexPath` always addresses the model supplied by the latest `Command`
+render, before local filtering. Items passed to `.items(...)` are in section 0,
+with `row` equal to their position in that iterator. Explicit groups use their
+group and item positions; when both forms are mixed, they follow the implicit
+ungrouped section. Filtering changes what is visible, not these coordinates.
+
 `on_query` runs only when a searchable query actually changes. Refiltering can
 move the highlight, so its `on_select` runs first when the selected `IndexPath`
 changes; then `on_query` runs. These callbacks, and `on_confirm`, are delivered

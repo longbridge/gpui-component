@@ -124,6 +124,11 @@ impl Command {
 
     /// Run a callback after the highlighted item's original index path changes and the current
     /// [`CommandState`] update releases its lease.
+    ///
+    /// For [`Self::items`], `section` is 0 and `row` is the item's position in
+    /// the supplied iterator. Explicit groups use their group and item
+    /// positions and follow the implicit ungrouped section when both forms are
+    /// mixed. Local filtering never changes these coordinates.
     pub fn on_select<F>(mut self, callback: F) -> Self
     where
         F: Fn(IndexPath, &mut Window, &mut App) + 'static,
@@ -135,6 +140,7 @@ impl Command {
     /// Run a callback with the confirmed item's original index path after its Action is dispatched,
     /// provided the source window remains live. The callback runs after the
     /// current [`CommandState`] update releases its lease.
+    /// The path follows the same input-model coordinates as [`Self::on_select`].
     pub fn on_confirm<F>(mut self, callback: F) -> Self
     where
         F: Fn(IndexPath, &mut Window, &mut App) + 'static,

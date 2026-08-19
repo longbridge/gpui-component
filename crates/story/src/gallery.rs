@@ -217,14 +217,14 @@ impl Gallery {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> bool {
-        if index.row != 0 {
+        if index.section != 0 {
             return false;
         }
         let Some(name) = self
             .stories
             .iter()
             .flat_map(|(_, stories)| stories)
-            .nth(index.section)
+            .nth(index.row)
             .map(|story| story.read(cx).name.clone())
         else {
             return false;
