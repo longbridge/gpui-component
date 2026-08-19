@@ -2,19 +2,37 @@ use std::time::Duration;
 
 use gpui::{
     AnyElement, App, AppContext as _, Context, Entity, FocusHandle, Focusable, IntoElement,
-    Keystroke, ParentElement as _, Render, Styled as _, Subscription, Task, Window, div,
-    prelude::FluentBuilder as _, px,
+    KeyBinding, Keystroke, ParentElement as _, Render, SharedString, Styled as _, Task, Window,
+    actions, div, prelude::FluentBuilder as _, px,
 };
 use gpui_component::{
     ActiveTheme as _, Disableable as _, IconName, WindowExt as _,
     button::Button,
-    command::{Command, CommandEntry, CommandEvent, CommandGroup, CommandItem, CommandState},
+    command::{Command, CommandEntry, CommandGroup, CommandItem, CommandState},
     h_flex,
     kbd::Kbd,
     v_flex,
 };
 
 use crate::section;
+
+actions!(
+    command_story,
+    [
+        OpenProfile,
+        OpenBilling,
+        OpenSettings,
+        GoHome,
+        OpenInbox,
+        OpenDocuments,
+        OpenFolders,
+        NewFile,
+        CopyItem,
+        DeleteItem
+    ]
+);
+
+const COMMAND_CONTEXT: &str = "Command";
 
 pub struct CommandStory {
     focus_handle: FocusHandle,
@@ -24,11 +42,11 @@ pub struct CommandStory {
     scrollable: Entity<CommandState>,
     variable_rows: Entity<CommandState>,
     search: Entity<CommandState>,
+    stock_entries: Vec<CommandEntry>,
     /// Held so that a query that arrives while the last one is still in flight
     /// cancels it, instead of racing it.
     _search_task: Option<Task<()>>,
     last_command: Option<gpui::SharedString>,
-    _subscriptions: Vec<Subscription>,
 }
 
 impl super::Story for CommandStory {
@@ -47,131 +65,131 @@ impl super::Story for CommandStory {
 
 /// The palette used by the inline and dialog examples: two groups of commands,
 /// one of them disabled, the second group carrying shortcut hints.
-fn suggestions(state: CommandState) -> CommandState {
-    state
-        .group(
-            CommandGroup::new("Suggestions")
-                .item(
-                    CommandItem::new("calendar")
-                        .label("Calendar")
-                        .icon(IconName::Calendar),
-                )
-                .item(
-                    CommandItem::new("search-emoji")
-                        .label("Search Emoji")
-                        .icon(IconName::Search)
-                        .checked(true)
-                        .keywords(["smile", "icon"]),
-                )
-                .item(
-                    CommandItem::new("calculator")
-                        .label("Calculator")
-                        .icon(IconName::Frame)
-                        .disabled(true),
-                ),
-        )
-        .separator()
-        .group(
-            CommandGroup::new("Settings")
-                .item(
-                    CommandItem::new("profile")
-                        .label("Profile")
-                        .icon(IconName::User)
-                        .shortcut("⌘P"),
-                )
-                .item(
-                    CommandItem::new("billing")
-                        .label("Billing")
-                        .icon(IconName::CircleUser)
-                        .shortcut("⌘B"),
-                )
-                .item(
-                    CommandItem::new("settings")
-                        .label("Settings")
-                        .icon(IconName::Settings)
-                        .shortcut("⌘S"),
-                ),
-        )
+fn suggestions() -> Vec<CommandEntry> {
+    vec![
+        CommandGroup::new("Suggestions")
+            .item(
+                CommandItem::new("calendar")
+                    .label("Calendar")
+                    .icon(IconName::Calendar),
+            )
+            .item(
+                CommandItem::new("search-emoji")
+                    .label("Search Emoji")
+                    .icon(IconName::Search)
+                    .checked(true)
+                    .keywords(["smile", "icon"]),
+            )
+            .item(
+                CommandItem::new("calculator")
+                    .label("Calculator")
+                    .icon(IconName::Frame)
+                    .disabled(true),
+            )
+            .into(),
+        CommandEntry::Separator,
+        CommandGroup::new("Settings")
+            .item(
+                CommandItem::new("profile")
+                    .label("Profile")
+                    .icon(IconName::User)
+                    .action(Box::new(OpenProfile)),
+            )
+            .item(
+                CommandItem::new("billing")
+                    .label("Billing")
+                    .icon(IconName::CircleUser)
+                    .action(Box::new(OpenBilling)),
+            )
+            .item(
+                CommandItem::new("settings")
+                    .label("Settings")
+                    .icon(IconName::Settings)
+                    .action(Box::new(OpenSettings)),
+            )
+            .into(),
+    ]
 }
 
-fn scrollable(state: CommandState) -> CommandState {
-    state
-        .group(
-            CommandGroup::new("Navigation")
-                .item(
-                    CommandItem::new("Home")
-                        .icon(IconName::LayoutDashboard)
-                        .shortcut("⌘H"),
-                )
-                .item(
-                    CommandItem::new("Inbox")
-                        .icon(IconName::Inbox)
-                        .shortcut("⌘I"),
-                )
-                .item(
-                    CommandItem::new("Documents")
-                        .icon(IconName::File)
-                        .shortcut("⌘D"),
-                )
-                .item(
-                    CommandItem::new("Folders")
-                        .icon(IconName::Folder)
-                        .shortcut("⌘F"),
-                ),
-        )
-        .separator()
-        .group(
-            CommandGroup::new("Actions")
-                .item(
-                    CommandItem::new("New File")
-                        .icon(IconName::Plus)
-                        .shortcut("⌘N"),
-                )
-                .item(CommandItem::new("Copy").icon(IconName::Copy).shortcut("⌘C"))
-                .item(
-                    CommandItem::new("Delete")
-                        .icon(IconName::Delete)
-                        .shortcut("⌫"),
-                ),
-        )
-        .separator()
-        .group(
-            CommandGroup::new("Account")
-                .item(CommandItem::new("Profile").icon(IconName::User))
-                .item(CommandItem::new("Notifications").icon(IconName::Bell))
-                .item(CommandItem::new("Help & Support").icon(IconName::Info)),
-        )
-        .separator()
-        .group(
-            CommandGroup::new("Tools")
-                .item(CommandItem::new("Palette").icon(IconName::Palette))
-                .item(CommandItem::new("Terminal").icon(IconName::SquareTerminal))
-                .item(CommandItem::new("Globe").icon(IconName::Globe)),
-        )
+fn scrollable() -> Vec<CommandEntry> {
+    vec![
+        CommandGroup::new("Navigation")
+            .item(
+                CommandItem::new("Home")
+                    .icon(IconName::LayoutDashboard)
+                    .action(Box::new(GoHome)),
+            )
+            .item(
+                CommandItem::new("Inbox")
+                    .icon(IconName::Inbox)
+                    .action(Box::new(OpenInbox)),
+            )
+            .item(
+                CommandItem::new("Documents")
+                    .icon(IconName::File)
+                    .action(Box::new(OpenDocuments)),
+            )
+            .item(
+                CommandItem::new("Folders")
+                    .icon(IconName::Folder)
+                    .action(Box::new(OpenFolders)),
+            )
+            .into(),
+        CommandEntry::Separator,
+        CommandGroup::new("Actions")
+            .item(
+                CommandItem::new("New File")
+                    .icon(IconName::Plus)
+                    .action(Box::new(NewFile)),
+            )
+            .item(
+                CommandItem::new("Copy")
+                    .icon(IconName::Copy)
+                    .action(Box::new(CopyItem)),
+            )
+            .item(
+                CommandItem::new("Delete")
+                    .icon(IconName::Delete)
+                    .action(Box::new(DeleteItem)),
+            )
+            .into(),
+        CommandEntry::Separator,
+        CommandGroup::new("Account")
+            .item(CommandItem::new("Profile").icon(IconName::User))
+            .item(CommandItem::new("Notifications").icon(IconName::Bell))
+            .item(CommandItem::new("Help & Support").icon(IconName::Info))
+            .into(),
+        CommandEntry::Separator,
+        CommandGroup::new("Tools")
+            .item(CommandItem::new("Palette").icon(IconName::Palette))
+            .item(CommandItem::new("Terminal").icon(IconName::SquareTerminal))
+            .item(CommandItem::new("Globe").icon(IconName::Globe))
+            .into(),
+    ]
 }
 
 /// Actions that can be navigated without a search field, such as a compact
 /// context menu.
-fn quick_actions(state: CommandState) -> CommandState {
-    state
-        .searchable(false)
-        .item(CommandItem::new("New File").icon(IconName::Plus))
-        .item(CommandItem::new("Duplicate").icon(IconName::Copy))
-        .item(CommandItem::new("Move to Trash").icon(IconName::Delete))
+fn quick_actions() -> impl Iterator<Item = CommandItem> {
+    [
+        CommandItem::new("New File").icon(IconName::Plus),
+        CommandItem::new("Duplicate").icon(IconName::Copy),
+        CommandItem::new("Move to Trash").icon(IconName::Delete),
+    ]
+    .into_iter()
 }
 
 /// Two custom rows with different intrinsic heights. The Command list measures
 /// each flattened row, so both retain their own height while virtualized.
-fn variable_rows(state: CommandState) -> CommandState {
-    state
-        .item(CommandItem::new("small-row").element(|_, _| {
+fn variable_rows() -> impl Iterator<Item = CommandItem> {
+    [
+        CommandItem::new("small-row").child(|_, _| {
             h_flex()
                 .w_full()
                 .py_1()
                 .child(div().text_sm().child("Compact custom row"))
-                .into_any_element()
-        }))
-        .item(CommandItem::new("large-row").element(|_, cx| {
+        }),
+        CommandItem::new("large-row").child(|_, cx| {
             v_flex()
                 .w_full()
                 .py_4()
@@ -183,8 +201,19 @@ fn variable_rows(state: CommandState) -> CommandState {
                         .text_color(cx.theme().muted_foreground)
                         .child("Its extra detail gives this row a different height."),
                 )
-                .into_any_element()
-        }))
+        }),
+    ]
+    .into_iter()
+}
+
+fn with_entries(command: Command, entries: impl IntoIterator<Item = CommandEntry>) -> Command {
+    entries
+        .into_iter()
+        .fold(command, |command, entry| match entry {
+            CommandEntry::Item(item) => command.item(item),
+            CommandEntry::Group(group) => command.group(group),
+            CommandEntry::Separator => command.separator(),
+        })
 }
 
 fn key_hint(keys: &[&str], label: &'static str) -> AnyElement {
@@ -217,28 +246,34 @@ const STOCKS: [(&str, &str, &str, f32); 10] = [
 
 impl CommandStory {
     pub(crate) fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let inline = cx.new(|cx| suggestions(CommandState::new(window, cx)));
-        let dialog = cx.new(|cx| suggestions(CommandState::new(window, cx)));
-        let quick_actions = cx.new(|cx| quick_actions(CommandState::new(window, cx)));
-        let scrollable_state = cx.new(|cx| scrollable(CommandState::new(window, cx)));
-        let variable_rows = cx.new(|cx| variable_rows(CommandState::new(window, cx)));
-        let search = cx.new(|cx| {
-            CommandState::new(window, cx).filter(|item, query| {
-                let query = query.to_lowercase();
+        let primary = if cfg!(target_os = "macos") {
+            "cmd"
+        } else {
+            "ctrl"
+        };
+        cx.bind_keys([
+            KeyBinding::new(&format!("{primary}-p"), OpenProfile, Some(COMMAND_CONTEXT)),
+            KeyBinding::new(&format!("{primary}-b"), OpenBilling, Some(COMMAND_CONTEXT)),
+            KeyBinding::new(&format!("{primary}-s"), OpenSettings, Some(COMMAND_CONTEXT)),
+            KeyBinding::new(&format!("{primary}-h"), GoHome, Some(COMMAND_CONTEXT)),
+            KeyBinding::new(&format!("{primary}-i"), OpenInbox, Some(COMMAND_CONTEXT)),
+            KeyBinding::new(
+                &format!("{primary}-d"),
+                OpenDocuments,
+                Some(COMMAND_CONTEXT),
+            ),
+            KeyBinding::new(&format!("{primary}-f"), OpenFolders, Some(COMMAND_CONTEXT)),
+            KeyBinding::new(&format!("{primary}-n"), NewFile, Some(COMMAND_CONTEXT)),
+            KeyBinding::new(&format!("{primary}-c"), CopyItem, Some(COMMAND_CONTEXT)),
+            KeyBinding::new("backspace", DeleteItem, Some(COMMAND_CONTEXT)),
+        ]);
 
-                item.value().to_lowercase().contains(&query)
-                    || item.title().to_lowercase().contains(&query)
-            })
-        });
-
-        let _subscriptions = vec![
-            cx.subscribe(&inline, Self::on_command_event),
-            cx.subscribe_in(&dialog, window, Self::on_dialog_command_event),
-            cx.subscribe(&quick_actions, Self::on_command_event),
-            cx.subscribe(&scrollable_state, Self::on_command_event),
-            cx.subscribe(&variable_rows, Self::on_command_event),
-            cx.subscribe_in(&search, window, Self::on_search_event),
-        ];
+        let inline = cx.new(|cx| CommandState::new(window, cx));
+        let dialog = cx.new(|cx| CommandState::new(window, cx));
+        let quick_actions = cx.new(|cx| CommandState::new(window, cx));
+        let scrollable_state = cx.new(|cx| CommandState::new(window, cx));
+        let variable_rows = cx.new(|cx| CommandState::new(window, cx));
+        let search = cx.new(|cx| CommandState::new(window, cx));
 
         Self {
             focus_handle: cx.focus_handle(),
@@ -248,9 +283,9 @@ impl CommandStory {
             scrollable: scrollable_state,
             variable_rows,
             search,
+            stock_entries: popular_entries(),
             _search_task: None,
             last_command: None,
-            _subscriptions,
         }
     }
 
@@ -258,63 +293,80 @@ impl CommandStory {
         cx.new(|cx| Self::new(window, cx))
     }
 
-    fn on_command_event(
-        &mut self,
-        _: Entity<CommandState>,
-        event: &CommandEvent,
-        cx: &mut Context<Self>,
-    ) {
-        if let CommandEvent::Confirm(value) = event {
-            self.last_command = Some(value.clone());
-            cx.notify();
-        }
+    fn on_command_confirm(&mut self, value: &SharedString, cx: &mut Context<Self>) {
+        self.last_command = Some(value.clone());
+        cx.notify();
     }
 
-    fn on_dialog_command_event(
+    fn on_dialog_confirm(
         &mut self,
-        state: &Entity<CommandState>,
-        event: &CommandEvent,
+        value: &SharedString,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if matches!(event, CommandEvent::Confirm(_)) {
-            window.close_dialog(cx);
-        }
-        self.on_command_event(state.clone(), event, cx);
+        self.on_command_confirm(value, cx);
+        window.close_dialog(cx);
     }
 
     /// Open the stock search as a dialog, starting from an empty query.
     ///
     /// The palette keeps a fixed height so that results arriving, and the
     /// query being narrowed, do not make the dialog jump around.
-    fn on_open_stock_search(
-        &mut self,
-        _: &gpui::ClickEvent,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    fn open_stock_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self._search_task = None;
+        self.stock_entries = popular_entries();
         self.search.update(cx, |search, cx| {
             search.set_query("", window, cx);
             search.set_loading(false, window, cx);
-            search.set_entries(popular_entries(), cx);
         });
 
         let search = self.search.clone();
+        let story = cx.weak_entity();
         window.open_dialog(cx, move |dialog, _, _| {
             let search = search.clone();
+            let story = story.clone();
             dialog
                 .close_button(false)
                 .p_0()
-                .content(move |content, _, _| {
-                    content.child(
+                .content(move |content, _, cx| {
+                    let entries = story
+                        .read_with(cx, |story, _| {
+                            stock_entries_for_render(&story.stock_entries)
+                        })
+                        .unwrap_or_default();
+                    let query_owner = story.clone();
+                    let confirm_owner = story.clone();
+                    let cancel_owner = story.clone();
+                    content.child(with_entries(
                         Command::new(&search)
                             .bordered(false)
                             .placeholder("Search stocks...")
                             .empty("No stock found.")
                             .min_h(px(320.))
-                            .max_h(px(320.)),
-                    )
+                            .max_h(px(320.))
+                            .filter(|item, query| {
+                                let query = query.to_lowercase();
+                                item.value().to_lowercase().contains(&query)
+                                    || item.title().to_lowercase().contains(&query)
+                            })
+                            .on_query(move |query, window, cx| {
+                                _ = query_owner.update(cx, |story, cx| {
+                                    story.on_stock_query(query, window, cx);
+                                });
+                            })
+                            .on_confirm(move |value, window, cx| {
+                                _ = confirm_owner.update(cx, |story, cx| {
+                                    story.on_stock_confirm(value, window, cx);
+                                });
+                            })
+                            .on_cancel(move |_, cx| {
+                                _ = cancel_owner.update(cx, |story, cx| {
+                                    story._search_task = None;
+                                    cx.notify();
+                                });
+                            }),
+                        entries,
+                    ))
                 })
         });
         let focus_handle = self.search.read(cx).focus_handle(cx);
@@ -323,35 +375,25 @@ impl CommandStory {
 
     /// Answer the search panel's queries the way a remote search would: spin
     /// the field, wait, then replace the entries with the results.
-    fn on_search_event(
-        &mut self,
-        state: &Entity<CommandState>,
-        event: &CommandEvent,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        let CommandEvent::Query(query) = event else {
-            if matches!(event, CommandEvent::Confirm(_)) {
-                window.close_dialog(cx);
-            }
-            return self.on_command_event(state.clone(), event, cx);
-        };
-
+    fn on_stock_query(&mut self, query: &str, window: &mut Window, cx: &mut Context<Self>) {
         let query = query.trim().to_lowercase();
         if query.is_empty() {
             // Nothing typed is not the same as nothing found: fall back to the
             // list people would otherwise have to search for.
             self._search_task = None;
-            return state.update(cx, |state, cx| {
+            self.stock_entries = popular_entries();
+            self.search.update(cx, |state, cx| {
                 state.set_loading(false, window, cx);
-                state.set_entries(popular_entries(), cx);
             });
+            cx.notify();
+            return;
         }
 
-        state.update(cx, |state, cx| state.set_loading(true, window, cx));
+        self.search
+            .update(cx, |state, cx| state.set_loading(true, window, cx));
 
-        let state = state.clone();
-        self._search_task = Some(cx.spawn_in(window, async move |_, cx| {
+        let search = self.search.clone();
+        self._search_task = Some(cx.spawn_in(window, async move |story, cx| {
             // The round trip a real search would spend on the network.
             cx.background_executor()
                 .timer(Duration::from_millis(400))
@@ -365,11 +407,25 @@ impl CommandStory {
                 .map(|stock| CommandEntry::Item(stock_item(*stock)))
                 .collect::<Vec<_>>();
 
-            _ = state.update_in(cx, |state, window, cx| {
-                state.set_loading(false, window, cx);
-                state.set_entries(entries, cx);
+            _ = story.update_in(cx, |story, window, cx| {
+                search.update(cx, |state, cx| {
+                    state.set_loading(false, window, cx);
+                });
+                story.stock_entries = entries;
+                story._search_task = None;
+                cx.notify();
             });
         }));
+    }
+
+    fn on_stock_confirm(
+        &mut self,
+        value: &SharedString,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self._search_task = None;
+        self.on_dialog_confirm(value, window, cx);
     }
 }
 
@@ -382,11 +438,32 @@ fn popular_entries() -> Vec<CommandEntry> {
     ]
 }
 
+/// `Command` consumes its entries when rendered. Rebuild the stock rows from
+/// the owner-held result identities so a dialog redraw never drains the owner.
+fn stock_entries_for_render(entries: &[CommandEntry]) -> Vec<CommandEntry> {
+    entries
+        .iter()
+        .filter_map(|entry| match entry {
+            CommandEntry::Item(item) => STOCKS
+                .iter()
+                .find(|(symbol, _, _, _)| item.value() == *symbol)
+                .map(|stock| CommandEntry::Item(stock_item(*stock))),
+            CommandEntry::Group(group)
+                if group.heading().map(|heading| heading.as_ref()) == Some("Popular") =>
+            {
+                popular_entries().pop()
+            }
+            CommandEntry::Group(_) => None,
+            CommandEntry::Separator => Some(CommandEntry::Separator),
+        })
+        .collect()
+}
+
 /// A two-line search result: symbol and name on the left, quote on the right.
 fn stock_item(stock: (&'static str, &'static str, &'static str, f32)) -> CommandItem {
     let (symbol, name, price, change) = stock;
 
-    CommandItem::new(symbol).label(name).element(move |_, cx| {
+    CommandItem::new(symbol).label(name).child(move |_, cx| {
         let change_color = if change < 0. {
             cx.theme().chart_bearish
         } else {
@@ -421,7 +498,6 @@ fn stock_item(stock: (&'static str, &'static str, &'static str, f32)) -> Command
                             .child(format!("{:+.2}%", change)),
                     ),
             )
-            .into_any_element()
     })
 }
 
@@ -434,6 +510,10 @@ impl Focusable for CommandStory {
 impl Render for CommandStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let dialog_state = self.dialog.clone();
+        let inline_owner = cx.weak_entity();
+        let quick_actions_owner = cx.weak_entity();
+        let scrollable_owner = cx.weak_entity();
+        let variable_rows_owner = cx.weak_entity();
 
         v_flex()
             .w_full()
@@ -441,7 +521,16 @@ impl Render for CommandStory {
             .child(
                 section("Inline")
                     .description("A palette rendered in place, with groups, icons and shortcuts.")
-                    .child(Command::new(&self.inline).w(px(380.))),
+                    .child(with_entries(
+                        Command::new(&self.inline)
+                            .w(px(380.))
+                            .on_confirm(move |value, _, cx| {
+                                _ = inline_owner.update(cx, |story, cx| {
+                                    story.on_command_confirm(value, cx);
+                                });
+                            }),
+                        suggestions(),
+                    )),
             )
             .child(
                 section("Dialog")
@@ -454,14 +543,26 @@ impl Render for CommandStory {
                             .label("Open Menu")
                             .on_click(cx.listener(move |_, _, window, cx| {
                                 let command = dialog_state.clone();
+                                let owner = cx.weak_entity();
                                 window.open_dialog(cx, move |dialog, _, _| {
                                     let command = command.clone();
+                                    let owner = owner.clone();
                                     dialog.close_button(false).p_0().content(
                                         move |content, _, _| {
-                                            content.child(
+                                            let confirm_owner = owner.clone();
+                                            // Cancel intentionally has no local close callback:
+                                            // the propagated action belongs to Dialog.
+                                            content.child(with_entries(
                                                 Command::new(&command)
                                                     .bordered(false)
                                                     .placeholder("Type a command or search...")
+                                                    .on_confirm(move |value, window, cx| {
+                                                        _ = confirm_owner.update(cx, |story, cx| {
+                                                            story.on_dialog_confirm(
+                                                                value, window, cx,
+                                                            );
+                                                        });
+                                                    })
                                                     .header(|state, _, cx| {
                                                         h_flex()
                                                             .justify_between()
@@ -494,7 +595,8 @@ impl Render for CommandStory {
                                                             .child(key_hint(&["enter"], "Select"))
                                                             .child(key_hint(&["escape"], "Close"))
                                                     }),
-                                            )
+                                                suggestions(),
+                                            ))
                                         },
                                     )
                                 });
@@ -506,19 +608,48 @@ impl Render for CommandStory {
             .child(
                 section("Quick actions")
                     .description("A no-search palette focused on arrow-key navigation.")
-                    .child(Command::new(&self.quick_actions).w(px(380.))),
+                    .child(
+                        Command::new(&self.quick_actions)
+                            .searchable(false)
+                            .items(quick_actions())
+                            .w(px(380.))
+                            .on_confirm(move |value, _, cx| {
+                                _ = quick_actions_owner.update(cx, |story, cx| {
+                                    story.on_command_confirm(value, cx);
+                                });
+                            }),
+                    ),
             )
             .child(
                 section("Scrollable")
                     .description("More commands than fit, capped at 220px.")
-                    .child(Command::new(&self.scrollable).max_h(px(220.)).w(px(380.))),
+                    .child(with_entries(
+                        Command::new(&self.scrollable)
+                            .max_h(px(220.))
+                            .w(px(380.))
+                            .on_confirm(move |value, _, cx| {
+                                _ = scrollable_owner.update(cx, |story, cx| {
+                                    story.on_command_confirm(value, cx);
+                                });
+                            }),
+                        scrollable(),
+                    )),
             )
             .child(
                 section("Variable-height rows")
                     .description(
                         "Each custom row keeps its own intrinsic height while the list remains virtualized.",
                     )
-                    .child(Command::new(&self.variable_rows).w(px(380.))),
+                    .child(
+                        Command::new(&self.variable_rows)
+                            .items(variable_rows())
+                            .w(px(380.))
+                            .on_confirm(move |value, _, cx| {
+                                _ = variable_rows_owner.update(cx, |story, cx| {
+                                    story.on_command_confirm(value, cx);
+                                });
+                            }),
+                    ),
             )
             .child(
                 section("Search panel")
@@ -530,15 +661,148 @@ impl Render for CommandStory {
                         Button::new("open-stock-search")
                             .outline()
                             .label("Search Stocks")
-                            .on_click(cx.listener(Self::on_open_stock_search)),
+                            .on_click(cx.listener(|story, _, window, cx| {
+                                story.open_stock_search(window, cx);
+                            })),
                     ),
             )
             .when_some(self.last_command.clone(), |this, value| {
                 this.child(
                     section("Last confirmed")
-                        .description("The value reported by the last CommandEvent::Confirm.")
+                        .description("The value reported by the last on_confirm callback.")
                         .child(value),
                 )
             })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{cell::RefCell, rc::Rc};
+
+    use gpui::{AnyWindowHandle, Entity, TestAppContext};
+    use gpui_component::{Root, WindowExt as _};
+
+    use super::*;
+
+    fn command_story_window(cx: &mut TestAppContext) -> (AnyWindowHandle, Entity<CommandStory>) {
+        cx.update(gpui_component::init);
+        let story = Rc::new(RefCell::new(None));
+        let window = cx.add_window({
+            let story_slot = story.clone();
+            move |window, cx| {
+                let story = CommandStory::view(window, cx);
+                *story_slot.borrow_mut() = Some(story.clone());
+                Root::new(story, window, cx)
+            }
+        });
+        let window = window.into();
+        cx.update_window(window, |_, window, cx| window.draw(cx).clear(cx))
+            .unwrap();
+
+        let story = story.borrow_mut().take().unwrap();
+        (window, story)
+    }
+
+    #[gpui::test]
+    fn stock_query_replaces_owner_held_results(cx: &mut TestAppContext) {
+        let (window, story) = command_story_window(cx);
+        story.read_with(cx, |story, _| {
+            assert!(matches!(
+                story.stock_entries.as_slice(),
+                [CommandEntry::Group(group)]
+                    if group.heading().map(|heading| heading.as_ref()) == Some("Popular")
+            ));
+        });
+
+        window
+            .update(cx, |_, window, cx| {
+                story.update(cx, |story, cx| story.open_stock_search(window, cx));
+                window.draw(cx).clear(cx);
+                let search = story.read(cx).search.clone();
+                search.update(cx, |search, cx| {
+                    search.set_query("tesla", window, cx);
+                });
+                window.draw(cx).clear(cx);
+            })
+            .unwrap();
+        cx.executor().advance_clock(Duration::from_millis(400));
+        cx.run_until_parked();
+
+        story.read_with(cx, |story, _| {
+            assert!(matches!(
+                story.stock_entries.as_slice(),
+                [CommandEntry::Item(item)] if item.value() == "TSLA.US"
+            ));
+        });
+    }
+
+    #[gpui::test]
+    fn stock_confirm_clears_search_and_closes_only_its_dialog(cx: &mut TestAppContext) {
+        let (window, story) = command_story_window(cx);
+        window
+            .update(cx, |_, window, cx| {
+                window.open_dialog(cx, |dialog, _, _| dialog.title("Background"));
+                story.update(cx, |story, cx| story.open_stock_search(window, cx));
+                window.draw(cx).clear(cx);
+                let search = story.read(cx).search.clone();
+                search.update(cx, |search, cx| {
+                    search.set_query("tesla", window, cx);
+                });
+                window.draw(cx).clear(cx);
+            })
+            .unwrap();
+        cx.run_until_parked();
+
+        story.read_with(cx, |story, _| {
+            assert!(story._search_task.is_some());
+        });
+        cx.simulate_keystrokes(window, "enter");
+
+        story.read_with(cx, |story, _| {
+            assert!(story._search_task.is_none());
+            assert_eq!(story.last_command.as_deref(), Some("TSLA.US"));
+        });
+        assert!(
+            window
+                .update(cx, |_, window, cx| window.has_active_dialog(cx))
+                .unwrap()
+        );
+        window
+            .update(cx, |_, window, cx| window.close_dialog(cx))
+            .unwrap();
+        assert!(
+            !window
+                .update(cx, |_, window, cx| window.has_active_dialog(cx))
+                .unwrap()
+        );
+    }
+
+    #[gpui::test]
+    fn stock_escape_leaves_background_dialog_open(cx: &mut TestAppContext) {
+        let (window, story) = command_story_window(cx);
+        window
+            .update(cx, |_, window, cx| {
+                window.open_dialog(cx, |dialog, _, _| dialog.title("Background"));
+                story.update(cx, |story, cx| story.open_stock_search(window, cx));
+                window.draw(cx).clear(cx);
+            })
+            .unwrap();
+
+        cx.simulate_keystrokes(window, "escape");
+
+        assert!(
+            window
+                .update(cx, |_, window, cx| window.has_active_dialog(cx))
+                .unwrap()
+        );
+        window
+            .update(cx, |_, window, cx| window.close_dialog(cx))
+            .unwrap();
+        assert!(
+            !window
+                .update(cx, |_, window, cx| window.has_active_dialog(cx))
+                .unwrap()
+        );
     }
 }
