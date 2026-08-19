@@ -669,7 +669,7 @@ const copy = computed(() =>
                       title: "Dock 自由布局",
                       description:
                           "面板停靠、拖拽重排、缩放与 Tiles 自由布局，并可序列化保存。",
-                      apis: ["DockArea", "Tiles", "TabPanel"],
+                      apis: ["DockArea", "DockLayout", "TabGroup"],
                   },
                   {
                       icon: "theme",
@@ -771,7 +771,7 @@ const copy = computed(() =>
                       title: "Freeform dock layout",
                       description:
                           "Dockable panels with drag-to-rearrange, zooming and freeform tiles — all serializable.",
-                      apis: ["DockArea", "Tiles", "TabPanel"],
+                      apis: ["DockArea", "DockLayout", "TabGroup"],
                   },
                   {
                       icon: "theme",

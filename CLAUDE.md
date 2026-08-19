@@ -148,17 +148,18 @@ The first view of every window must be a `Root`.
 
 ### Dock System
 
-A complex panel layout system supporting:
+Layout behavior lives in `crates/base/src/dock`; `crates/ui/src/dock` is a
+presentation skin (`DockSkin`) over it. See `docs/ARCHITECTURE.md`.
 
-- **DockArea**: Main container managing center area and left/bottom/right docks
-- **DockItem**: Tree-based layout structure
-  - `Split`: Split layout (horizontal/vertical)
-  - `Tabs`: Tab layout
-  - `Panel`: Individual panel
-- **Panel**: Defined via `PanelView` trait
-- **PanelRegistry**: Global panel registry for serializing/deserializing layouts
-- **StackPanel**: Resizable split panel container
-- **TabPanel**: Tab panel container
+- **`LayoutTree`**: Pure-data layout tree, the single source of truth.
+  - `NodeKind::Split` / `Tabs` / `Tiles`: containers, addressed by `NodeId`
+  - Panels are addressed by `PanelId`; the tree holds no entity handles
+- **`DockArea`**: Owns the center and dock trees, reconciles them into a
+  cache of container entities keyed by `NodeId`
+- **`TabGroup`** / **`TilesState`**: The `Tabs`/`Tiles` container entities
+- **`Panel`**: Split at the seam — `gpui_base::dock::Panel` for behavior,
+  `gpui_component::dock::Panel` for presentation; a panel implements both
+- **`PanelRegistry`**: Resolves a persisted `panel_name` back to a panel type
 
 The Dock system supports:
 
