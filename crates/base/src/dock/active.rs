@@ -37,6 +37,14 @@ impl ActiveTracker {
     /// this function instead of an incidental property of a sort key, and is
     /// what guarantees no panel ever observes two panels active in its group
     /// at the same time.
+    ///
+    /// `displayed`, when `Some`, is expected to name a member of `panels`.
+    /// This is not a hard invariant enforced here — a `displayed` id absent
+    /// from `panels` is simply never matched by the `should_be_active` check
+    /// below, so it degrades gracefully to "no panel in this group is
+    /// displayed" rather than panicking. Callers should not rely on that
+    /// degradation as a feature; it exists so a caller computing `displayed`
+    /// from slightly stale state doesn't crash the tracker.
     pub(crate) fn reconcile(
         &mut self,
         panels: &[PanelId],
@@ -81,6 +89,18 @@ impl ActiveTracker {
     /// not look like an edge to the destination group.
     pub(crate) fn seed(&mut self, panel: PanelId, active: bool) {
         self.notified.insert(panel, active);
+    }
+
+    /// What this tracker last told `panel`, if anything. A pure read: it does
+    /// not remove or otherwise change the entry. This is how a caller reads a
+    /// departing panel's state *before* pruning it (e.g. before removing the
+    /// panel from the group that owns this tracker), so the value can be
+    /// handed to [`Self::seed`] on the destination tracker when the panel
+    /// moves to another group — the source tracker's own next `reconcile`
+    /// prunes the entry on its own, so this type does not also need a
+    /// remove-and-return accessor.
+    pub(crate) fn last_notified(&self, panel: PanelId) -> Option<bool> {
+        self.notified.get(&panel).copied()
     }
 
     #[cfg(test)]
@@ -173,5 +193,33 @@ mod tests {
         let changes = tracker.reconcile(&[panel(1)], None);
 
         assert_eq!(changes, vec![(panel(1), false)]);
+    }
+
+    #[test]
+    fn last_notified_reads_a_panels_state_for_handoff_to_another_tracker() {
+        // Mirrors `TabPanel::detach_panel` reading the outgoing panel's
+        // notified state, and `on_drop` handing it to the destination
+        // group's tracker via `seed`, when a panel is dragged between tab
+        // groups while displayed.
+        let mut source = ActiveTracker::default();
+        source.reconcile(&[panel(1), panel(2)], Some(panel(1)));
+
+        assert_eq!(source.last_notified(panel(1)), Some(true));
+        assert_eq!(source.last_notified(panel(2)), Some(false));
+        assert_eq!(
+            source.last_notified(panel(3)),
+            None,
+            "a panel never reconciled has no recorded state"
+        );
+
+        let mut destination = ActiveTracker::default();
+        destination.seed(panel(1), source.last_notified(panel(1)).unwrap());
+
+        assert!(
+            destination
+                .reconcile(&[panel(1)], Some(panel(1)))
+                .is_empty(),
+            "seeded from the source's last_notified value, the move must not look like a fresh edge"
+        );
     }
 }
