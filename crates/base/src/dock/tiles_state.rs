@@ -847,3 +847,202 @@ impl TilesRenderer for BareTiles {
         Empty.into_any_element()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::{cell::RefCell, rc::Rc};
+
+    use gpui::{Bounds, Entity, TestAppContext, VisualTestContext, point, size};
+
+    use super::*;
+    use crate::ElementExt as _;
+    use crate::dock::{
+        DockArea, DockAreaRenderer, DockLayout, TabGroupRenderer, test_support::TestPanel,
+    };
+
+    /// What each hook drew, in the order the frame prepainted it.
+    ///
+    /// Prepaint order, not call order: the overlay has to be *below the tiles
+    /// in the element tree*, and a renderer that computed it early and added
+    /// it late would still be called first. Prepaint walks the tree, so this
+    /// records the property that matters.
+    #[derive(Default)]
+    struct DrawOrder {
+        painted: Vec<&'static str>,
+        content: Option<Size<Pixels>>,
+        /// The contexts the drag bar was handed, so a test can drive a tile
+        /// through the same seam a skin would.
+        tiles: Vec<TileContext>,
+    }
+
+    struct OrderRecorder {
+        order: Rc<RefCell<DrawOrder>>,
+    }
+
+    impl TilesRenderer for OrderRecorder {
+        fn render_drag_bar(&self, tile: &TileContext, _: &mut Window, _: &mut App) -> AnyElement {
+            self.order.borrow_mut().tiles.push(tile.clone());
+            Empty.into_any_element()
+        }
+
+        fn panel_frame(&self, tile: &TileContext, _: &mut Window, _: &mut App) -> Stateful<Div> {
+            let order = self.order.clone();
+            div()
+                .id(("tile", tile.panel_id().as_u64()))
+                .on_prepaint(move |_, _, _| order.borrow_mut().painted.push("tile"))
+        }
+
+        fn render_overlay(
+            &self,
+            content: Size<Pixels>,
+            _: &mut Window,
+            _: &mut App,
+        ) -> Option<AnyElement> {
+            let order = self.order.clone();
+            Some(
+                div()
+                    .on_prepaint(move |_, _, _| {
+                        let mut order = order.borrow_mut();
+                        order.painted.push("overlay");
+                        order.content = Some(content);
+                    })
+                    .into_any_element(),
+            )
+        }
+    }
+
+    impl TabGroupRenderer for OrderRecorder {
+        fn render_tab_bar(
+            &self,
+            _: &super::super::TabGroupContext,
+            _: &mut Window,
+            _: &mut App,
+        ) -> AnyElement {
+            Empty.into_any_element()
+        }
+    }
+
+    impl DockAreaRenderer for OrderRecorder {
+        fn tab_group_renderer(&self) -> Rc<dyn TabGroupRenderer> {
+            Rc::new(OrderRecorder {
+                order: self.order.clone(),
+            })
+        }
+
+        fn tiles_renderer(&self) -> Rc<dyn TilesRenderer> {
+            Rc::new(OrderRecorder {
+                order: self.order.clone(),
+            })
+        }
+    }
+
+    fn setup_order(
+        cx: &mut TestAppContext,
+    ) -> (
+        Entity<DockArea>,
+        Rc<RefCell<DrawOrder>>,
+        &mut VisualTestContext,
+    ) {
+        cx.update(|cx| {
+            let _ = crate::Theme::global_mut(cx);
+        });
+        let order: Rc<RefCell<DrawOrder>> = Rc::default();
+        let renderer = Rc::new(OrderRecorder {
+            order: order.clone(),
+        });
+        let (area, cx) = cx.add_window_view(|window, cx| {
+            DockArea::new("tiles-order", None, window, cx).with_renderer(renderer)
+        });
+        (area, order, cx)
+    }
+
+    /// The canvas overlay is drawn after every tile.
+    ///
+    /// This is the whole reason the hook exists rather than the skin adding a
+    /// scrollbar to the canvas frame: the frame is the scroll container, and
+    /// base appends the tiles to whatever it carries, so anything placed there
+    /// paints and hit-tests underneath every tile. Move
+    /// `children(render_overlay(..))` above `children(tiles)` in
+    /// `TilesState::render` and this fails.
+    #[gpui::test]
+    fn the_canvas_overlay_is_drawn_after_every_tile(cx: &mut TestAppContext) {
+        let (area, order, cx) = setup_order(cx);
+
+        cx.update(|window, cx| {
+            let first = TestPanel::new("First", cx);
+            let second = TestPanel::new("Second", cx);
+            let layout = DockLayout::tiles()
+                .tile(
+                    first,
+                    Bounds {
+                        origin: point(px(20.), px(20.)),
+                        size: size(px(100.), px(80.)),
+                    },
+                )
+                .tile(
+                    second,
+                    Bounds {
+                        origin: point(px(140.), px(20.)),
+                        size: size(px(100.), px(80.)),
+                    },
+                );
+            area.update(cx, |area, cx| area.set_center(layout, window, cx));
+        });
+        cx.run_until_parked();
+        order.borrow_mut().painted.clear();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        assert_eq!(
+            order.borrow().painted,
+            vec!["tile", "tile", "overlay"],
+            "the overlay must come after every tile, or it paints beneath them"
+        );
+
+        // And it is handed the whole canvas, not the tile it happens to sit
+        // over: 20..240 across and 20..100 down, measured from the origin.
+        assert_eq!(
+            order.borrow().content,
+            Some(size(px(240.), px(100.))),
+            "the overlay is given the canvas's scrollable extent"
+        );
+    }
+
+    /// A zoomed tile fills the dock, so there is no canvas to overlay.
+    #[gpui::test]
+    fn a_zoomed_canvas_draws_no_overlay(cx: &mut TestAppContext) {
+        let (area, order, cx) = setup_order(cx);
+
+        let panel = cx.update(|window, cx| {
+            let panel = TestPanel::new("Only", cx);
+            let layout = DockLayout::tiles().tile(
+                panel.clone(),
+                Bounds {
+                    origin: point(px(20.), px(20.)),
+                    size: size(px(100.), px(80.)),
+                },
+            );
+            area.update(cx, |area, cx| area.set_center(layout, window, cx));
+            panel
+        });
+        cx.run_until_parked();
+
+        // Zoomed through the seam a skin uses, not a back door.
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        let tile = order.borrow().tiles.last().cloned().expect("the tile drew");
+        cx.update(|window, cx| tile.toggle_zoom(window, cx));
+        cx.run_until_parked();
+        assert_eq!(
+            cx.read(|cx| area.read(cx).zoomed_tile()),
+            Some(PanelId::from(panel.entity_id())),
+            "the tile is the one filling the dock"
+        );
+        order.borrow_mut().painted.clear();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        assert_eq!(
+            order.borrow().painted,
+            vec!["tile"],
+            "a zoomed tile fills the dock, so no overlay is drawn over it"
+        );
+    }
+}

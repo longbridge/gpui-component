@@ -414,3 +414,60 @@ impl TilesRenderer for TilesSkin {
         cx.theme().tile_grid_size
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::cell::Cell;
+
+    use gpui::{Bounds, TestAppContext, point, size};
+    use gpui_base::dock::{DockArea, DockLayout};
+
+    use super::*;
+    use crate::dock::{DockSkin, panel_handle, test_support::MeasuredProbe};
+
+    /// A tile's panel view has to be given a size.
+    ///
+    /// Base draws the panel as an ordinary child of the tile frame, so
+    /// without [`TilesSkin::panel_frame`]'s `size_full` the panel measures
+    /// zero — the same defect the tab group had, in the other container. It
+    /// would be invisible in the story example, whose panels happen to be
+    /// `size_full` themselves.
+    #[gpui::test]
+    fn a_tiles_panel_gets_the_height_below_its_drag_bar(cx: &mut TestAppContext) {
+        cx.update(|cx| {
+            crate::init(cx);
+        });
+        let height = Rc::new(Cell::new(px(0.)));
+        let (area, cx) = cx.add_window_view(|window, cx| {
+            let skin = DockSkin::new(cx);
+            DockArea::new("skin", None, window, cx).with_renderer(skin)
+        });
+
+        let measured = height.clone();
+        let bounds = Bounds {
+            origin: point(px(20.), px(20.)),
+            size: size(px(380.), px(280.)),
+        };
+        cx.update(|window, cx| {
+            let panel = MeasuredProbe::new(measured, cx);
+            let layout = DockLayout::tiles().tile_view(panel_handle(panel), bounds, cx);
+            area.update(cx, |area, cx| area.set_center(layout, window, cx));
+        });
+        cx.run_until_parked();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        let panel_height = height.get();
+        assert!(
+            panel_height > px(0.),
+            "the tile's panel must receive height; it got {panel_height:?}"
+        );
+        // The tile is 280 tall; the drag bar takes 30 and the border 2, so the
+        // panel gets the rest. Asserted as a range rather than a number so a
+        // border-width change is not a test failure.
+        assert!(
+            panel_height > px(200.) && panel_height < bounds.size.height,
+            "the panel should fill what the drag bar leaves of a 280px tile; \
+             it got {panel_height:?}"
+        );
+    }
+}

@@ -31,7 +31,7 @@ pub use tab_group::{
 };
 pub use tiles_geometry::{
     DRAG_BAR_HEIGHT, HANDLE_SIZE, MINIMUM_SIZE, ResizeDrag, ResizeSide, TileChange,
-    apply_boundary_constraints, compute_resized_bounds, magnetic_snap, round_point_to_grid,
-    round_to_grid, snap_edge,
+    apply_boundary_constraints, compute_resized_bounds, content_size, magnetic_snap,
+    round_point_to_grid, round_to_grid, snap_edge,
 };
 pub use tiles_state::{TileContext, TilesEvent, TilesRenderer, TilesState};
