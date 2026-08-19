@@ -232,68 +232,6 @@ impl Gallery {
         self.select_story(&name, window, cx)
     }
 
-    #[cfg(test)]
-    pub(crate) fn set_sidebar_query_for_test(
-        &mut self,
-        query: &str,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.search_input
-            .update(cx, |input, cx| input.set_value(query, window, cx));
-    }
-
-    #[cfg(test)]
-    pub(crate) fn sidebar_query_for_test(&self, cx: &App) -> SharedString {
-        self.search_input.read(cx).value()
-    }
-
-    #[cfg(test)]
-    pub(crate) fn selected_story_name_for_test(&self, cx: &App) -> SharedString {
-        self.stories[self.active_group_index.unwrap()].1[self.active_index.unwrap()]
-            .read(cx)
-            .name
-            .clone()
-    }
-
-    #[cfg(test)]
-    pub(crate) fn test_view(window: &mut Window, cx: &mut App) -> Entity<Self> {
-        cx.new(|cx| {
-            let search_input = cx.new(|cx| InputState::new(window, cx).placeholder("Search…"));
-            let _subscriptions =
-                vec![
-                    cx.subscribe(&search_input, |this: &mut Self, _, e, cx| match e {
-                        InputEvent::Change => {
-                            this.active_group_index = Some(0);
-                            this.active_index = Some(0);
-                            cx.notify()
-                        }
-                        _ => {}
-                    }),
-                ];
-            let stories = ["Button", "Command"]
-                .into_iter()
-                .map(|name| {
-                    cx.new(|cx| {
-                        let mut story = StoryContainer::new(window, cx);
-                        story.name = name.into();
-                        story
-                    })
-                })
-                .collect();
-
-            Self {
-                search_input,
-                stories: vec![("", stories)],
-                active_group_index: Some(0),
-                active_index: Some(0),
-                collapsed: false,
-                embedded: false,
-                _subscriptions,
-            }
-        })
-    }
-
     pub fn view(init_story: Option<&str>, window: &mut Window, cx: &mut App) -> Entity<Self> {
         cx.new(|cx| Self::new(init_story, window, cx))
     }

@@ -215,21 +215,6 @@ pub(crate) fn theme_name_at(index: gpui_component::IndexPath, cx: &App) -> Optio
         .map(|theme| theme.name.clone())
 }
 
-#[cfg(test)]
-pub(crate) fn theme_index(name: &str, cx: &App) -> Option<gpui_component::IndexPath> {
-    [ThemeMode::Light, ThemeMode::Dark]
-        .into_iter()
-        .enumerate()
-        .find_map(|(section, mode)| {
-            ThemeRegistry::global(cx)
-                .sorted_themes()
-                .into_iter()
-                .filter(|theme| theme.mode == mode)
-                .position(|theme| theme.name.as_ref() == name)
-                .map(|row| gpui_component::IndexPath::new(row).section(section))
-        })
-}
-
 fn theme_item(theme: &ThemeConfig, active_name: &SharedString) -> CommandItem {
     let name = theme.name.clone();
 
