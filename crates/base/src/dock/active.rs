@@ -14,8 +14,8 @@ use super::layout::PanelId;
 /// hidden panel occupying the active slot still receives `true`, even though
 /// rendering falls back to the first visible panel.
 ///
-/// `TabGroup` owns one of these. `TabPanel` in `crates/ui` still keeps its own
-/// `notified_active` map until the cutover removes it.
+/// `TabGroup` owns one of these, and is the only thing that does: the skin in
+/// `crates/ui` draws tab bars and keeps no active-state map of its own.
 #[derive(Default)]
 pub(crate) struct ActiveTracker {
     notified: HashMap<PanelId, bool>,
