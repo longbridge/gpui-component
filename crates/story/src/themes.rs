@@ -211,9 +211,7 @@ fn theme_item(theme: &ThemeConfig, active_name: &SharedString) -> CommandItem {
         .icon(IconName::Palette)
         .checked(&name == active_name)
         .keywords([theme.mode.name()])
-        .on_select(move |window, cx| {
-            window.dispatch_action(Box::new(SwitchTheme(name.clone())), cx);
-        })
+        .action(Box::new(SwitchTheme(name)))
 }
 
 #[cfg(test)]

@@ -382,15 +382,22 @@ impl CommandStory {
             // list people would otherwise have to search for.
             self._search_task = None;
             self.stock_entries = popular_entries();
-            self.search.update(cx, |state, cx| {
-                state.set_loading(false, window, cx);
+            let search = self.search.clone();
+            window.defer(cx, move |window, cx| {
+                search.update(cx, |state, cx| {
+                    state.set_loading(false, window, cx);
+                });
             });
             cx.notify();
             return;
         }
 
-        self.search
-            .update(cx, |state, cx| state.set_loading(true, window, cx));
+        let search = self.search.clone();
+        window.defer(cx, move |window, cx| {
+            search.update(cx, |state, cx| {
+                state.set_loading(true, window, cx);
+            });
+        });
 
         let search = self.search.clone();
         self._search_task = Some(cx.spawn_in(window, async move |story, cx| {

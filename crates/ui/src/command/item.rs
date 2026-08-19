@@ -21,6 +21,21 @@ pub struct CommandItem {
     pub(crate) content: Option<Rc<CommandItemContent>>,
 }
 
+impl Clone for CommandItem {
+    fn clone(&self) -> Self {
+        Self {
+            value: self.value.clone(),
+            label: self.label.clone(),
+            keywords: self.keywords.clone(),
+            icon: self.icon.clone(),
+            action: self.action.as_ref().map(|action| action.boxed_clone()),
+            checked: self.checked,
+            disabled: self.disabled,
+            content: self.content.clone(),
+        }
+    }
+}
+
 impl CommandItem {
     /// Create a new item with the given value.
     ///
@@ -151,6 +166,15 @@ pub struct CommandGroup {
     pub(crate) items: Vec<CommandItem>,
 }
 
+impl Clone for CommandGroup {
+    fn clone(&self) -> Self {
+        Self {
+            heading: self.heading.clone(),
+            items: self.items.clone(),
+        }
+    }
+}
+
 impl CommandGroup {
     /// Create a new group with the given heading.
     pub fn new(heading: impl Into<SharedString>) -> Self {
@@ -199,6 +223,16 @@ pub enum CommandEntry {
     Separator,
 }
 
+impl Clone for CommandEntry {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Item(item) => Self::Item(item.clone()),
+            Self::Group(group) => Self::Group(group.clone()),
+            Self::Separator => Self::Separator,
+        }
+    }
+}
+
 impl From<CommandItem> for CommandEntry {
     fn from(item: CommandItem) -> Self {
         Self::Item(item)
@@ -213,7 +247,52 @@ impl From<CommandGroup> for CommandEntry {
 
 #[cfg(test)]
 mod tests {
+    use std::{cell::Cell, rc::Rc};
+
+    use gpui::{TestAppContext, actions, div};
+
     use super::*;
+
+    actions!(command_item_test, [CloneAction]);
+
+    #[gpui::test]
+    fn cloned_entries_keep_actions_and_lazy_children_usable(cx: &mut TestAppContext) {
+        let action_count = Rc::new(Cell::new(0));
+        let child_count = Rc::new(Cell::new(0));
+        let action_count_for_handler = action_count.clone();
+        cx.update(|cx| {
+            cx.on_action(move |_: &CloneAction, _| {
+                action_count_for_handler.set(action_count_for_handler.get() + 1);
+            });
+        });
+
+        let child_count_for_builder = child_count.clone();
+        let entry = CommandEntry::Group(
+            CommandGroup::new("Group").item(
+                CommandItem::new("clonable")
+                    .action(Box::new(CloneAction))
+                    .child(move |_, _| {
+                        child_count_for_builder.set(child_count_for_builder.get() + 1);
+                        div()
+                    }),
+            ),
+        );
+        let cloned = entry.clone();
+        let CommandEntry::Group(group) = cloned else {
+            panic!("the cloned entry should remain a group");
+        };
+        let cloned_item = group.items.into_iter().next().unwrap();
+
+        let cx = cx.add_empty_window();
+        cx.update(|window, cx| {
+            let child = cloned_item.content.as_ref().unwrap().clone();
+            _ = child(window, cx);
+            window.dispatch_action(cloned_item.action.as_ref().unwrap().boxed_clone(), cx);
+        });
+
+        assert_eq!(child_count.get(), 1);
+        assert_eq!(action_count.get(), 1);
+    }
 
     #[test]
     fn title_falls_back_to_value() {
