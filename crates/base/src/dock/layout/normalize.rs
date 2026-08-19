@@ -3,6 +3,13 @@ use gpui::Pixels;
 use super::node::{LayoutNode, NodeKind};
 use super::tree::{LayoutTree, RootKind};
 
+/// Upper bound on `normalize` passes. Every pass that changes anything
+/// strictly reduces node count or nesting depth, so real dock layouts
+/// converge in a small handful of passes; this is a generous ceiling against
+/// a future rule change that fights another rule rather than a bound tuned
+/// to today's rule set.
+const MAX_NORMALIZE_PASSES: u32 = 64;
+
 impl LayoutTree {
     /// Collapse the tree to canonical shape.
     ///
@@ -24,18 +31,50 @@ impl LayoutTree {
     ///
     /// Idempotent: `normalize(normalize(t)) == normalize(t)`.
     pub fn normalize(&mut self) {
+        self.run_normalize_passes();
+        debug_assert!(self.is_normalized(), "normalize did not reach a fixpoint");
+    }
+
+    /// Run passes until nothing changes, or until [`MAX_NORMALIZE_PASSES`] is
+    /// exhausted. Returns the number of passes run.
+    ///
+    /// Split out from [`Self::normalize`] so a `#[cfg(test)]` caller can pin
+    /// how many passes convergence actually takes, without widening the
+    /// public API with a pass count nobody outside tests needs.
+    fn run_normalize_passes(&mut self) -> u32 {
+        let mut passes = 0;
+        let mut changed = true;
         // Bounded because every pass that changes anything strictly reduces
         // node count or nesting depth.
-        for _ in 0..64 {
-            let mut changed = false;
+        while changed && passes < MAX_NORMALIZE_PASSES {
+            changed = false;
             normalize_node(self.root_mut(), &mut changed);
             collapse_root(self, &mut changed);
-            if !changed {
-                break;
-            }
+            passes += 1;
         }
 
-        debug_assert!(self.is_normalized(), "normalize did not reach a fixpoint");
+        // `debug_assert!` in `normalize` disappears in release builds, so a
+        // desktop build left silently short of the fixpoint would otherwise
+        // render a non-canonical layout with no trace of why. This keeps the
+        // failure observable without turning it into a user-facing panic:
+        // rendering a slightly non-canonical layout beats crashing the app.
+        if changed {
+            tracing::warn!(
+                passes,
+                "LayoutTree::normalize exhausted {MAX_NORMALIZE_PASSES} passes without reaching \
+                 a fixpoint; the tree may still contain an empty container, a single-child \
+                 split, same-axis split nesting, or an unclamped Tabs active_ix"
+            );
+        }
+
+        passes
+    }
+
+    /// Test-only hook so a test can pin how many passes convergence takes,
+    /// without exposing a pass count through the public `normalize` API.
+    #[cfg(test)]
+    pub(crate) fn normalize_pass_count_for_test(&mut self) -> u32 {
+        self.run_normalize_passes()
     }
 
     /// Whether the tree satisfies every structural invariant.
@@ -199,7 +238,7 @@ fn collapse_root(tree: &mut LayoutTree, changed: &mut bool) {
 #[cfg(test)]
 mod tests {
     use super::super::*;
-    use gpui::{Axis, px};
+    use gpui::{Axis, Pixels, px};
 
     fn panel(n: u64) -> PanelId {
         PanelId::from_u64(n)
@@ -324,5 +363,71 @@ mod tests {
         tree.normalize();
 
         assert_eq!(once, tree);
+    }
+
+    #[test]
+    fn same_axis_splice_scales_inner_sizes_to_fill_the_outer_slot() {
+        // Every other test that reaches a same-axis splice pushes children
+        // with an unknown (`None`) size, so it only ever exercises
+        // `distribute_slot`'s pass-through branches. This is the one test
+        // that gives every sibling a known size, forcing the scaling arm.
+        let mut tree = LayoutTree::new(RootKind::Split);
+        let root = tree.root().id();
+        let inner = tree.push_split_for_test(root, Axis::Horizontal, Some(px(400.)));
+        tree.push_sized_tabs_for_test(inner, vec![panel(1)], Some(px(50.)));
+        tree.push_sized_tabs_for_test(inner, vec![panel(2)], Some(px(150.)));
+
+        tree.normalize();
+
+        let NodeRef::Split { sizes, .. } = tree.root().kind() else {
+            panic!()
+        };
+        assert_eq!(
+            sizes,
+            &[Some(px(100.)), Some(px(300.))],
+            "sizes scale by the outer/inner ratio (400/200 = 2x), not by its reverse"
+        );
+        let total: Pixels = sizes.iter().flatten().copied().sum();
+        assert_eq!(
+            total,
+            px(400.),
+            "the scaled sizes sum back to the outer slot"
+        );
+    }
+
+    #[test]
+    fn normalize_converges_within_two_passes_on_an_adversarial_tree() {
+        // root(H) -> D(V) -> A(H) -> { empty, B(V) -> C(V) -> [leaf1, leaf2] }
+        //
+        // `RootKind::Any` lets rule 5 collapse the root itself, so this tree
+        // combines every rule at once: single-child splits nested five
+        // levels deep (root, D, A, B all start single-child), an empty
+        // container dropped mid-chain (under A), and same-axis nesting
+        // spliced twice (C into B, then the surviving B into D). Everything
+        // still has to bottom out at a fixpoint within 2 passes: one pass
+        // that resolves every rule bottom-up plus the root collapse, one
+        // pass that confirms nothing is left to change.
+        let mut tree = LayoutTree::new(RootKind::Any);
+        let root = tree.root().id();
+        let d = tree.push_split_for_test(root, Axis::Vertical, None);
+        let a = tree.push_split_for_test(d, Axis::Horizontal, None);
+        tree.push_tabs_for_test(a, vec![]);
+        let b = tree.push_split_for_test(a, Axis::Vertical, None);
+        let c = tree.push_split_for_test(b, Axis::Vertical, None);
+        tree.push_tabs_for_test(c, vec![panel(1)]);
+        tree.push_tabs_for_test(c, vec![panel(2)]);
+
+        let passes = tree.normalize_pass_count_for_test();
+
+        assert!(
+            passes <= 2,
+            "expected the fixpoint within 2 passes, took {passes}"
+        );
+        assert!(tree.is_normalized());
+        assert_eq!(
+            tree.panels().collect::<Vec<_>>(),
+            vec![panel(1), panel(2)],
+            "every panel survives the collapse, in order"
+        );
     }
 }

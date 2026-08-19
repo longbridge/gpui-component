@@ -177,6 +177,35 @@ impl LayoutTree {
         id
     }
 
+    /// Like [`Self::push_tabs_for_test`], but with a concrete slot size
+    /// instead of always pushing `None`. Needed to exercise the scaling
+    /// arithmetic in `normalize`'s same-axis splice rule, which only runs
+    /// when every sibling size is known.
+    pub(crate) fn push_sized_tabs_for_test(
+        &mut self,
+        parent: NodeId,
+        panels: Vec<PanelId>,
+        size: Option<Pixels>,
+    ) -> NodeId {
+        let id = self.allocate_node_id();
+        let path = self.path_of_node(parent).expect("parent must exist");
+        let NodeKind::Split {
+            children, sizes, ..
+        } = self.node_at_mut(&path).kind_mut()
+        else {
+            panic!("parent must be a split");
+        };
+        children.push(LayoutNode::new(
+            id,
+            NodeKind::Tabs {
+                panels,
+                active_ix: 0,
+            },
+        ));
+        sizes.push(size);
+        id
+    }
+
     pub(crate) fn set_root_tiles_for_test(&mut self, panels: Vec<TilePanel>) -> NodeId {
         let id = self.allocate_node_id();
         self.root = LayoutNode::new(id, NodeKind::Tiles { panels });
