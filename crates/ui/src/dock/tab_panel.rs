@@ -14,7 +14,7 @@ use gpui::{
     DragMoveEvent, Empty, Entity, EntityId, EventEmitter, FocusHandle, Focusable,
     InteractiveElement as _, IntoElement, ParentElement, Pixels, Point, Render, ScrollHandle,
     SharedString, StatefulInteractiveElement, StyleRefinement, Styled, WeakEntity, Window, div,
-    point, prelude::FluentBuilder, px, rems,
+    point, prelude::FluentBuilder, px,
 };
 use rust_i18n::t;
 
@@ -774,7 +774,6 @@ impl TabPanel {
 
             return h_flex()
                 .justify_between()
-                .line_height(rems(1.0))
                 .h(px(30.))
                 .py_2()
                 .pl_3()
