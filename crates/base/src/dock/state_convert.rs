@@ -574,6 +574,28 @@ mod tests {
                 .iter()
                 .all(|child| child.panel_name == "TabPanel")
         );
+        // Order matters as much as count: a splice that reversed the spliced
+        // children, or that put the collapsed single-child split ahead of
+        // them, would still satisfy the two assertions above.
+        assert_eq!(state.children[0].children[0].panel_name, "Alpha");
+        assert_eq!(state.children[1].children[0].panel_name, "Beta");
+        assert_eq!(state.children[2].children[0].panel_name, "Gamma");
+
+        // The fixture's inner slot (50.0 + 150.0 = 200.0) does not equal its
+        // outer slot (400.0), so the scale factor is a genuine 2x, not 1x:
+        // `distribute_slot`'s `slot / total` and a wrongly inverted
+        // `total / slot` would disagree here. The vertical single-child
+        // split's own inner size (300.0) is discarded; its outer slot
+        // (300.0) is what the surviving child inherits.
+        let PanelInfo::Stack { sizes, .. } = &state.info else {
+            panic!("expected Stack info");
+        };
+        assert_eq!(
+            sizes,
+            &vec![px(100.), px(300.), px(300.)],
+            "the spliced-in sizes are scaled by outer/inner (400/200 = 2x), and the \
+             collapsed split hands its own outer slot (300.0) to its surviving child"
+        );
     }
 
     #[test]
@@ -582,12 +604,23 @@ mod tests {
         let tiles = &state.children[0];
 
         assert_eq!(tiles.panel_name, "Tiles");
+        // `metas` and `children` are parallel arrays, matched up by index. A
+        // bug that swapped `children`'s order while leaving `metas` in place
+        // would misattribute bounds to the wrong panel without either array
+        // changing length, so check both arrays' contents *and* that they
+        // still line up by identity, not just that each array is correct in
+        // isolation.
+        assert_eq!(tiles.children[0].panel_name, "Alpha");
+        assert_eq!(tiles.children[1].panel_name, "Beta");
+
         let PanelInfo::Tiles { metas } = &tiles.info else {
             panic!()
         };
         assert_eq!(metas.len(), 2);
-        assert_eq!(metas[1].z_index, 1);
-        assert_eq!(metas[1].bounds.origin.x, px(220.));
+        assert_eq!(metas[0].z_index, 0, "Alpha's meta");
+        assert_eq!(metas[0].bounds.origin.x, px(10.), "Alpha's meta");
+        assert_eq!(metas[1].z_index, 1, "Beta's meta");
+        assert_eq!(metas[1].bounds.origin.x, px(220.), "Beta's meta");
     }
 
     #[test]
@@ -640,5 +673,34 @@ mod tests {
             &vec![px(0.), px(200.)],
             "the unconstrained slot writes back out as the 0.0 sentinel"
         );
+    }
+
+    /// `from_state`'s forced-wrap branch (a bare, non-`Split` root gets
+    /// wrapped in a synthetic split) is gated on `RootKind::Split` and must
+    /// *not* fire under `RootKind::Any`. No production code wires a dock's
+    /// `PanelState` through `LayoutTree` yet, so this pins the shape a dock
+    /// panel would present if it did: every dock in the shipped
+    /// `fixtures/layout.json` (`left_dock`, `right_dock`, `bottom_dock`)
+    /// stores a bare `TabPanel`, exactly what `fixtures/bare_tab_panel_root.json`
+    /// mirrors. Before this test, `RootKind::Any`'s non-wrapping behavior was
+    /// pinned only by hand-built `PanelState` trees elsewhere in this file
+    /// (e.g. `a_bare_panel_leaf_is_wrapped_in_a_tab_group`, which covers the
+    /// opposite, always-wrap case for a bare *leaf*, not a bare *TabPanel*
+    /// root), never by a golden JSON fixture.
+    #[test]
+    fn a_bare_tab_panel_root_is_not_wrapped_under_root_kind_any() {
+        let json = include_str!("fixtures/bare_tab_panel_root.json");
+        let state: PanelState = serde_json::from_str(json).unwrap();
+        let mut panels = PreservingPanels::default();
+        let tree = LayoutTree::from_state(&state, RootKind::Any, &mut panels);
+
+        assert!(
+            matches!(tree.root().kind(), NodeRef::Tabs { .. }),
+            "a bare TabPanel root must stay a Tabs node under RootKind::Any, \
+             not get wrapped in a synthetic split"
+        );
+
+        let dumped = tree.to_state(&panels);
+        assert_eq!(dumped.panel_name, "TabPanel");
     }
 }
