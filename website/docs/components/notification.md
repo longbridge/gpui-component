@@ -193,6 +193,51 @@ Then remove the notification with `window.remove_notification::<UpdateNotificati
 window.remove_notification::<UpdateNotification>(cx);
 ```
 
+### System Notification
+
+A notification can also be delivered to the operating system's notification
+center. Use `NotificationDelivery` to choose where a notification goes: as an
+in-app toast (`InApp`, the default), in the OS notification center (`System`),
+or both (`InAppAndSystem`).
+
+```rust
+use gpui_component::notification::{Notification, NotificationDelivery};
+
+// Per-notification override; `.system()` and `.in_app_and_system()` are
+// shorthands for `.delivery(NotificationDelivery::...)`.
+Notification::info("Your download is ready.")
+    .title("Download complete")
+    .system()
+
+// Or set a global default for all notifications
+Theme::global_mut(cx).notification.delivery = NotificationDelivery::InAppAndSystem;
+```
+
+The notification's title and message become the system notification's title
+and body; a notification with neither is not posted. Pushing again with the
+same `.id::<T>()` replaces the previous system notification, and
+`window.remove_notification::<T>(cx)` / `window.clear_notifications(cx)`
+retract it. When the toast auto-hides, the system notification stays in the
+notification center.
+
+Clicking the system notification activates the application and its window,
+closes the in-app toast (if any), and fires `on_click` with a default
+`ClickEvent`. With `NotificationDelivery::System` no toast exists, so
+`on_close` is never called.
+
+`gpui_component::init` registers the app-global
+`on_system_notification_response` handler, so do not register your own after
+it — gpui keeps only one. Notifications your application posts directly via
+`cx.show_system_notification` are left untouched.
+
+Platform requirements:
+
+| Platform | Requirement | Retraction |
+| --- | --- | --- |
+| macOS | Must run from a bundled `.app` in a trusted location (e.g. `/Applications`); silently disabled under plain `cargo run`. The first post triggers the system authorization prompt; a denial is remembered and later posts fail silently | Supported |
+| Windows | Call `cx.set_app_identity(identifier, name)` early in startup | Supported |
+| Linux | An XDG notification daemon must be present | Unsupported (ages out) |
+
 ## Examples
 
 ### Form Validation Error
