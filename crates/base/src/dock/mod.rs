@@ -1,3 +1,4 @@
+mod active;
 mod dock_area;
 pub mod layout;
 mod registry;
