@@ -118,11 +118,16 @@ pub trait Panel: gpui_base::dock::Panel {
 
     /// Where the zoom affordance appears, or `None` for nowhere.
     ///
-    /// This decides the *control*, not the capability:
-    /// [`gpui_base::dock::Panel::zoomable`] decides whether zooming happens at
-    /// all, and a panel that returns `None` here while leaving that true can
-    /// still be zoomed by the [`ToggleZoom`](super::ToggleZoom) action. A
-    /// panel that means "never zoom" has to say so in both places.
+    /// `None` withholds the whole affordance, not just the button: the
+    /// [`ToggleZoom`](super::ToggleZoom) action refuses to zoom a panel that
+    /// offers no control, so either answer alone is enough to mean "never
+    /// zoom". Zooming *out* is never refused — a panel that stops offering
+    /// the control while zoomed would otherwise strand the user with no way
+    /// back.
+    ///
+    /// [`gpui_base::dock::Panel::zoomable`] is the other half: it decides
+    /// whether zooming happens at all, and base refuses a zoom that fails it
+    /// however the zoom was asked for.
     fn zoom_control(&self, cx: &App) -> Option<PanelControl> {
         Some(PanelControl::Menu)
     }
@@ -295,14 +300,16 @@ impl gpui_base::dock::PanelView for PanelHandle {
 ///
 /// This is what every entry point into the dock wants:
 /// `DockLayout::tabs().panel_view(panel_handle(story), cx)`,
-/// `DockArea::add_panel_view(panel_handle(story), ..)`, and the closure a
+/// `DockLayout::tiles().tile_view(panel_handle(story), bounds, cx)`,
+/// `DockArea::add_panel_view(panel_handle(story), ..)`,
+/// `DockArea::add_tile_view(panel_handle(story), ..)`, and the closure a
 /// [`register_panel`](gpui_base::dock::register_panel) builder returns.
 ///
-/// Base's own `DockLayout::panel` / `DockArea::add_panel` also accept a panel
-/// — a `gpui_component::dock::Panel` is a `gpui_base::dock::Panel` — but they
-/// store the bare entity, and a skin cannot recover presentation from one.
-/// Such a panel still docks, drags and persists; it just draws its
-/// `panel_name` where its title would be.
+/// Base's own `DockLayout::panel` / `tile` and `DockArea::add_panel` /
+/// `add_tile` also accept a panel — a `gpui_component::dock::Panel` is a
+/// `gpui_base::dock::Panel` — but they store the bare entity, and a skin
+/// cannot recover presentation from one. Such a panel still docks, drags and
+/// persists; it just draws its `panel_name` where its title would be.
 pub fn panel_handle<P: Panel>(panel: Entity<P>) -> Arc<dyn gpui_base::dock::PanelView> {
     Arc::new(PanelHandle::new(panel))
 }

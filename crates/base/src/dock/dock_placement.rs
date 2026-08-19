@@ -64,14 +64,19 @@ impl DockSizing {
     }
 
     /// The dock size the pointer implies, before clamping.
+    ///
+    /// `DockPlacement::Center` names the canvas, which has no edge to measure
+    /// from and no dock size, so it answers zero. Both this and [`Self::clamp`]
+    /// are public and take a `pub` enum, so a caller can name that variant; a
+    /// base-layer arithmetic helper must not panic a desktop application over
+    /// it. [`DockPlacement::axis`] resolves the same variant the same way,
+    /// silently rather than by panicking.
     pub fn size_from_pointer(&self, pointer: Point<Pixels>) -> Pixels {
         match self.placement {
             DockPlacement::Left => pointer.x - self.area.left(),
             DockPlacement::Right => self.area.right() - pointer.x,
             DockPlacement::Bottom => self.area.bottom() - pointer.y,
-            DockPlacement::Center => {
-                unreachable!("the center placement is the canvas, not a resizable dock")
-            }
+            DockPlacement::Center => px(0.),
         }
     }
 
@@ -80,6 +85,10 @@ impl DockSizing {
     /// dock (if any) below `PANEL_MIN_SIZE` either. The `.max(PANEL_MIN_SIZE)`
     /// on the computed maximum matters when the area itself is narrower than
     /// both minimums combined — it keeps the clamp range non-empty.
+    ///
+    /// `DockPlacement::Center` constrains nothing, so it hands the size back
+    /// unchanged. See [`Self::size_from_pointer`] for why that variant is
+    /// answered rather than rejected.
     pub fn clamp(&self, size: Pixels) -> Pixels {
         let max_size = match self.placement {
             DockPlacement::Left | DockPlacement::Right => {
@@ -87,9 +96,7 @@ impl DockSizing {
                     .max(PANEL_MIN_SIZE)
             }
             DockPlacement::Bottom => (self.area.size.height - PANEL_MIN_SIZE).max(PANEL_MIN_SIZE),
-            DockPlacement::Center => {
-                unreachable!("the center placement is the canvas, not a resizable dock")
-            }
+            DockPlacement::Center => return size,
         };
         size.clamp(PANEL_MIN_SIZE, max_size)
     }
@@ -98,9 +105,10 @@ impl DockSizing {
 /// Runtime state for one dock: whether it is open, collapsible, its current
 /// size, and whether it is mid-resize.
 ///
-/// This does not include the dock's placement, its area's entity handle, or
-/// its panel content — those stay on `crates/ui`'s `Dock` entity, which owns
-/// one of these as a field.
+/// This does not include the dock's placement or its panel content. `DockArea`
+/// owns one of these per dock, paired with that dock's `LayoutTree` and keyed
+/// by its [`DockPlacement`]; the placement is the key, and the content is the
+/// tree.
 #[derive(Clone, Copy, Debug)]
 pub struct Dock {
     open: bool,
@@ -139,8 +147,14 @@ impl Dock {
         self.size
     }
 
+    /// Set the dock's size, never below [`PANEL_MIN_SIZE`].
+    ///
+    /// The floor is here rather than at the call sites because
+    /// `DockArea::set_dock_size` is public and unclamped: a smaller value
+    /// would collapse the dock to nothing, the skin clips the resize handle
+    /// that would drag it back out, and the collapsed size persists.
     pub fn set_size(&mut self, size: Pixels) {
-        self.size = size;
+        self.size = size.max(PANEL_MIN_SIZE);
     }
 
     pub fn is_resizing(&self) -> bool {
@@ -196,6 +210,33 @@ mod dock_tests {
         });
 
         assert_eq!(sizing.size_from_pointer(point(px(500.), px(0.))), px(300.));
+    }
+
+    /// `DockArea::set_dock_size` is public and hands its argument straight
+    /// here, so without this floor a caller could collapse a dock to nothing
+    /// and persist it that way.
+    #[test]
+    fn a_dock_never_shrinks_below_the_minimum() {
+        let mut dock = Dock::new(px(240.));
+        dock.set_size(px(1.));
+        assert_eq!(dock.size(), PANEL_MIN_SIZE);
+
+        dock.set_size(px(400.));
+        assert_eq!(dock.size(), px(400.), "a size above the floor is kept");
+    }
+
+    /// Both are `pub` and take a `pub` enum, so a caller can name the center.
+    /// Answering it is what keeps a base arithmetic helper from panicking a
+    /// desktop application over a value its own type permits.
+    #[test]
+    fn the_center_placement_is_answered_rather_than_panicking() {
+        let sizing = DockSizing::new(DockPlacement::Center).with_area_bounds(Bounds {
+            origin: point(px(0.), px(0.)),
+            size: size(px(800.), px(600.)),
+        });
+
+        assert_eq!(sizing.clamp(px(7.)), px(7.), "the center clamps nothing");
+        assert_eq!(sizing.size_from_pointer(point(px(400.), px(300.))), px(0.));
     }
 
     #[test]

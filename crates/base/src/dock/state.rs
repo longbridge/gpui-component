@@ -225,6 +225,11 @@ mod tests {
     use super::*;
     use gpui::px;
 
+    /// The whole of a real user's file, not just its outline: every dock and
+    /// the nesting under each one. Ported from the old
+    /// `test_deserialize_item_state`, which checked all three docks and their
+    /// children — a fixture test that only reads the center and one dock
+    /// would keep passing if a dock's shape stopped deserializing at all.
     #[test]
     fn the_shipped_fixture_still_deserializes() {
         let json = include_str!("fixtures/layout.json");
@@ -233,12 +238,37 @@ mod tests {
         assert_eq!(state.version, None);
         assert_eq!(state.center.panel_name, "StackPanel");
         assert_eq!(state.center.children.len(), 2);
+        assert_eq!(state.center.children[0].panel_name, "TabPanel");
+        assert_eq!(state.center.children[1].panel_name, "TabPanel");
+        assert_eq!(state.center.children[1].children.len(), 1);
+        assert_eq!(
+            state.center.children[1].children[0].panel_name,
+            "StoryContainer"
+        );
 
         let left = state.left_dock.unwrap();
         assert_eq!(left.open(), true);
         assert_eq!(left.size(), px(350.0));
         assert_eq!(left.placement(), DockPlacement::Left);
         assert_eq!(left.panel().panel_name, "TabPanel");
+        assert_eq!(left.panel().children.len(), 1);
+        assert_eq!(left.panel().children[0].panel_name, "StoryContainer");
+
+        let bottom = state.bottom_dock.unwrap();
+        assert_eq!(bottom.open(), true);
+        assert_eq!(bottom.size(), px(200.0));
+        assert_eq!(bottom.placement(), DockPlacement::Bottom);
+        assert_eq!(bottom.panel().panel_name, "TabPanel");
+        assert_eq!(bottom.panel().children.len(), 2);
+        assert_eq!(bottom.panel().children[0].panel_name, "StoryContainer");
+
+        let right = state.right_dock.unwrap();
+        assert_eq!(right.open(), true);
+        assert_eq!(right.size(), px(320.0));
+        assert_eq!(right.placement(), DockPlacement::Right);
+        assert_eq!(right.panel().panel_name, "TabPanel");
+        assert_eq!(right.panel().children.len(), 1);
+        assert_eq!(right.panel().children[0].panel_name, "StoryContainer");
     }
 
     #[test]

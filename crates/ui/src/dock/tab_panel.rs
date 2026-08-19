@@ -441,7 +441,6 @@ impl TabGroupSkin {
         let collapsed = group.is_collapsed();
 
         let droppable = group.is_droppable();
-        let in_tiles = group.is_in_tiles();
         let tabs_count = group.panels().len();
         let active_ix = group.active_ix();
         let displayed = group.active_panel().map(|panel| panel.panel_id(cx));
@@ -557,19 +556,17 @@ impl TabGroupSkin {
                                             );
                                         }
                                     })
-                                    .when(!in_tiles, |this| {
-                                        this.drag_over::<AnyDrag>(|this, _, _, cx| {
-                                            this.rounded_l_none()
-                                                .border_l_2()
-                                                .border_r_0()
-                                                .border_color(cx.theme().drag_border)
-                                        })
-                                        .on_drop({
-                                            let group = group.clone();
-                                            move |item: &AnyDrag, window, cx| {
-                                                group.drop_item(item.clone(), None, window, cx);
-                                            }
-                                        })
+                                    .drag_over::<AnyDrag>(|this, _, _, cx| {
+                                        this.rounded_l_none()
+                                            .border_l_2()
+                                            .border_r_0()
+                                            .border_color(cx.theme().drag_border)
+                                    })
+                                    .on_drop({
+                                        let group = group.clone();
+                                        move |item: &AnyDrag, window, cx| {
+                                            group.drop_item(item.clone(), None, window, cx);
+                                        }
                                     })
                                 })
                             })
@@ -598,16 +595,14 @@ impl TabGroupSkin {
                                 group.drop_panel(drag.clone(), ix, false, window, cx);
                             }
                         })
-                        .when(!in_tiles, |this| {
-                            this.drag_over::<AnyDrag>(|this, _, _, cx| {
-                                this.bg(cx.theme().tokens.drop_target)
-                            })
-                            .on_drop({
-                                let group = group.clone();
-                                move |item: &AnyDrag, window, cx| {
-                                    group.drop_item(item.clone(), None, window, cx);
-                                }
-                            })
+                        .drag_over::<AnyDrag>(|this, _, _, cx| {
+                            this.bg(cx.theme().tokens.drop_target)
+                        })
+                        .on_drop({
+                            let group = group.clone();
+                            move |item: &AnyDrag, window, cx| {
+                                group.drop_item(item.clone(), None, window, cx);
+                            }
                         })
                     }),
             )
@@ -996,6 +991,46 @@ mod tests {
         }
     }
 
+    /// A panel that offers no zoom control but leaves base's `zoomable`
+    /// default alone. Withholding the control is meant to be enough.
+    struct NoControlProbe {
+        focus_handle: FocusHandle,
+    }
+
+    impl NoControlProbe {
+        fn new(cx: &mut App) -> Entity<Self> {
+            cx.new(|cx| Self {
+                focus_handle: cx.focus_handle(),
+            })
+        }
+    }
+
+    impl gpui_base::dock::Panel for NoControlProbe {
+        fn panel_name(&self) -> &'static str {
+            "NoControlProbe"
+        }
+    }
+
+    impl Panel for NoControlProbe {
+        fn zoom_control(&self, _: &App) -> Option<PanelControl> {
+            None
+        }
+    }
+
+    impl EventEmitter<PanelEvent> for NoControlProbe {}
+
+    impl Focusable for NoControlProbe {
+        fn focus_handle(&self, _: &App) -> FocusHandle {
+            self.focus_handle.clone()
+        }
+    }
+
+    impl Render for NoControlProbe {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            Empty
+        }
+    }
+
     /// A panel that says "never zoom" in base's half but still names a place
     /// for the control in this crate's half.
     struct UnzoomableProbe {
@@ -1197,6 +1232,42 @@ mod tests {
         cx.dispatch_action(ToggleZoom);
         cx.run_until_parked();
         assert_eq!(cx.read(|cx| area.read(cx).is_zoomed()), false);
+    }
+
+    /// Withholding the control withholds the whole affordance, keybinding
+    /// included. The two halves of the zoom question are asked in one place —
+    /// the skin's `frame` — so a doc claiming the action gets through anyway
+    /// would send a panel author looking for a second switch that does not
+    /// exist.
+    #[gpui::test]
+    fn the_zoom_action_refuses_a_panel_that_offers_no_control(cx: &mut TestAppContext) {
+        cx.update(|cx| {
+            crate::init(cx);
+        });
+        let (area, cx) = cx.add_window_view(|window, cx| {
+            let skin = DockSkin::new(cx);
+            DockArea::new("skin", None, window, cx).with_renderer(skin)
+        });
+
+        let panel = cx.update(|window, cx| {
+            let panel = NoControlProbe::new(cx);
+            let layout = DockLayout::tabs().panel_view(panel_handle(panel.clone()), cx);
+            area.update(cx, |area, cx| area.set_center(layout, window, cx));
+            panel
+        });
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            panel.read(cx).focus_handle(cx).focus(window, cx);
+        });
+        cx.run_until_parked();
+
+        cx.dispatch_action(ToggleZoom);
+        cx.run_until_parked();
+        assert_eq!(
+            cx.read(|cx| area.read(cx).is_zoomed()),
+            false,
+            "no control means no zoom, however the zoom was asked for"
+        );
     }
 
     /// The tab group's own frame has to be a flex column.

@@ -60,7 +60,6 @@ pub enum TabGroupEvent {
 /// that forgets something gets a group that does less rather than more.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TabGroupConstraints {
-    in_tiles: bool,
     alone: bool,
     dock_locked: bool,
     collapsed: bool,
@@ -72,7 +71,6 @@ impl TabGroupConstraints {
     /// starts as, before any container has placed it.
     pub fn sealed() -> Self {
         Self {
-            in_tiles: false,
             alone: true,
             dock_locked: true,
             collapsed: false,
@@ -85,26 +83,7 @@ impl TabGroupConstraints {
     /// dock empty.
     pub fn in_split(alone: bool) -> Self {
         Self {
-            in_tiles: false,
             alone,
-            dock_locked: false,
-            collapsed: false,
-            closable: true,
-        }
-    }
-
-    /// A group on a tiles canvas.
-    ///
-    /// A tiles canvas runs its own drag and resize system, so the group is
-    /// locked against panel drags and dock drops. Unlike every other locked
-    /// group its panels stay closable, because closing is how a tile is
-    /// dismissed. There is no way to unlock it, which is deliberate: the old
-    /// `TabPanel` reached the same state through `stack_panel.is_none()`, and
-    /// nothing could clear that either.
-    pub fn in_tiles() -> Self {
-        Self {
-            in_tiles: true,
-            alone: true,
             dock_locked: false,
             collapsed: false,
             closable: true,
@@ -130,23 +109,19 @@ impl TabGroupConstraints {
         self
     }
 
-    pub fn is_in_tiles(&self) -> bool {
-        self.in_tiles
-    }
-
     /// Whether nothing sits beside this group in its tree.
     pub fn is_alone(&self) -> bool {
         self.alone
     }
 
-    pub fn is_dock_locked(&self) -> bool {
-        self.dock_locked
-    }
-
-    /// Whether the group's place in the dock is fixed, which is the dock-wide
-    /// lock or a tiles canvas.
+    /// Whether the group's place in the dock is fixed.
+    ///
+    /// The dock-wide lock is the whole of it. A tab group only ever sits
+    /// inside a split — a tiles canvas holds panels directly and never a tab
+    /// group — so there is no second way for a container to pin one down, and
+    /// no separate `is_dock_locked` reader that would answer identically.
     pub fn is_locked(&self) -> bool {
-        self.dock_locked || self.in_tiles
+        self.dock_locked
     }
 
     pub fn is_collapsed(&self) -> bool {
@@ -243,11 +218,11 @@ impl TabGroup {
     /// Whether closing this group's displayed panel is allowed at all.
     ///
     /// Mirrors the old `TabPanel::closable`: the container must permit it, the
-    /// group must have somewhere to go — or be a tile, which is dismissed by
-    /// closing — and the displayed panel must itself be closable.
+    /// group must have somewhere to go, and the displayed panel must itself be
+    /// closable.
     pub fn can_close(&self, cx: &App) -> bool {
         self.constraints.can_close()
-            && (self.draggable(cx) || self.constraints.is_in_tiles())
+            && self.draggable(cx)
             && self
                 .active_panel(cx)
                 .is_some_and(|panel| panel.closable(cx))
@@ -272,9 +247,8 @@ impl TabGroup {
         if !self.constraints.can_close() {
             return;
         }
-        // A dock's last group has nowhere to go and must stay; a tile is
-        // dismissed by closing it, so it is exempt.
-        if !self.draggable(cx) && !self.constraints.is_in_tiles() {
+        // A dock's last group has nowhere to go and must stay.
+        if !self.draggable(cx) {
             return;
         }
 
@@ -305,7 +279,6 @@ impl TabGroup {
             active_ix: self.active_ix,
             zoomed: self.zoomed,
             collapsed: self.constraints.is_collapsed(),
-            in_tiles: self.constraints.is_in_tiles(),
             can_close: self.can_close(cx),
             locked: self.is_locked(),
             draggable: self.draggable(cx),
@@ -469,11 +442,6 @@ impl TabGroup {
 
     /// A locked group cannot be rearranged. Zooming locks it too: a zoomed
     /// group is the only thing on screen, so there is nowhere to drop.
-    ///
-    /// [`TabGroupConstraints::is_locked`] already folds in the tiles case,
-    /// matching the old `TabPanel::is_locked`, whose final
-    /// `self.stack_panel.is_none()` limb was true for exactly the groups a
-    /// tiles canvas builds.
     fn is_locked(&self) -> bool {
         self.constraints.is_locked() || self.zoomed
     }
@@ -733,11 +701,12 @@ impl Render for TabGroup {
             .child(
                 renderer
                     .content_frame(&context, window, cx)
-                    // Both drag kinds hang off `droppable` alone. In the old
-                    // `TabPanel` the host-item handlers carried an extra
-                    // `!in_tiles` guard nested inside the same droppable test,
-                    // which never did anything: a tiles group was already
-                    // locked, so `droppable` was false there.
+                    // Both drag kinds hang off `droppable` alone. The old
+                    // `TabPanel` nested a second guard inside the same
+                    // droppable test for the host-item handlers, asking
+                    // whether it sat on a tiles canvas; it never did anything,
+                    // because such a group was already locked and `droppable`
+                    // was therefore false.
                     .when(droppable, |this| {
                         this.on_drag_move(cx.listener(Self::on_panel_drag_move))
                             .on_drop(cx.listener(|this, drag: &DragPanel, _, cx| {
@@ -783,7 +752,6 @@ pub struct TabGroupContext {
     active_ix: usize,
     zoomed: bool,
     collapsed: bool,
-    in_tiles: bool,
     locked: bool,
     draggable: bool,
     droppable: bool,
@@ -829,12 +797,6 @@ impl TabGroupContext {
 
     pub fn is_collapsed(&self) -> bool {
         self.collapsed
-    }
-
-    /// Whether this group sits on a tiles canvas. Tiles run their own drag
-    /// system, so a skin drawing tabs there must not offer dock drop targets.
-    pub fn is_in_tiles(&self) -> bool {
-        self.in_tiles
     }
 
     /// Whether closing the displayed panel is allowed at all, so a skin knows
@@ -1473,40 +1435,19 @@ mod tests {
         );
     }
 
-    /// A tiles canvas runs its own drag and resize system. The old `TabPanel`
-    /// reached the same conclusion through `stack_panel.is_none()`, which was
-    /// true for exactly the groups `DockItem::Tiles` builds.
+    /// A real drag over a locked group must resolve nothing: base installs no
+    /// drop handling on one, so the placement is never computed and the layout
+    /// tree is never asked to move anything.
     #[gpui::test]
-    fn a_tiles_group_is_locked_but_its_panels_stay_closable(cx: &mut TestAppContext) {
-        let log = log_of();
-        let (group, _panels, cx) = build_group(&log, &["a", "b"], cx);
-
-        cx.update(|window, cx| {
-            group.update(cx, |group, cx| {
-                group.set_constraints(TabGroupConstraints::in_tiles(), window, cx)
-            })
-        });
-        let context = cx.update(|_, cx| group.read(cx).context(cx));
-
-        assert!(context.is_locked());
-        assert!(!context.is_droppable(), "tiles take no dock drops");
-        assert!(!context.is_draggable(), "tiles move whole tiles, not tabs");
-        assert!(context.is_in_tiles());
-        assert!(
-            context.can_close(),
-            "closing is how a tile is dismissed, so it survives the lock"
-        );
-    }
-
-    /// A real drag over a tiles group must resolve nothing: base installs no
-    /// drop handling on a locked group, so the placement is never computed and
-    /// the layout tree is never asked to move anything.
-    #[gpui::test]
-    fn a_drag_over_a_tiles_group_resolves_nothing(cx: &mut TestAppContext) {
+    fn a_drag_over_a_locked_group_resolves_nothing(cx: &mut TestAppContext) {
         let (group, _calls, cx) = build_skinned_group(&["a", "b"], cx);
         cx.update(|window, cx| {
             group.update(cx, |group, cx| {
-                group.set_constraints(TabGroupConstraints::in_tiles(), window, cx)
+                group.set_constraints(
+                    TabGroupConstraints::in_split(false).dock_locked(true),
+                    window,
+                    cx,
+                )
             })
         });
         cx.update(|window, cx| window.draw(cx).clear(cx));
@@ -1545,9 +1486,12 @@ mod tests {
     }
 
     /// The last visible panel of the only group has nowhere to go, so it is
-    /// not closable either — unless it is a tile.
+    /// not closable either — closing it would empty the region out from under
+    /// itself. Placing a sibling beside the group makes the same panel
+    /// closable again, which is what pins the reason to `alone` rather than to
+    /// something else the sealed default also forbids.
     #[gpui::test]
-    fn the_only_groups_last_panel_is_closable_only_in_tiles(cx: &mut TestAppContext) {
+    fn the_only_groups_last_panel_is_not_closable(cx: &mut TestAppContext) {
         let log = log_of();
         let (group, _panels, cx) = build_group(&log, &["a"], cx);
 
@@ -1556,17 +1500,17 @@ mod tests {
                 group.set_constraints(TabGroupConstraints::in_split(true), window, cx)
             })
         });
-        let in_split = cx.update(|_, cx| group.read(cx).context(cx).can_close());
+        let alone = cx.update(|_, cx| group.read(cx).context(cx).can_close());
 
         cx.update(|window, cx| {
             group.update(cx, |group, cx| {
-                group.set_constraints(TabGroupConstraints::in_tiles(), window, cx)
+                group.set_constraints(TabGroupConstraints::in_split(false), window, cx)
             })
         });
-        let in_tiles = cx.update(|_, cx| group.read(cx).context(cx).can_close());
+        let beside_a_sibling = cx.update(|_, cx| group.read(cx).context(cx).can_close());
 
-        assert!(!in_split);
-        assert!(in_tiles);
+        assert!(!alone);
+        assert!(beside_a_sibling);
     }
 
     /// Collapsing takes the displayed panel off screen, and the active-state

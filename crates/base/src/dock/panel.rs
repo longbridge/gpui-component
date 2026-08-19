@@ -22,10 +22,15 @@ pub trait Panel: EventEmitter<PanelEvent> + Render + Focusable {
     /// Identifies the panel in persisted layouts. Once chosen, never change it.
     fn panel_name(&self) -> &'static str;
 
+    /// Whether the panel is drawn at all. A hidden panel keeps its place in
+    /// the layout tree and its tab, and reappears when this turns back on;
+    /// a container whose panels are all hidden gives up its slot.
     fn visible(&self, cx: &App) -> bool {
         true
     }
 
+    /// Whether the panel may be closed. A container can still refuse — the
+    /// last group of a dock does — so this is permission, not a guarantee.
     fn closable(&self, cx: &App) -> bool {
         true
     }
@@ -55,6 +60,11 @@ pub trait Panel: EventEmitter<PanelEvent> + Render + Focusable {
     /// displayed when the zoom changes is never told about it retroactively.
     fn set_zoomed(&mut self, zoomed: bool, window: &mut Window, cx: &mut Context<Self>) {}
 
+    /// Called when the panel joins a tab group, with a weak handle on it.
+    ///
+    /// Delivered before any `set_active`, so a panel can hold the handle and
+    /// act on the first activation. A panel moved between groups is told
+    /// again, with the new group; it is not told it was removed in between.
     fn on_added_to(
         &mut self,
         group: WeakEntity<TabGroup>,
@@ -63,8 +73,20 @@ pub trait Panel: EventEmitter<PanelEvent> + Render + Focusable {
     ) {
     }
 
+    /// Called when the panel leaves the dock for good — closed, or displaced
+    /// by a wholesale `set_center`, `set_dock`, `remove_dock` or `load`.
+    ///
+    /// This is also the deactivation signal: a panel that was displayed is not
+    /// told `set_active(false)` on its way out. A panel dragged from one group
+    /// to another never leaves the dock, so it never hears this.
     fn on_removed(&mut self, window: &mut Window, cx: &mut Context<Self>) {}
 
+    /// The panel's own persisted state, written into the layout under its
+    /// [`panel_name`](Panel::panel_name) and handed back to the
+    /// [`PanelRegistry`](crate::dock::PanelRegistry) builder on the next load.
+    ///
+    /// The default records the name and nothing else, which is enough for a
+    /// panel whose builder can reconstruct it from the name alone.
     fn dump(&self, cx: &App) -> PanelState {
         PanelState::new(self.panel_name())
     }

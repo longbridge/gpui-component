@@ -431,10 +431,30 @@ than the entity directly, which is what makes the layout algebra testable as
 pure functions with no `TestAppContext`.
 
 Building a layout is entity-free too: `DockLayout` (`h_split`, `v_split`,
-`tabs`, `tiles`, chained with `.child(...)`, `.panel(...)`, `.tile(...)`, and
-`.active_index(...)`) needs neither `window` nor `cx`, because it produces a
-tree rather than constructing containers. `DockArea::set_center` and
-`set_dock` reconcile a `DockLayout` into live entities when it is installed.
+`tabs`, `tiles`, chained with `.child(...)`, `.panel_view(...)`,
+`.tile_view(...)`, and `.active_index(...)`) produces a tree rather than
+constructing containers. `DockArea::set_center` and `set_dock` reconcile a
+`DockLayout` into live entities when it is installed.
+
+Panels go in wrapped: `gpui_component::dock::panel_handle(panel)` is what
+carries a panel's presentation across the renderer seam, and every entry point
+takes one — `DockLayout::panel_view` / `tile_view` when describing a layout,
+`DockArea::add_panel_view` / `add_tile_view` when adding to a live one, and
+the closure a `register_panel` builder returns.
+
+```rust,ignore
+let center = DockLayout::h_split()
+    .child(DockLayout::tabs().panel_view(panel_handle(files), cx), Some(px(240.)))
+    .child(DockLayout::tabs().panel_view(panel_handle(editor), cx), None);
+dock_area.update(cx, |area, cx| area.set_center(center, window, cx));
+```
+
+Base's own `DockLayout::panel` / `tile` and `DockArea::add_panel` / `add_tile`
+take a bare `Entity<P>` instead. They are the base-only forms: the panel docks,
+drags and persists exactly the same, but base stores the bare entity and the
+skin cannot recover presentation from it, so **every tab draws the panel's
+`panel_name` where its title belongs**. The only signal is a one-off
+`tracing::warn!`. Use them only when there is no skin over the dock at all.
 
 ### Normalization
 

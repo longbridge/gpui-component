@@ -388,7 +388,7 @@ fn split_parent_of(path: &super::tree::NodePath) -> Option<(super::tree::NodePat
 mod tests {
     use super::super::*;
     use crate::Placement;
-    use gpui::{Axis, Bounds, point, px, size};
+    use gpui::{Axis, Bounds, Pixels, point, px, size};
 
     fn panel(n: u64) -> PanelId {
         PanelId::from_u64(n)
@@ -652,6 +652,66 @@ mod tests {
             before_sizes.as_slice(),
             "the mismatched vector is rejected"
         );
+    }
+
+    fn tile_bounds(x: f32) -> Bounds<Pixels> {
+        Bounds {
+            origin: point(px(x), px(0.)),
+            size: size(px(10.), px(10.)),
+        }
+    }
+
+    #[test]
+    fn inserting_a_tile_places_it_at_the_given_bounds_on_top() {
+        let mut tree = LayoutTree::new(RootKind::Any);
+        let canvas = tree.set_root_tiles_for_test(vec![
+            TilePanel::new(panel(1), tile_bounds(0.)).with_z_index(4),
+        ]);
+
+        let result = tree.insert_panel(
+            panel(2),
+            InsertTarget::Tile {
+                node: canvas,
+                bounds: tile_bounds(70.),
+            },
+        );
+
+        assert!(result.changed());
+        let NodeRef::Tiles { panels } = tree.root().kind() else {
+            panic!("the canvas stays a canvas rather than being split")
+        };
+        assert_eq!(panels.len(), 2);
+        let added = panels.iter().find(|tile| tile.panel() == panel(2)).unwrap();
+        assert_eq!(added.bounds(), tile_bounds(70.), "the bounds are honoured");
+        assert!(
+            added.z_index() > panels[0].z_index(),
+            "a new tile lands on top of the ones already there"
+        );
+    }
+
+    #[test]
+    fn set_tile_bounds_moves_one_tile_and_leaves_its_peers_alone() {
+        let mut tree = LayoutTree::new(RootKind::Any);
+        tree.set_root_tiles_for_test(vec![
+            TilePanel::new(panel(1), tile_bounds(0.)).with_z_index(1),
+            TilePanel::new(panel(2), tile_bounds(40.)).with_z_index(2),
+        ]);
+
+        let result = tree.set_tile_bounds(panel(1), tile_bounds(90.));
+
+        assert!(result.changed());
+        let NodeRef::Tiles { panels } = tree.root().kind() else {
+            panic!()
+        };
+        let moved = panels.iter().find(|tile| tile.panel() == panel(1)).unwrap();
+        let other = panels.iter().find(|tile| tile.panel() == panel(2)).unwrap();
+        assert_eq!(moved.bounds(), tile_bounds(90.));
+        assert_eq!(
+            moved.z_index(),
+            1,
+            "moving a tile does not raise it; that is `bring_to_front`'s job"
+        );
+        assert_eq!(other.bounds(), tile_bounds(40.), "its peer does not move");
     }
 
     #[test]

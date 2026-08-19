@@ -43,11 +43,11 @@ pub use gpui_base::dock::PanelView as BasePanelView;
 /// Two names are handled elsewhere and one is deliberately absent:
 /// base's `Panel` and `PanelView` arrive as [`BasePanel`] and [`BasePanelView`]
 /// because this module's `Panel`/`PanelView` are the presentation halves that
-/// extend them, and base's `Dock` — a plain `{open, collapsible, size}` state
-/// struct — is not re-exported at all, because the name meant a panel
-/// container in every released version of this crate and handing it back with
-/// a different meaning is worse than dropping it. A skin reads a dock through
-/// [`DockContext`].
+/// extend them, and base's `Dock` — a plain state struct holding one dock's
+/// open, collapsible, size and resizing flags — is not re-exported at all,
+/// because the name meant a panel container in every released version of this
+/// crate and handing it back with a different meaning is worse than dropping
+/// it. A skin reads a dock through [`DockContext`].
 pub use gpui_base::dock::{
     AnyDrag, DRAG_BAR_HEIGHT, DockArea, DockAreaRenderer, DockAreaState, DockContext, DockEvent,
     DockLayout, DockPlacement, DockSizing, DockState, DragPanel, DropIndicator,
@@ -214,10 +214,10 @@ mod tests {
     /// without depending on the foundation crate directly.
     ///
     /// This reads both export lists rather than naming them, because the way
-    /// this went wrong was checking the list against a *brief* instead of
-    /// against base: a hand-written list cannot notice a name base gained
-    /// after it was written. `TilesState` and `TilesEvent` were missing when
-    /// this was added.
+    /// this went wrong was checking the list against a description of base
+    /// instead of against base itself: a hand-written list cannot notice a
+    /// name base gained after it was written. `TilesState` and `TilesEvent`
+    /// were missing when this was added.
     ///
     /// The parse is deliberately crude — it takes the braces of each
     /// `pub use ...::{..}` and the tail of each single-name `pub use a::b;` —
