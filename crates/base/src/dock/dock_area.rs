@@ -438,7 +438,17 @@ impl DockArea {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.panels.insert(id, panel);
+        // The registration is written before the target is resolved, because
+        // both want `&mut self`, so an add that finds nowhere to put the panel
+        // has to undo it. *Undo*, not remove: adding a panel the dock already
+        // holds is a legitimate call — a host re-placing one it owns — and
+        // dropping its view would strand it in a tree with no entity, which is
+        // what `reconcile`'s `views_of` asserts against. Restoring the previous
+        // handle rather than keeping this one matters too: the two differ when
+        // a panel registered through `add_panel_view` is then named by
+        // `add_tile`, and keeping the bare entity would cost the panel its
+        // title for a call that otherwise did nothing.
+        let previous = self.panels.insert(id, panel);
 
         // A dock is created to hold the panel, but only for a caller that will
         // take whatever shape the region offers. A tile has to land on a
@@ -458,7 +468,7 @@ impl DockArea {
         }
 
         let Some(tree) = self.tree_mut(placement) else {
-            self.panels.remove(&id);
+            self.restore_registration(id, previous);
             return;
         };
         let target = match added {
@@ -468,7 +478,7 @@ impl DockArea {
             Added::AsTile(bounds) => match first_tiles_canvas(tree.root()) {
                 Some(node) => InsertTarget::Tile { node, bounds },
                 None => {
-                    self.panels.remove(&id);
+                    self.restore_registration(id, previous);
                     return;
                 }
             },
@@ -502,12 +512,22 @@ impl DockArea {
         };
         let result = tree.insert_panel(id, target);
         if !result.changed() {
-            // Nothing took the panel, so it must not linger in the view map
-            // and be told `on_removed` by the next reconcile.
-            self.panels.remove(&id);
+            // Nothing took the panel, so a newly registered one must not
+            // linger in the view map and be told `on_removed` by the next
+            // reconcile.
+            self.restore_registration(id, previous);
             return;
         }
         self.commit(result, window, cx);
+    }
+
+    /// Put the view map back the way an add found it, for one that placed
+    /// nothing. `previous` is what [`HashMap::insert`] handed back.
+    fn restore_registration(&mut self, id: PanelId, previous: Option<Arc<dyn PanelView>>) {
+        match previous {
+            Some(view) => self.panels.insert(id, view),
+            None => self.panels.remove(&id),
+        };
     }
 
     /// Remove a panel from wherever it lives, telling it that it was removed.
@@ -1087,8 +1107,14 @@ impl DockArea {
 
         let entity = cx.new(|_| ResizableState::default());
         // A drag on a resize handle changes only the measured sizes. Writing
-        // them straight back into the tree is what keeps the tree the single
-        // source of truth that `dump` can read.
+        // them straight back keeps the tree describing the layout the user
+        // arranged, which is what a later insert or removal scales from and
+        // what a region with no live split entity is dumped from.
+        //
+        // It does not make the tree authoritative on slot sizes generally, and
+        // `dump` does not treat it as such: only a finished drag arrives here,
+        // while `adjust_to_container_size` rewrites the measurements silently
+        // on every window resize. See [`Self::dump`].
         let subscription =
             cx.subscribe(&entity, move |this, state, _: &ResizablePanelEvent, cx| {
                 let sizes: Vec<Option<Pixels>> = state
@@ -2580,6 +2606,71 @@ mod tests {
             cx.read(|cx| area.read(cx).layout(DockPlacement::Left).is_none()),
             "a tile with nowhere to go must not leave a dock behind"
         );
+    }
+
+    /// The call `add_tile` was written for is a host re-placing a panel it
+    /// already holds, so a failed one must leave that panel exactly as it
+    /// found it. Registering first and removing on failure would drop the view
+    /// of a panel still sitting in a tree, which `reconcile`'s `views_of`
+    /// asserts against in dev and answers with a shifted active index in
+    /// release.
+    #[gpui::test]
+    fn a_declined_add_leaves_an_already_docked_panel_untouched(cx: &mut TestAppContext) {
+        let log = log_of();
+        let (area, panels, cx) = one_group(&log, &["Alpha"], None, cx);
+        let alpha = panels[0].clone();
+        let alpha_id = panel_id_of(&alpha);
+        let bounds = Bounds {
+            origin: gpui::point(px(10.), px(10.)),
+            size: gpui::size(px(100.), px(100.)),
+        };
+
+        let registered = cx.read(|cx| {
+            Arc::as_ptr(
+                area.read(cx)
+                    .panel(alpha_id)
+                    .expect("one_group registers it"),
+            ) as *const ()
+        });
+
+        // The center is a tab group, so there is no canvas to take the tile.
+        cx.update(|window, cx| {
+            area.update(cx, |area, cx| {
+                area.add_tile(alpha.clone(), DockPlacement::Center, bounds, window, cx);
+            });
+        });
+        cx.run_until_parked();
+
+        let handle = |cx: &mut VisualTestContext| {
+            cx.read(|cx| {
+                Arc::as_ptr(area.read(cx).panel(alpha_id).expect("still registered")) as *const ()
+            })
+        };
+        assert_eq!(
+            handle(cx),
+            registered,
+            "a panel that was already docked keeps the very handle it was \
+             registered with; `add_tile` takes a bare entity, so overwriting \
+             would cost a panel installed through `add_panel_view` its title"
+        );
+        assert!(
+            cx.read(|cx| area
+                .read(cx)
+                .layout(DockPlacement::Center)
+                .unwrap()
+                .find_panel_node(alpha_id))
+                .is_some(),
+            "and keeps its place in the tree"
+        );
+        assert!(
+            !drain(&log).contains(&("Alpha", PanelSignal::Removed)),
+            "a declined add is not a removal"
+        );
+
+        // The whole dock still reconciles, which is the failure `views_of`
+        // would otherwise assert on.
+        let state = cx.read(|cx| area.read(cx).dump(cx));
+        assert_eq!(state.center.children[0].children[0].panel_name, "Alpha");
     }
 
     #[gpui::test]
