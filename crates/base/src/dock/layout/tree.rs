@@ -43,12 +43,17 @@ impl LayoutTree {
         &self.root
     }
 
+    /// Mutable access to the root, for normalization's post-order pass.
+    pub(crate) fn root_mut(&mut self) -> &mut LayoutNode {
+        &mut self.root
+    }
+
     pub fn root_kind(&self) -> RootKind {
         self.root_kind
     }
 
-    // Only called by `#[cfg(test)]` seeders today; normalization and edit
-    // operations become real callers in a later task.
+    // Only called by `#[cfg(test)]` seeders today; edit operations become
+    // real callers in a later task.
     #[allow(dead_code)]
     pub(crate) fn allocate_node_id(&mut self) -> NodeId {
         let id = NodeId::from_u64(self.next_node_id);
@@ -139,7 +144,16 @@ impl LayoutTree {
         }
         node
     }
+
+    /// Replace the whole tree with `node`, keeping `node`'s own id and
+    /// `root_kind` unchanged. Used by normalization's root-collapse rule.
+    pub(crate) fn replace_root(&mut self, node: LayoutNode) {
+        self.root = node;
+    }
 }
+
+#[cfg(test)]
+use gpui::{Axis, Pixels};
 
 #[cfg(test)]
 impl LayoutTree {
@@ -166,6 +180,61 @@ impl LayoutTree {
     pub(crate) fn set_root_tiles_for_test(&mut self, panels: Vec<TilePanel>) -> NodeId {
         let id = self.allocate_node_id();
         self.root = LayoutNode::new(id, NodeKind::Tiles { panels });
+        id
+    }
+
+    pub(crate) fn set_root_split_for_test(&mut self, axis: Axis) -> NodeId {
+        let id = self.allocate_node_id();
+        self.root = LayoutNode::new(
+            id,
+            NodeKind::Split {
+                axis,
+                children: Vec::new(),
+                sizes: Vec::new(),
+            },
+        );
+        id
+    }
+
+    pub(crate) fn set_root_axis_for_test(&mut self, new_axis: Axis) {
+        if let NodeKind::Split { axis, .. } = self.root.kind_mut() {
+            *axis = new_axis;
+        }
+    }
+
+    pub(crate) fn set_root_tabs_for_test(
+        &mut self,
+        panels: Vec<PanelId>,
+        active_ix: usize,
+    ) -> NodeId {
+        let id = self.allocate_node_id();
+        self.root = LayoutNode::new(id, NodeKind::Tabs { panels, active_ix });
+        id
+    }
+
+    pub(crate) fn push_split_for_test(
+        &mut self,
+        parent: NodeId,
+        axis: Axis,
+        size: Option<Pixels>,
+    ) -> NodeId {
+        let id = self.allocate_node_id();
+        let path = self.path_of_node(parent).expect("parent must exist");
+        let NodeKind::Split {
+            children, sizes, ..
+        } = self.node_at_mut(&path).kind_mut()
+        else {
+            panic!("parent must be a split");
+        };
+        children.push(LayoutNode::new(
+            id,
+            NodeKind::Split {
+                axis,
+                children: Vec::new(),
+                sizes: Vec::new(),
+            },
+        ));
+        sizes.push(size);
         id
     }
 }

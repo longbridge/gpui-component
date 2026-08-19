@@ -151,9 +151,6 @@ impl LayoutNode {
         }
     }
 
-    // Only reachable through `LayoutTree::node_at_mut` today, whose own
-    // callers arrive with the edit operations added in a later task.
-    #[allow(dead_code)]
     pub(crate) fn kind_mut(&mut self) -> &mut NodeKind {
         &mut self.kind
     }

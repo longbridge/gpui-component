@@ -1,4 +1,5 @@
 mod node;
+mod normalize;
 mod tree;
 
 // `NodeKind` and `NodePath` stay crate-private here for sibling modules
