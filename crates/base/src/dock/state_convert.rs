@@ -182,16 +182,16 @@ fn build_node(
             )
         }
         PanelInfo::Tiles { metas } => {
-            let panels = state
-                .children
-                .iter()
-                .enumerate()
-                .map(|(ix, child)| {
-                    let meta = metas.get(ix).copied().unwrap_or_default();
-                    TilePanel::new(builder.build(child, &child.info), meta.bounds)
-                        .with_z_index(meta.z_index)
-                })
-                .collect();
+            let mut panels = Vec::new();
+            for (ix, child) in state.children.iter().enumerate() {
+                // Keyed by the *child* index, not by the output index: a
+                // child that expands to several tiles must not shift the
+                // metas of the children after it.
+                let meta = metas.get(ix).copied().unwrap_or_default();
+                for panel in tile_panels(child, builder) {
+                    panels.push(TilePanel::new(panel, meta.bounds).with_z_index(meta.z_index));
+                }
+            }
             LayoutNode::new(id, NodeKind::Tiles { panels })
         }
         PanelInfo::Panel(_) => {
@@ -210,6 +210,42 @@ fn build_node(
                 },
             )
         }
+    }
+}
+
+/// The panels one persisted `Tiles` child stands for.
+///
+/// Every tile the old dock ever wrote is `TabPanel`-shaped: `DockItem::tiles`
+/// wraps each child in a `TabPanel`, `DockItem::add_panel`'s tiles arm wraps
+/// every UI-added panel in a fresh one, and `PanelState::to_item` converts a
+/// plain-panel child into a `TabPanel` on the next save. In the tree model a
+/// tile *is* a panel, so the group has to be unwrapped — building the
+/// `"TabPanel"` leaf directly would miss the registry, fall to a placeholder,
+/// and never build the user's real panels at all, restoring a saved tiles
+/// canvas as blank tiles.
+///
+/// A group holding several panels expands to one tile per panel, sharing the
+/// group's meta. That is not merely defensive: the UI cannot produce it
+/// (tiles groups are locked, so they can never gain a tab), but
+/// `DockItem::tiles(vec![DockItem::tabs(vec![a, b])], ..)` can, and a tiles
+/// canvas has no way to show a second tab.
+fn tile_panels(child: &PanelState, builder: &mut dyn PanelBuilder) -> Vec<PanelId> {
+    match &child.info {
+        PanelInfo::Tabs { .. } => {
+            let panels = collect_tab_panels(&child.children, builder);
+            if panels.len() > 1 {
+                tracing::warn!(
+                    panels = panels.len(),
+                    "a tiles child held a tab group with more than one panel; \
+                     expanding it to one tile per panel, all sharing the group's placement"
+                );
+            }
+            panels
+        }
+        // The legacy empty-group form: a `TabPanel` name carrying leaf info.
+        // It stands for no panel, so it contributes no tile.
+        PanelInfo::Panel(_) if child.panel_name == TAB_PANEL_NAME => Vec::new(),
+        _ => vec![builder.build(child, &child.info)],
     }
 }
 
@@ -524,6 +560,7 @@ mod tests {
             include_str!("fixtures/legacy_empty_tab_group.json"),
             include_str!("fixtures/unregistered_panel.json"),
             include_str!("fixtures/zero_size_sentinel.json"),
+            include_str!("fixtures/tiles_tab_panel_children.json"),
         ] {
             let once = canonicalize(json);
             let twice = {
@@ -596,6 +633,87 @@ mod tests {
             "the spliced-in sizes are scaled by outer/inner (400/200 = 2x), and the \
              collapsed split hands its own outer slot (300.0) to its surviving child"
         );
+    }
+
+    /// The shape every persisted tiles canvas actually has: each tile child
+    /// is a `TabPanel` wrapping the real panel. Reading the `"TabPanel"` leaf
+    /// literally would build a placeholder and drop the user's panel.
+    #[test]
+    fn a_tiles_child_that_is_a_tab_group_is_unwrapped_to_its_panels() {
+        let json = include_str!("fixtures/tiles_tab_panel_children.json");
+        let state: DockAreaState = serde_json::from_str(json).unwrap();
+        let mut panels = PreservingPanels::default();
+        let tree = LayoutTree::from_state(&state.center, RootKind::Split, &mut panels);
+
+        assert_eq!(
+            panels.names,
+            vec!["Alpha", "Beta", "Gamma"],
+            "the real panels are built; no `TabPanel` leaf is handed to the builder"
+        );
+
+        let dumped = tree.to_state(&panels);
+        let tiles = &dumped.children[0];
+        assert_eq!(tiles.panel_name, "Tiles");
+        assert_eq!(
+            tiles
+                .children
+                .iter()
+                .map(|child| child.panel_name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["Alpha", "Beta", "Gamma"],
+        );
+
+        let PanelInfo::Tiles { metas } = &tiles.info else {
+            panic!("expected Tiles info");
+        };
+        // The two-panel child expands to two tiles sharing its own meta, and
+        // the *next* child still gets the meta at its own child index — an
+        // implementation keyed on the output index would hand Gamma the first
+        // meta and lose the second entirely.
+        assert_eq!(metas.len(), 3);
+        assert_eq!(
+            metas[0].bounds.origin.x,
+            px(10.),
+            "Alpha keeps child 0's meta"
+        );
+        assert_eq!(
+            metas[1].bounds.origin.x,
+            px(10.),
+            "Beta shares child 0's meta"
+        );
+        assert_eq!(metas[1].z_index, 0);
+        assert_eq!(
+            metas[2].bounds.origin.x,
+            px(400.),
+            "Gamma gets child 1's meta"
+        );
+        assert_eq!(metas[2].z_index, 3);
+    }
+
+    #[test]
+    fn an_empty_tab_group_on_a_tiles_canvas_contributes_no_tile() {
+        let state = PanelState {
+            panel_name: TILES_PANEL_NAME.to_string(),
+            children: vec![
+                // The legacy empty-group form.
+                PanelState {
+                    panel_name: TAB_PANEL_NAME.to_string(),
+                    children: Vec::new(),
+                    info: PanelInfo::panel(serde_json::Value::Null),
+                },
+                tabs_state(vec![panel_state("Alpha")], 0),
+            ],
+            info: PanelInfo::tiles(vec![TileMeta::default(), TileMeta::default()]),
+        };
+
+        let mut builder = RecordingBuilder::default();
+        let tree = LayoutTree::from_state(&state, RootKind::Any, &mut builder);
+
+        assert_eq!(builder.built, vec!["Alpha"]);
+        let NodeRef::Tiles { panels } = tree.root().kind() else {
+            panic!()
+        };
+        assert_eq!(panels.len(), 1);
     }
 
     #[test]
