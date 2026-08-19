@@ -41,6 +41,25 @@ pub enum DockEvent {
     DragDrop { item: AnyDrag, target: DropTarget },
 }
 
+/// What fills the whole area, when something does.
+///
+/// A zoom names a *container*, never the panel inside it. The old dock zoomed
+/// the `TabPanel`: `TabPanel` is the only thing that ever emitted
+/// `PanelEvent::ZoomIn` — `subscribe_panel` was handed `StackPanel`s too, but
+/// those never zoom — so `set_zoomed_in` only ever received a whole tab panel,
+/// and a zoomed panel kept its tab bar, its toolbar and its menu. That is
+/// where the control that zooms back out lives. Naming the panel instead would
+/// strip all of it and leave the user with no way back.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Zoomed {
+    /// A tab group, rendered whole through its own [`TabGroupRenderer`].
+    Group(NodeId),
+    /// One tile of a canvas, rendered by that canvas through its own
+    /// [`TilesRenderer`]. The canvas is what draws a tile's chrome, so the
+    /// canvas is what is rendered.
+    Tile { node: NodeId, panel: PanelId },
+}
+
 /// One dock: its own layout tree plus the open/size/collapsible state.
 struct DockPane {
     tree: LayoutTree,
@@ -88,10 +107,7 @@ pub struct DockArea {
     panels: HashMap<PanelId, Arc<dyn PanelView>>,
 
     locked: bool,
-    zoom_view: Option<AnyView>,
-    /// The group whose zoom flag produced [`Self::zoom_view`], so clearing the
-    /// zoom from outside can put that flag back.
-    zoomed_group: Option<NodeId>,
+    zoomed: Option<Zoomed>,
     focus_handle: FocusHandle,
     renderer: Rc<dyn DockAreaRenderer>,
 }
@@ -117,8 +133,7 @@ impl DockArea {
             tiles: HashMap::new(),
             panels: HashMap::new(),
             locked: false,
-            zoom_view: None,
-            zoomed_group: None,
+            zoomed: None,
             focus_handle: cx.focus_handle(),
             renderer: Rc::new(BareDockArea),
         }
@@ -498,36 +513,120 @@ impl DockArea {
 }
 
 /// Zooming.
+///
+/// There is no `set_zoomed_in(panel)` here. A zoom is a container's own act:
+/// only the container knows whether its displayed panel is zoomable, and only
+/// the container can tell that panel it was zoomed. So the way in is
+/// [`TabGroupContext::toggle_zoom`](super::TabGroupContext::toggle_zoom) or
+/// [`TileContext::toggle_zoom`](super::TileContext::toggle_zoom) — a skin has
+/// one of those wherever it draws a zoom control — or
+/// [`Self::set_zoomed_in`] by node, which delegates to the same place. The
+/// area then installs the container that reported it.
 impl DockArea {
-    pub fn set_zoomed_in<P: Panel>(
-        &mut self,
-        panel: Entity<P>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.set_zoomed_out(window, cx);
-        self.zoom_view = Some(panel.into());
-        cx.notify();
+    /// Zoom the tab group at `node` in, as if its own zoom control had been
+    /// used.
+    ///
+    /// Nothing happens for a node that is not a live tab group, or when the
+    /// group refuses — the group is the one that knows.
+    pub fn set_zoomed_in(&mut self, node: NodeId, window: &mut Window, cx: &mut Context<Self>) {
+        self.set_zoom(Some(Zoomed::Group(node)), window, cx);
     }
 
-    /// Clear the zoom, putting the zoomed group's own flag back with it.
+    /// Clear the zoom, putting the zoomed container's own flag back with it.
     ///
-    /// A group toggles its zoom itself and only reports it, so an area that
-    /// dropped the view without telling the group would leave the group
-    /// believing it is still zoomed — and a zoomed group refuses drops.
-    pub fn set_zoomed_out(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(node) = self.zoomed_group.take() {
-            if let Some(cached) = self.groups.get(&node) {
-                let group = cached.entity.clone();
-                group.update(cx, |group, cx| group.set_zoomed(false, cx));
-            }
-        }
-        self.zoom_view = None;
-        cx.notify();
+    /// A container toggles its zoom itself and only reports it, so an area
+    /// that dropped the view without telling the container would leave it
+    /// believing it still fills the dock — and a zoomed group refuses drops.
+    pub fn set_zoomed_out(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.set_zoom(None, window, cx);
     }
 
     pub fn is_zoomed(&self) -> bool {
-        self.zoom_view.is_some()
+        self.zoomed.is_some()
+    }
+
+    /// The tab group filling the area, if a group is what is zoomed.
+    pub fn zoomed_group(&self) -> Option<NodeId> {
+        match self.zoomed {
+            Some(Zoomed::Group(node)) => Some(node),
+            _ => None,
+        }
+    }
+
+    /// The tile filling the area, if a tile is what is zoomed.
+    pub fn zoomed_tile(&self) -> Option<PanelId> {
+        match self.zoomed {
+            Some(Zoomed::Tile { panel, .. }) => Some(panel),
+            _ => None,
+        }
+    }
+
+    /// The one place `self.zoomed` is written.
+    ///
+    /// Every write drives the container's own flag through the same call, and
+    /// the new target is recorded only if that container accepted it. So the
+    /// area cannot show a container the container does not think is zoomed,
+    /// and cannot leave a container flagged zoomed while showing something
+    /// else — the split state a group would carry as a permanent lock.
+    fn set_zoom(&mut self, zoomed: Option<Zoomed>, window: &mut Window, cx: &mut Context<Self>) {
+        if self.zoomed == zoomed {
+            return;
+        }
+
+        if let Some(previous) = self.zoomed {
+            self.drive_zoom(previous, false, window, cx);
+        }
+        let accepted = match zoomed {
+            Some(next) => self.drive_zoom(next, true, window, cx).then_some(next),
+            None => None,
+        };
+        self.zoomed = accepted;
+        cx.notify();
+    }
+
+    /// Ask one container to zoom in or out, and report whether it now agrees.
+    ///
+    /// A container that has already been left out of the cache — its node is
+    /// gone from the tree — has nothing to say and nothing to put back, so it
+    /// answers `false` and a zoom naming it is never installed.
+    fn drive_zoom(
+        &mut self,
+        zoomed: Zoomed,
+        zoom_in: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        match zoomed {
+            Zoomed::Group(node) => {
+                let Some(group) = self.groups.get(&node).map(|cached| cached.entity.clone()) else {
+                    return false;
+                };
+                group.update(cx, |group, cx| {
+                    group.set_zoomed(zoom_in, window, cx);
+                    group.is_zoomed() == zoom_in
+                })
+            }
+            Zoomed::Tile { node, panel } => {
+                let Some(canvas) = self.tiles.get(&node).map(|cached| cached.entity.clone()) else {
+                    return false;
+                };
+                canvas.update(cx, |canvas, cx| {
+                    canvas.set_zoomed(zoom_in.then_some(panel), window, cx);
+                    canvas.zoomed_tile() == zoom_in.then_some(panel)
+                })
+            }
+        }
+    }
+
+    /// The container that fills the area when something is zoomed.
+    ///
+    /// The container, not the panel inside it: this is what keeps a zoomed
+    /// group's tab bar and a zoomed tile's chrome on screen.
+    fn zoomed_view(&self) -> Option<AnyView> {
+        match self.zoomed? {
+            Zoomed::Group(node) => Some(self.groups.get(&node)?.entity.clone().into()),
+            Zoomed::Tile { node, .. } => Some(self.tiles.get(&node)?.entity.clone().into()),
+        }
     }
 }
 
@@ -544,7 +643,7 @@ impl DockArea {
         cx: &mut Context<Self>,
     ) -> Result<()> {
         self.version = state.version;
-        self.zoom_view = None;
+        self.zoomed = None;
         // Nothing in the old layout survives a load, so the caches are
         // emptied rather than reconciled: every node id in the new trees is
         // freshly minted and would miss the old cache anyway.
@@ -783,16 +882,24 @@ impl DockArea {
             .collect();
         self.panels.retain(|panel, _| live_panels.contains(panel));
 
-        // A zoomed panel fills the whole area, so one that has just left the
-        // dock would otherwise keep filling it with nothing behind it.
-        if let Some(zoomed) = self.zoom_view.as_ref().map(|view| view.entity_id()) {
-            if departed
-                .iter()
-                .any(|view| view.view().entity_id() == zoomed)
-            {
-                self.zoom_view = None;
-                self.zoomed_group = None;
+        // A zoomed container fills the whole area, so one that has just left
+        // the dock would otherwise keep filling it with nothing behind it.
+        //
+        // It is the container going away that ends the zoom, not a panel:
+        // a group survives its displayed panel closing, and the next tab
+        // takes over, still zoomed. The old `TabPanel::remove_panel` instead
+        // emitted `ZoomOut` on every removal, which cleared the dock's zoom
+        // even for a panel in some other tab panel entirely — and left the
+        // zoomed `TabPanel` still flagged zoomed while the dock was not.
+        let zoom_survives = match self.zoomed {
+            Some(Zoomed::Group(node)) => self.groups.contains_key(&node),
+            Some(Zoomed::Tile { node, panel }) => {
+                self.tiles.contains_key(&node) && self.panels.contains_key(&panel)
             }
+            None => true,
+        };
+        if !zoom_survives {
+            self.set_zoom(None, window, cx);
         }
 
         cx.notify();
@@ -931,14 +1038,18 @@ impl DockArea {
                 self.commit(result, window, cx);
             }
             TabGroupEvent::ZoomIn => {
-                self.zoom_view = group.read(cx).active_panel(cx).map(|panel| panel.view());
-                self.zoomed_group = self.zoom_view.is_some().then(|| group.read(cx).node());
-                cx.notify();
+                let node = group.read(cx).node();
+                self.set_zoom(Some(Zoomed::Group(node)), window, cx);
             }
+            // Only the group that is actually on screen can give the dock
+            // back. A group told to zoom out to make room for another one
+            // reports it too, and that report must not undo the zoom that
+            // replaced it.
             TabGroupEvent::ZoomOut => {
-                self.zoom_view = None;
-                self.zoomed_group = None;
-                cx.notify();
+                let node = group.read(cx).node();
+                if self.zoomed == Some(Zoomed::Group(node)) {
+                    self.set_zoom(None, window, cx);
+                }
             }
         }
     }
@@ -975,6 +1086,24 @@ impl DockArea {
                 item: item.clone(),
                 target: DropTarget::Canvas,
             }),
+            TilesEvent::ZoomIn { panel } => {
+                self.set_zoom(
+                    Some(Zoomed::Tile {
+                        node,
+                        panel: *panel,
+                    }),
+                    window,
+                    cx,
+                );
+            }
+            // As with a tab group: only the canvas actually on screen can
+            // give the dock back.
+            TilesEvent::ZoomOut => {
+                if matches!(self.zoomed, Some(Zoomed::Tile { node: zoomed, .. }) if zoomed == node)
+                {
+                    self.set_zoom(None, window, cx);
+                }
+            }
         }
     }
 }
@@ -1156,7 +1285,7 @@ impl Render for DockArea {
                 area.update(cx, |area, _| area.bounds = bounds);
             })
             .track_focus(&self.focus_handle)
-            .map(|frame| match self.zoom_view.clone() {
+            .map(|frame| match self.zoomed_view() {
                 Some(view) => frame.child(view),
                 None => frame
                     .when_some(
@@ -1561,8 +1690,11 @@ impl DockArea {
 mod tests {
     use gpui::{TestAppContext, VisualTestContext};
 
+    use std::cell::RefCell;
+
     use super::*;
     use crate::dock::test_support::{Log, PanelSignal, TestPanel, drain, drain_active, log_of};
+    use crate::dock::{TabGroupContext, TileContext};
 
     fn setup(cx: &mut TestAppContext) -> (Entity<DockArea>, &mut VisualTestContext) {
         cx.update(|cx| {
@@ -2079,9 +2211,8 @@ mod tests {
         let (area, alpha, cx) = two_groups(&log, cx);
         cx.run_until_parked();
 
-        cx.update(|window, cx| {
-            area.update(cx, |area, cx| area.set_zoomed_in(alpha.clone(), window, cx))
-        });
+        let node = child_node(&area, 0, cx);
+        cx.update(|window, cx| area.update(cx, |area, cx| area.set_zoomed_in(node, window, cx)));
         assert!(cx.read(|cx| area.read(cx).is_zoomed()));
 
         cx.update(|window, cx| {
@@ -3070,5 +3201,279 @@ mod tests {
             "the closed tile's panel left the dock"
         );
         assert!(drain(&log).contains(&("Alpha", PanelSignal::Removed)));
+    }
+
+    /// A skin that records what it was asked to draw.
+    ///
+    /// The chrome is the point: a tab bar is drawn by the *group*, and a
+    /// tile's drag bar by the *canvas*. Neither runs if the area renders the
+    /// bare panel instead, so what lands in these logs says which of the two
+    /// is on screen — a question no reading of `is_zoomed()` can answer.
+    struct RecordingSkin {
+        tab_bars: Rc<RefCell<Vec<NodeId>>>,
+        drag_bars: Rc<RefCell<Vec<PanelId>>>,
+    }
+
+    struct RecordingTabGroup {
+        drawn: Rc<RefCell<Vec<NodeId>>>,
+    }
+
+    struct RecordingTiles {
+        drawn: Rc<RefCell<Vec<PanelId>>>,
+    }
+
+    impl DockAreaRenderer for RecordingSkin {
+        fn tab_group_renderer(&self) -> Rc<dyn TabGroupRenderer> {
+            Rc::new(RecordingTabGroup {
+                drawn: self.tab_bars.clone(),
+            })
+        }
+
+        fn tiles_renderer(&self) -> Rc<dyn TilesRenderer> {
+            Rc::new(RecordingTiles {
+                drawn: self.drag_bars.clone(),
+            })
+        }
+    }
+
+    impl TabGroupRenderer for RecordingTabGroup {
+        fn render_tab_bar(
+            &self,
+            group: &TabGroupContext,
+            _: &mut Window,
+            _: &mut App,
+        ) -> AnyElement {
+            self.drawn.borrow_mut().push(group.node());
+            Empty.into_any_element()
+        }
+    }
+
+    impl TilesRenderer for RecordingTiles {
+        fn render_drag_bar(&self, tile: &TileContext, _: &mut Window, _: &mut App) -> AnyElement {
+            self.drawn.borrow_mut().push(tile.panel_id());
+            Empty.into_any_element()
+        }
+    }
+
+    type DrawLog = (Rc<RefCell<Vec<NodeId>>>, Rc<RefCell<Vec<PanelId>>>);
+
+    /// [`setup`], with a skin that records the tab bars and drag bars drawn.
+    fn setup_recording(
+        cx: &mut TestAppContext,
+    ) -> (Entity<DockArea>, DrawLog, &mut VisualTestContext) {
+        cx.update(|cx| {
+            let _ = crate::Theme::global_mut(cx);
+        });
+        let tab_bars: Rc<RefCell<Vec<NodeId>>> = Rc::default();
+        let drag_bars: Rc<RefCell<Vec<PanelId>>> = Rc::default();
+        let skin = Rc::new(RecordingSkin {
+            tab_bars: tab_bars.clone(),
+            drag_bars: drag_bars.clone(),
+        });
+        let (area, cx) = cx.add_window_view(|window, cx| {
+            DockArea::new("test-dock", None, window, cx).with_renderer(skin)
+        });
+        (area, (tab_bars, drag_bars), cx)
+    }
+
+    fn zoom_signals(log: &Log) -> Vec<(&'static str, PanelSignal)> {
+        drain(log)
+            .into_iter()
+            .filter(|(_, signal)| matches!(signal, PanelSignal::Zoomed(_)))
+            .collect()
+    }
+
+    /// The regression this exists for: zooming shows the *group*, tab bar and
+    /// all, not the panel inside it.
+    ///
+    /// The old dock zoomed the whole `TabPanel` — every `subscribe_panel` call
+    /// site handed it one — so the tab bar, the toolbar and the panel menu
+    /// stayed on screen, and that is where the control that zooms back out
+    /// lives. A zoom rendering the bare panel would still fill the area and
+    /// still answer `is_zoomed()`; only the tab bar tells the two apart.
+    #[gpui::test]
+    fn a_zoomed_group_is_drawn_whole_rather_than_as_its_bare_panel(cx: &mut TestAppContext) {
+        let log = log_of();
+        let (area, (tab_bars, _), cx) = setup_recording(cx);
+        cx.update(|window, cx| {
+            let alpha = TestPanel::logging("Alpha", &log, cx);
+            let beta = TestPanel::logging("Beta", &log, cx);
+            area.update(cx, |area, cx| {
+                area.set_center(
+                    DockLayout::h_split()
+                        .child(DockLayout::tabs().panel(alpha), None)
+                        .child(DockLayout::tabs().panel(beta), None),
+                    window,
+                    cx,
+                );
+            });
+        });
+        cx.run_until_parked();
+
+        let zoomed = child_node(&area, 0, cx);
+        let other = child_node(&area, 1, cx);
+        assert!(
+            tab_bars.borrow().contains(&zoomed) && tab_bars.borrow().contains(&other),
+            "both groups draw their own tab bar while nothing is zoomed"
+        );
+
+        tab_bars.borrow_mut().clear();
+        let group = group_of(&area, 0, cx);
+        cx.update(|window, cx| group.update(cx, |group, cx| group.toggle_zoom(window, cx)));
+        cx.run_until_parked();
+
+        assert!(
+            tab_bars.borrow().contains(&zoomed),
+            "a zoomed group is rendered whole: its own tab bar is still drawn, \
+             which is exactly what the bare panel does not carry"
+        );
+        assert!(
+            !tab_bars.borrow().contains(&other),
+            "and it is the only thing on screen"
+        );
+    }
+
+    /// Zooming a tile shows its canvas drawing that one tile with its chrome.
+    ///
+    /// A tile was a `TabPanel` in the old dock, so it zoomed with its own bar
+    /// too. The canvas is what draws a tile's chrome, so the canvas is what
+    /// the area renders.
+    #[gpui::test]
+    fn a_zoomed_tile_is_drawn_by_its_canvas_with_its_chrome(cx: &mut TestAppContext) {
+        let log = log_of();
+        let (area, (_, drag_bars), cx) = setup_recording(cx);
+        let bounds = Bounds {
+            origin: gpui::point(px(40.), px(40.)),
+            size: gpui::size(px(200.), px(150.)),
+        };
+        let (alpha, beta) = cx.update(|window, cx| {
+            let alpha = TestPanel::logging("Alpha", &log, cx);
+            let beta = TestPanel::logging("Beta", &log, cx);
+            area.update(cx, |area, cx| {
+                area.set_center(
+                    DockLayout::tiles()
+                        .tile(alpha.clone(), bounds)
+                        .tile(beta.clone(), bounds),
+                    window,
+                    cx,
+                );
+            });
+            (alpha, beta)
+        });
+        cx.run_until_parked();
+        drain(&log);
+
+        let canvas_node = child_node(&area, 0, cx);
+        let canvas = cx.read(|cx| {
+            area.read(cx)
+                .tiles
+                .get(&canvas_node)
+                .unwrap()
+                .entity
+                .clone()
+        });
+        assert!(
+            drag_bars.borrow().contains(&panel_id_of(&alpha))
+                && drag_bars.borrow().contains(&panel_id_of(&beta)),
+            "both tiles draw their own drag bar while nothing is zoomed"
+        );
+
+        drag_bars.borrow_mut().clear();
+        cx.update(|window, cx| {
+            let tile = canvas.read(cx).tiles(cx)[0].clone();
+            assert!(tile.can_zoom());
+            tile.toggle_zoom(window, cx);
+        });
+        cx.run_until_parked();
+
+        assert_eq!(
+            cx.read(|cx| area.read(cx).zoomed_tile()),
+            Some(panel_id_of(&alpha))
+        );
+        assert!(
+            drag_bars.borrow().contains(&panel_id_of(&alpha)),
+            "the zoomed tile keeps the chrome the bare panel does not carry"
+        );
+        assert!(
+            !drag_bars.borrow().contains(&panel_id_of(&beta)),
+            "and the tiles beside it are no longer drawn"
+        );
+        assert_eq!(
+            zoom_signals(&log),
+            vec![("Alpha", PanelSignal::Zoomed(true))],
+            "the panel is told it was zoomed, as its group would have told it"
+        );
+
+        // A zoomed tile is no longer at its stored bounds, so there is
+        // nothing for a move to mean — the tiles counterpart of a zoomed
+        // group reporting itself locked.
+        cx.update(|window, cx| {
+            let tile = canvas.read(cx).tiles(cx)[0].clone();
+            tile.begin_move(gpui::point(px(100.), px(100.)), window, cx);
+        });
+        assert!(!cx.read(|cx| canvas.read(cx).tiles(cx)[0].is_moving()));
+    }
+
+    /// The area's zoom and the container's own flag are written together, so
+    /// neither can be left believing something the other does not.
+    ///
+    /// A group left flagged zoomed reports itself locked for good, and a
+    /// locked group refuses every drop.
+    #[gpui::test]
+    fn clearing_the_zoom_from_outside_puts_the_groups_own_flag_back(cx: &mut TestAppContext) {
+        let log = log_of();
+        let (area, _alpha, cx) = two_groups(&log, cx);
+        cx.run_until_parked();
+        drain(&log);
+
+        let node = child_node(&area, 0, cx);
+        let group = group_of(&area, 0, cx);
+        cx.update(|window, cx| group.update(cx, |group, cx| group.toggle_zoom(window, cx)));
+        cx.run_until_parked();
+        assert_eq!(cx.read(|cx| area.read(cx).zoomed_group()), Some(node));
+        assert!(cx.read(|cx| group.read(cx).is_zoomed()));
+        assert_eq!(
+            zoom_signals(&log),
+            vec![("Alpha", PanelSignal::Zoomed(true))]
+        );
+
+        cx.update(|window, cx| area.update(cx, |area, cx| area.set_zoomed_out(window, cx)));
+        cx.run_until_parked();
+
+        assert!(!cx.read(|cx| area.read(cx).is_zoomed()));
+        assert!(
+            !cx.read(|cx| group.read(cx).is_zoomed()),
+            "a group left flagged zoomed would stay locked and refuse every drop"
+        );
+        assert!(
+            cx.read(|cx| group.read(cx).context(cx).is_droppable()),
+            "and the lock the zoom imposed is lifted with it"
+        );
+        assert_eq!(
+            zoom_signals(&log),
+            vec![("Alpha", PanelSignal::Zoomed(false))],
+            "the panel hears the zoom end too, not just the group"
+        );
+    }
+
+    /// A group that refuses to zoom must not leave the area showing it as
+    /// zoomed: the area records a zoom only once the container agrees.
+    #[gpui::test]
+    fn a_group_that_refuses_to_zoom_leaves_the_area_unzoomed(cx: &mut TestAppContext) {
+        let log = log_of();
+        let (area, alpha, cx) = two_groups(&log, cx);
+        cx.run_until_parked();
+        cx.update(|_, cx| alpha.update(cx, |panel, cx| panel.set_zoomable(false, cx)));
+
+        let node = child_node(&area, 0, cx);
+        let group = group_of(&area, 0, cx);
+        cx.update(|window, cx| area.update(cx, |area, cx| area.set_zoomed_in(node, window, cx)));
+        cx.run_until_parked();
+
+        assert!(!cx.read(|cx| group.read(cx).is_zoomed()));
+        assert!(
+            !cx.read(|cx| area.read(cx).is_zoomed()),
+            "the area must not fill itself with a group that never zoomed"
+        );
     }
 }

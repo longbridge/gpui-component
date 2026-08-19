@@ -36,19 +36,16 @@ pub enum TabGroupEvent {
         target: InsertTarget,
     },
     /// A host-owned drag landed on this group.
-    DragDrop {
-        item: AnyDrag,
-        target: DropTarget,
-    },
+    DragDrop { item: AnyDrag, target: DropTarget },
     /// The user asked to close `panel`.
-    ClosePanel {
-        panel: PanelId,
-    },
+    ClosePanel { panel: PanelId },
     /// The displayed tab changed, so the tree's stored `active_ix` is stale.
-    ActiveChanged {
-        ix: usize,
-    },
+    ActiveChanged { ix: usize },
+    /// This group asked to fill the whole dock. The container installs the
+    /// *group* as its zoomed view, chrome and all — the tab bar is where the
+    /// control that zooms back out lives.
     ZoomIn,
+    /// This group gave the dock back.
     ZoomOut,
 }
 
@@ -294,29 +291,7 @@ impl TabGroup {
     }
 
     pub fn toggle_zoom(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(panel) = self.active_panel(cx) else {
-            return;
-        };
-        if !panel.zoomable(cx) {
-            return;
-        }
-
-        self.zoomed = !self.zoomed;
-        cx.emit(if self.zoomed {
-            TabGroupEvent::ZoomIn
-        } else {
-            TabGroupEvent::ZoomOut
-        });
-
-        // Delivered outside this update so a `set_zoomed` handler may call
-        // back into the group. The old `TabPanel` sent this to itself, where
-        // `Panel::set_zoomed` defaulted to a no-op, so no panel ever heard it.
-        let zoomed = self.zoomed;
-        cx.spawn_in(window, async move |_, cx| {
-            _ = cx.update(|window, cx| panel.set_zoomed(zoomed, window, cx));
-        })
-        .detach();
-        cx.notify();
+        self.set_zoomed(!self.zoomed, window, cx);
     }
 
     /// A snapshot of everything a skin needs to draw this group.
@@ -428,13 +403,45 @@ impl TabGroup {
         cx.notify();
     }
 
+    /// Zoom this group in or out, in full: the flag flips, the displayed
+    /// panel is told, and the container is asked to install or clear the
+    /// zoomed view.
+    ///
     /// Zoom is the group's own state rather than the container's, but the
-    /// container drives it too when it installs or clears a zoomed view.
-    pub(crate) fn set_zoomed(&mut self, zoomed: bool, cx: &mut Context<Self>) {
+    /// container drives it too when it installs or clears a zoomed view — and
+    /// it goes through this same method, so a group cannot end up flagged
+    /// zoomed while the container shows something else.
+    ///
+    /// Zooming *in* is refused, leaving the flag alone, when there is no
+    /// displayed panel or that panel is not zoomable — the early return the
+    /// old `TabPanel::on_action_toggle_zoom` made on `zoomable(cx).is_none()`.
+    /// Zooming *out* is never refused: a group that became unzoomable while
+    /// zoomed still has to be able to give the dock back.
+    pub(crate) fn set_zoomed(&mut self, zoomed: bool, window: &mut Window, cx: &mut Context<Self>) {
         if self.zoomed == zoomed {
             return;
         }
+        let panel = self.active_panel(cx);
+        if zoomed && !panel.as_ref().is_some_and(|panel| panel.zoomable(cx)) {
+            return;
+        }
+
         self.zoomed = zoomed;
+        cx.emit(if zoomed {
+            TabGroupEvent::ZoomIn
+        } else {
+            TabGroupEvent::ZoomOut
+        });
+
+        // Delivered outside this update so a `set_zoomed` handler may call
+        // back into the group. The old `TabPanel` sent this to itself, where
+        // `Panel::set_zoomed` defaulted to a no-op, so no panel ever heard it.
+        if let Some(panel) = panel {
+            cx.spawn_in(window, async move |_, cx| {
+                _ = cx.update(|window, cx| panel.set_zoomed(zoomed, window, cx));
+            })
+            .detach();
+        }
         cx.notify();
     }
 
@@ -1197,7 +1204,7 @@ mod tests {
         cx.update(|window, cx| {
             group.update(cx, |group, cx| {
                 group.set_constraints(TabGroupConstraints::in_split(false), window, cx);
-                group.set_zoomed(true, cx);
+                group.set_zoomed(true, window, cx);
             })
         });
 

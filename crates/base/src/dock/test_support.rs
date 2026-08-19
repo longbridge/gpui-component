@@ -68,6 +68,7 @@ pub(crate) struct TestPanel {
     focus_handle: FocusHandle,
     log: Log,
     visible: bool,
+    zoomable: bool,
     pub(crate) group: Option<WeakEntity<TabGroup>>,
 }
 
@@ -85,12 +86,19 @@ impl TestPanel {
             focus_handle: cx.focus_handle(),
             log,
             visible: true,
+            zoomable: true,
             group: None,
         })
     }
 
     pub(crate) fn set_visible(&mut self, visible: bool, cx: &mut Context<Self>) {
         self.visible = visible;
+        cx.notify();
+    }
+
+    /// A panel that refuses to zoom, which its group must honour.
+    pub(crate) fn set_zoomable(&mut self, zoomable: bool, cx: &mut Context<Self>) {
+        self.zoomable = zoomable;
         cx.notify();
     }
 
@@ -107,6 +115,10 @@ impl Panel for TestPanel {
 
     fn visible(&self, _: &App) -> bool {
         self.visible
+    }
+
+    fn zoomable(&self, _: &App) -> bool {
+        self.zoomable
     }
 
     fn set_active(&mut self, active: bool, _: &mut Window, _: &mut Context<Self>) {

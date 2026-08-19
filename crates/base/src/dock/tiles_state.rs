@@ -5,7 +5,7 @@ use std::{rc::Rc, sync::Arc};
 use gpui::{
     AnyElement, App, Bounds, Context, Div, Empty, EntityId, EventEmitter, FocusHandle, Focusable,
     InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Point, Render, Stateful,
-    Styled as _, WeakEntity, Window, div, px,
+    Styled as _, WeakEntity, Window, div, prelude::FluentBuilder as _, px,
 };
 
 use crate::history::History;
@@ -40,6 +40,12 @@ pub enum TilesEvent {
     /// A host-owned drag landed on the canvas. The canvas has free
     /// coordinates, so the host reads the landing position itself.
     DragDrop { item: AnyDrag },
+    /// One tile asked to fill the whole dock. The container installs the
+    /// *canvas* as its zoomed view, and the canvas draws that one tile with
+    /// its chrome — which is where the control that zooms back out lives.
+    ZoomIn { panel: PanelId },
+    /// The zoomed tile gave the dock back.
+    ZoomOut,
 }
 
 /// One tile, mirrored from a `Tiles` node.
@@ -80,6 +86,10 @@ pub struct TilesState {
     this: WeakEntity<Self>,
     tiles: Vec<Tile>,
     focus_handle: FocusHandle,
+    /// The tile filling the whole dock, if one is. Driven by the container
+    /// through [`Self::set_zoomed`], so the canvas and the container name the
+    /// same tile or neither does.
+    zoomed: Option<PanelId>,
     moving: Option<TileMove>,
     resizing: Option<TileResize>,
     history: History<TileChange>,
@@ -95,6 +105,7 @@ impl TilesState {
             this: cx.weak_entity(),
             tiles: Vec::new(),
             focus_handle: cx.focus_handle(),
+            zoomed: None,
             moving: None,
             resizing: None,
             history: History::new().group_interval(std::time::Duration::from_millis(100)),
@@ -154,6 +165,68 @@ impl TilesState {
         cx.notify();
     }
 
+    /// The tile filling the whole dock, if one is.
+    pub fn zoomed_tile(&self) -> Option<PanelId> {
+        self.zoomed
+    }
+
+    /// Flip one tile's zoom.
+    pub fn toggle_zoom(&mut self, panel: PanelId, window: &mut Window, cx: &mut Context<Self>) {
+        let zoomed = (self.zoomed != Some(panel)).then_some(panel);
+        self.set_zoomed(zoomed, window, cx);
+    }
+
+    /// Zoom one tile in, or zoom out with `None`: the flag changes, the panel
+    /// is told, and the container is asked to install or clear the zoomed
+    /// view.
+    ///
+    /// The container drives this too when it clears a zoom from outside, so
+    /// the canvas cannot be left naming a tile the container is not showing.
+    ///
+    /// Zooming *in* is refused, leaving the flag alone, for a tile that is not
+    /// on this canvas or whose panel is not zoomable. Zooming *out* is never
+    /// refused: a tile that became unzoomable while zoomed still has to be
+    /// able to give the dock back.
+    pub(crate) fn set_zoomed(
+        &mut self,
+        zoomed: Option<PanelId>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.zoomed == zoomed {
+            return;
+        }
+        // The outgoing tile hears about it as well as the incoming one, so a
+        // zoom moved straight from one tile to another leaves neither panel
+        // believing it still fills the dock.
+        let outgoing = self.zoomed.and_then(|panel| self.panel_view(panel));
+        let incoming = zoomed.and_then(|panel| self.panel_view(panel));
+        if zoomed.is_some() && !incoming.as_ref().is_some_and(|panel| panel.zoomable(cx)) {
+            return;
+        }
+
+        self.zoomed = zoomed;
+        cx.emit(match zoomed {
+            Some(panel) => TilesEvent::ZoomIn { panel },
+            None => TilesEvent::ZoomOut,
+        });
+
+        // Delivered outside this update so a `set_zoomed` handler may call
+        // back into the canvas.
+        cx.spawn_in(window, async move |_, cx| {
+            _ = cx.update(|window, cx| {
+                if let Some(panel) = outgoing {
+                    panel.set_zoomed(false, window, cx);
+                }
+                if let Some(panel) = incoming {
+                    panel.set_zoomed(true, window, cx);
+                }
+            });
+        })
+        .detach();
+        cx.notify();
+    }
+
     /// Undo the most recent group of tile changes.
     pub fn undo(&mut self, cx: &mut Context<Self>) {
         let Some(changes) = self.history.undo() else {
@@ -194,6 +267,10 @@ impl TilesState {
         self.index_of(panel).map(|ix| self.tiles[ix].bounds)
     }
 
+    fn panel_view(&self, panel: PanelId) -> Option<Arc<dyn PanelView>> {
+        self.index_of(panel).map(|ix| self.tiles[ix].panel.clone())
+    }
+
     /// The panel behind a history record's `EntityId`.
     fn panel_of(&self, entity: EntityId) -> Option<PanelId> {
         self.tiles
@@ -217,6 +294,12 @@ impl TilesState {
     }
 
     fn begin_move(&mut self, panel: PanelId, pointer: Point<Pixels>, cx: &mut Context<Self>) {
+        // A zoomed tile fills the dock rather than sitting at its stored
+        // bounds, so there is nothing for a move to mean — the same reason a
+        // zoomed tab group reports itself locked.
+        if self.zoomed.is_some() {
+            return;
+        }
         let Some(initial_bounds) = self.bounds_of(panel) else {
             return;
         };
@@ -271,6 +354,9 @@ impl TilesState {
         pointer: Point<Pixels>,
         cx: &mut Context<Self>,
     ) {
+        if self.zoomed.is_some() {
+            return;
+        }
         let Some(initial_bounds) = self.bounds_of(panel) else {
             return;
         };
@@ -397,6 +483,8 @@ impl TilesState {
             moving: self.moving.is_some_and(|drag| drag.panel == panel),
             resizing: self.resizing.is_some_and(|drag| drag.panel == panel),
             closable: tile.panel.closable(cx),
+            zoomed: self.zoomed == Some(panel),
+            zoomable: tile.panel.zoomable(cx),
             on_begin_move: {
                 let canvas = canvas.clone();
                 Rc::new(move |pointer, _, cx| {
@@ -443,6 +531,12 @@ impl TilesState {
                     });
                 })
             },
+            on_toggle_zoom: {
+                let canvas = canvas.clone();
+                Rc::new(move |window, cx| {
+                    _ = canvas.update(cx, |canvas, cx| canvas.toggle_zoom(panel, window, cx));
+                })
+            },
             on_close: Rc::new(move |_, cx| {
                 _ = canvas.update(cx, |canvas, cx| canvas.close_tile(panel, cx));
             }),
@@ -462,7 +556,16 @@ impl Render for TilesState {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let renderer = self.renderer.clone();
         let focus_handle = self.focus_handle.clone();
-        let tiles = self.tiles(cx);
+        // A zoomed tile fills the dock on its own, so the tiles beside it are
+        // not drawn — just as the rest of the dock is not drawn behind it.
+        // A zoom naming a tile that has since left the canvas draws the
+        // canvas whole rather than nothing at all.
+        let zoomed = self.zoomed.filter(|panel| self.index_of(*panel).is_some());
+        let tiles: Vec<TileContext> = self
+            .tiles(cx)
+            .into_iter()
+            .filter(|tile| zoomed.is_none_or(|panel| tile.id == panel))
+            .collect();
 
         renderer
             .frame(window, cx)
@@ -474,21 +577,30 @@ impl Render for TilesState {
                 tiles
                     .into_iter()
                     .map(|tile| {
-                        // The only positioning base installs anywhere in the
-                        // dock. A tiles canvas *is* "panels at stored
-                        // coordinates": drawing one somewhere other than its
-                        // own bounds would not be a different skin, it would
-                        // be a different data structure.
                         renderer
                             .tile_frame(&tile, window, cx)
-                            .absolute()
-                            .left(tile.bounds.origin.x)
-                            .top(tile.bounds.origin.y)
-                            .w(tile.bounds.size.width)
-                            .h(tile.bounds.size.height)
+                            // The only positioning base installs anywhere in
+                            // the dock. A tiles canvas *is* "panels at stored
+                            // coordinates": drawing one somewhere other than
+                            // its own bounds would not be a different skin,
+                            // it would be a different data structure. A
+                            // zoomed tile is the exception — it is no longer
+                            // at its coordinates, and how it fills the dock
+                            // is the skin's to decide.
+                            .when(!tile.zoomed, |this| {
+                                this.absolute()
+                                    .left(tile.bounds.origin.x)
+                                    .top(tile.bounds.origin.y)
+                                    .w(tile.bounds.size.width)
+                                    .h(tile.bounds.size.height)
+                            })
                             .child(renderer.render_drag_bar(&tile, window, cx))
                             .child(tile.panel.view())
-                            .child(renderer.render_resize_handles(&tile, window, cx))
+                            // Nothing to resize against while zoomed, and the
+                            // canvas refuses the gesture anyway.
+                            .when(!tile.zoomed, |this| {
+                                this.child(renderer.render_resize_handles(&tile, window, cx))
+                            })
                     })
                     .collect::<Vec<_>>(),
             )
@@ -511,6 +623,8 @@ pub struct TileContext {
     moving: bool,
     resizing: bool,
     closable: bool,
+    zoomed: bool,
+    zoomable: bool,
     on_begin_move: MovePointerHandler,
     on_move_to: MovePointerHandler,
     on_end_move: GestureEndHandler,
@@ -518,6 +632,7 @@ pub struct TileContext {
     on_resize_to: MovePointerHandler,
     on_end_resize: GestureEndHandler,
     on_bring_to_front: GestureEndHandler,
+    on_toggle_zoom: GestureEndHandler,
     on_close: GestureEndHandler,
 }
 
@@ -556,6 +671,22 @@ impl TileContext {
         self.closable
     }
 
+    /// Whether this tile is the one filling the whole dock.
+    ///
+    /// A zoomed tile is drawn without its stored bounds and takes no move or
+    /// resize gesture, so a skin should offer the way back out here rather
+    /// than the affordances of a tile that can still be dragged.
+    pub fn is_zoomed(&self) -> bool {
+        self.zoomed
+    }
+
+    /// Whether this tile's panel allows zooming at all. Where the zoom
+    /// control appears is the skin's decision; whether there is one to offer
+    /// is not.
+    pub fn can_zoom(&self) -> bool {
+        self.zoomable
+    }
+
     /// Pointer positions are in window coordinates: every gesture is resolved
     /// against the position the gesture started at, so the skin never has to
     /// convert into canvas space.
@@ -591,6 +722,16 @@ impl TileContext {
 
     pub fn bring_to_front(&self, window: &mut Window, cx: &mut App) {
         (self.on_bring_to_front)(window, cx);
+    }
+
+    /// Flip this tile between filling the whole dock and sitting at its
+    /// stored bounds.
+    ///
+    /// Zooming *in* is refused when [`Self::can_zoom`] is false, so a skin
+    /// that offers a Zoom control should gate it on that. Zooming out is
+    /// never refused.
+    pub fn toggle_zoom(&self, window: &mut Window, cx: &mut App) {
+        (self.on_toggle_zoom)(window, cx);
     }
 
     /// Dismiss this tile. Refused when [`Self::can_close`] is false, so a
