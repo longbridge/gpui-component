@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{any::Any, collections::HashMap, sync::Arc};
 
 use gpui::{
     AnyView, App, Context, Entity, EventEmitter, FocusHandle, Focusable, Render, WeakEntity, Window,
@@ -86,6 +86,27 @@ pub trait PanelView: 'static + Send + Sync {
     fn view(&self) -> AnyView;
     fn focus_handle(&self, cx: &App) -> FocusHandle;
     fn dump(&self, cx: &App) -> PanelState;
+
+    /// The concrete value behind this handle.
+    ///
+    /// A layer above base cannot recover its own richer panel trait object
+    /// from this one: `Arc<dyn some_skin::PanelView>` coerces *to*
+    /// `Arc<dyn PanelView>`, and Rust has no coercion back — a sub-trait
+    /// object cannot be recovered from a super-trait object. The registry
+    /// documents the same wall one layer in.
+    ///
+    /// So a layer that needs more off a panel than this trait carries defines
+    /// a *concrete* handle type, implements this trait for it by delegation,
+    /// hands base that, and recovers it here with
+    /// `panel.as_any().downcast_ref::<ItsOwnHandle>()`. That downcast works
+    /// precisely because the type it names is concrete.
+    ///
+    /// The blanket implementation for `Entity<T>` answers with the entity, so
+    /// a caller that knows the panel type can recover `Entity<T>` instead.
+    /// Which of the two a given handle holds is not fixed: a failed
+    /// `downcast_ref` means only that this handle was built by someone else,
+    /// and every caller needs a path for that.
+    fn as_any(&self) -> &dyn Any;
 }
 
 impl<T: Panel> PanelView for Entity<T> {
@@ -139,6 +160,10 @@ impl<T: Panel> PanelView for Entity<T> {
 
     fn dump(&self, cx: &App) -> PanelState {
         self.read(cx).dump(cx)
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 

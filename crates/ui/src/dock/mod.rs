@@ -1,6 +1,7 @@
 mod dock;
 mod invalid_panel;
 mod panel;
+pub mod panel_handle;
 mod stack_panel;
 mod state;
 mod tab_panel;

@@ -320,7 +320,37 @@ impl DockArea {
         cx: &mut Context<Self>,
     ) {
         let id = PanelId::from(panel.entity_id());
-        self.panels.insert(id, Arc::new(panel));
+        self.add_panel_inner(id, Arc::new(panel), placement, size, window, cx);
+    }
+
+    /// Add an already-wrapped panel handle to a region.
+    ///
+    /// The companion to [`Self::add_panel`], for a layer that hands base its
+    /// own concrete handle — see [`PanelView::as_any`] — rather than a bare
+    /// entity. The id comes from [`PanelView::panel_id`], which is the only
+    /// place it can come from once the entity is behind the handle.
+    pub fn add_panel_view(
+        &mut self,
+        panel: Arc<dyn PanelView>,
+        placement: DockPlacement,
+        size: Option<Pixels>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let id = panel.panel_id(cx);
+        self.add_panel_inner(id, panel, placement, size, window, cx);
+    }
+
+    fn add_panel_inner(
+        &mut self,
+        id: PanelId,
+        panel: Arc<dyn PanelView>,
+        placement: DockPlacement,
+        size: Option<Pixels>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.panels.insert(id, panel);
 
         if placement != DockPlacement::Center && !self.docks.contains_key(&placement) {
             self.docks.insert(
@@ -527,10 +557,12 @@ impl DockArea {
         // they were removed.
 
         let dock_area = self.this.clone();
+        let renderer = self.renderer.clone();
         let mut built = Vec::new();
         self.center = {
             let mut builder = RegistryPanelBuilder {
                 dock_area: dock_area.clone(),
+                renderer: renderer.clone(),
                 built: &mut built,
                 window,
                 cx,
@@ -545,6 +577,7 @@ impl DockArea {
             let tree = {
                 let mut builder = RegistryPanelBuilder {
                     dock_area: dock_area.clone(),
+                    renderer: renderer.clone(),
                     built: &mut built,
                     window,
                     cx,
@@ -1285,6 +1318,7 @@ fn target_node(target: &InsertTarget) -> NodeId {
 /// Rebuilds panels out of persisted state through [`PanelRegistry`].
 struct RegistryPanelBuilder<'a, 'w, 'c> {
     dock_area: WeakEntity<DockArea>,
+    renderer: Rc<dyn DockAreaRenderer>,
     built: &'a mut Vec<(PanelId, Arc<dyn PanelView>)>,
     window: &'w mut Window,
     cx: &'c mut App,
@@ -1293,11 +1327,17 @@ struct RegistryPanelBuilder<'a, 'w, 'c> {
 impl PanelBuilder for RegistryPanelBuilder<'_, '_, '_> {
     fn build(&mut self, state: &PanelState, info: &PanelInfo) -> PanelId {
         let context = PanelBuildContext::new(self.dock_area.clone(), state, info);
-        let view = PanelRegistry::build_panel(&state.panel_name, context, self.window, self.cx)
-            .unwrap_or_else(|| {
-                Arc::new(self.cx.new(|cx| PlaceholderPanel::new(state.clone(), cx)))
-                    as Arc<dyn PanelView>
-            });
+        let view =
+            match PanelRegistry::build_panel(&state.panel_name, context, self.window, self.cx) {
+                Some(view) => view,
+                None => self
+                    .renderer
+                    .build_placeholder(state, self.window, self.cx)
+                    .unwrap_or_else(|| {
+                        Arc::new(self.cx.new(|cx| PlaceholderPanel::new(state.clone(), cx)))
+                            as Arc<dyn PanelView>
+                    }),
+            };
 
         let id = view.panel_id(self.cx);
         self.built.push((id, view));
@@ -1445,6 +1485,29 @@ pub trait DockAreaRenderer: 'static {
         cx: &mut App,
     ) -> AnyElement {
         content
+    }
+
+    /// The stand-in for a panel this build cannot construct — one whose
+    /// `panel_name` no [`PanelRegistry`] builder answers to. `None` takes
+    /// base's own placeholder, which draws nothing.
+    ///
+    /// The hook exists because a placeholder cannot be wrapped after the
+    /// fact: presentation reaches base only through the handle a panel is
+    /// registered behind, so whoever creates the panel decides what it can
+    /// draw. An "unknown panel" message is presentation, so the skin creates
+    /// that panel or does without one.
+    ///
+    /// A placeholder is what gets written back out on the next save, so one
+    /// supplied here should answer [`Panel::dump`] with `state` unchanged —
+    /// otherwise saving after a load erases the panel it stood in for. Base's
+    /// own placeholder does; nothing here can enforce it of a skin's.
+    fn build_placeholder(
+        &self,
+        state: &PanelState,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Option<Arc<dyn PanelView>> {
+        None
     }
 
     fn tab_group_renderer(&self) -> Rc<dyn TabGroupRenderer>;
@@ -2094,6 +2157,111 @@ mod tests {
         );
     }
 
+    /// The skin's stand-in for a panel this build cannot construct. It keeps
+    /// the original state, which is the obligation
+    /// [`DockAreaRenderer::build_placeholder`] documents.
+    struct SkinPlaceholder {
+        state: PanelState,
+        focus_handle: FocusHandle,
+    }
+
+    impl Panel for SkinPlaceholder {
+        fn panel_name(&self) -> &'static str {
+            "SkinPlaceholder"
+        }
+
+        fn dump(&self, _: &App) -> PanelState {
+            self.state.clone()
+        }
+    }
+
+    impl EventEmitter<PanelEvent> for SkinPlaceholder {}
+
+    impl Focusable for SkinPlaceholder {
+        fn focus_handle(&self, _: &App) -> FocusHandle {
+            self.focus_handle.clone()
+        }
+    }
+
+    impl Render for SkinPlaceholder {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            Empty
+        }
+    }
+
+    struct PlaceholderSkin {
+        asked: Rc<std::cell::RefCell<Vec<String>>>,
+    }
+
+    impl DockAreaRenderer for PlaceholderSkin {
+        fn build_placeholder(
+            &self,
+            state: &PanelState,
+            _: &mut Window,
+            cx: &mut App,
+        ) -> Option<Arc<dyn PanelView>> {
+            self.asked.borrow_mut().push(state.panel_name.clone());
+            let state = state.clone();
+            Some(Arc::new(cx.new(|cx| SkinPlaceholder {
+                state,
+                focus_handle: cx.focus_handle(),
+            })))
+        }
+
+        fn tab_group_renderer(&self) -> Rc<dyn TabGroupRenderer> {
+            Rc::new(BareTabGroup)
+        }
+
+        fn tiles_renderer(&self) -> Rc<dyn TilesRenderer> {
+            Rc::new(BareTiles)
+        }
+    }
+
+    /// A panel no builder answers for becomes the skin's placeholder rather
+    /// than base's draw-nothing one, so the "unknown panel" message the old
+    /// `InvalidPanel` drew has somewhere to live.
+    #[gpui::test]
+    fn an_unbuildable_panel_becomes_the_skins_placeholder(cx: &mut TestAppContext) {
+        cx.update(|cx| {
+            let _ = crate::Theme::global_mut(cx);
+        });
+        let asked: Rc<std::cell::RefCell<Vec<String>>> = Rc::default();
+        let skin = Rc::new(PlaceholderSkin {
+            asked: asked.clone(),
+        });
+        let (area, cx) = cx.add_window_view(|window, cx| {
+            DockArea::new("test-dock", None, window, cx).with_renderer(skin)
+        });
+
+        // Nothing is registered, so the round trip cannot rebuild this panel.
+        cx.update(|window, cx| {
+            let ghost = TestPanel::new("Ghost", cx);
+            area.update(cx, |area, cx| {
+                area.set_center(DockLayout::tabs().panel(ghost), window, cx)
+            });
+        });
+        let state = cx.read(|cx| area.read(cx).dump(cx));
+        cx.update(|window, cx| area.update(cx, |area, cx| area.load(state, window, cx).unwrap()));
+        cx.run_until_parked();
+
+        assert_eq!(*asked.borrow(), vec!["Ghost".to_string()]);
+        assert_eq!(
+            cx.read(|cx| area
+                .read(cx)
+                .panels
+                .values()
+                .map(|panel| panel.panel_name(cx))
+                .collect::<Vec<_>>()),
+            vec!["SkinPlaceholder"],
+            "base installed the skin's placeholder, not its own"
+        );
+        assert_eq!(
+            cx.read(|cx| area.read(cx).dump(cx)).center.children[0].children[0].panel_name,
+            "Ghost",
+            "and the unknown panel still survives the next save"
+        );
+    }
+
     #[gpui::test]
     fn a_persisted_tiles_canvas_restores_its_panels(cx: &mut TestAppContext) {
         // Every tiles canvas the old dock ever wrote has `TabPanel`-shaped
@@ -2464,6 +2632,33 @@ mod tests {
         });
         cx.run_until_parked();
 
+        assert!(!is_center_empty(&area, cx));
+    }
+
+    /// The pre-wrapped companion of `add_panel`, for a layer that hands base
+    /// its own handle. The panel it registers is the very handle it was
+    /// given, keyed by the id that handle reports.
+    #[gpui::test]
+    fn add_panel_view_registers_the_handle_it_was_given(cx: &mut TestAppContext) {
+        let (area, cx) = setup(cx);
+
+        let view = cx.update(|window, cx| {
+            let view: Arc<dyn PanelView> = Arc::new(TestPanel::new("Alpha", cx));
+            area.update(cx, |area, cx| {
+                area.add_panel_view(view.clone(), DockPlacement::Center, None, window, cx)
+            });
+            view
+        });
+        cx.run_until_parked();
+
+        let id = cx.read(|cx| view.panel_id(cx));
+        assert!(
+            cx.read(|cx| area
+                .read(cx)
+                .panel(id)
+                .is_some_and(|stored| Arc::ptr_eq(stored, &view))),
+            "the stored handle is the one that was handed over, under its own id"
+        );
         assert!(!is_center_empty(&area, cx));
     }
 

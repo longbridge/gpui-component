@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use gpui::{Axis, Bounds, Entity, Pixels};
+use gpui::{App, Axis, Bounds, Entity, Pixels};
 
 use super::node::{LayoutNode, NodeKind, PanelId, TilePanel};
 use super::tree::{LayoutTree, RootKind};
@@ -99,6 +99,24 @@ impl DockLayout {
         self
     }
 
+    /// Add an already-wrapped panel handle to a tab group.
+    ///
+    /// The companion to [`Self::panel`], for a layer that hands base its own
+    /// concrete handle — see [`PanelView::as_any`] — rather than a bare
+    /// entity. `cx` is here because the id has to come from
+    /// [`PanelView::panel_id`]: unlike [`Self::panel`], there is no entity in
+    /// hand to take it from.
+    pub fn panel_view(mut self, panel: Arc<dyn PanelView>, cx: &App) -> Self {
+        debug_assert!(
+            matches!(self.kind, BuilderKind::Tabs { .. }),
+            "panel_view() is only valid on tabs()"
+        );
+        if let BuilderKind::Tabs { panels, .. } = &mut self.kind {
+            panels.push((panel.panel_id(cx), panel));
+        }
+        self
+    }
+
     /// Place a panel on a tiles canvas.
     pub fn tile<P: Panel>(mut self, panel: Entity<P>, bounds: Bounds<Pixels>) -> Self {
         debug_assert!(
@@ -107,6 +125,25 @@ impl DockLayout {
         );
         if let BuilderKind::Tiles { panels } = &mut self.kind {
             panels.push((PanelId::from(panel.entity_id()), Arc::new(panel), bounds));
+        }
+        self
+    }
+
+    /// Place an already-wrapped panel handle on a tiles canvas. The companion
+    /// to [`Self::tile`], for the same reason [`Self::panel_view`] is the
+    /// companion to [`Self::panel`].
+    pub fn tile_view(
+        mut self,
+        panel: Arc<dyn PanelView>,
+        bounds: Bounds<Pixels>,
+        cx: &App,
+    ) -> Self {
+        debug_assert!(
+            matches!(self.kind, BuilderKind::Tiles { .. }),
+            "tile_view() is only valid on tiles()"
+        );
+        if let BuilderKind::Tiles { panels } = &mut self.kind {
+            panels.push((panel.panel_id(cx), panel, bounds));
         }
         self
     }
