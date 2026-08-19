@@ -5,7 +5,7 @@ use std::{rc::Rc, sync::Arc};
 use gpui::{
     AnyElement, AnyView, App, Bounds, Context, Div, DragMoveEvent, Empty, EventEmitter,
     FocusHandle, Focusable, InteractiveElement as _, IntoElement, ParentElement as _, Pixels,
-    Render, WeakEntity, Window, div, prelude::FluentBuilder as _,
+    Render, Stateful, WeakEntity, Window, div, prelude::FluentBuilder as _,
 };
 
 use crate::Placement;
@@ -26,6 +26,7 @@ use super::{
 /// to the container that owns this group. Reporting the intent instead of
 /// reaching for the container keeps the whole detach-then-reinsert dance —
 /// and the reentrancy it used to provoke — out of the group entirely.
+#[non_exhaustive]
 pub enum TabGroupEvent {
     /// A panel was dropped on this group. `target` says where in the tree it
     /// lands; the container applies it as a single `LayoutTree::move_panel`.
@@ -51,17 +52,125 @@ pub enum TabGroupEvent {
     ZoomOut,
 }
 
+/// Everything the container knows about a group's place in the dock.
+///
+/// Pushed as one value rather than one setter per fact. These are read
+/// together, and a container that updates one while leaving another stale
+/// describes a dock that cannot exist — a group on a tiles canvas that still
+/// reports itself droppable, or a group beside siblings that still reports
+/// itself alone. Choosing a constructor forces the container kind to be
+/// stated; anything a constructor does not grant stays off, so a container
+/// that forgets something gets a group that does less rather than more.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TabGroupConstraints {
+    in_tiles: bool,
+    alone: bool,
+    dock_locked: bool,
+    collapsed: bool,
+    closable: bool,
+}
+
+impl TabGroupConstraints {
+    /// A group with nowhere to go: locked, alone, unclosable. What a group
+    /// starts as, before any container has placed it.
+    pub fn sealed() -> Self {
+        Self {
+            in_tiles: false,
+            alone: true,
+            dock_locked: true,
+            collapsed: false,
+            closable: false,
+        }
+    }
+
+    /// A group in a split layout. `alone` when nothing sits beside it, which
+    /// is what stops its last visible panel being dragged out and leaving the
+    /// dock empty.
+    pub fn in_split(alone: bool) -> Self {
+        Self {
+            in_tiles: false,
+            alone,
+            dock_locked: false,
+            collapsed: false,
+            closable: true,
+        }
+    }
+
+    /// A group on a tiles canvas.
+    ///
+    /// A tiles canvas runs its own drag and resize system, so the group is
+    /// locked against panel drags and dock drops. Unlike every other locked
+    /// group its panels stay closable, because closing is how a tile is
+    /// dismissed. There is no way to unlock it, which is deliberate: the old
+    /// `TabPanel` reached the same state through `stack_panel.is_none()`, and
+    /// nothing could clear that either.
+    pub fn in_tiles() -> Self {
+        Self {
+            in_tiles: true,
+            alone: true,
+            dock_locked: false,
+            collapsed: false,
+            closable: true,
+        }
+    }
+
+    /// Whether the dock as a whole forbids rearranging.
+    pub fn dock_locked(mut self, dock_locked: bool) -> Self {
+        self.dock_locked = dock_locked;
+        self
+    }
+
+    /// Whether the group is folded away to a strip of tabs with no content.
+    pub fn collapsed(mut self, collapsed: bool) -> Self {
+        self.collapsed = collapsed;
+        self
+    }
+
+    /// Whether the container allows this group's panels to be closed at all.
+    /// A dock's last group sets this `false` so the dock cannot be emptied.
+    pub fn closable(mut self, closable: bool) -> Self {
+        self.closable = closable;
+        self
+    }
+
+    pub fn is_in_tiles(&self) -> bool {
+        self.in_tiles
+    }
+
+    /// Whether nothing sits beside this group in its tree.
+    pub fn is_alone(&self) -> bool {
+        self.alone
+    }
+
+    pub fn is_dock_locked(&self) -> bool {
+        self.dock_locked
+    }
+
+    /// Whether the group's place in the dock is fixed, which is the dock-wide
+    /// lock or a tiles canvas.
+    pub fn is_locked(&self) -> bool {
+        self.dock_locked || self.in_tiles
+    }
+
+    pub fn is_collapsed(&self) -> bool {
+        self.collapsed
+    }
+
+    pub fn can_close(&self) -> bool {
+        self.closable
+    }
+}
+
 /// A tab group's behavior, with no appearance of its own.
 ///
 /// It owns the panel list mirrored from the layout tree, the displayed index,
 /// the focus handle, drag and drop hit state, and the zoom flag. Everything
 /// visible is produced by the [`TabGroupRenderer`] the host installs.
 ///
-/// The group holds no handle on its container. What the container knows —
-/// whether the dock is locked, whether this is the only group, whether it sits
-/// on a tiles canvas — is pushed in, and what the group needs done is emitted
-/// as a [`TabGroupEvent`]. That keeps a group constructible, and testable, on
-/// its own.
+/// The group holds no handle on its container. What the container knows — the
+/// facts in [`TabGroupConstraints`] — is pushed in, and what the group needs
+/// done is emitted as a [`TabGroupEvent`]. That keeps a group constructible,
+/// and testable, on its own.
 pub struct TabGroup {
     node: NodeId,
     /// Handed to the callbacks in [`TabGroupContext`], which are built from a
@@ -70,10 +179,7 @@ pub struct TabGroup {
     panels: Vec<Arc<dyn PanelView>>,
     active_ix: usize,
     zoomed: bool,
-    collapsed: bool,
-    locked: bool,
-    only_group: bool,
-    in_tiles: bool,
+    constraints: TabGroupConstraints,
     focus_handle: FocusHandle,
     active: ActiveTracker,
     drop_indicator: Option<DropIndicator>,
@@ -94,10 +200,8 @@ impl TabGroup {
             panels: Vec::new(),
             active_ix: 0,
             zoomed: false,
-            collapsed: false,
-            locked: false,
-            only_group: true,
-            in_tiles: false,
+            // A group that no container has placed yet can do nothing.
+            constraints: TabGroupConstraints::sealed(),
             focus_handle: cx.focus_handle(),
             active: ActiveTracker::default(),
             drop_indicator: None,
@@ -139,7 +243,20 @@ impl TabGroup {
     }
 
     pub fn is_collapsed(&self) -> bool {
-        self.collapsed
+        self.constraints.is_collapsed()
+    }
+
+    /// Whether closing this group's displayed panel is allowed at all.
+    ///
+    /// Mirrors the old `TabPanel::closable`: the container must permit it, the
+    /// group must have somewhere to go — or be a tile, which is dismissed by
+    /// closing — and the displayed panel must itself be closable.
+    pub fn can_close(&self, cx: &App) -> bool {
+        self.constraints.can_close()
+            && (self.draggable(cx) || self.constraints.is_in_tiles())
+            && self
+                .active_panel(cx)
+                .is_some_and(|panel| panel.closable(cx))
     }
 
     /// Display `ix`, if it names a tab that is not already displayed.
@@ -156,8 +273,17 @@ impl TabGroup {
     }
 
     /// Ask the container to close `panel`. Nothing happens for a panel that is
-    /// not in this group or does not allow closing.
+    /// not in this group, or when either the group or the panel refuses.
     pub fn close_panel(&mut self, panel: PanelId, cx: &mut Context<Self>) {
+        if !self.constraints.can_close() {
+            return;
+        }
+        // A dock's last group has nowhere to go and must stay; a tile is
+        // dismissed by closing it, so it is exempt.
+        if !self.draggable(cx) && !self.constraints.is_in_tiles() {
+            return;
+        }
+
         let closable = self
             .panels
             .iter()
@@ -206,7 +332,9 @@ impl TabGroup {
             active_panel: self.active_panel(cx),
             active_ix: self.active_ix,
             zoomed: self.zoomed,
-            collapsed: self.collapsed,
+            collapsed: self.constraints.is_collapsed(),
+            in_tiles: self.constraints.is_in_tiles(),
+            can_close: self.can_close(cx),
             locked: self.is_locked(),
             draggable: self.draggable(cx),
             droppable: self.droppable(),
@@ -249,8 +377,7 @@ impl TabGroup {
 
 /// What the container pushes into a group, and reads back out of it.
 ///
-/// `DockArea` is the only caller and lands in the next task, so none of this
-/// is reachable yet.
+/// `DockArea`, which lands in the next task, is the only caller outside tests.
 #[allow(dead_code)]
 impl TabGroup {
     /// Mirror one `Tabs` node's membership and displayed index into this
@@ -277,55 +404,41 @@ impl TabGroup {
         cx.notify();
     }
 
-    /// Whether the dock as a whole forbids rearranging, and whether this group
-    /// has anywhere to move to. Pushed by the container, which is the only
-    /// thing that can see either.
-    pub(crate) fn set_locked(&mut self, locked: bool, cx: &mut Context<Self>) {
-        if self.locked == locked {
+    /// Replace everything the container knows about this group's place in the
+    /// dock, in one call.
+    ///
+    /// One value rather than a setter per fact, because these are read
+    /// together and a container that updates one while leaving another stale
+    /// describes a dock that cannot exist — a group on a tiles canvas that
+    /// still reports itself droppable, or a group beside siblings that still
+    /// reports itself alone.
+    pub(crate) fn set_constraints(
+        &mut self,
+        constraints: TabGroupConstraints,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.constraints == constraints {
             return;
         }
-        self.locked = locked;
+
+        // Collapsing takes the displayed panel off screen, which the
+        // active-state contract counts as no panel being displayed.
+        let collapse_changed = self.constraints.is_collapsed() != constraints.is_collapsed();
+        self.constraints = constraints;
+        if collapse_changed {
+            self.schedule_active_sync(window, cx);
+        }
         cx.notify();
     }
 
-    /// Whether this is the only group in its tree, which is what makes its
-    /// last visible panel undraggable and unclosable.
-    pub(crate) fn set_only_group(&mut self, only_group: bool, cx: &mut Context<Self>) {
-        if self.only_group == only_group {
-            return;
-        }
-        self.only_group = only_group;
-        cx.notify();
-    }
-
-    pub(crate) fn set_in_tiles(&mut self, in_tiles: bool, cx: &mut Context<Self>) {
-        if self.in_tiles == in_tiles {
-            return;
-        }
-        self.in_tiles = in_tiles;
-        cx.notify();
-    }
-
+    /// Zoom is the group's own state rather than the container's, but the
+    /// container drives it too when it installs or clears a zoomed view.
     pub(crate) fn set_zoomed(&mut self, zoomed: bool, cx: &mut Context<Self>) {
         if self.zoomed == zoomed {
             return;
         }
         self.zoomed = zoomed;
-        cx.notify();
-    }
-
-    /// A collapsed group displays nothing, so no panel of it is active.
-    pub(crate) fn set_collapsed(
-        &mut self,
-        collapsed: bool,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        if self.collapsed == collapsed {
-            return;
-        }
-        self.collapsed = collapsed;
-        self.schedule_active_sync(window, cx);
         cx.notify();
     }
 
@@ -353,15 +466,20 @@ impl TabGroup {
 
     /// A locked group cannot be rearranged. Zooming locks it too: a zoomed
     /// group is the only thing on screen, so there is nowhere to drop.
+    ///
+    /// [`TabGroupConstraints::is_locked`] already folds in the tiles case,
+    /// matching the old `TabPanel::is_locked`, whose final
+    /// `self.stack_panel.is_none()` limb was true for exactly the groups a
+    /// tiles canvas builds.
     fn is_locked(&self) -> bool {
-        self.locked || self.zoomed
+        self.constraints.is_locked() || self.zoomed
     }
 
     /// True when this group holds the last visible panel that anything could
     /// be rearranged around. Only visible panels count, so a hidden panel does
     /// not keep the last visible one draggable and leave the dock empty.
     fn is_last_panel(&self, cx: &App) -> bool {
-        self.only_group && self.visible_panels(cx).count() <= 1
+        self.constraints.is_alone() && self.visible_panels(cx).count() <= 1
     }
 
     fn draggable(&self, cx: &App) -> bool {
@@ -408,7 +526,7 @@ impl TabGroup {
         self.active.sync_finished();
 
         let ids: Vec<PanelId> = self.panels.iter().map(|panel| panel.panel_id(cx)).collect();
-        let displayed = match self.collapsed {
+        let displayed = match self.constraints.is_collapsed() {
             true => None,
             false => ids.get(self.active_ix).copied(),
         };
@@ -602,7 +720,6 @@ impl Render for TabGroup {
         let renderer = self.renderer.clone();
         let focus_handle = self.focus_handle(cx);
         let droppable = context.droppable;
-        let splittable = droppable && !self.in_tiles;
         let indicator = context.drop_indicator;
 
         renderer
@@ -613,14 +730,17 @@ impl Render for TabGroup {
             .child(
                 renderer
                     .content_frame(&context, window, cx)
+                    // Both drag kinds hang off `droppable` alone. In the old
+                    // `TabPanel` the host-item handlers carried an extra
+                    // `!in_tiles` guard nested inside the same droppable test,
+                    // which never did anything: a tiles group was already
+                    // locked, so `droppable` was false there.
                     .when(droppable, |this| {
                         this.on_drag_move(cx.listener(Self::on_panel_drag_move))
                             .on_drop(cx.listener(|this, drag: &DragPanel, _, cx| {
                                 this.on_drop(drag, None, true, cx)
                             }))
-                    })
-                    .when(splittable, |this| {
-                        this.on_drag_move(cx.listener(Self::on_item_drag_move))
+                            .on_drag_move(cx.listener(Self::on_item_drag_move))
                             .on_drop(cx.listener(|this, item: &AnyDrag, _, cx| {
                                 let placement = this
                                     .drop_indicator
@@ -660,9 +780,11 @@ pub struct TabGroupContext {
     active_ix: usize,
     zoomed: bool,
     collapsed: bool,
+    in_tiles: bool,
     locked: bool,
     draggable: bool,
     droppable: bool,
+    can_close: bool,
     drop_indicator: Option<DropIndicator>,
     on_select_tab: SelectTabHandler,
     on_close: ClosePanelHandler,
@@ -704,6 +826,18 @@ impl TabGroupContext {
 
     pub fn is_collapsed(&self) -> bool {
         self.collapsed
+    }
+
+    /// Whether this group sits on a tiles canvas. Tiles run their own drag
+    /// system, so a skin drawing tabs there must not offer dock drop targets.
+    pub fn is_in_tiles(&self) -> bool {
+        self.in_tiles
+    }
+
+    /// Whether closing the displayed panel is allowed at all, so a skin knows
+    /// whether to offer a Close control.
+    pub fn can_close(&self) -> bool {
+        self.can_close
     }
 
     pub fn is_locked(&self) -> bool {
@@ -766,20 +900,28 @@ impl TabGroupContext {
 
 /// Appearance for a tab group. Base draws none of it.
 ///
-/// The two `Div`-returning hooks exist because base attaches focus, keyboard
-/// grouping, and drop handling to the very elements the skin styles: handing
-/// back a wrapper instead would put the hit area and the painted area on
-/// different elements.
+/// The two frame hooks return the element itself rather than wrapping one,
+/// because base attaches focus, keyboard grouping, and drop handling to the
+/// very elements the skin styles: a wrapper would put the hit area and the
+/// painted area on different elements.
 #[allow(unused_variables)]
 pub trait TabGroupRenderer: 'static {
     /// The group's outer frame, which base tracks focus on.
-    fn frame(&self, group: &TabGroupContext, window: &mut Window, cx: &mut App) -> Div {
-        div()
+    ///
+    /// Identified rather than plain, so a skin can add a role, a tooltip, or
+    /// scroll tracking; `Stateful<Div>` does everything base needs from it.
+    fn frame(&self, group: &TabGroupContext, window: &mut Window, cx: &mut App) -> Stateful<Div> {
+        div().id("tab-group")
     }
 
     /// The region below the tab bar, which base installs drop handling on.
-    fn content_frame(&self, group: &TabGroupContext, window: &mut Window, cx: &mut App) -> Div {
-        div()
+    fn content_frame(
+        &self,
+        group: &TabGroupContext,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Stateful<Div> {
+        div().id("tab-group-content")
     }
 
     fn render_tab_bar(
@@ -835,7 +977,10 @@ impl TabGroupRenderer for BareTabGroup {
 mod tests {
     use std::cell::RefCell;
 
-    use gpui::{Entity, TestAppContext, VisualTestContext, point, px, size};
+    use gpui::{
+        AppContext as _, Entity, Modifiers, MouseButton, StatefulInteractiveElement as _,
+        Styled as _, TestAppContext, VisualTestContext, point, px, size,
+    };
 
     use super::*;
     use crate::dock::test_support::{
@@ -940,7 +1085,7 @@ mod tests {
     }
 
     #[gpui::test]
-    fn the_renderer_receives_the_group_state_and_not_the_panels(cx: &mut TestAppContext) {
+    fn the_context_snapshots_the_group_state(cx: &mut TestAppContext) {
         let log = log_of();
         let (group, _panels, cx) = build_group(&log, &["a", "b"], cx);
 
@@ -1020,11 +1165,24 @@ mod tests {
         let log = log_of();
         let (group, _panels, cx) = build_group(&log, &["a", "b"], cx);
 
+        cx.update(|window, cx| {
+            group.update(cx, |group, cx| {
+                group.set_constraints(TabGroupConstraints::in_split(false), window, cx)
+            })
+        });
         let unlocked = cx.update(|_, cx| {
             let context = group.read(cx).context(cx);
             (context.is_draggable(), context.is_droppable())
         });
-        cx.update(|_, cx| group.update(cx, |group, cx| group.set_locked(true, cx)));
+        cx.update(|window, cx| {
+            group.update(cx, |group, cx| {
+                group.set_constraints(
+                    TabGroupConstraints::in_split(false).dock_locked(true),
+                    window,
+                    cx,
+                )
+            })
+        });
         let locked = cx.update(|_, cx| {
             let context = group.read(cx).context(cx);
             (context.is_draggable(), context.is_droppable())
@@ -1041,7 +1199,12 @@ mod tests {
         let log = log_of();
         let (group, _panels, cx) = build_group(&log, &["a", "b"], cx);
 
-        cx.update(|_, cx| group.update(cx, |group, cx| group.set_zoomed(true, cx)));
+        cx.update(|window, cx| {
+            group.update(cx, |group, cx| {
+                group.set_constraints(TabGroupConstraints::in_split(false), window, cx);
+                group.set_zoomed(true, cx);
+            })
+        });
 
         assert!(!cx.update(|_, cx| group.read(cx).context(cx).is_droppable()));
     }
@@ -1053,8 +1216,17 @@ mod tests {
         let log = log_of();
         let (group, _panels, cx) = build_group(&log, &["a"], cx);
 
+        cx.update(|window, cx| {
+            group.update(cx, |group, cx| {
+                group.set_constraints(TabGroupConstraints::in_split(true), window, cx)
+            })
+        });
         let alone = cx.update(|_, cx| group.read(cx).context(cx).is_draggable());
-        cx.update(|_, cx| group.update(cx, |group, cx| group.set_only_group(false, cx)));
+        cx.update(|window, cx| {
+            group.update(cx, |group, cx| {
+                group.set_constraints(TabGroupConstraints::in_split(false), window, cx)
+            })
+        });
         let beside_others = cx.update(|_, cx| group.read(cx).context(cx).is_draggable());
 
         assert!(!alone);
@@ -1297,5 +1469,369 @@ mod tests {
             ],
             "the old TabPanel sent this to itself, where the default no-op swallowed it"
         );
+    }
+
+    /// A tiles canvas runs its own drag and resize system. The old `TabPanel`
+    /// reached the same conclusion through `stack_panel.is_none()`, which was
+    /// true for exactly the groups `DockItem::Tiles` builds.
+    #[gpui::test]
+    fn a_tiles_group_is_locked_but_its_panels_stay_closable(cx: &mut TestAppContext) {
+        let log = log_of();
+        let (group, _panels, cx) = build_group(&log, &["a", "b"], cx);
+
+        cx.update(|window, cx| {
+            group.update(cx, |group, cx| {
+                group.set_constraints(TabGroupConstraints::in_tiles(), window, cx)
+            })
+        });
+        let context = cx.update(|_, cx| group.read(cx).context(cx));
+
+        assert!(context.is_locked());
+        assert!(!context.is_droppable(), "tiles take no dock drops");
+        assert!(!context.is_draggable(), "tiles move whole tiles, not tabs");
+        assert!(context.is_in_tiles());
+        assert!(
+            context.can_close(),
+            "closing is how a tile is dismissed, so it survives the lock"
+        );
+    }
+
+    /// A real drag over a tiles group must resolve nothing: base installs no
+    /// drop handling on a locked group, so the placement is never computed and
+    /// the layout tree is never asked to move anything.
+    #[gpui::test]
+    fn a_drag_over_a_tiles_group_resolves_nothing(cx: &mut TestAppContext) {
+        let (group, _calls, cx) = build_skinned_group(&["a", "b"], cx);
+        cx.update(|window, cx| {
+            group.update(cx, |group, cx| {
+                group.set_constraints(TabGroupConstraints::in_tiles(), window, cx)
+            })
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        drag_from_the_tab_into_the_content(cx);
+
+        assert!(
+            cx.update(|_, cx| group.read(cx).drop_indicator.is_none()),
+            "a locked group installs no drag-move listener, so nothing resolved"
+        );
+    }
+
+    /// `Dock::new` marks a dock's last group unclosable so the dock cannot be
+    /// emptied out from under itself.
+    #[gpui::test]
+    fn a_group_the_container_sealed_shut_refuses_to_close(cx: &mut TestAppContext) {
+        let log = log_of();
+        let (group, panels, cx) = build_group(&log, &["a", "b"], cx);
+        let events = record_events(&group, cx);
+        let panel = panel_id(&panels[0], cx);
+
+        cx.update(|window, cx| {
+            group.update(cx, |group, cx| {
+                group.set_constraints(
+                    TabGroupConstraints::in_split(false).closable(false),
+                    window,
+                    cx,
+                );
+                group.close_panel(panel, cx);
+            })
+        });
+        cx.run_until_parked();
+
+        assert!(!cx.update(|_, cx| group.read(cx).context(cx).can_close()));
+        assert!(events.borrow().is_empty());
+    }
+
+    /// The last visible panel of the only group has nowhere to go, so it is
+    /// not closable either — unless it is a tile.
+    #[gpui::test]
+    fn the_only_groups_last_panel_is_closable_only_in_tiles(cx: &mut TestAppContext) {
+        let log = log_of();
+        let (group, _panels, cx) = build_group(&log, &["a"], cx);
+
+        cx.update(|window, cx| {
+            group.update(cx, |group, cx| {
+                group.set_constraints(TabGroupConstraints::in_split(true), window, cx)
+            })
+        });
+        let in_split = cx.update(|_, cx| group.read(cx).context(cx).can_close());
+
+        cx.update(|window, cx| {
+            group.update(cx, |group, cx| {
+                group.set_constraints(TabGroupConstraints::in_tiles(), window, cx)
+            })
+        });
+        let in_tiles = cx.update(|_, cx| group.read(cx).context(cx).can_close());
+
+        assert!(!in_split);
+        assert!(in_tiles);
+    }
+
+    /// Collapsing takes the displayed panel off screen, and the active-state
+    /// contract counts that as no panel being displayed.
+    #[gpui::test]
+    fn collapsing_deactivates_the_displayed_panel_and_expanding_restores_it(
+        cx: &mut TestAppContext,
+    ) {
+        let log = log_of();
+        let (group, _panels, cx) = build_group(&log, &["a", "b"], cx);
+        cx.run_until_parked();
+        assert_eq!(drain_active(&log), vec![("a", true)]);
+
+        cx.update(|window, cx| {
+            group.update(cx, |group, cx| {
+                group.set_constraints(
+                    TabGroupConstraints::in_split(false).collapsed(true),
+                    window,
+                    cx,
+                )
+            })
+        });
+        cx.run_until_parked();
+        assert_eq!(drain_active(&log), vec![("a", false)]);
+
+        cx.update(|window, cx| {
+            group.update(cx, |group, cx| {
+                group.set_constraints(TabGroupConstraints::in_split(false), window, cx)
+            })
+        });
+        cx.run_until_parked();
+        assert_eq!(drain_active(&log), vec![("a", true)]);
+    }
+
+    // ---- the renderer seam ----
+
+    /// Where `RecordingRenderer` puts its content frame. Deliberately not the
+    /// window's own origin or size, so a listener on the outer frame would
+    /// report different bounds.
+    fn skin_content() -> Bounds<Pixels> {
+        Bounds {
+            origin: point(px(100.), px(50.)),
+            size: size(px(400.), px(300.)),
+        }
+    }
+
+    /// A skin that records which hooks base calls, and lays its two frames out
+    /// at known coordinates so a test can tell them apart by hit geometry.
+    struct RecordingRenderer {
+        calls: Rc<RefCell<Vec<&'static str>>>,
+    }
+
+    impl RecordingRenderer {
+        fn saw(&self, call: &'static str) {
+            self.calls.borrow_mut().push(call);
+        }
+    }
+
+    impl TabGroupRenderer for RecordingRenderer {
+        fn frame(&self, _: &TabGroupContext, _: &mut Window, _: &mut App) -> Stateful<Div> {
+            self.saw("frame");
+            div().id("skin-frame").relative().size_full()
+        }
+
+        fn content_frame(&self, _: &TabGroupContext, _: &mut Window, _: &mut App) -> Stateful<Div> {
+            self.saw("content_frame");
+            div()
+                .id("skin-content")
+                .absolute()
+                .left(skin_content().origin.x)
+                .top(skin_content().origin.y)
+                .w(skin_content().size.width)
+                .h(skin_content().size.height)
+        }
+
+        fn render_tab_bar(
+            &self,
+            group: &TabGroupContext,
+            _: &mut Window,
+            cx: &mut App,
+        ) -> AnyElement {
+            self.saw("tab_bar");
+            div()
+                .id("skin-tab")
+                .absolute()
+                .left(px(0.))
+                .top(px(0.))
+                .w(px(80.))
+                .h(px(24.))
+                .when_some(group.drag_panel(0, cx), |this, drag| {
+                    this.on_drag(drag, |drag, offset, _, cx| {
+                        drag.set_drag_offset(offset);
+                        cx.new(|_| drag.clone())
+                    })
+                })
+                .into_any_element()
+        }
+
+        fn render_active_panel(
+            &self,
+            panel: AnyView,
+            _: &TabGroupContext,
+            _: &mut Window,
+            _: &mut App,
+        ) -> AnyElement {
+            self.saw("active_panel");
+            panel.into_any_element()
+        }
+
+        fn render_empty(
+            &self,
+            _: &TabGroupContext,
+            _: &mut Window,
+            _: &mut App,
+        ) -> Option<AnyElement> {
+            self.saw("empty");
+            None
+        }
+
+        fn render_drop_indicator(
+            &self,
+            _: DropIndicator,
+            _: &mut Window,
+            _: &mut App,
+        ) -> Option<AnyElement> {
+            self.saw("drop_indicator");
+            None
+        }
+    }
+
+    fn build_skinned_group<'a>(
+        names: &[&'static str],
+        cx: &'a mut TestAppContext,
+    ) -> (
+        Entity<TabGroup>,
+        Rc<RefCell<Vec<&'static str>>>,
+        &'a mut VisualTestContext,
+    ) {
+        let calls: Rc<RefCell<Vec<&'static str>>> = Rc::default();
+        let renderer = Rc::new(RecordingRenderer {
+            calls: calls.clone(),
+        });
+        let (group, cx) = cx.add_window_view(|window, cx| {
+            TabGroup::new(NodeId::from_u64(1), window, cx).with_renderer(renderer)
+        });
+
+        let names = names.to_vec();
+        let log = log_of();
+        cx.update(|window, cx| {
+            let views: Vec<Arc<dyn PanelView>> = names
+                .iter()
+                .map(|name| {
+                    Arc::new(crate::dock::test_support::TestPanel::logging(
+                        name, &log, cx,
+                    )) as _
+                })
+                .collect();
+            group.update(cx, |group, cx| {
+                group.set_constraints(TabGroupConstraints::in_split(false), window, cx);
+                group.sync_from_tree(views, 0, window, cx);
+            });
+        });
+        cx.run_until_parked();
+        calls.borrow_mut().clear();
+
+        (group, calls, cx)
+    }
+
+    /// Press on the skin's tab, start the drag, and move into the right-hand
+    /// third of `skin_content()`.
+    fn drag_from_the_tab_into_the_content(cx: &mut VisualTestContext) {
+        cx.simulate_mouse_down(
+            point(px(20.), px(10.)),
+            MouseButton::Left,
+            Modifiers::none(),
+        );
+        cx.simulate_mouse_move(
+            point(px(30.), px(14.)),
+            MouseButton::Left,
+            Modifiers::none(),
+        );
+        cx.simulate_mouse_move(
+            point(px(450.), px(200.)),
+            MouseButton::Left,
+            Modifiers::none(),
+        );
+    }
+
+    /// The composition contract every later renderer copies: which hooks base
+    /// calls, and in what order.
+    #[gpui::test]
+    fn the_renderer_composes_frame_then_tab_bar_then_content(cx: &mut TestAppContext) {
+        let (_group, calls, cx) = build_skinned_group(&["a"], cx);
+
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        assert_eq!(
+            *calls.borrow(),
+            vec!["frame", "tab_bar", "content_frame", "active_panel"],
+            "the tab bar is a sibling of the content, not a child of it"
+        );
+    }
+
+    /// With nothing to display base asks for the empty element instead of the
+    /// active panel, and never for both.
+    #[gpui::test]
+    fn an_empty_group_asks_the_renderer_for_its_empty_state(cx: &mut TestAppContext) {
+        let (_group, calls, cx) = build_skinned_group(&[], cx);
+
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        assert_eq!(
+            *calls.borrow(),
+            vec!["frame", "tab_bar", "content_frame", "empty"]
+        );
+    }
+
+    /// The drop listeners must sit on the content frame, not the outer frame:
+    /// a drag over the group resolves against the content frame's own bounds,
+    /// which the skin — not base — decides.
+    #[gpui::test]
+    fn the_content_frame_is_what_a_drag_is_measured_against(cx: &mut TestAppContext) {
+        let (group, calls, cx) = build_skinned_group(&["a", "b"], cx);
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        drag_from_the_tab_into_the_content(cx);
+
+        let indicator = cx
+            .update(|_, cx| group.read(cx).drop_indicator)
+            .expect("the content frame's drag-move listener ran");
+
+        assert_eq!(
+            indicator.bounds(),
+            skin_content(),
+            "measured against the content frame, not the full-size outer frame"
+        );
+        assert_eq!(indicator.placement(), Some(Placement::Right));
+
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        assert!(
+            calls.borrow().contains(&"drop_indicator"),
+            "a published indicator is handed to the renderer to draw"
+        );
+    }
+
+    /// A drop landing on the content frame reports a move the container can
+    /// apply, and clears the hover state behind it.
+    #[gpui::test]
+    fn dropping_on_the_content_frame_reports_the_move(cx: &mut TestAppContext) {
+        let (group, _calls, cx) = build_skinned_group(&["a", "b"], cx);
+        let events = record_events(&group, cx);
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        drag_from_the_tab_into_the_content(cx);
+        cx.simulate_mouse_up(
+            point(px(450.), px(200.)),
+            MouseButton::Left,
+            Modifiers::none(),
+        );
+        cx.run_until_parked();
+
+        assert_eq!(events.borrow().len(), 1, "got {:?}", events.borrow());
+        assert!(
+            events.borrow()[0].ends_with("split 1 Right"),
+            "got {:?}",
+            events.borrow()
+        );
+        assert!(cx.update(|_, cx| group.read(cx).drop_indicator.is_none()));
     }
 }

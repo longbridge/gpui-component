@@ -47,6 +47,12 @@ pub trait Panel: EventEmitter<PanelEvent> + Render + Focusable {
     /// visible panel.
     fn set_active(&mut self, active: bool, window: &mut Window, cx: &mut Context<Self>) {}
 
+    /// Called when the group displaying this panel zooms in or out.
+    ///
+    /// Only the panel that is currently displayed is told: a group has one
+    /// zoom state, and it is the visible panel that fills the dock. Panels
+    /// sharing the group's other tabs hear nothing, and a panel that is not
+    /// displayed when the zoom changes is never told about it retroactively.
     fn set_zoomed(&mut self, zoomed: bool, window: &mut Window, cx: &mut Context<Self>) {}
 
     fn on_added_to(

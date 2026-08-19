@@ -14,17 +14,14 @@ use super::layout::PanelId;
 /// hidden panel occupying the active slot still receives `true`, even though
 /// rendering falls back to the first visible panel.
 ///
-/// Not yet wired into any panel group: `TabPanel` in `crates/ui` still owns
-/// its own `notified_active` map. A later task migrates it onto this type,
-/// which is why the whole type is presently unused outside its own tests.
-#[allow(dead_code)]
+/// `TabGroup` owns one of these. `TabPanel` in `crates/ui` still keeps its own
+/// `notified_active` map until the cutover removes it.
 #[derive(Default)]
 pub(crate) struct ActiveTracker {
     notified: HashMap<PanelId, bool>,
     sync_scheduled: bool,
 }
 
-#[allow(dead_code)]
 impl ActiveTracker {
     /// Compare the group's current membership and displayed panel against
     /// what each panel was last told, and return only the real edges,
@@ -99,6 +96,9 @@ impl ActiveTracker {
     /// moves to another group — the source tracker's own next `reconcile`
     /// prunes the entry on its own, so this type does not also need a
     /// remove-and-return accessor.
+    ///
+    /// Unused for the same reason as [`Self::seed`], its counterpart.
+    #[allow(dead_code)]
     pub(crate) fn last_notified(&self, panel: PanelId) -> Option<bool> {
         self.notified.get(&panel).copied()
     }

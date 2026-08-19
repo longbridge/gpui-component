@@ -14,14 +14,22 @@ use gpui::{
 
 use super::layout::{NodeId, PanelId};
 use super::panel::{Panel, PanelEvent, PanelView};
-use super::tab_group::TabGroup;
+use super::tab_group::{TabGroup, TabGroupConstraints};
 
 /// One thing a panel was told, in delivery order.
 ///
 /// `set_active` and the membership callbacks share one log because their
-/// relative order is itself part of the contract under test: a moved panel
-/// must never see `Removed`, and a panel joining a group must see `Added`
-/// before it is told it is active.
+/// relative order is itself part of the contract under test: a panel joining a
+/// group must see `Added` before it is told it is active.
+///
+/// `Removed` is also where a deliberate divergence from `crates/ui` shows up.
+/// The old `TabPanel::detach_panel` calls `on_removed` on every detach,
+/// including the detach half of a drag between groups, so a moved panel is
+/// told it was removed and then added again. In the tree world a move never
+/// leaves the tree — `LayoutTree::move_panel` reports no `removed_panels`, and
+/// `EditResult::removed_panels` documents that a moved panel is absent from it
+/// precisely so its entity survives. So under the new contract a moved panel
+/// must never see `Removed`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum PanelSignal {
     Active(bool),
@@ -61,7 +69,9 @@ pub(crate) struct TestPanel {
     log: Log,
     visible: bool,
     /// Cleared by `on_removed`, so a test can assert a moved panel's entity
-    /// survived rather than being torn down and rebuilt.
+    /// survived rather than being torn down and rebuilt. Read by
+    /// `moving_a_panel_reuses_its_entity` once `DockArea` lands.
+    #[allow(dead_code)]
     pub(crate) alive: bool,
     pub(crate) group: Option<WeakEntity<TabGroup>>,
 }
@@ -169,7 +179,12 @@ pub(crate) fn build_group<'a>(
             .iter()
             .map(|panel| Arc::new(panel.clone()) as Arc<dyn PanelView>)
             .collect();
-        group.update(cx, |group, cx| group.sync_from_tree(views, 0, window, cx));
+        group.update(cx, |group, cx| {
+            // A freshly built group is sealed; place it beside siblings so
+            // tests that do not care about constraints get a working group.
+            group.set_constraints(TabGroupConstraints::in_split(false), window, cx);
+            group.sync_from_tree(views, 0, window, cx);
+        });
         panels
     });
 
