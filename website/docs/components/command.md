@@ -5,91 +5,120 @@ description: A command palette — a filtered list of commands and quick actions
 
 # Command
 
-A command palette is a filtered list of commands with groups, shortcut hints,
-and keyboard navigation. Use it inline or compose it into an existing dialog
-for a `⌘K`-style menu. The list is virtualized, so large palettes render only
-their visible rows.
+A command palette is a filtered list of commands with groups, Action-derived
+keybinding hints, and keyboard navigation. Use it inline or compose it into an
+existing dialog for a `⌘K`-style menu. The list stays virtualized, so large
+palettes create only visible rows.
+
+`Command` owns the entries and presentation policy. `CommandState` owns the
+interaction state: query input, focus, selection, scrolling, and loading.
 
 ## Import
 
 ```rust
-use gpui_component::command::{
-    Command, CommandEntry, CommandEvent, CommandGroup, CommandItem, CommandState,
-};
+use gpui_component::command::{Command, CommandEntry, CommandGroup, CommandItem, CommandState};
 ```
 
 ## Composition
 
-Commands live in a [`CommandState`] entity; [`Command`] renders that state.
+Build the palette structure directly on `Command`; create an empty state once
+and reuse it while the palette is shown.
 
 ```text
-CommandState
+Command
 ├── CommandItem                 // ungrouped
 ├── CommandGroup
 │   ├── CommandItem
 │   └── CommandItem
-├── CommandEntry::Separator
+├── separator
 └── CommandGroup
     ├── CommandItem
     └── CommandItem
+
+CommandState                    // query, focus, selection, scrolling
 ```
 
 ## Usage
 
 ### Inline
 
+Define Actions and bindings in application setup. The default row resolves an
+Action's active binding in the Command focus scope and then at application
+scope, rendering a `Kbd` hint only when it finds one.
+
 ```rust
-let state = cx.new(|cx| {
-    CommandState::new(window, cx)
-        .group(
-            CommandGroup::new("Suggestions")
-                .item(CommandItem::new("calendar").label("Calendar").icon(IconName::Calendar))
-                .item(CommandItem::new("search").label("Search Emoji").icon(IconName::Search))
-                .item(CommandItem::new("calc").label("Calculator").disabled(true)),
-        )
-        .separator()
-        .group(
-            CommandGroup::new("Settings")
-                .item(CommandItem::new("profile").label("Profile").icon(IconName::User).shortcut("⌘P"))
-                .item(CommandItem::new("billing").label("Billing").shortcut("⌘B")),
-        )
-});
+use gpui::{actions, KeyBinding};
+
+actions!(my_app, [OpenProfile, OpenBilling]);
+
+// During application setup:
+cx.bind_keys([
+    KeyBinding::new("cmd-p", OpenProfile, Some("Command")),
+    KeyBinding::new("cmd-b", OpenBilling, Some("Command")),
+]);
+
+let state = cx.new(|cx| CommandState::new(window, cx));
 
 Command::new(&state)
+    .group(
+        CommandGroup::new("Suggestions")
+            .item(CommandItem::new("calendar").label("Calendar").icon(IconName::Calendar))
+            .item(CommandItem::new("search-emoji").label("Search Emoji").icon(IconName::Search))
+            .item(CommandItem::new("calculator").label("Calculator").disabled(true)),
+    )
+    .separator()
+    .group(
+        CommandGroup::new("Settings")
+            .item(
+                CommandItem::new("profile")
+                    .label("Profile")
+                    .icon(IconName::User)
+                    .action(Box::new(OpenProfile)),
+            )
+            .item(
+                CommandItem::new("billing")
+                    .label("Billing")
+                    .action(Box::new(OpenBilling)),
+            ),
+    )
     .placeholder("Type a command or search...")
     .empty("No results found.")
     .w(px(380.))
 ```
 
+Do not provide a manually formatted shortcut string. `CommandItem::action`
+provides both the executable behavior and, for the default row, the displayed
+binding. A custom row owns its complete presentation, including any key hint.
+
 ### Quick Actions Without Search
 
-Disable search for a compact action palette. It has no search field, does not
-filter entries, and `state.focus(window, cx)` focuses the Command frame so its
+Disable search for a compact action palette. It has no search field, retains
+all entries, and `state.focus(window, cx)` focuses the Command frame so its
 arrow, Enter, and Escape actions remain available.
 
 ```rust
-let actions = cx.new(|cx| {
-    CommandState::new(window, cx)
-        .searchable(false)
-        .item(CommandItem::new("New File").icon(IconName::Plus))
-        .item(CommandItem::new("Duplicate").icon(IconName::Copy))
-        .item(CommandItem::new("Move to Trash").icon(IconName::Delete))
-});
+let actions = cx.new(|cx| CommandState::new(window, cx));
 
-Command::new(&actions).w(px(380.))
+Command::new(&actions)
+    .searchable(false)
+    .items([
+        CommandItem::new("New File").icon(IconName::Plus),
+        CommandItem::new("Duplicate").icon(IconName::Copy),
+        CommandItem::new("Move to Trash").icon(IconName::Delete),
+    ])
+    .w(px(380.))
 ```
 
 With the default `.searchable(true)`, `state.focus(window, cx)` and
-[`Focusable::focus_handle`] target the search input instead.
+[`Focusable::focus_handle`] target the search input instead. A non-searchable
+palette never invokes `on_query`.
 
 ### In a Dialog
 
-Compose the palette with the existing [`WindowExt::open_dialog`] API. Subscribe
-to [`CommandEvent`] and explicitly close the dialog only on `Confirm`.
-`CommandState` propagates `Cancel`, so the hosting Dialog owns Escape/Cancel
-dismissal; do not close it again. Command does not provide a dialog-specific
-API. `header` renders above the optional search field and list, while `footer`
-renders below the list.
+Compose the palette with the existing [`WindowExt::open_dialog`] API. `header`
+renders above the optional search field and list; `footer` renders below the
+list. On an empty query, Command calls `on_cancel` and then propagates Cancel.
+Let the hosting Dialog perform dismissal—do not close it again in `on_cancel`.
 
 ```rust
 use gpui_component::WindowExt as _;
@@ -102,6 +131,17 @@ window.open_dialog(cx, move |dialog, _, _| {
             Command::new(&state)
                 .bordered(false)
                 .placeholder("Type a command or search...")
+                .items([
+                    CommandItem::new("profile").label("Profile"),
+                    CommandItem::new("billing").label("Billing"),
+                ])
+                .on_confirm(|value, window, cx| {
+                    window.push_notification(format!("Selected {value}"), cx);
+                })
+                // Record local cleanup only; Dialog handles the propagated Cancel.
+                .on_cancel(|window, cx| {
+                    window.push_notification("Command palette cancelled", cx);
+                })
                 .header(|state, _, cx| {
                     h_flex()
                         .justify_between()
@@ -128,43 +168,70 @@ window.open_dialog(cx, move |dialog, _, _| {
 });
 ```
 
-### Reacting to a Choice
+### Callbacks and Actions
 
-Either give an item a handler:
+Callbacks are configured on `Command`, not subscribed from `CommandState`.
+They notify the palette owner directly:
 
 ```rust
-CommandItem::new("profile")
-    .label("Profile")
-    .on_select(|window, cx| {
-        window.push_notification("Opening profile", cx);
+Command::new(&state)
+    .items(entries)
+    .on_query(|query, window, cx| {
+        // Start or update an application-owned search.
+    })
+    .on_select(|value, window, cx| {
+        // Preview the newly highlighted value.
+    })
+    .on_confirm(|value, window, cx| {
+        // Finish with this value, whether or not it has an Action.
+    })
+    .on_cancel(|window, cx| {
+        // Clean up local palette state before Cancel propagates.
     })
 ```
 
-or subscribe to the state:
+`on_query` runs only when a searchable query actually changes. Refiltering can
+move the highlight, so its `on_select` runs first when the selected value
+changes; then `on_query` runs. Keyboard and pointer highlight changes run
+`on_select` but never dispatch an Action. Confirming an enabled item dispatches
+its Action first and then invokes `on_confirm`; an item without an Action still
+invokes `on_confirm`. Escape clears a non-empty query. With an empty query it
+invokes `on_cancel`, then propagates Cancel.
+
+### Dynamic Entries
+
+Keep asynchronous or changing entries in the owner view, then reconstruct the
+Command from the owner's current data when that view renders. Do not mutate the
+state with an entry builder or `set_entries`.
 
 ```rust
-cx.subscribe(&state, |this, _, event: &CommandEvent, cx| {
-    match event {
-        CommandEvent::Select(value) => { /* highlight moved */ }
-        CommandEvent::Confirm(value) => { /* clicked or Enter */ }
-        CommandEvent::Query(query) => { /* the query changed */ }
-        CommandEvent::Cancel => { /* Escape on an empty query */ }
+struct StockSearch {
+    state: Entity<CommandState>,
+    results: Vec<CommandItem>,
+}
+
+impl StockSearch {
+    fn render_palette(&self, owner: WeakEntity<Self>) -> Command {
+        let results = self.results.clone();
+
+        Command::new(&self.state)
+            .items(results)
+            .filter(|item, query| {
+                let query = query.to_lowercase();
+                item.value().to_lowercase().contains(&query)
+                    || item.title().to_lowercase().contains(&query)
+            })
+            .on_query(move |query, window, cx| {
+                _ = owner.update(cx, |this, cx| this.search(query, window, cx));
+            })
     }
-})
+}
 ```
 
-### Changing Commands
-
-```rust
-state.update(cx, |state, cx| {
-    state.set_entries(
-        results
-            .into_iter()
-            .map(|name| CommandEntry::Item(CommandItem::new(name))),
-        cx,
-    );
-});
-```
+The installed model remains in `CommandState` while query, selection, and
+scrolling change, so those interactions do not need an owner rerender. A later
+owner render installs the new model, preserves the selected value when it is
+still present, and remeasures rows.
 
 ## Searching
 
@@ -180,42 +247,29 @@ CommandItem::new("profile")
     .keywords(["account", "user"])
 ```
 
-Use a custom filter when the application's match policy differs. This stock
-search checks the symbol first, then the company name:
-
-```rust
-let stocks = cx.new(|cx| {
-    CommandState::new(window, cx)
-        .filter(|item, query| {
-            let query = query.to_lowercase();
-            item.value().to_lowercase().contains(&query)
-                || item.title().to_lowercase().contains(&query)
-        })
-        .item(CommandItem::new("AAPL.US").label("Apple Inc."))
-        .item(CommandItem::new("NVDA.US").label("NVIDIA Corporation"))
-});
-```
-
-The custom predicate runs only for non-empty queries while search is enabled;
-otherwise every item remains visible. For remote search, listen for
-`CommandEvent::Query`, replace the entries with returned results, and keep the
-query terms in the item value or label if local filtering should still apply.
-Use `set_loading` while waiting so the empty message is suppressed.
+Use `Command::filter` when the application's match policy differs. The custom
+predicate runs only for non-empty queries while search is enabled; otherwise
+every item remains visible. For remote search, update owner-held entries in
+`on_query` and call `state.set_loading(true, window, cx)` while waiting so the
+empty message is suppressed. Render the new entries when the response arrives.
 
 ## Custom Rows and Virtualization
 
-`CommandItem::element` replaces an item's icon and label content. Command
-measures each flattened row when rebuilding its `v_virtual_list` sizes, so
-custom rows may have independent intrinsic heights. Build rows for their
-available list width and keep their rendered content stable until the state is
-updated, because the saved sizes are reused by the virtual list.
+`CommandItem::child` replaces an item's icon and label content with a lazy
+child factory. The factory can run more than once for measurement, viewport
+entry, and typography or width invalidation, so it must be side-effect-free.
+
+Command measures every flattened row before supplying independent sizes to
+`v_virtual_list`. Custom rows may therefore have different intrinsic heights
+while the list remains virtualized. Build them for the available list width and
+keep their rendered content stable until the owner updates the entries.
 
 ```rust
-CommandState::new(window, cx)
-    .item(CommandItem::new("compact").element(|_, _| {
+Command::new(&state)
+    .item(CommandItem::new("compact").child(|_, _| {
         h_flex().w_full().py_1().child("Compact custom row")
     }))
-    .item(CommandItem::new("expanded").element(|_, cx| {
+    .item(CommandItem::new("expanded").child(|_, cx| {
         v_flex()
             .w_full()
             .py_4()
@@ -228,7 +282,15 @@ CommandState::new(window, cx)
 
 | Method | Signature and description |
 | --- | --- |
-| `new` | `new(&Entity<CommandState>) -> Command` renders a state. |
+| `new` | `new(&Entity<CommandState>) -> Command` creates a palette for a state. |
+| `item` / `items` | `item(CommandItem) -> Self` and `items(impl IntoIterator<Item = CommandItem>) -> Self` add ungrouped entries. |
+| `group` / `separator` | `group(CommandGroup) -> Self` adds a group; `separator() -> Self` adds a divider. |
+| `searchable` | `searchable(bool) -> Self` shows or hides the search field and local filtering. Default: `true`. |
+| `filter` | `filter<F>(F) -> Self`, where `F: Fn(&CommandItem, &str) -> bool + 'static`, replaces default matching. |
+| `on_query` | `on_query<F>(F) -> Self`, where `F: Fn(&str, &mut Window, &mut App) + 'static`, runs after a searchable query changes. |
+| `on_select` | `on_select<F>(F) -> Self`, where `F: Fn(&SharedString, &mut Window, &mut App) + 'static`, runs when the highlighted value changes. |
+| `on_confirm` | `on_confirm<F>(F) -> Self`, with the same value callback bounds; runs after the confirmed Action dispatches. |
+| `on_cancel` | `on_cancel<F>(F) -> Self`, where `F: Fn(&mut Window, &mut App) + 'static`, runs before empty-query Cancel propagates. |
 | `placeholder` | `placeholder(impl Into<SharedString>) -> Self` sets the search-field placeholder. |
 | `empty` | `empty(impl Into<SharedString>) -> Self` sets the message for no matches. |
 | `max_h` | `max_h(impl Into<DefiniteLength>) -> Self` sets the list maximum. Default: `18.75rem` (300px). |
@@ -243,30 +305,40 @@ to the palette frame.
 
 | Method | Description |
 | --- | --- |
-| `new(value)` | The value identifies the item and is its label until `label` sets one. |
+| `new(value)` | The value identifies the item, is reported to callbacks, and is its label until `label` sets one. |
 | `label` | Sets the visible label. |
-| `icon` | Sets the leading icon. |
-| `shortcut` | Sets a trailing shortcut hint; the application binds the keystroke. |
-| `checked` | Draws a trailing check; `shortcut` uses that position instead. |
+| `icon` | Sets the leading icon for the default row. |
+| `action` | `action(Box<dyn Action>) -> Self` sets the behavior dispatched on click or confirm. The default row displays its resolved binding. |
+| `checked` | Draws a trailing check. A resolved Action binding uses that position instead. |
 | `keywords` | Adds default-match terms. |
-| `disabled` | Makes the item non-interactive and skips it during keyboard navigation. |
-| `element` | Replaces the row content with a custom element. |
-| `on_select` | Runs on click or Enter confirmation. |
+| `disabled` | `Disableable::disabled(bool) -> Self` makes the item non-interactive and skips it during keyboard navigation. |
+| `child` | `child<F, E>(F) -> Self`, where `F: Fn(&mut Window, &mut App) -> E + 'static` and `E: IntoElement`; lazily replaces the default row content. |
+| `value` / `title` | Read the item identity or its visible label (falling back to its value). |
+| `is_checked` / `is_disabled` / `matches` | Read checked or disabled state, or apply the default case-insensitive matcher. |
+
+## CommandGroup
+
+| Method | Description |
+| --- | --- |
+| `new(heading)` | Creates a titled group. The heading hides when all items filter out. |
+| `unlabeled` | Creates a group without a heading. |
+| `item` / `items` | Add one or many `CommandItem`s to the group. |
+| `heading` | Returns the optional heading. |
+
+`CommandEntry` is the public enum for an item, group, or separator. It is useful
+when an owner stores a mixed dynamic entry collection; replay each variant onto
+a newly constructed `Command` during rendering.
 
 ## CommandState
 
 | Method | Signature and description |
 | --- | --- |
-| `new` | `new(&mut Window, &mut Context<Self>) -> Self` creates an empty, searchable palette. |
-| `item` / `group` / `separator` | Add an ungrouped item, a group, or a divider. |
-| `searchable` | `searchable(bool) -> Self` enables local filtering and the search field. Default: `true`. |
-| `filter` | `filter<F>(F) -> Self`, where `F: Fn(&CommandItem, &str) -> bool + 'static`, replaces default matching. |
-| `set_entries` | Replaces every entry. |
-| `query` / `set_query` | Read or replace the search query. |
-| `selected_index` / `selected_value` | Read the highlighted matching item. |
+| `new` | `new(&mut Window, &mut Context<Self>) -> Self` creates empty interaction state. |
+| `query` / `set_query` | Read the query, or `set_query(query, window, cx)` as if it were typed. |
+| `selected_index` / `selected_value` | Read the highlighted matching index or value. |
 | `matched_count` | Returns the number of matching items. |
 | `focus` | `focus(&self, &mut Window, &mut App)` focuses the input when searchable, otherwise the Command frame. |
-| `set_loading` | Shows the search spinner and suppresses the empty message while loading. |
+| `set_loading` / `is_loading` | Show or read the search spinner; loading suppresses the empty message. |
 
 ## Keyboard Shortcuts
 
@@ -274,15 +346,16 @@ to the palette frame.
 | --- | --- |
 | `↑` / `↓` | Move the highlight, wrapping around and skipping disabled items. |
 | `Enter` | Confirm the highlighted item. |
-| `Escape` | Clear the query; when it is already empty, emit `Cancel`. |
+| `Escape` | Clear the query; when it is already empty, call `on_cancel` and propagate `Cancel`. |
 
 ## Best Practices
 
-1. Group related commands and add keywords for alternate names.
-2. Use `searchable(false)` for compact, keyboard-navigable quick actions.
-3. Treat `shortcut` as a visual hint and bind the keystroke in the application.
-4. Use slots for application-owned status and hints, not a Command-specific dialog layer.
-5. Give each rendered palette its own [`CommandState`].
+1. Build static entries, groups, separators, searchability, and filters on `Command`.
+2. Keep dynamic entries and asynchronous results in the palette owner; rebuild `Command` from them when rendering.
+3. Bind real `Action`s instead of supplying shortcut text, so hints and dispatch stay in sync.
+4. Keep `child` factories side-effect-free and use them for rows that need custom presentation or variable heights.
+5. Let a hosting Dialog own cancellation after `on_cancel`; use header and footer for application-owned status and hints.
+6. Give each independently rendered palette its own [`CommandState`].
 
 [Command]: https://docs.rs/gpui-component/latest/gpui_component/command/struct.Command.html
 [CommandState]: https://docs.rs/gpui-component/latest/gpui_component/command/struct.CommandState.html
