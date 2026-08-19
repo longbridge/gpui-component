@@ -1,13 +1,13 @@
 use std::rc::Rc;
 
-use gpui::{AnyElement, App, IntoElement, SharedString, Window};
+use gpui::{Action, AnyElement, App, IntoElement, SharedString, Window};
 
 use crate::{Disableable, Icon};
 
 /// A single command in a [`crate::command::Command`] palette.
 ///
-/// The value is the item's identity: it is reported by
-/// [`crate::command::CommandEvent`] and is used as the label when none is set.
+/// The value is the item's identity: it is reported to palette callbacks and
+/// is used as the label when none is set.
 pub struct CommandItem {
     value: SharedString,
     label: Option<SharedString>,
@@ -15,11 +15,10 @@ pub struct CommandItem {
     /// Boxed: an [`Icon`] carries a whole `StyleRefinement`, which would make
     /// every item — and so the palette's item vector — kilobytes wide.
     pub(crate) icon: Option<Box<Icon>>,
-    pub(crate) shortcut: Option<SharedString>,
+    pub(crate) action: Option<Box<dyn Action>>,
     pub(crate) checked: bool,
     disabled: bool,
     pub(crate) content: Option<Rc<CommandItemContent>>,
-    pub(crate) handler: Option<Rc<dyn Fn(&mut Window, &mut App)>>,
 }
 
 impl CommandItem {
@@ -32,11 +31,10 @@ impl CommandItem {
             label: None,
             keywords: Vec::new(),
             icon: None,
-            shortcut: None,
+            action: None,
             checked: false,
             disabled: false,
             content: None,
-            handler: None,
         }
     }
 
@@ -52,18 +50,19 @@ impl CommandItem {
         self
     }
 
-    /// Set the trailing keyboard shortcut hint, e.g. `⌘P`.
+    /// Set the Action dispatched when this item is clicked or confirmed.
     ///
-    /// This is a hint only — binding the keystroke is the application's job.
-    pub fn shortcut(mut self, shortcut: impl Into<SharedString>) -> Self {
-        self.shortcut = Some(shortcut.into());
+    /// The Action's active keybinding is also shown by the default row.
+    pub fn action(mut self, action: Box<dyn Action>) -> Self {
+        self.action = Some(action);
         self
     }
 
     /// Mark this item as the chosen one, drawing a check at the right end of
     /// the row.
     ///
-    /// A [`Self::shortcut`] takes that slot, so an item with one shows no check.
+    /// A resolved Action binding takes that slot, so an item with one shows no
+    /// check.
     pub fn checked(mut self, checked: bool) -> Self {
         self.checked = checked;
         self
@@ -82,9 +81,9 @@ impl CommandItem {
 
     /// Replace the row content (icon and label) with a lazily built child.
     ///
-    /// The shortcut, when set, is still rendered after the custom element.
     /// The builder may run more than once for measurement and rendering, so it
-    /// must be side-effect-free.
+    /// must be side-effect-free. Custom children own their complete visual
+    /// presentation, including any keybinding hint.
     pub fn child<F, E>(mut self, builder: F) -> Self
     where
         F: Fn(&mut Window, &mut App) -> E + 'static,
@@ -93,12 +92,6 @@ impl CommandItem {
         self.content = Some(Rc::new(move |window, cx| {
             builder(window, cx).into_any_element()
         }));
-        self
-    }
-
-    /// Set the handler to run when the item is clicked or confirmed with Enter.
-    pub fn on_select(mut self, handler: impl Fn(&mut Window, &mut App) + 'static) -> Self {
-        self.handler = Some(Rc::new(handler));
         self
     }
 

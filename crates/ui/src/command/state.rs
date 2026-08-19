@@ -1,12 +1,11 @@
 use std::rc::Rc;
 
 use gpui::{
-    AbsoluteLength, AnyElement, App, AppContext as _, AvailableSpace, Context, Entity,
-    EventEmitter, FocusHandle, Focusable, FontFallbacks, FontFeatures, FontStyle, FontWeight,
-    InteractiveElement, IntoElement, KeyBinding, ListSizingBehavior, ParentElement, Pixels, Render,
-    Role, ScrollStrategy, SharedString, Size, StatefulInteractiveElement as _, StyleRefinement,
-    Styled, Subscription, TextOverflow, WhiteSpace, Window, div, prelude::FluentBuilder as _, px,
-    size,
+    AbsoluteLength, AnyElement, App, AppContext as _, AvailableSpace, Context, Entity, FocusHandle,
+    Focusable, FontFallbacks, FontFeatures, FontStyle, FontWeight, InteractiveElement, IntoElement,
+    KeyBinding, ListSizingBehavior, ParentElement, Pixels, Render, Role, ScrollStrategy,
+    SharedString, Size, StatefulInteractiveElement as _, StyleRefinement, Styled, Subscription,
+    TextOverflow, WhiteSpace, Window, div, prelude::FluentBuilder as _, px, size,
 };
 use rust_i18n::t;
 
@@ -19,6 +18,7 @@ use crate::{
     },
     h_flex,
     input::{Input, InputEvent, InputState},
+    kbd::Kbd,
     scroll::Scrollbar,
     v_flex, v_virtual_list,
 };
@@ -30,11 +30,18 @@ pub(crate) const CONTEXT: &str = "Command";
 const SEPARATOR_ROW_HEIGHT: f32 = 9.;
 
 pub(crate) type CommandFilter = dyn Fn(&CommandItem, &str) -> bool;
+pub(crate) type OnQuery = dyn Fn(&str, &mut Window, &mut App);
+pub(crate) type OnValue = dyn Fn(&SharedString, &mut Window, &mut App);
+pub(crate) type OnCancel = dyn Fn(&mut Window, &mut App);
 
 pub(crate) struct CommandModel {
     pub(crate) entries: Vec<CommandEntry>,
     pub(crate) searchable: bool,
     pub(crate) filter: Option<Rc<CommandFilter>>,
+    pub(crate) on_query: Option<Rc<OnQuery>>,
+    pub(crate) on_select: Option<Rc<OnValue>>,
+    pub(crate) on_confirm: Option<Rc<OnValue>>,
+    pub(crate) on_cancel: Option<Rc<OnCancel>>,
 }
 
 impl Default for CommandModel {
@@ -43,6 +50,10 @@ impl Default for CommandModel {
             entries: Vec::new(),
             searchable: true,
             filter: None,
+            on_query: None,
+            on_select: None,
+            on_confirm: None,
+            on_cancel: None,
         }
     }
 }
@@ -55,23 +66,6 @@ pub(crate) fn init(cx: &mut App) {
         KeyBinding::new("up", SelectUp, context),
         KeyBinding::new("down", SelectDown, context),
     ]);
-}
-
-/// Events emitted by a [`CommandState`].
-#[derive(Clone)]
-pub enum CommandEvent {
-    /// The search query changed.
-    ///
-    /// Applications can answer this by fetching results, updating owner data,
-    /// and rebuilding the [`crate::command::Command`]. Returned items still
-    /// participate in the command palette's local matching.
-    Query(SharedString),
-    /// The highlighted item moved to the item with this value.
-    Select(SharedString),
-    /// The item with this value was clicked or confirmed with Enter.
-    Confirm(SharedString),
-    /// Escape was pressed with an empty query.
-    Cancel,
 }
 
 /// One rendered line of the list.
@@ -135,6 +129,7 @@ pub struct CommandState {
     /// writes when it changed — `set_placeholder` notifies, and an
     /// unconditional notify from `render` would redraw every frame.
     applied_placeholder: SharedString,
+    applied_query: SharedString,
     pub(crate) options: CommandOptions,
     _subscriptions: Vec<Subscription>,
 }
@@ -144,7 +139,8 @@ impl CommandState {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let query_input = cx.new(|cx| InputState::new(window, cx));
 
-        let _subscriptions = vec![cx.subscribe(&query_input, Self::on_query_input_event)];
+        let _subscriptions =
+            vec![cx.subscribe_in(&query_input, window, Self::on_query_input_event)];
 
         Self {
             focus_handle: cx.focus_handle(),
@@ -160,6 +156,7 @@ impl CommandState {
             loading: false,
             pending_scroll: None,
             applied_placeholder: SharedString::default(),
+            applied_query: SharedString::default(),
             options: CommandOptions::default(),
             _subscriptions,
         }
@@ -201,16 +198,21 @@ impl CommandState {
     /// Replace the search query, as if it had been typed.
     ///
     /// The input suppresses its own change event for a programmatic write, so
-    /// the re-filter and the [`CommandEvent::Query`] happen here instead.
+    /// the re-filter and query callback happen here instead.
     pub fn set_query(
         &mut self,
         query: impl Into<SharedString>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        let query = query.into();
+        if self.query(cx) == query {
+            return;
+        }
+
         self.query_input
             .update(cx, |input, cx| input.set_value(query, window, cx));
-        self.on_query_changed(cx);
+        self.on_query_changed(window, cx);
     }
 
     /// The index of the highlighted item, among the items matching the query.
@@ -242,7 +244,7 @@ impl CommandState {
     /// Show or hide the search field's spinner, and suppress the empty message
     /// while it spins.
     ///
-    /// Turn it on while a [`CommandEvent::Query`] is being answered.
+    /// Turn it on while an `on_query` callback is being answered.
     pub fn set_loading(&mut self, loading: bool, window: &mut Window, cx: &mut Context<Self>) {
         self.loading = loading;
         self.query_input
@@ -369,22 +371,37 @@ impl CommandState {
 
     fn on_query_input_event(
         &mut self,
-        _: Entity<InputState>,
+        _: &Entity<InputState>,
         event: &InputEvent,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         if !matches!(event, InputEvent::Change) {
             return;
         }
 
-        self.on_query_changed(cx);
+        self.on_query_changed(window, cx);
     }
 
     /// Re-filter for the query that is now in the field, and report it.
-    fn on_query_changed(&mut self, cx: &mut Context<Self>) {
+    fn on_query_changed(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let query = self.query(cx);
+        if query == self.applied_query {
+            return;
+        }
+
+        let previous_selection = self.selected_value();
+        self.applied_query = query.clone();
         self.update_matches(cx);
         self.reset_selection();
-        cx.emit(CommandEvent::Query(self.query(cx)));
+        self.invoke_on_select_if_changed(previous_selection, window, cx);
+
+        if self.model.searchable {
+            if let Some(on_query) = self.model.on_query.clone() {
+                on_query(query.as_ref(), window, cx);
+            }
+        }
+
         cx.notify();
     }
 
@@ -404,24 +421,39 @@ impl CommandState {
 
     // MARK: Actions
 
-    fn select(&mut self, matched_ix: usize, cx: &mut Context<Self>) {
+    fn invoke_on_select_if_changed(
+        &self,
+        previous_value: Option<SharedString>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let value = self.selected_value();
+        if value == previous_value {
+            return;
+        }
+
+        if let (Some(value), Some(on_select)) = (value, self.model.on_select.clone()) {
+            on_select(&value, window, cx);
+        }
+    }
+
+    fn select(&mut self, matched_ix: usize, window: &mut Window, cx: &mut Context<Self>) {
         if self.selected_index == matched_ix {
             return;
         }
 
+        let previous_value = self.selected_value();
         self.selected_index = matched_ix;
         self.pending_scroll = self.matched.get(matched_ix).map(|matched| matched.row_ix);
 
-        if let Some(value) = self.selected_value() {
-            cx.emit(CommandEvent::Select(value));
-        }
+        self.invoke_on_select_if_changed(previous_value, window, cx);
 
         cx.notify();
     }
 
     /// Move the highlight by `step` items, wrapping around and skipping the
     /// disabled ones.
-    fn select_by(&mut self, step: isize, cx: &mut Context<Self>) {
+    fn select_by(&mut self, step: isize, window: &mut Window, cx: &mut Context<Self>) {
         let len = self.matched.len();
         if len == 0 {
             return;
@@ -435,15 +467,20 @@ impl CommandState {
             }
         }
 
-        self.select(next, cx);
+        self.select(next, window, cx);
     }
 
-    fn on_action_select_up(&mut self, _: &SelectUp, _: &mut Window, cx: &mut Context<Self>) {
-        self.select_by(-1, cx);
+    fn on_action_select_up(&mut self, _: &SelectUp, window: &mut Window, cx: &mut Context<Self>) {
+        self.select_by(-1, window, cx);
     }
 
-    fn on_action_select_down(&mut self, _: &SelectDown, _: &mut Window, cx: &mut Context<Self>) {
-        self.select_by(1, cx);
+    fn on_action_select_down(
+        &mut self,
+        _: &SelectDown,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.select_by(1, window, cx);
     }
 
     fn on_action_confirm(&mut self, _: &Confirm, window: &mut Window, cx: &mut Context<Self>) {
@@ -458,7 +495,9 @@ impl CommandState {
             return;
         }
 
-        cx.emit(CommandEvent::Cancel);
+        if let Some(on_cancel) = self.model.on_cancel.clone() {
+            on_cancel(window, cx);
+        }
 
         cx.propagate();
     }
@@ -472,13 +511,19 @@ impl CommandState {
         }
 
         let value = item.value().clone();
-        let handler = item.handler.clone();
+        let action = item.action.as_ref().map(|action| action.boxed_clone());
+        let on_confirm = self.model.on_confirm.clone();
 
-        if let Some(handler) = handler {
-            handler(window, cx);
+        if let Some(action) = action {
+            window.dispatch_action(action, cx);
+            if let Some(on_confirm) = on_confirm {
+                cx.defer_in(window, move |_, window, cx| {
+                    on_confirm(&value, window, cx);
+                });
+            }
+        } else if let Some(on_confirm) = on_confirm {
+            on_confirm(&value, window, cx);
         }
-
-        cx.emit(CommandEvent::Confirm(value));
     }
 
     // MARK: Row sizing
@@ -596,6 +641,14 @@ impl CommandState {
         } else {
             muted_foreground
         };
+        let binding = if item.content.is_none() {
+            item.action.as_ref().and_then(|action| {
+                Kbd::binding_for_action_in(action.as_ref(), &self.focus_handle(cx), window)
+                    .or_else(|| Kbd::binding_for_action(action.as_ref(), None, window))
+            })
+        } else {
+            None
+        };
 
         let content = match &item.content {
             Some(render) => render(window, cx),
@@ -617,9 +670,9 @@ impl CommandState {
             .when(disabled, |this| this.text_color(muted_foreground))
             .when(!disabled, |this| {
                 this.cursor_default()
-                    .on_hover(cx.listener(move |this, hovered: &bool, _, cx| {
+                    .on_hover(cx.listener(move |this, hovered: &bool, window, cx| {
                         if *hovered {
-                            this.select(matched_ix, cx);
+                            this.select(matched_ix, window, cx);
                         }
                     }))
                     .on_click(cx.listener(move |this, _, window, cx| {
@@ -627,15 +680,9 @@ impl CommandState {
                     }))
             })
             .child(content)
-            .map(|this| match item.shortcut.clone() {
-                Some(shortcut) => this.child(
-                    div()
-                        .ml_auto()
-                        .text_xs()
-                        .when(!selected, |this| this.text_color(muted_foreground))
-                        .child(shortcut),
-                ),
-                // The shortcut owns the trailing slot, so only an item without
+            .map(|this| match binding {
+                Some(binding) => this.child(binding.ml_auto()),
+                // The binding owns the trailing slot, so only an item without
                 // one can show its check there.
                 None => this.when(item.checked, |this| {
                     this.child(crate::Sizable::xsmall(Icon::new(IconName::Check).ml_auto()))
@@ -661,8 +708,6 @@ impl CommandState {
             .into_any_element()
     }
 }
-
-impl EventEmitter<CommandEvent> for CommandState {}
 
 impl Focusable for CommandState {
     fn focus_handle(&self, cx: &App) -> FocusHandle {
@@ -812,16 +857,216 @@ mod tests {
     };
 
     use gpui::{
-        AppContext as _, Entity, IntoElement, ParentElement as _, Pixels, Render, Styled as _,
-        TestAppContext, Window, div, prelude::FluentBuilder as _, px,
+        AppContext as _, AvailableSpace, Entity, InteractiveElement as _, IntoElement, KeyBinding,
+        Modifiers, ParentElement as _, Pixels, Render, Styled as _, TestAppContext, Window,
+        actions, div, point, prelude::FluentBuilder as _, px,
     };
 
-    use super::{CommandFilter, CommandModel, CommandRow, CommandState, SEPARATOR_ROW_HEIGHT};
+    use super::{
+        CONTEXT, CommandFilter, CommandModel, CommandRow, CommandState, SEPARATOR_ROW_HEIGHT,
+    };
     use crate::{
         Disableable as _,
         actions::{Cancel, Confirm, SelectDown},
-        command::{Command, CommandEntry, CommandEvent, CommandGroup, CommandItem},
+        command::{Command, CommandEntry, CommandGroup, CommandItem},
     };
+
+    actions!(command_test, [GlobalTestItem, OpenTestItem]);
+
+    struct CommandActionsHarness {
+        state: Entity<CommandState>,
+        events: Rc<RefCell<Vec<String>>>,
+    }
+
+    impl Render for CommandActionsHarness {
+        fn render(&mut self, _: &mut Window, _: &mut gpui::Context<Self>) -> impl IntoElement {
+            let action_events = self.events.clone();
+            let propagated_cancel_events = self.events.clone();
+            let query_events = self.events.clone();
+            let select_events = self.events.clone();
+            let confirm_events = self.events.clone();
+            let cancel_events = self.events.clone();
+
+            div()
+                .size_full()
+                .on_action(move |_: &OpenTestItem, _, _| {
+                    action_events.borrow_mut().push("action".into());
+                })
+                .on_action(move |_: &Cancel, _, _| {
+                    propagated_cancel_events
+                        .borrow_mut()
+                        .push("propagated_cancel".into());
+                })
+                .child(
+                    Command::new(&self.state)
+                        .item(
+                            CommandItem::new("open")
+                                .label("Item")
+                                .keywords(["needle"])
+                                .action(Box::new(OpenTestItem)),
+                        )
+                        .item(CommandItem::new("plain").label("Item"))
+                        .item(
+                            CommandItem::new("global")
+                                .label("Item")
+                                .action(Box::new(GlobalTestItem)),
+                        )
+                        .on_query(move |query, _, _| {
+                            query_events.borrow_mut().push(format!("query:{query}"));
+                        })
+                        .on_select(move |value, _, _| {
+                            select_events.borrow_mut().push(format!("select:{value}"));
+                        })
+                        .on_confirm(move |value, _, _| {
+                            confirm_events.borrow_mut().push(format!("confirm:{value}"));
+                        })
+                        .on_cancel(move |_, _| {
+                            cancel_events.borrow_mut().push("cancel".into());
+                        }),
+                )
+        }
+    }
+
+    struct CommandItemWidthHarness {
+        state: Entity<CommandState>,
+        matched_ix: usize,
+        width: Rc<Cell<Option<Pixels>>>,
+    }
+
+    impl Render for CommandItemWidthHarness {
+        fn render(
+            &mut self,
+            window: &mut Window,
+            cx: &mut gpui::Context<Self>,
+        ) -> impl IntoElement {
+            let width = self.width.clone();
+            let item = self.state.update(cx, |state, cx| {
+                state.render_item(self.matched_ix, window, cx)
+            });
+
+            div()
+                .on_children_prepainted(move |bounds, _, _| width.set(Some(bounds[0].size.width)))
+                .child(item)
+        }
+    }
+
+    #[gpui::test]
+    fn command_actions_and_callbacks_follow_defined_order(cx: &mut TestAppContext) {
+        cx.update(|cx| {
+            crate::init(cx);
+            cx.bind_keys([
+                KeyBinding::new("ctrl-o", OpenTestItem, Some(CONTEXT)),
+                KeyBinding::new("ctrl-g", GlobalTestItem, None),
+            ]);
+        });
+        let events = Rc::new(RefCell::new(Vec::new()));
+        let (harness, cx) = cx.add_window_view(|window, cx| CommandActionsHarness {
+            state: cx.new(|cx| CommandState::new(window, cx)),
+            events: events.clone(),
+        });
+        let state = cx.update(|_, cx| harness.read(cx).state.clone());
+
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            _ = window.draw(cx);
+            state.update(cx, |state, cx| state.focus(window, cx));
+            _ = window.draw(cx);
+        });
+
+        let action_width = Rc::new(Cell::new(None));
+        let plain_width = Rc::new(Cell::new(None));
+        let global_width = Rc::new(Cell::new(None));
+        let (action_probe, plain_probe, global_probe) = cx.update(|_, cx| {
+            (
+                cx.new(|_| CommandItemWidthHarness {
+                    state: state.clone(),
+                    matched_ix: 0,
+                    width: action_width.clone(),
+                }),
+                cx.new(|_| CommandItemWidthHarness {
+                    state: state.clone(),
+                    matched_ix: 1,
+                    width: plain_width.clone(),
+                }),
+                cx.new(|_| CommandItemWidthHarness {
+                    state: state.clone(),
+                    matched_ix: 2,
+                    width: global_width.clone(),
+                }),
+            )
+        });
+        cx.draw(
+            point(px(0.), px(0.)),
+            AvailableSpace::min_size(),
+            move |_, _| action_probe.into_any_element(),
+        );
+        cx.draw(
+            point(px(0.), px(0.)),
+            AvailableSpace::min_size(),
+            move |_, _| plain_probe.into_any_element(),
+        );
+        cx.draw(
+            point(px(0.), px(0.)),
+            AvailableSpace::min_size(),
+            move |_, _| global_probe.into_any_element(),
+        );
+        let action_width = action_width.get().unwrap();
+        let plain_width = plain_width.get().unwrap();
+        let global_width = global_width.get().unwrap();
+        assert!(
+            action_width > plain_width,
+            "the scoped Action binding should add a visible Kbd ({action_width:?} vs {plain_width:?})",
+        );
+        assert!(
+            global_width > plain_width,
+            "the app-level fallback binding should add a visible Kbd ({global_width:?} vs {plain_width:?})",
+        );
+
+        cx.update(|window, cx| {
+            state.update(cx, |state, cx| {
+                state.set_query("needle", window, cx);
+                state.set_query("needle", window, cx);
+                state.set_query("", window, cx);
+            });
+            window.dispatch_action(Box::new(SelectDown), cx);
+            window.dispatch_action(Box::new(crate::actions::SelectUp), cx);
+            window.dispatch_action(Box::new(Confirm { secondary: false }), cx);
+        });
+        cx.run_until_parked();
+
+        assert_eq!(
+            events.borrow().as_slice(),
+            [
+                "query:needle",
+                "query:",
+                "select:plain",
+                "select:open",
+                "action",
+                "confirm:open",
+            ]
+        );
+
+        cx.simulate_click(point(px(20.), px(52.)), Modifiers::default());
+        cx.run_until_parked();
+        cx.update(|window, cx| window.dispatch_action(Box::new(Cancel), cx));
+        cx.run_until_parked();
+
+        assert_eq!(
+            events.borrow().as_slice(),
+            [
+                "query:needle",
+                "query:",
+                "select:plain",
+                "select:open",
+                "action",
+                "confirm:open",
+                "action",
+                "confirm:open",
+                "cancel",
+                "propagated_cancel",
+            ]
+        );
+    }
 
     struct CommandOwnedEntriesHarness {
         state: Entity<CommandState>,
@@ -915,6 +1160,7 @@ mod tests {
                 entries: entries.into_iter().collect(),
                 searchable,
                 filter,
+                ..CommandModel::default()
             },
             cx,
         );
@@ -1081,25 +1327,22 @@ mod tests {
     #[gpui::test]
     fn non_searchable_command_uses_frame_focus(cx: &mut TestAppContext) {
         cx.update(crate::init);
-        let (harness, cx) = cx.add_window_view(|window, cx| Harness {
+        let confirmed = Rc::new(RefCell::new(None));
+        let confirmed_for_render = confirmed.clone();
+        let (harness, cx) = cx.add_window_view(move |window, cx| Harness {
             state: cx.new(|cx| CommandState::new(window, cx)),
-            command: Rc::new(|state| {
+            command: Rc::new(move |state| {
+                let confirmed = confirmed_for_render.clone();
                 Command::new(state)
                     .searchable(false)
                     .item(CommandItem::new("alpha"))
                     .item(CommandItem::new("beta"))
+                    .on_confirm(move |value, _, _| {
+                        *confirmed.borrow_mut() = Some(value.clone());
+                    })
             }),
         });
         let state = cx.update(|_, cx| harness.read(cx).state.clone());
-        let confirmed = Rc::new(RefCell::new(None));
-        let confirmed_value = confirmed.clone();
-        let _subscription = cx.update(|_, cx| {
-            cx.subscribe(&state, move |_, event: &CommandEvent, _| {
-                if let CommandEvent::Confirm(value) = event {
-                    *confirmed_value.borrow_mut() = Some(value.clone());
-                }
-            })
-        });
 
         cx.run_until_parked();
         cx.update(|window, cx| _ = window.draw(cx));
@@ -1118,24 +1361,21 @@ mod tests {
         cx: &mut TestAppContext,
     ) {
         cx.update(crate::init);
-        let (harness, cx) = cx.add_window_view(|window, cx| Harness {
+        let confirmed = Rc::new(RefCell::new(None));
+        let confirmed_for_render = confirmed.clone();
+        let (harness, cx) = cx.add_window_view(move |window, cx| Harness {
             state: cx.new(|cx| CommandState::new(window, cx)),
-            command: Rc::new(|state| {
+            command: Rc::new(move |state| {
+                let confirmed = confirmed_for_render.clone();
                 Command::new(state)
                     .item(CommandItem::new("disabled").disabled(true))
                     .item(CommandItem::new("enabled"))
+                    .on_confirm(move |value, _, _| {
+                        *confirmed.borrow_mut() = Some(value.clone());
+                    })
             }),
         });
         let state = cx.update(|_, cx| harness.read(cx).state.clone());
-        let confirmed = Rc::new(RefCell::new(None));
-        let confirmed_value = confirmed.clone();
-        let _subscription = cx.update(|_, cx| {
-            cx.subscribe(&state, move |_, event: &CommandEvent, _| {
-                if let CommandEvent::Confirm(value) = event {
-                    *confirmed_value.borrow_mut() = Some(value.clone());
-                }
-            })
-        });
 
         cx.run_until_parked();
         cx.update(|window, cx| _ = window.draw(cx));
@@ -1156,24 +1396,21 @@ mod tests {
         cx: &mut TestAppContext,
     ) {
         cx.update(crate::init);
-        let (harness, cx) = cx.add_window_view(|window, cx| Harness {
+        let confirmed = Rc::new(RefCell::new(None));
+        let confirmed_for_render = confirmed.clone();
+        let (harness, cx) = cx.add_window_view(move |window, cx| Harness {
             state: cx.new(|cx| CommandState::new(window, cx)),
-            command: Rc::new(|state| {
+            command: Rc::new(move |state| {
+                let confirmed = confirmed_for_render.clone();
                 Command::new(state)
                     .item(CommandItem::new("one").disabled(true))
                     .item(CommandItem::new("two").disabled(true))
+                    .on_confirm(move |value, _, _| {
+                        *confirmed.borrow_mut() = Some(value.clone());
+                    })
             }),
         });
         let state = cx.update(|_, cx| harness.read(cx).state.clone());
-        let confirmed = Rc::new(RefCell::new(None));
-        let confirmed_value = confirmed.clone();
-        let _subscription = cx.update(|_, cx| {
-            cx.subscribe(&state, move |_, event: &CommandEvent, _| {
-                if let CommandEvent::Confirm(value) = event {
-                    *confirmed_value.borrow_mut() = Some(value.clone());
-                }
-            })
-        });
 
         cx.run_until_parked();
         cx.update(|window, cx| _ = window.draw(cx));
@@ -1189,24 +1426,23 @@ mod tests {
     #[gpui::test]
     fn non_searchable_command_cancels_without_clearing_a_hidden_query(cx: &mut TestAppContext) {
         cx.update(crate::init);
-        let (harness, cx) = cx.add_window_view(|window, cx| Harness {
+        let cancelled = Rc::new(Cell::new(false));
+        let cancelled_for_render = cancelled.clone();
+        let query_calls = Rc::new(Cell::new(0));
+        let query_calls_for_render = query_calls.clone();
+        let (harness, cx) = cx.add_window_view(move |window, cx| Harness {
             state: cx.new(|cx| CommandState::new(window, cx)),
-            command: Rc::new(|state| {
+            command: Rc::new(move |state| {
+                let cancelled = cancelled_for_render.clone();
+                let query_calls = query_calls_for_render.clone();
                 Command::new(state)
                     .searchable(false)
                     .item(CommandItem::new("alpha"))
+                    .on_query(move |_, _, _| query_calls.set(query_calls.get() + 1))
+                    .on_cancel(move |_, _| cancelled.set(true))
             }),
         });
         let state = cx.update(|_, cx| harness.read(cx).state.clone());
-        let cancelled = Rc::new(Cell::new(false));
-        let cancelled_value = cancelled.clone();
-        let _subscription = cx.update(|_, cx| {
-            cx.subscribe(&state, move |_, event: &CommandEvent, _| {
-                if matches!(event, CommandEvent::Cancel) {
-                    cancelled_value.set(true);
-                }
-            })
-        });
 
         cx.run_until_parked();
         cx.update(|window, cx| _ = window.draw(cx));
@@ -1219,6 +1455,7 @@ mod tests {
         });
 
         assert!(cancelled.get());
+        assert_eq!(query_calls.get(), 0);
         assert_eq!(
             state.read_with(cx, |state, cx| state.query(cx)),
             "hidden query"
@@ -1238,20 +1475,20 @@ mod tests {
                 state.reset_selection();
                 assert_eq!(state.selected_value(), Some("Calendar".into()));
 
-                state.select_by(1, cx);
+                state.select_by(1, window, cx);
                 assert_eq!(state.selected_value(), Some("Search Emoji".into()));
 
                 // "Calculator" is disabled, so it is stepped over.
-                state.select_by(1, cx);
+                state.select_by(1, window, cx);
                 assert_eq!(state.selected_value(), Some("profile".into()));
 
-                state.select_by(-1, cx);
+                state.select_by(-1, window, cx);
                 assert_eq!(state.selected_value(), Some("Search Emoji".into()));
 
                 // Wraps around the end, skipping the disabled item again.
-                state.select_by(-1, cx);
+                state.select_by(-1, window, cx);
                 assert_eq!(state.selected_value(), Some("Calendar".into()));
-                state.select_by(-1, cx);
+                state.select_by(-1, window, cx);
                 assert_eq!(state.selected_value(), Some("billing".into()));
             });
         });
@@ -1715,7 +1952,9 @@ mod tests {
 
         cx.run_until_parked();
         cx.update(|window, cx| _ = window.draw(cx));
-        state.update(cx, |state, cx| state.select_by(1, cx));
+        cx.update(|window, cx| {
+            state.update(cx, |state, cx| state.select_by(1, window, cx));
+        });
         assert_eq!(
             state.read_with(cx, |state, _| state.selected_value()),
             Some("beta".into()),
@@ -1805,10 +2044,10 @@ mod tests {
 
         // The list is capped well below 50 rows, so walking to the last one has
         // to bring the viewport with it.
-        cx.update(|_, cx| {
+        cx.update(|window, cx| {
             state.update(cx, |state, cx| {
                 for _ in 0..49 {
-                    state.select_by(1, cx);
+                    state.select_by(1, window, cx);
                 }
             })
         });

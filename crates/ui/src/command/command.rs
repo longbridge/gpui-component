@@ -7,7 +7,7 @@ use gpui::{
 
 use crate::command::{
     item::{CommandEntry, CommandGroup, CommandItem},
-    state::{CommandFilter, CommandModel, CommandState},
+    state::{CommandFilter, CommandModel, CommandState, OnCancel, OnQuery, OnValue},
 };
 
 pub(crate) type CommandSlot = dyn Fn(&CommandState, &mut Window, &mut App) -> AnyElement;
@@ -89,6 +89,10 @@ pub struct Command {
     entries: Vec<CommandEntry>,
     searchable: bool,
     filter: Option<Rc<CommandFilter>>,
+    on_query: Option<Rc<OnQuery>>,
+    on_select: Option<Rc<OnValue>>,
+    on_confirm: Option<Rc<OnValue>>,
+    on_cancel: Option<Rc<OnCancel>>,
     options: CommandOptions,
 }
 
@@ -100,6 +104,10 @@ impl Command {
             entries: Vec::new(),
             searchable: true,
             filter: None,
+            on_query: None,
+            on_select: None,
+            on_confirm: None,
+            on_cancel: None,
             options: CommandOptions::default(),
         }
     }
@@ -141,6 +149,42 @@ impl Command {
         F: Fn(&CommandItem, &str) -> bool + 'static,
     {
         self.filter = Some(Rc::new(filter));
+        self
+    }
+
+    /// Run a callback when the searchable query actually changes.
+    pub fn on_query<F>(mut self, callback: F) -> Self
+    where
+        F: Fn(&str, &mut Window, &mut App) + 'static,
+    {
+        self.on_query = Some(Rc::new(callback));
+        self
+    }
+
+    /// Run a callback when the highlighted item value changes.
+    pub fn on_select<F>(mut self, callback: F) -> Self
+    where
+        F: Fn(&SharedString, &mut Window, &mut App) + 'static,
+    {
+        self.on_select = Some(Rc::new(callback));
+        self
+    }
+
+    /// Run a callback after a confirmed item's Action has been dispatched.
+    pub fn on_confirm<F>(mut self, callback: F) -> Self
+    where
+        F: Fn(&SharedString, &mut Window, &mut App) + 'static,
+    {
+        self.on_confirm = Some(Rc::new(callback));
+        self
+    }
+
+    /// Run a callback before an empty-query Cancel action propagates.
+    pub fn on_cancel<F>(mut self, callback: F) -> Self
+    where
+        F: Fn(&mut Window, &mut App) + 'static,
+    {
+        self.on_cancel = Some(Rc::new(callback));
         self
     }
 
@@ -209,6 +253,10 @@ impl RenderOnce for Command {
             entries: self.entries,
             searchable: self.searchable,
             filter: self.filter,
+            on_query: self.on_query,
+            on_select: self.on_select,
+            on_confirm: self.on_confirm,
+            on_cancel: self.on_cancel,
         };
         self.state.update(cx, |state, cx| {
             state.options = options;
