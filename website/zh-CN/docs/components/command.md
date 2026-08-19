@@ -54,14 +54,14 @@ let state = cx.new(|cx| CommandState::new(window, cx));
 
 Command::new(&state)
     .group(
-        CommandGroup::new("Suggestions")
+        CommandGroup::new().label("Suggestions")
             .item(CommandItem::new("calendar").label("Calendar").icon(IconName::Calendar))
             .item(CommandItem::new("search-emoji").label("Search Emoji").icon(IconName::Search))
             .item(CommandItem::new("calculator").label("Calculator").disabled(true)),
     )
     .separator()
     .group(
-        CommandGroup::new("Settings")
+        CommandGroup::new().label("Settings")
             .item(
                 CommandItem::new("profile")
                     .label("Profile")

@@ -1,5 +1,9 @@
 [default]
 extend-ignore-re = ['\\u\{[0-9A-Fa-f]+\}']
 
+[default.extend-words]
+# Correct Italian singular of "command".
+comando = "comando"
+
 [files]
 extend-exclude = ["crates/story/src/fixtures/"]

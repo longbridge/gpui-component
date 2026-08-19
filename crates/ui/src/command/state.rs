@@ -1218,7 +1218,11 @@ mod tests {
             Command::new(&self.state)
                 .searchable(false)
                 .item(CommandItem::new("alpha"))
-                .group(CommandGroup::new("Settings").item(CommandItem::new("beta")))
+                .group(
+                    CommandGroup::new()
+                        .label("Settings")
+                        .item(CommandItem::new("beta")),
+                )
                 .separator()
                 .item(CommandItem::new("custom").child(|_, _| div().h(px(72.)).child("Custom")))
         }
@@ -1310,13 +1314,15 @@ mod tests {
 
     fn suggestion_entries() -> Vec<CommandEntry> {
         vec![
-            CommandGroup::new("Suggestions")
+            CommandGroup::new()
+                .label("Suggestions")
                 .item(CommandItem::new("Calendar"))
                 .item(CommandItem::new("Search Emoji"))
                 .item(CommandItem::new("Calculator").disabled(true))
                 .into(),
             CommandEntry::Separator,
-            CommandGroup::new("Settings")
+            CommandGroup::new()
+                .label("Settings")
                 .item(CommandItem::new("profile").label("Profile"))
                 .item(CommandItem::new("billing").label("Billing"))
                 .into(),
@@ -1786,7 +1792,8 @@ mod tests {
 
     fn entries_with_late_first_enabled_item() -> Vec<CommandEntry> {
         vec![
-            CommandGroup::new("Disabled")
+            CommandGroup::new()
+                .label("Disabled")
                 .items((0..30).map(|ix| {
                     CommandItem::new(format!("disabled-{ix}"))
                         .keywords(["match"])
@@ -1794,7 +1801,8 @@ mod tests {
                 }))
                 .into(),
             CommandEntry::Separator,
-            CommandGroup::new("Enabled")
+            CommandGroup::new()
+                .label("Enabled")
                 .item(CommandItem::new("enabled").keywords(["match"]))
                 .into(),
         ]
@@ -2045,12 +2053,14 @@ mod tests {
             command: Rc::new(|state| {
                 Command::new(state)
                     .group(
-                        CommandGroup::new("Short")
+                        CommandGroup::new()
+                            .label("Short")
                             .item(CommandItem::new("short").child(|_, _| div().h(px(32.)))),
                     )
                     .separator()
                     .group(
-                        CommandGroup::new("Tall")
+                        CommandGroup::new()
+                            .label("Tall")
                             .item(CommandItem::new("tall").child(|_, _| div().h(px(72.)))),
                     )
             }),

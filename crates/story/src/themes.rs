@@ -192,7 +192,8 @@ pub(crate) fn theme_entries(cx: &App) -> Vec<CommandEntry> {
     [(ThemeMode::Light, "Light"), (ThemeMode::Dark, "Dark")]
         .into_iter()
         .map(|(mode, heading)| {
-            CommandGroup::new(heading)
+            CommandGroup::new()
+                .label(heading)
                 .items(
                     themes
                         .iter()

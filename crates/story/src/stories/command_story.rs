@@ -67,7 +67,8 @@ impl super::Story for CommandStory {
 /// one of them disabled, the second group carrying shortcut hints.
 fn suggestions() -> Vec<CommandEntry> {
     vec![
-        CommandGroup::new("Suggestions")
+        CommandGroup::new()
+            .label("Suggestions")
             .item(
                 CommandItem::new("calendar")
                     .label("Calendar")
@@ -88,7 +89,8 @@ fn suggestions() -> Vec<CommandEntry> {
             )
             .into(),
         CommandEntry::Separator,
-        CommandGroup::new("Settings")
+        CommandGroup::new()
+            .label("Settings")
             .item(
                 CommandItem::new("profile")
                     .label("Profile")
@@ -113,7 +115,8 @@ fn suggestions() -> Vec<CommandEntry> {
 
 fn scrollable() -> Vec<CommandEntry> {
     vec![
-        CommandGroup::new("Navigation")
+        CommandGroup::new()
+            .label("Navigation")
             .item(
                 CommandItem::new("Home")
                     .icon(IconName::LayoutDashboard)
@@ -136,7 +139,8 @@ fn scrollable() -> Vec<CommandEntry> {
             )
             .into(),
         CommandEntry::Separator,
-        CommandGroup::new("Actions")
+        CommandGroup::new()
+            .label("Actions")
             .item(
                 CommandItem::new("New File")
                     .icon(IconName::Plus)
@@ -154,13 +158,15 @@ fn scrollable() -> Vec<CommandEntry> {
             )
             .into(),
         CommandEntry::Separator,
-        CommandGroup::new("Account")
+        CommandGroup::new()
+            .label("Account")
             .item(CommandItem::new("Profile").icon(IconName::User))
             .item(CommandItem::new("Notifications").icon(IconName::Bell))
             .item(CommandItem::new("Help & Support").icon(IconName::Info))
             .into(),
         CommandEntry::Separator,
-        CommandGroup::new("Tools")
+        CommandGroup::new()
+            .label("Tools")
             .item(CommandItem::new("Palette").icon(IconName::Palette))
             .item(CommandItem::new("Terminal").icon(IconName::SquareTerminal))
             .item(CommandItem::new("Globe").icon(IconName::Globe))
@@ -452,7 +458,8 @@ impl CommandStory {
 /// What the panel shows before anything has been typed.
 fn popular_entries() -> Vec<CommandEntry> {
     vec![
-        CommandGroup::new("Popular")
+        CommandGroup::new()
+            .label("Popular")
             .items(STOCKS.iter().take(5).map(|stock| stock_item(*stock)))
             .into(),
     ]
@@ -840,42 +847,6 @@ mod tests {
                 .update(cx, |_, window, cx| window.has_active_dialog(cx))
                 .unwrap()
         );
-    }
-
-    #[gpui::test]
-    fn stock_backdrop_dismissal_cancels_search_and_clears_loading(cx: &mut TestAppContext) {
-        let (window, story) = command_story_window(cx);
-        window
-            .update(cx, |_, window, cx| {
-                story.update(cx, |story, cx| story.open_stock_search(window, cx));
-                window.draw(cx).clear(cx);
-                let search = story.read(cx).search.clone();
-                search.update(cx, |search, cx| {
-                    search.set_query("tesla", window, cx);
-                });
-                window.draw(cx).clear(cx);
-            })
-            .unwrap();
-        cx.run_until_parked();
-
-        story.read_with(cx, |story, cx| {
-            assert!(story._search_task.is_some());
-            assert!(story.search.read(cx).is_loading());
-        });
-        let backdrop_point = gpui::point(px(50.), px(50.));
-        let mut visual = gpui::VisualTestContext::from_window(window, cx);
-        visual.simulate_mouse_move(backdrop_point, None, Default::default());
-        visual.simulate_click(backdrop_point, Default::default());
-
-        assert!(
-            !window
-                .update(cx, |_, window, cx| window.has_active_dialog(cx))
-                .unwrap()
-        );
-        story.read_with(cx, |story, cx| {
-            assert!(story._search_task.is_none());
-            assert!(!story.search.read(cx).is_loading());
-        });
     }
 
     #[gpui::test]

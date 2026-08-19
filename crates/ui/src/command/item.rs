@@ -176,20 +176,18 @@ impl Clone for CommandGroup {
 }
 
 impl CommandGroup {
-    /// Create a new group with the given heading.
-    pub fn new(heading: impl Into<SharedString>) -> Self {
-        Self {
-            heading: Some(heading.into()),
-            items: Vec::new(),
-        }
-    }
-
-    /// Create a new group without a heading.
-    pub fn unlabeled() -> Self {
+    /// Create a new group without a label.
+    pub fn new() -> Self {
         Self {
             heading: None,
             items: Vec::new(),
         }
+    }
+
+    /// Set the label displayed above the group's items.
+    pub fn label(mut self, label: impl Into<SharedString>) -> Self {
+        self.heading = Some(label.into());
+        self
     }
 
     /// Add an item to the group.
@@ -268,8 +266,8 @@ mod tests {
 
         let child_count_for_builder = child_count.clone();
         let entry = CommandEntry::Group(
-            CommandGroup::new("Group").item(
-                CommandItem::new("clonable")
+            CommandGroup::new().label("Group").item(
+                CommandItem::new("cloneable")
                     .action(Box::new(CloneAction))
                     .child(move |_, _| {
                         child_count_for_builder.set(child_count_for_builder.get() + 1);

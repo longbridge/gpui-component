@@ -78,7 +78,7 @@ impl CommandOptions {
 ///
 /// Command::new(&state)
 ///     .group(
-///         CommandGroup::new("Suggestions")
+///         CommandGroup::new().label("Suggestions")
 ///             .item(CommandItem::new("Calendar").icon(IconName::Calendar)),
 ///     )
 ///     .placeholder("Type a command or search...")
