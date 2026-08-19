@@ -35,6 +35,8 @@ pub enum TilesEvent {
     },
     /// A tile was interacted with and should stack above its peers.
     BringToFront { panel: PanelId },
+    /// The user asked to close `panel`, dismissing its tile.
+    ClosePanel { panel: PanelId },
     /// A host-owned drag landed on the canvas. The canvas has free
     /// coordinates, so the host reads the landing position itself.
     DragDrop { item: AnyDrag },
@@ -367,6 +369,20 @@ impl TilesState {
         cx.notify();
     }
 
+    /// Ask the container to close `panel`. Nothing happens for a tile that
+    /// is not on this canvas, or for a panel that refuses to close.
+    fn close_tile(&mut self, panel: PanelId, cx: &mut Context<Self>) {
+        let closable = self
+            .tiles
+            .iter()
+            .any(|tile| tile.id == panel && tile.panel.closable(cx));
+        if !closable {
+            return;
+        }
+        cx.emit(TilesEvent::ClosePanel { panel });
+        cx.notify();
+    }
+
     fn tile_context(&self, ix: usize, cx: &App) -> TileContext {
         let tile = &self.tiles[ix];
         let panel = tile.id;
@@ -419,10 +435,16 @@ impl TilesState {
                     _ = canvas.update(cx, |canvas, cx| canvas.end_resize(cx));
                 })
             },
-            on_bring_to_front: Rc::new(move |_, cx| {
-                _ = canvas.update(cx, |_, cx| {
-                    cx.emit(TilesEvent::BringToFront { panel });
-                });
+            on_bring_to_front: {
+                let canvas = canvas.clone();
+                Rc::new(move |_, cx| {
+                    _ = canvas.update(cx, |_, cx| {
+                        cx.emit(TilesEvent::BringToFront { panel });
+                    });
+                })
+            },
+            on_close: Rc::new(move |_, cx| {
+                _ = canvas.update(cx, |canvas, cx| canvas.close_tile(panel, cx));
             }),
         }
     }
@@ -496,6 +518,7 @@ pub struct TileContext {
     on_resize_to: MovePointerHandler,
     on_end_resize: GestureEndHandler,
     on_bring_to_front: GestureEndHandler,
+    on_close: GestureEndHandler,
 }
 
 impl TileContext {
@@ -568,6 +591,12 @@ impl TileContext {
 
     pub fn bring_to_front(&self, window: &mut Window, cx: &mut App) {
         (self.on_bring_to_front)(window, cx);
+    }
+
+    /// Dismiss this tile. Refused when [`Self::can_close`] is false, so a
+    /// skin that offers a Close control should gate it on that.
+    pub fn close(&self, window: &mut Window, cx: &mut App) {
+        (self.on_close)(window, cx);
     }
 }
 

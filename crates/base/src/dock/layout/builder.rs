@@ -259,6 +259,36 @@ mod tests {
         assert!(matches!(children[0].kind(), NodeRef::Tabs { panels, .. } if panels.len() == 1));
     }
 
+    /// Ported from `DockItem::split_with_sizes_adds_each_child_once`, which
+    /// guarded a `StackPanel` that once added every child twice.
+    #[gpui::test]
+    fn split_with_sizes_adds_each_child_once(cx: &mut TestAppContext) {
+        let (tree, _) = cx.update(|cx| {
+            let alpha = TestPanel::new("Alpha", cx);
+            let beta = TestPanel::new("Beta", cx);
+            LayoutTree::from_layout(
+                DockLayout::h_split()
+                    .child(DockLayout::tabs().panel(alpha), None)
+                    .child(DockLayout::tabs().panel(beta), None),
+                RootKind::Split,
+            )
+        });
+
+        let NodeRef::Split {
+            children, sizes, ..
+        } = tree.root().kind()
+        else {
+            panic!("expected a split root");
+        };
+        assert_eq!(
+            children.len(),
+            2,
+            "each described child appears exactly once"
+        );
+        assert_eq!(sizes.len(), children.len());
+        assert_ne!(children[0].id(), children[1].id());
+    }
+
     #[gpui::test]
     fn a_bare_tab_group_is_wrapped_for_a_split_root(cx: &mut TestAppContext) {
         let (tree, _) = cx.update(|cx| {

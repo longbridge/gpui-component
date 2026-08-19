@@ -165,6 +165,17 @@ impl DockArea {
         self.locked
     }
 
+    /// Whether a region currently holds no visible panel.
+    ///
+    /// This is the question the old `DockItem::is_empty` answered, and it is
+    /// the same one [`Self::is_node_visible`] answers per container: a region
+    /// is empty when nothing in it would be drawn. A region that does not
+    /// exist — a dock that was never installed — is empty too.
+    pub fn is_empty(&self, placement: DockPlacement, cx: &App) -> bool {
+        self.layout(placement)
+            .is_none_or(|tree| !self.is_node_visible(tree.root(), cx))
+    }
+
     /// Lock the layout against rearranging. Resizing stays available.
     pub fn set_locked(&mut self, locked: bool, window: &mut Window, cx: &mut Context<Self>) {
         if self.locked == locked {
@@ -254,6 +265,14 @@ impl DockArea {
         // what `TabGroupConstraints::collapsed` carries.
         self.reconcile(window, cx);
         cx.emit(DockEvent::LayoutChanged);
+    }
+
+    /// Whether a dock may be collapsed at all. A skin drawing a collapse
+    /// affordance in a tab bar reads this to decide whether to offer one.
+    pub fn is_dock_collapsible(&self, placement: DockPlacement) -> bool {
+        self.docks
+            .get(&placement)
+            .is_some_and(|pane| pane.dock.is_collapsible())
     }
 
     pub fn set_dock_collapsible(
@@ -918,6 +937,7 @@ impl DockArea {
                 let result = tree.bring_to_front(*panel);
                 self.commit(result, window, cx);
             }
+            TilesEvent::ClosePanel { panel } => self.remove_panel_id(*panel, window, cx),
             TilesEvent::DragDrop { item } => cx.emit(DockEvent::DragDrop {
                 item: item.clone(),
                 target: DropTarget::Canvas,
@@ -1479,7 +1499,7 @@ mod tests {
     use gpui::{TestAppContext, VisualTestContext};
 
     use super::*;
-    use crate::dock::test_support::{Log, PanelSignal, TestPanel, drain, log_of};
+    use crate::dock::test_support::{Log, PanelSignal, TestPanel, drain, drain_active, log_of};
 
     fn setup(cx: &mut TestAppContext) -> (Entity<DockArea>, &mut VisualTestContext) {
         cx.update(|cx| {
@@ -1575,6 +1595,71 @@ mod tests {
                 Arc::new(TestPanel::new(name, cx)) as Arc<dyn PanelView>
             });
         }
+    }
+
+    /// One tab group holding `names`, installed as the whole center.
+    ///
+    /// The `DockItem::tabs` the old `TabPanel` tests built is now a described
+    /// layout the area reconciles, so the group entity is reached through the
+    /// tree rather than handed back by the constructor.
+    fn one_group<'a>(
+        log: &Log,
+        names: &[&'static str],
+        active_ix: Option<usize>,
+        cx: &'a mut TestAppContext,
+    ) -> (
+        Entity<DockArea>,
+        Vec<Entity<TestPanel>>,
+        &'a mut VisualTestContext,
+    ) {
+        let (area, cx) = setup(cx);
+        let log = log.clone();
+        let names = names.to_vec();
+        let panels = cx.update(|window, cx| {
+            let panels: Vec<_> = names
+                .iter()
+                .map(|name| TestPanel::logging(name, &log, cx))
+                .collect();
+            let layout = panels
+                .iter()
+                .fold(DockLayout::tabs(), |layout, panel| {
+                    layout.panel(panel.clone())
+                })
+                .active_index(active_ix.unwrap_or(0));
+            area.update(cx, |area, cx| area.set_center(layout, window, cx));
+            panels
+        });
+        (area, panels, cx)
+    }
+
+    /// The live group behind the center split's `ix`-th child.
+    fn group_of(
+        area: &Entity<DockArea>,
+        ix: usize,
+        cx: &mut VisualTestContext,
+    ) -> Entity<TabGroup> {
+        let node = child_node(area, ix, cx);
+        cx.read(|cx| area.read(cx).groups.get(&node).unwrap().entity.clone())
+    }
+
+    fn move_panel_into(
+        area: &Entity<DockArea>,
+        panel: PanelId,
+        node: NodeId,
+        ix: Option<usize>,
+        activate: bool,
+        cx: &mut VisualTestContext,
+    ) {
+        cx.update(|window, cx| {
+            area.update(cx, |area, cx| {
+                area.move_panel(panel, InsertTarget::Tabs { node, ix, activate }, window, cx);
+            });
+        });
+        cx.run_until_parked();
+    }
+
+    fn is_center_empty(area: &Entity<DockArea>, cx: &mut VisualTestContext) -> bool {
+        cx.read(|cx| area.read(cx).is_empty(DockPlacement::Center, cx))
     }
 
     #[gpui::test]
@@ -2306,5 +2391,489 @@ mod tests {
             !cx.read(|cx| group.read(cx).can_close(cx)),
             "the lock reaches every group through the constraints push"
         );
+    }
+
+    // The tests below were ported from `crates/ui/src/dock/tab_panel.rs` when
+    // the dock skin was rebuilt on this crate. They are the surviving record
+    // of the `is_empty` semantics and the documented `set_active` contract.
+
+    /// An empty `StackPanel` used to dump as `PanelInfo::Panel`, the
+    /// `PanelState` default, so restoring looked it up in `PanelRegistry` and
+    /// failed.
+    #[gpui::test]
+    fn empty_center_round_trips_as_a_stack(cx: &mut TestAppContext) {
+        let (area, cx) = setup(cx);
+        let center = cx.read(|cx| area.read(cx).dump(cx).center);
+
+        assert_eq!(center.panel_name, "StackPanel");
+        assert!(
+            matches!(center.info, PanelInfo::Stack { .. }),
+            "got {:?}",
+            center.info
+        );
+    }
+
+    #[gpui::test]
+    fn fresh_center_is_empty(cx: &mut TestAppContext) {
+        let (area, cx) = setup(cx);
+
+        assert!(
+            is_center_empty(&area, cx),
+            "DockArea::new starts with an empty split centre"
+        );
+    }
+
+    #[gpui::test]
+    fn center_holding_a_tab_group_is_not_empty(cx: &mut TestAppContext) {
+        let log = log_of();
+        let (area, _panels, cx) = one_group(&log, &["A", "B"], None, cx);
+        cx.run_until_parked();
+
+        assert!(!is_center_empty(&area, cx));
+    }
+
+    /// The tree still lists the group's node here until the last panel goes,
+    /// so anything reading node counts rather than panels would report
+    /// non-empty.
+    #[gpui::test]
+    fn center_is_empty_again_once_every_panel_is_removed(cx: &mut TestAppContext) {
+        let log = log_of();
+        let (area, panels, cx) = one_group(&log, &["A", "B"], None, cx);
+        cx.run_until_parked();
+
+        for panel in panels {
+            cx.update(|window, cx| {
+                area.update(cx, |area, cx| area.remove_panel(panel.clone(), window, cx))
+            });
+        }
+        cx.run_until_parked();
+
+        assert!(is_center_empty(&area, cx));
+    }
+
+    #[gpui::test]
+    fn center_is_not_empty_after_adding_to_a_tab_group(cx: &mut TestAppContext) {
+        let (area, cx) = setup(cx);
+        assert!(is_center_empty(&area, cx));
+
+        cx.update(|window, cx| {
+            let alpha = TestPanel::new("Alpha", cx);
+            area.update(cx, |area, cx| {
+                area.add_panel(alpha, DockPlacement::Center, None, window, cx)
+            });
+        });
+        cx.run_until_parked();
+
+        assert!(!is_center_empty(&area, cx));
+    }
+
+    /// Rendering skips invisible panels, so a centre holding only hidden ones
+    /// draws nothing and counts as empty.
+    #[gpui::test]
+    fn center_holding_only_hidden_panels_is_empty(cx: &mut TestAppContext) {
+        let log = log_of();
+        let (area, panels, cx) = one_group(&log, &["A", "B"], None, cx);
+        cx.run_until_parked();
+        assert!(!is_center_empty(&area, cx));
+
+        cx.update(|_, cx| {
+            for panel in &panels {
+                panel.update(cx, |panel, cx| panel.set_visible(false, cx));
+            }
+        });
+        cx.run_until_parked();
+
+        assert_eq!(
+            cx.read(|cx| area
+                .read(cx)
+                .layout(DockPlacement::Center)
+                .unwrap()
+                .panels()
+                .count()),
+            2,
+            "hiding a panel does not remove it from the tab group"
+        );
+        assert!(is_center_empty(&area, cx));
+    }
+
+    /// The old `TabPanel` inside `Tiles` had no parent `StackPanel` to remove
+    /// itself from, so emptying it left the tile behind and the walk had to
+    /// recurse. `normalize` now removes the emptied canvas outright, which is
+    /// the stronger outcome and is what this pins.
+    #[gpui::test]
+    fn center_holding_only_empty_tiles_is_empty(cx: &mut TestAppContext) {
+        let (area, cx) = setup(cx);
+        let bounds = Bounds {
+            origin: gpui::point(px(10.), px(10.)),
+            size: gpui::size(px(200.), px(200.)),
+        };
+        let alpha = cx.update(|window, cx| {
+            let alpha = TestPanel::new("Alpha", cx);
+            area.update(cx, |area, cx| {
+                area.set_center(DockLayout::tiles().tile(alpha.clone(), bounds), window, cx)
+            });
+            alpha
+        });
+        cx.run_until_parked();
+        assert!(!is_center_empty(&area, cx));
+
+        cx.update(|window, cx| area.update(cx, |area, cx| area.remove_panel(alpha, window, cx)));
+        cx.run_until_parked();
+
+        assert!(is_center_empty(&area, cx));
+    }
+
+    /// The recursion the previous test no longer reaches: a canvas that still
+    /// holds its tile, but whose every panel is hidden.
+    #[gpui::test]
+    fn center_holding_only_hidden_tiles_is_empty(cx: &mut TestAppContext) {
+        let (area, cx) = setup(cx);
+        let bounds = Bounds {
+            origin: gpui::point(px(10.), px(10.)),
+            size: gpui::size(px(200.), px(200.)),
+        };
+        let alpha = cx.update(|window, cx| {
+            let alpha = TestPanel::new("Alpha", cx);
+            area.update(cx, |area, cx| {
+                area.set_center(DockLayout::tiles().tile(alpha.clone(), bounds), window, cx)
+            });
+            alpha
+        });
+        cx.run_until_parked();
+        assert!(!is_center_empty(&area, cx));
+
+        cx.update(|_, cx| alpha.update(cx, |alpha, cx| alpha.set_visible(false, cx)));
+
+        assert_eq!(
+            cx.read(|cx| area
+                .read(cx)
+                .layout(DockPlacement::Center)
+                .unwrap()
+                .panels()
+                .count()),
+            1,
+            "the tile is still on the canvas"
+        );
+        assert!(is_center_empty(&area, cx));
+    }
+
+    #[gpui::test]
+    fn single_panel_group_receives_initial_active(cx: &mut TestAppContext) {
+        let log = log_of();
+        let (_area, _panels, cx) = one_group(&log, &["A"], None, cx);
+        cx.run_until_parked();
+
+        assert_eq!(drain_active(&log), [("A", true)]);
+    }
+
+    #[gpui::test]
+    fn multi_tab_construction_notifies_only_displayed_panel(cx: &mut TestAppContext) {
+        let log = log_of();
+        let (_area, _panels, cx) = one_group(&log, &["A", "B", "C"], None, cx);
+        cx.run_until_parked();
+
+        // No false-then-true flip on A, no duplicate true, B/C silent.
+        assert_eq!(drain_active(&log), [("A", true)]);
+    }
+
+    #[gpui::test]
+    fn active_index_restore_notifies_that_panel_only(cx: &mut TestAppContext) {
+        let log = log_of();
+        let (_area, _panels, cx) = one_group(&log, &["A", "B", "C"], Some(2), cx);
+        cx.run_until_parked();
+
+        assert_eq!(drain_active(&log), [("C", true)]);
+    }
+
+    #[gpui::test]
+    fn switching_tabs_sends_false_then_true(cx: &mut TestAppContext) {
+        let log = log_of();
+        let (area, _panels, cx) = one_group(&log, &["A", "B"], None, cx);
+        cx.run_until_parked();
+        drain(&log);
+
+        let group = group_of(&area, 0, cx);
+        cx.update(|window, cx| group.update(cx, |group, cx| group.select_tab(1, window, cx)));
+        cx.run_until_parked();
+
+        assert_eq!(drain_active(&log), [("A", false), ("B", true)]);
+    }
+
+    #[gpui::test]
+    fn reselecting_active_tab_stays_silent(cx: &mut TestAppContext) {
+        let log = log_of();
+        let (area, _panels, cx) = one_group(&log, &["A", "B"], None, cx);
+        cx.run_until_parked();
+        drain(&log);
+
+        let group = group_of(&area, 0, cx);
+        cx.update(|window, cx| group.update(cx, |group, cx| group.select_tab(0, window, cx)));
+        cx.run_until_parked();
+
+        assert_eq!(drain_active(&log), []);
+    }
+
+    /// The old `TabPanel::insert_panel_at` took a brand-new panel; the tree
+    /// API inserts a panel that is already in the dock, so `C` arrives from a
+    /// second group. It was a background tab there and so has been told
+    /// nothing, which is what makes the arrival a genuine activation rather
+    /// than a seeded handoff.
+    #[gpui::test]
+    fn inserting_at_active_ix_swaps_notifications(cx: &mut TestAppContext) {
+        let log = log_of();
+        let (area, cx) = setup(cx);
+        let c = cx.update(|window, cx| {
+            let a = TestPanel::logging("A", &log, cx);
+            let b = TestPanel::logging("B", &log, cx);
+            let x = TestPanel::logging("X", &log, cx);
+            let c = TestPanel::logging("C", &log, cx);
+            area.update(cx, |area, cx| {
+                area.set_center(
+                    DockLayout::h_split()
+                        .child(DockLayout::tabs().panel(a).panel(b), None)
+                        .child(DockLayout::tabs().panel(x).panel(c.clone()), None),
+                    window,
+                    cx,
+                );
+            });
+            c
+        });
+        cx.run_until_parked();
+        drain(&log);
+
+        let destination = child_node(&area, 0, cx);
+        let c_id = panel_id_of(&c);
+        move_panel_into(&area, c_id, destination, Some(0), true, cx);
+
+        assert_eq!(drain_active(&log), [("A", false), ("C", true)]);
+        let group = group_of(&area, 0, cx);
+        assert_eq!(cx.read(|cx| group.read(cx).active_ix()), 0);
+        assert_eq!(
+            cx.read(|cx| group.read(cx).panels()[0].panel_id(cx)),
+            c_id,
+            "the arriving panel took the slot it named"
+        );
+    }
+
+    #[gpui::test]
+    fn removing_before_active_keeps_displayed_panel(cx: &mut TestAppContext) {
+        let log = log_of();
+        let (area, panels, cx) = one_group(&log, &["A", "B", "C"], None, cx);
+        let group = group_of(&area, 0, cx);
+        cx.update(|window, cx| group.update(cx, |group, cx| group.select_tab(1, window, cx)));
+        cx.run_until_parked();
+        drain(&log);
+
+        cx.update(|window, cx| {
+            area.update(cx, |area, cx| {
+                area.remove_panel(panels[0].clone(), window, cx)
+            })
+        });
+        cx.run_until_parked();
+
+        assert_eq!(drain_active(&log), []);
+        assert_eq!(cx.read(|cx| group.read(cx).active_ix()), 0);
+        assert_eq!(
+            cx.read(|cx| group.read(cx).panels()[0].panel_id(cx)),
+            panel_id_of(&panels[1]),
+            "the same panel is still displayed, at its new index"
+        );
+    }
+
+    /// Collapsing is now a dock closing, which is what
+    /// `TabGroupConstraints::collapsed` carries.
+    #[gpui::test]
+    fn collapse_and_expand_notify_active_panel(cx: &mut TestAppContext) {
+        let log = log_of();
+        let (area, cx) = setup(cx);
+        cx.update(|window, cx| {
+            let a = TestPanel::logging("A", &log, cx);
+            let b = TestPanel::logging("B", &log, cx);
+            area.update(cx, |area, cx| {
+                area.set_dock(
+                    DockPlacement::Left,
+                    DockLayout::tabs().panel(a).panel(b),
+                    window,
+                    cx,
+                );
+            });
+        });
+        cx.run_until_parked();
+        drain(&log);
+
+        cx.update(|window, cx| {
+            area.update(cx, |area, cx| {
+                area.toggle_dock(DockPlacement::Left, window, cx)
+            })
+        });
+        cx.run_until_parked();
+        assert_eq!(drain_active(&log), [("A", false)]);
+
+        cx.update(|window, cx| {
+            area.update(cx, |area, cx| {
+                area.toggle_dock(DockPlacement::Left, window, cx)
+            })
+        });
+        cx.run_until_parked();
+        assert_eq!(drain_active(&log), [("A", true)]);
+    }
+
+    #[gpui::test]
+    fn background_add_is_silent_but_first_panel_is_not(cx: &mut TestAppContext) {
+        let log = log_of();
+        let (area, cx) = setup(cx);
+        let d = cx.update(|window, cx| {
+            let a = TestPanel::logging("A", &log, cx);
+            let b = TestPanel::logging("B", &log, cx);
+            let c = TestPanel::logging("C", &log, cx);
+            let d = TestPanel::logging("D", &log, cx);
+            area.update(cx, |area, cx| {
+                area.set_center(
+                    DockLayout::h_split()
+                        .child(DockLayout::tabs().panel(a).panel(b), None)
+                        .child(DockLayout::tabs().panel(c).panel(d.clone()), None),
+                    window,
+                    cx,
+                );
+            });
+            d
+        });
+        cx.run_until_parked();
+        drain(&log);
+
+        // D is a background tab in its own group and arrives as a background
+        // tab in the other one, so nothing changes for anybody.
+        let destination = child_node(&area, 0, cx);
+        move_panel_into(&area, panel_id_of(&d), destination, None, false, cx);
+        assert_eq!(drain_active(&log), []);
+
+        // The first panel of a region that had none is displayed regardless,
+        // so it must be told.
+        cx.update(|window, cx| {
+            let e = TestPanel::logging("E", &log, cx);
+            area.update(cx, |area, cx| {
+                area.add_panel(e, DockPlacement::Left, None, window, cx)
+            });
+        });
+        cx.run_until_parked();
+        assert_eq!(drain_active(&log), [("E", true)]);
+    }
+
+    #[gpui::test]
+    fn drag_active_panel_to_other_group_stays_silent_for_it(cx: &mut TestAppContext) {
+        let log = log_of();
+        let (area, cx) = setup(cx);
+        let a = cx.update(|window, cx| {
+            let a = TestPanel::logging("A", &log, cx);
+            let b = TestPanel::logging("B", &log, cx);
+            let c = TestPanel::logging("C", &log, cx);
+            area.update(cx, |area, cx| {
+                area.set_center(
+                    DockLayout::h_split()
+                        .child(DockLayout::tabs().panel(a.clone()).panel(b), None)
+                        .child(DockLayout::tabs().panel(c), None),
+                    window,
+                    cx,
+                );
+            });
+            a
+        });
+        cx.run_until_parked();
+        drain(&log);
+
+        // A was already told `true`; becoming the target's displayed tab must
+        // not repeat it.
+        let destination = child_node(&area, 1, cx);
+        move_panel_into(&area, panel_id_of(&a), destination, None, true, cx);
+
+        // Two groups reconcile independently, so their deliveries interleave
+        // in no guaranteed order; what is pinned is which ones happen.
+        let seen = drain_active(&log);
+        assert!(seen.contains(&("B", true)), "got {seen:?}");
+        assert!(seen.contains(&("C", false)), "got {seen:?}");
+        assert!(
+            !seen.iter().any(|(name, _)| *name == "A"),
+            "the moved panel was displayed before and after: {seen:?}"
+        );
+    }
+
+    #[gpui::test]
+    fn drag_active_panel_to_background_slot_deactivates_it(cx: &mut TestAppContext) {
+        let log = log_of();
+        let (area, cx) = setup(cx);
+        let a = cx.update(|window, cx| {
+            let a = TestPanel::logging("A", &log, cx);
+            let c = TestPanel::logging("C", &log, cx);
+            let d = TestPanel::logging("D", &log, cx);
+            area.update(cx, |area, cx| {
+                area.set_center(
+                    DockLayout::h_split()
+                        .child(DockLayout::tabs().panel(a.clone()), None)
+                        .child(DockLayout::tabs().panel(c).panel(d), None),
+                    window,
+                    cx,
+                );
+            });
+            a
+        });
+        cx.run_until_parked();
+        drain(&log);
+
+        // A was told `true` and becomes a background tab, so it gets one
+        // `false`.
+        let destination = child_node(&area, 1, cx);
+        move_panel_into(&area, panel_id_of(&a), destination, None, false, cx);
+
+        assert_eq!(drain_active(&log), [("A", false)]);
+    }
+
+    #[gpui::test]
+    fn closing_a_tile_removes_its_panel(cx: &mut TestAppContext) {
+        // `TileContext::can_close` would otherwise be a control a skin can
+        // draw and never wire up.
+        let log = log_of();
+        let (area, cx) = setup(cx);
+        let bounds = Bounds {
+            origin: gpui::point(px(10.), px(10.)),
+            size: gpui::size(px(200.), px(200.)),
+        };
+        let alpha = cx.update(|window, cx| {
+            let alpha = TestPanel::logging("Alpha", &log, cx);
+            let beta = TestPanel::logging("Beta", &log, cx);
+            area.update(cx, |area, cx| {
+                area.set_center(
+                    DockLayout::tiles()
+                        .tile(alpha.clone(), bounds)
+                        .tile(beta, bounds),
+                    window,
+                    cx,
+                );
+            });
+            alpha
+        });
+        cx.run_until_parked();
+        drain(&log);
+
+        let canvas_node = child_node(&area, 0, cx);
+        let canvas = cx.read(|cx| {
+            area.read(cx)
+                .tiles
+                .get(&canvas_node)
+                .unwrap()
+                .entity
+                .clone()
+        });
+        cx.update(|window, cx| {
+            let tile = canvas.read(cx).tiles(cx)[0].clone();
+            assert!(tile.can_close());
+            tile.close(window, cx);
+        });
+        cx.run_until_parked();
+
+        assert!(
+            cx.read(|cx| area.read(cx).panel(panel_id_of(&alpha)).is_none()),
+            "the closed tile's panel left the dock"
+        );
+        assert!(drain(&log).contains(&("Alpha", PanelSignal::Removed)));
     }
 }
