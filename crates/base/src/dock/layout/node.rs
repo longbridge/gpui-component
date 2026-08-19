@@ -1,0 +1,174 @@
+use gpui::{Axis, Bounds, EntityId, Pixels};
+
+/// Stable container identity. Survives structural edits and normalization so
+/// the `DockArea` view cache does not tear down and rebuild entities.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
+pub struct NodeId(u64);
+
+impl NodeId {
+    pub(crate) fn from_u64(raw: u64) -> Self {
+        Self(raw)
+    }
+
+    pub fn as_u64(self) -> u64 {
+        self.0
+    }
+}
+
+/// Stable panel identity. Wraps the `EntityId` of the panel entity so the
+/// layout algebra can be exercised without an `App`.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
+pub struct PanelId(u64);
+
+impl PanelId {
+    pub fn from_u64(raw: u64) -> Self {
+        Self(raw)
+    }
+
+    pub fn as_u64(self) -> u64 {
+        self.0
+    }
+}
+
+impl From<EntityId> for PanelId {
+    fn from(id: EntityId) -> Self {
+        Self(id.as_u64())
+    }
+}
+
+/// One panel placed on a tiles canvas.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub struct TilePanel {
+    panel: PanelId,
+    bounds: Bounds<Pixels>,
+    z_index: usize,
+}
+
+impl TilePanel {
+    pub fn new(panel: PanelId, bounds: Bounds<Pixels>) -> Self {
+        Self {
+            panel,
+            bounds,
+            z_index: 0,
+        }
+    }
+
+    pub fn with_z_index(mut self, z_index: usize) -> Self {
+        self.z_index = z_index;
+        self
+    }
+
+    pub fn with_bounds(mut self, bounds: Bounds<Pixels>) -> Self {
+        self.bounds = bounds;
+        self
+    }
+
+    pub fn panel(&self) -> PanelId {
+        self.panel
+    }
+
+    pub fn bounds(&self) -> Bounds<Pixels> {
+        self.bounds
+    }
+
+    pub fn z_index(&self) -> usize {
+        self.z_index
+    }
+}
+
+/// The shape of one container. Private: every mutation goes through
+/// [`LayoutTree`] so normalization always runs.
+///
+/// [`LayoutTree`]: super::LayoutTree
+///
+/// `Tabs` and `Tiles` are only constructed by the `#[cfg(test)]` seeders
+/// today; real construction lands with normalization and edit operations in
+/// later tasks.
+#[allow(dead_code)]
+#[derive(Clone, PartialEq, Debug)]
+pub(crate) enum NodeKind {
+    Split {
+        axis: Axis,
+        children: Vec<LayoutNode>,
+        sizes: Vec<Option<Pixels>>,
+    },
+    Tabs {
+        panels: Vec<PanelId>,
+        active_ix: usize,
+    },
+    Tiles {
+        panels: Vec<TilePanel>,
+    },
+}
+
+/// Borrowed read-only projection of a node.
+pub enum NodeRef<'a> {
+    Split {
+        axis: Axis,
+        children: &'a [LayoutNode],
+        sizes: &'a [Option<Pixels>],
+    },
+    Tabs {
+        panels: &'a [PanelId],
+        active_ix: usize,
+    },
+    Tiles {
+        panels: &'a [TilePanel],
+    },
+}
+
+#[derive(Clone, PartialEq, Debug)]
+pub struct LayoutNode {
+    id: NodeId,
+    kind: NodeKind,
+}
+
+impl LayoutNode {
+    pub(crate) fn new(id: NodeId, kind: NodeKind) -> Self {
+        Self { id, kind }
+    }
+
+    pub fn id(&self) -> NodeId {
+        self.id
+    }
+
+    pub fn kind(&self) -> NodeRef<'_> {
+        match &self.kind {
+            NodeKind::Split {
+                axis,
+                children,
+                sizes,
+            } => NodeRef::Split {
+                axis: *axis,
+                children,
+                sizes,
+            },
+            NodeKind::Tabs { panels, active_ix } => NodeRef::Tabs {
+                panels,
+                active_ix: *active_ix,
+            },
+            NodeKind::Tiles { panels } => NodeRef::Tiles { panels },
+        }
+    }
+
+    // Only reachable through `LayoutTree::node_at_mut` today, whose own
+    // callers arrive with the edit operations added in a later task.
+    #[allow(dead_code)]
+    pub(crate) fn kind_mut(&mut self) -> &mut NodeKind {
+        &mut self.kind
+    }
+
+    pub(crate) fn kind_ref(&self) -> &NodeKind {
+        &self.kind
+    }
+
+    /// Depth-first pre-order walk over this node and its descendants.
+    pub fn walk(&self, f: &mut impl FnMut(&LayoutNode)) {
+        f(self);
+        if let NodeKind::Split { children, .. } = &self.kind {
+            for child in children {
+                child.walk(f);
+            }
+        }
+    }
+}
