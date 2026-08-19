@@ -517,7 +517,7 @@ impl CommandState {
         if let Some(action) = action {
             window.dispatch_action(action, cx);
             if let Some(on_confirm) = on_confirm {
-                cx.defer_in(window, move |_, window, cx| {
+                window.defer(cx, move |window, cx| {
                     on_confirm(&value, window, cx);
                 });
             }
@@ -871,7 +871,10 @@ mod tests {
         command::{Command, CommandEntry, CommandGroup, CommandItem},
     };
 
-    actions!(command_test, [GlobalTestItem, OpenTestItem]);
+    actions!(
+        command_test,
+        [GlobalTestItem, OpenTestItem, RemovePaletteTestItem]
+    );
 
     struct CommandActionsHarness {
         state: Entity<CommandState>,
@@ -948,6 +951,48 @@ mod tests {
                 .on_children_prepainted(move |bounds, _, _| width.set(Some(bounds[0].size.width)))
                 .child(item)
         }
+    }
+
+    #[gpui::test]
+    fn action_that_removes_command_state_still_confirms_after_dispatch(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let events = Rc::new(RefCell::new(Vec::new()));
+        let state_owner: Rc<RefCell<Option<Entity<CommandState>>>> = Rc::new(RefCell::new(None));
+        let action_events = events.clone();
+        let action_state_owner = state_owner.clone();
+        cx.update(|cx| {
+            cx.on_action(move |_: &RemovePaletteTestItem, _| {
+                action_events.borrow_mut().push("action".into());
+                action_state_owner.borrow_mut().take();
+            });
+        });
+        let cx = cx.add_empty_window();
+        cx.update(|window, cx| {
+            let confirm_events = events.clone();
+            let state = cx.new(|cx| {
+                let mut state = CommandState::new(window, cx);
+                state.install_model(
+                    CommandModel {
+                        entries: vec![CommandEntry::Item(
+                            CommandItem::new("removed").action(Box::new(RemovePaletteTestItem)),
+                        )],
+                        searchable: false,
+                        on_confirm: Some(Rc::new(move |value, _, _| {
+                            confirm_events.borrow_mut().push(format!("confirm:{value}"));
+                        })),
+                        ..CommandModel::default()
+                    },
+                    cx,
+                );
+                state
+            });
+            *state_owner.borrow_mut() = Some(state.clone());
+            state.update(cx, |state, cx| state.confirm(0, window, cx));
+        });
+        cx.run_until_parked();
+
+        assert!(state_owner.borrow().is_none());
+        assert_eq!(events.borrow().as_slice(), ["action", "confirm:removed"]);
     }
 
     #[gpui::test]
