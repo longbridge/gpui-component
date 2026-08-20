@@ -11,8 +11,8 @@ use anyhow::Result;
 use gpui::{
     AnyElement, AnyView, App, AppContext as _, Axis, Bounds, Context, Div, Empty, Entity,
     EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement, ParentElement,
-    Pixels, Point, Render, SharedString, Stateful, Subscription, WeakEntity, Window, div,
-    prelude::FluentBuilder as _, px,
+    Pixels, Point, Render, SharedString, Stateful, Styled as _, Subscription, WeakEntity, Window,
+    div, prelude::FluentBuilder as _, px,
 };
 
 use crate::{
@@ -1404,7 +1404,13 @@ impl DockArea {
                             // panels behind a node.
                             .visible(self.is_node_visible(child, cx))
                             .child(self.render_node(child, window, cx))
-                            .when_some(*size, |panel, size| panel.size(size))
+                            // `flex_none` is what makes the size stick.
+                            // `ResizablePanel` sets `flex_grow: 1` on itself,
+                            // so a slot given a size would otherwise treat it
+                            // as a flex-basis and still absorb an equal share
+                            // of the leftover — a 200px sidebar rendering
+                            // 1075px wide in a 1950px split.
+                            .when_some(*size, |panel, size| panel.size(size).flex_none())
                     })
                     .collect();
 
