@@ -88,7 +88,7 @@ This is required for theming and other global settings to work correctly.
 
 GPUI Component uses stateless [RenderOnce] elements, making them simple and predictable. State management is handled at the view level, not in individual components.
 
-The are all implemented [IntoElement] types.
+They are all implemented [IntoElement] types.
 
 For example:
 
