@@ -77,14 +77,14 @@ impl TilePanel {
 }
 
 /// The shape of one container. Private: every mutation goes through
-/// [`LayoutTree`] so normalization always runs.
+/// [`PaneTree`] so normalization always runs.
 ///
-/// [`LayoutTree`]: super::LayoutTree
+/// [`PaneTree`]: super::PaneTree
 #[derive(Clone, PartialEq, Debug)]
 pub(crate) enum NodeKind {
     Split {
         axis: Axis,
-        children: Vec<LayoutNode>,
+        children: Vec<PaneNode>,
         sizes: Vec<Option<Pixels>>,
     },
     Tabs {
@@ -97,10 +97,10 @@ pub(crate) enum NodeKind {
 }
 
 /// Borrowed read-only projection of a node.
-pub enum NodeRef<'a> {
+pub enum PaneRef<'a> {
     Split {
         axis: Axis,
-        children: &'a [LayoutNode],
+        children: &'a [PaneNode],
         sizes: &'a [Option<Pixels>],
     },
     Tabs {
@@ -113,12 +113,12 @@ pub enum NodeRef<'a> {
 }
 
 #[derive(Clone, PartialEq, Debug)]
-pub struct LayoutNode {
+pub struct PaneNode {
     id: NodeId,
     kind: NodeKind,
 }
 
-impl LayoutNode {
+impl PaneNode {
     pub(crate) fn new(id: NodeId, kind: NodeKind) -> Self {
         Self { id, kind }
     }
@@ -127,22 +127,22 @@ impl LayoutNode {
         self.id
     }
 
-    pub fn kind(&self) -> NodeRef<'_> {
+    pub fn kind(&self) -> PaneRef<'_> {
         match &self.kind {
             NodeKind::Split {
                 axis,
                 children,
                 sizes,
-            } => NodeRef::Split {
+            } => PaneRef::Split {
                 axis: *axis,
                 children,
                 sizes,
             },
-            NodeKind::Tabs { panels, active_ix } => NodeRef::Tabs {
+            NodeKind::Tabs { panels, active_ix } => PaneRef::Tabs {
                 panels,
                 active_ix: *active_ix,
             },
-            NodeKind::Tiles { panels } => NodeRef::Tiles { panels },
+            NodeKind::Tiles { panels } => PaneRef::Tiles { panels },
         }
     }
 
@@ -155,7 +155,7 @@ impl LayoutNode {
     }
 
     /// Depth-first pre-order walk over this node and its descendants.
-    pub fn walk(&self, f: &mut impl FnMut(&LayoutNode)) {
+    pub fn walk(&self, f: &mut impl FnMut(&PaneNode)) {
         f(self);
         if let NodeKind::Split { children, .. } = &self.kind {
             for child in children {

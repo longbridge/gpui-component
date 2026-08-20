@@ -1,6 +1,6 @@
 use gpui::{Axis, Pixels};
 
-use super::layout::{LayoutNode, LayoutTree, NodeKind, NodeRef, PanelId, RootKind, TilePanel};
+use super::layout::{NodeKind, PaneNode, PaneRef, PaneTree, PanelId, RootKind, TilePanel};
 use super::state::{PanelInfo, PanelState, TileMeta};
 
 /// The names written to persisted layouts. These are contract, not type names:
@@ -19,15 +19,15 @@ pub trait PanelSource {
     fn dump(&self, id: PanelId) -> PanelState;
 }
 
-impl LayoutTree {
+impl PaneTree {
     pub fn to_state(&self, source: &dyn PanelSource) -> PanelState {
         node_to_state(self.root(), source)
     }
 }
 
-fn node_to_state(node: &LayoutNode, source: &dyn PanelSource) -> PanelState {
+fn node_to_state(node: &PaneNode, source: &dyn PanelSource) -> PanelState {
     match node.kind() {
-        NodeRef::Split {
+        PaneRef::Split {
             axis,
             children,
             sizes,
@@ -53,14 +53,14 @@ fn node_to_state(node: &LayoutNode, source: &dyn PanelSource) -> PanelState {
                 axis,
             ),
         },
-        NodeRef::Tabs { panels, active_ix } => PanelState {
+        PaneRef::Tabs { panels, active_ix } => PanelState {
             panel_name: TAB_PANEL_NAME.to_string(),
             children: panels.iter().map(|panel| source.dump(*panel)).collect(),
             // Unconditional, unlike the old writer which assigned this inside
             // its loop and left an empty group looking like a bare panel.
             info: PanelInfo::tabs(active_ix),
         },
-        NodeRef::Tiles { panels } => PanelState {
+        PaneRef::Tiles { panels } => PanelState {
             panel_name: TILES_PANEL_NAME.to_string(),
             children: panels
                 .iter()
@@ -90,7 +90,7 @@ pub trait PanelBuilder {
     fn build(&mut self, state: &PanelState, info: &PanelInfo) -> PanelId;
 }
 
-impl LayoutTree {
+impl PaneTree {
     /// Read a persisted layout.
     ///
     /// Compatibility rules, all previously implicit in `PanelState::to_item`:
@@ -116,13 +116,13 @@ impl LayoutTree {
         root_kind: RootKind,
         builder: &mut dyn PanelBuilder,
     ) -> Self {
-        let mut tree = LayoutTree::new(root_kind);
+        let mut tree = PaneTree::new(root_kind);
         let root = build_node(&mut tree, state, builder);
 
         let root = match (root_kind, &root) {
             (RootKind::Split, node) if !matches!(node.kind_ref(), NodeKind::Split { .. }) => {
                 let id = tree.allocate_node_id();
-                LayoutNode::new(
+                PaneNode::new(
                     id,
                     NodeKind::Split {
                         axis: Axis::Horizontal,
@@ -140,11 +140,7 @@ impl LayoutTree {
     }
 }
 
-fn build_node(
-    tree: &mut LayoutTree,
-    state: &PanelState,
-    builder: &mut dyn PanelBuilder,
-) -> LayoutNode {
+fn build_node(tree: &mut PaneTree, state: &PanelState, builder: &mut dyn PanelBuilder) -> PaneNode {
     let id = tree.allocate_node_id();
 
     match &state.info {
@@ -154,7 +150,7 @@ fn build_node(
             } else {
                 Axis::Vertical
             };
-            let children: Vec<LayoutNode> = state
+            let children: Vec<PaneNode> = state
                 .children
                 .iter()
                 .map(|child| build_node(tree, child, builder))
@@ -162,7 +158,7 @@ fn build_node(
             let sizes = (0..children.len())
                 .map(|ix| sizes.get(ix).copied().filter(|size| *size > Pixels::ZERO))
                 .collect();
-            LayoutNode::new(
+            PaneNode::new(
                 id,
                 NodeKind::Split {
                     axis,
@@ -173,7 +169,7 @@ fn build_node(
         }
         PanelInfo::Tabs { active_index } => {
             let panels = collect_tab_panels(&state.children, builder);
-            LayoutNode::new(
+            PaneNode::new(
                 id,
                 NodeKind::Tabs {
                     panels,
@@ -192,7 +188,7 @@ fn build_node(
                     panels.push(TilePanel::new(panel, meta.bounds).with_z_index(meta.z_index));
                 }
             }
-            LayoutNode::new(id, NodeKind::Tiles { panels })
+            PaneNode::new(id, NodeKind::Tiles { panels })
         }
         PanelInfo::Panel(_) => {
             // A container name carrying a leaf info means the writer that
@@ -202,7 +198,7 @@ fn build_node(
             } else {
                 vec![builder.build(state, &state.info)]
             };
-            LayoutNode::new(
+            PaneNode::new(
                 id,
                 NodeKind::Tabs {
                     panels,
@@ -295,7 +291,7 @@ mod tests {
 
     #[test]
     fn a_split_serializes_as_a_stack_panel() {
-        let mut tree = LayoutTree::new(RootKind::Split);
+        let mut tree = PaneTree::new(RootKind::Split);
         tree.push_tabs_for_test(tree.root().id(), vec![PanelId::from_u64(1)]);
         tree.push_tabs_for_test(tree.root().id(), vec![PanelId::from_u64(2)]);
         tree.normalize();
@@ -319,7 +315,7 @@ mod tests {
 
     #[test]
     fn an_unresolved_slot_size_serializes_as_the_zero_sentinel() {
-        let mut tree = LayoutTree::new(RootKind::Split);
+        let mut tree = PaneTree::new(RootKind::Split);
         let root = tree.root().id();
         tree.push_sized_tabs_for_test(root, vec![PanelId::from_u64(1)], Some(px(120.)));
         tree.push_sized_tabs_for_test(root, vec![PanelId::from_u64(2)], None);
@@ -341,7 +337,7 @@ mod tests {
 
     #[test]
     fn an_empty_tab_group_serializes_as_tabs_not_as_a_panel() {
-        let mut tree = LayoutTree::new(RootKind::Any);
+        let mut tree = PaneTree::new(RootKind::Any);
         tree.set_root_tabs_for_test(vec![], 0);
 
         let state = tree.to_state(&FakePanels(vec![]));
@@ -355,7 +351,7 @@ mod tests {
 
     #[test]
     fn an_empty_center_still_serializes_as_a_stack_panel() {
-        let tree = LayoutTree::new(RootKind::Split);
+        let tree = PaneTree::new(RootKind::Split);
         let state = tree.to_state(&FakePanels(vec![]));
         assert_eq!(state.panel_name, "StackPanel");
         assert!(matches!(state.info, PanelInfo::Stack { .. }));
@@ -363,7 +359,7 @@ mod tests {
 
     #[test]
     fn tiles_serialize_with_their_metas_in_order() {
-        let mut tree = LayoutTree::new(RootKind::Any);
+        let mut tree = PaneTree::new(RootKind::Any);
         let bounds = Bounds {
             origin: point(px(5.), px(6.)),
             size: size(px(7.), px(8.)),
@@ -423,10 +419,10 @@ mod tests {
         );
 
         let mut builder = RecordingBuilder::default();
-        let tree = LayoutTree::from_state(&state, RootKind::Any, &mut builder);
+        let tree = PaneTree::from_state(&state, RootKind::Any, &mut builder);
 
         assert_eq!(builder.built, vec!["Alpha", "Beta"]);
-        let NodeRef::Tabs { panels, active_ix } = tree.root().kind() else {
+        let PaneRef::Tabs { panels, active_ix } = tree.root().kind() else {
             panic!()
         };
         assert_eq!(panels.len(), 2);
@@ -436,9 +432,9 @@ mod tests {
     #[test]
     fn a_bare_panel_leaf_is_wrapped_in_a_tab_group() {
         let mut builder = RecordingBuilder::default();
-        let tree = LayoutTree::from_state(&panel_state("Alpha"), RootKind::Any, &mut builder);
+        let tree = PaneTree::from_state(&panel_state("Alpha"), RootKind::Any, &mut builder);
 
-        assert!(matches!(tree.root().kind(), NodeRef::Tabs { panels, .. } if panels.len() == 1));
+        assert!(matches!(tree.root().kind(), PaneRef::Tabs { panels, .. } if panels.len() == 1));
     }
 
     #[test]
@@ -451,22 +447,22 @@ mod tests {
         };
 
         let mut builder = RecordingBuilder::default();
-        let tree = LayoutTree::from_state(&state, RootKind::Any, &mut builder);
+        let tree = PaneTree::from_state(&state, RootKind::Any, &mut builder);
 
         assert!(
             builder.built.is_empty(),
             "no panel is built for the phantom leaf"
         );
-        assert!(matches!(tree.root().kind(), NodeRef::Tabs { panels, .. } if panels.is_empty()));
+        assert!(matches!(tree.root().kind(), PaneRef::Tabs { panels, .. } if panels.is_empty()));
     }
 
     #[test]
     fn a_split_root_is_forced_even_when_the_state_is_a_tab_group() {
         let state = tabs_state(vec![panel_state("Alpha")], 0);
         let mut builder = RecordingBuilder::default();
-        let tree = LayoutTree::from_state(&state, RootKind::Split, &mut builder);
+        let tree = PaneTree::from_state(&state, RootKind::Split, &mut builder);
 
-        assert!(matches!(tree.root().kind(), NodeRef::Split { .. }));
+        assert!(matches!(tree.root().kind(), PaneRef::Split { .. }));
     }
 
     #[test]
@@ -482,9 +478,9 @@ mod tests {
         };
 
         let mut builder = RecordingBuilder::default();
-        let tree = LayoutTree::from_state(&state, RootKind::Any, &mut builder);
+        let tree = PaneTree::from_state(&state, RootKind::Any, &mut builder);
 
-        let NodeRef::Tiles { panels } = tree.root().kind() else {
+        let PaneRef::Tiles { panels } = tree.root().kind() else {
             panic!()
         };
         assert_eq!(panels[0].bounds(), bounds);
@@ -500,9 +496,9 @@ mod tests {
         };
 
         let mut builder = RecordingBuilder::default();
-        let tree = LayoutTree::from_state(&state, RootKind::Any, &mut builder);
+        let tree = PaneTree::from_state(&state, RootKind::Any, &mut builder);
 
-        let NodeRef::Tiles { panels } = tree.root().kind() else {
+        let PaneRef::Tiles { panels } = tree.root().kind() else {
             panic!()
         };
         assert_eq!(panels.len(), 2, "a short metas list must not drop panels");
@@ -547,7 +543,7 @@ mod tests {
     fn canonicalize(json: &str) -> PanelState {
         let state: DockAreaState = serde_json::from_str(json).unwrap();
         let mut panels = PreservingPanels::default();
-        let tree = LayoutTree::from_state(&state.center, RootKind::Split, &mut panels);
+        let tree = PaneTree::from_state(&state.center, RootKind::Split, &mut panels);
         tree.to_state(&panels)
     }
 
@@ -643,7 +639,7 @@ mod tests {
         let json = include_str!("fixtures/tiles_tab_panel_children.json");
         let state: DockAreaState = serde_json::from_str(json).unwrap();
         let mut panels = PreservingPanels::default();
-        let tree = LayoutTree::from_state(&state.center, RootKind::Split, &mut panels);
+        let tree = PaneTree::from_state(&state.center, RootKind::Split, &mut panels);
 
         assert_eq!(
             panels.names,
@@ -707,10 +703,10 @@ mod tests {
         };
 
         let mut builder = RecordingBuilder::default();
-        let tree = LayoutTree::from_state(&state, RootKind::Any, &mut builder);
+        let tree = PaneTree::from_state(&state, RootKind::Any, &mut builder);
 
         assert_eq!(builder.built, vec!["Alpha"]);
-        let NodeRef::Tiles { panels } = tree.root().kind() else {
+        let PaneRef::Tiles { panels } = tree.root().kind() else {
             panic!()
         };
         assert_eq!(panels.len(), 1);
@@ -746,11 +742,11 @@ mod tests {
         let json = include_str!("fixtures/nested_splits.json");
         let state: DockAreaState = serde_json::from_str(json).unwrap();
         let mut panels = PreservingPanels::default();
-        let tree = LayoutTree::from_state(&state.center, RootKind::Split, &mut panels);
+        let tree = PaneTree::from_state(&state.center, RootKind::Split, &mut panels);
 
         let dumped = tree.to_state(&panels);
         let mut rebuilt_panels = PreservingPanels::default();
-        let rebuilt = LayoutTree::from_state(&dumped, RootKind::Split, &mut rebuilt_panels);
+        let rebuilt = PaneTree::from_state(&dumped, RootKind::Split, &mut rebuilt_panels);
 
         assert_eq!(
             tree.to_state(&panels),
@@ -771,9 +767,9 @@ mod tests {
         let json = include_str!("fixtures/zero_size_sentinel.json");
         let state: DockAreaState = serde_json::from_str(json).unwrap();
         let mut panels = PreservingPanels::default();
-        let tree = LayoutTree::from_state(&state.center, RootKind::Split, &mut panels);
+        let tree = PaneTree::from_state(&state.center, RootKind::Split, &mut panels);
 
-        let NodeRef::Split { sizes, .. } = tree.root().kind() else {
+        let PaneRef::Split { sizes, .. } = tree.root().kind() else {
             panic!("expected the root to stay a split");
         };
         assert_eq!(
@@ -816,10 +812,10 @@ mod tests {
         let json = include_str!("fixtures/bare_tab_panel_root.json");
         let state: PanelState = serde_json::from_str(json).unwrap();
         let mut panels = PreservingPanels::default();
-        let tree = LayoutTree::from_state(&state, RootKind::Any, &mut panels);
+        let tree = PaneTree::from_state(&state, RootKind::Any, &mut panels);
 
         assert!(
-            matches!(tree.root().kind(), NodeRef::Tabs { .. }),
+            matches!(tree.root().kind(), PaneRef::Tabs { .. }),
             "a bare TabPanel root must stay a Tabs node under RootKind::Any, \
              not get wrapped in a synthetic split"
         );

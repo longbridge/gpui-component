@@ -26,7 +26,7 @@ use super::tab_group::{TabGroup, TabGroupConstraints};
 /// The old `TabPanel::detach_panel` calls `on_removed` on every detach,
 /// including the detach half of a drag between groups, so a moved panel is
 /// told it was removed and then added again. In the tree world a move never
-/// leaves the tree — `LayoutTree::move_panel` reports no `removed_panels`, and
+/// leaves the tree — `PaneTree::move_panel` reports no `removed_panels`, and
 /// `EditResult::removed_panels` documents that a moved panel is absent from it
 /// precisely so its entity survives. So under the new contract a moved panel
 /// must never see `Removed`.

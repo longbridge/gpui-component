@@ -4,8 +4,8 @@ use std::sync::Arc;
 
 use gpui::{App, Axis, Bounds, Entity, Pixels};
 
-use super::node::{LayoutNode, NodeKind, PanelId, TilePanel};
-use super::tree::{LayoutTree, RootKind};
+use super::node::{NodeKind, PaneNode, PanelId, TilePanel};
+use super::tree::{PaneTree, RootKind};
 use crate::dock::panel::{Panel, PanelView};
 
 /// Describes a layout without constructing any entity.
@@ -50,6 +50,7 @@ impl DockLayout {
         Self::split(Axis::Vertical)
     }
 
+    /// A tab group: panels stacked one at a time, selected from a tab bar.
     pub fn tabs() -> Self {
         Self {
             kind: BuilderKind::Tabs {
@@ -59,6 +60,8 @@ impl DockLayout {
         }
     }
 
+    /// A tiles canvas: panels placed at free coordinates, each dragged and
+    /// resized on its own.
     pub fn tiles() -> Self {
         Self {
             kind: BuilderKind::Tiles { panels: Vec::new() },
@@ -169,8 +172,8 @@ impl DockLayout {
     /// implementation ever answered with something other than its entity id.
     pub(crate) fn build(
         self,
-        tree: &mut LayoutTree,
-    ) -> (LayoutNode, Vec<(PanelId, Arc<dyn PanelView>)>) {
+        tree: &mut PaneTree,
+    ) -> (PaneNode, Vec<(PanelId, Arc<dyn PanelView>)>) {
         let mut panels = Vec::new();
         let node = self.build_node(tree, &mut panels);
         (node, panels)
@@ -178,9 +181,9 @@ impl DockLayout {
 
     fn build_node(
         self,
-        tree: &mut LayoutTree,
+        tree: &mut PaneTree,
         collected: &mut Vec<(PanelId, Arc<dyn PanelView>)>,
-    ) -> LayoutNode {
+    ) -> PaneNode {
         let id = tree.allocate_node_id();
         match self.kind {
             BuilderKind::Split { axis, children } => {
@@ -190,7 +193,7 @@ impl DockLayout {
                     nodes.push(child.build_node(tree, collected));
                     sizes.push(size);
                 }
-                LayoutNode::new(
+                PaneNode::new(
                     id,
                     NodeKind::Split {
                         axis,
@@ -202,7 +205,7 @@ impl DockLayout {
             BuilderKind::Tabs { panels, active_ix } => {
                 let ids = panels.iter().map(|(id, _)| *id).collect();
                 collected.extend(panels);
-                LayoutNode::new(
+                PaneNode::new(
                     id,
                     NodeKind::Tabs {
                         panels: ids,
@@ -219,31 +222,31 @@ impl DockLayout {
                     })
                     .collect();
                 collected.extend(panels.into_iter().map(|(id, view, _)| (id, view)));
-                LayoutNode::new(id, NodeKind::Tiles { panels: tiles })
+                PaneNode::new(id, NodeKind::Tiles { panels: tiles })
             }
         }
     }
 }
 
-impl LayoutTree {
+impl PaneTree {
     /// Build a whole tree from a described layout.
     ///
     /// The `RootKind::Split` wrap mirrors the one in
-    /// [`LayoutTree::from_state`](crate::dock::LayoutTree::from_state): a
+    /// [`PaneTree::from_state`](crate::dock::PaneTree::from_state): a
     /// center whose described root is a tab group or a tiles canvas still has
     /// to serialize as a `StackPanel`.
     pub(crate) fn from_layout(
         layout: DockLayout,
         root_kind: RootKind,
     ) -> (Self, Vec<(PanelId, Arc<dyn PanelView>)>) {
-        let mut tree = LayoutTree::new(root_kind);
+        let mut tree = PaneTree::new(root_kind);
         let (root, panels) = layout.build(&mut tree);
 
         let root = match (root_kind, root.kind_ref()) {
             (RootKind::Split, NodeKind::Split { .. }) | (RootKind::Any, _) => root,
             (RootKind::Split, _) => {
                 let id = tree.allocate_node_id();
-                LayoutNode::new(
+                PaneNode::new(
                     id,
                     NodeKind::Split {
                         axis: Axis::Horizontal,
@@ -264,7 +267,7 @@ impl LayoutTree {
 mod tests {
     use gpui::{TestAppContext, px};
 
-    use super::super::NodeRef;
+    use super::super::PaneRef;
     use super::*;
     use crate::dock::test_support::TestPanel;
 
@@ -273,7 +276,7 @@ mod tests {
         let (tree, panels) = cx.update(|cx| {
             let alpha = TestPanel::new("Alpha", cx);
             let beta = TestPanel::new("Beta", cx);
-            LayoutTree::from_layout(
+            PaneTree::from_layout(
                 DockLayout::h_split()
                     .child(DockLayout::tabs().panel(alpha), Some(px(300.)))
                     .child(DockLayout::tabs().panel(beta), None),
@@ -282,7 +285,7 @@ mod tests {
         });
 
         assert_eq!(panels.len(), 2);
-        let NodeRef::Split {
+        let PaneRef::Split {
             axis,
             children,
             sizes,
@@ -293,7 +296,7 @@ mod tests {
         assert_eq!(axis, gpui::Axis::Horizontal);
         assert_eq!(children.len(), 2);
         assert_eq!(sizes, &[Some(px(300.)), None]);
-        assert!(matches!(children[0].kind(), NodeRef::Tabs { panels, .. } if panels.len() == 1));
+        assert!(matches!(children[0].kind(), PaneRef::Tabs { panels, .. } if panels.len() == 1));
     }
 
     /// Ported from `DockItem::split_with_sizes_adds_each_child_once`, which
@@ -303,7 +306,7 @@ mod tests {
         let (tree, _) = cx.update(|cx| {
             let alpha = TestPanel::new("Alpha", cx);
             let beta = TestPanel::new("Beta", cx);
-            LayoutTree::from_layout(
+            PaneTree::from_layout(
                 DockLayout::h_split()
                     .child(DockLayout::tabs().panel(alpha), None)
                     .child(DockLayout::tabs().panel(beta), None),
@@ -311,7 +314,7 @@ mod tests {
             )
         });
 
-        let NodeRef::Split {
+        let PaneRef::Split {
             children, sizes, ..
         } = tree.root().kind()
         else {
@@ -330,10 +333,10 @@ mod tests {
     fn a_bare_tab_group_is_wrapped_for_a_split_root(cx: &mut TestAppContext) {
         let (tree, _) = cx.update(|cx| {
             let alpha = TestPanel::new("Alpha", cx);
-            LayoutTree::from_layout(DockLayout::tabs().panel(alpha), RootKind::Split)
+            PaneTree::from_layout(DockLayout::tabs().panel(alpha), RootKind::Split)
         });
 
-        assert!(matches!(tree.root().kind(), NodeRef::Split { .. }));
+        assert!(matches!(tree.root().kind(), PaneRef::Split { .. }));
     }
 
     #[gpui::test]
@@ -341,13 +344,13 @@ mod tests {
         let (tree, _) = cx.update(|cx| {
             let alpha = TestPanel::new("Alpha", cx);
             let beta = TestPanel::new("Beta", cx);
-            LayoutTree::from_layout(
+            PaneTree::from_layout(
                 DockLayout::tabs().panel(alpha).panel(beta).active_index(1),
                 RootKind::Any,
             )
         });
 
-        let NodeRef::Tabs { active_ix, .. } = tree.root().kind() else {
+        let PaneRef::Tabs { active_ix, .. } = tree.root().kind() else {
             panic!("expected a tab group root");
         };
         assert_eq!(active_ix, 1);
@@ -362,13 +365,13 @@ mod tests {
         let (tree, _) = cx.update(|cx| {
             let alpha = TestPanel::new("Alpha", cx);
             let beta = TestPanel::new("Beta", cx);
-            LayoutTree::from_layout(
+            PaneTree::from_layout(
                 DockLayout::tiles().tile(alpha, bounds).tile(beta, bounds),
                 RootKind::Any,
             )
         });
 
-        let NodeRef::Tiles { panels } = tree.root().kind() else {
+        let PaneRef::Tiles { panels } = tree.root().kind() else {
             panic!("expected a tiles root");
         };
         assert_eq!(panels[0].z_index(), 0);

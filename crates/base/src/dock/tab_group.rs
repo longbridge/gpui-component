@@ -29,7 +29,7 @@ use super::{
 #[non_exhaustive]
 pub enum TabGroupEvent {
     /// A panel was dropped on this group. `target` says where in the tree it
-    /// lands; the container applies it as a single `LayoutTree::move_panel`.
+    /// lands; the container applies it as a single `PaneTree::move_panel`.
     Drop {
         panel: PanelId,
         source: NodeId,

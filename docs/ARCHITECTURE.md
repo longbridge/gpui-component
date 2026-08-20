@@ -413,7 +413,7 @@ persists — it draws no chrome at all.
 
 ### The layout tree
 
-`LayoutTree` is the single source of truth for one region — the center, or
+`PaneTree` is the single source of truth for one region — the center, or
 one of the left/bottom/right docks. It stores no GPUI entity handles:
 containers are addressed by `NodeId`, panels by `PanelId` (the panel entity's
 `EntityId`), and a container's `NodeKind` is one of `Split`, `Tabs`, or
@@ -421,9 +421,9 @@ containers are addressed by `NodeId`, panels by `PanelId` (the panel entity's
 `Tabs` or `Tiles` node — the invariant a runtime assertion checked in the old
 implementation is expressed in the type instead.
 
-`NodeKind` stays private. Callers read a node through the borrowed `NodeRef`
+`NodeKind` stays private. Callers read a node through the borrowed `PaneRef`
 projection and never construct one directly; every mutation goes through
-`LayoutTree`'s edit methods (`insert_panel`, `remove_panel`, `move_panel`,
+`PaneTree`'s edit methods (`insert_panel`, `remove_panel`, `move_panel`,
 `split`, `set_active`, `set_sizes`, `set_tile_bounds`, `bring_to_front`), each
 of which runs `normalize` before returning. When base needs a fact about a
 panel — its name, its visibility, its dump — it asks a `PanelSource` rather

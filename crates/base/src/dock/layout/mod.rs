@@ -9,8 +9,8 @@ pub use edit::{EditResult, InsertTarget};
 
 // `NodeKind` stays crate-private: `dock_area` reads through it to resolve slot
 // sizes before a dump, but nothing outside this crate may build a node without
-// going through `LayoutTree`, which is what guarantees normalization always
+// going through `PaneTree`, which is what guarantees normalization always
 // runs.
 pub(crate) use node::NodeKind;
-pub use node::{LayoutNode, NodeId, NodeRef, PanelId, TilePanel};
-pub use tree::{LayoutTree, RootKind};
+pub use node::{NodeId, PaneNode, PaneRef, PanelId, TilePanel};
+pub use tree::{PaneTree, RootKind};

@@ -25,7 +25,7 @@ use super::{
 /// The canvas mirrors one `Tiles` node but does not own the tree that node
 /// lives in, so — exactly as with [`TabGroupEvent`](super::TabGroupEvent) —
 /// every outcome is reported as an intent and applied by the container
-/// through `LayoutTree::set_tile_bounds` / `LayoutTree::bring_to_front`.
+/// through `PaneTree::set_tile_bounds` / `PaneTree::bring_to_front`.
 #[non_exhaustive]
 pub enum TilesEvent {
     /// A tile finished moving or resizing at `bounds`.

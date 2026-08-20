@@ -12,15 +12,15 @@ use gpui::{
 };
 
 use crate::{
-    ElementExt as _, Placement, ResizablePanelEvent, ResizableState, h_resizable,
-    resizable::PANEL_MIN_SIZE, resizable_panel, v_resizable,
+    ElementExt as _, Placement, ResizablePanelEvent, ResizableState, ResizeHandleContext,
+    h_resizable, resizable::PANEL_MIN_SIZE, resizable_panel, v_resizable,
 };
 
 use super::{
     dock_placement::{Dock, DockSizing},
     drag::{AnyDrag, DropTarget},
     layout::{
-        DockLayout, EditResult, InsertTarget, LayoutNode, LayoutTree, NodeId, NodeKind, NodeRef,
+        DockLayout, EditResult, InsertTarget, NodeId, NodeKind, PaneNode, PaneRef, PaneTree,
         PanelId, RootKind,
     },
     panel::{LivePanels, Panel, PanelEvent, PanelView},
@@ -83,8 +83,8 @@ impl Added {
 }
 
 /// One dock: its own layout tree plus the open/size/collapsible state.
-struct DockPane {
-    tree: LayoutTree,
+struct DockRegion {
+    tree: PaneTree,
     dock: Dock,
 }
 
@@ -112,7 +112,7 @@ struct CachedSplit {
 
 /// The main area of the dock.
 ///
-/// It owns one [`LayoutTree`] per region and the entity cache that mirrors
+/// It owns one [`PaneTree`] per region and the entity cache that mirrors
 /// them. Nothing else turns a tree edit into live entities.
 pub struct DockArea {
     id: SharedString,
@@ -120,8 +120,8 @@ pub struct DockArea {
     bounds: Bounds<Pixels>,
     this: WeakEntity<Self>,
 
-    center: LayoutTree,
-    docks: HashMap<DockPlacement, DockPane>,
+    center: PaneTree,
+    docks: HashMap<DockPlacement, DockRegion>,
 
     groups: HashMap<NodeId, Cached<TabGroup>>,
     splits: HashMap<NodeId, CachedSplit>,
@@ -135,6 +135,13 @@ pub struct DockArea {
 }
 
 impl DockArea {
+    /// An empty area that draws nothing but its panels.
+    ///
+    /// `id` names the area for the host's own persistence; `version` is
+    /// written into [`Self::dump`] and read back by [`Self::load`], for a host
+    /// that wants to reject or migrate a layout an older build wrote.
+    ///
+    /// Install appearance with [`Self::with_renderer`].
     pub fn new(
         id: impl Into<SharedString>,
         version: Option<usize>,
@@ -148,7 +155,7 @@ impl DockArea {
             version,
             bounds: Bounds::default(),
             this: cx.weak_entity(),
-            center: LayoutTree::new(RootKind::Split),
+            center: PaneTree::new(RootKind::Split),
             docks: HashMap::new(),
             groups: HashMap::new(),
             splits: HashMap::new(),
@@ -161,6 +168,9 @@ impl DockArea {
         }
     }
 
+    /// Install the appearance for this area and everything under it: the
+    /// renderer also supplies the [`TabGroupRenderer`] and [`TilesRenderer`]
+    /// every container it builds will use.
     pub fn with_renderer(mut self, renderer: Rc<dyn DockAreaRenderer>) -> Self {
         self.renderer = renderer;
         self
@@ -186,7 +196,7 @@ impl DockArea {
     /// because a dock is genuinely optional — it is `Option<DockState>` in the
     /// persisted schema — and there is no borrowable empty tree to hand back
     /// for one that is absent.
-    pub fn layout(&self, placement: DockPlacement) -> Option<&LayoutTree> {
+    pub fn layout(&self, placement: DockPlacement) -> Option<&PaneTree> {
         match placement {
             DockPlacement::Center => Some(&self.center),
             _ => self.docks.get(&placement).map(|pane| &pane.tree),
@@ -225,16 +235,24 @@ impl DockArea {
     }
 }
 
-/// Installing layouts.
+/// Installing layouts: the center region and the three docks.
 impl DockArea {
+    /// Replace the center region with a described layout. Whatever was there
+    /// leaves the dock, so its panels are told [`Panel::on_removed`].
     pub fn set_center(&mut self, layout: DockLayout, window: &mut Window, cx: &mut Context<Self>) {
-        let (tree, panels) = LayoutTree::from_layout(layout, RootKind::Split);
+        let (tree, panels) = PaneTree::from_layout(layout, RootKind::Split);
         self.center = tree;
         self.panels.extend(panels);
         self.reconcile(window, cx);
         cx.emit(DockEvent::LayoutChanged);
     }
 
+    /// Replace one dock with a described layout, creating the dock if the area
+    /// does not have one there yet. A new dock keeps the size and open state of
+    /// the one it replaces, so re-filling a dock does not resize it.
+    ///
+    /// [`DockPlacement::Center`] defers to [`Self::set_center`]: the center is
+    /// not a dock and has no size or open state of its own.
     pub fn set_dock(
         &mut self,
         placement: DockPlacement,
@@ -246,18 +264,20 @@ impl DockArea {
             return self.set_center(layout, window, cx);
         }
 
-        let (tree, panels) = LayoutTree::from_layout(layout, RootKind::Any);
+        let (tree, panels) = PaneTree::from_layout(layout, RootKind::Any);
         let dock = self
             .docks
             .get(&placement)
             .map(|pane| pane.dock)
             .unwrap_or_else(|| Dock::new(PANEL_MIN_SIZE * 2.));
-        self.docks.insert(placement, DockPane { tree, dock });
+        self.docks.insert(placement, DockRegion { tree, dock });
         self.panels.extend(panels);
         self.reconcile(window, cx);
         cx.emit(DockEvent::LayoutChanged);
     }
 
+    /// Take a dock away entirely, panels and all. Distinct from
+    /// [`Self::toggle_dock`], which only takes it off screen.
     pub fn remove_dock(
         &mut self,
         placement: DockPlacement,
@@ -277,12 +297,17 @@ impl DockArea {
         self.docks.contains_key(&placement)
     }
 
+    /// Whether a dock is on screen. A dock the area does not have is never
+    /// open, so this answers the question a caller usually means without a
+    /// preceding [`Self::has_dock`].
     pub fn is_dock_open(&self, placement: DockPlacement) -> bool {
         self.docks
             .get(&placement)
             .is_some_and(|pane| pane.dock.is_open())
     }
 
+    /// Open a closed dock or close an open one. A dock that is not
+    /// collapsible refuses to close; there is nothing to refuse when opening.
     pub fn toggle_dock(
         &mut self,
         placement: DockPlacement,
@@ -460,8 +485,8 @@ impl DockArea {
         {
             self.docks.insert(
                 placement,
-                DockPane {
-                    tree: LayoutTree::new(RootKind::Any),
+                DockRegion {
+                    tree: PaneTree::new(RootKind::Any),
                     dock: Dock::new(added.dock_size().unwrap_or(PANEL_MIN_SIZE * 2.)),
                 },
             );
@@ -791,7 +816,7 @@ impl DockArea {
                 window,
                 cx,
             };
-            LayoutTree::from_state(&state.center, RootKind::Split, &mut builder)
+            PaneTree::from_state(&state.center, RootKind::Split, &mut builder)
         };
 
         for dock_state in [state.left_dock, state.right_dock, state.bottom_dock]
@@ -806,12 +831,12 @@ impl DockArea {
                     window,
                     cx,
                 };
-                LayoutTree::from_state(dock_state.panel(), RootKind::Any, &mut builder)
+                PaneTree::from_state(dock_state.panel(), RootKind::Any, &mut builder)
             };
             let mut dock = Dock::new(dock_state.size());
             dock.set_open(dock_state.open());
             self.docks
-                .insert(dock_state.placement(), DockPane { tree, dock });
+                .insert(dock_state.placement(), DockRegion { tree, dock });
         }
 
         self.panels.extend(built);
@@ -867,13 +892,13 @@ impl DockArea {
         ))
     }
 
-    fn resolved_tree(&self, tree: &LayoutTree, cx: &App) -> LayoutTree {
+    fn resolved_tree(&self, tree: &PaneTree, cx: &App) -> PaneTree {
         let mut tree = tree.clone();
         self.resolve_sizes(tree.root_mut(), cx);
         tree
     }
 
-    fn resolve_sizes(&self, node: &mut LayoutNode, cx: &App) {
+    fn resolve_sizes(&self, node: &mut PaneNode, cx: &App) {
         let measured = self
             .splits
             .get(&node.id())
@@ -1247,7 +1272,7 @@ impl DockArea {
 
 /// Region lookup.
 impl DockArea {
-    fn tree_mut(&mut self, placement: DockPlacement) -> Option<&mut LayoutTree> {
+    fn tree_mut(&mut self, placement: DockPlacement) -> Option<&mut PaneTree> {
         match placement {
             DockPlacement::Center => Some(&mut self.center),
             _ => self.docks.get_mut(&placement).map(|pane| &mut pane.tree),
@@ -1304,9 +1329,9 @@ impl DockArea {
 /// Rendering.
 impl DockArea {
     /// Lower one container to an element.
-    fn render_node(&self, node: &LayoutNode, window: &mut Window, cx: &mut App) -> AnyElement {
+    fn render_node(&self, node: &PaneNode, window: &mut Window, cx: &mut App) -> AnyElement {
         match node.kind() {
-            NodeRef::Split {
+            PaneRef::Split {
                 axis,
                 children,
                 sizes,
@@ -1334,6 +1359,12 @@ impl DockArea {
                     .when_some(self.splits.get(&node.id()), |group, cached| {
                         group.with_state(&cached.entity)
                     })
+                    .with_handle_appearance({
+                        let renderer = self.renderer.clone();
+                        Rc::new(move |handle, window, cx| {
+                            renderer.render_split_handle(handle, window, cx)
+                        })
+                    })
                     .children(panels);
 
                 self.renderer
@@ -1341,11 +1372,11 @@ impl DockArea {
                     .child(group)
                     .into_any_element()
             }
-            NodeRef::Tabs { .. } => match self.groups.get(&node.id()) {
+            PaneRef::Tabs { .. } => match self.groups.get(&node.id()) {
                 Some(cached) => cached.entity.clone().into_any_element(),
                 None => Empty.into_any_element(),
             },
-            NodeRef::Tiles { .. } => match self.tiles.get(&node.id()) {
+            PaneRef::Tiles { .. } => match self.tiles.get(&node.id()) {
                 Some(cached) => cached.entity.clone().into_any_element(),
                 None => Empty.into_any_element(),
             },
@@ -1357,14 +1388,14 @@ impl DockArea {
     /// Mirrors the old `StackPanel::render`, which asked each slot's
     /// `TabPanel::visible` — "does this group hold any visible panel?" — and
     /// hid the slot when it did not.
-    fn is_node_visible(&self, node: &LayoutNode, cx: &App) -> bool {
+    fn is_node_visible(&self, node: &PaneNode, cx: &App) -> bool {
         let panels = LivePanels::new(&self.panels, cx);
         match node.kind() {
-            NodeRef::Split { children, .. } => {
+            PaneRef::Split { children, .. } => {
                 children.iter().any(|child| self.is_node_visible(child, cx))
             }
-            NodeRef::Tabs { panels: ids, .. } => ids.iter().any(|panel| panels.is_visible(*panel)),
-            NodeRef::Tiles { panels: tiles } => {
+            PaneRef::Tabs { panels: ids, .. } => ids.iter().any(|panel| panels.is_visible(*panel)),
+            PaneRef::Tiles { panels: tiles } => {
                 tiles.iter().any(|tile| panels.is_visible(tile.panel()))
             }
         }
@@ -1507,7 +1538,18 @@ fn sync_split_panels(
             continue;
         }
         let at = ix.min(state.sizes().len());
-        state.insert_panel(sizes.get(ix).copied().flatten(), Some(at), cx);
+        // An unconstrained slot has to be resolved to a concrete size here,
+        // not passed through. `ResizableState` stores the `None` as the
+        // panel's own preference, which makes that slot the flexible one:
+        // it then absorbs whatever its fixed siblings leave over, so a panel
+        // dropped beside an existing one takes most of the split instead of
+        // half of it. Sharing the container equally is what the old
+        // `StackPanel::insert_panel` did with the same input, and it is what
+        // a drop with no size in mind should mean.
+        let size = sizes.get(ix).copied().flatten().unwrap_or_else(|| {
+            (state.container_size() / (state.sizes().len() + 1) as f32).max(PANEL_MIN_SIZE)
+        });
+        state.insert_panel(Some(size), Some(at), cx);
         current.insert(at.min(current.len()), *node);
     }
 
@@ -1518,20 +1560,20 @@ fn sync_split_panels(
     );
 }
 
-fn plan_tree(tree: &LayoutTree, collapsed: bool, locked: bool, out: &mut Vec<ContainerPlan>) {
+fn plan_tree(tree: &PaneTree, collapsed: bool, locked: bool, out: &mut Vec<ContainerPlan>) {
     // The root has nothing beside it by definition.
     plan_node(tree.root(), true, collapsed, locked, out);
 }
 
 fn plan_node(
-    node: &LayoutNode,
+    node: &PaneNode,
     alone: bool,
     collapsed: bool,
     locked: bool,
     out: &mut Vec<ContainerPlan>,
 ) {
     match node.kind() {
-        NodeRef::Split {
+        PaneRef::Split {
             axis,
             children,
             sizes,
@@ -1539,7 +1581,7 @@ fn plan_node(
             out.push(ContainerPlan::Split {
                 node: node.id(),
                 axis,
-                children: children.iter().map(LayoutNode::id).collect(),
+                children: children.iter().map(PaneNode::id).collect(),
                 sizes: sizes.to_vec(),
             });
             let children_alone = children.len() <= 1;
@@ -1547,7 +1589,7 @@ fn plan_node(
                 plan_node(child, children_alone, collapsed, locked, out);
             }
         }
-        NodeRef::Tabs { panels, active_ix } => out.push(ContainerPlan::Group {
+        PaneRef::Tabs { panels, active_ix } => out.push(ContainerPlan::Group {
             node: node.id(),
             panels: panels.to_vec(),
             active_ix,
@@ -1555,7 +1597,7 @@ fn plan_node(
                 .dock_locked(locked)
                 .collapsed(collapsed),
         }),
-        NodeRef::Tiles { panels } => out.push(ContainerPlan::Tiles {
+        PaneRef::Tiles { panels } => out.push(ContainerPlan::Tiles {
             node: node.id(),
             tiles: panels
                 .iter()
@@ -1565,19 +1607,19 @@ fn plan_node(
     }
 }
 
-fn first_tab_group(node: &LayoutNode) -> Option<NodeId> {
+fn first_tab_group(node: &PaneNode) -> Option<NodeId> {
     match node.kind() {
-        NodeRef::Tabs { .. } => Some(node.id()),
-        NodeRef::Split { children, .. } => children.iter().find_map(first_tab_group),
-        NodeRef::Tiles { .. } => None,
+        PaneRef::Tabs { .. } => Some(node.id()),
+        PaneRef::Split { children, .. } => children.iter().find_map(first_tab_group),
+        PaneRef::Tiles { .. } => None,
     }
 }
 
-fn first_tiles_canvas(node: &LayoutNode) -> Option<NodeId> {
+fn first_tiles_canvas(node: &PaneNode) -> Option<NodeId> {
     match node.kind() {
-        NodeRef::Tiles { .. } => Some(node.id()),
-        NodeRef::Split { children, .. } => children.iter().find_map(first_tiles_canvas),
-        NodeRef::Tabs { .. } => None,
+        PaneRef::Tiles { .. } => Some(node.id()),
+        PaneRef::Split { children, .. } => children.iter().find_map(first_tiles_canvas),
+        PaneRef::Tabs { .. } => None,
     }
 }
 
@@ -1749,6 +1791,21 @@ pub trait DockAreaRenderer: 'static {
         div().id("dock-area-center")
     }
 
+    /// The painted part of the divider between two slots of a split.
+    ///
+    /// `None` keeps base's own one-pixel line, so a skin that has no opinion
+    /// about dividers implements nothing. The hit area, the cursor and the
+    /// drag itself stay with base either way — this hook supplies appearance
+    /// only, and is told the axis and whether the divider is being dragged.
+    fn render_split_handle(
+        &self,
+        handle: &ResizeHandleContext,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Option<AnyElement> {
+        None
+    }
+
     /// One dock's chrome around its content: the title strip, the collapse
     /// affordance, and the resize handle.
     fn render_dock(
@@ -1879,7 +1936,7 @@ mod tests {
     /// The id of the center split's `ix`-th child container.
     fn child_node(area: &Entity<DockArea>, ix: usize, cx: &mut VisualTestContext) -> NodeId {
         cx.read(|cx| {
-            let NodeRef::Split { children, .. } = area
+            let PaneRef::Split { children, .. } = area
                 .read(cx)
                 .layout(DockPlacement::Center)
                 .unwrap()
@@ -2261,6 +2318,51 @@ mod tests {
         );
     }
 
+    /// A drop that splits carries no size — `TabGroup` builds
+    /// `InsertTarget::Split { size: None }` — so the split has to decide one,
+    /// and sharing the container equally is the decision. Passing the `None`
+    /// straight to `ResizableState` instead makes the new slot the flexible
+    /// one among fixed siblings, and it stops looking like a half.
+    #[gpui::test]
+    fn a_panel_dropped_beside_another_takes_half_the_split(cx: &mut TestAppContext) {
+        let log = Log::default();
+        let (area, panels, cx) = one_group(&log, &["Alpha", "Beta"], None, cx);
+        let group = child_node(&area, 0, cx);
+        let beta = panel_id_of(&panels[1]);
+
+        cx.update(|window, cx| {
+            area.update(cx, |area, cx| {
+                area.move_panel(
+                    beta,
+                    InsertTarget::Split {
+                        node: group,
+                        placement: Placement::Right,
+                        size: None,
+                    },
+                    window,
+                    cx,
+                );
+            });
+        });
+        cx.run_until_parked();
+
+        let root = cx.read(|cx| {
+            area.read(cx)
+                .layout(DockPlacement::Center)
+                .unwrap()
+                .root()
+                .id()
+        });
+        let sizes = cx.read(|cx| area.read(cx).splits[&root].entity.read(cx).sizes().clone());
+
+        assert_eq!(sizes.len(), 2, "the drop splits the center in two");
+        let (left, right) = (sizes[0].as_f32(), sizes[1].as_f32());
+        assert!(
+            (left - right).abs() <= (left + right) * 0.02,
+            "the two halves must be within 2% of each other, got {left} and {right}"
+        );
+    }
+
     /// The headline claim of the whole extraction, in one place: a layout
     /// written by the shipped dock loads into the tree world, draws, and saves
     /// back to a state the next load reproduces exactly.
@@ -2488,7 +2590,7 @@ mod tests {
 
         let canvas_node = child_node(&area, 0, cx);
         let panels = cx.read(|cx| {
-            let NodeRef::Tiles { panels } = area
+            let PaneRef::Tiles { panels } = area
                 .read(cx)
                 .layout(DockPlacement::Center)
                 .unwrap()
@@ -2546,7 +2648,7 @@ mod tests {
         let beta_id = panel_id_of(&beta);
         let canvas_node = child_node(&area, 0, cx);
         let tile = cx.read(|cx| {
-            let NodeRef::Tiles { panels } = area
+            let PaneRef::Tiles { panels } = area
                 .read(cx)
                 .layout(DockPlacement::Center)
                 .unwrap()
@@ -2725,7 +2827,7 @@ mod tests {
                 .unwrap()
                 .clone()
         });
-        let NodeRef::Tiles { panels } = node.kind() else {
+        let PaneRef::Tiles { panels } = node.kind() else {
             panic!("expected a tiles node");
         };
         assert_eq!(panels[0].panel(), panel_id_of(&alpha));

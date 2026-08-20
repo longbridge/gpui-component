@@ -2,8 +2,8 @@ use gpui::{Bounds, Pixels};
 
 use crate::Placement;
 
-use super::node::{LayoutNode, NodeId, NodeKind, PanelId, TilePanel};
-use super::tree::LayoutTree;
+use super::node::{NodeId, NodeKind, PaneNode, PanelId, TilePanel};
+use super::tree::PaneTree;
 
 /// Where a panel should land.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -69,7 +69,7 @@ impl EditResult {
     }
 }
 
-impl LayoutTree {
+impl PaneTree {
     pub fn insert_panel(&mut self, panel: PanelId, target: InsertTarget) -> EditResult {
         self.edit(|tree| tree.apply_insert(panel, target))
     }
@@ -161,7 +161,7 @@ impl LayoutTree {
     }
 }
 
-impl LayoutTree {
+impl PaneTree {
     fn edit(&mut self, apply: impl FnOnce(&mut Self) -> Vec<PanelId>) -> EditResult {
         let before = self.clone();
         let before_active = before.active_panels();
@@ -220,7 +220,7 @@ impl LayoutTree {
     }
 }
 
-impl LayoutTree {
+impl PaneTree {
     fn apply_insert(&mut self, panel: PanelId, target: InsertTarget) -> Vec<PanelId> {
         match target {
             InsertTarget::Tabs { node, ix, activate } => {
@@ -273,7 +273,7 @@ impl LayoutTree {
             return;
         };
         let group_id = self.allocate_node_id();
-        let group = LayoutNode::new(
+        let group = PaneNode::new(
             group_id,
             NodeKind::Tabs {
                 panels: vec![panel],
@@ -310,7 +310,7 @@ impl LayoutTree {
         } else {
             (vec![target, group], vec![None, size])
         };
-        let wrapper = LayoutNode::new(
+        let wrapper = PaneNode::new(
             wrapper_id,
             NodeKind::Split {
                 axis: placement.axis(),
@@ -394,8 +394,8 @@ mod tests {
         PanelId::from_u64(n)
     }
 
-    fn tree_with_one_group() -> (LayoutTree, NodeId) {
-        let mut tree = LayoutTree::new(RootKind::Split);
+    fn tree_with_one_group() -> (PaneTree, NodeId) {
+        let mut tree = PaneTree::new(RootKind::Split);
         let tabs = tree.push_tabs_for_test(tree.root().id(), vec![panel(1)]);
         tree.normalize();
         (tree, tabs)
@@ -414,7 +414,7 @@ mod tests {
         );
 
         assert!(result.changed());
-        let NodeRef::Tabs { panels, active_ix } = tree.find_node(tabs).unwrap().kind() else {
+        let PaneRef::Tabs { panels, active_ix } = tree.find_node(tabs).unwrap().kind() else {
             panic!()
         };
         assert_eq!(panels, [panel(1), panel(2)]);
@@ -448,7 +448,7 @@ mod tests {
         assert_eq!(result.removed_panels(), &[panel(1)]);
         assert!(result.removed_nodes().contains(&tabs));
         assert!(
-            matches!(tree.root().kind(), NodeRef::Split { children, .. } if children.is_empty())
+            matches!(tree.root().kind(), PaneRef::Split { children, .. } if children.is_empty())
         );
     }
 
@@ -458,7 +458,7 @@ mod tests {
         let result = tree.split(tabs, panel(2), Placement::Right, Some(px(240.)));
 
         assert!(result.changed());
-        let NodeRef::Split {
+        let PaneRef::Split {
             axis,
             children,
             sizes,
@@ -470,11 +470,11 @@ mod tests {
         assert_eq!(children.len(), 2);
         assert_eq!(sizes[1], Some(px(240.)));
 
-        let NodeRef::Tabs { panels, .. } = children[0].kind() else {
+        let PaneRef::Tabs { panels, .. } = children[0].kind() else {
             panic!()
         };
         assert_eq!(panels, [panel(1)]);
-        let NodeRef::Tabs { panels, .. } = children[1].kind() else {
+        let PaneRef::Tabs { panels, .. } = children[1].kind() else {
             panic!()
         };
         assert_eq!(panels, [panel(2)]);
@@ -485,10 +485,10 @@ mod tests {
         let (mut tree, tabs) = tree_with_one_group();
         tree.split(tabs, panel(2), Placement::Left, None);
 
-        let NodeRef::Split { children, .. } = tree.root().kind() else {
+        let PaneRef::Split { children, .. } = tree.root().kind() else {
             panic!()
         };
-        let NodeRef::Tabs { panels, .. } = children[0].kind() else {
+        let PaneRef::Tabs { panels, .. } = children[0].kind() else {
             panic!()
         };
         assert_eq!(panels, [panel(2)]);
@@ -502,11 +502,11 @@ mod tests {
 
         tree.split(tabs, panel(2), Placement::Bottom, None);
 
-        let NodeRef::Split { axis, children, .. } = tree.root().kind() else {
+        let PaneRef::Split { axis, children, .. } = tree.root().kind() else {
             panic!()
         };
         assert_eq!(axis, Axis::Horizontal);
-        let NodeRef::Split {
+        let PaneRef::Split {
             axis: inner,
             children: inner_children,
             ..
@@ -519,11 +519,11 @@ mod tests {
 
         // `Bottom` puts the new group after the original target: the
         // wrapper's first child is still the target, the second is new.
-        let NodeRef::Tabs { panels, .. } = inner_children[0].kind() else {
+        let PaneRef::Tabs { panels, .. } = inner_children[0].kind() else {
             panic!()
         };
         assert_eq!(panels, [panel(1)], "the original target stays first");
-        let NodeRef::Tabs { panels, .. } = inner_children[1].kind() else {
+        let PaneRef::Tabs { panels, .. } = inner_children[1].kind() else {
             panic!()
         };
         assert_eq!(panels, [panel(2)], "the new group lands second, below");
@@ -537,10 +537,10 @@ mod tests {
 
         tree.split(tabs, panel(2), Placement::Top, None);
 
-        let NodeRef::Split { children, .. } = tree.root().kind() else {
+        let PaneRef::Split { children, .. } = tree.root().kind() else {
             panic!()
         };
-        let NodeRef::Split {
+        let PaneRef::Split {
             axis: inner,
             children: inner_children,
             ..
@@ -553,11 +553,11 @@ mod tests {
 
         // `Top` is the mirror of `Bottom`: the new group lands first, above
         // the original target.
-        let NodeRef::Tabs { panels, .. } = inner_children[0].kind() else {
+        let PaneRef::Tabs { panels, .. } = inner_children[0].kind() else {
             panic!()
         };
         assert_eq!(panels, [panel(2)], "the new group lands first, above");
-        let NodeRef::Tabs { panels, .. } = inner_children[1].kind() else {
+        let PaneRef::Tabs { panels, .. } = inner_children[1].kind() else {
             panic!()
         };
         assert_eq!(panels, [panel(1)], "the original target moves second");
@@ -617,7 +617,7 @@ mod tests {
         let result = tree.set_sizes(root, vec![Some(px(100.)), Some(px(200.))]);
 
         assert!(result.changed());
-        let NodeRef::Split { sizes, .. } = tree.root().kind() else {
+        let PaneRef::Split { sizes, .. } = tree.root().kind() else {
             panic!()
         };
         assert_eq!(sizes, &[Some(px(100.)), Some(px(200.))]);
@@ -628,7 +628,7 @@ mod tests {
         let (mut tree, tabs) = tree_with_one_group();
         tree.split(tabs, panel(2), Placement::Right, None);
         let root = tree.root().id();
-        let NodeRef::Split {
+        let PaneRef::Split {
             sizes: before_sizes,
             ..
         } = tree.root().kind()
@@ -644,7 +644,7 @@ mod tests {
             !result.changed(),
             "a mismatched vector must not report a change"
         );
-        let NodeRef::Split { sizes, .. } = tree.root().kind() else {
+        let PaneRef::Split { sizes, .. } = tree.root().kind() else {
             panic!()
         };
         assert_eq!(
@@ -663,7 +663,7 @@ mod tests {
 
     #[test]
     fn inserting_a_tile_places_it_at_the_given_bounds_on_top() {
-        let mut tree = LayoutTree::new(RootKind::Any);
+        let mut tree = PaneTree::new(RootKind::Any);
         let canvas = tree.set_root_tiles_for_test(vec![
             TilePanel::new(panel(1), tile_bounds(0.)).with_z_index(4),
         ]);
@@ -677,7 +677,7 @@ mod tests {
         );
 
         assert!(result.changed());
-        let NodeRef::Tiles { panels } = tree.root().kind() else {
+        let PaneRef::Tiles { panels } = tree.root().kind() else {
             panic!("the canvas stays a canvas rather than being split")
         };
         assert_eq!(panels.len(), 2);
@@ -691,7 +691,7 @@ mod tests {
 
     #[test]
     fn set_tile_bounds_moves_one_tile_and_leaves_its_peers_alone() {
-        let mut tree = LayoutTree::new(RootKind::Any);
+        let mut tree = PaneTree::new(RootKind::Any);
         tree.set_root_tiles_for_test(vec![
             TilePanel::new(panel(1), tile_bounds(0.)).with_z_index(1),
             TilePanel::new(panel(2), tile_bounds(40.)).with_z_index(2),
@@ -700,7 +700,7 @@ mod tests {
         let result = tree.set_tile_bounds(panel(1), tile_bounds(90.));
 
         assert!(result.changed());
-        let NodeRef::Tiles { panels } = tree.root().kind() else {
+        let PaneRef::Tiles { panels } = tree.root().kind() else {
             panic!()
         };
         let moved = panels.iter().find(|tile| tile.panel() == panel(1)).unwrap();
@@ -716,7 +716,7 @@ mod tests {
 
     #[test]
     fn bring_to_front_raises_the_tile_above_its_peers() {
-        let mut tree = LayoutTree::new(RootKind::Any);
+        let mut tree = PaneTree::new(RootKind::Any);
         let bounds = Bounds {
             origin: point(px(0.), px(0.)),
             size: size(px(10.), px(10.)),
@@ -728,7 +728,7 @@ mod tests {
 
         tree.bring_to_front(panel(1));
 
-        let NodeRef::Tiles { panels } = tree.root().kind() else {
+        let PaneRef::Tiles { panels } = tree.root().kind() else {
             panic!()
         };
         let raised = panels.iter().find(|p| p.panel() == panel(1)).unwrap();

@@ -12,7 +12,7 @@ use gpui::{
 
 use crate::{AxisExt, ElementExt, StyledExt as _, h_flex, resizable::PANEL_MIN_SIZE, v_flex};
 
-use super::{ResizableState, resizable_panel, resize_handle};
+use super::{ResizableState, ResizeHandleRenderer, resizable_panel, resize_handle};
 
 pub enum ResizablePanelEvent {
     Resized,
@@ -35,6 +35,7 @@ pub struct ResizablePanelGroup {
     size: Option<Pixels>,
     children: Vec<ResizablePanel>,
     on_resize: Rc<dyn Fn(&Entity<ResizableState>, &mut Window, &mut App)>,
+    handle_appearance: Option<ResizeHandleRenderer>,
 }
 
 impl ResizablePanelGroup {
@@ -47,7 +48,17 @@ impl ResizablePanelGroup {
             state: None,
             size: None,
             on_resize: Rc::new(|_, _, _| {}),
+            handle_appearance: None,
         }
+    }
+
+    /// Hand the painted part of every divider in this group to `appearance`.
+    ///
+    /// The hit area, the cursor and the drag stay here; a renderer that
+    /// returns `None` for a given handle leaves the built-in line on it.
+    pub fn with_handle_appearance(mut self, appearance: ResizeHandleRenderer) -> Self {
+        self.handle_appearance = Some(appearance);
+        self
     }
 
     /// Bind yourself to a resizable state entity.
@@ -151,6 +162,7 @@ impl RenderOnce for ResizablePanelGroup {
                         panel.panel_ix = ix;
                         panel.axis = self.axis;
                         panel.state = Some(state.clone());
+                        panel.handle_appearance = self.handle_appearance.clone();
                         panel
                     }),
             )
@@ -216,6 +228,7 @@ pub struct ResizablePanel {
     children: Vec<AnyElement>,
     visible: bool,
     style: StyleRefinement,
+    handle_appearance: Option<ResizeHandleRenderer>,
 }
 
 impl ResizablePanel {
@@ -230,6 +243,7 @@ impl ResizablePanel {
             children: vec![],
             visible: true,
             style: StyleRefinement::default(),
+            handle_appearance: None,
         }
     }
 
@@ -330,17 +344,20 @@ impl RenderOnce for ResizablePanel {
             .children(self.children)
             .when(self.panel_ix > 0, |this| {
                 let ix = self.panel_ix - 1;
-                this.child(resize_handle(("resizable-handle", ix), self.axis).on_drag(
-                    DragPanel,
-                    move |drag_panel, _, _, cx| {
-                        cx.stop_propagation();
-                        // Set current resizing panel ix
-                        state.update(cx, |state, _| {
-                            state.resizing_panel_ix = Some(ix);
-                        });
-                        cx.new(|_| drag_panel.deref().clone())
-                    },
-                ))
+                this.child(
+                    resize_handle(("resizable-handle", ix), self.axis)
+                        .when_some(self.handle_appearance.clone(), |handle, appearance| {
+                            handle.with_appearance(appearance)
+                        })
+                        .on_drag(DragPanel, move |drag_panel, _, _, cx| {
+                            cx.stop_propagation();
+                            // Set current resizing panel ix
+                            state.update(cx, |state, _| {
+                                state.resizing_panel_ix = Some(ix);
+                            });
+                            cx.new(|_| drag_panel.deref().clone())
+                        }),
+                )
             })
     }
 }

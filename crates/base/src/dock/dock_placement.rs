@@ -106,7 +106,7 @@ impl DockSizing {
 /// size, and whether it is mid-resize.
 ///
 /// This does not include the dock's placement or its panel content. `DockArea`
-/// owns one of these per dock, paired with that dock's `LayoutTree` and keyed
+/// owns one of these per dock, paired with that dock's `PaneTree` and keyed
 /// by its [`DockPlacement`]; the placement is the key, and the content is the
 /// tree.
 #[derive(Clone, Copy, Debug)]

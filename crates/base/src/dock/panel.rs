@@ -209,7 +209,7 @@ impl PartialEq for dyn PanelView {
 
 /// Reads panel properties out of the live entity map that `DockArea` keeps.
 ///
-/// This is the `PanelSource` implementation `LayoutTree::to_state` runs
+/// This is the `PanelSource` implementation `PaneTree::to_state` runs
 /// against when `DockArea::dump` writes a live layout out.
 pub(crate) struct LivePanels<'a> {
     panels: &'a HashMap<PanelId, Arc<dyn PanelView>>,

@@ -1,7 +1,7 @@
 use gpui::Pixels;
 
-use super::node::{LayoutNode, NodeKind};
-use super::tree::{LayoutTree, RootKind};
+use super::node::{NodeKind, PaneNode};
+use super::tree::{PaneTree, RootKind};
 
 /// Upper bound on `normalize` passes. Every pass that changes anything
 /// strictly reduces node count or nesting depth, so real dock layouts
@@ -10,7 +10,7 @@ use super::tree::{LayoutTree, RootKind};
 /// to today's rule set.
 const MAX_NORMALIZE_PASSES: u32 = 64;
 
-impl LayoutTree {
+impl PaneTree {
     /// Collapse the tree to canonical shape.
     ///
     /// One post-order pass repeated to a fixpoint. This is the only place a
@@ -61,7 +61,7 @@ impl LayoutTree {
         if changed {
             tracing::warn!(
                 passes,
-                "LayoutTree::normalize exhausted {MAX_NORMALIZE_PASSES} passes without reaching \
+                "PaneTree::normalize exhausted {MAX_NORMALIZE_PASSES} passes without reaching \
                  a fixpoint; the tree may still contain an empty container, a single-child \
                  split, same-axis split nesting, or an unclamped Tabs active_ix"
             );
@@ -112,7 +112,7 @@ impl LayoutTree {
     }
 }
 
-fn normalize_node(node: &mut LayoutNode, changed: &mut bool) {
+fn normalize_node(node: &mut PaneNode, changed: &mut bool) {
     match node.kind_mut() {
         NodeKind::Tabs { panels, active_ix } => {
             let clamped = (*active_ix).min(panels.len().saturating_sub(1));
@@ -208,7 +208,7 @@ fn distribute_slot(slot: Option<Pixels>, inner: Vec<Option<Pixels>>) -> Vec<Opti
     }
 }
 
-fn is_empty_container(node: &LayoutNode) -> bool {
+fn is_empty_container(node: &PaneNode) -> bool {
     match node.kind_ref() {
         NodeKind::Split { children, .. } => children.is_empty(),
         NodeKind::Tabs { panels, .. } => panels.is_empty(),
@@ -219,7 +219,7 @@ fn is_empty_container(node: &LayoutNode) -> bool {
 /// Rule 5. A `RootKind::Split` tree keeps a split root no matter what, so an
 /// empty center still serializes as a `StackPanel`. A `RootKind::Any` tree
 /// lets rule 2 collapse the root like any other node.
-fn collapse_root(tree: &mut LayoutTree, changed: &mut bool) {
+fn collapse_root(tree: &mut PaneTree, changed: &mut bool) {
     if tree.root_kind() == RootKind::Split {
         return;
     }
@@ -246,7 +246,7 @@ mod tests {
 
     #[test]
     fn empty_tab_groups_are_dropped() {
-        let mut tree = LayoutTree::new(RootKind::Split);
+        let mut tree = PaneTree::new(RootKind::Split);
         let root = tree.root().id();
         tree.push_tabs_for_test(root, vec![]);
         tree.push_tabs_for_test(root, vec![panel(1)]);
@@ -256,14 +256,14 @@ mod tests {
         // The empty tab group is dropped by rule 1, leaving the root split
         // holding the one surviving child.
         assert!(
-            matches!(tree.root().kind(), NodeRef::Split { children, .. } if children.len() == 1)
+            matches!(tree.root().kind(), PaneRef::Split { children, .. } if children.len() == 1)
         );
         assert_eq!(tree.panels().collect::<Vec<_>>(), vec![panel(1)]);
     }
 
     #[test]
     fn a_single_child_split_is_replaced_by_its_child_keeping_the_child_id() {
-        let mut tree = LayoutTree::new(RootKind::Any);
+        let mut tree = PaneTree::new(RootKind::Any);
         let outer = tree.set_root_split_for_test(Axis::Horizontal);
         let inner = tree.push_split_for_test(outer, Axis::Vertical, Some(px(120.)));
         let tabs = tree.push_tabs_for_test(inner, vec![panel(1)]);
@@ -276,7 +276,7 @@ mod tests {
 
     #[test]
     fn a_collapsing_split_hands_its_slot_size_to_the_child() {
-        let mut tree = LayoutTree::new(RootKind::Split);
+        let mut tree = PaneTree::new(RootKind::Split);
         let root = tree.root().id();
         let inner = tree.push_split_for_test(root, Axis::Vertical, Some(px(300.)));
         tree.push_tabs_for_test(inner, vec![panel(1)]);
@@ -284,7 +284,7 @@ mod tests {
 
         tree.normalize();
 
-        let NodeRef::Split { sizes, .. } = tree.root().kind() else {
+        let PaneRef::Split { sizes, .. } = tree.root().kind() else {
             panic!()
         };
         assert_eq!(
@@ -296,7 +296,7 @@ mod tests {
 
     #[test]
     fn same_axis_nesting_is_spliced_into_the_parent() {
-        let mut tree = LayoutTree::new(RootKind::Split);
+        let mut tree = PaneTree::new(RootKind::Split);
         tree.set_root_axis_for_test(Axis::Horizontal);
         let root = tree.root().id();
         tree.push_tabs_for_test(root, vec![panel(1)]);
@@ -306,7 +306,7 @@ mod tests {
 
         tree.normalize();
 
-        let NodeRef::Split { children, axis, .. } = tree.root().kind() else {
+        let PaneRef::Split { children, axis, .. } = tree.root().kind() else {
             panic!()
         };
         assert_eq!(axis, Axis::Horizontal);
@@ -324,12 +324,12 @@ mod tests {
 
     #[test]
     fn active_index_is_clamped_to_the_panel_count() {
-        let mut tree = LayoutTree::new(RootKind::Any);
+        let mut tree = PaneTree::new(RootKind::Any);
         let tabs = tree.set_root_tabs_for_test(vec![panel(1), panel(2)], 9);
 
         tree.normalize();
 
-        let NodeRef::Tabs { active_ix, .. } = tree.find_node(tabs).unwrap().kind() else {
+        let PaneRef::Tabs { active_ix, .. } = tree.find_node(tabs).unwrap().kind() else {
             panic!()
         };
         assert_eq!(active_ix, 1);
@@ -337,21 +337,21 @@ mod tests {
 
     #[test]
     fn a_split_root_survives_being_emptied() {
-        let mut tree = LayoutTree::new(RootKind::Split);
+        let mut tree = PaneTree::new(RootKind::Split);
         let root = tree.root().id();
         tree.push_tabs_for_test(root, vec![]);
 
         tree.normalize();
 
         assert!(
-            matches!(tree.root().kind(), NodeRef::Split { children, .. } if children.is_empty()),
+            matches!(tree.root().kind(), PaneRef::Split { children, .. } if children.is_empty()),
             "the center must still serialize as a StackPanel when empty"
         );
     }
 
     #[test]
     fn normalize_is_idempotent() {
-        let mut tree = LayoutTree::new(RootKind::Split);
+        let mut tree = PaneTree::new(RootKind::Split);
         let root = tree.root().id();
         let inner = tree.push_split_for_test(root, Axis::Horizontal, None);
         tree.push_tabs_for_test(inner, vec![panel(1)]);
@@ -371,7 +371,7 @@ mod tests {
         // with an unknown (`None`) size, so it only ever exercises
         // `distribute_slot`'s pass-through branches. This is the one test
         // that gives every sibling a known size, forcing the scaling arm.
-        let mut tree = LayoutTree::new(RootKind::Split);
+        let mut tree = PaneTree::new(RootKind::Split);
         let root = tree.root().id();
         let inner = tree.push_split_for_test(root, Axis::Horizontal, Some(px(400.)));
         tree.push_sized_tabs_for_test(inner, vec![panel(1)], Some(px(50.)));
@@ -379,7 +379,7 @@ mod tests {
 
         tree.normalize();
 
-        let NodeRef::Split { sizes, .. } = tree.root().kind() else {
+        let PaneRef::Split { sizes, .. } = tree.root().kind() else {
             panic!()
         };
         assert_eq!(
@@ -407,7 +407,7 @@ mod tests {
         // still has to bottom out at a fixpoint within 2 passes: one pass
         // that resolves every rule bottom-up plus the root collapse, one
         // pass that confirms nothing is left to change.
-        let mut tree = LayoutTree::new(RootKind::Any);
+        let mut tree = PaneTree::new(RootKind::Any);
         let root = tree.root().id();
         let d = tree.push_split_for_test(root, Axis::Vertical, None);
         let a = tree.push_split_for_test(d, Axis::Horizontal, None);

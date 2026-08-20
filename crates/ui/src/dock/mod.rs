@@ -51,13 +51,13 @@ pub use gpui_base::dock::PanelView as BasePanelView;
 pub use gpui_base::dock::{
     AnyDrag, DRAG_BAR_HEIGHT, DockArea, DockAreaRenderer, DockAreaState, DockContext, DockEvent,
     DockLayout, DockPlacement, DockSizing, DockState, DragPanel, DropIndicator,
-    DropPlaceholderBounds, DropTarget, EditResult, HANDLE_SIZE, InsertTarget, LayoutNode,
-    LayoutTree, MINIMUM_SIZE, NodeId, NodeRef, PanelBuildContext, PanelEvent, PanelId, PanelInfo,
-    PanelRegistry, PanelSource, PanelState, ResizeDrag, ResizeSide, RootKind, TabGroup,
-    TabGroupConstraints, TabGroupContext, TabGroupEvent, TabGroupRenderer, TileChange, TileContext,
-    TileMeta, TilePanel, TilesEvent, TilesRenderer, TilesState, apply_boundary_constraints,
-    compute_resized_bounds, content_size, magnetic_snap, register_panel, round_point_to_grid,
-    round_to_grid, snap_edge, split_placement_at,
+    DropPlaceholderBounds, DropTarget, EditResult, HANDLE_SIZE, InsertTarget, MINIMUM_SIZE, NodeId,
+    PaneNode, PaneRef, PaneTree, PanelBuildContext, PanelEvent, PanelId, PanelInfo, PanelRegistry,
+    PanelSource, PanelState, ResizeDrag, ResizeSide, RootKind, TabGroup, TabGroupConstraints,
+    TabGroupContext, TabGroupEvent, TabGroupRenderer, TileChange, TileContext, TileMeta, TilePanel,
+    TilesEvent, TilesRenderer, TilesState, apply_boundary_constraints, compute_resized_bounds,
+    content_size, magnetic_snap, register_panel, round_point_to_grid, round_to_grid, snap_edge,
+    split_placement_at,
 };
 pub use panel::*;
 pub use tab_panel::DragPanelPreview;

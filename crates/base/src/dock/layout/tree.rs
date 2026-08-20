@@ -2,7 +2,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use smallvec::SmallVec;
 
-use super::node::{LayoutNode, NodeId, NodeKind, NodeRef, PanelId, TilePanel};
+use super::node::{NodeId, NodeKind, PaneNode, PaneRef, PanelId, TilePanel};
 
 /// Whether the root of this tree is pinned to a split.
 ///
@@ -31,15 +31,26 @@ fn next_node_id() -> NodeId {
     NodeId::from_u64(NEXT_NODE_ID.fetch_add(1, Ordering::Relaxed))
 }
 
+/// One region's layout, as pure data.
+///
+/// A `DockArea` owns one of these per region — the center plus each dock it
+/// has. Containers are addressed by [`NodeId`] and panels by [`PanelId`];
+/// no entity handle lives in here, so a tree can be built, edited, compared
+/// and serialized with no `App` in sight.
+///
+/// Every edit method normalizes before returning and reports what it did as
+/// an [`EditResult`](super::EditResult), so there is no window in which a
+/// caller can observe a tree with an empty container, a one-child split, or an
+/// out-of-range active index.
 #[derive(Clone, PartialEq, Debug)]
-pub struct LayoutTree {
-    root: LayoutNode,
+pub struct PaneTree {
+    root: PaneNode,
     root_kind: RootKind,
 }
 
-impl LayoutTree {
+impl PaneTree {
     pub fn new(root_kind: RootKind) -> Self {
-        let root = LayoutNode::new(
+        let root = PaneNode::new(
             next_node_id(),
             NodeKind::Split {
                 axis: gpui::Axis::Horizontal,
@@ -50,12 +61,12 @@ impl LayoutTree {
         Self { root, root_kind }
     }
 
-    pub fn root(&self) -> &LayoutNode {
+    pub fn root(&self) -> &PaneNode {
         &self.root
     }
 
     /// Mutable access to the root, for normalization's post-order pass.
-    pub(crate) fn root_mut(&mut self) -> &mut LayoutNode {
+    pub(crate) fn root_mut(&mut self) -> &mut PaneNode {
         &mut self.root
     }
 
@@ -78,14 +89,14 @@ impl LayoutTree {
     pub fn panels(&self) -> impl Iterator<Item = PanelId> {
         let mut found = Vec::new();
         self.root.walk(&mut |node| match node.kind() {
-            NodeRef::Tabs { panels, .. } => found.extend_from_slice(panels),
-            NodeRef::Tiles { panels } => found.extend(panels.iter().map(TilePanel::panel)),
-            NodeRef::Split { .. } => {}
+            PaneRef::Tabs { panels, .. } => found.extend_from_slice(panels),
+            PaneRef::Tiles { panels } => found.extend(panels.iter().map(TilePanel::panel)),
+            PaneRef::Split { .. } => {}
         });
         found.into_iter()
     }
 
-    pub fn find_node(&self, id: NodeId) -> Option<&LayoutNode> {
+    pub fn find_node(&self, id: NodeId) -> Option<&PaneNode> {
         self.path_of_node(id).map(|path| self.node_at(&path))
     }
 
@@ -94,9 +105,9 @@ impl LayoutTree {
         let mut found = None;
         self.root.walk(&mut |node| {
             let holds = match node.kind() {
-                NodeRef::Tabs { panels, .. } => panels.contains(&panel),
-                NodeRef::Tiles { panels } => panels.iter().any(|p| p.panel() == panel),
-                NodeRef::Split { .. } => false,
+                PaneRef::Tabs { panels, .. } => panels.contains(&panel),
+                PaneRef::Tiles { panels } => panels.iter().any(|p| p.panel() == panel),
+                PaneRef::Split { .. } => false,
             };
             if holds {
                 found = Some(node.id());
@@ -106,7 +117,7 @@ impl LayoutTree {
     }
 
     pub(crate) fn path_of_node(&self, id: NodeId) -> Option<NodePath> {
-        fn search(node: &LayoutNode, id: NodeId, path: &mut NodePath) -> bool {
+        fn search(node: &PaneNode, id: NodeId, path: &mut NodePath) -> bool {
             if node.id() == id {
                 return true;
             }
@@ -126,7 +137,7 @@ impl LayoutTree {
         search(&self.root, id, &mut path).then_some(path)
     }
 
-    pub(crate) fn node_at(&self, path: &NodePath) -> &LayoutNode {
+    pub(crate) fn node_at(&self, path: &NodePath) -> &PaneNode {
         let mut node = &self.root;
         for ix in path {
             let NodeKind::Split { children, .. } = node.kind_ref() else {
@@ -137,7 +148,7 @@ impl LayoutTree {
         node
     }
 
-    pub(crate) fn node_at_mut(&mut self, path: &NodePath) -> &mut LayoutNode {
+    pub(crate) fn node_at_mut(&mut self, path: &NodePath) -> &mut PaneNode {
         let mut node = &mut self.root;
         for ix in path {
             let NodeKind::Split { children, .. } = node.kind_mut() else {
@@ -150,7 +161,7 @@ impl LayoutTree {
 
     /// Replace the whole tree with `node`, keeping `node`'s own id and
     /// `root_kind` unchanged. Used by normalization's root-collapse rule.
-    pub(crate) fn replace_root(&mut self, node: LayoutNode) {
+    pub(crate) fn replace_root(&mut self, node: PaneNode) {
         self.root = node;
     }
 }
@@ -159,7 +170,7 @@ impl LayoutTree {
 use gpui::{Axis, Pixels};
 
 #[cfg(test)]
-impl LayoutTree {
+impl PaneTree {
     pub(crate) fn push_tabs_for_test(&mut self, parent: NodeId, panels: Vec<PanelId>) -> NodeId {
         let id = self.allocate_node_id();
         let path = self.path_of_node(parent).expect("parent must exist");
@@ -169,7 +180,7 @@ impl LayoutTree {
         else {
             panic!("parent must be a split");
         };
-        children.push(LayoutNode::new(
+        children.push(PaneNode::new(
             id,
             NodeKind::Tabs {
                 panels,
@@ -198,7 +209,7 @@ impl LayoutTree {
         else {
             panic!("parent must be a split");
         };
-        children.push(LayoutNode::new(
+        children.push(PaneNode::new(
             id,
             NodeKind::Tabs {
                 panels,
@@ -211,13 +222,13 @@ impl LayoutTree {
 
     pub(crate) fn set_root_tiles_for_test(&mut self, panels: Vec<TilePanel>) -> NodeId {
         let id = self.allocate_node_id();
-        self.root = LayoutNode::new(id, NodeKind::Tiles { panels });
+        self.root = PaneNode::new(id, NodeKind::Tiles { panels });
         id
     }
 
     pub(crate) fn set_root_split_for_test(&mut self, axis: Axis) -> NodeId {
         let id = self.allocate_node_id();
-        self.root = LayoutNode::new(
+        self.root = PaneNode::new(
             id,
             NodeKind::Split {
                 axis,
@@ -240,7 +251,7 @@ impl LayoutTree {
         active_ix: usize,
     ) -> NodeId {
         let id = self.allocate_node_id();
-        self.root = LayoutNode::new(id, NodeKind::Tabs { panels, active_ix });
+        self.root = PaneNode::new(id, NodeKind::Tabs { panels, active_ix });
         id
     }
 
@@ -258,7 +269,7 @@ impl LayoutTree {
         else {
             panic!("parent must be a split");
         };
-        children.push(LayoutNode::new(
+        children.push(PaneNode::new(
             id,
             NodeKind::Split {
                 axis,
@@ -283,16 +294,16 @@ mod tests {
 
     #[test]
     fn a_fresh_split_root_tree_has_no_panels() {
-        let tree = LayoutTree::new(RootKind::Split);
+        let tree = PaneTree::new(RootKind::Split);
         assert!(
-            matches!(tree.root().kind(), NodeRef::Split { children, .. } if children.is_empty())
+            matches!(tree.root().kind(), PaneRef::Split { children, .. } if children.is_empty())
         );
         assert_eq!(tree.panels().count(), 0);
     }
 
     #[test]
     fn node_ids_are_unique_and_resolvable() {
-        let mut tree = LayoutTree::new(RootKind::Split);
+        let mut tree = PaneTree::new(RootKind::Split);
         let root = tree.root().id();
         let tabs = tree.push_tabs_for_test(root, vec![panel_id(1)]);
         assert_ne!(tabs, tree.root().id());
@@ -302,7 +313,7 @@ mod tests {
 
     #[test]
     fn tile_panels_carry_bounds_and_z_index() {
-        let mut tree = LayoutTree::new(RootKind::Any);
+        let mut tree = PaneTree::new(RootKind::Any);
         let tiles = tree.set_root_tiles_for_test(vec![
             TilePanel::new(
                 panel_id(7),
@@ -313,7 +324,7 @@ mod tests {
             )
             .with_z_index(3),
         ]);
-        let NodeRef::Tiles { panels } = tree.find_node(tiles).unwrap().kind() else {
+        let PaneRef::Tiles { panels } = tree.find_node(tiles).unwrap().kind() else {
             panic!("expected tiles root");
         };
         assert_eq!(panels[0].panel(), panel_id(7));

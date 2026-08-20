@@ -20,7 +20,7 @@ use gpui::{
     div, prelude::FluentBuilder as _, px, rems,
 };
 use gpui_base::dock::{
-    AnyDrag, DockPlacement, DragPanel, DropIndicator, LayoutNode, NodeId, NodeRef, PanelId,
+    AnyDrag, DockPlacement, DragPanel, DropIndicator, NodeId, PaneNode, PaneRef, PanelId,
     TabGroupContext, TabGroupRenderer,
 };
 use rust_i18n::t;
@@ -156,26 +156,26 @@ fn tab_drag(group: &TabGroupContext, ix: usize, cx: &App) -> Option<DragPanel> {
 
 /// The left-most, top-most tab group in a container — where a left dock's
 /// collapse affordance goes. Mirrors the old `StackPanel::left_top_tab_panel`.
-fn left_top_group(node: &LayoutNode) -> Option<NodeId> {
+fn left_top_group(node: &PaneNode) -> Option<NodeId> {
     match node.kind() {
-        NodeRef::Tabs { .. } => Some(node.id()),
-        NodeRef::Split { children, .. } => children.first().and_then(left_top_group),
-        NodeRef::Tiles { .. } => None,
+        PaneRef::Tabs { .. } => Some(node.id()),
+        PaneRef::Split { children, .. } => children.first().and_then(left_top_group),
+        PaneRef::Tiles { .. } => None,
     }
 }
 
 /// The right-most, top-most tab group. A vertical split stacks its children,
 /// so its *first* child is the top one; a horizontal split's last child is the
 /// right-most. Mirrors the old `StackPanel::right_top_tab_panel`.
-fn right_top_group(node: &LayoutNode) -> Option<NodeId> {
+fn right_top_group(node: &PaneNode) -> Option<NodeId> {
     match node.kind() {
-        NodeRef::Tabs { .. } => Some(node.id()),
-        NodeRef::Split { axis, children, .. } => match axis {
+        PaneRef::Tabs { .. } => Some(node.id()),
+        PaneRef::Split { axis, children, .. } => match axis {
             gpui::Axis::Vertical => children.first(),
             gpui::Axis::Horizontal => children.last(),
         }
         .and_then(right_top_group),
-        NodeRef::Tiles { .. } => None,
+        PaneRef::Tiles { .. } => None,
     }
 }
 
