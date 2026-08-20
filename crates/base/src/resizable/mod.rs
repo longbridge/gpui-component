@@ -127,6 +127,47 @@ impl ResizableState {
         cx.notify();
     }
 
+    /// Adopt slot sizes decided by an owner that keeps its own record of the
+    /// layout — the dock's pane tree does.
+    ///
+    /// Unlike [`Self::insert_panel`], nothing is redistributed: the caller has
+    /// already decided how the space divides, and re-normalizing here would
+    /// undo exactly that decision. Slots the caller left unconstrained keep
+    /// whatever they had.
+    pub(crate) fn adopt_sizes(&mut self, sizes: &[Option<Pixels>], cx: &mut Context<Self>) {
+        let mut changed = false;
+        for (ix, size) in sizes.iter().enumerate() {
+            // The preference is mirrored exactly, `None` included. That is the
+            // load-bearing half: `insert_panel` resolves every existing
+            // panel's `None` into a concrete value as a side effect of
+            // redistributing, so after inserting one slot the caller's "these
+            // two are equally unconstrained" has quietly become "that one is
+            // pinned, this one is the only flexible slot" — and the flexible
+            // one then swallows whatever the pinned ones leave over.
+            if let Some(panel) = self.panels.get_mut(ix) {
+                if panel.size != *size {
+                    panel.size = *size;
+                    changed = true;
+                }
+            }
+
+            // The measurement only moves when the tree names a size; an
+            // unconstrained slot keeps whatever it was last laid out at until
+            // the next pass recomputes it.
+            let Some(size) = size else { continue };
+            if let Some(slot) = self.sizes.get_mut(ix) {
+                if *slot != *size {
+                    *slot = *size;
+                    changed = true;
+                }
+            }
+        }
+
+        if changed {
+            cx.notify();
+        }
+    }
+
     pub(crate) fn sync_panels_count(
         &mut self,
         axis: Axis,

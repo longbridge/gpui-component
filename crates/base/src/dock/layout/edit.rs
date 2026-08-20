@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use gpui::{Bounds, Pixels};
 
 use crate::Placement;
@@ -29,43 +31,20 @@ pub enum InsertTarget {
 
 /// What one edit changed.
 ///
-/// The caller uses this to decide what to reconcile and whether to persist.
-/// Fields are private so new outcomes can be added without breaking callers.
+/// Only whether anything changed, for now. An earlier revision also carried
+/// the created and removed nodes, the removed panels, and the activation
+/// edges — but nothing outside tests ever read them, and computing them meant
+/// cloning the whole tree on every edit to diff against, on a path that a
+/// tile drag walks once per mouse move. Fields are private, so any of them
+/// can come back the day something needs one.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct EditResult {
     changed: bool,
-    created_nodes: Vec<NodeId>,
-    removed_nodes: Vec<NodeId>,
-    removed_panels: Vec<PanelId>,
-    activated: Vec<PanelId>,
-    deactivated: Vec<PanelId>,
 }
 
 impl EditResult {
     pub fn changed(&self) -> bool {
         self.changed
-    }
-
-    pub fn created_nodes(&self) -> &[NodeId] {
-        &self.created_nodes
-    }
-
-    pub fn removed_nodes(&self) -> &[NodeId] {
-        &self.removed_nodes
-    }
-
-    /// Panels that left the tree entirely. A moved panel is absent here: its
-    /// entity survives, so it must not receive `on_removed`.
-    pub fn removed_panels(&self) -> &[PanelId] {
-        &self.removed_panels
-    }
-
-    pub fn activated(&self) -> &[PanelId] {
-        &self.activated
-    }
-
-    pub fn deactivated(&self) -> &[PanelId] {
-        &self.deactivated
     }
 }
 
@@ -75,22 +54,16 @@ impl PaneTree {
     }
 
     pub fn remove_panel(&mut self, panel: PanelId) -> EditResult {
-        self.edit(|tree| {
-            if tree.detach_panel(panel) {
-                vec![panel]
-            } else {
-                Vec::new()
-            }
-        })
+        self.edit(|tree| tree.detach_panel(panel))
     }
 
     /// Move a panel to a new home without ever removing it from the tree's
     /// perspective, so the caller never fires `on_removed` for a drag.
     pub fn move_panel(&mut self, panel: PanelId, target: InsertTarget) -> EditResult {
         self.edit(|tree| {
-            tree.detach_panel(panel);
-            tree.apply_insert(panel, target);
-            Vec::new()
+            let detached = tree.detach_panel(panel);
+            let inserted = tree.apply_insert(panel, target);
+            detached || inserted
         })
     }
 
@@ -113,12 +86,17 @@ impl PaneTree {
 
     pub fn set_active(&mut self, node: NodeId, ix: usize) -> EditResult {
         self.edit(|tree| {
-            if let Some(path) = tree.path_of_node(node) {
-                if let NodeKind::Tabs { active_ix, .. } = tree.node_at_mut(&path).kind_mut() {
-                    *active_ix = ix;
-                }
+            let Some(path) = tree.path_of_node(node) else {
+                return false;
+            };
+            let NodeKind::Tabs { active_ix, .. } = tree.node_at_mut(&path).kind_mut() else {
+                return false;
+            };
+            if *active_ix == ix {
+                return false;
             }
-            Vec::new()
+            *active_ix = ix;
+            true
         })
     }
 
@@ -131,112 +109,141 @@ impl PaneTree {
     /// `debug_assert!`.
     pub fn set_sizes(&mut self, node: NodeId, new_sizes: Vec<Option<Pixels>>) -> EditResult {
         self.edit(|tree| {
-            if let Some(path) = tree.path_of_node(node) {
-                if let NodeKind::Split {
-                    children, sizes, ..
-                } = tree.node_at_mut(&path).kind_mut()
-                {
-                    if new_sizes.len() == children.len() {
-                        *sizes = new_sizes;
-                    }
-                }
+            let Some(path) = tree.path_of_node(node) else {
+                return false;
+            };
+            let NodeKind::Split {
+                children, sizes, ..
+            } = tree.node_at_mut(&path).kind_mut()
+            else {
+                return false;
+            };
+            if new_sizes.len() != children.len() || *sizes == new_sizes {
+                return false;
             }
-            Vec::new()
+            *sizes = new_sizes;
+            true
         })
     }
 
     pub fn set_tile_bounds(&mut self, panel: PanelId, bounds: Bounds<Pixels>) -> EditResult {
         self.edit(|tree| {
-            tree.with_tile(panel, |tile| *tile = tile.with_bounds(bounds));
-            Vec::new()
+            let mut changed = false;
+            tree.with_tile(panel, |tile| {
+                if tile.bounds() != bounds {
+                    *tile = tile.with_bounds(bounds);
+                    changed = true;
+                }
+            });
+            changed
         })
     }
 
     pub fn bring_to_front(&mut self, panel: PanelId) -> EditResult {
         self.edit(|tree| {
             let top = tree.max_z_index();
-            tree.with_tile(panel, |tile| *tile = tile.with_z_index(top + 1));
-            Vec::new()
+            let mut changed = false;
+            tree.with_tile(panel, |tile| {
+                // Already on top is a no-op rather than another increment, so
+                // repeatedly grabbing the front tile neither churns the tree
+                // nor lets z-indices climb forever.
+                if tile.z_index() < top {
+                    *tile = tile.with_z_index(top + 1);
+                    changed = true;
+                }
+            });
+            changed
         })
     }
 }
 
 impl PaneTree {
-    fn edit(&mut self, apply: impl FnOnce(&mut Self) -> Vec<PanelId>) -> EditResult {
-        let before = self.clone();
-        let before_active = before.active_panels();
-        let before_nodes = before.node_ids();
+    /// Replace every split's slot sizes with what that split is actually drawn
+    /// at.
+    ///
+    /// A layout is usually built with unconstrained slots, and `None` stays
+    /// `None` in the tree no matter how the split is later measured or
+    /// dragged. That is fine until an edit has to divide space — dropping a
+    /// panel beside another one has to halve *something*, and it cannot halve
+    /// an unknown. Adopting the measured sizes first turns the question into
+    /// arithmetic on real pixels, and it matches what the person dragging
+    /// sees: the layout on screen is the layout being divided.
+    pub(crate) fn adopt_measured_sizes(&mut self, measured: &HashMap<NodeId, Vec<Pixels>>) {
+        fn walk(node: &mut PaneNode, measured: &HashMap<NodeId, Vec<Pixels>>) {
+            let id = node.id();
+            let NodeKind::Split {
+                children, sizes, ..
+            } = node.kind_mut()
+            else {
+                return;
+            };
 
-        let removed_panels = apply(self);
-        self.normalize();
+            if let Some(actual) = measured.get(&id) {
+                if actual.len() == sizes.len() {
+                    for (slot, size) in sizes.iter_mut().zip(actual) {
+                        // A zero means the split has not been laid out yet, so
+                        // the slot keeps whatever it already had.
+                        if *size > Pixels::ZERO {
+                            *slot = Some(*size);
+                        }
+                    }
+                }
+            }
 
-        let changed = *self != before;
-        if !changed {
-            return EditResult::default();
+            for child in children.iter_mut() {
+                walk(child, measured);
+            }
         }
 
-        let after_active = self.active_panels();
-        let after_nodes = self.node_ids();
+        walk(self.root_mut(), measured);
+    }
+}
+
+impl PaneTree {
+    /// Apply one mutation, then collapse.
+    ///
+    /// `apply` reports whether it changed anything and normalization reports
+    /// the same, so no snapshot of the previous tree is needed to answer the
+    /// only question a caller asks. A mutation that cannot resolve its target
+    /// returns `false` and the whole edit is a no-op.
+    fn edit(&mut self, apply: impl FnOnce(&mut Self) -> bool) -> EditResult {
+        let mutated = apply(self);
+        let collapsed = self.normalize_reporting();
 
         EditResult {
-            changed: true,
-            created_nodes: after_nodes
-                .iter()
-                .filter(|id| !before_nodes.contains(id))
-                .copied()
-                .collect(),
-            removed_nodes: before_nodes
-                .iter()
-                .filter(|id| !after_nodes.contains(id))
-                .copied()
-                .collect(),
-            removed_panels,
-            activated: after_active
-                .iter()
-                .filter(|panel| !before_active.contains(panel))
-                .copied()
-                .collect(),
-            deactivated: before_active
-                .iter()
-                .filter(|panel| !after_active.contains(panel) && self.contains_panel(**panel))
-                .copied()
-                .collect(),
+            changed: mutated || collapsed,
         }
     }
 
-    /// The displayed panel of every tab group, plus every tile panel.
-    pub(crate) fn active_panels(&self) -> Vec<PanelId> {
-        let mut active = Vec::new();
-        self.root().walk(&mut |node| match node.kind_ref() {
-            NodeKind::Tabs { panels, active_ix } => active.extend(panels.get(*active_ix).copied()),
-            NodeKind::Tiles { panels } => active.extend(panels.iter().map(TilePanel::panel)),
-            NodeKind::Split { .. } => {}
-        });
-        active
-    }
-
-    pub(crate) fn contains_panel(&self, panel: PanelId) -> bool {
+    /// Whether `panel` is anywhere in this tree.
+    pub fn contains_panel(&self, panel: PanelId) -> bool {
         self.panels().any(|candidate| candidate == panel)
     }
 }
 
 impl PaneTree {
-    fn apply_insert(&mut self, panel: PanelId, target: InsertTarget) -> Vec<PanelId> {
+    /// Returns whether the panel actually landed. A target this tree cannot
+    /// resolve — a stale node id, or one whose kind does not match the
+    /// target — is a no-op rather than an error, and reports `false`.
+    fn apply_insert(&mut self, panel: PanelId, target: InsertTarget) -> bool {
         match target {
             InsertTarget::Tabs { node, ix, activate } => {
-                if let Some(path) = self.path_of_node(node) {
-                    if let NodeKind::Tabs { panels, active_ix } = self.node_at_mut(&path).kind_mut()
-                    {
-                        let ix = ix.unwrap_or(panels.len()).min(panels.len());
-                        panels.insert(ix, panel);
-                        if activate {
-                            *active_ix = ix;
-                        } else if ix <= *active_ix && panels.len() > 1 {
-                            // Keep the displayed panel displayed.
-                            *active_ix += 1;
-                        }
-                    }
+                let Some(path) = self.path_of_node(node) else {
+                    return false;
+                };
+                let NodeKind::Tabs { panels, active_ix } = self.node_at_mut(&path).kind_mut()
+                else {
+                    return false;
+                };
+                let ix = ix.unwrap_or(panels.len()).min(panels.len());
+                panels.insert(ix, panel);
+                if activate {
+                    *active_ix = ix;
+                } else if ix <= *active_ix && panels.len() > 1 {
+                    // Keep the displayed panel displayed.
+                    *active_ix += 1;
                 }
+                true
             }
             InsertTarget::Split {
                 node,
@@ -244,15 +251,17 @@ impl PaneTree {
                 size,
             } => self.insert_beside(node, panel, placement, size),
             InsertTarget::Tile { node, bounds } => {
-                if let Some(path) = self.path_of_node(node) {
-                    let top = self.max_z_index();
-                    if let NodeKind::Tiles { panels } = self.node_at_mut(&path).kind_mut() {
-                        panels.push(TilePanel::new(panel, bounds).with_z_index(top + 1));
-                    }
-                }
+                let Some(path) = self.path_of_node(node) else {
+                    return false;
+                };
+                let top = self.max_z_index();
+                let NodeKind::Tiles { panels } = self.node_at_mut(&path).kind_mut() else {
+                    return false;
+                };
+                panels.push(TilePanel::new(panel, bounds).with_z_index(top + 1));
+                true
             }
         }
-        Vec::new()
     }
 
     /// Place `panel` in a new tab group beside `node`.
@@ -268,9 +277,9 @@ impl PaneTree {
         panel: PanelId,
         placement: Placement,
         size: Option<Pixels>,
-    ) {
+    ) -> bool {
         let Some(path) = self.path_of_node(node) else {
-            return;
+            return false;
         };
         let group_id = self.allocate_node_id();
         let group = PaneNode::new(
@@ -293,18 +302,47 @@ impl PaneTree {
                     children, sizes, ..
                 } = self.node_at_mut(&parent_path).kind_mut()
                 else {
-                    return;
+                    return false;
+                };
+                // The new group splits the slot it landed beside, rather
+                // than the whole row being re-divided: drop a panel next to
+                // one neighbour and it is that neighbour's space you take.
+                // A caller that named a size gets exactly it, and the
+                // neighbour is left alone.
+                //
+                // An unconstrained neighbour halves to another `None`, which
+                // is right for the same reason — the two of them go on
+                // sharing whatever the fixed slots leave over, now between
+                // themselves.
+                let share = match size {
+                    Some(size) => Some(size),
+                    None => {
+                        let half = sizes[ix].map(|slot| slot / 2.);
+                        sizes[ix] = half;
+                        half
+                    }
                 };
                 let at = if before { ix } else { ix + 1 };
                 children.insert(at, group);
-                sizes.insert(at, size);
-                return;
+                sizes.insert(at, share);
+                return true;
             }
         }
 
-        // Wrap the target in a new split of the placement's axis.
+        // Wrap the target in a new split of the placement's axis. The target
+        // is swapped out rather than cloned: it can be a whole subtree, and
+        // the placeholder left behind is overwritten two statements later.
         let wrapper_id = self.allocate_node_id();
-        let target = self.node_at(&path).clone();
+        let target = std::mem::replace(
+            self.node_at_mut(&path),
+            PaneNode::new(
+                wrapper_id,
+                NodeKind::Tabs {
+                    panels: Vec::new(),
+                    active_ix: 0,
+                },
+            ),
+        );
         let (children, sizes) = if before {
             (vec![group, target], vec![size, None])
         } else {
@@ -319,6 +357,7 @@ impl PaneTree {
             },
         );
         *self.node_at_mut(&path) = wrapper;
+        true
     }
 
     /// Remove `panel` wherever it lives. Returns whether it was found.
@@ -418,9 +457,7 @@ mod tests {
             panic!()
         };
         assert_eq!(panels, [panel(1), panel(2)]);
-        assert_eq!(active_ix, 1);
-        assert_eq!(result.activated(), &[panel(2)]);
-        assert_eq!(result.deactivated(), &[panel(1)]);
+        assert_eq!(active_ix, 1, "the inserted panel becomes the displayed one");
     }
 
     #[test]
@@ -435,8 +472,12 @@ mod tests {
             },
         );
 
-        assert!(result.activated().is_empty());
-        assert!(result.deactivated().is_empty());
+        assert!(result.changed());
+        let PaneRef::Tabs { panels, active_ix } = tree.find_node(tabs).unwrap().kind() else {
+            panic!()
+        };
+        assert_eq!(panels, [panel(1), panel(2)]);
+        assert_eq!(active_ix, 0, "the displayed panel is left alone");
     }
 
     #[test]
@@ -445,8 +486,8 @@ mod tests {
         let result = tree.remove_panel(panel(1));
 
         assert!(result.changed());
-        assert_eq!(result.removed_panels(), &[panel(1)]);
-        assert!(result.removed_nodes().contains(&tabs));
+        assert!(!tree.contains_panel(panel(1)), "the panel left the tree");
+        assert!(tree.find_node(tabs).is_none(), "its empty group collapsed");
         assert!(
             matches!(tree.root().kind(), PaneRef::Split { children, .. } if children.is_empty())
         );
@@ -577,8 +618,10 @@ mod tests {
     #[test]
     fn moving_a_panel_between_groups_preserves_its_identity() {
         let (mut tree, tabs) = tree_with_one_group();
-        let result = tree.split(tabs, panel(2), Placement::Right, None);
-        let other = result.created_nodes()[0];
+        assert!(tree.split(tabs, panel(2), Placement::Right, None).changed());
+        let other = tree
+            .find_panel_node(panel(2))
+            .expect("the split put panel 2 in a group of its own");
 
         let result = tree.move_panel(
             panel(1),
@@ -590,11 +633,11 @@ mod tests {
         );
 
         assert!(result.changed());
-        assert!(
-            result.removed_panels().is_empty(),
-            "a move is not a removal; the panel entity must survive"
+        assert_eq!(
+            tree.panels().collect::<Vec<_>>(),
+            vec![panel(2), panel(1)],
+            "a move is not a removal; both panels are still in the tree"
         );
-        assert_eq!(tree.panels().collect::<Vec<_>>(), vec![panel(2), panel(1)]);
         assert!(
             tree.find_node(tabs).is_none(),
             "the emptied group collapses"

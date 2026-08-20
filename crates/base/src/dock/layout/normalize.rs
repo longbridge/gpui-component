@@ -31,25 +31,39 @@ impl PaneTree {
     ///
     /// Idempotent: `normalize(normalize(t)) == normalize(t)`.
     pub fn normalize(&mut self) {
-        self.run_normalize_passes();
+        self.normalize_reporting();
+    }
+
+    /// [`Self::normalize`], reporting whether it changed anything.
+    ///
+    /// `edit` uses this instead of comparing whole trees: collapse is the only
+    /// thing that can change a tree after a mutation has already reported what
+    /// it did, so the two booleans together are exactly the answer, and no
+    /// snapshot of the previous tree has to be kept to reach it.
+    pub(crate) fn normalize_reporting(&mut self) -> bool {
+        let changed = self.run_normalize_passes().1;
         debug_assert!(self.is_normalized(), "normalize did not reach a fixpoint");
+        changed
     }
 
     /// Run passes until nothing changes, or until [`MAX_NORMALIZE_PASSES`] is
-    /// exhausted. Returns the number of passes run.
+    /// exhausted. Returns the number of passes run, and whether any pass
+    /// changed the tree.
     ///
     /// Split out from [`Self::normalize`] so a `#[cfg(test)]` caller can pin
     /// how many passes convergence actually takes, without widening the
     /// public API with a pass count nobody outside tests needs.
-    fn run_normalize_passes(&mut self) -> u32 {
+    fn run_normalize_passes(&mut self) -> (u32, bool) {
         let mut passes = 0;
         let mut changed = true;
+        let mut any_change = false;
         // Bounded because every pass that changes anything strictly reduces
         // node count or nesting depth.
         while changed && passes < MAX_NORMALIZE_PASSES {
             changed = false;
             normalize_node(self.root_mut(), &mut changed);
             collapse_root(self, &mut changed);
+            any_change |= changed;
             passes += 1;
         }
 
@@ -67,14 +81,14 @@ impl PaneTree {
             );
         }
 
-        passes
+        (passes, any_change)
     }
 
     /// Test-only hook so a test can pin how many passes convergence takes,
     /// without exposing a pass count through the public `normalize` API.
     #[cfg(test)]
     pub(crate) fn normalize_pass_count_for_test(&mut self) -> u32 {
-        self.run_normalize_passes()
+        self.run_normalize_passes().0
     }
 
     /// Whether the tree satisfies every structural invariant.
@@ -146,42 +160,61 @@ fn normalize_node(node: &mut PaneNode, changed: &mut bool) {
             }
 
             // Rule 2: a single-child split child is replaced by its child,
-            // which inherits the slot size the split occupied.
+            // which inherits the slot size the split occupied. The child is
+            // moved out rather than cloned — it can carry an arbitrarily deep
+            // subtree, and this runs on every edit.
             for ix in 0..children.len() {
-                let replacement = match children[ix].kind_ref() {
-                    NodeKind::Split {
-                        children: inner, ..
-                    } if inner.len() == 1 => Some(inner[0].clone()),
-                    _ => None,
-                };
-                if let Some(replacement) = replacement {
-                    children[ix] = replacement;
-                    *changed = true;
+                let is_single = matches!(
+                    children[ix].kind_ref(),
+                    NodeKind::Split { children: inner, .. } if inner.len() == 1
+                );
+                if !is_single {
+                    continue;
                 }
+                let NodeKind::Split {
+                    children: inner, ..
+                } = children[ix].kind_mut()
+                else {
+                    continue;
+                };
+                let replacement = inner.remove(0);
+                children[ix] = replacement;
+                *changed = true;
             }
 
             // Rule 3: splice same-axis nesting.
             let mut ix = 0;
             while ix < children.len() {
-                let splice = match children[ix].kind_ref() {
-                    NodeKind::Split {
-                        axis: inner_axis,
-                        children: inner,
-                        sizes: inner_sizes,
-                    } if *inner_axis == axis => Some((inner.clone(), inner_sizes.clone())),
-                    _ => None,
-                };
-
-                if let Some((inner, inner_sizes)) = splice {
-                    let slot = sizes[ix];
-                    let inner_sizes = distribute_slot(slot, inner_sizes);
-                    children.splice(ix..=ix, inner.iter().cloned());
-                    sizes.splice(ix..=ix, inner_sizes.iter().copied());
-                    ix += inner.len();
-                    *changed = true;
-                } else {
+                let same_axis = matches!(
+                    children[ix].kind_ref(),
+                    NodeKind::Split { axis: inner, .. } if *inner == axis
+                );
+                if !same_axis {
                     ix += 1;
+                    continue;
                 }
+
+                // Taken, not cloned: the spliced children move up a level
+                // rather than being copied and discarded.
+                let NodeKind::Split {
+                    children: inner,
+                    sizes: inner_sizes,
+                    ..
+                } = children[ix].kind_mut()
+                else {
+                    ix += 1;
+                    continue;
+                };
+                let inner = std::mem::take(inner);
+                let inner_sizes = std::mem::take(inner_sizes);
+
+                let slot = sizes[ix];
+                let inner_sizes = distribute_slot(slot, inner_sizes);
+                let count = inner.len();
+                children.splice(ix..=ix, inner);
+                sizes.splice(ix..=ix, inner_sizes);
+                ix += count;
+                *changed = true;
             }
         }
     }
@@ -346,6 +379,62 @@ mod tests {
         assert!(
             matches!(tree.root().kind(), PaneRef::Split { children, .. } if children.is_empty()),
             "the center must still serialize as a StackPanel when empty"
+        );
+    }
+
+    /// Rule 3 splices a same-axis child's slots into the parent, scaling them
+    /// to the slot they replace. When one inner slot is unconstrained there is
+    /// no total to scale against, so they pass through — and then the known
+    /// ones are absolute values that no longer relate to the space they landed
+    /// in. This pins what actually happens, so a future change to
+    /// `distribute_slot` has to decide about this case deliberately.
+    #[test]
+    fn a_same_axis_splice_with_one_unknown_inner_size_passes_them_through() {
+        let mut tree = PaneTree::new(RootKind::Split);
+        let root = tree.root().id();
+        let inner = tree.push_split_for_test(root, Axis::Horizontal, Some(px(400.)));
+        tree.push_sized_tabs_for_test(inner, vec![panel(1)], Some(px(100.)));
+        tree.push_sized_tabs_for_test(inner, vec![panel(2)], None);
+
+        tree.normalize();
+
+        let PaneRef::Split { sizes, .. } = tree.root().kind() else {
+            panic!()
+        };
+        assert_eq!(
+            sizes,
+            &[Some(px(100.)), None],
+            "an unknown inner size leaves every sibling unscaled; the 400px \
+             slot they replaced constrains nothing"
+        );
+    }
+
+    /// Dropping a container mid-row hands its space to nobody in the tree —
+    /// the surviving slots keep their absolute sizes and no longer sum to
+    /// anything in particular. The renderer's own resizable state is what
+    /// redistributes on the next layout pass.
+    #[test]
+    fn removing_a_middle_container_leaves_its_siblings_untouched() {
+        let mut tree = PaneTree::new(RootKind::Split);
+        let root = tree.root().id();
+        tree.push_sized_tabs_for_test(root, vec![panel(1)], Some(px(400.)));
+        tree.push_sized_tabs_for_test(root, vec![], Some(px(800.)));
+        tree.push_sized_tabs_for_test(root, vec![panel(3)], Some(px(400.)));
+
+        tree.normalize();
+
+        let PaneRef::Split {
+            sizes, children, ..
+        } = tree.root().kind()
+        else {
+            panic!()
+        };
+        assert_eq!(children.len(), 2);
+        assert_eq!(
+            sizes,
+            &[Some(px(400.)), Some(px(400.))],
+            "the survivors keep their own sizes; the 800px the empty group \
+             held is not handed to either of them here"
         );
     }
 

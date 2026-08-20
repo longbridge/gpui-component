@@ -1,7 +1,11 @@
 //! The dock area: the trees, the entity cache that mirrors them, and the
 //! reconciliation that keeps the two in step.
 
-use std::{collections::HashMap, rc::Rc, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    rc::Rc,
+    sync::Arc,
+};
 
 use anyhow::Result;
 use gpui::{
@@ -579,6 +583,12 @@ impl DockArea {
         };
         let source = self.placement_of_panel(panel);
 
+        // A split target divides an existing slot, so the tree needs real
+        // pixels to divide.
+        if matches!(target, InsertTarget::Split { .. }) {
+            self.adopt_measured_sizes(destination, cx);
+        }
+
         // Read what the source group last told the panel *before* the edit,
         // so the destination can be seeded with it. Without this a panel
         // dragged between groups while displayed is told `true` twice.
@@ -643,6 +653,7 @@ impl DockArea {
         let Some(region) = self.placement_of_node(node) else {
             return;
         };
+        self.adopt_measured_sizes(region, cx);
         let Some(tree) = self.tree_mut(region) else {
             return;
         };
@@ -967,11 +978,14 @@ impl DockArea {
             plan_tree(&pane.tree, !pane.dock.is_open(), self.locked, &mut plans);
         }
 
-        let mut live_nodes = Vec::with_capacity(plans.len());
-        let mut live_panels: Vec<PanelId> = Vec::new();
+        // Sets rather than vectors: these are membership tests, run once per
+        // cached entity and once per live panel, and a drag reaches this path
+        // on every mouse move.
+        let mut live_nodes = HashSet::with_capacity(plans.len());
+        let mut live_panels: HashSet<PanelId> = HashSet::new();
 
         for plan in plans {
-            live_nodes.push(plan.node());
+            live_nodes.insert(plan.node());
             match plan {
                 ContainerPlan::Split {
                     node,
@@ -988,6 +1002,11 @@ impl DockArea {
                     state.update(cx, |state, cx| {
                         sync_split_panels(state, &previous, &children, &sizes, cx);
                         state.sync_panels_count(axis, children.len(), cx);
+                        // The tree is authoritative on how space divides, so
+                        // its sizes land last — `insert_panel` renormalizes
+                        // everything it touches, which would otherwise undo
+                        // the share an edit just decided.
+                        state.adopt_sizes(&sizes, cx);
                     });
                     if let Some(cached) = self.splits.get_mut(&node) {
                         cached.children = children;
@@ -1272,6 +1291,30 @@ impl DockArea {
 
 /// Region lookup.
 impl DockArea {
+    /// Feed every split's measured size back into the tree before an edit
+    /// that has to divide space.
+    ///
+    /// Done here rather than continuously: the tree is the record of what the
+    /// user arranged, and rewriting it on every layout pass would let a
+    /// transient window size become the stored layout.
+    fn adopt_measured_sizes(&mut self, placement: DockPlacement, cx: &App) {
+        let measured: HashMap<NodeId, Vec<Pixels>> = self
+            .splits
+            .iter()
+            // Only splits that have actually been laid out. A split created
+            // earlier in this same edit has a zero container and its `sizes`
+            // are whatever `insert_panel` left behind — adopting those would
+            // freeze a placeholder ratio into the tree, and every later edit
+            // would divide space according to it.
+            .filter(|(_, cached)| cached.entity.read(cx).container_size() > Pixels::ZERO)
+            .map(|(node, cached)| (*node, cached.entity.read(cx).sizes().clone()))
+            .collect();
+
+        if let Some(tree) = self.tree_mut(placement) {
+            tree.adopt_measured_sizes(&measured);
+        }
+    }
+
     fn tree_mut(&mut self, placement: DockPlacement) -> Option<&mut PaneTree> {
         match placement {
             DockPlacement::Center => Some(&mut self.center),
@@ -1538,18 +1581,11 @@ fn sync_split_panels(
             continue;
         }
         let at = ix.min(state.sizes().len());
-        // An unconstrained slot has to be resolved to a concrete size here,
-        // not passed through. `ResizableState` stores the `None` as the
-        // panel's own preference, which makes that slot the flexible one:
-        // it then absorbs whatever its fixed siblings leave over, so a panel
-        // dropped beside an existing one takes most of the split instead of
-        // half of it. Sharing the container equally is what the old
-        // `StackPanel::insert_panel` did with the same input, and it is what
-        // a drop with no size in mind should mean.
-        let size = sizes.get(ix).copied().flatten().unwrap_or_else(|| {
-            (state.container_size() / (state.sizes().len() + 1) as f32).max(PANEL_MIN_SIZE)
-        });
-        state.insert_panel(Some(size), Some(at), cx);
+        // Passed through as-is. The tree already decided this slot's share
+        // when the panel was inserted — a drop halves the neighbour it landed
+        // beside — so there is nothing to compute here, and nothing that
+        // depends on a container this state may not have measured yet.
+        state.insert_panel(sizes.get(ix).copied().flatten(), Some(at), cx);
         current.insert(at.min(current.len()), *node);
     }
 
@@ -2361,6 +2397,182 @@ mod tests {
             (left - right).abs() <= (left + right) * 0.02,
             "the two halves must be within 2% of each other, got {left} and {right}"
         );
+    }
+
+    /// The other drop geometry: a placement whose axis differs from the
+    /// parent's wraps the target in a fresh split, so the sizes are decided
+    /// by a `ResizableState` that has never been measured.
+    #[gpui::test]
+    fn a_panel_dropped_across_the_axis_still_takes_half(cx: &mut TestAppContext) {
+        let log = Log::default();
+        let (area, panels, cx) = one_group(&log, &["Alpha", "Beta"], None, cx);
+        let group = child_node(&area, 0, cx);
+        let beta = panel_id_of(&panels[1]);
+
+        cx.update(|window, cx| {
+            area.update(cx, |area, cx| {
+                area.move_panel(
+                    beta,
+                    InsertTarget::Split {
+                        node: group,
+                        placement: Placement::Bottom,
+                        size: None,
+                    },
+                    window,
+                    cx,
+                );
+            });
+        });
+        cx.run_until_parked();
+
+        // Dropping across the axis wraps the target in a new split, which
+        // becomes the center root's only child — the root itself still holds
+        // one slot.
+        let wrapper = child_node(&area, 0, cx);
+        let sizes = cx.read(|cx| {
+            area.read(cx).splits[&wrapper]
+                .entity
+                .read(cx)
+                .sizes()
+                .clone()
+        });
+        assert_eq!(sizes.len(), 2, "the drop splits the group in two");
+        let (top, bottom) = (sizes[0].as_f32(), sizes[1].as_f32());
+        assert!(
+            (top - bottom).abs() <= (top + bottom) * 0.02,
+            "the two halves must be within 2% of each other, got {top} and {bottom}"
+        );
+    }
+
+    /// A drop into a split that already holds more than one slot, which is the
+    /// shape a real workspace is in by the time anyone drags anything.
+    #[gpui::test]
+    fn a_panel_dropped_into_a_populated_split_takes_an_even_share(cx: &mut TestAppContext) {
+        let (area, cx) = setup(cx);
+        let panels = cx.update(|window, cx| {
+            let alpha = TestPanel::new("Alpha", cx);
+            let beta = TestPanel::new("Beta", cx);
+            let gamma = TestPanel::new("Gamma", cx);
+            area.update(cx, |area, cx| {
+                area.set_center(
+                    DockLayout::h_split()
+                        .child(DockLayout::tabs().panel(alpha.clone()), Some(px(240.)))
+                        .child(
+                            DockLayout::tabs().panel(beta.clone()).panel(gamma.clone()),
+                            None,
+                        ),
+                    window,
+                    cx,
+                );
+            });
+            vec![alpha, beta, gamma]
+        });
+        cx.run_until_parked();
+
+        let right = child_node(&area, 1, cx);
+        let gamma = panel_id_of(&panels[2]);
+        cx.update(|window, cx| {
+            area.update(cx, |area, cx| {
+                area.move_panel(
+                    gamma,
+                    InsertTarget::Split {
+                        node: right,
+                        placement: Placement::Right,
+                        size: None,
+                    },
+                    window,
+                    cx,
+                );
+            });
+        });
+        cx.run_until_parked();
+
+        let root = cx.read(|cx| {
+            area.read(cx)
+                .layout(DockPlacement::Center)
+                .unwrap()
+                .root()
+                .id()
+        });
+        let sizes = cx.read(|cx| area.read(cx).splits[&root].entity.read(cx).sizes().clone());
+        assert_eq!(sizes.len(), 3, "three slots side by side");
+        let dropped = sizes[2].as_f32();
+        let neighbour = sizes[1].as_f32();
+        assert!(
+            (dropped - neighbour).abs() <= (dropped + neighbour) * 0.02,
+            "the dropped panel splits its neighbour evenly, got neighbour {neighbour} and dropped {dropped}"
+        );
+    }
+
+    /// A dock's root is usually a bare tab group, so a drop beside it takes
+    /// the "wrap the target in a new split" path rather than the "insert into
+    /// the existing split" one — and that split has never been measured.
+    #[gpui::test]
+    fn a_panel_dropped_beside_a_dock_takes_half(cx: &mut TestAppContext) {
+        for placement in [DockPlacement::Bottom, DockPlacement::Left] {
+            let (area, cx) = setup(cx);
+            let dropped = cx.update(|window, cx| {
+                let resident = TestPanel::new("Resident", cx);
+                let dropped = TestPanel::new("Dropped", cx);
+                area.update(cx, |area, cx| {
+                    area.set_center(
+                        DockLayout::tabs().panel(TestPanel::new("Center", cx)),
+                        window,
+                        cx,
+                    );
+                    area.set_dock(
+                        placement,
+                        DockLayout::tabs().panel(resident).panel(dropped.clone()),
+                        window,
+                        cx,
+                    );
+                    area.set_dock_size(placement, px(400.), window, cx);
+                });
+                dropped
+            });
+            cx.run_until_parked();
+
+            let group = cx.read(|cx| {
+                area.read(cx)
+                    .layout(placement)
+                    .unwrap()
+                    .find_panel_node(panel_id_of(&dropped))
+                    .expect("both panels start in the dock's only group")
+            });
+
+            cx.update(|window, cx| {
+                area.update(cx, |area, cx| {
+                    area.move_panel(
+                        panel_id_of(&dropped),
+                        InsertTarget::Split {
+                            node: group,
+                            placement: Placement::Bottom,
+                            size: None,
+                        },
+                        window,
+                        cx,
+                    );
+                });
+            });
+            cx.run_until_parked();
+
+            let split = cx.read(|cx| {
+                let tree = area.read(cx).layout(placement).unwrap();
+                let root = tree.root();
+                match root.kind() {
+                    PaneRef::Split { .. } => root.id(),
+                    _ => panic!("the drop must have produced a split"),
+                }
+            });
+            let sizes = cx.read(|cx| area.read(cx).splits[&split].entity.read(cx).sizes().clone());
+
+            assert_eq!(sizes.len(), 2, "{placement:?}: the drop splits in two");
+            let (first, second) = (sizes[0].as_f32(), sizes[1].as_f32());
+            assert!(
+                (first - second).abs() <= (first + second) * 0.02,
+                "{placement:?}: expected halves, got {first} and {second}"
+            );
+        }
     }
 
     /// The headline claim of the whole extraction, in one place: a layout
