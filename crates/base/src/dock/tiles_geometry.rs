@@ -33,8 +33,6 @@ pub struct TileChange {
     tile_id: EntityId,
     old_bounds: Option<Bounds<Pixels>>,
     new_bounds: Option<Bounds<Pixels>>,
-    old_order: Option<usize>,
-    new_order: Option<usize>,
     version: usize,
 }
 
@@ -49,20 +47,6 @@ impl TileChange {
             tile_id,
             old_bounds: Some(old_bounds),
             new_bounds: Some(new_bounds),
-            old_order: None,
-            new_order: None,
-            version: 0,
-        }
-    }
-
-    /// A change record for a tile whose z-order (stacking position) moved.
-    pub fn order_change(tile_id: EntityId, old_order: usize, new_order: usize) -> Self {
-        Self {
-            tile_id,
-            old_bounds: None,
-            new_bounds: None,
-            old_order: Some(old_order),
-            new_order: Some(new_order),
             version: 0,
         }
     }
@@ -77,14 +61,6 @@ impl TileChange {
 
     pub fn new_bounds(&self) -> Option<Bounds<Pixels>> {
         self.new_bounds
-    }
-
-    pub fn old_order(&self) -> Option<usize> {
-        self.old_order
-    }
-
-    pub fn new_order(&self) -> Option<usize> {
-        self.new_order
     }
 }
 
@@ -132,10 +108,6 @@ impl ResizeDrag {
 
     pub fn side(&self) -> ResizeSide {
         self.side
-    }
-
-    pub fn last_position(&self) -> Point<Pixels> {
-        self.last_position
     }
 
     pub fn last_bounds(&self) -> Bounds<Pixels> {
@@ -265,14 +237,6 @@ pub fn compute_resized_bounds(
 /// skin reads the grid size and passes it in here instead.
 pub fn round_to_grid(value: Pixels, grid_size: Pixels) -> Pixels {
     (value / grid_size).round() * grid_size
-}
-
-/// Round both coordinates of `point` to the nearest multiple of `grid_size`.
-pub fn round_point_to_grid(point: Point<Pixels>, grid_size: Pixels) -> Point<Pixels> {
-    Point::new(
-        round_to_grid(point.x, grid_size),
-        round_to_grid(point.y, grid_size),
-    )
 }
 
 /// Calculate the magnetic snap position for a tile being dragged.

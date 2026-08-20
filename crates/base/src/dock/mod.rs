@@ -185,9 +185,10 @@ mod tiles_state;
 
 pub use dock_area::{DockArea, DockAreaRenderer, DockContext, DockEvent};
 pub use dock_placement::{Dock, DockSizing};
-pub use drag::{
-    AnyDrag, DragPanel, DropIndicator, DropPlaceholderBounds, DropTarget, split_placement_at,
-};
+pub use drag::{AnyDrag, DragPanel, DropIndicator, DropPlaceholderBounds, DropTarget};
+// `split_placement_at` stays internal for the same reason: where a drop lands
+// is base's decision, and a renderer is told the result through
+// `TabGroupContext::drop_indicator`.
 pub use layout::{
     DockLayout, EditResult, InsertTarget, NodeId, PaneNode, PaneRef, PaneTree, PanelId, RootKind,
     TilePanel,
@@ -195,13 +196,23 @@ pub use layout::{
 pub use panel::{Panel, PanelEvent, PanelView};
 pub use registry::{PanelBuildContext, PanelRegistry, register_panel};
 pub use state::{DockAreaState, DockPlacement, DockState, PanelInfo, PanelState, TileMeta};
-pub use state_convert::PanelSource;
+/// Both halves of the persistence seam. `PaneTree::to_state` reads panel
+/// properties through `PanelSource`; `PaneTree::from_state` turns persisted
+/// leaves back into panels through `PanelBuilder`. Exporting only the first
+/// left `from_state` public but uncallable, since no caller outside this crate
+/// could name the trait its parameter requires.
+pub use state_convert::{PanelBuilder, PanelSource};
 pub use tab_group::{
     TabGroup, TabGroupConstraints, TabGroupContext, TabGroupEvent, TabGroupRenderer,
 };
-pub use tiles_geometry::{
-    DRAG_BAR_HEIGHT, HANDLE_SIZE, MINIMUM_SIZE, ResizeDrag, ResizeSide, TileChange,
-    apply_boundary_constraints, compute_resized_bounds, content_size, magnetic_snap,
-    round_point_to_grid, round_to_grid, snap_edge,
-};
+/// What a skin actually needs off the tiles geometry: the two sizes it has to
+/// draw to, and which edge a resize is pulling.
+pub use tiles_geometry::{DRAG_BAR_HEIGHT, HANDLE_SIZE, ResizeSide};
+// The arithmetic itself is deliberately not re-exported. Base resolves every
+// bound before a renderer sees it — a skin is handed finished `Bounds`, never
+// asked to snap anything — so `magnetic_snap`, `snap_edge`, `round_to_grid`,
+// `round_point_to_grid`, `compute_resized_bounds`, `apply_boundary_constraints`
+// and `content_size` had no caller outside this crate and no purpose there.
+// `ResizeDrag` and `TileChange` are `TilesState`'s own fields, and
+// `MINIMUM_SIZE` is a constraint base applies on the skin's behalf.
 pub use tiles_state::{TileContext, TilesEvent, TilesRenderer, TilesState};
