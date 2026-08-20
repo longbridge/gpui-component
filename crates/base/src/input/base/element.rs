@@ -1301,12 +1301,12 @@ impl<M: InputModeKind> TextElement<M> {
         let is_single_line = state.is_single_line();
 
         if is_single_line {
-            let shaped_line = window.text_system().shape_line(
-                display_text.to_string().into(),
-                font_size,
-                &runs,
-                None,
-            );
+            let text: SharedString = display_text.to_string().into();
+            let aligned_runs = align_runs_to_char_boundaries(&text, runs);
+            let line_runs = aligned_runs.as_deref().unwrap_or(runs);
+            let shaped_line = window
+                .text_system()
+                .shape_line(text, font_size, line_runs, None);
 
             let line_layout = LineLayout::new()
                 .lines(smallvec::smallvec![shaped_line])
@@ -1366,6 +1366,8 @@ impl<M: InputModeKind> TextElement<M> {
                 };
 
                 let sub_line: SharedString = line_text[range.clone()].to_string().into();
+                let line_runs =
+                    align_runs_to_char_boundaries(&sub_line, &line_runs).unwrap_or(line_runs);
                 let shaped_line = window
                     .text_system()
                     .shape_line(sub_line, font_size, &line_runs, None);
@@ -1441,28 +1443,34 @@ impl<M: InputModeKind> TextElement<M> {
         };
 
         let mut styles = Vec::with_capacity(visible_buffer_lines.len());
+        // Byte ranges of the flushed line groups; the composed styles are
+        // clipped to these at the end so the resulting runs cover exactly the
+        // visible (non-folded) lines' bytes.
+        let mut group_ranges: Vec<Range<usize>> = Vec::new();
 
         // Helper to flush a contiguous range of lines. These ranges are disjoint,
         // so appending avoids repeatedly cloning and recombining prior styles.
-        let flush_range = |start_line: usize, end_line: usize, skip: bool, styles: &mut Vec<_>| {
-            let byte_start = text.line_start_offset(start_line);
-            let byte_end = if is_multi_line {
-                // +1 for `\n`
-                text.line_start_offset(end_line + 1)
-            } else {
-                text.line_end_offset(end_line)
-            };
-            let range_styles = if skip {
-                vec![(byte_start..byte_end, HighlightStyle::default())]
-            } else {
-                highlighter.styles(
-                    &(byte_start..byte_end),
-                    state.editor_style.highlight_styles.as_ref(),
-                )
-            };
+        let mut flush_range =
+            |start_line: usize, end_line: usize, skip: bool, styles: &mut Vec<_>| {
+                let byte_start = text.line_start_offset(start_line);
+                let byte_end = if is_multi_line {
+                    // +1 for `\n`
+                    text.line_start_offset(end_line + 1)
+                } else {
+                    text.line_end_offset(end_line)
+                };
+                let range_styles = if skip {
+                    vec![(byte_start..byte_end, HighlightStyle::default())]
+                } else {
+                    highlighter.styles(
+                        &(byte_start..byte_end),
+                        state.editor_style.highlight_styles.as_ref(),
+                    )
+                };
 
-            styles.extend(range_styles);
-        };
+                group_ranges.push(byte_start..byte_end);
+                styles.extend(range_styles);
+            };
 
         // Group contiguous visible lines into ranges and call styles() once per range
         let mut visible_iter = visible_buffer_lines.iter().peekable();
@@ -1533,6 +1541,13 @@ impl<M: InputModeKind> TextElement<M> {
             .unwrap_or_default();
         }
         styles = gpui::combine_highlights(diagnostic_styles, styles).collect();
+
+        // Some sources reach outside the flushed groups — a diagnostic
+        // straddling the viewport edge, or any range inside a folded region —
+        // which would inject extra bytes into the runs coordinate space and
+        // shift every later run boundary (see `layout_lines`). Clip the
+        // composed styles back to the groups.
+        styles = clip_styles_to_ranges(styles, &group_ranges);
 
         Some(styles)
     }
@@ -2413,6 +2428,71 @@ pub(super) fn runs_for_range(
     result
 }
 
+/// Clip sorted `styles` to the sorted, disjoint `ranges`, splitting styles
+/// that span several ranges and dropping coverage in the gaps between them.
+fn clip_styles_to_ranges(
+    styles: Vec<(Range<usize>, HighlightStyle)>,
+    ranges: &[Range<usize>],
+) -> Vec<(Range<usize>, HighlightStyle)> {
+    let mut result = Vec::with_capacity(styles.len());
+    let mut range_ix = 0;
+
+    for (style_range, style) in styles {
+        while range_ix < ranges.len() && ranges[range_ix].end <= style_range.start {
+            range_ix += 1;
+        }
+
+        let mut ix = range_ix;
+        while ix < ranges.len() && ranges[ix].start < style_range.end {
+            let start = style_range.start.max(ranges[ix].start);
+            let end = style_range.end.min(ranges[ix].end);
+            if start < end {
+                result.push((start..end, style));
+            }
+            ix += 1;
+        }
+    }
+
+    result
+}
+
+/// Snap run boundaries to char boundaries of `text` and cap them at its
+/// length. Style ranges are byte offsets that can drift off char boundaries
+/// (a stale syntax tree, a range in the wrong coordinate space) and the
+/// platform text system panics when a run splits a multi-byte character.
+///
+/// Returns `None` when the runs are already aligned (the common case).
+pub(super) fn align_runs_to_char_boundaries(text: &str, runs: &[TextRun]) -> Option<Vec<TextRun>> {
+    let mut end = 0;
+    let aligned = runs.iter().all(|run| {
+        end += run.len;
+        end <= text.len() && text.is_char_boundary(end)
+    });
+    if aligned {
+        return None;
+    }
+
+    let mut result = Vec::with_capacity(runs.len());
+    let mut cursor = 0;
+    let mut raw_end = 0;
+    for run in runs {
+        raw_end = (raw_end + run.len).min(text.len());
+        let mut end = raw_end;
+        while !text.is_char_boundary(end) {
+            end += 1;
+        }
+        if end > cursor {
+            result.push(TextRun {
+                len: end - cursor,
+                ..run.clone()
+            });
+            cursor = end;
+        }
+    }
+
+    Some(result)
+}
+
 fn split_run_for_ime_underline(
     run: TextRun,
     run_range: Range<usize>,
@@ -2843,6 +2923,85 @@ mod tests {
             .map(|(_, line_runs)| line_runs.iter().map(|run| run.len).collect::<Vec<_>>())
             .collect::<Vec<_>>();
         assert_eq!(run_lengths, vec![vec![2], vec![], vec![1]]);
+    }
+
+    #[test]
+    fn test_align_runs_to_char_boundaries() {
+        let run = TextRun {
+            len: 0,
+            font: gpui::font(".SystemUIFont"),
+            color: gpui::blue(),
+            background_color: None,
+            underline: None,
+            strikethrough: None,
+        };
+        let runs = |lens: &[usize]| {
+            lens.iter()
+                .map(|&len| TextRun { len, ..run.clone() })
+                .collect::<Vec<_>>()
+        };
+        let lens = |runs: &[TextRun]| runs.iter().map(|run| run.len).collect::<Vec<_>>();
+
+        // "成交量" is 9 bytes; boundaries at 0, 3, 6, 9.
+        let text = "成交量";
+
+        // Aligned runs pass through untouched.
+        assert_eq!(align_runs_to_char_boundaries(text, &runs(&[3, 6])), None);
+
+        // A mid-char boundary (4) snaps up to the next boundary (6).
+        let aligned = align_runs_to_char_boundaries(text, &runs(&[4, 5])).unwrap();
+        assert_eq!(lens(&aligned), vec![6, 3]);
+
+        // Several boundaries inside the same char collapse into one run.
+        let aligned = align_runs_to_char_boundaries(text, &runs(&[1, 1, 7])).unwrap();
+        assert_eq!(lens(&aligned), vec![3, 6]);
+
+        // Overshooting runs are capped at the text length.
+        let aligned = align_runs_to_char_boundaries(text, &runs(&[3, 20])).unwrap();
+        assert_eq!(lens(&aligned), vec![3, 6]);
+
+        // Undershooting runs keep the shortfall (the tail is left unshaped,
+        // matching `runs_for_range` clipping).
+        assert_eq!(align_runs_to_char_boundaries(text, &runs(&[3, 3])), None);
+    }
+
+    #[test]
+    fn test_clip_styles_to_ranges() {
+        let style = HighlightStyle::default();
+        let styles = vec![(0..4, style), (4..10, style), (12..20, style)];
+
+        // Ranges with a gap (a folded region) drop the gap coverage and split
+        // styles that span a range edge.
+        let clipped = clip_styles_to_ranges(styles.clone(), &[2..6, 14..18]);
+        assert_eq!(
+            clipped
+                .iter()
+                .map(|(range, _)| range.clone())
+                .collect::<Vec<_>>(),
+            vec![2..4, 4..6, 14..18]
+        );
+
+        // Styles fully inside the ranges are unchanged.
+        let clipped = clip_styles_to_ranges(styles.clone(), &[0..20]);
+        assert_eq!(
+            clipped
+                .iter()
+                .map(|(range, _)| range.clone())
+                .collect::<Vec<_>>(),
+            vec![0..4, 4..10, 12..20]
+        );
+
+        // A single style spanning several ranges splits into one piece per range.
+        let clipped = clip_styles_to_ranges(vec![(0..30, style)], &[5..10, 20..25]);
+        assert_eq!(
+            clipped
+                .iter()
+                .map(|(range, _)| range.clone())
+                .collect::<Vec<_>>(),
+            vec![5..10, 20..25]
+        );
+
+        assert!(clip_styles_to_ranges(styles, &[]).is_empty());
     }
 
     #[test]
