@@ -1396,7 +1396,8 @@ impl DockArea {
                 let panels: Vec<_> = children
                     .iter()
                     .zip(sizes.iter())
-                    .map(|(child, size)| {
+                    .enumerate()
+                    .map(|(ix, (child, size))| {
                         resizable_panel()
                             // A container whose every panel is hidden must
                             // not keep occupying its slot. No renderer hook
@@ -1410,7 +1411,16 @@ impl DockArea {
                             // as a flex-basis and still absorb an equal share
                             // of the leftover — a 200px sidebar rendering
                             // 1075px wide in a 1950px split.
-                            .when_some(*size, |panel, size| panel.size(size).flex_none())
+                            // The trailing slot absorbs container growth. A
+                            // drag records every measured size as pixels; if
+                            // all of them became `flex_none`, a later viewport
+                            // resize would leave an empty strip after the
+                            // split instead of keeping the Dock filled.
+                            .when_some(*size, |panel, size| {
+                                panel
+                                    .size(size)
+                                    .when(ix + 1 < children.len(), |panel| panel.flex_none())
+                            })
                     })
                     .collect();
 

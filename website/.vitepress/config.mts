@@ -11,6 +11,7 @@ import { extname, join, resolve } from "node:path";
 function wasmExamplesDevServer() {
   const roots = new Map([
     ["/gpui-component/examples/base", resolve("../crates/base/examples/wasm/www/dist")],
+    ["/gpui-component/gallery", resolve("../crates/story-web/www/dist")],
   ]);
   const contentTypes: Record<string, string> = {
     ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
