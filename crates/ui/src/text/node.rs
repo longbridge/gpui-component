@@ -42,6 +42,10 @@ thread_local! {
         RefCell::new(HashMap::new());
 }
 
+/// A callout is an aside, so it runs one step smaller than the document it
+/// sits in: the step `text_sm` takes off the base font size.
+const CALLOUT_FONT_SCALE: f32 = 0.875;
+
 /// A GitHub-flavored Markdown alert (callout) declared on the first line of a
 /// blockquote, e.g. `> [!NOTE]`, `> [!WARNING]`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1435,6 +1439,29 @@ impl NodeContext {
     pub(super) fn add_ref(&mut self, identifier: SharedString, link: LinkMark) {
         self.link_refs.insert(identifier, link);
     }
+
+    /// The document style scaled by `ratio`.
+    ///
+    /// A block that renders its children at a smaller text size has to hand
+    /// them this, or the sizes the style carries as pixels — headings, code
+    /// blocks, the paragraph gap — keep the size of the document around it.
+    fn scaled(&self, ratio: f32, cx: &App) -> Self {
+        let style = TextViewStyle {
+            heading_base_font_size: self.style.heading_base_font_size * ratio,
+            paragraph_gap: rems(self.style.paragraph_gap.0 * ratio),
+            code_block: self
+                .style
+                .code_block
+                .clone()
+                .text_size(cx.theme().mono_font_size * ratio),
+            ..self.style.clone()
+        };
+
+        Self {
+            style,
+            ..self.clone()
+        }
+    }
 }
 
 impl PartialEq for NodeContext {
@@ -2420,13 +2447,20 @@ impl BlockNode {
             BlockNode::Blockquote {
                 children, callout, ..
             } => {
+                // The callout body renders one step smaller than the document,
+                // so its own headings, code blocks, and paragraph gaps have to
+                // scale with the text size the callout box sets.
+                let callout_cx = callout
+                    .is_some()
+                    .then(|| node_cx.scaled(CALLOUT_FONT_SCALE, cx));
+                let body_cx = callout_cx.as_ref().unwrap_or(node_cx);
                 let children_len = children.len();
                 let children = children
-                    .into_iter()
+                    .iter()
                     .enumerate()
                     .map(|(index, c)| {
                         let is_last = index == children_len - 1;
-                        c.render_block(options.is_last(is_last), node_cx, window, cx)
+                        c.render_block(options.is_last(is_last), body_cx, window, cx)
                     })
                     .collect::<Vec<_>>();
 
@@ -2451,6 +2485,7 @@ impl BlockNode {
                                 .rounded(cx.theme().radius)
                                 .border_1()
                                 .border_color(callout.variant().border_color(cx))
+                                .text_size(cx.theme().font_size * CALLOUT_FONT_SCALE)
                                 .child(
                                     div()
                                         .mt(px(3.))
@@ -2464,7 +2499,6 @@ impl BlockNode {
                                         .child(
                                             div()
                                                 .pb(rems(0.25))
-                                                .text_sm()
                                                 .font_semibold()
                                                 .text_color(callout.variant().fg(cx))
                                                 .child(callout.title()),
