@@ -787,7 +787,7 @@ mod tests {
     use std::cell::RefCell;
 
     use gpui::{
-        AppContext as _, Entity, EventEmitter, FocusHandle, Focusable, TestAppContext,
+        AppContext as _, Entity, EventEmitter, FocusHandle, Focusable, Pixels, TestAppContext,
         VisualTestContext,
     };
     use gpui_base::dock::{
@@ -796,7 +796,10 @@ mod tests {
     };
 
     use super::*;
-    use crate::dock::{DockSkin, Panel, panel_handle, test_support::MeasuredProbe};
+    use crate::dock::{
+        DockSkin, Panel, panel_handle,
+        test_support::{HideableProbe, MeasuredProbe},
+    };
 
     struct Probe {
         focus_handle: FocusHandle,
@@ -1192,6 +1195,114 @@ mod tests {
              got {:?} of {window_height:?}",
             centre.get()
         );
+    }
+
+    /// Whichever slots of a split are hidden, the drawn ones fill it.
+    ///
+    /// `render_node` pins every slot but one to a fixed size and lets the
+    /// remaining one absorb whatever the container has spare. Picking that
+    /// slot by tree position alone picks a hidden one whenever the trailing
+    /// container's panels are all hidden — nothing draws there, nothing
+    /// grows, and the split stops short of its frame, showing a band of the
+    /// frame's own background under the last visible panel. Hiding a slot is
+    /// an everyday event: a panel that is only meaningful for some symbols
+    /// answers `visible` with `false` for the rest.
+    ///
+    /// Every subset is covered because the defect is positional: only the
+    /// cases that hide the trailing slot fail, and a test that hid one fixed
+    /// slot would pass against a fix that only special-cased that slot.
+    #[gpui::test]
+    fn a_split_fills_its_container_whichever_slots_are_hidden(cx: &mut TestAppContext) {
+        cx.update(|cx| {
+            crate::init(cx);
+        });
+        let heights: Vec<Rc<Cell<Pixels>>> = (0..3).map(|_| Rc::new(Cell::new(px(0.)))).collect();
+        let (area, cx) = cx.add_window_view(|window, cx| {
+            let skin = DockSkin::new(cx);
+            DockArea::new("skin", None, window, cx).with_renderer(skin)
+        });
+
+        let slots = heights.clone();
+        let probes = cx.update(|window, cx| {
+            let probes: Vec<_> = slots
+                .iter()
+                .map(|height| HideableProbe::new(height.clone(), cx))
+                .collect();
+            area.update(cx, |area, cx| {
+                area.set_dock(
+                    DockPlacement::Right,
+                    probes.iter().zip([260., 320., 200.]).fold(
+                        DockLayout::v_split(),
+                        |split, (probe, size)| {
+                            split.child(
+                                DockLayout::tabs().panel_view(panel_handle(probe.clone()), cx),
+                                Some(px(size)),
+                            )
+                        },
+                    ),
+                    window,
+                    cx,
+                );
+                area.set_dock_size(DockPlacement::Right, px(380.), window, cx);
+            });
+            probes
+        });
+        cx.run_until_parked();
+        let draw = |cx: &mut VisualTestContext| {
+            cx.update(|window, _| window.refresh());
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+        };
+        draw(cx);
+
+        let dock_height = cx.update(|window, _| window.viewport_size().height);
+        // Each slot spends a tab bar out of its height and the probe under it
+        // measures the rest, so the drawn slots account for the whole dock
+        // once one tab bar per drawn slot is added back.
+        let drawn: Pixels = heights.iter().map(|height| height.get()).sum();
+        let bar = (dock_height - drawn) / 3.;
+        assert!(
+            bar > px(0.) && bar < px(60.),
+            "the three slots fill the dock to begin with, one tab bar each; \
+             that leaves {bar:?} per slot of {dock_height:?}"
+        );
+
+        // Every subset except "all three hidden", which gives the whole node
+        // up to *its* parent and so has no container of its own to fill.
+        for hidden in 1..0b111u8 {
+            let shown = (0..3).filter(|slot| hidden & (1 << slot) == 0);
+            cx.update(|_, cx| {
+                for (slot, probe) in probes.iter().enumerate() {
+                    // A sentinel, so a slot that stopped drawing is not read
+                    // as one that kept the height it had.
+                    heights[slot].set(px(-1.));
+                    probe.update(cx, |probe, cx| {
+                        probe.set_visible(hidden & (1 << slot) == 0, cx)
+                    });
+                }
+            });
+            cx.run_until_parked();
+            draw(cx);
+
+            let mut count = 0;
+            let mut total = px(0.);
+            for slot in shown {
+                assert_ne!(
+                    heights[slot].get(),
+                    px(-1.),
+                    "hiding {hidden:03b}: slot {slot} is shown and must draw"
+                );
+                count += 1;
+                total += heights[slot].get();
+            }
+            let empty = dock_height - total - bar * count as f32;
+            assert!(
+                empty.abs() < px(1.),
+                "hiding {hidden:03b}: the drawn slots must take the hidden \
+                 ones' space between them; they left {empty:?} of \
+                 {dock_height:?} empty"
+            );
+        }
     }
 
     /// The old dock installed `ToggleZoom` and `ClosePanel` on the tab panel

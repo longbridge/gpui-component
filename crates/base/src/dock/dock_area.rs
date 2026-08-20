@@ -1393,17 +1393,26 @@ impl DockArea {
                     Axis::Horizontal => h_resizable(("dock-split", node.id().as_u64())),
                     Axis::Vertical => v_resizable(("dock-split", node.id().as_u64())),
                 };
+                // A container whose every panel is hidden must not keep
+                // occupying its slot. No renderer hook could supply this:
+                // only the area can see the panels behind a node.
+                let shown: Vec<bool> = children
+                    .iter()
+                    .map(|child| self.is_node_visible(child, cx))
+                    .collect();
+                // The slot that absorbs the leftover has to be one that is
+                // actually drawn. A hidden slot renders nothing and grows
+                // nothing, so making it the flexible one leaves every drawn
+                // slot rigid and the split ends short of its container — the
+                // empty strip this picks the *last shown* slot to avoid.
+                let grows = shown.iter().rposition(|shown| *shown);
                 let panels: Vec<_> = children
                     .iter()
                     .zip(sizes.iter())
                     .enumerate()
                     .map(|(ix, (child, size))| {
                         resizable_panel()
-                            // A container whose every panel is hidden must
-                            // not keep occupying its slot. No renderer hook
-                            // could supply this: only the area can see the
-                            // panels behind a node.
-                            .visible(self.is_node_visible(child, cx))
+                            .visible(shown[ix])
                             .child(self.render_node(child, window, cx))
                             // `flex_none` is what makes the size stick.
                             // `ResizablePanel` sets `flex_grow: 1` on itself,
@@ -1411,7 +1420,7 @@ impl DockArea {
                             // as a flex-basis and still absorb an equal share
                             // of the leftover — a 200px sidebar rendering
                             // 1075px wide in a 1950px split.
-                            // The trailing slot absorbs container growth. A
+                            // The growth slot absorbs container growth. A
                             // drag records every measured size as pixels; if
                             // all of them became `flex_none`, a later viewport
                             // resize would leave an empty strip after the
@@ -1419,7 +1428,7 @@ impl DockArea {
                             .when_some(*size, |panel, size| {
                                 panel
                                     .size(size)
-                                    .when(ix + 1 < children.len(), |panel| panel.flex_none())
+                                    .when(Some(ix) != grows, |panel| panel.flex_none())
                             })
                     })
                     .collect();
