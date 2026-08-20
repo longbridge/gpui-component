@@ -77,6 +77,18 @@ And this is next blockquote
 > [!CAUTION]
 > Advises about certain risks or negative potential outcomes.
 
+A callout holds blocks, not just one line of text.
+
+> [!TIP]
+> Anything fits inside: **bold**, a [link](https://gpui.rs), and `inline code`.
+>
+> 1. Ordered items keep their numbering
+> 2. And their nesting
+>
+> ```rs
+> const FOO: &str = "bar";
+> ```
+
 ## Code block
 
 #### Rust
