@@ -408,7 +408,7 @@ pub struct InputPresentation {
     code_editor: bool,
     text_align: TextAlign,
     placeholder: SharedString,
-    value: String,
+    value: Rope,
     mask_placeholder: Option<String>,
 }
 
@@ -456,7 +456,7 @@ impl InputPresentation {
         &self.placeholder
     }
 
-    pub fn value(&self) -> &str {
+    pub fn value(&self) -> &Rope {
         &self.value
     }
 
@@ -498,7 +498,7 @@ impl<M: InputModeKind> InputBaseState<M> {
             code_editor: self.is_code_editor(),
             text_align: self.text_align,
             placeholder: self.placeholder.clone(),
-            value: self.text.to_string(),
+            value: self.text.clone(),
             mask_placeholder: self.mask_pattern.placeholder(),
         }
     }
