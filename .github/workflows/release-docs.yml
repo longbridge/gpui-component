@@ -57,11 +57,6 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-wasm-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Build Story Web (WASM)
-        working-directory: crates/story-web
-        run: |
-          make build-prod
-
       - name: Build GPUI Base examples (WASM)
         working-directory: crates/base/examples/wasm
         run: |
@@ -76,8 +71,6 @@ jobs:
 
       - name: Copy WASM apps to Website
         run: |
-          mkdir -p website/.vitepress/dist/gallery
-          cp -r crates/story-web/www/dist/* website/.vitepress/dist/gallery/
           mkdir -p website/.vitepress/dist/examples/base
           cp -r crates/base/examples/wasm/www/dist/* website/.vitepress/dist/examples/base/
 

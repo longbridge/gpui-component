@@ -4,21 +4,20 @@
 [![Documentation](https://docs.rs/gpui-base/badge.svg)](https://docs.rs/gpui-base)
 [![License](https://img.shields.io/crates/l/gpui-base.svg)](../../LICENSE-APACHE)
 
-`gpui-base` is the foundation layer of [GPUI Component](https://github.com/longbridge/gpui-component), built on [GPUI](https://gpui.rs). It is intended for GPUI applications that want to build and own their own design systems. It provides interaction behavior, focus management, accessibility semantics, animation, virtual lists, theme tokens, and other foundational capabilities without imposing a visual style.
+`gpui-base` is the reusable foundation of the [GPUI Component](https://github.com/longbridge/gpui-component) Rust desktop application framework, built on [GPUI](https://gpui.rs). It is intended for applications that want to build and own their own design systems. It provides interaction behavior, focus management, accessibility semantics, animation, virtual lists, theme tokens, and other foundational capabilities without imposing a visual style.
 
 > Use [`gpui-component`](https://crates.io/crates/gpui-component) if you want ready-to-use components with a complete visual design. Use `gpui-base` if your application should own its component source and visual styles while reusing stable, shared behavior.
 
 ## Where It Fits in GPUI Component
 
-`gpui-component` is the project and ecosystem brand. `gpui-base` is its independently reusable foundation crate:
+GPUI Component is the framework and project brand. Its currently implemented
+architecture has two directly usable layers:
 
 ```text
-gpui-component
-├── gpui-base          Interaction, state, and infrastructure (this crate)
-├── gpui-component     Fully styled components and compatibility facade
-├── registry           Component source copied into and owned by applications
-├── blocks             Higher-level UI compositions
-└── CLI                Project initialization and component installation
+application
+├── gpui-component     Complete, styled framework experience
+└── custom UI          Application-owned design system
+         └── gpui-base Interaction, state, and infrastructure (this crate)
 ```
 
 Dependencies always point from higher layers toward the foundation: `gpui-base` does not depend on `gpui-component`. Existing applications can continue using `gpui-component`; a direct dependency on `gpui-base` is only necessary when building custom components or a design system.
@@ -31,7 +30,7 @@ The GPUI Component ecosystem follows the same layering idea as [shadcn](https://
 | --- | --- |
 | [GPUI](https://gpui.rs) | HTML + Tailwind CSS |
 | `gpui-base` | [Base UI](https://base-ui.com) |
-| GPUI Component | shadcn |
+| `gpui-component` | shadcn |
 | `crates/ui` in GPUI Component | shadcn's default UI |
 
 ## Design Principles

@@ -46,7 +46,7 @@ DescriptionList::horizontal()
 // Vertical layout
 DescriptionList::vertical()
     .item("Name", "GPUI Component", 1)
-    .item("Description", "A comprehensive UI component library", 1)
+    .item("Description", "A comprehensive Rust desktop framework", 1)
 ```
 
 ### Multiple Columns with Spans
@@ -147,7 +147,7 @@ DescriptionList::new()
         DescriptionItem::Separator, // Full-width separator
 
         DescriptionItem::new("Description").value(
-            "A comprehensive UI component library for building desktop applications with GPUI"
+            "A comprehensive Rust desktop framework built on GPUI"
         ).span(3),
 
         DescriptionItem::new("Repository").value(
