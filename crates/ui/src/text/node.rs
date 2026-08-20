@@ -15,7 +15,7 @@ use markdown::mdast;
 use ropey::Rope;
 
 use crate::{
-    ActiveTheme as _, Icon, IconName, StyledExt,
+    ActiveTheme as _, Icon, IconName, Sizable as _, Size, StyledExt,
     alert::AlertVariant,
     h_flex,
     highlighter::{HighlightTheme, LanguageRegistry, SyntaxHighlighter},
@@ -2435,29 +2435,38 @@ impl BlockNode {
                     .pb(mb)
                     .map(|this| match callout {
                         // A callout is an `Alert` rendered from Markdown, so it
-                        // borrows the alert paddings, radius, and variant colors.
+                        // borrows the alert paddings, radius, and border color.
+                        // It stays quieter than an `Alert` though: only the icon
+                        // and the title carry the variant color, and there is no
+                        // filled background for the body, whose own code blocks
+                        // and tables bring backgrounds of their own.
                         Some(callout) => this.child(
                             h_flex()
                                 .id(("callout", ix))
                                 .w_full()
                                 .items_start()
-                                .gap(px(12.))
-                                .px(px(16.))
+                                .gap(px(10.))
+                                .px(px(12.))
                                 .py(px(10.))
                                 .rounded(cx.theme().radius)
                                 .border_1()
                                 .border_color(callout.variant().border_color(cx))
-                                .bg(callout.variant().bg(cx))
-                                .text_color(callout.variant().fg(cx))
-                                .child(div().mt(px(5.)).child(Icon::new(callout.icon())))
+                                .child(
+                                    div()
+                                        .mt(px(3.))
+                                        .text_color(callout.variant().fg(cx))
+                                        .child(Icon::new(callout.icon()).with_size(Size::Small)),
+                                )
                                 .child(
                                     v_flex()
                                         .flex_1()
                                         .overflow_hidden()
                                         .child(
                                             div()
-                                                .pb(node_cx.style.paragraph_gap)
+                                                .pb(rems(0.25))
+                                                .text_sm()
                                                 .font_semibold()
+                                                .text_color(callout.variant().fg(cx))
                                                 .child(callout.title()),
                                         )
                                         .children(children),
