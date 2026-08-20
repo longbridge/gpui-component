@@ -8,29 +8,36 @@
 
 [![Build Status](https://github.com/longbridge/gpui-component/actions/workflows/ci.yml/badge.svg)](https://github.com/longbridge/gpui-component/actions/workflows/ci.yml) [![Docs](https://docs.rs/gpui-component/badge.svg)](https://docs.rs/gpui-component/) [![Crates.io](https://img.shields.io/crates/v/gpui-component.svg)](https://crates.io/crates/gpui-component)
 
-UI components for building fantastic desktop applications using [GPUI](https://gpui.rs).
+Build fantastic, high-performance desktop apps with Rust and [GPUI](https://gpui.rs).
+
+GPUI Component is a comprehensive Rust desktop application framework. It
+combines a production-ready UI system with application-grade data, layout, and
+editing capabilities, all built on a reusable foundation of behavior, state,
+and infrastructure.
 
 ## Features
 
-- **Richness**: 60+ cross-platform desktop UI components.
-- **Native**: Inspired by macOS and Windows controls, combined with shadcn/ui design for a modern experience.
-- **Ease of Use**: Stateless `RenderOnce` components, simple and user-friendly.
-- **Customizable**: Built-in `Theme` and `ThemeColor`, supporting multi-theme and variable-based configurations.
-- **Versatile**: Supports sizes like `xs`, `sm`, `md`, and `lg`.
-- **Flexible Layout**: Dock layout for panel arrangements, resizing, and freeform (Tiles) layouts.
-- **High Performance**: Virtualized Table and List components for smooth large-data rendering.
-- **Content Rendering**: Native support for Markdown and simple HTML.
-- **Charting**: Built-in charts for visualizing your data.
-- **Editor**: High performance code editor (Up to 200K lines for stable performance) with LSP (diagnostics, completion, hover, etc).
-- **Syntax Highlighting**: Syntax highlighting for editor and markdown components using Tree Sitter.
+- **60+ UI Components**: Forms, navigation, overlays, feedback, layout, and more, with polished interactions and productive defaults.
+- **Production Ready**: Used to build Longbridge Pro from day one and continuously refined in a publicly shipped commercial desktop application.
+- **Native Feel**: Modern controls inspired by macOS and Windows, backed by semantic themes and multiple sizes.
+- **120 FPS**: GPU-accelerated interfaces that remain smooth under load.
+- **Data Tables**: Virtual scrolling, fixed and resizable columns, sorting, and cell selection across hundreds of thousands of rows.
+- **Virtual Lists**: Render only the visible range, including lists whose items have different sizes.
+- **Code Editor**: Stable performance at 200K lines with Tree-sitter highlighting and LSP diagnostics, completion, and hover.
+- **Dock Layout**: Resizable panels, draggable tabs, nested splits, edge docks, and serializable freeform Tiles.
+- **Rich Content**: Native Markdown and HTML rendering, syntax highlighting, and built-in charts.
+- **Design Freedom**: Use the complete visual system or build your own on the behavior and infrastructure in `gpui-base`.
+- **Cross Platform**: Ship one Rust codebase to macOS, Windows, and Linux.
 
-## Ecosystem Architecture
+## Framework Architecture
 
 ### Two layers. One ecosystem.
 
-Choose the layer that matches how much of the interface you want to own.
+Use `gpui-component` to keep the application coherent with one complete visual
+and interaction system. Use `gpui-base` when your product needs to create and
+own that system itself.
 
-| **GPUI Component**               | **gpui-base**                                 |
+| **`gpui-component`**             | **`gpui-base`**                               |
 | -------------------------------- | --------------------------------------------- |
 | Complete, styled components      | Unstyled behavior and infrastructure          |
 | Productive defaults with theming | Full control over structure and visual design |
@@ -60,8 +67,8 @@ Choose the layer that matches how much of the interface you want to own.
 
 > **Behavior belongs to the foundation. Presentation belongs to the application.**
 
-Use **GPUI Component** when you want polished controls ready to ship. Build on
-**gpui-base** when your application should own its component source, layout,
+Use **`gpui-component`** when you want polished controls ready to ship. Build on
+**`gpui-base`** when your application should own its component source, layout,
 styling, and motion while reusing difficult interaction behavior.
 
 The layering follows the same separation that makes the
@@ -71,15 +78,17 @@ The layering follows the same separation that makes the
 | ------------------------------------ | ------------------------------- |
 | [GPUI](https://gpui.rs)              | HTML + Tailwind CSS             |
 | [`gpui-base`](crates/base/README.md) | [Base UI](https://base-ui.com)  |
-| GPUI Component                       | shadcn's styled component layer |
+| `gpui-component`                     | shadcn's styled component layer |
 
 [Explore the architecture →](docs/ARCHITECTURE.md)
 
 ## Showcase
 
-https://longbridge.github.io/gpui-component/gallery/
+GPUI Component has powered [Longbridge Pro](https://longbridge.com/desktop)
+from day one. The framework is extracted from the demands of a publicly shipped
+commercial desktop application rather than designed in isolation.
 
-Here is the first application: [Longbridge Pro](https://longbridge.com/desktop), built using GPUI Component.
+> **GPUI provides the rendering foundation. Longbridge provides the production foundation.**
 
 <img width="1763" alt="Image" src="https://github.com/user-attachments/assets/e1ecb9c3-2dd3-431e-bd97-5a819c30e551" />
 
@@ -180,24 +189,6 @@ cargo run -p system_monitor
 # Window title customization
 cargo run -p window_title
 ```
-
-### Web Gallery (WASM)
-
-You can also run the gallery in a web browser using WASM:
-
-```bash
-cd crates/story-web
-
-# Install dependencies (first time only)
-make install
-
-# Build and run development server
-make dev
-```
-
-The gallery will be available at http://localhost:3000
-
-For more details, see [crates/story-web/README.md](crates/story-web/README.md).
 
 Check out [CONTRIBUTING.md](CONTRIBUTING.md) for more details.
 

@@ -1,27 +1,30 @@
 ---
 title: Introduction
-description: Rust GUI components for building fantastic cross-platform desktop application by using GPUI.
+description: A comprehensive Rust framework for building fantastic, high-performance desktop applications with GPUI.
 ---
 
 # GPUI Component Introduction
 
-GPUI Component is a Rust UI component library for building fantastic desktop applications using [GPUI](https://gpui.rs).
+GPUI Component is a comprehensive Rust desktop application framework built on [GPUI](https://gpui.rs).
 
-GPUI Component is a comprehensive UI component library for building fantastic desktop applications using [GPUI](https://gpui.rs). It provides 60+ cross-platform components with modern design, theming support, and high performance.
+It combines a complete UI system with application-grade data, layout, content,
+and editing capabilities. Use `gpui-component` for polished controls with one
+coherent visual language, or build your own design system on the reusable
+behavior and infrastructure in `gpui-base`.
 
 ## Features
 
-- **Richness**: 60+ cross-platform desktop UI components
-- **Native**: Inspired by macOS and Windows controls, combined with shadcn/ui design
-- **Ease of Use**: Stateless `RenderOnce` components, simple and user-friendly
-- **Customizable**: Built-in `Theme` and `ThemeColor`, supporting multi-theme
-- **Versatile**: Supports sizes like `xs`, `sm`, `md`, and `lg`
-- **Flexible Layout**: Dock layout for panel arrangements, resizing, and freeform (Tiles) layouts
-- **High Performance**: Virtualized Table and List components for smooth large-data rendering
-- **Content Rendering**: Native support for Markdown and simple HTML
-- **Charting**: Built-in charts for visualization
-- **Editor**: High performance code editor with LSP support
-- **Syntax Highlighting**: Using Tree Sitter
+- **60+ UI Components**: Forms, navigation, overlays, feedback, layout, and more.
+- **Production Ready**: Used to build Longbridge Pro from day one and refined in a publicly shipped commercial desktop application.
+- **Native Feel**: Modern controls inspired by macOS and Windows.
+- **120 FPS**: GPU-accelerated interfaces that remain smooth under load.
+- **Data Tables**: Virtual scrolling, fixed and resizable columns, sorting, and cell selection across hundreds of thousands of rows.
+- **Virtual Lists**: Render only the visible range, including differently sized items.
+- **Code Editor**: 200K lines, Tree-sitter highlighting, diagnostics, completion, and hover.
+- **Dock Layout**: Resizable panels, draggable tabs, nested splits, edge docks, and freeform Tiles.
+- **Rich Content**: Native Markdown and HTML, syntax highlighting, and charts.
+- **Design Freedom**: Use the complete visual system or build your own on `gpui-base`.
+- **Cross Platform**: Ship one Rust codebase to macOS, Windows, and Linux.
 
 ## Quick Example
 

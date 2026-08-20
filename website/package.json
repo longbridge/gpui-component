@@ -20,7 +20,7 @@
     "vitepress-sidebar": "^1.18.0"
   },
   "scripts": {
-    "dev": "make -C ../crates/story-web build && make -C ../crates/base/examples/wasm build && bun --bun vitepress dev",
+    "dev": "make -C ../crates/base/examples/wasm build && bun --bun vitepress dev",
     "build": "bun --bun vitepress build",
     "preview": "bun --bun vitepress preview"
   },

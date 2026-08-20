@@ -10,15 +10,14 @@ single screen, what this project is — and then prove it is real.
 ## Principles
 
 1. **Say what it is, immediately.** The headline states the product in plain
-   language ("Build native desktop apps in Rust."). Positioning that only makes
+   language ("Build fantastic, high-performance desktop apps."). Positioning that only makes
    sense to someone who already knows the project — architecture layers,
    "ship fast or own everything" — belongs further down the page, not in the
    hero.
-2. **Show the real thing, never a mock.** The page embeds the actual
-   WebAssembly build of the gallery. No greyed-out wireframe placeholders, no
-   invented product screenshots. A fake UI panel on the homepage of a UI
-   library reads as an admission that there is nothing to show, and a
-   convincing one gets mistaken for a product the project does not ship.
+2. **Show the real thing, never a mock.** Component documentation embeds live
+   WebAssembly examples compiled from the same Rust sources as the native
+   examples. Homepage capability previews are deliberately diagrams, not fake
+   product screenshots.
 3. **Verifiable facts over adjectives.** Star count, licence, platforms, real
    type names (`DockArea`, `Rope`, `Tiles`), real numbers from the README (120
    FPS, 200K lines). A developer judges credibility from specifics.
@@ -125,9 +124,9 @@ Two constraints that are easy to get wrong:
   height, and the hamburger opens onto nothing.
 - The hero is two columns: copy, and a macOS window holding a real snippet from
   the Quick Start guide. Its vertical rhythm is 20 / 20 / 24 / 24 / 20 px.
-- **The WASM gallery must not be in the first screen.** It is a full
-  WebAssembly build and takes time to load; it sits in the band below the hero
-  and mounts through an `IntersectionObserver`.
+- Live WASM examples belong to their component documentation, next to the API
+  and guidance they demonstrate. The homepage links into that documentation
+  instead of maintaining a separate gallery surface.
 - Cards in a row must align internally, not just at their outer edges: absorb
   the slack after the description (`margin-bottom: auto`, or `min-height` when
   two cards must match) so chips, snippets and previews line up. Equal-length
@@ -159,8 +158,8 @@ The frame is: a hairline outer stroke, an inner top highlight, layered soft
 shadows, and real traffic lights (`#ff5f57`, `#febc2e`, `#28c840`). The title
 is centred and independent of the lights, as macOS does.
 
-Used by the hero snippet, the gallery band and `ComponentExample.vue` on every
-component page, so the three never diverge.
+Used by the hero snippet and `ComponentExample.vue` on every component page, so
+the two never diverge.
 
 **Do not put document tabs inside the window chrome.** A tab strip in the
 titlebar fights the traffic lights, and a browser-style tab row below it is not
@@ -192,7 +191,9 @@ The card carries **identity only** — mark, product name, tagline, and three
 facts that do not expire. It must not carry a headline: the platform draws the
 page's own `og:title` and description beside the image, and a baked-in headline
 competes with them. For the same reason the facts avoid the star count, which a
-static image cannot keep current.
+static image cannot keep current. Its content is shifted toward the top of the
+frame, leaving the bottom clear for source labels and other overlays added by
+social clients.
 
 Per-page `og:title`, `og:description`, `og:url` and the canonical link come from
 `transformPageData` in `config.mts`. Note it uses `||`, not `??`: the home page
@@ -222,9 +223,8 @@ through motion alone.
 - Landing-page copy lives in one bilingual `copy` object in `index.vue`. Both
   locales must be updated together, matching the site-wide rule that
   `website/docs/` and `website/zh-CN/docs/` stay in sync.
-- Gallery demos should be the components that demonstrate density and
-  capability. A demo that looks trivial or renders without highlighting
-  undersells the library and should be swapped out.
+- Live examples should demonstrate the documented component's real behavior
+  and use the same source as its native example.
 
 ## Files
 
