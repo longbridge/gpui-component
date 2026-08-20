@@ -1334,7 +1334,7 @@ mod tests {
 
         // Swap the text without reparsing: the tree is now stale and its node
         // offsets point into the middle of the new text's CJK characters.
-        let new = Rope::from("# 成交量提醒策略\n中文注释，*强调* 与 `代码`\n");
+        let new = Rope::from("# 你好，世界\n你好，*世界* 与 `代码`\n");
         highlighter.edit_tree(None, &new);
 
         let theme = HighlightTheme::default_dark();

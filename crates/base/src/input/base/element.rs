@@ -2942,23 +2942,23 @@ mod tests {
         };
         let lens = |runs: &[TextRun]| runs.iter().map(|run| run.len).collect::<Vec<_>>();
 
-        // "成交量" is 9 bytes; boundaries at 0, 3, 6, 9.
-        let text = "成交量";
+        // "你好，世界" is 15 bytes; boundaries at 0, 3, 6, 9, 12, 15.
+        let text = "你好，世界";
 
         // Aligned runs pass through untouched.
-        assert_eq!(align_runs_to_char_boundaries(text, &runs(&[3, 6])), None);
+        assert_eq!(align_runs_to_char_boundaries(text, &runs(&[3, 12])), None);
 
         // A mid-char boundary (4) snaps up to the next boundary (6).
-        let aligned = align_runs_to_char_boundaries(text, &runs(&[4, 5])).unwrap();
-        assert_eq!(lens(&aligned), vec![6, 3]);
+        let aligned = align_runs_to_char_boundaries(text, &runs(&[4, 11])).unwrap();
+        assert_eq!(lens(&aligned), vec![6, 9]);
 
         // Several boundaries inside the same char collapse into one run.
-        let aligned = align_runs_to_char_boundaries(text, &runs(&[1, 1, 7])).unwrap();
-        assert_eq!(lens(&aligned), vec![3, 6]);
+        let aligned = align_runs_to_char_boundaries(text, &runs(&[1, 1, 13])).unwrap();
+        assert_eq!(lens(&aligned), vec![3, 12]);
 
         // Overshooting runs are capped at the text length.
         let aligned = align_runs_to_char_boundaries(text, &runs(&[3, 20])).unwrap();
-        assert_eq!(lens(&aligned), vec![3, 6]);
+        assert_eq!(lens(&aligned), vec![3, 12]);
 
         // Undershooting runs keep the shortfall (the tail is left unshaped,
         // matching `runs_for_range` clipping).
