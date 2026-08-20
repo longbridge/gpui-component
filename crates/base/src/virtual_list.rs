@@ -31,9 +31,7 @@ use crate::{AxisExt, InteractiveElementExt as _};
 struct VirtualListScrollHandleState {
     axis: Axis,
     items_count: usize,
-    /// The content bounds size (excluding padding and border) of the list in
-    /// the last frame, used to measure the sample item with a definite
-    /// cross-axis constraint.
+    /// Content bounds size (excluding padding and border) from the last frame.
     last_content_size: Option<Size<Pixels>>,
     pub deferred_scroll_to_item: Option<DeferredScrollToItem>,
 }
@@ -384,14 +382,10 @@ impl Element for VirtualList {
         let rem_size = window.rem_size();
         let font_size = window.text_style().font_size.to_pixels(rem_size);
         let mut size_layout = ItemSizeLayout::default();
-        // For vertical lists, measure the sample item with the last known
-        // content width, so relative widths and text truncation resolve the
-        // same way as the visible items (which are laid out at the content
-        // bounds width in prepaint). An unconstrained (`MinContent`) measure
-        // lets a single long non-wrapping text report its full width, which
-        // then becomes a phantom horizontal scroll range with blank space.
-        // Items wider than the viewport (e.g. with `min_w`) still measure
-        // larger and keep the horizontal scrolling.
+        // Measure vertical lists at the last known content width so relative
+        // widths and text truncation resolve like the visible rows; an
+        // unconstrained measure would turn one long non-wrapping text into a
+        // phantom horizontal scroll range.
         let list_width = if self.axis.is_vertical() {
             self.scroll_handle
                 .state
