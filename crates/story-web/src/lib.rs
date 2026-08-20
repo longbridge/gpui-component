@@ -65,7 +65,9 @@ pub fn run(story: Option<String>, dark: Option<bool>) -> Result<(), JsValue> {
     #[cfg(target_family = "wasm")]
     let app = gpui_platform::single_threaded_web();
 
-    let app = app.with_assets(Assets::new("/gpui-component/gallery"));
+    let app = app.with_assets(Assets::new(
+        "https://longbridge.github.io/gpui-component/gallery/",
+    ));
     let launch = move |cx: &mut App| {
         gpui_component_story::init(cx);
 
