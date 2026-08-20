@@ -223,6 +223,17 @@ Text input system based on Rope data structure:
 - When a PR changes the public API of `crates/ui`, add a `## Breaking Changes`
   section with `diff` blocks showing the old and new usage. See PR #2691 and
   `.claude/skills/gpui-component-dev/references/pr-description.md`.
+- Avoid `Kind` as a type-name suffix. It says an enum classifies something
+  without saying what it classifies, and carries no meaning a reader could not
+  already infer from `enum`. Name the type after what its variants *are*
+  instead. Keep `Kind` only when no honest name covers the variant set —
+  `NodeKind`'s variants straddle two levels (`Split` is an interior node,
+  `Tabs` and `Tiles` are leaves), and every domain word for the leaf level
+  (`Pane`, most of all) would misdescribe `Split`; a vaguer name is better
+  than a precise wrong one. Prefer confining such a type to `pub(crate)`.
+  This governs new code; existing `Kind` names are not a rewrite target on
+  their own, and names owned by external crates (`CodeActionKind`,
+  `CompletionItemKind`, `WindowKind`) keep their upstream spelling.
 
 ## Icon System
 
