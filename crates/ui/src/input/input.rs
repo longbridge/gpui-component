@@ -486,7 +486,7 @@ impl RenderOnce for Input {
         // accessibility tree, so skip it when no client is listening.
         let accessibility_value = (window.is_a11y_active()
             && exposes_accessibility_value(presentation.is_masked(), content_type))
-        .then(|| presentation.value().to_owned());
+        .then(|| state.text(cx).to_string());
         let input_focused =
             presentation.focus_handle().is_focused(window) && !presentation.is_disabled();
         if input_focused {
@@ -523,7 +523,7 @@ impl RenderOnce for Input {
         let show_clear_button = self.cleanable
             && presentation.is_editable()
             && !presentation.is_loading()
-            && !presentation.value().is_empty()
+            && state.text(cx).len() > 0
             && !presentation.is_multi_line();
         let has_suffix =
             suffix.is_some() || presentation.is_loading() || self.mask_toggle || show_clear_button;
