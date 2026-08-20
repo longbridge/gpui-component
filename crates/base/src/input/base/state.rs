@@ -408,7 +408,6 @@ pub struct InputPresentation {
     code_editor: bool,
     text_align: TextAlign,
     placeholder: SharedString,
-    value: Rope,
     mask_placeholder: Option<String>,
 }
 
@@ -456,10 +455,6 @@ impl InputPresentation {
         &self.placeholder
     }
 
-    pub fn value(&self) -> &Rope {
-        &self.value
-    }
-
     /// The placeholder derived from the mask pattern, e.g.: `(___) ___-____`.
     pub fn mask_placeholder(&self) -> Option<&str> {
         self.mask_placeholder.as_deref()
@@ -498,7 +493,6 @@ impl<M: InputModeKind> InputBaseState<M> {
             code_editor: self.is_code_editor(),
             text_align: self.text_align,
             placeholder: self.placeholder.clone(),
-            value: self.text.clone(),
             mask_placeholder: self.mask_pattern.placeholder(),
         }
     }
@@ -1095,13 +1089,19 @@ impl<M: InputModeKind> InputBaseState<M> {
         self
     }
 
-    /// Return the value of the input field.
+    /// Return the value of the input field as an owned string.
+    ///
+    /// The string is materialized on each call. See [`Self::text`] for the
+    /// [`Rope`] the state owns, which is borrowed and costs nothing to read.
     pub fn value(&self) -> SharedString {
         SharedString::new(self.text.to_string())
     }
 
     /// Return the portion of the value within the input field that
-    /// is selected by the user
+    /// is selected by the user, as an owned string.
+    ///
+    /// The string is materialized on each call. See [`Self::selected_text`]
+    /// for the same selection borrowed out of the [`Rope`] the state owns.
     pub fn selected_value(&self) -> SharedString {
         SharedString::new(self.selected_text().to_string())
     }
@@ -1120,6 +1120,9 @@ impl<M: InputModeKind> InputBaseState<M> {
     pub fn prepare(&mut self, _: &mut Window, _: &mut Context<Self>) {}
 
     /// Return the text [`Rope`] of the input field.
+    ///
+    /// Borrowed from the state, so reading even a large document copies
+    /// nothing. See [`Self::value`] when an owned string is wanted.
     pub fn text(&self) -> &Rope {
         &self.text
     }
@@ -2507,7 +2510,11 @@ impl<M: InputModeKind> InputBaseState<M> {
         }
     }
 
-    pub(super) fn selected_text(&self) -> RopeSlice<'_> {
+    /// Return the selected portion of the text, borrowed out of the [`Rope`]
+    /// the state owns.
+    ///
+    /// See [`Self::selected_value`] when an owned string is wanted.
+    pub fn selected_text(&self) -> RopeSlice<'_> {
         let range_utf16 = self.range_to_utf16(&self.selected_range.into());
         let range = self.range_from_utf16(&range_utf16);
         self.text.slice(range)
