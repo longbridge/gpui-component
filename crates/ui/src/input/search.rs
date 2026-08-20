@@ -73,6 +73,11 @@ impl<M: crate::input::overlay::OverlayMode> SearchPanel<M> {
         self.session = session.clone();
     }
 
+    /// The query the panel's search input currently holds.
+    pub(super) fn query(&self, cx: &App) -> gpui::SharedString {
+        self.search_input.read(cx).value()
+    }
+
     pub(crate) fn new(
         editor: Entity<InputBaseState<M>>,
         window: &mut Window,
