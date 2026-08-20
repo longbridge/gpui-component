@@ -1,5 +1,6 @@
 use gpui::{App, Entity, FocusHandle, Focusable as _, SharedString, Window};
 use gpui_base::OtpState;
+use ropey::Rope;
 
 use super::{EditorState, InputState, TextareaState};
 use crate::Root;
@@ -57,6 +58,13 @@ impl TextInputState {
 
     pub(crate) fn presentation(&self, cx: &App) -> gpui_base::input::InputPresentation {
         dispatch!(self, |state| state.read(cx).presentation())
+    }
+
+    /// The text of the input, borrowed from the state that owns it.
+    ///
+    /// The state holds the only copy; nothing on the render path snapshots it.
+    pub(crate) fn text<'a>(&self, cx: &'a App) -> &'a Rope {
+        dispatch!(self, |state| state.read(cx).text())
     }
 
     pub(crate) fn focus(&self, window: &mut Window, cx: &mut App) {

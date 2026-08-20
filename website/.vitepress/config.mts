@@ -181,14 +181,14 @@ const sharedThemeConfig = {
 const SITE_URL = "https://longbridge.github.io/gpui-component";
 const SITE_TITLE = "GPUI Component";
 const SITE_DESCRIPTION =
-  "UI components for building fantastic desktop applications in Rust, using GPUI.";
+  "A comprehensive Rust framework for building fantastic, high-performance desktop apps with GPUI.";
 
 // https://vitepress.dev/reference/site-config
 const config: UserConfig = {
   title: "GPUI Component",
   base: "/gpui-component/",
   description:
-    "Rust GUI components for building fantastic cross-platform desktop application by using GPUI.",
+    "A comprehensive Rust framework for building fantastic, high-performance desktop apps with GPUI.",
   cleanUrls: true,
   head: [
     // One icon link, not a `prefers-color-scheme` pair: the site's own

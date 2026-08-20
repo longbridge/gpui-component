@@ -34,6 +34,7 @@ pub mod clipboard;
 pub mod collapsible;
 pub mod color_picker;
 pub mod combobox;
+pub mod command;
 pub mod description_list;
 pub mod dialog;
 pub mod dock;
@@ -89,12 +90,12 @@ pub use element_ext::*;
 pub use global_state::GlobalState;
 pub use gpui_base::animation;
 pub(crate) use gpui_base::measurement_enabled as measure_enable;
+#[doc(hidden)]
+pub(crate) use gpui_base::resize_handle;
 pub use gpui_base::{
     AxisExt, Edges, FocusTrapElement, InteractiveElementExt, LengthExt, Measure, OngoingScrollExt,
     Placement, Side, measure, measure_if,
 };
-#[doc(hidden)]
-pub(crate) use gpui_base::{PANEL_MIN_SIZE, resize_handle};
 pub use gpui_base::{
     ResizablePanel, ResizablePanelEvent, ResizablePanelGroup, ResizableState, h_resizable,
     resizable_panel, v_resizable,
@@ -130,6 +131,8 @@ pub fn init(cx: &mut App) {
     dock::init(cx);
     sheet::init(cx);
     list::init(cx);
+    command::init(cx);
+    notification::init(cx);
     popover::init(cx);
     menu::init(cx);
     table::init(cx);

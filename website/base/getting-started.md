@@ -58,7 +58,7 @@ Keep each `ElementId` stable across renders so GPUI can preserve element and foc
 The examples used by this website also run as a native GPUI application:
 
 ```sh
-cargo run -p gpui-base --example base_components -- button
+cargo run -p gpui-base --example components -- button
 ```
 
 Replace `button` with a primitive slug from the [primitive catalog](./primitives/index.md). The website compiles the same showcase for `wasm32-unknown-unknown` and loads it on each primitive page.

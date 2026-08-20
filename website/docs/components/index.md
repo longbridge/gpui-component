@@ -63,11 +63,13 @@ collapsed: false
 ### Advanced Components
 
 - [Calendar](calendar) - Calendar display and navigation
+- [Command](command) - Command palette for search and quick actions
 - [Chart](chart) - Data visualization charts (Line, Bar, Area, Pie, Candlestick)
 - [List](list) - List display with items
 - [Menu](menu) - Menu and context menu and dropdown menu.
 - [Settings](settings) - Settings UI
 - [DataTable](data-table) - High-performance data tables
+- [Dock](/docs/dock) - Production-ready dock layouts with tabs, splits, and persistent state
 - [Tabs](tabs) - Tabbed interface
 - [Tree](tree) - Hierarchical tree data display
 - [VirtualList](virtual-list) - Virtualized list for large datasets

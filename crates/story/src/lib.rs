@@ -9,7 +9,11 @@ use gpui_component::{
     ActiveTheme, IconName, Root, Sizable as _, Size as ComponentSize, StyledExt as _,
     TITLE_BAR_HEIGHT, TitleBar, WindowExt,
     button::Button,
-    dock::{Panel, PanelControl, PanelEvent, PanelInfo, PanelState, TitleStyle, register_panel},
+    command::{Command, CommandEntry, CommandState},
+    dock::{
+        BasePanel, Panel, PanelControl, PanelEvent, PanelInfo, PanelState, TitleStyle,
+        panel_handle, register_panel,
+    },
     group_box::{GroupBox, GroupBoxVariants as _},
     h_flex,
     menu::PopupMenu,
@@ -21,7 +25,7 @@ use gpui_component::{
 };
 use gpui_fps::fps_monitor;
 use serde::{Deserialize, Serialize};
-use std::{rc::Rc, time::Duration};
+use std::{cell::Cell, rc::Rc, time::Duration};
 
 mod app_menus;
 mod embedded_themes;
@@ -29,6 +33,7 @@ mod gallery;
 mod stories;
 mod themes;
 mod title_bar;
+use crate::themes::SelectTheme;
 pub use crate::title_bar::AppTitleBar;
 pub use gallery::Gallery;
 pub use stories::*;
@@ -60,6 +65,7 @@ actions!(
     [
         About,
         Open,
+        OpenCommandPalette,
         Quit,
         ToggleSearch,
         TestAction,
@@ -78,12 +84,14 @@ pub struct AppState {
     /// Whether the window root renders the performance HUD. Toggled from the
     /// title bar's settings menu, read by [`StoryRoot`].
     pub show_fps_monitor: bool,
+    pub(crate) previewing_theme: bool,
 }
 impl AppState {
     fn init(cx: &mut App) {
         let state = Self {
             invisible_panels: cx.new(|_| Vec::new()),
             show_fps_monitor: false,
+            previewing_theme: false,
         };
         cx.set_global::<AppState>(state);
     }
@@ -211,6 +219,7 @@ pub fn init(cx: &mut App) {
 
     cx.bind_keys([
         KeyBinding::new("/", ToggleSearch, None),
+        KeyBinding::new("ctrl-shift-p", OpenCommandPalette, None),
         #[cfg(target_os = "macos")]
         KeyBinding::new("cmd-o", Open, None),
         #[cfg(not(target_os = "macos"))]
@@ -219,6 +228,10 @@ pub fn init(cx: &mut App) {
         KeyBinding::new("cmd-q", Quit, None),
         #[cfg(not(target_os = "macos"))]
         KeyBinding::new("alt-f4", Quit, None),
+        #[cfg(target_os = "macos")]
+        KeyBinding::new("cmd-k", SelectTheme, None),
+        #[cfg(not(target_os = "macos"))]
+        KeyBinding::new("ctrl-k", SelectTheme, None),
     ]);
 
     cx.on_action(|_: &Quit, cx: &mut App| {
@@ -245,10 +258,10 @@ pub fn init(cx: &mut App) {
         }
     });
 
-    register_panel(cx, PANEL_NAME, |_, _, info, window, cx| {
-        let story_state = match info {
+    register_panel(cx, PANEL_NAME, |context, window, cx| {
+        let story_state = match context.info() {
             PanelInfo::Panel(value) => StoryState::from_value(value.clone()),
-            _ => {
+            info => {
                 unreachable!("Invalid PanelInfo: {:?}", info)
             }
         };
@@ -275,7 +288,7 @@ pub fn init(cx: &mut App) {
             container.zoomable = zoomable;
             container
         });
-        Box::new(view)
+        panel_handle(view)
     });
 
     cx.activate(true);
@@ -720,32 +733,19 @@ impl StoryState {
     }
 }
 
-impl Panel for StoryContainer {
+impl BasePanel for StoryContainer {
     fn panel_name(&self) -> &'static str {
         "StoryContainer"
-    }
-
-    fn title(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
-        self.name.clone().into_any_element()
-    }
-
-    fn title_style(&self, cx: &App) -> Option<TitleStyle> {
-        if let Some(bg) = self.title_bg {
-            Some(TitleStyle {
-                background: bg,
-                foreground: cx.theme().foreground,
-            })
-        } else {
-            None
-        }
     }
 
     fn closable(&self, _cx: &App) -> bool {
         self.closable
     }
 
-    fn zoomable(&self, _cx: &App) -> Option<PanelControl> {
-        self.zoomable
+    /// The presentation half decides *where* the control appears; this decides
+    /// whether zooming is possible at all.
+    fn zoomable(&self, _cx: &App) -> bool {
+        self.zoomable.is_some()
     }
 
     fn visible(&self, cx: &App) -> bool {
@@ -766,6 +766,36 @@ impl Panel for StoryContainer {
                 on_active(story, active, _window, cx);
             }
         }
+    }
+
+    fn dump(&self, _cx: &App) -> PanelState {
+        let mut state = PanelState::new(self.panel_name());
+        let story_state = StoryState {
+            story_klass: self.story_klass.clone().unwrap(),
+        };
+        state.info = PanelInfo::panel(story_state.to_value());
+        state
+    }
+}
+
+impl Panel for StoryContainer {
+    fn title(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        self.name.clone().into_any_element()
+    }
+
+    fn title_style(&self, cx: &App) -> Option<TitleStyle> {
+        if let Some(bg) = self.title_bg {
+            Some(TitleStyle {
+                background: bg,
+                foreground: cx.theme().foreground,
+            })
+        } else {
+            None
+        }
+    }
+
+    fn zoom_control(&self, _cx: &App) -> Option<PanelControl> {
+        self.zoomable
     }
 
     fn dropdown_menu(
@@ -795,15 +825,6 @@ impl Panel for StoryContainer {
                 }),
         ])
     }
-
-    fn dump(&self, _cx: &App) -> PanelState {
-        let mut state = PanelState::new(self);
-        let story_state = StoryState {
-            story_klass: self.story_klass.clone().unwrap(),
-        };
-        state.info = PanelInfo::panel(story_state.to_value());
-        state
-    }
 }
 
 impl EventEmitter<PanelEvent> for StoryContainer {}
@@ -825,11 +846,41 @@ impl Render for StoryContainer {
     }
 }
 
+fn with_command_entries(
+    command: Command,
+    entries: impl IntoIterator<Item = CommandEntry>,
+) -> Command {
+    entries
+        .into_iter()
+        .fold(command, |command, entry| match entry {
+            CommandEntry::Item(item) => command.item(item),
+            CommandEntry::Group(group) => command.group(group),
+            CommandEntry::Separator => command.separator(),
+        })
+}
+
 pub struct StoryRoot {
     pub(crate) focus_handle: FocusHandle,
     pub(crate) title_bar: Entity<AppTitleBar>,
     pub(crate) view: AnyView,
     pub(crate) embedded: bool,
+    /// The palette behind [`SelectTheme`], rebuilt every time it opens.
+    theme_palette: Entity<CommandState>,
+    /// Theme commands owned by this root and refreshed before the palette opens.
+    theme_entries: Vec<CommandEntry>,
+    /// The component palette for Gallery windows.
+    component_palette: Entity<CommandState>,
+    /// Component commands owned by this root and refreshed before the palette opens.
+    component_entries: Vec<CommandEntry>,
+    /// Whether this root currently owns an open component palette dialog.
+    component_palette_open: bool,
+    gallery: Option<Entity<Gallery>>,
+    /// The theme in force when the palette opened, put back if the user
+    /// cancels out of the preview.
+    theme_before_preview: Option<SharedString>,
+    /// Identifies the current preview session so deferred selection callbacks
+    /// from a closed palette cannot affect a newly opened one.
+    theme_preview_generation: u64,
 }
 
 impl StoryRoot {
@@ -840,22 +891,88 @@ impl StoryRoot {
         cx: &mut Context<Self>,
     ) -> Self {
         let title_bar = cx.new(|cx| AppTitleBar::new(title, window, cx));
-        Self {
-            focus_handle: cx.focus_handle(),
-            title_bar,
-            view: view.into(),
-            embedded: false,
-        }
+
+        Self::with_title_bar(title_bar, view, false, window, cx)
     }
 
     pub fn embedded(view: impl Into<AnyView>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let title_bar = cx.new(|cx| AppTitleBar::new("", window, cx));
+
+        Self::with_title_bar(title_bar, view, true, window, cx)
+    }
+
+    fn with_title_bar(
+        title_bar: Entity<AppTitleBar>,
+        view: impl Into<AnyView>,
+        embedded: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
+        let view = view.into();
+        let gallery = view.clone().downcast::<Gallery>().ok();
+        let theme_palette = cx.new(|cx| CommandState::new(window, cx));
+        let component_palette = cx.new(|cx| CommandState::new(window, cx));
+
         Self {
             focus_handle: cx.focus_handle(),
             title_bar,
-            view: view.into(),
-            embedded: true,
+            view,
+            embedded,
+            theme_palette,
+            theme_entries: Vec::new(),
+            component_palette,
+            component_entries: Vec::new(),
+            component_palette_open: false,
+            gallery,
+            theme_before_preview: None,
+            theme_preview_generation: 0,
         }
+    }
+
+    fn on_component_palette_confirm(
+        &mut self,
+        index: gpui_component::IndexPath,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(gallery) = self.gallery.clone() {
+            gallery.update(cx, |gallery, cx| {
+                gallery.select_story_index(index, window, cx);
+            });
+        }
+        self.component_palette_open = false;
+        window.close_dialog(cx);
+    }
+
+    /// Preview the highlighted theme while the palette is open: moving the
+    /// highlight applies the theme, Enter keeps it, Escape puts back the one
+    /// that was in force when the palette opened.
+    fn on_theme_palette_select(
+        &mut self,
+        index: gpui_component::IndexPath,
+        generation: u64,
+        cx: &mut Context<Self>,
+    ) {
+        if self.theme_before_preview.is_none() || self.theme_preview_generation != generation {
+            return;
+        }
+
+        if let Some(name) = themes::theme_name_at(index, cx) {
+            themes::apply_theme(&name, cx);
+        }
+    }
+
+    fn on_theme_palette_confirm(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.theme_before_preview = None;
+        themes::finish_theme_preview(cx);
+        window.close_dialog(cx);
+    }
+
+    fn finish_theme_preview(&mut self, cx: &mut Context<Self>) {
+        if let Some(name) = self.theme_before_preview.take() {
+            themes::apply_theme(&name, cx);
+        }
+        themes::finish_theme_preview(cx);
     }
 
     fn on_action_panel_info(
@@ -869,6 +986,155 @@ impl StoryRoot {
             .message("You have clicked panel info.")
             .id::<Info>();
         window.push_notification(note, cx);
+    }
+
+    /// Opens the theme Command palette, refreshed from the registry so that a
+    /// theme added while the app is running shows up, and reset to an empty
+    /// query.
+    fn on_action_select_theme(
+        &mut self,
+        _: &SelectTheme,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.theme_before_preview.is_some() {
+            self.theme_palette
+                .read(cx)
+                .focus_handle(cx)
+                .focus(window, cx);
+            return;
+        }
+
+        self.theme_entries = themes::theme_entries(cx);
+        self.theme_before_preview = Some(cx.theme().theme_name().clone());
+        self.theme_preview_generation = self.theme_preview_generation.wrapping_add(1);
+        let theme_preview_generation = self.theme_preview_generation;
+        themes::begin_theme_preview(cx);
+        self.theme_palette.update(cx, |palette, cx| {
+            palette.set_query("", window, cx);
+        });
+        cx.notify();
+
+        let theme_palette = self.theme_palette.clone();
+        let story_root = cx.weak_entity();
+        let focus_on_mount = Rc::new(Cell::new(true));
+        window.open_dialog(cx, move |dialog, _, _| {
+            let theme_palette = theme_palette.clone();
+            let close_owner = story_root.clone();
+            let content_owner = story_root.clone();
+            let focus_on_mount = focus_on_mount.clone();
+            dialog
+                .close_button(false)
+                .overlay_closable(false)
+                .p_0()
+                .on_close(move |_, _, cx| {
+                    _ = close_owner.update(cx, |root, cx| root.finish_theme_preview(cx));
+                })
+                .content(move |content, window, cx| {
+                    if focus_on_mount.replace(false) {
+                        let theme_palette = theme_palette.clone();
+                        window.defer(cx, move |window, cx| {
+                            theme_palette.read(cx).focus_handle(cx).focus(window, cx);
+                        });
+                    }
+                    let entries = content_owner
+                        .read_with(cx, |root, _| root.theme_entries.clone())
+                        .unwrap_or_default();
+                    let select_owner = content_owner.clone();
+                    let confirm_owner = content_owner.clone();
+                    content.child(with_command_entries(
+                        Command::new(&theme_palette)
+                            .bordered(false)
+                            .placeholder("Search themes...")
+                            .max_h(px(400.))
+                            .on_select(move |index, _, cx| {
+                                _ = select_owner.update(cx, |root, cx| {
+                                    root.on_theme_palette_select(
+                                        index,
+                                        theme_preview_generation,
+                                        cx,
+                                    );
+                                });
+                            })
+                            .on_confirm(move |_, window, cx| {
+                                _ = confirm_owner.update(cx, |root, cx| {
+                                    root.on_theme_palette_confirm(window, cx);
+                                });
+                            }),
+                        entries,
+                    ))
+                })
+        });
+    }
+
+    fn on_action_open_command_palette(
+        &mut self,
+        _: &OpenCommandPalette,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(gallery) = self.gallery.as_ref() else {
+            cx.propagate();
+            return;
+        };
+        if self.component_palette_open {
+            self.component_palette
+                .read(cx)
+                .focus_handle(cx)
+                .focus(window, cx);
+            return;
+        }
+
+        self.component_entries = gallery.read(cx).command_entries(cx);
+        self.component_palette_open = true;
+        self.component_palette.update(cx, |palette, cx| {
+            palette.set_query("", window, cx);
+        });
+        cx.notify();
+
+        let component_palette = self.component_palette.clone();
+        let story_root = cx.weak_entity();
+        let focus_on_mount = Rc::new(Cell::new(true));
+        window.open_dialog(cx, move |dialog, _, _| {
+            let component_palette = component_palette.clone();
+            let close_owner = story_root.clone();
+            let content_owner = story_root.clone();
+            let focus_on_mount = focus_on_mount.clone();
+            dialog
+                .close_button(false)
+                .overlay_closable(false)
+                .p_0()
+                .on_close(move |_, _, cx| {
+                    _ = close_owner.update(cx, |root, _| root.component_palette_open = false);
+                })
+                .content(move |content, window, cx| {
+                    if focus_on_mount.replace(false) {
+                        let component_palette = component_palette.clone();
+                        window.defer(cx, move |window, cx| {
+                            component_palette
+                                .read(cx)
+                                .focus_handle(cx)
+                                .focus(window, cx);
+                        });
+                    }
+                    let entries = content_owner
+                        .read_with(cx, |root, _| root.component_entries.clone())
+                        .unwrap_or_default();
+                    let confirm_owner = content_owner.clone();
+                    content.child(with_command_entries(
+                        Command::new(&component_palette)
+                            .bordered(false)
+                            .placeholder("Search components...")
+                            .max_h(px(400.))
+                            .on_confirm(move |index, window, cx| {
+                                _ = confirm_owner.update(cx, |root, cx| {
+                                    root.on_component_palette_confirm(index, window, cx);
+                                });
+                            }),
+                        entries,
+                    ))
+                })
+        });
     }
 
     fn on_action_toggle_search(
@@ -906,6 +1172,8 @@ impl Render for StoryRoot {
         div()
             .id("story-root")
             .on_action(cx.listener(Self::on_action_panel_info))
+            .on_action(cx.listener(Self::on_action_select_theme))
+            .on_action(cx.listener(Self::on_action_open_command_palette))
             .on_action(cx.listener(Self::on_action_toggle_search))
             .size_full()
             .child(

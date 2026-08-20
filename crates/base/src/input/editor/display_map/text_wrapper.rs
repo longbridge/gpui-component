@@ -1,4 +1,5 @@
 use gpui::Half;
+use std::borrow::Cow;
 use std::ops::Range;
 
 use gpui::{
@@ -321,25 +322,24 @@ impl TextWrapper {
 
         // To add the new lines.
         let new_start_row = changed_text.offset_to_point(range.start).row;
-        let new_start_offset = changed_text.line_start_offset(new_start_row);
         let new_end_row = changed_text
             .offset_to_point(range.start + new_text.len())
             .row;
-        let new_end_offset = changed_text.line_end_offset(new_end_row);
-        let new_range = new_start_offset..new_end_offset;
 
-        let mut new_lines = vec![];
+        let mut new_lines = Vec::with_capacity(new_end_row.saturating_sub(new_start_row) + 1);
         let wrap_width = self.wrap_width;
 
         // line not contains `\n`.
-        for line in Rope::from(changed_text.slice(new_range)).iter_lines() {
-            let line_str = line.to_string();
+        for row in new_start_row..=new_end_row {
+            let line = changed_text.slice_line(row);
             let mut wrapped_lines = SmallVec::<[Range<usize>; 1]>::new();
             let mut prev_boundary_ix = 0;
             let mut indent_chars = 0;
 
             // If wrap_width is Pixels::MAX, skip wrapping to disable word wrap
             if let Some(wrap_width) = wrap_width {
+                // Borrowed for lines within a single rope chunk.
+                let line_str: Cow<str> = line.into();
                 match self.wrapping_indent {
                     WrappingIndent::Same => {
                         // Here only have wrapped line, if there is no wrap meet, the `line_wraps`
@@ -353,9 +353,8 @@ impl TextWrapper {
                     WrappingIndent::None => {
                         // The first visual line keeps the line's leading indentation, so it is
                         // wrapped as is.
-                        let bondaries = wrap_line(&line_str, wrap_width);
-                        if let Some(first) = bondaries.first() {
-                            let first_ix = first.ix;
+                        let boundaries = wrap_line(&line_str, wrap_width);
+                        if let Some(first_ix) = boundaries.first().map(|b| b.ix) {
                             wrapped_lines.push(prev_boundary_ix..first_ix);
                             prev_boundary_ix = first_ix;
 
@@ -370,7 +369,7 @@ impl TextWrapper {
             }
 
             // Reset of the line
-            if !line_str[prev_boundary_ix..].is_empty() || prev_boundary_ix == 0 {
+            if prev_boundary_ix < line.len() || prev_boundary_ix == 0 {
                 wrapped_lines.push(prev_boundary_ix..line.len());
             }
 

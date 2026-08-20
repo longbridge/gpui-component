@@ -127,6 +127,47 @@ impl ResizableState {
         cx.notify();
     }
 
+    /// Adopt slot sizes decided by an owner that keeps its own record of the
+    /// layout — the dock's pane tree does.
+    ///
+    /// Unlike [`Self::insert_panel`], nothing is redistributed: the caller has
+    /// already decided how the space divides, and re-normalizing here would
+    /// undo exactly that decision. Slots the caller left unconstrained keep
+    /// whatever they had.
+    pub(crate) fn adopt_sizes(&mut self, sizes: &[Option<Pixels>], cx: &mut Context<Self>) {
+        let mut changed = false;
+        for (ix, size) in sizes.iter().enumerate() {
+            // The preference is mirrored exactly, `None` included. That is the
+            // load-bearing half: `insert_panel` resolves every existing
+            // panel's `None` into a concrete value as a side effect of
+            // redistributing, so after inserting one slot the caller's "these
+            // two are equally unconstrained" has quietly become "that one is
+            // pinned, this one is the only flexible slot" — and the flexible
+            // one then swallows whatever the pinned ones leave over.
+            if let Some(panel) = self.panels.get_mut(ix) {
+                if panel.size != *size {
+                    panel.size = *size;
+                    changed = true;
+                }
+            }
+
+            // The measurement only moves when the tree names a size; an
+            // unconstrained slot keeps whatever it was last laid out at until
+            // the next pass recomputes it.
+            let Some(size) = size else { continue };
+            if let Some(slot) = self.sizes.get_mut(ix) {
+                if *slot != *size {
+                    *slot = *size;
+                    changed = true;
+                }
+            }
+        }
+
+        if changed {
+            cx.notify();
+        }
+    }
+
     pub(crate) fn sync_panels_count(
         &mut self,
         axis: Axis,
@@ -311,6 +352,17 @@ impl ResizableState {
     /// When the container size changes, the panels should take up the same percentage as they did before.
     fn adjust_to_container_size(&mut self, cx: &mut Context<Self>) {
         if self.container_size().is_zero() {
+            return;
+        }
+
+        // A panel with no size preference is laid out by flex, and its entry
+        // in `sizes` is a placeholder until something measures it. Rescaling
+        // by a ratio computed from that placeholder drags the panels that
+        // *do* have a preference along with it: a 200px sidebar beside one
+        // flexible panel comes back 587px wide on the frame after the first,
+        // which reads as the layout jumping once for no reason. Flex already
+        // fits the container, so there is nothing here to adjust.
+        if self.panels.iter().any(|panel| panel.size.is_none()) {
             return;
         }
 

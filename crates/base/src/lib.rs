@@ -21,6 +21,7 @@ mod combobox;
 pub mod component_traits;
 mod date_picker;
 mod dialog;
+pub mod dock;
 mod element_ext;
 mod event;
 mod focus_trap;
@@ -126,8 +127,8 @@ pub use radio_group::RadioGroup;
 #[doc(hidden)]
 pub use resizable::{PANEL_MIN_SIZE, resize_handle};
 pub use resizable::{
-    ResizablePanel, ResizablePanelEvent, ResizablePanelGroup, ResizableState, h_resizable,
-    resizable_panel, v_resizable,
+    ResizablePanel, ResizablePanelEvent, ResizablePanelGroup, ResizableState, ResizeHandleContext,
+    ResizeHandleRenderer, h_resizable, resizable_panel, v_resizable,
 };
 pub use scrollbar::{
     Scrollbar, ScrollbarAxis, ScrollbarEntrance, ScrollbarHandle, ScrollbarMode, ScrollbarMotion,
