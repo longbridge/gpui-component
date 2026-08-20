@@ -355,6 +355,17 @@ impl ResizableState {
             return;
         }
 
+        // A panel with no size preference is laid out by flex, and its entry
+        // in `sizes` is a placeholder until something measures it. Rescaling
+        // by a ratio computed from that placeholder drags the panels that
+        // *do* have a preference along with it: a 200px sidebar beside one
+        // flexible panel comes back 587px wide on the frame after the first,
+        // which reads as the layout jumping once for no reason. Flex already
+        // fits the container, so there is nothing here to adjust.
+        if self.panels.iter().any(|panel| panel.size.is_none()) {
+            return;
+        }
+
         let container_size = self.container_size();
         let total = self.sizes.iter().map(|s| s.as_f32()).sum::<f32>();
         if !total.is_finite() || total <= 0. {

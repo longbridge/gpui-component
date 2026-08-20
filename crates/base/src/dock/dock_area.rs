@@ -188,6 +188,16 @@ impl DockArea {
         self.version
     }
 
+    /// Change the schema version a later [`dump`](Self::dump) writes.
+    ///
+    /// Set at construction for an area whose layout never changes shape. A
+    /// host that installs one of several preset layouts into the same area
+    /// picks the version with the preset, which is after the area exists.
+    pub fn set_version(&mut self, version: Option<usize>, cx: &mut Context<Self>) {
+        self.version = version;
+        cx.notify();
+    }
+
     /// The area's own bounds, recorded each frame. Dock resizing measures
     /// against it.
     pub fn bounds(&self) -> Bounds<Pixels> {
@@ -2573,6 +2583,54 @@ mod tests {
                 "{placement:?}: expected halves, got {first} and {second}"
             );
         }
+    }
+
+    /// A slot given an explicit size keeps it on the frame after the first.
+    ///
+    /// The layout is laid out once with a flexible sibling, and the flexible
+    /// slot's placeholder measurement used to drag the fixed one with it when
+    /// the container was first measured — the layout visibly jumped once,
+    /// then settled.
+    #[gpui::test]
+    fn an_explicit_slot_size_survives_the_first_layout_pass(cx: &mut TestAppContext) {
+        let (area, cx) = setup(cx);
+        cx.update(|window, cx| {
+            let sidebar = TestPanel::new("Sidebar", cx);
+            let content = TestPanel::new("Content", cx);
+            area.update(cx, |area, cx| {
+                area.set_center(
+                    DockLayout::h_split()
+                        .child(DockLayout::tabs().panel(sidebar), Some(px(200.)))
+                        .child(DockLayout::tabs().panel(content), None),
+                    window,
+                    cx,
+                );
+            });
+        });
+        cx.run_until_parked();
+
+        let root = cx.read(|cx| {
+            area.read(cx)
+                .layout(DockPlacement::Center)
+                .unwrap()
+                .root()
+                .id()
+        });
+        let sizes = cx.read(|cx| area.read(cx).splits[&root].entity.read(cx).sizes().clone());
+
+        // Within a couple of pixels of what was asked for — the measured
+        // value carries the frame's own rounding. The bug this pins made it
+        // 587px.
+        let fixed = sizes
+            .first()
+            .copied()
+            .expect("the split has slots")
+            .as_f32();
+        assert!(
+            (fixed - 200.).abs() <= 4.,
+            "the fixed slot keeps its 200px instead of being rescaled by the \
+             flexible sibling's placeholder, got {fixed}"
+        );
     }
 
     /// The headline claim of the whole extraction, in one place: a layout
