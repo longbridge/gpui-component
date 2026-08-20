@@ -59,6 +59,7 @@ pub struct Command {
     state: Entity<CommandState>,
     entries: Vec<CommandEntry>,
     searchable: bool,
+    filterable: bool,
     on_query: Option<Rc<OnQuery>>,
     on_select: Option<Rc<OnIndex>>,
     on_confirm: Option<Rc<OnIndex>>,
@@ -73,6 +74,7 @@ impl Command {
             state: state.clone(),
             entries: Vec::new(),
             searchable: true,
+            filterable: true,
             on_query: None,
             on_select: None,
             on_confirm: None,
@@ -109,6 +111,17 @@ impl Command {
     /// Show or hide the query field and local filtering.
     pub fn searchable(mut self, searchable: bool) -> Self {
         self.searchable = searchable;
+        self
+    }
+
+    /// Keep the query field but toggle the local filtering, default: `true`.
+    ///
+    /// Turn it off when an external source already answers the query, such as
+    /// an async search: every supplied item stays visible, the query still
+    /// reports through [`Self::on_query`], and a query change hands the
+    /// highlight back to the first item instead of a local textual match.
+    pub fn filterable(mut self, filterable: bool) -> Self {
+        self.filterable = filterable;
         self
     }
 
@@ -230,6 +243,7 @@ impl RenderOnce for Command {
         let model = CommandModel {
             entries: self.entries,
             searchable: self.searchable,
+            filterable: self.filterable,
             on_query: self.on_query,
             on_select: self.on_select,
             on_confirm: self.on_confirm,

@@ -17,7 +17,7 @@ use gpui::{
     Anchor, Animation, AnimationExt as _, AnyElement, AnyView, App, AppContext as _, Context, Div,
     Empty, InteractiveElement as _, IntoElement, ParentElement as _, Point, Render, ScrollHandle,
     SharedString, Stateful, StatefulInteractiveElement as _, StyleRefinement, Styled as _, Window,
-    div, prelude::FluentBuilder as _, px, rems,
+    div, prelude::FluentBuilder as _, px,
 };
 use gpui_base::dock::{
     AnyDrag, DockPlacement, DragPanel, DropIndicator, NodeId, PaneNode, PaneRef, PanelId,
@@ -371,7 +371,6 @@ impl TabGroupSkin {
 
         h_flex()
             .justify_between()
-            .line_height(rems(1.0))
             .h(px(30.))
             .py_2()
             .pl_3()

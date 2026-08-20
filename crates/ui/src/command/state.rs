@@ -37,6 +37,7 @@ pub(crate) type OnCancel = dyn Fn(&mut Window, &mut App);
 pub(crate) struct CommandModel {
     pub(crate) entries: Vec<CommandEntry>,
     pub(crate) searchable: bool,
+    pub(crate) filterable: bool,
     pub(crate) on_query: Option<Rc<OnQuery>>,
     pub(crate) on_select: Option<Rc<OnIndex>>,
     pub(crate) on_confirm: Option<Rc<OnIndex>>,
@@ -48,6 +49,7 @@ impl Default for CommandModel {
         Self {
             entries: Vec::new(),
             searchable: true,
+            filterable: true,
             on_query: None,
             on_select: None,
             on_confirm: None,
@@ -300,7 +302,7 @@ impl CommandState {
     // MARK: Matching
 
     fn item_matches(&self, item: &CommandItem, query: &str) -> bool {
-        if !self.model.searchable || query.is_empty() {
+        if !self.model.searchable || !self.model.filterable || query.is_empty() {
             true
         } else {
             item.matches(query)
@@ -850,13 +852,17 @@ impl Render for CommandState {
                     .role(Role::ListBox)
                     .relative()
                     .flex_1()
-                    .p_1()
+                    // The rows carry their inset on the virtual list itself so
+                    // that a mid-scroll clip edge sits flush against the
+                    // surrounding dividers; only the empty slot needs the
+                    // container padding.
+                    .when(rows_count == 0, |this| this.p_1())
                     .on_prepaint({
                         let measure_state = command_state.clone();
                         move |bounds, window, cx| {
                             measure_state.update(cx, |state, cx| {
-                                // `p_1` is one quarter rem on each side. Its
-                                // rem-dependent padding and inherited
+                                // The list's `p_1` is one quarter rem on each
+                                // side. Its rem-dependent padding and inherited
                                 // layout-relevant text style participate in
                                 // the row-size cache key.
                                 let text_style = window.text_style();
@@ -903,6 +909,11 @@ impl Render for CommandState {
                                         .collect::<Vec<_>>()
                                 },
                             )
+                            // Padding on the virtual list acts like CSS
+                            // scroll-padding: the scroll ends keep their inset
+                            // while scrolled-under rows paint and clip at the
+                            // list edge.
+                            .p_1()
                             .with_sizing_behavior(ListSizingBehavior::Infer)
                             .track_scroll(&self.scroll_handle),
                         )
@@ -1465,6 +1476,39 @@ mod tests {
                 assert_eq!(state.matched_count(), 0);
                 assert!(state.rows.is_empty());
                 assert_eq!(state.selected_index(), None);
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn filterable_off_keeps_every_item_and_resets_the_highlight(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let cx = cx.add_empty_window();
+
+        cx.update(|window, cx| {
+            let state = cx.new(|cx| {
+                let mut state = CommandState::new(window, cx);
+                state.install_model(
+                    CommandModel {
+                        entries: suggestion_entries(),
+                        filterable: false,
+                        ..CommandModel::default()
+                    },
+                    cx,
+                );
+                state
+            });
+
+            state.update(cx, |state, cx| {
+                state.set_selected_index(Some(IndexPath::new(1).section(1)), window, cx);
+
+                // "Bil" would locally match only "Billing"; an unfiltered
+                // palette keeps every row and hands the highlight back to the
+                // first item instead of the textual match.
+                state.set_query("Bil", window, cx);
+
+                assert_eq!(state.matched_count(), 5);
+                assert_eq!(state.selected_index(), Some(IndexPath::new(0).section(0)));
             });
         });
     }

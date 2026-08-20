@@ -132,6 +132,7 @@ pub fn init(cx: &mut App) {
     sheet::init(cx);
     list::init(cx);
     command::init(cx);
+    notification::init(cx);
     popover::init(cx);
     menu::init(cx);
     table::init(cx);

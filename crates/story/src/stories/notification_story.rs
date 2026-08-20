@@ -398,6 +398,56 @@ impl Render for NotificationStory {
                             }))
                     })),
             )
+            .child({
+                struct SystemNotificationKind;
+
+                section("System notification")
+                    .description(
+                        "Deliver to the OS notification center; click the system \
+                        notification to refocus the app. macOS shows them only when \
+                        running from a bundled .app; Windows requires \
+                        cx.set_app_identity().",
+                    )
+                    .child(
+                        Button::new("show-notify-system")
+                            .outline()
+                            .label("System only")
+                            .on_click(cx.listener(|_, _, window, cx| {
+                                window.push_notification(
+                                    Notification::info(
+                                        "Delivered straight to the notification center.",
+                                    )
+                                    .id::<SystemNotificationKind>()
+                                    .title("Build finished")
+                                    .system()
+                                    .on_click(|_, _, _| {
+                                        println!("[notification] system notification clicked");
+                                    }),
+                                    cx,
+                                )
+                            })),
+                    )
+                    .child(
+                        Button::new("show-notify-in-app-and-system")
+                            .outline()
+                            .label("In-app and system")
+                            .on_click(cx.listener(|_, _, window, cx| {
+                                window.push_notification(
+                                    Notification::info(
+                                        "Shown as a toast and in the notification center.",
+                                    )
+                                    .id::<SystemNotificationKind>()
+                                    .title("Build finished")
+                                    .in_app_and_system()
+                                    .autohide(false)
+                                    .on_click(|_, _, _| {
+                                        println!("[notification] system notification clicked");
+                                    }),
+                                    cx,
+                                )
+                            })),
+                    )
+            })
             .child(
                 section("Custom content")
                     .description("Render application-owned notification content.")

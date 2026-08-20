@@ -9,6 +9,9 @@ fn main() {
 
     app.run(move |cx| {
         init(cx);
+        // Required for system notifications on Windows; macOS only shows them
+        // when running from a bundled .app.
+        cx.set_app_identity("com.longbridge.gpui-component.story", "GPUI Component");
         cx.activate(true);
 
         create_new_window(
