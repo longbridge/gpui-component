@@ -10,7 +10,10 @@ use gpui_component::{
     TITLE_BAR_HEIGHT, TitleBar, WindowExt,
     button::Button,
     command::{Command, CommandEntry, CommandState},
-    dock::{Panel, PanelControl, PanelEvent, PanelInfo, PanelState, TitleStyle, register_panel},
+    dock::{
+        BasePanel, Panel, PanelControl, PanelEvent, PanelInfo, PanelState, TitleStyle,
+        panel_handle, register_panel,
+    },
     group_box::{GroupBox, GroupBoxVariants as _},
     h_flex,
     menu::PopupMenu,
@@ -255,10 +258,10 @@ pub fn init(cx: &mut App) {
         }
     });
 
-    register_panel(cx, PANEL_NAME, |_, _, info, window, cx| {
-        let story_state = match info {
+    register_panel(cx, PANEL_NAME, |context, window, cx| {
+        let story_state = match context.info() {
             PanelInfo::Panel(value) => StoryState::from_value(value.clone()),
-            _ => {
+            info => {
                 unreachable!("Invalid PanelInfo: {:?}", info)
             }
         };
@@ -285,7 +288,7 @@ pub fn init(cx: &mut App) {
             container.zoomable = zoomable;
             container
         });
-        Box::new(view)
+        panel_handle(view)
     });
 
     cx.activate(true);
@@ -730,32 +733,19 @@ impl StoryState {
     }
 }
 
-impl Panel for StoryContainer {
+impl BasePanel for StoryContainer {
     fn panel_name(&self) -> &'static str {
         "StoryContainer"
-    }
-
-    fn title(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
-        self.name.clone().into_any_element()
-    }
-
-    fn title_style(&self, cx: &App) -> Option<TitleStyle> {
-        if let Some(bg) = self.title_bg {
-            Some(TitleStyle {
-                background: bg,
-                foreground: cx.theme().foreground,
-            })
-        } else {
-            None
-        }
     }
 
     fn closable(&self, _cx: &App) -> bool {
         self.closable
     }
 
-    fn zoomable(&self, _cx: &App) -> Option<PanelControl> {
-        self.zoomable
+    /// The presentation half decides *where* the control appears; this decides
+    /// whether zooming is possible at all.
+    fn zoomable(&self, _cx: &App) -> bool {
+        self.zoomable.is_some()
     }
 
     fn visible(&self, cx: &App) -> bool {
@@ -776,6 +766,36 @@ impl Panel for StoryContainer {
                 on_active(story, active, _window, cx);
             }
         }
+    }
+
+    fn dump(&self, _cx: &App) -> PanelState {
+        let mut state = PanelState::new(self.panel_name());
+        let story_state = StoryState {
+            story_klass: self.story_klass.clone().unwrap(),
+        };
+        state.info = PanelInfo::panel(story_state.to_value());
+        state
+    }
+}
+
+impl Panel for StoryContainer {
+    fn title(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        self.name.clone().into_any_element()
+    }
+
+    fn title_style(&self, cx: &App) -> Option<TitleStyle> {
+        if let Some(bg) = self.title_bg {
+            Some(TitleStyle {
+                background: bg,
+                foreground: cx.theme().foreground,
+            })
+        } else {
+            None
+        }
+    }
+
+    fn zoom_control(&self, _cx: &App) -> Option<PanelControl> {
+        self.zoomable
     }
 
     fn dropdown_menu(
@@ -804,15 +824,6 @@ impl Panel for StoryContainer {
                     window.push_notification("You have clicked search button", cx);
                 }),
         ])
-    }
-
-    fn dump(&self, _cx: &App) -> PanelState {
-        let mut state = PanelState::new(self);
-        let story_state = StoryState {
-            story_klass: self.story_klass.clone().unwrap(),
-        };
-        state.info = PanelInfo::panel(story_state.to_value());
-        state
     }
 }
 

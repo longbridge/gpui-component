@@ -11,6 +11,8 @@ mod color_picker;
 mod combobox;
 mod date_picker;
 mod dialog;
+mod dock;
+pub(super) use dock::build_dock;
 mod editor;
 mod hover_card;
 mod input;

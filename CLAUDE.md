@@ -148,17 +148,18 @@ The first view of every window must be a `Root`.
 
 ### Dock System
 
-A complex panel layout system supporting:
+Layout behavior lives in `crates/base/src/dock`; `crates/ui/src/dock` is a
+presentation skin (`DockSkin`) over it. See `docs/ARCHITECTURE.md`.
 
-- **DockArea**: Main container managing center area and left/bottom/right docks
-- **DockItem**: Tree-based layout structure
-  - `Split`: Split layout (horizontal/vertical)
-  - `Tabs`: Tab layout
-  - `Panel`: Individual panel
-- **Panel**: Defined via `PanelView` trait
-- **PanelRegistry**: Global panel registry for serializing/deserializing layouts
-- **StackPanel**: Resizable split panel container
-- **TabPanel**: Tab panel container
+- **`LayoutTree`**: Pure-data layout tree, the single source of truth.
+  - `NodeKind::Split` / `Tabs` / `Tiles`: containers, addressed by `NodeId`
+  - Panels are addressed by `PanelId`; the tree holds no entity handles
+- **`DockArea`**: Owns the center and dock trees, reconciles them into a
+  cache of container entities keyed by `NodeId`
+- **`TabGroup`** / **`TilesState`**: The `Tabs`/`Tiles` container entities
+- **`Panel`**: Split at the seam — `gpui_base::dock::Panel` for behavior,
+  `gpui_component::dock::Panel` for presentation; a panel implements both
+- **`PanelRegistry`**: Resolves a persisted `panel_name` back to a panel type
 
 The Dock system supports:
 
@@ -222,6 +223,17 @@ Text input system based on Rope data structure:
 - When a PR changes the public API of `crates/ui`, add a `## Breaking Changes`
   section with `diff` blocks showing the old and new usage. See PR #2691 and
   `.claude/skills/gpui-component-dev/references/pr-description.md`.
+- Avoid `Kind` as a type-name suffix. It says an enum classifies something
+  without saying what it classifies, and carries no meaning a reader could not
+  already infer from `enum`. Name the type after what its variants *are*
+  instead. Keep `Kind` only when no honest name covers the variant set —
+  `NodeKind`'s variants straddle two levels (`Split` is an interior node,
+  `Tabs` and `Tiles` are leaves), and every domain word for the leaf level
+  (`Pane`, most of all) would misdescribe `Split`; a vaguer name is better
+  than a precise wrong one. Prefer confining such a type to `pub(crate)`.
+  This governs new code; existing `Kind` names are not a rewrite target on
+  their own, and names owned by external crates (`CodeActionKind`,
+  `CompletionItemKind`, `WindowKind`) keep their upstream spelling.
 
 ## Icon System
 

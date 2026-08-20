@@ -3,8 +3,9 @@ use gpui::*;
 use gpui_component::{
     ActiveTheme, Root, Sizable, TitleBar,
     dock::{
-        DockArea, DockAreaState, DockEvent, DockItem, Panel, PanelEvent, PanelInfo, PanelRegistry,
-        PanelState, PanelView, register_panel,
+        BasePanel, BasePanelView, DockArea, DockAreaState, DockEvent, DockLayout, DockSkin, Panel,
+        PanelBuildContext, PanelEvent, PanelHandle, PanelInfo, PanelRegistry, PanelState,
+        panel_handle, register_panel,
     },
     input::{Input, InputState},
     scroll::ScrollbarMode,
@@ -27,7 +28,7 @@ const TILES_DOCK_AREA: DockAreaTab = DockAreaTab {
 ///
 /// - Add a search bar to all panels.
 struct ContainerPanel {
-    panel: Arc<dyn PanelView>,
+    panel: Arc<dyn BasePanelView>,
     search_state: Entity<InputState>,
 }
 
@@ -53,31 +54,23 @@ impl ContainerPanelState {
 
 impl ContainerPanel {
     fn init(cx: &mut App) {
-        register_panel(
-            cx,
-            "ContainerPanel",
-            |dock_area, _, info, window, cx| match info {
-                PanelInfo::Panel(panel_info) => {
-                    let container_state =
-                        ContainerPanelState::from_value(panel_info.clone()).unwrap();
-                    let child_state = container_state.child;
-                    let view = PanelRegistry::build_panel(
-                        &child_state.panel_name,
-                        dock_area,
-                        &child_state,
-                        &child_state.info,
-                        window,
-                        cx,
-                    );
+        register_panel(cx, "ContainerPanel", |context, window, cx| {
+            let PanelInfo::Panel(panel_info) = context.info() else {
+                unreachable!()
+            };
+            let container_state = ContainerPanelState::from_value(panel_info.clone()).unwrap();
+            let child_state = container_state.child;
+            let child_context =
+                PanelBuildContext::new(context.dock_area(), &child_state, &child_state.info);
+            let view =
+                PanelRegistry::build_panel(&child_state.panel_name, child_context, window, cx)
+                    .expect("the child panel type is registered");
 
-                    Box::new(ContainerPanel::new(view.into(), window, cx))
-                }
-                _ => unreachable!(),
-            },
-        );
+            panel_handle(ContainerPanel::new(view, window, cx))
+        });
     }
 
-    fn new(panel: Arc<dyn PanelView>, window: &mut Window, cx: &mut App) -> Entity<Self> {
+    fn new(panel: Arc<dyn BasePanelView>, window: &mut Window, cx: &mut App) -> Entity<Self> {
         cx.new(|cx| {
             let search_state = cx.new(|cx| InputState::new(window, cx).placeholder("Search..."));
 
@@ -89,13 +82,26 @@ impl ContainerPanel {
     }
 }
 
-impl Panel for ContainerPanel {
+impl BasePanel for ContainerPanel {
     fn panel_name(&self) -> &'static str {
         "ContainerPanel"
     }
 
+    fn dump(&self, cx: &App) -> PanelState {
+        let mut state = PanelState::new(self.panel_name());
+        let panel_state = self.panel.dump(cx);
+        let json_value = ContainerPanelState::new(panel_state).to_value();
+        state.info = PanelInfo::panel(json_value);
+        state
+    }
+}
+
+impl Panel for ContainerPanel {
     fn title(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        self.panel.title(window, cx)
+        match PanelHandle::of(&self.panel) {
+            Some(handle) => handle.title(window, cx),
+            None => SharedString::from(self.panel.panel_name(cx)).into_any_element(),
+        }
     }
 
     fn title_suffix(&mut self, _: &mut Window, cx: &mut Context<Self>) -> Option<impl IntoElement> {
@@ -110,14 +116,6 @@ impl Panel for ContainerPanel {
                 .child(Input::new(&self.search_state).xsmall().appearance(false))
                 .into_any_element(),
         )
-    }
-
-    fn dump(&self, cx: &App) -> PanelState {
-        let mut state = PanelState::new(self);
-        let panel_state = self.panel.dump(cx);
-        let json_value = ContainerPanelState::new(panel_state).to_value();
-        state.info = PanelInfo::panel(json_value);
-        state
     }
 }
 
@@ -156,14 +154,13 @@ struct DockAreaTab {
 
 impl StoryTiles {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let dock_area = cx.new(|cx| {
-            DockArea::new(
-                TILES_DOCK_AREA.id,
-                Some(TILES_DOCK_AREA.version),
-                window,
-                cx,
-            )
-        });
+        let (dock_area, skin) = DockSkin::dock_area(
+            TILES_DOCK_AREA.id,
+            Some(TILES_DOCK_AREA.version),
+            window,
+            cx,
+        );
+        skin.set_tiles_scrollbar_mode(Some(ScrollbarMode::Always), cx);
         let weak_dock_area = dock_area.downgrade();
 
         match Self::load_tiles(dock_area.clone(), window, cx) {
@@ -243,17 +240,6 @@ impl StoryTiles {
         Ok(())
     }
 
-    fn set_scrollbar_mode(dock_area: &mut DockArea, cx: &mut App) {
-        match dock_area.center() {
-            DockItem::Tiles { view, .. } => {
-                view.update(cx, |this, cx| {
-                    this.set_scrollbar_mode(Some(ScrollbarMode::Always), cx);
-                });
-            }
-            _ => {}
-        }
-    }
-
     fn load_tiles(
         dock_area: Entity<DockArea>,
         window: &mut Window,
@@ -288,7 +274,6 @@ impl StoryTiles {
 
         dock_area.update(cx, |dock_area, cx| {
             dock_area.load(state, window, cx).context("load layout")?;
-            Self::set_scrollbar_mode(dock_area, cx);
             Ok::<(), anyhow::Error>(())
         })
     }
@@ -298,37 +283,15 @@ impl StoryTiles {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let dock_item = Self::init_default_layout(&dock_area, window, cx);
+        let dock_item = Self::init_default_layout(window, cx);
         _ = dock_area.update(cx, |dock_area, cx| {
-            dock_area.set_version(TILES_DOCK_AREA.version, window, cx);
             dock_area.set_center(dock_item, window, cx);
-
-            Self::set_scrollbar_mode(dock_area, cx);
             Self::save_tiles(&dock_area.dump(cx)).unwrap();
         });
     }
 
-    fn init_default_layout(
-        dock_area: &WeakEntity<DockArea>,
-        window: &mut Window,
-        cx: &mut App,
-    ) -> DockItem {
+    fn init_default_layout(window: &mut Window, cx: &mut App) -> DockLayout {
         const PANELS: usize = 4;
-        let panels = (0..PANELS)
-            .map(|i| {
-                let story = if i % 2 == 0 {
-                    Arc::new(StoryContainer::panel::<ButtonStory>(window, cx))
-                } else {
-                    Arc::new(StoryContainer::panel::<IconStory>(window, cx))
-                };
-                DockItem::tab(
-                    ContainerPanel::new(story, window, cx),
-                    dock_area,
-                    window,
-                    cx,
-                )
-            })
-            .collect::<Vec<_>>();
 
         // Panel size: 380x280, Gap: 20px, Starting position: (20, 20)
         let panel_width = px(380.);
@@ -338,17 +301,23 @@ impl StoryTiles {
         let start_y = px(20.);
         let cols = 4;
 
-        let bounds = (0..PANELS)
-            .map(|i| {
-                let row = i / cols;
-                let col = i % cols;
-                let x = start_x + (panel_width + gap) * col as f32;
-                let y = start_y + (panel_height + gap) * row as f32;
-                Bounds::new(point(x, y), size(panel_width, panel_height))
-            })
-            .collect::<Vec<_>>();
+        (0..PANELS).fold(DockLayout::tiles(), |layout, i| {
+            let story = if i % 2 == 0 {
+                panel_handle(StoryContainer::panel::<ButtonStory>(window, cx))
+            } else {
+                panel_handle(StoryContainer::panel::<IconStory>(window, cx))
+            };
+            let row = i / cols;
+            let col = i % cols;
+            let x = start_x + (panel_width + gap) * col as f32;
+            let y = start_y + (panel_height + gap) * row as f32;
 
-        DockItem::tiles(panels, bounds, dock_area, window, cx)
+            layout.tile_view(
+                panel_handle(ContainerPanel::new(story, window, cx)),
+                Bounds::new(point(x, y), size(panel_width, panel_height)),
+                cx,
+            )
+        })
     }
 
     pub fn new_local(cx: &mut App) -> Task<anyhow::Result<WindowHandle<Root>>> {
