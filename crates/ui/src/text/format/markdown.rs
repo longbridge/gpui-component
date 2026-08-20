@@ -318,70 +318,104 @@ fn new_span(pos: Option<markdown::unist::Position>, cx: &NodeContext) -> Option<
     })
 }
 
-/// Detect whether a blockquote's first paragraph is a GitHub callout (e.g.
-/// `> [!WARNING]`). Returns the callout kind and any text on that first line
-/// that follows the `]` (usually empty).
-fn callout_of(children: &[Node]) -> Option<(CalloutKind, String)> {
-    let first = children.first()?;
-    let mdast::Node::Paragraph(paragraph) = first else {
+/// The callout keywords GitHub understands, and the kind each one declares.
+const CALLOUT_KINDS: [(&str, CalloutKind); 5] = [
+    ("note", CalloutKind::Note),
+    ("tip", CalloutKind::Tip),
+    ("important", CalloutKind::Important),
+    ("warning", CalloutKind::Warning),
+    ("caution", CalloutKind::Caution),
+];
+
+/// Take the callout marker (e.g. `> [!NOTE]`) off a blockquote's first
+/// paragraph, returning the kind it declares.
+///
+/// Only the marker line is removed, so the rest of the paragraph keeps its
+/// inline nodes (links, emphasis, code) and, by re-anchoring the paragraph on
+/// the next line, its source offsets.
+fn take_callout(source: &str, children: &mut Vec<Node>) -> Option<CalloutKind> {
+    let Some(Node::Paragraph(paragraph)) = children.first() else {
         return None;
     };
-    let text = paragraph_plain_text(paragraph);
-    callout_kind_and_remainder(&text)
+    let Some(Node::Text(text)) = paragraph.children.first() else {
+        return None;
+    };
+
+    let (callout, body) = split_callout_marker(&text.value, paragraph.children.len() == 1)?;
+    let body_offset = paragraph
+        .position
+        .as_ref()
+        .and_then(|pos| body_offset(source, pos.start.offset));
+
+    let Some(Node::Paragraph(paragraph)) = children.first_mut() else {
+        unreachable!("the first child was matched as a paragraph above")
+    };
+    if body.is_empty() {
+        paragraph.children.remove(0);
+    } else if let Some(Node::Text(text)) = paragraph.children.first_mut() {
+        text.value = body;
+        re_anchor(text.position.as_mut(), body_offset);
+    }
+
+    // The marker was the whole first block, the body starts at the next one.
+    if paragraph.children.is_empty() {
+        children.remove(0);
+    } else {
+        re_anchor(paragraph.position.as_mut(), body_offset);
+    }
+
+    Some(callout)
 }
 
-fn callout_kind_and_remainder(text: &str) -> Option<(CalloutKind, String)> {
-    let trimmed = text.trim_start();
-    let lower = trimmed.to_ascii_lowercase();
+/// Split a leading callout marker off the first text of a blockquote,
+/// returning the kind and the text that is left of that first node.
+///
+/// The marker has to be alone on its line: GitHub renders `> [!NOTE] text` as
+/// a plain blockquote, and so does a marker followed by other inline nodes.
+fn split_callout_marker(value: &str, is_only_child: bool) -> Option<(CalloutKind, String)> {
+    let lower = value.to_ascii_lowercase();
+    let (callout, marker_len) = CALLOUT_KINDS.iter().find_map(|(keyword, callout)| {
+        lower
+            .starts_with(&format!("[!{}]", keyword))
+            // `[`, `!`, and `]` around the keyword.
+            .then_some((*callout, keyword.len() + 3))
+    })?;
 
-    let kinds = [
-        ("note", CalloutKind::Note),
-        ("tip", CalloutKind::Tip),
-        ("important", CalloutKind::Important),
-        ("warning", CalloutKind::Warning),
-        ("caution", CalloutKind::Caution),
-    ];
-
-    for (keyword, kind) in kinds {
-        let token = format!("[!{}]", keyword);
-        if lower.starts_with(&token) {
-            let rest = trimmed[token.len()..].trim_start();
-            return Some((kind, rest.to_string()));
+    match value[marker_len..].split_once('\n') {
+        Some((marker_line_rest, body)) if marker_line_rest.trim().is_empty() => {
+            Some((callout, body.to_string()))
         }
-    }
-    None
-}
-
-/// Concatenate the plain text of a paragraph's inline children (enough to
-/// detect a leading callout token).
-fn paragraph_plain_text(paragraph: &mdast::Paragraph) -> String {
-    let mut out = String::new();
-    for child in &paragraph.children {
-        match child {
-            mdast::Node::Text(t) => out.push_str(&t.value),
-            mdast::Node::InlineCode(c) => out.push_str(&c.value),
-            mdast::Node::Strong(s) => {
-                for c in &s.children {
-                    out.push_str(&paragraph_plain_text_of_node(c));
-                }
-            }
-            mdast::Node::Emphasis(s) => {
-                for c in &s.children {
-                    out.push_str(&paragraph_plain_text_of_node(c));
-                }
-            }
-            _ => {}
+        // The marker is all the paragraph has, the callout body starts at the
+        // next block (or the callout is empty).
+        None if is_only_child && value[marker_len..].trim().is_empty() => {
+            Some((callout, String::new()))
         }
+        _ => None,
     }
-    out
 }
 
-fn paragraph_plain_text_of_node(node: &mdast::Node) -> String {
-    match node {
-        mdast::Node::Text(t) => t.value.clone(),
-        mdast::Node::InlineCode(c) => c.value.clone(),
-        _ => String::new(),
-    }
+/// The offset of the callout body, the first character after the `>` that
+/// opens the line following the marker at `marker_offset`.
+fn body_offset(source: &str, marker_offset: usize) -> Option<usize> {
+    let line_start = source.get(marker_offset..)?.find('\n')? + marker_offset + 1;
+    let line = source.get(line_start..)?;
+    // Up to three spaces may indent the `>`, and one space after it belongs to
+    // the marker rather than to the content.
+    let indent = line.len() - line.trim_start_matches([' ', '\t']).len();
+    let line = &line[indent..];
+    let marker = line.starts_with('>') as usize;
+    let space = line[marker..].starts_with([' ', '\t']) as usize;
+    Some(line_start + indent + marker + space)
+}
+
+/// Move a node's start to `offset`, the first line of the callout body.
+fn re_anchor(position: Option<&mut markdown::unist::Position>, offset: Option<usize>) {
+    let (Some(position), Some(offset)) = (position, offset) else {
+        return;
+    };
+    position.start.line += 1;
+    position.start.column = 1;
+    position.start.offset = offset;
 }
 
 fn ast_to_node(source: &str, value: mdast::Node, cx: &mut NodeContext) -> BlockNode {
@@ -402,35 +436,17 @@ fn ast_to_node(source: &str, value: mdast::Node, cx: &mut NodeContext) -> BlockN
             paragraph.span = new_span(val.position, cx);
             BlockNode::Paragraph(paragraph)
         }
-        Node::Blockquote(val) => {
-            if let Some((kind, remainder)) = callout_of(&val.children) {
-                let mut children: Vec<BlockNode> = Vec::new();
-                if !remainder.is_empty() {
-                    children.push(BlockNode::Paragraph(Paragraph::new(remainder)));
-                }
-                children.extend(
-                    val.children
-                        .into_iter()
-                        .skip(1)
-                        .map(|c| ast_to_node(source, c, cx))
-                        .filter(|n| !matches!(n, BlockNode::Unknown)),
-                );
-                BlockNode::Blockquote {
-                    children,
-                    span: new_span(val.position, cx),
-                    callout: Some(kind),
-                }
-            } else {
-                let children = val
-                    .children
-                    .into_iter()
-                    .map(|c| ast_to_node(source, c, cx))
-                    .collect();
-                BlockNode::Blockquote {
-                    children,
-                    span: new_span(val.position, cx),
-                    callout: None,
-                }
+        Node::Blockquote(mut val) => {
+            let callout = take_callout(source, &mut val.children);
+            let children = val
+                .children
+                .into_iter()
+                .map(|c| ast_to_node(source, c, cx))
+                .collect();
+            BlockNode::Blockquote {
+                children,
+                span: new_span(val.position, cx),
+                callout,
             }
         }
         Node::List(list) => {
@@ -620,6 +636,55 @@ mod tests {
                 .any(|(_, mark)| mark.bold && mark.italic),
             "nested emphasis should produce a bold and italic mark"
         );
+    }
+
+    #[test]
+    fn test_gfm_callout_keeps_the_body_inline_nodes_and_offsets() {
+        let source = "> [!WARNING]\n> Do **not** do this.";
+        let mut cx = NodeContext::default();
+        let document = parse(source, &mut cx).unwrap();
+
+        let BlockNode::Blockquote {
+            children, callout, ..
+        } = &document.blocks[0]
+        else {
+            panic!("expected blockquote");
+        };
+        assert_eq!(*callout, Some(CalloutKind::Warning));
+
+        let [BlockNode::Paragraph(paragraph)] = children.as_slice() else {
+            panic!("expected the marker line to leave a single paragraph");
+        };
+        let bold = paragraph
+            .children
+            .iter()
+            .find(|child| child.text.as_ref() == "not")
+            .expect("expected the emphasis to survive the marker");
+        assert!(bold.marks.iter().any(|(_, mark)| mark.bold));
+
+        // The paragraph is anchored on the body, so selecting it yields the
+        // Markdown source of the body and not of the marker.
+        let span = paragraph.span.expect("expected a span");
+        assert_eq!(&source[span.start..span.end], "Do **not** do this.");
+    }
+
+    #[test]
+    fn test_gfm_callout_marker_must_be_alone_on_its_line() {
+        let mut cx = NodeContext::default();
+        let document = parse("> [!NOTE] this is a plain blockquote", &mut cx).unwrap();
+
+        let BlockNode::Blockquote { callout, .. } = &document.blocks[0] else {
+            panic!("expected blockquote");
+        };
+        assert_eq!(*callout, None);
+    }
+
+    #[test]
+    fn test_gfm_callout_round_trips_to_markdown() {
+        let mut cx = NodeContext::default();
+        let document = parse("> [!tip]\n>\n> Try this.", &mut cx).unwrap();
+
+        assert_eq!(document.blocks[0].to_markdown(), "> [!TIP]\n> Try this.");
     }
 
     #[test]

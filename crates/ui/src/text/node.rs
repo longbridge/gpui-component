@@ -15,7 +15,9 @@ use markdown::mdast;
 use ropey::Rope;
 
 use crate::{
-    ActiveTheme as _, Icon, IconName, StyledExt, h_flex,
+    ActiveTheme as _, Icon, IconName, StyledExt,
+    alert::AlertVariant,
+    h_flex,
     highlighter::{HighlightTheme, LanguageRegistry, SyntaxHighlighter},
     input::{InputEdit, Point, RopeExt as _},
     scroll::horizontal_scroll_area,
@@ -40,8 +42,8 @@ thread_local! {
         RefCell::new(HashMap::new());
 }
 
-/// GitHub-flavored markdown callout/alerts inside a blockquote
-/// (e.g. `> [!NOTE]`, `> [!WARNING]`).
+/// A GitHub-flavored Markdown alert (callout) declared on the first line of a
+/// blockquote, e.g. `> [!NOTE]`, `> [!WARNING]`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum CalloutKind {
     Note,
@@ -52,13 +54,49 @@ pub(crate) enum CalloutKind {
 }
 
 impl CalloutKind {
-    pub(crate) fn label(&self) -> &'static str {
+    /// The keyword used by the Markdown marker, e.g. `NOTE` for `> [!NOTE]`.
+    pub(crate) fn keyword(&self) -> &'static str {
         match self {
             Self::Note => "NOTE",
             Self::Tip => "TIP",
             Self::Important => "IMPORTANT",
             Self::Warning => "WARNING",
             Self::Caution => "CAUTION",
+        }
+    }
+
+    /// The title shown above the callout body.
+    fn title(&self) -> &'static str {
+        match self {
+            Self::Note => "Note",
+            Self::Tip => "Tip",
+            Self::Important => "Important",
+            Self::Warning => "Warning",
+            Self::Caution => "Caution",
+        }
+    }
+
+    /// Callouts are painted with the [`Alert`](crate::alert::Alert) colors, so a
+    /// `> [!WARNING]` in a document matches the alerts used elsewhere in the
+    /// app. GitHub's purple `IMPORTANT` has no counterpart in the theme, so it
+    /// shares the informational colors with `NOTE` and is told apart by its
+    /// icon and title.
+    fn variant(&self) -> AlertVariant {
+        match self {
+            Self::Note | Self::Important => AlertVariant::Info,
+            Self::Tip => AlertVariant::Success,
+            Self::Warning => AlertVariant::Warning,
+            Self::Caution => AlertVariant::Error,
+        }
+    }
+
+    fn icon(&self) -> IconName {
+        match self {
+            Self::Note => IconName::Info,
+            Self::Tip => IconName::CircleCheck,
+            Self::Important => IconName::Bell,
+            Self::Warning => IconName::TriangleAlert,
+            Self::Caution => IconName::CircleX,
         }
     }
 }
@@ -227,23 +265,26 @@ impl BlockNode {
             BlockNode::ListItem { children, .. } => {
                 text.push_str(&Self::children_text(children, kind));
             }
-            BlockNode::Blockquote { children, .. } => {
+            BlockNode::Blockquote {
+                children, callout, ..
+            } => {
                 let block_text = Self::children_text(children, kind);
 
                 if !block_text.is_empty() {
                     if matches!(kind, BlockTextKind::SelectedSource) {
                         // Prefix every line with `> ` so a selected blockquote
-                        // round-trips as Markdown.
-                        let quoted = block_text
-                            .trim_end_matches('\n')
-                            .lines()
-                            .map(|line| {
+                        // round-trips as Markdown, restoring the callout marker
+                        // that is rendered as a title.
+                        let quoted = callout
+                            .iter()
+                            .map(|callout| format!("> [!{}]", callout.keyword()))
+                            .chain(block_text.trim_end_matches('\n').lines().map(|line| {
                                 if line.is_empty() {
                                     ">".to_string()
                                 } else {
                                     format!("> {}", line)
                                 }
-                            })
+                            }))
                             .collect::<Vec<_>>()
                             .join("\n");
                         text.push_str(&quoted);
@@ -1760,16 +1801,12 @@ impl BlockNode {
                     .collect::<Vec<_>>()
                     .join("\n\n");
 
-                let mut lines: Vec<String> = Vec::new();
-                if let Some(kind) = callout {
-                    lines.push(format!("> [{}]", kind.label()));
-                }
-                lines.extend(
-                    content
-                        .lines()
-                        .map(|line| format!("> {}", line)),
-                );
-                lines.join("\n")
+                callout
+                    .iter()
+                    .map(|kind| format!("> [!{}]", kind.keyword()))
+                    .chain(content.lines().map(|line| format!("> {}", line)))
+                    .collect::<Vec<_>>()
+                    .join("\n")
             }
             BlockNode::List {
                 children, ordered, ..
@@ -2383,68 +2420,50 @@ impl BlockNode {
             BlockNode::Blockquote {
                 children, callout, ..
             } => {
-                if let Some(kind) = callout {
-                    let color = match kind {
-                        CalloutKind::Note => cx.theme().blue,
-                        CalloutKind::Tip => cx.theme().success,
-                        CalloutKind::Important => cx.theme().warning,
-                        CalloutKind::Warning | CalloutKind::Caution => cx.theme().danger,
-                    };
-                    div()
-                        .w_full()
-                        .pb(mb)
-                        .child(
-                            div()
+                let children_len = children.len();
+                let children = children
+                    .into_iter()
+                    .enumerate()
+                    .map(|(index, c)| {
+                        let is_last = index == children_len - 1;
+                        c.render_block(options.is_last(is_last), node_cx, window, cx)
+                    })
+                    .collect::<Vec<_>>();
+
+                div()
+                    .w_full()
+                    .pb(mb)
+                    .map(|this| match callout {
+                        // A callout is an `Alert` rendered from Markdown, so it
+                        // borrows the alert paddings, radius, and variant colors.
+                        Some(callout) => this.child(
+                            h_flex()
                                 .id(("callout", ix))
                                 .w_full()
-                                .flex()
-                                .flex_col()
-                                .gap_1()
-                                .px_4()
-                                .py_3()
-                                .rounded_md()
+                                .items_start()
+                                .gap(px(12.))
+                                .px(px(16.))
+                                .py(px(10.))
+                                .rounded(cx.theme().radius)
                                 .border_1()
-                                .border_color(color.opacity(0.4))
-                                .bg(color.opacity(0.08))
+                                .border_color(callout.variant().border_color(cx))
+                                .bg(callout.variant().bg(cx))
+                                .text_color(callout.variant().fg(cx))
+                                .child(div().mt(px(5.)).child(Icon::new(callout.icon())))
                                 .child(
-                                    div()
-                                        .flex()
-                                        .flex_row()
-                                        .items_center()
-                                        .gap_2()
+                                    v_flex()
+                                        .flex_1()
+                                        .overflow_hidden()
                                         .child(
                                             div()
-                                                .text_sm()
-                                                .font_weight(FontWeight::BOLD)
-                                                .text_color(color)
-                                                .child(kind.label()),
-                                        ),
-                                )
-                                .child(
-                                    div()
-                                        .flex()
-                                        .flex_col()
-                                        .gap_1()
-                                        .children({
-                                            let children_len = children.len();
-                                            children.into_iter().enumerate().map(move |(index, c)| {
-                                                let is_last = index == children_len - 1;
-                                                c.render_block(
-                                                    options.is_last(is_last),
-                                                    node_cx,
-                                                    window,
-                                                    cx,
-                                                )
-                                            })
-                                        }),
+                                                .pb(node_cx.style.paragraph_gap)
+                                                .font_semibold()
+                                                .child(callout.title()),
+                                        )
+                                        .children(children),
                                 ),
-                        )
-                        .into_any_element()
-                } else {
-                    div()
-                        .w_full()
-                        .pb(mb)
-                        .child(
+                        ),
+                        None => this.child(
                             div()
                                 .id(("blockquote", ix))
                                 .w_full()
@@ -2452,21 +2471,10 @@ impl BlockNode {
                                 .border_l_3()
                                 .border_color(cx.theme().secondary_active)
                                 .px_4()
-                                .children({
-                                    let children_len = children.len();
-                                    children.into_iter().enumerate().map(move |(index, c)| {
-                                        let is_last = index == children_len - 1;
-                                        c.render_block(
-                                            options.is_last(is_last),
-                                            node_cx,
-                                            window,
-                                            cx,
-                                        )
-                                    })
-                                }),
-                        )
-                        .into_any_element()
-                }
+                                .children(children),
+                        ),
+                    })
+                    .into_any_element()
             }
             BlockNode::List {
                 children, ordered, ..

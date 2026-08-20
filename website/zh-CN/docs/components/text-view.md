@@ -38,6 +38,28 @@ TextView::markdown("preview", markdown_source)
     .selectable(true)
 ```
 
+### GitHub Alerts
+
+以 Alert 标记开头的引用块会渲染为 [`Alert`](./alert.md)，而不是普通引用。标记必须
+独占第一行，支持 GitHub 的五种类型：
+
+```markdown
+> [!NOTE]
+> Useful information that users should know, even when skimming content.
+
+> [!TIP]
+> Helpful advice for doing things better or more easily.
+
+> [!IMPORTANT]
+> Key information users need to know to achieve their goal.
+
+> [!WARNING]
+> Urgent info that needs immediate user attention to avoid problems.
+
+> [!CAUTION]
+> Advises about certain risks or negative potential outcomes.
+```
+
 ### HTML
 
 ```rust

@@ -38,6 +38,29 @@ TextView::markdown("preview", markdown_source)
     .selectable(true)
 ```
 
+### GitHub Alerts
+
+A blockquote that opens with an alert marker renders as an [`Alert`](./alert.md)
+instead of a quote. The marker must be alone on the first line, and the five
+GitHub kinds are supported:
+
+```markdown
+> [!NOTE]
+> Useful information that users should know, even when skimming content.
+
+> [!TIP]
+> Helpful advice for doing things better or more easily.
+
+> [!IMPORTANT]
+> Key information users need to know to achieve their goal.
+
+> [!WARNING]
+> Urgent info that needs immediate user attention to avoid problems.
+
+> [!CAUTION]
+> Advises about certain risks or negative potential outcomes.
+```
+
 ### HTML
 
 ```rust

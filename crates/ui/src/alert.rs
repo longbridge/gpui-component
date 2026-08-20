@@ -23,7 +23,7 @@ pub enum AlertVariant {
 }
 
 impl AlertVariant {
-    fn fg(&self, cx: &App) -> Hsla {
+    pub(crate) fn fg(&self, cx: &App) -> Hsla {
         match self {
             Self::Default => cx.theme().foreground,
             Self::Info => cx.theme().info,
@@ -33,7 +33,7 @@ impl AlertVariant {
         }
     }
 
-    fn bg(&self, cx: &App) -> Hsla {
+    pub(crate) fn bg(&self, cx: &App) -> Hsla {
         match self {
             Self::Default => cx.theme().background,
             Self::Info => cx.theme().info.mix_oklab(transparent_white(), 0.04),
@@ -43,7 +43,7 @@ impl AlertVariant {
         }
     }
 
-    fn border_color(&self, cx: &App) -> Hsla {
+    pub(crate) fn border_color(&self, cx: &App) -> Hsla {
         match self {
             Self::Default => cx.theme().border,
             Self::Info => cx.theme().info.mix_oklab(transparent_white(), 0.3),
