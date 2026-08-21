@@ -1,6 +1,6 @@
 use gpui::{
     App, AppContext as _, Context, Entity, HighlightStyle, IntoElement, ParentElement, Pixels,
-    Render, Styled, Window, div, px,
+    Render, SharedString, Styled, Window, div, prelude::FluentBuilder as _, px,
 };
 
 use gpui_component::{
@@ -22,6 +22,7 @@ pub struct EditorStory {
     _decorations: TextDecorationCollection,
     active_tab: usize,
     readonly: bool,
+    font_family: Option<SharedString>,
     font_size: Pixels,
 }
 impl super::Story for EditorStory {
@@ -141,34 +142,65 @@ impl EditorStory {
             _decorations: decorations,
             active_tab: 0,
             readonly: false,
+            font_family: None,
             font_size: cx.theme().mono_font_size,
         }
     }
 }
 
 impl EditorStory {
+    /// The font families to offer beside the theme's own monospace one.
+    const FONT_FAMILIES: [&'static str; 2] = if cfg!(target_os = "macos") {
+        ["Monaco", "Courier New"]
+    } else if cfg!(target_os = "windows") {
+        ["Cascadia Mono", "Courier New"]
+    } else {
+        ["Liberation Mono", "monospace"]
+    };
+
     /// The font sizes to switch the editor between.
     const FONT_SIZES: [Pixels; 4] = [px(11.), px(13.), px(16.), px(20.)];
 
     fn render_font_menu(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let story = cx.entity();
-        let current = self.font_size;
+        let family = self.font_family.clone();
+        let size = self.font_size;
+        let label = format!(
+            "{}, {}",
+            family.clone().unwrap_or_else(|| "Theme default".into()),
+            size
+        );
 
-        Button::new("editor-font-size")
+        Button::new("editor-font")
             .xsmall()
             .outline()
-            .label(format!("Font size: {current}"))
+            .label(label)
             .dropdown_menu(move |menu, window, _| {
-                Self::FONT_SIZES.iter().fold(menu, |menu, &size| {
-                    menu.item(
-                        PopupMenuItem::new(size.to_string())
-                            .checked(current == size)
-                            .on_click(window.listener_for(&story, move |this, _, _, cx| {
-                                this.font_size = size;
+                let menu = std::iter::once(None)
+                    .chain(Self::FONT_FAMILIES.map(|name| Some(SharedString::from(name))))
+                    .fold(menu.label("Font family"), |menu, item| {
+                        let label = item.clone().unwrap_or_else(|| "Theme default".into());
+
+                        menu.item(PopupMenuItem::new(label).checked(family == item).on_click(
+                            window.listener_for(&story, move |this, _, _, cx| {
+                                this.font_family = item.clone();
                                 cx.notify();
-                            })),
-                    )
-                })
+                            }),
+                        ))
+                    });
+
+                Self::FONT_SIZES
+                    .iter()
+                    .fold(menu.separator().label("Font size"), |menu, &item| {
+                        menu.item(
+                            PopupMenuItem::new(item.to_string())
+                                .checked(size == item)
+                                .on_click(window.listener_for(&story, move |this, _, _, cx| {
+                                    this.font_size = item;
+                                    cx.notify();
+                                })),
+                        )
+                    })
             })
     }
 }
@@ -207,12 +239,18 @@ impl Render for EditorStory {
             )
             .child(div().min_h_0().flex_1().child(if self.active_tab == 0 {
                 Editor::new(&self.editor_state)
+                    .when_some(self.font_family.clone(), |this, family| {
+                        this.font_family(family)
+                    })
                     .font_size(self.font_size)
                     .readonly(self.readonly)
                     .size_full()
                     .into_any_element()
             } else {
                 Editor::new(&self.decorations_state)
+                    .when_some(self.font_family.clone(), |this, family| {
+                        this.font_family(family)
+                    })
                     .font_size(self.font_size)
                     .readonly(self.readonly)
                     .size_full()
