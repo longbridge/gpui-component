@@ -4,15 +4,10 @@ use gpui::{
 };
 
 use gpui_component::{
-    ActiveTheme, Sizable as _,
-    button::Button,
-    h_flex,
-    input::*,
-    menu::{DropdownMenu as _, PopupMenuItem},
-    switch::Switch,
-    tab::TabBar,
-    v_flex,
+    ActiveTheme, button::Button, h_flex, input::*, menu::PopupMenuItem, tab::TabBar, v_flex,
 };
+
+use crate::story_toolbar_group;
 
 const EXAMPLE_CODE: &str = include_str!("./editor_preview.rs");
 
@@ -155,24 +150,25 @@ impl EditorStory {
     /// The font sizes to switch the editor between.
     const FONT_SIZES: [Pixels; 4] = [px(11.), px(13.), px(16.), px(20.)];
 
-    fn render_font_menu(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render_toolbar(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let story = cx.entity();
+        let readonly = self.readonly;
         let family = self.font_family.clone();
         let size = self.font_size;
-        let label = format!(
-            "{}, {}",
-            family.clone().unwrap_or_else(|| "Theme default".into()),
-            size
-        );
 
-        Button::new("editor-font")
-            .xsmall()
-            .outline()
-            .label(label)
-            .dropdown_menu(move |menu, window, _| {
+        story_toolbar_group().dropdown_child(
+            Button::new("editor-options").label("Options"),
+            move |menu, window, _| {
+                let menu = menu.item(PopupMenuItem::new("Read only").checked(readonly).on_click(
+                    window.listener_for(&story, |this, _, _, cx| {
+                        this.readonly = !this.readonly;
+                        cx.notify();
+                    }),
+                ));
+
                 let menu = std::iter::once(None)
                     .chain(Self::FONT_FAMILIES.map(|name| Some(SharedString::from(name))))
-                    .fold(menu.label("Font family"), |menu, item| {
+                    .fold(menu.separator().label("Font family"), |menu, item| {
                         let label = item.clone().unwrap_or_else(|| "Theme default".into());
 
                         menu.item(PopupMenuItem::new(label).checked(family == item).on_click(
@@ -195,7 +191,8 @@ impl EditorStory {
                                 })),
                         )
                     })
-            })
+            },
+        )
     }
 }
 
@@ -219,17 +216,7 @@ impl Render for EditorStory {
                             .child("Code")
                             .child("Decorations"),
                     )
-                    .child(
-                        h_flex().gap_2().child(self.render_font_menu(cx)).child(
-                            Switch::new("editor-read-only")
-                                .label("Read only")
-                                .checked(self.readonly)
-                                .on_click(cx.listener(|this, checked: &bool, _, cx| {
-                                    this.readonly = *checked;
-                                    cx.notify();
-                                })),
-                        ),
-                    ),
+                    .child(self.render_toolbar(cx)),
             )
             .child(div().min_h_0().flex_1().child(if self.active_tab == 0 {
                 Editor::new(&self.editor_state)
