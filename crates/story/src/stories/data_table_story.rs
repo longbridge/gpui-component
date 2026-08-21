@@ -1136,8 +1136,7 @@ impl DataTableStory {
         window: &mut gpui::AsyncWindowContext,
     ) -> anyhow::Result<()> {
         let (headers, rows_count) = table.update_in(window, |table, _, cx| {
-            let (headers, _) = table.dump_range(0..0, cx);
-            (headers, table.delegate().rows_count(cx))
+            (table.headers(cx), table.delegate().rows_count(cx))
         })?;
 
         let (sender, receiver) = async_channel::bounded::<Vec<Vec<String>>>(1);

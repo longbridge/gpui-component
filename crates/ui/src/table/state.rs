@@ -515,14 +515,11 @@ where
         &self.visible_range
     }
 
-    /// Dump table data.
+    /// Dump the header row of the table.
     ///
-    /// Returns a tuple of (headers, rows) where each row is a vector of cell values.
-    ///
-    /// This materializes the complete table in memory. For large tables, prefer
-    /// [`Self::dump_range`] and process rows in batches.
-    pub fn dump(&self, cx: &App) -> (Vec<String>, Vec<Vec<String>>) {
-        // Get header row
+    /// Batched exporters can read the headers once with this, then stream the
+    /// rows with [`Self::dump_range`].
+    pub fn headers(&self, cx: &App) -> Vec<String> {
         let columns_count = self.delegate.columns_count(cx);
         let mut headers = Vec::with_capacity(columns_count);
         for col_ix in 0..columns_count {
@@ -530,18 +527,17 @@ where
             headers.push(column.name.to_string());
         }
 
-        // Get data rows
-        let rows_count = self.delegate.rows_count(cx);
-        let mut rows = Vec::with_capacity(rows_count);
-        for row_ix in 0..rows_count {
-            let mut row = Vec::with_capacity(columns_count);
-            for col_ix in 0..columns_count {
-                row.push(self.delegate.cell_text(row_ix, col_ix, cx));
-            }
-            rows.push(row);
-        }
+        headers
+    }
 
-        (headers, rows)
+    /// Dump table data.
+    ///
+    /// Returns a tuple of (headers, rows) where each row is a vector of cell values.
+    ///
+    /// This materializes the complete table in memory. For large tables, prefer
+    /// [`Self::dump_range`] and process rows in batches.
+    pub fn dump(&self, cx: &App) -> (Vec<String>, Vec<Vec<String>>) {
+        self.dump_range(0..self.delegate.rows_count(cx), cx)
     }
 
     /// Dump table data for the specified row range.
@@ -553,13 +549,6 @@ where
     /// large tables, callers can invoke this repeatedly with bounded ranges.
     pub fn dump_range(&self, range: Range<usize>, cx: &App) -> (Vec<String>, Vec<Vec<String>>) {
         let columns_count = self.delegate.columns_count(cx);
-
-        let mut headers = Vec::with_capacity(columns_count);
-        for col_ix in 0..columns_count {
-            let column = self.delegate.column(col_ix, cx);
-            headers.push(column.name.to_string());
-        }
-
         let rows_count = self.delegate.rows_count(cx);
         let start = range.start.min(rows_count);
         let end = range.end.min(rows_count).max(start);
@@ -573,7 +562,7 @@ where
             rows.push(row);
         }
 
-        (headers, rows)
+        (self.headers(cx), rows)
     }
 
     /// Re-compute the header layout from the current delegate.
