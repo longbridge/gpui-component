@@ -150,13 +150,7 @@ impl EditorStory {
 
 impl EditorStory {
     /// The font families to offer beside the theme's own monospace one.
-    const FONT_FAMILIES: [&'static str; 2] = if cfg!(target_os = "macos") {
-        ["Monaco", "Courier New"]
-    } else if cfg!(target_os = "windows") {
-        ["Cascadia Mono", "Courier New"]
-    } else {
-        ["Liberation Mono", "monospace"]
-    };
+    const FONT_FAMILIES: [&'static str; 2] = ["Menlo", "Consolas"];
 
     /// The font sizes to switch the editor between.
     const FONT_SIZES: [Pixels; 4] = [px(11.), px(13.), px(16.), px(20.)];
