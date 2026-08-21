@@ -75,34 +75,20 @@ production integrations can keep incremental parser state in their
 
 ## Font
 
-The editor paints its own text, so there is no styled element in between to
-inherit a font from. `InputFont` carries the same settings a code editor's
-options do — `font_family`, `font_size`, `font_weight`, and `line_height` — and
-anything left unset falls through to the ambient text style:
+The editor has no font setting of its own: it paints with the ambient text
+style, so the family, size, weight, and line height come from the element the
+application wraps it in.
 
 ```rust
-Editor::new(&editor)
+div()
     .font_family("JetBrains Mono")
-    .font_size(px(13.))
-    .line_height(relative(1.5))
+    .text_size(px(13.))
+    .child(Editor::new(&editor))
 ```
 
-`font` takes them together, to pass a whole font around as one value:
-
-```rust
-use gpui_base::input::InputFont;
-
-Editor::new(&editor).font(
-    InputFont::new()
-        .with_family("JetBrains Mono")
-        .with_size(px(13.)),
-)
-```
-
-The element is the only thing that decides: it writes the font onto its state on
-every render, so an editor rendered with no font of its own inherits the ambient
-style whole. A relative `line_height` keeps the rows in step with the glyphs at
-any size; an absolute one stays put.
+A relative `line_height` keeps the rows in step with the glyphs at any size; an
+absolute one stays put. For a ready-made monospace treatment, see the
+[`gpui-component` Editor](../../docs/components/editor.md).
 
 ## Presentation
 

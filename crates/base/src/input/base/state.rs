@@ -8,7 +8,7 @@ use gpui::{
     EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyBinding,
     KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _,
     Pixels, Point, Render, ScrollHandle, ScrollWheelEvent, SharedString, Styled as _, Subscription,
-    TextStyle, UTF16Selection, Window, actions, div, point, prelude::FluentBuilder as _, px,
+    UTF16Selection, Window, actions, div, point, prelude::FluentBuilder as _, px,
 };
 use ropey::{Rope, RopeSlice};
 use serde::Deserialize;
@@ -20,7 +20,7 @@ use sum_tree::Bias;
 use unicode_segmentation::*;
 
 use super::{
-    DiagnosticSet, DisplayMap, InputContextMenuCapabilities, InputEditorStyle, InputFont,
+    DiagnosticSet, DisplayMap, InputContextMenuCapabilities, InputEditorStyle,
     InputHighlighterFactory, MASK_CHAR, MaskPattern, NativeMenu, NumberStep, WrappingIndent,
     blink_cursor::BlinkCursor,
     change::Change,
@@ -340,8 +340,6 @@ pub struct InputBaseState<M: InputModeKind> {
     pub(super) editor_scrollbar_snapshot: Cell<Option<EditorScrollbarSnapshot>>,
     pub(super) editor_paddings: Edges<Pixels>,
     pub(super) editor_style: InputEditorStyle,
-    /// The font to paint the text with, anything unset inherits the ambient one.
-    pub(super) font: InputFont,
 
     /// The mask pattern for formatting the input text
     pub(crate) mask_pattern: MaskPattern,
@@ -633,7 +631,6 @@ impl<M: InputModeKind> InputBaseState<M> {
             mask_pattern: MaskPattern::default(),
             mask_pattern_set: false,
             editor_style: InputEditorStyle::default(),
-            font: InputFont::default(),
             diagnostic_popover: None,
             context_menu_handler: None,
             pending_context_menu: None,
@@ -723,36 +720,6 @@ impl<M: InputModeKind> InputBaseState<M> {
 
     pub fn set_editor_style(&mut self, style: InputEditorStyle) {
         self.editor_style = style;
-    }
-
-    /// Paint the text with this font, instead of the ambient one.
-    ///
-    /// The input paints its own text, so there is no styled element in between
-    /// for it to inherit a monospace family or a code-sized font from. The
-    /// element drives this on every render, so set the font there rather than
-    /// here; [`InputFont::default`] paints with the ambient style throughout.
-    pub fn set_font(&mut self, font: InputFont, cx: &mut Context<Self>) {
-        if self.font == font {
-            return;
-        }
-
-        self.font = font;
-        cx.notify();
-    }
-
-    /// The text style this input paints with: the ambient one, with the font
-    /// pinned on this state laid over it.
-    ///
-    /// The line height follows from that style, so a relative one keeps the rows
-    /// in step with the glyphs while an absolute one stays put.
-    pub fn text_style(&self, window: &Window) -> TextStyle {
-        self.font.resolve(window.text_style())
-    }
-
-    /// The height of one row, for the font this input paints with.
-    pub(crate) fn resolved_line_height(&self, window: &Window) -> Pixels {
-        self.text_style(window)
-            .line_height_in_pixels(window.rem_size())
     }
 
     /// Set presentation padding for multi-line text and its scrollbar layout.
@@ -1800,7 +1767,7 @@ impl<M: InputModeKind> InputBaseState<M> {
             .last_layout
             .as_ref()
             .map(|layout| layout.line_height)
-            .unwrap_or_else(|| self.resolved_line_height(window));
+            .unwrap_or(window.line_height());
         let delta = event.delta.pixel_delta(line_height);
 
         let old_offset = self.scroll_handle.offset();
@@ -3217,53 +3184,6 @@ mod tests {
                 f(crate::input::InputState::new(window, cx))
             })
         }
-    }
-
-    #[gpui::test]
-    fn font_options_drive_the_glyphs_and_the_rows(cx: &mut TestAppContext) {
-        cx.update(crate::init);
-        let input_view = InputView::new(cx);
-        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
-        let input = input_view.input;
-
-        cx.update(|window, cx| {
-            input.update(cx, |state, cx| {
-                state.set_value("fn main() {}\nfn other() {}", window, cx);
-                state.set_font(InputFont::new().with_size(px(10.)), cx);
-            });
-        });
-        cx.run_until_parked();
-
-        let small_rows = cx.update(|_, cx| input.read(cx).line_height().unwrap());
-        let small_width = cx.update(|_, cx| {
-            input.read(cx).last_layout.as_ref().unwrap().lines[0]
-                .size(small_rows)
-                .width
-        });
-
-        // A larger font must move the rows apart and widen the glyphs with it.
-        cx.update(|_, cx| {
-            input.update(cx, |state, cx| {
-                state.set_font(InputFont::new().with_size(px(20.)), cx)
-            });
-        });
-        cx.run_until_parked();
-
-        let large_rows = cx.update(|_, cx| input.read(cx).line_height().unwrap());
-        let large_width = cx.update(|_, cx| {
-            input.read(cx).last_layout.as_ref().unwrap().lines[0]
-                .size(large_rows)
-                .width
-        });
-
-        assert!(
-            large_rows > small_rows,
-            "rows stayed at {small_rows} for a font twice the size"
-        );
-        assert!(
-            large_width > small_width,
-            "glyphs stayed {small_width} wide for a font twice the size"
-        );
     }
 
     #[gpui::test]

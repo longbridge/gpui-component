@@ -223,7 +223,7 @@ impl Render for EditorStory {
                     .when_some(self.font_family.clone(), |this, family| {
                         this.font_family(family)
                     })
-                    .font_size(self.font_size)
+                    .text_size(self.font_size)
                     .readonly(self.readonly)
                     .size_full()
                     .into_any_element()
@@ -232,7 +232,7 @@ impl Render for EditorStory {
                     .when_some(self.font_family.clone(), |this, family| {
                         this.font_family(family)
                     })
-                    .font_size(self.font_size)
+                    .text_size(self.font_size)
                     .readonly(self.readonly)
                     .size_full()
                     .into_any_element()

@@ -70,32 +70,19 @@ editor.update(cx, |state, cx| {
 
 ## 字体
 
-Editor 默认使用主题中的等宽字体：`mono_font_family` 和 `mono_font_size`，行高为字号的
-1.5 倍。可以为单个编辑器指定，gutter 和行高会跟随字号变化：
+Editor 默认使用主题中的等宽字体 —— `mono_font_family` 和 `mono_font_size`，行高为字号的
+1.5 倍。这只是默认值：在 Editor 上设置的文本样式会覆盖它，gutter 和行高都跟随字号变化。
 
 ```rust
+Editor::new(&editor).text_sm()
+
 Editor::new(&editor)
     .font_family("JetBrains Mono")
-    .font_size(px(15.))
+    .text_size(px(15.))
 ```
 
-四个设置项与代码编辑器 options 中的字体分组一致：`font_family`、`font_size`、
-`font_weight`、`line_height`；`font` 则用 `InputFont` 一次性传入，便于把整套字体配置
-作为一个值传递：
-
-```rust
-use gpui_component::input::InputFont;
-
-let font = InputFont::new()
-    .with_family("JetBrains Mono")
-    .with_size(px(15.))
-    .with_line_height(relative(1.6));
-
-Editor::new(&editor).font(font)
-```
-
-每一项的取值顺序都一样：先看这个元素上的选项，再看 refine 到它上面的文本样式
-（所以 `.text_sm()`、`.text_xs()` 同样生效），最后才是主题默认值。
+这些就是所有元素都有的 [`Styled`](https://docs.rs/gpui/latest/gpui/trait.Styled.html)
+方法，`font_weight`、`line_height` 用法相同。
 
 ## 外观
 

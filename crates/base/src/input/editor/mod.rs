@@ -1,9 +1,6 @@
-use gpui::{
-    AbsoluteLength, App, DefiniteLength, Div, Entity, FontWeight, InteractiveElement as _,
-    IntoElement, RenderOnce, SharedString, Stateful, Window,
-};
+use gpui::{App, Div, Entity, InteractiveElement as _, IntoElement, RenderOnce, Stateful, Window};
 
-use super::{EditorMode, InputBaseState, InputFont, InputModeKind};
+use super::{EditorMode, InputBaseState, InputModeKind};
 
 /// State for source-code editing.
 ///
@@ -190,62 +187,18 @@ impl EditorState {
 #[derive(IntoElement)]
 pub struct Editor {
     state: Entity<EditorState>,
-    font: InputFont,
 }
 
 impl Editor {
     pub fn new(state: &Entity<EditorState>) -> Self {
         Self {
             state: state.clone(),
-            font: InputFont::default(),
         }
-    }
-
-    /// Paint the code with this font, instead of the ambient one.
-    ///
-    /// Source code wants a monospace family at a code-sized font, which the
-    /// surrounding text style rarely carries. Whatever is left unset falls
-    /// through to that style, so an editor given no font at all still inherits
-    /// its surroundings. The four settings below fill this in one at a time.
-    pub fn font(mut self, font: InputFont) -> Self {
-        self.font = font;
-        self
-    }
-
-    /// The family to shape the code with. See [`Self::font`].
-    pub fn font_family(mut self, font_family: impl Into<SharedString>) -> Self {
-        self.font = self.font.with_family(font_family);
-        self
-    }
-
-    /// The size to paint the code at. See [`Self::font`].
-    pub fn font_size(mut self, font_size: impl Into<AbsoluteLength>) -> Self {
-        self.font = self.font.with_size(font_size);
-        self
-    }
-
-    /// The weight to paint the code at. See [`Self::font`].
-    pub fn font_weight(mut self, font_weight: FontWeight) -> Self {
-        self.font = self.font.with_weight(font_weight);
-        self
-    }
-
-    /// The height of one row, a fraction of the font size or an absolute
-    /// length. See [`Self::font`].
-    pub fn line_height(mut self, line_height: impl Into<DefiniteLength>) -> Self {
-        self.font = self.font.with_line_height(line_height);
-        self
     }
 }
 
 impl RenderOnce for Editor {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        // The state carries the font, because the editor paints its own text
-        // and has no styled element in between to inherit one from. Writing it
-        // on every render leaves the element the only thing that decides.
-        self.state
-            .update(cx, |state, cx| state.set_font(self.font, cx));
-
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         self.state
     }
 }
@@ -288,76 +241,5 @@ impl crate::input::InputExtras for super::EditorExtras {
             self.lsp.definition_provider.is_some(),
             !self.lsp.code_action_providers.is_empty(),
         )
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use gpui::{
-        AppContext as _, Context, ParentElement as _, Pixels, Render, Styled as _, TestAppContext,
-        TextStyle, VisualTestContext, div, prelude::FluentBuilder as _, px,
-    };
-
-    struct Harness {
-        state: Entity<EditorState>,
-        /// `None` renders the editor with no font of its own.
-        font: Option<InputFont>,
-    }
-
-    impl Render for Harness {
-        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-            div().size_full().text_size(px(30.)).child(
-                Editor::new(&self.state).when_some(self.font.clone(), |this, font| this.font(font)),
-            )
-        }
-    }
-
-    /// What the editor ends up painting with, for the given element font: the
-    /// font pinned on its state, and the row height it laid out with.
-    fn painted_with(cx: &mut TestAppContext, font: Option<InputFont>) -> (TextStyle, Pixels) {
-        cx.update(crate::init);
-        let mut state = None;
-        let (_, cx) = cx.add_window_view(|window, cx| {
-            let editor = cx.new(|cx| EditorState::new(window, cx).default_value("fn main() {}"));
-            state = Some(editor.clone());
-            Harness {
-                state: editor,
-                font,
-            }
-        });
-        let state = state.unwrap();
-        VisualTestContext::update(cx, |window, cx| window.draw(cx).clear(cx));
-
-        VisualTestContext::update(cx, |window, cx| {
-            let state = state.read(cx);
-            (
-                state.text_style(window),
-                state.line_height().expect("the editor must lay out"),
-            )
-        })
-    }
-
-    #[gpui::test]
-    fn the_element_owns_the_font_and_an_unset_one_inherits(cx: &mut TestAppContext) {
-        let (pinned, pinned_rows) = painted_with(
-            cx,
-            Some(
-                InputFont::new()
-                    .with_family("Courier New")
-                    .with_size(px(20.)),
-            ),
-        );
-        assert_eq!(pinned.font_family, "Courier New".to_string());
-        assert_eq!(pinned.font_size.to_pixels(px(16.)), px(20.));
-
-        // Nothing pinned: the ambient 30px of the surrounding element comes
-        // through, and lays out taller rows than the pinned 20px did.
-        let (_, inherited_rows) = painted_with(cx, None);
-        assert!(
-            inherited_rows > pinned_rows,
-            "an editor with no font of its own laid out {inherited_rows} rows, \
-             no taller than the {pinned_rows} of a smaller pinned font"
-        );
     }
 }

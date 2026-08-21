@@ -79,34 +79,21 @@ cx.subscribe(&editor, |this, state, event: &InputEvent, cx| {
 
 ## Font
 
-The editor paints its code in the theme's monospace font: `mono_font_family` at
-`mono_font_size`, with rows 1.5 times the font size. Set a different one per
-editor, and the gutter and row height follow the size:
+The editor paints its code in the theme's monospace font — `mono_font_family` at
+`mono_font_size` — with rows 1.5 times the font size. That is only the default:
+a text style set on the editor refines over it, and the gutter and row height
+follow the size.
 
 ```rust
+Editor::new(&editor).text_sm()
+
 Editor::new(&editor)
     .font_family("JetBrains Mono")
-    .font_size(px(15.))
+    .text_size(px(15.))
 ```
 
-The four settings match the font group of a code editor's options —
-`font_family`, `font_size`, `font_weight`, and `line_height` — and `font` takes
-them together as an `InputFont`, to pass a whole font around as one value:
-
-```rust
-use gpui_component::input::InputFont;
-
-let font = InputFont::new()
-    .with_family("JetBrains Mono")
-    .with_size(px(15.))
-    .with_line_height(relative(1.6));
-
-Editor::new(&editor).font(font)
-```
-
-Each setting resolves the same way: the option on this element first, then a
-text style refined onto it — so `.text_sm()` and `.text_xs()` work too — and the
-theme last.
+These are the ordinary [`Styled`](https://docs.rs/gpui/latest/gpui/trait.Styled.html)
+methods every element has, so `font_weight` and `line_height` work the same way.
 
 ## Appearance
 
