@@ -3,7 +3,7 @@ use gpui::{
     Styled as _, Window, div,
 };
 
-use std::ops::RangeInclusive;
+use std::{ops::RangeInclusive, sync::Arc};
 
 use crate::text::{
     SelectionFormat,
@@ -14,7 +14,7 @@ use crate::text::{
 #[derive(Debug, Clone, PartialEq, Default)]
 pub(crate) struct ParsedDocument {
     pub(crate) source: SharedString,
-    pub(crate) blocks: Vec<BlockNode>,
+    pub(crate) blocks: Arc<Vec<BlockNode>>,
 }
 
 #[derive(Default, Clone, Copy)]

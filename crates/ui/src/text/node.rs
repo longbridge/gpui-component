@@ -2885,7 +2885,7 @@ mod tests {
 
         let document = ParsedDocument {
             source: source.into(),
-            blocks: vec![
+            blocks: Arc::new(vec![
                 BlockNode::Paragraph(selected_paragraph("start")),
                 BlockNode::List {
                     ordered: true,
@@ -2902,7 +2902,7 @@ mod tests {
                     }),
                 },
                 BlockNode::Paragraph(selected_paragraph("end")),
-            ],
+            ]),
         };
 
         assert_eq!(
@@ -2929,11 +2929,11 @@ mod tests {
 
         let document = ParsedDocument {
             source: source.into(),
-            blocks: vec![
+            blocks: Arc::new(vec![
                 BlockNode::Paragraph(selected_paragraph("before")),
                 BlockNode::Paragraph(image),
                 BlockNode::Paragraph(selected_paragraph("after")),
-            ],
+            ]),
         };
         assert_eq!(
             document.selected_text(SelectionFormat::Source, None),
@@ -2952,7 +2952,8 @@ mod tests {
             blocks: vec![
                 BlockNode::Paragraph(selected_paragraph("before")),
                 BlockNode::Paragraph(image_paragraph("alt", "u")),
-            ],
+            ]
+            .into(),
         };
         assert_eq!(
             document.selected_text(SelectionFormat::Source, None),
@@ -3044,7 +3045,8 @@ mod tests {
                         },
                     ],
                 },
-            ],
+            ]
+            .into(),
         };
 
         assert_eq!(

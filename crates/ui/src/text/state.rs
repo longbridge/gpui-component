@@ -747,7 +747,7 @@ fn parse_content(
 
     let mut source = String::new();
     if options.append
-        && let Some(last_block) = content.document.blocks.pop()
+        && let Some(last_block) = Arc::make_mut(&mut content.document.blocks).pop()
         && let Some(span) = last_block.span()
     {
         node_cx.offset = span.start;
@@ -766,7 +766,8 @@ fn parse_content(
     if options.append {
         content.document.source =
             format!("{}{}", content.document.source, options.pending_text).into();
-        content.document.blocks.extend(new_document.blocks);
+        Arc::make_mut(&mut content.document.blocks)
+            .extend(Arc::unwrap_or_clone(new_document.blocks));
     } else {
         content.document = new_document;
     }

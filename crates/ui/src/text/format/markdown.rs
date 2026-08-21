@@ -1,4 +1,4 @@
-use std::ops::Range;
+use std::{ops::Range, sync::Arc};
 
 use gpui::SharedString;
 use markdown::mdast::{self, Node};
@@ -239,7 +239,9 @@ fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node, cx: &mut NodeC
         }
         Node::Html(val) => match super::html::parse(&val.value, cx) {
             Ok(el) => {
-                if let Some(inline_text) = append_inline_html_blocks(paragraph, el.blocks) {
+                if let Some(inline_text) =
+                    append_inline_html_blocks(paragraph, Arc::unwrap_or_clone(el.blocks))
+                {
                     text = inline_text;
                 } else {
                     if cfg!(debug_assertions) {
@@ -305,7 +307,7 @@ fn ast_to_document(source: &str, root: mdast::Node, cx: &mut NodeContext) -> Par
         .collect();
     ParsedDocument {
         source: source.to_string().into(),
-        blocks,
+        blocks: Arc::new(blocks),
     }
 }
 
@@ -400,7 +402,7 @@ fn ast_to_node(source: &str, value: mdast::Node, cx: &mut NodeContext) -> BlockN
         )),
         Node::Html(val) => match super::html::parse(&val.value, cx) {
             Ok(el) => BlockNode::Root {
-                children: el.blocks,
+                children: Arc::unwrap_or_clone(el.blocks),
                 span: new_span(val.position, cx),
             },
             Err(err) => {
