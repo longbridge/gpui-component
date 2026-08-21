@@ -78,11 +78,6 @@ impl InputFont {
         self.line_height
     }
 
-    /// Whether nothing is pinned, and the ambient text style comes through whole.
-    pub fn is_inherited(&self) -> bool {
-        self == &Self::default()
-    }
-
     /// Lay this font over an ambient text style.
     pub fn resolve(&self, mut style: TextStyle) -> TextStyle {
         if let Some(family) = self.family.clone() {

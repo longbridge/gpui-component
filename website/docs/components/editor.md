@@ -105,7 +105,9 @@ Editor::new(&editor).font(font)
 ```
 
 A text style set on the element refines over the theme default, so `.text_sm()`
-and `.text_xs()` work too. An explicit `font_size` wins over both.
+and `.text_xs()` work too. An explicit `font_size` wins over both. A font pinned
+on the state itself — `EditorState::font`, from the `gpui-base` layer — wins over
+all of them, so pick one layer and stay in it.
 
 ## Appearance
 

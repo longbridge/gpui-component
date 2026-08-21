@@ -94,8 +94,9 @@ let font = InputFont::new()
 Editor::new(&editor).font(font)
 ```
 
-在元素上设置的文本样式会覆盖主题默认值，因此 `.text_sm()`、`.text_xs()` 同样生效。
-显式设置的 `font_size` 优先级最高。
+在元素上设置的文本样式会覆盖主题默认值，因此 `.text_sm()`、`.text_xs()` 同样生效，
+显式设置的 `font_size` 又比它们优先。而直接钉在 state 上的字体（`gpui-base` 层的
+`EditorState::font`）优先级高于以上全部，所以两层只选一层用。
 
 ## 外观
 

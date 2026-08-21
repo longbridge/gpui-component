@@ -744,11 +744,6 @@ impl<M: InputModeKind> InputBaseState<M> {
         cx.notify();
     }
 
-    /// The font pinned on this input. See [`Self::set_font`] to change it.
-    pub fn font_settings(&self) -> &InputFont {
-        &self.font
-    }
-
     /// The text style this input paints with: the ambient one, with the font
     /// pinned on this state laid over it.
     ///
@@ -759,7 +754,7 @@ impl<M: InputModeKind> InputBaseState<M> {
     }
 
     /// The height of one row, for the font this input paints with.
-    pub fn resolved_line_height(&self, window: &Window) -> Pixels {
+    pub(crate) fn resolved_line_height(&self, window: &Window) -> Pixels {
         self.text_style(window)
             .line_height_in_pixels(window.rem_size())
     }

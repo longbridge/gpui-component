@@ -104,8 +104,10 @@ editor.update(cx, |state, cx| {
 });
 ```
 
-A relative `line_height` keeps the rows in step with the glyphs at any size; an
-absolute one stays put.
+A font set on the element is written through to the state, so it stays until
+something replaces it; pass `InputFont::default()` to go back to inheriting the
+ambient style. A relative `line_height` keeps the rows in step with the glyphs at
+any size; an absolute one stays put.
 
 ## Presentation
 

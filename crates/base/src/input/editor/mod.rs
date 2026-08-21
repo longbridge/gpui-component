@@ -190,49 +190,52 @@ impl EditorState {
 #[derive(IntoElement)]
 pub struct Editor {
     state: Entity<EditorState>,
-    font: InputFont,
+    /// `None` leaves whatever font the state already carries alone.
+    font: Option<InputFont>,
 }
 
 impl Editor {
     pub fn new(state: &Entity<EditorState>) -> Self {
         Self {
             state: state.clone(),
-            font: InputFont::default(),
+            font: None,
         }
     }
 
     /// Paint the code with this font, instead of the ambient one.
     ///
     /// Source code wants a monospace family at a code-sized font, which the
-    /// surrounding text style rarely carries. Left unset, the editor inherits
-    /// the ambient font. The four settings below fill this in one at a time.
+    /// surrounding text style rarely carries. Left unset, the editor keeps the
+    /// font its state already carries, and inherits the ambient one for the
+    /// rest; [`InputFont::default`] puts it back to inheriting everything. The
+    /// four settings below fill this in one at a time.
     pub fn font(mut self, font: InputFont) -> Self {
-        self.font = font;
+        self.font = Some(font);
         self
     }
 
     /// The family to shape the code with. See [`Self::font`].
     pub fn font_family(mut self, font_family: impl Into<SharedString>) -> Self {
-        self.font = self.font.with_family(font_family);
+        self.font = Some(self.font.unwrap_or_default().with_family(font_family));
         self
     }
 
     /// The size to paint the code at. See [`Self::font`].
     pub fn font_size(mut self, font_size: impl Into<AbsoluteLength>) -> Self {
-        self.font = self.font.with_size(font_size);
+        self.font = Some(self.font.unwrap_or_default().with_size(font_size));
         self
     }
 
     /// The weight to paint the code at. See [`Self::font`].
     pub fn font_weight(mut self, font_weight: FontWeight) -> Self {
-        self.font = self.font.with_weight(font_weight);
+        self.font = Some(self.font.unwrap_or_default().with_weight(font_weight));
         self
     }
 
     /// The height of one row, a fraction of the font size or an absolute
     /// length. See [`Self::font`].
     pub fn line_height(mut self, line_height: impl Into<DefiniteLength>) -> Self {
-        self.font = self.font.with_line_height(line_height);
+        self.font = Some(self.font.unwrap_or_default().with_line_height(line_height));
         self
     }
 }
@@ -241,9 +244,8 @@ impl RenderOnce for Editor {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         // The state carries the font, because the editor paints its own text
         // and has no styled element in between to inherit one from.
-        if !self.font.is_inherited() {
-            self.state
-                .update(cx, |state, cx| state.set_font(self.font, cx));
+        if let Some(font) = self.font {
+            self.state.update(cx, |state, cx| state.set_font(font, cx));
         }
 
         self.state
@@ -325,14 +327,8 @@ mod tests {
         let state = state.unwrap();
         VisualTestContext::update(cx, |window, cx| window.draw(cx).clear(cx));
 
-        let (family, size) = cx.read(|cx| {
-            let font = state.read(cx).font_settings().clone();
-            (
-                font.family().map(str::to_string),
-                font.size().map(|size| size.to_pixels(px(16.))),
-            )
-        });
-        assert_eq!(family.as_deref(), Some("Courier New"));
-        assert_eq!(size, Some(px(20.)));
+        let style = VisualTestContext::update(cx, |window, cx| state.read(cx).text_style(window));
+        assert_eq!(style.font_family, "Courier New".to_string());
+        assert_eq!(style.font_size.to_pixels(px(16.)), px(20.));
     }
 }
