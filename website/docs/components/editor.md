@@ -77,6 +77,24 @@ cx.subscribe(&editor, |this, state, event: &InputEvent, cx| {
 });
 ```
 
+## Font
+
+The editor paints its code in the theme's monospace font — `mono_font_family` at
+`mono_font_size` — with rows 1.5 times the font size. That is only the default:
+a text style set on the editor refines over it, and the gutter and row height
+follow the size.
+
+```rust
+Editor::new(&editor).text_sm()
+
+Editor::new(&editor)
+    .font_family("JetBrains Mono")
+    .text_size(px(15.))
+```
+
+These are the ordinary [`Styled`](https://docs.rs/gpui/latest/gpui/trait.Styled.html)
+methods every element has, so `font_weight` and `line_height` work the same way.
+
 ## Appearance
 
 ```rust

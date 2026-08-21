@@ -1,9 +1,13 @@
 use gpui::{
-    App, AppContext as _, Context, Entity, HighlightStyle, IntoElement, ParentElement, Render,
-    Styled, Window, div,
+    App, AppContext as _, Context, Entity, HighlightStyle, IntoElement, ParentElement, Pixels,
+    Render, SharedString, Styled, Window, div, prelude::FluentBuilder as _, px,
 };
 
-use gpui_component::{ActiveTheme, h_flex, input::*, switch::Switch, tab::TabBar, v_flex};
+use gpui_component::{
+    ActiveTheme, button::Button, h_flex, input::*, menu::PopupMenuItem, tab::TabBar, v_flex,
+};
+
+use crate::story_toolbar_group;
 
 const EXAMPLE_CODE: &str = include_str!("./editor_preview.rs");
 
@@ -13,6 +17,8 @@ pub struct EditorStory {
     _decorations: TextDecorationCollection,
     active_tab: usize,
     readonly: bool,
+    font_family: Option<SharedString>,
+    font_size: Pixels,
 }
 impl super::Story for EditorStory {
     fn title() -> &'static str {
@@ -131,7 +137,62 @@ impl EditorStory {
             _decorations: decorations,
             active_tab: 0,
             readonly: false,
+            font_family: None,
+            font_size: cx.theme().mono_font_size,
         }
+    }
+}
+
+impl EditorStory {
+    /// The font families to offer beside the theme's own monospace one.
+    const FONT_FAMILIES: [&'static str; 3] = ["Menlo", "Consolas", "Monaco"];
+
+    /// The font sizes to switch the editor between.
+    const FONT_SIZES: [Pixels; 4] = [px(11.), px(13.), px(16.), px(20.)];
+
+    fn render_toolbar(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let story = cx.entity();
+        let readonly = self.readonly;
+        let family = self.font_family.clone();
+        let size = self.font_size;
+
+        story_toolbar_group().dropdown_child(
+            Button::new("editor-options").label("Options"),
+            move |menu, window, _| {
+                let menu = menu.item(PopupMenuItem::new("Read only").checked(readonly).on_click(
+                    window.listener_for(&story, |this, _, _, cx| {
+                        this.readonly = !this.readonly;
+                        cx.notify();
+                    }),
+                ));
+
+                let menu = std::iter::once(None)
+                    .chain(Self::FONT_FAMILIES.map(|name| Some(SharedString::from(name))))
+                    .fold(menu.separator().label("Font family"), |menu, item| {
+                        let label = item.clone().unwrap_or_else(|| "Theme default".into());
+
+                        menu.item(PopupMenuItem::new(label).checked(family == item).on_click(
+                            window.listener_for(&story, move |this, _, _, cx| {
+                                this.font_family = item.clone();
+                                cx.notify();
+                            }),
+                        ))
+                    });
+
+                Self::FONT_SIZES
+                    .iter()
+                    .fold(menu.separator().label("Font size"), |menu, &item| {
+                        menu.item(
+                            PopupMenuItem::new(item.to_string())
+                                .checked(size == item)
+                                .on_click(window.listener_for(&story, move |this, _, _, cx| {
+                                    this.font_size = item;
+                                    cx.notify();
+                                })),
+                        )
+                    })
+            },
+        )
     }
 }
 
@@ -155,27 +216,23 @@ impl Render for EditorStory {
                             .child("Code")
                             .child("Decorations"),
                     )
-                    .child(
-                        Switch::new("editor-read-only")
-                            .label("Read only")
-                            .checked(self.readonly)
-                            .on_click(cx.listener(|this, checked: &bool, _, cx| {
-                                this.readonly = *checked;
-                                cx.notify();
-                            })),
-                    ),
+                    .child(self.render_toolbar(cx)),
             )
             .child(div().min_h_0().flex_1().child(if self.active_tab == 0 {
                 Editor::new(&self.editor_state)
-                    .font_family(cx.theme().mono_font_family.clone())
-                    .text_size(cx.theme().mono_font_size)
+                    .when_some(self.font_family.clone(), |this, family| {
+                        this.font_family(family)
+                    })
+                    .text_size(self.font_size)
                     .readonly(self.readonly)
                     .size_full()
                     .into_any_element()
             } else {
                 Editor::new(&self.decorations_state)
-                    .font_family(cx.theme().mono_font_family.clone())
-                    .text_size(cx.theme().mono_font_size)
+                    .when_some(self.font_family.clone(), |this, family| {
+                        this.font_family(family)
+                    })
+                    .text_size(self.font_size)
                     .readonly(self.readonly)
                     .size_full()
                     .into_any_element()

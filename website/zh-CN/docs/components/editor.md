@@ -68,6 +68,22 @@ editor.update(cx, |state, cx| {
 
 `EditorState` 会发出 `InputEvent::Change`、`Focus` 和 `Blur` 等事件。
 
+## 字体
+
+Editor 默认使用主题中的等宽字体 —— `mono_font_family` 和 `mono_font_size`，行高为字号的
+1.5 倍。这只是默认值：在 Editor 上设置的文本样式会覆盖它，gutter 和行高都跟随字号变化。
+
+```rust
+Editor::new(&editor).text_sm()
+
+Editor::new(&editor)
+    .font_family("JetBrains Mono")
+    .text_size(px(15.))
+```
+
+这些就是所有元素都有的 [`Styled`](https://docs.rs/gpui/latest/gpui/trait.Styled.html)
+方法，`font_weight`、`line_height` 用法相同。
+
 ## 外观
 
 ```rust
