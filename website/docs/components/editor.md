@@ -77,6 +77,36 @@ cx.subscribe(&editor, |this, state, event: &InputEvent, cx| {
 });
 ```
 
+## Font
+
+The editor paints its code in the theme's monospace font: `mono_font_family` at
+`mono_font_size`, with rows 1.5 times the font size. Set a different one per
+editor, and the gutter and row height follow the size:
+
+```rust
+Editor::new(&editor)
+    .font_family("JetBrains Mono")
+    .font_size(px(15.))
+```
+
+The four settings match the font group of a code editor's options —
+`font_family`, `font_size`, `font_weight`, and `line_height` — and `font` takes
+them together as an `InputFont`, to pass a whole font around as one value:
+
+```rust
+use gpui_component::input::InputFont;
+
+let font = InputFont::new()
+    .with_family("JetBrains Mono")
+    .with_size(px(15.))
+    .with_line_height(relative(1.6));
+
+Editor::new(&editor).font(font)
+```
+
+A text style set on the element refines over the theme default, so `.text_sm()`
+and `.text_xs()` work too. An explicit `font_size` wins over both.
+
 ## Appearance
 
 ```rust

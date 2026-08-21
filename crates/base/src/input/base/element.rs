@@ -1060,7 +1060,7 @@ impl<M: InputModeKind> TextElement<M> {
         let completion_text = &completion_item.insert_text;
         let completion_color = state.editor_style.muted_foreground.opacity(0.5);
 
-        let text_style = window.text_style();
+        let text_style = state.text_style(window);
         let font = text_style.font();
 
         let lines: Vec<&str> = completion_text.split('\n').collect();
@@ -1652,7 +1652,7 @@ impl<M: InputModeKind> Element for TextElement<M> {
         cx: &mut App,
     ) -> (LayoutId, Self::RequestLayoutState) {
         let state = self.state.read(cx);
-        let line_height = window.line_height();
+        let line_height = state.resolved_line_height(window);
 
         let mut style = Style::default();
         style.size.width = relative(1.).into();
@@ -1683,7 +1683,7 @@ impl<M: InputModeKind> Element for TextElement<M> {
         window: &mut Window,
         cx: &mut App,
     ) -> Self::PrepaintState {
-        let style = window.text_style();
+        let style = self.state.read(cx).text_style(window);
         let font = style.font();
         let text_size = style.font_size.to_pixels(window.rem_size());
 
@@ -1698,7 +1698,7 @@ impl<M: InputModeKind> Element for TextElement<M> {
         let is_empty = text.len() == 0;
         let placeholder = self.placeholder.clone();
 
-        let text_style = window.text_style();
+        let text_style = style.clone();
         let disabled = state.disabled;
         let dim = |color: Hsla| if disabled { color.opacity(0.5) } else { color };
         let fg = dim(text_style.color);
@@ -1748,7 +1748,7 @@ impl<M: InputModeKind> Element for TextElement<M> {
         }
 
         let state = self.state.read(cx);
-        let line_height = window.line_height();
+        let line_height = state.resolved_line_height(window);
 
         let (visible_range, visible_buffer_lines, visible_top) =
             self.calculate_visible_range(&state, line_height, bounds.size.height);
@@ -2106,7 +2106,7 @@ impl<M: InputModeKind> Element for TextElement<M> {
         );
 
         // Paint multi line text
-        let line_height = window.line_height();
+        let line_height = prepaint.last_layout.line_height;
         let origin = bounds.origin;
 
         let invisible_top_padding = prepaint.last_layout.visible_top;

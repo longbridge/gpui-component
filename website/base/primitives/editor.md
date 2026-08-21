@@ -73,6 +73,40 @@ is intentionally simple and reparses the short sample after each edit;
 production integrations can keep incremental parser state in their
 `InputHighlighter` implementation.
 
+## Font
+
+The editor paints its own text, so there is no styled element in between to
+inherit a font from. `InputFont` carries the same settings a code editor's
+options do — `font_family`, `font_size`, `font_weight`, and `line_height` — and
+anything left unset falls through to the ambient text style:
+
+```rust
+Editor::new(&editor)
+    .font_family("JetBrains Mono")
+    .font_size(px(13.))
+    .line_height(relative(1.5))
+```
+
+The font lives on the state, so it can also be set once at construction, or
+changed at runtime:
+
+```rust
+use gpui_base::input::InputFont;
+
+let editor = cx.new(|cx| {
+    EditorState::new(window, cx)
+        .language("rust")
+        .font(InputFont::new().with_family("JetBrains Mono").with_size(px(13.)))
+});
+
+editor.update(cx, |state, cx| {
+    state.set_font(InputFont::new().with_size(px(16.)), cx);
+});
+```
+
+A relative `line_height` keeps the rows in step with the glyphs at any size; an
+absolute one stays put.
+
 ## Presentation
 
 The application owns editor colors, gutter appearance, fold icons, and overlay

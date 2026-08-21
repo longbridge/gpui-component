@@ -1,9 +1,106 @@
 use crate::{StateStyle, StyledExt as _};
 use gpui::{
-    AnyElement, App, Div, ElementId, InteractiveElement, Interactivity, IntoElement, ParentElement,
-    Refineable as _, RenderOnce, Role, SharedString, StatefulInteractiveElement, StyleRefinement,
-    Styled, Window, div, prelude::FluentBuilder as _,
+    AbsoluteLength, AnyElement, App, DefiniteLength, Div, ElementId, FontWeight,
+    InteractiveElement, Interactivity, IntoElement, ParentElement, Refineable as _, RenderOnce,
+    Role, SharedString, StatefulInteractiveElement, StyleRefinement, Styled, TextStyle, Window,
+    div, prelude::FluentBuilder as _,
 };
+
+/// The font an input paints its text with.
+///
+/// The four settings mirror the font group of a code editor's options, as
+/// Monaco spells it: `fontFamily`, `fontSize`, `fontWeight`, and `lineHeight`.
+/// Anything left unset falls through to the ambient text style, so an input
+/// keeps inheriting its surroundings until something is pinned here.
+///
+/// ```
+/// use gpui::{px, relative};
+/// use gpui_base::input::InputFont;
+///
+/// let font = InputFont::new()
+///     .with_family("JetBrains Mono")
+///     .with_size(px(13.))
+///     .with_line_height(relative(1.5));
+///
+/// assert_eq!(font.family(), Some("JetBrains Mono"));
+/// ```
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct InputFont {
+    family: Option<SharedString>,
+    size: Option<AbsoluteLength>,
+    weight: Option<FontWeight>,
+    line_height: Option<DefiniteLength>,
+}
+
+impl InputFont {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// The family to shape the text with, a monospace one for source code.
+    pub fn with_family(mut self, family: impl Into<SharedString>) -> Self {
+        self.family = Some(family.into());
+        self
+    }
+
+    /// The size to paint the text at.
+    ///
+    /// A relative line height follows it, so the rows stay in proportion.
+    pub fn with_size(mut self, size: impl Into<AbsoluteLength>) -> Self {
+        self.size = Some(size.into());
+        self
+    }
+
+    pub fn with_weight(mut self, weight: FontWeight) -> Self {
+        self.weight = Some(weight);
+        self
+    }
+
+    /// The height of one row: a fraction of the font size, or an absolute length.
+    pub fn with_line_height(mut self, line_height: impl Into<DefiniteLength>) -> Self {
+        self.line_height = Some(line_height.into());
+        self
+    }
+
+    pub fn family(&self) -> Option<&str> {
+        self.family.as_deref()
+    }
+
+    pub fn size(&self) -> Option<AbsoluteLength> {
+        self.size
+    }
+
+    pub fn weight(&self) -> Option<FontWeight> {
+        self.weight
+    }
+
+    pub fn line_height(&self) -> Option<DefiniteLength> {
+        self.line_height
+    }
+
+    /// Whether nothing is pinned, and the ambient text style comes through whole.
+    pub fn is_inherited(&self) -> bool {
+        self == &Self::default()
+    }
+
+    /// Lay this font over an ambient text style.
+    pub fn resolve(&self, mut style: TextStyle) -> TextStyle {
+        if let Some(family) = self.family.clone() {
+            style.font_family = family;
+        }
+        if let Some(size) = self.size {
+            style.font_size = size;
+        }
+        if let Some(weight) = self.weight {
+            style.font_weight = weight;
+        }
+        if let Some(line_height) = self.line_height {
+            style.line_height = line_height;
+        }
+
+        style
+    }
+}
 
 /// What the input can offer to its context menu, at the moment it is opened.
 ///

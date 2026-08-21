@@ -1,9 +1,18 @@
 use gpui::{
-    App, AppContext as _, Context, Entity, HighlightStyle, IntoElement, ParentElement, Render,
-    Styled, Window, div,
+    App, AppContext as _, Context, Entity, HighlightStyle, IntoElement, ParentElement, Pixels,
+    Render, Styled, Window, div, px,
 };
 
-use gpui_component::{ActiveTheme, h_flex, input::*, switch::Switch, tab::TabBar, v_flex};
+use gpui_component::{
+    ActiveTheme, Sizable as _,
+    button::Button,
+    h_flex,
+    input::*,
+    menu::{DropdownMenu as _, PopupMenuItem},
+    switch::Switch,
+    tab::TabBar,
+    v_flex,
+};
 
 const EXAMPLE_CODE: &str = include_str!("./editor_preview.rs");
 
@@ -13,6 +22,7 @@ pub struct EditorStory {
     _decorations: TextDecorationCollection,
     active_tab: usize,
     readonly: bool,
+    font_size: Pixels,
 }
 impl super::Story for EditorStory {
     fn title() -> &'static str {
@@ -131,7 +141,35 @@ impl EditorStory {
             _decorations: decorations,
             active_tab: 0,
             readonly: false,
+            font_size: cx.theme().mono_font_size,
         }
+    }
+}
+
+impl EditorStory {
+    /// The font sizes to switch the editor between.
+    const FONT_SIZES: [Pixels; 4] = [px(11.), px(13.), px(16.), px(20.)];
+
+    fn render_font_menu(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let story = cx.entity();
+        let current = self.font_size;
+
+        Button::new("editor-font-size")
+            .xsmall()
+            .outline()
+            .label(format!("Font size: {current}"))
+            .dropdown_menu(move |menu, window, _| {
+                Self::FONT_SIZES.iter().fold(menu, |menu, &size| {
+                    menu.item(
+                        PopupMenuItem::new(size.to_string())
+                            .checked(current == size)
+                            .on_click(window.listener_for(&story, move |this, _, _, cx| {
+                                this.font_size = size;
+                                cx.notify();
+                            })),
+                    )
+                })
+            })
     }
 }
 
@@ -156,26 +194,26 @@ impl Render for EditorStory {
                             .child("Decorations"),
                     )
                     .child(
-                        Switch::new("editor-read-only")
-                            .label("Read only")
-                            .checked(self.readonly)
-                            .on_click(cx.listener(|this, checked: &bool, _, cx| {
-                                this.readonly = *checked;
-                                cx.notify();
-                            })),
+                        h_flex().gap_2().child(self.render_font_menu(cx)).child(
+                            Switch::new("editor-read-only")
+                                .label("Read only")
+                                .checked(self.readonly)
+                                .on_click(cx.listener(|this, checked: &bool, _, cx| {
+                                    this.readonly = *checked;
+                                    cx.notify();
+                                })),
+                        ),
                     ),
             )
             .child(div().min_h_0().flex_1().child(if self.active_tab == 0 {
                 Editor::new(&self.editor_state)
-                    .font_family(cx.theme().mono_font_family.clone())
-                    .text_size(cx.theme().mono_font_size)
+                    .font_size(self.font_size)
                     .readonly(self.readonly)
                     .size_full()
                     .into_any_element()
             } else {
                 Editor::new(&self.decorations_state)
-                    .font_family(cx.theme().mono_font_family.clone())
-                    .text_size(cx.theme().mono_font_size)
+                    .font_size(self.font_size)
                     .readonly(self.readonly)
                     .size_full()
                     .into_any_element()

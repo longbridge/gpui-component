@@ -1,13 +1,13 @@
 use std::rc::Rc;
 
 use gpui::{
-    App, DefiniteLength, Entity, IntoElement, RenderOnce, SharedString, StyleRefinement, Styled,
-    Window, prelude::FluentBuilder as _,
+    AbsoluteLength, App, DefiniteLength, Entity, FontWeight, IntoElement, RenderOnce, SharedString,
+    StyleRefinement, Styled, Window, prelude::FluentBuilder as _,
 };
 
-use super::{EditorState, Input};
+use super::{EditorState, Input, InputFont};
 use crate::native_menu::NativeMenu;
-use crate::{RoleOverride, StyledExt as _};
+use crate::{ActiveTheme as _, RoleOverride, StyledExt as _};
 
 /// A styled source-code editor.
 #[derive(IntoElement)]
@@ -22,6 +22,7 @@ pub struct Editor {
     tab_index: isize,
     role: RoleOverride,
     aria_label: Option<SharedString>,
+    font: InputFont,
 
     /// An optional context menu builder to allow a custom context menu.
     ///
@@ -42,8 +43,45 @@ impl Editor {
             tab_index: 0,
             role: RoleOverride::default(),
             aria_label: None,
+            font: InputFont::default(),
             context_menu_builder: None,
         }
+    }
+
+    /// Set the font of the code.
+    ///
+    /// The family and size default to [`crate::Theme::mono_font_family`] and
+    /// [`crate::Theme::mono_font_size`], and the rows follow the size, so the
+    /// editor keeps its leading in proportion at any size. The four settings
+    /// below fill this in one at a time.
+    pub fn font(mut self, font: InputFont) -> Self {
+        self.font = font;
+        self
+    }
+
+    /// Set the font family of the code, default is [`crate::Theme::mono_font_family`].
+    pub fn font_family(mut self, font_family: impl Into<SharedString>) -> Self {
+        self.font = self.font.with_family(font_family);
+        self
+    }
+
+    /// Set the font size of the code, default is [`crate::Theme::mono_font_size`].
+    pub fn font_size(mut self, font_size: impl Into<AbsoluteLength>) -> Self {
+        self.font = self.font.with_size(font_size);
+        self
+    }
+
+    /// Set the font weight of the code.
+    pub fn font_weight(mut self, font_weight: FontWeight) -> Self {
+        self.font = self.font.with_weight(font_weight);
+        self
+    }
+
+    /// Set the height of one row, a fraction of the font size or an absolute
+    /// length, default is 1.5 times the font size.
+    pub fn line_height(mut self, line_height: impl Into<DefiniteLength>) -> Self {
+        self.font = self.font.with_line_height(line_height);
+        self
     }
 
     pub fn h(mut self, height: impl Into<DefiniteLength>) -> Self {
@@ -111,8 +149,15 @@ impl Styled for Editor {
 }
 
 impl RenderOnce for Editor {
-    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        let font = self.font;
+
         Input::from_state(self.state.clone())
+            // The theme's monospace font is only the default: a style set on
+            // this element refines over it, so `.text_sm()` keeps working, and
+            // an explicit font below wins over both.
+            .font_family(cx.theme().mono_font_family.clone())
+            .text_size(cx.theme().mono_font_size)
             .appearance(self.appearance)
             .bordered(self.bordered)
             .focus_bordered(false)
@@ -126,5 +171,81 @@ impl RenderOnce for Editor {
                 this.context_menu(move |menu, window, cx| build(menu, window, cx))
             })
             .refine_style(&self.style)
+            .when_some(font.family(), |this, family| {
+                this.font_family(family.to_string())
+            })
+            .when_some(font.size(), |this, size| this.text_size(size))
+            .when_some(font.weight(), |this, weight| this.font_weight(weight))
+            .when_some(font.line_height(), |this, line_height| {
+                this.line_height(line_height)
+            })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::input::EditorState;
+    use gpui::{
+        AppContext as _, Context, ParentElement as _, Pixels, Render, TestAppContext,
+        VisualTestContext, div, px,
+    };
+
+    struct Harness {
+        state: Entity<EditorState>,
+        /// The `font_size` option, when the test sets one.
+        font_size: Option<Pixels>,
+        /// A text size refined onto the element, as `.text_sm()` would.
+        style_size: Option<Pixels>,
+    }
+
+    impl Render for Harness {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div().size_full().child(
+                Editor::new(&self.state)
+                    .when_some(self.style_size, |this, size| this.text_size(size))
+                    .when_some(self.font_size, |this, size| this.font_size(size)),
+            )
+        }
+    }
+
+    /// The row height the editor laid out with, which follows its font size.
+    fn line_height(
+        cx: &mut TestAppContext,
+        font_size: Option<Pixels>,
+        style_size: Option<Pixels>,
+    ) -> Pixels {
+        cx.update(crate::init);
+        let mut state = None;
+        let (_, cx) = cx.add_window_view(|window, cx| {
+            let editor = cx.new(|cx| EditorState::new(window, cx).default_value("fn main() {}"));
+            state = Some(editor.clone());
+            Harness {
+                state: editor,
+                font_size,
+                style_size,
+            }
+        });
+        let state = state.unwrap();
+        VisualTestContext::update(cx, |window, cx| window.draw(cx).clear(cx));
+
+        cx.read(|cx| {
+            state
+                .read(cx)
+                .line_height()
+                .expect("the editor must lay out")
+        })
+    }
+
+    #[gpui::test]
+    fn the_font_size_option_wins_over_a_refined_text_size(cx: &mut TestAppContext) {
+        let default = line_height(cx, None, None);
+        let refined = line_height(cx, None, Some(px(24.)));
+        let option = line_height(cx, Some(px(40.)), Some(px(24.)));
+
+        // The default is the theme's monospace size, not the ambient one.
+        assert_eq!(default, px(20.));
+        assert_eq!(refined, px(36.));
+        assert_eq!(option, px(60.));
     }
 }

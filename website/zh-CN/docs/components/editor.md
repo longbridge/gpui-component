@@ -68,6 +68,35 @@ editor.update(cx, |state, cx| {
 
 `EditorState` 会发出 `InputEvent::Change`、`Focus` 和 `Blur` 等事件。
 
+## 字体
+
+Editor 默认使用主题中的等宽字体：`mono_font_family` 和 `mono_font_size`，行高为字号的
+1.5 倍。可以为单个编辑器指定，gutter 和行高会跟随字号变化：
+
+```rust
+Editor::new(&editor)
+    .font_family("JetBrains Mono")
+    .font_size(px(15.))
+```
+
+四个设置项与代码编辑器 options 中的字体分组一致：`font_family`、`font_size`、
+`font_weight`、`line_height`；`font` 则用 `InputFont` 一次性传入，便于把整套字体配置
+作为一个值传递：
+
+```rust
+use gpui_component::input::InputFont;
+
+let font = InputFont::new()
+    .with_family("JetBrains Mono")
+    .with_size(px(15.))
+    .with_line_height(relative(1.6));
+
+Editor::new(&editor).font(font)
+```
+
+在元素上设置的文本样式会覆盖主题默认值，因此 `.text_sm()`、`.text_xs()` 同样生效。
+显式设置的 `font_size` 优先级最高。
+
 ## 外观
 
 ```rust

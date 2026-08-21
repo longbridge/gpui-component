@@ -1,6 +1,9 @@
-use gpui::{App, Div, Entity, InteractiveElement as _, IntoElement, RenderOnce, Stateful, Window};
+use gpui::{
+    AbsoluteLength, App, DefiniteLength, Div, Entity, FontWeight, InteractiveElement as _,
+    IntoElement, RenderOnce, SharedString, Stateful, Window,
+};
 
-use super::{EditorMode, InputBaseState, InputModeKind};
+use super::{EditorMode, InputBaseState, InputFont, InputModeKind};
 
 /// State for source-code editing.
 ///
@@ -187,18 +190,62 @@ impl EditorState {
 #[derive(IntoElement)]
 pub struct Editor {
     state: Entity<EditorState>,
+    font: InputFont,
 }
 
 impl Editor {
     pub fn new(state: &Entity<EditorState>) -> Self {
         Self {
             state: state.clone(),
+            font: InputFont::default(),
         }
+    }
+
+    /// Paint the code with this font, instead of the ambient one.
+    ///
+    /// Source code wants a monospace family at a code-sized font, which the
+    /// surrounding text style rarely carries. Left unset, the editor inherits
+    /// the ambient font. The four settings below fill this in one at a time.
+    pub fn font(mut self, font: InputFont) -> Self {
+        self.font = font;
+        self
+    }
+
+    /// The family to shape the code with. See [`Self::font`].
+    pub fn font_family(mut self, font_family: impl Into<SharedString>) -> Self {
+        self.font = self.font.with_family(font_family);
+        self
+    }
+
+    /// The size to paint the code at. See [`Self::font`].
+    pub fn font_size(mut self, font_size: impl Into<AbsoluteLength>) -> Self {
+        self.font = self.font.with_size(font_size);
+        self
+    }
+
+    /// The weight to paint the code at. See [`Self::font`].
+    pub fn font_weight(mut self, font_weight: FontWeight) -> Self {
+        self.font = self.font.with_weight(font_weight);
+        self
+    }
+
+    /// The height of one row, a fraction of the font size or an absolute
+    /// length. See [`Self::font`].
+    pub fn line_height(mut self, line_height: impl Into<DefiniteLength>) -> Self {
+        self.font = self.font.with_line_height(line_height);
+        self
     }
 }
 
 impl RenderOnce for Editor {
-    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        // The state carries the font, because the editor paints its own text
+        // and has no styled element in between to inherit one from.
+        if !self.font.is_inherited() {
+            self.state
+                .update(cx, |state, cx| state.set_font(self.font, cx));
+        }
+
         self.state
     }
 }
@@ -241,5 +288,51 @@ impl crate::input::InputExtras for super::EditorExtras {
             self.lsp.definition_provider.is_some(),
             !self.lsp.code_action_providers.is_empty(),
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gpui::{
+        AppContext as _, Context, ParentElement as _, Render, Styled as _, TestAppContext,
+        VisualTestContext, div, px,
+    };
+
+    struct Harness {
+        state: Entity<EditorState>,
+    }
+
+    impl Render for Harness {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div().size_full().child(
+                Editor::new(&self.state)
+                    .font_family("Courier New")
+                    .font_size(px(20.)),
+            )
+        }
+    }
+
+    #[gpui::test]
+    fn the_element_options_reach_the_state_it_paints_from(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let mut state = None;
+        let (_, cx) = cx.add_window_view(|window, cx| {
+            let editor = cx.new(|cx| EditorState::new(window, cx).default_value("fn main() {}"));
+            state = Some(editor.clone());
+            Harness { state: editor }
+        });
+        let state = state.unwrap();
+        VisualTestContext::update(cx, |window, cx| window.draw(cx).clear(cx));
+
+        let (family, size) = cx.read(|cx| {
+            let font = state.read(cx).font_settings().clone();
+            (
+                font.family().map(str::to_string),
+                font.size().map(|size| size.to_pixels(px(16.))),
+            )
+        });
+        assert_eq!(family.as_deref(), Some("Courier New"));
+        assert_eq!(size, Some(px(20.)));
     }
 }
