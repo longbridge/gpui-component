@@ -2,6 +2,27 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Canonical Design and Coding Guides
+
+Before changing UI, interaction, interface language, layout, styling,
+components, or application architecture, read and follow the repository's
+canonical guides:
+
+- [Design Guides](website/docs/design-guides.md)
+- [Coding Guides](website/docs/coding-guides.md)
+
+These guides are requirements, not optional inspiration. Do not copy generic
+web conventions, infer a design system from one existing screen, or add a
+control merely because the underlying feature exists. Preserve the documented
+task hierarchy, interaction promise, desktop conventions, spacing, alignment,
+theme tokens, component boundaries, naming, and crate architecture. Review the
+finished work against both guides before considering it complete.
+
+For Chinese documentation and UI, apply the terminology rules in Design Guides.
+Keep established framework, component, and API names in their canonical English
+form when translation would reduce precision; write the surrounding Chinese as
+natural Chinese rather than word-for-word translation.
+
 ## Project Overview
 
 GPUI Component is a UI component library for building desktop applications using [GPUI](https://gpui.rs). It provides 60+ cross-platform desktop UI components, inspired by macOS/Windows controls and combined with shadcn/ui design.

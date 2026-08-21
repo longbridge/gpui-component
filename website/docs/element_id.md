@@ -4,6 +4,8 @@ description: To introduce the ElementId concept in GPUI.
 order: -4
 ---
 
+# ElementId
+
 The [ElementId] is a unique identifier for a GPUI element. It is used to reference elements in the GPUI component tree.
 
 Before you start using GPUI and GPUI Component, you need to understand the [ElementId].

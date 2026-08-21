@@ -6,6 +6,30 @@
 @import "tailwindcss";
 @custom-variant dark (&:where(.dark, .dark *));
 
+.architecture-dark {
+  display: none;
+}
+
+.alignment-dark {
+  display: none;
+}
+
+html.dark .architecture-light {
+  display: none;
+}
+
+html.dark .architecture-dark {
+  display: block;
+}
+
+html.dark .alignment-light {
+  display: none;
+}
+
+html.dark .alignment-dark {
+  display: block;
+}
+
 :root {
   --radius-control: 0.375rem;
   --radius-card: 0.625rem;

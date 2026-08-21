@@ -1,9 +1,9 @@
 ---
-title: 图标与资源
+title: Icon
 order: -4
 ---
 
-# 图标与资源
+# Icon
 
 GPUI Component 中的 [IconName] 和 [Icon] 提供了一套可直接在 GPUI 应用中使用的图标接口。
 

@@ -92,6 +92,8 @@ const baseSidebar = createSidebar("/base/", "GPUI Base");
 const zhSidebar = createSidebar("/zh-CN/docs/", "文档");
 
 function createFooter(prefix = "", locale: "en" | "zh" = "en") {
+  const designGuidesText = locale === "zh" ? "设计指南" : "Design Guides";
+  const codingGuidesText = locale === "zh" ? "编码指南" : "Coding Guides";
   const contributorsText = locale === "zh" ? "贡献者" : "Contributors";
   const skillsText = "Skills";
   const reportBugText = locale === "zh" ? "报告问题" : "Report Bug";
@@ -107,6 +109,10 @@ function createFooter(prefix = "", locale: "en" | "zh" = "en") {
     message,
     copyright: `
       <a href="https://gpui.rs">GPUI</a>
+      |
+      <a href="/gpui-component${prefix}/docs/design-guides">${designGuidesText}</a>
+      |
+      <a href="/gpui-component${prefix}/docs/coding-guides">${codingGuidesText}</a>
       |
       <a href="/gpui-component${prefix}/contributors">${contributorsText}</a>
       |

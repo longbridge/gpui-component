@@ -1,16 +1,16 @@
 ---
-title: 上下文
+title: Context
 description: 了解 GPUI 中的 Window 和 Context。
 order: -4
 ---
 
-# 上下文
+# Context
 
 在 GPUI 中，[Window]、[App]、[Context] 和 [Entity] 是最常见、也最重要的几个核心概念。
 
 - [Window] - 当前窗口实例，负责处理 **窗口级** 行为
 - [App] - 当前应用实例，负责处理 **应用级** 行为
-- [Context] - 某个 Entity 的上下文实例，负责处理 **上下文级** 行为
+- [Context] - 某个 Entity 的 `Context` 实例，负责处理 **Context 级** 行为
 - [Entity] - 某个实体本身，负责处理 **实体级** 状态和逻辑
 
 例如：
