@@ -104,10 +104,9 @@ let font = InputFont::new()
 Editor::new(&editor).font(font)
 ```
 
-A text style set on the element refines over the theme default, so `.text_sm()`
-and `.text_xs()` work too. An explicit `font_size` wins over both. A font pinned
-on the state itself — `EditorState::font`, from the `gpui-base` layer — wins over
-all of them, so pick one layer and stay in it.
+Each setting resolves the same way: the option on this element first, then a
+text style refined onto it — so `.text_sm()` and `.text_xs()` work too — and the
+theme last.
 
 ## Appearance
 

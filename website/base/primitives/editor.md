@@ -87,26 +87,21 @@ Editor::new(&editor)
     .line_height(relative(1.5))
 ```
 
-The font lives on the state, so it can also be set once at construction, or
-changed at runtime:
+`font` takes them together, to pass a whole font around as one value:
 
 ```rust
 use gpui_base::input::InputFont;
 
-let editor = cx.new(|cx| {
-    EditorState::new(window, cx)
-        .language("rust")
-        .font(InputFont::new().with_family("JetBrains Mono").with_size(px(13.)))
-});
-
-editor.update(cx, |state, cx| {
-    state.set_font(InputFont::new().with_size(px(16.)), cx);
-});
+Editor::new(&editor).font(
+    InputFont::new()
+        .with_family("JetBrains Mono")
+        .with_size(px(13.)),
+)
 ```
 
-A font set on the element is written through to the state, so it stays until
-something replaces it; pass `InputFont::default()` to go back to inheriting the
-ambient style. A relative `line_height` keeps the rows in step with the glyphs at
+The element is the only thing that decides: it writes the font onto its state on
+every render, so an editor rendered with no font of its own inherits the ambient
+style whole. A relative `line_height` keeps the rows in step with the glyphs at
 any size; an absolute one stays put.
 
 ## Presentation

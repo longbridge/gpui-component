@@ -367,9 +367,6 @@ impl Styled for Input {
 impl RenderOnce for Input {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         const LINE_HEIGHT: Rems = Rems(1.25);
-        // A code editor takes its rows from the font, so that a smaller or
-        // larger font keeps its leading in proportion.
-        const EDITOR_LINE_HEIGHT: f32 = 1.5;
         let text_align = self.style.text.text_align.unwrap_or(TextAlign::Left);
         let state = self.state.clone();
         // Which kind of input this registers as follows from the state itself.
@@ -567,10 +564,7 @@ impl RenderOnce for Input {
             })
             .flex()
             .size_full()
-            .map(|this| match presentation.is_code_editor() {
-                true => this.line_height(relative(EDITOR_LINE_HEIGHT)),
-                false => this.line_height(LINE_HEIGHT),
-            })
+            .line_height(LINE_HEIGHT)
             .when(!is_multi_line, |this| {
                 this.input_px(self.size).input_py(self.size)
             })

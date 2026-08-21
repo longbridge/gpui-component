@@ -2,12 +2,16 @@ use std::rc::Rc;
 
 use gpui::{
     AbsoluteLength, App, DefiniteLength, Entity, FontWeight, IntoElement, RenderOnce, SharedString,
-    StyleRefinement, Styled, Window, prelude::FluentBuilder as _,
+    StyleRefinement, Styled, Window, prelude::FluentBuilder as _, relative,
 };
 
 use super::{EditorState, Input, InputFont};
 use crate::native_menu::NativeMenu;
 use crate::{ActiveTheme as _, RoleOverride, StyledExt as _};
+
+/// A code editor takes its rows from the font, so that a smaller or larger
+/// font keeps its leading in proportion.
+const EDITOR_LINE_HEIGHT: f32 = 1.5;
 
 /// A styled source-code editor.
 #[derive(IntoElement)]
@@ -150,14 +154,37 @@ impl Styled for Editor {
 
 impl RenderOnce for Editor {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        let font = self.font;
+        // The editor paints its own text, so the font has to reach it as one
+        // resolved value rather than as an ambient style. Each setting comes
+        // from this element's own option, else from a style refined onto it —
+        // `.text_sm()` and friends — else from the theme.
+        let text = &self.style.text;
+        let font = InputFont::new()
+            .with_family(
+                self.font
+                    .family()
+                    .map(SharedString::from)
+                    .or_else(|| text.font_family.clone())
+                    .unwrap_or_else(|| cx.theme().mono_font_family.clone()),
+            )
+            .with_size(
+                self.font
+                    .size()
+                    .or(text.font_size)
+                    .unwrap_or_else(|| cx.theme().mono_font_size.into()),
+            )
+            .with_line_height(
+                self.font
+                    .line_height()
+                    .or(text.line_height)
+                    .unwrap_or_else(|| relative(EDITOR_LINE_HEIGHT)),
+            )
+            .when_some(self.font.weight().or(text.font_weight), |font, weight| {
+                font.with_weight(weight)
+            });
+        self.state.update(cx, |state, cx| state.set_font(font, cx));
 
         Input::from_state(self.state.clone())
-            // The theme's monospace font is only the default: a style set on
-            // this element refines over it, so `.text_sm()` keeps working, and
-            // an explicit font below wins over both.
-            .font_family(cx.theme().mono_font_family.clone())
-            .text_size(cx.theme().mono_font_size)
             .appearance(self.appearance)
             .bordered(self.bordered)
             .focus_bordered(false)
@@ -171,14 +198,6 @@ impl RenderOnce for Editor {
                 this.context_menu(move |menu, window, cx| build(menu, window, cx))
             })
             .refine_style(&self.style)
-            .when_some(font.family(), |this, family| {
-                this.font_family(family.to_string())
-            })
-            .when_some(font.size(), |this, size| this.text_size(size))
-            .when_some(font.weight(), |this, weight| this.font_weight(weight))
-            .when_some(font.line_height(), |this, line_height| {
-                this.line_height(line_height)
-            })
     }
 }
 

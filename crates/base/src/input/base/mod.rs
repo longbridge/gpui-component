@@ -97,6 +97,9 @@ impl InputFont {
     }
 }
 
+/// So that a font can be built with `when` and `when_some`, the way an element is.
+impl gpui::prelude::FluentBuilder for InputFont {}
+
 /// What the input can offer to its context menu, at the moment it is opened.
 ///
 /// Built by the input and read by the menu, the fields are private and reached

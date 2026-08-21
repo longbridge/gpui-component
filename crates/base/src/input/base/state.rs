@@ -727,14 +727,10 @@ impl<M: InputModeKind> InputBaseState<M> {
 
     /// Paint the text with this font, instead of the ambient one.
     ///
-    /// The editor paints its own text, so there is no styled element in between
-    /// for it to inherit a monospace family or a code-sized font from.
-    pub fn font(mut self, font: InputFont) -> Self {
-        self.font = font;
-        self
-    }
-
-    /// Change the font, [`InputFont::default`] goes back to the ambient one.
+    /// The input paints its own text, so there is no styled element in between
+    /// for it to inherit a monospace family or a code-sized font from. The
+    /// element drives this on every render, so set the font there rather than
+    /// here; [`InputFont::default`] paints with the ambient style throughout.
     pub fn set_font(&mut self, font: InputFont, cx: &mut Context<Self>) {
         if self.font == font {
             return;
@@ -3226,14 +3222,14 @@ mod tests {
     #[gpui::test]
     fn font_options_drive_the_glyphs_and_the_rows(cx: &mut TestAppContext) {
         cx.update(crate::init);
-        let input_view =
-            InputView::build_editor(cx, |state| state.font(InputFont::new().with_size(px(10.))));
+        let input_view = InputView::new(cx);
         let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
         let input = input_view.input;
 
         cx.update(|window, cx| {
             input.update(cx, |state, cx| {
-                state.set_value("fn main() {}\nfn other() {}", window, cx)
+                state.set_value("fn main() {}\nfn other() {}", window, cx);
+                state.set_font(InputFont::new().with_size(px(10.)), cx);
             });
         });
         cx.run_until_parked();
