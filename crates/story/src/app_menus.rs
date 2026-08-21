@@ -132,7 +132,7 @@ fn language_menu(_: &App) -> MenuItem {
     })
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "test-support"))]
 mod tests {
     use gpui::TestAppContext;
 

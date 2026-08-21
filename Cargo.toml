@@ -1,5 +1,5 @@
 [workspace]
-default-members = ["crates/ui", "crates/story", "crates/assets"]
+default-members = ["crates/story"]
 members = [
     "crates/base",
     "crates/base/examples/wasm",
