@@ -232,7 +232,7 @@ impl RenderOnce for HoverCard {
 
 #[cfg(test)]
 mod tests {
-    use gpui::{Context, InteractiveElement as _, Render, Styled as _, TestAppContext, point, px};
+    use gpui::{Context, Render, Styled as _, TestAppContext, point, px};
 
     use super::*;
 

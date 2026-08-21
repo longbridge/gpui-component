@@ -515,7 +515,7 @@ impl RenderOnce for AccordionItem {
 
 #[cfg(test)]
 mod tests {
-    use gpui::{Context, InteractiveElement as _, Render, TestAppContext, div, px};
+    use gpui::{Context, Render, TestAppContext, div, px};
 
     use super::*;
 
