@@ -1,5 +1,6 @@
 use std::{
     ops::Range,
+    path::PathBuf,
     sync::LazyLock,
     time::{self, Duration},
 };
@@ -85,6 +86,8 @@ struct Counter {
 static ALL_COUNTERS: LazyLock<Vec<Counter>> =
     LazyLock::new(|| serde_json::from_str(include_str!("../fixtures/counters.json")).unwrap());
 static INCREMENT_ID: LazyLock<std::sync::Mutex<usize>> = LazyLock::new(|| std::sync::Mutex::new(0));
+
+const CSV_EXPORT_BATCH_ROWS: usize = 2_000;
 
 impl Counter {
     fn random() -> Self {
@@ -1106,55 +1109,64 @@ impl DataTableStory {
     }
 
     fn dump_csv(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
-        match self.write_csv(cx) {
-            Ok(csv_content) => {
-                let Some(path) = dirs::download_dir() else {
-                    eprintln!("Failed to get download directory");
-                    return;
-                };
-                let receiver = cx.prompt_for_new_path(&path, Some("export.csv"));
-                cx.spawn_in(window, async move |_, _| {
-                    if let Some(path) = receiver.await.ok().into_iter().flatten().flatten().next() {
-                        match std::fs::write(&path, csv_content) {
-                            Ok(_) => {
-                                println!("CSV exported successfully to: {:?}", path);
-                            }
-                            Err(e) => {
-                                eprintln!("Failed to save CSV file: {}", e);
-                            }
-                        }
-                    } else {
-                        println!("CSV export cancelled by user");
-                    };
-                })
-                .detach();
+        let Some(download_dir) = dirs::download_dir() else {
+            eprintln!("Failed to get download directory");
+            return;
+        };
+
+        let receiver = cx.prompt_for_new_path(&download_dir, Some("export.csv"));
+        let table = self.table.clone();
+        cx.spawn_in(window, async move |_, window| {
+            let Some(path) = receiver.await.ok().into_iter().flatten().flatten().next() else {
+                println!("CSV export cancelled by user");
+                return;
+            };
+
+            match Self::write_csv(table, path, window).await {
+                Ok(()) => println!("CSV exported successfully"),
+                Err(error) => eprintln!("Failed to export CSV: {error}"),
             }
-            Err(e) => {
-                eprintln!("Failed to export CSV: {}", e);
-            }
-        }
+        })
+        .detach();
     }
 
-    fn write_csv(&mut self, cx: &mut Context<Self>) -> anyhow::Result<String> {
-        let (headers, rows) = self.table.update(cx, |table, cx| table.dump(cx));
+    async fn write_csv(
+        table: Entity<TableState<StockTableDelegate>>,
+        path: PathBuf,
+        window: &mut gpui::AsyncWindowContext,
+    ) -> anyhow::Result<()> {
+        let (headers, rows_count) = table.update_in(window, |table, _, cx| {
+            (table.headers(cx), table.delegate().rows_count(cx))
+        })?;
 
-        // Convert to CSV format using rust-csv
-        let mut wtr = csv::Writer::from_writer(vec![]);
+        let (sender, receiver) = async_channel::bounded::<Vec<Vec<String>>>(1);
+        let writer_task = window.background_spawn(async move {
+            let mut writer = csv::Writer::from_path(path)?;
+            writer.write_record(headers)?;
 
-        // Write header
-        wtr.write_record(&headers)?;
+            while let Ok(rows) = receiver.recv().await {
+                for row in rows {
+                    writer.write_record(row)?;
+                }
+            }
 
-        // Write data rows
-        for row in rows {
-            wtr.write_record(&row)?;
+            writer.flush()?;
+            Ok::<(), anyhow::Error>(())
+        });
+
+        for start in (0..rows_count).step_by(CSV_EXPORT_BATCH_ROWS) {
+            let end = start.saturating_add(CSV_EXPORT_BATCH_ROWS).min(rows_count);
+            let (_, rows) =
+                table.update_in(window, |table, _, cx| table.dump_range(start..end, cx))?;
+
+            if sender.send(rows).await.is_err() {
+                break;
+            }
         }
 
-        // Flush and get the CSV data
-        wtr.flush()?;
-        let data = wtr.into_inner().map_err(csv::IntoInnerError::into_error)?;
-        let csv_content = String::from_utf8(data)?;
-
-        Ok(csv_content)
+        drop(sender);
+        writer_task.await?;
+        Ok(())
     }
 }
 

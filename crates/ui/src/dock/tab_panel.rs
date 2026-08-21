@@ -787,8 +787,7 @@ mod tests {
     use std::cell::RefCell;
 
     use gpui::{
-        AppContext as _, Entity, EventEmitter, FocusHandle, Focusable, Pixels, TestAppContext,
-        VisualTestContext,
+        Entity, EventEmitter, FocusHandle, Focusable, Pixels, TestAppContext, VisualTestContext,
     };
     use gpui_base::dock::{
         DockArea, DockAreaRenderer, DockLayout, DockPlacement, PanelEvent, TileContext,

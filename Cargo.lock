@@ -3168,6 +3168,7 @@ name = "gpui-component-story"
 version = "0.5.1"
 dependencies = [
  "anyhow",
+ "async-channel",
  "autocorrect",
  "chrono",
  "color-lsp",
