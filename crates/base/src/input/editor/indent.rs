@@ -342,12 +342,13 @@ impl<M: InputModeKind> InputBaseState<M> {
             let start_offset = self.selected_range.start;
             let offset = self.start_of_line_of_selection(window, cx);
             let offset = self.offset_from_utf16(self.offset_to_utf16(offset));
-            // FIXME: To improve performance
+
             if self
                 .text
                 .slice(offset..self.text.len())
-                .to_string()
-                .starts_with(tab_indent.as_ref())
+                .chars()
+                .take(tab_indent.chars().count())
+                .eq(tab_indent.chars())
             {
                 self.replace_text_in_range_silent(
                     Some(self.range_to_utf16(&(offset..offset + tab_indent.len()))),
