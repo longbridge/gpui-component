@@ -4,6 +4,8 @@ description: 介绍 GPUI 中的 ElementId 概念。
 order: -4
 ---
 
+# ElementId
+
 [ElementId] 是 GPUI 元素的唯一标识符，用于在 GPUI 组件树中引用具体元素。
 
 在开始使用 GPUI 和 GPUI Component 之前，最好先理解 [ElementId] 的作用。

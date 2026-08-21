@@ -4,6 +4,8 @@ description: Learn about the Window and Context in GPUI.
 order: -4
 ---
 
+# Context
+
 The [Window], [App], [Context] and [Entity] are most important things in GPUI, it appears everywhere.
 
 - [Window] - The current window instance, which for handle the **Window Level** things.

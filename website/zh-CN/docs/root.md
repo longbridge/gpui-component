@@ -2,7 +2,7 @@
 order: -7
 ---
 
-# Root 视图
+# Root View
 
 [Root] 组件是 GPUI Component 在窗口中的根提供者。要启用 GPUI Component 的功能，必须把 [Root] 作为窗口中的 **第一层子节点**。
 
@@ -29,9 +29,7 @@ fn main() {
 
 ## 窗口边框
 
-默认情况下，[Root] 会渲染 GPUI Component 的客户端窗口边框包装层。对于
-layer-shell 全屏窗口，或其他不应该渲染这层边框的场景，可以用 `bordered(false)`
-关闭：
+默认情况下，[Root] 会渲染 GPUI Component 的客户端窗口边框包装层。`layer-shell` 全屏窗口等场景不应渲染这层边框，可以使用 `bordered(false)` 关闭：
 
 ```rs
 cx.new(|cx| Root::new(view, window, cx).bordered(false))

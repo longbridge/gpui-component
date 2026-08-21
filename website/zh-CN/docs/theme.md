@@ -2,7 +2,7 @@
 order: -4
 ---
 
-# 主题
+# Theme
 
 所有组件都支持内置主题系统。[ActiveTheme] trait 用于访问当前主题中的颜色值：
 
