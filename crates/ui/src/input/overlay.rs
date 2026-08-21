@@ -308,23 +308,31 @@ impl<M: OverlayMode> InputOverlayHost<M> {
             search_session.anchor_offset,
         );
         if search_signature != self.search_signature {
+            let (was_open, was_replace, _, was_anchor) = &self.search_signature;
+            let query_echo = search_open
+                && *was_open
+                && *was_replace == replace_mode
+                && *was_anchor == search_session.anchor_offset
+                && self.search.read(cx).query(cx) == search_session.query;
             self.search_signature = search_signature;
-            self.search.update(cx, |panel, cx| {
-                if search_open {
-                    let selected = Rope::from(search_session.query.clone());
-                    let visible = search_session.anchor_offset.map(|offset| offset..offset);
-                    panel.show_with_focus(
-                        &selected,
-                        replace_mode,
-                        visible,
-                        !cfg!(test),
-                        window,
-                        cx,
-                    );
-                } else {
-                    panel.hide_with_focus(!cfg!(test), window, cx);
-                }
-            });
+            if !query_echo {
+                self.search.update(cx, |panel, cx| {
+                    if search_open {
+                        let selected = Rope::from(search_session.query.clone());
+                        let visible = search_session.anchor_offset.map(|offset| offset..offset);
+                        panel.show_with_focus(
+                            &selected,
+                            replace_mode,
+                            visible,
+                            !cfg!(test),
+                            window,
+                            cx,
+                        );
+                    } else {
+                        panel.hide_with_focus(!cfg!(test), window, cx);
+                    }
+                });
+            }
         }
 
         if let (Some(lsp), Some(snapshot)) = (self.lsp.as_mut(), snapshot.as_ref()) {

@@ -1,6 +1,6 @@
 use gpui::{prelude::FluentBuilder as _, *};
 use gpui_component::{
-    ActiveTheme, Icon, IconName, IndexPath, Sizable as _,
+    ActiveTheme, Icon, IconName, IndexPath, Sizable as _, ThemeStyled as _,
     button::Button,
     button::ButtonVariants as _,
     combobox::*,
@@ -260,7 +260,7 @@ impl SearchableListDelegate for FeaturedDelegate {
                 })
                 .child(
                     div()
-                        .rounded_sm()
+                        .rounded(cx.theme().radius.half())
                         .bg(cx.theme().primary)
                         .text_color(cx.theme().primary_foreground)
                         .px_1()
@@ -706,7 +706,7 @@ impl Render for ComboboxStory {
                                                     div()
                                                         .bg(cx.theme().primary)
                                                         .text_color(cx.theme().primary_foreground)
-                                                        .rounded_full()
+                                                        .rounded_full_style(cx)
                                                         .px_2()
                                                         .py_0p5()
                                                         .text_xs()
@@ -767,7 +767,7 @@ impl Render for ComboboxStory {
                                                         .min_w_0()
                                                         .gap_0p5()
                                                         .items_center()
-                                                        .rounded_sm()
+                                                        .rounded(cx.theme().radius.half())
                                                         .border_1()
                                                         .border_color(cx.theme().border)
                                                         .px_1()
@@ -873,7 +873,7 @@ impl Render for ComboboxStory {
                                     .children(trigger.selection().iter().take(MAX_SHOWN).map(
                                         |(_index, item)| {
                                             div()
-                                                .rounded_sm()
+                                                .rounded(cx.theme().radius.half())
                                                 .border_1()
                                                 .border_color(cx.theme().border)
                                                 .px_1()
@@ -885,7 +885,7 @@ impl Render for ComboboxStory {
                                         let hidden = trigger.selection().len() - MAX_SHOWN;
                                         this.child(
                                             div()
-                                                .rounded_sm()
+                                                .rounded(cx.theme().radius.half())
                                                 .border_1()
                                                 .border_color(cx.theme().border)
                                                 .px_1()
@@ -933,7 +933,7 @@ impl Render for ComboboxStory {
                                             .min_w(px(16.))
                                             .h(px(16.))
                                             .px_1()
-                                            .rounded_full()
+                                            .rounded_full_style(cx)
                                             .bg(cx.theme().red)
                                             .text_color(white())
                                             .text_size(px(10.))

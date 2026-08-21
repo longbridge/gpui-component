@@ -242,7 +242,7 @@ impl Render for TextareaStory {
                                     .id(("chat-msg", i))
                                     .px_2()
                                     .py_1()
-                                    .rounded(px(4.))
+                                    .rounded(cx.theme().radius)
                                     .bg(cx.theme().muted)
                                     .child(msg.clone())
                             }),

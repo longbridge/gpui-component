@@ -47,4 +47,3 @@ GPUI Base primitives provide behavior without prescribing presentation. Each pag
 - [Toggle Group](./toggle-group.md) — Coordinates a set of toggle controls as a single- or multiple-selection group.
 - [Tooltip](./tooltip.md) — A delayed, positioned description associated with a trigger element.
 - [Tree](./tree.md) — A virtualized hierarchical list with explicit expansion and selection state.
-- [Virtual List](./virtual-list.md) — A high-performance vertical or horizontal list that renders only visible items.

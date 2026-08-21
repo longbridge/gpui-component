@@ -12,10 +12,10 @@ Like every `gpui-base` primitive, Progress supplies behavior and semantic struct
 
 ## Example
 
-The [single native Cargo entrypoint](https://github.com/longbridge/gpui-component/blob/main/crates/base/examples/base_components.rs) selects this primitive from the [shared showcase implementation](https://github.com/longbridge/gpui-component/blob/main/crates/base/examples/showcase/mod.rs). The same showcase is compiled once for the WASM preview above.
+The [single native Cargo entrypoint](https://github.com/longbridge/gpui-component/blob/main/crates/base/examples/components.rs) selects this primitive from the [shared showcase implementation](https://github.com/longbridge/gpui-component/blob/main/crates/base/examples/showcase/mod.rs). The same showcase is compiled once for the WASM preview above.
 
 ```bash
-cargo run -p gpui-base --example base_components -- progress
+cargo run -p gpui-base --example components -- progress
 ```
 
 ## Import

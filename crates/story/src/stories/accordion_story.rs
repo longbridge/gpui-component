@@ -1,6 +1,6 @@
 use gpui::{
     Action, App, AppContext, Context, Entity, FocusHandle, Focusable, Hsla, InteractiveElement,
-    IntoElement, ParentElement as _, Render, StyleRefinement, Styled as _, Window, div,
+    IntoElement, ParentElement as _, Pixels, Render, StyleRefinement, Styled as _, Window, div,
     prelude::FluentBuilder as _, px,
 };
 use gpui_component::{
@@ -26,6 +26,15 @@ enum ToggleOption {
     Bordered,
 }
 
+/// The theme-derived values a settings row draws with, read once so the row
+/// builder itself needs no app context.
+#[derive(Clone, Copy)]
+struct SettingsItemStyle {
+    icon_bg: Hsla,
+    muted: Hsla,
+    icon_radius: Pixels,
+}
+
 /// A settings row: the icon sits in a rounded square, and the content lines up
 /// with the title rather than with the icon.
 fn settings_item(
@@ -34,9 +43,14 @@ fn settings_item(
     title: &'static str,
     tag: Option<Tag>,
     body: &'static str,
-    icon_bg: Hsla,
-    muted: Hsla,
+    style: SettingsItemStyle,
 ) -> AccordionItem {
+    let SettingsItemStyle {
+        icon_bg,
+        muted,
+        icon_radius,
+    } = style;
+
     item.title(
         h_flex()
             .gap_2()
@@ -47,7 +61,7 @@ fn settings_item(
                     .size(px(32.))
                     .items_center()
                     .justify_center()
-                    .rounded(px(8.))
+                    .rounded(icon_radius)
                     .bg(icon_bg)
                     .child(Icon::new(icon).small().text_color(muted)),
             )
@@ -129,8 +143,11 @@ impl Focusable for AccordionStory {
 
 impl Render for AccordionStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let icon_bg = cx.theme().secondary.opacity(0.5);
-        let muted_fg = cx.theme().muted_foreground;
+        let settings_item_style = SettingsItemStyle {
+            icon_bg: cx.theme().secondary.opacity(0.5),
+            muted: cx.theme().muted_foreground,
+            icon_radius: cx.theme().radius,
+        };
 
         v_flex()
             .w_full()
@@ -243,7 +260,7 @@ impl Render for AccordionStory {
                     div()
                         .w(px(480.))
                         .p(px(4.))
-                        .rounded(px(16.))
+                        .rounded(cx.theme().radius_lg * 2.)
                         .bg(cx.theme().secondary.opacity(0.5))
                         .border_1()
                         .border_color(cx.theme().border.opacity(0.5))
@@ -260,8 +277,7 @@ impl Render for AccordionStory {
                                         "Manage your account preferences, security settings, \
                                     and personal information. You can also configure \
                                     two-factor authentication here.",
-                                        icon_bg,
-                                        muted_fg,
+                                        settings_item_style,
                                     )
                                     .open(self.styled_open_ixs.contains(&0))
                                 })
@@ -273,8 +289,7 @@ impl Render for AccordionStory {
                                         None,
                                         "Control who can see your profile and how your data \
                                     is used.",
-                                        icon_bg,
-                                        muted_fg,
+                                        settings_item_style,
                                     )
                                     .open(self.styled_open_ixs.contains(&1))
                                 })
@@ -286,8 +301,7 @@ impl Render for AccordionStory {
                                         None,
                                         "Browse the documentation, or get in touch with the \
                                     support team.",
-                                        icon_bg,
-                                        muted_fg,
+                                        settings_item_style,
                                     )
                                     .open(self.styled_open_ixs.contains(&2))
                                 })

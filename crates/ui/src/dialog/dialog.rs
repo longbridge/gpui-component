@@ -515,8 +515,16 @@ impl RenderOnce for Dialog {
             paddings.bottom = pb.to_pixels(base_size, rem_size);
         }
 
-        let animation =
-            Animation::new(*ANIMATION_DURATION).with_easing(cubic_bezier(0.32, 0.72, 0., 1.));
+        // x1 = 1/3, x2 = 2/3 make the bezier's time mapping the identity,
+        // preserving the trajectory this dialog was tuned with before
+        // `cubic_bezier` solved for x; vaul's (0.32, 0.72, 0., 1.) is far
+        // more front-loaded under the CSS-correct solver.
+        let animation = Animation::new(*ANIMATION_DURATION).with_easing(cubic_bezier(
+            1. / 3.,
+            0.72,
+            2. / 3.,
+            1.,
+        ));
 
         anchored()
             .position(point(window_paddings.left, window_paddings.top))

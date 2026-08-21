@@ -30,7 +30,7 @@ impl Render for RootBorderlessExample {
                     .gap_3()
                     .child(
                         div()
-                            .rounded_md()
+                            .rounded(cx.theme().radius)
                             .border_1()
                             .border_color(cx.theme().border)
                             .px_3()
@@ -39,7 +39,7 @@ impl Render for RootBorderlessExample {
                     )
                     .child(
                         div()
-                            .rounded_md()
+                            .rounded(cx.theme().radius)
                             .border_1()
                             .border_color(cx.theme().border)
                             .px_3()

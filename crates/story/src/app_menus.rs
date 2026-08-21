@@ -1,11 +1,9 @@
 use gpui::{App, Entity, Menu, MenuItem, SharedString};
-use gpui_component::{
-    ActiveTheme as _, GlobalState, Theme, ThemeMode, ThemeRegistry, menu::AppMenuBar,
-};
+use gpui_component::{ActiveTheme as _, GlobalState, Theme, ThemeMode, menu::AppMenuBar};
 
 use crate::{
-    About, Open, Quit, SelectLocale, ToggleSearch,
-    themes::{SwitchTheme, SwitchThemeMode},
+    About, Open, OpenCommandPalette, Quit, SelectLocale,
+    themes::{SelectTheme, SwitchThemeMode},
 };
 
 pub fn init(title: impl Into<SharedString>, cx: &mut App) -> Entity<AppMenuBar> {
@@ -69,7 +67,6 @@ fn build_menus(title: impl Into<SharedString>, cx: &App) -> Vec<Menu> {
                     ],
                     disabled: false,
                 }),
-                theme_menu(cx),
                 language_menu(cx),
                 MenuItem::Separator,
                 MenuItem::action("Quit", Quit),
@@ -103,8 +100,11 @@ fn build_menus(title: impl Into<SharedString>, cx: &App) -> Vec<Menu> {
             disabled: false,
         },
         Menu {
-            name: "Window".into(),
-            items: vec![MenuItem::action("Toggle Search", ToggleSearch)],
+            name: "Go".into(),
+            items: vec![
+                MenuItem::action("Go to...", OpenCommandPalette),
+                MenuItem::action("Themes...", SelectTheme),
+            ],
             disabled: false,
         },
         Menu {
@@ -132,19 +132,86 @@ fn language_menu(_: &App) -> MenuItem {
     })
 }
 
-fn theme_menu(cx: &App) -> MenuItem {
-    let themes = ThemeRegistry::global(cx).sorted_themes();
-    let current_name = cx.theme().theme_name();
-    MenuItem::Submenu(Menu {
-        name: "Theme".into(),
-        items: themes
+#[cfg(test)]
+mod tests {
+    use gpui::TestAppContext;
+
+    use super::*;
+
+    #[gpui::test]
+    fn build_menus_puts_navigation_actions_in_go_menu(cx: &mut TestAppContext) {
+        cx.update(gpui_component::init);
+
+        cx.read(|cx| {
+            let menus = build_menus("Story", cx);
+            let names: Vec<_> = menus.iter().map(|menu| menu.name.as_ref()).collect();
+            assert_eq!(names, ["Story", "Edit", "Go", "Help"]);
+
+            let go_menu = menus.iter().find(|menu| menu.name == "Go").unwrap();
+            assert_action(&go_menu.items[0], "Go to...", |action| {
+                action.as_any().is::<crate::OpenCommandPalette>()
+            });
+            assert_action(&go_menu.items[1], "Themes...", |action| {
+                action.as_any().is::<SelectTheme>()
+            });
+
+            let app_menu = &menus[0];
+            assert!(app_menu.items.iter().all(|item| !matches!(
+                item,
+                MenuItem::Action { action, .. } if action.as_any().is::<SelectTheme>()
+            )));
+            assert!(menus.iter().all(|menu| menu.name != "Window"));
+            assert!(menus.iter().flat_map(|menu| &menu.items).all(|item| !matches!(
+                item,
+                MenuItem::Action { action, .. } if action.as_any().is::<crate::ToggleSearch>()
+            )));
+        });
+    }
+
+    #[gpui::test]
+    fn build_menus_reflects_active_theme_and_locale_checked_states(cx: &mut TestAppContext) {
+        cx.update(gpui_component::init);
+        cx.update(|cx| Theme::change(ThemeMode::Dark, None, cx));
+        rust_i18n::set_locale("fr");
+
+        cx.read(|cx| {
+            let menus = build_menus("Story", cx);
+            let app_menu = &menus[0];
+            let appearance = submenu(&app_menu.items, "Appearance");
+            assert_eq!(appearance.items.len(), 2);
+            assert!(!appearance.items[0].is_checked());
+            assert!(appearance.items[1].is_checked());
+
+            let language = submenu(&app_menu.items, "Language");
+            assert!(!language.items[0].is_checked());
+            assert!(!language.items[1].is_checked());
+            assert!(language.items[2].is_checked());
+        });
+
+        rust_i18n::set_locale("en");
+    }
+
+    fn submenu<'a>(items: &'a [MenuItem], name: &str) -> &'a Menu {
+        items
             .iter()
-            .map(|theme| {
-                let checked = current_name == &theme.name;
-                MenuItem::action(theme.name.clone(), SwitchTheme(theme.name.clone()))
-                    .checked(checked)
+            .find_map(|item| match item {
+                MenuItem::Submenu(menu) if menu.name == name => Some(menu),
+                _ => None,
             })
-            .collect(),
-        disabled: false,
-    })
+            .unwrap()
+    }
+
+    fn assert_action(
+        item: &MenuItem,
+        expected_name: &str,
+        matches_action: impl FnOnce(&dyn gpui::Action) -> bool,
+    ) {
+        match item {
+            MenuItem::Action { name, action, .. } => {
+                assert_eq!(name, expected_name);
+                assert!(matches_action(action.as_ref()));
+            }
+            _ => panic!("expected an action menu item"),
+        }
+    }
 }

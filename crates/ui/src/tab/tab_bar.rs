@@ -241,7 +241,7 @@ impl TabBar {
                     div()
                         .size_full()
                         .bg(cx.theme().tokens.primary)
-                        .rounded(px(99.)),
+                        .rounded(cx.theme().radius_full()),
                 ),
                 TabVariant::Underline => el.child(
                     div()

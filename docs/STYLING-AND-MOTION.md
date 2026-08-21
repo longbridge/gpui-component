@@ -153,6 +153,39 @@ to mutate arbitrary descendants.
 Keep state-independent geometry in the part's ordinary builder chain and put
 state-dependent color, border, fill, or opacity in its semantic style context.
 
+## Corner Radius
+
+Every corner an application-owned component draws comes from the theme. An
+application that sets `Theme::radius` to zero gets square corners everywhere,
+including the elements that read as circles or pills — avatar, badge dot, radio
+mark, slider thumb, stepper indicator, pill tab, progress bar.
+
+```text
+Theme::radius            the general radius
+Theme::radius_lg         dialogs, notifications, large surfaces
+Theme::radius_full()     circle or pill; zero when `radius` is zero
+ThemeStyled::rounded_full_style(cx)   the same, applied to an element
+```
+
+Do not write a literal radius. `rounded_full()`, `rounded_md()`,
+`rounded(px(6.))` and friends survive `radius` being set to zero, which leaves
+a handful of permanently round elements in a UI that is square everywhere else.
+Derive from the theme instead, scaling with `radius.half()` or `radius * 2.`
+where a component needs a tighter or looser curve than the base.
+
+The Base layer keeps its own copy of the theme, because it paints the scrollbar
+and the resize handles without going through `gpui-component`. `Theme::change`
+refreshes that copy; writing to the theme's public fields does not. After
+mutating the theme directly, call `Theme::sync_base(cx)` or the scrollbar thumb
+keeps the radius it was last given.
+
+Two deliberate exceptions:
+
+- A radius the caller passes in explicitly, such as `Tag::rounded_full()` or
+  `Avatar::rounded(px(20.))`. The application asked for that shape.
+- Plotted geometry — a scatter marker, a pie slice, a chart data dot. Those are
+  data, not chrome, and do not follow the interface's radius.
+
 ## Motion Ownership
 
 Ordinary semantic controls do not install default fade, slide, spring, or size
@@ -252,3 +285,4 @@ may continue to use its module-qualified API.
 7. Part styling is explicit and typed; base does not traverse arbitrary child
    trees to apply styles.
 8. Reduced-motion preferences are honored by generic transitions.
+9. Corner radius is derived from the theme, never written as a literal.

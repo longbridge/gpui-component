@@ -234,6 +234,19 @@ Dialog:
     zh-HK: 取消
     zh-TW: 取消
     it: Annulla
+Command:
+  placeholder:
+    en: Type a command or search...
+    zh-CN: 输入命令或搜索...
+    zh-HK: 輸入命令或搜尋...
+    zh-TW: 輸入命令或搜尋...
+    it: Digita un comando o cerca...
+  empty:
+    en: No results found.
+    zh-CN: 未找到结果。
+    zh-HK: 未找到結果。
+    zh-TW: 未找到結果。
+    it: Nessun risultato trovato.
 List:
   search_placeholder:
     en: Search...

@@ -7,7 +7,7 @@ description: DropdownButton 由一个主按钮和一个触发下拉菜单的按�
 
 [DropdownButton] 是一个组合型按钮组件。点击左侧主按钮时可以执行独立动作，点击右侧触发按钮时则会展开下拉菜单。
 
-它同时继承了 [Button] 的许多能力，例如变体、尺寸、图标和加载状态。
+共享变体和尺寸可以设置在 DropdownButton 上。文案、图标、提示、加载状态和点击回调等动作自身的选项属于内层 [Button]。
 
 ## 导入
 
@@ -43,6 +43,25 @@ DropdownButton::new("dropdown")
     })
 ```
 
+DropdownButton 上不设置变体或尺寸时，内层按钮的值会应用到两半。
+
+### 内层按钮选项
+
+```rust
+DropdownButton::new("dropdown")
+    .button(
+        Button::new("btn")
+            .label("Save")
+            .compact()
+            .loading(is_saving)
+            .tooltip("Save the current view")
+            .on_click(|_, _, _| println!("Saved")),
+    )
+    .dropdown_menu(|menu, _, _| {
+        menu.menu("Save as…", Box::new(MyAction))
+    })
+```
+
 ### 自定义锚点
 
 ```rust
@@ -55,5 +74,4 @@ DropdownButton::new("dropdown")
 
 [Button]: https://docs.rs/gpui-component/latest/gpui_component/button/struct.Button.html
 [DropdownButton]: https://docs.rs/gpui-component/latest/gpui_component/button/struct.DropdownButton.html
-[ButtonCustomVariant]: https://docs.rs/gpui-component/latest/gpui_component/button/struct.ButtonCustomVariant.html
 [Sizable]: https://docs.rs/gpui-component/latest/gpui_component/trait.Sizable.html

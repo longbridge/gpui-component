@@ -4,7 +4,7 @@ use crate::highlighter::LanguageRegistry;
 
 use anyhow::{Context, Result, anyhow};
 use gpui::{HighlightStyle, SharedString};
-
+use gpui_base::input::RopeExt as _;
 use ropey::{ChunkCursor, Rope};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -13,6 +13,7 @@ use std::{
     ops::{ControlFlow, Range},
     usize,
 };
+use sum_tree::Bias;
 use tree_sitter::{
     InputEdit, ParseOptions, Parser, Point, Query, QueryCursor, StreamingIterator, Tree,
 };
@@ -1081,6 +1082,13 @@ impl SyntaxHighlighter {
             if node_range.start > node_range.end {
                 node_range.end = node_range.start;
             }
+            // The tree can be stale while a background reparse is pending
+            // (sync-parse timeout, or the large-text `edit_tree` path), so
+            // node offsets may fall inside multi-byte characters of the
+            // current text. Snap to char boundaries — text shaping panics on
+            // a mid-char style boundary.
+            node_range = self.text.clip_offset(node_range.start, Bias::Left)
+                ..self.text.clip_offset(node_range.end, Bias::Right);
             if node_range.is_empty() {
                 continue;
             }
@@ -1310,6 +1318,34 @@ mod tests {
         let mut highlighter = SyntaxHighlighter::new("no-such-language");
         assert!(highlighter.update(None, &rope, None));
         assert!(highlighter.tree().is_none());
+    }
+
+    /// While a background reparse is pending (sync-parse timeout, or the
+    /// large-text `edit_tree` path), `styles()` serves ranges from a stale
+    /// tree. Those must still land on char boundaries of the current text,
+    /// or text shaping panics on multi-byte characters.
+    #[cfg(feature = "tree-sitter-languages")]
+    #[test]
+    fn test_stale_tree_styles_snap_to_char_boundaries() {
+        let mut highlighter = SyntaxHighlighter::new("markdown");
+        let old = Rope::from("# hello world\n*emphasis* and `code` here\n");
+        assert!(highlighter.update(None, &old, None));
+        assert!(highlighter.tree().is_some());
+
+        // Swap the text without reparsing: the tree is now stale and its node
+        // offsets point into the middle of the new text's CJK characters.
+        let new = Rope::from("# 你好，世界\n你好，*世界* 与 `代码`\n");
+        highlighter.edit_tree(None, &new);
+
+        let theme = HighlightTheme::default_dark();
+        let styles = highlighter.styles(&(0..new.len()), theme.as_ref());
+        assert!(!styles.is_empty());
+        for (range, _) in &styles {
+            assert!(
+                new.is_char_boundary(range.start) && new.is_char_boundary(range.end),
+                "style range {range:?} is not on char boundaries of the current text"
+            );
+        }
     }
 
     #[cfg(feature = "tree-sitter-languages")]

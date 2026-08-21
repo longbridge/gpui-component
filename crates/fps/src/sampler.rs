@@ -153,7 +153,7 @@ impl FrameSampler {
     }
 }
 
-/// A sample of this process' resource usage.
+/// A sample of the resource usage shown beside the frame numbers.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub(crate) struct ResourceSample {
     /// CPU used by this process, normalized so that 100 means every logical
@@ -162,9 +162,12 @@ pub(crate) struct ResourceSample {
     pub cpu_percent: f32,
     /// Resident memory of this process, in bytes.
     pub memory_bytes: u64,
+    /// The share of the GPU this process is using, and `None` on a platform
+    /// that does not attribute GPU time per process. See [`crate::gpu`].
+    pub gpu_percent: Option<f32>,
 }
 
-/// Samples this process' CPU and memory usage.
+/// Samples this process' CPU, memory and GPU usage.
 ///
 /// Refreshing is a blocking syscall walk, so this must be driven from a
 /// background thread rather than from the render loop.
@@ -173,6 +176,9 @@ pub(crate) struct ResourceProbe {
     system: sysinfo::System,
     pid: sysinfo::Pid,
     cores: f32,
+    /// `None` when this platform publishes no per-process GPU counter, which
+    /// the HUD shows by leaving the reading out rather than at a flat zero.
+    gpu: Option<crate::gpu::GpuProbe>,
 }
 
 #[cfg(not(target_family = "wasm"))]
@@ -189,6 +195,7 @@ impl ResourceProbe {
             system: sysinfo::System::new(),
             pid,
             cores,
+            gpu: crate::gpu::GpuProbe::new(),
         };
         // The first refresh only establishes the baseline; `cpu_usage` is a
         // delta against the previous refresh and reads zero until then.
@@ -198,10 +205,15 @@ impl ResourceProbe {
 
     pub(crate) fn sample(&mut self) -> Option<ResourceSample> {
         self.refresh();
+        // Sampled before the process is borrowed out of `self.system`, so the
+        // two borrows of `self` do not overlap.
+        let gpu_percent = self.gpu.as_mut().and_then(crate::gpu::GpuProbe::sample);
+
         let process = self.system.process(self.pid)?;
         Some(ResourceSample {
             cpu_percent: (process.cpu_usage() / self.cores).min(100.),
             memory_bytes: process.memory(),
+            gpu_percent,
         })
     }
 

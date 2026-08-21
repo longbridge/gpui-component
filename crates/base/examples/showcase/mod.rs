@@ -8,6 +8,11 @@ use gpui::{
 };
 #[cfg(not(target_family = "wasm"))]
 use gpui::{KeyBinding, WindowBounds};
+use gpui_base::ResizeHandleContext;
+use gpui_base::dock::{
+    DockArea, DockAreaRenderer, DockContext, DockLayout, DockPlacement, DropIndicator, NodeId,
+    Panel, PanelEvent, PanelView, TabGroupContext, TabGroupRenderer, TileContext, TilesRenderer,
+};
 use gpui_base::input::InputEditorStyle;
 use gpui_base::input::{EditorState, InputState, TextareaState};
 use gpui_base::slider::SliderState;
@@ -78,6 +83,7 @@ pub const COMPONENTS: &[&str] = &[
     "combobox",
     "date-picker",
     "dialog",
+    "dock",
     "editor",
     "hover-card",
     "input",
@@ -144,6 +150,7 @@ pub struct BaseShowcase {
     scroll: ScrollHandle,
     example_scroll: ScrollHandle,
     virtual_scroll: VirtualListScrollHandle,
+    dock: gpui::Entity<DockArea>,
     text_selection_handles: [TextSelectionHandle; 4],
     text_selection_scroll: ScrollHandle,
     text_selection_auto_scroll: AutoScroll,
@@ -331,6 +338,7 @@ impl BaseShowcase {
             scroll: ScrollHandle::new(),
             example_scroll: ScrollHandle::new(),
             virtual_scroll: VirtualListScrollHandle::new(),
+            dock: components::build_dock(window, cx),
             text_selection_handles,
             text_selection_scroll,
             text_selection_auto_scroll: AutoScroll::default(),
@@ -433,10 +441,13 @@ impl Render for BaseShowcase {
             "toggle-group" => self.toggle_group(cx).into_any_element(),
             "tooltip" => self.tooltip(cx).into_any_element(),
             "tree" => self.tree().into_any_element(),
+            "dock" => self.dock(cx).into_any_element(),
             "virtual-list" => self.virtual_list(cx).into_any_element(),
             _ => self.overview(cx).into_any_element(),
         };
         let show_back = self.navigation_enabled && self.component != "overview";
+        // Surfaces rather than parts: these take the whole viewport.
+        let fills_viewport = matches!(self.component.as_str(), "dock");
         let entity = cx.entity().downgrade();
         div()
             .size_full()
@@ -488,10 +499,23 @@ impl Render for BaseShowcase {
                             .min_h_full()
                             .w_full()
                             .flex()
-                            .items_center()
-                            .justify_center()
+                            // Most examples are small parts, centered in the
+                            // viewport. A few are whole surfaces that have to
+                            // fill it instead: centering them inside a
+                            // `flex_none` box leaves a percentage size with
+                            // nothing to resolve against, and it collapses.
+                            .when(!fills_viewport, |this| {
+                                this.items_center().justify_center()
+                            })
                             .p_4()
-                            .child(div().flex_none().child(content)),
+                            .child(
+                                div()
+                                    .map(|this| match fills_viewport {
+                                        true => this.flex_1().size_full().min_h(px(420.)),
+                                        false => this.flex_none(),
+                                    })
+                                    .child(content),
+                            ),
                     ),
             )
     }

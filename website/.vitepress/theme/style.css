@@ -839,6 +839,12 @@ html[lang^="ja"] :is(h1, h2, h3, h4) {
     border-radius: 0.25rem;
     background: var(--secondary);
     font-size: 0.84em;
+    /* The border makes this box visible, so its height has to stay inside the
+       line it sits on. At the body's 1.7 line-height the default padding pushes
+       the box past the leading, and consecutive lines — table cells most of
+       all — overlap. */
+    line-height: 1.2;
+    padding: 0.1em 0.35em;
   }
 
   div[class*="language-"] {

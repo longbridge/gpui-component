@@ -254,6 +254,20 @@ impl RenderOnce for WindowControls {
             return div().id("window-controls");
         }
 
+        // Under server-side decorations the window manager already renders
+        // its own title bar, complete with min/max/close; drawing ours as
+        // well stacks a duplicate set of controls on top of it (most
+        // visibly two close buttons). gpui falls back to server-side
+        // decorations on X11 sessions without a compositor, and a Wayland
+        // compositor may grant server mode even when client mode was
+        // requested. Skip ours unless this window is actually client-side
+        // decorated, mirroring the `is_client_decorated` gating of the
+        // title bar's window-menu overlay.
+        #[cfg(target_os = "linux")]
+        if !matches!(window.window_decorations(), Decorations::Client { .. }) {
+            return div().id("window-controls");
+        }
+
         // The window manager declares which controls it can honor; a tiling
         // compositor may support neither minimize nor maximize. Close is
         // always ours to offer.

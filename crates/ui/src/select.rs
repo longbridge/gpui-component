@@ -393,12 +393,7 @@ where
 
     fn set_open(&mut self, open: bool, cx: &mut Context<Self>) {
         self.state.open = open;
-
-        if self.state.open {
-            GlobalState::register_deferred_popover(&self.state.focus_handle, cx)
-        } else {
-            GlobalState::unregister_deferred_popover(&self.state.focus_handle, cx)
-        }
+        self.state.deferred_context = open.then(|| GlobalState::register_deferred_popover(cx));
 
         cx.notify();
     }

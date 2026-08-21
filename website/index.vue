@@ -173,70 +173,6 @@
             </div>
         </section>
 
-        <section ref="liveSection" class="band">
-            <div class="band__inner">
-                <header class="section-head showcase__head">
-                    <div>
-                        <span class="section-kicker">{{
-                            copy.liveKicker
-                        }}</span>
-                        <h2>{{ copy.liveTitle }}</h2>
-                        <p>{{ copy.liveDescription }}</p>
-                    </div>
-                    <div class="segmented" role="tablist">
-                        <button
-                            v-for="demo in demos"
-                            :key="demo.story"
-                            type="button"
-                            role="tab"
-                            :aria-selected="demo.story === activeStory"
-                            :class="{ 'is-active': demo.story === activeStory }"
-                            @click="activeStory = demo.story"
-                        >
-                            {{ demo.label }}
-                        </button>
-                    </div>
-                </header>
-
-                <div
-                    class="showcase__frame mac-window"
-                    :class="{ 'mac-window--zoomed': zoomed }"
-                >
-                    <div class="mac-window__bar">
-                        <span class="mac-window__lights" aria-hidden="true"
-                            ><i /><i /><i
-                        /></span>
-                        <span class="mac-window__title"
-                            >{{ activeStory }} — gpui-component</span
-                        >
-                        <span class="live__badge">
-                            {{ copy.liveBadge }}
-                        </span>
-                        <WindowZoomButton
-                            class="mac-window__action--always"
-                            :zoomed="zoomed"
-                            :label="zoomLabel"
-                            @click="setZoomed(!zoomed)"
-                        />
-                    </div>
-                    <iframe
-                        v-if="liveSrc"
-                        :key="liveSrc"
-                        :src="liveSrc"
-                        :title="copy.liveTitle"
-                        loading="lazy"
-                    />
-                    <div
-                        v-else
-                        class="showcase__placeholder"
-                        aria-hidden="true"
-                    >
-                        <span class="live__dot"></span>
-                    </div>
-                </div>
-            </div>
-        </section>
-
         <section class="band">
             <div class="band__inner">
                 <header class="section-head">
@@ -425,7 +361,7 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, ref } from "vue";
 import { useData, withBase } from "vitepress";
 import {
     ArrowRight,
@@ -451,12 +387,8 @@ import {
     X,
 } from "lucide-vue-next";
 import { data as repo } from "./data/repo.data";
-import { useWindowZoom } from "./.vitepress/theme/composables/zoom";
-import WindowZoomButton from "./.vitepress/theme/components/WindowZoomButton.vue";
 
 const { isDark, localeIndex, theme } = useData();
-
-const { zoomed, zoomLabel, setZoomed } = useWindowZoom("demo");
 
 // The navbar renders the very same `nav` array that config.mts feeds to the
 // docs navbar, so the two can never drift apart.
@@ -560,54 +492,7 @@ const copyInstall = async () => {
     }
 };
 
-// The gallery is a full WASM build, so it only loads once the section is close
-// to the viewport — the hero must never pay for it.
-const demos = computed(() =>
-    isZh.value
-        ? [
-              { story: "DataTable", label: "数据表格" },
-              { story: "Chart", label: "图表" },
-              { story: "Editor", label: "编辑器" },
-              { story: "List", label: "列表" },
-              { story: "Sidebar", label: "侧边栏" },
-          ]
-        : [
-              { story: "DataTable", label: "Data table" },
-              { story: "Chart", label: "Charts" },
-              { story: "Editor", label: "Editor" },
-              { story: "List", label: "List" },
-              { story: "Sidebar", label: "Sidebar" },
-          ],
-);
-const activeStory = ref("DataTable");
-const galleryVisible = ref(false);
-const liveSection = ref();
-const liveSrc = computed(() =>
-    galleryVisible.value
-        ? withBase(`/gallery/?story=${encodeURIComponent(activeStory.value)}`)
-        : undefined,
-);
-
-let observer;
-onMounted(() => {
-    if (!liveSection.value) return;
-    if (!("IntersectionObserver" in window)) {
-        galleryVisible.value = true;
-        return;
-    }
-    observer = new IntersectionObserver(
-        (entries) => {
-            if (entries.some((entry) => entry.isIntersecting)) {
-                galleryVisible.value = true;
-                observer?.disconnect();
-            }
-        },
-        { rootMargin: "400px" },
-    );
-    observer.observe(liveSection.value);
-});
 onBeforeUnmount(() => {
-    observer?.disconnect();
     clearTimeout(copyTimer);
 });
 
@@ -619,23 +504,18 @@ const copy = computed(() =>
               themeNav: "切换主题",
               menuNav: "打开菜单",
               copyLabel: "复制安装命令",
-              eyebrow: "基于 GPUI —— Zed 背后的渲染引擎",
-              title: "用 Rust 构建原生桌面应用。",
-              lead: "面向 GPUI（Zed 编辑器背后的 GPU 加速渲染引擎）的 UI 组件库。数据表格、Dock 布局、图表与代码编辑器一应俱全；一份 Rust 源码，同时交付 macOS、Windows 与 Linux。",
+              eyebrow: "基于 GPUI，经过 Longbridge 生产验证",
+              title: "构建出色的高性能桌面应用。",
+              lead: "一个综合性的 Rust 桌面开发框架，集完整 UI 系统、数据表格、Dock 布局、图表与代码编辑器于一体；从第一天起用于构建 Longbridge Pro。",
               componentsAction: "浏览组件",
               baseAction: "探索 gpui-base",
               signalStars: "GitHub stars",
               signalLicense: "Apache-2.0 许可",
               signalPlatforms: "macOS / Windows / Linux",
-              liveKicker: "真实运行",
-              liveTitle: "不是截图，是真的在跑。",
-              liveDescription:
-                  "下面这些组件由同一份 Rust 源码编译为 WebAssembly，就在你的浏览器里渲染。桌面端跑的是原生构建。",
-              liveBadge: "WASM 实时",
               capsKicker: "核心能力",
               capsTitle: "为信息密集型软件而生。",
               capsDescription:
-                  "复杂桌面应用真正需要的部分，都已在库内解决，无需自行拼装。",
+                  "复杂桌面应用真正需要的系统能力，都已整合在框架之中。",
               caps: [
                   {
                       icon: "perf",
@@ -669,7 +549,7 @@ const copy = computed(() =>
                       title: "Dock 自由布局",
                       description:
                           "面板停靠、拖拽重排、缩放与 Tiles 自由布局，并可序列化保存。",
-                      apis: ["DockArea", "Tiles", "TabPanel"],
+                      apis: ["DockArea", "DockLayout", "TabGroup"],
                   },
                   {
                       icon: "theme",
@@ -679,20 +559,20 @@ const copy = computed(() =>
                       apis: ["Theme", "ThemeColor", "ActiveTheme"],
                   },
               ],
-              chooseKicker: "两条路径",
-              chooseTitle: "从适合产品的层开始。",
+              chooseKicker: "两层架构，一个生态",
+              chooseTitle: "决定由谁掌控视觉系统。",
               chooseDescription:
-                  "使用完整组件库快速交付，或只采用底层行为来构建自己的系统。",
-              shipTitle: "交付完整应用",
+                  "使用 gpui-component 保持统一风格，或基于 gpui-base 构建并拥有自己的设计系统。",
+              shipTitle: "保持风格统一",
               shipDescription:
-                  "主题、复杂数据组件、Dock、图表与编辑器均已就绪。",
+                  "gpui-component 提供完整、成熟且开箱即用的视觉与交互系统。",
               shipPoints: [
                   "60+ 个成品组件",
                   "内置明暗主题",
                   "开箱即用的交互细节",
               ],
               startComponent: "开始使用",
-              ownTitle: "构建设计系统",
+              ownTitle: "拥有设计系统",
               ownDescription:
                   "复用焦点、选择、浮层与虚拟化行为，视觉完全由你决定。",
               ownPoints: [
@@ -720,23 +600,18 @@ const copy = computed(() =>
               themeNav: "Toggle color theme",
               menuNav: "Open menu",
               copyLabel: "Copy install command",
-              eyebrow: "Built on GPUI — the renderer behind Zed",
-              title: "Build native desktop apps in Rust.",
-              lead: "A UI library for GPUI, the GPU-accelerated renderer behind the Zed editor. Data tables, docking, charts and a code editor included — one Rust source, shipping to macOS, Windows and Linux.",
+              eyebrow: "Built on GPUI. Proven at Longbridge.",
+              title: "Build fantastic, high-performance desktop apps.",
+              lead: "A comprehensive Rust desktop framework with a complete UI system, data tables, docking, charts, and a code editor — used to build Longbridge Pro from day one.",
               componentsAction: "Browse components",
               baseAction: "Explore gpui-base",
               signalStars: "stars on GitHub",
               signalLicense: "Apache-2.0",
               signalPlatforms: "macOS, Windows, Linux",
-              liveKicker: "Running now",
-              liveTitle: "Not screenshots. Actually running.",
-              liveDescription:
-                  "These components are compiled from the same Rust source to WebAssembly and rendered in your browser right now. On desktop they run as a native build.",
-              liveBadge: "Live WASM",
               capsKicker: "Capabilities",
               capsTitle: "Built for information-dense software.",
               capsDescription:
-                  "The parts that real desktop applications need are already solved inside the library.",
+                  "The systems that real desktop applications need are integrated into one framework.",
               caps: [
                   {
                       icon: "perf",
@@ -771,7 +646,7 @@ const copy = computed(() =>
                       title: "Freeform dock layout",
                       description:
                           "Dockable panels with drag-to-rearrange, zooming and freeform tiles — all serializable.",
-                      apis: ["DockArea", "Tiles", "TabPanel"],
+                      apis: ["DockArea", "DockLayout", "TabGroup"],
                   },
                   {
                       icon: "theme",
@@ -781,20 +656,20 @@ const copy = computed(() =>
                       apis: ["Theme", "ThemeColor", "ActiveTheme"],
                   },
               ],
-              chooseKicker: "Two paths",
-              chooseTitle: "Start at the layer your product needs.",
+              chooseKicker: "Two layers. One ecosystem.",
+              chooseTitle: "Choose who owns the visual system.",
               chooseDescription:
-                  "Ship with the complete component library, or adopt only the behavior layer and build your own system.",
-              shipTitle: "Ship the complete application",
+                  "Use gpui-component for a coherent product, or build and own your design system on gpui-base.",
+              shipTitle: "Keep the product coherent",
               shipDescription:
-                  "Themes, data-heavy controls, docking, charts and an editor are ready to use.",
+                  "gpui-component provides a complete, polished visual and interaction system ready to ship.",
               shipPoints: [
                   "60+ finished components",
                   "Light and dark themes included",
                   "Interaction details already handled",
               ],
               startComponent: "Get started",
-              ownTitle: "Create the design system",
+              ownTitle: "Own the design system",
               ownDescription:
                   "Reuse focus, selection, overlay and virtualization behavior while owning every pixel.",
               ownPoints: [
@@ -1391,96 +1266,6 @@ html[lang^="zh"] .section-kicker {
     }
 }
 
-/* -------------------------------------------------------------- showcase */
-
-/* The live window belongs to the hero, so its caption is a single thin line:
-   what you are looking at, and what to look at instead. */
-.showcase__head {
-    display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
-    gap: 2rem;
-    max-width: none;
-
-    /* The heading keeps a readable measure; the control stays at the edge. */
-    > div {
-        max-width: 44rem;
-    }
-
-    p {
-        margin-bottom: 0.15rem;
-    }
-}
-
-/* tab_bar.segmented.background / tab.active.background — the library's own
-   segmented control, which is how gpui-component switches between views. */
-.segmented {
-    display: inline-flex;
-    flex-shrink: 0;
-    gap: 0.1rem;
-    padding: 0.18rem;
-    border: 1px solid var(--border);
-    border-radius: calc(var(--radius-control) + 0.18rem);
-    background: var(--secondary);
-
-    button {
-        padding: 0.35rem 0.7rem;
-        border: 1px solid transparent;
-        border-radius: var(--radius-control);
-        color: var(--muted-foreground);
-        font-size: 0.8rem;
-        font-weight: 520;
-        white-space: nowrap;
-        cursor: pointer;
-        transition:
-            background 140ms ease,
-            color 140ms ease;
-
-        &:hover {
-            color: var(--foreground);
-        }
-
-        &.is-active {
-            border-color: var(--border);
-            background: var(--background);
-            box-shadow: var(--shadow-raise);
-            color: var(--foreground);
-            font-weight: 560;
-        }
-    }
-}
-
-.live__badge {
-    margin-left: auto;
-    color: var(--muted-foreground);
-    font: 0.66rem/1 var(--vp-font-family-mono);
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-}
-
-.live__dot {
-    flex-shrink: 0;
-    width: 0.4rem;
-    height: 0.4rem;
-    border-radius: 50%;
-    background: var(--success);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 20%, transparent);
-}
-
-.showcase__frame iframe,
-.showcase__placeholder {
-    display: block;
-    width: 100%;
-    height: min(600px, calc(100dvh - 11rem));
-    border: 0;
-    @apply bg-white dark:bg-[#0a0a0a];
-}
-
-.showcase__placeholder {
-    display: grid;
-    place-items: center;
-}
-
 /* ------------------------------------------------------------------ caps */
 
 .caps__grid {
@@ -1979,15 +1764,6 @@ html[lang^="zh"] .section-kicker {
 }
 
 @media (max-width: 860px) {
-    .showcase__head {
-        flex-direction: column;
-        align-items: stretch;
-        gap: 1.25rem;
-    }
-    .segmented {
-        overflow-x: auto;
-        scrollbar-width: none;
-    }
     .paths__grid {
         grid-template-columns: 1fr;
     }
@@ -1995,15 +1771,6 @@ html[lang^="zh"] .section-kicker {
     .principle {
         grid-template-columns: 1fr;
         align-items: start;
-    }
-    /* A narrow gallery wraps its own content, so the same story needs more
-       vertical room here than on a wide screen to show a comparable amount.
-       Sizing by share of the viewport keeps that room proportional on both a
-       tall tablet and a short desktop window, where a fixed height would either
-       waste space or swallow the whole screen. */
-    .showcase__frame iframe,
-    .showcase__placeholder {
-        height: clamp(480px, 62dvh, 560px);
     }
 }
 
@@ -2069,20 +1836,6 @@ html[lang^="zh"] .section-kicker {
     }
     .home-footer nav {
         justify-content: flex-start;
-    }
-    .showcase__frame iframe,
-    .showcase__placeholder {
-        height: clamp(420px, 66dvh, 560px);
-    }
-}
-
-/* A short viewport — a phone held sideways — cannot spare the minimum height
-   the width breakpoints above ask for. Fit the window to the screen instead, so
-   the title bar and the frame stay visible together. */
-@media (max-width: 860px) and (max-height: 560px) {
-    .showcase__frame iframe,
-    .showcase__placeholder {
-        height: calc(100dvh - 7rem);
     }
 }
 

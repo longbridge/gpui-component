@@ -1,6 +1,6 @@
 [package]
 name = "gpui-fps"
-description = "Realtime FPS, frame time, CPU and memory HUD for GPUI applications."
+description = "Realtime FPS, frame time, CPU, GPU and memory HUD for GPUI applications."
 keywords = ["fps", "gpui", "hud", "performance", "profiling"]
 license = "Apache-2.0"
 documentation = "https://docs.rs/gpui-fps"
@@ -20,6 +20,26 @@ instant.workspace = true
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 sysinfo = "0.37"
+
+# This process' GPU usage is read straight from the platform, since `sysinfo`
+# does not report it. Each backend is the counter the platform's own activity
+# monitor attributes per process with, so no vendor SDK or elevated privilege
+# is involved.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2-core-foundation = { version = "0.3", default-features = false, features = [
+    "std",
+    "CFArray",
+    "CFDictionary",
+    "CFNumber",
+    "CFString",
+] }
+objc2-io-kit = { version = "0.3", default-features = false, features = [
+    "std",
+    "libc",
+] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { workspace = true, features = ["Win32_System_Performance"] }
 
 [dev-dependencies]
 gpui = { workspace = true, features = ["test-support"] }

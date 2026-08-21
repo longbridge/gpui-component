@@ -102,7 +102,8 @@ semantic seams. Base does not walk arbitrary descendant trees to discover them.
 ### 3. Stateful systems
 
 Examples include InputState, TextareaState, EditorState, CalendarState, TreeState, SliderState,
-ResizableState, OtpState, ColorPickerState, ToastManager, and ToastStackState.
+ResizableState, OtpState, ColorPickerState, ToastManager, ToastStackState, DockArea, TabGroup, and
+TilesState.
 
 These modules retain data because their behavior spans frames or requires
 measurement, subscriptions, history, focus, or incremental updates. State is
@@ -400,6 +401,111 @@ list because its visible entries share a row height.
 One handle represents one logical viewport. Sharing a handle between nested or
 unrelated scroll areas causes offsets, hitboxes, and scrollbar geometry to
 interfere.
+
+## Dock Layout Architecture
+
+`crates/base/src/dock` owns the layout tree, persistence, drag hit-testing,
+resize arithmetic, the active-panel state machine, zoom, focus, and the panel
+registry. `crates/ui/src/dock` is a skin: `DockSkin` implements the renderer
+traits below to supply the tab bar, toolbar, drop-indicator, and dock-toggle
+appearance. A `DockArea` built without a renderer still docks, drags, and
+persists — it draws no chrome at all.
+
+### The layout tree
+
+`PaneTree` is the single source of truth for one region — the center, or
+one of the left/bottom/right docks. It stores no GPUI entity handles:
+containers are addressed by `NodeId`, panels by `PanelId` (the panel entity's
+`EntityId`), and a container's `NodeKind` is one of `Split`, `Tabs`, or
+`Tiles`. There is no leaf variant, so a panel can only ever live inside a
+`Tabs` or `Tiles` node — the invariant a runtime assertion checked in the old
+implementation is expressed in the type instead.
+
+`NodeKind` stays private. Callers read a node through the borrowed `PaneRef`
+projection and never construct one directly; every mutation goes through
+`PaneTree`'s edit methods (`insert_panel`, `remove_panel`, `move_panel`,
+`split`, `set_active`, `set_sizes`, `set_tile_bounds`, `bring_to_front`), each
+of which runs `normalize` before returning. When base needs a fact about a
+panel — its name, its visibility, its dump — it asks a `PanelSource` rather
+than the entity directly, which is what makes the layout algebra testable as
+pure functions with no `TestAppContext`.
+
+Building a layout is entity-free too: `DockLayout` (`h_split`, `v_split`,
+`tabs`, `tiles`, chained with `.child(...)`, `.panel_view(...)`,
+`.tile_view(...)`, and `.active_index(...)`) produces a tree rather than
+constructing containers. `DockArea::set_center` and `set_dock` reconcile a
+`DockLayout` into live entities when it is installed.
+
+Panels go in wrapped: `gpui_component::dock::panel_handle(panel)` is what
+carries a panel's presentation across the renderer seam, and every entry point
+takes one — `DockLayout::panel_view` / `tile_view` when describing a layout,
+`DockArea::add_panel_view` / `add_tile_view` when adding to a live one, and
+the closure a `register_panel` builder returns.
+
+```rust,ignore
+let center = DockLayout::h_split()
+    .child(DockLayout::tabs().panel_view(panel_handle(files), cx), Some(px(240.)))
+    .child(DockLayout::tabs().panel_view(panel_handle(editor), cx), None);
+dock_area.update(cx, |area, cx| area.set_center(center, window, cx));
+```
+
+Base's own `DockLayout::panel` / `tile` and `DockArea::add_panel` / `add_tile`
+take a bare `Entity<P>` instead. They are the base-only forms: the panel docks,
+drags and persists exactly the same, but base stores the bare entity and the
+skin cannot recover presentation from it, so **every tab draws the panel's
+`panel_name` where its title belongs**. The only signal is a one-off
+`tracing::warn!`. Use them only when there is no skin over the dock at all.
+
+### Normalization
+
+One post-order pass, repeated to a fixpoint, replaces the mutually recursive
+parent-pointer collapse the old `StackPanel`/`TabPanel` pair used:
+
+1. An empty `Tabs`, `Tiles`, or `Split` is removed from its parent; the root
+   is exempt.
+2. A `Split` with one child is replaced by that child, which keeps its own
+   `NodeId` and inherits the split's slot size.
+3. A `Split` containing a `Split` of the same axis splices the inner
+   children into the outer node.
+4. `active_ix` is clamped to the panel count.
+5. Root shape is enforced per `RootKind` — the center's root is always a
+   `Split`, so an empty center still serializes as a stack; a dock's root is
+   unconstrained.
+
+`normalize` is idempotent and needs no parent pointers or deferred work: the
+tree is self-consistent the instant an edit operation returns.
+
+### Reconciliation
+
+`DockArea` holds the tree plus a cache of container and panel entities keyed
+by `NodeId` and `PanelId`. After any edit that reports a change, it walks the
+tree, creates an entity for each container id the cache does not yet have,
+drops cache entries for ids no longer present — calling `on_removed` on the
+panels that departed — pushes sizes and `active_ix` into the surviving
+entities, and emits `DockEvent::LayoutChanged`.
+
+Because `NodeId` survives every edit operation and every `normalize` rule, a
+steady-state reconciliation pass creates and drops nothing: only genuinely
+new or dead containers churn. That is what keeps a drag from resetting the
+state of panels it did not touch.
+
+### Rendering seam
+
+`TabGroup` owns the panel list mirrored from the tree, the active index, the
+focus handle, drag-and-drop hit state, and the zoom flag; it renders a
+skeleton and delegates all appearance to a `TabGroupRenderer`.
+`DockAreaRenderer` and `TilesRenderer` do the same for the area frame and a
+tiles canvas. Base attaches the drag source, drop-target hit testing,
+keyboard actions, and focus handling — a renderer implementation never sees a
+drag event, only resolved state through `TabGroupContext`, `DockContext`, and
+`TileContext`.
+
+`Panel` splits at the seam the same way: `gpui_base::dock::Panel` covers
+behavior (`panel_name`, `visible`, `closable`, `zoomable`, `set_active`,
+`set_zoomed`, `on_added_to`, `on_removed`, `dump`), and
+`gpui_component::dock::Panel` extends it with presentation (`title`,
+`tab_name`, `toolbar_buttons`, `dropdown_menu`, `zoom_control`). A panel type
+implements both.
 
 ## Theme Projection
 
