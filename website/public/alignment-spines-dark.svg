@@ -61,7 +61,7 @@
 
     <circle class="muted-surface" cx="146" cy="496" r="12"/><text class="ink" x="146" y="501" text-anchor="middle" font-size="11" font-weight="700">B</text>
     <text class="ink" x="174" y="501" font-size="15" font-weight="620">Beacon</text>
-    <circle cx="562" cy="496" r="4" fill="#f59e0b"/><text class="muted" x="574" y="501" font-size="14">Review</text>
+    <circle cx="562" cy="496" r="4" fill="#419cff"/><text class="muted" x="574" y="501" font-size="14">Review</text>
     <text class="muted" x="696" y="501" font-size="14">Yesterday</text>
     <g fill="#a3a3a3"><circle cx="810" cy="496" r="2"/><circle cx="816" cy="496" r="2"/><circle cx="822" cy="496" r="2"/></g>
 

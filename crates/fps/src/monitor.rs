@@ -4,9 +4,12 @@ use instant::Instant;
 
 use gpui::{
     Bounds, Context, Div, Hsla, InteractiveElement as _, IntoElement, ParentElement, PathBuilder,
-    Pixels, Point, Render, StatefulInteractiveElement as _, Styled, Task, Window, canvas, div,
-    point, prelude::FluentBuilder as _, px, relative,
+    Pixels, Point, Render, StatefulInteractiveElement as _, Styled, Window, canvas, div, point,
+    prelude::FluentBuilder as _, px, relative,
 };
+
+#[cfg(not(target_family = "wasm"))]
+use gpui::Task;
 
 use crate::{
     FrameTraceGuard,
@@ -112,6 +115,7 @@ pub struct FpsMonitor {
     compact: bool,
     /// Upper bound of the chart's y axis, in seconds.
     axis_max: f32,
+    #[cfg(not(target_family = "wasm"))]
     resource_task: Option<Task<()>>,
     _frame_trace: FrameTraceGuard,
 }
@@ -131,6 +135,7 @@ impl FpsMonitor {
             resources: None,
             compact: false,
             axis_max: frame_budget.as_secs_f32() * 2.,
+            #[cfg(not(target_family = "wasm"))]
             resource_task: None,
             _frame_trace: FrameTraceGuard::acquire(),
         }
