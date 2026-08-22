@@ -54,7 +54,7 @@ jobs:
       - name: Lint
         if: ${{ matrix.run_on == 'macos-latest' }}
         run: |
-          cargo clippy -- --deny warnings
+          cargo clippy -p gpui-component -p gpui-component-story -p gpui-component-assets -- --deny warnings
       - name: Check without default features (tree-sitter disabled)
         if: ${{ matrix.run_on == 'ubuntu-latest' }}
         run: |
@@ -62,13 +62,13 @@ jobs:
       - name: Test Linux
         if: ${{ matrix.run_on == 'ubuntu-latest' }}
         run: |
-          cargo test --all
+          cargo test --all --features gpui-component-story/test-support
       - name: Test Windows
         if: ${{ matrix.run_on == 'windows-latest' }}
         run: |
-          cargo test --all
+          cargo test --all --features gpui-component-story/test-support
       - name: Test MacOS
         if: ${{ matrix.run_on == 'macos-latest' }}
         run: |
-          cargo test --all
+          cargo test --all --features gpui-component-story/test-support
           cargo test -p gpui-component --doc

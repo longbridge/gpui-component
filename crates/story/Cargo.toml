@@ -7,6 +7,7 @@ edition.workspace = true
 [features]
 inspector = ["gpui-component/inspector"]
 tree-sitter = ["gpui-component/tree-sitter-languages"]
+test-support = ["gpui/test-support"]
 default = ["tree-sitter"]
 
 [dependencies]
@@ -29,7 +30,11 @@ regex = "1"
 serde = "1"
 serde_json = "1"
 tracing.workspace = true
-tracing-subscriber = { version = "0.3.22", features = ["env-filter", "fmt", "registry"], default-features = false }
+tracing-subscriber = { version = "0.3.22", features = [
+  "env-filter",
+  "fmt",
+  "registry",
+], default-features = false }
 unindent = "0.2.3"
 rust-i18n.workspace = true
 dirs = "6.0.0"
@@ -54,7 +59,6 @@ getrandom = { version = "0.2", features = ["js"] }
 gtk = { version = "0.18" }
 
 [dev-dependencies]
-gpui = { workspace = true, features = ["test-support"] }
 gpui-base.workspace = true
 
 [lints]

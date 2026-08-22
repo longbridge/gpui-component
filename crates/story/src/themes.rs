@@ -226,7 +226,7 @@ fn theme_item(theme: &ThemeConfig, active_name: &SharedString) -> CommandItem {
         .action(Box::new(SwitchTheme(name)))
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "test-support"))]
 mod tests {
     use super::*;
     use gpui::{TestAppContext, px};
