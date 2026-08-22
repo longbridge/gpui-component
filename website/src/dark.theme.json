@@ -216,7 +216,7 @@
         "entity.other.attribute-name.attribute.scss"
       ],
       "settings": {
-        "foreground": "#0ABF9F"
+        "foreground": "#CBA6F7"
       }
     },
     {
@@ -242,7 +242,7 @@
         "meta.instance.constructor"
       ],
       "settings": {
-        "foreground": "#0ABF9F"
+        "foreground": "#CBA6F7"
       }
     },
     {
