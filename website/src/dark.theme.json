@@ -185,7 +185,7 @@
         "entity.other.attribute-name"
       ],
       "settings": {
-        "foreground": "#87B1F6"
+        "foreground": "#78A9F5"
       }
     },
     {
@@ -201,7 +201,7 @@
         "meta.template.expression"
       ],
       "settings": {
-        "foreground": "#87B1F6"
+        "foreground": "#78A9F5"
       }
     },
     {
@@ -274,7 +274,7 @@
     {
       "scope": ["meta.function-call", "support.function", "entity.name.function"],
       "settings": {
-        "foreground": "#B3C5F3"
+        "foreground": "#8FA6D8"
       }
     },
     {
