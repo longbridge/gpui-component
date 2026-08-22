@@ -3,5 +3,5 @@
   <!-- The mark splits into two counters: an open C, and the bar-and-stem that
        turns it into a G. Together they cover exactly the original path. -->
   <path fill="#ECEDEF" d="M4 4h24v5H10v14h18v5H4V4Z"/>
-  <path fill="#B54E05" d="M16 13h12v10h-5v-5h-7v-5Z"/>
+  <path fill="#419CFF" d="M16 13h12v10h-5v-5h-7v-5Z"/>
 </svg>

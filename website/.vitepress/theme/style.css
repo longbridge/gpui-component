@@ -180,7 +180,7 @@ html.dark .alignment-dark {
   --muted-foreground: #a3a3a3;
   --accent: #262626;
   --accent-foreground: #fafafa;
-  --destructive: #f87171;
+  --destructive: #e44a4f;
   --border: #262626;
   --input: #2f2f2f;
   --ring: #d4d4d4;
@@ -205,11 +205,11 @@ html.dark .alignment-dark {
   --brand-subtle: #262626;
   --brand-line: color-mix(in srgb, var(--foreground) 26%, transparent);
 
-  --data-1: #e9a05a;
-  --data-2: #b54e05;
-  --data-3: #c9761f;
-  --data-4: #8f3d04;
-  --data-5: #6b2d03;
+  --data-1: #93c5fd;
+  --data-2: #419cff;
+  --data-3: #2563eb;
+  --data-4: #1d4ed8;
+  --data-5: #1e40af;
 
   --selection: #c2610a;
 
@@ -229,11 +229,11 @@ html.dark .alignment-dark {
   /* src/dark.theme.json ("macos-classic-dark") */
   --code-bg: #151515;
   --code-fg: #caccca;
-  --code-keyword: #c28b12;
-  --code-string: #76ba53;
-  --code-comment: #9e9e9e;
-  --code-fn: #fdd888;
-  --code-type: #b54e05;
+  --code-keyword: #87b1f6;
+  --code-string: #a3e09f;
+  --code-comment: #9d9d9d;
+  --code-fn: #b3c5f3;
+  --code-type: #0abf9f;
 }
 
 html {
