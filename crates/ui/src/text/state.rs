@@ -745,17 +745,33 @@ fn parse_content(
         ..NodeContext::default()
     };
 
+    // Re-parse the last block together with the appended text, so a block the
+    // new text continues (an unclosed list, a fenced code block) is not split
+    // in two. A block without a span cannot be located in `source` — the HTML
+    // parser never records spans — so it is left in place and only the
+    // appended text is parsed, positioned at the end of the current source.
+    let last_span = options
+        .append
+        .then(|| {
+            content
+                .document
+                .blocks
+                .last()
+                .and_then(|block| block.span())
+        })
+        .flatten();
+
     let mut source = String::new();
-    if options.append
-        && let Some(last_block) = Arc::make_mut(&mut content.document.blocks).pop()
-        && let Some(span) = last_block.span()
-    {
+    if let Some(span) = last_span {
+        Arc::make_mut(&mut content.document.blocks).pop();
         node_cx.offset = span.start;
-        let last_source = &content.document.source[span.start..];
-        source.push_str(last_source);
+        source.push_str(&content.document.source[span.start..]);
         source.push_str(&options.pending_text);
     } else {
-        source = options.pending_text.to_string();
+        if options.append {
+            node_cx.offset = content.document.source.len();
+        }
+        source.push_str(&options.pending_text);
     }
 
     let new_document = match format {
@@ -850,6 +866,31 @@ mod tests {
         state.read_with(cx, |state, _| {
             assert_eq!(state.text.as_str(), expected.as_str());
             assert_eq!(state.source().as_str(), expected.as_str());
+        });
+    }
+
+    #[gpui::test]
+    fn html_push_str_keeps_earlier_blocks(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let state = cx.update(|cx| cx.new(|cx| TextViewState::html("<p>first</p>", cx)));
+        cx.run_until_parked();
+
+        state.update(cx, |state, cx| {
+            state.push_str("<p>second</p>", cx);
+        });
+        cx.run_until_parked();
+
+        state.read_with(cx, |state, _| {
+            assert_eq!(state.source().as_str(), "<p>first</p><p>second</p>");
+            let text = state
+                .parsed_content
+                .document
+                .blocks
+                .iter()
+                .map(|block| block.text())
+                .collect::<String>();
+            assert!(text.contains("first"), "lost the first block: {text:?}");
+            assert!(text.contains("second"), "lost the appended block: {text:?}");
         });
     }
 
