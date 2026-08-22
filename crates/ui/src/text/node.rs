@@ -2902,7 +2902,8 @@ mod tests {
                     }),
                 },
                 BlockNode::Paragraph(selected_paragraph("end")),
-            ],
+            ]
+            .into(),
         };
 
         assert_eq!(
@@ -2933,7 +2934,8 @@ mod tests {
                 BlockNode::Paragraph(selected_paragraph("before")),
                 BlockNode::Paragraph(image),
                 BlockNode::Paragraph(selected_paragraph("after")),
-            ],
+            ]
+            .into(),
         };
         assert_eq!(
             document.selected_text(SelectionFormat::Source, None),
@@ -2952,7 +2954,8 @@ mod tests {
             blocks: vec![
                 BlockNode::Paragraph(selected_paragraph("before")),
                 BlockNode::Paragraph(image_paragraph("alt", "u")),
-            ],
+            ]
+            .into(),
         };
         assert_eq!(
             document.selected_text(SelectionFormat::Source, None),
@@ -3044,7 +3047,8 @@ mod tests {
                         },
                     ],
                 },
-            ],
+            ]
+            .into(),
         };
 
         assert_eq!(
