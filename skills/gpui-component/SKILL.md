@@ -1,18 +1,54 @@
 ---
 name: gpui-component
-description: How to use the gpui-component UI library in GPUI applications. Use when building UIs with gpui-component components (Button, Input, Select, Dialog, Tabs, Sidebar, List, Table, etc.), setting up the library, handling component state, theming, or finding the right component for a given UI need.
+description: How to use the gpui-component UI library in GPUI applications, and the normative Design and Coding Guides that govern it. Use when building UIs with gpui-component components (Button, Input, Select, Dialog, Tabs, Sidebar, List, Table, etc.), setting up the library, handling component state or theming, finding the right component for a UI need, and also when designing layouts, spacing, visual hierarchy, or interaction states, writing interface copy, or making application architecture, state-ownership, or public API decisions.
 ---
+
+## Read This First
+
+Before changing UI, interaction, interface language, layout, styling,
+components, or application architecture, **fetch and read the relevant guide**:
+
+| Guide | Fetch as Markdown | Read before |
+| --- | --- | --- |
+| **Design Guides** | `https://longbridge.github.io/gpui-component/docs/design-guides.md` | Choosing components, layout, spacing, hierarchy, color, density, interaction states, overlays, interface copy |
+| **Coding Guides** | `https://longbridge.github.io/gpui-component/docs/coding-guides.md` | Crate layering, `RenderOnce` vs `Entity<T>`, state ownership, `ElementId`, focus, async, public API, testing |
+
+These guides are requirements, not optional inspiration. Do not copy generic
+web conventions, infer a design system from one existing screen, or add a
+control merely because the underlying feature exists. Review the finished work
+against both guides before considering it complete.
+
+They are the single source of truth and are versioned with the library, so
+fetch them rather than relying on what this file or your training data says.
+
+### Non-negotiables
+
+These hold even when you cannot fetch. For anything past this list, read the guides.
+
+- **Never invent an API.** Search the current source for the real signature.
+  Do not translate a React, CSS, or older-GPUI example by analogy — a
+  plausible-looking method name that does not exist is the most common
+  failure mode here.
+- **Desktop before web convention.** Keyboard access, window chrome, menus,
+  dense data views, resizable regions, persistent navigation.
+- **`Button` vs `Link`.** `Button` for every in-app command — use `ghost` or
+  `outline` when it should read quietly. `Link` only for external URLs and
+  email addresses.
+- **Tokens before values.** No raw hex or `rgb(...)` in application UI; use
+  `cx.theme()` semantic tokens. Use rem-based helpers (`p_2()`, `gap_3()`,
+  `text_sm()`) so window zoom works. Any spacing number you see quoted is the
+  current default scale, not a literal to repeat.
+- **State must be visible.** Hover, focus, selection, disabled, loading,
+  validation, and destructive states each need distinct, consistent treatment.
+- **Stable identity.** Repeated elements need domain-derived `ElementId`s, not
+  list indexes.
+- **Overlays.** Escape dismisses the topmost surface and returns focus to its
+  trigger.
+- **Copy.** Name the object and the verb — `Delete “Roadmap”?` with a `Delete`
+  button, not `Are you sure?` with `OK`.
 
 ## Documentation
 
-- **Design Guides** (normative): fetch `https://longbridge.github.io/gpui-component/docs/design-guides.md`
-  - Read before choosing components or writing layout code. Covers visual
-    hierarchy, spacing scale, interaction states, `Button` vs `Link`, overlays,
-    interface copy, and the design review checklist.
-- **Coding Guides** (normative): fetch `https://longbridge.github.io/gpui-component/docs/coding-guides.md`
-  - Read before architecture, state-ownership, API, or lifecycle decisions.
-    Covers crate layering, `RenderOnce` vs `Entity<T>`, stable `ElementId`s,
-    theme tokens and rem zoom, focus, async, and testing.
 - **Full reference**: fetch `https://longbridge.github.io/gpui-component/llms-full.txt`
 - **Per-component API**: fetch `https://longbridge.github.io/gpui-component/docs/components/{name}.md`
   - e.g. `button.md`, `input.md`, `select.md`, `dialog.md`, `data-table.md`
