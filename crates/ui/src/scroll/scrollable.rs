@@ -82,11 +82,12 @@ where
             axis: axis.into(),
         }
     }
-    /// Sets a stable identity for the scroll state of this scrollable.
+
+    /// Set a specific element id, default is the [`std::panic::Location::caller`].
     ///
-    /// This is useful when multiple scrollable elements are created from
-    /// the same call site, such as inside a list or virtual list.
-    pub fn scroll_id(mut self, id: impl Into<ElementId>) -> Self {
+    /// Only needed when one call site creates several scrollables, which would
+    /// otherwise share a single scroll position.
+    pub fn id(mut self, id: impl Into<ElementId>) -> Self {
         self.id = id.into();
         self
     }
@@ -790,7 +791,7 @@ mod tests {
                         .w(px(100.))
                         .h(px(40.))
                         .overflow_x_scrollbar()
-                        .scroll_id(format!("dynamic-scroll-{ix}"))
+                        .id(format!("dynamic-scroll-{ix}"))
                         .child(
                             div()
                                 .w(px(200.))
