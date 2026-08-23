@@ -82,6 +82,15 @@ where
             axis: axis.into(),
         }
     }
+
+    /// Set a specific element id, default is the [`std::panic::Location::caller`].
+    ///
+    /// Only needed when one call site creates several scrollables, which would
+    /// otherwise share a single scroll position.
+    pub fn id(mut self, id: impl Into<ElementId>) -> Self {
+        self.id = id.into();
+        self
+    }
 }
 
 impl<E> Styled for Scrollable<E>
@@ -769,6 +778,79 @@ mod tests {
         assert_eq!(
             second_after_scroll.left() - first_after_scroll.right(),
             px(10.)
+        );
+    }
+    struct IndependentDynamicScrollablesTest;
+
+    impl Render for IndependentDynamicScrollablesTest {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            crate::v_flex()
+                .w(px(100.))
+                .children((0..2).map(|ix| {
+                    crate::h_flex()
+                        .w(px(100.))
+                        .h(px(40.))
+                        .overflow_x_scrollbar()
+                        .id(format!("dynamic-scroll-{ix}"))
+                        .child(
+                            div()
+                                .w(px(200.))
+                                .h(px(20.))
+                                .flex_shrink_0()
+                                .when(ix == 0, |this| {
+                                    this.debug_selector(|| {
+                                        "dynamic-scroll-first".to_string()
+                                    })
+                                })
+                                .when(ix == 1, |this| {
+                                    this.debug_selector(|| {
+                                        "dynamic-scroll-second".to_string()
+                                    })
+                                }),
+                        )
+                }))
+        }
+    }
+
+    #[gpui::test]
+    fn dynamic_scrollables_with_unique_scroll_ids_keep_independent_state(
+        cx: &mut TestAppContext,
+    ) {
+        cx.update(crate::init);
+
+        let (_, cx) = cx.add_window_view(|_, _| IndependentDynamicScrollablesTest);
+        let cx: &mut VisualTestContext = cx;
+
+        draw(cx);
+
+        let first_initial = cx
+            .debug_bounds("dynamic-scroll-first")
+            .unwrap();
+
+        let second_initial = cx
+            .debug_bounds("dynamic-scroll-second")
+            .unwrap();
+
+        // Scroll horizontally inside the first row.
+        scroll(cx, 10., 10., -50., 0.);
+
+        let first_after_scroll = cx
+            .debug_bounds("dynamic-scroll-first")
+            .unwrap();
+
+        let second_after_scroll = cx
+            .debug_bounds("dynamic-scroll-second")
+            .unwrap();
+
+        // First scrollable should move horizontally.
+        assert!(
+            first_after_scroll.left() < first_initial.left()
+        );
+
+        // Second scrollable must keep its own independent scroll state.
+        assert_eq!(
+            second_after_scroll.left(),
+            second_initial.left()
         );
     }
 }
