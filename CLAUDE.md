@@ -287,6 +287,17 @@ Uses `rust-i18n` crate.
 - When modifying any documentation file, always sync changes to both `en` and `zh-CN` versions.
 - `docs/` holds internal architecture specifications (RFC, migration status, reviews).
   These are single-language and are not published to the site; see `docs/README.md`.
+- `skills/gpui-component/references/{coding,design}-guides.md` are verbatim copies
+  of the English `website/docs/` originals, vendored so the skill works after
+  `npx skills add` in a project that does not have this repo. After editing either
+  guide, copy it across:
+
+  ```bash
+  cp website/docs/design-guides.md skills/gpui-component/references/design-guides.md
+  cp website/docs/coding-guides.md skills/gpui-component/references/coding-guides.md
+  ```
+
+  CI fails if the copies drift. Never edit the copy directly — edit `website/docs/`.
 
 ## Platform Support
 

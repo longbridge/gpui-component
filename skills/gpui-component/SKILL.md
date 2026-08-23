@@ -6,24 +6,25 @@ description: How to use the gpui-component UI library in GPUI applications, and 
 ## Read This First
 
 Before changing UI, interaction, interface language, layout, styling,
-components, or application architecture, **fetch and read the relevant guide**:
+components, or application architecture, **read the relevant guide**:
 
-| Guide | Fetch as Markdown | Read before |
-| --- | --- | --- |
-| **Design Guides** | `https://longbridge.github.io/gpui-component/docs/design-guides.md` | Choosing components, layout, spacing, hierarchy, color, density, interaction states, overlays, interface copy |
-| **Coding Guides** | `https://longbridge.github.io/gpui-component/docs/coding-guides.md` | Crate layering, `RenderOnce` vs `Entity<T>`, state ownership, `ElementId`, focus, async, public API, testing |
+| Guide | Read before |
+| --- | --- |
+| [Design Guides](references/design-guides.md) | Choosing components, layout, spacing, hierarchy, color, density, interaction states, overlays, interface copy |
+| [Coding Guides](references/coding-guides.md) | Crate layering, `RenderOnce` vs `Entity<T>`, state ownership, `ElementId`, focus, async, public API, testing |
 
 These guides are requirements, not optional inspiration. Do not copy generic
 web conventions, infer a design system from one existing screen, or add a
 control merely because the underlying feature exists. Review the finished work
 against both guides before considering it complete.
 
-They are the single source of truth and are versioned with the library, so
-fetch them rather than relying on what this file or your training data says.
+Read the guide file itself. Do not answer from what this page summarizes, from
+an existing screen in the codebase, or from training data — those are the three
+ways the guides get quietly ignored.
 
 ### Non-negotiables
 
-These hold even when you cannot fetch. For anything past this list, read the guides.
+These are a floor, not a substitute. Read the guide for anything past this list.
 
 - **Never invent an API.** Search the current source for the real signature.
   Do not translate a React, CSS, or older-GPUI example by analogy — a
