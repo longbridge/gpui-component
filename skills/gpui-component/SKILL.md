@@ -122,5 +122,5 @@ When you need a component, find it here. For full API, fetch its `.md` doc.
 
 - [usage.md](references/usage.md) — setup patterns, component types, common examples
 - [style-guide.md](references/style-guide.md) — code style for contributors
-- `coding-guide` skill — architecture, lifecycle, rem zoom, and coding conventions
-- `design-guide` skill — product design, spatial grammar, interaction states, and review checklists
+- `coding-guides` skill — architecture, lifecycle, rem zoom, and coding conventions
+- `design-guides` skill — product design, spatial grammar, interaction states, and review checklists

@@ -1,5 +1,5 @@
 ---
-name: design-guide
+name: design-guides
 description: Product and interaction design guidance for GPUI Component applications. Use when designing layouts, establishing visual hierarchy and spatial grammar, choosing colors/tokens, setting density/zoom, handling interaction states, choosing between Button and Link, crafting interface copy and confirmation dialogs, or running design review and accessibility checklists.
 ---
 

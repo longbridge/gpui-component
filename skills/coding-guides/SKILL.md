@@ -1,5 +1,5 @@
 ---
-name: coding-guide
+name: coding-guides
 description: Architecture and coding conventions for maintainable GPUI Component applications. Use when organizing application crates, choosing between RenderOnce and Entity, managing state and async work, implementing theme tokens and rem zoom, designing public component APIs, naming types/methods, testing, or following rules for coding agents.
 ---
 
