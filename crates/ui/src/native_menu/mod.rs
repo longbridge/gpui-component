@@ -104,8 +104,8 @@ impl NativeMenu {
 
     /// Append an item showing `icon` next to its label.
     ///
-    /// Native platform menus render file-backed icons from their filesystem path
-    /// and asset-backed icons from memory. [`crate::IconName`] works across all backends.
+    /// Native platform menus load absolute paths from the filesystem and relative paths through
+    /// the application [`gpui::AssetSource`].
     /// - **macOS**: loaded into an `NSImage` as a template image, so it tints with the item
     /// text and assigned to the item ([`NSMenuItem::image`]).
     /// - **Windows**: loaded into an `HBITMAP` and set as the item's
@@ -228,8 +228,10 @@ pub(super) fn resolve_icon_image(
         return None;
     }
 
-    let bytes = if Path::new(path.as_ref()).is_file() {
-        std::fs::read(path.as_ref()).ok()?
+    let icon_path = Path::new(path.as_ref());
+    // Relative paths are asset identifiers and must not resolve against the process CWD.
+    let bytes = if icon_path.is_absolute() {
+        std::fs::read(icon_path).ok()?
     } else {
         asset_source
             .load(path.as_ref())
@@ -345,9 +347,52 @@ mod tests {
     use crate::IconName;
     use serde::Deserialize;
 
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    use std::{borrow::Cow, fs, path::PathBuf};
+
     #[derive(Action, Clone, PartialEq, Deserialize)]
     #[action(namespace = native_menu_tests, no_json)]
     struct TestAction;
+
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    struct TestAssetSource(Option<&'static [u8]>);
+
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    impl AssetSource for TestAssetSource {
+        fn load(&self, _path: &str) -> gpui::Result<Option<Cow<'static, [u8]>>> {
+            Ok(self.0.map(Cow::Borrowed))
+        }
+
+        fn list(&self, _path: &str) -> gpui::Result<Vec<SharedString>> {
+            Ok(Vec::new())
+        }
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    struct TestIconFile(PathBuf);
+
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    impl TestIconFile {
+        fn create(path: impl Into<PathBuf>, bytes: &[u8]) -> Self {
+            let path = path.into();
+            assert!(
+                !path.exists(),
+                "test file already exists: {}",
+                path.display()
+            );
+            fs::create_dir_all(path.parent().expect("test file should have a parent"))
+                .expect("test directory should be created");
+            fs::write(&path, bytes).expect("test file should be written");
+            Self(path)
+        }
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    impl Drop for TestIconFile {
+        fn drop(&mut self) {
+            let _ = fs::remove_file(&self.0);
+        }
+    }
 
     #[test]
     fn test_native_menu_builder_accepts_icon() {
@@ -369,7 +414,7 @@ mod tests {
         assert_eq!(label, "Github");
         assert!(!disabled);
         assert!(!checked);
-        assert!(icon.path_ref().ends_with("github.svg"));
+        assert_eq!(icon.path_ref().as_ref(), "icons/github.svg");
     }
 
     #[test]
@@ -408,5 +453,38 @@ mod tests {
 
         assert_eq!(image.format, ImageFormat::Svg);
         assert!(!image.bytes.is_empty());
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    #[test]
+    fn test_relative_icon_path_only_uses_asset_source() {
+        const ASSET_SVG: &[u8] = br#"<svg xmlns="http://www.w3.org/2000/svg"/>"#;
+        const FILE_SVG: &[u8] = br#"<svg xmlns="http://www.w3.org/2000/svg"><path/></svg>"#;
+
+        let path: SharedString = "target/native-menu-relative-shadow-test.svg".into();
+        let _file = TestIconFile::create(path.as_ref(), FILE_SVG);
+
+        let image = resolve_icon_image(&path, &TestAssetSource(Some(ASSET_SVG)))
+            .expect("relative icon should resolve from the asset source");
+        assert_eq!(image.bytes, ASSET_SVG);
+
+        assert!(resolve_icon_image(&path, &TestAssetSource(None)).is_none());
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    #[test]
+    fn test_absolute_icon_path_loads_from_filesystem() {
+        const ASSET_SVG: &[u8] = br#"<svg xmlns="http://www.w3.org/2000/svg"/>"#;
+        const FILE_SVG: &[u8] = br#"<svg xmlns="http://www.w3.org/2000/svg"><path/></svg>"#;
+
+        let path = std::env::current_dir()
+            .expect("test current directory should be available")
+            .join("target/native-menu-absolute-path-test.svg");
+        let _file = TestIconFile::create(&path, FILE_SVG);
+        let path: SharedString = path.to_string_lossy().into_owned().into();
+
+        let image = resolve_icon_image(&path, &TestAssetSource(Some(ASSET_SVG)))
+            .expect("absolute icon should resolve from the filesystem");
+        assert_eq!(image.bytes, FILE_SVG);
     }
 }
