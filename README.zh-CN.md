@@ -137,6 +137,21 @@ GPUI Component 提供了 `Icon` 元素，但默认不包含 SVG 文件。
 
 示例使用 [Lucide](https://lucide.dev) 图标，但你可以使用任意喜欢的图标。只需按照 [IconName](https://github.com/longbridge/gpui-component/blob/main/crates/ui/src/icon.rs#L86) 中的定义命名 SVG 文件，然后将所需图标添加到项目中即可。
 
+## AI 编码 Agent 技能 (Skills)
+
+为你的 AI 编码助手（Cursor, Claude Code, Gemini CLI, Codex 等）安装 GPUI Component 技能库：
+
+```bash
+npx skills add longbridge/gpui-component
+```
+
+| 技能 | 描述 |
+| --- | --- |
+| `coding-guide` | 应用架构、状态生命周期、Rem 缩放、组件 API 设计与编码规范。 |
+| `design-guide` | 产品交互设计、空间语法、对齐轴线、交互状态与文案规范。 |
+| `gpui-component` | 完整组件目录、常用使用模式与组件编写规范。 |
+| `gpui` | GPUI 底层框架机制（Element 渲染、Entity 状态、异步、焦点、Actions、测试）。 |
+
 ## Development
 
 ### 桌面 Gallery（Story）

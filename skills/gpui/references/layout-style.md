@@ -19,16 +19,22 @@ GPUI provides CSS-like styling with Rust type safety.
 
 ```rust
 use gpui::*;
+use gpui_component::ActiveTheme;
 
 div()
-    .w(px(200.))
-    .h(px(100.))
-    .bg(rgb(0x2196F3))
-    .text_color(rgb(0xFFFFFF))
-    .rounded(px(8.))
-    .p(px(16.))
+    .w_64()                         // Rem-based width (recommended for zoom)
+    .h_32()                         // Rem-based height
+    .bg(cx.theme().primary)         // Semantic theme color
+    .text_color(cx.theme().primary_foreground)
+    .rounded(cx.theme().radius)
+    .p_4()                          // Rem-based padding
     .child("Styled content")
 ```
+
+> **Note on Units & Colors**:
+> - **Scale**: In application UI, prefer rem-based scale helpers (`p_2()`, `gap_3()`, `text_sm()`) to support window-level application zoom. Use `px()` when defining exact 1px hairlines, platform insets, or theme base font.
+> - **Colors**: In `gpui-component` applications, always use `cx.theme()` semantic tokens. Raw color constructors like `rgb(0x2196F3)` or `hsla(...)` are GPUI engine primitives, reserved for theme definitions or audited raster/chart data.
+
 
 ### Flexbox Layout
 
@@ -99,39 +105,55 @@ div()
 
 ## Styling Methods
 
-### Dimensions
+### Dimensions & Sizing
 
 ```rust
-.w(px(200.))              // Width
-.h(px(100.))              // Height
-.size(px(200.))           // Width and height
-.min_w(px(100.))          // Min width
-.max_w(px(400.))          // Max width
+// Tailwind rem-based helpers (Recommended for app UI zoom)
+.w_64()                   // Width
+.h_32()                   // Height
+.size_full()              // 100% width and height
+.min_w_0()                // Allow flex child to shrink
+
+// Low-level GPUI primitives (For physical boundaries / measured geometry)
+.w(px(200.))              // Fixed pixels
+.h(rems(10.))             // Explicit rems
+.w(relative(0.5))         // Percentage of parent
 ```
 
 ### Colors
 
 ```rust
-.bg(rgb(0x2196F3))        // Background
-.text_color(rgb(0xFFFFFF)) // Text color
-.border_color(rgb(0x000000)) // Border color
+// Semantic theme tokens (Recommended)
+.bg(cx.theme().background)
+.text_color(cx.theme().foreground)
+.border_color(cx.theme().border)
+
+// Low-level GPUI color primitives (For theme definitions / raw canvas)
+.bg(rgb(0x2196F3))
+.text_color(hsla(0.5, 0.8, 0.5, 1.0))
 ```
 
-### Borders
+### Borders & Radius
 
 ```rust
-.border(px(1.))           // Border width
-.rounded(px(8.))          // Border radius
-.rounded_t(px(8.))        // Top corners
-.border_color(rgb(0x000000))
+.border_1()               // 1px border
+.border_color(cx.theme().border)
+.rounded(cx.theme().radius) // Themed corner radius
+.rounded_full()           // Full pill/circle
 ```
 
 ### Spacing
 
 ```rust
-.p(px(16.))               // Padding
-.m(px(8.))                // Margin
-.gap(px(8.))              // Gap between flex children
+// Rem-based spacing helpers (Recommended)
+.p_4()                    // Padding
+.px_3()                   // Horizontal padding
+.py_2()                   // Vertical padding
+.gap_2()                  // Flex gap
+
+// Low-level pixel spacing
+.p(px(16.))
+.gap(px(8.))
 ```
 
 ### Flexbox

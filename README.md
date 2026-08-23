@@ -149,6 +149,21 @@ GPUI Component has an `Icon` element, but it does not include SVG files by defau
 
 The example uses [Lucide](https://lucide.dev) icons, but you can use any icons you like. Just name the SVG files as defined in [IconName](https://github.com/longbridge/gpui-component/blob/main/crates/ui/src/icon.rs#L86). You can add any icons you need to your project.
 
+## Skills for AI Coding Agents
+
+Install the GPUI Component skills for your AI coding agent (Cursor, Claude Code, Gemini CLI, Codex, etc.):
+
+```bash
+npx skills add longbridge/gpui-component
+```
+
+| Skill | Description |
+| --- | --- |
+| `coding-guide` | Architecture, state lifecycle, rem zoom, component API design, and coding conventions. |
+| `design-guide` | Product interaction design, spatial grammar, alignment spines, interaction states, and copy guidelines. |
+| `gpui-component` | Component catalog, usage patterns, and contributor code style guide. |
+| `gpui` | Low-level GPUI framework mechanics (elements, entities, async, focus, actions, tests). |
+
 ## Development
 
 ### Desktop Gallery (Story)
