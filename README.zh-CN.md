@@ -147,8 +147,6 @@ npx skills add longbridge/gpui-component
 
 | 技能 | 描述 |
 | --- | --- |
-| `coding-guides` | 应用架构、状态生命周期、Rem 缩放、组件 API 设计与编码规范。 |
-| `design-guides` | 产品交互设计、空间语法、对齐轴线、交互状态与文案规范。 |
 | `gpui-component` | 完整组件目录、常用使用模式与组件编写规范。 |
 | `gpui` | GPUI 底层框架机制（Element 渲染、Entity 状态、异步、焦点、Actions、测试）。 |
 

@@ -5,6 +5,14 @@ description: How to use the gpui-component UI library in GPUI applications. Use 
 
 ## Documentation
 
+- **Design Guides** (normative): fetch `https://longbridge.github.io/gpui-component/docs/design-guides.md`
+  - Read before choosing components or writing layout code. Covers visual
+    hierarchy, spacing scale, interaction states, `Button` vs `Link`, overlays,
+    interface copy, and the design review checklist.
+- **Coding Guides** (normative): fetch `https://longbridge.github.io/gpui-component/docs/coding-guides.md`
+  - Read before architecture, state-ownership, API, or lifecycle decisions.
+    Covers crate layering, `RenderOnce` vs `Entity<T>`, stable `ElementId`s,
+    theme tokens and rem zoom, focus, async, and testing.
 - **Full reference**: fetch `https://longbridge.github.io/gpui-component/llms-full.txt`
 - **Per-component API**: fetch `https://longbridge.github.io/gpui-component/docs/components/{name}.md`
   - e.g. `button.md`, `input.md`, `select.md`, `dialog.md`, `data-table.md`

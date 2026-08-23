@@ -159,8 +159,6 @@ npx skills add longbridge/gpui-component
 
 | Skill | Description |
 | --- | --- |
-| `coding-guides` | Architecture, state lifecycle, rem zoom, component API design, and coding conventions. |
-| `design-guides` | Product interaction design, spatial grammar, alignment spines, interaction states, and copy guidelines. |
 | `gpui-component` | Component catalog, usage patterns, and contributor code style guide. |
 | `gpui` | Low-level GPUI framework mechanics (elements, entities, async, focus, actions, tests). |
 
