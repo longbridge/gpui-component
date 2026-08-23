@@ -132,8 +132,8 @@ where a distinction changes what the user notices or does.
 Read colors from `cx.theme()` and use them by semantic role:
 
 - `background` and `foreground` for the main surface and text;
-- `card`, `popover`, `sidebar`, and their foreground tokens for their named
-  surfaces;
+- `group_box`, `popover`, `sidebar`, and their foreground tokens for their
+  named surfaces;
 - `muted` and `muted_foreground` for supporting information;
 - `primary` for the principal action or selection emphasis;
 - `danger`, `warning`, `success`, and `info` only for their meanings;
