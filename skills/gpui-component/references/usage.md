@@ -196,18 +196,47 @@ Icon::new(IconName::Plus).large().text_color(cx.theme().primary)
 ### Dialog
 
 ```rust
-use gpui_component::dialog::Dialog;
+use gpui_component::dialog::{Dialog, DialogAction, DialogClose, DialogFooter};
 
-// Open from window context
-window.open_modal(cx, |modal, _, cx| {
-    modal
-        .title("Confirm")
-        .child(div().child("Are you sure?"))
-        .footer(|this, _, cx| {
-            this.child(Button::new("cancel").label("Cancel"))
-                .child(Button::new("ok").primary().label("OK")
-                    .on_click(|_, window, cx| { window.close_modal(cx); }))
-        })
+// Open from window context. `footer` takes an element, not a closure.
+// DialogClose dismisses the dialog, so no manual close call is needed.
+window.open_dialog(cx, |dialog, _, _| {
+    dialog
+        .title("Export Report")
+        .child("Choose a destination for the exported file.")
+        .footer(
+            DialogFooter::new()
+                .gap_2()
+                .child(DialogClose::new().child(
+                    Button::new("cancel").label("Cancel").outline(),
+                ))
+                .child(DialogAction::new().child(
+                    Button::new("export").label("Export").primary(),
+                )),
+        )
+});
+```
+
+### AlertDialog
+
+Use `AlertDialog` — not `Dialog` — to confirm a consequential action. It is not
+overlay-closable and has no close button, so the choice must be made. Name the
+object in the title and the result on the confirming button; see the Design
+Guides for the copy rules.
+
+```rust
+use gpui_component::{button::ButtonVariant, dialog::DialogButtonProps};
+
+window.open_alert_dialog(cx, |alert, _, _| {
+    alert
+        .title("Remove “Roadmap”?")
+        .description("Files on disk aren’t deleted.")
+        .button_props(
+            DialogButtonProps::default()
+                .ok_text("Remove")
+                .ok_variant(ButtonVariant::Danger)
+                .on_ok(|_, _, _| true),
+        )
 });
 ```
 

@@ -86,19 +86,19 @@ When you need a component, find it here. For full API, fetch its `.md` doc.
 | Component | Import | Notes |
 |-----------|--------|-------|
 | `Input` | `input::{Input, InputState}` | Stateful. Text, password, mask, validation |
-| `NumberInput` | `number_input::{NumberInput, NumberInputState}` | Stateful. Numeric with step |
-| `OtpInput` | `otp_input::{OtpInput, OtpInputState}` | Stateful. One-time password |
+| `NumberInput` | `input::{NumberInput, NumberInputEvent}` | Stateful. Numeric with step |
+| `OtpInput` | `input::OtpInput` | Stateful. One-time password |
 | `Select` | `select::{Select, SelectState}` | Stateful. Dropdown picker |
 | `Combobox` | `combobox::{Combobox, ComboboxState}` | Stateful. Searchable select |
 | `Checkbox` | `checkbox::Checkbox` | Stateless. `on_click(|&bool, ...|)` |
 | `Switch` | `switch::Switch` | Stateless. Toggle |
 | `Radio` | `radio::{Radio, RadioGroup}` | Stateless. |
 | `Slider` | `slider::{Slider, SliderState}` | Stateful. |
-| `Toggle` | `toggle::Toggle` | Stateless. |
+| `Toggle` | `button::Toggle` | Stateless. |
 | `Rating` | `rating::Rating` | Stateless. |
 | `Stepper` | `stepper::Stepper` | Stateless. Increment/decrement |
 | `ColorPicker` | `color_picker::{ColorPicker, ColorPickerState}` | Stateful. |
-| `DatePicker` | `time::date_picker::{DatePicker, DatePickerState}` | Stateful. |
+| `DatePicker` | `date_picker::{DatePicker, DatePickerState}` | Stateful. |
 | `Form` | `form::{v_form, h_form, field}` | Layout container for form fields |
 
 ### Display & Feedback
@@ -114,16 +114,15 @@ When you need a component, find it here. For full API, fetch its `.md` doc.
 | `Alert` | `alert::Alert` | Stateless. Info/success/warning/error |
 | `Spinner` | `spinner::Spinner` | Stateless. Loading indicator |
 | `Skeleton` | `skeleton::Skeleton` | Stateless. Loading placeholder |
-| `Progress` | `progress::{ProgressBar, ProgressCircle}` | Stateless. |
+| `Progress` | `progress::{Progress, ProgressCircle}` | Stateless. |
 | `Tooltip` | `tooltip::Tooltip` | Via `.tooltip()` on elements |
 | `HoverCard` | `hover_card::{HoverCard, HoverCardState}` | Stateful. |
-| `Image` | `image::Image` | Stateless. |
 | `Clipboard` | `clipboard::Clipboard` | Stateless. Copy button |
 
 ### Overlay & Popups
 | Component | Import | Notes |
 |-----------|--------|-------|
-| `Dialog` | `dialog::Dialog` + `WindowExt` | Via `window.open_modal(...)` |
+| `Dialog` | `dialog::Dialog` + `WindowExt` | Via `window.open_dialog(...)` |
 | `AlertDialog` | `WindowExt` | Via `window.open_alert_dialog(...)` |
 | `Sheet` | `sheet::Sheet` + `WindowExt` | Side panel, via `window.open_sheet(...)` |
 | `Notification` | `notification::Notification` + `WindowExt` | Via `window.push_notification(...)` |
@@ -136,15 +135,15 @@ When you need a component, find it here. For full API, fetch its `.md` doc.
 |-----------|--------|-------|
 | `Tabs` / `TabBar` | `tab::{Tab, TabBar}` | Tabbed interface |
 | `Sidebar` | `sidebar::{Sidebar, SidebarMenu, ...}` | App navigation panel |
-| `TitleBar` | `title_bar::TitleBar` | Window title bar |
+| `TitleBar` | `TitleBar` | Window title bar |
 | `Breadcrumb` | `breadcrumb::Breadcrumb` | Navigation breadcrumb |
 | `Pagination` | `pagination::Pagination` | Page navigation |
 | `Accordion` | `accordion::Accordion` | Collapsible sections |
 | `Collapsible` | `collapsible::Collapsible` | Single collapsible |
 | `GroupBox` | `group_box::GroupBox` | Labeled container |
-| `Resizable` | `resizable::Resizable` | Draggable split panes |
+| `Resizable` | `resizable::{h_resizable, v_resizable, resizable_panel, ResizableState}` | Draggable split panes |
 | `Scrollable` | `scroll::Scrollbar` | Custom scrollbar |
-| `FocusTrap` | `focus_trap::FocusTrap` | Keyboard trap for modals |
+| `FocusTrap` | `gpui_base::focus_trap::FocusTrapElement` | Keyboard trap for modals |
 
 ### Data Display
 | Component | Import | Notes |
@@ -153,14 +152,14 @@ When you need a component, find it here. For full API, fetch its `.md` doc.
 | `Table` | `table::{Table, ...}` | Simpler table |
 | `VirtualList` | `{v_virtual_list, h_virtual_list}` | High-perf large lists |
 | `List` | `list::{List, ListState, ListDelegate}` | Stateful. Searchable list |
-| `Tree` | `tree::{Tree, TreeState, TreeDelegate}` | Stateful. Hierarchy |
+| `Tree` | `tree::{Tree, TreeState, TreeItem, TreeEntry}` | Stateful. Hierarchy |
 | `DescriptionList` | `description_list::DescriptionList` | Key-value pairs |
-| `Settings` | `settings::Settings` | Settings panel |
+| `Settings` | `setting::Settings` | Settings panel |
 
 ### Charts
 | Component | Import | Notes |
 |-----------|--------|-------|
-| `Chart` | `chart::Chart` | Bar, line, area, pie charts |
+| `Chart` | `chart::{AreaChart, BarChart, LineChart, PieChart, RadarChart}` | Bar, line, area, pie charts |
 | `Plot` | `plot::Plot` | `#[derive(IntoPlot)]` for data |
 
 ## Reference Files
