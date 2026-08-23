@@ -88,7 +88,7 @@ GPUI Component 通过 Rust 库以及 `gpui-base` / `gpui-component` 分层来实
 从 `cx.theme()` 读取颜色，并按语义角色使用：
 
 - `background` / `foreground`：主表面和正文；
-- `card`、`popover`、`sidebar` 及对应 foreground：具名表面；
+- `group_box`、`popover`、`sidebar` 及对应 foreground：具名表面；
 - `muted` / `muted_foreground`：辅助信息；
 - `primary`：当前决策区域的主要操作或选中强调；
 - `danger`、`warning`、`success`、`info`：只表达对应语义；
