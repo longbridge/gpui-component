@@ -1,9 +1,9 @@
 use std::rc::Rc;
 
 use gpui::{
-    Anchor, AnyElement, App, AppContext, Context, Entity, FocusHandle, InteractiveElement as _,
-    IntoElement, MouseButton, ParentElement as _, Render, SharedString, Styled as _, Subscription,
-    Window, div, px,
+    Anchor, AnyElement, App, AppContext, Context, Entity, FocusHandle, FontWeight,
+    InteractiveElement as _, IntoElement, MouseButton, ParentElement as _, Render, SharedString,
+    Styled as _, Subscription, Window, div, prelude::FluentBuilder as _, px,
 };
 use gpui_component::{
     ActiveTheme as _, IconName, Side, Sizable as _, Theme, TitleBar, WindowExt as _,
@@ -19,7 +19,8 @@ use crate::{
 };
 
 pub struct AppTitleBar {
-    app_menu_bar: Entity<AppMenuBar>,
+    title: SharedString,
+    app_menu_bar: Option<Entity<AppMenuBar>>,
     font_size_selector: Entity<FontSizeSelector>,
     child: Rc<dyn Fn(&mut Window, &mut App) -> AnyElement>,
     _subscriptions: Vec<Subscription>,
@@ -31,10 +32,12 @@ impl AppTitleBar {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let app_menu_bar = app_menus::init(title, cx);
+        let title: SharedString = title.into();
+        let app_menu_bar = app_menus::init(title.clone(), cx);
         let font_size_selector = cx.new(|cx| FontSizeSelector::new(window, cx));
 
         Self {
+            title,
             app_menu_bar,
             font_size_selector,
             child: Rc::new(|_, _| div().into_any_element()),
@@ -58,7 +61,22 @@ impl Render for AppTitleBar {
 
         TitleBar::new()
             // left side
-            .child(div().flex().items_center().child(self.app_menu_bar.clone()))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .children(self.app_menu_bar.clone())
+                    // when the system draws the menus elsewhere, add a title to the window
+                    .when_none(&self.app_menu_bar, |this| {
+                        this.child(
+                            div()
+                                .text_sm()
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_color(cx.theme().foreground)
+                                .child(self.title.clone()),
+                        )
+                    }),
+            )
             .child(
                 div()
                     .flex()

@@ -6,8 +6,11 @@ use crate::{
     themes::{SelectTheme, SwitchThemeMode},
 };
 
-pub fn init(title: impl Into<SharedString>, cx: &mut App) -> Entity<AppMenuBar> {
-    let app_menu_bar = AppMenuBar::new(cx);
+// Used to skip drawing the menus on macos. Possibly useful in some Linux contexts, also?
+const HAS_SYSTEM_MENU_BAR: bool = cfg!(target_os = "macos");
+
+pub fn init(title: impl Into<SharedString>, cx: &mut App) -> Option<Entity<AppMenuBar>> {
+    let app_menu_bar = (!HAS_SYSTEM_MENU_BAR).then(|| AppMenuBar::new(cx));
     let title: SharedString = title.into();
     update_app_menu(title.clone(), app_menu_bar.clone(), cx);
 
@@ -33,10 +36,18 @@ pub fn init(title: impl Into<SharedString>, cx: &mut App) -> Entity<AppMenuBar> 
     app_menu_bar
 }
 
-fn update_app_menu(title: impl Into<SharedString>, app_menu_bar: Entity<AppMenuBar>, cx: &mut App) {
+fn update_app_menu(
+    title: impl Into<SharedString>,
+    app_menu_bar: Option<Entity<AppMenuBar>>,
+    cx: &mut App,
+) {
     let title: SharedString = title.into();
 
     cx.set_menus(build_menus(title.clone(), cx));
+    let Some(app_menu_bar) = app_menu_bar else {
+        return;
+    };
+
     let menus = build_menus(title, cx)
         .into_iter()
         .map(|menu| menu.owned())
