@@ -223,7 +223,7 @@ spring instead:
 let left = gpui_base::spring(
     ("tab-indicator", "left"),
     selected_tab_left,
-    gpui_base::Spring::SNAPPY.with_epsilon(0.1),
+    gpui_base::Spring::new(0.25, 0.85).with_epsilon(0.1),
     window,
     cx,
 );
@@ -249,7 +249,7 @@ let size = spring(id, target, DOCK_SPRING.with_travel(!resizing), window, cx);
 ```
 
 `Spring::new(response_seconds, damping_ratio)` builds one from perceptual
-parameters, with `SMOOTH`, `SNAPPY`, and `BOUNCY` as named starting points. A
+parameters. A
 damping ratio below `1.0` overshoots, so a spring driving a value with a
 meaningful ceiling — an opacity, a measured height — must be critically damped.
 The settling tolerance is expressed in the target's own units and defaults to a

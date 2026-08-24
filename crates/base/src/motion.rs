@@ -208,13 +208,6 @@ pub struct Spring {
 }
 
 impl Spring {
-    /// A firm spring that settles without overshooting.
-    pub const SMOOTH: Self = Self::new(0.30, 1.0);
-    /// A quick spring with a slight overshoot.
-    pub const SNAPPY: Self = Self::new(0.25, 0.85);
-    /// A loose spring with a pronounced overshoot.
-    pub const BOUNCY: Self = Self::new(0.35, 0.7);
-
     /// Builds a spring from a perceptual response time and a damping ratio.
     ///
     /// `response_seconds` is the period one full oscillation would take without
@@ -223,17 +216,8 @@ impl Spring {
     /// above `1.0` to approach slowly.
     pub const fn new(response_seconds: f32, damping_ratio: f32) -> Self {
         let frequency = std::f32::consts::TAU / response_seconds;
-        Self::from_config(SpringConfig::new(
-            frequency * frequency,
-            2.0 * damping_ratio * frequency,
-            1.0,
-        ))
-    }
-
-    /// Builds a spring from stiffness, damping, and mass directly.
-    pub const fn from_config(config: SpringConfig) -> Self {
         Self {
-            config,
+            config: SpringConfig::new(frequency * frequency, 2.0 * damping_ratio * frequency, 1.0),
             epsilon: DEFAULT_SPRING_EPSILON,
             travel: true,
         }
@@ -260,21 +244,6 @@ impl Spring {
     pub const fn with_epsilon(mut self, epsilon: f32) -> Self {
         self.epsilon = epsilon;
         self
-    }
-
-    /// Returns the underlying physical parameters.
-    pub fn config(&self) -> SpringConfig {
-        self.config
-    }
-
-    /// Returns the settling tolerance.
-    pub fn epsilon(&self) -> f32 {
-        self.epsilon
-    }
-
-    /// Returns whether the spring travels to its target.
-    pub fn travel(&self) -> bool {
-        self.travel
     }
 }
 
@@ -645,13 +614,13 @@ mod tests {
 
     #[gpui::test]
     fn a_spring_adopts_its_first_target_immediately(cx: &mut TestAppContext) {
-        let fixture = SpringFixture::open(cx, Spring::SMOOTH);
+        let fixture = SpringFixture::open(cx, Spring::new(0.3, 1.0));
         assert_eq!(*fixture.samples.borrow().first().unwrap(), 0.0);
     }
 
     #[gpui::test]
     fn a_spring_travels_toward_its_target_over_time(cx: &mut TestAppContext) {
-        let fixture = SpringFixture::open(cx, Spring::SMOOTH);
+        let fixture = SpringFixture::open(cx, Spring::new(0.3, 1.0));
         assert_eq!(fixture.render(cx, 1.0), 0.0);
 
         let early = fixture.advance(cx, 50, 1.0);
@@ -664,7 +633,7 @@ mod tests {
 
     #[gpui::test]
     fn a_reversed_spring_keeps_its_momentum_before_turning_around(cx: &mut TestAppContext) {
-        let fixture = SpringFixture::open(cx, Spring::SMOOTH);
+        let fixture = SpringFixture::open(cx, Spring::new(0.3, 1.0));
         fixture.render(cx, 1.0);
         let reversed_at = fixture.advance(cx, 100, 1.0);
 
@@ -683,7 +652,7 @@ mod tests {
 
     #[gpui::test]
     fn a_bouncy_spring_overshoots_its_target(cx: &mut TestAppContext) {
-        let fixture = SpringFixture::open(cx, Spring::BOUNCY);
+        let fixture = SpringFixture::open(cx, Spring::new(0.35, 0.7));
         fixture.render(cx, 1.0);
         for _ in 0..30 {
             fixture.advance(cx, 16, 1.0);
@@ -700,7 +669,7 @@ mod tests {
 
     #[gpui::test]
     fn a_settled_spring_stops_requesting_frames(cx: &mut TestAppContext) {
-        let fixture = SpringFixture::open(cx, Spring::SMOOTH);
+        let fixture = SpringFixture::open(cx, Spring::new(0.3, 1.0));
         fixture.render(cx, 1.0);
         assert_eq!(fixture.pending_frame(cx), 1);
 
@@ -712,7 +681,7 @@ mod tests {
 
     #[gpui::test]
     fn a_spring_that_is_not_travelling_adopts_its_target_on_the_spot(cx: &mut TestAppContext) {
-        let fixture = SpringFixture::open(cx, Spring::SMOOTH);
+        let fixture = SpringFixture::open(cx, Spring::new(0.3, 1.0));
         fixture.travel.set(false);
 
         assert_eq!(fixture.render(cx, 1.0), 1.0);
@@ -733,7 +702,7 @@ mod tests {
     #[gpui::test]
     fn reduced_motion_adopts_the_spring_target_without_requesting_a_frame(cx: &mut TestAppContext) {
         cx.update(|cx| cx.set_reduce_motion(true));
-        let fixture = SpringFixture::open(cx, Spring::BOUNCY);
+        let fixture = SpringFixture::open(cx, Spring::new(0.35, 0.7));
         assert_eq!(fixture.render(cx, 1.0), 1.0);
         assert_eq!(fixture.pending_frame(cx), 0);
     }

@@ -19,10 +19,11 @@ use crate::{
 
 /// Slide motion for the selected-tab indicator.
 ///
-/// Settling is measured in pixels, so the tolerance is coarsened from the
-/// normalized default to end the animation once the remaining travel is
-/// sub-pixel.
-const INDICATOR_SPRING: Spring = Spring::SNAPPY.with_epsilon(0.1);
+/// Slightly underdamped, so the indicator arrives with a hint of weight rather
+/// than stopping dead. Settling is measured in pixels, so the tolerance is
+/// coarsened from the normalized default to end the animation once the
+/// remaining travel is sub-pixel.
+const INDICATOR_SPRING: Spring = Spring::new(0.25, 0.85).with_epsilon(0.1);
 
 struct TabIndicatorBounds {
     container: Bounds<Pixels>,
