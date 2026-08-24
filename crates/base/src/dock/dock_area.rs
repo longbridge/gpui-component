@@ -598,6 +598,11 @@ impl DockArea {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        // A panel this area does not own (e.g. dropped from a nested dock) has
+        // no backing entity here; inserting it would strand a ghost tab.
+        if self.panel(panel).is_none() {
+            return;
+        }
         let Some(destination) = self.placement_of_node(target_node(&target)) else {
             return;
         };
@@ -2654,6 +2659,21 @@ mod tests {
             (left - right).abs() <= (left + right) * 0.02,
             "the two halves must be within 2% of each other, got {left} and {right}"
         );
+    }
+
+    /// Moving a panel this area does not own is a no-op, not a ghost insert.
+    #[gpui::test]
+    fn a_move_of_an_unowned_panel_is_ignored(cx: &mut TestAppContext) {
+        let log = Log::default();
+        let (area, _panels, cx) = one_group(&log, &["Alpha", "Beta"], None, cx);
+        let group = child_node(&area, 0, cx);
+        let before = cx.read(|cx| area.read(cx).dump(cx));
+
+        // A PanelId from nowhere, as if dropped from another DockArea.
+        move_panel_into(&area, PanelId::from_u64(9_999_999), group, None, true, cx);
+
+        let after = cx.read(|cx| area.read(cx).dump(cx));
+        assert_eq!(before, after, "an unowned panel move must not touch the tree");
     }
 
     /// The other drop geometry: a placement whose axis differs from the
