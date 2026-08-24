@@ -4,8 +4,17 @@
 //! from the application directory and nowhere else — the same root that bounds
 //! module resolution — so an application carries its own icons and cannot read
 //! an image from outside the directory the user pointed the runtime at.
+//!
+//! Note the asymmetry, because it surprises people: `import "./counter.js"`
+//! resolves against the *importing file*, the way every JavaScript module
+//! system does, while `svg("icons/check.svg")` resolves against the
+//! *application root*, the way a web application's public directory does. A
+//! runtime cannot tell which module called `svg`, so per-file asset paths are
+//! not available to it. The rule is therefore stated in the README, and a
+//! missing asset says exactly where it was looked for rather than drawing
+//! nothing.
 
-use std::{borrow::Cow, path::PathBuf};
+use std::{borrow::Cow, cell::RefCell, collections::HashSet, path::PathBuf};
 
 use gpui::{AssetSource, SharedString};
 
@@ -52,9 +61,15 @@ impl AssetSource for AppAssets {
 
         match std::fs::read(&resolved) {
             Ok(bytes) => Ok(Some(Cow::Owned(bytes))),
-            // A missing asset is not an error here: GPUI asks for assets it may
-            // not need, and the element that wanted this one reports it.
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            // A missing asset cannot be an error: GPUI asks for assets it may
+            // not need, and returning one would fail the frame. But an icon
+            // that silently does not appear is the hardest kind of mistake to
+            // find, so it is reported — once per path, because this runs on
+            // every paint.
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                report_missing(path, &resolved);
+                Ok(None)
+            }
             Err(error) => Err(error.into()),
         }
     }
@@ -72,6 +87,21 @@ impl AssetSource for AppAssets {
             .collect();
         names.sort();
         Ok(names)
+    }
+}
+
+thread_local! {
+    static REPORTED: RefCell<HashSet<String>> = RefCell::new(HashSet::new());
+}
+
+fn report_missing(requested: &str, resolved: &std::path::Path) {
+    let first_time = REPORTED.with(|reported| reported.borrow_mut().insert(requested.to_owned()));
+    if first_time {
+        tracing::warn!(
+            "asset `{requested}` was not found at {}; asset paths resolve against the \
+             application directory, not against the file that asked for them",
+            resolved.display()
+        );
     }
 }
 
