@@ -518,12 +518,11 @@ impl<M: InputModeKind> InputBaseState<M> {
         M::CODE_EDITOR
     }
 
-    /// Whether the selection may leave the input as plain text.
+    /// Whether the user is allowed to copy the selection out.
     ///
     /// A masked input keeps its value out of the clipboard, the way
-    /// `NSSecureTextField`, `PasswordBox`, `QLineEdit` and
-    /// `<input type="password">` all do.
-    pub fn can_copy(&self) -> bool {
+    /// `NSSecureTextField` and `PasswordBox` do.
+    pub fn is_copyable(&self) -> bool {
         !self.selected_range.is_empty() && !self.masked
     }
 
@@ -1293,7 +1292,7 @@ impl<M: InputModeKind> InputBaseState<M> {
         if self.masked {
             // The mask replaces every character, so the displayed text has no
             // word boundaries to move or delete by. Collapse the word to the
-            // whole text, matching `<input type="password">` and `QLineEdit`.
+            // whole text.
             return 0;
         }
 
@@ -1932,7 +1931,7 @@ impl<M: InputModeKind> InputBaseState<M> {
     }
 
     pub(super) fn copy(&mut self, _: &Copy, _: &mut Window, cx: &mut Context<Self>) {
-        if !self.can_copy() {
+        if !self.is_copyable() {
             return;
         }
 
@@ -1941,7 +1940,7 @@ impl<M: InputModeKind> InputBaseState<M> {
     }
 
     pub(super) fn cut(&mut self, _: &Cut, window: &mut Window, cx: &mut Context<Self>) {
-        if !self.can_copy() {
+        if !self.is_copyable() {
             return;
         }
 
@@ -4011,13 +4010,13 @@ mod tests {
             input.update(cx, |state, cx| {
                 state.set_value("hunter2", window, cx);
                 state.select_all(window, cx);
-                assert!(state.context_menu_capabilities().can_copy());
+                assert!(state.context_menu_capabilities().is_copyable());
 
                 state.set_masked(true, window, cx);
                 let capabilities = state.context_menu_capabilities();
                 assert!(capabilities.is_masked());
                 assert!(capabilities.has_selection());
-                assert!(!capabilities.can_copy());
+                assert!(!capabilities.is_copyable());
             });
         });
     }

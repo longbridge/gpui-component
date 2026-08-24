@@ -686,7 +686,7 @@ impl TileContext {
         self.resizing
     }
 
-    pub fn can_close(&self) -> bool {
+    pub fn is_closable(&self) -> bool {
         self.closable
     }
 
@@ -702,7 +702,7 @@ impl TileContext {
     /// Whether this tile's panel allows zooming at all. Where the zoom
     /// control appears is the skin's decision; whether there is one to offer
     /// is not.
-    pub fn can_zoom(&self) -> bool {
+    pub fn is_zoomable(&self) -> bool {
         self.zoomable
     }
 
@@ -746,14 +746,14 @@ impl TileContext {
     /// Flip this tile between filling the whole dock and sitting at its
     /// stored bounds.
     ///
-    /// Zooming *in* is refused when [`Self::can_zoom`] is false, so a skin
+    /// Zooming *in* is refused when [`Self::is_zoomable`] is false, so a skin
     /// that offers a Zoom control should gate it on that. Zooming out is
     /// never refused.
     pub fn toggle_zoom(&self, window: &mut Window, cx: &mut App) {
         (self.on_toggle_zoom)(window, cx);
     }
 
-    /// Dismiss this tile. Refused when [`Self::can_close`] is false, so a
+    /// Dismiss this tile. Refused when [`Self::is_closable`] is false, so a
     /// skin that offers a Close control should gate it on that.
     pub fn close(&self, window: &mut Window, cx: &mut App) {
         (self.on_close)(window, cx);

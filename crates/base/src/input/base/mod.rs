@@ -102,15 +102,15 @@ impl InputContextMenuCapabilities {
         self.masked
     }
 
-    /// Returns true if the selection may leave the input as plain text.
+    /// Returns true if the user is allowed to copy the text out.
     ///
-    /// A masked input keeps its value out of the clipboard, so both Copy and
-    /// Cut are unavailable while the value is hidden.
-    pub fn can_copy(&self) -> bool {
+    /// A masked input keeps its value out of the clipboard, so Copy and Cut
+    /// are both unavailable while the value is hidden.
+    pub fn is_copyable(&self) -> bool {
         self.selection && !self.masked
     }
 
-    pub fn can_go_to_definition(&self) -> bool {
+    pub fn has_definition(&self) -> bool {
         self.go_to_definition
     }
 

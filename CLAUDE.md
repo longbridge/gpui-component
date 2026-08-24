@@ -223,10 +223,11 @@ Text input system based on Rope data structure:
    option set — keeps its fields private, is constructed with a builder, and is read
    through methods. Adding a `pub` field is a breaking change; adding one behind a builder
    is not. Setters and readers must not collide: an all-boolean type names setters after
-   the field and readers `is_`/`has_`/`can_`; a type with non-boolean fields prefixes every
-   setter with `with_` and keeps the field name for readers. Value types whose fields are
-   the definition and cannot grow (`Point`, `Selection`, `Edges`) are exempt. See the
-   "Public Data Types Across the Seam" section of `docs/ARCHITECTURE.md`.
+   the field and readers `is_<adjective>`/`has_<noun>`, never `can_`; a type with
+   non-boolean fields prefixes every setter with `with_` and keeps the field name for
+   readers. Value types whose fields are the definition and cannot grow (`Point`,
+   `Selection`, `Edges`) are exempt. See the "Public Data Types Across the Seam" section
+   of `docs/ARCHITECTURE.md`.
 8. **Spell `Context` out**: Name a context type `ComboboxTriggerContext`, never `…Ctx`.
    `cx` is reserved for GPUI's `App`, `Context<T>`, and `AsyncApp`, so `ctx` for anything
    else reads as a competing context. A callback receiving both takes the GPUI one as `cx`

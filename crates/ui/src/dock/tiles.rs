@@ -117,9 +117,9 @@ impl TilesSkin {
         let control = handle.and_then(|handle| handle.zoom_control(cx));
         let zoomed = tile.is_zoomed();
         let toolbar_zoom =
-            tile.can_zoom() && control.is_some_and(|control| control.toolbar_visible());
-        let menu_zoom = tile.can_zoom() && control.is_some_and(|control| control.menu_visible());
-        let closable = tile.can_close();
+            tile.is_zoomable() && control.is_some_and(|control| control.toolbar_visible());
+        let menu_zoom = tile.is_zoomable() && control.is_some_and(|control| control.menu_visible());
+        let closable = tile.is_closable();
         let buttons = handle.and_then(|handle| handle.toolbar_buttons(window, cx));
         let panel = handle.map(|handle| handle.panel());
 

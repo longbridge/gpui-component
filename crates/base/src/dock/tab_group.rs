@@ -128,7 +128,7 @@ impl TabGroupConstraints {
         self.collapsed
     }
 
-    pub fn can_close(&self) -> bool {
+    pub fn is_closable(&self) -> bool {
         self.closable
     }
 }
@@ -220,8 +220,8 @@ impl TabGroup {
     /// Mirrors the old `TabPanel::closable`: the container must permit it, the
     /// group must have somewhere to go, and the displayed panel must itself be
     /// closable.
-    pub fn can_close(&self, cx: &App) -> bool {
-        self.constraints.can_close()
+    pub fn is_closable(&self, cx: &App) -> bool {
+        self.constraints.is_closable()
             && self.draggable(cx)
             && self
                 .active_panel(cx)
@@ -244,7 +244,7 @@ impl TabGroup {
     /// Ask the container to close `panel`. Nothing happens for a panel that is
     /// not in this group, or when either the group or the panel refuses.
     pub fn close_panel(&mut self, panel: PanelId, cx: &mut Context<Self>) {
-        if !self.constraints.can_close() {
+        if !self.constraints.is_closable() {
             return;
         }
         // A dock's last group has nowhere to go and must stay.
@@ -279,7 +279,7 @@ impl TabGroup {
             active_ix: self.active_ix,
             zoomed: self.zoomed,
             collapsed: self.constraints.is_collapsed(),
-            can_close: self.can_close(cx),
+            closable: self.is_closable(cx),
             locked: self.is_locked(),
             draggable: self.draggable(cx),
             droppable: self.droppable(),
@@ -755,7 +755,7 @@ pub struct TabGroupContext {
     locked: bool,
     draggable: bool,
     droppable: bool,
-    can_close: bool,
+    closable: bool,
     drop_indicator: Option<DropIndicator>,
     on_select_tab: SelectTabHandler,
     on_close: ClosePanelHandler,
@@ -801,8 +801,8 @@ impl TabGroupContext {
 
     /// Whether closing the displayed panel is allowed at all, so a skin knows
     /// whether to offer a Close control.
-    pub fn can_close(&self) -> bool {
-        self.can_close
+    pub fn is_closable(&self) -> bool {
+        self.closable
     }
 
     pub fn is_locked(&self) -> bool {
@@ -1481,7 +1481,7 @@ mod tests {
         });
         cx.run_until_parked();
 
-        assert!(!cx.update(|_, cx| group.read(cx).context(cx).can_close()));
+        assert!(!cx.update(|_, cx| group.read(cx).context(cx).is_closable()));
         assert!(events.borrow().is_empty());
     }
 
@@ -1500,14 +1500,14 @@ mod tests {
                 group.set_constraints(TabGroupConstraints::in_split(true), window, cx)
             })
         });
-        let alone = cx.update(|_, cx| group.read(cx).context(cx).can_close());
+        let alone = cx.update(|_, cx| group.read(cx).context(cx).is_closable());
 
         cx.update(|window, cx| {
             group.update(cx, |group, cx| {
                 group.set_constraints(TabGroupConstraints::in_split(false), window, cx)
             })
         });
-        let beside_a_sibling = cx.update(|_, cx| group.read(cx).context(cx).can_close());
+        let beside_a_sibling = cx.update(|_, cx| group.read(cx).context(cx).is_closable());
 
         assert!(!alone);
         assert!(beside_a_sibling);
