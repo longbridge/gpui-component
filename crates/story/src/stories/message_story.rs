@@ -5,7 +5,7 @@ use gpui::{
 use gpui_component::{
     ActiveTheme as _, Sizable as _, StyledExt as _,
     avatar::Avatar,
-    bubble::Bubble,
+    bubble::{Bubble, BubbleVariant},
     message::{
         Message, MessageAlignment, MessageContent, MessageFooter, MessageGroup, MessageHeader,
     },
@@ -67,8 +67,7 @@ impl Render for MessageStory {
                             .content(
                                 MessageContent::new().child(
                                     Bubble::new()
-                                        .bg(cx.theme().secondary)
-                                        .text_color(cx.theme().secondary_foreground)
+                                        .with_variant(BubbleVariant::Secondary)
                                         .child("Can you review this?"),
                                 ),
                             )
@@ -100,8 +99,7 @@ impl Render for MessageStory {
                                     .content(
                                         MessageContent::new().child(
                                             Bubble::new()
-                                                .bg(cx.theme().secondary)
-                                                .text_color(cx.theme().secondary_foreground)
+                                                .with_variant(BubbleVariant::Secondary)
                                                 .child("I attached the draft."),
                                         ),
                                     ),
@@ -110,8 +108,7 @@ impl Render for MessageStory {
                                 Message::new().content(
                                     MessageContent::new().child(
                                         Bubble::new()
-                                            .bg(cx.theme().secondary)
-                                            .text_color(cx.theme().secondary_foreground)
+                                            .with_variant(BubbleVariant::Secondary)
                                             .child("The second page needs attention."),
                                     ),
                                 ),

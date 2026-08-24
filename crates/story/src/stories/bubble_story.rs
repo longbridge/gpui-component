@@ -4,7 +4,9 @@ use gpui::{
 };
 use gpui_component::{
     ActiveTheme as _, Sizable as _, StyledExt as _,
-    bubble::{Bubble, BubbleReactionSide, BubbleReactions, BubbleVariant},
+    bubble::{
+        Bubble, BubbleContent, BubbleGroup, BubbleReactionSide, BubbleReactions, BubbleVariant,
+    },
     button::{Button, ButtonVariants as _},
     h_flex,
     message::MessageAlignment,
@@ -55,20 +57,40 @@ impl Render for BubbleStory {
             .gap_4()
             .child(
                 section("Variants")
-                    .description("Filled, outline, and ghost cover the shared surface treatments.")
+                    .description("Semantic variants match the Base UI bubble treatments.")
                     .w(px(680.))
                     .v_flex()
                     .gap_4()
-                    .child(Bubble::new().child("Filled bubble"))
+                    .child(Bubble::new().child("A strong primary bubble."))
+                    .child(
+                        Bubble::new()
+                            .with_variant(BubbleVariant::Secondary)
+                            .child("The neutral secondary bubble."),
+                    )
+                    .child(
+                        Bubble::new()
+                            .with_variant(BubbleVariant::Muted)
+                            .child("A lower-emphasis muted bubble."),
+                    )
+                    .child(
+                        Bubble::new()
+                            .with_variant(BubbleVariant::Tinted)
+                            .child("A softly tinted primary bubble."),
+                    )
                     .child(
                         Bubble::new()
                             .with_variant(BubbleVariant::Outline)
-                            .child("Outline bubble"),
+                            .child("A bordered bubble for rich content."),
+                    )
+                    .child(
+                        Bubble::new()
+                            .with_variant(BubbleVariant::Destructive)
+                            .child("A failed action with its reason in text."),
                     )
                     .child(
                         Bubble::new()
                             .with_variant(BubbleVariant::Ghost)
-                            .child("Ghost bubble for rich or unframed content"),
+                            .child("Ghost content is unframed and can use the full row width."),
                     ),
             )
             .child(
@@ -79,8 +101,7 @@ impl Render for BubbleStory {
                     .gap_3()
                     .child(
                         Bubble::new()
-                            .bg(cx.theme().secondary)
-                            .text_color(cx.theme().secondary_foreground)
+                            .with_variant(BubbleVariant::Secondary)
                             .child("Incoming message"),
                     )
                     .child(
@@ -98,7 +119,7 @@ impl Render for BubbleStory {
                         Bubble::new()
                             .with_variant(BubbleVariant::Outline)
                             .child("This bubble has reaction feedback.")
-                            .child(
+                            .reactions(
                                 BubbleReactions::new().child(
                                     Button::new("bubble-like").ghost().xsmall().label("👍 2"),
                                 ),
@@ -108,11 +129,29 @@ impl Render for BubbleStory {
                         Bubble::new()
                             .alignment(MessageAlignment::End)
                             .child("Reactions can attach to any edge.")
-                            .child(
+                            .reactions(
                                 BubbleReactions::new()
                                     .side(BubbleReactionSide::Top)
                                     .alignment(MessageAlignment::Start)
                                     .child("✨ 1"),
+                            ),
+                    ),
+            )
+            .child(
+                section("Group")
+                    .description("Group consecutive bubbles from one sender with an 8 px gap.")
+                    .w(px(680.))
+                    .child(
+                        BubbleGroup::new()
+                            .child(
+                                Bubble::new()
+                                    .with_variant(BubbleVariant::Secondary)
+                                    .child("Can you tell me what changed?"),
+                            )
+                            .child(
+                                Bubble::new()
+                                    .with_variant(BubbleVariant::Secondary)
+                                    .child("The registry route was stale."),
                             ),
                     ),
             )
@@ -143,12 +182,14 @@ impl Render for BubbleStory {
                     .description("Caller refinements override the surface defaults.")
                     .w(px(680.))
                     .child(
-                        Bubble::new()
-                            .rounded(cx.theme().radius)
-                            .bg(cx.theme().green.opacity(0.15))
-                            .text_color(cx.theme().green)
-                            .border_color(cx.theme().green.opacity(0.35))
-                            .child("Custom semantic color"),
+                        Bubble::new().content(
+                            BubbleContent::new()
+                                .rounded(cx.theme().radius)
+                                .bg(cx.theme().green.opacity(0.15))
+                                .text_color(cx.theme().green)
+                                .border_color(cx.theme().green.opacity(0.35))
+                                .child("Custom semantic color"),
+                        ),
                     ),
             )
     }

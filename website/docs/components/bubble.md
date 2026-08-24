@@ -5,13 +5,16 @@ description: A styleable chat surface for text, rich content, and reaction contr
 
 # Bubble
 
-`Bubble` is the visible message surface used inside a chat message. It accepts arbitrary children, supports leading or trailing alignment, and provides filled, outline, and ghost treatments.
+`Bubble` lays out a conversational surface and its reactions. The root owns alignment and the 80% maximum width, while `BubbleContent` owns the visible surface styling.
 
 ## Import
 
 ```rust
 use gpui_component::{
-    bubble::{Bubble, BubbleReactionSide, BubbleReactions, BubbleVariant},
+    bubble::{
+        Bubble, BubbleContent, BubbleGroup, BubbleReactionSide,
+        BubbleReactions, BubbleVariant,
+    },
     message::MessageAlignment,
 };
 ```
@@ -20,10 +23,16 @@ use gpui_component::{
 
 ```rust
 Bubble::new()
-    .child("Can you review this?")
+    .content(BubbleContent::new().child("Can you review this?"))
 ```
 
-`Bubble` is both the layout container and the styled surface. A separate `BubbleContent` wrapper is unnecessary in GPUI because child composition and `Styled` refinements already cover that role.
+For short content, direct children are added to the content slot as a convenience:
+
+```rust
+Bubble::new().child("Can you review this?")
+```
+
+Use an explicit `BubbleContent` when its surface needs custom styling. This keeps layout refinements on `Bubble` separate from colors, padding, radius, and typography on `BubbleContent`.
 
 ## Alignment
 
@@ -45,27 +54,55 @@ Bubble::new()
     .child("Filled")
 
 Bubble::new()
+    .with_variant(BubbleVariant::Secondary)
+    .child("Secondary")
+
+Bubble::new()
+    .with_variant(BubbleVariant::Muted)
+    .child("Muted")
+
+Bubble::new()
+    .with_variant(BubbleVariant::Tinted)
+    .child("Tinted")
+
+Bubble::new()
     .with_variant(BubbleVariant::Outline)
     .child("Outline")
 
 Bubble::new()
     .with_variant(BubbleVariant::Ghost)
     .child("Ghost")
+
+Bubble::new()
+    .with_variant(BubbleVariant::Destructive)
+    .child("The request failed.")
 ```
 
-The shared component keeps only the three surface treatments requested by chat interfaces. Semantic colors such as muted, success, warning, or destructive remain caller styles instead of becoming chat-specific variants.
+Variants use semantic theme tokens. `Ghost` removes the frame and content padding and can fill the row; the other variants size to their content up to 80% of the available width.
 
 ## Rich content
 
 Any GPUI element can be a direct child:
 
 ```rust
-Bubble::new().child(
-    h_flex()
-        .gap_3()
-        .child(file_icon)
-        .child(file_details),
+Bubble::new().content(
+    BubbleContent::new().child(
+        h_flex()
+            .gap_3()
+            .child(file_icon)
+            .child(file_details),
+    ),
 )
+```
+
+## Groups
+
+Use `BubbleGroup` for consecutive bubbles from the same sender:
+
+```rust
+BubbleGroup::new()
+    .child(Bubble::new().with_variant(BubbleVariant::Muted).child("First"))
+    .child(Bubble::new().with_variant(BubbleVariant::Muted).child("Second"))
 ```
 
 ## Reactions
@@ -75,7 +112,7 @@ Bubble::new().child(
 ```rust
 Bubble::new()
     .child("Looks good to me.")
-    .child(
+    .reactions(
         BubbleReactions::new()
             .side(BubbleReactionSide::Bottom)
             .alignment(MessageAlignment::End)
@@ -91,21 +128,27 @@ There is no `BubbleAction` type. `Button` already provides focus, keyboard, disa
 
 ## Custom styling
 
-Both public elements implement `Styled`, and caller refinements are applied after defaults:
+Every public part implements `Styled`, and caller refinements are applied after defaults:
 
 ```rust
-Bubble::new()
-    .rounded(cx.theme().radius)
-    .bg(cx.theme().green.opacity(0.15))
-    .text_color(cx.theme().green)
-    .border_color(cx.theme().green.opacity(0.35))
-    .child("Custom semantic color")
+Bubble::new().content(
+    BubbleContent::new()
+        .rounded(cx.theme().radius)
+        .bg(cx.theme().green.opacity(0.15))
+        .text_color(cx.theme().green)
+        .border_color(cx.theme().green.opacity(0.35))
+        .child("Custom semantic color"),
+)
 ```
 
 ## API reference
 
 - [Bubble]
+- [BubbleContent]
+- [BubbleGroup]
 - [BubbleReactions]
 
 [Bubble]: https://docs.rs/gpui-component/latest/gpui_component/bubble/struct.Bubble.html
+[BubbleContent]: https://docs.rs/gpui-component/latest/gpui_component/bubble/struct.BubbleContent.html
+[BubbleGroup]: https://docs.rs/gpui-component/latest/gpui_component/bubble/struct.BubbleGroup.html
 [BubbleReactions]: https://docs.rs/gpui-component/latest/gpui_component/bubble/struct.BubbleReactions.html

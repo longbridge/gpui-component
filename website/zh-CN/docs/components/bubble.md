@@ -5,13 +5,16 @@ description: 可承载文本、富内容和 reaction 控件的聊天消息表面
 
 # Bubble
 
-`Bubble` 是聊天消息中可见的消息表面。它可以容纳任意 child，支持起始端或末端对齐，并提供 filled、outline 与 ghost 三种样式。
+`Bubble` 负责聊天表面及 reaction 的布局。根组件负责对齐和 80% 最大宽度，`BubbleContent` 负责可见表面的样式。
 
 ## 导入
 
 ```rust
 use gpui_component::{
-    bubble::{Bubble, BubbleReactionSide, BubbleReactions, BubbleVariant},
+    bubble::{
+        Bubble, BubbleContent, BubbleGroup, BubbleReactionSide,
+        BubbleReactions, BubbleVariant,
+    },
     message::MessageAlignment,
 };
 ```
@@ -20,10 +23,16 @@ use gpui_component::{
 
 ```rust
 Bubble::new()
-    .child("可以帮我检查一下吗？")
+    .content(BubbleContent::new().child("可以帮我检查一下吗？"))
 ```
 
-`Bubble` 同时承担布局容器和可见表面。GPUI 已可通过 child 组合与 `Styled` refinement 覆盖样式，因此无需额外增加 `BubbleContent` 包装层。
+短内容可以直接作为 child 添加到 content slot：
+
+```rust
+Bubble::new().child("可以帮我检查一下吗？")
+```
+
+需要定制消息表面时使用显式 `BubbleContent`。这样 `Bubble` 上的布局 refinement 与 `BubbleContent` 上的颜色、padding、圆角和 typography 保持独立。
 
 ## 对齐
 
@@ -45,27 +54,55 @@ Bubble::new()
     .child("Filled")
 
 Bubble::new()
+    .with_variant(BubbleVariant::Secondary)
+    .child("Secondary")
+
+Bubble::new()
+    .with_variant(BubbleVariant::Muted)
+    .child("Muted")
+
+Bubble::new()
+    .with_variant(BubbleVariant::Tinted)
+    .child("Tinted")
+
+Bubble::new()
     .with_variant(BubbleVariant::Outline)
     .child("Outline")
 
 Bubble::new()
     .with_variant(BubbleVariant::Ghost)
     .child("Ghost")
+
+Bubble::new()
+    .with_variant(BubbleVariant::Destructive)
+    .child("请求失败。")
 ```
 
-共享组件只保留聊天界面要求的三种表面样式。Muted、success、warning、destructive 等语义颜色由调用方通过样式表达，不扩展成聊天专用 variant。
+所有 variant 都使用语义主题 token。`Ghost` 会移除边框与 content padding，并可占满整行；其他 variant 根据内容收缩，最大宽度为可用宽度的 80%。
 
 ## 富内容
 
 任意 GPUI element 都可以作为直接 child：
 
 ```rust
-Bubble::new().child(
-    h_flex()
-        .gap_3()
-        .child(file_icon)
-        .child(file_details),
+Bubble::new().content(
+    BubbleContent::new().child(
+        h_flex()
+            .gap_3()
+            .child(file_icon)
+            .child(file_details),
+    ),
 )
+```
+
+## 分组
+
+连续的同一发送者消息可以使用 `BubbleGroup`：
+
+```rust
+BubbleGroup::new()
+    .child(Bubble::new().with_variant(BubbleVariant::Muted).child("第一条"))
+    .child(Bubble::new().with_variant(BubbleVariant::Muted).child("第二条"))
 ```
 
 ## Reaction
@@ -75,7 +112,7 @@ Bubble::new().child(
 ```rust
 Bubble::new()
     .child("看起来没问题。")
-    .child(
+    .reactions(
         BubbleReactions::new()
             .side(BubbleReactionSide::Bottom)
             .alignment(MessageAlignment::End)
@@ -91,21 +128,27 @@ Bubble::new()
 
 ## 自定义样式
 
-两个公开 element 都实现了 `Styled`，调用方 refinement 会在默认样式之后应用：
+所有公开 part 都实现了 `Styled`，调用方 refinement 会在默认样式之后应用：
 
 ```rust
-Bubble::new()
-    .rounded(cx.theme().radius)
-    .bg(cx.theme().green.opacity(0.15))
-    .text_color(cx.theme().green)
-    .border_color(cx.theme().green.opacity(0.35))
-    .child("自定义语义颜色")
+Bubble::new().content(
+    BubbleContent::new()
+        .rounded(cx.theme().radius)
+        .bg(cx.theme().green.opacity(0.15))
+        .text_color(cx.theme().green)
+        .border_color(cx.theme().green.opacity(0.35))
+        .child("自定义语义颜色"),
+)
 ```
 
 ## API 参考
 
 - [Bubble]
+- [BubbleContent]
+- [BubbleGroup]
 - [BubbleReactions]
 
 [Bubble]: https://docs.rs/gpui-component/latest/gpui_component/bubble/struct.Bubble.html
+[BubbleContent]: https://docs.rs/gpui-component/latest/gpui_component/bubble/struct.BubbleContent.html
+[BubbleGroup]: https://docs.rs/gpui-component/latest/gpui_component/bubble/struct.BubbleGroup.html
 [BubbleReactions]: https://docs.rs/gpui-component/latest/gpui_component/bubble/struct.BubbleReactions.html
