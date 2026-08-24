@@ -414,6 +414,20 @@ Platform branch 即使 presentation 不同，也必须保留 semantic contract�
 
 Boolean builder 可叫 `disabled(bool)`，reader 叫 `is_disabled()`。含 non-boolean field 的公开接口中的非布尔字段使用 `with_item_ix(...)` 构造、`item_ix()` 读取，避免冲突。新的局部或内部零起始索引优先使用 `_ix`，现有公开名称如 `selected_index` 保持不变，不再引入 `_idx`。调用方从不构造的快照，不要为了对称而发布构造方法。
 
+### 让外层名字承担上下文
+
+名字总是在某个东西内部被阅读。字段在它的类型内部被读到，参数在它的方法签名内部
+被读到，所以两者都不重复外层已经说过的话：`with_item_ix(ix)`，而不是
+`with_item_ix(item_ix)`。
+
+同一个类型的字段保持相同的缩写程度。其中若有一个写全了，它就成了异类，读者会去
+找那个让它与众不同的区别。又因为 builder 按 `with_<field>` 命名，缩短字段会同时
+缩短它的 builder，两者始终配对。
+
+只在外层名字确实能消除歧义时才缩短。当短形式在生态的别处同时是*另一个量*的既有
+术语时，在 doc comment 里说明你指的是哪一个，而不是把标识符加长 —— doc 是在调用处
+被读到的，它能解释清楚一个更长的名字只能暗示的东西。
+
 ### 精确区分领域词汇
 
 - **selected** 是持久 membership/active item；**focused** 是 keyboard target；**hovered** 是 pointer presence；**confirmed** 是 activation result，不能混用。

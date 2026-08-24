@@ -24,7 +24,7 @@ use crate::{
 /// coarsened from the normalized default to end the animation once the
 /// remaining travel is sub-pixel.
 const INDICATOR_SPRING: Spring = Spring::new(Duration::from_millis(250))
-    .with_damping_ratio(0.85)
+    .with_damping(0.85)
     .with_epsilon(0.1);
 
 struct TabIndicatorBounds {

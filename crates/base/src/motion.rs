@@ -203,7 +203,7 @@ where
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Spring {
     response: Duration,
-    damping_ratio: f32,
+    damping: f32,
     epsilon: f32,
     travel: bool,
 }
@@ -221,7 +221,7 @@ impl Spring {
     pub const fn new(response: Duration) -> Self {
         Self {
             response,
-            damping_ratio: 1.0,
+            damping: 1.0,
             epsilon: DEFAULT_SPRING_EPSILON,
             travel: true,
         }
@@ -236,8 +236,8 @@ impl Spring {
     ///
     /// This is $\zeta$, not GPUI's `SpringConfig::damping`, which is the
     /// coefficient $c = 2 \zeta \omega_0$.
-    pub const fn with_damping_ratio(mut self, ratio: f32) -> Self {
-        self.damping_ratio = ratio;
+    pub const fn with_damping(mut self, ratio: f32) -> Self {
+        self.damping = ratio;
         self
     }
 
@@ -248,11 +248,7 @@ impl Spring {
     /// from a built config can be called from a `const fn`.
     fn config(&self) -> SpringConfig {
         let frequency = std::f32::consts::TAU / self.response.as_secs_f32();
-        SpringConfig::new(
-            frequency * frequency,
-            2.0 * self.damping_ratio * frequency,
-            1.0,
-        )
+        SpringConfig::new(frequency * frequency, 2.0 * self.damping * frequency, 1.0)
     }
 
     /// Sets whether the spring travels to its target or adopts it on the spot.
@@ -684,7 +680,7 @@ mod tests {
     fn a_bouncy_spring_overshoots_its_target(cx: &mut TestAppContext) {
         let fixture = SpringFixture::open(
             cx,
-            Spring::new(Duration::from_millis(350)).with_damping_ratio(0.7),
+            Spring::new(Duration::from_millis(350)).with_damping(0.7),
         );
         fixture.render(cx, 1.0);
         for _ in 0..30 {
@@ -737,7 +733,7 @@ mod tests {
         cx.update(|cx| cx.set_reduce_motion(true));
         let fixture = SpringFixture::open(
             cx,
-            Spring::new(Duration::from_millis(350)).with_damping_ratio(0.7),
+            Spring::new(Duration::from_millis(350)).with_damping(0.7),
         );
         assert_eq!(fixture.render(cx, 1.0), 1.0);
         assert_eq!(fixture.pending_frame(cx), 0);

@@ -666,6 +666,23 @@ zero-based indices, preserve established public terms such as `selected_index`,
 and do not introduce `_idx`. If callers never construct the seam value, do not
 publish a builder merely for symmetry.
 
+### Let the enclosing name carry the context
+
+A name is read inside something. A field is read inside its type and a parameter
+inside its method, so neither repeats what encloses it: `with_item_ix(ix)`, not
+`with_item_ix(item_ix)`.
+
+Keep one type's fields at the same level of abbreviation. A single field spelled
+out in full becomes the odd one out, and a reader goes looking for the
+distinction that made it different. Because a builder is named `with_<field>`,
+shortening a field shortens its builder with it and the pair stays matched.
+
+Shorten only where the enclosing name really does disambiguate. When a short
+form is also the established term for a *different* quantity elsewhere in the
+ecosystem, say which one you mean in the doc comment rather than lengthening the
+identifier — the doc is read at the call, and it can explain what a longer name
+could only hint at.
+
 ### Use precise domain words
 
 - **selected** is persistent membership or the active item; **focused** is the
