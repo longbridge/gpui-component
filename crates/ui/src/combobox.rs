@@ -1004,11 +1004,20 @@ fn render_trigger_container(
             h_flex()
                 .id("inner")
                 .w_full()
+                .min_w_0()
                 .overflow_hidden()
+                .whitespace_nowrap()
                 .items_center()
                 .justify_between()
                 .gap_1()
-                .child(trigger_body)
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .overflow_hidden()
+                        .whitespace_nowrap()
+                        .child(trigger_body),
+                )
                 .child(trailing),
         )
 }

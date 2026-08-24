@@ -457,14 +457,19 @@ impl RenderOnce for DatePicker {
                     .child(
                         h_flex()
                             .w_full()
+                            .min_w_0()
                             .overflow_hidden()
+                            .whitespace_nowrap()
                             .items_center()
                             .justify_between()
                             .gap_1()
                             .child(
                                 div()
-                                    .w_full()
+                                    .flex_1()
+                                    .min_w_0()
                                     .overflow_hidden()
+                                    .whitespace_nowrap()
+                                    .truncate()
                                     .when(!state.date.is_some(), |this| {
                                         this.text_color(cx.theme().muted_foreground)
                                     })
