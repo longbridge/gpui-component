@@ -33,6 +33,7 @@ pub(super) struct Inline {
     highlights: Vec<(Range<usize>, HighlightStyle)>,
     styled_text: StyledText,
     link_click_handler: Option<Arc<LinkClickHandlerFn>>,
+    link_underline_on_hover: bool,
 
     state: Arc<Mutex<InlineState>>,
 }
@@ -66,6 +67,7 @@ impl Inline {
             .lock()
             .map(|state| state.text.clone())
             .unwrap_or_default();
+        highlights.retain(|(range, _)| range.start <= range.end && range.end <= text.len());
 
         if link_underline_on_hover
             && let Some(index) = state.lock().ok().and_then(|state| state.hovered_index)
@@ -91,6 +93,7 @@ impl Inline {
             text: text.clone(),
             styled_text: StyledText::new(text),
             link_click_handler,
+            link_underline_on_hover,
             state,
         }
     }
@@ -536,35 +539,37 @@ impl Element for Inline {
             });
         }
 
-        // mouse move, update hovered link
-        window.on_mouse_event({
-            let hitbox = hitbox.clone();
-            let text_layout = text_layout.clone();
-            let inline_state = self.state.clone();
-            let links = self.links.clone();
-            move |event: &MouseMoveEvent, phase, window, cx| {
-                if !phase.bubble() {
-                    return;
-                }
-
-                let updated = hitbox
-                    .is_hovered(window)
-                    .then(|| text_layout.index_for_position(event.position).ok())
-                    .flatten()
-                    .filter(|index| links.iter().any(|(range, _)| range.contains(index)));
-                let changed = inline_state.lock().ok().is_some_and(|mut state| {
-                    if state.hovered_index == updated {
-                        false
-                    } else {
-                        state.hovered_index = updated;
-                        true
+        if self.link_underline_on_hover {
+            // mouse move, update hovered link
+            window.on_mouse_event({
+                let hitbox = hitbox.clone();
+                let text_layout = text_layout.clone();
+                let inline_state = self.state.clone();
+                let links = self.links.clone();
+                move |event: &MouseMoveEvent, phase, window, cx| {
+                    if !phase.bubble() {
+                        return;
                     }
-                });
-                if changed {
-                    cx.notify(current_view);
+
+                    let updated = hitbox
+                        .is_hovered(window)
+                        .then(|| text_layout.index_for_position(event.position).ok())
+                        .flatten()
+                        .filter(|index| links.iter().any(|(range, _)| range.contains(index)));
+                    let changed = inline_state.lock().ok().is_some_and(|mut state| {
+                        if state.hovered_index == updated {
+                            false
+                        } else {
+                            state.hovered_index = updated;
+                            true
+                        }
+                    });
+                    if changed {
+                        cx.notify(current_view);
+                    }
                 }
-            }
-        });
+            });
+        }
 
         if !is_selection {
             // click to open link
