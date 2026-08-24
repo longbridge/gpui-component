@@ -2746,6 +2746,12 @@ impl<M: InputModeKind> EntityInputHandler for InputBaseState<M> {
                 None,
             );
         }
+        // A commit ends the IME composition: macOS delivers `insertText:` for
+        // the confirmed candidate without a following `unmarkText`, so close
+        // the transaction here. Leaving it open would keep merging every later
+        // edit into the same change, which then carries the text and selection
+        // of the first composition.
+        self.undo_manager.commit_transaction();
         if let Some(diagnostics) = self.mode.diagnostics_mut() {
             diagnostics.reset(&self.text)
         }
@@ -4389,6 +4395,69 @@ mod tests {
                 assert_eq!(state.value(), "a");
                 state.redo(&Redo, window, cx);
                 assert_eq!(state.value(), "a是");
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_undo_manager_consecutive_compositions_are_separate_groups(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| state);
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                // First composition: "jin" -> "今天"
+                state.replace_and_mark_text_in_range(None, "j", None, window, cx);
+                state.replace_and_mark_text_in_range(None, "jin", None, window, cx);
+                state.replace_text_in_range(None, "今天", window, cx);
+                // Second composition: "wo" -> "我们"
+                state.replace_and_mark_text_in_range(None, "w", None, window, cx);
+                state.replace_and_mark_text_in_range(None, "wo", None, window, cx);
+                state.replace_text_in_range(None, "我们", window, cx);
+                assert_eq!(state.value(), "今天我们");
+                assert_eq!(state.selected_range(), 12..12);
+
+                state.undo(&Undo, window, cx);
+                assert_eq!(state.value(), "今天");
+                assert_eq!(state.selected_range(), 6..6);
+
+                state.undo(&Undo, window, cx);
+                assert_eq!(state.value(), "");
+                assert_eq!(state.selected_range(), 0..0);
+
+                state.redo(&Redo, window, cx);
+                assert_eq!(state.value(), "今天");
+                assert_eq!(state.selected_range(), 6..6);
+
+                state.redo(&Redo, window, cx);
+                assert_eq!(state.value(), "今天我们");
+                assert_eq!(state.selected_range(), 12..12);
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_undo_manager_typing_after_composition_is_a_separate_group(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| state);
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.replace_and_mark_text_in_range(None, "n", None, window, cx);
+                state.replace_text_in_range(None, "你", window, cx);
+                state.undo_manager.pending_intent = Some(EditIntent::Typing);
+                state.replace_text_in_range(None, "a", window, cx);
+                state.undo_manager.pending_intent = Some(EditIntent::Typing);
+                state.replace_text_in_range(None, "b", window, cx);
+                assert_eq!(state.value(), "你ab");
+
+                state.undo(&Undo, window, cx);
+                assert_eq!(state.value(), "你");
+
+                state.undo(&Undo, window, cx);
+                assert_eq!(state.value(), "");
             });
         });
     }
