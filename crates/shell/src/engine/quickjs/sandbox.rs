@@ -224,13 +224,13 @@ const FREEZE_BUILTINS: &str = r#"
 /// a bundle take its non-browser branch. A throwing getter would turn a working
 /// feature test into a crash.
 const ABSENT_GLOBALS: &[(&str, &str)] = &[
-    ("setTimeout", "use gpui.timer(ms, callback)"),
-    ("setInterval", "use gpui.timer(ms, callback)"),
+    ("setTimeout", "use gpui.timer.after(ms, callback)"),
+    ("setInterval", "use gpui.timer.after(ms, callback)"),
     ("clearTimeout", "cancel the handle gpui.timer returned"),
     ("clearInterval", "cancel the handle gpui.timer returned"),
     (
         "fetch",
-        "network access is capability-gated; use gpui.http once capabilities.network.hosts is declared",
+        "network access is capability-gated; use gpui.fs or a native module once capabilities.network.hosts is declared",
     ),
     ("require", "this runtime uses ES modules; use `import`"),
 ];

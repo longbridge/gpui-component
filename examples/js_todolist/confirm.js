@@ -30,7 +30,10 @@ export default class ConfirmClear extends View {
               "confirm",
               "Delete",
               (_event, cx) => {
-                if (this.onConfirm) this.onConfirm();
+                // The callback is handed *this* call's cx. A cx captured when
+                // the dialog was opened belongs to a call that has returned,
+                // and using it throws.
+                if (this.onConfirm) this.onConfirm(cx);
                 cx.close_dialog();
               },
               { variant: "primary" },

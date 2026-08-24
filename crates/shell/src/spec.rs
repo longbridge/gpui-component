@@ -1,8 +1,8 @@
 //! The element description buffer.
 //!
 //! GPUI elements are values that are consumed when used: `RenderOnce::render`
-//! takes `self`, and `ParentElement::child` takes its child by value. A Lua
-//! object therefore cannot *be* an element. Instead a Lua builder records
+//! takes `self`, and `ParentElement::child` takes its child by value. A script
+//! object therefore cannot *be* an element. Instead a script builder records
 //! operations into this arena, and [`crate::materialize`] replays them into real
 //! elements inside `Render::render`. The arena is cleared after every render, so
 //! no element description ever outlives the pass that produced it.
@@ -14,7 +14,7 @@ use crate::value::Bridged;
 /// Index of a node inside a [`SpecArena`].
 pub type SpecId = u32;
 
-/// Index of a Lua callback inside the current callback arena.
+/// Index of a script callback inside the current callback arena.
 pub type CallbackId = u32;
 
 /// Which constructor produced a node.

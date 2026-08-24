@@ -682,6 +682,19 @@ globalThis.__gpui = (() => {
     release: () => __input_release(handle),
   });
 
+  // `console` is the first thing a JavaScript author types. It is an alias for
+  // `gpui.log`, not a second logging system: same sink, same plugin field.
+  // Resolved at call time, not here: `gpui.log` is installed after this
+  // prelude runs.
+  const forward = (level) => (...args) => globalThis.__gpui.log[level](...args);
+  globalThis.console = {
+    debug: forward("debug"),
+    log: forward("info"),
+    info: forward("info"),
+    warn: forward("warn"),
+    error: forward("error"),
+  };
+
   globalThis.__construct = (Class) => new Class();
 
   class View {

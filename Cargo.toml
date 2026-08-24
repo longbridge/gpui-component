@@ -39,6 +39,7 @@ gpui-base = { path = "crates/base", version = "0.5.2" }
 gpui-component-macros = { path = "crates/macros", version = "0.5.1" }
 gpui-component-assets = { path = "crates/assets", version = "0.5.1" }
 gpui-fps = { path = "crates/fps", version = "0.1.0" }
+gpui-shell = { path = "crates/shell", version = "0.1.0" }
 story = { path = "crates/story" }
 
 gpui = { version = "0.2.2", git = "https://github.com/zed-industries/zed", features = ["profiler"] }

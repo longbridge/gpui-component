@@ -299,6 +299,27 @@
                             >{{ copy.startBase }} <ArrowRight
                         /></a>
                     </article>
+
+                    <article class="path">
+                        <div class="path__meta">
+                            <Braces />
+                            <span>gpui-shell</span>
+                        </div>
+                        <h3>{{ copy.scriptTitle }}</h3>
+                        <p>{{ copy.scriptDescription }}</p>
+                        <pre><code><span class="c-type">Button</span>.<span class="c-fn">new</span>(<span class="c-str">"save"</span>)
+    .<span class="c-fn">on_click</span>(save)
+    .<span class="c-fn">rounded</span>(6)
+    .<span class="c-fn">child</span>(<span class="c-fn">text</span>(<span class="c-str">"Save changes"</span>))</code></pre>
+                        <ul>
+                            <li v-for="item in copy.scriptPoints" :key="item">
+                                <Check />{{ item }}
+                            </li>
+                        </ul>
+                        <a :href="shellHref" class="path__link"
+                            >{{ copy.startShell }} <ArrowRight
+                        /></a>
+                    </article>
                 </div>
             </div>
         </section>
@@ -367,6 +388,7 @@ import {
     ArrowRight,
     ChevronDown,
     Blocks,
+    Braces,
     Check,
     Copy,
     Gauge,
@@ -423,6 +445,7 @@ const componentsHref = computed(() =>
     withBase(`${localePrefix.value}/docs/components`),
 );
 const baseHref = computed(() => withBase("/base/"));
+const shellHref = computed(() => withBase(`${localePrefix.value}/shell/`));
 const docsHref = computed(() => withBase(`${localePrefix.value}/docs/`));
 const searchHref = computed(() =>
     withBase(`${localePrefix.value}/docs/components`),
@@ -559,10 +582,10 @@ const copy = computed(() =>
                       apis: ["Theme", "ThemeColor", "ActiveTheme"],
                   },
               ],
-              chooseKicker: "两层架构，一个生态",
+              chooseKicker: "三个层次，一个生态",
               chooseTitle: "决定由谁掌控视觉系统。",
               chooseDescription:
-                  "使用 gpui-component 保持统一风格，或基于 gpui-base 构建并拥有自己的设计系统。",
+                  "使用 gpui-component 保持统一风格，基于 gpui-base 构建自己的设计系统，或用 gpui-shell 把应用层写成 JavaScript。",
               shipTitle: "保持风格统一",
               shipDescription:
                   "gpui-component 提供完整、成熟且开箱即用的视觉与交互系统。",
@@ -581,6 +604,15 @@ const copy = computed(() =>
                   "视觉表达 100% 自主",
               ],
               startBase: "阅读 gpui-base 文档",
+              scriptTitle: "用脚本写应用层",
+              scriptDescription:
+                  "应用代码用 JavaScript 编写，运行在 QuickJS 上；渲染、布局与系统能力仍然留在 Rust。",
+              scriptPoints: [
+                  "改一行，存盘，立刻看到",
+                  "呈现权完全在脚本一侧",
+                  "默认不授予任何系统能力",
+              ],
+              startShell: "了解 gpui-shell",
               principleKicker: "设计原则",
               principleLead: "行为属于基础层。",
               principleTail: "视觉属于应用。",
@@ -656,10 +688,10 @@ const copy = computed(() =>
                       apis: ["Theme", "ThemeColor", "ActiveTheme"],
                   },
               ],
-              chooseKicker: "Two layers. One ecosystem.",
+              chooseKicker: "Three layers. One ecosystem.",
               chooseTitle: "Choose who owns the visual system.",
               chooseDescription:
-                  "Use gpui-component for a coherent product, or build and own your design system on gpui-base.",
+                  "Use gpui-component for a coherent product, build and own your design system on gpui-base, or write the application layer in JavaScript with gpui-shell.",
               shipTitle: "Keep the product coherent",
               shipDescription:
                   "gpui-component provides a complete, polished visual and interaction system ready to ship.",
@@ -678,6 +710,15 @@ const copy = computed(() =>
                   "100% visual ownership",
               ],
               startBase: "Read the gpui-base docs",
+              scriptTitle: "Script the application layer",
+              scriptDescription:
+                  "Application code in JavaScript on QuickJS, while rendering, layout and system capabilities stay in Rust.",
+              scriptPoints: [
+                  "Change a line, save, see it",
+                  "The script owns presentation",
+                  "No capability granted by default",
+              ],
+              startShell: "Explore gpui-shell",
               principleKicker: "Principle",
               principleLead: "Behavior belongs to the foundation.",
               principleTail: "Presentation belongs to the application.",
@@ -1522,7 +1563,7 @@ html[lang^="zh"] .section-kicker {
 
 .paths__grid {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 1.25rem;
 }
 
@@ -1759,6 +1800,12 @@ html[lang^="zh"] .section-kicker {
     }
 
     .caps__grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 1180px) {
+    .paths__grid {
         grid-template-columns: repeat(2, 1fr);
     }
 }

@@ -1,6 +1,6 @@
-//! The styling engine behind the Lua fluent chain.
+//! The styling engine behind the the script fluent chain.
 //!
-//! Lua writes exactly what Rust writes — `v_flex():size_full():bg("surface"):p(12)`
+//! the script writes exactly what Rust writes — `v_flex():size_full():bg("surface"):p(12)`
 //! — so this module has to answer one question for any method name a script
 //! calls: is it a style method, and if so how is it applied to a
 //! [`StyleRefinement`]?
@@ -13,7 +13,7 @@
 //!   takes a receiver, so reflection covers precisely the `fn(self) -> Self`
 //!   style methods — hundreds of names (`flex_col`, `items_center`, `gap_2`,
 //!   `rounded_md`, `text_sm`, `size_full`, …) obtained with zero maintenance.
-//!   When upstream GPUI adds one, Lua gets it for free. They are addressed by a
+//!   When upstream GPUI adds one, the script gets it for free. They are addressed by a
 //!   `u16` index so the spec arena can record a style call in two bytes instead
 //!   of a string.
 //! * **Methods that take arguments** cannot be reflected and are bound by hand
@@ -192,7 +192,7 @@ fn table() -> &'static StyleTable {
     })
 }
 
-/// Builds the reflection table once, so the first Lua call does not pay for it.
+/// Builds the reflection table once, so the first script call does not pay for it.
 ///
 /// Idempotent: every accessor in this module initializes on demand anyway, and
 /// `nullary_name` in particular is reached from `SpecArena::debug_tree` in tests
@@ -416,7 +416,7 @@ fn unknown_message(name: &str) -> String {
     }
 }
 
-/// A length as written in Lua, before it is narrowed to what a given method
+/// A length as written in a script, before it is narrowed to what a given method
 /// accepts.
 ///
 /// The three GPUI length types form a hierarchy (`Length` ⊃ `DefiniteLength` ⊃

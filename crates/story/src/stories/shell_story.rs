@@ -248,6 +248,7 @@ fn palette(cx: &mut App) -> NativeValue {
             .field("muted_foreground", theme.muted_foreground.to_hex())
             .field("border", theme.border.to_hex())
             .field("primary", theme.primary.to_hex())
+            .field("primary_hover", theme.primary_hover.to_hex())
             .field("primary_foreground", theme.primary_foreground.to_hex())
             .field("secondary", theme.secondary.to_hex())
             .field("accent", theme.accent.to_hex())

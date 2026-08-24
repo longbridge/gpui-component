@@ -1,6 +1,6 @@
 //! Turns element descriptions into real GPUI elements.
 //!
-//! This runs entirely in Rust: it never calls back into Lua, which is what
+//! This runs entirely in Rust: it never calls back into the script, which is what
 //! makes it possible to benchmark and snapshot-test the render path
 //! independently of the VM.
 

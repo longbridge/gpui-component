@@ -1,4 +1,4 @@
-//! Lua ↔ Rust value conversion.
+//! Script ↔ Rust value conversion.
 //!
 //! Every coercion lives here so the rules are defined once: a bare number is
 //! pixels, a percent string is a relative length, a `#rrggbb` string is a color,

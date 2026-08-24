@@ -1,4 +1,4 @@
-//! The shell's default semantic palette, and token-name resolution for Lua.
+//! Semantic palette installation, and token-name resolution for scripts.
 //!
 //! `gpui_base::Theme` carries a [`SemanticThemeTokens`] whose [`ColorTokens`]
 //! derives `Default`, so every color starts as `Hsla { h: 0, s: 0, l: 0, a: 0 }`
@@ -56,7 +56,7 @@ pub enum ThemeMode {
 }
 
 impl ThemeMode {
-    /// The name Lua uses, in `gpui.set_theme("dark")`.
+    /// The name a script uses, in `gpui.set_theme("dark")`.
     pub fn as_str(self) -> &'static str {
         match self {
             ThemeMode::Light => "light",
@@ -64,7 +64,7 @@ impl ThemeMode {
         }
     }
 
-    /// Parses a Lua-supplied name. `None` is a caller error, not a host bug, so
+    /// Parses a script-supplied name. `None` is a caller error, not a host bug, so
     /// the binding layer can report the offending string.
     pub fn from_name(name: &str) -> Option<Self> {
         match name {
@@ -124,7 +124,7 @@ pub fn mode(cx: &App) -> ThemeMode {
 /// Resolves a semantic color token name (`"background"`, `"primary_foreground"`,
 /// ...) against the installed palette.
 ///
-/// Reads the ambient `App` through [`crate::scope::with_current_app`], so Lua
+/// Reads the ambient `App` through [`crate::scope::with_current_app`], so the script
 /// bindings can resolve `:bg("surface")` without threading a context through
 /// the value conversion layer. Returns `None` outside any call scope, before
 /// [`init`], or for an unknown name — resolving to a transparent color instead
@@ -146,7 +146,7 @@ pub fn token_radius(name: &str) -> Option<Pixels> {
 }
 
 /// Every valid color token name, for error messages and for exposing the theme
-/// to Lua.
+/// to a script.
 pub fn color_token_names() -> &'static [&'static str] {
     COLOR_TOKEN_NAMES
 }
@@ -507,7 +507,7 @@ mod tests {
     #[test]
     fn token_lookup_is_none_outside_a_call_scope() {
         // No `CallScope` is open on a test thread, so there is no ambient `App`
-        // and a Lua-facing lookup must decline rather than invent a color.
+        // and a script-facing lookup must decline rather than invent a color.
         assert!(token_color("background").is_none());
         assert!(token_spacing("md").is_none());
         assert!(token_radius("lg").is_none());

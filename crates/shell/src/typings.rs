@@ -379,6 +379,11 @@ const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; 
     selected(value: boolean): Element;
     /** The controlled value of a `Checkbox` or `Switch`. */
     checked(value: boolean): Element;
+    /**
+     * What a screen reader announces. An icon-only control has no text of its
+     * own and announces nothing without it.
+     */
+    accessibility_label(description: string): Element;
 
     /**
      * Styles applied while the pointer is over the element. `declare` receives
@@ -416,6 +421,66 @@ const CONSTRUCTORS: &str = r#"
   export const Checkbox: ComponentType;
   /** A controlled switch. No styling. */
   export const Switch: ComponentType;
+
+  /**
+   * A vector image from the application's own directory.
+   *
+   * The path resolves against the application root — the directory passed to
+   * gpui-shell — not against the file that asked for it, the way a web
+   * application's public directory works. It inherits the surrounding text
+   * color unless it sets its own.
+   */
+  export function svg(path: string): Element;
+
+  /**
+   * Retained text state, created once and kept on the view.
+   *
+   * `InputState.new(...)` needs a live host call, so it belongs in `init` or in
+   * an event handler — never in `render`.
+   */
+  export interface InputStateHandle {
+    value(): string;
+    set_value(next: string): void;
+    /** `change`, `submit`, `focus` or `blur`. */
+    on(event: "change" | "submit" | "focus" | "blur", handler: (event: any, cx: Context) => void): boolean;
+    release(): boolean;
+  }
+
+  export interface InputStateType {
+    new: (options?: { placeholder?: string; value?: string }) => InputStateHandle;
+  }
+
+  export const InputState: InputStateType;
+
+  export interface InputType {
+    new: (state: InputStateHandle) => Element;
+  }
+
+  /** The frame around retained text state. */
+  export const Input: InputType;
+
+  /** The theme the host installed. Read-only. */
+  export interface Theme {
+    colors: Record<ColorToken, string>;
+    spacing: Record<string, number>;
+    radius: Record<string, number>;
+    mode: "light" | "dark";
+    is_dark: boolean;
+  }
+
+  export function theme(): Theme;
+  /** Switches palette. Returns whether anything changed. */
+  export function set_theme(mode: "light" | "dark"): boolean;
+  /**
+   * States the script API version this application needs, at the first line,
+   * where a mismatch is still cheap. Throws when the runtime cannot satisfy it.
+   */
+  export function require_api(version: string): string;
+  /**
+   * A module the host registered in Rust. Throws when no such module exists,
+   * naming the ones that do.
+   */
+  export function native(module: string): Record<string, (...args: any[]) => any>;
 "#;
 
 const CAPABILITIES: &str = r#"
@@ -552,6 +617,7 @@ mod tests {
         "disabled",
         "selected",
         "checked",
+        "accessibility_label",
         "hover",
         "active",
         "focus",

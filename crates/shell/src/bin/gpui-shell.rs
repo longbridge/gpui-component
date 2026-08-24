@@ -282,22 +282,10 @@ fn run(arguments: Arguments) {
             install_palette(cx);
 
             if arguments.is_development() {
-                // TODO(wiring): `sandbox` is a private module inside
-                // `engine::quickjs`, so the relaxations are unreachable from here.
-                // The library needs an engine-agnostic wrapper — a
-                // `gpui_shell::set_development_mode(bool)` in `lib.rs` that
-                // forwards to `engine::quickjs::sandbox::set_development_mode` under
-                // `#[cfg(feature = "quickjs")]` and is a no-op for the Lua engine —
-                // rather than `pub use engine::quickjs::sandbox`, which would
-                // publish an engine-specific path across a seam the crate is built
-                // to keep closed. It must run before `ShellRuntime::new`, because
-                // the policy is read when the context is created.
-                //
-                // gpui_shell::set_development_mode(true);
-                tracing::warn!(
-                    "`--dev` is not wired up yet: the sandbox relaxations stay off, \
-                 only source watching is enabled"
-                );
+                // Before `ShellRuntime::new`: the policy is read when the
+                // context is created.
+                gpui_shell::set_development_mode(true);
+                tracing::debug!("development mode: eval and the built-in prototypes are open");
             }
 
             let runtime = match ShellRuntime::new() {

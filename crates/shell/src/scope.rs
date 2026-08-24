@@ -1,16 +1,16 @@
-//! Host context that is valid only for the duration of one Rust → Lua call.
+//! Host context that is valid only for the duration of one Rust → the script call.
 //!
-//! GPUI hands out `&mut Window` and `&mut App` as borrows. Lua userdata outlives
+//! GPUI hands out `&mut Window` and `&mut App` as borrows. the script userdata outlives
 //! any borrow, so a `cx` captured during one call and used from a later timer
 //! would point at a dead stack frame. [`CallScope`] turns "am I inside a legal
 //! host call?" into a runtime-checkable fact: every entry point pushes a frame
-//! with a fresh generation, and the Lua-side `cx` only carries that generation.
+//! with a fresh generation, and the the script-side `cx` only carries that generation.
 //!
 //! # Safety
 //!
 //! The raw pointers below are sound because:
 //!
-//! - the Lua VM and GPUI's `App` are both main-thread only, so no other thread
+//! - the the script VM and GPUI's `App` are both main-thread only, so no other thread
 //!   can observe the stack;
 //! - frames are strictly last-in-first-out, enforced by [`CallScopeGuard`];
 //! - a frame's pointers are only reachable while its guard is alive.
@@ -76,7 +76,7 @@ impl Drop for CallScopeGuard {
     }
 }
 
-/// Opens a scope. The returned generation is what the Lua-side `cx` carries.
+/// Opens a scope. The returned generation is what the script-side `cx` carries.
 pub fn enter(
     window: &mut Window,
     app: &mut App,
@@ -114,7 +114,7 @@ pub fn current_phase() -> Option<ScopePhase> {
 
 /// Runs `f` with the innermost scope's `App`, whatever its generation.
 ///
-/// Used by conversions that need to read globals (theme tokens) while a Lua
+/// Used by conversions that need to read globals (theme tokens) while a script
 /// call is in progress. Returns `None` outside any scope.
 pub fn with_current_app<R>(f: impl FnOnce(&mut App) -> R) -> Option<R> {
     let app = STACK.with(|stack| stack.borrow().last().map(|frame| frame.app));
@@ -142,7 +142,7 @@ pub fn current_view() -> Option<Entity<ScriptView>> {
 
 /// Runs `f` with the innermost scope's context, if `generation` is still current.
 ///
-/// A stale generation is a programming error in the Lua code, not a host bug, so
+/// A stale generation is a programming error in the script, not a host bug, so
 /// it produces a descriptive error rather than a panic.
 pub fn with_context<R>(
     generation: u64,
@@ -159,13 +159,13 @@ pub fn with_context<R>(
     match pointers {
         // SAFETY: see the module header. The frame is the innermost one, its
         // guard is therefore still alive, and nothing else can be holding these
-        // borrows on this thread while Lua is running.
+        // borrows on this thread while the script is running.
         Some((window, app)) => Ok(f(unsafe { &mut *window }, unsafe { &mut *app })),
         None => Err(StaleContext),
     }
 }
 
-/// The Lua code used a `cx` that belongs to a call which has already returned.
+/// The script used a `cx` that belongs to a call which has already returned.
 #[derive(Debug)]
 pub struct StaleContext;
 

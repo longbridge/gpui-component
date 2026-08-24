@@ -1,7 +1,7 @@
-//! GPUI Shell — a Lua application runtime built on `gpui-base`.
+//! GPUI Shell — a scriptable application runtime built on `gpui-base`.
 //!
 //! The host owns rendering, layout, text editing, virtualization and system
-//! capabilities; Lua owns composition, presentation and business logic. See
+//! capabilities; the script owns composition, presentation and business logic. See
 //! `docs/gpui-shell.md` for the design this implements.
 
 pub mod assets;
@@ -82,7 +82,7 @@ pub fn set_development_mode(_enabled: bool) {}
 /// Initializes the base layer, the shell's default semantic tokens, and the
 /// style reflection table.
 ///
-/// Must be called once at application startup, before any Lua runs.
+/// Must be called once at application startup, before any script runs.
 pub fn init(cx: &mut App) {
     gpui_base::init(cx);
     theme::init(cx);

@@ -91,16 +91,20 @@ export default class TodoList extends View {
     const count = this.completed;
     if (count === 0) return;
 
+    // Anything the dialog's own `init` should see rides in `props`; the rest of
+    // the object is how the dialog behaves, not what it shows.
     cx.open_dialog(ConfirmClear, {
-      count,
-      onConfirm: () => {
-        this.items = this.items.filter((item) => !item.done);
-        this.persisted = save(this.items);
-        cx.toast({
-          title: `Deleted ${count} ${count === 1 ? "item" : "items"}`,
-          level: "info",
-          id: "cleared",
-        });
+      props: {
+        count,
+        onConfirm: (dialogCx) => {
+          this.items = this.items.filter((item) => !item.done);
+          this.persisted = save(this.items);
+          dialogCx.toast({
+            title: `Deleted ${count} ${count === 1 ? "item" : "items"}`,
+            level: "info",
+            id: "cleared",
+          });
+        },
       },
     });
   }

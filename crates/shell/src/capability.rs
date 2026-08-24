@@ -1,4 +1,4 @@
-//! What a Lua application is allowed to do.
+//! What a script application is allowed to do.
 //!
 //! The default set is empty: a script gets no file, process, network, storage or
 //! clipboard access until the host grants it. Grants come from a plugin manifest

@@ -21,10 +21,10 @@ opens a working application — but it is not complete. §26 states plainly what
 exists and what does not.
 
 The crate is under active development, so §26 in particular is a snapshot and
-will need re-checking against the source. At the time of writing, `plugin.rs`
-holds a complete manifest and plugin-manager implementation that `lib.rs` does
-not yet declare as a module, and `dock.rs` is complete on the Rust side with no
-engine binding above it — both are noted where they appear below.
+will need re-checking against the source. Two modules are complete in Rust with
+nothing above them yet: `dock.rs` has no engine binding, so a script cannot reach
+a panel, and `plugin.rs` compiles and is exported but has no caller, so nothing
+loads a plugin. Both are noted where they appear below.
 
 ---
 
@@ -1561,10 +1561,14 @@ no style method collides with an element method, that every parametric method is
 classified, that every color token is in the union, and that no internal name
 (`__id`, `__apply`, `__gpui`) leaks into the declarations.
 
-Those tests do not catch a *missing* declaration, and there are several: `svg`,
-`Input`, `InputState`, `accessibility_label`, and every overlay method on `cx`
-are bound at runtime and absent from `gpui.d.ts`. Running `// @ts-check` against
-the generated declarations would flag the shipped example.
+Those tests do not catch a *missing* declaration, and there are several. `svg`,
+`Input`, `InputState`, and `accessibility_label` are bound at runtime and absent
+from the declarations; so is every overlay method on `cx` — the declared
+`Context` carries only `notify` and `phase` — and so are `native`, `theme`,
+`set_theme`, and `require_api`. Running `// @ts-check` against the generated
+declarations would flag the shipped example. The tests assert that what *is*
+declared matches the dispatcher; nothing asserts the converse, and a check that
+every `MODULE_EXPORTS` name appears in the output would close it.
 
 ### 14.6 A `gpui-component` module, later
 
@@ -1788,7 +1792,7 @@ Everything here is denied by default and gated on the capability set in force
 `capability.rs`; the engine holds only the argument shuffling.
 
 ```js
-import { fs, store, clipboard, log, process } from "gpui";
+import { fs, store, clipboard, log, process, native } from "gpui";
 ```
 
 Two rules keep this honest. **There is one path resolver:** every filesystem
@@ -1995,10 +1999,10 @@ plugin's code runs. That is the whole reason a manifest exists.
 `plugin.rs` implements it: manifest parsing with a generated JSON Schema,
 discovery, load and unload, per-plugin capabilities and data directories, and
 activation. `plugin_api.rs` implements the version check behind
-`gpui.require_api("1.0")`. **`plugin_api` is wired into `lib.rs` and reachable
-from script; `plugin.rs` is not yet declared as a module**, so nothing calls the
-manager. The rest of this section describes what it does, because the shape is
-what the design is about.
+`gpui.require_api("1.0")`, which is reachable from script. **`PluginManager`
+itself has no caller** — neither the binary nor the engine uses it, so nothing
+yet loads a plugin. The rest of this section describes what it does, because the
+shape is what the design is about.
 
 ### 18.1 The manifest
 
@@ -2673,7 +2677,9 @@ reopened without new information.
 
 ## 26. What Is Built and What Is Not
 
-### Built
+This is the section most likely to be out of date; check it against the source.
+
+### Built and reachable from script
 
 The engine seam with QuickJS as default and a compilable Lua fallback, enforced
 by `compile_error!`. The render protocol: descriptions into `SpecArena`,
@@ -2683,18 +2689,31 @@ generation checks, and the crate's only `unsafe`. Retained state by handle, with
 store-owned subscriptions, for `InputState`. The full style surface — 3,148
 reflected no-argument methods, 57 hand-bound parametric ones, 9 hand-added font
 weights — with Levenshtein suggestions and a two-prototype diagnostic strategy.
-The default semantic palette in light and dark. Callbacks with per-pass lifetime
-and generation-checked dispatch. State styles for hover, active, and focus.
+The default semantic palette in light and dark, readable through `gpui.theme()`
+and switchable with `gpui.set_theme()`. Callbacks with per-pass lifetime and
+generation-checked dispatch. State styles for hover, active, and focus.
 Asynchrony: promises bridged to GPUI tasks, job-queue draining, `spawn`,
 `sleep`, `timer.after`/`every`, `with_cx`, owner-bound cancellation, and
 unhandled-rejection reporting. `ShellRoot` with the dialog stack, one sheet, the
-toast stack, focus restoration, and Tab navigation. System capabilities for
-`fs`, `store`, `clipboard`, `log`, and `process`, all default-denied through one
-path resolver. The sandbox: module confinement, compiler withholding, frozen
-prototypes, absent-global stubs, interrupt and memory limits. Hot reload with
-per-generation module invalidation. `gpui.d.ts` generation from the dispatch
-tables. The CLI, with `check` and `types`. The measured benchmark on both
-engines.
+toast stack, focus restoration, and Tab navigation, reached through `cx`. System
+capabilities for `fs`, `store`, `clipboard`, `log`, and `process`, all
+default-denied through one path resolver. Host-registered native modules through
+`native(name)`. `gpui.require_api` and the script API version. The sandbox:
+module confinement, compiler withholding, frozen prototypes, absent-global
+stubs, interrupt and memory limits. Hot reload with per-generation module
+invalidation. `gpui.d.ts` generation from the dispatch tables. The CLI, with
+`check` and `types`. The measured benchmark on both engines.
+
+### Built in Rust, with no engine binding above it
+
+The dock: `ScriptPanel`, `ScriptDockSkin`, the three renderer traits forwarded
+to a `DockChrome`, panel-name interning, registry round-trip, and the
+JSON projections of each renderer context (§15). A host can drive all of it; a
+script cannot reach any of it.
+
+The plugin model: manifest parsing and its generated schema, discovery, load and
+unload, per-plugin capabilities and data directories, activation (§18). It
+compiles and is exported, and no caller uses it.
 
 ### Not built
 
@@ -2703,15 +2722,15 @@ engines.
 Tree, Table, VirtualList, Radio, Toggle, Popover, Tooltip, or Textarea, and
 therefore no virtualization, which is the largest unrealized performance win.
 Semantic state styles (checked, selected, disabled) with base's precedence rules.
-Actions and key bindings. Animation. `gpui.theme()` and `gpui.set_theme()`.
-`gpui.open_window` and multi-window applications. `gpui.http`. Native modules.
-The binding table and the rustdoc-JSON drift check. Every part of the dock and
-panel integration. Every part of the plugin model: manifest, contribution
-registry, loader, authorization UI. Distribution, packaging, and API versioning.
-`--dev`'s sandbox relaxations and the development-mode marker. The
-intrinsic-level `Eval` withholding. DevTools and `gc_stats`. State preservation
-across a reload. A shipped preset module. The `gpui-component` binding registry.
-`console`.
+Actions and key bindings. Animation. `gpui.open_window` and multi-window
+applications. `gpui.http`. A contribution registry — no `gpui.command`,
+`gpui.keymap`, `gpui.register_panel`, or `gpui.register_theme`. The capability
+authorization model: prompting, persistence, host policy, and re-asking on
+upgrade. Per-plugin grants that can coexist. The binding table and the
+rustdoc-JSON drift check. Packaging and distribution. `--dev`'s sandbox
+relaxations and the development-mode marker. The intrinsic-level `Eval`
+withholding. DevTools and `gc_stats`. State preservation across a reload. A
+shipped preset module. The `gpui-component` binding registry. `console`.
 
 ---
 
@@ -2880,6 +2899,8 @@ crates/shell/                 # gpui-shell — depends on gpui-base + gpui only
         sandbox.rs            #   language trimming · process · limits
         overlay.rs            #   dialog · sheet · toast on the script-side cx
         entity_api.rs         #   the script face of retained state
+        native.rs             #   value conversion for native(name)
+        theme_api.rs          #   theme · set_theme · require_api
       lua.rs                  #   the fallback engine (mlua)
     scope.rs                  # CallScope — the crate's only unsafe module
     spec.rs                   # SpecArena / SpecNode / SpecOp
@@ -2892,6 +2913,10 @@ crates/shell/                 # gpui-shell — depends on gpui-base + gpui only
     entities.rs               # retained state by handle
     runtime.rs                # CallbackArena<T> · root resolution · failure surface
     root.rs                   # ShellRoot
+    dock.rs                   # ScriptPanel · ScriptDockSkin · panel registration
+    native.rs                 # the host-registered native module registry
+    plugin_api.rs             # the script API version and its check
+    plugin.rs                 # manifest · discovery · load/unload  (no caller yet)
     view.rs                   # ScriptView
     assets.rs                 # application-directory asset source
     watch.rs                  # source watching and in-place reload
@@ -2927,6 +2952,10 @@ Following `CLAUDE.md`:
   singular.
 - Bound script method names match Rust exactly, in snake_case, with no camelCase
   renaming (§6.4). Names an author writes follow the host language's convention.
+- One namespace prefix for everything a script contributes to the host, and it
+  names the shell rather than the engine: `shell:<application>/<panel>` (§15).
+  `plugin.rs` still documents it as `script:<id>/<panel>`, which `dock.rs` does
+  not implement; the two should be reconciled before either is public.
 
 A batch of module documentation in `crates/shell/src` still describes the
 runtime as a Lua one — `lib.rs`, `spec.rs`, `scope.rs`, `value.rs`,

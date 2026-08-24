@@ -42,7 +42,7 @@
 //! render pass that is currently building an element tree. Holding no script
 //! handle makes that impossible to express, and [`dispatch`] refuses a nested
 //! call outright so a host that finds another route (pumping GPUI until a view
-//! re-renders, say) gets a diagnosable error instead of undefined behaviour.
+//! re-renders, say) gets a diagnosable error instead of undefined behavior.
 //!
 //! Reading and writing host state is fine, and is the point: a function may
 //! reach for the ambient `App` through [`crate::scope::with_current_app`] and

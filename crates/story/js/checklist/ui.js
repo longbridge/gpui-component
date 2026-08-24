@@ -1,8 +1,8 @@
 // The script half's presentation layer.
 //
-// `gpui-shell` binds `gpui-base`, which ships behaviour and no visual style at
+// `gpui-shell` binds `gpui-base`, which ships behavior and no visual style at
 // all: a Button here has hit testing, focus and hover state, and not one pixel
-// of appearance. So every colour, size and radius below is a decision this file
+// of appearance. So every color, size and radius below is a decision this file
 // makes — that is what "the script owns presentation" means.
 //
 // The decisions are not invented, though. They are read from the host through
@@ -122,7 +122,9 @@ export const action = (id, caption, onClick, options = {}) => {
     .bg(primary ? colors.primary : colors.background)
     .when(disabled, (el) => el.opacity(0.5))
     .when(!disabled, (el) =>
-      el.hover((style) => style.bg(primary ? colors.primary : colors.muted)),
+      el
+        .hover((style) => style.bg(primary ? colors.primary_hover : colors.muted))
+        .on_click(onClick),
     )
     .child(
       text(caption)
