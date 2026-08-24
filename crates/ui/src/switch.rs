@@ -7,13 +7,13 @@ use gpui::{
     px,
 };
 use gpui_base::{Spring, Switch as BaseSwitch, SwitchThumb, SwitchTrack, spring};
-use std::rc::Rc;
+use std::{rc::Rc, time::Duration};
 
 /// Thumb travel motion.
 ///
 /// Critically damped: the thumb slides inside a track it must not leave, so an
 /// overshoot would push it through the border.
-const THUMB_SPRING: Spring = Spring::new(0.18).with_epsilon(0.1);
+const THUMB_SPRING: Spring = Spring::new(Duration::from_millis(180)).with_epsilon(0.1);
 
 /// A Switch element that can be toggled on or off.
 #[derive(IntoElement)]

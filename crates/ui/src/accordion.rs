@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashSet, rc::Rc, sync::Arc};
+use std::{cell::RefCell, collections::HashSet, rc::Rc, sync::Arc, time::Duration};
 
 use gpui::{
     AnyElement, App, AvailableSpace, Bounds, ContentMask, Element, ElementId, GlobalElementId,
@@ -19,7 +19,7 @@ use gpui_base::{
 /// Critically damped, so the panel height never overshoots the measured content
 /// height. A panel toggled again mid-flight reverses from its current velocity
 /// instead of restarting.
-const PANEL_SPRING: Spring = Spring::new(0.2);
+const PANEL_SPRING: Spring = Spring::new(Duration::from_millis(200));
 
 /// Accordion element.
 #[derive(IntoElement)]

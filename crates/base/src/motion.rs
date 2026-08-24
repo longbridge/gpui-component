@@ -202,21 +202,25 @@ where
 /// snapping to a new curve's initial speed.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Spring {
-    response_seconds: f32,
+    response: Duration,
     damping_ratio: f32,
     epsilon: f32,
     travel: bool,
 }
 
 impl Spring {
-    /// Builds a spring that reaches its target in about `response_seconds`
-    /// without overshooting it.
+    /// Builds a spring that reaches its target in about `response` without
+    /// overshooting it.
     ///
-    /// `response_seconds` is the period one full oscillation would take without
-    /// damping; smaller values feel faster.
-    pub const fn new(response_seconds: f32) -> Self {
+    /// `response` is not a duration in the sense [`Transition::new`] means one.
+    /// A spring has no end to schedule: this is the period one full oscillation
+    /// would take without damping, which is the scale the motion is felt at
+    /// rather than the moment it stops. The remaining fraction of a percent
+    /// keeps settling past it, until it is within the tolerance
+    /// [`Self::with_epsilon`] sets.
+    pub const fn new(response: Duration) -> Self {
         Self {
-            response_seconds,
+            response,
             damping_ratio: 1.0,
             epsilon: DEFAULT_SPRING_EPSILON,
             travel: true,
@@ -236,11 +240,11 @@ impl Spring {
 
     /// The physical parameters GPUI integrates.
     ///
-    /// Derived on use rather than stored, so the builder stays `const`:
-    /// recovering a damping ratio from a built config needs a square root,
-    /// which a `const fn` cannot call.
+    /// Derived on use rather than stored, so the builders stay `const`: neither
+    /// `Duration::as_secs_f32` nor the square root that recovers a damping ratio
+    /// from a built config can be called from a `const fn`.
     fn config(&self) -> SpringConfig {
-        let frequency = std::f32::consts::TAU / self.response_seconds;
+        let frequency = std::f32::consts::TAU / self.response.as_secs_f32();
         SpringConfig::new(
             frequency * frequency,
             2.0 * self.damping_ratio * frequency,
@@ -637,13 +641,13 @@ mod tests {
 
     #[gpui::test]
     fn a_spring_adopts_its_first_target_immediately(cx: &mut TestAppContext) {
-        let fixture = SpringFixture::open(cx, Spring::new(0.3));
+        let fixture = SpringFixture::open(cx, Spring::new(Duration::from_millis(300)));
         assert_eq!(*fixture.samples.borrow().first().unwrap(), 0.0);
     }
 
     #[gpui::test]
     fn a_spring_travels_toward_its_target_over_time(cx: &mut TestAppContext) {
-        let fixture = SpringFixture::open(cx, Spring::new(0.3));
+        let fixture = SpringFixture::open(cx, Spring::new(Duration::from_millis(300)));
         assert_eq!(fixture.render(cx, 1.0), 0.0);
 
         let early = fixture.advance(cx, 50, 1.0);
@@ -656,7 +660,7 @@ mod tests {
 
     #[gpui::test]
     fn a_reversed_spring_keeps_its_momentum_before_turning_around(cx: &mut TestAppContext) {
-        let fixture = SpringFixture::open(cx, Spring::new(0.3));
+        let fixture = SpringFixture::open(cx, Spring::new(Duration::from_millis(300)));
         fixture.render(cx, 1.0);
         let reversed_at = fixture.advance(cx, 100, 1.0);
 
@@ -675,7 +679,10 @@ mod tests {
 
     #[gpui::test]
     fn a_bouncy_spring_overshoots_its_target(cx: &mut TestAppContext) {
-        let fixture = SpringFixture::open(cx, Spring::new(0.35).with_damping(0.7));
+        let fixture = SpringFixture::open(
+            cx,
+            Spring::new(Duration::from_millis(350)).with_damping(0.7),
+        );
         fixture.render(cx, 1.0);
         for _ in 0..30 {
             fixture.advance(cx, 16, 1.0);
@@ -692,7 +699,7 @@ mod tests {
 
     #[gpui::test]
     fn a_settled_spring_stops_requesting_frames(cx: &mut TestAppContext) {
-        let fixture = SpringFixture::open(cx, Spring::new(0.3));
+        let fixture = SpringFixture::open(cx, Spring::new(Duration::from_millis(300)));
         fixture.render(cx, 1.0);
         assert_eq!(fixture.pending_frame(cx), 1);
 
@@ -704,7 +711,7 @@ mod tests {
 
     #[gpui::test]
     fn a_spring_that_is_not_travelling_adopts_its_target_on_the_spot(cx: &mut TestAppContext) {
-        let fixture = SpringFixture::open(cx, Spring::new(0.3));
+        let fixture = SpringFixture::open(cx, Spring::new(Duration::from_millis(300)));
         fixture.travel.set(false);
 
         assert_eq!(fixture.render(cx, 1.0), 1.0);
@@ -725,7 +732,10 @@ mod tests {
     #[gpui::test]
     fn reduced_motion_adopts_the_spring_target_without_requesting_a_frame(cx: &mut TestAppContext) {
         cx.update(|cx| cx.set_reduce_motion(true));
-        let fixture = SpringFixture::open(cx, Spring::new(0.35).with_damping(0.7));
+        let fixture = SpringFixture::open(
+            cx,
+            Spring::new(Duration::from_millis(350)).with_damping(0.7),
+        );
         assert_eq!(fixture.render(cx, 1.0), 1.0);
         assert_eq!(fixture.pending_frame(cx), 0);
     }

@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{rc::Rc, time::Duration};
 
 use crate::{
     ActiveTheme, Disableable, IconName, RoleOverride, Selectable, Sizable, Size, icon::IconNamed,
@@ -16,7 +16,7 @@ use gpui_base::{CheckboxIndicator, Spring, spring};
 ///
 /// Critically damped, because an opacity that overshoots would clip at 1 and
 /// come back — a flicker rather than a flourish.
-const MARK_SPRING: Spring = Spring::new(0.2);
+const MARK_SPRING: Spring = Spring::new(Duration::from_millis(200));
 
 /// A Checkbox element.
 #[derive(IntoElement)]

@@ -223,7 +223,9 @@ spring instead:
 let left = gpui_base::spring(
     ("tab-indicator", "left"),
     selected_tab_left,
-    gpui_base::Spring::new(0.25).with_damping(0.85).with_epsilon(0.1),
+    gpui_base::Spring::new(Duration::from_millis(250))
+        .with_damping(0.85)
+        .with_epsilon(0.1),
     window,
     cx,
 );
@@ -248,11 +250,16 @@ drag released it:
 let size = spring(id, target, DOCK_SPRING.with_travel(!resizing), window, cx);
 ```
 
-`Spring::new(response_seconds)` builds one that reaches its target in about that
-long without overshooting it, which is what almost every value wants: a spring
+`Spring::new(response)` builds one that reaches its target in about that long
+without overshooting it, which is what almost every value wants: a spring
 driving an opacity, a measured height, or anything bounded by the geometry
 around it has nowhere to overshoot to. `with_damping` opts a value out where
 passing the target and coming back is the intended effect.
+
+A response is not a duration in the sense `Transition::new` means one. A spring
+has no end to schedule, so this is the scale the motion is felt at rather than
+the moment it stops: the last fraction of a percent keeps settling past it,
+until it is inside the tolerance below.
 
 The settling tolerance is expressed in the target's own units and defaults to a
 normalized `0..1` range; a spring over pixels should coarsen it so the animation

@@ -442,9 +442,8 @@ impl RenderOnce for ToastStack {
         // new layout instead of restarting. Critically damped, because a height
         // or an opacity that overshoots its target reads as a glitch. Geometry
         // settles in pixels, so its tolerance is coarser than the fade's.
-        let response = self.motion.duration.as_secs_f32();
-        let geometry = Spring::new(response).with_epsilon(0.1);
-        let fade = Spring::new(response);
+        let geometry = Spring::new(self.motion.duration).with_epsilon(0.1);
+        let fade = Spring::new(self.motion.duration);
         let stack_height = spring(
             (self.id.clone(), "height"),
             if expanded {
