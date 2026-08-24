@@ -54,12 +54,14 @@ export const button = (id, caption, onClick, options = {}) => {
     .child(text(caption));
 };
 
-/// A text field. Base's Input draws the text and nothing else, so the frame,
-/// the padding and the focus treatment are ours.
+/// A text field.
+///
+/// The runtime frames an input as a centered row that focuses on click; height,
+/// padding, radius and color are still ours, because base picks none of them.
 export const field = (state) =>
   Input.new(state)
     .flex_1()
-    .h(30)
+    .h(32)
     .px(SPACE.md)
     .rounded(6)
     .border(1)

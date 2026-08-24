@@ -7,10 +7,14 @@
 use std::rc::{Rc, Weak};
 
 use gpui::{
-    AnyElement, App, InteractiveElement, IntoElement, ParentElement, Refineable as _, SharedString,
-    StatefulInteractiveElement, StyleRefinement, Styled, Window, div,
+    AnyElement, App, InteractiveElement, IntoElement, MouseButton, ParentElement, Refineable as _,
+    SharedString, StatefulInteractiveElement, StyleRefinement, Styled, Window, div,
 };
-use gpui_base::{Button, Checkbox, CheckboxState, Switch, h_flex, input::Input, v_flex};
+use gpui_base::{
+    Button, Checkbox, CheckboxState, Switch, h_flex,
+    input::{Input, InputBase},
+    v_flex,
+};
 
 use crate::{
     engine::ShellRuntime,
@@ -144,21 +148,41 @@ pub fn materialize(
             finish(switch, refinement, children)
         }
         Component::Input(handle) => {
-            // Base's `Input` renders text and nothing else — no frame, no
-            // padding, no focus treatment. The script's styling therefore lands
-            // on a wrapper, which is also where a focus ring will go when the
-            // binding grows one.
-            let mut frame = div();
+            let Some(state) = crate::entities::input(handle) else {
+                tracing::error!("input handle {handle} is no longer live");
+                return div().into_any_element();
+            };
+
+            // `InputBase` rather than a bare `div`: it is the foundational input
+            // frame, so it carries the input semantics, the focused state style
+            // and the accessibility role that a `div` around a text run does
+            // not. `Input` itself draws the text and nothing else.
+            //
+            // Three defaults are applied before the script's own styling, so a
+            // script can override any of them but does not have to remember
+            // them:
+            //
+            // * a centered row — otherwise the text sits at the top of whatever
+            //   height the frame was given, which is what a missing `h` looks
+            //   like on screen;
+            // * full width, so the editable area is the frame rather than the
+            //   width of the text already in it;
+            // * a click anywhere in the frame focuses the input, because the
+            //   padding is part of the control as far as a user is concerned.
+            let focus_target = state.clone();
+            let mut frame = InputBase::new(("gpui-shell-input", handle))
+                .flex()
+                .items_center()
+                .w_full()
+                .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+                    focus_target.update(cx, |state, cx| state.focus(window, cx));
+                });
+
             frame.style().refine(&refinement);
             frame.extend(children);
-
-            match crate::entities::input(handle) {
-                Some(state) => frame.child(Input::new(&state)).into_any_element(),
-                None => {
-                    tracing::error!("input handle {handle} is no longer live");
-                    frame.into_any_element()
-                }
-            }
+            let frame = with_hover(frame, &states);
+            let frame = with_active_and_focus(frame, &states);
+            frame.child(Input::new(&state)).into_any_element()
         }
     }
 }
