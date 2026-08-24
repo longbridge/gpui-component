@@ -50,6 +50,7 @@ pub mod label;
 pub mod link;
 pub mod list;
 pub mod menu;
+pub mod marker;
 pub mod message;
 pub mod native_menu;
 pub mod notification;

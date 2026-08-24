@@ -21,6 +21,7 @@ collapsed: false
 - [Image](image) - Image display with fallbacks
 - [Kbd](kbd) - Keyboard shortcut display
 - [Label](label) - Text labels for form elements
+- [Marker](marker) - Conversation status and separator marker
 - [Message](message) - Composable chat message structure
 - [Pagination](pagination) - Page navigation controls
 - [Progress](progress) - Progress bars

@@ -17,6 +17,7 @@ collapsed: false
 - [Checkbox](checkbox) - 二元选择控件
 - [Icon](icon) - 图标展示组件
 - [Image](image) - 带回退能力的图片展示
+- [Marker](marker) - 会话状态与分隔标记
 - [Message](message) - 可组合的聊天消息结构
 - [TextView](text-view) - Markdown 与 HTML 文本渲染
 - [Tooltip](tooltip) - 悬浮提示
