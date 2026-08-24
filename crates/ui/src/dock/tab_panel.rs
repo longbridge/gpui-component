@@ -283,7 +283,7 @@ impl TabGroupSkin {
         let control = zoom_control(group, cx);
         let toolbar_zoom = control.is_some_and(|control| control.toolbar_visible());
         let menu_zoom = control.is_some_and(|control| control.menu_visible());
-        let closable = group.can_close();
+        let closable = group.is_closable();
         let buttons = handle.and_then(|handle| handle.toolbar_buttons(window, cx));
         let panel = handle.map(|handle| handle.panel());
 

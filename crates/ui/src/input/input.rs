@@ -439,7 +439,7 @@ impl RenderOnce for Input {
                         menu = menu
                             .menu_with_disabled(
                                 t!("Input.Go to Definition"),
-                                !(enabled && capabilities.can_go_to_definition()),
+                                !(enabled && capabilities.has_definition()),
                                 Box::new(gpui_base::input::GoToDefinition),
                             )
                             .menu_with_disabled(
@@ -451,12 +451,12 @@ impl RenderOnce for Input {
                     }
                     menu.menu_with_disabled(
                         t!("Input.Cut"),
-                        !(editable && capabilities.has_selection()),
+                        !(editable && capabilities.is_copyable()),
                         Box::new(gpui_base::input::Cut),
                     )
                     .menu_with_disabled(
                         t!("Input.Copy"),
-                        !capabilities.has_selection(),
+                        !capabilities.is_copyable(),
                         Box::new(gpui_base::input::Copy),
                     )
                     .menu_with_disabled(

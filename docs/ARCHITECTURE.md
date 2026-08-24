@@ -209,8 +209,8 @@ The shape to use instead:
 Setters and readers must not collide, which decides the naming:
 
 - a type whose fields are all boolean names its setters after the field and its
-  readers `is_`/`has_`/`can_`, matching how elements read — `CalendarItemState`,
-  `InputContextMenuCapabilities`;
+  readers `is_<adjective>`/`has_<noun>`, never `can_`, matching how elements
+  read — `CalendarItemState`, `InputContextMenuCapabilities`;
 - a type carrying non-boolean fields prefixes every setter with `with_`, so the
   readers keep the plain field name — `RenderOptions::with_item_ix` against
   `RenderOptions::item_ix`. This follows `Sizable::with_size`.

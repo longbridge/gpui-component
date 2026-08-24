@@ -580,8 +580,7 @@ For reusable components:
   modifiers or pointer details are meaningful;
 - evolvable behavioral seams use private fields, builders for construction,
   and readers for inspection;
-- boolean readers use `is_`, `has_`, or `can_` where a same-named builder
-  exists;
+- boolean readers use `is_` or `has_` where a same-named builder exists;
 - non-boolean setters use `with_` when readers need the plain field name;
 - explicit compound parts are preferable to inspecting arbitrary descendants;
 - adding reusable behavior must not force a product-level visual choice.
@@ -648,7 +647,7 @@ make ordinary prose sound technical.
 | Fluent property | noun/adjective | `label`, `disabled`, `selected`, `placement` |
 | General non-boolean replacement builder | `with_<field>` | `with_size`, `with_mode` |
 | In-place mutation | `set_<field>` | `set_items`, `set_selected_index` |
-| Boolean reader | `is_` / `has_` / `can_` | `is_open`, `has_selection` |
+| Boolean reader | `is_<adjective>` / `has_<noun>` | `is_open`, `is_closable`, `has_selection` |
 | Plain value reader | field noun | `placement`, `selected_value` |
 | Callback registration | `on_<event or intent>` | `on_click`, `on_open_change` |
 | Rendering a named region | `render_<region>` | `render_toolbar`, `render_content` |
@@ -657,6 +656,13 @@ For new APIs, fluent builders omit `set_` because they consume and return
 `Self`; mutation through `&mut self` uses `set_`. Preserve established public
 names when changing them would cause needless churn. Existing builder names
 such as `set_position` are compatibility exceptions, not patterns for new APIs.
+
+A boolean reader is either `has_<noun>`, when the value holds something, or
+`is_<adjective>`, when it describes a state or a permission. Reach for the
+adjective whenever the action has one: `is_closable` over `can_close`,
+`is_zoomable` over `can_zoom`, `is_copyable` over `can_copy`. When the action
+is a verb phrase with no adjective form, name the thing it needs instead:
+`has_definition`, not `can_go_to_definition`. Do not add new `can_` readers.
 
 Boolean builders may use the field name (`disabled(bool)`) while their readers
 use `is_disabled()`. For a public seam struct containing non-boolean fields,

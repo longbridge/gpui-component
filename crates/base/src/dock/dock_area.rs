@@ -3525,14 +3525,14 @@ mod tests {
         let node = child_node(&area, 0, cx);
         let group = cx.read(|cx| area.read(cx).groups.get(&node).unwrap().entity.clone());
         assert!(
-            cx.read(|cx| group.read(cx).can_close(cx)),
+            cx.read(|cx| group.read(cx).is_closable(cx)),
             "an unlocked group's panel can be closed"
         );
 
         cx.update(|window, cx| area.update(cx, |area, cx| area.set_locked(true, window, cx)));
 
         assert!(
-            !cx.read(|cx| group.read(cx).can_close(cx)),
+            !cx.read(|cx| group.read(cx).is_closable(cx)),
             "the lock reaches every group through the constraints push"
         );
     }
@@ -4000,7 +4000,7 @@ mod tests {
 
     #[gpui::test]
     fn closing_a_tile_removes_its_panel(cx: &mut TestAppContext) {
-        // `TileContext::can_close` would otherwise be a control a skin can
+        // `TileContext::is_closable` would otherwise be a control a skin can
         // draw and never wire up.
         let log = log_of();
         let (area, cx) = setup(cx);
@@ -4036,7 +4036,7 @@ mod tests {
         });
         cx.update(|window, cx| {
             let tile = canvas.read(cx).tiles(cx)[0].clone();
-            assert!(tile.can_close());
+            assert!(tile.is_closable());
             tile.close(window, cx);
         });
         cx.run_until_parked();
@@ -4226,7 +4226,7 @@ mod tests {
         drag_bars.borrow_mut().clear();
         cx.update(|window, cx| {
             let tile = canvas.read(cx).tiles(cx)[0].clone();
-            assert!(tile.can_zoom());
+            assert!(tile.is_zoomable());
             tile.toggle_zoom(window, cx);
         });
         cx.run_until_parked();

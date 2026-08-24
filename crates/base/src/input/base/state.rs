@@ -518,6 +518,13 @@ impl<M: InputModeKind> InputBaseState<M> {
         M::CODE_EDITOR
     }
 
+    /// Whether the user is allowed to copy the selection out.
+    ///
+    /// A masked input keeps its value out of the clipboard.
+    pub fn is_copyable(&self) -> bool {
+        !self.selected_range.is_empty() && !self.masked
+    }
+
     pub fn context_menu_capabilities(&self) -> InputContextMenuCapabilities {
         let (go_to_definition, code_actions) = self.extras.context_menu_capabilities();
         InputContextMenuCapabilities::new()
@@ -525,6 +532,7 @@ impl<M: InputModeKind> InputBaseState<M> {
             .readonly(self.readonly)
             .code_editor(self.is_code_editor())
             .selection(!self.selected_range.is_empty())
+            .masked(self.masked)
             .go_to_definition(go_to_definition)
             .code_actions(code_actions)
     }
@@ -1280,6 +1288,13 @@ impl<M: InputModeKind> InputBaseState<M> {
 
     /// Return the start offset of the previous word.
     pub(super) fn previous_start_of_word(&mut self) -> usize {
+        if self.masked {
+            // The mask replaces every character, so the displayed text has no
+            // word boundaries to move or delete by. Collapse the word to the
+            // whole text.
+            return 0;
+        }
+
         let offset = self.selected_range.start;
         let offset = self.offset_from_utf16(self.offset_to_utf16(offset));
         // FIXME: Avoid to_string
@@ -1293,6 +1308,11 @@ impl<M: InputModeKind> InputBaseState<M> {
 
     /// Return the next end offset of the next word.
     pub(super) fn next_end_of_word(&mut self) -> usize {
+        if self.masked {
+            // See `previous_start_of_word`.
+            return self.text.len();
+        }
+
         let offset = self.cursor();
         let offset = self.offset_from_utf16(self.offset_to_utf16(offset));
         let right_part = self.text.slice(offset..self.text.len()).to_string();
@@ -1910,7 +1930,7 @@ impl<M: InputModeKind> InputBaseState<M> {
     }
 
     pub(super) fn copy(&mut self, _: &Copy, _: &mut Window, cx: &mut Context<Self>) {
-        if self.selected_range.is_empty() {
+        if !self.is_copyable() {
             return;
         }
 
@@ -1919,7 +1939,7 @@ impl<M: InputModeKind> InputBaseState<M> {
     }
 
     pub(super) fn cut(&mut self, _: &Cut, window: &mut Window, cx: &mut Context<Self>) {
-        if self.selected_range.is_empty() {
+        if !self.is_copyable() {
             return;
         }
 
@@ -3897,6 +3917,105 @@ mod tests {
                 );
                 state.undo(&Undo, window, cx);
                 assert_eq!(state.value(), "first line with punctuation!\n");
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_masked_input_keeps_its_value_out_of_the_clipboard(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| state);
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.set_value("hunter2", window, cx);
+                state.set_masked(true, window, cx);
+                state.select_all(window, cx);
+                cx.write_to_clipboard(ClipboardItem::new_string("sentinel".into()));
+
+                state.copy(&Copy, window, cx);
+                assert_eq!(
+                    cx.read_from_clipboard().and_then(|item| item.text()),
+                    Some("sentinel".to_string())
+                );
+
+                // Cut neither copies nor deletes.
+                state.cut(&Cut, window, cx);
+                assert_eq!(state.value(), "hunter2");
+                assert_eq!(
+                    cx.read_from_clipboard().and_then(|item| item.text()),
+                    Some("sentinel".to_string())
+                );
+
+                // Revealing the value restores both.
+                state.set_masked(false, window, cx);
+                state.copy(&Copy, window, cx);
+                assert_eq!(
+                    cx.read_from_clipboard().and_then(|item| item.text()),
+                    Some("hunter2".to_string())
+                );
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_masked_input_collapses_word_boundaries(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| state);
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.set_value("aaa bbb ccc", window, cx);
+                state.set_masked(true, window, cx);
+                state.set_selected_range(7..7, cx);
+
+                // The mask hides word boundaries, so a word delete takes
+                // everything before the caret and leaves the rest.
+                state.delete_previous_word(&DeleteToPreviousWordStart, window, cx);
+                assert_eq!(state.value(), " ccc");
+                assert_eq!(state.selected_range(), 0..0);
+
+                state.delete_next_word(&DeleteToNextWordEnd, window, cx);
+                assert_eq!(state.value(), "");
+
+                // A double click takes the whole value, not one word.
+                state.set_value("aaa bbb ccc", window, cx);
+                state.select_word(9, window, cx);
+                assert_eq!(state.selected_range(), 0..11);
+
+                // Unmasked, the same delete only takes one word.
+                state.set_masked(false, window, cx);
+                state.set_value("aaa bbb ccc", window, cx);
+                state.set_selected_range(11..11, cx);
+                state.delete_previous_word(&DeleteToPreviousWordStart, window, cx);
+                assert_eq!(state.value(), "aaa bbb ");
+
+                state.set_value("aaa bbb ccc", window, cx);
+                state.select_word(9, window, cx);
+                assert_eq!(state.selected_range(), 8..11);
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_masked_input_disables_the_copy_context_menu_items(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| state);
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.set_value("hunter2", window, cx);
+                state.select_all(window, cx);
+                assert!(state.context_menu_capabilities().is_copyable());
+
+                state.set_masked(true, window, cx);
+                let capabilities = state.context_menu_capabilities();
+                assert!(capabilities.is_masked());
+                assert!(capabilities.has_selection());
+                assert!(!capabilities.is_copyable());
             });
         });
     }
