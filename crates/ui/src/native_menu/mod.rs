@@ -104,8 +104,9 @@ impl NativeMenu {
 
     /// Append an item showing `icon` next to its label.
     ///
-    /// Native platform menus load absolute paths from the filesystem and relative paths through
-    /// the application [`gpui::AssetSource`].
+    /// Native platform menus load absolute paths ([`Path::is_absolute`]) from the filesystem,
+    /// and every other path through the application [`gpui::AssetSource`].
+    /// [`crate::IconName`] resolves as an asset and works across all backends.
     /// - **macOS**: loaded into an `NSImage` as a template image, so it tints with the item
     /// text and assigned to the item ([`NSMenuItem::image`]).
     /// - **Windows**: loaded into an `HBITMAP` and set as the item's
@@ -347,52 +348,9 @@ mod tests {
     use crate::IconName;
     use serde::Deserialize;
 
-    #[cfg(any(target_os = "macos", target_os = "windows"))]
-    use std::{borrow::Cow, fs, path::PathBuf};
-
     #[derive(Action, Clone, PartialEq, Deserialize)]
     #[action(namespace = native_menu_tests, no_json)]
     struct TestAction;
-
-    #[cfg(any(target_os = "macos", target_os = "windows"))]
-    struct TestAssetSource(Option<&'static [u8]>);
-
-    #[cfg(any(target_os = "macos", target_os = "windows"))]
-    impl AssetSource for TestAssetSource {
-        fn load(&self, _path: &str) -> gpui::Result<Option<Cow<'static, [u8]>>> {
-            Ok(self.0.map(Cow::Borrowed))
-        }
-
-        fn list(&self, _path: &str) -> gpui::Result<Vec<SharedString>> {
-            Ok(Vec::new())
-        }
-    }
-
-    #[cfg(any(target_os = "macos", target_os = "windows"))]
-    struct TestIconFile(PathBuf);
-
-    #[cfg(any(target_os = "macos", target_os = "windows"))]
-    impl TestIconFile {
-        fn create(path: impl Into<PathBuf>, bytes: &[u8]) -> Self {
-            let path = path.into();
-            assert!(
-                !path.exists(),
-                "test file already exists: {}",
-                path.display()
-            );
-            fs::create_dir_all(path.parent().expect("test file should have a parent"))
-                .expect("test directory should be created");
-            fs::write(&path, bytes).expect("test file should be written");
-            Self(path)
-        }
-    }
-
-    #[cfg(any(target_os = "macos", target_os = "windows"))]
-    impl Drop for TestIconFile {
-        fn drop(&mut self) {
-            let _ = fs::remove_file(&self.0);
-        }
-    }
 
     #[test]
     fn test_native_menu_builder_accepts_icon() {
@@ -444,47 +402,86 @@ mod tests {
         assert!(icon.path_ref().ends_with("inbox.svg"));
     }
 
+    /// Icon resolution is only compiled for the platforms with an OS-native menu.
     #[cfg(any(target_os = "macos", target_os = "windows"))]
-    #[test]
-    fn test_native_menu_icon_asset_resolves_to_bytes() {
-        let icon = Icon::new(IconName::Github);
-        let image = resolve_icon_image(icon.path_ref(), &gpui_component_assets::Assets)
-            .expect("icon asset should resolve");
+    mod icon_resolution {
+        use super::*;
+        use std::{borrow::Cow, fs, path::PathBuf};
 
-        assert_eq!(image.format, ImageFormat::Svg);
-        assert!(!image.bytes.is_empty());
-    }
-
-    #[cfg(any(target_os = "macos", target_os = "windows"))]
-    #[test]
-    fn test_relative_icon_path_only_uses_asset_source() {
         const ASSET_SVG: &[u8] = br#"<svg xmlns="http://www.w3.org/2000/svg"/>"#;
         const FILE_SVG: &[u8] = br#"<svg xmlns="http://www.w3.org/2000/svg"><path/></svg>"#;
 
-        let path: SharedString = "target/native-menu-relative-shadow-test.svg".into();
-        let _file = TestIconFile::create(path.as_ref(), FILE_SVG);
+        struct TestAssetSource(Option<&'static [u8]>);
 
-        let image = resolve_icon_image(&path, &TestAssetSource(Some(ASSET_SVG)))
-            .expect("relative icon should resolve from the asset source");
-        assert_eq!(image.bytes, ASSET_SVG);
+        impl AssetSource for TestAssetSource {
+            fn load(&self, _path: &str) -> gpui::Result<Option<Cow<'static, [u8]>>> {
+                Ok(self.0.map(Cow::Borrowed))
+            }
 
-        assert!(resolve_icon_image(&path, &TestAssetSource(None)).is_none());
-    }
+            fn list(&self, _path: &str) -> gpui::Result<Vec<SharedString>> {
+                Ok(Vec::new())
+            }
+        }
 
-    #[cfg(any(target_os = "macos", target_os = "windows"))]
-    #[test]
-    fn test_absolute_icon_path_loads_from_filesystem() {
-        const ASSET_SVG: &[u8] = br#"<svg xmlns="http://www.w3.org/2000/svg"/>"#;
-        const FILE_SVG: &[u8] = br#"<svg xmlns="http://www.w3.org/2000/svg"><path/></svg>"#;
+        /// A file written into the current directory for the duration of one test.
+        ///
+        /// The shadowing tests need a file the process would find by walking a *relative*
+        /// path, so it has to live in the current directory rather than a temporary one.
+        /// Nothing else is created alongside it, so dropping the file leaves no residue.
+        struct TestIconFile(PathBuf);
 
-        let path = std::env::current_dir()
-            .expect("test current directory should be available")
-            .join("target/native-menu-absolute-path-test.svg");
-        let _file = TestIconFile::create(&path, FILE_SVG);
-        let path: SharedString = path.to_string_lossy().into_owned().into();
+        impl TestIconFile {
+            fn create(path: impl Into<PathBuf>, bytes: &[u8]) -> Self {
+                let path = path.into();
+                assert!(
+                    !path.exists(),
+                    "leftover test file, delete it and re-run: {}",
+                    path.display()
+                );
+                fs::write(&path, bytes).expect("test file should be written");
+                Self(path)
+            }
+        }
 
-        let image = resolve_icon_image(&path, &TestAssetSource(Some(ASSET_SVG)))
-            .expect("absolute icon should resolve from the filesystem");
-        assert_eq!(image.bytes, FILE_SVG);
+        impl Drop for TestIconFile {
+            fn drop(&mut self) {
+                let _ = fs::remove_file(&self.0);
+            }
+        }
+
+        #[test]
+        fn test_native_menu_icon_asset_resolves_to_bytes() {
+            let icon = Icon::new(IconName::Github);
+            let image = resolve_icon_image(icon.path_ref(), &gpui_component_assets::Assets)
+                .expect("icon asset should resolve");
+
+            assert_eq!(image.format, ImageFormat::Svg);
+            assert!(!image.bytes.is_empty());
+        }
+
+        #[test]
+        fn test_relative_icon_path_only_uses_asset_source() {
+            let path: SharedString = "native-menu-relative-shadow-test.svg".into();
+            let _file = TestIconFile::create(path.as_ref(), FILE_SVG);
+
+            let image = resolve_icon_image(&path, &TestAssetSource(Some(ASSET_SVG)))
+                .expect("relative icon should resolve from the asset source");
+            assert_eq!(image.bytes, ASSET_SVG);
+
+            assert!(resolve_icon_image(&path, &TestAssetSource(None)).is_none());
+        }
+
+        #[test]
+        fn test_absolute_icon_path_loads_from_filesystem() {
+            let path = std::env::current_dir()
+                .expect("test current directory should be available")
+                .join("native-menu-absolute-path-test.svg");
+            let _file = TestIconFile::create(&path, FILE_SVG);
+            let path: SharedString = path.to_string_lossy().into_owned().into();
+
+            let image = resolve_icon_image(&path, &TestAssetSource(Some(ASSET_SVG)))
+                .expect("absolute icon should resolve from the filesystem");
+            assert_eq!(image.bytes, FILE_SVG);
+        }
     }
 }
