@@ -451,12 +451,12 @@ impl RenderOnce for Input {
                     }
                     menu.menu_with_disabled(
                         t!("Input.Cut"),
-                        !(editable && capabilities.has_selection()),
+                        !(editable && capabilities.can_copy()),
                         Box::new(gpui_base::input::Cut),
                     )
                     .menu_with_disabled(
                         t!("Input.Copy"),
-                        !capabilities.has_selection(),
+                        !capabilities.can_copy(),
                         Box::new(gpui_base::input::Copy),
                     )
                     .menu_with_disabled(

@@ -27,6 +27,7 @@ pub struct InputContextMenuCapabilities {
     readonly: bool,
     code_editor: bool,
     selection: bool,
+    masked: bool,
     go_to_definition: bool,
     code_actions: bool,
 }
@@ -54,6 +55,12 @@ impl InputContextMenuCapabilities {
     /// Set whether the input has a non-empty selection.
     pub fn selection(mut self, selection: bool) -> Self {
         self.selection = selection;
+        self
+    }
+
+    /// Set whether the input renders its value masked.
+    pub fn masked(mut self, masked: bool) -> Self {
+        self.masked = masked;
         self
     }
 
@@ -89,6 +96,18 @@ impl InputContextMenuCapabilities {
 
     pub fn has_selection(&self) -> bool {
         self.selection
+    }
+
+    pub fn is_masked(&self) -> bool {
+        self.masked
+    }
+
+    /// Returns true if the selection may leave the input as plain text.
+    ///
+    /// A masked input keeps its value out of the clipboard, so both Copy and
+    /// Cut are unavailable while the value is hidden.
+    pub fn can_copy(&self) -> bool {
+        self.selection && !self.masked
     }
 
     pub fn can_go_to_definition(&self) -> bool {

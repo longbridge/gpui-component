@@ -13,8 +13,17 @@ impl<M: InputModeKind> InputBaseState<M> {
     ///
     /// The offset is the UTF-8 offset.
     pub(super) fn select_word(&mut self, offset: usize, _: &mut Window, cx: &mut Context<Self>) {
-        let Some(range) = TextSelector::word_range(&self.text, offset) else {
-            return;
+        // A masked value renders as one unbroken run of mask characters, so it
+        // has no word boundaries to select by. Take all of it instead, the way
+        // `<input type="password">` does, rather than let the selection
+        // highlight reveal where the words are.
+        let range = if self.masked {
+            0..self.text.len()
+        } else {
+            let Some(range) = TextSelector::word_range(&self.text, offset) else {
+                return;
+            };
+            range
         };
 
         self.undo_manager.break_transaction_coalescing();
