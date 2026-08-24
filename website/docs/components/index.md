@@ -24,6 +24,7 @@ collapsed: false
 - [Label](label) - Text labels for form elements
 - [Marker](marker) - Conversation status and separator marker
 - [Message](message) - Composable chat message structure
+- [MessageScroller](message-scroller) - Tail-following virtualized message list
 - [Pagination](pagination) - Page navigation controls
 - [Progress](progress) - Progress bars
 - [Radio](radio) - Single selection from multiple options

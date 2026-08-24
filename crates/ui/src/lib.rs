@@ -53,6 +53,7 @@ pub mod list;
 pub mod menu;
 pub mod marker;
 pub mod message;
+pub mod message_scroller;
 pub mod native_menu;
 pub mod notification;
 pub mod pagination;
