@@ -220,7 +220,7 @@ base 的接口因为"不承载视觉"而天然更窄、更稳定。第一期绑 
 | `crates/ui` | **无。** 第一期不依赖 |
 | `crates/macros` | 可选新增绑定派生宏（§14.3） |
 | 新增 `crates/shell` | 运行时全部实现（`gpui-shell`） |
-| 新增 `examples/js_checklist` | 最小示例，符合既有 `examples/*` 约定 |
+| 新增 `examples/js_todolist` | 最小示例，符合既有 `examples/*` 约定 |
 
 ### 4.5 100% 向后兼容
 
@@ -403,7 +403,7 @@ export default class Counter extends View {
 2. **机械转换在这批名字上没有良定义。** `items_center` → `itemsCenter` 是清楚的，`gap_2` → `gap2` 还是 `gap_2`？`text_3xl` → `text3xl` 还是 `text3Xl`？`rounded_tl` → `roundedTl` 还是 `roundedTL`？带数字段与双字母缩写的名字上，任何一条规则都会在某几十个名字上给出别扭结果，而这些名字每天都要写。
 3. **一件事只有一种写法（§6.4 末尾的约定）。** 同时提供两种拼写，会立刻分裂示例、类型声明、文档与模型生成的代码——而"两套等价写法"正是本文一贯拒绝的东西（§8.2 方案 C、§13.2 的 `class` 字符串）。
 
-代价也如实说：JS 作者第一次看到 `.items_center()` 会觉得不像 JS；同一份文件里于是有两种命名风格——凡是绑定来的名字是 snake_case，凡是作者自己写的（`this.visibleItems()`、`onSubmit`）是 camelCase。`examples/js_checklist` 就是这个样子，读下来并不刺眼，但这是审美判断，不是论证。
+代价也如实说：JS 作者第一次看到 `.items_center()` 会觉得不像 JS；同一份文件里于是有两种命名风格——凡是绑定来的名字是 snake_case，凡是作者自己写的（`this.visibleItems()`、`onSubmit`）是 camelCase。`examples/js_todolist` 就是这个样子，读下来并不刺眼，但这是审美判断，不是论证。
 
 **如果将来决定改**：在原型构建处（`crates/shell/src/engine/quickjs.rs` 的 prelude 里那句 `for (const name of __styleNames) define(name)`）加一个名字改写函数即可，一行的事，两种拼写也可以同时装上。真正不可逆的是文档与生态里已经写下的那一批调用点，所以现在就要定。
 
@@ -1036,7 +1036,7 @@ button(Button.new("save"), { variant: "primary", size: "sm" }).child(text("Save"
 
 三条纪律：
 
-1. **它是脚本源码**，随包发布在 `crates/shell/js/`，应用可以整体替换或 fork；`examples/js_checklist/counter.js` 里那个十几行的 `button` 辅助函数就是它的雏形；
+1. **它是脚本源码**，随包发布在 `crates/shell/js/`，应用可以整体替换或 fork；`examples/js_todolist/counter.js` 里那个十几行的 `button` 辅助函数就是它的雏形；
 2. **Rust 侧不得内置任何视觉决策**（§5.6），否则等于在 base 之上又造了一套不受控的视觉系统；
 3. 它**不是** `gpui-component` 的复刻，也不承诺与之视觉一致——需要产品视觉的应用等 §14.6。
 
@@ -1882,7 +1882,7 @@ wasm 目标（QuickJS 与 Lua 5.4 都可编，届时比一次体积与启动时�
 
 ### 附录 A：完整示例应用（第一期，呈现权在脚本）
 
-`examples/js_checklist/main.js` 的完整形态（M2 之后，窗口由脚本打开）：
+`examples/js_todolist/main.js` 的完整形态（M2 之后，窗口由脚本打开）：
 
 ```js
 import { gpui, View, div, h_flex, v_flex, text, Button, Checkbox, Input, InputState, VirtualList }
@@ -2028,7 +2028,7 @@ crates/shell/                 # gpui-shell（第一期只依赖 gpui-base + gpui
   lua/                        # 同上，Lua 引擎那一份
   types/                      # 生成的 .d.ts（与 LuaCATS）
   tests/                      # render 端到端 + suite/（跨引擎行为套件，§22.3）
-examples/js_checklist/            # 最小示例（JS）
+examples/js_todolist/            # 最小示例（JS）
 examples/lua_hello/           # 同一个示例的 Lua 版，用于验证退路
 ```
 
