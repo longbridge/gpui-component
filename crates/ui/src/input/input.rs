@@ -997,4 +997,81 @@ mod tests {
             assert_eq!(cx.update(|window, cx| window.focused_input(cx)), None);
         }
     }
+
+    #[gpui::test]
+    fn focused_input_registry_ignores_input_removed_while_focused(cx: &mut gpui::TestAppContext) {
+        use crate::{Root, WindowExt as _};
+        use gpui::{AppContext as _, Render};
+
+        struct Probe {
+            input: Entity<InputState>,
+            show_input: bool,
+            other: gpui::FocusHandle,
+        }
+        impl Render for Probe {
+            fn render(&mut self, _: &mut Window, _: &mut gpui::Context<Self>) -> impl IntoElement {
+                let base = div().child(div().track_focus(&self.other));
+                if self.show_input {
+                    base.child(Input::new(&self.input))
+                } else {
+                    base
+                }
+            }
+        }
+
+        cx.update(crate::init);
+        let mut input = None;
+        let mut other_focus = None;
+        let mut probe_entity = None;
+        let window = cx.update(|cx| {
+            cx.open_window(Default::default(), |window, cx| {
+                let state = cx.new(|cx| InputState::new(window, cx));
+                input = Some(state.clone());
+                let other = cx.focus_handle();
+                other_focus = Some(other.clone());
+                let probe = cx.new(|_| Probe {
+                    input: state,
+                    show_input: true,
+                    other,
+                });
+                probe_entity = Some(probe.clone());
+                cx.new(|cx| Root::new(probe, window, cx))
+            })
+            .unwrap()
+        });
+        let input: AnyInputState = input.unwrap().into();
+        let other_focus = other_focus.unwrap();
+        let probe = probe_entity.unwrap();
+        let mut cx = gpui::VisualTestContext::from_window(window.into(), cx);
+
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+        cx.update(|window, cx| input.focus_handle(cx).focus(window, cx));
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+        assert_eq!(
+            cx.update(|window, cx| window.focused_input(cx)),
+            Some(input.clone())
+        );
+
+        // Remove the input from the tree while it holds focus and move focus
+        // elsewhere in the same update (e.g. closing a sidebar containing the
+        // input) — the input never re-renders to unregister itself.
+        cx.update(|window, cx| {
+            probe.update(cx, |probe, cx| {
+                probe.show_input = false;
+                cx.notify();
+            });
+            other_focus.focus(window, cx);
+        });
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+        assert!(!cx.update(|window, cx| window.has_focused_input(cx)));
+        assert_eq!(cx.update(|window, cx| window.focused_input(cx)), None);
+    }
 }

@@ -81,6 +81,8 @@ pub trait WindowExt: Sized {
     ///
     /// Covers `Input`, `Textarea`, `Editor` and `OtpInput`, use
     /// [`AnyInputState::as_input`] and friends to get the concrete state.
+    /// A registration whose focus handle is no longer focused (e.g. the input
+    /// was removed from the tree while focused) is treated as `None`.
     fn focused_input(&mut self, cx: &mut App) -> Option<AnyInputState>;
     /// Returns true if there is a focused Input entity.
     fn has_focused_input(&mut self, cx: &mut App) -> bool;
@@ -215,12 +217,24 @@ impl WindowExt for Window {
 
     #[inline]
     fn has_focused_input(&mut self, cx: &mut App) -> bool {
-        Root::read(self, cx).focused_input.is_some()
+        self.focused_input(cx).is_some()
     }
 
-    #[inline]
     fn focused_input(&mut self, cx: &mut App) -> Option<AnyInputState> {
-        Root::read(self, cx).focused_input.clone()
+        let state = Root::read(self, cx).focused_input.clone()?;
+        if state.focus_handle(cx).is_focused(self) {
+            return Some(state);
+        }
+
+        // An input removed from the tree while focused never re-renders to
+        // unregister itself; drop the stale registration lazily.
+        Root::try_update(self, cx, |root, _, cx| {
+            if root.focused_input.as_ref() == Some(&state) {
+                root.focused_input = None;
+                cx.notify();
+            }
+        });
+        None
     }
 
     #[inline]
