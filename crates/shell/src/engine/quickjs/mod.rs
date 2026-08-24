@@ -673,9 +673,16 @@ impl ShellRuntime {
             globals.set("__styleNames", names)?;
 
             let behaviors = rquickjs::Array::new(ctx.clone())?;
-            for (index, name) in ["on_click", "on_change", "disabled", "selected", "checked"]
-                .into_iter()
-                .enumerate()
+            for (index, name) in [
+                "on_click",
+                "on_change",
+                "disabled",
+                "selected",
+                "checked",
+                "accessibility_label",
+            ]
+            .into_iter()
+            .enumerate()
             {
                 behaviors.set(index, name)?;
             }
@@ -758,12 +765,13 @@ impl ShellRuntime {
                 };
                 self.push_op_checked(ctx, self.push_op(id, SpecOp::Callback(name, callback)))
             }
-            "disabled" | "selected" | "checked" => {
+            "disabled" | "selected" | "checked" | "accessibility_label" => {
                 let bridged = args.values(method)?;
                 let name = match method {
                     "disabled" => "disabled",
                     "selected" => "selected",
-                    _ => "checked",
+                    "checked" => "checked",
+                    _ => "accessibility_label",
                 };
                 self.push_op_checked(ctx, self.push_op(id, SpecOp::Method(name, bridged)))
             }

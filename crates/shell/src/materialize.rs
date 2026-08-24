@@ -44,6 +44,9 @@ struct Behavior {
     disabled: bool,
     selected: bool,
     checked: bool,
+    /// What a screen reader announces. An icon-only control has no text of its
+    /// own, so without this it announces nothing.
+    accessibility_label: Option<SharedString>,
     on_click: Option<CallbackId>,
     on_change: Option<CallbackId>,
 }
@@ -92,6 +95,10 @@ pub fn materialize(
                 .disabled(behavior.disabled)
                 .selected(behavior.selected);
 
+            if let Some(label) = behavior.accessibility_label.clone() {
+                button = button.accessibility_label(label);
+            }
+
             if let Some(callback) = behavior.on_click {
                 let runtime = Rc::downgrade(runtime);
                 button = button.on_click(move |event, window, cx| {
@@ -107,6 +114,10 @@ pub fn materialize(
             let mut checkbox = Checkbox::new(SharedString::from(id))
                 .disabled(behavior.disabled)
                 .checked(behavior.checked);
+
+            if let Some(label) = behavior.accessibility_label.clone() {
+                checkbox = checkbox.accessibility_label(label);
+            }
 
             if let Some(callback) = behavior.on_change {
                 let runtime = Rc::downgrade(runtime);
@@ -148,10 +159,18 @@ pub fn materialize(
             finish(switch, refinement, children)
         }
         Component::Svg(path) => {
-            // An icon carries no children and takes its color from the text
-            // color, which is what makes it inherit a row's tone for free.
+            // GPUI paints an svg only when the element's own style carries a
+            // text color: an inherited color reaches children as a text style,
+            // not as this element's style, so an icon with no explicit color
+            // silently draws nothing. Falling back to the ambient text color is
+            // what makes `svg(...)` inside a row simply take that row's tone,
+            // which is what anyone writing it expects — and a script can still
+            // set `text_color` to override.
             let mut image = gpui::svg().path(SharedString::from(path));
             image.style().refine(&refinement);
+            if image.style().text.color.is_none() {
+                image.style().text.color = Some(window.text_style().color);
+            }
             image.into_any_element()
         }
         Component::Input(handle) => {
@@ -337,6 +356,12 @@ fn resolve_state(runtime: &Rc<ShellRuntime>, node: SpecId) -> StyleRefinement {
 fn apply_behavior(behavior: &mut Behavior, name: &str, args: &[Bridged]) {
     let flag = args.first().map(|arg| arg.as_bool().unwrap_or(true));
     match name {
+        "accessibility_label" => {
+            behavior.accessibility_label = args
+                .first()
+                .and_then(|value| value.as_str().ok())
+                .map(SharedString::from);
+        }
         "disabled" => behavior.disabled = flag.unwrap_or(true),
         "selected" => behavior.selected = flag.unwrap_or(true),
         "checked" => behavior.checked = flag.unwrap_or(true),

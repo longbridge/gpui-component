@@ -109,6 +109,28 @@ export const emptyState = (heading, hint) =>
 
 export const row = () => h_flex().items_center().gap(SPACE.md);
 
+/// An icon-only button. It carries an accessibility label, because an icon
+/// alone announces nothing to a screen reader.
+export const iconButton = (id, name, description, onClick, options = {}) => {
+  const { disabled = false, tone = "muted_foreground" } = options;
+
+  return Button.new(id)
+    .disabled(disabled)
+    .accessibility_label(description)
+    .flex()
+    .items_center()
+    .justify_center()
+    .w(28)
+    .h(28)
+    .rounded(6)
+    .text_color(tone)
+    .when(!disabled, (el) => el.hover((style) => style.bg("muted")))
+    .when(!disabled, (el) => el.active((style) => style.opacity(0.7)))
+    .when(disabled, (el) => el.opacity(0.45))
+    .when(!disabled, (el) => el.on_click(onClick))
+    .child(icon(name, 15));
+};
+
 /// An icon from the application's own `icons/` directory.
 ///
 /// It takes its color from the text color around it, so an icon inside a muted

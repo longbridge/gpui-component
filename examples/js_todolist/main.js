@@ -14,6 +14,7 @@ import {
   SPACE,
   button,
   icon,
+  iconButton,
   checkbox,
   emptyState,
   field,
@@ -190,10 +191,12 @@ export default class TodoList extends View {
           ),
         )
         .child(
-          button("remove-" + item.id, "Remove", (_event, cx) => this.remove(item.id, cx), {
-            variant: "ghost",
-            icon: "trash",
-          }),
+          iconButton(
+            "remove-" + item.id,
+            "trash",
+            `Remove “${item.caption}”`,
+            (_event, cx) => this.remove(item.id, cx),
+          ),
         ),
     );
   }
