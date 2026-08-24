@@ -51,7 +51,7 @@ const DRAG_PREVIEW_SIZE: gpui::Size<gpui::Pixels> = gpui::size(px(96.), px(30.))
 /// Critically damped, so the placeholder never reads as covering a region the
 /// drop would not take. The tolerance is coarse: this runs during a drag, where
 /// a frame spent on half a pixel competes with the drag itself.
-const PLACEHOLDER_SPRING: Spring = Spring::new(0.2, 1.).with_epsilon(0.5);
+const PLACEHOLDER_SPRING: Spring = Spring::new(0.2).with_epsilon(0.5);
 
 /// The preview that follows the cursor while a panel is dragged.
 ///

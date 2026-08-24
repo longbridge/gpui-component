@@ -19,7 +19,7 @@ use gpui_base::{
 /// Critically damped, so the panel height never overshoots the measured content
 /// height. A panel toggled again mid-flight reverses from its current velocity
 /// instead of restarting.
-const PANEL_SPRING: Spring = Spring::new(0.2, 1.0);
+const PANEL_SPRING: Spring = Spring::new(0.2);
 
 /// Accordion element.
 #[derive(IntoElement)]

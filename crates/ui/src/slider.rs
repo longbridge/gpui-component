@@ -20,7 +20,7 @@ const THUMB_RING_OPACITY: f32 = 0.5;
 /// A click presses and releases faster than the ring finishes growing, so the
 /// ring is sprung to decelerate through the reversal. Critically damped, so it
 /// never grows past the ring width the thumb reserves for it.
-const THUMB_RING_SPRING: Spring = Spring::new(0.15, 1.);
+const THUMB_RING_SPRING: Spring = Spring::new(0.15);
 
 /// The animated hover ring of one thumb.
 struct ThumbRing {

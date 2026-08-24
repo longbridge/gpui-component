@@ -35,7 +35,7 @@ const CLOSED_BOTTOM_STRIP: Pixels = px(29.);
 /// window edge and pull it back. The tolerance is coarse because the value is a
 /// layout width — every frame of it re-lays out the whole dock subtree, and
 /// half a pixel of travel is not worth that.
-const DOCK_SPRING: Spring = Spring::new(0.28, 1.).with_epsilon(0.5);
+const DOCK_SPRING: Spring = Spring::new(0.28).with_epsilon(0.5);
 
 /// The transition channel naming one dock within its area.
 fn placement_channel(placement: DockPlacement) -> &'static str {

@@ -13,7 +13,7 @@ use std::rc::Rc;
 ///
 /// Critically damped: the thumb slides inside a track it must not leave, so an
 /// overshoot would push it through the border.
-const THUMB_SPRING: Spring = Spring::new(0.18, 1.).with_epsilon(0.1);
+const THUMB_SPRING: Spring = Spring::new(0.18).with_epsilon(0.1);
 
 /// A Switch element that can be toggled on or off.
 #[derive(IntoElement)]
