@@ -241,13 +241,14 @@ chasing rapid selection changes, a panel toggled again mid-slide — and a
 transition where the target is set once and runs to completion.
 
 A value that the pointer is already moving must not be sprung while the drag
-lasts, or it trails the cursor. `Spring::with_travel(false)` suspends travel and
-keeps the retained state pinned to the target, so the same call site can hand
-the value straight through during a drag and resume springing from where the
-drag released it:
+lasts, or it trails the cursor. A zero response adopts the target on the spot,
+exactly as a zero duration does for a transition, and keeps the retained state
+pinned to it — so one call site can hand the value straight through during a
+drag and resume springing from where the drag released it:
 
 ```rust,ignore
-let size = spring(id, target, DOCK_SPRING.with_travel(!resizing), window, cx);
+let policy = if resizing { Spring::new(Duration::ZERO) } else { DOCK_SPRING };
+let size = spring(id, target, policy, window, cx);
 ```
 
 `Spring::new(response)` builds one that reaches its target in about that long

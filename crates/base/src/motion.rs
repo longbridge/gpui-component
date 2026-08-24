@@ -200,12 +200,11 @@ where
 /// position but not in velocity. A spring carries velocity across the retarget,
 /// so a value reversed mid-flight decelerates and turns around instead of
 /// snapping to a new curve's initial speed.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy)]
 pub struct Spring {
     response: Duration,
     damping: f32,
     epsilon: f32,
-    travel: bool,
 }
 
 impl Spring {
@@ -218,12 +217,19 @@ impl Spring {
     /// rather than the moment it stops. The remaining fraction of a percent
     /// keeps settling past it, until it is within the tolerance
     /// [`Self::with_epsilon`] sets.
+    ///
+    /// A zero response adopts the target on the spot, as a zero duration does
+    /// for a transition — an infinitely stiff spring has nowhere to travel. Use
+    /// it for a value the pointer is already moving, such as a panel being
+    /// dragged by its resize handle, which must not lag behind the pointer:
+    /// retained state stays pinned to the target meanwhile, so travel resumes
+    /// from the value the drag released rather than from wherever the spring was
+    /// when it began.
     pub const fn new(response: Duration) -> Self {
         Self {
             response,
             damping: 1.0,
             epsilon: DEFAULT_SPRING_EPSILON,
-            travel: true,
         }
     }
 
@@ -241,18 +247,6 @@ impl Spring {
         self
     }
 
-    /// Sets whether the spring travels to its target or adopts it on the spot.
-    ///
-    /// A value the pointer is already moving — a panel being dragged by its
-    /// resize handle — must not lag behind the pointer, so the spring stops
-    /// travelling for as long as the drag lasts. Retained state stays pinned to
-    /// the target meanwhile, so travel resumes from the value the drag released
-    /// rather than from wherever the spring was when it began.
-    pub const fn with_travel(mut self, travel: bool) -> Self {
-        self.travel = travel;
-        self
-    }
-
     /// Sets the settling tolerance, expressed in the target's own units.
     ///
     /// The default suits targets that move within a normalized `0..1` range. A
@@ -264,7 +258,8 @@ impl Spring {
         self
     }
 
-    /// The physical parameters GPUI integrates.
+    /// The physical parameters GPUI integrates. The response must be non-zero;
+    /// [`spring`] adopts the target before reaching here when it is not.
     ///
     /// Derived on use rather than stored, so the builders stay `const`: neither
     /// `Duration::as_secs_f32` nor the square root that recovers a damping ratio
@@ -323,7 +318,7 @@ where
         state.updated_at = now;
     };
 
-    if cx.reduce_motion() || !policy.travel {
+    if cx.reduce_motion() || policy.response.is_zero() {
         if snapshot.state.position != target_position || snapshot.state.velocity != 0.0 {
             state.update(cx, |state, _| settle(state));
         }
@@ -569,8 +564,7 @@ mod tests {
 
     struct SpringView {
         target: Rc<Cell<f32>>,
-        policy: Spring,
-        travel: Rc<Cell<bool>>,
+        policy: Rc<Cell<Spring>>,
         samples: Rc<RefCell<Vec<f32>>>,
     }
 
@@ -583,7 +577,7 @@ mod tests {
             self.samples.borrow_mut().push(spring(
                 ("spring-test", "value"),
                 self.target.get(),
-                self.policy.with_travel(self.travel.get()),
+                self.policy.get(),
                 window,
                 cx,
             ));
@@ -594,23 +588,22 @@ mod tests {
     struct SpringFixture {
         window: WindowHandle<SpringView>,
         target: Rc<Cell<f32>>,
-        travel: Rc<Cell<bool>>,
+        policy: Rc<Cell<Spring>>,
         samples: Rc<RefCell<Vec<f32>>>,
     }
 
     impl SpringFixture {
         fn open(cx: &mut TestAppContext, policy: Spring) -> Self {
             let target = Rc::new(Cell::new(0.0));
-            let travel = Rc::new(Cell::new(true));
+            let policy = Rc::new(Cell::new(policy));
             let samples = Rc::new(RefCell::new(Vec::new()));
             let window = cx.open_window(size(px(100.), px(100.)), {
                 let target = target.clone();
-                let travel = travel.clone();
+                let policy = policy.clone();
                 let samples = samples.clone();
                 move |_, _| SpringView {
                     target,
                     policy,
-                    travel,
                     samples,
                 }
             });
@@ -618,7 +611,7 @@ mod tests {
             Self {
                 window,
                 target,
-                travel,
+                policy,
                 samples,
             }
         }
@@ -715,17 +708,17 @@ mod tests {
     }
 
     #[gpui::test]
-    fn a_spring_that_is_not_travelling_adopts_its_target_on_the_spot(cx: &mut TestAppContext) {
-        let fixture = SpringFixture::open(cx, Spring::new(Duration::from_millis(300)));
-        fixture.travel.set(false);
+    fn a_zero_response_spring_adopts_its_target_on_the_spot(cx: &mut TestAppContext) {
+        let travelling = Spring::new(Duration::from_millis(300));
+        let fixture = SpringFixture::open(cx, Spring::new(Duration::ZERO));
 
         assert_eq!(fixture.render(cx, 1.0), 1.0);
         assert_eq!(fixture.pending_frame(cx), 0);
         assert_eq!(fixture.advance(cx, 100, 5.0), 5.0);
 
-        // Travel resumes from the value the pause left behind. A spring that
-        // had kept its pre-pause state would jump back to it here.
-        fixture.travel.set(true);
+        // Travel resumes from the value the zero response left behind. A spring
+        // that had kept the state it held beforehand would jump back to it here.
+        fixture.policy.set(travelling);
         assert_eq!(fixture.render(cx, 6.0), 5.0);
         let next = fixture.advance(cx, 50, 6.0);
         assert!(
