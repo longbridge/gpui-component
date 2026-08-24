@@ -2038,7 +2038,7 @@ decisions are worth stating.
 
 **Unknown fields are rejected before missing ones**, so a typo reports itself
 rather than reporting the field it was meant to be. This is the case the design
-is most exposed to: `"capabilites"` looks optional, and accepting it would hand
+is most exposed to: a manifest that misspells `capabilities` looks like one without any, and accepting it would hand
 the plugin an empty grant while its author believes everything listed was
 granted.
 
@@ -2611,11 +2611,27 @@ error — GPUI asks for assets it may not need — but it is warned about once p
 path, saying exactly where it was looked for, because an icon that silently does
 not appear is among the hardest mistakes to find.
 
-The API version scheme — a semver for the script API, independent of the crate
-version, declared by an application and checked at load — is not implemented, and
-neither is any packaging or distribution format. When they are: the same version
-number must offer the same capabilities and the same behavior on both engines,
-and the engine belongs in neither the version number nor the manifest.
+The script API has its own version, independent of the crate version, and an
+application states what it needs in script rather than in its manifest:
+`gpui.require_api("1.0")` either agrees or refuses at the first line, before
+anything is built. That is the only moment where a mismatch is cheap — once a
+view has rendered, a missing method is an exception in the middle of an
+interface. The version tracks the script surface: adding a binding is a minor,
+changing or removing one is a major. The grammar it accepts is deliberately tiny,
+`"1"` or `"1.0"`, because a caret or a range would suggest the runtime resolves
+versions, and there is exactly one implementation present. A newer minor is
+refused with the action to take ("upgrade gpui-shell"); a different major is
+refused as incompatible.
+
+The engine belongs in neither the version number nor the manifest: one version
+number must mean the same capabilities and the same behavior under either engine.
+
+No packaging or distribution format exists. The intended one is the simplest
+thing that works — a `.tar.zst` plus an `index.json`, hosted on any static file
+server or git repository, installed by URL with a signature and checksum check,
+carrying pure script source with no build output and no `node_modules`. Building
+a registry service before the plugin count justifies one would be pure
+liability.
 
 ---
 
@@ -2650,7 +2666,8 @@ reopened without new information.
 | **Cycles across two collectors leak** | Medium | Per-frame callbacks are released per pass and long-lived ones are owner-bound (§7.4); there is no `gc_stats`, so a slow leak would be found by watching memory |
 | **Sandbox escape**, with `Eval`, quickjs-libc, and prototype pollution as the largest surfaces | High | quickjs-libc is not compiled in; prototypes are frozen; every compiler path is closed at the JavaScript level, but the stronger intrinsic-level fix is not done (§19.1). The escape suite is real and asserts on messages |
 | **Generated code assumes Node or a browser** | Medium | Named stubs point at replacements, `gpui.d.ts` moves the error into the editor. Two stub messages are wrong: `fetch` points at a `gpui.http` that does not exist, and `setTimeout` points at `gpui.timer(ms, callback)` when the API is `gpui.timer.after(ms, fn)` |
-| **Interned `&'static str` accumulates** for script-registered names | Low | Bounded by loaded plugins × names each; not yet reachable, since neither actions nor panels are bound |
+| **One capability grant is in force at a time.** The grant is process-wide state, so two loaded plugins cannot hold different permissions at once | High | Acknowledged rather than hidden: `PluginManager` keeps each grant on its plugin and installs one per activation, so the limitation is one field and one method. The fix is to move the grant from a host thread-local onto the script context (§18.3) |
+| **Interned `&'static str` accumulates** for script-registered names | Low | Reachable now that panel names are interned (§15). Bounded by applications loaded × panels each, tens of bytes apiece, and never reclaimed — deliberately, because a persisted layout may still refer to a name |
 
 ---
 
