@@ -1,6 +1,6 @@
 //! Hot reload: watching an application directory and rebuilding its view.
 //!
-//! The design (`docs/research/gpui-shell.md` §21.2) is a five step pipeline:
+//! The design (`docs/gpui-shell.md` §21.2) is a five step pipeline:
 //!
 //! ```text
 //! file change detected → debounce ~200ms → tear down the view →

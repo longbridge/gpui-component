@@ -5,7 +5,7 @@ built on [`gpui-base`](../base/README.md). The host owns rendering, layout,
 input and system capabilities; the script owns composition, presentation and
 business logic. JavaScript is the default scripting language.
 
-Its design is specified in [`docs/research/gpui-shell.md`](../../docs/research/gpui-shell.md).
+Its design is specified in [`docs/gpui-shell.md`](../../docs/gpui-shell.md).
 This crate is at milestone M0: a feasibility baseline, not a stable interface.
 
 ## Base-First: The Script Owns Presentation
@@ -283,7 +283,7 @@ throw a script error instead of failing in undefined ways.
 
 ## Related Resources
 
-- [GPUI Shell design document](../../docs/research/gpui-shell.md)
+- [GPUI Shell design document](../../docs/gpui-shell.md)
 - [`gpui-base`](../base/README.md), the foundation this runtime binds
 - [Architecture](../../docs/ARCHITECTURE.md) and [Styling and Motion](../../docs/STYLING-AND-MOTION.md)
 - [GPUI](https://gpui.rs)

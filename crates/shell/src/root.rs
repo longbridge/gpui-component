@@ -9,7 +9,7 @@
 //! smallest presentation that makes them visible.
 //!
 //! It is deliberately not `gpui_component::Root`. The shell binds to
-//! `gpui-base` only (see `docs/research/gpui-shell.md` §4.2), so the equivalent
+//! `gpui-base` only (see `docs/gpui-shell.md` §4.2), so the equivalent
 //! host has to be written here rather than reused.
 
 use std::time::Duration;
@@ -360,7 +360,7 @@ impl ShellRoot {
     /// focus from the work that caused them would be a regression, not a
     /// notification. `_window` is unused but kept in the signature because a
     /// `&mut Window` is what makes this operation legal at all — it can only be
-    /// reached from an `Event` or `Task` call scope (`docs/research/gpui-shell.md`
+    /// reached from an `Event` or `Task` call scope (`docs/gpui-shell.md`
     /// §16.2).
     pub fn push_toast(
         &mut self,
@@ -853,7 +853,7 @@ fn install_key_bindings(cx: &mut App) {
 /// `Task` call scope (`crate::scope`). Outside any scope — host Rust code, a
 /// test — there is nothing to check. A `Render` or `Layout` scope is a script
 /// bug: it is reported and ignored rather than panicked on, because a script
-/// error must not take the window down (`docs/research/gpui-shell.md` §5.8).
+/// error must not take the window down (`docs/gpui-shell.md` §5.8).
 fn overlay_mutation_allowed(operation: &str) -> bool {
     match scope::current_phase() {
         None => true,

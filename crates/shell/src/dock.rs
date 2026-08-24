@@ -7,7 +7,7 @@
 //! from a name in a persisted file, and a per-panel `serde_json::Value` that
 //! rides along with it. What it lacks is a way for a panel to come from
 //! somewhere other than the host binary. This module is that way — see
-//! `docs/research/gpui-shell.md` §15.
+//! `docs/gpui-shell.md` §15.
 //!
 //! Two halves, and they are independent of each other:
 //!

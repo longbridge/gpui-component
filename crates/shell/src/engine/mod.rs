@@ -36,7 +36,7 @@
 //!
 //! The engine choice is the one decision in this runtime that cannot be
 //! validated on paper: per-call cost across the language boundary decides
-//! whether the whole approach is viable (see `docs/research/gpui-shell.md`
+//! whether the whole approach is viable (see `docs/gpui-shell.md`
 //! §20). QuickJS is the default because application code reads better in
 //! JavaScript; the Lua engine stays behind a feature flag so the measurement
 //! can be run against both, and so switching back is a feature change rather

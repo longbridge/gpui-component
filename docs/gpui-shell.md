@@ -1431,9 +1431,16 @@ Rules for script:
 - This matches `CLAUDE.md`: the theme API exposes semantic tokens, not a growing
   set of component-specific fields.
 
-`gpui.theme()` and `gpui.set_theme(...)` are not bound yet; `theme::set_mode` is
-the Rust-side entry point, and it returns whether anything changed so a caller
-mirroring an OS appearance change can skip the refresh.
+A script reads the palette through `gpui.theme()`, which answers a snapshot of
+every color, spacing, and radius token plus `is_dark`, and switches with
+`gpui.set_theme("dark")`. Reading is offered and **writing is not**: a script
+that could repaint the host would make the host's own appearance something every
+application it loads gets a vote on. The snapshot is read fresh on each call
+rather than cached — a theme switch has to be visible to the next render, and a
+view reads a handful of tokens rather than thousands. `set_theme` needs a live
+host call and refuses an unknown name against the valid set;
+`theme::set_mode` underneath returns whether anything changed, so a caller
+mirroring an OS appearance change can skip the window refresh.
 
 ### 13.4 The preset module
 
@@ -1584,32 +1591,82 @@ the state do not.
 
 ## 15. Dock and Panels
 
-Not implemented. No renderer is supplied, no `ScriptPanel` exists, and no script
-panel can be registered with `PanelRegistry`.
+`dock.rs` is what lets a panel come from somewhere other than the host binary.
+Base already has the half that is hard to build — a layout that is pure data, a
+`PanelRegistry` that rebuilds a panel from a name in a persisted file, and a
+per-panel `serde_json::Value` that rides along with it — and what it lacked was
+a way to point that machinery at a script.
 
-The substrate is ready and is the reason this is worth doing at all. Base owns
-the layout tree, persistence, drag hit-testing, resize arithmetic, zoom, focus,
-and the panel registry; `crates/ui/src/dock` is a skin over it that supplies tab
-bar, toolbar, drop indicators, and dock-toggle appearance through three renderer
-traits. A shell skin would forward those three traits to script, which makes the
-dock's appearance script-decided for the first time, while base keeps the drag
-source, drop-target hit testing, keyboard actions, and focus — a script would see
-only resolved state through `TabGroupContext`, `DockContext`, and `TileContext`,
-never a drag event.
+The module is complete on the Rust side and has **no engine binding above it**:
+nothing in `engine/quickjs/` implements `PanelScript` or `DockChrome`, so a
+script cannot yet register a panel or draw dock chrome. Everything below
+describes what a host can drive today and what the engine layer has to supply.
 
-Two constraints are already known and do not change. `Panel::panel_name`
-returns `&'static str` while a plugin's name is only known at runtime, so
-registration needs a process-wide intern table with a one-time `Box::leak`;
-the bound is loaded plugins × panels each, which is in the hundreds, and an
-unloaded plugin's string is not reclaimed. And the name must be prefixed
-`script:<plugin_id>/<panel_id>` — with `script:` rather than a language name, so
-one layout file still restores after an engine change.
+Two halves, independent of each other.
 
-The property that makes this worth building is one base already guarantees: when
-a panel's name is not in the registry, `DockArea` substitutes a draw-nothing
-placeholder and preserves the original `PanelState`, writing it back on the next
-save. A user can uninstall a plugin and reinstall it, and its panel returns to
-where it was.
+**`ScriptPanel`** is a `gpui_base::dock::Panel` whose body is a `ScriptView`.
+It implements behavior only, not the presentation trait one layer up: a script
+panel's title, toolbar, and menus are drawn by the skin from the script's own
+elements, which is what "the script owns presentation" means here. Its `dump`
+writes the script's `serialize()` payload into `PanelInfo::panel`, and
+`register_panel` teaches the registry to rebuild it — `PanelScript::build`
+first, then `deserialize` with whatever the last save wrote.
+
+**`ScriptDockSkin`** is the appearance. It implements all three renderer traits
+and forwards each callback to a `DockChrome`, whose every method has a default
+reproducing base's own no-chrome behavior — so an application that draws no
+chrome implements none of them and still gets a dock that docks, drags, resizes,
+and persists. Base keeps the drag source, drop-target hit testing, keyboard
+actions, and focus; a chrome implementation never sees a drag event, a mouse
+position, or a hit test, only resolved state through `TabGroupContext`,
+`DockContext`, and `TileContext`, and it calls those contexts' own callbacks
+(`select_tab`, `close`, `toggle_zoom`, `resize_to`) rather than reimplementing
+them.
+
+Both halves are engine-independent, which is the point: `PanelScript` and
+`DockChrome` are traits the engine implements, and this module deals only in
+`Entity<ScriptView>`, `AnyElement`, and `serde_json::Value`. `tab_group_data`,
+`dock_data`, and `tile_data` convert the state half of each context into plain
+JSON, which is the form the engine can hand to script code. The callbacks are
+deliberately left out of that JSON — they cannot be serialized — so the engine
+keeps the context alongside the value and wires the callbacks onto the elements
+the script returns.
+
+Two constraints were known in advance and both hold.
+
+`Panel::panel_name` returns `&'static str` while a script's panel name is only
+known when the application loads, so there is no way to satisfy the signature
+without a leak. It is made once per distinct name through a process-wide intern
+table: calling `panel_name("mail", "inbox")` twice returns the same pointer, so
+passing a name back through `ScriptPanel::new` leaks nothing further. The bound
+is applications loaded × panels each, in the hundreds, at tens of bytes apiece.
+Unloading does **not** reclaim a name, deliberately: reclaiming would let a name
+be freed while a persisted layout still refers to it, and outliving the load that
+produced it is the whole purpose of the name.
+
+The name is namespaced `shell:<application>/<panel>`. The prefix is `shell:`
+rather than an engine name so that one layout file still restores after the host
+switches engines — what wrote the panel is the shell, not QuickJS. It is applied
+however the panel was built: a `ScriptPanel::new("TabPanel", …)` becomes
+`shell:TabPanel`, so a script panel can never shadow a host one.
+
+The property that makes all of this worth building is one base already
+guarantees, and `dock.rs` extends it by one step. When a panel's name is not in
+the registry, `DockArea` substitutes a draw-nothing placeholder that answers
+`dump` with the `PanelState` it was handed, so the next save writes the panel —
+name, payload, and position — back out unchanged; a user can uninstall an
+application and reinstall it and its panels return to where they were. The
+extension covers the case base does not: a panel that *is* registered but whose
+script throws on construction gets a `RetainedPanel` with the same behavior, so
+a broken script costs the user that panel's contents for the session rather than
+its place in the layout or its saved state.
+
+One asymmetry is worth knowing before implementing the engine half.
+`PanelScript::serialize` takes `&App`, not `&mut Window`, because `Panel::dump`
+is a read — so there is no call scope to open, and a script `serialize()` must
+be a plain value-returning method that calls nothing back into the host.
+`deserialize` runs after `build`, with a real host call available, and may open
+a scope and touch entities.
 
 ---
 
@@ -1846,11 +1903,83 @@ native module that can return a structured result and a timeout.
 
 ### 17.6 Native modules
 
-Not implemented, and the shape is settled: a host registers Rust modules at
-compile time. There is no `dlopen`. Rust has no stable ABI, and native code
-loaded into the process has every permission the process has, which makes the
-sandbox meaningless. The cost — a third party who needs native capability must
-fork the host or send a patch — is deliberately retained.
+A script cannot load a native extension. `dlopen`ed Rust has no stable ABI and,
+once inside the process, holds every permission the process holds — a sandbox
+that permits it does not mean anything. So the direction is reversed: **the host
+registers, at compile time, the Rust it is willing to expose**, and a script
+reaches exactly that and nothing else. The cost — a third party who needs native
+capability must fork the host or send a patch — is deliberately retained.
+
+```rust,ignore
+let mut modules = NativeModules::new();
+modules.register("workspace", |module| {
+    module.function("project_name", |_| Ok(NativeValue::from("gpui-component")));
+});
+gpui_shell::set_native_modules(modules);
+```
+
+```js
+import { native } from "gpui";
+
+const workspace = native("workspace");
+workspace.project_name();
+```
+
+**The boundary is plain data.** A native function receives `NativeArguments` and
+returns a `NativeValue` — null, boolean, number, string, array, or
+insertion-ordered object — and never receives a script handle. That is not a
+convenience. A handle would let the host keep a reference to a script value past
+the call that produced it and past the scope frame that made the surrounding
+context valid. It is also what lets one registry serve both engines, since
+neither engine's value type appears in `native.rs`.
+
+**A native function may not re-enter the engine.** A native call happens inside
+a script call, which is itself inside a host call; calling back into the VM from
+there would run script with an engine frame already on the stack, re-entering
+the render pass currently building an element tree. Holding no script handle
+makes that impossible to express, and `dispatch` additionally refuses a nested
+call outright, so a host that finds another route gets a diagnosable error rather
+than undefined behavior. Reading and writing host state is fine and is the point:
+a function may reach the ambient `App` and request a re-render, which is delivered
+after the call unwinds.
+
+**Reaching native modules is itself the grant.** The default registry is empty
+and every entry point fails while it stays that way — the same shape as
+`Capabilities::default()`. There is deliberately no per-module capability: the
+host chose the module list, so the list *is* the grant. The two failures get
+different sentences, because they are different facts: a host that registered
+nothing has not wired native access up, and telling that author "unknown module"
+would send them hunting for a typo that is not there.
+
+```text
+native module `workspace` is not available: this host registered none. Native
+modules are granted by the embedding application, with gpui_shell::set_native_modules(...).
+```
+
+```text
+unknown native module `workspce`; this host registered: editor, workspace
+```
+
+```text
+native module `editor` has no function `line_cont`; it provides: line_count
+```
+
+Argument readers (`string`, `number`, `integer`, `boolean`) report which
+position was wrong and what arrived there, so a host writing a function does not
+write that sentence itself. A `NativeError` carries only a sentence; the engine
+adds the module and function names when it turns one into a script exception.
+
+The QuickJS side is exactly the two conversions the seam forbids the registry
+from knowing about. The module object is built per call and frozen, with the
+registered functions as own properties over a `Proxy` prototype that reports an
+unknown name — so the trap is on the miss path only, the same trade the element
+prototype makes without needing its two-pass dance, because a native call is not
+on the per-element path. Freezing means a script cannot stash state on a module
+or shadow a function with its own. `then` is withheld along with the `__` names,
+because a module object answering `then` with a function would be mistaken for a
+thenable by any `await` and awaiting one would hang. Argument conversion is
+depth-limited at 16, which turns "the host was handed a 100,000-deep list" from a
+blown Rust stack into a message at the call site.
 
 ---
 

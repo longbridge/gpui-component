@@ -22,7 +22,7 @@
 //!
 //! Both halves feed [`suggest`], because a mistyped style name must be visible
 //! at the call site rather than as a silently ignored no-op — see §13.2 of
-//! `docs/research/gpui-shell.md`.
+//! `docs/gpui-shell.md`.
 //!
 //! # Availability
 //!

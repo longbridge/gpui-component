@@ -2,7 +2,7 @@
 //!
 //! The host owns rendering, layout, text editing, virtualization and system
 //! capabilities; Lua owns composition, presentation and business logic. See
-//! `docs/research/gpui-shell.md` for the design this implements.
+//! `docs/gpui-shell.md` for the design this implements.
 
 pub mod assets;
 pub mod capability;
