@@ -4,7 +4,7 @@ use gpui::{
     AnyElement, App, ClickEvent, Div, ElementId, FocusHandle, InteractiveElement, Interactivity,
     IntoElement, MouseButton, ParentElement, Refineable as _, RenderOnce, Role, SharedString,
     Stateful, StatefulInteractiveElement, StyleRefinement, Styled, Window, div,
-    prelude::FluentBuilder as _,
+    prelude::FluentBuilder as _, relative,
 };
 use smallvec::SmallVec;
 
@@ -212,6 +212,13 @@ impl RenderOnce for Button {
         let on_click = self.on_click;
 
         self.base
+            // A neutral line height is geometry, not visual policy: with the
+            // inherited value the text box is taller than the glyphs, so the
+            // caller's padding no longer determines the control's height and a
+            // button cannot be sized precisely. `relative(1.)` makes the text
+            // box exactly the font size; anything the caller sets refines over
+            // it, so a product that wants looser text still can.
+            .line_height(relative(1.))
             .when_some(self.role.resolve(|| Role::Button), |this, role| {
                 this.role(role)
             })
