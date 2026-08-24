@@ -1957,7 +1957,7 @@ modules are granted by the embedding application, with gpui_shell::set_native_mo
 ```
 
 ```text
-unknown native module `wrkspace`; this host registered: editor, workspace
+unknown native module `workspaces`; this host registered: editor, workspace
 ```
 
 ```text
@@ -1985,39 +1985,140 @@ blown Rust stack into a message at the call site.
 
 ## 18. The Plugin Model
 
-Not implemented. There is no manifest parser, no contribution registry, no
-plugin loader, and no authorization UI. What exists is the type the manifest
-would populate — `Capabilities`, with private fields, a builder, and an empty
-default — and the host-side entry points that install one
-(`gpui_shell::set_capabilities`, `set_store_path`).
+A host that runs one application from a directory needs none of this: the
+command line names the directory, the grant is decided by the act of typing the
+command, and storage is keyed by the path (§23). A host that runs *several*
+applications cannot do any of that, because identity, permission, and storage
+become per-plugin questions — and all three have to be answerable **before** the
+plugin's code runs. That is the whole reason a manifest exists.
+
+`plugin.rs` implements it: manifest parsing with a generated JSON Schema,
+discovery, load and unload, per-plugin capabilities and data directories, and
+activation. `plugin_api.rs` implements the version check behind
+`gpui.require_api("1.0")`. **`plugin_api` is wired into `lib.rs` and reachable
+from script; `plugin.rs` is not yet declared as a module**, so nothing calls the
+manager. The rest of this section describes what it does, because the shape is
+what the design is about.
+
+### 18.1 The manifest
+
+Five fields, no sixth: `id`, `name`, `version`, `entry`, `capabilities`. The
+file is `plugin.json` — the directory is the plugin, and `manifest.json` and
+`package.json` are both already spoken for by ecosystems whose schemas would be
+mistaken for this one.
+
+```json
+{
+  "id": "com.example.inbox",
+  "name": "Inbox",
+  "version": "1.2.0",
+  "entry": "main.js",
+  "capabilities": {
+    "fs": { "read": ["${pluginDir}", "${dataDir}"], "write": ["${dataDir}"], "execute": ["git"] },
+    "network": { "hosts": ["api.example.com"] },
+    "store": true,
+    "clipboard": { "write": true }
+  }
+}
+```
+
+**Capability is permission; contribution is behavior.** Commands, panels, key
+bindings, settings, and themes are registered from script, never declared a
+second time here. A permission has to be shown to a user and approved before any
+code runs, so it belongs in data; a contribution is code, so it belongs in code.
+Declaring both would create a class of bug — manifest and script disagreeing —
+while producing no information the script did not already carry. The schema is
+generated from the types with `schemars`, following
+`crates/ui/src/theme/schema.rs`, so the schema and the parser cannot disagree.
+
+Every parse failure names the field and says what was expected, because this is
+the first thing a plugin author meets and usually the only diagnostic they get:
+nothing has run, so there is no stack to fall back on. Three validation
+decisions are worth stating.
+
+**Unknown fields are rejected before missing ones**, so a typo reports itself
+rather than reporting the field it was meant to be. This is the case the design
+is most exposed to: `"capabilites"` looks optional, and accepting it would hand
+the plugin an empty grant while its author believes everything listed was
+granted.
+
+**`id` is validated strictly** — lowercase letters, digits, `.`, `-`, `_`, not
+beginning or ending with a separator, no `..`. Two of those rules are security
+rather than taste: no path separators and no `..`, because `<data home>/<id>`
+must stay inside the data directory; and no uppercase, because two ids differing
+only in case are one directory on a case-insensitive filesystem and two
+everywhere else. `version` must be semver-shaped, because it is compared across
+an upgrade. `entry` must be a path that cannot leave the plugin directory, which
+is the same rule the module resolver applies to every `import` — so a manifest
+cannot ask for a file the resolver would refuse anyway.
+
+**`capabilities` is the one omittable field**, because absent and `{}` both mean
+the empty grant and requiring the key would add a line saying "nothing" to every
+plugin that wants nothing.
+
+The manifest writes `${pluginDir}` and `${dataDir}` rather than real paths, for
+the same reason a plugin cannot name its own storage location: a path chosen by
+the plugin is a path the plugin can point anywhere. The *shape* of the grant
+comes from the manifest and nowhere else; the two directories it is anchored to
+come from the host and nowhere else. A relative path is anchored to the plugin
+directory; an absolute path is taken as written, and is exactly the case a host
+policy or an approval prompt exists to gate.
+
+`execute` is either an allowlist of command names or the string `"*"`.
+Unrestricted execution has to be spellable — a host that cannot express it pushes
+its users toward granting a wildcard read root instead, which is worse — but it
+is spelled differently from an allowlist so a permission sheet can show it at the
+severity it deserves.
+
+### 18.2 Lifecycle
+
+**Discovery executes nothing.** `PluginManager::discover` reads manifests and
+stops, so a host with thirty installed plugins lists thirty names, versions, and
+permission sets without starting thirty programs. Directories are searched in
+order and an earlier one wins a duplicate `id`, which is what lets a user's own
+copy shadow a bundled one. Only `load` evaluates script.
+
+Lazy loading belongs at the module level, not the plugin level. The entry module
+runs at load and its only job is registration; the real implementation lives in
+other modules that a handler pulls in with a dynamic `import()` when it is
+triggered. That is why dynamic `import()` is deliberately left callable by the
+sandbox (§19.1) — it is the mechanism, not a hole. It also gives every plugin a
+non-zero start-up cost that has to be budgeted (§20.5), and makes "do real work
+in the entry module" a convention violation tooling can flag.
+
+Data lives under the plugin's `id` rather than under its path, so it survives an
+upgrade that moves the plugin directory — which is exactly what §23's path digest
+cannot do for a directory run from the command line.
+
+### 18.3 The known limitation: one grant at a time
+
+`set_capabilities` and `set_store_path` write process-wide state — a thread-local
+in the engine host — so **one grant is in force at a time**. Two plugins loaded
+at once cannot hold different grants simultaneously; whichever was activated last
+is what `gpui.fs` and `gpui.store` see.
+
+`PluginManager` does not pretend otherwise. It keeps each plugin's grant on the
+plugin, installs one around each call into that plugin, and remembers which is
+currently installed, so the limitation is one field and one method rather than
+something spread across call sites. The real fix does not change that type's
+surface: the capability set has to move from a host-side thread-local onto the
+script context, so the engine reads the grant of whichever plugin owns the code
+it is running. Until then, "loaded" and "permitted" are two different states.
+
+### 18.4 What is still missing
+
+The authorization model — `granted` / `denied` / `prompt`, a permission sheet
+shown before the first run, a decision persisted in host configuration rather
+than in the plugin directory, a host policy that can force denial, and re-asking
+when an update adds a capability — is not built. Neither is a contribution
+registry: there is no `gpui.command`, `gpui.keymap`, `gpui.register_panel`, or
+`gpui.register_theme` for a script to register into.
 
 Today the grant comes from the host directly. Running a directory from the
 command line is an explicit act of trust, the same as `node app.js`, and
-`gpui-shell` grants exactly this: read access to the application root and its own
-storage directory, write access to the storage directory, and `store`. No
-network, no process execution, no clipboard, and no filesystem access outside
-those two directories (§23).
-
-Three decisions from the design still stand and should shape whatever is built.
-
-**Capability is permission; contribution is behavior.** A manifest answers two
-questions — who is this, and what does it want permission to do — and nothing
-else. Commands, panels, key bindings, settings, and themes are registered in
-script, not declared a second time in the manifest. Declaring them twice
-guarantees they will disagree, and the alignment produces no information.
-
-**Lazy loading belongs at the module level, not the plugin level.** `main.js`
-runs at start-up and its only job is registration; the real implementation lives
-in other modules that a handler pulls in with a dynamic `import()` when it is
-triggered. That is why dynamic `import()` is deliberately left callable by the
-sandbox (§19.1): it is the mechanism, not a hole. It also gives every plugin a
-non-zero start-up cost that has to be budgeted (§20.5) and makes "do real work in
-`main.js`" a convention violation that tooling can flag.
-
-**Identity is a namespace.** The manifest `id` prefixes the panel name
-(`script:<id>/<panel>`), the store namespace, the log field, and the
-authorization record — which is also what should replace the path digest that
-identifies an application's storage today (§23).
+`gpui-shell` grants read access to the application root and its storage
+directory, write access to the storage directory, and `store` — no network, no
+process execution, no clipboard, nothing else (§23).
 
 ---
 
