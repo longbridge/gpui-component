@@ -11,7 +11,7 @@ description: 支持上传状态、预览和操作的可组合文件与媒体附�
 
 ```rust
 use gpui_component::attachment::{
-    Attachment, AttachmentActions, AttachmentContent, AttachmentDescription,
+    Attachment, AttachmentActions, AttachmentContent, AttachmentDescription, AttachmentGroup,
     AttachmentMedia, AttachmentStatus, AttachmentTitle,
 };
 ```
@@ -66,17 +66,12 @@ Attachment::new()
 
 ## 缩略图与方向
 
-使用 `Axis::Vertical` 将预览放在元数据上方。`Attachment` 会用 axis 放置 content 与 actions，并把自身 size 作为 media slot 的默认尺寸。显式 media 尺寸或任意 `Styled` refinement 仍可覆盖这些默认值。
+使用 `Axis::Vertical` 将预览放在元数据上方。横向 Attachment 的最小宽度为 160 px；纵向 Attachment 在无 content 时宽 96 px，有 content 时宽 120 px，media 默认保持正方形。显式 media 尺寸或任意 `Styled` refinement 仍可覆盖这些默认值。
 
 ```rust
 Attachment::new()
     .axis(Axis::Vertical)
-    .media(
-        AttachmentMedia::new()
-            .src(preview_url)
-            .w_full()
-            .h(px(140.)),
-    )
+    .media(AttachmentMedia::new().src(preview_url))
     .content(
         AttachmentContent::new()
             .child(AttachmentTitle::new("preview.png"))
@@ -84,7 +79,17 @@ Attachment::new()
     )
 ```
 
-图片会用 `ObjectFit::Cover` 填满调用方设置的 media 区域。
+图片会用 `ObjectFit::Cover` 填满 media 区域。上传中、处理中或失败时，图片预览会降低透明度；等待上传和完成状态恢复为完全不透明。
+
+## 分组
+
+`AttachmentGroup` 提供 Base UI 的横向间距与滚动行为。它需要稳定的 GPUI element id 保存滚动状态：
+
+```rust
+AttachmentGroup::new("message-attachments")
+    .child(first_attachment)
+    .child(second_attachment)
+```
 
 ## 自定义样式
 
@@ -96,7 +101,7 @@ Attachment::new()
 
 - 直接使用 `Button`，不增加 `AttachmentAction`，以保留 Button 的全部 variant、size、事件与可访问性选项。
 - 应用自行组合导航或预览行为，不增加覆盖整个卡片的 `AttachmentTrigger`；GPUI 的焦点与点击所有权应保持明确。
-- 多附件布局使用 `h_flex()`、`v_flex()` 或应用自己的滚动容器。单独的 `AttachmentGroup` 只会重复布局与滚动 API。
+- `AttachmentGroup` 只负责共享的横向间距和 overflow 行为。需要 snap、选择或自定义滚动控件时，使用应用自己的容器。
 - 直接使用 `Progress`，不增加附件专属进度包装。
 
 保留的具名 slot 都有稳定的附件语义，并分别负责有意义的默认布局，因此它们属于有效的组件边界，而非只为样式增加的包装层。
@@ -104,6 +109,7 @@ Attachment::new()
 ## API 参考
 
 - [Attachment]
+- [AttachmentGroup]
 - [AttachmentMedia]
 - [AttachmentContent]
 - [AttachmentTitle]
@@ -111,6 +117,7 @@ Attachment::new()
 - [AttachmentActions]
 
 [Attachment]: https://docs.rs/gpui-component/latest/gpui_component/attachment/struct.Attachment.html
+[AttachmentGroup]: https://docs.rs/gpui-component/latest/gpui_component/attachment/struct.AttachmentGroup.html
 [AttachmentMedia]: https://docs.rs/gpui-component/latest/gpui_component/attachment/struct.AttachmentMedia.html
 [AttachmentContent]: https://docs.rs/gpui-component/latest/gpui_component/attachment/struct.AttachmentContent.html
 [AttachmentTitle]: https://docs.rs/gpui-component/latest/gpui_component/attachment/struct.AttachmentTitle.html

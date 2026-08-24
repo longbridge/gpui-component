@@ -1,10 +1,10 @@
 use gpui::{
-    AnyElement, App, Axis, ImageSource, IntoElement, ObjectFit, ParentElement, RenderOnce,
-    SharedString, StyleRefinement, Styled, StyledImage as _, Window, div, img,
-    prelude::FluentBuilder as _,
+    AnyElement, App, Axis, ElementId, ImageSource, InteractiveElement as _, IntoElement, ObjectFit,
+    ParentElement, RenderOnce, SharedString, StatefulInteractiveElement as _, StyleRefinement,
+    Styled, StyledImage as _, Window, div, img, prelude::FluentBuilder as _,
 };
 
-use crate::{ActiveTheme as _, Sizable, Size, StyledExt as _, v_flex};
+use crate::{ActiveTheme as _, Sizable, Size, StyledExt as _, h_flex, v_flex};
 
 /// The lifecycle status of an attachment.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -41,6 +41,11 @@ impl AttachmentStatus {
     /// Returns whether the attachment has failed.
     pub fn is_failed(self) -> bool {
         matches!(self, Self::Failed)
+    }
+
+    /// Returns whether the attachment is ready.
+    pub fn is_complete(self) -> bool {
+        matches!(self, Self::Complete)
     }
 
     /// Returns whether the attachment is in an in-progress state.
@@ -131,7 +136,10 @@ impl Attachment {
         let axis = self.axis;
         let status = self.status;
 
-        self.media = self.media.take().map(|media| media.layout(size, status));
+        self.media = self
+            .media
+            .take()
+            .map(|media| media.layout(size, status, axis));
         self.content = self
             .content
             .take()
@@ -149,6 +157,7 @@ impl RenderOnce for Attachment {
         let size = self.size;
         let axis = self.axis;
         let status = self.status;
+        let has_content = self.content.is_some();
 
         self.layout_slots();
 
@@ -161,7 +170,11 @@ impl RenderOnce for Attachment {
             .max_w_full()
             .min_w_0()
             .gap(gap)
-            .rounded(tokens.radius.lg)
+            .rounded(if size == Size::XSmall {
+                tokens.radius.lg
+            } else {
+                tokens.radius.xl
+            })
             .border_1()
             .border_color(if status.is_failed() {
                 tokens.colors.destructive.opacity(0.3)
@@ -177,8 +190,15 @@ impl RenderOnce for Attachment {
             .line_height(tokens.typography.sm.line_height);
 
         element = match axis {
-            Axis::Horizontal => element.items_center(),
-            Axis::Vertical => element.flex_col().items_start(),
+            Axis::Horizontal => element.min_w(gpui::px(160.)).items_center(),
+            Axis::Vertical => element
+                .w(if has_content {
+                    gpui::px(120.)
+                } else {
+                    gpui::px(96.)
+                })
+                .flex_col()
+                .items_start(),
         };
 
         element
@@ -198,6 +218,7 @@ pub struct AttachmentMedia {
     style: StyleRefinement,
     size: Option<Size>,
     status: AttachmentStatus,
+    axis: Axis,
     source: Option<ImageSource>,
     children: Vec<AnyElement>,
 }
@@ -209,6 +230,7 @@ impl AttachmentMedia {
             style: StyleRefinement::default(),
             size: None,
             status: AttachmentStatus::Complete,
+            axis: Axis::Horizontal,
             source: None,
             children: Vec::new(),
         }
@@ -220,11 +242,12 @@ impl AttachmentMedia {
         self
     }
 
-    fn layout(mut self, size: Size, status: AttachmentStatus) -> Self {
+    fn layout(mut self, size: Size, status: AttachmentStatus, axis: Axis) -> Self {
         if self.size.is_none() {
             self.size = Some(size);
         }
         self.status = status;
+        self.axis = axis;
         self
     }
 }
@@ -263,6 +286,11 @@ impl RenderOnce for AttachmentMedia {
         let source = self.source;
         let has_source = source.is_some();
         let failed_media = self.status.is_failed() && !has_source;
+        let dimmed_image = has_source
+            && !matches!(
+                self.status,
+                AttachmentStatus::Pending | AttachmentStatus::Complete
+            );
         let children = self.children;
 
         let element = div()
@@ -272,8 +300,10 @@ impl RenderOnce for AttachmentMedia {
             .items_center()
             .justify_center()
             .overflow_hidden()
-            .w(size)
-            .h(size)
+            .when(self.axis == Axis::Horizontal, |this| this.w(size).h(size))
+            .when(self.axis == Axis::Vertical, |this| {
+                this.w_full().aspect_ratio(1.)
+            })
             .rounded(radius)
             .bg(if failed_media {
                 tokens.colors.destructive.opacity(0.1)
@@ -288,6 +318,7 @@ impl RenderOnce for AttachmentMedia {
             .when_some(source, |this, source| {
                 this.child(img(source).size_full().object_fit(ObjectFit::Cover))
             })
+            .when(dimmed_image, |this| this.opacity(0.6))
             .when(!has_source, |this| this.children(children))
             .refine_style(&self.style);
 
@@ -514,14 +545,73 @@ fn attachment_spacing(
     tokens: &gpui_base::SemanticThemeTokens,
 ) -> (gpui::Pixels, gpui::Pixels, gpui::Pixels) {
     match size {
-        Size::XSmall => (tokens.spacing.xs, tokens.spacing.xs, tokens.spacing.xs),
-        Size::Small => (tokens.spacing.sm, tokens.spacing.sm, tokens.spacing.xs),
-        Size::Medium => (tokens.spacing.sm, tokens.spacing.md, tokens.spacing.sm),
+        Size::XSmall => (
+            tokens.spacing.xs + tokens.spacing.xxs,
+            tokens.spacing.xs + tokens.spacing.xxs,
+            tokens.spacing.xs,
+        ),
+        Size::Small => (
+            tokens.spacing.sm + tokens.spacing.xxs,
+            tokens.spacing.sm,
+            tokens.spacing.xs + tokens.spacing.xxs,
+        ),
+        Size::Medium => (
+            tokens.spacing.sm,
+            tokens.spacing.sm + tokens.spacing.xxs,
+            tokens.spacing.sm,
+        ),
         Size::Large => (tokens.spacing.md, tokens.spacing.lg, tokens.spacing.md),
         Size::Size(value) => {
             let padding = value * 0.25;
             (tokens.spacing.xs, padding, padding)
         }
+    }
+}
+
+/// A horizontally scrollable row of attachments.
+#[derive(IntoElement)]
+pub struct AttachmentGroup {
+    id: ElementId,
+    style: StyleRefinement,
+    children: Vec<AnyElement>,
+}
+
+impl AttachmentGroup {
+    /// Create an empty attachment group with a stable scroll identifier.
+    pub fn new(id: impl Into<ElementId>) -> Self {
+        Self {
+            id: id.into(),
+            style: StyleRefinement::default(),
+            children: Vec::new(),
+        }
+    }
+}
+
+impl ParentElement for AttachmentGroup {
+    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
+        self.children.extend(elements);
+    }
+}
+
+impl Styled for AttachmentGroup {
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
+    }
+}
+
+impl RenderOnce for AttachmentGroup {
+    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        let tokens = cx.theme().semantic_tokens();
+
+        h_flex()
+            .id(self.id)
+            .w_full()
+            .min_w_0()
+            .gap(tokens.spacing.md)
+            .py(tokens.spacing.xs)
+            .overflow_x_scroll()
+            .refine_style(&self.style)
+            .children(self.children)
     }
 }
 
@@ -595,6 +685,7 @@ mod tests {
         assert!(AttachmentStatus::Uploading.is_in_progress());
         assert!(AttachmentStatus::Processing.is_processing());
         assert!(AttachmentStatus::Failed.is_failed());
+        assert!(AttachmentStatus::Complete.is_complete());
         assert!(!AttachmentStatus::Complete.is_in_progress());
     }
 
@@ -612,13 +703,26 @@ mod tests {
 
     #[test]
     fn test_attachment_media_size_inherits_root_unless_explicit() {
-        let inherited = AttachmentMedia::new().layout(Size::Small, AttachmentStatus::Complete);
+        let inherited =
+            AttachmentMedia::new().layout(Size::Small, AttachmentStatus::Complete, Axis::Vertical);
         assert_eq!(inherited.size, Some(Size::Small));
+        assert_eq!(inherited.axis, Axis::Vertical);
 
-        let explicit = AttachmentMedia::new()
-            .with_size(Size::XSmall)
-            .layout(Size::Large, AttachmentStatus::Failed);
+        let explicit = AttachmentMedia::new().with_size(Size::XSmall).layout(
+            Size::Large,
+            AttachmentStatus::Failed,
+            Axis::Horizontal,
+        );
         assert_eq!(explicit.size, Some(Size::XSmall));
         assert_eq!(explicit.status, AttachmentStatus::Failed);
+    }
+
+    #[test]
+    fn test_attachment_group_builder() {
+        let group = AttachmentGroup::new("attachments")
+            .child("First")
+            .child("Second");
+
+        assert_eq!(group.children.len(), 2);
     }
 }

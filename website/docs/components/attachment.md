@@ -11,7 +11,7 @@ description: Composable file and media attachment surfaces with upload states, p
 
 ```rust
 use gpui_component::attachment::{
-    Attachment, AttachmentActions, AttachmentContent, AttachmentDescription,
+    Attachment, AttachmentActions, AttachmentContent, AttachmentDescription, AttachmentGroup,
     AttachmentMedia, AttachmentStatus, AttachmentTitle,
 };
 ```
@@ -66,17 +66,12 @@ Attachment::new()
 
 ## Thumbnail and orientation
 
-Use `Axis::Vertical` for a preview above the metadata. `Attachment` uses its axis to place the content and actions, and supplies its size as the media slot's default. An explicit media size or any `Styled` refinement can still override those defaults.
+Use `Axis::Vertical` for a preview above the metadata. Horizontal attachments have a 160 px minimum width. Vertical attachments are 96 px wide without content and 120 px wide with content, and their media uses a square aspect ratio. An explicit media size or any `Styled` refinement can still override those defaults.
 
 ```rust
 Attachment::new()
     .axis(Axis::Vertical)
-    .media(
-        AttachmentMedia::new()
-            .src(preview_url)
-            .w_full()
-            .h(px(140.)),
-    )
+    .media(AttachmentMedia::new().src(preview_url))
     .content(
         AttachmentContent::new()
             .child(AttachmentTitle::new("preview.png"))
@@ -84,7 +79,17 @@ Attachment::new()
     )
 ```
 
-The image fills the styled media bounds with `ObjectFit::Cover`.
+The image fills the styled media bounds with `ObjectFit::Cover`. Image previews dim while uploading, processing, or failed, and return to full opacity while pending or complete.
+
+## Groups
+
+`AttachmentGroup` provides the Base UI horizontal gap and scrolling behavior. It requires a stable GPUI element id for scroll state:
+
+```rust
+AttachmentGroup::new("message-attachments")
+    .child(first_attachment)
+    .child(second_attachment)
+```
 
 ## Custom styling
 
@@ -96,7 +101,7 @@ This API intentionally omits several shadcn/ui parts:
 
 - Use `Button` directly instead of `AttachmentAction`; this preserves every Button variant, size, event, and accessibility option.
 - Compose application navigation or preview behavior instead of a full-card `AttachmentTrigger`; GPUI focus and click ownership should remain explicit.
-- Use `h_flex()`, `v_flex()`, or an application-owned scroll container for groups. A dedicated `AttachmentGroup` would only duplicate layout and scrolling APIs.
+- `AttachmentGroup` stays thin and owns only the shared horizontal gap and overflow behavior. Use an application-owned container when snapping, selection, or custom scroll controls are required.
 - Use `Progress` directly instead of an attachment-specific progress wrapper.
 
 The remaining named slots have stable attachment semantics and each owns meaningful default layout, so they are useful component boundaries rather than styling-only wrappers.
@@ -104,6 +109,7 @@ The remaining named slots have stable attachment semantics and each owns meaning
 ## API reference
 
 - [Attachment]
+- [AttachmentGroup]
 - [AttachmentMedia]
 - [AttachmentContent]
 - [AttachmentTitle]
@@ -111,6 +117,7 @@ The remaining named slots have stable attachment semantics and each owns meaning
 - [AttachmentActions]
 
 [Attachment]: https://docs.rs/gpui-component/latest/gpui_component/attachment/struct.Attachment.html
+[AttachmentGroup]: https://docs.rs/gpui-component/latest/gpui_component/attachment/struct.AttachmentGroup.html
 [AttachmentMedia]: https://docs.rs/gpui-component/latest/gpui_component/attachment/struct.AttachmentMedia.html
 [AttachmentContent]: https://docs.rs/gpui-component/latest/gpui_component/attachment/struct.AttachmentContent.html
 [AttachmentTitle]: https://docs.rs/gpui-component/latest/gpui_component/attachment/struct.AttachmentTitle.html

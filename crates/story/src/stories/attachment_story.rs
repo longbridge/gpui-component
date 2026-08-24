@@ -5,8 +5,8 @@ use gpui::{
 use gpui_component::{
     ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt as _,
     attachment::{
-        Attachment, AttachmentActions, AttachmentContent, AttachmentDescription, AttachmentMedia,
-        AttachmentStatus, AttachmentTitle,
+        Attachment, AttachmentActions, AttachmentContent, AttachmentDescription, AttachmentGroup,
+        AttachmentMedia, AttachmentStatus, AttachmentTitle,
     },
     button::{Button, ButtonVariants as _},
     progress::Progress,
@@ -57,13 +57,14 @@ impl Render for AttachmentStory {
             .gap_4()
             .child(
                 section("File metadata")
-                    .description("Compose the media, metadata, and actions slots from existing controls.")
+                    .description(
+                        "Compose the media, metadata, and actions slots from existing controls.",
+                    )
                     .w(px(680.))
                     .v_flex()
                     .gap_3()
                     .child(
                         Attachment::new()
-                            .w_full()
                             .media(AttachmentMedia::new().child(Icon::new(IconName::File)))
                             .content(
                                 AttachmentContent::new()
@@ -82,7 +83,6 @@ impl Render for AttachmentStory {
                     .child(
                         Attachment::new()
                             .small()
-                            .w_full()
                             .media(AttachmentMedia::new().child(Icon::new(IconName::File)))
                             .content(
                                 AttachmentContent::new()
@@ -93,14 +93,15 @@ impl Render for AttachmentStory {
             )
             .child(
                 section("Upload states")
-                    .description("Keep progress and recovery actions composed from Progress and Button.")
+                    .description(
+                        "Keep progress and recovery actions composed from Progress and Button.",
+                    )
                     .w(px(680.))
                     .v_flex()
                     .gap_3()
                     .child(
                         Attachment::new()
                             .status(AttachmentStatus::Uploading)
-                            .w_full()
                             .media(AttachmentMedia::new().child(Icon::new(IconName::File)))
                             .content(
                                 AttachmentContent::new()
@@ -120,7 +121,6 @@ impl Render for AttachmentStory {
                     .child(
                         Attachment::new()
                             .status(AttachmentStatus::Failed)
-                            .w_full()
                             .media(AttachmentMedia::new().child(Icon::new(IconName::File)))
                             .content(
                                 AttachmentContent::new()
@@ -144,17 +144,17 @@ impl Render for AttachmentStory {
             )
             .child(
                 section("Thumbnail")
-                    .description("Vertical attachments can turn the media slot into a full-width preview.")
+                    .description(
+                        "Vertical attachments can turn the media slot into a full-width preview.",
+                    )
                     .w(px(680.))
                     .child(
                         Attachment::new()
                             .axis(Axis::Vertical)
-                            .w(px(320.))
                             .media(
-                                AttachmentMedia::new()
-                                    .src("https://pub.lbkrs.com/files/202503/vEnnmgUM6bo362ya/sdk.svg")
-                                    .w_full()
-                                    .h(px(140.)),
+                                AttachmentMedia::new().src(
+                                    "https://pub.lbkrs.com/files/202503/vEnnmgUM6bo362ya/sdk.svg",
+                                ),
                             )
                             .content(
                                 AttachmentContent::new()
@@ -168,6 +168,44 @@ impl Render for AttachmentStory {
                                         .xsmall()
                                         .icon(IconName::Close),
                                 ),
+                            ),
+                    ),
+            )
+            .child(
+                section("Sizes and group")
+                    .description(
+                        "Attachments size to their content and groups scroll horizontally.",
+                    )
+                    .w(px(680.))
+                    .child(
+                        AttachmentGroup::new("attachment-story-group")
+                            .child(
+                                Attachment::new()
+                                    .media(AttachmentMedia::new().child(Icon::new(IconName::File)))
+                                    .content(
+                                        AttachmentContent::new()
+                                            .child(AttachmentTitle::new("default.pdf"))
+                                            .child(AttachmentDescription::new("PDF · 2.4 MB")),
+                                    ),
+                            )
+                            .child(
+                                Attachment::new()
+                                    .small()
+                                    .media(AttachmentMedia::new().child(Icon::new(IconName::File)))
+                                    .content(
+                                        AttachmentContent::new()
+                                            .child(AttachmentTitle::new("small.csv"))
+                                            .child(AttachmentDescription::new("CSV · 840 KB")),
+                                    ),
+                            )
+                            .child(
+                                Attachment::new()
+                                    .xsmall()
+                                    .media(AttachmentMedia::new().child(Icon::new(IconName::File)))
+                                    .content(
+                                        AttachmentContent::new()
+                                            .child(AttachmentTitle::new("compact.txt")),
+                                    ),
                             ),
                     ),
             )
