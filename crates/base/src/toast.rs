@@ -19,7 +19,14 @@ use crate::{
 /// Motion tokens used by an unstyled toast stack.
 #[derive(Clone, Copy, Debug)]
 pub struct ToastMotion {
-    /// Duration of stack expansion and collapse.
+    /// Time scale of the stack's motion.
+    ///
+    /// This is read as two different quantities, because the stack sequences
+    /// one thing and interpolates another. [`ToastManager`] treats it as a
+    /// deadline: a toast is present once it has elapsed. The layout treats it
+    /// as a spring response, which is the scale the reflow is felt at rather
+    /// than the moment it stops — a toast arriving still nudges the stack for
+    /// a little longer than this.
     pub duration: Duration,
     /// Duration before an ending toast is unmounted.
     pub exit_duration: Duration,

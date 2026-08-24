@@ -338,6 +338,12 @@ where
     let config = policy.config();
     let stepped = config.step(snapshot.state, snapshot.target, elapsed);
 
+    // A spring that is already exactly at rest on its target writes nothing, so
+    // `updated_at` goes stale for as long as it stays there. The next retarget
+    // then steps a zero displacement at zero velocity over that whole gap, which
+    // any elapsed time leaves where it is, so the stale clock cannot move the
+    // value — it only has to not produce a NaN, and every term the propagator
+    // scales is finite.
     if config.is_settled(stepped, target_position, policy.epsilon) {
         if snapshot.state.position != target_position || snapshot.state.velocity != 0.0 {
             state.update(cx, |state, _| settle(state));
