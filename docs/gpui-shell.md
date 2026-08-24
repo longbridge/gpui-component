@@ -1957,7 +1957,7 @@ modules are granted by the embedding application, with gpui_shell::set_native_mo
 ```
 
 ```text
-unknown native module `workspce`; this host registered: editor, workspace
+unknown native module `wrkspace`; this host registered: editor, workspace
 ```
 
 ```text
