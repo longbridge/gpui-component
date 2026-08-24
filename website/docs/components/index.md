@@ -10,6 +10,7 @@ collapsed: false
 
 - [Accordion](accordion) - Collapsible content panels
 - [Alert](alert) - Alert messages with different variants
+- [Attachment](attachment) - File and media attachment surfaces
 - [Avatar](avatar) - User avatars with fallback text
 - [Badge](badge) - Count badges and indicators
 - [Bubble](bubble) - Chat message surface with alignment and reactions
