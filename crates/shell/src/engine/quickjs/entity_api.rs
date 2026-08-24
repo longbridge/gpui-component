@@ -12,15 +12,34 @@
 
 use std::rc::Weak;
 
-use rquickjs::{Ctx, Exception, Object, Result as JsResult, function::Func};
+use rquickjs::{
+    Ctx, Exception, FromJs, Function, Object, Persistent, Result as JsResult, Value, function::Func,
+};
 
 use crate::{
-    entities::{self, EntityHandle},
+    entities::{self, EntityHandle, InputEventName},
     scope::{self, ScopePhase},
     spec::{Component, SpecId},
 };
 
 use super::ShellRuntime;
+
+/// A script callback, persisted at conversion time.
+///
+/// A closure cannot take both `Ctx<'js>` and `Function<'js>` — the two elided
+/// lifetimes will not unify — so the function is saved into a `Persistent`
+/// inside `FromJs`, where both are still the same lifetime. The same reason the
+/// engine's `Arguments` type exists.
+struct Handler(Persistent<Function<'static>>);
+
+impl<'js> FromJs<'js> for Handler {
+    fn from_js(ctx: &Ctx<'js>, value: Value<'js>) -> JsResult<Self> {
+        let function = value
+            .as_function()
+            .ok_or_else(|| Exception::throw_type(ctx, "expected a function"))?;
+        Ok(Self(Persistent::save(ctx, function.clone())))
+    }
+}
 
 /// Installs the host half of the retained-state API. The prelude wraps these
 /// into `InputState` and `Input`.
@@ -76,6 +95,60 @@ pub fn install(ctx: &Ctx<'_>, module: &Object<'_>, runtime: Weak<ShellRuntime>) 
                     state.update(cx, |state, cx| state.set_value(value, window, cx));
                 })
                 .ok_or_else(|| needs_call(&ctx, "set_value()"))
+            },
+        ),
+    )?;
+
+    let subscribe_runtime = runtime.clone();
+    globals.set(
+        "__input_on",
+        Func::from(
+            move |ctx: Ctx<'_>,
+                  handle: EntityHandle,
+                  name: String,
+                  handler: Handler|
+                  -> JsResult<bool> {
+                let event = InputEventName::from_name(&name).ok_or_else(|| {
+                    Exception::throw_type(
+                        &ctx,
+                        &format!(
+                            "unknown input event `{name}`; expected one of: {}",
+                            InputEventName::NAMES.join(", ")
+                        ),
+                    )
+                })?;
+
+                let saved = handler.0;
+                let runtime = subscribe_runtime.clone();
+
+                let subscribed = scope::with_current(|window, cx| {
+                    entities::subscribe_input(
+                        handle,
+                        event,
+                        window,
+                        cx,
+                        move |emitted, window, cx| {
+                            let Some(runtime) = runtime.upgrade() else {
+                                return;
+                            };
+                            runtime.dispatch_input_event(&saved, emitted, window, cx);
+                        },
+                    )
+                })
+                .ok_or_else(|| {
+                    Exception::throw_type(
+                        &ctx,
+                        "on(...) needs a live host call; subscribe from init() or an event handler",
+                    )
+                })?;
+
+                if !subscribed {
+                    return Err(Exception::throw_type(
+                        &ctx,
+                        "this input state has been released",
+                    ));
+                }
+                Ok(true)
             },
         ),
     )?;

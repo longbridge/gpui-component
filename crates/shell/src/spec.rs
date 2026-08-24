@@ -30,6 +30,8 @@ pub enum Component {
     /// A text input, addressed by its entity handle rather than by an id: the
     /// state is what identifies it, and the state outlives the description.
     Input(crate::entities::EntityHandle),
+    /// A vector image, loaded from the application's own directory.
+    Svg(String),
 }
 
 impl Component {
@@ -43,6 +45,7 @@ impl Component {
             Component::Checkbox(_) => "Checkbox",
             Component::Switch(_) => "Switch",
             Component::Input(_) => "Input",
+            Component::Svg(_) => "svg",
         }
     }
 }
@@ -191,7 +194,8 @@ impl SpecArena {
             Component::Text(value)
             | Component::Button(value)
             | Component::Checkbox(value)
-            | Component::Switch(value) => out.push_str(&format!(" {value:?}")),
+            | Component::Switch(value)
+            | Component::Svg(value) => out.push_str(&format!(" {value:?}")),
             Component::Input(handle) => out.push_str(&format!(" #{handle}")),
             _ => {}
         }

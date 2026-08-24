@@ -11,15 +11,21 @@
 
 use std::cell::RefCell;
 
-use gpui::{App, AppContext as _, Entity, Window};
-use gpui_base::input::{InputEditorStyle, InputState};
+use gpui::{App, AppContext as _, Entity, Subscription, Window};
+use gpui_base::input::{InputEditorStyle, InputEvent, InputState};
 
 /// A script-visible reference to retained state.
 pub type EntityHandle = u32;
 
 /// What a handle points at. One variant per entity type the script can create.
 enum Record {
-    Input(Entity<InputState>),
+    Input {
+        state: Entity<InputState>,
+        /// Subscriptions are stored, not returned, because a dropped
+        /// `Subscription` stops delivering: a script that registers a handler
+        /// and moves on would otherwise silently receive nothing.
+        subscriptions: Vec<Subscription>,
+    },
 }
 
 thread_local! {
@@ -51,14 +57,82 @@ pub fn create_input(
         state.update(cx, |state, cx| state.set_value(value, window, cx));
     }
 
-    push(Record::Input(state))
+    push(Record::Input {
+        state,
+        subscriptions: Vec::new(),
+    })
 }
 
 /// The entity behind an input handle, if it is still live.
 pub fn input(handle: EntityHandle) -> Option<Entity<InputState>> {
     STORE.with(|store| match store.borrow().get(handle as usize) {
-        Some(Some(Record::Input(state))) => Some(state.clone()),
+        Some(Some(Record::Input { state, .. })) => Some(state.clone()),
         _ => None,
+    })
+}
+
+/// The events a script can subscribe to, named for what they mean rather than
+/// for the key that produced them.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum InputEventName {
+    Change,
+    Submit,
+    Focus,
+    Blur,
+}
+
+impl InputEventName {
+    pub fn from_name(name: &str) -> Option<Self> {
+        match name {
+            "change" => Some(Self::Change),
+            "submit" => Some(Self::Submit),
+            "focus" => Some(Self::Focus),
+            "blur" => Some(Self::Blur),
+            _ => None,
+        }
+    }
+
+    pub const NAMES: &'static [&'static str] = &["change", "submit", "focus", "blur"];
+
+    fn matches(self, event: &InputEvent) -> bool {
+        matches!(
+            (self, event),
+            (Self::Change, InputEvent::Change)
+                | (Self::Submit, InputEvent::PressEnter { .. })
+                | (Self::Focus, InputEvent::Focus)
+                | (Self::Blur, InputEvent::Blur)
+        )
+    }
+}
+
+/// Subscribes to one input event for as long as the handle lives.
+///
+/// The subscription is owned by the store rather than by the script: a script
+/// has no place to keep it, and a handler that stops firing because a value was
+/// dropped is the kind of bug nobody finds.
+pub fn subscribe_input(
+    handle: EntityHandle,
+    event: InputEventName,
+    window: &mut Window,
+    cx: &mut App,
+    handler: impl Fn(&InputEvent, &mut Window, &mut App) + 'static,
+) -> bool {
+    let Some(state) = input(handle) else {
+        return false;
+    };
+
+    let subscription = window.subscribe(&state, cx, move |_, emitted: &InputEvent, window, cx| {
+        if event.matches(emitted) {
+            handler(emitted, window, cx);
+        }
+    });
+
+    STORE.with(|store| match store.borrow_mut().get_mut(handle as usize) {
+        Some(Some(Record::Input { subscriptions, .. })) => {
+            subscriptions.push(subscription);
+            true
+        }
+        _ => false,
     })
 }
 

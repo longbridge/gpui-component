@@ -147,6 +147,13 @@ pub fn materialize(
             }
             finish(switch, refinement, children)
         }
+        Component::Svg(path) => {
+            // An icon carries no children and takes its color from the text
+            // color, which is what makes it inherit a row's tone for free.
+            let mut image = gpui::svg().path(SharedString::from(path));
+            image.style().refine(&refinement);
+            image.into_any_element()
+        }
         Component::Input(handle) => {
             let Some(state) = crate::entities::input(handle) else {
                 tracing::error!("input handle {handle} is no longer live");

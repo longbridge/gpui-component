@@ -4,15 +4,15 @@
 // here. Spacing follows the semantic scale (2/4/8/12/16/24/32) and type stays
 // on 12/13/14/16/20; colors are semantic tokens, never literals.
 
-import { div, h_flex, v_flex, text, Button, Checkbox, Input } from "gpui";
+import { div, h_flex, v_flex, text, svg, Button, Checkbox, Input } from "gpui";
 
 export const SPACE = { xxs: 2, xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 };
 
 export const label = (value) =>
-  text(value).text_size(13).line_height(1.45).text_color("foreground");
+  text(value).text_size(13).line_height(1).text_color("foreground");
 
 export const muted = (value) =>
-  text(value).text_size(12).line_height(1.45).text_color("muted_foreground");
+  text(value).text_size(12).line_height(1).text_color("muted_foreground");
 
 export const title = (value) =>
   text(value).text_size(20).line_height(1.3).font_semibold().text_color("foreground");
@@ -40,6 +40,7 @@ export const button = (id, caption, onClick, options = {}) => {
     .justify_center()
     .h(28)
     .px(SPACE.md)
+    .gap(SPACE.xs)
     .rounded(6)
     .border(1)
     .border_color(selected ? "accent" : palette.border)
@@ -51,6 +52,7 @@ export const button = (id, caption, onClick, options = {}) => {
     .when(!disabled, (el) => el.active((style) => style.opacity(0.75)))
     .when(disabled, (el) => el.opacity(0.45))
     .when(!disabled, (el) => el.on_click(onClick))
+    .when(Boolean(options.icon), (el) => el.child(icon(options.icon, 14)))
     .child(text(caption));
 };
 
@@ -91,9 +93,7 @@ export const checkbox = (id, checked, onChange, content) =>
         .border(1)
         .border_color(checked ? "primary" : "input")
         .bg(checked ? "primary" : "surface")
-        .when(checked, (el) =>
-          el.child(text("✓").text_size(11).line_height(1).text_color("primary_foreground")),
-        ),
+        .when(checked, (el) => el.child(icon("check", 10).text_color("primary_foreground"))),
     )
     .child(content);
 
@@ -108,3 +108,10 @@ export const emptyState = (heading, hint) =>
     .child(muted(hint));
 
 export const row = () => h_flex().items_center().gap(SPACE.md);
+
+/// An icon from the application's own `icons/` directory.
+///
+/// It takes its color from the text color around it, so an icon inside a muted
+/// row is muted without being told.
+export const icon = (name, size = 16) =>
+  svg(`icons/${name}.svg`).w(size).h(size).flex_none();

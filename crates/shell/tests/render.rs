@@ -385,3 +385,40 @@ fn the_todolist_example_exercises_the_runtime(cx: &mut TestAppContext) {
         );
     }
 }
+
+#[cfg(feature = "quickjs")]
+#[gpui::test]
+fn an_unknown_input_event_names_the_valid_ones(cx: &mut TestAppContext) {
+    cx.update(|cx| gpui_shell::init(cx));
+
+    let runtime = ShellRuntime::new().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+
+    let source = r#"
+import { View, div, InputState } from "gpui";
+
+export default class Bad extends View {
+  init() {
+    this.field = InputState.new({});
+    this.field.on("entered", () => {});
+  }
+  render() {
+    return div();
+  }
+}
+"#;
+
+    let view_type = runtime.load_source("bad", source).expect("load");
+
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+
+    let error = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .expect_err("an unknown event name must fail");
+
+    assert!(
+        error.to_string().contains("submit"),
+        "the error should list the valid events, got: {error}"
+    );
+}

@@ -64,6 +64,7 @@ const MODULE_EXPORTS: &[&str] = &[
     "h_flex",
     "v_flex",
     "text",
+    "svg",
     "Button",
     "Checkbox",
     "Switch",
@@ -300,6 +301,40 @@ impl ShellRuntime {
 
         if let Err(error) = result {
             tracing::error!("error in click handler: {error}");
+        }
+        scheduler::drain_jobs(&self.js_runtime);
+    }
+
+    /// Delivers an input event to a long-lived script subscription.
+    ///
+    /// Unlike a rendered callback this handler outlives the pass that created
+    /// it, so it lives with the entity rather than in the per-frame arena.
+    pub(super) fn dispatch_input_event(
+        self: &Rc<Self>,
+        handler: &Persistent<Function<'static>>,
+        event: &gpui_base::input::InputEvent,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        use gpui_base::input::InputEvent;
+
+        let (_guard, generation) = scope::enter(window, cx, ScopePhase::Event, None);
+
+        let result = self.with_js(|ctx| {
+            let handler = handler.clone().restore(ctx)?;
+            let payload = Object::new(ctx.clone())?;
+            match event {
+                InputEvent::PressEnter { secondary, shift } => {
+                    payload.set("secondary", *secondary)?;
+                    payload.set("shift", *shift)?;
+                }
+                InputEvent::Change | InputEvent::Focus | InputEvent::Blur => {}
+            }
+            handler.call::<_, ()>((payload, context_object(ctx, generation)?))
+        });
+
+        if let Err(error) = result {
+            tracing::error!("error in input handler: {error}");
         }
         scheduler::drain_jobs(&self.js_runtime);
     }
@@ -594,6 +629,7 @@ globalThis.__gpui = (() => {
     __handle: handle,
     value: () => __input_value(handle),
     set_value: (next) => __input_set_value(handle, String(next ?? "")),
+    on: (event, handler) => __input_on(handle, String(event), handler),
     release: () => __input_release(handle),
   });
 
@@ -611,6 +647,7 @@ globalThis.__gpui = (() => {
     h_flex: () => element(__h_flex()),
     v_flex: () => element(__v_flex()),
     text: (value) => element(__text(String(value))),
+    svg: (path) => element(__svg(String(path))),
     Button: { new: (id) => element(__button(String(id))) },
     Checkbox: { new: (id) => element(__checkbox(String(id))) },
     Switch: { new: (id) => element(__switch(String(id))) },
@@ -648,6 +685,7 @@ impl ShellRuntime {
             constructor(&globals, "__h_flex", runtime.clone(), || Component::HFlex)?;
             constructor(&globals, "__v_flex", runtime.clone(), || Component::VFlex)?;
             text_constructor(&globals, "__text", runtime.clone(), Component::Text)?;
+            text_constructor(&globals, "__svg", runtime.clone(), Component::Svg)?;
             text_constructor(&globals, "__button", runtime.clone(), Component::Button)?;
             text_constructor(&globals, "__checkbox", runtime.clone(), Component::Checkbox)?;
             text_constructor(&globals, "__switch", runtime.clone(), Component::Switch)?;

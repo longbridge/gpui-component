@@ -4,6 +4,7 @@
 //! capabilities; Lua owns composition, presentation and business logic. See
 //! `docs/research/gpui-shell.md` for the design this implements.
 
+pub mod assets;
 pub mod capability;
 pub mod engine;
 pub mod entities;

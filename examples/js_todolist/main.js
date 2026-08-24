@@ -13,6 +13,7 @@ import ConfirmClear from "./confirm.js";
 import {
   SPACE,
   button,
+  icon,
   checkbox,
   emptyState,
   field,
@@ -33,6 +34,9 @@ const FILTERS = [
 export default class TodoList extends View {
   init() {
     this.draft = InputState.new({ placeholder: "What needs doing?" });
+    // Enter is how a list like this is actually used; the Add button is for
+    // the pointer, not the primary path.
+    this.draft.on("submit", (_event, cx) => this.add(cx));
     this.items = load();
     this.filter = "all";
     this.nextId = this.items.reduce((max, item) => Math.max(max, item.id), 0) + 1;
@@ -127,7 +131,7 @@ export default class TodoList extends View {
     return h_flex()
       .items_center()
       .justify_between()
-      .child(title("Todo"))
+      .child(row().gap(SPACE.sm).child(icon("list", 18)).child(title("Todo")))
       .child(
         muted(
           this.items.length === 0
@@ -140,7 +144,12 @@ export default class TodoList extends View {
   composer() {
     return row()
       .child(field(this.draft))
-      .child(button("add", "Add", (_event, cx) => this.add(cx), { variant: "primary" }));
+      .child(
+        button("add", "Add", (_event, cx) => this.add(cx), {
+          variant: "primary",
+          icon: "plus",
+        }),
+      );
   }
 
   toolbar() {
@@ -183,6 +192,7 @@ export default class TodoList extends View {
         .child(
           button("remove-" + item.id, "Remove", (_event, cx) => this.remove(item.id, cx), {
             variant: "ghost",
+            icon: "trash",
           }),
         ),
     );

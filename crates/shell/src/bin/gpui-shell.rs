@@ -23,6 +23,7 @@ use gpui::{
 };
 use gpui_shell::{
     Capabilities, ScriptView, ShellRoot, ShellRuntime, ToastLevel, ToastRequest,
+    assets::AppAssets,
     watch::{self, SourceWatcher},
 };
 use tracing::{
@@ -265,95 +266,106 @@ fn version() -> String {
 // ---------------------------------------------------------------------------
 
 fn run(arguments: Arguments) {
-    gpui_platform::application().run(move |cx| {
-        gpui_shell::init(cx);
+    // Assets are served from the application directory, so the source has to be
+    // installed on the `Application` before the loop starts. Resolving the root
+    // here rather than inside the loop is what makes that possible; a path that
+    // does not resolve falls back to the argument and fails later with the
+    // message that explains why.
+    let asset_root = gpui_shell::runtime::resolve_app_root(&arguments.directory, ENTRY)
+        .unwrap_or_else(|_| arguments.directory.clone());
 
-        if arguments.is_development() {
-            // TODO(wiring): `sandbox` is a private module inside
-            // `engine::quickjs`, so the relaxations are unreachable from here.
-            // The library needs an engine-agnostic wrapper — a
-            // `gpui_shell::set_development_mode(bool)` in `lib.rs` that
-            // forwards to `engine::quickjs::sandbox::set_development_mode` under
-            // `#[cfg(feature = "quickjs")]` and is a no-op for the Lua engine —
-            // rather than `pub use engine::quickjs::sandbox`, which would
-            // publish an engine-specific path across a seam the crate is built
-            // to keep closed. It must run before `ShellRuntime::new`, because
-            // the policy is read when the context is created.
-            //
-            // gpui_shell::set_development_mode(true);
-            tracing::warn!(
-                "`--dev` is not wired up yet: the sandbox relaxations stay off, \
+    gpui_platform::application()
+        .with_assets(AppAssets::new(asset_root))
+        .run(move |cx| {
+            gpui_shell::init(cx);
+
+            if arguments.is_development() {
+                // TODO(wiring): `sandbox` is a private module inside
+                // `engine::quickjs`, so the relaxations are unreachable from here.
+                // The library needs an engine-agnostic wrapper — a
+                // `gpui_shell::set_development_mode(bool)` in `lib.rs` that
+                // forwards to `engine::quickjs::sandbox::set_development_mode` under
+                // `#[cfg(feature = "quickjs")]` and is a no-op for the Lua engine —
+                // rather than `pub use engine::quickjs::sandbox`, which would
+                // publish an engine-specific path across a seam the crate is built
+                // to keep closed. It must run before `ShellRuntime::new`, because
+                // the policy is read when the context is created.
+                //
+                // gpui_shell::set_development_mode(true);
+                tracing::warn!(
+                    "`--dev` is not wired up yet: the sandbox relaxations stay off, \
                  only source watching is enabled"
-            );
-        }
-
-        let runtime = match ShellRuntime::new() {
-            Ok(runtime) => runtime,
-            Err(error) => {
-                eprintln!("failed to start the script runtime: {error}");
-                std::process::exit(1);
+                );
             }
-        };
-        runtime.set_global(cx);
 
-        // Resolving here rather than leaving it to `load_app` gives the window
-        // title and the watcher the real application root even when the command
-        // line named `main.js`. A path that does not resolve is not reported
-        // twice: the load below fails with the message that explains why.
-        let root = gpui_shell::runtime::resolve_app_root(&arguments.directory, ENTRY)
-            .unwrap_or_else(|_| arguments.directory.clone());
+            let runtime = match ShellRuntime::new() {
+                Ok(runtime) => runtime,
+                Err(error) => {
+                    eprintln!("failed to start the script runtime: {error}");
+                    std::process::exit(1);
+                }
+            };
+            runtime.set_global(cx);
 
-        // Evaluating the module needs no window; constructing the view does.
-        // A view's `init` is where it creates the state it keeps across frames,
-        // and creating an entity needs a `Window`, so instantiation happens
-        // inside the window builder and hands the result back out here.
-        grant_local_access(&root);
+            // Resolving here rather than leaving it to `load_app` gives the window
+            // title and the watcher the real application root even when the command
+            // line named `main.js`. A path that does not resolve is not reported
+            // twice: the load below fails with the message that explains why.
+            let root = gpui_shell::runtime::resolve_app_root(&arguments.directory, ENTRY)
+                .unwrap_or_else(|_| arguments.directory.clone());
 
-        let module = runtime.load_app(&root).map_err(|error| {
-            eprintln!("{error}");
-            error.to_string()
-        });
+            // Evaluating the module needs no window; constructing the view does.
+            // A view's `init` is where it creates the state it keeps across frames,
+            // and creating an entity needs a `Window`, so instantiation happens
+            // inside the window builder and hands the result back out here.
+            grant_local_access(&root);
 
-        let built: Rc<RefCell<Option<Entity<ScriptView>>>> = Rc::new(RefCell::new(None));
-        let sink = built.clone();
-        let builder_runtime = runtime.clone();
+            let module = runtime.load_app(&root).map_err(|error| {
+                eprintln!("{error}");
+                error.to_string()
+            });
 
-        let window = cx
-            .open_window(window_options(&root, cx), move |window, cx| {
-                let content: AnyView = match &module {
-                    Ok(view_type) => match builder_runtime.instantiate(view_type, window, cx) {
-                        Ok(object) => {
-                            let view = cx.new(|_| ScriptView::new(builder_runtime.clone(), object));
-                            *sink.borrow_mut() = Some(view.clone());
-                            view.into()
-                        }
-                        Err(error) => {
-                            eprintln!("{error}");
-                            cx.new(|_| LoadFailure(error.to_string())).into()
-                        }
-                    },
-                    Err(message) => cx.new(|_| LoadFailure(message.clone())).into(),
-                };
+            let built: Rc<RefCell<Option<Entity<ScriptView>>>> = Rc::new(RefCell::new(None));
+            let sink = built.clone();
+            let builder_runtime = runtime.clone();
 
-                cx.new(|cx| ShellRoot::new(content, window, cx))
-            })
-            .expect("failed to open window");
+            let window = cx
+                .open_window(window_options(&root, cx), move |window, cx| {
+                    let content: AnyView = match &module {
+                        Ok(view_type) => match builder_runtime.instantiate(view_type, window, cx) {
+                            Ok(object) => {
+                                let view =
+                                    cx.new(|_| ScriptView::new(builder_runtime.clone(), object));
+                                *sink.borrow_mut() = Some(view.clone());
+                                view.into()
+                            }
+                            Err(error) => {
+                                eprintln!("{error}");
+                                cx.new(|_| LoadFailure(error.to_string())).into()
+                            }
+                        },
+                        Err(message) => cx.new(|_| LoadFailure(message.clone())).into(),
+                    };
 
-        let loaded = built.borrow_mut().take().ok_or(());
+                    cx.new(|cx| ShellRoot::new(content, window, cx))
+                })
+                .expect("failed to open window");
 
-        if arguments.is_watching() {
-            match loaded {
-                Ok(view) => watch_sources(runtime, view, window, root, cx),
-                // A reload replaces the object inside a live `ScriptView`, and a
-                // failed first load never produced one. Saying so is better than
-                // a `--watch` that looks armed and never fires.
-                Err(()) => eprintln!(
-                    "--watch is inactive: the application did not load, so there is \
+            let loaded = built.borrow_mut().take().ok_or(());
+
+            if arguments.is_watching() {
+                match loaded {
+                    Ok(view) => watch_sources(runtime, view, window, root, cx),
+                    // A reload replaces the object inside a live `ScriptView`, and a
+                    // failed first load never produced one. Saying so is better than
+                    // a `--watch` that looks armed and never fires.
+                    Err(()) => eprintln!(
+                        "--watch is inactive: the application did not load, so there is \
                      no view to reload into. Fix {ENTRY} and start gpui-shell again."
-                ),
+                    ),
+                }
             }
-        }
-    });
+        });
 }
 
 /// Loads and renders the application once, without showing anything.
@@ -370,59 +382,69 @@ fn check(arguments: CheckArguments) -> ! {
     let sink = outcome.clone();
     let directory = arguments.directory.clone();
 
-    gpui_platform::application().run(move |cx| {
-        gpui_shell::init(cx);
+    // Assets are served from the application directory, so the source has to be
+    // installed on the `Application` before the loop starts. Resolving the root
+    // here rather than inside the loop is what makes that possible; a path that
+    // does not resolve falls back to the argument and fails later with the
+    // message that explains why.
+    let asset_root = gpui_shell::runtime::resolve_app_root(&arguments.directory, ENTRY)
+        .unwrap_or_else(|_| arguments.directory.clone());
 
-        let runtime = match ShellRuntime::new() {
-            Ok(runtime) => runtime,
-            Err(error) => {
+    gpui_platform::application()
+        .with_assets(AppAssets::new(asset_root))
+        .run(move |cx| {
+            gpui_shell::init(cx);
+
+            let runtime = match ShellRuntime::new() {
+                Ok(runtime) => runtime,
+                Err(error) => {
+                    sink.borrow_mut().fail(format!("{error:#}"));
+                    cx.quit();
+                    return;
+                }
+            };
+            runtime.set_global(cx);
+
+            let root = match gpui_shell::runtime::resolve_app_root(&arguments.directory, ENTRY) {
+                Ok(root) => root,
+                Err(error) => {
+                    sink.borrow_mut().fail(format!("{error:#}"));
+                    cx.quit();
+                    return;
+                }
+            };
+
+            grant_local_access(&root);
+
+            let module = runtime.load_app(&root);
+            let window_sink = sink.clone();
+            let print_spec = arguments.print_spec;
+
+            let opened = cx.open_window(hidden_window_options(cx), move |window, cx| {
+                let result = module
+                    .and_then(|view_type| runtime.instantiate(&view_type, window, cx))
+                    .and_then(|object| runtime.render_to_spec(&object, None, window, cx));
+
+                match result {
+                    Ok(spec) => window_sink.borrow_mut().succeed(spec, print_spec),
+                    Err(error) => window_sink.borrow_mut().fail(format!("{error:#}")),
+                }
+
+                cx.new(|_| LoadFailure(String::new()))
+            });
+
+            if let Err(error) = opened {
                 sink.borrow_mut().fail(format!("{error:#}"));
-                cx.quit();
-                return;
-            }
-        };
-        runtime.set_global(cx);
-
-        let root = match gpui_shell::runtime::resolve_app_root(&arguments.directory, ENTRY) {
-            Ok(root) => root,
-            Err(error) => {
-                sink.borrow_mut().fail(format!("{error:#}"));
-                cx.quit();
-                return;
-            }
-        };
-
-        grant_local_access(&root);
-
-        let module = runtime.load_app(&root);
-        let window_sink = sink.clone();
-        let print_spec = arguments.print_spec;
-
-        let opened = cx.open_window(hidden_window_options(cx), move |window, cx| {
-            let result = module
-                .and_then(|view_type| runtime.instantiate(&view_type, window, cx))
-                .and_then(|object| runtime.render_to_spec(&object, None, window, cx));
-
-            match result {
-                Ok(spec) => window_sink.borrow_mut().succeed(spec, print_spec),
-                Err(error) => window_sink.borrow_mut().fail(format!("{error:#}")),
             }
 
-            cx.new(|_| LoadFailure(String::new()))
+            // Reporting and exiting happen here rather than after `run` returns:
+            // an application loop that has opened a window does not unwind just
+            // because nothing is shown, and a check that never terminates is worse
+            // than one that reports nothing.
+            let outcome = sink.borrow();
+            outcome.report(&directory);
+            std::process::exit(outcome.status());
         });
-
-        if let Err(error) = opened {
-            sink.borrow_mut().fail(format!("{error:#}"));
-        }
-
-        // Reporting and exiting happen here rather than after `run` returns:
-        // an application loop that has opened a window does not unwind just
-        // because nothing is shown, and a check that never terminates is worse
-        // than one that reports nothing.
-        let outcome = sink.borrow();
-        outcome.report(&directory);
-        std::process::exit(outcome.status());
-    });
 
     unreachable!("the check exits from inside the application loop")
 }
