@@ -39,6 +39,7 @@ rquickjs = { version = "0.12", features = [
 mlua = { version = "0.11", features = ["vendored", "macros"], optional = true }
 
 anyhow.workspace = true
+schemars.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 smallvec.workspace = true

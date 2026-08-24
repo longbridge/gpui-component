@@ -10,14 +10,17 @@ use crate::engine::{ShellRuntime, ViewObject};
 use gpui::{Context, IntoElement, Render, Window};
 
 pub struct ScriptView {
-    runtime: Rc<ShellRuntime>,
-    /// The script-side instance produced by the view type.
+    /// Declared before `runtime` because fields drop in declaration order, and
+    /// a script value released after its engine aborts the process. A view that
+    /// happens to hold the last reference to the runtime would otherwise free
+    /// the VM first and then release this handle into it.
     object: ViewObject,
+    runtime: Rc<ShellRuntime>,
 }
 
 impl ScriptView {
     pub fn new(runtime: Rc<ShellRuntime>, object: ViewObject) -> Self {
-        Self { runtime, object }
+        Self { object, runtime }
     }
 
     /// Replaces the script instance behind this view.

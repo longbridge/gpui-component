@@ -12,6 +12,7 @@ pub mod entities;
 pub mod error;
 pub mod materialize;
 pub mod native;
+pub mod plugin;
 pub mod plugin_api;
 pub mod root;
 pub mod runtime;
@@ -31,6 +32,7 @@ pub use native::{
     NativeArguments, NativeError, NativeModule, NativeModules, NativeObject, NativeResult,
     NativeValue,
 };
+pub use plugin::{Plugin, PluginManager, PluginManifest};
 pub use root::{DialogOptions, SheetSide, ShellRoot, ToastLevel, ToastRequest};
 pub use scope::ScopePhase;
 pub use view::ScriptView;

@@ -290,6 +290,7 @@ pub fn reload(
     runtime: &Rc<ShellRuntime>,
     view: &Entity<ScriptView>,
     directory: &Path,
+    entry: &str,
     window: &mut Window,
     cx: &mut App,
 ) -> Result<()> {
@@ -310,7 +311,7 @@ pub fn reload(
     // whole context is the clean form, and belongs behind the engine seam
     // rather than here.
     let view_type = runtime
-        .load_app(directory)
+        .load_app(directory, entry)
         .with_context(|| format!("reloading {}", directory.display()))?;
     let object = runtime
         .instantiate(&view_type, window, cx)

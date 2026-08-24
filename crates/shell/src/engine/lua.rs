@@ -76,11 +76,11 @@ impl ShellRuntime {
 
     /// Loads `main.lua` from an application directory and returns the view type
     /// it evaluates to.
-    pub fn load_app(self: &Rc<Self>, dir: &Path) -> Result<Table> {
-        let root = crate::runtime::resolve_app_root(dir, "main.lua")?;
+    pub fn load_app(self: &Rc<Self>, dir: &Path, entry: &str) -> Result<Table> {
+        let root = crate::runtime::resolve_app_root(dir, entry)?;
         self.set_module_search_path(&root).map_err(host_error)?;
 
-        let entry = root.join("main.lua");
+        let entry = root.join(entry);
         let source = std::fs::read_to_string(&entry)
             .with_context(|| format!("reading {}", entry.display()))?;
 

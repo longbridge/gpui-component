@@ -260,7 +260,9 @@ fn the_bundled_example_application_loads_and_renders(cx: &mut TestAppContext) {
         .canonicalize()
         .expect("example directory");
 
-    let view_type = runtime.load_app(&directory).expect("load example");
+    let view_type = runtime
+        .load_app(&directory, "main.js")
+        .expect("load example");
 
     let window = cx.add_window(|_, _| Empty);
     let mut context = VisualTestContext::from_window(*window.deref(), cx);
@@ -357,7 +359,9 @@ fn the_todolist_example_exercises_the_runtime(cx: &mut TestAppContext) {
         .canonicalize()
         .expect("example directory");
 
-    let view_type = runtime.load_app(&directory).expect("load example");
+    let view_type = runtime
+        .load_app(&directory, "main.js")
+        .expect("load example");
 
     let window = cx.add_window(|_, _| Empty);
     let mut context = VisualTestContext::from_window(*window.deref(), cx);
@@ -462,7 +466,7 @@ export default class Reloading extends View {
     let mut context = VisualTestContext::from_window(*window.deref(), cx);
 
     let render = |context: &mut VisualTestContext| {
-        let view_type = runtime.load_app(&directory).expect("load");
+        let view_type = runtime.load_app(&directory, "main.js").expect("load");
         let object = context
             .update(|window, cx| runtime.instantiate(&view_type, window, cx))
             .expect("instantiate");

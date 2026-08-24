@@ -171,8 +171,8 @@ impl ShellRuntime {
     /// Module resolution is scoped to that directory: an application can import
     /// its own files and the built-in `gpui` module, and nothing else. That is
     /// the first half of the sandbox's module policy (design doc §19.1).
-    pub fn load_app(self: &Rc<Self>, dir: &Path) -> Result<ViewType> {
-        let root = crate::runtime::resolve_app_root(dir, "main.js")?;
+    pub fn load_app(self: &Rc<Self>, dir: &Path, entry: &str) -> Result<ViewType> {
+        let root = crate::runtime::resolve_app_root(dir, entry)?;
 
         // Every load is a new generation, which is what makes a reload pick up
         // a change in an imported module rather than only in the entry point.
@@ -190,7 +190,7 @@ impl ShellRuntime {
             ),
         );
 
-        let entry = root.join("main.js");
+        let entry = root.join(entry);
         let source = std::fs::read_to_string(&entry)
             .with_context(|| format!("reading {}", entry.display()))?;
 

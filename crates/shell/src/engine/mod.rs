@@ -16,7 +16,7 @@
 //! ShellRuntime::global(&App) -> Option<Rc<Self>>
 //! ShellRuntime::arena_mut(&self) -> RefMut<'_, SpecArena>
 //!
-//! ShellRuntime::load_app(&Rc<Self>, &Path) -> anyhow::Result<ViewType>
+//! ShellRuntime::load_app(&Rc<Self>, &Path, entry: &str) -> anyhow::Result<ViewType>
 //! ShellRuntime::load_source(&Rc<Self>, &str, &str) -> anyhow::Result<ViewType>
 //! ShellRuntime::instantiate(&Rc<Self>, &ViewType) -> anyhow::Result<ViewObject>
 //!

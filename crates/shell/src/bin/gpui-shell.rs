@@ -322,7 +322,7 @@ fn run(arguments: Arguments) {
             // inside the window builder and hands the result back out here.
             grant_local_access(&root);
 
-            let module = runtime.load_app(&root).map_err(|error| {
+            let module = runtime.load_app(&root, ENTRY).map_err(|error| {
                 eprintln!("{error}");
                 error.to_string()
             });
@@ -419,7 +419,7 @@ fn check(arguments: CheckArguments) -> ! {
 
             grant_local_access(&root);
 
-            let module = runtime.load_app(&root);
+            let module = runtime.load_app(&root, ENTRY);
             let window_sink = sink.clone();
             let print_spec = arguments.print_spec;
 
@@ -683,7 +683,7 @@ fn watch_sources(
             }
 
             let reported = window.update(cx, |root, window, cx| {
-                match watch::reload(&runtime, &view, &directory, window, cx) {
+                match watch::reload(&runtime, &view, &directory, ENTRY, window, cx) {
                     Ok(()) => {
                         tracing::info!("reloaded {}", directory.display());
                         root.dismiss_toast(RELOAD_TOAST, cx);
