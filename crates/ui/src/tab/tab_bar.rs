@@ -1,22 +1,31 @@
 use std::{cell::RefCell, rc::Rc, time::Duration};
 
 use gpui::{
-    Anchor, Animation, AnimationExt as _, AnyElement, App, Background, Bounds, Edges, ElementId,
-    InteractiveElement, IntoElement, ParentElement, Pixels, RenderOnce, ScrollHandle, SharedString,
-    StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
-    prelude::FluentBuilder as _, px,
+    Anchor, AnyElement, App, Background, Bounds, Edges, ElementId, InteractiveElement, IntoElement,
+    ParentElement, Pixels, RenderOnce, ScrollHandle, SharedString, StatefulInteractiveElement as _,
+    StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, px,
 };
+use gpui_base::{Spring, spring};
 use rust_i18n::t;
 use smallvec::SmallVec;
 
 use super::{Tab, TabVariant};
-use crate::animation::{Lerp, ease_in_out_cubic};
 use crate::button::{Button, ButtonVariants as _};
 use crate::menu::{DropdownMenu as _, PopupMenuItem};
 use crate::{
     ActiveTheme, ElementExt, Icon, InteractiveElementExt as _, Selectable, Sizable, Size,
     StyledExt, h_flex,
 };
+
+/// Slide motion for the selected-tab indicator.
+///
+/// Slightly underdamped, so the indicator arrives with a hint of weight rather
+/// than stopping dead. Settling is measured in pixels, so the tolerance is
+/// coarsened from the normalized default to end the animation once the
+/// remaining travel is sub-pixel.
+const INDICATOR_SPRING: Spring = Spring::new(Duration::from_millis(250))
+    .with_damping(0.85)
+    .with_epsilon(0.1);
 
 struct TabIndicatorBounds {
     container: Bounds<Pixels>,
@@ -202,9 +211,8 @@ impl TabBar {
         let init_key = format!("{}-tab-init", self.id);
 
         let prev_selected = window.use_keyed_state(prev_key, cx, |_, _| selected_ix);
-        // (from_left, from_width, to_left, to_width, epoch)
-        let anim_params =
-            window.use_keyed_state(anim_key, cx, |_, _| (px(0.), px(0.), px(0.), px(0.), 0u64));
+        // (to_left, to_width, epoch)
+        let anim_params = window.use_keyed_state(anim_key, cx, |_, _| (px(0.), px(0.), 0u64));
         let initialized = window.use_keyed_state(init_key, cx, |_, _| false);
 
         // First frame: trigger re-render to capture bounds via on_prepaint
@@ -214,10 +222,29 @@ impl TabBar {
 
         self.update_anim_params(selected_ix, bounds_rc, &prev_selected, &anim_params, cx);
 
-        let (from_left, from_width, to_left, to_width, epoch) = *anim_params.read(cx);
+        let (to_left, to_width, epoch) = *anim_params.read(cx);
         if to_width <= px(0.) {
             return None;
         }
+
+        // The springs hold the indicator's own position and velocity, so a tab
+        // switched again mid-slide is redirected from where the indicator
+        // actually is rather than restarted from the tab it left.
+        let indicator_key = format!("{}-tab-indicator", self.id);
+        let left = spring(
+            (indicator_key.clone(), "left"),
+            to_left,
+            INDICATOR_SPRING,
+            window,
+            cx,
+        );
+        let width = spring(
+            (indicator_key, "width"),
+            to_width,
+            INDICATOR_SPRING,
+            window,
+            cx,
+        );
 
         let variant = self.variant;
         let size = self.size;
@@ -228,6 +255,8 @@ impl TabBar {
             .absolute()
             .top_0()
             .bottom_0()
+            .left(left)
+            .w(width)
             .map(|el| match variant {
                 TabVariant::Segmented => el.flex().items_center().child(
                     div()
@@ -253,16 +282,7 @@ impl TabBar {
                         .bg(cx.theme().tokens.primary),
                 ),
                 _ => el,
-            })
-            .with_animation(
-                ElementId::NamedInteger("tab-ind".into(), epoch),
-                Animation::new(Duration::from_millis(200)).with_easing(ease_in_out_cubic),
-                move |el, delta| {
-                    let left = Lerp::lerp(&from_left, &to_left, delta);
-                    let width = Lerp::lerp(&from_width, &to_width, delta);
-                    el.left(left).w(width)
-                },
-            );
+            });
 
         Some((indicator.into_any_element(), epoch))
     }
@@ -273,7 +293,7 @@ impl TabBar {
         selected_ix: usize,
         bounds_rc: &Option<Rc<RefCell<TabIndicatorBounds>>>,
         prev_selected: &gpui::Entity<usize>,
-        anim_params: &gpui::Entity<(Pixels, Pixels, Pixels, Pixels, u64)>,
+        anim_params: &gpui::Entity<(Pixels, Pixels, u64)>,
         cx: &mut App,
     ) {
         let rc = match bounds_rc {
@@ -293,25 +313,17 @@ impl TabBar {
         }
 
         if prev_ix != selected_ix {
-            let from_b = bounds.tabs.get(prev_ix);
-            let to_b = bounds.tabs.get(selected_ix);
-            match (from_b, to_b) {
-                (Some(from_b), Some(to_b)) => {
-                    let from_left = from_b.origin.x - container.origin.x;
-                    let from_width = from_b.size.width;
-                    let to_left = to_b.origin.x - container.origin.x;
-                    let to_width = to_b.size.width;
-                    let epoch = anim_params.read(cx).4 + 1;
-                    anim_params.update(cx, |v, _| {
-                        *v = (from_left, from_width, to_left, to_width, epoch)
-                    });
-                }
-                (None, Some(to_b)) => {
-                    let left = to_b.origin.x - container.origin.x;
-                    let width = to_b.size.width;
-                    anim_params.update(cx, |v, _| *v = (left, width, left, width, v.4));
-                }
-                _ => {}
+            if let Some(to_b) = bounds.tabs.get(selected_ix) {
+                let left = to_b.origin.x - container.origin.x;
+                let width = to_b.size.width;
+                // Only a switch away from a tab that still exists restarts the
+                // tabs' own epoch-keyed transitions.
+                let epoch = anim_params.read(cx).2;
+                let epoch = match bounds.tabs.get(prev_ix) {
+                    Some(_) => epoch + 1,
+                    None => epoch,
+                };
+                anim_params.update(cx, |v, _| *v = (left, width, epoch));
             }
             drop(bounds);
             prev_selected.update(cx, |v, _| *v = selected_ix);
@@ -321,15 +333,10 @@ impl TabBar {
         if let Some(to_b) = bounds.tabs.get(selected_ix) {
             let left = to_b.origin.x - container.origin.x;
             let width = to_b.size.width;
-            let (_, _, to_left, to_width, epoch) = *anim_params.read(cx);
-
-            if to_width == px(0.) {
-                anim_params.update(cx, |v, _| *v = (left, width, left, width, epoch));
-                return;
-            }
+            let (to_left, to_width, epoch) = *anim_params.read(cx);
 
             if left != to_left || width != to_width {
-                anim_params.update(cx, |v, _| *v = (left, width, left, width, epoch));
+                anim_params.update(cx, |v, _| *v = (left, width, epoch));
             }
         }
     }

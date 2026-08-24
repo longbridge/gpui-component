@@ -2,12 +2,18 @@ use crate::{
     ActiveTheme, Disableable, Side, Sizable, Size, StyledExt, text::Text, tooltip::ComponentTooltip,
 };
 use gpui::{
-    Animation, AnimationExt as _, App, Background, ElementId, Hsla, InteractiveElement,
-    IntoElement, ParentElement as _, RenderOnce, SharedString, StyleRefinement, Styled, Window,
-    div, prelude::FluentBuilder as _, px,
+    App, Background, ElementId, Hsla, InteractiveElement, IntoElement, ParentElement as _,
+    RenderOnce, SharedString, StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _,
+    px,
 };
-use gpui_base::{Switch as BaseSwitch, SwitchThumb, SwitchTrack};
+use gpui_base::{Spring, Switch as BaseSwitch, SwitchThumb, SwitchTrack, spring};
 use std::{rc::Rc, time::Duration};
+
+/// Thumb travel motion.
+///
+/// Critically damped: the thumb slides inside a track it must not leave, so an
+/// overshoot would push it through the border.
+const THUMB_SPRING: Spring = Spring::new(Duration::from_millis(180)).with_epsilon(0.1);
 
 /// A Switch element that can be toggled on or off.
 #[derive(IntoElement)]
@@ -101,7 +107,6 @@ impl RenderOnce for Switch {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let checked = self.checked;
         let on_click = self.on_click.clone();
-        let toggle_state = window.use_keyed_state(self.id.clone(), cx, |_, _| checked);
 
         let checked_bg = self
             .color
@@ -126,6 +131,23 @@ impl RenderOnce for Switch {
             cx.theme().radius
         };
 
+        // The thumb's position is geometry, not a semantic state style: a
+        // `checked` style setting `left` outranks the instance style by the
+        // documented precedence, which left the travel visible in one direction
+        // only. The spring owns it end to end and reverses from wherever the
+        // thumb is when the switch is toggled again mid-travel.
+        let thumb_x = spring(
+            (self.id.clone(), "thumb"),
+            if checked {
+                bg_width - bar_width - inset * 2
+            } else {
+                px(0.)
+            },
+            THUMB_SPRING,
+            window,
+            cx,
+        );
+
         div().refine_style(&self.style).child(
             BaseSwitch::new(self.id.clone())
                 .checked(checked)
@@ -135,11 +157,7 @@ impl RenderOnce for Switch {
                     |this, label| this.accessibility_label(label),
                 )
                 .when_some(on_click, |this, on_click| {
-                    let toggle_state = toggle_state.clone();
-                    this.on_change(move |next, _, window, cx| {
-                        _ = toggle_state.update(cx, |this, _| *this = checked);
-                        on_click(&next, window, cx);
-                    })
+                    this.on_change(move |next, _, window, cx| on_click(&next, window, cx))
                 })
                 .h_flex()
                 .gap_2()
@@ -175,48 +193,11 @@ impl RenderOnce for Switch {
                                 .disabled(self.disabled)
                                 .rounded(radius)
                                 .size(bar_width)
-                                .when(!checked, |this| this.left(px(0.)))
+                                .left(thumb_x)
                                 .when(!self.disabled, |this| this.bg(toggle_bg))
                                 .styles(|styles| {
                                     styles
-                                        .checked(|style| {
-                                            style.left(bg_width - bar_width - inset * 2)
-                                        })
                                         .disabled(|style| style.bg(toggle_bg.clone().opacity(0.35)))
-                                })
-                                .map(|this| {
-                                    let prev_checked = toggle_state.read(cx);
-                                    if !self.disabled && *prev_checked != checked {
-                                        let duration = Duration::from_secs_f64(0.15);
-                                        cx.spawn({
-                                            let toggle_state = toggle_state.clone();
-                                            async move |cx| {
-                                                cx.background_executor().timer(duration).await;
-                                                _ = toggle_state
-                                                    .update(cx, |this, _| *this = checked);
-                                            }
-                                        })
-                                        .detach();
-
-                                        this.with_animation(
-                                            ElementId::NamedInteger("move".into(), checked as u64),
-                                            Animation::new(duration),
-                                            move |this, delta| {
-                                                let max_x = bg_width - bar_width - inset * 2;
-                                                let x = if checked {
-                                                    max_x * delta
-                                                } else {
-                                                    max_x - max_x * delta
-                                                };
-                                                this.left(x)
-                                            },
-                                        )
-                                        .into_any_element()
-                                    } else {
-                                        let max_x = bg_width - bar_width - inset * 2;
-                                        let x = if checked { max_x } else { px(0.) };
-                                        this.left(x).into_any_element()
-                                    }
                                 }),
                         ),
                 )

@@ -13,14 +13,20 @@ use gpui::{
 
 use crate::{
     ElementExt as _, StyledExt as _,
-    animation::cubic_bezier,
-    motion::{Transition, transition},
+    motion::{Spring, spring},
 };
 
 /// Motion tokens used by an unstyled toast stack.
 #[derive(Clone, Copy, Debug)]
 pub struct ToastMotion {
-    /// Duration of stack expansion and collapse.
+    /// Time scale of the stack's motion.
+    ///
+    /// This is read as two different quantities, because the stack sequences
+    /// one thing and interpolates another. [`ToastManager`] treats it as a
+    /// deadline: a toast is present once it has elapsed. The layout treats it
+    /// as a spring response, which is the scale the reflow is felt at rather
+    /// than the moment it stops — a toast arriving still nudges the stack for
+    /// a little longer than this.
     pub duration: Duration,
     /// Duration before an ending toast is unmounted.
     pub exit_duration: Duration,
@@ -422,7 +428,6 @@ impl RenderOnce for ToastStack {
             .map(|id| measured_by_id.get(id).copied().unwrap_or(px(0.)))
             .collect::<Vec<_>>();
         let measured = self.state.heights.clone();
-        let duration = self.motion.duration;
         let peek = self.motion.collapsed_peek;
         let gap = self.motion.expanded_gap;
         let scale_step = self.motion.collapsed_scale_step;
@@ -439,15 +444,30 @@ impl RenderOnce for ToastStack {
             peek,
             anchored_bottom,
         );
-        let policy = || Transition::new(duration).ease(cubic_bezier(0.25, 0.1, 0.25, 1.));
-        let stack_height = transition(
+        // The whole stack reflows every time a toast arrives or leaves, so each
+        // layer is sprung: one retargeted mid-move carries its velocity into the
+        // new layout instead of restarting. Critically damped, because a height
+        // or an opacity that overshoots its target reads as a glitch. Geometry
+        // settles in pixels, so its tolerance is coarser than the fade's.
+        //
+        // A bottom-anchored item's position is composed from two of these — the
+        // stack height and the item's own offset — and the stack height only
+        // acquires its real target once the new toast has been measured in
+        // prepaint, a frame after the offsets know theirs. Two springs sharing a
+        // config stay proportional to each other only while they also share a
+        // start, so that one frame of skew lets the composed position pass its
+        // settled value by a fraction of a pixel before arriving. Both springs
+        // snap on settling, so it is a transient, not a resting error.
+        let geometry = Spring::new(self.motion.duration).with_epsilon(0.1);
+        let fade = Spring::new(self.motion.duration);
+        let stack_height = spring(
             (self.id.clone(), "height"),
             if expanded {
                 expanded_height
             } else {
                 collapsed_height
             },
-            policy(),
+            geometry,
             window,
             cx,
         );
@@ -466,10 +486,10 @@ impl RenderOnce for ToastStack {
                 } else {
                     collapsed_offset
                 };
-                let offset = transition(
+                let offset = spring(
                     (item_id.clone(), "offset"),
                     target_offset,
-                    policy(),
+                    geometry,
                     window,
                     cx,
                 );
@@ -478,21 +498,21 @@ impl RenderOnce for ToastStack {
                 } else {
                     stack_width * (scale_step * rank.min(collapsed_visible - 1) as f32 / 2.)
                 };
-                let inset = transition(
+                let inset = spring(
                     (item_id.clone(), "inset"),
                     target_inset,
-                    policy(),
+                    geometry,
                     window,
                     cx,
                 );
-                let opacity = transition(
+                let opacity = spring(
                     (item_id.clone(), "visibility"),
                     if expanded || rank < collapsed_visible {
                         1.
                     } else {
                         0.
                     },
-                    policy(),
+                    fade,
                     window,
                     cx,
                 );
@@ -943,7 +963,12 @@ mod tests {
             window.draw(cx).clear(cx);
             window.draw(cx).clear(cx);
         });
-        cx.executor().advance_clock(ToastMotion::sonner().duration);
+        // A bottom-anchored item's position is composed from two springs — the
+        // stack height and the item's own offset — and the stack height only
+        // acquires its real target once the toast has been measured in prepaint.
+        // Both the baseline and the final reading are taken settled, so neither
+        // carries the fraction of a pixel that separates them mid-flight.
+        cx.executor().advance_clock(Duration::from_secs(1));
         cx.update(|window, cx| window.draw(cx).clear(cx));
         let initial_y = cx.debug_bounds("bottom-first-toast").unwrap().origin.y;
 
@@ -966,7 +991,7 @@ mod tests {
             "middle={middle_y:?}, initial={initial_y:?}"
         );
 
-        cx.executor().advance_clock(Duration::from_millis(200));
+        cx.executor().advance_clock(Duration::from_secs(1));
         cx.update(|window, cx| window.draw(cx).clear(cx));
         assert_eq!(
             cx.debug_bounds("bottom-first-toast").unwrap().origin.y,

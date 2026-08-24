@@ -15,7 +15,7 @@ GPUI
 gpui-base
   defines semantic component states
   resolves semantic-state style precedence
-  provides generic value-transition lifecycle
+  provides generic value-transition and spring lifecycle
 
 application or gpui-component
   owns all target styles
@@ -216,6 +216,63 @@ The transition owns lifecycle mechanics only:
 The caller chooses what the value means and applies it to opacity, color,
 geometry, or another interpolatable property.
 
+For a value that can be retargeted while it is still moving, base provides a
+spring instead:
+
+```rust,ignore
+let left = gpui_base::spring(
+    ("tab-indicator", "left"),
+    selected_tab_left,
+    gpui_base::Spring::new(Duration::from_millis(250))
+        .with_damping(0.85)
+        .with_epsilon(0.1),
+    window,
+    cx,
+);
+```
+
+A spring is keyed, reduced-motion aware, and frame-rate independent in the same
+way a transition is. It differs in what it carries across a target change: a
+transition restarts its easing from the value sampled at that instant, which is
+continuous in position but not in velocity, while a spring preserves velocity
+and turns the value around. Prefer a spring where the target changes faster than
+the motion completes — a toast stack that reflows as toasts arrive, an indicator
+chasing rapid selection changes, a panel toggled again mid-slide — and a
+transition where the target is set once and runs to completion.
+
+A value that the pointer is already moving must not be sprung while the drag
+lasts, or it trails the cursor. `Spring::with_travel(false)` suspends travel and
+keeps the retained state pinned to the target, so the same call site can hand the
+value straight through during a drag and resume springing from where the drag
+released it:
+
+```rust,ignore
+let size = spring(id, target, DOCK_SPRING.with_travel(!resizing), window, cx);
+```
+
+Suspending travel says so where the reader is, and says it without disturbing the
+response, damping or tolerance the spring is configured with. A zero response
+resolves the same way — as a zero duration does for a transition — but it is the
+degenerate case rather than the way to express this, and a policy swapped out for
+the length of a drag has to restate or discard everything else the original one
+carried.
+
+`Spring::new(response)` builds one that reaches its target in about that long
+without overshooting it, which is what almost every value wants: a spring
+driving an opacity, a measured height, or anything bounded by the geometry
+around it has nowhere to overshoot to. `with_damping` opts a value out where
+passing the target and coming back is the intended effect.
+
+A response is not a duration in the sense `Transition::new` means one. A spring
+has no end to schedule, so this is the scale the motion is felt at rather than
+the moment it stops: the last fraction of a percent keeps settling past it,
+until it is inside the tolerance below.
+
+The settling tolerance is expressed in the target's own units and defaults to a
+normalized `0..1` range; a spring over pixels should coarsen it so the animation
+ends when the remaining travel is sub-pixel rather than running frames that
+change nothing visible.
+
 Deep behavior modules may own configurable motion when it is required to keep
 their internal layout lifecycle coherent. `ToastStack`, for example, combines
 measurement, overlap, expansion, and collapse through `ToastMotion`. This does
@@ -254,6 +311,11 @@ On the first render, the target is adopted immediately. When reduced motion is
 enabled or duration is zero, the target is returned immediately and retained
 transition state is synchronized with it.
 
+A spring resolves the same three moments differently. A target change keeps both
+the current position and the current velocity, so the value decelerates through
+the reversal instead of restarting. The first render adopts the target at rest.
+Reduced motion snaps to the target and clears the stored velocity.
+
 ## Supported Values
 
 `transition` accepts values implementing `Interpolate`, `Clone`, and
@@ -262,6 +324,13 @@ transition state is synchronized with it.
 
 Applications may implement `Interpolate` for their own value types when the
 interpolation is meaningful and deterministic.
+
+`spring` accepts values implementing GPUI's `SpringTarget`, which projects a
+value onto the single scalar coordinate the spring integrates and back again.
+GPUI implements it for `f32`, `Pixels`, `Rems`, and `bool`, the last resolving
+to an `AnimationPhase` that interpolates between two endpoint values. A value
+that needs more than one coordinate — a position, a pair of bounds — uses one
+spring per channel rather than one spring over the composite.
 
 ## Legacy Element Animation
 
@@ -284,5 +353,5 @@ may continue to use its module-qualified API.
 6. Disabled is the last semantic layer.
 7. Part styling is explicit and typed; base does not traverse arbitrary child
    trees to apply styles.
-8. Reduced-motion preferences are honored by generic transitions.
+8. Reduced-motion preferences are honored by generic transitions and springs.
 9. Corner radius is derived from the theme, never written as a literal.

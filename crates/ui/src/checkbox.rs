@@ -6,11 +6,17 @@ use crate::{
 };
 use crate::{StyledExt as _, ThemeStyled as _};
 use gpui::{
-    Animation, AnimationExt, AnyElement, App, ElementId, InteractiveElement, IntoElement,
-    MouseButton, ParentElement, RenderOnce, SharedString, StatefulInteractiveElement,
-    StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, px, relative, rems, svg,
+    AnyElement, App, ElementId, InteractiveElement, IntoElement, MouseButton, ParentElement,
+    RenderOnce, SharedString, StatefulInteractiveElement, StyleRefinement, Styled, Window, div,
+    prelude::FluentBuilder as _, px, relative, rems, svg,
 };
-use gpui_base::CheckboxIndicator;
+use gpui_base::{CheckboxIndicator, Spring, spring};
+
+/// Check-mark fade motion.
+///
+/// Critically damped, because an opacity that overshoots would clip at 1 and
+/// come back — a flicker rather than a flourish.
+const MARK_SPRING: Spring = Spring::new(Duration::from_millis(200));
 
 /// A Checkbox element.
 #[derive(IntoElement)]
@@ -161,7 +167,16 @@ pub(crate) fn checkbox_check_icon(
     window: &mut Window,
     cx: &mut App,
 ) -> impl IntoElement {
-    let toggle_state = window.use_keyed_state(id, cx, |_, _| checked);
+    // The mark keeps its path while the spring is still fading it out. Guarding
+    // the path on `checked` alone unmounted the glyph the moment the box was
+    // cleared, so only the fade-in was ever visible.
+    let opacity = spring(
+        (id, "mark"),
+        if checked { 1. } else { 0. },
+        MARK_SPRING,
+        window,
+        cx,
+    );
     let color = if disabled {
         cx.theme().primary_foreground.opacity(0.5)
     } else {
@@ -180,33 +195,8 @@ pub(crate) fn checkbox_check_icon(
             _ => this.size_3(),
         })
         .text_color(color)
-        .map(|this| match checked {
-            true => this.path(IconName::Check.path()),
-            _ => this,
-        })
-        .map(|this| {
-            if !disabled && checked != *toggle_state.read(cx) {
-                let duration = Duration::from_secs_f64(0.25);
-                cx.spawn({
-                    let toggle_state = toggle_state.clone();
-                    async move |cx| {
-                        cx.background_executor().timer(duration).await;
-                        _ = toggle_state.update(cx, |this, _| *this = checked);
-                    }
-                })
-                .detach();
-
-                this.with_animation(
-                    ElementId::NamedInteger("toggle".into(), checked as u64),
-                    Animation::new(Duration::from_secs_f64(0.25)),
-                    move |this, delta| {
-                        this.opacity(if checked { 1.0 * delta } else { 1.0 - delta })
-                    },
-                )
-                .into_any_element()
-            } else {
-                this.into_any_element()
-            }
+        .when(opacity > 0., |this| {
+            this.path(IconName::Check.path()).opacity(opacity)
         })
 }
 

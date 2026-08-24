@@ -14,20 +14,23 @@ use std::{
 };
 
 use gpui::{
-    Anchor, Animation, AnimationExt as _, AnyElement, AnyView, App, AppContext as _, Context, Div,
-    Empty, InteractiveElement as _, IntoElement, ParentElement as _, Point, Render, ScrollHandle,
-    SharedString, Stateful, StatefulInteractiveElement as _, StyleRefinement, Styled as _, Window,
-    div, prelude::FluentBuilder as _, px,
+    Anchor, AnyElement, AnyView, App, AppContext as _, Context, Div, Empty,
+    InteractiveElement as _, IntoElement, ParentElement as _, Render, ScrollHandle, SharedString,
+    Stateful, StatefulInteractiveElement as _, StyleRefinement, Styled as _, Window, div,
+    prelude::FluentBuilder as _, px,
 };
-use gpui_base::dock::{
-    AnyDrag, DockPlacement, DragPanel, DropIndicator, NodeId, PaneNode, PaneRef, PanelId,
-    TabGroupContext, TabGroupRenderer,
+use gpui_base::{
+    Spring,
+    dock::{
+        AnyDrag, DockPlacement, DragPanel, DropIndicator, NodeId, PaneNode, PaneRef, PanelId,
+        TabGroupContext, TabGroupRenderer,
+    },
+    spring,
 };
 use rust_i18n::t;
 
 use crate::{
     ActiveTheme as _, IconName, Selectable as _, Sizable as _,
-    animation::{Lerp as _, ease_out_cubic},
     button::{Button, ButtonVariants as _},
     dock::{ClosePanel, PanelControl, PanelHandle, PanelStyle, SkinShared, ToggleZoom},
     h_flex,
@@ -43,6 +46,13 @@ const ZOOM_CONTROL_SELECTOR: &str = "dock-tab-bar-zoom-control";
 /// The size the styled drag preview occupies, reported to base so a drop
 /// placeholder knows where to fly in from.
 const DRAG_PREVIEW_SIZE: gpui::Size<gpui::Pixels> = gpui::size(px(96.), px(30.));
+
+/// Motion for the drop placeholder as it follows the drop that would land.
+///
+/// Critically damped, so the placeholder never reads as covering a region the
+/// drop would not take. The tolerance is coarse: this runs during a drag, where
+/// a frame spent on half a pixel competes with the drag itself.
+const PLACEHOLDER_SPRING: Spring = Spring::new(Duration::from_millis(200)).with_epsilon(0.5);
 
 /// The preview that follows the cursor while a panel is dragged.
 ///
@@ -743,40 +753,41 @@ impl TabGroupRenderer for TabGroupSkin {
     fn render_drop_indicator(
         &self,
         indicator: DropIndicator,
-        _: &mut Window,
+        window: &mut Window,
         cx: &mut App,
     ) -> Option<AnyElement> {
-        let (from, to) = (indicator.from(), indicator.to());
-        // The placeholder animates from wherever it was to where the drop
-        // would land, so its own element is positioned at the destination and
-        // the animation only has to walk the difference back to zero.
-        let offset = from.origin() - to.origin();
+        let to = indicator.to();
+        // The placeholder chases the drop it would land in. Its rect was
+        // previously replayed from the drag source on every epoch, so crossing
+        // several drop zones in one drag restarted the walk at each one; the
+        // springs carry it through instead, and the element no longer needs an
+        // outer frame to hold the destination while an inner one walks to it.
+        let id = "drop-placeholder";
+        let left = spring((id, "left"), to.origin().x, PLACEHOLDER_SPRING, window, cx);
+        let top = spring((id, "top"), to.origin().y, PLACEHOLDER_SPRING, window, cx);
+        let width = spring(
+            (id, "width"),
+            to.size().width,
+            PLACEHOLDER_SPRING,
+            window,
+            cx,
+        );
+        let height = spring(
+            (id, "height"),
+            to.size().height,
+            PLACEHOLDER_SPRING,
+            window,
+            cx,
+        );
 
         Some(
             div()
                 .absolute()
-                .left(to.origin().x)
-                .top(to.origin().y)
-                .w(to.size().width)
-                .h(to.size().height)
-                .child(
-                    div()
-                        .absolute()
-                        .bg(cx.theme().tokens.drop_target)
-                        .with_animation(
-                            gpui::ElementId::NamedInteger(
-                                "drop-placeholder".into(),
-                                indicator.epoch(),
-                            ),
-                            Animation::new(Duration::from_millis(150)).with_easing(ease_out_cubic),
-                            move |this, delta| {
-                                let origin = offset.lerp(&Point::default(), delta);
-                                let width = from.size().width.lerp(&to.size().width, delta);
-                                let height = from.size().height.lerp(&to.size().height, delta);
-                                this.left(origin.x).top(origin.y).w(width).h(height)
-                            },
-                        ),
-                )
+                .bg(cx.theme().tokens.drop_target)
+                .left(left)
+                .top(top)
+                .w(width)
+                .h(height)
                 .into_any_element(),
         )
     }
