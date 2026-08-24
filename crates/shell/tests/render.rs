@@ -422,3 +422,70 @@ export default class Bad extends View {
         "the error should list the valid events, got: {error}"
     );
 }
+
+/// Hot reload has to pick up a change in an imported module, not only in the
+/// entry point. QuickJS caches an evaluated module by name and an ES module
+/// cannot be unloaded, so a naive reload re-evaluates `main.js` against the
+/// first version of everything it imports — and looks like it worked.
+#[cfg(feature = "quickjs")]
+#[gpui::test]
+fn a_reload_picks_up_a_change_in_an_imported_module(cx: &mut TestAppContext) {
+    cx.update(|cx| gpui_shell::init(cx));
+
+    let runtime = ShellRuntime::new().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+
+    let directory = std::env::temp_dir().join(format!("gpui-shell-reload-{}", std::process::id()));
+    std::fs::create_dir_all(&directory).expect("temp directory");
+
+    std::fs::write(
+        directory.join("main.js"),
+        r#"
+import { View, v_flex, text } from "gpui";
+import { caption } from "./caption.js";
+
+export default class Reloading extends View {
+  render() {
+    return v_flex().child(text(caption()));
+  }
+}
+"#,
+    )
+    .expect("write main");
+    std::fs::write(
+        directory.join("caption.js"),
+        "export const caption = () => \"before\";\n",
+    )
+    .expect("write caption");
+
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+
+    let render = |context: &mut VisualTestContext| {
+        let view_type = runtime.load_app(&directory).expect("load");
+        let object = context
+            .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+            .expect("instantiate");
+        context.update(|window, cx| {
+            runtime
+                .render_to_spec(&object, None, window, cx)
+                .expect("render")
+        })
+    };
+
+    assert!(render(&mut context).contains("before"));
+
+    std::fs::write(
+        directory.join("caption.js"),
+        "export const caption = () => \"after\";\n",
+    )
+    .expect("rewrite caption");
+
+    let reloaded = render(&mut context);
+    assert!(
+        reloaded.contains("after"),
+        "the imported module was served from the cache:\n{reloaded}"
+    );
+
+    std::fs::remove_dir_all(&directory).ok();
+}

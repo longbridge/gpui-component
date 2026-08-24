@@ -15,7 +15,7 @@
 //!   per name, each forwarding to a single Rust entry point.
 
 use std::{
-    cell::{RefCell, RefMut},
+    cell::{Cell, RefCell, RefMut},
     path::Path,
     rc::{Rc, Weak},
 };
@@ -90,6 +90,9 @@ pub struct ShellRuntime {
     callbacks: RefCell<CallbackArena<Persistent<Function<'static>>>>,
     arena: RefCell<SpecArena>,
     context: JsContext,
+    /// Incremented per `load_app`, so a reload re-reads every module rather
+    /// than serving the first version from QuickJS's module cache.
+    module_generation: Rc<Cell<u32>>,
     /// Held so the context stays alive, and so the module loader can be scoped
     /// to an application directory when one is loaded.
     js_runtime: JsRuntime,
@@ -134,6 +137,7 @@ impl ShellRuntime {
             callbacks: RefCell::new(CallbackArena::default()),
             arena: RefCell::new(SpecArena::new()),
             context,
+            module_generation: Rc::new(Cell::new(0)),
             js_runtime,
         });
 
@@ -162,21 +166,37 @@ impl ShellRuntime {
     pub fn load_app(self: &Rc<Self>, dir: &Path) -> Result<ViewType> {
         let root = crate::runtime::resolve_app_root(dir, "main.js")?;
 
+        // Every load is a new generation, which is what makes a reload pick up
+        // a change in an imported module rather than only in the entry point.
+        self.module_generation
+            .set(self.module_generation.get().wrapping_add(1));
+
         self.js_runtime.set_loader(
             (
                 BuiltinResolver::default().with_module("gpui"),
-                AppModules::new(root.clone()),
+                AppModules::new(root.clone(), self.module_generation.clone()),
             ),
             (
                 ModuleLoader::default().with_module("gpui", GpuiModule),
-                AppModules::new(root.clone()),
+                AppModules::new(root.clone(), self.module_generation.clone()),
             ),
         );
 
         let entry = root.join("main.js");
         let source = std::fs::read_to_string(&entry)
             .with_context(|| format!("reading {}", entry.display()))?;
-        self.load_source(&entry.to_string_lossy(), &source)
+
+        // The entry carries the generation too: it is a cached module like any
+        // other, and a reload that re-read every import but served a stale
+        // `main.js` would be the same bug one level up.
+        self.load_source(
+            &format!(
+                "{}?v={}",
+                entry.to_string_lossy(),
+                self.module_generation.get()
+            ),
+            &source,
+        )
     }
 
     /// Evaluates a module and returns its default export, which must be a view
@@ -458,16 +478,32 @@ impl ShellRuntime {
 #[derive(Clone)]
 struct AppModules {
     root: std::path::PathBuf,
+    /// Bumped on every load so a reload re-reads every file.
+    ///
+    /// QuickJS caches an evaluated module by name, and an ES module cannot be
+    /// unloaded — so re-evaluating `main.js` alone left every module it imports
+    /// at the version that was on disk the first time. A hot reload that
+    /// silently ignores every file except the entry point is worse than no hot
+    /// reload, because it looks like it worked. Tagging the resolved name with
+    /// a generation makes each reload a different module as far as the cache is
+    /// concerned. The previous generation stays in the cache until the runtime
+    /// shuts down; that is the cost, and it is a development-only one.
+    generation: Rc<Cell<u32>>,
 }
 
 impl AppModules {
-    fn new(root: std::path::PathBuf) -> Self {
-        Self { root }
+    fn new(root: std::path::PathBuf, generation: Rc<Cell<u32>>) -> Self {
+        Self { root, generation }
+    }
+
+    /// Strips the generation tag a resolved name carries.
+    fn untag(name: &str) -> &str {
+        name.split_once("?v=").map(|(path, _)| path).unwrap_or(name)
     }
 
     fn candidate(&self, base: &str, name: &str) -> Option<std::path::PathBuf> {
         let start = if name.starts_with('.') {
-            Path::new(base).parent()?.to_path_buf()
+            Path::new(Self::untag(base)).parent()?.to_path_buf()
         } else {
             self.root.clone()
         };
@@ -507,7 +543,11 @@ impl Resolver for AppModules {
             ));
         }
 
-        Ok(path.to_string_lossy().into_owned())
+        Ok(format!(
+            "{}?v={}",
+            path.to_string_lossy(),
+            self.generation.get()
+        ))
     }
 }
 
@@ -518,8 +558,9 @@ impl Loader for AppModules {
         name: &str,
         _attributes: Option<ImportAttributes<'js>>,
     ) -> JsResult<Module<'js, Declared>> {
-        let source = std::fs::read_to_string(name).map_err(|error| {
-            Exception::throw_message(ctx, &format!("cannot read module `{name}`: {error}"))
+        let path = Self::untag(name);
+        let source = std::fs::read_to_string(path).map_err(|error| {
+            Exception::throw_message(ctx, &format!("cannot read module `{path}`: {error}"))
         })?;
         Module::declare(ctx.clone(), name, source)
     }
