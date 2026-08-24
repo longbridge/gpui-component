@@ -2,8 +2,8 @@
 //! dock's runtime state (open/collapsible/size/resizing).
 //!
 //! This module decides *how big a dock is allowed to be*. It draws nothing:
-//! the resize-handle chrome and the collapsed/expanded animation are
-//! appearance and live in `crates/ui`.
+//! the resize-handle chrome and collapsed/expanded presentation live in
+//! `crates/ui`.
 
 use gpui::{Bounds, Pixels, Point, px};
 
