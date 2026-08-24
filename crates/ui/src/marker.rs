@@ -53,6 +53,18 @@ impl Marker {
         self.separator_style = style;
         self
     }
+
+    /// Add a configured icon slot.
+    pub fn icon(mut self, icon: MarkerIcon) -> Self {
+        self.children.push(icon.into_any_element());
+        self
+    }
+
+    /// Add a configured content slot.
+    pub fn content(mut self, content: MarkerContent) -> Self {
+        self.children.push(content.into_any_element());
+        self
+    }
 }
 
 impl Default for Marker {
@@ -101,6 +113,7 @@ impl RenderOnce for Marker {
                         .flex_1()
                         .min_w_0()
                         .h(tokens.spacing.xxs / 2.)
+                        .mr(tokens.spacing.xs)
                         .bg(tokens.colors.border)
                         .refine_style(&separator_style),
                 )
@@ -112,11 +125,105 @@ impl RenderOnce for Marker {
                         .flex_1()
                         .min_w_0()
                         .h(tokens.spacing.xxs / 2.)
+                        .ml(tokens.spacing.xs)
                         .bg(tokens.colors.border)
                         .refine_style(&separator_style),
                 )
             })
             .refine_style(&self.style)
+    }
+}
+
+/// A compact decorative icon slot inside a [`Marker`].
+#[derive(IntoElement)]
+pub struct MarkerIcon {
+    style: StyleRefinement,
+    children: Vec<AnyElement>,
+}
+
+impl MarkerIcon {
+    /// Create an empty marker icon slot.
+    pub fn new() -> Self {
+        Self {
+            style: StyleRefinement::default(),
+            children: Vec::new(),
+        }
+    }
+}
+
+impl Default for MarkerIcon {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ParentElement for MarkerIcon {
+    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
+        self.children.extend(elements);
+    }
+}
+
+impl Styled for MarkerIcon {
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
+    }
+}
+
+impl RenderOnce for MarkerIcon {
+    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        let tokens = cx.theme().semantic_tokens();
+
+        h_flex()
+            .size(tokens.spacing.lg)
+            .flex_none()
+            .items_center()
+            .justify_center()
+            .refine_style(&self.style)
+            .children(self.children)
+    }
+}
+
+/// The independently styleable text or rich-content slot in a [`Marker`].
+#[derive(IntoElement)]
+pub struct MarkerContent {
+    style: StyleRefinement,
+    children: Vec<AnyElement>,
+}
+
+impl MarkerContent {
+    /// Create an empty marker content slot.
+    pub fn new() -> Self {
+        Self {
+            style: StyleRefinement::default(),
+            children: Vec::new(),
+        }
+    }
+}
+
+impl Default for MarkerContent {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ParentElement for MarkerContent {
+    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
+        self.children.extend(elements);
+    }
+}
+
+impl Styled for MarkerContent {
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
+    }
+}
+
+impl RenderOnce for MarkerContent {
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+        div()
+            .min_w_0()
+            .refine_style(&self.style)
+            .children(self.children)
     }
 }
 
@@ -129,10 +236,13 @@ mod tests {
         let marker = Marker::new()
             .with_variant(MarkerVariant::Separator)
             .separator_style(StyleRefinement::default())
-            .child("Today");
+            .content(MarkerContent::new().child("Today"));
 
         assert_eq!(marker.variant, MarkerVariant::Separator);
         assert_eq!(marker.children.len(), 1);
         assert_eq!(Marker::default().variant, MarkerVariant::Plain);
+
+        let icon = MarkerIcon::new().child("icon");
+        assert_eq!(icon.children.len(), 1);
     }
 }

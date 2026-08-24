@@ -5,7 +5,7 @@ use gpui::{
 use gpui_component::{
     ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt as _,
     badge::Badge,
-    marker::{Marker, MarkerVariant},
+    marker::{Marker, MarkerContent, MarkerIcon, MarkerVariant},
     spinner::Spinner,
     v_flex,
 };
@@ -63,18 +63,21 @@ impl Render for MarkerStory {
                     .child(
                         Marker::new()
                             .text_color(cx.theme().green)
-                            .child(Icon::new(IconName::CircleCheck))
-                            .child("Online"),
+                            .icon(MarkerIcon::new().child(Icon::new(IconName::CircleCheck)))
+                            .content(MarkerContent::new().child("Online")),
                     )
                     .child(
                         Marker::new()
-                            .child(Spinner::new().xsmall())
-                            .child("Alice is typing…"),
+                            .icon(MarkerIcon::new().child(Spinner::new().xsmall()))
+                            .content(MarkerContent::new().child("Alice is typing…")),
                     )
                     .child(
                         Marker::new()
-                            .child(Badge::new().count(3).child(Icon::new(IconName::Bell)))
-                            .child("Unread notifications"),
+                            .icon(
+                                MarkerIcon::new()
+                                    .child(Badge::new().count(3).child(Icon::new(IconName::Bell))),
+                            )
+                            .content(MarkerContent::new().child("Unread notifications")),
                     ),
             )
             .child(
@@ -84,7 +87,7 @@ impl Render for MarkerStory {
                     .child(
                         Marker::new()
                             .with_variant(MarkerVariant::Separator)
-                            .child("Today"),
+                            .content(MarkerContent::new().child("Today")),
                     ),
             )
             .child(
@@ -94,8 +97,8 @@ impl Render for MarkerStory {
                     .child(
                         Marker::new()
                             .with_variant(MarkerVariant::Border)
-                            .child(Icon::new(IconName::Info))
-                            .child("3 unread messages"),
+                            .icon(MarkerIcon::new().child(Icon::new(IconName::Info)))
+                            .content(MarkerContent::new().child("3 unread messages")),
                     ),
             )
             .child(
@@ -109,8 +112,8 @@ impl Render for MarkerStory {
                             .rounded(cx.theme().radius)
                             .bg(cx.theme().accent)
                             .text_color(cx.theme().accent_foreground)
-                            .child(Icon::new(IconName::Star))
-                            .child("Pinned message"),
+                            .icon(MarkerIcon::new().child(Icon::new(IconName::Star)))
+                            .content(MarkerContent::new().child("Pinned message")),
                     ),
             )
     }

@@ -10,7 +10,7 @@ description: A compact composable row for conversation status, notifications, an
 ## Import
 
 ```rust
-use gpui_component::marker::{Marker, MarkerVariant};
+use gpui_component::marker::{Marker, MarkerContent, MarkerIcon, MarkerVariant};
 ```
 
 ## Status marker
@@ -20,15 +20,15 @@ Compose an existing icon, spinner, badge, or text value directly:
 ```rust
 Marker::new()
     .text_color(cx.theme().green)
-    .child(Icon::new(IconName::CircleCheck))
-    .child("Online")
+    .icon(MarkerIcon::new().child(Icon::new(IconName::CircleCheck)))
+    .content(MarkerContent::new().child("Online"))
 
 Marker::new()
-    .child(Spinner::new().xsmall())
-    .child("Alice is typing…")
+    .icon(MarkerIcon::new().child(Spinner::new().xsmall()))
+    .content(MarkerContent::new().child("Alice is typing…"))
 ```
 
-The component intentionally has no `Online`, `Typing`, `Read`, or other status enum. Those meanings and colors belong to the application.
+`MarkerIcon` supplies the Base UI 16 px icon slot, while `MarkerContent` gives text or rich content its own style target. Direct children remain supported for application-specific layouts. The component intentionally has no `Online`, `Typing`, `Read`, or other status enum. Those meanings and colors belong to the application.
 
 ## Variants
 
@@ -36,8 +36,8 @@ The component intentionally has no `Online`, `Typing`, `Read`, or other status e
 
 ```rust
 Marker::new()
-    .child(Icon::new(IconName::Info))
-    .child("Conversation archived")
+    .icon(MarkerIcon::new().child(Icon::new(IconName::Info)))
+    .content(MarkerContent::new().child("Conversation archived"))
 ```
 
 ### Separator
@@ -45,7 +45,7 @@ Marker::new()
 ```rust
 Marker::new()
     .with_variant(MarkerVariant::Separator)
-    .child("Today")
+    .content(MarkerContent::new().child("Today"))
 ```
 
 The decorative lines remain internal because they carry no semantic content. Use `separator_style(...)` to refine their color, thickness, or spacing without introducing public line subcomponents.
@@ -55,12 +55,12 @@ The decorative lines remain internal because they carry no semantic content. Use
 ```rust
 Marker::new()
     .with_variant(MarkerVariant::Border)
-    .child("3 unread messages")
+    .content(MarkerContent::new().child("3 unread messages"))
 ```
 
 ## Custom styling
 
-`Marker` implements `Styled`, and refinements are applied after its defaults:
+`Marker`, `MarkerIcon`, and `MarkerContent` implement `Styled`, and refinements are applied after their defaults:
 
 ```rust
 Marker::new()
@@ -91,5 +91,9 @@ Use Marker when those contents need one consistent conversation-row surface or m
 ## API reference
 
 - [Marker]
+- [MarkerIcon]
+- [MarkerContent]
 
 [Marker]: https://docs.rs/gpui-component/latest/gpui_component/marker/struct.Marker.html
+[MarkerIcon]: https://docs.rs/gpui-component/latest/gpui_component/marker/struct.MarkerIcon.html
+[MarkerContent]: https://docs.rs/gpui-component/latest/gpui_component/marker/struct.MarkerContent.html

@@ -10,7 +10,7 @@ description: 用于会话状态、通知边界和分隔标记的紧凑组合行�
 ## 导入
 
 ```rust
-use gpui_component::marker::{Marker, MarkerVariant};
+use gpui_component::marker::{Marker, MarkerContent, MarkerIcon, MarkerVariant};
 ```
 
 ## 状态标记
@@ -20,15 +20,15 @@ use gpui_component::marker::{Marker, MarkerVariant};
 ```rust
 Marker::new()
     .text_color(cx.theme().green)
-    .child(Icon::new(IconName::CircleCheck))
-    .child("在线")
+    .icon(MarkerIcon::new().child(Icon::new(IconName::CircleCheck)))
+    .content(MarkerContent::new().child("在线"))
 
 Marker::new()
-    .child(Spinner::new().xsmall())
-    .child("Alice 正在输入…")
+    .icon(MarkerIcon::new().child(Spinner::new().xsmall()))
+    .content(MarkerContent::new().child("Alice 正在输入…"))
 ```
 
-组件有意不提供 `Online`、`Typing`、`Read` 等状态 enum。这些含义和颜色由应用负责。
+`MarkerIcon` 提供 Base UI 的 16 px 图标 slot，`MarkerContent` 为文本或富内容提供独立样式入口。应用专属布局仍可直接添加 child。组件有意不提供 `Online`、`Typing`、`Read` 等状态 enum，这些含义和颜色由应用负责。
 
 ## 样式变体
 
@@ -36,8 +36,8 @@ Marker::new()
 
 ```rust
 Marker::new()
-    .child(Icon::new(IconName::Info))
-    .child("会话已归档")
+    .icon(MarkerIcon::new().child(Icon::new(IconName::Info)))
+    .content(MarkerContent::new().child("会话已归档"))
 ```
 
 ### Separator
@@ -45,7 +45,7 @@ Marker::new()
 ```rust
 Marker::new()
     .with_variant(MarkerVariant::Separator)
-    .child("今天")
+    .content(MarkerContent::new().child("今天"))
 ```
 
 装饰线没有语义内容，因此保持为内部实现。使用 `separator_style(...)` 可以调整颜色、粗细或间距，无需增加公开的线条子组件。
@@ -55,12 +55,12 @@ Marker::new()
 ```rust
 Marker::new()
     .with_variant(MarkerVariant::Border)
-    .child("3 条未读消息")
+    .content(MarkerContent::new().child("3 条未读消息"))
 ```
 
 ## 自定义样式
 
-`Marker` 实现了 `Styled`，调用方 refinement 会在默认样式之后应用：
+`Marker`、`MarkerIcon` 和 `MarkerContent` 都实现了 `Styled`，调用方 refinement 会在各自默认样式之后应用：
 
 ```rust
 Marker::new()
@@ -91,5 +91,9 @@ Marker 是刻意保持轻量的便利组件。已有组件能够完整表达任�
 ## API 参考
 
 - [Marker]
+- [MarkerIcon]
+- [MarkerContent]
 
 [Marker]: https://docs.rs/gpui-component/latest/gpui_component/marker/struct.Marker.html
+[MarkerIcon]: https://docs.rs/gpui-component/latest/gpui_component/marker/struct.MarkerIcon.html
+[MarkerContent]: https://docs.rs/gpui-component/latest/gpui_component/marker/struct.MarkerContent.html
