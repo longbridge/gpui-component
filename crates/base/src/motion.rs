@@ -233,8 +233,11 @@ impl Spring {
     /// approaches slowly. Overshoot suits a value with room to pass its target
     /// and nothing to collide with. A height, an opacity, or anything bounded by
     /// the geometry around it should stay at the default.
-    pub const fn with_damping(mut self, damping_ratio: f32) -> Self {
-        self.damping_ratio = damping_ratio;
+    ///
+    /// This is $\zeta$, not GPUI's `SpringConfig::damping`, which is the
+    /// coefficient $c = 2 \zeta \omega_0$.
+    pub const fn with_damping_ratio(mut self, ratio: f32) -> Self {
+        self.damping_ratio = ratio;
         self
     }
 
@@ -681,7 +684,7 @@ mod tests {
     fn a_bouncy_spring_overshoots_its_target(cx: &mut TestAppContext) {
         let fixture = SpringFixture::open(
             cx,
-            Spring::new(Duration::from_millis(350)).with_damping(0.7),
+            Spring::new(Duration::from_millis(350)).with_damping_ratio(0.7),
         );
         fixture.render(cx, 1.0);
         for _ in 0..30 {
@@ -734,7 +737,7 @@ mod tests {
         cx.update(|cx| cx.set_reduce_motion(true));
         let fixture = SpringFixture::open(
             cx,
-            Spring::new(Duration::from_millis(350)).with_damping(0.7),
+            Spring::new(Duration::from_millis(350)).with_damping_ratio(0.7),
         );
         assert_eq!(fixture.render(cx, 1.0), 1.0);
         assert_eq!(fixture.pending_frame(cx), 0);

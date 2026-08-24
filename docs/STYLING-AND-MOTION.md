@@ -224,7 +224,7 @@ let left = gpui_base::spring(
     ("tab-indicator", "left"),
     selected_tab_left,
     gpui_base::Spring::new(Duration::from_millis(250))
-        .with_damping(0.85)
+        .with_damping_ratio(0.85)
         .with_epsilon(0.1),
     window,
     cx,
@@ -253,7 +253,7 @@ let size = spring(id, target, DOCK_SPRING.with_travel(!resizing), window, cx);
 `Spring::new(response)` builds one that reaches its target in about that long
 without overshooting it, which is what almost every value wants: a spring
 driving an opacity, a measured height, or anything bounded by the geometry
-around it has nowhere to overshoot to. `with_damping` opts a value out where
+around it has nowhere to overshoot to. `with_damping_ratio` opts a value out where
 passing the target and coming back is the intended effect.
 
 A response is not a duration in the sense `Transition::new` means one. A spring
