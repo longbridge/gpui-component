@@ -27,6 +27,9 @@ pub enum Component {
     Button(String),
     Checkbox(String),
     Switch(String),
+    /// A text input, addressed by its entity handle rather than by an id: the
+    /// state is what identifies it, and the state outlives the description.
+    Input(crate::entities::EntityHandle),
 }
 
 impl Component {
@@ -39,6 +42,7 @@ impl Component {
             Component::Button(_) => "Button",
             Component::Checkbox(_) => "Checkbox",
             Component::Switch(_) => "Switch",
+            Component::Input(_) => "Input",
         }
     }
 }
@@ -183,12 +187,13 @@ impl SpecArena {
         };
         out.push_str(&"  ".repeat(depth));
         out.push_str(component.name());
-        if let Component::Text(value)
-        | Component::Button(value)
-        | Component::Checkbox(value)
-        | Component::Switch(value) = component
-        {
-            out.push_str(&format!(" {value:?}"));
+        match component {
+            Component::Text(value)
+            | Component::Button(value)
+            | Component::Checkbox(value)
+            | Component::Switch(value) => out.push_str(&format!(" {value:?}")),
+            Component::Input(handle) => out.push_str(&format!(" #{handle}")),
+            _ => {}
         }
         for op in &node.ops {
             match op {

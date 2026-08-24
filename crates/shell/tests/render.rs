@@ -83,10 +83,12 @@ fn a_script_view_produces_an_element_description(cx: &mut TestAppContext) {
     cx.update(|cx| runtime.set_global(cx));
 
     let view_type = runtime.load_source(ENTRY, COUNTER).expect("load");
-    let object = runtime.instantiate(&view_type).expect("instantiate");
 
     let window = cx.add_window(|_, _| Empty);
     let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .expect("instantiate");
 
     let tree = context.update(|window, cx| {
         runtime
@@ -135,10 +137,12 @@ return Broken
 "#;
 
     let view_type = runtime.load_source("broken", source).expect("load");
-    let object = runtime.instantiate(&view_type).expect("instantiate");
 
     let window = cx.add_window(|_, _| Empty);
     let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .expect("instantiate");
 
     let error = context
         .update(|window, cx| runtime.render_to_spec(&object, None, window, cx))
@@ -180,10 +184,12 @@ return Typo
 "#;
 
     let view_type = runtime.load_source("typo", source).expect("load");
-    let object = runtime.instantiate(&view_type).expect("instantiate");
 
     let window = cx.add_window(|_, _| Empty);
     let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .expect("instantiate");
 
     let error = context
         .update(|window, cx| runtime.render_to_spec(&object, None, window, cx))
@@ -203,12 +209,15 @@ fn a_view_renders_through_gpui(cx: &mut TestAppContext) {
     cx.update(|cx| runtime.set_global(cx));
 
     let view_type = runtime.load_source(ENTRY, COUNTER).expect("load");
-    let object = runtime.instantiate(&view_type).expect("instantiate");
 
+    // The view is constructed inside the window builder, because `init` may
+    // create retained state and that needs a live `Window`.
     let runtime_for_view = runtime.clone();
-    let window = cx.add_window(|_, cx| {
-        let _ = cx;
-        ScriptView::new(runtime_for_view, object)
+    let window = cx.add_window(|window, cx| {
+        let object = runtime_for_view
+            .instantiate(&view_type, window, cx)
+            .expect("instantiate");
+        ScriptView::new(runtime_for_view.clone(), object)
     });
     let mut context = VisualTestContext::from_window(*window.deref(), cx);
 
@@ -247,15 +256,17 @@ fn the_bundled_example_application_loads_and_renders(cx: &mut TestAppContext) {
     // The example is the contract with users: if it stops rendering, the
     // quickstart in the README is wrong.
     let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples/js_checklist")
+        .join("../../examples/js_todolist")
         .canonicalize()
         .expect("example directory");
 
     let view_type = runtime.load_app(&directory).expect("load example");
-    let object = runtime.instantiate(&view_type).expect("instantiate");
 
     let window = cx.add_window(|_, _| Empty);
     let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .expect("instantiate");
 
     let tree = context.update(|window, cx| {
         runtime
@@ -294,10 +305,12 @@ export default class Styled extends View {
 "#;
 
     let view_type = runtime.load_source("styled", source).expect("load");
-    let object = runtime.instantiate(&view_type).expect("instantiate");
 
     let window = cx.add_window(|_, _| Empty);
     let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .expect("instantiate");
 
     let tree = context.update(|window, cx| {
         runtime
@@ -325,4 +338,50 @@ fn theme_tokens_resolve_outside_a_call_scope(cx: &mut TestAppContext) {
     );
     assert!(gpui_shell::theme::token_color("primary").is_some());
     assert!(gpui_shell::theme::token_color("not_a_token").is_none());
+}
+
+/// The todo list exists to exercise the whole runtime at once: retained input
+/// state, controlled checkboxes, a dialog, a toast, capability-gated storage,
+/// and a filter that must survive every mutation. If a subsystem regresses,
+/// this is the test that notices.
+#[cfg(feature = "quickjs")]
+#[gpui::test]
+fn the_todolist_example_exercises_the_runtime(cx: &mut TestAppContext) {
+    cx.update(|cx| gpui_shell::init(cx));
+
+    let runtime = ShellRuntime::new().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+
+    let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../examples/js_todolist")
+        .canonicalize()
+        .expect("example directory");
+
+    let view_type = runtime.load_app(&directory).expect("load example");
+
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+
+    // `init` creates retained state, so instantiation needs a live host call.
+    let object = context.update(|window, cx| runtime.instantiate(&view_type, window, cx));
+    let object = object.expect("instantiate");
+
+    let tree = context.update(|window, cx| {
+        runtime
+            .render_to_spec(&object, None, window, cx)
+            .expect("render")
+    });
+
+    for expected in [
+        "Todo",             // the object
+        "Input",            // retained state reached the description
+        "\"Add\"",          // the action that creates work
+        "No items yet",     // the empty state explains the next step
+        "Clear completed…", // an ellipsis, because it opens a dialog
+    ] {
+        assert!(
+            tree.contains(expected),
+            "todolist is missing `{expected}`:\n{tree}"
+        );
+    }
 }

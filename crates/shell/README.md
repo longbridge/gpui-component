@@ -45,14 +45,14 @@ product visuals wait for a `gpui-component` module, a later milestone.
 Run the bundled example from the repository root:
 
 ```bash
-cargo run -p gpui-shell -- examples/js_checklist
+cargo run -p gpui-shell -- examples/js_todolist
 ```
 
 The runtime loads `main.js` from the given directory, takes the view class it
 default-exports, and mounts one instance of it as the window's root view:
 
 ```js
-// examples/js_checklist/main.js
+// examples/js_todolist/main.js
 import Counter from "./counter.js";
 
 export default Counter;
@@ -94,7 +94,7 @@ export default class Counter extends View {
 }
 ```
 
-See [`examples/js_checklist`](../../examples/js_checklist) for the complete
+See [`examples/js_todolist`](../../examples/js_todolist) for the complete
 version, including a button helper that applies consistent styling from theme
 tokens.
 

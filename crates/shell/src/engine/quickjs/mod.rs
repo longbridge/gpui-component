@@ -47,8 +47,10 @@ pub type ViewType = Persistent<Object<'static>>;
 /// One instance of a view type.
 pub type ViewObject = Persistent<Object<'static>>;
 
-mod host;
-mod sandbox;
+mod entity_api;
+pub(crate) mod host;
+mod overlay;
+pub(crate) mod sandbox;
 mod scheduler;
 
 /// Names exported by the built-in `gpui` module.
@@ -65,6 +67,8 @@ const MODULE_EXPORTS: &[&str] = &[
     "Button",
     "Checkbox",
     "Switch",
+    "Input",
+    "InputState",
     // System capabilities (`host`, `sandbox`).
     "fs",
     "process",
@@ -96,6 +100,10 @@ impl Drop for ShellRuntime {
         // released after its runtime aborts the process.
         scheduler::shutdown();
         self.callbacks.borrow_mut().clear();
+        // Retained entities are owned by GPUI but reachable only through this
+        // runtime's handles; leaving them registered outlives the app that owns
+        // them, which GPUI reports as a leaked handle on shutdown.
+        crate::entities::clear();
     }
 }
 
@@ -189,7 +197,17 @@ impl ShellRuntime {
     }
 
     /// Constructs one instance of a view class.
-    pub fn instantiate(self: &Rc<Self>, view_type: &ViewType) -> Result<ViewObject> {
+    ///
+    /// `init` is where a view creates the state it keeps across frames, and
+    /// creating an entity needs a `Window` and an `App`. So construction opens
+    /// a scope of its own rather than running in the gap between host calls.
+    pub fn instantiate(
+        self: &Rc<Self>,
+        view_type: &ViewType,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Result<ViewObject> {
+        let (_guard, _generation) = scope::enter(window, cx, ScopePhase::Event, None);
         self.with_js(|ctx| {
             let class = view_type.clone().restore(ctx)?;
             let construct: Function = ctx.globals().get("__construct")?;
@@ -385,6 +403,11 @@ impl ShellRuntime {
         self.arena.borrow_mut().push(component)
     }
 
+    /// Records an element for a component the bindings build themselves.
+    pub(super) fn push_component(&self, component: Component) -> SpecId {
+        self.push_node(component)
+    }
+
     fn push_op(&self, id: SpecId, op: SpecOp) -> Result<(), crate::spec::SpecError> {
         self.arena.borrow_mut().push_op(id, op)
     }
@@ -565,6 +588,15 @@ globalThis.__gpui = (() => {
     return produced;
   };
 
+  // Retained state is held by handle; the methods close over it so nothing has
+  // to read it back off `this`.
+  const inputState = (handle) => ({
+    __handle: handle,
+    value: () => __input_value(handle),
+    set_value: (next) => __input_set_value(handle, String(next ?? "")),
+    release: () => __input_release(handle),
+  });
+
   globalThis.__construct = (Class) => new Class();
 
   class View {
@@ -582,6 +614,11 @@ globalThis.__gpui = (() => {
     Button: { new: (id) => element(__button(String(id))) },
     Checkbox: { new: (id) => element(__checkbox(String(id))) },
     Switch: { new: (id) => element(__switch(String(id))) },
+    InputState: {
+      new: (options) =>
+        inputState(__input_state_new(options?.placeholder ?? null, options?.value ?? null)),
+    },
+    Input: { new: (state) => element(__input_element(state.__handle)) },
   };
 })();
 "#;
@@ -648,6 +685,7 @@ impl ShellRuntime {
             // Subsystems extend the same module object the prelude built.
             let module: Object = ctx.globals().get("__gpui")?;
             host::install(ctx, &module)?;
+            entity_api::install(ctx, &module, runtime.clone())?;
             scheduler::install(ctx, &module)?;
             sandbox::install(ctx)?;
 
@@ -786,6 +824,8 @@ fn context_object<'js>(ctx: &Ctx<'js>, generation: u64) -> JsResult<Object<'js>>
             .map_err(|error| Exception::throw_type(&ctx, &error.to_string()))
         }),
     )?;
+
+    overlay::install(ctx, &object, generation)?;
 
     object.set(
         "phase",

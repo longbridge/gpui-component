@@ -53,7 +53,7 @@ compile_error!(
 compile_error!("enable one scripting engine: `quickjs` (default) or `lua`/`luajit`");
 
 #[cfg(feature = "quickjs")]
-mod quickjs;
+pub(crate) mod quickjs;
 #[cfg(feature = "quickjs")]
 pub use quickjs::{ShellRuntime, ViewObject, ViewType};
 

@@ -10,7 +10,7 @@ use gpui::{
     AnyElement, App, InteractiveElement, IntoElement, ParentElement, Refineable as _, SharedString,
     StatefulInteractiveElement, StyleRefinement, Styled, Window, div,
 };
-use gpui_base::{Button, Checkbox, CheckboxState, Switch, h_flex, v_flex};
+use gpui_base::{Button, Checkbox, CheckboxState, Switch, h_flex, input::Input, v_flex};
 
 use crate::{
     engine::ShellRuntime,
@@ -117,6 +117,8 @@ pub fn materialize(
                 });
             }
 
+            let checkbox = with_hover(checkbox, &states);
+            let checkbox = with_active_and_focus(checkbox, &states);
             finish(checkbox, refinement, children)
         }
         Component::Switch(id) => {
@@ -131,7 +133,32 @@ pub fn materialize(
                 });
             }
 
+            // `Switch` itself is not interactive — `SwitchTrack` is — so a
+            // state style on the switch root has nowhere to land. Saying so is
+            // better than dropping it without a word.
+            if states.hover.is_some() || states.active.is_some() || states.focus.is_some() {
+                tracing::warn!(
+                    "state styles on a Switch are ignored; style the row around it instead"
+                );
+            }
             finish(switch, refinement, children)
+        }
+        Component::Input(handle) => {
+            // Base's `Input` renders text and nothing else — no frame, no
+            // padding, no focus treatment. The script's styling therefore lands
+            // on a wrapper, which is also where a focus ring will go when the
+            // binding grows one.
+            let mut frame = div();
+            frame.style().refine(&refinement);
+            frame.extend(children);
+
+            match crate::entities::input(handle) {
+                Some(state) => frame.child(Input::new(&state)).into_any_element(),
+                None => {
+                    tracing::error!("input handle {handle} is no longer live");
+                    frame.into_any_element()
+                }
+            }
         }
     }
 }

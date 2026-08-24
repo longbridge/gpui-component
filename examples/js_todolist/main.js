@@ -1,0 +1,214 @@
+// A todo list.
+//
+// It exists to exercise the whole runtime rather than to be minimal: retained
+// input state, controlled checkboxes, a dialog, a toast, capability-gated
+// storage, and a filter that has to survive every mutation. If something in
+// gpui-shell is broken, this is where it shows.
+//
+//   cargo run -p gpui-shell -- examples/js_todolist
+
+import { View, div, h_flex, v_flex, text, InputState } from "gpui";
+import { load, save } from "./storage.js";
+import ConfirmClear from "./confirm.js";
+import {
+  SPACE,
+  button,
+  checkbox,
+  emptyState,
+  field,
+  label,
+  muted,
+  row,
+  rule,
+  surface,
+  title,
+} from "./ui.js";
+
+const FILTERS = [
+  { id: "all", caption: "All" },
+  { id: "active", caption: "Active" },
+  { id: "done", caption: "Done" },
+];
+
+export default class TodoList extends View {
+  init() {
+    this.draft = InputState.new({ placeholder: "What needs doing?" });
+    this.items = load();
+    this.filter = "all";
+    this.nextId = this.items.reduce((max, item) => Math.max(max, item.id), 0) + 1;
+    this.persisted = true;
+  }
+
+  get remaining() {
+    return this.items.filter((item) => !item.done).length;
+  }
+
+  get completed() {
+    return this.items.filter((item) => item.done).length;
+  }
+
+  visible() {
+    if (this.filter === "all") return this.items;
+    return this.items.filter((item) => (this.filter === "done") === item.done);
+  }
+
+  commit(cx) {
+    this.persisted = save(this.items);
+    cx.notify();
+  }
+
+  add(cx) {
+    const caption = this.draft.value().trim();
+    if (caption === "") return;
+
+    this.items = [...this.items, { id: this.nextId, caption, done: false }];
+    this.nextId += 1;
+    this.draft.set_value("");
+    this.commit(cx);
+  }
+
+  toggle(id, done, cx) {
+    this.items = this.items.map((item) => (item.id === id ? { ...item, done } : item));
+    this.commit(cx);
+  }
+
+  remove(id, cx) {
+    this.items = this.items.filter((item) => item.id !== id);
+    this.commit(cx);
+  }
+
+  setFilter(filter, cx) {
+    this.filter = filter;
+    cx.notify();
+  }
+
+  clearCompleted(cx) {
+    const count = this.completed;
+    if (count === 0) return;
+
+    cx.open_dialog(ConfirmClear, {
+      count,
+      onConfirm: () => {
+        this.items = this.items.filter((item) => !item.done);
+        this.persisted = save(this.items);
+        cx.toast({
+          title: `Deleted ${count} ${count === 1 ? "item" : "items"}`,
+          level: "info",
+          id: "cleared",
+        });
+      },
+    });
+  }
+
+  render() {
+    const visible = this.visible();
+
+    return v_flex()
+      .size_full()
+      .bg("background")
+      .p(SPACE.xl)
+      .gap(SPACE.lg)
+      .child(this.header())
+      .child(this.composer())
+      .child(
+        surface()
+          .child(this.toolbar())
+          .child(rule())
+          .child(
+            visible.length === 0
+              ? emptyState(...this.emptyCopy())
+              : v_flex().flex_1().py(SPACE.xs).children(visible.map((item) => this.row(item))),
+          ),
+      )
+      .child(this.footer());
+  }
+
+  header() {
+    return h_flex()
+      .items_center()
+      .justify_between()
+      .child(title("Todo"))
+      .child(
+        muted(
+          this.items.length === 0
+            ? "Nothing yet"
+            : `${this.remaining} of ${this.items.length} remaining`,
+        ),
+      );
+  }
+
+  composer() {
+    return row()
+      .child(field(this.draft))
+      .child(button("add", "Add", (_event, cx) => this.add(cx), { variant: "primary" }));
+  }
+
+  toolbar() {
+    const filters = FILTERS.map((entry) =>
+      button(`filter-${entry.id}`, entry.caption, (_event, cx) => this.setFilter(entry.id, cx), {
+        variant: "ghost",
+        selected: this.filter === entry.id,
+      }),
+    );
+
+    return h_flex()
+      .items_center()
+      .justify_between()
+      .px(SPACE.md)
+      .py(SPACE.sm)
+      .child(h_flex().gap(SPACE.xs).children(filters))
+      .child(
+        button("clear", "Clear completed…", (_event, cx) => this.clearCompleted(cx), {
+          variant: "danger",
+          disabled: this.completed === 0,
+        }),
+      );
+  }
+
+  row(item) {
+    return checkbox(
+      `item-${item.id}`,
+      item.done,
+      (done, cx) => this.toggle(item.id, done, cx),
+      h_flex()
+        .flex_1()
+        .items_center()
+        .justify_between()
+        .gap(SPACE.md)
+        .child(
+          label(item.caption).when(item.done, (el) =>
+            el.text_color("muted_foreground").line_through(),
+          ),
+        )
+        .child(
+          button("remove-" + item.id, "Remove", (_event, cx) => this.remove(item.id, cx), {
+            variant: "ghost",
+          }),
+        ),
+    );
+  }
+
+  footer() {
+    return h_flex()
+      .items_center()
+      .justify_between()
+      .child(
+        muted(
+          this.persisted
+            ? "Saved"
+            : "Not saved — this host did not grant storage, so the list lasts for this run only",
+        ),
+      )
+      .child(muted(`${this.completed} completed`));
+  }
+
+  emptyCopy() {
+    if (this.items.length === 0) {
+      return ["No items yet", "Type above and press Add."];
+    }
+    if (this.filter === "done") {
+      return ["Nothing finished yet", "Tick an item to see it here."];
+    }
+    return ["All done", "Switch to All to review what you finished."];
+  }
+}

@@ -313,7 +313,7 @@ pub fn reload(
         .load_app(directory)
         .with_context(|| format!("reloading {}", directory.display()))?;
     let object = runtime
-        .instantiate(&view_type)
+        .instantiate(&view_type, window, cx)
         .with_context(|| format!("rebuilding the view from {}", directory.display()))?;
 
     view.update(cx, |view, cx| {

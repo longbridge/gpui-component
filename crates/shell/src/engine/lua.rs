@@ -153,10 +153,21 @@ impl ShellRuntime {
     }
 
     /// Instantiates a view type, running its `init`.
-    pub fn instantiate(self: &Rc<Self>, view_type: &Table) -> Result<Table> {
+    ///
+    /// `init` is where a view creates the state it keeps across frames, and
+    /// creating an entity needs a `Window` and an `App`. So construction opens
+    /// a scope of its own rather than running in the gap between host calls.
+    pub fn instantiate(
+        self: &Rc<Self>,
+        view_type: &Table,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Result<Table> {
         let new: Function = view_type
             .get("new")
             .map_err(|_| anyhow!("value returned by main.lua is not a gpui.view type"))?;
+
+        let (_guard, _generation) = scope::enter(window, cx, ScopePhase::Event, None);
         new.call::<Table>(LuaValue::Nil).map_err(host_error)
     }
 
@@ -179,7 +190,7 @@ impl ShellRuntime {
 
         match spec {
             Ok(id) => materialize(self, id, window, cx),
-            Err(error) => error_overlay(&error.to_string()),
+            Err(error) => error_overlay(&error.to_string(), window, cx),
         }
     }
 

@@ -129,10 +129,12 @@ fn describing_a_panel_stays_inside_the_frame_budget(cx: &mut TestAppContext) {
     cx.update(|cx| runtime.set_global(cx));
 
     let view_type = runtime.load_source("grid", SOURCE).expect("load");
-    let object = runtime.instantiate(&view_type).expect("instantiate");
 
     let window = cx.add_window(|_, _| Empty);
     let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .expect("instantiate");
 
     // Warm up: the style table and the module both initialize lazily.
     let nodes = context.update(|window, cx| {

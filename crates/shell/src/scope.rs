@@ -122,6 +122,19 @@ pub fn with_current_app<R>(f: impl FnOnce(&mut App) -> R) -> Option<R> {
     app.map(|app| f(unsafe { &mut *app }))
 }
 
+/// Runs `f` with the innermost scope's `Window` and `App`.
+///
+/// Creating a retained entity — an input's state, a tree's state — needs both,
+/// and it happens while script code is running rather than at a known point in
+/// the host, so the context comes from the scope stack rather than being
+/// threaded through. Returns `None` outside any scope, which is the honest
+/// answer for "the script asked for this from nowhere".
+pub fn with_current<R>(f: impl FnOnce(&mut Window, &mut App) -> R) -> Option<R> {
+    let pointers = STACK.with(|stack| stack.borrow().last().map(|frame| (frame.window, frame.app)));
+    // SAFETY: see the module header.
+    pointers.map(|(window, app)| f(unsafe { &mut *window }, unsafe { &mut *app }))
+}
+
 /// The view the innermost scope belongs to, if any.
 pub fn current_view() -> Option<Entity<ScriptView>> {
     STACK.with(|stack| stack.borrow().last().and_then(|frame| frame.view.clone()))
