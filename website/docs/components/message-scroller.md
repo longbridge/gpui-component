@@ -90,9 +90,9 @@ These readers query `ListState` directly instead of exposing a cached visible ra
 
 ## Styling and controls
 
-`MessageScroller` implements `Styled` for the root. `with_content_style(...)` refines the internal scrollbar viewport, `with_list_style(...)` refines the GPUI list after its default padding, and `with_row_style(...)` refines the full-width wrapper around every rendered row. Each row wrapper owns stable trailing spacing so GPUI's virtual list includes that spacing in its measured height across append and prepend updates.
+`MessageScroller` implements `Styled` for the root. `with_content_style(...)` refines the internal scrollbar viewport, `with_list_style(...)` refines the GPUI list after its default padding, and `with_row_style(...)` refines the full-width wrapper around every rendered row. The wrapper owns the Base UI 24 px transcript gap as stable trailing spacing, so GPUI's virtual list includes it in measured height across append and prepend updates.
 
-Use `.scrollbar(false)` to hide the built-in scrollbar. Use `.jump_button(false)` when the application needs to compose its own Button from `is_scrolled_up()` and `scroll_to_end()`. The built-in button is an existing `Button`, and `with_jump_button_label(...)` allows application-localized text.
+Use `.scrollbar(false)` to hide the built-in scrollbar. Use `.jump_button(false)` when the application needs to compose its own Button from `is_scrolled_up()` and `scroll_to_end()`. The built-in control is a 32 px circular secondary `Button` with an arrow icon. `with_jump_button_label(...)` localizes its tooltip, and `with_jump_button_style(...)` refines the Button without changing the scroller behavior.
 
 ## Component boundaries
 

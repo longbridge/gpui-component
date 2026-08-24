@@ -156,6 +156,7 @@ pub struct MessageScroller {
     content_style: StyleRefinement,
     list_style: StyleRefinement,
     row_style: StyleRefinement,
+    jump_button_style: StyleRefinement,
     scrollbar: bool,
     jump_button: bool,
     jump_button_label: SharedString,
@@ -182,6 +183,7 @@ impl MessageScroller {
             content_style: StyleRefinement::default(),
             list_style: StyleRefinement::default(),
             row_style: StyleRefinement::default(),
+            jump_button_style: StyleRefinement::default(),
             scrollbar: true,
             jump_button: true,
             jump_button_label: "Jump to latest".into(),
@@ -223,6 +225,12 @@ impl MessageScroller {
         self.row_style = style;
         self
     }
+
+    /// Refine the built-in jump-to-latest button after its defaults.
+    pub fn with_jump_button_style(mut self, style: StyleRefinement) -> Self {
+        self.jump_button_style = style;
+        self
+    }
 }
 
 impl Styled for MessageScroller {
@@ -242,8 +250,9 @@ impl RenderOnce for MessageScroller {
             )
         };
         let tokens = cx.theme().semantic_tokens();
-        let row_gap = tokens.spacing.md;
+        let row_gap = tokens.spacing.xl;
         let row_style = self.row_style;
+        let jump_button_style = self.jump_button_style;
         let mut renderer = self.renderer;
 
         let list = list(list_state.clone(), move |index, window, cx| {
@@ -290,14 +299,16 @@ impl RenderOnce for MessageScroller {
                         .justify_center()
                         .child(
                             Button::new((root_id, "jump-to-latest"))
-                                .ghost()
-                                .xsmall()
+                                .secondary()
+                                .small()
                                 .icon(IconName::ArrowDown)
-                                .label(self.jump_button_label)
+                                .tooltip(self.jump_button_label)
                                 .rounded(tokens.radius.full)
                                 .border_1()
                                 .border_color(tokens.colors.border)
                                 .bg(tokens.colors.background)
+                                .text_color(tokens.colors.foreground)
+                                .refine_style(&jump_button_style)
                                 .on_click(move |_, _, cx| {
                                     state.update(cx, |state, cx| state.scroll_to_end(cx));
                                 }),
@@ -352,7 +363,8 @@ mod tests {
             .with_jump_button_label("Latest")
             .with_content_style(StyleRefinement::default())
             .with_list_style(StyleRefinement::default())
-            .with_row_style(StyleRefinement::default());
+            .with_row_style(StyleRefinement::default())
+            .with_jump_button_style(StyleRefinement::default());
 
         assert!(!scroller.scrollbar);
         assert!(!scroller.jump_button);

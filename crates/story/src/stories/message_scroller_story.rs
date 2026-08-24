@@ -10,7 +10,7 @@ use gpui_component::{
     bubble::{Bubble, BubbleVariant},
     button::Button,
     h_flex,
-    marker::{Marker, MarkerVariant},
+    marker::{Marker, MarkerContent, MarkerVariant},
     message::{Message, MessageAlignment, MessageContent, MessageHeader},
     message_scroller::{MessageScroller, MessageScrollerState},
     v_flex,
@@ -202,7 +202,7 @@ impl Render for MessageScrollerStory {
                                     };
                                     let bubble = Bubble::new()
                                         .when(!message.sent, |bubble| {
-                                            bubble.with_variant(BubbleVariant::Outline)
+                                            bubble.with_variant(BubbleVariant::Secondary)
                                         })
                                         .child(message.body);
                                     let row = div()
@@ -223,7 +223,9 @@ impl Render for MessageScrollerStory {
                                             this.child(
                                                 Marker::new()
                                                     .with_variant(MarkerVariant::Separator)
-                                                    .child("Unread"),
+                                                    .content(
+                                                        MarkerContent::new().child("Unread"),
+                                                    ),
                                             )
                                         })
                                         .child(row)
