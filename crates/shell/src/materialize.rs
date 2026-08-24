@@ -58,10 +58,29 @@ struct Behavior {
 /// them today: entity-backed components (Input, Tree, Table) and tooltips need
 /// both at construction time, and they are part of this function's contract
 /// rather than an oversight.
-#[allow(clippy::only_used_in_recursion)]
 pub fn materialize(
     runtime: &Rc<ShellRuntime>,
     id: SpecId,
+    window: &mut Window,
+    cx: &mut App,
+) -> AnyElement {
+    let ambient = window.text_style().color;
+    materialize_node(runtime, id, ambient, window, cx)
+}
+
+/// Materializes one node, carrying the text color down the description.
+///
+/// GPUI resolves inherited text color while painting, but an svg needs the
+/// color on its *own* style before it will paint at all — and by then the
+/// description is gone. So inheritance is resolved here, walking the tree the
+/// script built: each node passes down its own `text_color` if it set one, and
+/// the ambient color otherwise. That is what makes an icon inside a dark button
+/// come out light without the script saying so twice.
+#[allow(clippy::only_used_in_recursion)]
+fn materialize_node(
+    runtime: &Rc<ShellRuntime>,
+    id: SpecId,
+    inherited: gpui::Hsla,
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
@@ -72,13 +91,14 @@ pub fn materialize(
         return div().into_any_element();
     };
 
+    let (refinement, behavior, states) = resolve_ops(runtime, &node);
+    let inherited = refinement.text.color.unwrap_or(inherited);
+
     let children: Vec<AnyElement> = node
         .children
         .iter()
-        .map(|child| materialize(runtime, *child, window, cx))
+        .map(|child| materialize_node(runtime, *child, inherited, window, cx))
         .collect();
-
-    let (refinement, behavior, states) = resolve_ops(runtime, &node);
 
     match component {
         Component::Div => flex_element(div(), id, refinement, behavior, states, children),
@@ -160,17 +180,14 @@ pub fn materialize(
         }
         Component::Svg(path) => {
             // GPUI paints an svg only when the element's own style carries a
-            // text color: an inherited color reaches children as a text style,
-            // not as this element's style, so an icon with no explicit color
-            // silently draws nothing. Falling back to the ambient text color is
-            // what makes `svg(...)` inside a row simply take that row's tone,
-            // which is what anyone writing it expects — and a script can still
-            // set `text_color` to override.
+            // text color, and an inherited color reaches children as a text
+            // style rather than as this element's style — so an icon with no
+            // color of its own silently draws nothing. `inherited` already
+            // accounts for this node's own `text_color`, so an explicit color
+            // still wins and an icon in a dark button comes out light.
             let mut image = gpui::svg().path(SharedString::from(path));
             image.style().refine(&refinement);
-            if image.style().text.color.is_none() {
-                image.style().text.color = Some(window.text_style().color);
-            }
+            image.style().text.color = Some(inherited);
             image.into_any_element()
         }
         Component::Input(handle) => {
