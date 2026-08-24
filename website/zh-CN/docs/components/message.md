@@ -11,7 +11,8 @@ description: 将发送者身份、元信息、富内容和操作组合成对齐�
 
 ```rust
 use gpui_component::message::{
-    Message, MessageAlignment, MessageContent, MessageFooter, MessageGroup, MessageHeader,
+    Message, MessageAlignment, MessageAvatar, MessageContent, MessageFooter,
+    MessageGroup, MessageHeader,
 };
 ```
 
@@ -19,7 +20,10 @@ use gpui_component::message::{
 
 ```rust
 Message::new()
-    .avatar(Avatar::new().name("Alice").small())
+    .avatar_slot(
+        MessageAvatar::new()
+            .child(Avatar::new().name("Alice").small()),
+    )
     .header(
         MessageHeader::new()
             .child("Alice")
@@ -35,7 +39,7 @@ Message::new()
     )
 ```
 
-avatar 可以接收任意 element，因此应用既可以使用 `Avatar`，也可以使用图标或其他身份样式。Header、Content 与 Footer 是可容纳任意 child 的具名 slot。`Message` 不持有发送者记录、时间戳、送达状态或操作逻辑。
+`MessageAvatar` 会保留 Base UI 的 32 px avatar 基线；存在 footer 时，它仍与可见消息表面对齐。`.avatar(...)` builder 会把任意 element 自动包装进该 slot，作为便利写法。Header、Content 与 Footer 是可容纳任意 child 的具名 slot。`Message` 不持有发送者记录、时间戳、送达状态或操作逻辑。
 
 ## 对齐
 
@@ -71,7 +75,10 @@ Message::new()
     .content(
         MessageContent::new()
             .child(Bubble::new().child("你好"))
-            .child(Attachment::new().child(file_content)),
+            .child(
+                Attachment::new()
+                    .content(AttachmentContent::new().child(file_content)),
+            ),
     )
     .footer(
         MessageFooter::new()
@@ -81,7 +88,7 @@ Message::new()
 
 ## 自定义样式
 
-`Message`、`MessageGroup`、`MessageHeader`、`MessageContent` 与 `MessageFooter` 都实现了 `Styled`。调用方样式会在组件默认样式之后应用：
+`Message`、`MessageGroup`、`MessageAvatar`、`MessageHeader`、`MessageContent` 与 `MessageFooter` 都实现了 `Styled`。调用方样式会在组件默认样式之后应用：
 
 ```rust
 Message::new()
@@ -98,12 +105,14 @@ Message::new()
 
 - [Message]
 - [MessageGroup]
+- [MessageAvatar]
 - [MessageHeader]
 - [MessageContent]
 - [MessageFooter]
 
 [Message]: https://docs.rs/gpui-component/latest/gpui_component/message/struct.Message.html
 [MessageGroup]: https://docs.rs/gpui-component/latest/gpui_component/message/struct.MessageGroup.html
+[MessageAvatar]: https://docs.rs/gpui-component/latest/gpui_component/message/struct.MessageAvatar.html
 [MessageHeader]: https://docs.rs/gpui-component/latest/gpui_component/message/struct.MessageHeader.html
 [MessageContent]: https://docs.rs/gpui-component/latest/gpui_component/message/struct.MessageContent.html
 [MessageFooter]: https://docs.rs/gpui-component/latest/gpui_component/message/struct.MessageFooter.html

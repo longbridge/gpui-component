@@ -7,7 +7,8 @@ use gpui_component::{
     avatar::Avatar,
     bubble::{Bubble, BubbleVariant},
     message::{
-        Message, MessageAlignment, MessageContent, MessageFooter, MessageGroup, MessageHeader,
+        Message, MessageAlignment, MessageAvatar, MessageContent, MessageFooter, MessageGroup,
+        MessageHeader,
     },
     v_flex,
 };
@@ -62,7 +63,9 @@ impl Render for MessageStory {
                     .gap_5()
                     .child(
                         Message::new()
-                            .avatar(Avatar::new().name("Alice").small())
+                            .avatar_slot(
+                                MessageAvatar::new().child(Avatar::new().name("Alice").small()),
+                            )
                             .header(MessageHeader::new().child("Alice").child("10:24 AM"))
                             .content(
                                 MessageContent::new().child(

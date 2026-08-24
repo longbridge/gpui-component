@@ -1,5 +1,5 @@
 use gpui::{
-    AnyElement, App, IntoElement, ParentElement, RenderOnce, StyleRefinement, Styled, Window, div,
+    AnyElement, App, IntoElement, ParentElement, RenderOnce, StyleRefinement, Styled, Window,
     prelude::FluentBuilder as _,
 };
 
@@ -70,7 +70,7 @@ impl RenderOnce for MessageGroup {
 pub struct Message {
     style: StyleRefinement,
     alignment: MessageAlignment,
-    avatar: Option<AnyElement>,
+    avatar: Option<MessageAvatar>,
     header: Option<MessageHeader>,
     content: Option<MessageContent>,
     footer: Option<MessageFooter>,
@@ -97,7 +97,13 @@ impl Message {
 
     /// Set an optional avatar or other sender identity element.
     pub fn avatar(mut self, avatar: impl IntoElement) -> Self {
-        self.avatar = Some(avatar.into_any_element());
+        self.avatar = Some(MessageAvatar::new().child(avatar));
+        self
+    }
+
+    /// Set a fully configured avatar slot.
+    pub fn avatar_slot(mut self, avatar: MessageAvatar) -> Self {
+        self.avatar = Some(avatar);
         self
     }
 
@@ -136,6 +142,7 @@ impl RenderOnce for Message {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let tokens = cx.theme().semantic_tokens();
         let alignment = self.alignment;
+        let has_footer = self.footer.is_some();
 
         h_flex()
             .relative()
@@ -150,13 +157,13 @@ impl RenderOnce for Message {
             })
             .refine_style(&self.style)
             .when_some(self.avatar, |this, avatar| {
-                this.child(div().flex_none().self_end().child(avatar))
+                this.child(avatar.with_footer_offset(has_footer))
             })
             .child(
                 v_flex()
                     .w_full()
                     .min_w_0()
-                    .gap(tokens.spacing.sm)
+                    .gap(tokens.spacing.sm + tokens.spacing.xxs)
                     .map(|this| match alignment {
                         MessageAlignment::Start => this.items_start(),
                         MessageAlignment::End => this.items_end(),
@@ -167,6 +174,71 @@ impl RenderOnce for Message {
                     })
                     .when_some(self.footer, |this, footer| this.child(footer)),
             )
+    }
+}
+
+/// The sender identity slot rendered beside a [`Message`].
+///
+/// The slot reserves a 32 pixel baseline and moves above a message footer so
+/// the avatar remains aligned with the visible message surface.
+#[derive(IntoElement)]
+pub struct MessageAvatar {
+    style: StyleRefinement,
+    footer_offset: bool,
+    children: Vec<AnyElement>,
+}
+
+impl MessageAvatar {
+    /// Create an empty avatar slot.
+    pub fn new() -> Self {
+        Self {
+            style: StyleRefinement::default(),
+            footer_offset: false,
+            children: Vec::new(),
+        }
+    }
+
+    fn with_footer_offset(mut self, footer_offset: bool) -> Self {
+        self.footer_offset = footer_offset;
+        self
+    }
+}
+
+impl Default for MessageAvatar {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ParentElement for MessageAvatar {
+    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
+        self.children.extend(elements);
+    }
+}
+
+impl Styled for MessageAvatar {
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
+    }
+}
+
+impl RenderOnce for MessageAvatar {
+    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        let tokens = cx.theme().semantic_tokens();
+
+        h_flex()
+            .relative()
+            .min_w(tokens.spacing.xxl)
+            .flex_none()
+            .items_center()
+            .justify_center()
+            .self_end()
+            .overflow_hidden()
+            .rounded(tokens.radius.full)
+            .bg(tokens.colors.muted)
+            .when(self.footer_offset, |this| this.bottom(tokens.spacing.xxl))
+            .refine_style(&self.style)
+            .children(self.children)
     }
 }
 
@@ -273,7 +345,7 @@ impl RenderOnce for MessageContent {
             .w_full()
             .max_w_full()
             .min_w_0()
-            .gap(tokens.spacing.sm)
+            .gap(tokens.spacing.sm + tokens.spacing.xxs)
             .map(|this| match self.alignment {
                 MessageAlignment::Start => this.items_start(),
                 MessageAlignment::End => this.items_end(),
@@ -344,7 +416,7 @@ mod tests {
     fn test_message_builder() {
         let message = Message::new()
             .alignment(MessageAlignment::End)
-            .avatar(div())
+            .avatar_slot(MessageAvatar::new().child(gpui::div()))
             .header(MessageHeader::new().child("Alice"))
             .content(MessageContent::new().child("Hello"))
             .footer(MessageFooter::new().child("Delivered"));
@@ -354,11 +426,16 @@ mod tests {
         assert!(message.header.is_some());
         assert!(message.content.is_some());
         assert!(message.footer.is_some());
+        assert!(!message.avatar.as_ref().unwrap().footer_offset);
 
         let group = MessageGroup::new().child("First").child("Second");
         assert_eq!(group.children.len(), 2);
 
         let content = MessageContent::new().aligned(MessageAlignment::End);
         assert_eq!(content.alignment, MessageAlignment::End);
+
+        let avatar = MessageAvatar::new().with_footer_offset(true).child("ME");
+        assert!(avatar.footer_offset);
+        assert_eq!(avatar.children.len(), 1);
     }
 }

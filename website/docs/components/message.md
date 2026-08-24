@@ -11,7 +11,8 @@ description: Compose sender identity, metadata, rich content, and actions into a
 
 ```rust
 use gpui_component::message::{
-    Message, MessageAlignment, MessageContent, MessageFooter, MessageGroup, MessageHeader,
+    Message, MessageAlignment, MessageAvatar, MessageContent, MessageFooter,
+    MessageGroup, MessageHeader,
 };
 ```
 
@@ -19,7 +20,10 @@ use gpui_component::message::{
 
 ```rust
 Message::new()
-    .avatar(Avatar::new().name("Alice").small())
+    .avatar_slot(
+        MessageAvatar::new()
+            .child(Avatar::new().name("Alice").small()),
+    )
     .header(
         MessageHeader::new()
             .child("Alice")
@@ -35,7 +39,7 @@ Message::new()
     )
 ```
 
-The avatar accepts any element, so an application can use `Avatar`, an icon, or another identity treatment. Header, content, and footer are typed slots with arbitrary children. `Message` does not own sender records, timestamps, delivery state, or actions.
+`MessageAvatar` reserves the Base UI 32 px avatar baseline and keeps the avatar aligned with the visible surface when a footer is present. The `.avatar(...)` builder wraps any element in this slot as a convenience. Header, content, and footer are typed slots with arbitrary children. `Message` does not own sender records, timestamps, delivery state, or actions.
 
 ## Alignment
 
@@ -71,7 +75,10 @@ Message::new()
     .content(
         MessageContent::new()
             .child(Bubble::new().child("Hello"))
-            .child(Attachment::new().child(file_content)),
+            .child(
+                Attachment::new()
+                    .content(AttachmentContent::new().child(file_content)),
+            ),
     )
     .footer(
         MessageFooter::new()
@@ -81,7 +88,7 @@ Message::new()
 
 ## Custom styling
 
-`Message`, `MessageGroup`, `MessageHeader`, `MessageContent`, and `MessageFooter` all implement `Styled`. Style refinements are applied after component defaults:
+`Message`, `MessageGroup`, `MessageAvatar`, `MessageHeader`, `MessageContent`, and `MessageFooter` all implement `Styled`. Style refinements are applied after component defaults:
 
 ```rust
 Message::new()
@@ -98,12 +105,14 @@ Interactive content should use `Button`, `Link`, or another semantic control ins
 
 - [Message]
 - [MessageGroup]
+- [MessageAvatar]
 - [MessageHeader]
 - [MessageContent]
 - [MessageFooter]
 
 [Message]: https://docs.rs/gpui-component/latest/gpui_component/message/struct.Message.html
 [MessageGroup]: https://docs.rs/gpui-component/latest/gpui_component/message/struct.MessageGroup.html
+[MessageAvatar]: https://docs.rs/gpui-component/latest/gpui_component/message/struct.MessageAvatar.html
 [MessageHeader]: https://docs.rs/gpui-component/latest/gpui_component/message/struct.MessageHeader.html
 [MessageContent]: https://docs.rs/gpui-component/latest/gpui_component/message/struct.MessageContent.html
 [MessageFooter]: https://docs.rs/gpui-component/latest/gpui_component/message/struct.MessageFooter.html
