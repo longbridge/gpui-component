@@ -44,7 +44,16 @@ mod macos {
     }
 
     fn ns_view(window: &Window) -> Option<&AnyObject> {
-        let handle = HasWindowHandle::window_handle(window).ok()?;
+        // A headless/test window's `window_handle()` panics (`unimplemented!`)
+        // instead of returning Err, so the graceful `.ok()?` never fires.
+        // Probe under catch_unwind and treat a panic as "no view" (the Input
+        // then skips native text-content wiring) so downstream crates' tests
+        // that render an Input over a test window don't panic here.
+        let handle = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            HasWindowHandle::window_handle(window).ok()
+        }))
+        .ok()
+        .flatten()?;
         let RawWindowHandle::AppKit(handle) = handle.as_raw() else {
             return None;
         };

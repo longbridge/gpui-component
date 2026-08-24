@@ -14,8 +14,14 @@ use objc2_foundation::NSPoint;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
 pub fn install_window_hit_test_forwarder(window: &Window) {
-    let Some(view) = ns_view(window) else {
-        return;
+    // A headless/test window's `window_handle()` panics (`unimplemented!`)
+    // instead of returning `Err`, so `ns_view`'s graceful `.ok()?` never
+    // gets to fire. Probe under `catch_unwind` and no-op when there is no
+    // backing AppKit window (gpui's test platform), so downstream crates'
+    // tests -- which build a `Root` over a test window -- don't panic here.
+    let view = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| ns_view(window))) {
+        Ok(Some(view)) => view,
+        _ => return,
     };
     let Some(window) = view.window() else {
         return;
