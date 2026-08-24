@@ -317,6 +317,8 @@ where
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self.state.clear_query(window, cx);
+
         let selected_indices = {
             let list = self.state.list.read(cx);
             let delegate = &list.delegate().delegate;
@@ -1278,6 +1280,44 @@ mod tests {
                         .delegate()
                         .selection_snapshot
                         .is_empty()
+                );
+            });
+        });
+    }
+
+    /// A value projected in from outside is not a position in the filtered view,
+    /// so an active search must not decide which values can be selected.
+    #[gpui::test]
+    fn test_combo_box_set_selected_values_keeps_values_hidden_by_the_search(
+        cx: &mut TestAppContext,
+    ) {
+        cx.update(crate::init);
+        let cx = cx.add_empty_window();
+        cx.update(|window, cx| {
+            let items = SearchableVec::new(vec!["React", "Vue", "Angular"]);
+            let state = cx.new(|cx| ComboboxState::new(items, vec![], window, cx).multiple(true));
+
+            state.update(cx, |state, cx| {
+                state.set_selected_values(&["React", "Vue"], window, cx);
+                state.state.list.update(cx, |list, cx| {
+                    list.set_query("Angular", window, cx);
+                });
+
+                state.set_selected_values(&["React", "Vue", "Angular"], window, cx);
+
+                assert_eq!(
+                    state.selected_values(),
+                    vec!["React", "Vue", "Angular"],
+                    "a value the search had hidden must survive being reapplied"
+                );
+                assert_eq!(
+                    state
+                        .selection()
+                        .iter()
+                        .map(|(index, _)| *index)
+                        .collect::<Vec<_>>(),
+                    vec![IndexPath::new(0), IndexPath::new(1), IndexPath::new(2)],
+                    "clearing the query puts every selected item back in view"
                 );
             });
         });

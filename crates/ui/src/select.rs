@@ -307,11 +307,7 @@ where
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.state.list.update(cx, |list, cx| {
-            if !list.query_input.read(cx).value().is_empty() {
-                list.set_query("", window, cx);
-            }
-        });
+        self.state.clear_query(window, cx);
 
         let selected_index = self
             .state

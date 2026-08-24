@@ -238,6 +238,10 @@ cx.subscribe_in(&state, window, |view, _, event, window, cx| {
 
 值会通过当前 delegate 解析，无法找到的值会被忽略。
 
+`set_selected_values` 会先清除搜索关键词，因此正在进行的搜索不会决定哪些值可以被选中。
+index path 定位的是列表当前显示的内容，所以 `set_selected_indices`、`add_selected_index`
+和 `remove_selected_index` 作用于可见行，不会改动搜索关键词。
+
 ```rust
 // 按值替换整个选中集合
 state.update(cx, |s, cx| {
