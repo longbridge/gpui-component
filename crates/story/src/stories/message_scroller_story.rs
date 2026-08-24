@@ -216,6 +216,8 @@ impl Render for MessageScrollerStory {
                                         );
 
                                     v_flex()
+                                        .w_full()
+                                        .min_w_0()
                                         .gap_3()
                                         .when(index == unread_index, |this| {
                                             this.child(

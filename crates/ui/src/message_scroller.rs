@@ -155,6 +155,7 @@ pub struct MessageScroller {
     style: StyleRefinement,
     content_style: StyleRefinement,
     list_style: StyleRefinement,
+    row_style: StyleRefinement,
     scrollbar: bool,
     jump_button: bool,
     jump_button_label: SharedString,
@@ -180,6 +181,7 @@ impl MessageScroller {
             style: StyleRefinement::default(),
             content_style: StyleRefinement::default(),
             list_style: StyleRefinement::default(),
+            row_style: StyleRefinement::default(),
             scrollbar: true,
             jump_button: true,
             jump_button_label: "Jump to latest".into(),
@@ -215,6 +217,12 @@ impl MessageScroller {
         self.list_style = style;
         self
     }
+
+    /// Refine the full-width wrapper around every rendered row.
+    pub fn with_row_style(mut self, style: StyleRefinement) -> Self {
+        self.row_style = style;
+        self
+    }
 }
 
 impl Styled for MessageScroller {
@@ -234,14 +242,24 @@ impl RenderOnce for MessageScroller {
             )
         };
         let tokens = cx.theme().semantic_tokens();
+        let row_gap = tokens.spacing.md;
+        let row_style = self.row_style;
+        let mut renderer = self.renderer;
 
-        let list = list(list_state.clone(), self.renderer)
-            .size_full()
-            .min_h_0()
-            .gap(tokens.spacing.md)
-            .px(tokens.spacing.md)
-            .py(tokens.spacing.sm)
-            .refine_style(&self.list_style);
+        let list = list(list_state.clone(), move |index, window, cx| {
+            div()
+                .w_full()
+                .min_w_0()
+                .pb(row_gap)
+                .refine_style(&row_style)
+                .child(renderer(index, window, cx))
+                .into_any_element()
+        })
+        .size_full()
+        .min_h_0()
+        .px(tokens.spacing.md)
+        .py(tokens.spacing.sm)
+        .refine_style(&self.list_style);
 
         let viewport = div()
             .id((root_id.clone(), "viewport"))
@@ -333,7 +351,8 @@ mod tests {
             .jump_button(false)
             .with_jump_button_label("Latest")
             .with_content_style(StyleRefinement::default())
-            .with_list_style(StyleRefinement::default());
+            .with_list_style(StyleRefinement::default())
+            .with_row_style(StyleRefinement::default());
 
         assert!(!scroller.scrollbar);
         assert!(!scroller.jump_button);

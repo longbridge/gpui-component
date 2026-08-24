@@ -90,7 +90,7 @@ if let Some(index) = messages.iter().position(|message| message.id == first_unre
 
 ## 样式与控件
 
-`MessageScroller` 在 root 上实现了 `Styled`。`with_content_style(...)` 用于调整内部 scrollbar viewport，`with_list_style(...)` 会在默认 padding 与 gap 之后调整 GPUI list。
+`MessageScroller` 在 root 上实现了 `Styled`。`with_content_style(...)` 用于调整内部 scrollbar viewport，`with_list_style(...)` 会在默认 padding 之后调整 GPUI list，`with_row_style(...)` 用于调整每个渲染 row 外层的全宽包装。每个包装层都持有稳定的尾部间距，因此 GPUI 虚拟列表会在 append 与 prepend 前后持续把该间距计入 row 的测量高度。
 
 使用 `.scrollbar(false)` 隐藏内置 scrollbar。当应用需要根据 `is_scrolled_up()` 与 `scroll_to_end()` 自行组合 Button 时，可使用 `.jump_button(false)`。内置按钮直接复用现有 `Button`，`with_jump_button_label(...)` 可设置应用本地化文本。
 
