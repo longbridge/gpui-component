@@ -40,7 +40,7 @@ gpui-component-assets = { path = "crates/assets", version = "0.5.1" }
 gpui-fps = { path = "crates/fps", version = "0.1.0" }
 story = { path = "crates/story" }
 
-gpui = { version = "0.2.2", git = "https://github.com/zed-industries/zed", features = ["profiler"] }
+gpui = { version = "0.2.2", git = "https://github.com/zed-industries/zed" }
 gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["font-kit", "x11", "wayland", "runtime_shaders"] }
 gpui_web = { git = "https://github.com/zed-industries/zed" }
 gpui_macros = { version = "0.1.0", git = "https://github.com/zed-industries/zed" }
