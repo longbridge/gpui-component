@@ -325,6 +325,23 @@ where
     });
 
     let snapshot = *state.read(cx);
+    let at_rest_on_target =
+        snapshot.state.position == target_position && snapshot.state.velocity == 0.0;
+
+    // The overwhelmingly common case: a spring nothing is currently moving. It
+    // has no state to advance and no frame to ask for, so it never builds a
+    // config or steps one — a settled spring costs a read and two comparisons.
+    // Every branch below would return this same value and write nothing.
+    //
+    // Resting writes nothing, so `updated_at` goes stale for as long as the rest
+    // lasts. The next retarget then steps a zero displacement at zero velocity
+    // over that whole gap, which any elapsed time leaves where it is, so the
+    // stale clock cannot move the value — it only has to not produce a NaN, and
+    // every term the propagator scales is finite.
+    if at_rest_on_target {
+        return target.resolve(target_position);
+    }
+
     let settle = |state: &mut SpringTransition| {
         state.state = SpringState {
             position: target_position,
@@ -335,9 +352,7 @@ where
     };
 
     if cx.reduce_motion() || !policy.travel || policy.response.is_zero() {
-        if snapshot.state.position != target_position || snapshot.state.velocity != 0.0 {
-            state.update(cx, |state, _| settle(state));
-        }
+        state.update(cx, |state, _| settle(state));
         return target.resolve(target_position);
     }
 
@@ -349,16 +364,8 @@ where
     let config = policy.config();
     let stepped = config.step(snapshot.state, snapshot.target, elapsed);
 
-    // A spring that is already exactly at rest on its target writes nothing, so
-    // `updated_at` goes stale for as long as it stays there. The next retarget
-    // then steps a zero displacement at zero velocity over that whole gap, which
-    // any elapsed time leaves where it is, so the stale clock cannot move the
-    // value — it only has to not produce a NaN, and every term the propagator
-    // scales is finite.
     if config.is_settled(stepped, target_position, policy.epsilon) {
-        if snapshot.state.position != target_position || snapshot.state.velocity != 0.0 {
-            state.update(cx, |state, _| settle(state));
-        }
+        state.update(cx, |state, _| settle(state));
         return target.resolve(target_position);
     }
 

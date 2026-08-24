@@ -32,10 +32,11 @@ const CLOSED_BOTTOM_STRIP: Pixels = px(29.);
 /// Open and close motion for a dock.
 ///
 /// Critically damped: a dock that overshot would push the centre area past the
-/// window edge and pull it back. The tolerance is coarse because the value is a
-/// layout width — every frame of it re-lays out the whole dock subtree, and
-/// half a pixel of travel is not worth that.
-const DOCK_SPRING: Spring = Spring::new(Duration::from_millis(280)).with_epsilon(0.5);
+/// window edge and pull it back. The tolerance is a whole pixel, coarser than
+/// anywhere else here, because this is the most expensive value in the set — it
+/// is a layout width, so every frame of it re-lays out the entire dock subtree,
+/// and the last pixel of a slide hundreds wide is not worth one of those.
+const DOCK_SPRING: Spring = Spring::new(Duration::from_millis(280)).with_epsilon(1.);
 
 /// The transition channel naming one dock within its area.
 fn placement_channel(placement: DockPlacement) -> &'static str {

@@ -449,6 +449,15 @@ impl RenderOnce for ToastStack {
         // new layout instead of restarting. Critically damped, because a height
         // or an opacity that overshoots its target reads as a glitch. Geometry
         // settles in pixels, so its tolerance is coarser than the fade's.
+        //
+        // A bottom-anchored item's position is composed from two of these — the
+        // stack height and the item's own offset — and the stack height only
+        // acquires its real target once the new toast has been measured in
+        // prepaint, a frame after the offsets know theirs. Two springs sharing a
+        // config stay proportional to each other only while they also share a
+        // start, so that one frame of skew lets the composed position pass its
+        // settled value by a fraction of a pixel before arriving. Both springs
+        // snap on settling, so it is a transient, not a resting error.
         let geometry = Spring::new(self.motion.duration).with_epsilon(0.1);
         let fade = Spring::new(self.motion.duration);
         let stack_height = spring(
