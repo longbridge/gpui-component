@@ -150,6 +150,27 @@ where
         &self.focus_handle
     }
 
+    /// Drop the search query, if there is one, so that a value lookup resolves
+    /// against every item rather than the filtered view.
+    ///
+    /// A delegate's `position` answers for the list as it is currently
+    /// displayed, which is what a click or a keyboard cursor needs. Projecting
+    /// an authoritative value in from outside is not a position in that view:
+    /// the value's item may be filtered out, and dropping it would let whatever
+    /// the user last typed decide which values can be selected at all.
+    ///
+    /// Search runs synchronously for a delegate holding its own items, so a
+    /// lookup right after this call sees the full set. One that fetches its
+    /// items cannot answer for a value it has not fetched, and this cannot make
+    /// it.
+    pub(crate) fn clear_query(&mut self, window: &mut Window, cx: &mut App) {
+        self.list.update(cx, |list, cx| {
+            if !list.query_input.read(cx).value().is_empty() {
+                list.set_query("", window, cx);
+            }
+        });
+    }
+
     // MARK: Mutation (no cx — callers emit events and notify)
 
     /// Add an index+item pair to the selection; no-op if already present.
