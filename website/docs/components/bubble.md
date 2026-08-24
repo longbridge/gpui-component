@@ -35,7 +35,7 @@ Bubble::new()
     .child("Outgoing message")
 ```
 
-When a bubble is used inside an end-aligned `Message`, pass the same value to the bubble so standalone and nested layouts behave consistently.
+Set alignment when a Bubble is used on its own. Inside `MessageContent`, leave it unset to inherit the alignment that `Message` propagates to the slot.
 
 ## Variants
 

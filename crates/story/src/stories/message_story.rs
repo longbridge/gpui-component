@@ -81,9 +81,7 @@ impl Render for MessageStory {
                             .header(MessageHeader::new().child("You").child("10:25 AM"))
                             .content(
                                 MessageContent::new().child(
-                                    Bubble::new()
-                                        .alignment(MessageAlignment::End)
-                                        .child("Sure — I will send notes shortly."),
+                                    Bubble::new().child("Sure — I will send notes shortly."),
                                 ),
                             )
                             .footer(MessageFooter::new().child("Delivered")),

@@ -34,7 +34,7 @@ pub enum BubbleReactionSide {
 #[derive(IntoElement)]
 pub struct Bubble {
     style: StyleRefinement,
-    alignment: MessageAlignment,
+    alignment: Option<MessageAlignment>,
     variant: BubbleVariant,
     children: Vec<AnyElement>,
 }
@@ -44,7 +44,7 @@ impl Bubble {
     pub fn new() -> Self {
         Self {
             style: StyleRefinement::default(),
-            alignment: MessageAlignment::Start,
+            alignment: None,
             variant: BubbleVariant::Filled,
             children: Vec::new(),
         }
@@ -52,7 +52,7 @@ impl Bubble {
 
     /// Set the bubble alignment.
     pub fn alignment(mut self, alignment: MessageAlignment) -> Self {
-        self.alignment = alignment;
+        self.alignment = Some(alignment);
         self
     }
 
@@ -92,13 +92,13 @@ impl RenderOnce for Bubble {
             .min_w_0()
             .flex_col()
             .flex_none()
-            .self_start()
             .gap(tokens.spacing.xs)
             .max_w(relative(0.8))
             .text_size(tokens.typography.sm.size)
             .line_height(tokens.typography.sm.line_height)
-            .when(self.alignment == MessageAlignment::End, |this| {
-                this.self_end()
+            .when_some(self.alignment, |this, alignment| match alignment {
+                MessageAlignment::Start => this.self_start(),
+                MessageAlignment::End => this.self_end(),
             })
             .map(|this| match variant {
                 BubbleVariant::Filled => this
@@ -230,7 +230,7 @@ mod tests {
             .with_variant(BubbleVariant::Outline)
             .child("Hello");
 
-        assert_eq!(bubble.alignment, MessageAlignment::End);
+        assert_eq!(bubble.alignment, Some(MessageAlignment::End));
         assert_eq!(bubble.variant, BubbleVariant::Outline);
         assert_eq!(bubble.children.len(), 1);
 

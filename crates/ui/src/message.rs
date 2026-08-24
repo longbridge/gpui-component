@@ -162,7 +162,9 @@ impl RenderOnce for Message {
                         MessageAlignment::End => this.items_end(),
                     })
                     .when_some(self.header, |this, header| this.child(header))
-                    .when_some(self.content, |this, content| this.child(content))
+                    .when_some(self.content, |this, content| {
+                        this.child(content.aligned(alignment))
+                    })
                     .when_some(self.footer, |this, footer| this.child(footer)),
             )
     }
@@ -225,6 +227,7 @@ impl RenderOnce for MessageHeader {
 #[derive(IntoElement)]
 pub struct MessageContent {
     style: StyleRefinement,
+    alignment: MessageAlignment,
     children: Vec<AnyElement>,
 }
 
@@ -233,8 +236,14 @@ impl MessageContent {
     pub fn new() -> Self {
         Self {
             style: StyleRefinement::default(),
+            alignment: MessageAlignment::Start,
             children: Vec::new(),
         }
+    }
+
+    fn aligned(mut self, alignment: MessageAlignment) -> Self {
+        self.alignment = alignment;
+        self
     }
 }
 
@@ -261,9 +270,14 @@ impl RenderOnce for MessageContent {
         let tokens = cx.theme().semantic_tokens();
 
         v_flex()
+            .w_full()
             .max_w_full()
             .min_w_0()
             .gap(tokens.spacing.sm)
+            .map(|this| match self.alignment {
+                MessageAlignment::Start => this.items_start(),
+                MessageAlignment::End => this.items_end(),
+            })
             .refine_style(&self.style)
             .children(self.children)
     }
@@ -343,5 +357,8 @@ mod tests {
 
         let group = MessageGroup::new().child("First").child("Second");
         assert_eq!(group.children.len(), 2);
+
+        let content = MessageContent::new().aligned(MessageAlignment::End);
+        assert_eq!(content.alignment, MessageAlignment::End);
     }
 }

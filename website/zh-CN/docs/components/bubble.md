@@ -35,7 +35,7 @@ Bubble::new()
     .child("发出的消息")
 ```
 
-在末端对齐的 `Message` 中使用 Bubble 时，请给 Bubble 传入相同值，确保独立使用与嵌套使用时行为一致。
+Bubble 独立使用时可以显式设置对齐。放在 `MessageContent` 中时可保持未设置，由 `Message` 将对齐传播给该 slot。
 
 ## 样式变体
 
