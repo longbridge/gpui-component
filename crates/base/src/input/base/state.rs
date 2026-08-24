@@ -502,6 +502,17 @@ impl<M: InputModeKind> InputBaseState<M> {
     /// Answered by the mode marker, which is fixed when the state is built.
     /// [`LayoutMode`] holds the row counts and growth policy, not the kind.
     #[inline]
+    /// Whether this input paints scrollbars.
+    ///
+    /// Only a multi-line input can scroll: a single-line input keeps its
+    /// caret in view by moving its own offset, and never has a viewport a
+    /// user could drag. Adding the editor scrollbar to every input put a
+    /// thumb inside every text field, which is a control the field does not
+    /// have.
+    pub(crate) fn shows_scrollbar(&self) -> bool {
+        self.is_multi_line()
+    }
+
     pub fn is_multi_line(&self) -> bool {
         M::MULTI_LINE
     }
@@ -3113,7 +3124,9 @@ impl<M: InputModeKind> Render for InputBaseState<M> {
                     .pl(self.editor_paddings.left)
             })
             .child(TextElement::new(entity.clone()).placeholder(self.placeholder.clone()))
-            .child(EditorScrollbar::new(entity.clone()));
+            .when(self.shows_scrollbar(), |this| {
+                this.child(EditorScrollbar::new(entity.clone()))
+            });
 
         // Actions only one mode handles are registered by that mode, where
         // `Self` is concrete enough to name its own entity type.
@@ -3210,6 +3223,24 @@ mod tests {
                 f(crate::input::InputState::new(window, cx))
             })
         }
+    }
+
+    #[gpui::test]
+    fn only_a_multi_line_input_paints_scrollbars(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+
+        // A single-line input keeps its caret in view by moving its own offset;
+        // it has no viewport to drag, so a scrollbar in a text field is a
+        // control that does not exist.
+        let single = InputView::build(cx, |state| state);
+        single
+            .input
+            .update(cx, |state, _| assert!(!state.shows_scrollbar()));
+
+        let multi = InputView::build_textarea(cx, |state| state);
+        multi
+            .input
+            .update(cx, |state, _| assert!(state.shows_scrollbar()));
     }
 
     #[gpui::test]
