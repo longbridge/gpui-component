@@ -1,20 +1,16 @@
 //! The gpui-component appearance for the dock area: the outer frame, the
 //! split frames, and one dock's chrome.
 
-use std::{ops::Deref as _, rc::Rc, sync::Arc, time::Duration};
+use std::{ops::Deref as _, rc::Rc, sync::Arc};
 
 use gpui::{
     AnyElement, App, AppContext as _, Axis, Context, Div, Element, Empty, InteractiveElement as _,
     IntoElement, MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Render, Stateful, Style,
     Styled as _, Window, div, prelude::FluentBuilder as _, px,
 };
-use gpui_base::{
-    Spring,
-    dock::{
-        DockAreaRenderer, DockContext, DockEvent, DockPlacement, NodeId, PanelState, PanelView,
-        TabGroupRenderer, TilesRenderer,
-    },
-    spring,
+use gpui_base::dock::{
+    DockAreaRenderer, DockContext, DockEvent, DockPlacement, NodeId, PanelState, PanelView,
+    TabGroupRenderer, TilesRenderer,
 };
 
 use crate::{
@@ -28,25 +24,6 @@ use crate::{
 
 /// The height a closed bottom dock keeps, so its tab bar stays clickable.
 const CLOSED_BOTTOM_STRIP: Pixels = px(29.);
-
-/// Open and close motion for a dock.
-///
-/// Critically damped: a dock that overshot would push the centre area past the
-/// window edge and pull it back. The tolerance is a whole pixel, coarser than
-/// anywhere else here, because this is the most expensive value in the set — it
-/// is a layout width, so every frame of it re-lays out the entire dock subtree,
-/// and the last pixel of a slide hundreds wide is not worth one of those.
-const DOCK_SPRING: Spring = Spring::new(Duration::from_millis(280)).with_epsilon(1.);
-
-/// The transition channel naming one dock within its area.
-fn placement_channel(placement: DockPlacement) -> &'static str {
-    match placement {
-        DockPlacement::Left => "left",
-        DockPlacement::Right => "right",
-        DockPlacement::Bottom => "bottom",
-        DockPlacement::Center => "center",
-    }
-}
 
 /// The payload a dock's resize handle drags. It draws nothing: the handle
 /// itself is the affordance.
@@ -108,27 +85,11 @@ impl DockAreaRenderer for DockSkin {
 
         // A closed left or right dock takes no space at all; a closed bottom
         // dock keeps a strip so its tab bar stays clickable.
-        let target = match (dock.is_open(), placement) {
+        let size = match (dock.is_open(), placement) {
             (true, _) => dock.size(),
             (false, DockPlacement::Bottom) => CLOSED_BOTTOM_STRIP,
             (false, _) => px(0.),
         };
-
-        // Opening and closing a dock is sprung, so the panel slides instead of
-        // appearing and vanishing. The resize handle drives the same value from
-        // the pointer and is drawn at the dock's edge, so travel is suspended
-        // for the length of a drag or the handle would trail the cursor.
-        let resizing = self.shared().resizing_dock().get() == Some(placement);
-        let size = spring(
-            (
-                ("dock-size", self.shared().area().entity_id()),
-                placement_channel(placement),
-            ),
-            target,
-            DOCK_SPRING.with_travel(!resizing),
-            window,
-            cx,
-        );
 
         if size <= px(0.) {
             return div().into_any_element();

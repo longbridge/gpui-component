@@ -247,7 +247,13 @@ value straight through during a drag and resume springing from where the drag
 released it:
 
 ```rust,ignore
-let size = spring(id, target, DOCK_SPRING.with_travel(!resizing), window, cx);
+let position = spring(
+    id,
+    target,
+    POSITION_SPRING.with_travel(!dragging),
+    window,
+    cx,
+);
 ```
 
 Suspending travel says so where the reader is, and says it without disturbing the
