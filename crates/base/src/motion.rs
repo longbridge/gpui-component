@@ -241,16 +241,6 @@ impl Spring {
         self
     }
 
-    /// The physical parameters GPUI integrates.
-    ///
-    /// Derived on use rather than stored, so the builders stay `const`: neither
-    /// `Duration::as_secs_f32` nor the square root that recovers a damping ratio
-    /// from a built config can be called from a `const fn`.
-    fn config(&self) -> SpringConfig {
-        let frequency = std::f32::consts::TAU / self.response.as_secs_f32();
-        SpringConfig::new(frequency * frequency, 2.0 * self.damping * frequency, 1.0)
-    }
-
     /// Sets whether the spring travels to its target or adopts it on the spot.
     ///
     /// A value the pointer is already moving — a panel being dragged by its
@@ -272,6 +262,16 @@ impl Spring {
     pub const fn with_epsilon(mut self, epsilon: f32) -> Self {
         self.epsilon = epsilon;
         self
+    }
+
+    /// The physical parameters GPUI integrates.
+    ///
+    /// Derived on use rather than stored, so the builders stay `const`: neither
+    /// `Duration::as_secs_f32` nor the square root that recovers a damping ratio
+    /// from a built config can be called from a `const fn`.
+    fn config(&self) -> SpringConfig {
+        let frequency = std::f32::consts::TAU / self.response.as_secs_f32();
+        SpringConfig::new(frequency * frequency, 2.0 * self.damping * frequency, 1.0)
     }
 }
 
