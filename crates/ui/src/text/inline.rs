@@ -70,6 +70,7 @@ impl Inline {
         if link_underline_on_hover
             && let Some(index) = state.lock().ok().and_then(|state| state.hovered_index)
             && let Some((range, _)) = links.iter().find(|(range, _)| range.contains(&index))
+            && range.end <= text.len()
         {
             highlights.push((
                 range.clone(),
@@ -675,8 +676,28 @@ fn point_in_text_selection(
 
 #[cfg(test)]
 mod tests {
-    use super::point_in_text_selection;
+    use std::sync::{Arc, Mutex};
+
+    use super::{Inline, InlineState, LinkMark, point_in_text_selection};
     use gpui::{point, px};
+
+    #[test]
+    fn hovered_link_underline_ignores_stale_ranges() {
+        let state = Arc::new(Mutex::new(InlineState {
+            hovered_index: Some(1),
+            ..Default::default()
+        }));
+        let inline = Inline::new(
+            "stale-hover",
+            state,
+            vec![(0..4, LinkMark::default())],
+            vec![],
+            None,
+            true,
+        );
+
+        assert!(inline.highlights.is_empty());
+    }
 
     #[test]
     fn test_point_in_text_selection() {
