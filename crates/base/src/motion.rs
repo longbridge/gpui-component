@@ -204,6 +204,7 @@ where
 pub struct Spring {
     config: SpringConfig,
     epsilon: f32,
+    travel: bool,
 }
 
 impl Spring {
@@ -234,7 +235,20 @@ impl Spring {
         Self {
             config,
             epsilon: DEFAULT_SPRING_EPSILON,
+            travel: true,
         }
+    }
+
+    /// Sets whether the spring travels to its target or adopts it on the spot.
+    ///
+    /// A value the pointer is already moving — a panel being dragged by its
+    /// resize handle — must not lag behind the pointer, so the spring stops
+    /// travelling for as long as the drag lasts. Retained state stays pinned to
+    /// the target meanwhile, so travel resumes from the value the drag released
+    /// rather than from wherever the spring was when it began.
+    pub const fn with_travel(mut self, travel: bool) -> Self {
+        self.travel = travel;
+        self
     }
 
     /// Sets the settling tolerance, expressed in the target's own units.
@@ -256,6 +270,11 @@ impl Spring {
     /// Returns the settling tolerance.
     pub fn epsilon(&self) -> f32 {
         self.epsilon
+    }
+
+    /// Returns whether the spring travels to its target.
+    pub fn travel(&self) -> bool {
+        self.travel
     }
 }
 
@@ -307,7 +326,7 @@ where
         state.updated_at = now;
     };
 
-    if cx.reduce_motion() {
+    if cx.reduce_motion() || !policy.travel {
         if snapshot.state.position != target_position || snapshot.state.velocity != 0.0 {
             state.update(cx, |state, _| settle(state));
         }
@@ -550,6 +569,7 @@ mod tests {
     struct SpringView {
         target: Rc<Cell<f32>>,
         policy: Spring,
+        travel: Rc<Cell<bool>>,
         samples: Rc<RefCell<Vec<f32>>>,
     }
 
@@ -562,7 +582,7 @@ mod tests {
             self.samples.borrow_mut().push(spring(
                 ("spring-test", "value"),
                 self.target.get(),
-                self.policy,
+                self.policy.with_travel(self.travel.get()),
                 window,
                 cx,
             ));
@@ -573,19 +593,23 @@ mod tests {
     struct SpringFixture {
         window: WindowHandle<SpringView>,
         target: Rc<Cell<f32>>,
+        travel: Rc<Cell<bool>>,
         samples: Rc<RefCell<Vec<f32>>>,
     }
 
     impl SpringFixture {
         fn open(cx: &mut TestAppContext, policy: Spring) -> Self {
             let target = Rc::new(Cell::new(0.0));
+            let travel = Rc::new(Cell::new(true));
             let samples = Rc::new(RefCell::new(Vec::new()));
             let window = cx.open_window(size(px(100.), px(100.)), {
                 let target = target.clone();
+                let travel = travel.clone();
                 let samples = samples.clone();
                 move |_, _| SpringView {
                     target,
                     policy,
+                    travel,
                     samples,
                 }
             });
@@ -593,6 +617,7 @@ mod tests {
             Self {
                 window,
                 target,
+                travel,
                 samples,
             }
         }
@@ -683,6 +708,26 @@ mod tests {
         fixture.pending_frame(cx);
         cx.run_until_parked();
         assert_eq!(fixture.pending_frame(cx), 0);
+    }
+
+    #[gpui::test]
+    fn a_spring_that_is_not_travelling_adopts_its_target_on_the_spot(cx: &mut TestAppContext) {
+        let fixture = SpringFixture::open(cx, Spring::SMOOTH);
+        fixture.travel.set(false);
+
+        assert_eq!(fixture.render(cx, 1.0), 1.0);
+        assert_eq!(fixture.pending_frame(cx), 0);
+        assert_eq!(fixture.advance(cx, 100, 5.0), 5.0);
+
+        // Travel resumes from the value the pause left behind. A spring that
+        // had kept its pre-pause state would jump back to it here.
+        fixture.travel.set(true);
+        assert_eq!(fixture.render(cx, 6.0), 5.0);
+        let next = fixture.advance(cx, 50, 6.0);
+        assert!(
+            5.0 < next && next < 6.0,
+            "expected travel to resume from 5.0, got {next}"
+        );
     }
 
     #[gpui::test]

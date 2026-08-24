@@ -238,6 +238,16 @@ the motion completes — a toast stack that reflows as toasts arrive, an indicat
 chasing rapid selection changes, a panel toggled again mid-slide — and a
 transition where the target is set once and runs to completion.
 
+A value that the pointer is already moving must not be sprung while the drag
+lasts, or it trails the cursor. `Spring::with_travel(false)` suspends travel and
+keeps the retained state pinned to the target, so the same call site can hand
+the value straight through during a drag and resume springing from where the
+drag released it:
+
+```rust,ignore
+let size = spring(id, target, DOCK_SPRING.with_travel(!resizing), window, cx);
+```
+
 `Spring::new(response_seconds, damping_ratio)` builds one from perceptual
 parameters, with `SMOOTH`, `SNAPPY`, and `BOUNCY` as named starting points. A
 damping ratio below `1.0` overshoots, so a spring driving a value with a
