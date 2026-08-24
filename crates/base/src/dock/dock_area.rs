@@ -137,6 +137,13 @@ pub struct DockArea {
     tiles: HashMap<NodeId, Cached<TilesState>>,
     panels: HashMap<PanelId, Arc<dyn PanelView>>,
 
+    /// Each tab-group leaf's on-screen rectangle, recorded during render
+    /// (via `on_prepaint`). Lets a host paint spatial overlays -- e.g. a
+    /// vimium-style pane picker badging each pane -- which the pure-data
+    /// tree cannot express. Stale entries for removed nodes are harmless:
+    /// node ids are unique, so a gone node is simply never queried.
+    node_bounds: HashMap<NodeId, Bounds<Pixels>>,
+
     locked: bool,
     zoomed: Option<Zoomed>,
     focus_handle: FocusHandle,
@@ -170,6 +177,7 @@ impl DockArea {
             splits: HashMap::new(),
             tiles: HashMap::new(),
             panels: HashMap::new(),
+            node_bounds: HashMap::new(),
             locked: false,
             zoomed: None,
             focus_handle: cx.focus_handle(),
@@ -207,6 +215,12 @@ impl DockArea {
     /// against it.
     pub fn bounds(&self) -> Bounds<Pixels> {
         self.bounds
+    }
+
+    /// Last-rendered rect of tab-group leaf `node`, or `None` if it is not a
+    /// rendered tab group.
+    pub fn node_bounds(&self, node: NodeId) -> Option<Bounds<Pixels>> {
+        self.node_bounds.get(&node).copied()
     }
 
     /// The tree for one region, or `None` for a dock that does not exist.
@@ -1507,7 +1521,23 @@ impl DockArea {
                     .into_any_element()
             }
             PaneRef::Tabs { .. } => match self.groups.get(&node.id()) {
-                Some(cached) => cached.entity.clone().into_any_element(),
+                Some(cached) => {
+                    // Wrapper records the group's rect for spatial overlays; it
+                    // only holds bounds, so sizing stays on `resizable_panel`.
+                    let node_id = node.id();
+                    let area = self.this.clone();
+                    // The probe must precede the content child so it measures
+                    // the wrapper's origin, not a point below it.
+                    div()
+                        .size_full()
+                        .on_prepaint(move |bounds, _, cx| {
+                            _ = area.update(cx, |area, _| {
+                                area.node_bounds.insert(node_id, bounds);
+                            });
+                        })
+                        .child(cached.entity.clone())
+                        .into_any_element()
+                }
                 None => Empty.into_any_element(),
             },
             PaneRef::Tiles { .. } => match self.tiles.get(&node.id()) {

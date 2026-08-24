@@ -252,7 +252,7 @@ mod tests {
     use gpui_base::dock::DockAreaRenderer;
 
     use crate::dock::{
-        DockArea, DockLayout, DockPlacement, DockSkin,
+        DockArea, DockLayout, DockPlacement, DockSkin, PaneRef,
         test_support::{MeasuredProbe, SizedProbe},
     };
 
@@ -454,5 +454,71 @@ mod tests {
             "the right dock must not move when the left handle is dragged"
         );
         assert_eq!(left, Some(px(240.)), "the left dock follows the pointer");
+    }
+
+    /// `node_bounds` records each center leaf's rect for host-painted overlays.
+    /// Regression guard for the `on_prepaint` probe order: the probe must
+    /// precede the pane content, or `origin.y` picks up the content's height and
+    /// any overlay lands off-screen. Asserts the two leaves are top-anchored and
+    /// tiled.
+    #[gpui::test]
+    fn node_bounds_capture_leaf_rects_at_the_docks_top(cx: &mut TestAppContext) {
+        cx.update(|cx| crate::init(cx));
+        let (area, cx) = cx.add_window_view(|window, cx| {
+            DockArea::new("test", None, window, cx).with_renderer(DockSkin::new(cx))
+        });
+        cx.simulate_resize(size(px(800.), px(600.)));
+        cx.update(|window, cx| {
+            area.update(cx, |area, cx| {
+                area.set_center(
+                    DockLayout::h_split()
+                        .child(DockLayout::tabs().panel(MeasuredProbe::new(Rc::default(), cx)), None)
+                        .child(DockLayout::tabs().panel(MeasuredProbe::new(Rc::default(), cx)), None),
+                    window,
+                    cx,
+                );
+            });
+        });
+        cx.run_until_parked();
+        // Force a real paint so the leaves' `on_prepaint` probes fire.
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        let (left_id, right_id) = cx.update(|_, cx| {
+            let area = area.read(cx);
+            let tree = area.layout(DockPlacement::Center).expect("a center tree");
+            let PaneRef::Split { children, .. } = tree.root().kind() else {
+                panic!("the center root is a horizontal split");
+            };
+            (children[0].id(), children[1].id())
+        });
+
+        let (left, right) = cx.update(|_, cx| {
+            let area = area.read(cx);
+            (
+                area.node_bounds(left_id).expect("left leaf rect captured during paint"),
+                area.node_bounds(right_id).expect("right leaf rect captured during paint"),
+            )
+        });
+
+        // Two leaves side by side: a shared top edge and height, tiled along x.
+        assert_eq!(left.origin.y, right.origin.y, "the two leaves share a top edge");
+        assert_eq!(left.size.height, right.size.height, "the two leaves are the same height");
+        assert!(left.size.height > px(0.), "the leaf has a real height");
+        assert!(left.origin.x < right.origin.x, "the left leaf sits left of the right");
+
+        // Top-anchored: the probe recorded the wrapper's origin, not a static
+        // position below the content. The regression set `origin.y` to the pane
+        // height, pushing the rect (and any overlay) off the bottom of the view.
+        assert!(
+            left.origin.y < px(1.),
+            "the leaf rect starts at the dock's top; got origin.y {:?}",
+            left.origin.y,
+        );
+        assert!(
+            left.origin.y + left.size.height <= px(601.),
+            "the leaf rect fits inside the 600px window; got origin.y {:?} + height {:?}",
+            left.origin.y,
+            left.size.height,
+        );
     }
 }
