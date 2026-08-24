@@ -25,6 +25,7 @@ members = [
     "examples/root_borderless",
     "examples/table_in_scrollable",
     "examples/markdown_table",
+    "crates/shell",
 ]
 resolver = "2"
 

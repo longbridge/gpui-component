@@ -1,0 +1,51 @@
+[package]
+name = "gpui-shell"
+description = "A scriptable application runtime for GPUI, built on gpui-base."
+version = "0.1.0"
+keywords = ["desktop", "gpui", "javascript", "runtime"]
+license = "Apache-2.0"
+publish = false
+edition.workspace = true
+repository = "https://github.com/longbridge/gpui-component"
+homepage = "https://longbridge.github.io/gpui-component"
+
+[lib]
+name = "gpui_shell"
+path = "src/lib.rs"
+
+[[bin]]
+name = "gpui-shell"
+path = "src/bin/gpui-shell.rs"
+
+[features]
+default = ["quickjs"]
+# The scripting engine. Exactly one must be enabled; see `src/engine/mod.rs`
+# for the surface an engine has to provide.
+quickjs = ["dep:rquickjs"]
+lua = ["dep:mlua", "mlua/lua54"]
+luajit = ["dep:mlua", "mlua/luajit"]
+
+[dependencies]
+gpui.workspace = true
+gpui_platform.workspace = true
+gpui-base = { workspace = true, features = ["inspector"] }
+
+rquickjs = { version = "0.12", features = [
+    "macro",
+    "loader",
+    "classes",
+    "properties",
+], optional = true }
+mlua = { version = "0.11", features = ["vendored", "macros"], optional = true }
+
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+smallvec.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+gpui = { workspace = true, features = ["test-support"] }
+
+[lints]
+workspace = true
