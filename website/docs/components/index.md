@@ -12,6 +12,7 @@ collapsed: false
 - [Alert](alert) - Alert messages with different variants
 - [Avatar](avatar) - User avatars with fallback text
 - [Badge](badge) - Count badges and indicators
+- [Bubble](bubble) - Chat message surface with alignment and reactions
 - [Button](button) - Interactive buttons with multiple variants
 - [Checkbox](checkbox) - Binary selection control
 - [Collapsible](collapsible) - Expandable/collapsible content

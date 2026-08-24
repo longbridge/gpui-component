@@ -27,6 +27,7 @@ pub mod alert;
 pub mod avatar;
 pub mod badge;
 pub mod breadcrumb;
+pub mod bubble;
 pub mod button;
 pub mod chart;
 pub mod checkbox;

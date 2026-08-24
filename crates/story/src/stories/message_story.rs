@@ -1,10 +1,11 @@
 use gpui::{
     App, AppContext as _, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement as _,
-    Render, Styled as _, Window, div, prelude::FluentBuilder as _, px, relative,
+    Render, Styled as _, Window, px,
 };
 use gpui_component::{
     ActiveTheme as _, Sizable as _, StyledExt as _,
     avatar::Avatar,
+    bubble::Bubble,
     message::{
         Message, MessageAlignment, MessageContent, MessageFooter, MessageGroup, MessageHeader,
     },
@@ -26,23 +27,6 @@ impl MessageStory {
 
     pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
         cx.new(|cx| Self::new(window, cx))
-    }
-
-    fn message_surface(text: &'static str, sent: bool, cx: &mut Context<Self>) -> impl IntoElement {
-        div()
-            .max_w(relative(0.8))
-            .rounded(cx.theme().radius_lg)
-            .px_3()
-            .py_2()
-            .when(sent, |this| {
-                this.bg(cx.theme().primary)
-                    .text_color(cx.theme().primary_foreground)
-            })
-            .when(!sent, |this| {
-                this.bg(cx.theme().secondary)
-                    .text_color(cx.theme().secondary_foreground)
-            })
-            .child(text)
     }
 }
 
@@ -80,11 +64,14 @@ impl Render for MessageStory {
                         Message::new()
                             .avatar(Avatar::new().name("Alice").small())
                             .header(MessageHeader::new().child("Alice").child("10:24 AM"))
-                            .content(MessageContent::new().child(Self::message_surface(
-                                "Can you review this?",
-                                false,
-                                cx,
-                            )))
+                            .content(
+                                MessageContent::new().child(
+                                    Bubble::new()
+                                        .bg(cx.theme().secondary)
+                                        .text_color(cx.theme().secondary_foreground)
+                                        .child("Can you review this?"),
+                                ),
+                            )
                             .footer(MessageFooter::new().child("Read")),
                     )
                     .child(
@@ -92,11 +79,13 @@ impl Render for MessageStory {
                             .alignment(MessageAlignment::End)
                             .avatar(Avatar::new().name("You").small())
                             .header(MessageHeader::new().child("You").child("10:25 AM"))
-                            .content(MessageContent::new().child(Self::message_surface(
-                                "Sure — I will send notes shortly.",
-                                true,
-                                cx,
-                            )))
+                            .content(
+                                MessageContent::new().child(
+                                    Bubble::new()
+                                        .alignment(MessageAlignment::End)
+                                        .child("Sure — I will send notes shortly."),
+                                ),
+                            )
                             .footer(MessageFooter::new().child("Delivered")),
                     ),
             )
@@ -110,19 +99,25 @@ impl Render for MessageStory {
                                 Message::new()
                                     .avatar(Avatar::new().name("Alice").small())
                                     .header(MessageHeader::new().child("Alice"))
-                                    .content(MessageContent::new().child(Self::message_surface(
-                                        "I attached the draft.",
-                                        false,
-                                        cx,
-                                    ))),
+                                    .content(
+                                        MessageContent::new().child(
+                                            Bubble::new()
+                                                .bg(cx.theme().secondary)
+                                                .text_color(cx.theme().secondary_foreground)
+                                                .child("I attached the draft."),
+                                        ),
+                                    ),
                             )
-                            .child(Message::new().content(MessageContent::new().child(
-                                Self::message_surface(
-                                    "The second page needs attention.",
-                                    false,
-                                    cx,
+                            .child(
+                                Message::new().content(
+                                    MessageContent::new().child(
+                                        Bubble::new()
+                                            .bg(cx.theme().secondary)
+                                            .text_color(cx.theme().secondary_foreground)
+                                            .child("The second page needs attention."),
+                                    ),
                                 ),
-                            ))),
+                            ),
                     ),
             )
             .child(
