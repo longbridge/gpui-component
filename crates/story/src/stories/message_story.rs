@@ -97,7 +97,7 @@ impl Render for MessageStory {
                         MessageGroup::new()
                             .child(
                                 Message::new()
-                                    .avatar(Avatar::new().name("Alice").small())
+                                    .avatar_slot(MessageAvatar::new())
                                     .header(MessageHeader::new().child("Alice"))
                                     .content(
                                         MessageContent::new().child(
@@ -108,13 +108,15 @@ impl Render for MessageStory {
                                     ),
                             )
                             .child(
-                                Message::new().content(
-                                    MessageContent::new().child(
-                                        Bubble::new()
-                                            .with_variant(BubbleVariant::Secondary)
-                                            .child("The second page needs attention."),
+                                Message::new()
+                                    .avatar(Avatar::new().name("Alice").small())
+                                    .content(
+                                        MessageContent::new().child(
+                                            Bubble::new()
+                                                .with_variant(BubbleVariant::Secondary)
+                                                .child("The second page needs attention."),
+                                        ),
                                     ),
-                                ),
                             ),
                     ),
             )

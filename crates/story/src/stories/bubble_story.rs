@@ -19,6 +19,10 @@ pub struct BubbleStory {
     focus_handle: FocusHandle,
 }
 
+fn start_bubble() -> Bubble {
+    Bubble::new().alignment(MessageAlignment::Start)
+}
+
 impl BubbleStory {
     fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
         Self {
@@ -61,34 +65,34 @@ impl Render for BubbleStory {
                     .w(px(680.))
                     .v_flex()
                     .gap_4()
-                    .child(Bubble::new().child("A strong primary bubble."))
+                    .child(start_bubble().child("A strong primary bubble."))
                     .child(
-                        Bubble::new()
+                        start_bubble()
                             .with_variant(BubbleVariant::Secondary)
                             .child("The neutral secondary bubble."),
                     )
                     .child(
-                        Bubble::new()
+                        start_bubble()
                             .with_variant(BubbleVariant::Muted)
                             .child("A lower-emphasis muted bubble."),
                     )
                     .child(
-                        Bubble::new()
+                        start_bubble()
                             .with_variant(BubbleVariant::Tinted)
                             .child("A softly tinted primary bubble."),
                     )
                     .child(
-                        Bubble::new()
+                        start_bubble()
                             .with_variant(BubbleVariant::Outline)
                             .child("A bordered bubble for rich content."),
                     )
                     .child(
-                        Bubble::new()
+                        start_bubble()
                             .with_variant(BubbleVariant::Destructive)
                             .child("A failed action with its reason in text."),
                     )
                     .child(
-                        Bubble::new()
+                        start_bubble()
                             .with_variant(BubbleVariant::Ghost)
                             .child("Ghost content is unframed and can use the full row width."),
                     ),
@@ -100,12 +104,12 @@ impl Render for BubbleStory {
                     .v_flex()
                     .gap_3()
                     .child(
-                        Bubble::new()
+                        start_bubble()
                             .with_variant(BubbleVariant::Secondary)
                             .child("Incoming message"),
                     )
                     .child(
-                        Bubble::new()
+                        start_bubble()
                             .alignment(MessageAlignment::End)
                             .child("Outgoing message"),
                     ),
@@ -114,9 +118,11 @@ impl Render for BubbleStory {
                 section("Reactions")
                     .description("Reaction controls keep Button semantics and remain replaceable.")
                     .w(px(680.))
+                    .v_flex()
+                    .gap_8()
                     .py_6()
                     .child(
-                        Bubble::new()
+                        start_bubble()
                             .with_variant(BubbleVariant::Outline)
                             .child("This bubble has reaction feedback.")
                             .reactions(
@@ -143,13 +149,14 @@ impl Render for BubbleStory {
                     .w(px(680.))
                     .child(
                         BubbleGroup::new()
+                            .w_full()
                             .child(
-                                Bubble::new()
+                                start_bubble()
                                     .with_variant(BubbleVariant::Secondary)
                                     .child("Can you tell me what changed?"),
                             )
                             .child(
-                                Bubble::new()
+                                start_bubble()
                                     .with_variant(BubbleVariant::Secondary)
                                     .child("The registry route was stale."),
                             ),
@@ -160,7 +167,7 @@ impl Render for BubbleStory {
                     .description("Any GPUI element can be placed directly in the surface.")
                     .w(px(680.))
                     .child(
-                        Bubble::new().child(
+                        start_bubble().child(
                             h_flex()
                                 .gap_3()
                                 .child(
@@ -182,7 +189,7 @@ impl Render for BubbleStory {
                     .description("Caller refinements override the surface defaults.")
                     .w(px(680.))
                     .child(
-                        Bubble::new().content(
+                        start_bubble().content(
                             BubbleContent::new()
                                 .rounded(cx.theme().radius)
                                 .bg(cx.theme().green.opacity(0.15))

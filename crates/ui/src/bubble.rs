@@ -49,7 +49,7 @@ pub struct Bubble {
 }
 
 impl Bubble {
-    /// Create a filled, leading-aligned bubble.
+    /// Create a filled bubble that can inherit alignment from its parent.
     pub fn new() -> Self {
         Self {
             style: StyleRefinement::default(),
@@ -109,6 +109,7 @@ impl RenderOnce for Bubble {
         let variant = self.variant;
         let mut content = self.content;
         content.variant = variant;
+        content.alignment = self.alignment;
 
         div()
             .relative()
@@ -122,8 +123,8 @@ impl RenderOnce for Bubble {
                 this.w_full().max_w_full()
             })
             .when_some(self.alignment, |this, alignment| match alignment {
-                MessageAlignment::Start => this.self_start(),
-                MessageAlignment::End => this.self_end(),
+                MessageAlignment::Start => this.self_start().mr_auto(),
+                MessageAlignment::End => this.self_end().ml_auto(),
             })
             .refine_style(&self.style)
             .child(content)
@@ -139,6 +140,7 @@ impl RenderOnce for Bubble {
 pub struct BubbleContent {
     style: StyleRefinement,
     variant: BubbleVariant,
+    alignment: Option<MessageAlignment>,
     children: Vec<AnyElement>,
 }
 
@@ -148,6 +150,7 @@ impl BubbleContent {
         Self {
             style: StyleRefinement::default(),
             variant: BubbleVariant::default(),
+            alignment: None,
             children: Vec::new(),
         }
     }
@@ -186,6 +189,10 @@ impl RenderOnce for BubbleContent {
             .py(tokens.spacing.sm)
             .text_size(tokens.typography.sm.size)
             .line_height(tokens.typography.sm.line_height)
+            .when_some(self.alignment, |this, alignment| match alignment {
+                MessageAlignment::Start => this.self_start(),
+                MessageAlignment::End => this.self_end(),
+            })
             .map(|this| match self.variant {
                 BubbleVariant::Filled => this
                     .bg(tokens.colors.primary)
@@ -322,6 +329,7 @@ impl Styled for BubbleReactions {
 impl RenderOnce for BubbleReactions {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let tokens = cx.theme().semantic_tokens();
+        let edge_offset = tokens.spacing.lg + tokens.spacing.xxs;
 
         div()
             .absolute()
@@ -339,10 +347,10 @@ impl RenderOnce for BubbleReactions {
             .py(tokens.spacing.xxs)
             .text_size(tokens.typography.sm.size)
             .when(self.side == BubbleReactionSide::Top, |this| {
-                this.top(-tokens.spacing.md)
+                this.top(-edge_offset)
             })
             .when(self.side == BubbleReactionSide::Bottom, |this| {
-                this.bottom(-tokens.spacing.md)
+                this.bottom(-edge_offset)
             })
             .when(self.alignment == MessageAlignment::Start, |this| {
                 this.left(tokens.spacing.md)

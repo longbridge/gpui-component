@@ -23,13 +23,16 @@ use gpui_component::{
 
 ```rust
 Bubble::new()
+    .alignment(MessageAlignment::Start)
     .content(BubbleContent::new().child("Can you review this?"))
 ```
 
 For short content, direct children are added to the content slot as a convenience:
 
 ```rust
-Bubble::new().child("Can you review this?")
+Bubble::new()
+    .alignment(MessageAlignment::Start)
+    .child("Can you review this?")
 ```
 
 Use an explicit `BubbleContent` when its surface needs custom styling. This keeps layout refinements on `Bubble` separate from colors, padding, radius, and typography on `BubbleContent`.
@@ -50,30 +53,37 @@ Set alignment when a Bubble is used on its own. Inside `MessageContent`, leave i
 
 ```rust
 Bubble::new()
+    .alignment(MessageAlignment::Start)
     .with_variant(BubbleVariant::Filled)
     .child("Filled")
 
 Bubble::new()
+    .alignment(MessageAlignment::Start)
     .with_variant(BubbleVariant::Secondary)
     .child("Secondary")
 
 Bubble::new()
+    .alignment(MessageAlignment::Start)
     .with_variant(BubbleVariant::Muted)
     .child("Muted")
 
 Bubble::new()
+    .alignment(MessageAlignment::Start)
     .with_variant(BubbleVariant::Tinted)
     .child("Tinted")
 
 Bubble::new()
+    .alignment(MessageAlignment::Start)
     .with_variant(BubbleVariant::Outline)
     .child("Outline")
 
 Bubble::new()
+    .alignment(MessageAlignment::Start)
     .with_variant(BubbleVariant::Ghost)
     .child("Ghost")
 
 Bubble::new()
+    .alignment(MessageAlignment::Start)
     .with_variant(BubbleVariant::Destructive)
     .child("The request failed.")
 ```
@@ -85,14 +95,16 @@ Variants use semantic theme tokens. `Ghost` removes the frame and content paddin
 Any GPUI element can be a direct child:
 
 ```rust
-Bubble::new().content(
-    BubbleContent::new().child(
-        h_flex()
-            .gap_3()
-            .child(file_icon)
-            .child(file_details),
-    ),
-)
+Bubble::new()
+    .alignment(MessageAlignment::Start)
+    .content(
+        BubbleContent::new().child(
+            h_flex()
+                .gap_3()
+                .child(file_icon)
+                .child(file_details),
+        ),
+    )
 ```
 
 ## Groups
@@ -101,8 +113,18 @@ Use `BubbleGroup` for consecutive bubbles from the same sender:
 
 ```rust
 BubbleGroup::new()
-    .child(Bubble::new().with_variant(BubbleVariant::Muted).child("First"))
-    .child(Bubble::new().with_variant(BubbleVariant::Muted).child("Second"))
+    .child(
+        Bubble::new()
+            .alignment(MessageAlignment::Start)
+            .with_variant(BubbleVariant::Muted)
+            .child("First"),
+    )
+    .child(
+        Bubble::new()
+            .alignment(MessageAlignment::Start)
+            .with_variant(BubbleVariant::Muted)
+            .child("Second"),
+    )
 ```
 
 ## Reactions
@@ -111,6 +133,7 @@ BubbleGroup::new()
 
 ```rust
 Bubble::new()
+    .alignment(MessageAlignment::Start)
     .child("Looks good to me.")
     .reactions(
         BubbleReactions::new()
@@ -131,14 +154,16 @@ There is no `BubbleAction` type. `Button` already provides focus, keyboard, disa
 Every public part implements `Styled`, and caller refinements are applied after defaults:
 
 ```rust
-Bubble::new().content(
-    BubbleContent::new()
-        .rounded(cx.theme().radius)
-        .bg(cx.theme().green.opacity(0.15))
-        .text_color(cx.theme().green)
-        .border_color(cx.theme().green.opacity(0.35))
-        .child("Custom semantic color"),
-)
+Bubble::new()
+    .alignment(MessageAlignment::Start)
+    .content(
+        BubbleContent::new()
+            .rounded(cx.theme().radius)
+            .bg(cx.theme().green.opacity(0.15))
+            .text_color(cx.theme().green)
+            .border_color(cx.theme().green.opacity(0.35))
+            .child("Custom semantic color"),
+    )
 ```
 
 ## API reference

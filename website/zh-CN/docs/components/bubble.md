@@ -23,13 +23,16 @@ use gpui_component::{
 
 ```rust
 Bubble::new()
+    .alignment(MessageAlignment::Start)
     .content(BubbleContent::new().child("可以帮我检查一下吗？"))
 ```
 
 短内容可以直接作为 child 添加到 content slot：
 
 ```rust
-Bubble::new().child("可以帮我检查一下吗？")
+Bubble::new()
+    .alignment(MessageAlignment::Start)
+    .child("可以帮我检查一下吗？")
 ```
 
 需要定制消息表面时使用显式 `BubbleContent`。这样 `Bubble` 上的布局 refinement 与 `BubbleContent` 上的颜色、padding、圆角和 typography 保持独立。
@@ -50,30 +53,37 @@ Bubble 独立使用时可以显式设置对齐。放在 `MessageContent` 中时�
 
 ```rust
 Bubble::new()
+    .alignment(MessageAlignment::Start)
     .with_variant(BubbleVariant::Filled)
     .child("Filled")
 
 Bubble::new()
+    .alignment(MessageAlignment::Start)
     .with_variant(BubbleVariant::Secondary)
     .child("Secondary")
 
 Bubble::new()
+    .alignment(MessageAlignment::Start)
     .with_variant(BubbleVariant::Muted)
     .child("Muted")
 
 Bubble::new()
+    .alignment(MessageAlignment::Start)
     .with_variant(BubbleVariant::Tinted)
     .child("Tinted")
 
 Bubble::new()
+    .alignment(MessageAlignment::Start)
     .with_variant(BubbleVariant::Outline)
     .child("Outline")
 
 Bubble::new()
+    .alignment(MessageAlignment::Start)
     .with_variant(BubbleVariant::Ghost)
     .child("Ghost")
 
 Bubble::new()
+    .alignment(MessageAlignment::Start)
     .with_variant(BubbleVariant::Destructive)
     .child("请求失败。")
 ```
@@ -85,14 +95,16 @@ Bubble::new()
 任意 GPUI element 都可以作为直接 child：
 
 ```rust
-Bubble::new().content(
-    BubbleContent::new().child(
-        h_flex()
-            .gap_3()
-            .child(file_icon)
-            .child(file_details),
-    ),
-)
+Bubble::new()
+    .alignment(MessageAlignment::Start)
+    .content(
+        BubbleContent::new().child(
+            h_flex()
+                .gap_3()
+                .child(file_icon)
+                .child(file_details),
+        ),
+    )
 ```
 
 ## 分组
@@ -101,8 +113,18 @@ Bubble::new().content(
 
 ```rust
 BubbleGroup::new()
-    .child(Bubble::new().with_variant(BubbleVariant::Muted).child("第一条"))
-    .child(Bubble::new().with_variant(BubbleVariant::Muted).child("第二条"))
+    .child(
+        Bubble::new()
+            .alignment(MessageAlignment::Start)
+            .with_variant(BubbleVariant::Muted)
+            .child("第一条"),
+    )
+    .child(
+        Bubble::new()
+            .alignment(MessageAlignment::Start)
+            .with_variant(BubbleVariant::Muted)
+            .child("第二条"),
+    )
 ```
 
 ## Reaction
@@ -111,6 +133,7 @@ BubbleGroup::new()
 
 ```rust
 Bubble::new()
+    .alignment(MessageAlignment::Start)
     .child("看起来没问题。")
     .reactions(
         BubbleReactions::new()
@@ -131,14 +154,16 @@ Bubble::new()
 所有公开 part 都实现了 `Styled`，调用方 refinement 会在默认样式之后应用：
 
 ```rust
-Bubble::new().content(
-    BubbleContent::new()
-        .rounded(cx.theme().radius)
-        .bg(cx.theme().green.opacity(0.15))
-        .text_color(cx.theme().green)
-        .border_color(cx.theme().green.opacity(0.35))
-        .child("自定义语义颜色"),
-)
+Bubble::new()
+    .alignment(MessageAlignment::Start)
+    .content(
+        BubbleContent::new()
+            .rounded(cx.theme().radius)
+            .bg(cx.theme().green.opacity(0.15))
+            .text_color(cx.theme().green)
+            .border_color(cx.theme().green.opacity(0.35))
+            .child("自定义语义颜色"),
+    )
 ```
 
 ## API 参考
