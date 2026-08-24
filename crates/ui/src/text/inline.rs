@@ -382,6 +382,9 @@ impl Element for Inline {
         let mut runs = Vec::new();
         let mut ix = 0;
         for (range, highlight) in self.highlights.iter() {
+            if range.start < ix || range.start > range.end || range.end > self.text.len() {
+                continue;
+            }
             if ix < range.start {
                 runs.push(text_style.clone().to_run(range.start - ix));
             }
