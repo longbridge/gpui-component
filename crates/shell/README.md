@@ -52,51 +52,67 @@ The runtime loads `main.js` from the given directory, takes the view class it
 default-exports, and mounts one instance of it as the window's root view:
 
 ```js
-// examples/js_todolist/main.js
-import Counter from "./counter.js";
+// main.js
+import { View, v_flex, text, Button, InputState } from "gpui";
 
-export default Counter;
-```
+export default class Notes extends View {
+  init() {
+    this.draft = InputState.new({ placeholder: "What needs doing?" });
+    this.draft.on("submit", (_event, cx) => this.add(cx));
+    this.items = [];
+  }
 
-```js
-// counter.js, trimmed down; the example has the full version
-import { View, v_flex, text, Button } from "gpui";
-
-export default class Counter extends View {
-  init(props = {}) {
-    this.count = props.start ?? 0;
+  add(cx) {
+    const caption = this.draft.value().trim();
+    if (caption === "") return;
+    this.items = [...this.items, caption];
+    this.draft.set_value("");
+    cx.notify();
   }
 
   render() {
     return v_flex()
       .size_full()
-      .items_center()
-      .justify_center()
-      .gap(20)
+      .p(24)
+      .gap(12)
       .bg("background")
-      .child(text(`${this.count}`).text_3xl().text_color("foreground"))
-      .child(
-        Button.new("increment")
-          .h(32)
-          .px(14)
-          .items_center()
-          .justify_center()
-          .bg("primary")
-          .text_color("primary_foreground")
-          .rounded(6)
-          .on_click((_event, cx) => {
-            this.count += 1;
-            cx.notify();
-          })
-          .child(text("Increment")),
-      );
+      .children(this.items.map((item) => text(item).text_color("foreground")));
   }
 }
 ```
 
 See [`examples/js_todolist`](../../examples/js_todolist) for the complete
-version, including a button helper that applies consistent styling from theme
-tokens.
+version: retained input state, controlled checkboxes, a confirmation dialog, a
+toast, icons, and storage that degrades to memory when it is not granted.
+
+### Checking an application without running it
+
+JavaScript has no compiler, so the runtime provides what would otherwise be
+missing:
+
+```bash
+cargo run -p gpui-shell -- check examples/js_todolist    # exit 0 or 1
+cargo run -p gpui-shell -- check examples/js_todolist --print-spec
+cargo run -p gpui-shell -- types examples/js_todolist    # writes gpui.d.ts
+```
+
+`check` loads and renders the application once without showing a window. It
+reports syntax errors, unresolved imports, a missing or malformed default
+export, unknown style methods with a suggestion, wrongly typed style arguments,
+and an element used twice — each with the script's own stack. `types` writes
+TypeScript declarations generated from the same tables the runtime dispatches
+through, so an editor catches a mistyped style method before it runs.
+
+### Working on an application
+
+```bash
+cargo run -p gpui-shell -- examples/js_todolist --watch
+cargo run -p gpui-shell -- examples/js_todolist --dev    # implies --watch
+```
+
+A reload re-reads every module, entry included. If the new code fails to load,
+the previous view keeps running and the error is reported — a broken save never
+costs you the window.
 
 ## Naming
 
@@ -109,7 +125,7 @@ its own variables, functions, classes and object keys — is ordinary camelCase
 JavaScript. The contrast is the point: a snake_case call is host surface, a
 camelCase one is script code.
 
-## M0 API Surface
+## API Surface
 
 One import provides the whole namespace:
 
@@ -231,22 +247,26 @@ described above are the same on either engine.
 
 ## Not Here Yet
 
-M0 covers `div`, `text`, `Button`, `Checkbox`, `Switch`, `on_click`,
-`on_change`, `when`, `cx.notify()`, the style surface and the default token
-palette. Deliberately absent:
+Present today: the element and style surface, state styles (`hover` / `active` /
+`focus`), `Button`, `Checkbox`, `Switch`, retained `InputState` with input
+events, icons through `svg()`, dialogs, sheets and toasts on `cx`, promises and
+timers, `fs` / `store` / `clipboard` / `log` / `process` behind capabilities,
+hot reload, `check`, and generated TypeScript declarations.
+
+Deliberately absent:
 
 - `gpui.open_window` and multi-window applications; the host opens the window.
-- Select, tabs, list, table and tree bindings, and `InputState` and the other
-  host state entities.
-- Semantic state styles (`style_disabled`), `hover` / `active` modifiers, and
-  animation.
-- Promises, `gpui.spawn`, timers, and every asynchronous API.
-- System capabilities: `fs`, `http`, `store`, `clipboard`, `log`.
-- Dock panels, the plugin model, the sandbox, and hot reload.
+- Select, combobox, tabs, list, table and tree bindings.
+- Charts, the code editor and its LSP surface, and WebView — these stay in Rust
+  on purpose; binding a trait-and-generics interface across a language boundary
+  costs more than it returns.
+- Asynchronous `fs`: the filesystem calls are synchronous, which is wrong for a
+  large file on the render thread. They are shaped so the move onto the
+  scheduler is mechanical.
+- Packaging and installing an application as a distributable archive.
 
-Each of these belongs to a later milestone. The full roadmap, with the exit
-criteria that gate every stage, is section 26 of
-[`docs/research/gpui-shell.md`](../../docs/research/gpui-shell.md).
+The design, what is implemented, and what is not are in
+[`docs/gpui-shell.md`](../../docs/gpui-shell.md).
 
 ## How It Works
 

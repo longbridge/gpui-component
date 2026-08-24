@@ -24,6 +24,7 @@ use gpui::{
 use gpui_shell::{
     Capabilities, ScriptView, ShellRoot, ShellRuntime, ToastLevel, ToastRequest,
     assets::AppAssets,
+    theme::Palettes,
     watch::{self, SourceWatcher},
 };
 use tracing::{
@@ -278,6 +279,7 @@ fn run(arguments: Arguments) {
         .with_assets(AppAssets::new(asset_root))
         .run(move |cx| {
             gpui_shell::init(cx);
+            install_palette(cx);
 
             if arguments.is_development() {
                 // TODO(wiring): `sandbox` is a private module inside
@@ -394,6 +396,7 @@ fn check(arguments: CheckArguments) -> ! {
         .with_assets(AppAssets::new(asset_root))
         .run(move |cx| {
             gpui_shell::init(cx);
+            install_palette(cx);
 
             let runtime = match ShellRuntime::new() {
                 Ok(runtime) => runtime,
@@ -543,6 +546,23 @@ fn grant_local_access(root: &Path) {
     gpui_shell::set_store_path(store.join("store.json"));
     gpui_shell::set_capabilities(local_capabilities(root, &store));
     tracing::debug!("storage: {}", store.display());
+}
+
+/// The palette this command ships.
+///
+/// It lives with the binary rather than with the runtime because a palette is a
+/// product decision: `gpui-shell` the command is an application and gets to
+/// have a look, while `gpui_shell` the library must not decide how everything
+/// built on it appears. An embedder installs its own the same way.
+const PALETTE: &str = include_str!("default-tokens.json");
+
+fn install_palette(cx: &mut App) {
+    match Palettes::parse(PALETTE) {
+        Ok(palettes) => palettes.install(cx),
+        // The file is compiled in, so a parse error is a build-time mistake
+        // that reached a user; the neutral fallback keeps the window legible.
+        Err(error) => tracing::error!("shipped palette did not parse: {error}"),
+    }
 }
 
 fn store_directory(root: &Path) -> PathBuf {

@@ -49,9 +49,11 @@ pub type ViewObject = Persistent<Object<'static>>;
 
 mod entity_api;
 pub(crate) mod host;
+mod native;
 mod overlay;
 pub(crate) mod sandbox;
 mod scheduler;
+mod theme_api;
 
 /// Names exported by the built-in `gpui` module.
 ///
@@ -76,6 +78,12 @@ const MODULE_EXPORTS: &[&str] = &[
     "store",
     "clipboard",
     "log",
+    // Native modules (`native`).
+    "native",
+    // Theme and runtime version (`theme_api`).
+    "theme",
+    "set_theme",
+    "require_api",
     // Scheduling (`scheduler`).
     "spawn",
     "timer",
@@ -689,6 +697,7 @@ globalThis.__gpui = (() => {
     v_flex: () => element(__v_flex()),
     text: (value) => element(__text(String(value))),
     svg: (path) => element(__svg(String(path))),
+    theme: () => JSON.parse(__theme_snapshot()),
     Button: { new: (id) => element(__button(String(id))) },
     Checkbox: { new: (id) => element(__checkbox(String(id))) },
     Switch: { new: (id) => element(__switch(String(id))) },
@@ -771,6 +780,8 @@ impl ShellRuntime {
             // Subsystems extend the same module object the prelude built.
             let module: Object = ctx.globals().get("__gpui")?;
             host::install(ctx, &module)?;
+            native::install(ctx, &module)?;
+            theme_api::install(ctx, &module)?;
             entity_api::install(ctx, &module, runtime.clone())?;
             scheduler::install(ctx, &module)?;
             sandbox::install(ctx)?;

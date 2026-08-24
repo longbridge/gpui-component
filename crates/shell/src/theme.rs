@@ -14,15 +14,13 @@
 //! shell binary is self-contained and cannot start up unstyled because a file
 //! is missing.
 
-use std::cell::RefCell;
-use std::sync::LazyLock;
-
 use gpui::{App, Global, Hsla, Pixels};
 use gpui_base::{
     ColorTokens, RadiusTokens, SemanticThemeTokens, ShadowTokens, SpacingTokens, Theme,
     TypographyTokens,
 };
 use serde::Deserialize;
+use std::cell::RefCell;
 
 use crate::scope::with_current_app;
 
@@ -92,11 +90,12 @@ struct InstalledPalette {
 
 impl Global for InstalledPalette {}
 
-/// Installs the shell's default palette into `gpui_base::Theme`.
+/// Installs whatever palette is current into `gpui_base::Theme`.
 ///
-/// Called from `gpui_shell::init`. Re-installs the currently selected mode, so
-/// calling it twice is harmless and a second call does not silently revert a
-/// mode the application already chose.
+/// Called from `gpui_shell::init`, before a host has had a chance to supply
+/// one, so this is where the neutral fallback lands. A host that has a design
+/// calls [`Palettes::install`] afterwards. Re-installing is harmless and does
+/// not revert a mode the application already chose.
 pub fn init(cx: &mut App) {
     install(mode(cx), cx);
 }
@@ -194,7 +193,7 @@ const RADIUS_TOKEN_NAMES: &[&str] = &["none", "sm", "md", "lg", "xl", "full"];
 /// meaningful Base defaults, which lets a palette override the ground colors
 /// alone.
 #[derive(Debug, Clone, Deserialize)]
-struct Palette {
+pub struct Palette {
     colors: ColorTokens,
     #[serde(default)]
     radius: RadiusTokens,
@@ -207,6 +206,60 @@ struct Palette {
 }
 
 impl Palette {
+    /// A grey scale plus one blue, at the two contrasts a UI needs.
+    fn neutral(dark: bool) -> Self {
+        let hex = |value: u32| -> Hsla { gpui::rgb(value).into() };
+        let colors = if dark {
+            ColorTokens {
+                background: hex(0x14161a),
+                foreground: hex(0xe6e8ec),
+                surface: hex(0x1b1e24),
+                surface_foreground: hex(0xe6e8ec),
+                primary: hex(0x5b8cff),
+                primary_foreground: hex(0x0d1017),
+                secondary: hex(0x272b33),
+                secondary_foreground: hex(0xdfe2e8),
+                muted: hex(0x21252c),
+                muted_foreground: hex(0x9aa1ad),
+                accent: hex(0x232c3f),
+                accent_foreground: hex(0xd3e0ff),
+                destructive: hex(0xd05c5c),
+                destructive_foreground: hex(0xffffff),
+                border: hex(0x2b3038),
+                input: hex(0x6b7280),
+                ring: hex(0x5b8cff),
+            }
+        } else {
+            ColorTokens {
+                background: hex(0xf7f8fa),
+                foreground: hex(0x14161a),
+                surface: hex(0xffffff),
+                surface_foreground: hex(0x14161a),
+                primary: hex(0x2f6bff),
+                primary_foreground: hex(0xffffff),
+                secondary: hex(0xe8eaee),
+                secondary_foreground: hex(0x1b1e24),
+                muted: hex(0xeef0f3),
+                muted_foreground: hex(0x5f6672),
+                accent: hex(0xdde6ff),
+                accent_foreground: hex(0x1a3a80),
+                destructive: hex(0xc0392b),
+                destructive_foreground: hex(0xffffff),
+                border: hex(0xd7dbe0),
+                input: hex(0x8b929c),
+                ring: hex(0x2f6bff),
+            }
+        };
+
+        Self {
+            colors,
+            radius: RadiusTokens::default(),
+            spacing: SpacingTokens::default(),
+            typography: TypographyTokens::default(),
+            shadow: ShadowTokens::default(),
+        }
+    }
+
     fn tokens(&self) -> SemanticThemeTokens {
         SemanticThemeTokens {
             colors: self.colors,
@@ -218,13 +271,51 @@ impl Palette {
     }
 }
 
-#[derive(Debug, Deserialize)]
-struct Palettes {
+/// A light and a dark palette, supplied by the host.
+///
+/// The runtime does not ship a design. A palette is a product decision, and a
+/// library that carried one would be deciding how every application built on it
+/// looks — which is the thing this whole layer exists to leave to the
+/// application. What the runtime does own is the *mechanism*: parsing, mode
+/// switching, and the cached lookup the style layer reads.
+///
+/// [`Palettes::neutral`] exists so that a host which has installed nothing
+/// still renders something legible; it is a safety net, not a design.
+#[derive(Debug, Clone, Deserialize)]
+pub struct Palettes {
     light: Palette,
     dark: Palette,
 }
 
 impl Palettes {
+    /// Parses the palette format: `{ "light": { "colors": { … } }, "dark": … }`.
+    ///
+    /// The token names are the fields of `gpui_base`'s `SemanticThemeTokens`,
+    /// which already derives `Deserialize` and `JsonSchema`, so this format has
+    /// no schema of its own to keep in sync.
+    pub fn parse(source: &str) -> Result<Self, String> {
+        serde_json::from_str(source).map_err(|error| format!("invalid palette: {error}"))
+    }
+
+    /// The smallest palette that makes an interface legible.
+    ///
+    /// Deliberately plain — a neutral grey scale with one blue — because it is
+    /// what a host gets for installing nothing, and it should look like a
+    /// placeholder rather than like a decision somebody made for them.
+    pub fn neutral() -> Self {
+        Self {
+            light: Palette::neutral(false),
+            dark: Palette::neutral(true),
+        }
+    }
+
+    /// Installs this palette and selects the current mode.
+    pub fn install(self, cx: &mut App) {
+        let mode = mode(cx);
+        INSTALLED.with(|installed| *installed.borrow_mut() = Some(self));
+        install(mode, cx);
+    }
+
     fn get(&self, mode: ThemeMode) -> &Palette {
         match mode {
             ThemeMode::Light => &self.light,
@@ -233,13 +324,20 @@ impl Palettes {
     }
 }
 
-static PALETTES: LazyLock<Palettes> = LazyLock::new(|| {
-    serde_json::from_str(include_str!("../theme/default-tokens.json"))
-        .expect("theme/default-tokens.json is compiled into the binary, so a parse error here is a build-time mistake")
-});
+thread_local! {
+    /// The palette the host installed, or the neutral fallback.
+    static INSTALLED: RefCell<Option<Palettes>> = const { RefCell::new(None) };
+}
+
+fn with_palettes<R>(f: impl FnOnce(&Palettes) -> R) -> R {
+    INSTALLED.with(|installed| {
+        let mut installed = installed.borrow_mut();
+        f(installed.get_or_insert_with(Palettes::neutral))
+    })
+}
 
 fn install(mode: ThemeMode, cx: &mut App) {
-    let tokens = PALETTES.get(mode).tokens();
+    let tokens = with_palettes(|palettes| palettes.get(mode).tokens());
     CACHED.with(|cached| *cached.borrow_mut() = Some(tokens.clone()));
     Theme::global_mut(cx).tokens = tokens;
     cx.set_global(InstalledPalette { mode });
@@ -328,11 +426,20 @@ mod tests {
     }
 
     #[test]
-    fn embedded_palettes_parse() {
+    fn a_supplied_palette_parses() {
+        // The format is the host's entry point, so a malformed one must say so
+        // rather than silently installing nothing.
+        assert!(Palettes::parse("{\"light\":{},\"dark\":{}}").is_err());
+        assert!(Palettes::parse("not json").is_err());
+    }
+
+    #[test]
+    fn the_neutral_fallback_keeps_the_base_scales() {
+        let palettes = Palettes::neutral();
         for mode in [ThemeMode::Light, ThemeMode::Dark] {
-            let palette = PALETTES.get(mode);
-            // Scales are omitted from the file, so they must fall back to the
-            // Base defaults rather than to zero.
+            let palette = palettes.get(mode);
+            // A palette that overrides only colors must keep Base's scales
+            // rather than zeroing them.
             assert_eq!(palette.radius, RadiusTokens::default());
             assert_eq!(palette.spacing, SpacingTokens::default());
         }
@@ -340,8 +447,9 @@ mod tests {
 
     #[test]
     fn every_color_token_is_opaque_in_both_palettes() {
+        let palettes = Palettes::neutral();
         for mode in [ThemeMode::Light, ThemeMode::Dark] {
-            let colors = PALETTES.get(mode).colors;
+            let colors = palettes.get(mode).colors;
             for name in color_token_names() {
                 let color = resolve_color(&colors, name)
                     .unwrap_or_else(|| panic!("`{name}` is not resolvable"));
@@ -358,7 +466,7 @@ mod tests {
     fn color_token_names_match_the_token_fields() {
         let fields = field_names(&ColorTokens::default());
         assert_eq!(fields, sorted(color_token_names()));
-        let colors = PALETTES.get(ThemeMode::Light).colors;
+        let colors = Palettes::neutral().get(ThemeMode::Light).colors;
         for name in &fields {
             assert!(
                 resolve_color(&colors, name).is_some(),
@@ -390,7 +498,8 @@ mod tests {
 
     #[test]
     fn unknown_token_names_resolve_to_none() {
-        assert!(resolve_color(&PALETTES.get(ThemeMode::Dark).colors, "backgrund").is_none());
+        let dark = Palettes::neutral();
+        assert!(resolve_color(&dark.get(ThemeMode::Dark).colors, "backgrund").is_none());
         assert!(resolve_spacing(&SpacingTokens::default(), "xxxl").is_none());
         assert!(resolve_radius(&RadiusTokens::default(), "rounded").is_none());
     }

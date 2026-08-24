@@ -6,10 +6,13 @@
 
 pub mod assets;
 pub mod capability;
+pub mod dock;
 pub mod engine;
 pub mod entities;
 pub mod error;
 pub mod materialize;
+pub mod native;
+pub mod plugin_api;
 pub mod root;
 pub mod runtime;
 pub mod scope;
@@ -24,6 +27,10 @@ pub mod watch;
 pub use capability::Capabilities;
 pub use engine::ShellRuntime;
 pub use error::ShellError;
+pub use native::{
+    NativeArguments, NativeError, NativeModule, NativeModules, NativeObject, NativeResult,
+    NativeValue,
+};
 pub use root::{DialogOptions, SheetSide, ShellRoot, ToastLevel, ToastRequest};
 pub use scope::ScopePhase;
 pub use view::ScriptView;
@@ -78,4 +85,14 @@ pub fn init(cx: &mut App) {
     gpui_base::init(cx);
     theme::init(cx);
     style::init();
+}
+
+/// Registers the native modules a script may reach.
+///
+/// Nothing is reachable until this is called: `native("...")` fails while the
+/// registry is empty, and it only ever resolves the modules the host put in it
+/// (design doc §17.6). Call it before the application runs; the registry is
+/// read at call time, so a later change takes effect on the next call.
+pub fn set_native_modules(modules: NativeModules) {
+    native::set_modules(modules);
 }
