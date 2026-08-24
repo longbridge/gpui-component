@@ -114,10 +114,9 @@ impl DockAreaRenderer for DockSkin {
         };
 
         // Opening and closing a dock is sprung, so the panel slides instead of
-        // appearing and vanishing. A drag drives the same value from the pointer
-        // and the handle is drawn at the dock's edge, so for the length of one
-        // the spring gives up its response and takes the size as it comes —
-        // otherwise the handle would trail the cursor.
+        // appearing and vanishing. The resize handle drives the same value from
+        // the pointer and is drawn at the dock's edge, so travel is suspended
+        // for the length of a drag or the handle would trail the cursor.
         let resizing = self.shared().resizing_dock().get() == Some(placement);
         let size = spring(
             (
@@ -125,11 +124,7 @@ impl DockAreaRenderer for DockSkin {
                 placement_channel(placement),
             ),
             target,
-            if resizing {
-                Spring::new(Duration::ZERO)
-            } else {
-                DOCK_SPRING
-            },
+            DOCK_SPRING.with_travel(!resizing),
             window,
             cx,
         );

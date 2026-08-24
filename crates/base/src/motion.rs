@@ -205,6 +205,7 @@ pub struct Spring {
     response: Duration,
     damping: f32,
     epsilon: f32,
+    travel: bool,
 }
 
 impl Spring {
@@ -219,17 +220,15 @@ impl Spring {
     /// [`Self::with_epsilon`] sets.
     ///
     /// A zero response adopts the target on the spot, as a zero duration does
-    /// for a transition — an infinitely stiff spring has nowhere to travel. Use
-    /// it for a value the pointer is already moving, such as a panel being
-    /// dragged by its resize handle, which must not lag behind the pointer:
-    /// retained state stays pinned to the target meanwhile, so travel resumes
-    /// from the value the drag released rather than from wherever the spring was
-    /// when it began.
+    /// for a transition. Say that with [`Self::with_travel`] where it is what
+    /// you mean; a zero here is the degenerate case, defined so an infinitely
+    /// stiff spring resolves rather than dividing by its own period.
     pub const fn new(response: Duration) -> Self {
         Self {
             response,
             damping: 1.0,
             epsilon: DEFAULT_SPRING_EPSILON,
+            travel: true,
         }
     }
 
@@ -244,6 +243,23 @@ impl Spring {
     /// coefficient $c = 2 \zeta \omega_0$.
     pub const fn with_damping(mut self, ratio: f32) -> Self {
         self.damping = ratio;
+        self
+    }
+
+    /// Sets whether the spring travels to its target or adopts it on the spot.
+    ///
+    /// A value the pointer is already moving — a panel being dragged by its
+    /// resize handle — must not lag behind the pointer, so the spring stops
+    /// travelling for as long as the drag lasts. Retained state stays pinned to
+    /// the target meanwhile, so travel resumes from the value the drag released
+    /// rather than from wherever the spring was when it began.
+    ///
+    /// This says at the call that the motion is suspended, and it says it
+    /// without disturbing the response, damping or tolerance the spring is
+    /// configured with — which a policy swapped out for the length of the drag
+    /// would have to restate or discard.
+    pub const fn with_travel(mut self, travel: bool) -> Self {
+        self.travel = travel;
         self
     }
 
@@ -318,7 +334,7 @@ where
         state.updated_at = now;
     };
 
-    if cx.reduce_motion() || policy.response.is_zero() {
+    if cx.reduce_motion() || !policy.travel || policy.response.is_zero() {
         if snapshot.state.position != target_position || snapshot.state.velocity != 0.0 {
             state.update(cx, |state, _| settle(state));
         }
@@ -708,15 +724,15 @@ mod tests {
     }
 
     #[gpui::test]
-    fn a_zero_response_spring_adopts_its_target_on_the_spot(cx: &mut TestAppContext) {
+    fn a_spring_that_is_not_travelling_adopts_its_target_on_the_spot(cx: &mut TestAppContext) {
         let travelling = Spring::new(Duration::from_millis(300));
-        let fixture = SpringFixture::open(cx, Spring::new(Duration::ZERO));
+        let fixture = SpringFixture::open(cx, travelling.with_travel(false));
 
         assert_eq!(fixture.render(cx, 1.0), 1.0);
         assert_eq!(fixture.pending_frame(cx), 0);
         assert_eq!(fixture.advance(cx, 100, 5.0), 5.0);
 
-        // Travel resumes from the value the zero response left behind. A spring
+        // Travel resumes from the value the suspension left behind. A spring
         // that had kept the state it held beforehand would jump back to it here.
         fixture.policy.set(travelling);
         assert_eq!(fixture.render(cx, 6.0), 5.0);
@@ -725,6 +741,13 @@ mod tests {
             5.0 < next && next < 6.0,
             "expected travel to resume from 5.0, got {next}"
         );
+    }
+
+    #[gpui::test]
+    fn a_zero_response_spring_resolves_instead_of_dividing_by_its_period(cx: &mut TestAppContext) {
+        let fixture = SpringFixture::open(cx, Spring::new(Duration::ZERO));
+        assert_eq!(fixture.render(cx, 1.0), 1.0);
+        assert_eq!(fixture.pending_frame(cx), 0);
     }
 
     #[gpui::test]
