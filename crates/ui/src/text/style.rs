@@ -43,6 +43,10 @@ pub struct TextViewStyle {
     /// Default is [`HighlightStyle::default()`], the `background_color` will
     /// fallback to `cx.theme().accent`, if it is `None`.
     pub inline_code: HighlightStyle,
+    /// Whether links are underlined at rest. Default is `true`.
+    pub link_underline: bool,
+    /// Whether links are underlined while hovered. Default is `false`.
+    pub link_underline_on_hover: bool,
     pub is_dark: bool,
 }
 
@@ -64,6 +68,8 @@ impl PartialEq for TextViewStyle {
             && self.table_head == other.table_head
             && self.table_cell == other.table_cell
             && self.inline_code == other.inline_code
+            && self.link_underline == other.link_underline
+            && self.link_underline_on_hover == other.link_underline_on_hover
             && self.is_dark == other.is_dark
     }
 }
@@ -80,6 +86,8 @@ impl Default for TextViewStyle {
             table_head: StyleRefinement::default(),
             table_cell: StyleRefinement::default(),
             inline_code: HighlightStyle::default(),
+            link_underline: true,
+            link_underline_on_hover: false,
             is_dark: false,
         }
     }
@@ -109,6 +117,18 @@ impl TextViewStyle {
     /// Set style for inline code spans.
     pub fn inline_code(mut self, style: HighlightStyle) -> Self {
         self.inline_code = style;
+        self
+    }
+
+    /// Set whether links are underlined at rest.
+    pub fn link_underline(mut self, underline: bool) -> Self {
+        self.link_underline = underline;
+        self
+    }
+
+    /// Set whether links are underlined while hovered.
+    pub fn link_underline_on_hover(mut self, underline: bool) -> Self {
+        self.link_underline_on_hover = underline;
         self
     }
 
@@ -167,6 +187,9 @@ mod tests {
         let mut dark = base.clone();
         dark.is_dark = true;
         assert!(base != dark);
+
+        assert!(base != base.clone().link_underline(false));
+        assert!(base != base.clone().link_underline_on_hover(true));
     }
 
     #[test]

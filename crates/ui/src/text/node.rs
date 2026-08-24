@@ -1333,6 +1333,7 @@ impl CodeBlock {
                         vec![],
                         self.styles(&cx.theme().highlight_theme),
                         node_cx.link_click_handler.clone(),
+                        false,
                     ))
                     .when_some(node_cx.code_block_actions.clone(), |this, actions| {
                         this.child(
@@ -1417,6 +1418,7 @@ impl Paragraph {
                             links.clone(),
                             highlights.clone(),
                             node_cx.link_click_handler.clone(),
+                            node_cx.style.link_underline_on_hover,
                         )
                         .into_any_element(),
                     );
@@ -1500,10 +1502,12 @@ impl Paragraph {
 
                     if let Some(mut link_mark) = style.link.clone() {
                         highlight.color = Some(cx.theme().link);
-                        highlight.underline = Some(gpui::UnderlineStyle {
-                            thickness: gpui::px(1.),
-                            ..Default::default()
-                        });
+                        if node_cx.style.link_underline {
+                            highlight.underline = Some(gpui::UnderlineStyle {
+                                thickness: gpui::px(1.),
+                                ..Default::default()
+                            });
+                        }
 
                         // convert link references, replace link
                         if let Some(identifier) = link_mark.identifier.as_ref() {
@@ -1536,6 +1540,7 @@ impl Paragraph {
                     links,
                     highlights,
                     node_cx.link_click_handler.clone(),
+                    node_cx.style.link_underline_on_hover,
                 )
                 .into_any_element(),
             );
@@ -1622,10 +1627,12 @@ impl Paragraph {
 
                     if let Some(mut link_mark) = style.link.clone() {
                         highlight.color = Some(cx.theme().link);
-                        highlight.underline = Some(gpui::UnderlineStyle {
-                            thickness: gpui::px(1.),
-                            ..Default::default()
-                        });
+                        if node_cx.style.link_underline {
+                            highlight.underline = Some(gpui::UnderlineStyle {
+                                thickness: gpui::px(1.),
+                                ..Default::default()
+                            });
+                        }
 
                         if let Some(identifier) = link_mark.identifier.as_ref()
                             && let Some(mark) = node_cx.link_refs.get(identifier)
