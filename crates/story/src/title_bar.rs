@@ -14,13 +14,13 @@ use gpui_component::{
 };
 
 use crate::{
-    AppState, SelectFont, SelectRadius, SelectScrollbarMode, ToggleFpsMonitor,
+    AppState, SelectFont, SelectRadius, SelectScrollbarMode, ToggleAppMenuBar, ToggleFpsMonitor,
     ToggleListActiveHighlight, app_menus,
 };
 
 pub struct AppTitleBar {
     title: SharedString,
-    app_menu_bar: Option<Entity<AppMenuBar>>,
+    app_menu_bar: Entity<AppMenuBar>,
     font_size_selector: Entity<FontSizeSelector>,
     child: Rc<dyn Fn(&mut Window, &mut App) -> AnyElement>,
     _subscriptions: Vec<Subscription>,
@@ -58,25 +58,24 @@ impl AppTitleBar {
 impl Render for AppTitleBar {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let notifications_count = window.notifications(cx).len();
+        let show_app_menu_bar = AppState::global(cx).show_app_menu_bar;
 
         TitleBar::new()
             // left side
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .children(self.app_menu_bar.clone())
-                    // when the system draws the menus elsewhere, add a title to the window
-                    .when_none(&self.app_menu_bar, |this| {
-                        this.child(
-                            div()
-                                .text_sm()
-                                .font_weight(FontWeight::MEDIUM)
-                                .text_color(cx.theme().foreground)
-                                .child(self.title.clone()),
-                        )
-                    }),
-            )
+            .child(div().flex().items_center().map(|this| {
+                if show_app_menu_bar {
+                    this.child(self.app_menu_bar.clone())
+                } else {
+                    // The system menu bar owns the menus, so the freed up left
+                    // side names the window the way a Mac app does.
+                    this.child(
+                        div()
+                            .text_sm()
+                            .font_weight(FontWeight::MEDIUM)
+                            .child(self.title.clone()),
+                    )
+                }
+            }))
             .child(
                 div()
                     .flex()
@@ -181,6 +180,17 @@ impl FontSizeSelector {
         state.show_fps_monitor = !state.show_fps_monitor;
         window.refresh();
     }
+
+    fn on_toggle_app_menu_bar(
+        &mut self,
+        _: &ToggleAppMenuBar,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let state = AppState::global_mut(cx);
+        state.show_app_menu_bar = !state.show_app_menu_bar;
+        window.refresh();
+    }
 }
 
 impl Render for FontSizeSelector {
@@ -190,6 +200,7 @@ impl Render for FontSizeSelector {
         let radius = cx.theme().radius.as_f32() as i32;
         let scroll_show = cx.theme().scrollbar_mode;
         let show_fps_monitor = AppState::global(cx).show_fps_monitor;
+        let show_app_menu_bar = AppState::global(cx).show_app_menu_bar;
 
         div()
             .id("font-size-selector")
@@ -199,6 +210,7 @@ impl Render for FontSizeSelector {
             .on_action(cx.listener(Self::on_select_scrollbar_mode))
             .on_action(cx.listener(Self::on_toggle_list_active_highlight))
             .on_action(cx.listener(Self::on_toggle_fps_monitor))
+            .on_action(cx.listener(Self::on_toggle_app_menu_bar))
             .child(
                 Button::new("btn")
                     .small()
@@ -253,6 +265,11 @@ impl Render for FontSizeSelector {
                                 "FPS Monitor",
                                 show_fps_monitor,
                                 Box::new(ToggleFpsMonitor),
+                            )
+                            .menu_with_check(
+                                "App Menu Bar",
+                                show_app_menu_bar,
+                                Box::new(ToggleAppMenuBar),
                             )
                     })
                     .anchor(Anchor::TopRight),
