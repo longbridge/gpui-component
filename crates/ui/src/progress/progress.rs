@@ -119,7 +119,9 @@ impl RenderOnce for Progress {
                 ProgressTrack::new()
                     .absolute()
                     .size_full()
-                    .bg(bg.opacity(0.2)),
+                    .bg(bg.opacity(0.2))
+                    .rounded(radius)
+                    .refine_style(&inner_style),
             )
             .child(
                 ProgressIndicator::new()
