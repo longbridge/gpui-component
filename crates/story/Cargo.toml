@@ -41,6 +41,7 @@ dirs = "6.0.0"
 
 # Native-only dependencies (not available on WASM)
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
+gpui-shell.workspace = true
 reqwest_client.workspace = true
 smol.workspace = true
 tree-sitter-navi = "0.2.3"

@@ -180,8 +180,8 @@ fn parse(arguments: impl IntoIterator<Item = String>) -> Result<Invocation, Stri
             "--dev" => development = true,
             "--print-spec" => print_spec = true,
             // A path is never mistaken for a flag, and an unknown flag is never
-            // mistaken for a path: silently treating `--wathc` as a directory
-            // would report a missing `main.js` instead of the typo.
+            // mistaken for a path: silently treating a mistyped `--watch` as a directory
+            // would report a missing entry file instead of the typo.
             other if other.starts_with('-') => {
                 return Err(format!("unknown flag `{other}`"));
             }
@@ -891,8 +891,8 @@ mod tests {
 
     #[test]
     fn an_unknown_flag_is_reported_rather_than_taken_as_a_path() {
-        let error = parse_args(&["app", "--wathc"]).expect_err("a typo is not a directory");
-        assert!(error.contains("--wathc"), "the message names the flag");
+        let error = parse_args(&["app", "--wtach"]).expect_err("a typo is not a directory");
+        assert!(error.contains("--wtach"), "the message names the flag");
     }
 
     #[test]
