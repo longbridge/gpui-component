@@ -95,9 +95,8 @@ Input::new(&input)
 While the value is masked, the input keeps it out of the clipboard and out of
 the selection: Copy and Cut do nothing (and are disabled in the context menu),
 a word-wise delete takes everything before the caret, and a double click
-selects the whole value instead of one word. This matches `NSSecureTextField`,
-`PasswordBox`, `QLineEdit` and `<input type="password">`. Paste and Select All
-keep working, and revealing the value with `mask_toggle` restores all of them.
+selects the whole value instead of one word. Paste and Select All keep working,
+and revealing the value with `mask_toggle` restores all of them.
 
 ### Input Sizes
 

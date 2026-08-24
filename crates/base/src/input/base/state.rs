@@ -520,8 +520,7 @@ impl<M: InputModeKind> InputBaseState<M> {
 
     /// Whether the user is allowed to copy the selection out.
     ///
-    /// A masked input keeps its value out of the clipboard, the way
-    /// `NSSecureTextField` and `PasswordBox` do.
+    /// A masked input keeps its value out of the clipboard.
     pub fn is_copyable(&self) -> bool {
         !self.selected_range.is_empty() && !self.masked
     }
@@ -3941,7 +3940,7 @@ mod tests {
                     Some("sentinel".to_string())
                 );
 
-                // Cut neither copies nor deletes, matching Chrome and PasswordBox.
+                // Cut neither copies nor deletes.
                 state.cut(&Cut, window, cx);
                 assert_eq!(state.value(), "hunter2");
                 assert_eq!(
