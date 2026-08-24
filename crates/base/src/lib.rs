@@ -111,7 +111,7 @@ pub use macos_accessibility::install_window_hit_test_forwarder;
 #[doc(hidden)]
 pub use measure::measurement_enabled;
 pub use measure::{Measure, measure, measure_if};
-pub use motion::{Interpolate, Transition, TransitionId, transition};
+pub use motion::{Interpolate, Spring, Transition, TransitionId, spring, transition};
 pub use number_input::{
     Decrement, Increment, NumberInput, NumberInputEvent, NumberInputText, NumberStep, StepAction,
     step_value,

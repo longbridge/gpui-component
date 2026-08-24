@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashSet, rc::Rc, sync::Arc, time::Duration};
+use std::{cell::RefCell, collections::HashSet, rc::Rc, sync::Arc};
 
 use gpui::{
     AnyElement, App, AvailableSpace, Bounds, ContentMask, Element, ElementId, GlobalElementId,
@@ -7,18 +7,19 @@ use gpui::{
     Window, div, percentage, prelude::FluentBuilder as _, px, relative, rems, size,
 };
 
-use crate::{
-    ActiveTheme as _, Icon, IconName, Sizable, Size, StyledExt as _, animation::ease_out_cubic,
-    h_flex,
-};
+use crate::{ActiveTheme as _, Icon, IconName, Sizable, Size, StyledExt as _, h_flex};
 use gpui_base::{
     Accordion as BaseAccordion, AccordionHeader as BaseAccordionHeader,
     AccordionItem as BaseAccordionItem, AccordionPanel as BaseAccordionPanel, AccordionTrigger,
-    Transition, transition,
+    Spring, spring,
 };
 
-/// Duration of the expand/collapse animation.
-const ANIMATION_DURATION: Duration = Duration::from_millis(200);
+/// Expand and collapse motion.
+///
+/// Critically damped, so the panel height never overshoots the measured content
+/// height. A panel toggled again mid-flight reverses from its current velocity
+/// instead of restarting.
+const PANEL_SPRING: Spring = Spring::new(0.2, 1.0);
 
 /// Accordion element.
 #[derive(IntoElement)]
@@ -416,10 +417,10 @@ impl RenderOnce for AccordionItem {
             Size::Large => rems(1.0),
             _ => rems(0.875),
         };
-        let progress = transition(
+        let progress = spring(
             (self.index, "accordion-panel"),
             if self.open { 1. } else { 0. },
-            Transition::new(ANIMATION_DURATION).ease(ease_out_cubic),
+            PANEL_SPRING,
             window,
             cx,
         );

@@ -15,7 +15,7 @@ GPUI
 gpui-base
   defines semantic component states
   resolves semantic-state style precedence
-  provides generic value-transition lifecycle
+  provides generic value-transition and spring lifecycle
 
 application or gpui-component
   owns all target styles
@@ -216,6 +216,37 @@ The transition owns lifecycle mechanics only:
 The caller chooses what the value means and applies it to opacity, color,
 geometry, or another interpolatable property.
 
+For a value that can be retargeted while it is still moving, base provides a
+spring instead:
+
+```rust,ignore
+let left = gpui_base::spring(
+    ("tab-indicator", "left"),
+    selected_tab_left,
+    gpui_base::Spring::SNAPPY.with_epsilon(0.1),
+    window,
+    cx,
+);
+```
+
+A spring is keyed, reduced-motion aware, and frame-rate independent in the same
+way a transition is. It differs in what it carries across a target change: a
+transition restarts its easing from the value sampled at that instant, which is
+continuous in position but not in velocity, while a spring preserves velocity
+and turns the value around. Prefer a spring where the target changes faster than
+the motion completes — a toast stack that reflows as toasts arrive, an indicator
+chasing rapid selection changes, a panel toggled again mid-slide — and a
+transition where the target is set once and runs to completion.
+
+`Spring::new(response_seconds, damping_ratio)` builds one from perceptual
+parameters, with `SMOOTH`, `SNAPPY`, and `BOUNCY` as named starting points. A
+damping ratio below `1.0` overshoots, so a spring driving a value with a
+meaningful ceiling — an opacity, a measured height — must be critically damped.
+The settling tolerance is expressed in the target's own units and defaults to a
+normalized `0..1` range; a spring over pixels should coarsen it so the animation
+ends when the remaining travel is sub-pixel rather than running frames that
+change nothing visible.
+
 Deep behavior modules may own configurable motion when it is required to keep
 their internal layout lifecycle coherent. `ToastStack`, for example, combines
 measurement, overlap, expansion, and collapse through `ToastMotion`. This does
@@ -254,6 +285,11 @@ On the first render, the target is adopted immediately. When reduced motion is
 enabled or duration is zero, the target is returned immediately and retained
 transition state is synchronized with it.
 
+A spring resolves the same three moments differently. A target change keeps both
+the current position and the current velocity, so the value decelerates through
+the reversal instead of restarting. The first render adopts the target at rest.
+Reduced motion snaps to the target and clears the stored velocity.
+
 ## Supported Values
 
 `transition` accepts values implementing `Interpolate`, `Clone`, and
@@ -262,6 +298,13 @@ transition state is synchronized with it.
 
 Applications may implement `Interpolate` for their own value types when the
 interpolation is meaningful and deterministic.
+
+`spring` accepts values implementing GPUI's `SpringTarget`, which projects a
+value onto the single scalar coordinate the spring integrates and back again.
+GPUI implements it for `f32`, `Pixels`, `Rems`, and `bool`, the last resolving
+to an `AnimationPhase` that interpolates between two endpoint values. A value
+that needs more than one coordinate — a position, a pair of bounds — uses one
+spring per channel rather than one spring over the composite.
 
 ## Legacy Element Animation
 
@@ -284,5 +327,5 @@ may continue to use its module-qualified API.
 6. Disabled is the last semantic layer.
 7. Part styling is explicit and typed; base does not traverse arbitrary child
    trees to apply styles.
-8. Reduced-motion preferences are honored by generic transitions.
+8. Reduced-motion preferences are honored by generic transitions and springs.
 9. Corner radius is derived from the theme, never written as a literal.

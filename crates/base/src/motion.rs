@@ -4,9 +4,12 @@ use std::{rc::Rc, time::Duration};
 #[cfg(target_family = "wasm")]
 use web_time::Instant;
 
-use gpui::{App, ElementId, SharedString, Window};
+use gpui::{App, ElementId, SharedString, SpringConfig, SpringState, SpringTarget, Window};
 
 use crate::animation::{Lerp, ease_out_cubic};
+
+/// Matches GPUI's own default spring settling tolerance.
+const DEFAULT_SPRING_EPSILON: f32 = 0.001;
 
 /// A value that can be interpolated between two application-owned targets.
 pub trait Interpolate: Clone {
@@ -187,6 +190,154 @@ where
         window.request_animation_frame();
     }
     value
+}
+
+/// A physical spring policy for [`spring`].
+///
+/// A spring is the counterpart to [`Transition`] for values that can be
+/// retargeted while they are still moving. A duration-based transition restarts
+/// its easing from the value sampled at that instant, which is continuous in
+/// position but not in velocity. A spring carries velocity across the retarget,
+/// so a value reversed mid-flight decelerates and turns around instead of
+/// snapping to a new curve's initial speed.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Spring {
+    config: SpringConfig,
+    epsilon: f32,
+}
+
+impl Spring {
+    /// A firm spring that settles without overshooting.
+    pub const SMOOTH: Self = Self::new(0.30, 1.0);
+    /// A quick spring with a slight overshoot.
+    pub const SNAPPY: Self = Self::new(0.25, 0.85);
+    /// A loose spring with a pronounced overshoot.
+    pub const BOUNCY: Self = Self::new(0.35, 0.7);
+
+    /// Builds a spring from a perceptual response time and a damping ratio.
+    ///
+    /// `response_seconds` is the period one full oscillation would take without
+    /// damping; smaller values feel faster. `damping_ratio` is `1.0` for a
+    /// spring that stops exactly at its target, below `1.0` to overshoot, and
+    /// above `1.0` to approach slowly.
+    pub const fn new(response_seconds: f32, damping_ratio: f32) -> Self {
+        let frequency = std::f32::consts::TAU / response_seconds;
+        Self::from_config(SpringConfig::new(
+            frequency * frequency,
+            2.0 * damping_ratio * frequency,
+            1.0,
+        ))
+    }
+
+    /// Builds a spring from stiffness, damping, and mass directly.
+    pub const fn from_config(config: SpringConfig) -> Self {
+        Self {
+            config,
+            epsilon: DEFAULT_SPRING_EPSILON,
+        }
+    }
+
+    /// Sets the settling tolerance, expressed in the target's own units.
+    ///
+    /// The default suits targets that move within a normalized `0..1` range. A
+    /// spring over pixels settles perceptibly sooner with a coarser tolerance,
+    /// which also ends the animation frames that the remaining sub-pixel motion
+    /// would otherwise request.
+    pub const fn with_epsilon(mut self, epsilon: f32) -> Self {
+        self.epsilon = epsilon;
+        self
+    }
+
+    /// Returns the underlying physical parameters.
+    pub fn config(&self) -> SpringConfig {
+        self.config
+    }
+
+    /// Returns the settling tolerance.
+    pub fn epsilon(&self) -> f32 {
+        self.epsilon
+    }
+}
+
+#[derive(Clone, Copy)]
+struct SpringTransition {
+    state: SpringState,
+    target: f32,
+    updated_at: Instant,
+}
+
+/// Returns the current value for a spring travelling toward `target`.
+///
+/// State is keyed by `id` exactly as [`transition`] keys its own. The first
+/// value is adopted immediately; later target changes preserve both the current
+/// position and the current velocity, so an interrupted spring is redirected
+/// rather than restarted.
+///
+/// Call this while rendering an element, where GPUI keyed element state is
+/// available. A channel id must identify one value within that element.
+pub fn spring<T>(
+    id: impl Into<TransitionId>,
+    target: T,
+    policy: Spring,
+    window: &mut Window,
+    cx: &mut App,
+) -> T::Output
+where
+    T: SpringTarget,
+{
+    let id: ElementId = id.into().into();
+    let now = cx.background_executor().now();
+    let target_position = target.target();
+    let state = window.use_keyed_state(id, cx, |_, _| SpringTransition {
+        state: SpringState {
+            position: target_position,
+            velocity: 0.0,
+        },
+        target: target_position,
+        updated_at: now,
+    });
+
+    let snapshot = *state.read(cx);
+    let settle = |state: &mut SpringTransition| {
+        state.state = SpringState {
+            position: target_position,
+            velocity: 0.0,
+        };
+        state.target = target_position;
+        state.updated_at = now;
+    };
+
+    if cx.reduce_motion() {
+        if snapshot.state.position != target_position || snapshot.state.velocity != 0.0 {
+            state.update(cx, |state, _| settle(state));
+        }
+        return target.resolve(target_position);
+    }
+
+    // Advance over the frame that just elapsed, which the previous target
+    // governed, before adopting the new one for the frame to come.
+    let elapsed = now
+        .saturating_duration_since(snapshot.updated_at)
+        .as_secs_f32();
+    let stepped = policy.config.step(snapshot.state, snapshot.target, elapsed);
+
+    if policy
+        .config
+        .is_settled(stepped, target_position, policy.epsilon)
+    {
+        if snapshot.state.position != target_position || snapshot.state.velocity != 0.0 {
+            state.update(cx, |state, _| settle(state));
+        }
+        return target.resolve(target_position);
+    }
+
+    state.update(cx, |state, _| {
+        state.state = stepped;
+        state.target = target_position;
+        state.updated_at = now;
+    });
+    window.request_animation_frame();
+    target.resolve(stepped.position)
 }
 
 #[cfg(test)]
@@ -392,6 +543,152 @@ mod tests {
         cx.update(|cx| cx.set_reduce_motion(true));
         let duration = Duration::from_millis(100);
         let fixture = Fixture::open(cx, duration);
+        assert_eq!(fixture.render(cx, 1.0), 1.0);
+        assert_eq!(fixture.pending_frame(cx), 0);
+    }
+
+    struct SpringView {
+        target: Rc<Cell<f32>>,
+        policy: Spring,
+        samples: Rc<RefCell<Vec<f32>>>,
+    }
+
+    impl Render for SpringView {
+        fn render(
+            &mut self,
+            window: &mut Window,
+            cx: &mut gpui::Context<Self>,
+        ) -> impl IntoElement {
+            self.samples.borrow_mut().push(spring(
+                ("spring-test", "value"),
+                self.target.get(),
+                self.policy,
+                window,
+                cx,
+            ));
+            Empty
+        }
+    }
+
+    struct SpringFixture {
+        window: WindowHandle<SpringView>,
+        target: Rc<Cell<f32>>,
+        samples: Rc<RefCell<Vec<f32>>>,
+    }
+
+    impl SpringFixture {
+        fn open(cx: &mut TestAppContext, policy: Spring) -> Self {
+            let target = Rc::new(Cell::new(0.0));
+            let samples = Rc::new(RefCell::new(Vec::new()));
+            let window = cx.open_window(size(px(100.), px(100.)), {
+                let target = target.clone();
+                let samples = samples.clone();
+                move |_, _| SpringView {
+                    target,
+                    policy,
+                    samples,
+                }
+            });
+            cx.run_until_parked();
+            Self {
+                window,
+                target,
+                samples,
+            }
+        }
+
+        fn render(&self, cx: &mut TestAppContext, target: f32) -> f32 {
+            self.target.set(target);
+            self.window
+                .update(cx, |_, window, _| window.refresh())
+                .unwrap();
+            cx.run_until_parked();
+            *self.samples.borrow().last().unwrap()
+        }
+
+        fn advance(&self, cx: &mut TestAppContext, millis: u64, target: f32) -> f32 {
+            cx.executor().advance_clock(Duration::from_millis(millis));
+            self.render(cx, target)
+        }
+
+        fn pending_frame(&self, cx: &mut TestAppContext) -> usize {
+            self.window
+                .update(cx, |_, window, cx| window.simulate_next_frame(cx))
+                .unwrap()
+        }
+    }
+
+    #[gpui::test]
+    fn a_spring_adopts_its_first_target_immediately(cx: &mut TestAppContext) {
+        let fixture = SpringFixture::open(cx, Spring::SMOOTH);
+        assert_eq!(*fixture.samples.borrow().first().unwrap(), 0.0);
+    }
+
+    #[gpui::test]
+    fn a_spring_travels_toward_its_target_over_time(cx: &mut TestAppContext) {
+        let fixture = SpringFixture::open(cx, Spring::SMOOTH);
+        assert_eq!(fixture.render(cx, 1.0), 0.0);
+
+        let early = fixture.advance(cx, 50, 1.0);
+        let late = fixture.advance(cx, 50, 1.0);
+        assert!(
+            0.0 < early && early < late && late < 1.0,
+            "expected monotonic approach, got {early} then {late}"
+        );
+    }
+
+    #[gpui::test]
+    fn a_reversed_spring_keeps_its_momentum_before_turning_around(cx: &mut TestAppContext) {
+        let fixture = SpringFixture::open(cx, Spring::SMOOTH);
+        fixture.render(cx, 1.0);
+        let reversed_at = fixture.advance(cx, 100, 1.0);
+
+        // Retarget mid-flight. A duration-based transition restarts its easing
+        // here and moves away from 1.0 on the very next frame.
+        assert_eq!(fixture.render(cx, 0.0), reversed_at);
+
+        let next = fixture.advance(cx, 16, 0.0);
+        assert!(
+            next > reversed_at,
+            "expected the spring to carry its velocity past {reversed_at}, got {next}"
+        );
+
+        assert_eq!(fixture.advance(cx, 1_000, 0.0), 0.0);
+    }
+
+    #[gpui::test]
+    fn a_bouncy_spring_overshoots_its_target(cx: &mut TestAppContext) {
+        let fixture = SpringFixture::open(cx, Spring::BOUNCY);
+        fixture.render(cx, 1.0);
+        for _ in 0..30 {
+            fixture.advance(cx, 16, 1.0);
+        }
+
+        let peak = fixture
+            .samples
+            .borrow()
+            .iter()
+            .copied()
+            .fold(f32::MIN, f32::max);
+        assert!(peak > 1.0, "expected an overshoot past 1.0, got {peak}");
+    }
+
+    #[gpui::test]
+    fn a_settled_spring_stops_requesting_frames(cx: &mut TestAppContext) {
+        let fixture = SpringFixture::open(cx, Spring::SMOOTH);
+        fixture.render(cx, 1.0);
+        assert_eq!(fixture.pending_frame(cx), 1);
+
+        assert_eq!(fixture.advance(cx, 2_000, 1.0), 1.0);
+        fixture.pending_frame(cx);
+        cx.run_until_parked();
+        assert_eq!(fixture.pending_frame(cx), 0);
+    }
+
+    #[gpui::test]
+    fn reduced_motion_adopts_the_spring_target_without_requesting_a_frame(cx: &mut TestAppContext) {
+        cx.update(|cx| cx.set_reduce_motion(true));
+        let fixture = SpringFixture::open(cx, Spring::BOUNCY);
         assert_eq!(fixture.render(cx, 1.0), 1.0);
         assert_eq!(fixture.pending_frame(cx), 0);
     }
