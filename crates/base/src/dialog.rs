@@ -4,10 +4,10 @@ use std::{
 };
 
 use gpui::{
-    AnyElement, App, ClickEvent, FocusHandle, InteractiveElement as _, IntoElement, KeyBinding,
-    MouseButton, ParentElement, Pixels, RenderOnce, Role, StatefulInteractiveElement as _,
-    StyleRefinement, Styled, Window, anchored, deferred, div, point, prelude::FluentBuilder as _,
-    px,
+    AnyElement, App, ClickEvent, FocusHandle, Global, InteractiveElement as _, IntoElement,
+    KeyBinding, MouseButton, ParentElement, Pixels, RenderOnce, Role,
+    StatefulInteractiveElement as _, StyleRefinement, Styled, WeakFocusHandle, Window, anchored,
+    deferred, div, point, prelude::FluentBuilder as _, px,
 };
 use smallvec::SmallVec;
 
@@ -365,6 +365,40 @@ impl RenderOnce for DialogClose {
     }
 }
 
+/// Topmost dialog hosts that did not contain the window focus on the previous frame.
+///
+/// `contains_focused` can only see the dispatch tree of the last rendered frame, so
+/// anything focused during this frame is not in it yet and reads as "outside" — a
+/// dialog on the frame it opens, or an input that just appeared inside one. Waiting
+/// for a second consecutive frame lets the tree catch up, so only focus that is
+/// genuinely elsewhere is reclaimed.
+#[derive(Default)]
+struct EscapedHosts(Vec<WeakFocusHandle>);
+
+impl Global for EscapedHosts {}
+
+impl EscapedHosts {
+    /// Records `focus` as looking escaped, returning whether it already did last frame.
+    fn mark(focus: &FocusHandle, cx: &mut App) -> bool {
+        let hosts = &mut cx.default_global::<Self>().0;
+        hosts.retain(|host| host.upgrade().is_some());
+        let host = focus.downgrade();
+        if hosts.contains(&host) {
+            return true;
+        }
+        hosts.push(host);
+        false
+    }
+
+    /// Forgets `focus`, which holds the window focus again (or no longer owns it).
+    fn clear(focus: &FocusHandle, cx: &mut App) {
+        let host = focus.downgrade();
+        cx.default_global::<Self>()
+            .0
+            .retain(|other| *other != host && other.upgrade().is_some());
+    }
+}
+
 impl Dialog {
     pub fn new(cx: &mut App) -> Self {
         Self {
@@ -478,8 +512,13 @@ impl RenderOnce for Dialog {
         }
         // A modal owns the window focus: reclaim it when focus escapes, or
         // Confirm/Cancel (dispatched along the focus path) silently miss this host.
-        if self.topmost && !self.focus.contains_focused(window, cx) {
+        // Escaping is only believed once it survives a frame, see `EscapedHosts`.
+        if !self.topmost || self.focus.contains_focused(window, cx) {
+            EscapedHosts::clear(&self.focus, cx);
+        } else if EscapedHosts::mark(&self.focus, cx) {
             window.focus(&self.focus, cx);
+        } else {
+            window.request_animation_frame();
         }
         let request_close = self.request_close;
         let cancel = self.on_cancel.clone();
@@ -620,5 +659,152 @@ mod tests {
             &*changes.borrow(),
             &[(true, DialogChangeReason::TriggerPress)]
         );
+    }
+
+    struct FocusHarness {
+        handle: DialogHandle,
+        dialog_focus: FocusHandle,
+        inner_focus: FocusHandle,
+        swapped_focus: FocusHandle,
+        outside_focus: FocusHandle,
+        swapped: bool,
+    }
+    impl Render for FocusHarness {
+        fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+            let content = if self.swapped {
+                div().track_focus(&self.swapped_focus)
+            } else {
+                div().track_focus(&self.inner_focus)
+            };
+            div()
+                .child(div().track_focus(&self.outside_focus).size(px(10.)))
+                .child(
+                    Dialog::new(cx)
+                        .handle(self.handle.clone())
+                        .focus_handle(self.dialog_focus.clone())
+                        .child(content.size(px(50.))),
+                )
+        }
+    }
+
+    fn focus_harness(
+        cx: &mut gpui::TestAppContext,
+        handle: DialogHandle,
+    ) -> (&mut gpui::VisualTestContext, gpui::Entity<FocusHarness>) {
+        cx.update(|cx| crate::focus_trap::init(cx));
+        let (view, cx) = cx.add_window_view(move |_, cx| FocusHarness {
+            handle,
+            dialog_focus: cx.focus_handle(),
+            inner_focus: cx.focus_handle(),
+            swapped_focus: cx.focus_handle(),
+            outside_focus: cx.focus_handle(),
+            swapped: false,
+        });
+        (cx, view)
+    }
+
+    fn draw(cx: &mut gpui::VisualTestContext) {
+        cx.update(|window, cx| {
+            window.draw(cx).clear(cx);
+        });
+    }
+
+    /// Callers open a dialog and immediately hand focus to an input inside it.
+    /// Neither the host nor that input has been in a dispatch tree yet, so the
+    /// modal must not read that as "focus escaped" on the frame it first renders.
+    #[gpui::test]
+    fn content_focused_before_first_frame_keeps_focus(cx: &mut gpui::TestAppContext) {
+        let handle = DialogHandle::new(false);
+        let (cx, view) = focus_harness(cx, handle.clone());
+        let (dialog_focus, inner_focus) = cx.update(|_, cx| {
+            let this = view.read(cx);
+            (this.dialog_focus.clone(), this.inner_focus.clone())
+        });
+
+        // A frame while the dialog is still closed: neither handle is in the tree.
+        draw(cx);
+
+        // `Root::open_dialog` focuses the host, then the caller focuses the input.
+        cx.update(|window, cx| {
+            handle.open(window, cx);
+            window.focus(&dialog_focus, cx);
+            window.focus(&inner_focus, cx);
+            window.draw(cx).clear(cx);
+        });
+        cx.update(|window, _| {
+            assert!(
+                inner_focus.is_focused(window),
+                "dialog stole focus from its own content on the frame it opened"
+            );
+        });
+
+        // And it must stay there once the tree knows about both.
+        draw(cx);
+        cx.update(|window, _| {
+            assert!(
+                inner_focus.is_focused(window),
+                "dialog stole focus from its own content on a later frame"
+            );
+        });
+    }
+
+    /// An input that appears inside an already open dialog is just as new to the
+    /// dispatch tree — a second-factor field replacing a password field.
+    #[gpui::test]
+    fn content_focused_as_it_appears_keeps_focus(cx: &mut gpui::TestAppContext) {
+        let handle = DialogHandle::new(true);
+        let (cx, view) = focus_harness(cx, handle);
+        let swapped_focus = cx.update(|_, cx| view.read(cx).swapped_focus.clone());
+
+        draw(cx);
+        draw(cx);
+
+        // Swap the field in and focus it in one go, as the caller does.
+        cx.update(|window, cx| {
+            view.update(cx, |this, cx| {
+                this.swapped = true;
+                cx.notify();
+            });
+            window.focus(&swapped_focus, cx);
+            window.draw(cx).clear(cx);
+        });
+        cx.update(|window, _| {
+            assert!(
+                swapped_focus.is_focused(window),
+                "dialog stole focus from an input that had just appeared inside it"
+            );
+        });
+    }
+
+    /// Focus that genuinely leaves the modal is still reclaimed, or the footer's
+    /// `Confirm`/`Cancel` never reach this host.
+    #[gpui::test]
+    fn focus_escaping_to_another_element_is_reclaimed(cx: &mut gpui::TestAppContext) {
+        let handle = DialogHandle::new(true);
+        let (cx, view) = focus_harness(cx, handle);
+        let (dialog_focus, outside_focus) = cx.update(|_, cx| {
+            let this = view.read(cx);
+            (this.dialog_focus.clone(), this.outside_focus.clone())
+        });
+
+        cx.update(|window, cx| {
+            window.focus(&dialog_focus, cx);
+            window.draw(cx).clear(cx);
+        });
+        draw(cx);
+
+        // Something outside the modal takes focus, the way a deferred
+        // focus scheduled elsewhere does after the dialog is already open.
+        cx.update(|window, cx| {
+            window.focus(&outside_focus, cx);
+            window.draw(cx).clear(cx);
+            window.draw(cx).clear(cx);
+        });
+        cx.update(|window, _| {
+            assert!(
+                dialog_focus.is_focused(window),
+                "dialog did not reclaim focus that escaped it"
+            );
+        });
     }
 }
