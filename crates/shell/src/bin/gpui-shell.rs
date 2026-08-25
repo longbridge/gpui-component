@@ -697,7 +697,21 @@ fn watch_sources(
     cx.spawn(async move |cx| {
         loop {
             cx.background_executor().timer(POLL_INTERVAL).await;
-            if !watcher.poll() {
+
+            // Scanned off the foreground for the same reason the embedded
+            // watcher does it: a bounded walk is still one `stat` per source
+            // file four times a second, and on a slow directory that is a
+            // periodic stall a user feels as the window hitching.
+            let (changed, scanned) = cx
+                .background_executor()
+                .spawn(async move {
+                    let changed = watcher.poll();
+                    (changed, watcher)
+                })
+                .await;
+            watcher = scanned;
+
+            if !changed {
                 continue;
             }
 

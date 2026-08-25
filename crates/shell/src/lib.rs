@@ -4,11 +4,33 @@
 //! capabilities; the script owns composition, presentation and business logic. See
 //! `docs/gpui-shell.md` for the design this implements.
 
+// # The surface a host may rely on
+//
+// Everything below is reachable, and not everything below is a promise. A
+// module that is `pub` because something across a crate boundary needs one item
+// from it is not thereby a stable interface, and saying so here is cheaper than
+// discovering it in a changelog.
+//
+// **Host surface.** `init`, the `set_*` entry points and `on_exit_request` at
+// the root; `capability`, `native`, `plugin`, `plugin_api`, `dock`, `root`,
+// `theme`, `view`, `watch`, `typings`, `metrics`, `snapshot`, `error`. These
+// exist for an embedder and change with notice.
+//
+// **Reachable, not promised.** `engine` is the seam and its shape follows
+// whatever is behind it. `scope` is here because a native module needs the
+// ambient `App` and there is no other way to reach it. `assets` and `style`
+// are here for the binary in this package, which is a separate crate. `spec`
+// and `materialize` are here so a test outside the crate can measure and assert
+// on a description without a GPU — they describe an internal representation and
+// will move when it does.
+//
+// **Not reachable at all.** `value` and `entities`: a `Bridged` and an entity
+// handle are the runtime talking to itself.
 pub mod assets;
 pub mod capability;
 pub mod dock;
 pub mod engine;
-pub mod entities;
+pub(crate) mod entities;
 pub mod error;
 pub mod materialize;
 pub mod metrics;
@@ -23,7 +45,7 @@ pub mod spec;
 pub mod style;
 pub mod theme;
 pub mod typings;
-pub mod value;
+pub(crate) mod value;
 pub mod view;
 pub mod watch;
 

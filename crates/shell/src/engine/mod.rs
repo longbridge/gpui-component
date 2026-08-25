@@ -1,14 +1,13 @@
-//! The scripting engine seam.
+//! Where the scripting engine is confined.
 //!
-//! Everything above this module — the spec arena, the materializer, the call
-//! scope, the style table, the theme, the capability model — is engine
-//! independent. Only this module knows what a script value is.
+//! Everything above this module — the snapshot, the spec arena, the
+//! materializer, the call scope, the style table, the theme, the capability
+//! model — is engine independent. Only this module knows what a script value is.
 //!
-//! # The contract
+//! # The surface the rest of the crate calls
 //!
-//! An engine module must expose one type, `ShellRuntime`, with exactly this
-//! surface. The rest of the crate calls nothing else, which is what makes the
-//! engine replaceable:
+//! One type, `ShellRuntime`, with exactly this shape. Nothing outside this
+//! directory calls anything else:
 //!
 //! ```text
 //! ShellRuntime::new() -> anyhow::Result<Rc<Self>>
@@ -46,34 +45,60 @@
 //! about the *application*, not about the interpreter, so it lives in
 //! [`crate::capability`] where an engine can read it and cannot answer it.
 //!
-//! plus the associated handle types `ViewType` and `ViewObject`, which are
-//! opaque to every caller.
+//! plus the handle types `ViewType` and `ViewObject`, which every caller treats
+//! as opaque — though nothing in the type system makes them so, which is part of
+//! the point below.
 //!
 //! `arena_mut` is the *scratch* arena the script builder records into during a
 //! `build_snapshot` call. It is reset at the start of every build and taken at
 //! the end; nothing outside a build should read it. Published descriptions live
 //! in [`crate::snapshot::RenderSnapshot`].
 //!
-//! # The one invariant an engine must not break
+//! # The one rule this boundary enforces
 //!
 //! `build_snapshot` is the only entry into the script's `render`, and nothing
-//! calls it per frame. An engine that renders opportunistically — on a repaint,
-//! on a hover, on a timer — would put script cost back on GPUI's frame budget,
-//! which is the coupling this seam exists to prevent. `script_renders` is the
-//! counter that lets a test prove it did not happen.
+//! calls it per frame. Rendering opportunistically — on a repaint, on a hover,
+//! on a timer — would put script cost back on GPUI's frame budget, which is the
+//! coupling the whole design exists to prevent. `metrics().script_renders()` is
+//! the counter, and benchmark C is the test that fails rather than merely
+//! getting slower.
 //!
-//! # Why the seam exists
+//! # What this seam is, and what it is not
+//!
+//! It is a **dependency isolation layer**, and calling it a replaceable-engine
+//! contract would be flattering it. `ShellRuntime`, `ViewObject` and `ViewType`
+//! are re-exports of QuickJS types, not associated types behind a trait; adding
+//! a second engine would mean editing this file, matching a structural surface
+//! nothing checks, and discovering by compile error which of the two dozen
+//! entry points above it had missed. That is a port, not an implementation of a
+//! contract.
+//!
+//! What the isolation does buy is real, and is the reason to keep it:
+//!
+//! * **No module above this one names a script value.** Not the snapshot, the
+//!   spec arena, the materializer, the call scope, the style table, the theme,
+//!   the capability model, the dock, or hot reload. A change to the engine has a
+//!   blast radius you can see from the directory listing.
+//! * **Host configuration cannot be quietly dropped.** Capabilities live above
+//!   the seam entirely, and `set_store_path` and `set_development_mode` are
+//!   entries here with no fallback compiled in — an engine either provides them
+//!   or does not build. An earlier arrangement had silent no-ops, which meant a
+//!   second engine could ignore the security configuration without a word.
+//! * **The render-frequency rule has one enforcement point.** `build_snapshot`
+//!   is the only entry into script `render`, and benchmark C fails if a repaint
+//!   ever reaches it.
+//!
+//! Making it an actual contract — an internal trait with associated opaque
+//! handles, and a minimal fake engine to compile the contract against — is worth
+//! doing when there is a second engine to write, and is make-work before that.
+//! The honest description today is the one above.
+//!
+//! # Why the engine was worth isolating at all
 //!
 //! The engine choice is the one decision in this runtime that cannot be
 //! validated on paper: per-call cost across the language boundary decides
 //! whether the whole approach is viable (see `docs/gpui-shell.md` §20). QuickJS
 //! is what ships, because application code reads better in JavaScript.
-//!
-//! The seam is not speculative generality. Everything above it — the snapshot,
-//! the spec arena, the materializer, the call scope, the style table, the theme,
-//! the capability model — is written against the contract rather than against
-//! QuickJS, which is what would make a second engine a new module instead of a
-//! rewrite. Nothing outside this module names a script value.
 
 #[cfg(not(feature = "quickjs"))]
 compile_error!("enable a scripting engine: `quickjs` is the default and the only one today");

@@ -56,13 +56,13 @@
 use std::{path::PathBuf, rc::Rc, time::Duration};
 
 use gpui::{
-    App, AppContext as _, Context, Entity, FocusHandle, Focusable, Hsla, InteractiveElement as _,
-    IntoElement, ParentElement, Render, SharedString, StatefulInteractiveElement as _, Styled,
-    Window, div, prelude::FluentBuilder as _, px, relative, rems,
+    App, AppContext as _, Context, Entity, FocusHandle, Focusable, Hsla, IntoElement,
+    ParentElement, Render, SharedString, Styled, Window, div, prelude::FluentBuilder as _, px,
+    relative, rems,
 };
 use gpui_component::{
     ActiveTheme as _, Colorize as _, Disableable as _, Sizable as _, StyledExt as _,
-    button::Button,
+    button::{Button, ButtonVariants as _},
     h_flex,
     label::Label,
     tab::{Tab, TabBar},
@@ -960,15 +960,22 @@ impl ShellStory {
         let watched = quote.watched;
         let moved = direction_color(quote.direction(), cx);
 
-        h_flex()
-            .id(SharedString::from(format!("quote-{symbol}")))
+        // A `Button`, not a clickable `h_flex`. The script half is one, and a
+        // comparison between a row you can Tab to and a row you cannot is not a
+        // comparison of the two renderers — it is a comparison of one of them
+        // against something that is not a control. Base gives it focus,
+        // Enter/Space, the role and the focus ring; the appearance is still
+        // entirely ours.
+        Button::new(SharedString::from(format!("quote-{symbol}")))
+            .ghost()
+            .accessibility_label(format!("Watch {}", quote.name))
+            .flex()
             .w_full()
             .items_center()
             .gap(rems(ROW_INSET))
             .px(rems(ROW_INSET))
             .py(rems(ROW_PADDING))
             .rounded(cx.theme().radius)
-            .hover(|this| this.bg(cx.theme().muted))
             .on_click(cx.listener(move |this, _, _, cx| {
                 let symbol = symbol.clone();
                 this.market.update(cx, |market, cx| {

@@ -12,6 +12,8 @@
 
 use std::rc::{Rc, Weak};
 
+use smallvec::SmallVec;
+
 use gpui::{
     AnyElement, App, InteractiveElement, IntoElement, MouseButton, ParentElement, Refineable as _,
     SharedString, StatefulInteractiveElement, StyleRefinement, Styled, Window, div,
@@ -29,6 +31,13 @@ use crate::{
     style,
     value::Bridged,
 };
+
+/// The children of one node, inline until there are more than a row's worth.
+///
+/// Eight because a quote row is six cells and a wrapper, which is the widest
+/// ordinary shape; past that the spill is one allocation for a node that was
+/// always going to be expensive.
+type Children = SmallVec<[AnyElement; 8]>;
 
 /// Behavior collected from a node's ops, applied after styling.
 /// Style refinements that apply only in a runtime state.
@@ -128,7 +137,11 @@ fn materialize_node(
     let (refinement, behavior, states) = resolve_ops(arena, node);
     let inherited = refinement.text.color.unwrap_or(inherited);
 
-    let children: Vec<AnyElement> = node
+    // `SmallVec` rather than `Vec`: this runs per node, per frame, and the
+    // overwhelming majority of nodes have a handful of children or none. A
+    // heap allocation for each of them is a cost the snapshot was supposed to
+    // remove, arriving one layer down.
+    let children: Children = node
         .children()
         .iter()
         .map(|child| materialize_node(runtime, arena, *child, inherited, window, cx))
@@ -267,7 +280,7 @@ fn materialize_node(
     }
 }
 
-fn finish<E>(mut element: E, refinement: StyleRefinement, children: Vec<AnyElement>) -> AnyElement
+fn finish<E>(mut element: E, refinement: StyleRefinement, children: Children) -> AnyElement
 where
     E: Styled + ParentElement + IntoElement + 'static,
 {
@@ -322,7 +335,7 @@ fn flex_element(
     refinement: StyleRefinement,
     behavior: Behavior,
     states: StateStyles,
-    children: Vec<AnyElement>,
+    children: Children,
 ) -> AnyElement {
     let element = with_hover(element, &states);
     if behavior.key.is_none() && !states.needs_identity() {

@@ -547,6 +547,15 @@ only entry into script `render`, and nothing calls it per frame (§8.4). An engi
 that rendered opportunistically would put script cost back on the frame budget.
 Benchmark C (§20.3) is what catches it.
 
+**And it is dependency isolation, not a replaceable-engine contract.**
+`ShellRuntime`, `ViewObject` and `ViewType` are re-exports of concrete QuickJS
+types rather than associated types behind a trait, so adding a second engine
+means editing `engine/mod.rs` and matching a structural surface nothing checks —
+a port, not an implementation. The isolation is still worth its keep: nothing
+above the directory names a script value, and host configuration either has an
+entry here or fails to build. Making it a real contract, with a fake engine to
+compile against, is work for when there is a second engine to write.
+
 **Host configuration crosses this line in one direction only.** The grant used to
 live inside the QuickJS module, with the crate root calling into it and a silent
 no-op compiled in for any other build — so a second engine could compile, run,
@@ -2890,6 +2899,7 @@ reopened without new information.
 | **Script render couples to frame rate again.** A repaint that enters the VM puts the whole description cost on the frame budget | Fatal | Prevented by the snapshot lifecycle (§8.4) and asserted by benchmark C plus `tests/snapshot.rs` (§20.3). It is a regression test rather than a convention precisely because the coupling is easy to reintroduce and invisible until it is a frame-rate problem |
 | **Presentation authority in script means uneven interface quality** | High | Mitigated by the default palette and by `examples/js_todolist/ui.js` as a worked example; a shipped preset (§13.4) and a `gpui-component` module (§14.6) are the real answers |
 | **Bindings drift from upstream** | High | The style surface is immune by construction; component bindings have no drift check at all (§14.5) |
+| **One thread, one runtime.** The capability grant, the store, the exit handler and the native module registry are thread state; two runtimes would share the last installer's policy | Medium | **Enforced, not documented.** `ShellRuntime::new` refuses a second one with a sentence saying why. Binding the state to the runtime would not have been the fix: per-plugin grants are a *within*-runtime problem, so when the plugin model gets a host driving it this state has to become per-call-context — which is the same work either way |
 | **Cycles across two collectors leak** | Medium | Render-bound callbacks are retired with their snapshot and long-lived ones are owner-bound (§7.4); retained state is a per-runtime `EntityStore` that drops with the runtime. The one global left is the native module registry, whose closures hold host entity handles — a host clears it with `clear_native_modules` when it goes away, and GPUI's leak check catches a host that forgets |
 | **A symlink escape from a filesystem grant** | Fatal | **Closed.** The resolver returns an open directory handle rather than a path, and every operation runs against it, so no name is resolved twice — `cap-std`, which is `openat2(RESOLVE_BENEATH)` on Linux and a per-component `openat` walk elsewhere. Two earlier attempts were not enough: comparing strings missed a link entirely, and comparing strings then canonicalizing caught a link that was already there but not one planted between the check and the syscall. `a_symlink_planted_after_the_check_is_still_refused` is the test for the case neither could cover |
 | **Sandbox escape**, with `Eval`, quickjs-libc, and prototype pollution as the largest surfaces | High | quickjs-libc is not compiled in; prototypes are frozen; every compiler path is closed at the JavaScript level, but the stronger intrinsic-level fix is not done (§19.1). The escape suite is real and asserts on messages |

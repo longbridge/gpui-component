@@ -64,13 +64,25 @@ pub fn capabilities() -> Capabilities {
     crate::capability::installed()
 }
 
-/// Points `gpui.store` at its backing file.
+/// Points `gpui.store` at its backing file, and reads it.
 ///
 /// Each application gets its own file so one cannot read another's settings
 /// (§17.3). Setting it drops whatever the previous application had cached, so a
 /// reload cannot serve stale values from the file it no longer owns.
+///
+/// **The read happens here, not on first use.** Loading lazily put a synchronous
+/// file read wherever the script first touched the store — `init`, or worse
+/// `render` — so a slow disk or a network home directory stalled a frame. A host
+/// calls this during start-up, before a window exists, where the same read
+/// delays a launch instead. That is the one place in this surface where blocking
+/// is the right answer rather than the easy one.
+///
+/// A failure is kept rather than raised: the host has no interface yet to report
+/// it on, and the script gets the message the first time it asks.
 pub fn set_store_path(path: PathBuf) {
-    STORE.with_borrow_mut(|store| *store = Some(Store::new(path)));
+    let mut store = Store::new(path);
+    store.warm = Some(store.load());
+    STORE.with_borrow_mut(|current| *current = Some(store));
 }
 
 /// The context argument is the engine's; the sub-objects are built from the
@@ -311,6 +323,9 @@ fn access_key(access: Access) -> &'static str {
 struct Store {
     path: PathBuf,
     values: Option<serde_json::Map<String, Json>>,
+    /// The outcome of the read done when the path was set, so the first script
+    /// call gets the answer rather than the syscall.
+    warm: Option<Result<serde_json::Map<String, Json>, String>>,
     /// Mutated since the last write was scheduled.
     dirty: bool,
     /// A write is on its way to the disk. One at a time, so a burst of `set`
@@ -324,6 +339,7 @@ impl Store {
         Self {
             path,
             values: None,
+            warm: None,
             dirty: false,
             writing: false,
         }
@@ -334,22 +350,34 @@ impl Store {
     /// a user's settings is worse than refusing to start.
     fn values(&mut self) -> Result<&mut serde_json::Map<String, Json>, String> {
         if self.values.is_none() {
-            self.values = Some(match std::fs::read(&self.path) {
-                Ok(bytes) => serde_json::from_slice(&bytes).map_err(|error| {
-                    format!(
-                        "`{}` is not a valid store file: {error}",
-                        self.path.display()
-                    )
-                })?,
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                    serde_json::Map::new()
-                }
-                Err(error) => {
-                    return Err(format!("cannot read `{}`: {error}", self.path.display()));
-                }
-            });
+            // Whatever [`set_store_path`] read at start-up. The fallback covers
+            // a host that never called it, which is already an error the store
+            // reports elsewhere — it must not also become a panic.
+            let loaded = match self.warm.take() {
+                Some(loaded) => loaded,
+                None => self.load(),
+            };
+            self.values = Some(loaded?);
         }
         Ok(self.values.as_mut().expect("just populated"))
+    }
+
+    /// Reads the file. A missing one is an empty store — a first run is not an
+    /// error. A malformed one is an error, because silently discarding a user's
+    /// settings is worse than refusing to start.
+    fn load(&self) -> Result<serde_json::Map<String, Json>, String> {
+        match std::fs::read(&self.path) {
+            Ok(bytes) => serde_json::from_slice(&bytes).map_err(|error| {
+                format!(
+                    "`{}` is not a valid store file: {error}",
+                    self.path.display()
+                )
+            }),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                Ok(serde_json::Map::new())
+            }
+            Err(error) => Err(format!("cannot read `{}`: {error}", self.path.display())),
+        }
     }
 
     /// Encodes the current values, for a write that will happen elsewhere.

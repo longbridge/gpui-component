@@ -343,11 +343,25 @@ pub fn reload_in_debug(
         loop {
             cx.background_executor().timer(POLL_INTERVAL).await;
 
+            // The scan runs on a background thread. It is bounded — depth 8,
+            // 4,096 files — but that bound is a `stat` per source file, four
+            // times a second, and on a slow directory that is a steady periodic
+            // stall in a place a user would experience as the window hitching.
+            // Only the answer comes back.
+            let (changed, scanned) = cx
+                .background_executor()
+                .spawn(async move {
+                    let changed = watcher.poll();
+                    (changed, watcher)
+                })
+                .await;
+            watcher = scanned;
+
             let (Some(runtime), Some(view)) = (runtime.upgrade(), view.upgrade()) else {
                 break;
             };
 
-            if !watcher.poll() {
+            if !changed {
                 continue;
             }
 

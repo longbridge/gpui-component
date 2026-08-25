@@ -233,13 +233,18 @@ QuickJS is what ships, via `rquickjs`, and is the only engine today. JavaScript
 is the choice because application code reads better in it and the language is
 more widely known.
 
-The seam is not speculative generality. The engine choice is the one decision in
-this runtime that cannot be validated on paper — per-call cost across the
-language boundary decides whether the whole approach is viable (design document
-§20) — so everything above the seam was written against the contract rather than
-against QuickJS. A second engine would be a new module under `engine/` rather
-than a rewrite, and `tests/benchmark.rs` is what would decide whether to add
-one.
+**Call it dependency isolation, not a replaceable-engine contract.**
+`ShellRuntime` and the two handle types are re-exports of QuickJS types, not
+associated types behind a trait, so a second engine would be a port rather than
+an implementation of something already written down.
+
+What the isolation buys is still worth having: no module above `engine/` names a
+script value, host configuration cannot be silently dropped by an engine that
+does not implement it, and `build_snapshot` is the single enforcement point for
+the rule that a repaint never enters the VM. Turning it into an actual contract —
+an internal trait with opaque handles, and a fake engine to compile it against —
+is worth doing when there is a second engine to write, and is make-work before
+that.
 
 ## Not Here Yet
 

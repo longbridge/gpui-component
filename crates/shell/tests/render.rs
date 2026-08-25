@@ -642,3 +642,30 @@ fn a_watcher_releases_its_view(cx: &mut TestAppContext) {
 
     let _ = std::fs::remove_dir_all(&directory);
 }
+
+/// A second runtime on one thread is refused, because the policy it would run
+/// under is not its own.
+///
+/// The capability grant, the store, the exit handler and the native module
+/// registry are thread state. Two runtimes would share the last installer's
+/// permissions with nothing saying so — the second would simply run under the
+/// first one's grant. Enforcing it beats documenting it.
+#[gpui::test]
+fn a_second_runtime_on_one_thread_is_refused(cx: &mut TestAppContext) {
+    cx.update(|cx| gpui_shell::init(cx));
+
+    let first = ShellRuntime::new().expect("the first runtime");
+    let error = ShellRuntime::new()
+        .err()
+        .expect("a second runtime must be refused")
+        .to_string();
+    assert!(
+        error.contains("already running") && error.contains("permissions"),
+        "the refusal has to say what would go wrong, got: {error}"
+    );
+
+    // Dropping the first releases the thread, so a host that tears one down and
+    // starts another is not blocked.
+    drop(first);
+    let _second = ShellRuntime::new().expect("a runtime after the first was dropped");
+}
