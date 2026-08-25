@@ -21,7 +21,7 @@ use std::{
 };
 
 use anyhow::{Context as _, Result, anyhow};
-use gpui::{AnyElement, App, ClickEvent, Entity, Global, Window};
+use gpui::{App, ClickEvent, Entity, Global, Window};
 use rquickjs::{
     Context as JsContext, Ctx, Error as JsError, Exception, FromJs, Function, Object, Persistent,
     Result as JsResult, Runtime as JsRuntime, Value,
@@ -33,9 +33,11 @@ use rquickjs::{
 use smallvec::SmallVec;
 
 use crate::{
-    materialize::materialize,
-    runtime::{CallbackArena, CallbackEntry, error_overlay},
+    entities::EntityStore,
+    metrics::Metrics,
+    runtime::{CallbackArena, CallbackEntry},
     scope::{self, ScopePhase},
+    snapshot::RenderSnapshot,
     spec::{CallbackId, Component, SpecArena, SpecId, SpecOp},
     style,
     value::Bridged,
@@ -97,6 +99,12 @@ pub struct ShellRuntime {
     /// QuickJS aborts the process if a value outlives its runtime.
     callbacks: RefCell<CallbackArena<Persistent<Function<'static>>>>,
     arena: RefCell<SpecArena>,
+    /// Retained state created by this runtime's scripts, and only this one's.
+    /// Declared before `context` for the same reason `callbacks` is: releasing
+    /// an entity can run script destructors.
+    entities: RefCell<EntityStore>,
+    /// What the runtime is spending. See [`Self::metrics`].
+    metrics: Metrics,
     context: JsContext,
     /// Incremented per `load_app`, so a reload re-reads every module rather
     /// than serving the first version from QuickJS's module cache.
@@ -115,7 +123,7 @@ impl Drop for ShellRuntime {
         // Retained entities are owned by GPUI but reachable only through this
         // runtime's handles; leaving them registered outlives the app that owns
         // them, which GPUI reports as a leaked handle on shutdown.
-        crate::entities::clear();
+        self.entities.borrow_mut().clear();
     }
 }
 
@@ -144,6 +152,8 @@ impl ShellRuntime {
         let runtime = Rc::new(Self {
             callbacks: RefCell::new(CallbackArena::default()),
             arena: RefCell::new(SpecArena::new()),
+            entities: RefCell::new(EntityStore::new()),
+            metrics: Metrics::default(),
             context,
             module_generation: Rc::new(Cell::new(0)),
             js_runtime,
@@ -164,6 +174,24 @@ impl ShellRuntime {
 
     pub fn arena_mut(&self) -> RefMut<'_, SpecArena> {
         self.arena.borrow_mut()
+    }
+
+    /// What the runtime is spending: script renders and materializations, with
+    /// the time each took.
+    ///
+    /// The two counters follow different things — application activity and
+    /// frame count — and the gap between them is what the snapshot lifecycle
+    /// exists to produce. See [`crate::metrics`].
+    pub fn metrics(&self) -> &Metrics {
+        &self.metrics
+    }
+
+    /// This runtime's retained state.
+    ///
+    /// Scoped to the runtime rather than shared, so one runtime cannot resolve
+    /// another's handle — see [`crate::entities`].
+    pub fn entities(&self) -> RefMut<'_, EntityStore> {
+        self.entities.borrow_mut()
     }
 
     /// Loads `main.js` from an application directory.
@@ -245,39 +273,67 @@ impl ShellRuntime {
         })
     }
 
-    /// Renders one script view: reset the arena, call `render`, materialize.
-    pub fn render_view(
+    /// Runs the script's `render` and freezes what it described.
+    ///
+    /// This is the only path into the VM's render function, and it is called
+    /// only when a view says its description may be out of date — never once
+    /// per frame. Everything it produces belongs to the returned snapshot:
+    /// the element descriptions, the root, and the handlers registered while
+    /// building it.
+    ///
+    /// The build is transactional. The scratch arena and an open callback
+    /// generation are staging; they are published together at the end, and a
+    /// script that throws discards both, leaving whatever snapshot the caller
+    /// already had untouched.
+    pub fn build_snapshot(
         self: &Rc<Self>,
-        object: ViewObject,
-        entity: Entity<ScriptView>,
+        object: &ViewObject,
+        view: Option<Entity<ScriptView>>,
         window: &mut Window,
         cx: &mut App,
-    ) -> AnyElement {
+    ) -> Result<RenderSnapshot> {
         self.arena.borrow_mut().reset();
-        self.callbacks.borrow_mut().swap();
+        let callbacks = self.callbacks.borrow_mut().begin();
 
-        let spec = {
-            let (_guard, generation) =
-                scope::enter(window, cx, ScopePhase::Render, Some(entity.clone()));
-            self.call_render(&object, generation)
+        let root = self.metrics.time_script_render(|| {
+            let (_guard, generation) = scope::enter(window, cx, ScopePhase::Render, view.clone());
+            self.call_render(object, generation)
+        });
+
+        let root = match root {
+            Ok(root) => root,
+            Err(error) => {
+                self.callbacks.borrow_mut().abort();
+                self.arena.borrow_mut().reset();
+                return Err(error);
+            }
         };
 
-        // Promise callbacks only run when the host drains QuickJS's job queue,
-        // and a continuation is script code, so it needs a scope of its own.
-        {
-            let (_guard, _) = scope::enter(window, cx, ScopePhase::Task, Some(entity));
-            scheduler::drain_jobs(&self.js_runtime);
+        self.callbacks.borrow_mut().commit();
+        // Taking the arena publishes the description and leaves a fresh scratch
+        // arena behind, so the snapshot owns its nodes outright rather than
+        // sharing them with the next build.
+        let arena = std::mem::take(&mut *self.arena.borrow_mut());
+        let snapshot = RenderSnapshot::new(self, callbacks, root, arena);
+
+        // Promise callbacks only run when the host drains QuickJS's job queue.
+        // That drain is deferred to the event loop rather than run here: a
+        // continuation is application code of unbounded length, and a render is
+        // the last path it belongs on. It costs one check when nothing is
+        // queued, which is the usual case.
+        if let Some(view) = view {
+            scheduler::drain_after_render(&self.js_runtime, view, window, cx);
         }
 
-        match spec {
-            Ok(id) => materialize(self, id, window, cx),
-            Err(error) => error_overlay(&error.to_string(), window, cx),
-        }
+        Ok(snapshot)
     }
 
-    /// Renders and returns the element description as text, without
-    /// materializing it. The description is plain data, so interface structure
-    /// can be asserted in tests that never paint a frame.
+    /// Runs the script and returns the element description as text.
+    ///
+    /// The description is plain data, so interface structure can be asserted in
+    /// tests that never paint a frame. This runs the script; to read a
+    /// description that has already been built, use
+    /// [`RenderSnapshot::debug_tree`] instead — that path never enters the VM.
     pub fn render_to_spec(
         self: &Rc<Self>,
         object: &ViewObject,
@@ -285,15 +341,15 @@ impl ShellRuntime {
         window: &mut Window,
         cx: &mut App,
     ) -> Result<String> {
-        self.arena.borrow_mut().reset();
-        self.callbacks.borrow_mut().swap();
+        Ok(self.build_snapshot(object, view, window, cx)?.debug_tree())
+    }
 
-        let root = {
-            let (_guard, generation) = scope::enter(window, cx, ScopePhase::Render, view);
-            self.call_render(object, generation)?
-        };
-
-        Ok(self.arena.borrow().debug_tree(root))
+    /// Releases the handlers registered while one snapshot was built.
+    ///
+    /// Called by [`RenderSnapshot`] as it drops, which is what ties handler
+    /// lifetime to snapshot lifetime rather than to a frame.
+    pub fn retire_callbacks(&self, generation: u32) {
+        self.callbacks.borrow_mut().retire(generation);
     }
 
     pub fn dispatch_click(
@@ -403,6 +459,10 @@ impl ShellRuntime {
             Err(error) if error.to_string().contains("not a function") => {
                 self.set_diagnostics(true);
                 self.arena.borrow_mut().reset();
+                // The first attempt already recorded handlers into the open
+                // generation; the retry describes the same tree again, so it
+                // must start from an empty index space.
+                self.callbacks.borrow_mut().rollback();
                 let diagnosed = self.call_render_once(object, generation);
                 self.set_diagnostics(false);
                 match diagnosed {
@@ -743,6 +803,7 @@ impl ShellRuntime {
                 "selected",
                 "checked",
                 "accessibility_label",
+                "id",
             ]
             .into_iter()
             .enumerate()
@@ -830,14 +891,27 @@ impl ShellRuntime {
                 };
                 self.push_op_checked(ctx, self.push_op(id, SpecOp::Callback(name, callback)))
             }
-            "disabled" | "selected" | "checked" | "accessibility_label" => {
+            "disabled" | "selected" | "checked" | "accessibility_label" | "id" => {
                 let bridged = args.values(method)?;
                 let name = match method {
                     "disabled" => "disabled",
                     "selected" => "selected",
                     "checked" => "checked",
+                    "id" => "id",
                     _ => "accessibility_label",
                 };
+                if name == "id"
+                    && bridged
+                        .first()
+                        .and_then(|value| value.as_str().ok())
+                        .is_none()
+                {
+                    return Err(Exception::throw_type(
+                        ctx,
+                        "id(name) expects a string; it is the element's stable identity, so it \
+                         must not change between renders",
+                    ));
+                }
                 self.push_op_checked(ctx, self.push_op(id, SpecOp::Method(name, bridged)))
             }
             _ => {
@@ -929,7 +1003,16 @@ fn context_object<'js>(ctx: &Ctx<'js>, generation: u64) -> JsResult<Object<'js>>
             let view = scope::current_view();
             scope::with_context(generation, move |_, app| {
                 if let Some(view) = view {
-                    view.update(app, |_, cx| cx.notify());
+                    // Two halves, and both matter. Invalidating says the script
+                    // description may have moved, which is the only thing that
+                    // lets the next frame enter the VM; notifying hands the
+                    // scheduling and coalescing of that frame back to GPUI,
+                    // which already does it well. Three notifies before the
+                    // next frame therefore rebuild one snapshot, not three.
+                    view.update(app, |view, cx| {
+                        view.invalidate();
+                        cx.notify();
+                    });
                 }
             })
             .map_err(|error| Exception::throw_type(&ctx, &error.to_string()))

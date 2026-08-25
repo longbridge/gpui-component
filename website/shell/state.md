@@ -26,7 +26,7 @@ export default class Counter extends View {
 
 `init` runs once, when the view is created. It is where state that survives frames is set up — plain fields, and any [retained entity](#retained-state) the view needs.
 
-`render` runs on every frame and **returns exactly one element**. Returning something that is not an element built with `gpui` fails immediately:
+`render` **returns exactly one element**, and runs when the view has been invalidated rather than on every frame — see [When `render` runs](#when-render-runs). Returning something that is not an element built with `gpui` fails immediately:
 
 ```text
 render(cx) must return an element built with gpui
@@ -52,7 +52,36 @@ This runs against the whole default assumption of the front-end ecosystem, so it
 
 GPUI is itself an explicit-`notify` model, and two reactive mental models inside one application interfere with each other rather than compose. Automatic tracking would mean wrapping every view instance in a `Proxy`, which is a permanent cost on the render path — and QuickJS has no JIT to amortize it. And a missing `notify` has a determinate symptom: the interface does not update. That is far cheaper to find than an automatic system that fires too often.
 
-Several `notify` calls inside one event handler collapse into a single repaint.
+Several `notify` calls inside one event handler collapse into a single repaint — and into a single `render`.
+
+## When `render` runs
+
+`render` does **not** run once per frame. GPUI repaints for reasons your application never hears about — a pointer moving over a button, a text cursor blinking, a list scrolling, an animation advancing — and none of those are a reason to run JavaScript.
+
+So a `render` call does not describe *this frame*. It describes the interface once, into a snapshot the runtime keeps:
+
+```text
+cx.notify()  ──▶  render()  ──▶  snapshot  ──┬──▶  frame
+                                             ├──▶  frame
+                                             └──▶  frame  …
+```
+
+The snapshot is rebuilt when, and only when, something invalidates it:
+
+- `cx.notify()` from an event handler or an async task
+- a [hot reload](./getting-started.md) replacing the script
+- a theme change, because `bg("surface")` resolves to a real colour while `render` runs and is baked into the snapshot
+- the host calling `ScriptView::refresh`, which is how Rust says it changed state your script reads through a [native module](./capabilities.md). A plain `cx.notify()` from the host is a repaint and runs no script — the two are different requests
+
+Everything else replays the description you already produced, in Rust, without entering the VM.
+
+Three consequences worth holding on to:
+
+**Your `render` cost follows your users, not your frame rate.** A view that changes ten times a second costs ten renders a second, whether the window is repainting at 60 FPS or 120. Describing a large panel is affordable precisely because it is not being redescribed sixty times for no reason.
+
+**Hover, focus and active styles never call back into script.** `.hover(s => s.opacity(0.8))` is resolved into a native style description while the snapshot is built, and GPUI applies it from there. A pointer moving across your interface runs no JavaScript at all. The same is true of an [`Input`](#retained-state)'s cursor and selection.
+
+**A failed `render` does not destroy the interface.** A snapshot is published only after `render` returns successfully, so a script that throws leaves the previous description — and the handlers registered with it — exactly as they were. The failure appears as a banner **over** the interface that still works, saying it is one version behind and offering the detail for pasting somewhere; you keep your scroll position and your focus. A view whose very first render failed has nothing to keep, and gets the full error surface instead. Either way the failing `render` is not re-run until something invalidates the view again.
 
 ## Phases
 

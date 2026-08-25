@@ -8,7 +8,6 @@
 use gpui::{TestAppContext, VisualTestContext};
 use gpui_shell::{ScriptView, ShellRuntime};
 
-#[cfg(feature = "quickjs")]
 const COUNTER: &str = r#"
 import { View, v_flex, text, Button } from "gpui";
 
@@ -41,39 +40,9 @@ export default class Counter extends View {
 }
 "#;
 
-#[cfg(not(feature = "quickjs"))]
-const COUNTER: &str = r#"
-local gpui = require("gpui")
-local Counter = gpui.view("Counter")
-
-function Counter:init()
-  self.count = 0
-end
-
-function Counter:render(cx)
-  return gpui.v_flex()
-    :size_full():items_center():gap_2():p(16):bg("background")
-    :child(gpui.text("Count: " .. self.count):text_color("foreground"))
-    :child(
-      gpui.Button.new("increment")
-        :px(12):py(6):rounded(6):bg("primary")
-        :on_click(function(event, cx)
-          self.count = self.count + 1
-          cx:notify()
-        end)
-        :child(gpui.text("Increment"):text_color("primary_foreground"))
-    )
-end
-
-return Counter
-"#;
-
 /// The entry name only affects diagnostics, but each engine has its own
 /// convention and the tests should read the way real code does.
-#[cfg(feature = "quickjs")]
 const ENTRY: &str = "counter.js";
-#[cfg(not(feature = "quickjs"))]
-const ENTRY: &str = "counter.lua";
 
 #[gpui::test]
 fn a_script_view_produces_an_element_description(cx: &mut TestAppContext) {
@@ -112,7 +81,6 @@ fn an_element_cannot_be_added_to_two_parents(cx: &mut TestAppContext) {
     let runtime = ShellRuntime::new().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
 
-    #[cfg(feature = "quickjs")]
     let source = r#"
 import { View, v_flex, text } from "gpui";
 
@@ -122,18 +90,6 @@ export default class Broken extends View {
     return v_flex().child(shared).child(shared);
   }
 }
-"#;
-    #[cfg(not(feature = "quickjs"))]
-    let source = r#"
-local gpui = require("gpui")
-local Broken = gpui.view("Broken")
-
-function Broken:render(cx)
-  local shared = gpui.text("reused")
-  return gpui.v_flex():child(shared):child(shared)
-end
-
-return Broken
 "#;
 
     let view_type = runtime.load_source("broken", source).expect("load");
@@ -161,7 +117,6 @@ fn an_unknown_style_method_suggests_the_closest_name(cx: &mut TestAppContext) {
     let runtime = ShellRuntime::new().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
 
-    #[cfg(feature = "quickjs")]
     let source = r#"
 import { View, div } from "gpui";
 
@@ -170,17 +125,6 @@ export default class Typo extends View {
     return div().items_centre();
   }
 }
-"#;
-    #[cfg(not(feature = "quickjs"))]
-    let source = r#"
-local gpui = require("gpui")
-local Typo = gpui.view("Typo")
-
-function Typo:render(cx)
-  return gpui.div():items_centre()
-end
-
-return Typo
 "#;
 
     let view_type = runtime.load_source("typo", source).expect("load");
@@ -245,7 +189,6 @@ impl gpui::Render for Empty {
 
 use std::ops::Deref;
 
-#[cfg(feature = "quickjs")]
 #[gpui::test]
 fn the_bundled_example_application_loads_and_renders(cx: &mut TestAppContext) {
     cx.update(|cx| gpui_shell::init(cx));
@@ -280,7 +223,6 @@ fn the_bundled_example_application_loads_and_renders(cx: &mut TestAppContext) {
     assert!(tree.contains("text"), "example has no text: {tree}");
 }
 
-#[cfg(feature = "quickjs")]
 #[gpui::test]
 fn state_styles_reuse_the_ordinary_style_methods(cx: &mut TestAppContext) {
     cx.update(|cx| gpui_shell::init(cx));
@@ -346,7 +288,6 @@ fn theme_tokens_resolve_outside_a_call_scope(cx: &mut TestAppContext) {
 /// state, controlled checkboxes, a dialog, a toast, capability-gated storage,
 /// and a filter that must survive every mutation. If a subsystem regresses,
 /// this is the test that notices.
-#[cfg(feature = "quickjs")]
 #[gpui::test]
 fn the_todolist_example_exercises_the_runtime(cx: &mut TestAppContext) {
     cx.update(|cx| gpui_shell::init(cx));
@@ -390,7 +331,6 @@ fn the_todolist_example_exercises_the_runtime(cx: &mut TestAppContext) {
     }
 }
 
-#[cfg(feature = "quickjs")]
 #[gpui::test]
 fn an_unknown_input_event_names_the_valid_ones(cx: &mut TestAppContext) {
     cx.update(|cx| gpui_shell::init(cx));
@@ -431,7 +371,6 @@ export default class Bad extends View {
 /// entry point. QuickJS caches an evaluated module by name and an ES module
 /// cannot be unloaded, so a naive reload re-evaluates `main.js` against the
 /// first version of everything it imports — and looks like it worked.
-#[cfg(feature = "quickjs")]
 #[gpui::test]
 fn a_reload_picks_up_a_change_in_an_imported_module(cx: &mut TestAppContext) {
     cx.update(|cx| gpui_shell::init(cx));

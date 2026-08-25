@@ -60,6 +60,7 @@ getrandom = { version = "0.2", features = ["js"] }
 gtk = { version = "0.18" }
 
 [dev-dependencies]
+gpui = { workspace = true, features = ["test-support"] }
 gpui-base.workspace = true
 
 [lints]

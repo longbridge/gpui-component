@@ -149,7 +149,7 @@ Seven things are deliberately absent, and will stay absent:
               ▼
      crates/shell ── gpui-shell
      ┌──────────────────────────────────────────────┐
-     │ engine/ seam: QuickJS (default) | Lua        │
+     │ engine/ seam: QuickJS                        │
      ├──────────────────────────────────────────────┤
      │ CallScope · SpecArena · style reflection     │
      │ materialize · theme tokens · capabilities    │
@@ -188,8 +188,8 @@ possible at all — and a binding layer that covers only part of its target is t
 hardest kind to use.
 
 **Build size and reach.** The runtime's own iteration speed, binary size, and
-WebAssembly viability all benefit from a smaller dependency tree. QuickJS is
-already larger than LuaJIT; every dependency saved elsewhere is worth having.
+WebAssembly viability all benefit from a smaller dependency tree. QuickJS is a
+full ES engine and not small; every dependency saved elsewhere is worth having.
 
 **A working precedent.** `crates/base/examples/showcase` is a base-only
 application: it implements the dock renderer traits itself, supplies its own
@@ -298,23 +298,24 @@ engine has to justify why it could not (§6.5).
 | Module | Responsibility | Side of the seam |
 | --- | --- | --- |
 | `engine/` | VM lifecycle, module loading, method dispatch, callbacks, exception conversion | below |
-| `engine/quickjs/` | The default engine: prelude, host API, scheduler, overlays, entity API, native bridge, theme API, sandbox | below |
-| `engine/lua.rs` | The fallback engine (mlua) | below |
+| `engine/quickjs/` | The engine: prelude, host API, scheduler, overlays, entity API, native bridge, theme API, sandbox | below |
 | `scope` | `CallScope`: the host-context stack, its phases, and generation checks | above |
-| `spec` | `SpecArena`: single-pass element descriptions, single-use checks, `debug_tree` | above |
-| `materialize` | Replays descriptions into real GPUI elements; pure Rust | above |
+| `snapshot` | `RenderSnapshot`: what one script render publishes and every frame replays | above |
+| `metrics` | `RuntimeMetrics`: script renders and materializations, with their timings | above |
+| `spec` | `SpecArena`: element descriptions, single-use checks, `debug_tree` | above |
+| `materialize` | Replays a snapshot into real GPUI elements; pure Rust, non-destructive | above |
 | `style` | The reflected style table, the parametric bindings, spelling suggestions | above |
 | `theme` | The default semantic palette and token-name resolution | above |
 | `value` | `Bridged`: the neutral script argument value, and color and length coercion | above |
 | `error` | `ShellError`: the neutral error type | above |
-| `entities` | Retained state addressed by handle, and its subscriptions | above |
+| `entities` | `EntityStore`: retained state by handle, one store per runtime | above |
 | `capability` | The capability set, the path resolver, and denial messages | above |
-| `runtime` | `CallbackArena<T>`, application-root resolution, the failure surface | above |
+| `runtime` | `CallbackArena<T>` in snapshot generations, application-root resolution, the failure surface | above |
 | `root` | `ShellRoot`: the window-level overlay stack | above |
 | `dock` | `ScriptPanel`, `ScriptDockSkin`, panel registration and name interning | above |
 | `native` | The host-registered native module registry | above |
 | `plugin_api` | The script API version and its compatibility check | above |
-| `view` | `ScriptView`: the one bridge into GPUI's render loop | above |
+| `view` | `ScriptView`: the one bridge into GPUI's render loop, and where a snapshot lives | above |
 | `assets` | Application-directory asset source for `svg(path)` | above |
 | `watch` | Source watching and in-place reload | above |
 | `typings` | `gpui.d.ts` generation | above |
@@ -344,11 +345,13 @@ impl Render for ScriptView {
 }
 ```
 
-`ScriptView` only carries `ViewObject`. Under QuickJS that is a
-`Persistent<Object>`; under Lua it is an `mlua::Table`. `ScriptView` needs to
-know neither. It also exposes `replace_object`, which is what makes a hot reload
-keep the window, the focus, and the element identities while swapping only what
-the script produced (§21.2).
+`ScriptView` carries `ViewObject` and the render state of §8.4 — the published
+snapshot, the one it replaced, the dirty flag. Under QuickJS a `ViewObject` is a
+`Persistent<Object>`; `ScriptView` needs to know that no more than it needs to
+know what a JavaScript object is. It also exposes `replace_object`, which is what
+makes a hot reload keep the window, the focus, and the element identities while
+swapping only what the script produced (§21.2), and `invalidate`, which is the
+Rust half of `cx.notify()`.
 
 `gpui_shell::init(cx)` must run once at startup. It calls `gpui_base::init`,
 installs the default palette, and builds the style reflection table so the first
@@ -356,45 +359,36 @@ script call does not pay for it.
 
 ### 6.3 The engine choice
 
-QuickJS via `rquickjs` 0.12 is the default, with the `macro`, `loader`,
-`classes`, and `properties` features. An mlua 0.11 engine lives behind the `lua`
-and `luajit` features as a compilable, runnable fallback.
+QuickJS via `rquickjs` 0.12, with the `macro`, `loader`, `classes`, and
+`properties` features. It is the only engine, and it sits behind the seam of
+§6.5 anyway.
 
-| | QuickJS (default) | LuaJIT | Lua 5.4 |
-| --- | --- | --- | --- |
-| Language | ES2023: classes, modules, `async`/`await`, Proxy, destructuring | Lua 5.1 semantics plus extensions | Lua 5.4 |
-| Execution | Bytecode interpreter, **no JIT** | Hand-written assembly interpreter plus trace JIT | Bytecode interpreter |
-| Hot loops | Weakest of the three | Strongest, by an order of magnitude | Comparable to QuickJS |
-| WebAssembly | Yes (pure C) | **No** | Yes |
-| W^X platforms | Unaffected — emits no machine code | Restricted (Apple Silicon and similar) | Unaffected |
-| Size | Largest: full ES semantics, regex, Unicode | Small | Smallest |
-| GC | Reference counting plus cycle collection | Incremental mark-and-sweep | Generational/incremental mark-and-sweep |
-| Corpus and tooling | Best | Fair | Fair |
-
-JavaScript is the default for one reason, and it is a product reason rather than
+JavaScript is the choice for one reason, and it is a product reason rather than
 a technical one: application code reads better in it, and the model corpus is
-the best there is. The costs are real and are not offset. QuickJS has no JIT, so
-neither hot loops nor per-call boundary cost will ever beat LuaJIT, and it is the
-largest of the three.
+the best there is. The costs are real and are not offset. QuickJS is a bytecode
+interpreter with **no JIT**, so neither hot loops nor per-call boundary cost will
+ever beat a JIT-compiled engine, and a full ES engine — regex, Unicode, the
+lot — is not small.
 
-Two properties of QuickJS turned out to matter more than the table suggests.
-Reference counting means a host handle — `Persistent<Function>`,
-`Persistent<Object>` — is released the moment its last reference goes away,
-which removes a layer of uncertainty from the cross-GC cycle problem in §7.4;
-true cycles still wait for the collector. And because it emits no machine code
-it has no W^X problem, which LuaJIT does have on Apple Silicon.
+Two properties of QuickJS turned out to matter more than expected. Reference
+counting means a host handle — `Persistent<Function>`, `Persistent<Object>` — is
+released the moment its last reference goes away, which removes a layer of
+uncertainty from the cross-GC cycle problem in §7.4; true cycles still wait for
+the collector. And because it emits no machine code it has no W^X problem, which
+a tracing JIT does have on Apple Silicon. It also compiles to WebAssembly, being
+plain C.
 
-The measurement is in §20.3. On the M0 benchmark QuickJS came out *ahead* of
-LuaJIT for describing an interface, which is not what the table predicts and is
-worth understanding before reading anything else into it: describing an element
-tree is almost entirely cross-boundary calls and argument conversion, not the
-arithmetic a trace JIT is good at.
+The measurement is in §20.3, and what it now measures is different from what it
+originally did: script description cost is no longer frame cost (§8.4), so the
+per-call boundary cost that would decide between engines matters less than it
+used to. It still decides, and it is still the number that would justify adding a
+second engine — but the argument for one is weaker than it was when every frame
+paid it.
 
-The constraint the seam imposes is that the script API stays inside the
-semantic intersection of both engines. That does not mean the two languages look
-alike — a view is `class extends View` in JavaScript and `gpui.view("Counter")`
-plus methods in Lua — it means the same use case produces the same description
-tree.
+The constraint the seam imposes on any second engine is that the script API stays
+inside the semantic intersection. That does not mean two languages would look
+alike — it means the same use case must produce the same description tree, and
+the same application activity must produce the same number of script renders.
 
 ### 6.4 The JavaScript surface
 
@@ -526,63 +520,64 @@ thing that knows the extension a given engine loads.
 #### Exactly one engine
 
 ```rust,ignore
-#[cfg(all(feature = "quickjs", any(feature = "lua", feature = "luajit")))]
-compile_error!(
-    "enable exactly one scripting engine: `quickjs` (default) or `lua`/`luajit`. ..."
-);
-
-#[cfg(not(any(feature = "quickjs", feature = "lua", feature = "luajit")))]
-compile_error!("enable one scripting engine: `quickjs` (default) or `lua`/`luajit`");
+#[cfg(not(feature = "quickjs"))]
+compile_error!("enable a scripting engine: `quickjs` is the default and the only one today");
 ```
 
-Both engines export the same type names, so enabling both makes
-`gpui_shell::ShellRuntime` ambiguous. There is no silent fallback to a default
-engine: a wrong feature combination fails at compile time and the message says
-how to fix it. The fallback build is:
-
-```bash
-cargo run -p gpui-shell --no-default-features --features luajit -- path/to/app
-```
+An engine exports `ShellRuntime`, `ViewType`, and `ViewObject`; two of them would
+make those names ambiguous, which is why the feature is a selection rather than a
+set. Building with none fails at compile time rather than producing a crate that
+exports nothing.
 
 #### The two sides
 
-| Above the seam (shared; no VM name appears in the source) | Below the seam (one implementation per engine) |
+| Above the seam (no VM name appears in the source) | Below the seam (what an engine implements) |
 | --- | --- |
-| `spec.rs`: description arena, single-use checks, `debug_tree` | Engine value → `Bridged` conversion |
-| `materialize.rs`: descriptions → real elements, pure Rust | Module system (ES modules and a resolver, versus `require` and `package.path`) |
-| `scope.rs`: `CallScope`, phases, generation checks, the crate's only `unsafe` | Method dispatch (a shared prototype, versus an `__index` metamethod and a method cache) |
-| `style.rs`: reflection table, parametric styles, spelling suggestions | Callback handle type (`Persistent<Function>` versus `mlua::Function`) |
-| `theme.rs`: default palette and token resolution | Exception conversion (`ShellError` → `Exception` / `LuaError`) |
-| `capability.rs`: capability set and path resolution | View definition shape (`class extends View` versus a metatable) |
-| `value.rs`, `error.rs`, `entities.rs`, `runtime.rs`, `root.rs`, `view.rs`, `watch.rs`, `typings.rs`, `assets.rs` | Sandbox specifics: language trimming, intrinsics, promise pumping (§19) |
+| `snapshot.rs`: what a script render publishes and frames replay | Engine value → `Bridged` conversion |
+| `spec.rs`: description arena, single-use checks, `debug_tree` | Module system (ES modules and a resolver, versus `require` and a path list) |
+| `materialize.rs`: descriptions → real elements, pure Rust | Method dispatch (a shared prototype, versus an `__index` metamethod and a method cache) |
+| `scope.rs`: `CallScope`, phases, generation checks, the crate's only `unsafe` | Callback handle type (`Persistent<Function>`) |
+| `style.rs`: reflection table, parametric styles, spelling suggestions | Exception conversion (`ShellError` → the language's own exception) |
+| `theme.rs`: default palette and token resolution | View definition shape (`class extends View`) |
+| `capability.rs`: capability set and path resolution | Sandbox specifics: language trimming, intrinsics, promise pumping (§19) |
+| `value.rs`, `error.rs`, `entities.rs`, `runtime.rs`, `root.rs`, `view.rs`, `watch.rs`, `typings.rs`, `assets.rs` | |
+
+The seam's load-bearing rule is about *when*, not what: `build_snapshot` is the
+only entry into script `render`, and nothing calls it per frame (§8.4). An engine
+that rendered opportunistically would put script cost back on the frame budget.
+Benchmark C (§20.3) is what catches it.
 
 #### Adding capability
 
 Any new capability goes above the seam unless the language genuinely prevents
 it. Three questions in order: does it need to know what a script value looks
 like? Can it be expressed with `Bridged`, `SpecOp`, and `ShellError`? If it truly
-must live in an engine, then either both engines implement it or the missing side
-throws an explicit exception. One engine having a feature while the other
-silently does nothing is how this seam rots, and it is the failure the shared
-test suite exists to catch (§22.3).
+must live in an engine, does it belong to the language or merely happen to have
+been written there?
 
-That rule has not held. The QuickJS engine has grown `host.rs`, `scheduler.rs`,
-`sandbox.rs`, `overlay.rs`, and `entity_api.rs`; the Lua engine has none of
-them, and also lacks `svg`, `Input`, `InputState`, state styles, and
-`accessibility_label`. Much of that growth is legitimately engine-specific —
-promise pumping and intrinsic trimming have no Lua analogue — but the parts that
-are not (the `fs` and `store` surfaces, whose bodies are a capability check plus
-one `std::fs` call) should have landed above the seam with only argument
-shuffling left in the engine. §25 treats this as the standing risk it is.
+That rule has not held, and with only one engine the pressure to hold it is
+weaker rather than stronger — which is exactly why it is written down. The
+QuickJS engine has grown `host.rs`, `scheduler.rs`, `sandbox.rs`, `overlay.rs`,
+and `entity_api.rs`. Some of that is legitimately engine-specific: promise
+pumping and intrinsic trimming have no meaning above the seam. The parts that are
+not — the `fs` and `store` surfaces, whose bodies are a capability check plus one
+`std::fs` call — should have landed above the seam with only argument shuffling
+left in the engine. §25 treats this as the standing risk it is.
 
-Asynchrony is the one gap the original design named and the implementation
-closed inside the engine rather than in the contract. Lua coroutines and
-JavaScript promises are not the same thing, and QuickJS additionally requires
-the host to drain its job queue or nothing after an `await` ever runs (§12.2).
-The scheduler therefore lives in `engine/quickjs/scheduler.rs` and does not
-appear in the contract above. That is a defensible place for the pumping, and an
-indefensible place for the ownership and cancellation model, which is neither
-engine-specific nor duplicated anywhere.
+Asynchrony is the one gap the original design named and the implementation closed
+inside the engine rather than in the contract. QuickJS requires the host to drain
+its job queue or nothing after an `await` ever runs (§12.2), and that is not a
+shape every engine shares. The scheduler therefore lives in
+`engine/quickjs/scheduler.rs` and does not appear in the contract above. That is a
+defensible place for the pumping, and an indefensible place for the ownership and
+cancellation model, which is neither engine-specific nor duplicated anywhere.
+
+The render path no longer drains inline. A snapshot build checks whether QuickJS
+has jobs queued and, if it does, hands the drain to the foreground executor;
+otherwise it does nothing at all, which is the usual case. That keeps
+continuations — application code of unbounded length — off the path a render
+took. Every other entry point still drains inline, because an event handler
+resuming its own `await` promptly is what an author expects.
 
 ---
 
@@ -688,11 +683,12 @@ The classic embedded-script leak: Rust holds a script closure, the closure
 captures a handle to a Rust entity, and neither collector can see the other's
 edge.
 
-Per-frame callbacks (`on_click`, `on_change`) live in `CallbackArena`, which is
-replaced wholesale on the next render, so they never form a long-lived cycle.
-`CallbackId` encodes the generation in its high 16 bits, and the previous
-generation is kept one pass longer because an event can be dispatched between a
-render and its paint.
+Render-bound callbacks (`on_click`, `on_change`) live in `CallbackArena`, in a
+generation owned by the snapshot that registered them. Dropping the snapshot
+retires the generation, so they never form a long-lived cycle. `CallbackId`
+encodes the generation in its high 16 bits; a view keeps two snapshots — the
+published one and the one it just replaced — because an event can be dispatched
+against a superseded frame.
 
 Long-lived callbacks — entity subscriptions, timers, task continuations — are
 bound to an owner. A timer or spawned task holds a `WeakEntity<ScriptView>`, so
@@ -710,8 +706,8 @@ would be found by noticing memory rather than by reading a number.
 
 ## 8. The Render Protocol
 
-This chapter is language-independent; both engines share `spec.rs` and
-`materialize.rs`.
+This chapter is language-independent: `snapshot.rs`, `spec.rs` and
+`materialize.rs` sit above the engine seam and name no script value.
 
 ### 8.1 The constraint: GPUI elements are consumed values
 
@@ -729,6 +725,10 @@ element by value, so an element value can be used exactly once.
 `.child(impl IntoElement)` likewise takes its child by value. And a view's
 `Render::render` rebuilds the entire tree from scratch on every redraw.
 
+The third fact is about *elements*, not about descriptions, and conflating the
+two was the original mistake in this chapter. Elements must be rebuilt every
+redraw. The description they are built from must not be — see §8.4.
+
 A JavaScript object therefore cannot *be* an element, and a mapping from a
 script `Button` object to a Rust `Button` entity does not exist, because
 `Button` was never an entity.
@@ -745,10 +745,11 @@ every frame. The reconciler would exist only to undo GPUI's model.
 interpret — are exactly equivalent to the builder chain but constitute a second
 way to write the same thing. Examples, documentation, type declarations, and
 generated code would immediately split into two dialects, and JavaScript makes
-that temptation sharper than Lua did, because object literals are the most
-natural thing in the language and React has made "UI is data" reflexive. What it
-would buy — fewer host calls per operation — is available from memoization and
-virtualization instead (§20.4).
+that temptation sharp, because object literals are the most natural thing in the
+language and React has made "UI is data" reflexive. What it would buy — fewer
+host calls per description — is worth much less now that a description is not
+rebuilt per frame (§8.4), and what remains is available from virtualization
+instead (§20.4).
 
 ### 8.3 The description arena
 
@@ -795,7 +796,7 @@ adding it to a second parent, or reusing it across frames — reports:
 element `Button` was already added to a parent; elements are single-use values
 ```
 
-A node from an earlier pass reports differently, because it is a different
+A node from an earlier render reports differently, because it is a different
 mistake:
 
 ```text
@@ -817,48 +818,141 @@ v_flex .size_full .items_center .gap[Number(12.0)] .bg[Str("background")]
     text "Increment"
 ```
 
-### 8.4 The render pass
+### 8.4 The render snapshot
+
+A GPUI render is not a script render, and the distinction is the load-bearing
+one in this runtime.
+
+GPUI repaints for reasons the script knows nothing about: a pointer crossing a
+button, a text cursor blinking, a list scrolling, an animation advancing. None of
+those is a reason to enter the VM. So a script `render` does not describe *this
+frame*. It describes the interface once, into a `RenderSnapshot`, and every
+frame after that replays the snapshot in Rust:
 
 ```text
-cx.notify() / an event / a state change
+      SCRIPT WORLD                     NATIVE WORLD
+
+  script state changes
         │
+        │ cx.notify()  →  script_dirty = true, GPUI notify
         ▼
-ScriptView::render(window, cx)
-        ├─ SpecArena::reset() · CallbackArena::swap()
-        ├─ CallScope::enter(phase = Render)                    §9
+  ScriptView::render ── dirty? ──no──▶ materialize(snapshot) ──▶ GPUI
+        │                                        ▲
+       yes                                       │
+        ▼                                        │
+  CallScope(Render) · script render(cx)          │
+        │                                        │
+        ▼                                        │
+  ┌──────────────────┐                           │
+  │ RenderSnapshot   │───────────────────────────┘
+  │  SpecArena       │        replayed by every frame
+  │  root SpecId     │        until something invalidates it
+  │  callback gen    │
+  └──────────────────┘
+```
+
+Building one:
+
+```text
+ScriptView::render(window, cx), snapshot dirty
+        ├─ script_dirty = false, before the script runs               (see below)
+        ├─ SpecArena::reset() on the runtime's scratch arena
+        ├─ CallbackArena::begin() → a fresh generation, not yet callable
+        ├─ CallScope::enter(phase = Render)                            §9
         ├─ call the script's render(cx)  →  root SpecId
         ├─ CallScope::exit()
-        ├─ CallScope::enter(phase = Task) · drain the job queue §12.2
-        ├─ materialize(root) → AnyElement                       (pure Rust)
-        └─ the previous pass's callbacks are released by the swap
+        │
+        ├─ on failure: CallbackArena::abort() · arena reset · keep the old
+        │              snapshot · record the message · draw it over the
+        │              interface that still works                      §21
+        │
+        ├─ on success: CallbackArena::commit()
+        ├─           mem::take the arena → RenderSnapshot
+        ├─           publish: previous ← current ← new
+        └─ CallScope::enter(phase = Task) · drain the job queue        §12.2
+        │
+        ▼
+materialize(snapshot) → AnyElement                            (pure Rust)
         │
         ▼
 GPUI layout / paint (never re-entering script)
 ```
 
-`materialize` is a depth-first walk in pure Rust: it takes each node out of the
-arena, replays its ops in order, recurses into children, and produces an
-`AnyElement`. Nothing survives the pass — not an element, not a callback, not
-the `cx` handed to `render`. Because it never touches script, it can be
-benchmarked and snapshot-tested independently of the VM.
+**Publication is transactional.** The scratch arena and the open callback
+generation are staging; a script that throws half-way discards both and leaves
+the previously published snapshot — and the handlers registered with it —
+untouched. A failed render loses the *new* interface, never the old one.
+
+**The dirty flag is cleared before the script runs, not after.** Draining the
+job queue at the end of a build can notify the same view, and that notify has to
+survive into the next frame rather than be erased by the build already in
+flight.
+
+**A failed build is not retried until something invalidates the view again.** A
+render that throws on every call would otherwise be exactly as frame-coupled as
+one that succeeds.
+
+**A failure is reported over the interface, not instead of it.** Because the old
+snapshot survived, there is usually still something correct to draw; blanking it
+would cost the reader their scroll position and their focus in exchange for a
+message that fits in a strip. `error_banner` is that strip. The full-screen
+`error_overlay` is kept for the one case with nothing to preserve — a view whose
+very first render failed.
+
+#### What invalidates a snapshot
+
+- `cx.notify()` from an `Event` or `Task` phase — it marks the view dirty *and*
+  notifies GPUI, leaving the scheduling and coalescing of the repaint to GPUI.
+  Three notifies before the next frame rebuild one snapshot, not three.
+- `ScriptView::replace_object` — hot reload (§21.3). The entity, the window and
+  the focus survive; the description does not.
+- `ScriptView::refresh` — the Rust half of the same request, for a host that
+  changed state the script reads through a native module (§17.6). **A bare
+  `cx.notify()` on a `ScriptView` is a repaint and nothing more**, which is the
+  right call for a host-side animation and the wrong one for host data. The two
+  are separate methods because they are separate requests, and conflating them
+  was the one behaviour change this lifecycle forced on embedders.
+- A palette change. `bg("surface")` resolves to a concrete `Hsla` while the
+  script runs, so the palette is baked into the snapshot and a repaint cannot
+  pick up a new one. `theme::generation()` is compared against the generation the
+  snapshot was built at.
+
+Nothing else does. In particular hover, focus, active, scrolling, cursor blink,
+input editing and animation are native throughout.
+
+#### Materialization
+
+`materialize` is a depth-first walk in pure Rust: it reads each node from the
+snapshot's arena, replays its ops in order, recurses into children, and produces
+an `AnyElement`. It is **non-destructive** — that is what makes a snapshot
+replayable — and it never calls script, which is what lets it be benchmarked and
+snapshot-tested independently of the VM (§20.3, §22.1).
 
 Two things materialization decides that the description cannot.
 
 **Text color is inherited while walking the description.** GPUI resolves
 inherited text color at paint time, but an `svg` will not paint at all unless
-the color is on its *own* style — and by paint time the description is gone. So
-`materialize_node` carries a color down the tree: each node passes its own
-`text_color` if it set one and the ambient color otherwise, and an `svg` writes
-the result into its own style. That is what makes an icon inside a dark button
-come out light without the script saying so twice, and it is the reason
-`examples/js_todolist` can write `icon("check", 11)` and have it follow its row.
+the color is on its *own* style — and materialization is the last point at which
+the description is available. So `materialize_node` carries a color down the
+tree: each node passes its own `text_color` if it set one and the ambient color
+otherwise, and an `svg` writes the result into its own style. That is what makes
+an icon inside a dark button come out light without the script saying so twice,
+and it is the reason `examples/js_todolist` can write `icon("check", 11)` and
+have it follow its row.
 
 **An element becomes stateful only when a state style needs identity.** GPUI's
 `hover` works on any interactive element, but `active` and `focus` need a stable
 element identity. A plain `div` therefore stays identity-free unless a state
 style demands one, at which point it takes an `ElementId` derived from its
-position in the description — stable across renders for a stable tree, the same
-property GPUI relies on for its own ids.
+position in the description. That position is a *snapshot-local address*: it is
+stable for as long as the snapshot lives, and stable across rebuilds only while
+the script builds the same tree in the same order — a conditional child appearing
+above it shifts every address below.
+
+So a script can name an element instead: `div().id("toolbar")` makes the name the
+identity, and it survives the script reordering its own tree. `Button`,
+`Checkbox` and `Switch` already take an identity from `new(id)` and say so with a
+warning rather than ignoring a second one in silence.
 
 `text(...)` materializes as a `div` carrying a string child rather than as a
 distinct element type, so every style method works on it unchanged. `Input`
@@ -871,6 +965,33 @@ does not have to remember any of them.
 A component that cannot honor a state style says so rather than dropping it
 silently: a state style on a `Switch` logs a warning, because `Switch` itself is
 not the interactive element (`SwitchTrack` is) and the style has nowhere to land.
+
+#### State styles resolve natively
+
+`.hover(...)`, `.active(...)` and `.focus(...)` record their declarations into a
+detached node while the script runs, and materialization turns them into
+`StyleRefinement`s that GPUI applies itself. A pointer moving across the
+interface executes no script at all. The same rule is what any future animation
+API has to follow: the script creates a native animation once, and receives at
+most a completion callback — never a per-frame one.
+
+#### The invariants
+
+These are what §22 tests, and what a change to this chapter has to preserve.
+
+1. `Render::render` on a `ScriptView` does not inherently execute script.
+2. A clean snapshot may be materialized any number of times without entering
+   the VM.
+3. Script `render` executes only when the view has been invalidated.
+4. `cx.notify()` invalidates script render state and delegates scheduling and
+   coalescing of the repaint to GPUI.
+5. Native interaction — hover, focus, cursor blink, scroll, animation — stays
+   native unless an explicit script event is required.
+6. Materialization is a pure native operation over frozen description data.
+7. Render-bound callbacks live with the snapshot that produced them, not with
+   a frame.
+8. Building a replacement snapshot is transactional; a failed script render
+   does not corrupt the currently valid snapshot.
 
 ### 8.5 Re-entrancy
 
@@ -895,10 +1016,14 @@ take the same shape when they are bound.
 
 ### 8.6 Memoization
 
-Elements cannot be cached across frames — they are consumed values — but
-descriptions could be, and `gpui.memo` was the planned form. It is not
-implemented. §20.4 explains why it is still the most valuable optimization on
-the list.
+Descriptions are now cached across frames wholesale (§8.4), which removes the
+problem memoization was first proposed for: repainting an unchanged view no
+longer costs a script render at all.
+
+What is left for `gpui.memo` is *sub*-tree granularity — skipping the part of a
+rebuild whose data has not changed when the rest of the view has. That is a
+smaller win than it used to be, and it is not implemented. §20.4 places it
+against the other levers.
 
 ---
 
@@ -917,9 +1042,9 @@ fn on_click(&mut self, event: &ClickEvent, window: &mut Window, cx: &mut App)
 
 A script object's lifetime is decided by the script's collector and cannot carry
 a Rust borrow. A `cx` stashed in a module-level variable and used later from a
-timer points at a stack frame that is long gone. JavaScript makes this easier to
-do than Lua did, because an arrow function captures its enclosing scope with no
-explicit act at all.
+timer points at a stack frame that is long gone. JavaScript makes this easy to
+do, because an arrow function captures its enclosing scope with no explicit act
+at all.
 
 ### 9.2 The design
 
@@ -1003,16 +1128,26 @@ directly. A `function () {}` handler gets the wrong `this` — the mistake
 JavaScript authors and models make most often here — which is why every example
 and every declaration comment uses an arrow function.
 
-`on_click` stores the function in this pass's `CallbackArena` and records only a
-`CallbackId` in the description; the high 16 bits are the render generation and
+`on_click` stores the function in the open `CallbackArena` generation and records
+only a `CallbackId` in the description; the high 16 bits are the generation and
 the low 16 the index. At materialization Rust builds a closure holding a
 `Weak<ShellRuntime>` and that id.
 
-A callback belongs to the render that produced it. The next render replaces the
-whole arena, keeping the previous generation one pass longer because an event
-can be dispatched between a render and its paint. An event that arrives more
-than a generation late is dropped with a `debug` log rather than an error — the
-author did nothing wrong.
+**A callback belongs to the snapshot that produced it, not to a frame.** A
+button described by snapshot #42 may stay on screen through hundreds of repaints,
+and its handler has to remain callable for all of them. So the generation is
+retired when the snapshot is dropped — which is also what keeps two views sharing
+one runtime from retiring each other's handlers, since each owns its own
+generations.
+
+A view keeps the snapshot it just replaced for one more generation, because an
+event can be dispatched against a frame that has already been superseded. An
+event that arrives later than that is dropped with a `debug` log rather than an
+error — the author did nothing wrong.
+
+A generation that was open when a script render failed is discarded rather than
+committed, so a handler registered by a render that then threw is never
+callable.
 
 ### 10.2 Event objects
 
@@ -1123,8 +1258,8 @@ of one diagnostic `Proxy` is in §13.2. And a forgotten `notify` has a definite
 symptom (the interface does not update) that costs far less to diagnose than
 over-triggering does.
 
-This has to be said louder in JavaScript than it would in Lua, because the
-entire front-end ecosystem assumes the opposite: **there are no signals here, no
+This has to be said loudly in JavaScript, because the entire front-end ecosystem
+assumes the opposite: **there are no signals here, no
 `useState`, and no dependency arrays. Change state, then call `cx.notify()`.**
 
 ### 11.3 View definition
@@ -1146,8 +1281,7 @@ export default class Counter extends View {
 `View`'s constructor does one thing: if the subclass defines `init`, it calls
 it. Authors do not write `constructor` directly because a `constructor` must
 call `super(props)` before touching `this`, and every forgotten `super` is a red
-exception; `init` has no such trap, and it also matches the Lua engine's
-`init` convention.
+exception; `init` has no such trap.
 
 A view constructed for a dialog or a sheet is built with `new Class(props)`
 directly, and `View`'s constructor forwards the argument to `init` — so the same
@@ -1200,8 +1334,8 @@ bound is itself an error log.
 **A `cx` must not be held across an `await`.** After an `await` the generation
 has moved and the old token produces the §9.2 error. The correct form is
 `gpui.with_cx(...)`, or taking `cx` from the callback arguments. This is easier
-to get wrong in JavaScript than it was in Lua, because the code before and after
-an `await` shares one lexical scope and the old `cx` is simply in reach.
+to get wrong in JavaScript, because the code before and after an `await` shares
+one lexical scope and the old `cx` is simply in reach.
 
 **An unhandled rejection must be visible.** A failed promise with no `catch` is
 silent by default in JavaScript. `gpui.spawn` adopts the promise it is given and
@@ -1266,7 +1400,7 @@ that is simply missing.
 ## 13. Styling and Theme
 
 Presentation authority sits in script, so this is a core chapter rather than a
-supporting one. All of it is above the seam: both engines share `style.rs` and
+supporting one. All of it is above the seam: `style.rs` is engine-independent and
 `theme.rs`.
 
 ### 13.1 No-argument styles: reflected, zero maintenance
@@ -1934,7 +2068,7 @@ returns a `NativeValue` — null, boolean, number, string, array, or
 insertion-ordered object — and never receives a script handle. That is not a
 convenience. A handle would let the host keep a reference to a script value past
 the call that produced it and past the scope frame that made the surrounding
-context valid. It is also what lets one registry serve both engines, since
+context valid. It is also what lets one registry serve any engine, since
 neither engine's value type appears in `native.rs`.
 
 **A native function may not re-enter the engine.** A native call happens inside
@@ -2128,11 +2262,10 @@ process execution, no clipboard, nothing else (§23).
 
 ## 19. The Sandbox
 
-The language surface is engine-specific and this chapter describes QuickJS; a
-Lua engine's trimming (`ffi`, `io.*`, `package.loadlib`, `debug.*`) is a
-different list because it is a different attack surface. But capability decisions
-and path resolution exist once, above the seam, so there is no room for one
-engine's sandbox to be looser than the other's.
+The language surface is engine-specific and this chapter describes QuickJS;
+another engine's trimming would be a different list because it would be a
+different attack surface. Capability decisions and path resolution exist once,
+above the seam, so no engine's sandbox can be looser than the policy.
 
 ### 19.1 Language trimming
 
@@ -2268,13 +2401,32 @@ the seam of §6.5 exists.
 
 ### 20.1 When rendering happens
 
-GPUI does **not** call `Render::render` every frame. A view rebuilds its element
-tree when it is notified, when an entity it depends on changes, or when the
-window is invalidated. Script cost is therefore a function of interaction
-frequency, not frame rate.
+Two frequencies, and the whole chapter turns on keeping them apart.
 
-The case that matters is continuous interaction — dragging, scrolling, typing,
-animating — which notifies at close to frame rate.
+GPUI calls `Render::render` when a view is notified, when an entity it depends on
+changes, or when the window is invalidated — which during continuous interaction
+means close to frame rate. **Script `render` is not called then.** It runs only
+when the view's snapshot has been invalidated (§8.4), which is a function of
+application activity.
+
+```text
+GPUI render frequency   ×   script render cost      ← the old model
+GPUI render frequency   ×   materialization cost    ← what is actually paid
+script invalidations    ×   script render cost      ← what the script costs
+```
+
+The case that used to be the dangerous one — dragging, scrolling, typing,
+animating — is now mostly native: a scroll offset, a hover, a text cursor and an
+animation frame all repaint without a script render. What remains genuinely
+frequent is application state that *is* changing quickly, which is legitimate. A
+view fed by a 10 Hz market data feed costs ten script renders a second, and at
+around 1.4 ms each (§20.3) that is 14 ms of CPU per second. The failure this
+design prevents is the same view costing 120 script renders a second because the
+window happened to be repainting at 120 Hz.
+
+Where per-frame cost is genuinely inherent — a realtime chart, a canvas, a very
+long list, a drag interaction — the answer is a native component the script
+configures, not a faster script render. `InputState` is the shape to copy.
 
 ### 20.2 The cost model
 
@@ -2305,39 +2457,43 @@ leaves three levers: reduce `C_op` itself, memoize, and virtualize.
 
 ### 20.3 Measured
 
-| Metric | Target | Measured |
-| --- | --- | --- |
-| 120 Hz frame budget | 8.3 ms | Everything, including layout and paint |
-| Script description under continuous interaction | **< 1.5 ms** | **QuickJS 1.14 ms, LuaJIT 1.36 ms** for 443 nodes |
-| Typical panel node count | 200 – 800 | 443 in the benchmark (40 rows × 5 cells plus wrappers) |
-| Operations per node, base-first | 6 – 12 | ~10 |
-| Implied `C_op` ceiling | ≈ 150 ns | ~250 ns measured under QuickJS |
-
-`tests/benchmark.rs` is the gate, and it runs on both engines from the same
-description shape:
+`tests/benchmark.rs` reports three numbers, because they are three different
+costs and reporting one was what hid the coupling:
 
 ```bash
 cargo test -p gpui-shell --release --test benchmark -- --nocapture
-cargo test -p gpui-shell --release --no-default-features --features luajit \
-    --test benchmark -- --nocapture
 ```
 
-The headline result is that **QuickJS came out ahead of LuaJIT**, which is not
-what §6.3's table predicts. Describing an element tree is almost entirely
-cross-boundary calls and argument conversion, not the arithmetic a trace JIT is
-good at, and QuickJS's prototype dispatch is competitive with an `__index`
-metamethod plus a method cache. The two numbers together are what the seam was
-for: they turned an engine choice from a bet into a measurement.
+| | Path | 443 nodes | Paid |
+| --- | --- | --- | --- |
+| **A** | script → snapshot | **1.4 ms** | per application invalidation |
+| **B** | snapshot → `AnyElement` | **0.7 ms** | per frame |
+| **C** | a full cached repaint | **1.8 ms**, **0 script renders** | per frame |
 
-Two caveats. The figures are one machine's, and the *shape* — both engines
-within a factor of 1.5, both under budget — is what should be read from them
+| Metric | Target | Measured |
+| --- | --- | --- |
+| 120 Hz frame budget | 8.3 ms | Everything, including layout and paint |
+| Script description per invalidation | **< 1.5 ms** | **1.4 ms** for 443 nodes (A) |
+| Materialization, per frame | — | 0.7 ms for 443 nodes (B) |
+| Typical panel node count | 200 – 800 | 443 in the benchmark (40 rows × 5 cells plus wrappers) |
+| Operations per node, base-first | 6 – 12 | ~10 |
+| Implied `C_op` ceiling | ≈ 150 ns | ~320 ns measured |
+
+**C is an assertion, not a timing.** Fifty repaints of an unchanged view enter
+the VM zero times; the test fails outright if that number moves, rather than
+merely getting slower. It is the regression gate for §8.4's invariants and the
+most important number in this chapter.
+
+Two caveats carried over. The figures are one machine's, and the *shape* — A
+inside budget, B well under it, C exactly zero — is what should be read from them
 rather than the digits. And the measured `C_op` is above the ceiling the budget
-implies while the total is under it, which means the budget is being met with
-fewer operations per node than the model assumed, not with a cheaper operation.
+implies while the total is under it, which means the budget is met with fewer
+operations per node than the model assumed, not with a cheaper operation.
 
-The in-test assertion is deliberately loose (200 ms), because the real budget is
-a release-build figure and the assertion must also hold in a debug build. The
-gate is the printed number, read by a person.
+The in-test assertions on A and B are deliberately loose (200 ms), because the
+real budget is a release-build figure and the assertion must also hold in a debug
+build. The gate for those two is the printed number, read by a person; the gate
+for C is the assertion itself.
 
 ### 20.4 What is left
 
@@ -2350,14 +2506,14 @@ unrealized win on the list.
 into a `SmallVec`; the cost is on the JavaScript side, in the call shape and the
 conversion. Specializing zero- and one-argument forwarders to avoid the rest
 array, and making the `__apply` entry allocation-free, are the most valuable
-changes available. **QuickJS has no JIT, so all of this is manual** — on LuaJIT
-one could hope a trace would remove part of the dispatch; here one cannot.
+changes available. **QuickJS has no JIT, so all of this is manual** — there is no
+trace to hope will remove part of the dispatch.
 
-**`gpui.memo`** would skip script construction for a subtree whose data has not
-changed, reusing the previous pass's arena fragment while materialization still
-runs every frame (it is the cheap, pure-Rust half). The absence of a JIT makes
-its relative value higher here than it would have been on LuaJIT. Not
-implemented (§8.6).
+**`gpui.memo`** would skip script construction for a *subtree* whose data has not
+changed, within a rebuild the rest of the view still needs. Whole-view caching is
+already done (§8.4), which took most of what memoization was originally for; what
+is left is worth doing only for views where one small region changes constantly
+and the rest is large. Not implemented (§8.6).
 
 **Reuse argument objects.** The context objects handed to item renderers and
 dock renderers should be pre-allocated and reused rather than built per row.
@@ -2383,9 +2539,9 @@ doing only if the measurement supports it.
 ### 21.1 Failure is recoverable
 
 Every Rust → script call catches at the boundary and carries the script's own
-stack. `describe` flattens a QuickJS `Exception` into `message + stack`; the Lua
-engine does the same with a traceback; both end as an ordinary `anyhow::Error`,
-because nothing above the seam should recognize a VM's error type.
+stack. `describe` flattens a QuickJS `Exception` into `message + stack`, which
+ends as an ordinary `anyhow::Error`, because nothing above the seam should
+recognize a VM's error type.
 
 A failure during render becomes a **failure surface** where the interface should
 have been. `runtime.rs` renders it: one heading, the message and stack, one
@@ -2503,9 +2659,14 @@ let tree = runtime.render_to_spec(&object, None, window, cx)?;
 assert!(tree.contains("Button \"increment\""));
 ```
 
-This is the extra return on choosing descriptions over a retained tree (§8.2),
-the main regression defence for the script layer, and the vehicle for
-cross-engine comparison.
+`render_to_spec` runs the script; `RenderSnapshot::debug_tree` reads a
+description that has already been built, without entering the VM. Tests that mean
+"what does this script produce" use the first; tests that mean "what is this view
+currently showing" use the second, and a test that confused them would be
+asserting on something production never does.
+
+This is the extra return on choosing descriptions over a retained tree (§8.2) and
+the main regression defence for the script layer.
 
 ### 22.2 Sandbox escape tests
 
@@ -2527,22 +2688,39 @@ compile that file at all, and dynamic `import()` is asserted to stay callable
 because confining it is the resolver's job and closing it would remove lazy
 loading.
 
-### 22.3 The shared suite across engines
+### 22.3 The render-frequency regression suite
 
-Two engines cannot run the same script, so what must be equal is not the fixture
-but the behavior. `tests/render.rs` carries per-engine fixtures for the same
-cases and asserts the same outcomes: the counter produces the same description
-shape, an element added to two parents fails with the same wording, a mistyped
-style name suggests the same correction, and a real paint does not panic.
-`tests/benchmark.rs` runs the same grid on both.
+`tests/snapshot.rs` is where §8.4's invariants stop being prose. The coupling it
+guards against is easy to reintroduce — one `arena.reset()` in the wrong place,
+one caller that rebuilds unconditionally — and invisible until it shows up as a
+frame-rate problem in an application nobody has written yet. So it is asserted
+directly, by counting entries into script `render`:
 
-The rule the suite is meant to enforce is that a case exists for both engines or
-CI fails, because that is the only executable definition of "the fallback is
-real." It is **not** enforced, and the consequence is visible: six of the ten
-tests in `tests/render.rs` are `#[cfg(feature = "quickjs")]`, covering the
-bundled example, state styles, input events, and reload — every one of which is a
-QuickJS-only capability. The shared core is genuinely shared; everything added
-since is not.
+| Test | What it proves |
+| --- | --- |
+| 65 repaints of a clean view | exactly 1 script render — invariants 1–3 |
+| one `on_change`, then a frame | exactly 2 — `notify` rebuilds, once |
+| three events, then one frame | exactly 2, and all three events reached the script: GPUI does the coalescing, and the runtime does not add a second scheduler |
+| a handler dispatched 32 frames later | still callable — invariant 7 |
+| a render that throws | the previous description survives — invariant 8 |
+| 16 frames after a failed render | no further script renders; a broken render is not frame-coupled either |
+| two views on one runtime, one rebuilding | the other's handlers stay callable |
+| a palette change | rebuilds, because tokens are resolved into the snapshot |
+| a bare `cx.notify()` from Rust, then `refresh` | the first repaints, the second re-runs the script |
+| the shell story's data feed against its repaint feed | the same distinction end to end, through a native module and a real script |
+
+`ShellRuntime::metrics()` is what these read — `script_renders` against
+`materializations`, with the time each took. It exists for this suite and for the
+readout in the shell story, which shows the same two numbers as live rates while
+a feed drives the panel. A claim about render frequency that cannot be observed
+cannot be regression-tested, and one nobody can watch is hard to believe.
+
+Benchmark C in `tests/benchmark.rs` (§20.3) makes the same assertion under a
+release build and a realistic node count.
+
+`tests/render.rs` keeps the end-to-end protocol cases — the counter's description
+shape, an element added to two parents, a mistyped style name's suggestion, input
+events, reload, and a real paint that must not panic.
 
 ### 22.4 Interaction tests
 
@@ -2556,9 +2734,9 @@ tests that catch a duplicated element id or a missing hitbox.
 
 Following `.claude/COMPONENT_TEST_RULES.md`: no tests assert presentation
 dimensions, and coverage concentrates on complex logic — call-scope validity,
-arena reuse errors, callback lifetime, value conversion, style table
-non-emptiness, sandbox boundaries, overlay ordering and focus, task ownership
-and cancellation, and cross-engine agreement.
+arena reuse errors, snapshot lifecycle and render frequency, callback lifetime,
+value conversion, style table non-emptiness, sandbox boundaries, overlay ordering
+and focus, and task ownership and cancellation.
 
 ---
 
@@ -2646,7 +2824,7 @@ reopened without new information.
 
 | Alternative | Why it is not used |
 | --- | --- |
-| **LuaJIT / Lua** | Not rejected — retained as a compilable fallback behind `lua`/`luajit`. It is smaller, faster in hot loops, and cheaper per call. It loses on corpus coverage and type tooling, cannot build for WebAssembly, and is restricted on W^X platforms. §20.3 measured it slower than QuickJS for the one workload that matters here |
+| **A second engine (LuaJIT and similar)** | Removed rather than carried. A fallback nobody exercises rots, and this one had: no `svg`, `Input`, `InputState`, state styles, `accessibility_label`, scheduler, host API, sandbox, or overlays. The seam it justified is kept, because it is what makes the rest of the crate name no VM |
 | **The WASM component model** | Every call crosses a serialization boundary, which is the worst possible fit for high-frequency fine-grained UI calls. Heavy toolchain, poor debugging |
 | **Embedding Node.js or Deno** | The process model and the size do not match an in-process, main-thread, embedded runtime. Bringing npm in brings native dependencies and a supply chain with it. VS Code's approach requires a separate extension process to work at all |
 | **A pure-Rust scripting language** (Rhai, Steel, Koto) | Almost no ecosystem, a new language for every author, and a thin corpus — which is disqualifying for generated interfaces |
@@ -2663,11 +2841,11 @@ reopened without new information.
 
 | Risk | Impact | State |
 | --- | --- | --- |
-| **Cross-boundary call cost exceeds the budget.** Base-first raises operations per node and style has no batching form | Fatal | Measured under budget at 443 nodes (§20.3); the levers if it regresses are specialized call forms, `gpui.memo`, virtualization, and finer view granularity — and, failing all of those, the fallback engine |
-| **The fallback engine rots.** A "fallback" nobody exercises silently stops compiling, and a fallback in the documentation only is worse than none | High | **Already happening.** The Lua engine has no `svg`, `Input`, `InputState`, state styles, `accessibility_label`, scheduler, host API, sandbox, or overlays. It still compiles and passes the shared core (§22.3), but the gap is widening every milestone |
+| **Cross-boundary call cost exceeds the budget.** Base-first raises operations per node and style has no batching form | Contained | Measured under budget at 443 nodes (§20.3), and no longer paid per frame (§8.4); the levers if it regresses are specialized call forms, subtree memoization, virtualization, and finer view granularity |
+| **Script render couples to frame rate again.** A repaint that enters the VM puts the whole description cost on the frame budget | Fatal | Prevented by the snapshot lifecycle (§8.4) and asserted by benchmark C plus `tests/snapshot.rs` (§20.3). It is a regression test rather than a convention precisely because the coupling is easy to reintroduce and invisible until it is a frame-rate problem |
 | **Presentation authority in script means uneven interface quality** | High | Mitigated by the default palette and by `examples/js_todolist/ui.js` as a worked example; a shipped preset (§13.4) and a `gpui-component` module (§14.6) are the real answers |
 | **Bindings drift from upstream** | High | The style surface is immune by construction; component bindings have no drift check at all (§14.5) |
-| **Cycles across two collectors leak** | Medium | Per-frame callbacks are released per pass and long-lived ones are owner-bound (§7.4); there is no `gc_stats`, so a slow leak would be found by watching memory |
+| **Cycles across two collectors leak** | Medium | Render-bound callbacks are retired with their snapshot and long-lived ones are owner-bound (§7.4); retained state is a per-runtime `EntityStore` that drops with the runtime. The one global left is the native module registry, whose closures hold host entity handles — a host clears it with `clear_native_modules` when it goes away, and GPUI's leak check catches a host that forgets |
 | **Sandbox escape**, with `Eval`, quickjs-libc, and prototype pollution as the largest surfaces | High | quickjs-libc is not compiled in; prototypes are frozen; every compiler path is closed at the JavaScript level, but the stronger intrinsic-level fix is not done (§19.1). The escape suite is real and asserts on messages |
 | **Generated code assumes Node or a browser** | Medium | Named stubs point at replacements, `gpui.d.ts` moves the error into the editor. Two stub messages are wrong: `fetch` points at a `gpui.http` that does not exist, and `setTimeout` points at `gpui.timer(ms, callback)` when the API is `gpui.timer.after(ms, fn)` |
 | **One capability grant is in force at a time.** The grant is process-wide state, so two loaded plugins cannot hold different permissions at once | High | Acknowledged rather than hidden: `PluginManager` keeps each grant on its plugin and installs one per activation, so the limitation is one field and one method. The fix is to move the grant from a host thread-local onto the script context (§18.3) |
@@ -2681,10 +2859,11 @@ This is the section most likely to be out of date; check it against the source.
 
 ### Built and reachable from script
 
-The engine seam with QuickJS as default and a compilable Lua fallback, enforced
-by `compile_error!`. The render protocol: descriptions into `SpecArena`,
-materialization in pure Rust, single-use enforcement, and the text-color
-inheritance the description walk resolves. `CallScope` with four phases,
+The engine seam, with QuickJS behind it and `compile_error!` guarding an engineless
+build. The render protocol: descriptions into `SpecArena`, published as a
+`RenderSnapshot` that outlives the frame that materialized it, materialization in
+pure Rust, single-use enforcement, and the text-color inheritance the description
+walk resolves. `CallScope` with four phases,
 generation checks, and the crate's only `unsafe`. Retained state by handle, with
 store-owned subscriptions, for `InputState`. The full style surface — 3,148
 reflected no-argument methods, 57 hand-bound parametric ones, 9 hand-added font
@@ -2702,7 +2881,8 @@ default-denied through one path resolver. Host-registered native modules through
 module confinement, compiler withholding, frozen prototypes, absent-global
 stubs, interrupt and memory limits. Hot reload with per-generation module
 invalidation. `gpui.d.ts` generation from the dispatch tables. The CLI, with
-`check` and `types`. The measured benchmark on both engines.
+`check` and `types`. The three-way benchmark of §20.3, including the cached-render
+regression gate.
 
 ### Built in Rust, with no engine binding above it
 
@@ -2774,12 +2954,14 @@ shipped preset module. The `gpui-component` binding registry. `console`.
    API `fetch` (§17.2). `console` is the live case: it maps exactly, it is a
    JavaScript author's first reflex, and it is currently a `ReferenceError`.
 
-8. **When may the Lua engine be removed?** The proposed criterion was two
-   consecutive milestones with no CI failure caught by a Lua fixture and no
-   platform requiring it. The question has changed shape: the engine has fallen
-   far enough behind (§25) that the real decision is whether to invest in
-   restoring parity or to admit the seam's value was the measurement in §20.3 and
-   retire the fallback deliberately rather than by neglect.
+8. **When does a second engine become worth adding?** The Lua fallback was
+   removed rather than repaired: it had fallen far enough behind (no `svg`,
+   `Input`, state styles, scheduler, host API, sandbox, or overlays) that
+   "compilable fallback" had stopped being true in any useful sense. The seam
+   stays, because it is what keeps the rest of the crate free of VM names. The
+   criterion for a second engine is a platform or an embedder that QuickJS
+   cannot serve — not a benchmark, now that description cost is not frame
+   cost (§8.4).
 
 9. **Does the seam still pay for itself?** It was built because the engine
    choice could not be settled on paper. It has been settled, on measurement,
@@ -2840,10 +3022,7 @@ Five things in that code are the shapes this document has been describing.
 **Event handlers are always arrow functions**, because they need `this` to be
 the view (§10.1).
 
-**`children` takes an array**, so `map` is the natural list form. The Lua engine
-keeps a `children(list)` shape too, but for a different reason — Lua has no
-array methods — which is one example of the two engines agreeing on behavior
-while differing in expression.
+**`children` takes an array**, so `map` is the natural list form.
 
 **`when(condition, fn)` keeps the chain in one piece**, matching the GPUI
 builder style `CLAUDE.md` requires, instead of splitting into a temporary and a
@@ -2887,11 +3066,11 @@ cx.open_dialog(ConfirmClear, { props: { count, onConfirm } });
 
 ```text
 crates/shell/                 # gpui-shell — depends on gpui-base + gpui only
-  Cargo.toml                  # features: quickjs (default) / lua / luajit
+  Cargo.toml                  # features: quickjs (default)
   src/
     lib.rs                    # init, capability and storage entry points, re-exports
     engine/                   # ← the seam
-      mod.rs                  #   contract, compile_error! guards, cfg forwarding
+      mod.rs                  #   contract, compile_error! guard, cfg forwarding
       quickjs/
         mod.rs                #   prelude, dispatch, module resolver, callbacks
         host.rs               #   fs · store · clipboard · log
@@ -2901,23 +3080,24 @@ crates/shell/                 # gpui-shell — depends on gpui-base + gpui only
         entity_api.rs         #   the script face of retained state
         native.rs             #   value conversion for native(name)
         theme_api.rs          #   theme · set_theme · require_api
-      lua.rs                  #   the fallback engine (mlua)
     scope.rs                  # CallScope — the crate's only unsafe module
+    snapshot.rs               # RenderSnapshot — one script render, many frames
+    metrics.rs                # script renders vs materializations, and timings
     spec.rs                   # SpecArena / SpecNode / SpecOp
-    materialize.rs            # descriptions → real elements, pure Rust
+    materialize.rs            # snapshot → real elements, pure Rust, non-destructive
     style.rs                  # reflection table + 57 parametric styles + suggestions
     theme.rs                  # the default palette and token resolution
     value.rs                  # Bridged, plus color and length coercion
     error.rs                  # ShellError
     capability.rs             # Capabilities / path resolution / denials
-    entities.rs               # retained state by handle
+    entities.rs               # EntityStore — retained state by handle, per runtime
     runtime.rs                # CallbackArena<T> · root resolution · failure surface
     root.rs                   # ShellRoot
     dock.rs                   # ScriptPanel · ScriptDockSkin · panel registration
     native.rs                 # the host-registered native module registry
     plugin_api.rs             # the script API version and its check
     plugin.rs                 # manifest · discovery · load/unload  (no caller yet)
-    view.rs                   # ScriptView
+    view.rs                   # ScriptView — snapshot ownership and invalidation
     assets.rs                 # application-directory asset source
     watch.rs                  # source watching and in-place reload
     typings.rs                # gpui.d.ts generation
@@ -2925,7 +3105,8 @@ crates/shell/                 # gpui-shell — depends on gpui-base + gpui only
   theme/default-tokens.json   # the default semantic palette, light and dark
   tests/
     render.rs                 # end-to-end description tests
-    benchmark.rs              # the viability benchmark, both engines
+    snapshot.rs               # the render-frequency invariants (§22.3)
+    benchmark.rs              # script build · materialization · cached render
 examples/js_todolist/         # the reference application
 ```
 
@@ -2947,8 +3128,8 @@ Following `CLAUDE.md`:
   `…Ctx`. `cx` is reserved for GPUI's `App`, `Context<T>`, and `AsyncApp`, and
   for the script-side object of the same name.
 - **Rust type names above the seam carry no language**: `ScriptView`,
-  `ScriptPanel`, `ScriptDockSkin` — never `JsView` or `LuaView`. They do not know
-  what the language is. Types inside an engine may, because there the language is
+  `ScriptPanel`, `ScriptDockSkin` — never `JsView`. They do not know what the
+  language is. Types inside an engine may, because there the language is
   singular.
 - Bound script method names match Rust exactly, in snake_case, with no camelCase
   renaming (§6.4). Names an author writes follow the host language's convention.
@@ -2957,8 +3138,6 @@ Following `CLAUDE.md`:
   `plugin.rs` still documents it as `script:<id>/<panel>`, which `dock.rs` does
   not implement; the two should be reconciled before either is public.
 
-A batch of module documentation in `crates/shell/src` still describes the
-runtime as a Lua one — `lib.rs`, `spec.rs`, `scope.rs`, `value.rs`,
-`materialize.rs`, `style.rs`, `theme.rs`, and `capability.rs` all say "Lua" where
-they mean "script". That predates the engine change and should be corrected in
-one pass.
+Module documentation in `crates/shell/src` should say "script" wherever it means
+"whatever the engine is", and name QuickJS only inside `engine/quickjs`. The
+batch that used to say "Lua" has been corrected.

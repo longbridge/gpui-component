@@ -40,6 +40,18 @@ JavaScript 的习惯写法是 `new Button(id)`。运行时不提供它，理由�
 
 `Button`、`Checkbox` 与 `Switch` 的 `id` 用于跨渲染标识元素，GPUI 据此保留焦点与元素状态。请保持它稳定，并在兄弟节点之间唯一——用 `` `item-${item.id}` ``，而不是一个会在列表被筛选时移位的数组下标。
 
+其余元素——`div`、`h_flex`——的身份是**它在这次渲染所构建的树里所处的位置**。只要树的形状不变，这就够用；而一旦上方多出一个条件子节点，它下面的每个元素都会移位，按下状态、焦点以及其他按身份记录的东西都跟着移位。
+
+`.id(name)` 用来说明「这是哪个元素」，而不是「它落在了哪里」：
+
+```js
+div()
+  .id("toolbar")
+  .active((el) => el.opacity(0.7))
+```
+
+凡是身份必须扛得住邻居变化的元素，都给它取个名字。`Button`、`Checkbox` 与 `Switch` 已经从 `new(id)` 拿到了身份，会忽略这里的名字——并且是给出警告，而不是默不作声。
+
 ### 文本
 
 `text(value)` 会把参数转成字符串，所以模板字符串和数字可以直接用：
@@ -116,6 +128,7 @@ when(...) must return the element
 | `.selected(value)` | `Button` | 报告 selected 状态 |
 | `.checked(value)` | `Checkbox`、`Switch` | 受控值 |
 | `.accessibility_label(text)` | `Button`、`Checkbox` | 屏幕阅读器读出的内容 |
+| `.id(name)` | `div`、`h_flex`、`v_flex` | 一个稳定的身份，取代「在树中的位置」 |
 
 disabled、selected 与 checked 的**外观**由你来画。基础层只报告状态，脚本不说就什么都不会变：
 
@@ -226,9 +239,9 @@ render() {
 
 ## 回调属于它所在的那次渲染
 
-传给 `.on_click` 的处理函数被存进一块 arena，下一次渲染会整体替换它。描述里只记录一个 id；Rust 装配的闭包持有对运行时的弱引用加上这个 id。
+传给 `.on_click` 的处理函数属于那次渲染产出的那份描述——而不是属于某一帧。那份描述会[被之后的每一帧复用，直到有东西让它失效](./state.md#render-什么时候执行)，处理函数在这期间一直可调用。描述里只记录一个 id；Rust 装配的闭包持有对运行时的弱引用加上这个 id。
 
-上一代会多保留一帧，因为事件可能在渲染与绘制之间派发。晚于两代之外才到达的事件会被丢弃并记一条 `debug` 日志，而不是报错——作者没有做错什么，也没有什么可修。
+被替换掉的那份描述会多保留一代，因为事件可能针对一个已经被取代的帧派发。再晚到达的事件会被丢弃并记一条 `debug` 日志，而不是报错——作者没有做错什么，也没有什么可修。
 
 实际后果是：渲染期注册的回调不是订阅。需要活得比本次渲染更久的东西——比如响应输入框的 `change` 事件——见 [状态与视图](./state.md#输入事件)。
 
@@ -242,10 +255,10 @@ unknown element method `items_centre` (did you mean `items_center`?)
 
 ```text
 unknown element method `on_clicked`; it is neither a style method nor one of
-child, children, when, on_click, on_change, disabled, selected, checked
+child, children, when, on_click, on_change, disabled, selected, checked, id
 ```
 
-这件事比看上去重要。拼错的样式名不会改变画面——它只是没起作用——没有诊断的话完全不可见。运行时如何在不给每帧加负担的前提下产生这条信息，见 [样式](./styling.md#未知方法)。
+这件事比看上去重要。拼错的样式名不会改变画面——它只是没起作用——没有诊断的话完全不可见。运行时如何在不给每次渲染加负担的前提下产生这条信息，见 [样式](./styling.md#未知方法)。
 
 ## 还没有的东西
 

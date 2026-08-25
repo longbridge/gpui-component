@@ -1,8 +1,8 @@
 //! Pieces shared by every scripting engine.
 //!
 //! Callback storage and the failure surface are the same problem whatever the
-//! VM is: handlers belong to exactly one render pass, and a script error has to
-//! land on screen rather than take the host down. Only the type of the stored
+//! VM is: handlers belong to exactly one render snapshot, and a script error has
+//! to land on screen rather than take the host down. Only the type of the stored
 //! handler differs, so it is a type parameter.
 
 use std::path::{Path, PathBuf};
@@ -106,46 +106,100 @@ impl<T: Clone> Clone for CallbackEntry<T> {
     }
 }
 
-/// Callbacks live for exactly one render pass.
+/// Callbacks live for exactly as long as the snapshot that produced them.
 ///
-/// The previous pass is kept one generation longer because an event can be
-/// dispatched between a render and its paint; the generation stored in each id
-/// is what keeps a stale handler from being called by mistake.
+/// A script render publishes one [`crate::snapshot::RenderSnapshot`], and that
+/// snapshot may be materialized by many GPUI frames. So a handler cannot be
+/// retired when a frame ends — only when the snapshot it belongs to is dropped,
+/// which is what [`retire`](Self::retire) does.
+///
+/// Building is staged: [`begin`](Self::begin) opens a generation, handlers
+/// accumulate into it, and it becomes reachable only on
+/// [`commit`](Self::commit). A script render that fails half-way calls
+/// [`abort`](Self::abort) instead, so a failed build leaves no trace — the same
+/// transactional rule the snapshot itself follows.
 pub struct CallbackArena<T> {
-    generation: u32,
-    current: Vec<CallbackEntry<T>>,
-    previous: Vec<CallbackEntry<T>>,
-    previous_generation: u32,
+    next_generation: u32,
+    /// The generation currently being recorded, if a build is open.
+    building: Option<(u32, Vec<CallbackEntry<T>>)>,
+    /// Committed generations, one per live snapshot. A view keeps two — the
+    /// published snapshot and the one it just replaced — so this stays short
+    /// enough that a scan beats a map.
+    live: Vec<(u32, Vec<CallbackEntry<T>>)>,
 }
 
 impl<T> Default for CallbackArena<T> {
     fn default() -> Self {
         Self {
-            generation: 0,
-            current: Vec::new(),
-            previous: Vec::new(),
-            previous_generation: u32::MAX,
+            next_generation: 0,
+            building: None,
+            live: Vec::new(),
         }
     }
 }
 
 impl<T: Clone> CallbackArena<T> {
+    /// Opens a generation. Any generation left open by an earlier failed build
+    /// is discarded rather than committed.
+    pub fn begin(&mut self) -> u32 {
+        let generation = self.next_generation & GENERATION_MASK;
+        self.next_generation = self.next_generation.wrapping_add(1);
+        self.building = Some((generation, Vec::new()));
+        generation
+    }
+
+    /// Publishes the open generation, so its handlers become callable.
+    pub fn commit(&mut self) {
+        if let Some(entry) = self.building.take() {
+            self.live.push(entry);
+        }
+    }
+
+    /// Drops the open generation. A failed script render must not leave
+    /// callable handlers behind.
+    pub fn abort(&mut self) {
+        self.building = None;
+    }
+
+    /// Empties the open generation without closing it.
+    ///
+    /// The diagnostic retry runs the same render a second time to produce a
+    /// better message; the second run must start from an empty index space
+    /// rather than stack its handlers on the abandoned ones. The generation
+    /// number survives, because the caller is already holding it.
+    pub fn rollback(&mut self) {
+        if let Some((_, entries)) = self.building.as_mut() {
+            entries.clear();
+        }
+    }
+
+    /// Releases the handlers of one committed generation, called when the
+    /// snapshot that owns them is dropped.
+    pub fn retire(&mut self, generation: u32) {
+        self.live.retain(|(live, _)| *live != generation);
+    }
+
     pub fn push(&mut self, entry: CallbackEntry<T>) -> CallbackId {
-        let index = self.current.len() as u32;
-        self.current.push(entry);
-        (self.generation << 16) | (index & 0xffff)
+        let Some((generation, entries)) = self.building.as_mut() else {
+            // Reached only if a handler is registered outside a script render,
+            // which is a host bug. An id no lookup can match is the harmless
+            // answer.
+            tracing::error!("a callback was registered outside a snapshot build");
+            return CallbackId::MAX;
+        };
+        let index = entries.len() as u32;
+        entries.push(entry);
+        (*generation << GENERATION_SHIFT) | (index & INDEX_MASK)
     }
 
     pub fn get(&self, id: CallbackId) -> Option<CallbackEntry<T>> {
-        let generation = id >> 16;
-        let index = (id & 0xffff) as usize;
-        if generation == self.generation {
-            self.current.get(index).cloned()
-        } else if generation == self.previous_generation {
-            self.previous.get(index).cloned()
-        } else {
-            None
-        }
+        let generation = id >> GENERATION_SHIFT;
+        let index = (id & INDEX_MASK) as usize;
+        self.live
+            .iter()
+            .find(|(live, _)| *live == generation)
+            .and_then(|(_, entries)| entries.get(index))
+            .cloned()
     }
 
     /// Releases every stored handler.
@@ -154,21 +208,102 @@ impl<T: Clone> CallbackArena<T> {
     /// in particular — call this before tearing the VM down, because a handle
     /// released after its runtime aborts the process.
     pub fn clear(&mut self) {
-        self.current.clear();
-        self.previous.clear();
+        self.building = None;
+        self.live.clear();
     }
+}
 
-    pub fn swap(&mut self) {
-        self.previous = std::mem::take(&mut self.current);
-        self.previous_generation = self.generation;
-        self.generation = self.generation.wrapping_add(1) & 0xffff;
-    }
+/// A [`CallbackId`] packs the generation into its high bits and the index into
+/// its low ones, so a handler from a retired snapshot resolves to `None`
+/// instead of to whatever now sits at that index.
+const GENERATION_SHIFT: u32 = 16;
+const INDEX_MASK: u32 = 0xffff;
+const GENERATION_MASK: u32 = 0xffff;
+
+/// A failure reported over an interface that still works.
+///
+/// A render that throws does not take the last valid description with it — the
+/// snapshot is only replaced after a build succeeds — so there is usually still
+/// a working interface to show. Blanking it would lose the reader's scroll
+/// position, their focus, and whatever they were reading, in exchange for a
+/// message that fits in a strip.
+///
+/// So the strip is what they get: it sits over the interface, says what broke
+/// and what to do, and hands over the detail for pasting elsewhere. The
+/// interface underneath is one render behind, which the banner says out loud
+/// rather than leaving the reader to discover.
+pub fn error_banner(message: &str, window: &mut Window, cx: &mut App) -> AnyElement {
+    let surface = token("surface", rgb(0x171d26).into());
+    let foreground = token("foreground", rgb(0xe6ebf2).into());
+    let muted = token("muted_foreground", rgb(0x93a1b3).into());
+    let border = token("border", rgb(0x2a3240).into());
+    let accent = token("destructive", rgb(0xd05050).into());
+
+    let copied =
+        window.use_keyed_state(SharedString::from("shell-banner-copied"), cx, |_, _| false);
+    let is_copied = copied.read(cx).to_owned();
+    let payload = format!("This view could not be re-rendered\n\n{message}");
+
+    div()
+        .absolute()
+        .top_0()
+        .left_0()
+        .right_0()
+        .flex()
+        .flex_col()
+        .bg(surface)
+        .border_b_1()
+        .border_color(border)
+        .child(div().h(px(2.)).w_full().bg(accent))
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .justify_between()
+                .gap(px(16.))
+                .px(px(16.))
+                .py(px(10.))
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap(px(2.))
+                        .child(
+                            div()
+                                .text_size(px(12.))
+                                .line_height(relative(1.4))
+                                .text_color(foreground)
+                                .child(SharedString::from(
+                                    "This view could not be re-rendered; showing the last \
+                                     version that worked",
+                                )),
+                        )
+                        .child(
+                            div()
+                                .text_size(px(11.))
+                                .line_height(relative(1.45))
+                                .text_color(muted)
+                                .child(SharedString::from(first_line(message))),
+                        ),
+                )
+                .child(copy_button(
+                    copied, is_copied, payload, foreground, border, muted,
+                )),
+        )
+        .into_any_element()
+}
+
+/// A banner has one line for the detail, so it shows the first one and the copy
+/// action carries the rest. A stack trace truncated mid-frame reads as noise.
+fn first_line(message: &str) -> String {
+    message.lines().next().unwrap_or(message).to_owned()
 }
 
 /// A visible, non-fatal failure surface.
 ///
-/// A script error must never blank the window with no explanation: the message
-/// belongs where the interface was supposed to be.
+/// Used when there is nothing to keep — a view whose very first render failed
+/// has no last good interface to put a banner over. The message belongs where
+/// the interface was supposed to be.
 pub fn error_overlay(message: &str, window: &mut Window, cx: &mut App) -> AnyElement {
     failure_surface(
         "This view could not be rendered",

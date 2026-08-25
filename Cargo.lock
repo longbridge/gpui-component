@@ -3237,7 +3237,7 @@ dependencies = [
  "gpui",
  "gpui-base",
  "gpui_platform",
- "mlua",
+ "instant",
  "rquickjs",
  "schemars",
  "serde",
@@ -3417,7 +3417,7 @@ source = "git+https://github.com/zed-industries/zed#8b1497dbd22fb06f5838a7c0b84a
 dependencies = [
  "anyhow",
  "log",
- "which 6.0.3",
+ "which",
 ]
 
 [[package]]
@@ -4663,25 +4663,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "lua-src"
-version = "550.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e836dc8ae16806c9bdcf42003a88da27d163433e3f9684c52f0301258004a4fb"
-dependencies = [
- "cc",
-]
-
-[[package]]
-name = "luajit-src"
-version = "210.6.6+707c12b"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a86cc925d4053d0526ae7f5bc765dbd0d7a5d1a63d43974f4966cb349ca63295"
-dependencies = [
- "cc",
- "which 8.0.5",
-]
-
-[[package]]
 name = "lyon"
 version = "1.0.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4982,52 +4963,6 @@ dependencies = [
  "log",
  "wasi 0.11.1+wasi-snapshot-preview1",
  "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "mlua"
-version = "0.11.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ccd36acfa49ce6ee56d1307a061dd302c564eee757e6e4cd67eb4f7204846fab"
-dependencies = [
- "bstr",
- "either",
- "libc",
- "mlua-sys",
- "mlua_derive",
- "num-traits",
- "parking_lot",
- "rustc-hash 2.1.2",
- "rustversion",
-]
-
-[[package]]
-name = "mlua-sys"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0f1c3a7fc7580227ece249fd90aa2fa3b39eb2b49d3aec5e103b3e85f2c3dfc8"
-dependencies = [
- "cc",
- "cfg-if",
- "libc",
- "lua-src",
- "luajit-src",
- "pkg-config",
-]
-
-[[package]]
-name = "mlua_derive"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "465bddde514c4eb3b50b543250e97c1d4b284fa3ef7dc0ba2992c77545dbceb2"
-dependencies = [
- "itertools 0.14.0",
- "once_cell",
- "proc-macro-error2",
- "proc-macro2",
- "quote",
- "regex",
- "syn 2.0.117",
 ]
 
 [[package]]
@@ -6412,28 +6347,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "version_check",
-]
-
-[[package]]
-name = "proc-macro-error-attr2"
-version = "2.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "96de42df36bb9bba5542fe9f1a054b8cc87e172759a1868aa05c1f3acc89dfc5"
-dependencies = [
- "proc-macro2",
- "quote",
-]
-
-[[package]]
-name = "proc-macro-error2"
-version = "2.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "11ec05c52be0a07b08061f7dd003e7d7092e0472bc731b4af7bb1ef876109802"
-dependencies = [
- "proc-macro-error-attr2",
- "proc-macro2",
- "quote",
- "syn 2.0.117",
 ]
 
 [[package]]
@@ -10322,15 +10235,6 @@ dependencies = [
  "home",
  "rustix 0.38.44",
  "winsafe",
-]
-
-[[package]]
-name = "which"
-version = "8.0.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f3ef584124b911bcc3875c2f1472e80f24361ceb789bd1c62b3e9a3df9ff43c"
-dependencies = [
- "libc",
 ]
 
 [[package]]

@@ -67,7 +67,7 @@ cargo run -p gpui-shell -- hello
 
 **`"gpui"` 是唯一的内建模块。** 其余 `import` 只能解析到应用目录之内。这里没有 npm，没有 `require`，也没有 `node:fs`。
 
-**`main.js` 必须 `export default` 一个继承 `View` 的类。** `init` 在视图创建时只执行一次，`render` 每帧执行并且返回恰好一个元素。
+**`main.js` 必须 `export default` 一个继承 `View` 的类。** `init` 在视图创建时只执行一次；`render` 返回恰好一个元素，并且是在视图被置为失效时执行，而不是每帧执行——见 [`render` 什么时候执行](./state.md#render-什么时候执行)。
 
 **样式方法是 snake_case，你自己写的代码是 camelCase。** `items_center`、`on_click`、`text_color`、`gap_2` 保留了 Rust 的拼写，因为无参样式接口是从 GPUI 的反射表生成的，而不是手写的。应用自己声明的一切——变量、方法、对象的键——都是普通的 JavaScript camelCase。这个对比是刻意的：snake_case 的调用是宿主接口，camelCase 的是你的代码。
 

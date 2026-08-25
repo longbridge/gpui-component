@@ -211,9 +211,15 @@ export default class Counter extends View {
 calling it during `render` throws, because notifying yourself while rendering is
 a loop.
 
+**`render` does not run every frame.** It runs when the view has been
+invalidated — a `notify`, a hot reload, a theme change — and publishes a
+description that every frame after that replays in Rust. A hover, a scroll, a
+blinking cursor or an animation repaints without entering the VM at all, so
+script cost follows what your application does rather than the frame rate.
+
 Elements are single-use values. Build them in `render` and never store one on
-the instance — a stored element belongs to a render pass that has already ended,
-and reusing it throws rather than drawing something unexpected.
+the instance — a stored element belongs to a render that has already ended, and
+reusing it throws rather than drawing something unexpected.
 
 ## The Engine Seam
 
@@ -223,27 +229,17 @@ the materializer, the call scope, the style table, the theme, the capability
 model — is engine independent, and only the engine module knows what a script
 value is.
 
-QuickJS is the default, via `rquickjs`. The same runtime also builds on Lua:
+QuickJS is what ships, via `rquickjs`, and is the only engine today. JavaScript
+is the choice because application code reads better in it and the language is
+more widely known.
 
-```bash
-cargo run -p gpui-shell --no-default-features --features lua -- path/to/app
-```
-
-Exactly one engine may be enabled; enabling both is a compile error, because
-`gpui_shell::ShellRuntime` would be ambiguous.
-
-The seam exists because the engine choice is the one decision in this runtime
-that cannot be validated on paper. Per-call cost across the language boundary
-decides whether the whole approach is viable (design document §20), and that
-number has to be measured on both engines rather than argued about. JavaScript
-is the default because application code reads better in it and the language is
-more widely known; keeping the Lua engine behind a feature flag means the
-measurement can be repeated and a reversal stays a feature change rather than a
-rewrite.
-
-The scripts themselves are not portable between the two — they are different
-languages — but the binding surface, the render protocol and the semantics
-described above are the same on either engine.
+The seam is not speculative generality. The engine choice is the one decision in
+this runtime that cannot be validated on paper — per-call cost across the
+language boundary decides whether the whole approach is viable (design document
+§20) — so everything above the seam was written against the contract rather than
+against QuickJS. A second engine would be a new module under `engine/` rather
+than a rewrite, and `tests/benchmark.rs` is what would decide whether to add
+one.
 
 ## Not Here Yet
 
@@ -268,18 +264,38 @@ Deliberately absent:
 The design, what is implemented, and what is not are in
 [`docs/gpui-shell.md`](../../docs/gpui-shell.md).
 
+## Embedding It
+
+Three host-side calls carry most of the weight:
+
+```rust,ignore
+// The script changed something on screen? GPUI already knows. But when *Rust*
+// changes state the script reads, say so — a bare notify is only a repaint.
+script_view.update(cx, |view, cx| view.refresh(cx));
+
+// What it is costing: script renders against frames, with the time each took.
+let reading = runtime.metrics().read();
+
+// Native module closures capture host entity handles, so a host that goes away
+// clears them. GPUI's leak check catches a host that forgets.
+gpui_shell::clear_native_modules();
+```
+
 ## How It Works
 
 GPUI elements are values that are consumed when used: `RenderOnce::render`
 takes `self` by value, `child` takes its child by value, and a view rebuilds its
 entire element tree on every redraw. A JavaScript object can therefore never
 *be* an element. Instead, a script builder records its calls into an arena of
-element descriptions; when GPUI asks the view to render, Rust replays those
-recorded calls into real elements, hands them to GPUI, and clears the arena.
-Nothing survives the pass — not an element, not a callback, not the `cx` handed
-to `render`. This is why elements are single-use, why callbacks belong to the
-render that registered them, and why the runtime can check both at runtime and
-throw a script error instead of failing in undefined ways.
+element descriptions, and Rust replays those recorded calls into real elements.
+
+The description, though, is **not** rebuilt every redraw. It is published as a
+snapshot when the script says its state moved, and every frame after that
+replays the same snapshot in Rust — so a hover, a scroll, a blinking cursor or
+an animation repaints without entering the VM. Script cost follows what the
+application does rather than the frame rate. Elements are still single-use and
+callbacks still belong to the render that registered them; what changed is how
+long that render's output lives.
 
 ## Related Resources
 

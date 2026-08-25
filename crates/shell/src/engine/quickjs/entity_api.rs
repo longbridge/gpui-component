@@ -17,7 +17,7 @@ use rquickjs::{
 };
 
 use crate::{
-    entities::{self, EntityHandle, InputEventName},
+    entities::{EntityHandle, InputEventName},
     scope::{self, ScopePhase},
     spec::{Component, SpecId},
 };
@@ -47,13 +47,18 @@ pub fn install(ctx: &Ctx<'_>, module: &Object<'_>, runtime: Weak<ShellRuntime>) 
     let _ = module;
     let globals = ctx.globals();
 
+    // Every entity call reaches its store through the runtime, because the
+    // store belongs to the runtime rather than to the thread — see
+    // `crate::entities`. Each closure carries its own `Weak`, since a `Func`
+    // owns what it captures.
+    let create = runtime.clone();
     globals.set(
         "__input_state_new",
         Func::from(
-            |ctx: Ctx<'_>,
-             placeholder: Option<String>,
-             value: Option<String>|
-             -> JsResult<EntityHandle> {
+            move |ctx: Ctx<'_>,
+                  placeholder: Option<String>,
+                  value: Option<String>|
+                  -> JsResult<EntityHandle> {
                 let phase = scope::current_phase();
                 if matches!(phase, Some(ScopePhase::Render) | Some(ScopePhase::Layout)) {
                     return Err(Exception::throw_type(
@@ -63,8 +68,11 @@ pub fn install(ctx: &Ctx<'_>, module: &Object<'_>, runtime: Weak<ShellRuntime>) 
                     ));
                 }
 
+                let store = alive(&ctx, &create)?;
                 scope::with_current(|window, cx| {
-                    entities::create_input(placeholder, value, window, cx)
+                    store
+                        .entities()
+                        .create_input(placeholder, value, window, cx)
                 })
                 .ok_or_else(|| {
                     Exception::throw_type(
@@ -77,20 +85,24 @@ pub fn install(ctx: &Ctx<'_>, module: &Object<'_>, runtime: Weak<ShellRuntime>) 
         ),
     )?;
 
+    let read = runtime.clone();
     globals.set(
         "__input_value",
-        Func::from(|ctx: Ctx<'_>, handle: EntityHandle| -> JsResult<String> {
-            let state = live(&ctx, handle)?;
-            scope::with_current_app(|cx| state.read(cx).value().to_string())
-                .ok_or_else(|| needs_call(&ctx, "value()"))
-        }),
+        Func::from(
+            move |ctx: Ctx<'_>, handle: EntityHandle| -> JsResult<String> {
+                let state = live(&ctx, &read, handle)?;
+                scope::with_current_app(|cx| state.read(cx).value().to_string())
+                    .ok_or_else(|| needs_call(&ctx, "value()"))
+            },
+        ),
     )?;
 
+    let write = runtime.clone();
     globals.set(
         "__input_set_value",
         Func::from(
-            |ctx: Ctx<'_>, handle: EntityHandle, value: String| -> JsResult<()> {
-                let state = live(&ctx, handle)?;
+            move |ctx: Ctx<'_>, handle: EntityHandle, value: String| -> JsResult<()> {
+                let state = live(&ctx, &write, handle)?;
                 scope::with_current(|window, cx| {
                     state.update(cx, |state, cx| state.set_value(value, window, cx));
                 })
@@ -119,16 +131,17 @@ pub fn install(ctx: &Ctx<'_>, module: &Object<'_>, runtime: Weak<ShellRuntime>) 
                 })?;
 
                 let saved = handler.0;
-                let runtime = subscribe_runtime.clone();
+                let dispatch = subscribe_runtime.clone();
+                let store = alive(&ctx, &subscribe_runtime)?;
 
                 let subscribed = scope::with_current(|window, cx| {
-                    entities::subscribe_input(
+                    store.entities().subscribe_input(
                         handle,
                         event,
                         window,
                         cx,
                         move |emitted, window, cx| {
-                            let Some(runtime) = runtime.upgrade() else {
+                            let Some(runtime) = dispatch.upgrade() else {
                                 return;
                             };
                             runtime.dispatch_input_event(&saved, emitted, window, cx);
@@ -153,25 +166,28 @@ pub fn install(ctx: &Ctx<'_>, module: &Object<'_>, runtime: Weak<ShellRuntime>) 
         ),
     )?;
 
+    let discard = runtime.clone();
     globals.set(
         "__input_release",
-        Func::from(|handle: EntityHandle| entities::release(handle)),
+        Func::from(move |handle: EntityHandle| {
+            discard
+                .upgrade()
+                .is_some_and(|runtime| runtime.entities().release(handle))
+        }),
     )?;
 
     globals.set(
         "__input_element",
         Func::from(
             move |ctx: Ctx<'_>, handle: EntityHandle| -> JsResult<SpecId> {
-                if entities::input(handle).is_none() {
+                let store = alive(&ctx, &runtime)?;
+                if store.entities().input(handle).is_none() {
                     return Err(Exception::throw_type(
                         &ctx,
                         "this input state has been released and can no longer be rendered",
                     ));
                 }
-                let runtime = runtime
-                    .upgrade()
-                    .ok_or_else(|| Exception::throw_message(&ctx, "the runtime has shut down"))?;
-                Ok(runtime.push_component(Component::Input(handle)))
+                Ok(store.push_component(Component::Input(handle)))
             },
         ),
     )?;
@@ -181,10 +197,24 @@ pub fn install(ctx: &Ctx<'_>, module: &Object<'_>, runtime: Weak<ShellRuntime>) 
 
 fn live(
     ctx: &Ctx<'_>,
+    runtime: &Weak<ShellRuntime>,
     handle: EntityHandle,
 ) -> JsResult<gpui::Entity<gpui_base::input::InputState>> {
-    entities::input(handle)
+    alive(ctx, runtime)?
+        .entities()
+        .input(handle)
         .ok_or_else(|| Exception::throw_type(ctx, "this input state has been released"))
+}
+
+/// The runtime this handle's store belongs to, or a clear failure.
+///
+/// A `Weak` that no longer upgrades means the VM is being torn down while a
+/// script call is still on the stack, which is a host bug rather than anything
+/// the author wrote.
+fn alive(ctx: &Ctx<'_>, runtime: &Weak<ShellRuntime>) -> JsResult<std::rc::Rc<ShellRuntime>> {
+    runtime
+        .upgrade()
+        .ok_or_else(|| Exception::throw_message(ctx, "the runtime has shut down"))
 }
 
 fn needs_call(ctx: &Ctx<'_>, what: &str) -> rquickjs::Error {

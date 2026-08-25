@@ -19,8 +19,8 @@
 //!
 //! The second is that this module stays engine independent. It names
 //! [`ShellRuntime`], [`ViewObject`] and [`Entity<ScriptView>`] and nothing
-//! below them, exactly like every other module above `engine::`. Reloading a
-//! QuickJS application and reloading a Lua one are the same three calls.
+//! below them, exactly like every other module above `engine::`. Reloading is
+//! the same three calls whatever the engine turns out to be.
 //!
 //! # Why polling, and what a real watcher would buy
 //!
@@ -67,7 +67,7 @@ const MAX_FILES: usize = 4096;
 
 /// Extensions a reload can be triggered by. Only sources the runtime actually
 /// evaluates count — a change to a README should not restart the application.
-const SOURCE_EXTENSIONS: [&str; 3] = ["js", "mjs", "lua"];
+const SOURCE_EXTENSIONS: [&str; 2] = ["js", "mjs"];
 
 /// Directory names that are never application source, skipped before their
 /// contents are stated. Hidden entries are skipped separately.

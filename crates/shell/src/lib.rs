@@ -11,12 +11,14 @@ pub mod engine;
 pub mod entities;
 pub mod error;
 pub mod materialize;
+pub mod metrics;
 pub mod native;
 pub mod plugin;
 pub mod plugin_api;
 pub mod root;
 pub mod runtime;
 pub mod scope;
+pub mod snapshot;
 pub mod spec;
 pub mod style;
 pub mod theme;
@@ -28,6 +30,7 @@ pub mod watch;
 pub use capability::Capabilities;
 pub use engine::ShellRuntime;
 pub use error::ShellError;
+pub use metrics::RuntimeMetrics;
 pub use native::{
     NativeArguments, NativeError, NativeModule, NativeModules, NativeObject, NativeResult,
     NativeValue,
@@ -35,6 +38,7 @@ pub use native::{
 pub use plugin::{Plugin, PluginManager, PluginManifest};
 pub use root::{DialogOptions, SheetSide, ShellRoot, ToastLevel, ToastRequest};
 pub use scope::ScopePhase;
+pub use snapshot::RenderSnapshot;
 pub use view::ScriptView;
 
 use std::path::PathBuf;
@@ -97,4 +101,13 @@ pub fn init(cx: &mut App) {
 /// read at call time, so a later change takes effect on the next call.
 pub fn set_native_modules(modules: NativeModules) {
     native::set_modules(modules);
+}
+
+/// Removes every native module.
+///
+/// A host that registered modules capturing GPUI entities should call this when
+/// it goes away; see [`native::clear_modules`] for why leaving them installed is
+/// a leak rather than merely untidy.
+pub fn clear_native_modules() {
+    native::clear_modules();
 }

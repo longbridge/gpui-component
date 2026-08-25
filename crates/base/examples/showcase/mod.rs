@@ -504,9 +504,7 @@ impl Render for BaseShowcase {
                             // fill it instead: centering them inside a
                             // `flex_none` box leaves a percentage size with
                             // nothing to resolve against, and it collapses.
-                            .when(!fills_viewport, |this| {
-                                this.items_center().justify_center()
-                            })
+                            .when(!fills_viewport, |this| this.items_center().justify_center())
                             .p_4()
                             .child(
                                 div()

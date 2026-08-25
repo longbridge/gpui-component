@@ -11,7 +11,7 @@
 // panel on the left renders directly; this file reaches it through the two
 // native modules `shell_story.rs` registered before the runtime started:
 //
-//   native("checklist")   steps() · toggle(id) · set_all(done)
+//   native("checklist")   steps() · reading() · toggle(id) · set_all(done)
 //   native("theme")       palette()
 //
 // Both are plain data in, plain data out. There is no host object to hold on
@@ -44,8 +44,15 @@ export default class ChecklistBoard extends View {
     const steps = checklist.steps();
     const done = steps.filter((step) => step.done).length;
 
+    // The live reading. Painting it is what makes the story's data feed visible
+    // here: when the feed moves it, the Rust side notifies, this render runs
+    // again, and the number changes. When the feed is only asking for repaints,
+    // this render does not run at all and the number holds still — which is the
+    // whole point of the counters under the panel.
+    const reading = checklist.reading();
+
     return surface()
-      .child(this.heading(steps.length, done))
+      .child(this.heading(steps.length, done, reading))
       .child(bar(steps.length === 0 ? 0 : done / steps.length))
       .child(rule())
       .child(this.list(checklist, steps))
@@ -53,7 +60,7 @@ export default class ChecklistBoard extends View {
       .child(this.actions(checklist, steps.length, done));
   }
 
-  heading(total, done) {
+  heading(total, done, reading) {
     return h_flex()
       .w_full()
       .items_start()
@@ -65,7 +72,13 @@ export default class ChecklistBoard extends View {
           .child(title("Release checklist"))
           .child(muted("Drawn by main.js · state read over native(\"checklist\")")),
       )
-      .child(label(`${done} / ${total}`));
+      .child(
+        v_flex()
+          .items_end()
+          .gap(SPACE.xxs)
+          .child(label(`${done} / ${total}`))
+          .child(muted(`reading ${reading}`)),
+      );
   }
 
   list(checklist, steps) {

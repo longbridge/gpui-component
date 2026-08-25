@@ -6,7 +6,7 @@ order: 3
 
 # Elements
 
-An element in `gpui-shell` is a **description**, not an object. It exists for one render pass and is consumed when it is used. This page covers what you can build, how to compose it, and what the runtime does when a description is used twice.
+An element in `gpui-shell` is a **description**, not an object. It exists for one `render` call and is consumed when it is used. This page covers what you can build, how to compose it, and what the runtime does when a description is used twice.
 
 ## Constructors
 
@@ -39,6 +39,18 @@ Views are the opposite case, and use the standard form: `class Counter extends V
 ### Ids
 
 The `id` given to `Button`, `Checkbox` and `Switch` identifies the element across renders, which is how GPUI preserves focus and element state. Keep it stable and unique among siblings — `` `item-${item.id}` `` rather than an array index that shifts when the list is filtered.
+
+Anything else — a `div`, an `h_flex` — is identified by **where it sits in the tree your render built**. That is enough while the tree keeps its shape, and stops being enough the moment a conditional child appears above it: every element below shifts, and the pressed state, the focus and anything else keyed by identity shift with them.
+
+`.id(name)` is how you say which element this is rather than where it landed:
+
+```js
+div()
+  .id("toolbar")
+  .active((el) => el.opacity(0.7))
+```
+
+Name anything whose identity has to survive its neighbours changing. `Button`, `Checkbox` and `Switch` already have an identity from `new(id)` and ignore this one (with a warning, rather than silently).
 
 ### Text
 
@@ -116,6 +128,7 @@ These are not styles; they report state to the base layer, which handles the int
 | `.selected(value)` | `Button` | Reports the selected state |
 | `.checked(value)` | `Checkbox`, `Switch` | The controlled value |
 | `.accessibility_label(text)` | `Button`, `Checkbox` | What a screen reader announces |
+| `.id(name)` | `div`, `h_flex`, `v_flex` | A stable identity, instead of position in the tree |
 
 Disabled, selected and checked **appearance** is yours to draw. The base layer only reports the state; nothing changes on screen unless the script says so:
 
@@ -226,9 +239,9 @@ That is how the [example application](https://github.com/longbridge/gpui-compone
 
 ## Callbacks belong to their render
 
-A handler passed to `.on_click` is stored in an arena that is replaced by the next render. The description records only an id; the closure Rust assembles holds a weak reference to the runtime plus that id.
+A handler passed to `.on_click` belongs to the description that render produced — not to a frame. That description is [replayed by every frame until something invalidates it](./state.md#when-render-runs), and the handler stays callable for all of them. The description records only an id; the closure Rust assembles holds a weak reference to the runtime plus that id.
 
-The previous generation is kept one frame longer, because an event can be dispatched between render and paint. An event that arrives more than two generations late is dropped with a `debug` log rather than an error — the author did nothing wrong, and there is nothing for them to fix.
+The description a render replaced is kept one generation longer, because an event can be dispatched against a frame that has already been superseded. An event that arrives later than that is dropped with a `debug` log rather than an error — the author did nothing wrong, and there is nothing for them to fix.
 
 The practical consequence is that a rendered callback is not a subscription. For something that must outlive the pass that created it — reacting to an input's `change` event, say — see [State and views](./state.md#input-events).
 
@@ -242,10 +255,10 @@ unknown element method `items_centre` (did you mean `items_center`?)
 
 ```text
 unknown element method `on_clicked`; it is neither a style method nor one of
-child, children, when, on_click, on_change, disabled, selected, checked
+child, children, when, on_click, on_change, disabled, selected, checked, id
 ```
 
-This matters more than it looks. A mistyped style name changes nothing on screen — it simply fails to — and without a diagnostic it is invisible. See [Styling](./styling.md#unknown-methods) for how the runtime produces that message without paying for it on every frame.
+This matters more than it looks. A mistyped style name changes nothing on screen — it simply fails to — and without a diagnostic it is invisible. See [Styling](./styling.md#unknown-methods) for how the runtime produces that message without paying for it on every render.
 
 ## Not there yet
 

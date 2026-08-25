@@ -67,8 +67,9 @@ use std::{
 
 /// A value crossing the native boundary, in either direction.
 ///
-/// The six cases are the intersection of what both engines and JSON can carry,
-/// which is what keeps one registry usable from QuickJS and from Lua.
+/// The six cases are the intersection of what a script engine and JSON can both
+/// carry, which is what keeps one registry usable from any engine behind the
+/// seam rather than from QuickJS alone.
 #[derive(Clone, Debug, PartialEq)]
 pub enum NativeValue {
     Null,
@@ -509,6 +510,21 @@ thread_local! {
 /// call rather than on the next restart.
 pub fn set_modules(modules: NativeModules) {
     REGISTRY.with(|registry| *registry.borrow_mut() = Rc::new(modules));
+}
+
+/// Removes every installed module.
+///
+/// A host closure typically captures a GPUI entity handle — that is how a native
+/// function reaches host state at all — so the registry keeps those handles
+/// alive for as long as it holds the closure. A host that goes away without
+/// clearing leaves them registered, which GPUI reports as a leaked handle at
+/// shutdown and which would be a real leak for a plugin host that unloads and
+/// reloads.
+///
+/// So clearing is the installer's job, in the same place it would drop anything
+/// else it owns.
+pub fn clear_modules() {
+    set_modules(NativeModules::default());
 }
 
 /// The installed registry.

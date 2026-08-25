@@ -27,7 +27,7 @@
 //! with the answer. Switch the gallery's theme or radius and the script half
 //! follows.
 
-use std::{path::PathBuf, rc::Rc};
+use std::{path::PathBuf, rc::Rc, time::Duration};
 
 use gpui::{
     App, AppContext as _, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement,
@@ -42,7 +42,7 @@ use gpui_component::{
     v_flex,
 };
 use gpui_shell::{
-    ScriptView, ShellRuntime,
+    RuntimeMetrics, ScriptView, ShellRuntime,
     native::{NativeError, NativeModules, NativeObject, NativeValue},
 };
 
@@ -65,6 +65,11 @@ struct Step {
 /// inside a script call and still notify observers afterwards.
 pub struct Checklist {
     steps: Vec<Step>,
+    /// A number a live feed moves, so there is something changing that nobody
+    /// clicked. It stands in for the case that actually stresses a scripting
+    /// runtime: data arriving on its own, several times a second, while the
+    /// window is repainting for its own reasons.
+    reading: u32,
 }
 
 impl Checklist {
@@ -87,7 +92,13 @@ impl Checklist {
                     done: id == 1,
                 })
                 .collect(),
+            reading: 0,
         }
+    }
+
+    /// Moves the live reading. One tick of a feed.
+    fn advance(&mut self) {
+        self.reading = self.reading.wrapping_add(1);
     }
 
     fn done_count(&self) -> usize {
@@ -157,6 +168,59 @@ impl Checklist {
     }
 }
 
+/// What is driving the script view right now.
+///
+/// Two feeds rather than one, because they separate the two frequencies this
+/// runtime keeps apart. A **data** feed moves state the script reads, so the
+/// script re-renders; a **repaint** feed only tells GPUI the view needs drawing
+/// again, which is what a hover, a scroll, a cursor blink or an animation does.
+///
+/// Run the second one and watch the readout: frames climb, script renders stay
+/// at zero. That is the architecture, live, rather than in a test.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Feed {
+    Idle,
+    /// Changes the checklist's reading, which invalidates the script view.
+    Data(u32),
+    /// Notifies the script view without changing anything it reads.
+    Repaint(u32),
+}
+
+impl Feed {
+    fn hz(self) -> Option<u32> {
+        match self {
+            Feed::Idle => None,
+            Feed::Data(hz) | Feed::Repaint(hz) => Some(hz),
+        }
+    }
+
+    fn interval(self) -> Option<Duration> {
+        self.hz()
+            .filter(|hz| *hz > 0)
+            .map(|hz| Duration::from_secs_f64(1.0 / f64::from(hz)))
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Feed::Idle => "Idle",
+            Feed::Data(_) => "Data",
+            Feed::Repaint(_) => "Repaint",
+        }
+    }
+}
+
+/// The choices offered, in the order they answer the question.
+const FEEDS: [(&str, &str, Feed); 4] = [
+    ("feed-off", "Off", Feed::Idle),
+    ("feed-data-10", "Data · 10 Hz", Feed::Data(10)),
+    ("feed-data-60", "Data · 60 Hz", Feed::Data(60)),
+    ("feed-repaint-60", "Repaint · 60 Hz", Feed::Repaint(60)),
+];
+
+/// How often the readout re-reads the counters. One second, because the numbers
+/// it shows are rates and a rate over a shorter window is mostly noise.
+const SAMPLE_INTERVAL: Duration = Duration::from_secs(1);
+
 /// The entry file the script application directory must contain.
 const ENTRY: &str = "main.js";
 
@@ -181,6 +245,14 @@ fn install_native_modules(checklist: &Entity<Checklist>) {
     modules.register("checklist", |module| {
         let read = checklist.clone();
         module.function("steps", move |_| with_app(|cx| read.read(cx).to_native()));
+
+        // Read separately from `steps()` so the script can paint the feed
+        // without the checklist itself having to change: the two move for
+        // different reasons and at very different rates.
+        let reading = checklist.clone();
+        module.function("reading", move |_| {
+            with_app(|cx| NativeValue::from(reading.read(cx).reading))
+        });
 
         let flip = checklist.clone();
         module.function("toggle", move |arguments| {
@@ -270,6 +342,15 @@ pub struct ShellStory {
     /// that silently shows the previous script after a syntax error is worse
     /// than one that says what broke.
     script_error: Option<SharedString>,
+    feed: Feed,
+    /// Bumped whenever the feed changes, so a loop started for an older feed
+    /// stops on its next tick instead of racing the new one.
+    feed_generation: u64,
+    /// The counters as of the last sample, and what the second before it added.
+    /// A rate is the difference of two readings; the runtime does not know what
+    /// a second is, and should not have to.
+    sampled: RuntimeMetrics,
+    rate: RuntimeMetrics,
 }
 
 impl super::Story for ShellStory {
@@ -306,7 +387,11 @@ impl ShellStory {
         // looking at the same entity, so both are told.
         cx.observe(&checklist, |this, _, cx| {
             if let Some(script) = &this.script {
-                script.update(cx, |_, cx| cx.notify());
+                // `refresh`, not `notify`: the checklist is state the script
+                // reads over a native call, so its description is now stale.
+                // A bare notify would redraw the panel from the snapshot it
+                // already published — correct for a repaint, wrong here.
+                script.update(cx, |view, cx| view.refresh(cx));
             }
             cx.notify();
         })
@@ -318,6 +403,10 @@ impl ShellStory {
             runtime: None,
             script: None,
             script_error: None,
+            feed: Feed::Idle,
+            feed_generation: 0,
+            sampled: RuntimeMetrics::default(),
+            rate: RuntimeMetrics::default(),
         };
 
         match ShellRuntime::new() {
@@ -329,7 +418,96 @@ impl ShellStory {
             Err(error) => story.script_error = Some(error.to_string().into()),
         }
 
+        story.sample_metrics(cx);
         story
+    }
+
+    /// Re-reads the runtime counters once a second, forever.
+    ///
+    /// Separate from the feed on purpose: the readout has to keep working when
+    /// the feed is off, because "zero script renders while the window is busy"
+    /// is one of the readings worth seeing.
+    fn sample_metrics(&self, cx: &mut Context<Self>) {
+        cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor().timer(SAMPLE_INTERVAL).await;
+                let alive = this.update(cx, |this, cx| {
+                    let Some(runtime) = &this.runtime else {
+                        return;
+                    };
+                    let reading = runtime.metrics().read();
+                    this.rate = reading.since(&this.sampled);
+                    this.sampled = reading;
+                    cx.notify();
+                });
+                if alive.is_err() {
+                    break;
+                }
+            }
+        })
+        .detach();
+    }
+
+    /// Switches the feed, and starts the loop that drives it.
+    ///
+    /// The counters are reset here rather than accumulated, because the readout
+    /// answers "what is this feed costing", not "what has this window done since
+    /// it opened".
+    fn set_feed(&mut self, feed: Feed, cx: &mut Context<Self>) {
+        self.feed_generation += 1;
+        self.feed = feed;
+
+        if let Some(runtime) = &self.runtime {
+            runtime.metrics().reset();
+        }
+        self.sampled = RuntimeMetrics::default();
+        self.rate = RuntimeMetrics::default();
+        cx.notify();
+
+        let Some(interval) = feed.interval() else {
+            return;
+        };
+        let generation = self.feed_generation;
+
+        cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor().timer(interval).await;
+                let running = this.update(cx, |this, cx| {
+                    if this.feed_generation != generation {
+                        return false;
+                    }
+                    this.tick(cx);
+                    true
+                });
+                if !matches!(running, Ok(true)) {
+                    break;
+                }
+            }
+        })
+        .detach();
+    }
+
+    /// One tick of whichever feed is running.
+    fn tick(&mut self, cx: &mut Context<Self>) {
+        match self.feed {
+            Feed::Idle => {}
+            // Changing the entity notifies its observers, which invalidates the
+            // script view: the script has to run, because what it reads moved.
+            Feed::Data(_) => self.checklist.update(cx, |checklist, cx| {
+                checklist.advance();
+                cx.notify();
+            }),
+            // Nothing the script reads has changed, so this is a repaint and
+            // nothing more. The view materializes its existing snapshot and the
+            // VM is never entered.
+            Feed::Repaint(_) => {
+                if let Some(script) = &self.script {
+                    // A bare notify on purpose. This is exactly the case
+                    // `refresh` exists to be distinguished from.
+                    script.update(cx, |_, cx| cx.notify());
+                }
+            }
+        }
     }
 
     /// Re-reads the script from disk and swaps it into the live view.
@@ -390,6 +568,69 @@ impl ShellStory {
         }))
     }
 
+    /// The two counters, side by side, with what they mean underneath.
+    ///
+    /// Rates rather than totals: a total answers "how much work has this window
+    /// ever done", and the question here is "what is this costing right now".
+    fn readout(&self, cx: &Context<Self>) -> impl IntoElement {
+        let script = self.rate.script_renders();
+        let frames = self.rate.materializations();
+
+        v_flex()
+            .w_full()
+            .gap_2()
+            .child(
+                h_flex()
+                    .w_full()
+                    .gap_6()
+                    .child(reading(
+                        "Script renders",
+                        format!("{script}/s"),
+                        format!("{:.2} ms each", millis(self.rate.mean_script_render())),
+                        cx,
+                    ))
+                    .child(reading(
+                        "Frames drawn",
+                        format!("{frames}/s"),
+                        format!("{:.2} ms each", millis(self.rate.mean_materialize())),
+                        cx,
+                    ))
+                    .child(reading(
+                        "Feed",
+                        match self.feed.hz() {
+                            Some(hz) => format!("{} · {hz} Hz", self.feed.label()),
+                            None => self.feed.label().to_owned(),
+                        },
+                        match self.feed {
+                            Feed::Idle => "nothing is driving the panel".to_owned(),
+                            Feed::Data(hz) => format!("the reading moves {hz} times a second"),
+                            Feed::Repaint(hz) => {
+                                format!("the view is redrawn {hz} times a second")
+                            }
+                        },
+                        cx,
+                    )),
+            )
+            .child(
+                Label::new(match self.feed {
+                    Feed::Idle => {
+                        "Counters are cleared when the feed changes. With no feed running, \
+                         hovering the script panel still draws frames — and still runs no script."
+                    }
+                    Feed::Data(_) => {
+                        "The reading is state the script reads, so every tick invalidates its \
+                         snapshot: script renders track the feed rate."
+                    }
+                    Feed::Repaint(_) => {
+                        "Nothing the script reads has changed, so every tick is a repaint of the \
+                         snapshot it already published: frames climb, script renders stay at zero."
+                    }
+                })
+                .text_xs()
+                .text_color(cx.theme().muted_foreground),
+            )
+    }
+
     fn script_panel(&self, cx: &Context<Self>) -> impl IntoElement {
         v_flex()
             .w_full()
@@ -412,6 +653,16 @@ impl ShellStory {
                 )
             })
             .children(self.script.clone())
+    }
+}
+
+/// The native modules this story installed capture its `Entity<Checklist>`, and
+/// the registry they live in is process-wide. Leaving them there would keep the
+/// entity alive after the story is gone — which GPUI reports as a leaked handle,
+/// and which is exactly the shape of leak a plugin host would hit on unload.
+impl Drop for ShellStory {
+    fn drop(&mut self) {
+        gpui_shell::clear_native_modules();
     }
 }
 
@@ -498,6 +749,25 @@ impl Render for ShellStory {
                     ),
             )
             .child(
+                section("Render frequency")
+                    .description(
+                        "A script render and a GPUI frame are not the same event. Drive the \
+                         panel and watch the two counters come apart.",
+                    )
+                    .sub_title(h_flex().gap_2().children(FEEDS.map(|(id, label, feed)| {
+                        Button::new(id)
+                            .xsmall()
+                            .label(label)
+                            .when(self.feed == feed, |this| this.primary())
+                            .when(self.feed != feed, |this| this.outline())
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                this.set_feed(feed, cx);
+                            }))
+                    })))
+                    .v_flex()
+                    .child(self.readout(cx)),
+            )
+            .child(
                 section("Where the boundary is")
                     .description(
                         "The script holds no state and no host object. It calls two native \
@@ -529,6 +799,36 @@ impl Render for ShellStory {
     }
 }
 
+/// One counter: what it is, the number, and what the number means.
+///
+/// The number is the focal point and gets the size; the label above it and the
+/// detail below it are both quiet, because a reader glancing at this is
+/// comparing two figures, not reading three lines.
+fn reading(
+    caption: &'static str,
+    value: String,
+    detail: String,
+    cx: &Context<ShellStory>,
+) -> impl IntoElement {
+    v_flex()
+        .gap_1()
+        .child(
+            Label::new(caption)
+                .text_xs()
+                .text_color(cx.theme().muted_foreground),
+        )
+        .child(Label::new(value).font_semibold())
+        .child(
+            Label::new(detail)
+                .text_xs()
+                .text_color(cx.theme().muted_foreground),
+        )
+}
+
+fn millis(duration: Duration) -> f64 {
+    duration.as_secs_f64() * 1000.0
+}
+
 /// One line of the boundary summary: the call on the left, what it does on the
 /// right. Two columns rather than a sentence, because the reader is scanning
 /// for a name, not reading prose.
@@ -547,4 +847,100 @@ fn boundary_line(
                 .text_xs()
                 .text_color(cx.theme().muted_foreground),
         )
+}
+
+#[cfg(test)]
+mod tests {
+    use std::ops::Deref as _;
+
+    use gpui::{TestAppContext, VisualTestContext};
+
+    use super::*;
+
+    /// The claim the readout under the panel makes, checked without a person
+    /// having to watch two counters.
+    ///
+    /// It is worth an end-to-end test rather than a unit one because it spans
+    /// every part that has to agree: the entity, the native module, the script's
+    /// `reading()` call, and the difference between `refresh` and `notify`.
+    #[gpui::test]
+    fn a_data_feed_re_runs_the_script_and_a_repaint_feed_does_not(cx: &mut TestAppContext) {
+        // The story reads the gallery's theme through `native("theme")`, so
+        // the theme has to exist before the script's first render.
+        cx.update(gpui_component::init);
+        let window = cx.add_window(|window, cx| ShellStory::new(window, cx));
+        let story = cx.update(|cx| window.entity(cx)).expect("the story");
+        let mut context = VisualTestContext::from_window(*window.deref(), cx);
+
+        let (runtime, script) = story.read_with(&mut context, |story, _| {
+            assert!(
+                story.script_error.is_none(),
+                "the story's script did not load: {:?}",
+                story.script_error
+            );
+            (story.runtime.clone(), story.script.clone())
+        });
+        let runtime = runtime.expect("a runtime");
+        let script = script.expect("a script view");
+
+        draw(&mut context, &script);
+        assert!(
+            description(&mut context, &script).contains("reading 0"),
+            "the script should be painting the live reading"
+        );
+
+        let baseline = runtime.metrics().read().script_renders();
+
+        // A data tick moves state the script reads, so the description is stale.
+        tick(&mut context, &story, Feed::Data(10));
+        draw(&mut context, &script);
+        assert_eq!(
+            runtime.metrics().read().script_renders(),
+            baseline + 1,
+            "a data tick must re-run the script"
+        );
+        assert!(description(&mut context, &script).contains("reading 1"));
+
+        // A repaint tick changes nothing the script can see.
+        for _ in 0..8 {
+            tick(&mut context, &story, Feed::Repaint(60));
+            draw(&mut context, &script);
+        }
+        assert_eq!(
+            runtime.metrics().read().script_renders(),
+            baseline + 1,
+            "eight repaints must not enter the VM"
+        );
+        assert!(
+            description(&mut context, &script).contains("reading 1"),
+            "and the description must be the one already published"
+        );
+    }
+
+    fn tick(context: &mut VisualTestContext, story: &Entity<ShellStory>, feed: Feed) {
+        story.update(context, |story, cx| {
+            story.feed = feed;
+            story.tick(cx);
+        });
+    }
+
+    fn draw(context: &mut VisualTestContext, script: &Entity<ScriptView>) {
+        let script = script.clone();
+        context.draw(
+            gpui::Point::default(),
+            gpui::size(gpui::px(480.), gpui::px(360.)),
+            move |_, _| script.into_any_element(),
+        );
+    }
+
+    /// The published description, read without entering the VM.
+    fn description(context: &mut VisualTestContext, script: &Entity<ScriptView>) -> String {
+        context.update(|_, cx| {
+            script
+                .read(cx)
+                .snapshot()
+                .map(gpui_shell::RenderSnapshot::debug_tree)
+                .unwrap_or_default()
+        })
+    }
 }

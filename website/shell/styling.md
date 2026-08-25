@@ -169,7 +169,7 @@ The suggestion is a Levenshtein match against the full name list, with a tight b
 
 There is a nice piece of machinery behind that message, and it explains a number in the source. QuickJS reports a missing method as a bare `TypeError: not a function` **without naming the property**, so a mistyped style name would otherwise arrive with no clue at all. Wrapping the element prototype in a `Proxy` fixes that — and measured at roughly 30% of the entire description pass (1.09 ms → 1.42 ms for 443 nodes).
 
-So the runtime keeps a fast plain prototype as the default, and when a render fails with "not a function" it **re-runs that render once** against a diagnostic `Proxy` prototype, purely to produce the message. Errors are rare; a 30% tax on every frame is not.
+So the runtime keeps a fast plain prototype as the default, and when a render fails with "not a function" it **re-runs that render once** against a diagnostic `Proxy` prototype, purely to produce the message. Errors are rare; a 30% tax on every render is not.
 
 ## Not there yet
 

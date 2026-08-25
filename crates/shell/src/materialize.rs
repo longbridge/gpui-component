@@ -2,7 +2,13 @@
 //!
 //! This runs entirely in Rust: it never calls back into the script, which is what
 //! makes it possible to benchmark and snapshot-test the render path
-//! independently of the VM.
+//! independently of the VM — and, more importantly, what lets GPUI repaint a
+//! script view as often as it likes without entering one.
+//!
+//! Reading a snapshot leaves it intact, so the same description is replayed by
+//! every frame until script state replaces it. The runtime is still needed here,
+//! but only to dispatch events: no path through this module calls into the
+//! script while an element is being built.
 
 use std::rc::{Rc, Weak};
 
@@ -18,7 +24,8 @@ use gpui_base::{
 
 use crate::{
     engine::ShellRuntime,
-    spec::{CallbackId, Component, SpecId, SpecNode, SpecOp},
+    snapshot::RenderSnapshot,
+    spec::{CallbackId, Component, SpecArena, SpecId, SpecNode, SpecOp},
     style,
     value::Bridged,
 };
@@ -44,6 +51,15 @@ struct Behavior {
     disabled: bool,
     selected: bool,
     checked: bool,
+    /// A name the script gave this element, used as its GPUI identity.
+    ///
+    /// Without one, identity falls back to the node's address in the
+    /// description — which is stable only while the script builds the same tree
+    /// in the same order. A conditional child earlier in the tree shifts every
+    /// address after it, and with it the active state, the focus, and anything
+    /// else GPUI keys by id. `id("toolbar")` is how a script says which element
+    /// this is, rather than where it happened to land.
+    key: Option<SharedString>,
     /// What a screen reader announces. An icon-only control has no text of its
     /// own, so without this it announces nothing.
     accessibility_label: Option<SharedString>,
@@ -51,8 +67,12 @@ struct Behavior {
     on_change: Option<CallbackId>,
 }
 
-/// Materializes `id` and every descendant. Nodes are taken out of the arena as
-/// they are consumed, so a description can only ever be materialized once.
+/// Materializes a snapshot's root and every descendant.
+///
+/// Reading is non-destructive, so this may be called any number of times on the
+/// same snapshot and produces the same interface each time. That is the whole
+/// point: a hover, a cursor blink or an animation frame repaints through here
+/// and never through the VM.
 ///
 /// `window` and `cx` are threaded through even though only the recursion uses
 /// them today: entity-backed components (Input, Tree, Table) and tooltips need
@@ -60,12 +80,25 @@ struct Behavior {
 /// rather than an oversight.
 pub fn materialize(
     runtime: &Rc<ShellRuntime>,
-    id: SpecId,
+    snapshot: &RenderSnapshot,
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
     let ambient = window.text_style().color;
-    materialize_node(runtime, id, ambient, window, cx)
+    // Counted and timed because this is the half that follows frames: the story
+    // and the benchmark both read the two counters side by side, and the gap
+    // between them is the architecture.
+    let metrics = runtime.metrics();
+    metrics.time_materialize(|| {
+        materialize_node(
+            runtime,
+            snapshot.arena(),
+            snapshot.root(),
+            ambient,
+            window,
+            cx,
+        )
+    })
 }
 
 /// Materializes one node, carrying the text color down the description.
@@ -79,25 +112,26 @@ pub fn materialize(
 #[allow(clippy::only_used_in_recursion)]
 fn materialize_node(
     runtime: &Rc<ShellRuntime>,
+    arena: &SpecArena,
     id: SpecId,
     inherited: gpui::Hsla,
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
-    let Some(node) = runtime.arena_mut().take(id) else {
+    let Some(node) = arena.node(id) else {
         return div().into_any_element();
     };
     let Some(component) = node.component.clone() else {
         return div().into_any_element();
     };
 
-    let (refinement, behavior, states) = resolve_ops(runtime, &node);
+    let (refinement, behavior, states) = resolve_ops(arena, node);
     let inherited = refinement.text.color.unwrap_or(inherited);
 
     let children: Vec<AnyElement> = node
         .children
         .iter()
-        .map(|child| materialize_node(runtime, *child, inherited, window, cx))
+        .map(|child| materialize_node(runtime, arena, *child, inherited, window, cx))
         .collect();
 
     match component {
@@ -111,6 +145,7 @@ fn materialize_node(
             element.child(SharedString::from(value)).into_any_element()
         }
         Component::Button(id) => {
+            warn_ignored_key(&behavior, "Button");
             let mut button = Button::new(SharedString::from(id))
                 .disabled(behavior.disabled)
                 .selected(behavior.selected);
@@ -131,6 +166,7 @@ fn materialize_node(
             finish(button, refinement, children)
         }
         Component::Checkbox(id) => {
+            warn_ignored_key(&behavior, "Checkbox");
             let mut checkbox = Checkbox::new(SharedString::from(id))
                 .disabled(behavior.disabled)
                 .checked(behavior.checked);
@@ -157,6 +193,7 @@ fn materialize_node(
             finish(checkbox, refinement, children)
         }
         Component::Switch(id) => {
+            warn_ignored_key(&behavior, "Switch");
             let mut switch = Switch::new(SharedString::from(id))
                 .disabled(behavior.disabled)
                 .checked(behavior.checked);
@@ -191,7 +228,7 @@ fn materialize_node(
             image.into_any_element()
         }
         Component::Input(handle) => {
-            let Some(state) = crate::entities::input(handle) else {
+            let Some(state) = runtime.entities().input(handle) else {
                 tracing::error!("input handle {handle} is no longer live");
                 return div().into_any_element();
             };
@@ -272,11 +309,13 @@ fn with_active_and_focus<E: StatefulInteractiveElement>(element: E, states: &Sta
     element
 }
 
-/// A plain `div` becomes stateful only when a state style needs an identity.
+/// A plain `div` becomes stateful when a state style needs an identity, or when
+/// the script named it.
 ///
-/// The identity is derived from the node's position in the description, which
-/// is stable across renders for a stable tree — the same property GPUI relies
-/// on for its own element ids.
+/// A script-given name wins, because it is the only identity that survives the
+/// script reordering its own tree. Without one the identity is the node's
+/// address in the description, which is stable for as long as the snapshot lives
+/// and across rebuilds only while the tree keeps its shape.
 fn flex_element(
     element: gpui::Div,
     id: SpecId,
@@ -285,16 +324,12 @@ fn flex_element(
     states: StateStyles,
     children: Vec<AnyElement>,
 ) -> AnyElement {
-    let _ = behavior;
     let element = with_hover(element, &states);
-    if !states.needs_identity() {
+    if behavior.key.is_none() && !states.needs_identity() {
         return finish(element, refinement, children);
     }
 
-    let stateful = element.id(gpui::ElementId::NamedInteger(
-        "gpui-shell".into(),
-        id as u64,
-    ));
+    let stateful = element.id(element_id(id, behavior.key));
     finish(
         with_active_and_focus(stateful, &states),
         refinement,
@@ -302,10 +337,26 @@ fn flex_element(
     )
 }
 
-fn resolve_ops(
-    runtime: &Rc<ShellRuntime>,
-    node: &SpecNode,
-) -> (StyleRefinement, Behavior, StateStyles) {
+/// A control that already takes an identity from `new(id)` has nowhere to put a
+/// second one. Saying so beats dropping it without a word.
+fn warn_ignored_key(behavior: &Behavior, component: &str) {
+    if let Some(key) = &behavior.key {
+        tracing::warn!(
+            "id(\"{key}\") is ignored on a {component}: it is already identified by the id \
+             passed to {component}.new(...)"
+        );
+    }
+}
+
+/// The script's name for an element, or its address in the description.
+fn element_id(id: SpecId, key: Option<SharedString>) -> gpui::ElementId {
+    match key {
+        Some(key) => gpui::ElementId::Name(key),
+        None => gpui::ElementId::NamedInteger("gpui-shell".into(), id as u64),
+    }
+}
+
+fn resolve_ops(arena: &SpecArena, node: &SpecNode) -> (StyleRefinement, Behavior, StateStyles) {
     let mut refinement = StyleRefinement::default();
     let mut behavior = Behavior::default();
     let mut states = StateStyles::default();
@@ -328,7 +379,7 @@ fn resolve_ops(
             }
             SpecOp::Method(name, args) => apply_behavior(&mut behavior, name, args),
             SpecOp::StateStyle(name, node) => {
-                let resolved = resolve_state(runtime, *node);
+                let resolved = resolve_state(arena, *node);
                 match *name {
                     "hover" => states.hover = Some(resolved),
                     "active" => states.active = Some(resolved),
@@ -350,8 +401,8 @@ fn resolve_ops(
 /// Resolves a detached state node into a refinement. Only style ops are
 /// meaningful there; anything else is a script mistake already reported at the
 /// call site.
-fn resolve_state(runtime: &Rc<ShellRuntime>, node: SpecId) -> StyleRefinement {
-    let Some(node) = runtime.arena_mut().take(node) else {
+fn resolve_state(arena: &SpecArena, node: SpecId) -> StyleRefinement {
+    let Some(node) = arena.node(node) else {
         return StyleRefinement::default();
     };
 
@@ -375,6 +426,12 @@ fn apply_behavior(behavior: &mut Behavior, name: &str, args: &[Bridged]) {
     match name {
         "accessibility_label" => {
             behavior.accessibility_label = args
+                .first()
+                .and_then(|value| value.as_str().ok())
+                .map(SharedString::from);
+        }
+        "id" => {
+            behavior.key = args
                 .first()
                 .and_then(|value| value.as_str().ok())
                 .map(SharedString::from);

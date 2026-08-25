@@ -67,7 +67,7 @@ Four things in that file are worth naming now, because everything else builds on
 
 **`"gpui"` is the only built-in module.** Every other `import` resolves inside the application directory and nowhere else. There is no npm, no `require`, no `node:fs`.
 
-**`main.js` must `export default` a class extending `View`.** `init` runs once when the view is created; `render` runs on every frame and returns exactly one element.
+**`main.js` must `export default` a class extending `View`.** `init` runs once when the view is created; `render` returns exactly one element, and runs when the view is invalidated rather than on every frame — see [When `render` runs](./state.md#when-render-runs).
 
 **Style methods are `snake_case`, your own code is `camelCase`.** `items_center`, `on_click`, `text_color`, `gap_2` keep their Rust spelling, because the no-argument style surface is generated from GPUI's reflection table rather than written by hand. Anything the application declares itself — variables, methods, object keys — is ordinary JavaScript. The contrast is deliberate: a `snake_case` call is host surface, a `camelCase` one is your code.
 

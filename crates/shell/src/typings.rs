@@ -342,9 +342,10 @@ const CONTEXT_AND_VIEW: &str = r#"  /**
   /**
    * The base class of every view: subclass it and default-export the subclass.
    *
-   * `init` runs once when the view is created; `render` runs on every frame
-   * and returns exactly one element. Never store an element on the instance —
-   * it belongs to the pass that built it.
+   * `init` runs once when the view is created. `render` returns exactly one
+   * element, and runs when the view is invalidated — by `cx.notify()`, a
+   * reload, or a theme change — not on every frame. Never store an element on
+   * the instance: it belongs to the render that built it.
    */
   export abstract class View {
     constructor(props?: Props);
@@ -384,6 +385,18 @@ const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; 
      * own and announces nothing without it.
      */
     accessibility_label(description: string): Element;
+    /**
+     * A stable name for this element, used as its identity.
+     *
+     * Without one, an element is identified by where it sits in the tree the
+     * render built — which shifts the moment a conditional child appears above
+     * it, taking the pressed state, the focus and anything else keyed by
+     * identity with it. Name anything whose identity has to survive that.
+     *
+     * `Button`, `Checkbox` and `Switch` take their identity from `new(id)` and
+     * ignore this.
+     */
+    id(name: string): Element;
 
     /**
      * Styles applied while the pointer is over the element. `declare` receives
@@ -618,6 +631,7 @@ mod tests {
         "selected",
         "checked",
         "accessibility_label",
+        "id",
         "hover",
         "active",
         "focus",

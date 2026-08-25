@@ -4,8 +4,14 @@
 //! takes `self`, and `ParentElement::child` takes its child by value. A script
 //! object therefore cannot *be* an element. Instead a script builder records
 //! operations into this arena, and [`crate::materialize`] replays them into real
-//! elements inside `Render::render`. The arena is cleared after every render, so
-//! no element description ever outlives the pass that produced it.
+//! elements inside `Render::render`.
+//!
+//! One arena is the runtime's scratch space, reset at the start of every script
+//! render; a successful render freezes it into a
+//! [`crate::snapshot::RenderSnapshot`] and leaves a fresh one behind. Reading it
+//! is therefore non-destructive: the same description is replayed by every GPUI
+//! frame that materializes the snapshot, which is what keeps repainting off the
+//! VM.
 
 use smallvec::SmallVec;
 
@@ -14,7 +20,7 @@ use crate::value::Bridged;
 /// Index of a node inside a [`SpecArena`].
 pub type SpecId = u32;
 
-/// Index of a script callback inside the current callback arena.
+/// Index of a script callback, within the snapshot generation that registered it.
 pub type CallbackId = u32;
 
 /// Which constructor produced a node.
@@ -74,7 +80,7 @@ pub struct SpecNode {
     pub children: SmallVec<[SpecId; 4]>,
 }
 
-/// Single-render element descriptions.
+/// Element descriptions for one script render.
 #[derive(Default)]
 pub struct SpecArena {
     nodes: Vec<SpecNode>,
@@ -93,7 +99,8 @@ impl SpecArena {
         Self::default()
     }
 
-    /// Drops every node. Called once per render pass.
+    /// Drops every node. Called at the start of each script render, on the
+    /// runtime's scratch arena — never on a published snapshot.
     pub fn reset(&mut self) {
         self.nodes.clear();
         self.parented.clear();
@@ -120,11 +127,6 @@ impl SpecArena {
 
     pub fn node(&self, id: SpecId) -> Option<&SpecNode> {
         self.nodes.get(id as usize)
-    }
-
-    /// Takes a node out of the arena for materialization.
-    pub fn take(&mut self, id: SpecId) -> Option<SpecNode> {
-        self.nodes.get_mut(id as usize).map(std::mem::take)
     }
 
     pub fn push_op(&mut self, id: SpecId, op: SpecOp) -> Result<(), SpecError> {

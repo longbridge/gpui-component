@@ -1,6 +1,6 @@
 ---
 title: The Engine Seam
-description: QuickJS by default, a compiling LuaJIT fallback, why the seam exists, and the measurement that decides between them.
+description: QuickJS behind one internal interface, why the seam exists, and the three measurements that tell script cost apart from frame cost.
 order: 8
 ---
 
@@ -9,49 +9,44 @@ order: 8
 The scripting engine sits behind one internal interface. Everything above it — the element description arena, the materializer, the call scope, the style table, the theme, the capability model, the overlay host, hot reload — is engine independent, and only the engine module knows what a script value is.
 
 ```bash
-# The default: QuickJS, via rquickjs.
 cargo run -p gpui-shell -- examples/js_todolist
-
-# The fallback, which still compiles and still runs.
-cargo run -p gpui-shell --no-default-features --features luajit -- path/to/app
-cargo run -p gpui-shell --no-default-features --features lua -- path/to/app
 ```
 
-Exactly one engine may be enabled. Enabling both is a **compile error**, not a silent fallback to the default, because both export a type of the same name and `gpui_shell::ShellRuntime` would be ambiguous. A wrong feature combination should be reported at build time with the command to fix it.
+QuickJS, via `rquickjs`, is the engine that ships and the only one today. It sits behind a `quickjs` cargo feature all the same, and building with no engine is a **compile error** rather than a crate that exports nothing.
 
 ## Why there is a seam at all
 
 The engine choice is the one decision in this runtime that could not be settled on paper.
 
-Everything else in the design follows from GPUI's element model and can be argued about with a whiteboard. The engine cannot, because the whole approach stands or falls on a single number: **how long it takes script code to describe a realistic interface.** The script sits on the path that rebuilds the element tree every frame, and every method call in a builder chain is one crossing of the language boundary. If that per-call cost is too high, no amount of design fixes it.
+Everything else in the design follows from GPUI's element model and can be argued about with a whiteboard. The engine cannot, because the whole approach stands or falls on a single number: **how long it takes script code to describe a realistic interface.** Every method call in a builder chain is one crossing of the language boundary, and if that per-call cost is too high, no amount of design fixes it.
 
-So the seam is a way of not having to be right in advance. The decision is made by measurement, and reversing it is a cargo feature rather than a rewrite.
+What the number is *compared against* changed once script renders stopped being frame renders. A description is built when application state moves and [replayed by every frame until it moves again](./state.md#when-render-runs), so the cost below is paid per user action rather than per repaint. That makes the boundary cost matter less than it did — but it does not make it free, and it is still the number that would decide a second engine.
+
+So the seam is a way of not having to be right in advance. The decision is made by measurement, and a second engine would be a new module rather than a rewrite.
 
 JavaScript is the default for one reason, and it is a product reason rather than a technical one: **application code reads better in it.** With presentation owned by the script, the vast majority of an application is composing elements, writing styles and handling events — and the readability of that code decides whether the runtime is worth using. Classes, arrow functions, template literals and destructuring land squarely on that kind of code. The secondary benefit is that JavaScript is the best-covered language in model training data, which matters for one of the [three audiences](./index.md#who-it-is-for).
 
-The cost is stated rather than glossed over. QuickJS is larger than LuaJIT and **has no JIT** — it is a bytecode interpreter, so hot loops and per-call costs will not beat LuaJIT on principle.
+The cost is stated rather than glossed over. QuickJS **has no JIT** — it is a bytecode interpreter, so hot loops and per-call costs will not beat a JIT-compiled engine on principle. That is a real trade, and the benchmark below is where it would show up if it mattered.
 
 ## The measurement
 
-The benchmark describes a 40 × 5 grid of styled cells — 443 description nodes, roughly ten recorded operations each — fifty times, and reports the mean per pass. It is the one test that decides the engine, so it runs on both:
+There are three costs here, and treating them as one was the original mistake. The benchmark describes a 40 × 5 grid of styled cells — 443 description nodes, roughly ten recorded operations each — and reports each cost separately:
 
 ```bash
 cargo test -p gpui-shell --release --test benchmark -- --nocapture
-
-cargo test -p gpui-shell --release --no-default-features --features luajit \
-    --test benchmark -- --nocapture
 ```
 
-| Engine | 443 nodes, per description pass |
-| --- | --- |
-| **QuickJS** | **1.14 ms** |
-| LuaJIT | 1.36 ms |
+| | What it measures | 443 nodes | Paid |
+| --- | --- | --- | --- |
+| **A** | script → snapshot | **1.4 ms** | once per application change |
+| **B** | snapshot → GPUI elements | **0.7 ms** | every frame |
+| **C** | a full cached repaint | **1.8 ms**, **0 script renders** | every frame |
 
-A re-run on different hardware measured 1.09 ms and 1.43 ms — the absolute figure moves with the machine, the ordering did not. Both are release-build numbers; run it in release or the figure means nothing.
+Run it in release or the figures mean nothing; the absolute numbers move with the machine.
 
-The surprise is worth naming: **QuickJS came out ahead**, despite having no JIT and despite LuaJIT being the faster interpreter by a wide margin on hot numeric loops. This workload is not a hot loop. It is thousands of short calls that each cross into Rust and record one operation, and on that shape the two engines are close enough that a JIT never gets to matter.
+**C is the one that is an assertion rather than a timing.** Fifty repaints of an unchanged view enter the VM zero times. If that number is ever not zero, the runtime has regressed to charging script cost per frame, and the benchmark fails rather than merely getting slower.
 
-The design's own budget is worth holding the result against, and the answer is "inside, with less room than hoped". The target is 1.5 ms for a script render during continuous interaction, and a panel of this size clears it on either engine. But that budget was derived from roughly 150 ns per recorded operation across 800 nodes, and the benchmark reports about 250 ns on QuickJS and 320 ns on LuaJIT. A panel three times this size would not fit. The three levers the design names for that case — driving the per-call cost down, memoizing unchanged subtrees, and virtualizing long lists — are exactly the ones that are [not implemented yet](./elements.md#not-there-yet).
+Read A against the design's own budget — 1.5 ms for a script render — and it clears it, but with less room than hoped: the budget was derived from roughly 150 ns per recorded operation across 800 nodes, and the measurement reports about 320 ns across 443. A panel three times this size would not fit in one pass. What changed is how often that matters. At 120 FPS the old model would have spent 168 ms of every second describing an interface nobody had changed; the same panel now costs 1.4 ms when the user actually changes something, and 0.7 ms to repaint. The levers the design names for genuinely enormous panels — driving the per-call cost down, memoizing unchanged subtrees, virtualizing long lists — are still [not implemented](./elements.md#not-there-yet), and are now optimizations rather than prerequisites.
 
 Two implementation choices came out of the same measurement and are visible in the runtime today:
 
@@ -62,15 +57,16 @@ Two implementation choices came out of the same measurement and are visible in t
 
 The proportion is itself the argument for the seam: above it is the actual design, below it is "what does a script value look like".
 
-| Above the seam — shared by both engines | Below the seam — written once per engine |
+| Above the seam — engine independent | Below the seam — what an engine implements |
 | --- | --- |
-| The element description arena, single-use checking, and the debug tree | Converting an engine value to the runtime's neutral value type |
-| Materialization: descriptions into real GPUI elements, pure Rust | The module system's shape — ES modules and a resolver, versus `require` and a path list |
-| The call scope: phases, generations, and the crate's only `unsafe` | Method dispatch — functions on a shared prototype, versus an `__index` metamethod |
-| The style table, parametric styles and spelling suggestions | The callback handle type |
-| The default token palette and colour token resolution | Converting the neutral error type into the language's own exception |
-| The capability model and path resolution | How a view is defined — `class extends View`, versus a metatable |
-| Length and colour coercion | The language-specific part of the sandbox |
+| The render snapshot: what a script render produces and what frames replay | Converting an engine value to the runtime's neutral value type |
+| The element description arena, single-use checking, and the debug tree | The module system's shape — ES modules and a resolver, versus `require` and a path list |
+| Materialization: descriptions into real GPUI elements, pure Rust | Method dispatch — functions on a shared prototype, versus an `__index` metamethod |
+| The call scope: phases, generations, and the crate's only `unsafe` | The callback handle type |
+| The style table, parametric styles and spelling suggestions | Converting the neutral error type into the language's own exception |
+| The default token palette and colour token resolution | How a view is defined — `class extends View`, versus a metatable |
+| The capability model and path resolution | The language-specific part of the sandbox |
+| Length and colour coercion | |
 | The neutral error type, the callback arena, the error overlay | |
 | `ScriptView`, `ShellRoot`, hot reload | |
 
@@ -78,24 +74,28 @@ None of the modules on the left names a VM anywhere in its source. That is what 
 
 A trait would actually be worse here. The two handle types — a view class and a view instance — carry lifetimes of their own on the QuickJS side, and forcing them through a trait would move that complexity into the type system without removing any of it.
 
+The contract's load-bearing rule is about *when*, not what: **the engine's `build_snapshot` is the only entry into script `render`, and nothing calls it per frame.** An engine that rendered opportunistically — on a repaint, on a hover, on a timer — would put script cost back on the frame budget, which is the coupling the seam exists to prevent. Benchmark C is what would catch it.
+
 ## Portability
 
-**Scripts are not portable between the engines.** They are different languages: a view is `class Counter extends View` in JavaScript and a metatable in Lua.
+If a second engine is ever added, **scripts will not be portable between them.** They would be different languages: a view is `class Counter extends View` in JavaScript and would be something else anywhere else.
 
-What *is* the same on both is everything else — the binding surface, the render protocol, the phase rules, the capability model, the error messages. The requirement the design imposes is behavioural: the same use case must produce the **same description tree** under either engine. That is what keeps the seam from rotting into two divergent runtimes.
+What has to be the same is everything around them — the binding surface, the render protocol, the phase rules, the capability model, the error messages. The requirement the design imposes is behavioural: the same use case must produce the **same description tree** under either engine, and the same application activity must produce the **same number of script renders**. That is what would keep the seam from rotting into two divergent runtimes.
 
 ## Known gap: async is not fully behind the seam
 
 The seam's contract does not yet cover asynchronous work, and that is a real hole rather than an oversight.
 
-Lua's coroutines and JavaScript's promises are not the same mechanism, and QuickJS additionally requires the host to drain its job queue itself — nothing after an `await` runs until somebody asks. So the scheduler cannot sit entirely above the seam. It needs two operations from each engine: turning a host task into something the script can await, and running the pending jobs, which is a no-op on the Lua side.
+QuickJS requires the host to drain its job queue itself — nothing after an `await` runs until somebody asks — and that is not a shape every engine shares. So the scheduler cannot sit entirely above the seam. It needs two operations from an engine: turning a host task into something the script can await, and running the pending jobs.
 
-Until those are added to the contract, the scheduler is QuickJS-specific. The rule it will be held to is the one that applies to any new capability: it goes above the seam unless it genuinely cannot be expressed there, and if it must live below, **both engines implement it or the missing side throws a clear error**. One engine having a feature and the other silently doing nothing is how a seam like this decays.
+There is a second, sharper reason to finish this. Draining the job queue currently happens at the end of a snapshot build, which means arbitrary application code — anything after an `await` — runs on the path a render took. Snapshot caching makes that rare rather than per-frame, but the coupling is still there and belongs on the event loop instead.
+
+Until both are addressed, the scheduler is QuickJS-specific. The rule it will be held to is the one that applies to any new capability: it goes above the seam unless it genuinely cannot be expressed there.
 
 ## Why not WebAssembly, or a separate process
 
 Two questions the seam invites.
 
-`gpui-shell` runs the VM **in the host process, on the main thread**, alongside GPUI's `App`. That is not a shortcut — it is what makes a per-call cost of a few hundred nanoseconds possible at all. A separate process would put an IPC round trip on the path that rebuilds the element tree, and there is no budget for one. For the same reason there is no `Worker`: the VM and the `App` are both main-thread only.
+`gpui-shell` runs the VM **in the host process, on the main thread**, alongside GPUI's `App`. That is not a shortcut — it is what makes a per-call cost of a few hundred nanoseconds possible at all. A separate process would put an IPC round trip on every recorded builder call, and there is no budget for one even at the reduced frequency snapshots buy. For the same reason there is no `Worker`: the VM and the `App` are both main-thread only.
 
-The wasm target is the other reason the seam is drawn where it is. QuickJS is plain C and compiles to WebAssembly; LuaJIT does not. LuaJIT also generates machine code, which is a constraint on platforms that forbid writable-executable memory. Neither fact decides today's default, but they are why "the engine is a parameter, not a part of the architecture" is written down rather than assumed.
+The wasm target is the other reason the seam is drawn where it is. QuickJS is plain C and compiles to WebAssembly; not every candidate engine does, and some generate machine code, which is a constraint on platforms that forbid writable-executable memory. Neither fact decides today's engine, but they are why "the engine is a parameter, not a part of the architecture" is written down rather than assumed.

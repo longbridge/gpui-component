@@ -19,11 +19,10 @@ path = "src/bin/gpui-shell.rs"
 
 [features]
 default = ["quickjs"]
-# The scripting engine. Exactly one must be enabled; see `src/engine/mod.rs`
-# for the surface an engine has to provide.
+# The scripting engine. See `src/engine/mod.rs` for the surface an engine has
+# to provide; QuickJS is the only implementation today, and the feature exists
+# so a second one can be added without the seam having to be invented first.
 quickjs = ["dep:rquickjs"]
-lua = ["dep:mlua", "mlua/lua54"]
-luajit = ["dep:mlua", "mlua/luajit"]
 
 [dependencies]
 gpui.workspace = true
@@ -36,9 +35,9 @@ rquickjs = { version = "0.12", features = [
     "classes",
     "properties",
 ], optional = true }
-mlua = { version = "0.11", features = ["vendored", "macros"], optional = true }
 
 anyhow.workspace = true
+instant.workspace = true
 schemars.workspace = true
 serde.workspace = true
 serde_json.workspace = true

@@ -104,7 +104,7 @@ store.flush();
 
 Values are JSON: `null`, booleans, numbers, strings, arrays and plain objects. Functions and `undefined` properties are dropped exactly as `JSON.stringify` drops them, so the mental model transfers. `NaN` and `Infinity` have no JSON form and are refused rather than silently becoming `null`. Nesting is capped at 64 levels, which no real configuration reaches and a reference cycle exceeds immediately.
 
-Values are cached in memory, because `get` is reachable from `render` and a file read per frame would be absurd. **Every mutation persists immediately**, written to a temporary file and renamed over the target — so a crash mid-write leaves the previous settings intact rather than a truncated file. `flush` therefore does not need to be called; it stays in the API as the durability barrier for when the write becomes a promise you can await.
+Values are cached in memory, because `get` is reachable from `render` and a file read per render would be absurd. **Every mutation persists immediately**, written to a temporary file and renamed over the target — so a crash mid-write leaves the previous settings intact rather than a truncated file. `flush` therefore does not need to be called; it stays in the API as the durability barrier for when the write becomes a promise you can await.
 
 ### Where storage lives
 

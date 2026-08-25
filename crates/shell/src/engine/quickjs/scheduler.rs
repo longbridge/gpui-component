@@ -33,9 +33,14 @@
 //! QuickJS keeps promise reactions in a job queue that only runs when the host
 //! asks it to. Nothing — no `.then`, no continuation after an `await` — happens
 //! until somebody calls [`drain_jobs`]. **The engine must call it after every
-//! script entry point** (render, click, change, timer, load); see that
-//! function's documentation for the exact placement, which is inside the entry
-//! point's scope and outside `Context::with`.
+//! script entry point** (click, change, timer, load); see that function's
+//! documentation for the exact placement, which is inside the entry point's
+//! scope and outside `Context::with`.
+//!
+//! Building a render snapshot is the one entry point that does *not* drain
+//! inline. A continuation is arbitrary application code with no bound on how
+//! long it runs, and a render is the last place that belongs; see
+//! [`drain_after_render`].
 //!
 //! # Ownership and cancellation
 //!
@@ -91,8 +96,9 @@ pub fn install(_ctx: &Ctx<'_>, module: &Object<'_>) -> JsResult<()> {
 /// log, just a promise that stays pending. So every place that calls into
 /// JavaScript ends with a drain:
 ///
-/// - `render_view` / `render_to_spec`, after the render call;
 /// - `dispatch_click` / `dispatch_change`, after the handler;
+/// - `build_snapshot`, on the next turn of the event loop rather than inline —
+///   see [`drain_after_render`];
 /// - `load_source` / `instantiate`, after top-level module evaluation;
 /// - every resumption this module drives, which is handled here already.
 ///
@@ -131,6 +137,54 @@ pub fn drain_jobs(runtime: &JsRuntime) {
         "stopped draining promise jobs after {MAX_JOBS_PER_DRAIN}: a continuation is queueing \
          work faster than it completes. The remaining jobs run at the next entry point."
     );
+}
+
+/// Queues a drain on GPUI's event loop instead of running one here.
+///
+/// A promise continuation is application code that has already started, and its
+/// running time is unbounded from the renderer's point of view. Running it at
+/// the end of a snapshot build would put that time on the path a render took —
+/// the same coupling the snapshot lifecycle exists to remove, arriving through a
+/// different door.
+///
+/// So the render path only *notices* that jobs are pending and hands them to the
+/// foreground executor. The common case — a render that queued nothing, which is
+/// most of them — costs one `is_job_pending` check and no task at all.
+///
+/// The deferred drain opens its own [`ScopePhase::Task`] scope carrying `view`,
+/// so a continuation that calls `cx.notify()` still reaches the view that was
+/// rendering when it was queued. A notify from there marks the view for the
+/// *next* frame, which is exactly right: the snapshot just published is not
+/// invalidated by work that had not finished when it was built.
+pub fn drain_after_render(
+    js_runtime: &JsRuntime,
+    view: Entity<ScriptView>,
+    window: &mut gpui::Window,
+    cx: &mut gpui::App,
+) {
+    if !js_runtime.is_job_pending() {
+        return;
+    }
+
+    let handle = window.window_handle();
+    let mut app = cx.to_async();
+    cx.foreground_executor()
+        .spawn(async move {
+            let entered = handle.update(&mut app, |_, window, cx| {
+                let Some(runtime) = ShellRuntime::global(cx) else {
+                    tracing::debug!("deferred drain dropped: the shell runtime has shut down");
+                    return;
+                };
+                let (guard, _) = scope::enter(window, cx, ScopePhase::Task, Some(view));
+                drain_jobs(&runtime.js_runtime);
+                drop(guard);
+            });
+
+            if let Err(error) = entered {
+                tracing::debug!("deferred drain dropped: {error}");
+            }
+        })
+        .detach();
 }
 
 /// Releases every pending task and the script functions they hold.

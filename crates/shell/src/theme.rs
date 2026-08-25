@@ -20,7 +20,7 @@ use gpui_base::{
     TypographyTokens,
 };
 use serde::Deserialize;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 
 use crate::scope::with_current_app;
 
@@ -341,6 +341,24 @@ fn install(mode: ThemeMode, cx: &mut App) {
     CACHED.with(|cached| *cached.borrow_mut() = Some(tokens.clone()));
     Theme::global_mut(cx).tokens = tokens;
     cx.set_global(InstalledPalette { mode });
+    GENERATION.with(|generation| generation.set(generation.get().wrapping_add(1)));
+}
+
+thread_local! {
+    /// Bumped whenever a palette is installed.
+    static GENERATION: Cell<u64> = const { Cell::new(0) };
+}
+
+/// Which palette the currently installed tokens came from.
+///
+/// A script resolves `:bg("surface")` to a concrete color while it builds its
+/// description, so the palette is baked into the resulting snapshot. Repainting
+/// the window is therefore not enough to pick up a new palette — the snapshot
+/// has to be rebuilt. A view records this number alongside its snapshot and
+/// rebuilds when the two disagree, which is how a theme switch reaches script
+/// views without the theme knowing they exist.
+pub fn generation() -> u64 {
+    GENERATION.with(Cell::get)
 }
 
 /// The tokens [`init`] installed, or `None` if it never ran.
