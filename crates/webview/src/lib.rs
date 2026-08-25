@@ -15,7 +15,7 @@ use gpui::{
 ///
 /// Cloning this handle prolongs the native webview's lifetime. Dropping the owning [`WebView`]
 /// entity hides the child view, but final native destruction waits until all handle and frame
-/// clones are dropped.
+/// clones are dropped. All handles must be dropped before the parent window is destroyed.
 #[derive(Clone)]
 pub struct WebViewHandle(Rc<wry::WebView>);
 
