@@ -382,6 +382,24 @@ impl Theme {
         }
     }
 
+    /// Returns the next surface radius above the existing `xl` theme tier.
+    ///
+    /// Larger surface tiers derive from the same application-controlled base
+    /// radius, so adjusting or squaring the theme updates every tier together.
+    pub fn radius_2xl(&self) -> Pixels {
+        self.radius * 2.5
+    }
+
+    /// Returns the surface radius above [`Self::radius_2xl`].
+    pub fn radius_3xl(&self) -> Pixels {
+        self.radius * 3.
+    }
+
+    /// Returns the surface radius above [`Self::radius_3xl`].
+    pub fn radius_4xl(&self) -> Pixels {
+        self.radius * 3.5
+    }
+
     pub fn radius_tokens(&self) -> RadiusTokens {
         RadiusTokens {
             none: px(0.),
@@ -389,7 +407,7 @@ impl Theme {
             md: self.radius,
             lg: self.radius_lg,
             xl: self.radius * 2.,
-            full: RADIUS_FULL,
+            full: self.radius_full(),
         }
     }
 
@@ -526,6 +544,25 @@ mod semantic_token_tests {
         // just on the elements whose radius happens to come from `radius`.
         theme.radius = px(0.);
         assert_eq!(theme.radius_full(), px(0.));
+        assert_eq!(theme.radius_tokens().full, px(0.));
+    }
+
+    #[test]
+    fn larger_surface_radii_follow_the_theme_radius() {
+        let mut theme = Theme::default();
+        assert!(theme.radius_tokens().xl < theme.radius_2xl());
+        assert!(theme.radius_2xl() < theme.radius_3xl());
+        assert!(theme.radius_3xl() < theme.radius_4xl());
+
+        theme.radius = px(10.);
+        assert_eq!(theme.radius_2xl(), px(25.));
+        assert_eq!(theme.radius_3xl(), px(30.));
+        assert_eq!(theme.radius_4xl(), px(35.));
+
+        theme.radius = px(0.);
+        assert_eq!(theme.radius_2xl(), px(0.));
+        assert_eq!(theme.radius_3xl(), px(0.));
+        assert_eq!(theme.radius_4xl(), px(0.));
     }
 
     #[test]
