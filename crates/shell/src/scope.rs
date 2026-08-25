@@ -17,12 +17,12 @@
 
 use std::{
     cell::{Cell, RefCell},
-    rc::Rc,
+    rc::{Rc, Weak},
 };
 
 use gpui::{App, Entity, Window};
 
-use crate::{policy::Policy, view::ScriptView};
+use crate::{engine::ShellRuntime, policy::Policy, view::ScriptView};
 
 /// What the current host call is allowed to do.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -67,6 +67,8 @@ struct Frame {
     /// it. See [`crate::policy`] for why the alternatives cannot be made
     /// correct.
     policy: Rc<Policy>,
+    /// The VM this call entered. Async work inherits this exact runtime.
+    runtime: Weak<ShellRuntime>,
 }
 
 thread_local! {
@@ -104,19 +106,53 @@ pub fn enter(
         .or_else(current_policy)
         .unwrap_or_else(crate::policy::default);
 
-    enter_with(window, app, phase, view, policy)
+    let runtime = view
+        .as_ref()
+        .and_then(|view| with_current_app(|cx| view.read(cx).runtime()))
+        .or_else(current_runtime)
+        .or_else(|| ShellRuntime::global(app));
+
+    enter_with_runtime_opt(window, app, phase, view, policy, runtime.as_ref())
+}
+
+/// Opens a scope for a runtime that the caller already knows.
+pub fn enter_runtime(
+    runtime: &Rc<ShellRuntime>,
+    window: &mut Window,
+    app: &mut App,
+    phase: ScopePhase,
+    view: Option<Entity<ScriptView>>,
+) -> (CallScopeGuard, u64) {
+    let policy = view
+        .as_ref()
+        .map(|view| view.read(app).policy())
+        .or_else(current_policy)
+        .unwrap_or_else(crate::policy::default);
+    enter_with_runtime(runtime, window, app, phase, view, policy)
 }
 
 /// Opens a scope under a policy the caller names.
 ///
 /// The entry points with no view yet use this: "under whose authority is this
 /// code being loaded" is a question the caller answers rather than inherits.
-pub fn enter_with(
+pub fn enter_with_runtime(
+    runtime: &Rc<ShellRuntime>,
     window: &mut Window,
     app: &mut App,
     phase: ScopePhase,
     view: Option<Entity<ScriptView>>,
     policy: Rc<Policy>,
+) -> (CallScopeGuard, u64) {
+    enter_with_runtime_opt(window, app, phase, view, policy, Some(runtime))
+}
+
+fn enter_with_runtime_opt(
+    window: &mut Window,
+    app: &mut App,
+    phase: ScopePhase,
+    view: Option<Entity<ScriptView>>,
+    policy: Rc<Policy>,
+    runtime: Option<&Rc<ShellRuntime>>,
 ) -> (CallScopeGuard, u64) {
     let generation = NEXT_GENERATION.with(|next| {
         let value = next.get();
@@ -132,10 +168,20 @@ pub fn enter_with(
             generation,
             view,
             policy,
+            runtime: runtime.map_or_else(Weak::new, Rc::downgrade),
         })
     });
 
     (CallScopeGuard { _private: () }, generation)
+}
+
+pub fn current_runtime() -> Option<Rc<ShellRuntime>> {
+    STACK.with(|stack| {
+        stack
+            .borrow()
+            .last()
+            .and_then(|frame| frame.runtime.upgrade())
+    })
 }
 
 /// The generation of the innermost scope, if any.

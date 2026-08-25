@@ -546,7 +546,7 @@ fn draw(context: &mut VisualTestContext, view: &gpui::Entity<ScriptView>) {
 #[gpui::test]
 fn a_granted_exit_reaches_the_host(cx: &mut TestAppContext) {
     cx.update(|cx| crate::init(cx));
-    crate::set_capabilities(crate::Capabilities::new().read_roots([std::env::temp_dir()]));
+    crate::set_capabilities(crate::Capabilities::new().exit(true));
 
     let asked: std::rc::Rc<std::cell::Cell<Option<i32>>> = Default::default();
     let recorded = asked.clone();
@@ -675,6 +675,7 @@ fn a_scope_answers_with_the_policy_it_was_opened_under(cx: &mut TestAppContext) 
     let plugin = Rc::new(
         Policy::new().with_capabilities(Capabilities::new().read_roots([PathBuf::from("/tmp/p")])),
     );
+    let runtime = ShellRuntime::new().expect("runtime");
 
     context.update(|window, cx| {
         assert!(
@@ -683,7 +684,8 @@ fn a_scope_answers_with_the_policy_it_was_opened_under(cx: &mut TestAppContext) 
         );
 
         // No view: the case a plugin's module top level runs in.
-        let (guard, _) = crate::scope::enter_with(
+        let (guard, _) = crate::scope::enter_with_runtime(
+            &runtime,
             window,
             cx,
             crate::scope::ScopePhase::Task,

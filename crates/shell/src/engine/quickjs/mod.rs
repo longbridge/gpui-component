@@ -118,7 +118,7 @@ impl Drop for ShellRuntime {
     fn drop(&mut self) {
         // Both hold `Persistent` script values, and a persistent handle
         // released after its runtime aborts the process.
-        scheduler::shutdown();
+        scheduler::shutdown(self);
         self.callbacks.borrow_mut().clear();
         // Retained entities are owned by GPUI but reachable only through this
         // runtime's handles; leaving them registered outlives the app that owns
@@ -279,7 +279,7 @@ impl ShellRuntime {
         window: &mut Window,
         cx: &mut App,
     ) -> Result<ViewObject> {
-        let (_guard, _generation) = scope::enter(window, cx, ScopePhase::Event, None);
+        let (_guard, _generation) = scope::enter_runtime(self, window, cx, ScopePhase::Event, None);
         self.with_js(|ctx| {
             let class = view_type.clone().restore(ctx)?;
             let construct: Function = ctx.globals().get("__construct")?;
@@ -304,15 +304,23 @@ impl ShellRuntime {
         self: &Rc<Self>,
         object: &ViewObject,
         view: Option<Entity<ScriptView>>,
+        policy: Rc<crate::policy::Policy>,
         window: &mut Window,
         cx: &mut App,
     ) -> Result<RenderSnapshot> {
         self.arena.borrow_mut().reset();
         let callbacks = self.callbacks.borrow_mut().begin();
 
-        let root = self.metrics.time_script_render(|| {
-            let (_guard, generation) = scope::enter(window, cx, ScopePhase::Render, view.clone());
-            self.call_render(object, generation)
+        let (root, policy) = self.metrics.time_script_render(|| {
+            let (_guard, generation) = scope::enter_with_runtime(
+                self,
+                window,
+                cx,
+                ScopePhase::Render,
+                view.clone(),
+                policy.clone(),
+            );
+            (self.call_render(object, generation), policy)
         });
 
         let root = match root {
@@ -320,6 +328,9 @@ impl ShellRuntime {
             Err(error) => {
                 self.callbacks.borrow_mut().abort();
                 self.arena.borrow_mut().reset();
+                if let Some(view) = view {
+                    scheduler::drain_after_render(self, view, policy, window, cx);
+                }
                 return Err(error);
             }
         };
@@ -337,7 +348,7 @@ impl ShellRuntime {
         // the last path it belongs on. It costs one check when nothing is
         // queued, which is the usual case.
         if let Some(view) = view {
-            scheduler::drain_after_render(&self.js_runtime, view, window, cx);
+            scheduler::drain_after_render(self, view, policy, window, cx);
         }
 
         Ok(snapshot)
@@ -356,7 +367,13 @@ impl ShellRuntime {
         window: &mut Window,
         cx: &mut App,
     ) -> Result<String> {
-        Ok(self.build_snapshot(object, view, window, cx)?.debug_tree())
+        let policy = view
+            .as_ref()
+            .map(|view| view.read(cx).policy())
+            .unwrap_or_else(crate::policy::default);
+        Ok(self
+            .build_snapshot(object, view, policy, window, cx)?
+            .debug_tree())
     }
 
     /// Releases the handlers registered while one snapshot was built.
@@ -379,7 +396,8 @@ impl ShellRuntime {
             return;
         };
 
-        let (_guard, generation) = scope::enter(window, cx, ScopePhase::Event, entry.view.clone());
+        let (_guard, generation) =
+            scope::enter_runtime(self, window, cx, ScopePhase::Event, entry.view.clone());
         let click_count = event.click_count();
         let modifiers = event.modifiers();
 
@@ -423,7 +441,7 @@ impl ShellRuntime {
         // any one view — and no enclosing frame either, so `enter` would fall
         // back to the default.
         let (_guard, generation) =
-            scope::enter_with(window, cx, ScopePhase::Event, None, policy.clone());
+            scope::enter_with_runtime(self, window, cx, ScopePhase::Event, None, policy.clone());
 
         let result = self.with_js(|ctx| {
             let handler = handler.clone().restore(ctx)?;
@@ -458,7 +476,8 @@ impl ShellRuntime {
             return;
         };
 
-        let (_guard, generation) = scope::enter(window, cx, ScopePhase::Event, entry.view.clone());
+        let (_guard, generation) =
+            scope::enter_runtime(self, window, cx, ScopePhase::Event, entry.view.clone());
 
         let result = self.with_js(|ctx| {
             let handler = entry.value.clone().restore(ctx)?;

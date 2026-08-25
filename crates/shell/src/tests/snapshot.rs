@@ -62,6 +62,17 @@ export default class Flaky extends View {
 }
 "#;
 
+const ASYNC_FAILURE: &str = r#"
+import { View, v_flex, text, with_cx } from "gpui";
+
+export default class AsyncFailure extends View {
+  render() {
+    Promise.resolve().then(() => with_cx((cx) => cx.notify()));
+    throw new Error("render failed after queueing work");
+  }
+}
+"#;
+
 #[gpui::test]
 fn repeated_gpui_renders_do_not_re_enter_the_script(cx: &mut TestAppContext) {
     let (runtime, mut context, view) = script_view(cx, TOGGLE);
@@ -246,6 +257,22 @@ fn a_failed_render_is_not_retried_every_frame(cx: &mut TestAppContext) {
         runtime.metrics().read().script_renders(),
         after_failure,
         "a broken render is as frame-coupled as a working one if failure re-triggers the build"
+    );
+}
+
+#[gpui::test]
+fn a_failed_render_continuation_keeps_its_original_view(cx: &mut TestAppContext) {
+    let (runtime, mut context, failed) = script_view(cx, ASYNC_FAILURE);
+    let other = another_view(&mut context, &runtime, TOGGLE);
+    render_once(&mut context, &other);
+
+    render_once(&mut context, &failed);
+    context.run_until_parked();
+
+    assert!(failed.read_with(&context, |view, _| view.is_dirty()));
+    assert!(
+        !other.read_with(&context, |view, _| view.is_dirty()),
+        "the failed view's continuation invalidated another view"
     );
 }
 

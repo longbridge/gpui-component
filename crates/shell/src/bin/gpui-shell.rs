@@ -581,6 +581,7 @@ fn local_capabilities(root: &Path, store: &Path) -> Capabilities {
         .read_roots([root.to_path_buf(), store.to_path_buf()])
         .write_roots([store.to_path_buf()])
         .store(true)
+        .exit(true)
 }
 
 fn window_options(root: &Path, cx: &App) -> WindowOptions {

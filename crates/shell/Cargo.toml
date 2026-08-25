@@ -35,6 +35,7 @@ rquickjs = { version = "0.12", features = [
     "classes",
     "properties",
 ], optional = true }
+cap-std = "4.0.3"
 
 anyhow.workspace = true
 instant.workspace = true
@@ -43,10 +44,14 @@ serde.workspace = true
 serde_json.workspace = true
 smallvec.workspace = true
 tracing.workspace = true
-cap-std = "4.0.3"
+
 
 [dev-dependencies]
 gpui = { workspace = true, features = ["test-support"] }
 
 [lints]
 workspace = true
+
+[profile.dev.package]
+rquickjs = { opt-level = 3 }
+cap-std = { opt-level = 3 }

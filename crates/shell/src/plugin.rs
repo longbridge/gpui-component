@@ -405,6 +405,9 @@ struct CapabilitiesFile {
     /// Clipboard access.
     #[serde(default)]
     clipboard: Option<ClipboardGrantFile>,
+    /// Process-level host requests, separate from filesystem execution.
+    #[serde(default)]
+    process: Option<ProcessGrantFile>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Deserialize, JsonSchema)]
@@ -452,6 +455,13 @@ struct ClipboardGrantFile {
     write: bool,
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct ProcessGrantFile {
+    #[serde(default)]
+    exit: bool,
+}
+
 const PLUGIN_DIR_PLACEHOLDER: &str = "${pluginDir}";
 const DATA_DIR_PLACEHOLDER: &str = "${dataDir}";
 
@@ -459,6 +469,7 @@ impl CapabilitiesFile {
     fn grant(&self, plugin_dir: &Path, data_dir: &Path) -> Capabilities {
         let fs = self.fs.clone().unwrap_or_default();
         let clipboard = self.clipboard.clone().unwrap_or_default();
+        let process = self.process.clone().unwrap_or_default();
         let execute = match fs.execute.clone() {
             None => ExecuteGrant::Denied,
             Some(ExecuteFile::Unrestricted(_)) => ExecuteGrant::Unrestricted,
@@ -480,6 +491,7 @@ impl CapabilitiesFile {
             .store(self.store)
             .clipboard_read(clipboard.read)
             .clipboard_write(clipboard.write)
+            .exit(process.exit)
     }
 
     /// A placeholder the host does not expand would otherwise reach
@@ -709,7 +721,7 @@ impl std::fmt::Display for ManifestProblem {
             ),
             ManifestProblem::Capabilities(error) => write!(
                 f,
-                "invalid `capabilities`: {error}. The block accepts fs (read, write, execute), network (hosts), store and clipboard (read, write)"
+                "invalid `capabilities`: {error}. The block accepts fs (read, write, execute), network (hosts), store, clipboard (read, write) and process (exit)"
             ),
         }
     }
@@ -954,7 +966,14 @@ impl PluginManager {
         // The frame is what carries the grant, so everything the entry module
         // does — including anything it defers — happens inside one.
         let loaded = {
-            let (_scope, _) = scope::enter_with(window, cx, ScopePhase::Task, None, policy.clone());
+            let (_scope, _) = scope::enter_with_runtime(
+                runtime,
+                window,
+                cx,
+                ScopePhase::Task,
+                None,
+                policy.clone(),
+            );
             runtime
                 .load_app(&root, manifest.entry())
                 .and_then(|view_type| runtime.instantiate(&view_type, window, cx))
@@ -1100,7 +1119,8 @@ mod tests {
             },
             "network": { "hosts": ["api.example.com"] },
             "store": true,
-            "clipboard": { "write": true }
+            "clipboard": { "write": true },
+            "process": { "exit": true }
         }
     }"#;
 
@@ -1153,6 +1173,7 @@ mod tests {
         assert!(capabilities.has_store());
         assert!(capabilities.is_clipboard_writable());
         assert!(!capabilities.is_clipboard_readable());
+        assert!(capabilities.may_exit());
     }
 
     #[test]
@@ -1491,6 +1512,8 @@ mod tests {
             "hosts",
             "store",
             "clipboard",
+            "process",
+            "exit",
         ] {
             assert!(
                 schema.contains(grant),

@@ -15,7 +15,8 @@ gpui_shell::set_capabilities(
     Capabilities::new()
         .read_roots([application_root.clone()])
         .write_roots([data_directory.clone()])
-        .store(true),
+        .store(true)
+        .exit(true),
 );
 ```
 
@@ -30,6 +31,7 @@ gpui_shell::set_capabilities(
 | 存储     | 授予                           |
 | 剪贴板   | **不**授予                     |
 | 进程执行 | **不**授予                     |
+| 退出请求 | 授予                           |
 | 网络     | **不**授予                     |
 
 因此应用可以读自己的源码与资源、使用自己的存储，除此之外没有别的。它刻意比“全部放开”要窄，因为将来安装的插件会走同一条代码路径、由 manifest 来决定授权——而一个对本地运行足够宽松的默认，继承过去就是错的默认。
@@ -53,6 +55,10 @@ storage is not granted; set capabilities.store to true
 
 ```text
 running `git` is not granted; add it to capabilities.fs.execute in the manifest
+```
+
+```text
+process.exit() is not granted; set capabilities.process.exit to true in the manifest
 ```
 
 ::: warning 目前还没有 manifest
@@ -227,6 +233,8 @@ process.exit(0);
 
 输出是**捕获的，不是继承的**：跑一条命令的脚本几乎总是想要它说了什么，而在一个窗口程序里，子进程往宿主的 stdout 写，是写到没人会看的地方。`code` 成功时是 `0`，被信号杀死时是 `-1`——那种情况本来就没有退出码。
 
+执行是有界的：30 秒、stdout 8 MiB、stderr 8 MiB。触及任一上限都会终止并回收子进程，同时 reject promise。取消所属任务或销毁 runtime 也会终止子进程。
+
 它受执行授权约束，授权有三种形态：拒绝（默认）、命令名白名单，或不受限。被拒绝的命令**在调用处抛出**而不是 reject，和被拒绝的 `fs` 路径一样——没人 await 的 rejected promise，等于没人看见的拒绝。
 
 `process.exit` 在运行时内部是**一个请求，绝不是 `exit(2)`**。它把退出码交给宿主安装的处理函数，由后者决定怎么做——关闭插件的面板、关闭窗口、结束进程。一个插件不能把宿主进程带走，而宿主可能还有未保存的状态。
@@ -235,9 +243,7 @@ process.exit(0);
 
 这个名字上的撞车是刻意的。`process` 正是 JavaScript 作者——或者生成 JavaScript 的模型——会去伸手拿的名字，所以运行时把自己受能力约束的接口放在那里，而不是把这个名字空着、任其看起来像 Node 的却行为不同。
 
-::: warning `process.exit` 挂在了错误的 key 上
-`process.exit` 目前要求的是文件系统授权（`capabilities.fs`）而不是它自己的一项授权，拒绝信息也是这么说的。这是能力集合里还没有为它设条目留下的痕迹。
-:::
+`process.exit` 使用独立的 `capabilities.process.exit` 授权。文件系统访问权不会隐式获得关闭面板、窗口或进程的权限。
 
 ## 沙箱
 
@@ -273,5 +279,4 @@ process.exit(0);
 
 - **`gpui.http`（落地时返回 promise —— 一个 socket 可以花上一分钟，而文件系统已经演示过发布一个阻塞接口的代价）。** 能力模型里有 `capabilities.network.hosts`，`fetch` 的拒绝信息也提到了它，但没有 HTTP 接口。
 - **Manifest，以及它所属的插件模型。** 今天授权来自宿主。
-- **`process.exit` 自己的那项能力。**
 - **向用户询问授权。** 授权在应用加载之前就已决定，不会在使用的那一刻弹出询问。

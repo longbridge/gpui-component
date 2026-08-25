@@ -303,13 +303,21 @@ fn run<'js>(ctx: Ctx<'js>, command: String, args: Opt<Vec<String>>) -> JsResult<
     }
 
     let args = args.0.unwrap_or_default();
-    scheduler::blocking(&ctx, "gpui.process.run(command, args)", move || {
-        std::process::Command::new(&command)
-            .args(args)
-            .output()
-            .map(Output::from)
-            .map_err(|error| format!("running `{command}` failed: {error}"))
-    })
+    let cancellation = crate::process::Cancellation::new();
+    let worker_cancellation = cancellation.clone();
+    scheduler::blocking_cancellable(
+        &ctx,
+        "gpui.process.run(command, args)",
+        move || cancellation.cancel(),
+        move || {
+            crate::process::run_bounded(
+                &command,
+                &args,
+                crate::process::Limits::default(),
+                worker_cancellation,
+            )
+        },
+    )
 }
 
 /// What a command did: its status, and both streams.
@@ -317,26 +325,7 @@ fn run<'js>(ctx: Ctx<'js>, command: String, args: Opt<Vec<String>>) -> JsResult<
 /// A plain struct because it crosses threads — the work runs on the background
 /// executor and only the result comes back — so the conversion to a script value
 /// happens here, on the main thread, the way `DirEntry` does in `host`.
-struct Output {
-    code: i32,
-    stdout: String,
-    stderr: String,
-}
-
-impl From<std::process::Output> for Output {
-    fn from(output: std::process::Output) -> Self {
-        Self {
-            // `-1` for a process killed by a signal, which has no exit code.
-            // Not `null`: every caller would have to handle it, and the one
-            // fact they want — "did it succeed" — is `code === 0` either way.
-            code: output.status.code().unwrap_or(-1),
-            stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-        }
-    }
-}
-
-impl<'js> IntoJs<'js> for Output {
+impl<'js> IntoJs<'js> for crate::process::Output {
     fn into_js(self, ctx: &Ctx<'js>) -> JsResult<Value<'js>> {
         let object = Object::new(ctx.clone())?;
         object.set("code", self.code)?;
@@ -355,10 +344,10 @@ fn install_process(ctx: &Ctx<'_>) -> JsResult<()> {
         "exit",
         Func::from(|ctx: Ctx<'_>, code: Opt<i32>| -> JsResult<()> {
             let capabilities = host::capabilities();
-            if !capabilities.has_read_access() && !capabilities.has_write_access() {
+            if !capabilities.may_exit() {
                 return Err(Exception::throw_type(
                     &ctx,
-                    "process.exit() is not granted; declare capabilities.fs in the manifest",
+                    "process.exit() is not granted; set capabilities.process.exit to true in the manifest",
                 ));
             }
 
@@ -643,15 +632,18 @@ mod tests {
     }
 
     #[test]
-    fn process_exit_refuses_without_a_grant_and_never_exits_the_host() {
+    fn filesystem_access_does_not_grant_process_exit() {
         let _policy = policy();
         let (_runtime, context) = sandboxed();
+        crate::capability::install(
+            crate::capability::Capabilities::new().read_roots([std::env::temp_dir()]),
+        );
         crate::runtime::clear_exit_handler();
 
         let message = rejection(&context, "process.exit(0)")
-            .expect("process.exit must refuse without a filesystem grant");
+            .expect("filesystem access must not grant process.exit");
         assert!(
-            message.contains("capabilities.fs"),
+            message.contains("capabilities.process.exit"),
             "the refusal must name the key to declare, got: {message}"
         );
     }
@@ -664,9 +656,7 @@ mod tests {
     fn a_granted_exit_without_a_handler_says_so_rather_than_succeeding() {
         let _policy = policy();
         let (_runtime, context) = sandboxed();
-        crate::capability::install(
-            crate::capability::Capabilities::new().read_roots([std::env::temp_dir()]),
-        );
+        crate::capability::install(crate::capability::Capabilities::new().exit(true));
         crate::runtime::clear_exit_handler();
 
         let message = rejection(&context, "process.exit(3)")

@@ -15,7 +15,8 @@ gpui_shell::set_capabilities(
     Capabilities::new()
         .read_roots([application_root.clone()])
         .write_roots([data_directory.clone()])
-        .store(true),
+        .store(true)
+        .exit(true),
 );
 ```
 
@@ -30,6 +31,7 @@ Running a directory from the command line is an explicit act of trust — the sa
 | Storage           | Granted                                                  |
 | Clipboard         | **Not** granted                                          |
 | Process execution | **Not** granted                                          |
+| Exit request      | Granted                                                  |
 | Network           | **Not** granted                                          |
 
 An application can therefore read its own sources and assets and use its own storage, and nothing else. It is deliberately narrower than "everything", because an installed plugin will one day run through the same code path with a manifest deciding instead — and a grant that is generous for a local run would be the wrong default to inherit.
@@ -53,6 +55,10 @@ storage is not granted; set capabilities.store to true
 
 ```text
 running `git` is not granted; add it to capabilities.fs.execute in the manifest
+```
+
+```text
+process.exit() is not granted; set capabilities.process.exit to true in the manifest
 ```
 
 ::: warning There is no manifest yet
@@ -227,6 +233,8 @@ process.exit(0);
 
 Output is **captured, not inherited**: a script that runs a command almost always wants what it said, and in a windowed application a child writing to the host's stdout is writing somewhere no user will look. `code` is `0` on success and `-1` when a signal killed it, which has no exit code of its own.
 
+Execution is bounded: 30 seconds, 8 MiB of stdout and 8 MiB of stderr. Reaching a bound kills and reaps the child and rejects the promise. Cancelling owned work or tearing down its runtime also terminates the child.
+
 It is gated on an execute grant, which is one of three: denied (the default), an allowlist of command names, or unrestricted. A denied command **throws at the call** rather than rejecting, like a denied `fs` path — a rejected promise nobody awaited is a denial nobody sees.
 
 `process.exit` is **a request, never `exit(2)`** inside the runtime. It hands the code to a handler the host installed, which decides what to do — close the plugin's panel, close the window, end the process. One plugin must not be able to take the host process down, and the host may have unsaved state.
@@ -235,9 +243,7 @@ The handler is not optional: a host that grants the capability without installin
 
 The name is a deliberate collision. `process` is what a JavaScript author — or a model generating JavaScript — reaches for, so the runtime puts its own capability-gated surface there rather than leaving the name free to look like Node's and behave differently.
 
-::: warning `process.exit` is gated on the wrong key
-`process.exit` currently requires a filesystem grant (`capabilities.fs`) rather than a grant of its own, and its refusal says so. That is an artefact of the capability set not yet having an entry for it.
-:::
+`process.exit` has its own `capabilities.process.exit` grant. Filesystem access never implies permission to close a panel, window, or process.
 
 ## The sandbox
 
@@ -273,5 +279,4 @@ Development mode never relaxes capability gating. It makes the language easier t
 
 - **`gpui.http`.** The capability model has `capabilities.network.hosts` and `fetch`'s refusal message names it, but there is no HTTP surface. When it lands it returns promises — a socket can take a minute, and the filesystem already demonstrated what shipping a blocking surface costs.
 - **The manifest, and the plugin model it belongs to.** Grants come from the host today.
-- **A capability of its own for `process.exit`.**
 - **Prompting the user.** Grants are decided before the application loads; nothing asks at the moment of use.

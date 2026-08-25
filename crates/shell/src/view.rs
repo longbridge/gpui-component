@@ -147,6 +147,10 @@ impl ScriptView {
         self.policy.clone()
     }
 
+    pub(crate) fn runtime(&self) -> Rc<ShellRuntime> {
+        self.runtime.clone()
+    }
+
     pub fn is_dirty(&self) -> bool {
         self.dirty || self.current.is_none() || self.theme_generation != crate::theme::generation()
     }
@@ -167,9 +171,10 @@ impl ScriptView {
 
         let runtime = self.runtime.clone();
         let object = self.object.clone();
+        let policy = self.policy.clone();
         let entity = cx.entity();
 
-        match runtime.build_snapshot(&object, Some(entity), window, cx) {
+        match runtime.build_snapshot(&object, Some(entity), policy, window, cx) {
             Ok(snapshot) => {
                 // Assigning through `previous` is what retires the snapshot
                 // before last: dropping it releases its callbacks.

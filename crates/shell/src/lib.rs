@@ -48,6 +48,7 @@ pub mod native;
 pub(crate) mod plugin;
 pub(crate) mod plugin_api;
 pub mod policy;
+pub(crate) mod process;
 pub mod root;
 pub(crate) mod runtime;
 pub(crate) mod scope;

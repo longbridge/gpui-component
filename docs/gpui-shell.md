@@ -2127,8 +2127,10 @@ together, in the kernel, where the interrupt budget cannot see it. Output is
 captured rather than inherited, because a script that runs a command wants what
 it said and a child writing to a windowed host's stdout is writing nowhere. The
 grant is checked on the calling thread, so a denial throws at the call site
-rather than rejecting a promise nobody awaited. `process.exit(code?)` requires a
-filesystem grant and is a **request**: it hands the code to a handler the host
+rather than rejecting a promise nobody awaited. Execution is bounded to 30
+seconds and 8 MiB for each output stream; crossing a bound kills and reaps the
+child. `process.exit(code?)` requires `capabilities.process.exit` and is a
+**request**: it hands the code to a handler the host
 installed with `gpui_shell::on_exit_request`, which decides what to do with it —
 close the panel, close the window, end the process. It is never `exit(2)` inside
 the runtime, because one plugin must not be able to take down an application the

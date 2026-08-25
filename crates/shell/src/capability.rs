@@ -19,6 +19,7 @@ pub struct Capabilities {
     store: bool,
     clipboard_read: bool,
     clipboard_write: bool,
+    exit: bool,
 }
 
 /// Which external commands a script may run.
@@ -71,6 +72,16 @@ impl Capabilities {
     pub fn clipboard_write(mut self, allowed: bool) -> Self {
         self.clipboard_write = allowed;
         self
+    }
+
+    /// Whether script may ask its host to exit.
+    pub fn exit(mut self, allowed: bool) -> Self {
+        self.exit = allowed;
+        self
+    }
+
+    pub fn may_exit(&self) -> bool {
+        self.exit
     }
 
     pub fn has_store(&self) -> bool {

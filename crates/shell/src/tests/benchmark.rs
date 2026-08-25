@@ -101,7 +101,7 @@ fn describing_a_panel_stays_inside_the_frame_budget(cx: &mut TestAppContext) {
     // Warm up: the style table and the module both initialize lazily.
     let nodes = context.update(|window, cx| {
         runtime
-            .build_snapshot(&object, None, window, cx)
+            .build_snapshot(&object, None, crate::policy::default(), window, cx)
             .expect("render")
             .len()
     });
@@ -110,7 +110,7 @@ fn describing_a_panel_stays_inside_the_frame_budget(cx: &mut TestAppContext) {
     context.update(|window, cx| {
         for _ in 0..ITERATIONS {
             runtime
-                .build_snapshot(&object, None, window, cx)
+                .build_snapshot(&object, None, crate::policy::default(), window, cx)
                 .expect("render");
         }
     });
@@ -138,7 +138,7 @@ fn materializing_a_snapshot_stays_inside_the_frame_budget(cx: &mut TestAppContex
 
     let snapshot = context.update(|window, cx| {
         runtime
-            .build_snapshot(&object, None, window, cx)
+            .build_snapshot(&object, None, crate::policy::default(), window, cx)
             .expect("render")
     });
     let nodes = snapshot.len();
@@ -219,7 +219,7 @@ fn every_size_pays_the_script_only_when_it_changes(cx: &mut TestAppContext) {
 
         let nodes = context.update(|window, cx| {
             runtime
-                .build_snapshot(&object, None, window, cx)
+                .build_snapshot(&object, None, crate::policy::default(), window, cx)
                 .expect("render")
                 .len()
         });
@@ -230,7 +230,7 @@ fn every_size_pays_the_script_only_when_it_changes(cx: &mut TestAppContext) {
             for _ in 0..ITERATIONS {
                 last = Some(
                     runtime
-                        .build_snapshot(&object, None, window, cx)
+                        .build_snapshot(&object, None, crate::policy::default(), window, cx)
                         .expect("render"),
                 );
             }

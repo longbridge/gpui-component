@@ -158,25 +158,34 @@ pub fn drain_jobs(runtime: &JsRuntime) {
 /// *next* frame, which is exactly right: the snapshot just published is not
 /// invalidated by work that had not finished when it was built.
 pub fn drain_after_render(
-    js_runtime: &JsRuntime,
+    runtime: &Rc<ShellRuntime>,
     view: Entity<ScriptView>,
+    policy: Rc<Policy>,
     window: &mut gpui::Window,
     cx: &mut gpui::App,
 ) {
-    if !js_runtime.is_job_pending() {
+    if !runtime.js_runtime.is_job_pending() {
         return;
     }
 
+    let runtime = Rc::downgrade(runtime);
     let handle = window.window_handle();
     let mut app = cx.to_async();
     cx.foreground_executor()
         .spawn(async move {
             let entered = handle.update(&mut app, |_, window, cx| {
-                let Some(runtime) = ShellRuntime::global(cx) else {
+                let Some(runtime) = runtime.upgrade() else {
                     tracing::debug!("deferred drain dropped: the shell runtime has shut down");
                     return;
                 };
-                let (guard, _) = scope::enter(window, cx, ScopePhase::Task, Some(view));
+                let (guard, _) = scope::enter_with_runtime(
+                    &runtime,
+                    window,
+                    cx,
+                    ScopePhase::Task,
+                    Some(view),
+                    policy,
+                );
                 drain_jobs(&runtime.js_runtime);
                 drop(guard);
             });
@@ -196,14 +205,21 @@ pub fn drain_after_render(
 // Unused until `ShellRuntime::drop` calls it; see the module header's wiring
 // notes, which is the one change outside this file the scheduler needs.
 #[allow(dead_code)]
-pub fn shutdown() {
+pub fn shutdown(runtime: &ShellRuntime) {
+    let runtime = runtime as *const ShellRuntime;
     TASKS.with_borrow_mut(|tasks| {
-        for task in tasks.values() {
+        let owned: Vec<_> = tasks
+            .values()
+            .filter(|task| task.runtime.as_ptr() == runtime)
+            .cloned()
+            .collect();
+        for task in &owned {
             task.cancelled.set(true);
+            task.cancel_work();
             task.callback.replace(None);
             task.rejection.replace(None);
         }
-        tasks.clear();
+        tasks.retain(|_, task| task.runtime.as_ptr() != runtime);
     });
 }
 
@@ -480,6 +496,7 @@ pub(super) struct Host {
     app: AsyncApp,
     foreground: ForegroundExecutor,
     background: BackgroundExecutor,
+    runtime: std::rc::Weak<ShellRuntime>,
 }
 
 /// The executors and window handle a deferred call needs, taken from the scope
@@ -494,11 +511,14 @@ fn host(ctx: &Ctx<'_>, api: &str) -> JsResult<Host> {
         return Err(outside_host_call(ctx, api));
     };
 
+    let runtime = scope::current_runtime()
+        .ok_or_else(|| Exception::throw_type(ctx, &format!("{api} has no owning shell runtime")))?;
     scope::with_context(generation, |window, app| Host {
         window: window.window_handle(),
         app: app.to_async(),
         foreground: app.foreground_executor().clone(),
         background: app.background_executor().clone(),
+        runtime: Rc::downgrade(&runtime),
     })
     .map_err(|error| Exception::throw_type(ctx, &error.to_string()))
 }
@@ -518,14 +538,15 @@ fn resume(
     let policy = policy.clone();
     let mut app = host.app.clone();
     let entered = host.window.update(&mut app, |_, window, cx| {
-        let Some(runtime) = ShellRuntime::global(cx) else {
+        let Some(runtime) = host.runtime.upgrade() else {
             tracing::debug!("script task dropped: the shell runtime has already shut down");
             return;
         };
 
         // `enter_with` and not `enter`: there is no enclosing frame to inherit
         // from out here, so `enter` would reach for the default policy.
-        let (guard, generation) = scope::enter_with(window, cx, ScopePhase::Task, owner, policy);
+        let (guard, generation) =
+            scope::enter_with_runtime(&runtime, window, cx, ScopePhase::Task, owner, policy);
         if let Err(error) = runtime.with_js(|ctx| body(ctx, generation)) {
             tracing::error!("error in script task: {error}");
         }
@@ -569,6 +590,7 @@ struct TaskState {
     /// and its `init` both create tasks before its view exists, so this is the
     /// ordinary case rather than an edge one.
     policy: Rc<Policy>,
+    runtime: std::rc::Weak<ShellRuntime>,
     cancelled: Cell<bool>,
     done: Cell<bool>,
     /// The script function to resume with: a timer handler, or a promise's
@@ -578,6 +600,7 @@ struct TaskState {
     /// A promise's `reject`, for work that can fail. Held for the same reason
     /// and released at the same time.
     rejection: RefCell<Option<Persistent<Function<'static>>>>,
+    cancellation: RefCell<Option<Rc<dyn Fn()>>>,
 }
 
 /// Whether a task may run now, and the owner its scope belongs to.
@@ -602,9 +625,12 @@ impl TaskState {
             api,
             owner,
             policy: scope::policy(),
+            runtime: scope::current_runtime()
+                .map_or_else(std::rc::Weak::new, |runtime| Rc::downgrade(&runtime)),
             cancelled: Cell::new(false),
             done: Cell::new(false),
             rejection: RefCell::new(None),
+            cancellation: RefCell::new(None),
             callback: RefCell::new(callback),
         }
     }
@@ -633,6 +659,23 @@ impl TaskState {
     fn with_rejection(self, reject: Persistent<Function<'static>>) -> Self {
         self.rejection.replace(Some(reject));
         self
+    }
+
+    fn with_cancellation(self, cancel: impl Fn() + 'static) -> Self {
+        self.cancellation.replace(Some(Rc::new(cancel)));
+        self
+    }
+
+    #[cfg(test)]
+    fn with_runtime(mut self, runtime: &Rc<ShellRuntime>) -> Self {
+        self.runtime = Rc::downgrade(runtime);
+        self
+    }
+
+    fn cancel_work(&self) {
+        if let Some(cancel) = self.cancellation.borrow_mut().take() {
+            cancel();
+        }
     }
 
     fn take_rejection(&self) -> Option<Persistent<Function<'static>>> {
@@ -776,6 +819,83 @@ where
     Ok(promise)
 }
 
+/// [`blocking`] with a hook that interrupts the underlying host operation.
+pub(super) fn blocking_cancellable<'js, T>(
+    ctx: &Ctx<'js>,
+    api: &'static str,
+    cancel: impl Fn() + 'static,
+    work: impl FnOnce() -> Result<T, String> + Send + 'static,
+) -> JsResult<Promise<'js>>
+where
+    T: for<'a> IntoJs<'a> + Send + 'static,
+{
+    let host = host(ctx, api)?;
+    let (promise, resolve, reject) = ctx.promise()?;
+    let task = register(
+        TaskState::new(
+            api,
+            scope::current_view().map(|view| view.downgrade()),
+            Some(Persistent::save(ctx, resolve)),
+        )
+        .with_rejection(Persistent::save(ctx, reject))
+        .with_cancellation(cancel),
+    );
+
+    let running = task.clone();
+    let watching = task.clone();
+    let monitor_background = host.background.clone();
+    host.foreground
+        .clone()
+        .spawn(async move {
+            loop {
+                monitor_background.timer(Duration::from_millis(25)).await;
+                match watching.readiness() {
+                    Readiness::Ready(_) => {}
+                    Readiness::OwnerGone => {
+                        watching.cancelled.set(true);
+                        watching.cancel_work();
+                        watching.callback.replace(None);
+                        watching.rejection.replace(None);
+                        break;
+                    }
+                    Readiness::Cancelled => break,
+                }
+            }
+        })
+        .detach();
+    host.foreground
+        .clone()
+        .spawn(async move {
+            let outcome = host.background.spawn(async move { work() }).await;
+            if let Readiness::Ready(owner) = running.readiness() {
+                let resolve = running.take_callback();
+                let reject = running.take_rejection();
+                resume(
+                    &host,
+                    &running.policy.clone(),
+                    owner,
+                    move |ctx, _| match outcome {
+                        Ok(value) => match resolve {
+                            Some(resolve) => resolve.restore(ctx)?.call::<_, ()>((value,)),
+                            None => Ok(()),
+                        },
+                        Err(message) => match reject {
+                            Some(reject) => {
+                                let error = Exception::from_message(ctx.clone(), &message)?;
+                                reject.restore(ctx)?.call::<_, ()>((error,))
+                            }
+                            None => Ok(()),
+                        },
+                    },
+                );
+            }
+            finish(&running);
+        })
+        .detach();
+
+    Ok(promise)
+}
+
 fn register(task: TaskState) -> Rc<TaskState> {
     let task = Rc::new(task);
     TASKS.with_borrow_mut(|tasks| tasks.insert(task.id, task.clone()));
@@ -789,6 +909,7 @@ fn register(task: TaskState) -> Rc<TaskState> {
 fn finish(task: &Rc<TaskState>) {
     task.done.set(true);
     task.callback.replace(None);
+    task.cancellation.replace(None);
     TASKS.with_borrow_mut(|tasks| tasks.remove(&task.id));
 }
 
@@ -806,6 +927,7 @@ fn cancel(id: TaskId) {
     tracing::trace!("cancelled {} (task {id})", task.api);
     task.cancelled.set(true);
     task.done.set(true);
+    task.cancel_work();
     task.callback.replace(None);
 }
 
@@ -1160,6 +1282,23 @@ mod tests {
         assert!(TASKS.with_borrow(|tasks| !tasks.contains_key(&task.id)));
         // The handle keeps answering after the entry is gone.
         assert!(is_done(task.id + 10_000));
+    }
+
+    #[test]
+    fn shutting_down_one_runtime_keeps_another_runtimes_tasks() {
+        let first = ShellRuntime::new().expect("first runtime");
+        let second = ShellRuntime::new().expect("second runtime");
+        let first_task = register(TaskState::new("first", None, None).with_runtime(&first));
+        let second_task = register(TaskState::new("second", None, None).with_runtime(&second));
+
+        shutdown(&first);
+
+        assert!(is_done(first_task.id));
+        assert!(
+            !is_done(second_task.id),
+            "dropping one runtime cancelled another runtime's task"
+        );
+        finish(&second_task);
     }
 
     /// The rule from §12.3: work whose panel has closed must not run. Note it is

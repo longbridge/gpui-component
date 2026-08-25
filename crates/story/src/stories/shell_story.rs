@@ -1294,20 +1294,23 @@ impl Render for ShellStory {
                     // to take" where it meant "this is the one in force" — two
                     // different things wearing one style.
                     .sub_title(
-                        TabBar::new("feed")
-                            .segmented()
-                            .selected_index(
-                                FEEDS
-                                    .iter()
-                                    .position(|(_, feed)| *feed == self.feed)
-                                    .unwrap_or(0),
-                            )
-                            .on_click(cx.listener(|this, index: &usize, _, cx| {
-                                if let Some((_, feed)) = FEEDS.get(*index) {
-                                    this.set_feed(*feed, cx);
-                                }
-                            }))
-                            .children(FEEDS.map(|(_, feed)| Tab::new().label(feed.caption()))),
+                        div().min_w_0().flex_1().max_w(rems(32.)).child(
+                            TabBar::new("feed")
+                                .w_full()
+                                .segmented()
+                                .selected_index(
+                                    FEEDS
+                                        .iter()
+                                        .position(|(_, feed)| *feed == self.feed)
+                                        .unwrap_or(0),
+                                )
+                                .on_click(cx.listener(|this, index: &usize, _, cx| {
+                                    if let Some((_, feed)) = FEEDS.get(*index) {
+                                        this.set_feed(*feed, cx);
+                                    }
+                                }))
+                                .children(FEEDS.map(|(_, feed)| Tab::new().label(feed.caption()))),
+                        ),
                     )
                     .v_flex()
                     .child(self.readout(cx)),
