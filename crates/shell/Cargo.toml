@@ -41,12 +41,15 @@ llrt_buffer = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7dd
 llrt_console = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb2778eca4b5a63111e74f51" }
 llrt_crypto = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb2778eca4b5a63111e74f51", default-features = false, features = ["crypto-rust"] }
 llrt_fs = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb2778eca4b5a63111e74f51" }
+llrt_fetch = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb2778eca4b5a63111e74f51", default-features = false, features = ["http1", "http2", "compression-rust", "webpki-roots", "tls-ring"] }
+llrt_net = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb2778eca4b5a63111e74f51" }
 llrt_os = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb2778eca4b5a63111e74f51", default-features = false }
 llrt_path = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb2778eca4b5a63111e74f51" }
 llrt_process = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb2778eca4b5a63111e74f51" }
 llrt_url = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb2778eca4b5a63111e74f51" }
 llrt_zlib = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb2778eca4b5a63111e74f51", default-features = false, features = ["compression-rust"] }
 cap-std = "4.0.3"
+reqwest = { workspace = true, features = ["blocking"] }
 
 anyhow.workspace = true
 instant.workspace = true

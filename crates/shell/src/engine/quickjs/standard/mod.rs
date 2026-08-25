@@ -6,7 +6,9 @@
 use rquickjs::{Ctx, Result, loader::BuiltinResolver, loader::ModuleLoader};
 
 mod console;
+mod fetch;
 mod fs;
+mod net;
 mod os;
 mod process;
 
@@ -16,6 +18,7 @@ const NAMES: &[&str] = &[
     "crypto",
     "fs",
     "fs/promises",
+    "net",
     "os",
     "path",
     "process",
@@ -38,6 +41,7 @@ pub(super) fn loader() -> ModuleLoader {
         .with_module("crypto", llrt_crypto::CryptoModule)
         .with_module("fs", fs::FsModule)
         .with_module("fs/promises", fs::FsModule)
+        .with_module("net", net::NetModule)
         .with_module("os", os::OsModule)
         .with_module("path", llrt_path::PathModule)
         .with_module("process", process::ProcessModule)
@@ -53,5 +57,6 @@ pub(super) fn install(ctx: &Ctx<'_>) -> Result<()> {
     llrt_crypto::init(ctx)?;
     console::install(ctx)?;
     super::sandbox::install_process(ctx)?;
+    fetch::install(ctx)?;
     Ok(())
 }
