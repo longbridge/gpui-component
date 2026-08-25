@@ -320,7 +320,10 @@ pub(crate) struct Grant {
 
 impl Grant {
     /// The directory every operation goes through.
-    #[cfg(test)]
+    // Only the symlink tests read the handle apart from the path, and those
+    // are Unix-only — so on Windows this has no caller and `-D warnings` says
+    // so.
+    #[cfg(all(test, unix))]
     pub(crate) fn dir(&self) -> &Dir {
         &self.dir
     }
@@ -487,14 +490,17 @@ mod tests {
     #[test]
     fn execute_is_denied_by_default_and_allowlisted_when_granted() {
         assert!(!Capabilities::new().may_run("git"));
-        let capabilities =
-            Capabilities::new().execute(ExecuteGrant::Allowed(vec!["git".into()]));
+        let capabilities = Capabilities::new().execute(ExecuteGrant::Allowed(vec!["git".into()]));
         assert!(capabilities.may_run("git"));
         assert!(!capabilities.may_run("curl"));
     }
 }
 
-#[cfg(test)]
+/// Unix-only, and the tests say why rather than the module: creating a symlink
+/// on Windows needs Developer Mode or an elevated process, which CI has neither
+/// of. A test that quietly does nothing when the link cannot be made would pass
+/// while testing nothing, which is worse than not running.
+#[cfg(all(test, unix))]
 mod symlink_tests {
     use super::*;
 
@@ -533,11 +539,8 @@ mod symlink_tests {
         }
 
         fn link(&self, name: &str, target: &Path) {
-            #[cfg(unix)]
             std::os::unix::fs::symlink(target, self.root.join("inside").join(name))
                 .expect("a symlink");
-            #[cfg(windows)]
-            let _ = std::os::windows::fs::symlink_dir(target, self.root.join("inside").join(name));
         }
     }
 
@@ -548,7 +551,6 @@ mod symlink_tests {
     }
 
     #[test]
-    #[cfg(unix)]
     fn a_symlink_out_of_a_root_cannot_be_read_through() {
         let sandbox = Sandbox::new("read");
         let outside = sandbox.outside();
@@ -580,7 +582,6 @@ mod symlink_tests {
     }
 
     #[test]
-    #[cfg(unix)]
     fn a_symlink_out_of_a_root_cannot_be_written_through() {
         let sandbox = Sandbox::new("write");
         let outside = sandbox.outside();
@@ -615,7 +616,6 @@ mod symlink_tests {
     /// the path was judged. A handle cannot be talked out of its directory, so
     /// the timing stops mattering.
     #[test]
-    #[cfg(unix)]
     fn a_symlink_planted_after_the_check_is_still_refused() {
         let sandbox = Sandbox::new("toctou");
         let outside = sandbox.outside();
@@ -638,7 +638,6 @@ mod symlink_tests {
     }
 
     #[test]
-    #[cfg(unix)]
     fn a_dangling_symlink_is_not_followed() {
         let sandbox = Sandbox::new("dangling");
         let outside = sandbox.outside();
