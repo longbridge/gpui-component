@@ -180,6 +180,12 @@ fn main() {
         // This must be called before using any GPUI Component features.
         gpui_component::init(cx);
 
+        // The document embeds remote images; without an HTTP client they
+        // silently never load.
+        let http_client = reqwest_client::ReqwestClient::user_agent("gpui-component/example")
+            .expect("Failed to create the HTTP client");
+        cx.set_http_client(std::sync::Arc::new(http_client));
+
         let window_options = WindowOptions {
             window_bounds: Some(WindowBounds::centered(size(px(680.), px(620.)), cx)),
             ..Default::default()

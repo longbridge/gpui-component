@@ -11,6 +11,7 @@ gpui.workspace = true
 gpui_platform.workspace = true
 gpui-component = { workspace = true }
 gpui-component-assets.workspace = true
+reqwest_client.workspace = true
 
 [lints]
 workspace = true
