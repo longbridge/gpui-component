@@ -173,7 +173,6 @@ impl ShellRuntime {
         });
 
         runtime.install_globals()?;
-        runtime.with_js(standard::install)?;
         Ok(runtime)
     }
 
@@ -1016,6 +1015,9 @@ impl ShellRuntime {
             theme_api::install(ctx, &module)?;
             entity_api::install(ctx, &module, runtime.clone())?;
             scheduler::install(ctx, &module)?;
+            // Standard Runtime constructors and prototypes must exist before
+            // the sandbox freezes built-ins, or they would remain mutable.
+            standard::install(ctx)?;
             sandbox::install(ctx)?;
 
             Ok(())

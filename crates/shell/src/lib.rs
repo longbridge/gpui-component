@@ -1,5 +1,9 @@
 //! GPUI Shell — a scriptable application runtime built on `gpui-base`.
 //!
+//! > **Experimental:** scripting interfaces, Standard Runtime compatibility,
+//! > capability semantics and module behavior may change between minor
+//! > releases.
+//!
 //! The host owns rendering, layout, text editing, virtualization and system
 //! capabilities; the script owns composition, presentation and business logic. See
 //! `docs/gpui-shell.md` for the design this implements.

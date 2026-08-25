@@ -48,6 +48,22 @@ export default class Probe extends View {
 }
 "#;
 
+const DENIAL_PROBE: &str = r#"
+import { View, v_flex, text, spawn, with_cx } from "gpui";
+import * as fs from "fs/promises";
+export default class Probe extends View {
+  init() {
+    this.state = "pending";
+    spawn(async () => {
+      try { await fs.readFile("__PATH__"); this.state = "unexpectedly allowed"; }
+      catch (error) { this.state = `rejected:${error.message}`; }
+      with_cx((cx) => cx.notify());
+    });
+  }
+  render() { return v_flex().child(text(this.state)); }
+}
+"#;
+
 #[gpui::test]
 fn every_fs_call_settles_through_a_promise(cx: &mut TestAppContext) {
     let directory = std::env::temp_dir().join(format!("gpui-shell-fs-{}", std::process::id()));
@@ -133,6 +149,56 @@ fn an_oversized_read_is_refused_by_name(cx: &mut TestAppContext) {
     );
 
     let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[gpui::test]
+fn fs_is_denied_by_default_through_the_javascript_module(cx: &mut TestAppContext) {
+    let rendered = denial_probe(cx, Capabilities::new(), "notes.txt");
+    assert!(
+        rendered.contains("rejected:") && rendered.contains("capabilities.fs.read"),
+        "{rendered}"
+    );
+}
+
+#[cfg(unix)]
+#[gpui::test]
+fn fs_module_cannot_follow_a_symlink_out_of_a_granted_root(cx: &mut TestAppContext) {
+    use std::os::unix::fs::symlink;
+
+    let base = std::env::temp_dir().join(format!("gpui-shell-fs-link-{}", std::process::id()));
+    let root = base.join("root");
+    let outside = base.join("outside");
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(&root).expect("granted root");
+    std::fs::create_dir_all(&outside).expect("outside root");
+    std::fs::write(outside.join("secret.txt"), "secret").expect("secret");
+    symlink(&outside, root.join("escape")).expect("escape symlink");
+
+    let rendered = denial_probe(
+        cx,
+        Capabilities::new().read_roots([root]),
+        "escape/secret.txt",
+    );
+    assert!(rendered.contains("rejected:"), "{rendered}");
+    assert!(!rendered.contains("unexpectedly allowed"), "{rendered}");
+    let _ = std::fs::remove_dir_all(&base);
+}
+
+fn denial_probe(cx: &mut TestAppContext, capabilities: Capabilities, path: &str) -> String {
+    cx.update(crate::init);
+    crate::set_capabilities(capabilities);
+    let runtime = ShellRuntime::new().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = DENIAL_PROBE.replace("__PATH__", path);
+    let view_type = runtime.load_source("fs-denial.js", &source).expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let view = context
+        .update(|window, cx| runtime.instantiate_view(&view_type, window, cx))
+        .expect("instantiate");
+    context.run_until_parked();
+    draw(&mut context, &view);
+    snapshot_text(&mut context, &view)
 }
 
 struct Empty;

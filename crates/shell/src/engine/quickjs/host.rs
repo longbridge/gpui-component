@@ -9,7 +9,7 @@
 //! Two rules keep this file honest:
 //!
 //! - **One path resolver.** Every filesystem path goes through
-//!   [`Capabilities::resolve`], never through `std::fs` directly. `gpui.fs` and
+//!   [`Capabilities::resolve`], never through `std::fs` directly. `fs` and
 //!   the capability-gated `os.*` entry points that arrive later therefore share
 //!   one policy, and there is no second place for a traversal bug to hide.
 //! - **A denial names its manifest key.** The error a script sees is the
@@ -104,7 +104,7 @@ pub(super) fn read_text<'js>(ctx: Ctx<'js>, path: String) -> JsResult<Promise<'j
     let name = grant.describe();
     let (dir, relative) = grant.into_parts();
 
-    scheduler::blocking(&ctx, "gpui.fs.read_text(path)", move || {
+    scheduler::blocking(&ctx, "fs.readFile(path)", move || {
         use std::io::Read as _;
 
         // One open through the granted directory, then everything on the handle
@@ -146,7 +146,7 @@ pub(super) fn write_text<'js>(
     let name = grant.describe();
     let (dir, relative) = grant.into_parts();
 
-    scheduler::blocking(&ctx, "gpui.fs.write_text(path, contents)", move || {
+    scheduler::blocking(&ctx, "fs.writeFile(path, contents)", move || {
         dir.write(&relative, contents)
             .map_err(|error| message("write", &name, &error))
     })
@@ -157,7 +157,7 @@ pub(super) fn list_dir<'js>(ctx: Ctx<'js>, path: String) -> JsResult<Promise<'js
     let name = grant.describe();
     let (dir, relative) = grant.into_parts();
 
-    scheduler::blocking(&ctx, "gpui.fs.read_dir(path)", move || {
+    scheduler::blocking(&ctx, "fs.readdir(path)", move || {
         read_dir(&dir, &relative).map_err(|error| message("list", &name, &error))
     })
 }
@@ -169,7 +169,7 @@ pub(super) fn exists<'js>(ctx: Ctx<'js>, path: String) -> JsResult<Promise<'js>>
     let grant = grant(&ctx, &path, Access::Read)?;
     let (dir, relative) = grant.into_parts();
 
-    scheduler::blocking(&ctx, "gpui.fs.exists(path)", move || {
+    scheduler::blocking(&ctx, "fs.exists(path)", move || {
         Ok(dir.try_exists(&relative).unwrap_or(false))
     })
 }
@@ -186,7 +186,7 @@ pub(super) fn remove_file<'js>(ctx: Ctx<'js>, path: String) -> JsResult<Promise<
     let name = grant.describe();
     let (dir, relative) = grant.into_parts();
 
-    scheduler::blocking(&ctx, "gpui.fs.remove_file(path)", move || {
+    scheduler::blocking(&ctx, "fs.unlink(path)", move || {
         dir.remove_file(&relative)
             .map_err(|error| message("remove", &name, &error))
     })
@@ -198,7 +198,7 @@ pub(super) fn remove_dir<'js>(ctx: Ctx<'js>, path: String) -> JsResult<Promise<'
     let name = grant.describe();
     let (dir, relative) = grant.into_parts();
 
-    scheduler::blocking(&ctx, "gpui.fs.remove_dir(path)", move || {
+    scheduler::blocking(&ctx, "fs.rmdir(path)", move || {
         dir.remove_dir(&relative)
             .map_err(|error| message("remove", &name, &error))
     })
@@ -221,7 +221,7 @@ pub(super) fn mkdir<'js>(
     let (dir, relative) = grant.into_parts();
     let recursive = options.0.unwrap_or_default().recursive;
 
-    scheduler::blocking(&ctx, "gpui.fs.mkdir(path, options)", move || {
+    scheduler::blocking(&ctx, "fs.mkdir(path, options)", move || {
         let made = if recursive {
             dir.create_dir_all(&relative)
         } else {
@@ -246,7 +246,7 @@ impl<'js> FromJs<'js> for MakeDirectory {
         let Some(object) = value.into_object() else {
             return Err(Exception::throw_type(
                 ctx,
-                "gpui.fs.mkdir(path, options) expects an object, such as { recursive: true }",
+                "fs.mkdir(path, options) expects an object, such as { recursive: true }",
             ));
         };
 
@@ -258,7 +258,7 @@ impl<'js> FromJs<'js> for MakeDirectory {
                 return Err(Exception::throw_type(
                     ctx,
                     &format!(
-                        "unknown option `{key}` for gpui.fs.mkdir(path, options); \
+                        "unknown option `{key}` for fs.mkdir(path, options); \
                          expected recursive"
                     ),
                 ));
@@ -290,11 +290,11 @@ fn message(verb: &str, name: &str, error: &std::io::Error) -> String {
 fn too_large(name: &str, size: u64) -> String {
     format!(
         "`{name}` is {size} bytes, over the {MAX_READ_BYTES}-byte limit for \
-         gpui.fs.read_text; read it in pieces or keep it out of the script"
+         fs.readFile; read it in pieces or keep it out of the script"
     )
 }
 
-/// One entry of `fs.read_dir`, as the plain object a script sees.
+/// One entry of `fs.readdir`, as the plain object a script sees.
 ///
 /// `is_dir` rides along because there is no `stat` in this surface, and without
 /// it every caller would have to guess from the name.
@@ -840,6 +840,9 @@ mod tests {
             let module = Object::new(ctx.clone()).expect("creating the module object");
             install(&ctx, &module).expect("installing the host surface");
             ctx.globals().set("gpui", module).expect("binding `gpui`");
+            ctx.globals()
+                .set("readFile", Func::from(read_text))
+                .expect("binding the FS test adapter");
             body(&ctx)
         })
     }
@@ -867,7 +870,7 @@ mod tests {
             Capabilities::new().read_roots([directory.path().to_path_buf()]),
         );
 
-        let message = with_host(|ctx| error_of(ctx, "gpui.fs.read_text('../../etc/passwd')"));
+        let message = with_host(|ctx| error_of(ctx, "readFile('../../etc/passwd')"));
         assert!(
             message.contains("outside every granted read root"),
             "unexpected message: {message}"
@@ -880,7 +883,7 @@ mod tests {
 
     #[test]
     fn a_read_without_a_grant_reports_the_missing_capability() {
-        let message = with_host(|ctx| error_of(ctx, "gpui.fs.read_text('items.json')"));
+        let message = with_host(|ctx| error_of(ctx, "readFile('items.json')"));
         assert!(
             message.contains("is not granted") && message.contains("capabilities.fs.read"),
             "unexpected message: {message}"

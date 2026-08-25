@@ -18,7 +18,7 @@
 //! - It owns the *language* surface: dynamic code, the shared built-in
 //!   prototypes, the stubs for globals that do not exist here.
 //! - It owns `process`, the capability-gated command and exit surface.
-//! - It does **not** own filesystem access. `gpui.fs` lives in [`super::host`]
+//! - It does **not** own filesystem access. `fs/promises` uses [`super::host`]
 //!   and goes through the same [`crate::capability::Capabilities`] resolver, so
 //!   there is one path policy, not two.
 //! - It does **not** re-check module resolution. `AppModules` in the parent
@@ -58,8 +58,8 @@ use std::{
 };
 
 use rquickjs::{
-    Ctx, Exception, IntoJs, Object, Promise, Result as JsResult, Value,
-    function::{Func, Opt},
+    Ctx, Exception, Function, IntoJs, Object, Promise, Result as JsResult, Value,
+    function::{Args, Func, Opt, Rest},
 };
 
 use crate::{
@@ -229,10 +229,6 @@ const ABSENT_GLOBALS: &[(&str, &str)] = &[
     ("setInterval", "use gpui.timer.after(ms, callback)"),
     ("clearTimeout", "cancel the handle gpui.timer returned"),
     ("clearInterval", "cancel the handle gpui.timer returned"),
-    (
-        "fetch",
-        "network access is capability-gated; use gpui.fs or a native module once capabilities.network.hosts is declared",
-    ),
     ("require", "this runtime uses ES modules; use `import`"),
 ];
 
@@ -269,17 +265,14 @@ fn install_absent_globals(ctx: &Ctx<'_>) -> JsResult<()> {
 /// does not gets an error naming the manifest key to add. Removing them instead
 /// would produce a `ReferenceError` that teaches nothing.
 ///
-/// `process` is a global as well as a `gpui` module member, because `process` is
+/// `process` is a global as well as a bare module, because `process` is
 /// the name a JavaScript author — or a model generating JavaScript — will reach
-/// for. The module member is set only if the `gpui` module object exists, so
-/// this also works in a bare context.
+/// for. The module loader and this installer share the same policy-aware
+/// implementation.
 ///
-/// Note for the parent module: `import { process } from "gpui"` needs
-/// `"process"` added to `MODULE_EXPORTS`. Until then the global is the only way
-/// in.
 /// Runs a command and resolves with what it did.
 ///
-/// A promise, for a sharper version of the reason `gpui.fs` is one. A file read
+/// A promise, for a sharper version of the reason `fs/promises` is one. A file read
 /// has no bound; a child process has *less* — it can compute for minutes, wait
 /// on input that never comes, or outlive the window. `.status()` blocked the
 /// frame and the VM together for as long as that took, in the kernel, where the
@@ -306,7 +299,7 @@ fn run<'js>(ctx: Ctx<'js>, command: String, args: Opt<Vec<String>>) -> JsResult<
     let worker_cancellation = cancellation.clone();
     scheduler::blocking_cancellable(
         &ctx,
-        "gpui.process.run(command, args)",
+        "process.run(command, args)",
         move || cancellation.cancel(),
         move || {
             crate::process::run_bounded(
@@ -317,6 +310,14 @@ fn run<'js>(ctx: Ctx<'js>, command: String, args: Opt<Vec<String>>) -> JsResult<
             )
         },
     )
+}
+
+fn next_tick<'js>(ctx: Ctx<'js>, callback: Function<'js>, args: Rest<Value<'js>>) -> JsResult<()> {
+    let mut deferred = Args::new(ctx, args.len());
+    for argument in args.0 {
+        deferred.push_arg(argument)?;
+    }
+    callback.defer_arg(deferred)
 }
 
 /// What a command did: its status, and both streams.
@@ -338,6 +339,7 @@ pub(super) fn install_process(ctx: &Ctx<'_>) -> JsResult<()> {
     let process = Object::new(ctx.clone())?;
 
     process.set("run", Func::from(run))?;
+    process.set("nextTick", Func::from(next_tick))?;
 
     process.set(
         "exit",

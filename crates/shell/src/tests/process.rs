@@ -5,14 +5,15 @@
 //! `process.run`, awaits its promise, and publishes what JavaScript observed in
 //! a render snapshot.
 
-#![cfg(unix)]
-
 use std::ops::Deref;
 
 use gpui::{Entity, IntoElement as _, TestAppContext, VisualTestContext};
 
-use crate::{Capabilities, ExecuteGrant, ScriptView, ShellRuntime};
+#[cfg(unix)]
+use crate::ExecuteGrant;
+use crate::{Capabilities, ScriptView, ShellRuntime};
 
+#[cfg(unix)]
 const OUTPUT_PROBE: &str = r#"
 import { View, v_flex, text, spawn, with_cx } from "gpui";
 import process from "process";
@@ -40,6 +41,7 @@ export default class Probe extends View {
 }
 "#;
 
+#[cfg(unix)]
 const FAILURE_PROBE: &str = r#"
 import { View, v_flex, text, spawn, with_cx } from "gpui";
 import process from "process";
@@ -64,6 +66,7 @@ export default class Probe extends View {
 }
 "#;
 
+#[cfg(unix)]
 const OUTPUT_LIMIT_PROBE: &str = r#"
 import { View, v_flex, text, spawn, with_cx } from "gpui";
 import process from "process";
@@ -88,6 +91,34 @@ export default class Probe extends View {
 }
 "#;
 
+const DENIAL_PROBE: &str = r#"
+import { View, v_flex, text, with_cx } from "gpui";
+import process from "process";
+
+export default class Probe extends View {
+  init() {
+    try {
+      process.run("gpui-shell-denied-command");
+      this.state = "unexpectedly allowed";
+    } catch (error) {
+      this.state = [
+        error.message,
+        typeof process.kill,
+        typeof process.setuid,
+        typeof process.setgid,
+        Object.keys(process.env).length,
+      ].join("|");
+      process.nextTick((suffix) => {
+        this.state += suffix;
+        with_cx((cx) => cx.notify());
+      }, "|tick");
+    }
+  }
+  render() { return v_flex().child(text(this.state)); }
+}
+"#;
+
+#[cfg(unix)]
 #[gpui::test]
 fn process_promise_exposes_status_and_both_streams(cx: &mut TestAppContext) {
     let (_runtime, object, mut context) = probe(cx, "/bin/sh", "process-output.js", OUTPUT_PROBE);
@@ -104,6 +135,7 @@ fn process_promise_exposes_status_and_both_streams(cx: &mut TestAppContext) {
     );
 }
 
+#[cfg(unix)]
 #[gpui::test]
 fn process_start_failure_rejects_the_javascript_promise(cx: &mut TestAppContext) {
     let command = "/gpui-shell-command-that-does-not-exist";
@@ -123,6 +155,7 @@ fn process_start_failure_rejects_the_javascript_promise(cx: &mut TestAppContext)
     );
 }
 
+#[cfg(unix)]
 #[gpui::test]
 fn process_output_limit_rejects_the_javascript_promise(cx: &mut TestAppContext) {
     let (_runtime, object, mut context) =
@@ -138,6 +171,33 @@ fn process_output_limit_rejects_the_javascript_promise(cx: &mut TestAppContext) 
     );
 }
 
+#[gpui::test]
+fn process_is_denied_and_ambient_authority_is_absent_on_every_platform(cx: &mut TestAppContext) {
+    cx.update(crate::init);
+    crate::set_capabilities(Capabilities::new());
+    let runtime = ShellRuntime::new().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let view_type = runtime
+        .load_source("process-denial.js", DENIAL_PROBE)
+        .expect("load script");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let view = context
+        .update(|window, cx| runtime.instantiate_view(&view_type, window, cx))
+        .expect("instantiate script view");
+    draw(&mut context, &view);
+    context.run_until_parked();
+    draw(&mut context, &view);
+    let rendered = snapshot_text(&mut context, &view);
+    assert!(
+        rendered.contains("capabilities.fs.execute")
+            && rendered.contains("|undefined|undefined|undefined|0")
+            && rendered.contains("|tick"),
+        "{rendered}"
+    );
+}
+
+#[cfg(unix)]
 fn probe(
     cx: &mut TestAppContext,
     command: &str,

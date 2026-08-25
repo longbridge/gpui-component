@@ -101,6 +101,7 @@ pub fn declarations() -> String {
     out.push_str(CAPABILITIES);
     out.push_str(SCHEDULING);
     out.push_str("}\n");
+    out.push_str(STANDARD_RUNTIME);
     out.push_str(WINDOW_GLOBAL);
     out
 }
@@ -437,7 +438,7 @@ const PREAMBLE: &str = "\
 // and a length or color the compiler refuses is one the runtime would refuse
 // too. Put `// @ts-check` at the top of a script to have an editor check it.
 //
-// What is not expressed: capability grants (a denied `fs.read_text` still
+// What is not expressed: capability grants (a denied `fs.readFile` still
 // type-checks), element and `cx` lifetimes (both belong to one call), and
 // which component a method suits (all elements share one prototype).
 
@@ -770,43 +771,6 @@ const CONSTRUCTORS: &str = r#"
 "#;
 
 const CAPABILITIES: &str = r#"
-  /** One entry of `fs.read_dir`. */
-  export interface DirEntry {
-    name: string;
-    is_dir: boolean;
-  }
-
-  /**
-   * Filesystem access, confined to the roots the manifest grants.
-   *
-   * Every call returns a promise: the syscall runs off the main thread, because
-   * a disk has no bound on how long it takes and blocking here would stop the
-   * frame and the VM together.
-   *
-   * A **denial still throws at the call site** rather than rejecting, because
-   * the capability check costs nothing and a rejected promise nobody awaited is
-   * a denial nobody sees.
-   */
-  export interface FileSystem {
-    /** Refuses a file over 64 MiB, naming it and the limit. */
-    read_text(path: string): Promise<string>;
-    write_text(path: string, contents: string): Promise<void>;
-    /** Sorted by name. */
-    read_dir(path: string): Promise<DirEntry[]>;
-    /** Throws on a path outside the granted roots, rather than answering false. */
-    exists(path: string): Promise<boolean>;
-    remove_file(path: string): Promise<void>;
-    /** The directory must be empty: this is never a tree walk. */
-    remove_dir(path: string): Promise<void>;
-    /** Bare, the parent must already exist. `{ recursive: true }` creates it. */
-    mkdir(path: string, options?: MakeDirectoryOptions): Promise<void>;
-  }
-
-  export interface MakeDirectoryOptions {
-    /** Create missing parents too. Default `false`, as everywhere else. */
-    recursive?: boolean;
-  }
-
   /** Key-value storage that survives a restart. Persisted on every write. */
   export interface Store {
     /** `null` when the key is unset. */
@@ -814,8 +778,8 @@ const CAPABILITIES: &str = r#"
     set(key: string, value: Json): void;
     remove(key: string): void;
     keys(): string[];
-    /** Writes the file now. Synchronous, like the rest of this surface. */
-    flush(): void;
+    /** Completes after the current value has been durably written. */
+    flush(): Promise<void>;
   }
 
   export interface Clipboard {
@@ -832,37 +796,91 @@ const CAPABILITIES: &str = r#"
     error(message: unknown, ...rest: unknown[]): void;
   }
 
-  export interface Process {
-    /**
-     * Runs a command and resolves with what it did.
-     *
-     * A promise: a child process has no bound on how long it takes, and waiting
-     * for one on this thread would stop the frame and the VM together. Output is
-     * captured, not inherited.
-     *
-     * A denied command throws here rather than rejecting, so a refusal is not a
-     * rejection nobody awaited.
-     */
-    run(command: string, args?: string[]): Promise<CommandOutput>;
-    /**
-     * Asks the host to close this application. A request, not `exit(2)`: the
-     * host decides, and the call returns.
-     */
-    exit(code?: number): void;
-  }
-
-  export interface CommandOutput {
-    /** `0` on success. `-1` when a signal killed it, which has no exit code. */
-    code: number;
-    stdout: string;
-    stderr: string;
-  }
-
-  export const fs: FileSystem;
   export const store: Store;
   export const clipboard: Clipboard;
   export const log: Log;
-  export const process: Process;
+"#;
+
+const STANDARD_RUNTIME: &str = r#"
+declare module "buffer" {
+  export class Buffer extends Uint8Array {
+    static from(value: string | ArrayBuffer | ArrayLike<number>, encoding?: string): Buffer;
+    static alloc(size: number): Buffer;
+    toString(encoding?: string): string;
+  }
+}
+declare module "path" {
+  export function join(...parts: string[]): string;
+  export function resolve(...parts: string[]): string;
+  export function dirname(path: string): string;
+  export function basename(path: string, suffix?: string): string;
+  const path: { join: typeof join; resolve: typeof resolve; dirname: typeof dirname; basename: typeof basename };
+  export default path;
+}
+declare module "url" {
+  export const URL: typeof globalThis.URL;
+  export const URLSearchParams: typeof globalThis.URLSearchParams;
+}
+declare module "crypto" {
+  export interface Hash { update(data: string | Uint8Array): Hash; digest(encoding?: string): string | import("buffer").Buffer; }
+  export function createHash(algorithm: string): Hash;
+  export function randomBytes(size: number): import("buffer").Buffer;
+  export function randomUUID(): string;
+  export const webcrypto: Crypto;
+}
+declare module "zlib" {
+  export function deflateSync(data: string | Uint8Array): import("buffer").Buffer;
+  export function inflateSync(data: Uint8Array): import("buffer").Buffer;
+  export function gzipSync(data: string | Uint8Array): import("buffer").Buffer;
+  export function gunzipSync(data: Uint8Array): import("buffer").Buffer;
+}
+declare module "console" {
+  interface Console { debug(...values: unknown[]): void; log(...values: unknown[]): void; info(...values: unknown[]): void; warn(...values: unknown[]): void; error(...values: unknown[]): void; }
+  const console: Console;
+  export default console;
+}
+declare module "process" {
+  export interface CommandOutput { code: number; stdout: string; stderr: string; }
+  export function run(command: string, args?: string[]): Promise<CommandOutput>;
+  export function exit(code?: number): void;
+  export function nextTick(callback: (...args: unknown[]) => void, ...args: unknown[]): void;
+  export const platform: string;
+  export const arch: string;
+  export const env: Readonly<Record<string, string>>;
+  export function cwd(): string;
+  const process: { run: typeof run; exit: typeof exit; nextTick: typeof nextTick; platform: string; arch: string; env: typeof env; cwd: typeof cwd };
+  export default process;
+}
+declare module "os" {
+  export function platform(): string;
+  export function arch(): string;
+  export function homedir(): string;
+  export function tmpdir(): string;
+  export const EOL: string;
+  const os: { platform: typeof platform; arch: typeof arch; homedir: typeof homedir; tmpdir: typeof tmpdir; EOL: string };
+  export default os;
+}
+declare module "fs/promises" {
+  export interface DirEntry { name: string; is_dir: boolean; }
+  export interface MakeDirectoryOptions { recursive?: boolean; }
+  export function readFile(path: string): Promise<string>;
+  export function writeFile(path: string, contents: string): Promise<void>;
+  export function readdir(path: string): Promise<DirEntry[]>;
+  export function exists(path: string): Promise<boolean>;
+  export function unlink(path: string): Promise<void>;
+  export function rmdir(path: string): Promise<void>;
+  export function mkdir(path: string, options?: MakeDirectoryOptions): Promise<void>;
+}
+declare module "fs" { export * from "fs/promises"; }
+declare module "net" {
+  export interface Socket { write(data: string): Promise<void>; read(maxBytes?: number): Promise<string>; close(): void; }
+  export function connect(host: string, port: number): Promise<Socket>;
+  const net: { connect: typeof connect };
+  export default net;
+}
+interface ShellFetchResponse { readonly status: number; readonly ok: boolean; readonly url: string; text(): string; }
+declare function fetch(url: string): Promise<ShellFetchResponse>;
+declare const process: typeof import("process").default;
 "#;
 
 /// `window` is a global, like `cx` — see the runtime's `overlay` module.
@@ -1058,6 +1076,33 @@ mod tests {
         // or export of its own.
         assert!(declarations.contains("\ndeclare const window:"));
         assert!(declarations.ends_with(";\n"));
+    }
+
+    #[test]
+    fn standard_runtime_modules_are_declared_without_node_aliases() {
+        let declarations = declarations();
+        for name in [
+            "buffer",
+            "path",
+            "url",
+            "crypto",
+            "zlib",
+            "console",
+            "process",
+            "os",
+            "fs",
+            "fs/promises",
+            "net",
+        ] {
+            assert!(
+                declarations.contains(&format!("declare module \"{name}\"")),
+                "missing Standard Runtime module {name}"
+            );
+        }
+        assert!(!declarations.contains("node:"));
+        assert!(!declarations.contains("export const fs: FileSystem"));
+        assert!(!declarations.contains("export const process: Process"));
+        assert!(declarations.contains("declare function fetch"));
     }
 
     #[test]

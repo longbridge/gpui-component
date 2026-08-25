@@ -1338,7 +1338,7 @@ mod policy_capture_tests {
     ///
     /// A plugin's module top level and its `init` both run with no view — the
     /// view is what they are building — so a timer, a `spawn` or an awaited
-    /// `gpui.fs` call there has no owner to take a policy from. Deriving one at
+    /// `fs` call there has no owner to take a policy from. Deriving one at
     /// resume time therefore fell back to the *default* policy, which for a
     /// plugin host is the grant of the application it is embedded in. Capturing
     /// at creation is what makes the task keep its own.

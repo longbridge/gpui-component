@@ -11,6 +11,7 @@ mod fs;
 mod net;
 mod os;
 mod process;
+mod upstream;
 
 const NAMES: &[&str] = &[
     "buffer",
@@ -50,6 +51,7 @@ pub(super) fn loader() -> ModuleLoader {
 }
 
 pub(super) fn install(ctx: &Ctx<'_>) -> Result<()> {
+    upstream::assert_compatible();
     // Order is significant: URL and Crypto consume Buffer-compatible byte
     // classes installed by the first initializer.
     llrt_buffer::init(ctx)?;

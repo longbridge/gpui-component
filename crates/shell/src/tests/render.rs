@@ -470,14 +470,10 @@ fn an_embedded_runtime_reloads_when_a_source_changes(cx: &mut TestAppContext) {
             .instantiate(&view_type, window, cx)
             .expect("instantiate");
         let view = cx.new(|_| ScriptView::new(runtime.clone(), object));
-        let watch = crate::watch::reload_in_debug(
-            &runtime,
-            &view,
-            directory.clone(),
-            "main.js",
-            window,
-            cx,
-        );
+        // Exercise the watcher itself in both debug and release test builds.
+        // `reload_in_debug` intentionally does nothing in release binaries.
+        let watch =
+            crate::watch::watch_view(&runtime, &view, directory.clone(), "main.js", window, cx);
         watch.forget();
         view
     });
@@ -658,7 +654,7 @@ fn two_runtimes_share_a_thread_without_sharing_a_grant(cx: &mut TestAppContext) 
     let _second = ShellRuntime::new().expect("the second runtime");
 }
 
-/// A scope opened under a policy answers `gpui.fs` with *that* grant.
+/// A scope opened under a policy answers `fs` with *that* grant.
 ///
 /// This is the seam every capability check goes through, and the half of the
 /// P0 fix that the scheduler's capture relies on: a task that kept its policy

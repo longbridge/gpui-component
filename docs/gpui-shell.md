@@ -1,5 +1,10 @@
 # GPUI Shell Architecture
 
+> [!WARNING]
+> GPUI Shell is experimental. Scripting interfaces, Standard Runtime
+> compatibility, capability semantics and module behavior may change between
+> minor releases.
+
 ## Status and Scope
 
 This document describes the architecture implemented by `crates/shell`. It is a
@@ -54,6 +59,63 @@ packaging and distribution are not.
 The goal is one sentence: build an application layer at the iteration speed of
 a scripting language while keeping Rust and the GPU on the render path.
 
+### 1.1 Standard Runtime installation and removal
+
+The Standard Runtime is built into `gpui-shell`; a script application does not
+install LLRT, Node.js, npm packages, or a second VM. A Rust host enables it by
+depending on and initializing GPUI Shell:
+
+```toml
+[dependencies]
+gpui-shell = { path = "crates/shell" }
+```
+
+```rust
+gpui_shell::init(cx);
+let runtime = gpui_shell::ShellRuntime::new()?;
+```
+
+The shell pins every LLRT crate to commit
+`7b95c82a9b15e7ddfb2778eca4b5a63111e74f51`, whose modules share
+`rquickjs 0.12`. LLRT supplies Standard Runtime implementations and data types;
+GPUI Shell remains responsible for the VM, scheduler, Policy and OS authority.
+
+Scripts import bare GPUI Shell module names:
+
+```js
+import { Buffer } from "buffer";
+import * as fs from "fs/promises";
+import process from "process";
+import { connect } from "net";
+```
+
+There are deliberately no `node:` aliases and no claim of Node.js
+compatibility. Unknown bare imports remain errors; npm/package resolution is
+not installed.
+
+| Surface | Implementation and authority |
+| --- | --- |
+| `buffer`, `path`, `url`, `crypto`, `zlib` | LLRT implementation in the existing QuickJS context |
+| `console` | LLRT-compatible surface routed to `gpui_shell::script` tracing |
+| `process` | Shell adapter: filtered metadata plus async bounded `run` and host-mediated `exit` |
+| `os` | Safe read-only subset; virtual home/temp locations do not reveal ambient host paths |
+| `fs`, `fs/promises` | Shell adapter over capability directory handles; no ambient `std::fs` access |
+| global `fetch` | Capability-checked HTTP, including every redirect; 30-second timeout and 8 MiB buffered-body limit |
+| `net` | Capability-checked TCP connect; 30-second I/O timeout and 1 MiB per-call read/write limit |
+
+The old `gpui.fs` and `gpui.process` exports have been removed. Existing scripts
+must migrate to `fs/promises` and `process`; `console` remains global and is
+also importable from `console`.
+
+To remove the Standard Runtime from an embedding application, remove the
+`gpui-shell` dependency and calls to `gpui_shell::init`/`ShellRuntime`; it does
+not install files or a system runtime. To uninstall a standalone script
+application, remove its application directory and, if its persistent data is
+also unwanted, remove only its generated directory identity under
+`<data-home>/gpui-shell/apps/` (§23). Plugin data is under
+`<data-home>/gpui-shell/plugins/<plugin-id>`. Never remove the shared
+`gpui-shell` data root when uninstalling one application.
+
 ---
 
 ## 2. Why It Exists
@@ -83,9 +145,10 @@ is the best-covered language in public training data, and its type declarations
 (§14.4) are a format both editors and models already read.
 
 The same coverage is also a liability: a model writing for this runtime will
-reach for `document`, `window`, `fetch`, `require("fs")`, npm packages, and
-`setTimeout`. None of them exist here. §19.1 answers that with named stubs that
-throw and point at the replacement, rather than with a bare `ReferenceError`.
+reach for `document`, full browser `fetch`, `require("fs")`, npm packages, and
+`setTimeout`. Only the documented Standard Runtime subset exists. §19.1 answers
+unsupported callable globals with named stubs and rejects unknown modules,
+rather than silently pretending broad compatibility.
 
 ### 2.2 Who it is for
 
@@ -132,11 +195,12 @@ Seven things are deliberately absent, and will stay absent:
 5. **There is no dynamic native plugin loading.** Rust has no stable ABI, and
    `dlopen`ed native code inside the process defeats the sandbox outright.
 6. **`gpui-base` is not modified.** Everything lives in `crates/shell`.
-7. **There is no Node.js or browser compatibility layer.** No DOM `document`,
-   browser `window`, `fetch`, `require`, Node module system, or npm. The shell's
-   narrow `window` and `process` globals expose GPUI/host capabilities only; they
-   do not claim browser or Node compatibility. Host capability also appears in
-   the `gpui` module (§17).
+7. **There is no Node.js or browser compatibility layer.** There is no DOM,
+   CommonJS `require`, Node module resolution, npm, or `node:` namespace. The
+   Standard Runtime deliberately exposes selected bare modules plus a
+   WinterCG-style `fetch`; those individual APIs do not imply browser or Node.js
+   compatibility. The shell's narrow `window` and `process` globals expose only
+   GPUI/host capabilities.
 
 ---
 
@@ -2034,12 +2098,14 @@ Everything here is denied by default and gated on the capability set in force
 `capability.rs`; the engine holds only the argument shuffling.
 
 ```js
-import { fs, store, clipboard, log, process, native } from "gpui";
+import { store, clipboard, log, native } from "gpui";
+import * as fs from "fs/promises";
+import process from "process";
 ```
 
 Two rules keep this honest. **There is one path resolver:** every filesystem
 path goes through `Capabilities::resolve`, never through `std::fs` directly, so
-`gpui.fs` and every later path-taking entry point share one policy and there is
+`fs` and every later path-taking entry point share one policy and there is
 no second place for a traversal bug to hide. **A denial names its manifest
 key:** the error a script sees is the instruction for fixing it.
 
@@ -2054,24 +2120,17 @@ running `curl` is not granted; add it to capabilities.fs.execute in the manifest
 
 ### 17.1 Filesystem
 
-`read_text`, `write_text`, `read_dir`, `exists`, `remove_file`, `remove_dir`,
-`mkdir`.
+The public modules are `fs` and `fs/promises`; both currently expose the same
+promise-only subset: `readFile`, `writeFile`, `readdir`, `exists`, `unlink`,
+`rmdir`, and `mkdir`. The camelCase names replace the removed handwritten
+`gpui.fs` surface. Binary buffers, streams, file descriptors, watches and sync
+operations are intentionally not part of the experimental contract yet.
 
-The names are Rust's where Rust and the JavaScript runtimes agree, and the
-runtimes' where they do not. `read_text` / `write_text` rather than Rust's
-`read_to_string` / `write`, because Rust's names the destination *type*, which
-means nothing here — and because `read` is reserved: it returns bytes in Rust,
-Deno and Bun alike, so a `read` that returned a string would contradict all
-three and burn the name binary I/O will want. Deno spells the same split
-`readTextFile` / `writeTextFile`. `remove_file` and `remove_dir` are Rust's,
-because one `remove` does not say whether a directory is in scope. `mkdir` is
-the runtimes', with `{ recursive }`, because that is the name every script
-author already has.
 Paths resolve against the granted roots; traversal is rejected by lexical
-normalization plus a `starts_with` check, and symbolic links are re-checked at
-the system call.
+normalization and each operation executes through a `cap-std` directory handle,
+not by joining an ambient host path after authorization.
 
-Three shapes are deliberate. `read_dir` sorts by name, so a script rendering a
+Three shapes are deliberate. `readdir` sorts by name, so a script rendering a
 listing does not inherit the filesystem's arbitrary order and does not have to
 sort. `exists` _throws_ on a denied path rather than answering `false`, because
 "you may not look" and "it is not there" are different facts and collapsing them
@@ -2089,40 +2148,34 @@ and it stays on the calling thread, so **a denial throws at the call site rather
 than rejecting**: a rejected promise nobody awaited is a denial nobody sees. That
 split is also why the symlink and denial tests need no executor at all.
 
-`read_text` refuses a file over 64 MiB by name. The alternative to a ceiling is a
+`readFile` refuses a file over 64 MiB by name. The alternative to a ceiling is a
 string that has to fit in the JavaScript heap, which is itself capped — so the
 failure without one is an out-of-memory inside the VM instead of a sentence
 naming the file.
 
 `store` is deliberately not like this: it is a cache with a write-through, so
-`get` and `set` answer from memory. Making `store.flush` awaitable is the one
-piece of §17.1 still open.
+`get` and `set` answer from memory. `store.flush()` returns a promise that
+settles when the current value is durable.
 
 ### 17.2 Network
 
-Not implemented. `Capabilities` carries a host allowlist and `may_reach`, and
-nothing calls it. The `fetch` stub's message points at a `gpui.http` that does
-not exist yet.
+Two experimental surfaces are implemented. Global `fetch(url)` performs an
+HTTP GET and resolves to `{ status, ok, url, text() }`. Bare module `net`
+provides `connect(host, port)`, whose socket has bounded async `read`, `write`
+and `close`. `net` deliberately has no listening/server API.
 
-When it lands it is **asynchronous, and not optionally so.** Every request
-returns a promise and the work happens off the main thread, for the reason §17.1
-gives about the filesystem — with a network the argument is not even close: a
-socket can take a minute. The capability check stays synchronous at the call
-site, so a host that is not on the allowlist is a thrown error rather than a
-rejected promise nobody awaited. `scheduler::blocking` is the shape to reuse.
+Both are **asynchronous and capability-gated**. The host allowlist is checked at
+the call site before background work starts. `fetch` follows redirects manually
+and rechecks every destination, preventing an allowed origin from redirecting
+into a denied network. Requests and socket operations time out after 30 seconds;
+HTTP response bodies are capped at 8 MiB and socket reads/writes at 1 MiB per
+call. Cancellation drops the scheduler ownership immediately, although an
+already-running blocking OS operation can continue only until its timeout.
 
-This is written down because the filesystem got it wrong first: those calls
-shipped synchronous behind a comment saying they should not be, and the comment
-outlived the reason it gave. A surface that blocks the frame is not a thing to
-fix later.
-
-The HTTP client must also be **injected by the host** rather than hard-wired: a desktop host can pass Zed's `reqwest_client` (which `crates/story`
-already uses) and a WebAssembly host a fetch adapter, which is what keeps the
-dependency restraint of §4.2. And it must not be called `fetch` or imitate its
-signature. A name that matches while the semantics only mostly match is worse
-than a different name: a model will generate against `fetch`'s full contract —
-`Response.json()`, a streaming body, `AbortController` — and fail on the third
-line.
+This is a deliberately small `fetch` subset: request options, headers, streaming
+bodies, `json()`, abort signals, cookies and proxies are not yet promised. The
+name follows the WinterCG ecosystem, while this subset and the absence of DOM or
+package resolution mean GPUI Shell does not claim browser compatibility.
 
 ### 17.3 Storage
 
@@ -2160,12 +2213,14 @@ space-separated the way `console.log` behaves, and any value prints — structur
 values as JSON, an unprintable one as a placeholder rather than aborting the call
 it was describing.
 
-`console.debug/log/info/warn/error` are aliases over the same `gpui.log` sink;
+`console.debug/log/info/warn/error` use the same tracing sink as `gpui.log`;
 they do not create a second logging subsystem or bypass filtering.
 
 ### 17.5 Processes
 
-`process.run(command, args?)` resolves to `{ code, stdout, stderr }` and requires
+`process.nextTick(callback, ...args)` queues a QuickJS job without creating a
+timer or another scheduler. `process.run(command, args?)` resolves to
+`{ code, stdout, stderr }` and requires
 the command to be on the `capabilities.fs.execute` allowlist. A promise, for a
 sharper version of §17.1's reason: a file read has no bound and a child process
 has less — it can compute for minutes, wait on input that never comes, or outlive
@@ -2402,7 +2457,7 @@ cannot do for a directory run from the command line.
 
 Each loaded plugin holds a `Policy` — its grant, its store, its native modules —
 built once from its manifest at load. The policy rides on the **call frame**
-(`scope::Frame`), so every read of `gpui.fs` or `gpui.store` answers with the
+(`scope::Frame`), so every call to `fs` or `gpui.store` answers with the
 grant of whichever plugin owns the code that is running. Two plugins loaded at
 once hold two different grants at the same time, and neither can see the other's
 files.
@@ -2460,10 +2515,10 @@ prototypes.
 | -------------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Never added**      | quickjs-libc's `std` and `os`                                                    | These provide `open`, `exec`, `getenv`, and `popen`; registering either is full access. `rquickjs` does not inject them and the shell never registers them. This is "never added" rather than "removed", which is an order of magnitude more reliable — and `rquickjs-sys` does not compile that file at all, so a test asserts their absence as a guard on the build |
 | **Withheld**         | `eval` and every function constructor                                            | `globalThis.eval` is deleted outright; the `Function`, `AsyncFunction`, `GeneratorFunction`, and `AsyncGeneratorFunction` constructors are replaced with throwing stubs                                                                                                                                                                                               |
-| **Replaced**         | The module resolver (static and dynamic `import` alike)                          | Resolves only the built-in `gpui` module and paths inside the application root; anything else is refused before it reaches the filesystem. Dynamic `import()` stays callable — it is how §18 does lazy loading                                                                                                                                                        |
+| **Replaced**         | The module resolver (static and dynamic `import` alike)                          | Resolves `gpui`, the listed Standard Runtime bare modules, and paths inside the application root. `node:` names and unknown packages are refused before reaching the filesystem. Dynamic `import()` stays callable — it is how §18 does lazy loading                                                                                                                    |
 | **Frozen**           | `Object`, `Array`, `Function`, `String`, and `Number` prototypes                 | One VM hosts several plugins, so the built-ins are shared mutable state                                                                                                                                                                                                                                                                                               |
-| **Capability-gated** | `gpui.fs.*`, `process.run`, `process.exit`                                       | §17                                                                                                                                                                                                                                                                                                                                                                   |
-| **Throwing stub**    | `setTimeout`, `setInterval`, `clearTimeout`, `clearInterval`, `fetch`, `require` | Present, and throwing a message that names the replacement                                                                                                                                                                                                                                                                                                            |
+| **Capability-gated** | `fs`, `process.run`, `process.exit`, `fetch`, `net.connect`                      | §17; each async operation captures the caller's policy before leaving the VM                                                                                                                                                                                                                                                                                          |
+| **Throwing stub**    | `setTimeout`, `setInterval`, `clearTimeout`, `clearInterval`, `require`          | Present, and throwing a message that names the replacement                                                                                                                                                                                                                                                                                                            |
 
 Three of these are worth more than a table row.
 
@@ -2676,6 +2731,20 @@ The in-test assertions on A and B are deliberately loose (200 ms), because the
 real budget is a release-build figure and the assertion must also hold in a debug
 build. The gate for those two is the printed number, read by a person; the gate
 for C is the assertion itself.
+
+The first Standard Runtime release baseline was recorded on 2026-08-25 on
+Apple Silicon macOS with a release build:
+
+| Standard Runtime build metric | Baseline |
+| --- | ---: |
+| `gpui-shell` executable | 28,540,608 bytes (27.2 MiB) |
+| `gpui-shell check examples/js_todolist` wall time | 1.19 s |
+| Maximum resident set reported by `/usr/bin/time -l` | 65,781,760 bytes (62.7 MiB) |
+
+The pre-LLRT branch did not record equivalent startup or size figures, so this
+is the reproducible comparison point for subsequent LLRT revision or feature
+changes rather than a retroactively estimated delta. Measurements are platform
+and linker specific; CI correctness gates do not assert these absolute values.
 
 ### 20.4 What is left
 
@@ -2907,14 +2976,22 @@ events, reload, and a real paint that must not panic.
 ### 22.4 JavaScript host-API integration tests
 
 The system APIs are not considered covered merely because their Rust adapters
-have unit tests. `tests/fs.rs`, `tests/process.rs`, and `tests/host_api.rs` load
+have unit tests. `tests/standard_runtime.rs`, `tests/fs.rs`, `tests/process.rs`,
+`tests/network.rs`, and `tests/host_api.rs` load
 real JavaScript modules, create real `ScriptView` entities, drive the GPUI event
 loop, and assert the snapshot JavaScript published after its promise resumed.
 They cover:
 
 - filesystem calls and the store flush path;
+- LLRT-backed buffer, path, URL, crypto and compression modules inside the same
+  VM, bare module resolution, rejection of `node:` aliases, and removal of the
+  old `gpui.fs` / `gpui.process` exports;
 - process success, non-zero status, spawn failure, both captured streams, and
-  output-limit rejection;
+  output-limit rejection; the cross-platform case also proves denial, filtered
+  environment, absent signal/identity mutation, and `nextTick` execution;
+- local HTTP and TCP success, default denial for both surfaces, redirect
+  reauthorization, response and socket size ceilings, and two simultaneous
+  runtime policies, without depending on the public Internet;
 - clipboard read/write, timer cancellation, and a host-registered native module;
 - `with_cx` returning a live context to the original view after `await`.
 
@@ -2940,6 +3017,23 @@ dimensions, and coverage concentrates on complex logic — call-scope validity,
 arena reuse errors, snapshot lifecycle and render frequency, callback lifetime,
 value conversion, style table non-emptiness, sandbox boundaries, overlay ordering
 and focus, and task ownership and cancellation.
+
+### 22.7 CI split
+
+The repository-wide OS matrix excludes `gpui-shell`; otherwise every ordinary
+workspace run would repeat its relatively expensive QuickJS/LLRT suite. Shell
+has two explicit jobs:
+
+- **GPUI Shell Core** runs once on Linux and excludes the Standard Runtime,
+  filesystem, process, network and benchmark groups.
+- **GPUI Shell Standard Runtime** runs the focused JavaScript integration groups
+  on macOS, Linux and Windows. Network cases use loopback servers only.
+
+The equivalent local commands are the commands in `.github/workflows/ci.yml`.
+Adding a Standard Runtime surface means adding its black-box JavaScript test to
+the focused job; adding render, scheduler or bridge behavior belongs in the core
+job. Benchmarks remain explicit release-only measurements rather than per-commit
+correctness gates.
 
 ---
 

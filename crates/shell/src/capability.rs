@@ -55,7 +55,10 @@ impl Capabilities {
     }
 
     pub fn network_hosts(mut self, hosts: impl IntoIterator<Item = String>) -> Self {
-        self.network_hosts = hosts.into_iter().collect();
+        self.network_hosts = hosts
+            .into_iter()
+            .map(|host| host.to_ascii_lowercase())
+            .collect();
         self
     }
 
@@ -119,7 +122,9 @@ impl Capabilities {
     }
 
     pub fn may_reach(&self, host: &str) -> bool {
-        self.network_hosts.iter().any(|allowed| allowed == host)
+        self.network_hosts
+            .iter()
+            .any(|allowed| allowed.eq_ignore_ascii_case(host))
     }
 
     /// Opens the granted directory a path belongs to, and the path within it.
@@ -136,7 +141,7 @@ impl Capabilities {
     /// difference — `cap-std` can, because a `Dir` carries the authority instead
     /// of describing it.
     ///
-    /// The same resolver serves `gpui.fs`, the capability-gated `os.*`
+    /// The same resolver serves the `fs` modules, the capability-gated `os.*`
     /// functions and the asset source, so there is no second path policy to keep
     /// in sync.
     pub(crate) fn open(&self, path: &Path, access: Access) -> Result<Grant, CapabilityError> {
@@ -439,6 +444,13 @@ mod tests {
         fn drop(&mut self) {
             let _ = std::fs::remove_dir_all(&self.0);
         }
+    }
+
+    #[test]
+    fn network_host_grants_are_dns_case_insensitive() {
+        let capabilities = Capabilities::new().network_hosts(["API.Example.COM".to_owned()]);
+        assert!(capabilities.may_reach("api.example.com"));
+        assert!(capabilities.may_reach("Api.Example.Com"));
     }
 
     #[test]

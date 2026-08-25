@@ -22,7 +22,21 @@ default = ["quickjs"]
 # The scripting engine. See `src/engine/mod.rs` for the surface an engine has
 # to provide; QuickJS is the only implementation today, and the feature exists
 # so a second one can be added without the seam having to be invented first.
-quickjs = ["dep:rquickjs"]
+quickjs = [
+    "dep:rquickjs",
+    "dep:llrt_buffer",
+    "dep:llrt_console",
+    "dep:llrt_crypto",
+    "dep:llrt_fetch",
+    "dep:llrt_fs",
+    "dep:llrt_net",
+    "dep:llrt_os",
+    "dep:llrt_path",
+    "dep:llrt_process",
+    "dep:llrt_url",
+    "dep:llrt_zlib",
+    "dep:reqwest",
+]
 
 [dependencies]
 gpui.workspace = true
@@ -37,19 +51,19 @@ rquickjs = { version = "0.12", features = [
 ], optional = true }
 # LLRT is still pre-release. Keep every module on the same audited revision;
 # crates.io's 0.8.1-beta release uses rquickjs 0.11 and cannot share our VM.
-llrt_buffer = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb2778eca4b5a63111e74f51" }
-llrt_console = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb2778eca4b5a63111e74f51" }
-llrt_crypto = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb2778eca4b5a63111e74f51", default-features = false, features = ["crypto-rust"] }
-llrt_fs = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb2778eca4b5a63111e74f51" }
-llrt_fetch = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb2778eca4b5a63111e74f51", default-features = false, features = ["http1", "http2", "compression-rust", "webpki-roots", "tls-ring"] }
-llrt_net = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb2778eca4b5a63111e74f51" }
-llrt_os = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb2778eca4b5a63111e74f51", default-features = false }
-llrt_path = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb2778eca4b5a63111e74f51" }
-llrt_process = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb2778eca4b5a63111e74f51" }
-llrt_url = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb2778eca4b5a63111e74f51" }
-llrt_zlib = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb2778eca4b5a63111e74f51", default-features = false, features = ["compression-rust"] }
+llrt_buffer = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb2778eca4b5a63111e74f51", optional = true }
+llrt_console = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb2778eca4b5a63111e74f51", optional = true }
+llrt_crypto = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb2778eca4b5a63111e74f51", default-features = false, features = ["crypto-rust"], optional = true }
+llrt_fs = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb2778eca4b5a63111e74f51", optional = true }
+llrt_fetch = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb2778eca4b5a63111e74f51", default-features = false, features = ["http1", "http2", "compression-rust", "webpki-roots", "tls-ring"], optional = true }
+llrt_net = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb2778eca4b5a63111e74f51", optional = true }
+llrt_os = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb2778eca4b5a63111e74f51", default-features = false, optional = true }
+llrt_path = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb2778eca4b5a63111e74f51", optional = true }
+llrt_process = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb2778eca4b5a63111e74f51", optional = true }
+llrt_url = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb2778eca4b5a63111e74f51", optional = true }
+llrt_zlib = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb2778eca4b5a63111e74f51", default-features = false, features = ["compression-rust"], optional = true }
 cap-std = "4.0.3"
-reqwest = { workspace = true, features = ["blocking"] }
+reqwest = { workspace = true, features = ["blocking"], optional = true }
 
 anyhow.workspace = true
 instant.workspace = true
@@ -61,6 +75,9 @@ tracing.workspace = true
 
 [dev-dependencies]
 gpui = { workspace = true, features = ["test-support"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
 
 [lints]
 workspace = true

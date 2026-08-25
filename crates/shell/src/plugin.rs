@@ -420,7 +420,7 @@ struct FsGrantFile {
     /// Directories that may be written.
     #[serde(default)]
     write: Vec<String>,
-    /// Commands `gpui.process.run` may start.
+    /// Commands `process.run` may start.
     #[serde(default)]
     execute: Option<ExecuteFile>,
 }
@@ -1178,12 +1178,13 @@ mod tests {
         std::fs::write(
             root.join("main.js"),
             r#"
-                import { View, v_flex, text, fs, spawn, with_cx } from "gpui";
+                import { View, v_flex, text, spawn, with_cx } from "gpui";
+                import * as fs from "fs/promises";
                 export default class Panel extends View {
                   init() {
                     this.message = "pending";
                     spawn(async (cx) => {
-                      this.message = await fs.read_text("message.txt");
+                      this.message = await fs.readFile("message.txt");
                       with_cx((cx) => cx.notify());
                     });
                   }
