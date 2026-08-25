@@ -1,9 +1,9 @@
 use gpui::{
     AnyElement, App, IntoElement, ParentElement, RenderOnce, StyleRefinement, Styled, Window, div,
-    prelude::FluentBuilder as _, relative,
+    prelude::FluentBuilder as _, relative, rems,
 };
 
-use crate::{ActiveTheme as _, StyledExt as _, message::MessageAlignment, v_flex};
+use crate::{ActiveTheme as _, Colorize as _, StyledExt as _, message::MessageAlignment, v_flex};
 
 /// Visual treatment for a chat bubble.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -104,8 +104,7 @@ impl Styled for Bubble {
 }
 
 impl RenderOnce for Bubble {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        let tokens = cx.theme().semantic_tokens();
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         let variant = self.variant;
         let mut content = self.content;
         content.variant = variant;
@@ -117,7 +116,7 @@ impl RenderOnce for Bubble {
             .min_w_0()
             .flex_col()
             .flex_none()
-            .gap(tokens.spacing.xs)
+            .gap_1()
             .max_w(relative(0.8))
             .when(variant == BubbleVariant::Ghost, |this| {
                 this.w_full().max_w_full()
@@ -182,13 +181,13 @@ impl RenderOnce for BubbleContent {
             .min_w_0()
             .max_w_full()
             .overflow_hidden()
-            .rounded(tokens.radius.xl)
+            .rounded(cx.theme().radius_3xl())
             .border_1()
             .border_color(cx.theme().transparent)
-            .px(tokens.spacing.md)
-            .py(tokens.spacing.sm)
-            .text_size(tokens.typography.sm.size)
-            .line_height(tokens.typography.sm.line_height)
+            .px_3()
+            .py_2p5()
+            .text_sm()
+            .line_height(relative(1.625))
             .when_some(self.alignment, |this, alignment| match alignment {
                 MessageAlignment::Start => this.self_start(),
                 MessageAlignment::End => this.self_end(),
@@ -204,7 +203,10 @@ impl RenderOnce for BubbleContent {
                     .bg(tokens.colors.muted)
                     .text_color(tokens.colors.foreground),
                 BubbleVariant::Tinted => this
-                    .bg(tokens.colors.primary.opacity(0.12))
+                    .bg(tokens.colors.primary.mix_oklab(
+                        tokens.colors.background,
+                        if cx.theme().is_dark() { 0.24 } else { 0.12 },
+                    ))
                     .text_color(tokens.colors.foreground),
                 BubbleVariant::Outline => this
                     .border_color(tokens.colors.border)
@@ -217,7 +219,11 @@ impl RenderOnce for BubbleContent {
                     .text_color(tokens.colors.foreground)
                     .p_0(),
                 BubbleVariant::Destructive => this
-                    .bg(tokens.colors.destructive.opacity(0.12))
+                    .bg(tokens.colors.destructive.opacity(if cx.theme().is_dark() {
+                        0.2
+                    } else {
+                        0.1
+                    }))
                     .text_color(tokens.colors.destructive),
             })
             .refine_style(&self.style)
@@ -261,12 +267,10 @@ impl Styled for BubbleGroup {
 }
 
 impl RenderOnce for BubbleGroup {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        let tokens = cx.theme().semantic_tokens();
-
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         v_flex()
             .min_w_0()
-            .gap(tokens.spacing.sm)
+            .gap_2()
             .refine_style(&self.style)
             .children(self.children)
     }
@@ -329,34 +333,32 @@ impl Styled for BubbleReactions {
 impl RenderOnce for BubbleReactions {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let tokens = cx.theme().semantic_tokens();
-        let edge_offset = tokens.spacing.lg + tokens.spacing.xxs;
-
         div()
             .absolute()
             .flex()
             .flex_none()
             .items_center()
             .justify_center()
-            .gap(tokens.spacing.xs)
-            .rounded(tokens.radius.full)
+            .gap_1()
+            .rounded(cx.theme().radius_full())
             .border_3()
             .border_color(tokens.colors.background)
             .bg(tokens.colors.muted)
             .text_color(tokens.colors.foreground)
-            .px(tokens.spacing.sm)
-            .py(tokens.spacing.xxs)
-            .text_size(tokens.typography.sm.size)
+            .px_1p5()
+            .py_0p5()
+            .text_sm()
             .when(self.side == BubbleReactionSide::Top, |this| {
-                this.top(-edge_offset)
+                this.top(-rems(0.75))
             })
             .when(self.side == BubbleReactionSide::Bottom, |this| {
-                this.bottom(-edge_offset)
+                this.bottom(-rems(0.75))
             })
             .when(self.alignment == MessageAlignment::Start, |this| {
-                this.left(tokens.spacing.md)
+                this.left_3()
             })
             .when(self.alignment == MessageAlignment::End, |this| {
-                this.right(tokens.spacing.md)
+                this.right_3()
             })
             .refine_style(&self.style)
             .children(self.children)

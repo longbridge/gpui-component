@@ -1,6 +1,6 @@
 use gpui::{
     App, AppContext as _, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement as _,
-    Render, Styled as _, Window, div, px,
+    Render, Styled as _, Window, div, rems,
 };
 use gpui_component::{
     ActiveTheme as _, Sizable as _, StyledExt as _,
@@ -62,7 +62,7 @@ impl Render for BubbleStory {
             .child(
                 section("Variants")
                     .description("Semantic variants match the Base UI bubble treatments.")
-                    .w(px(680.))
+                    .w(rems(42.5))
                     .v_flex()
                     .gap_4()
                     .child(start_bubble().child("A strong primary bubble."))
@@ -100,7 +100,7 @@ impl Render for BubbleStory {
             .child(
                 section("Alignment")
                     .description("Use the same alignment value as Message.")
-                    .w(px(680.))
+                    .w(rems(42.5))
                     .v_flex()
                     .gap_3()
                     .child(
@@ -117,7 +117,7 @@ impl Render for BubbleStory {
             .child(
                 section("Reactions")
                     .description("Reaction controls keep Button semantics and remain replaceable.")
-                    .w(px(680.))
+                    .w(rems(42.5))
                     .v_flex()
                     .gap_8()
                     .py_6()
@@ -145,8 +145,8 @@ impl Render for BubbleStory {
             )
             .child(
                 section("Group")
-                    .description("Group consecutive bubbles from one sender with an 8 px gap.")
-                    .w(px(680.))
+                    .description("Group consecutive bubbles using the shared spacing scale.")
+                    .w(rems(42.5))
                     .child(
                         BubbleGroup::new()
                             .w_full()
@@ -165,29 +165,29 @@ impl Render for BubbleStory {
             .child(
                 section("Rich content")
                     .description("Any GPUI element can be placed directly in the surface.")
-                    .w(px(680.))
+                    .w(rems(42.5))
                     .child(
-                        start_bubble().child(
-                            h_flex()
-                                .gap_3()
-                                .child(
-                                    div()
-                                        .size_10()
-                                        .rounded(cx.theme().radius)
-                                        .bg(cx.theme().primary_foreground.opacity(0.18)),
-                                )
-                                .child(
-                                    v_flex()
-                                        .child("design-notes.pdf")
-                                        .child(div().text_xs().opacity(0.75).child("2.4 MB · PDF")),
-                                ),
+                        start_bubble().content(
+                            BubbleContent::new().child(
+                                h_flex()
+                                    .gap_3()
+                                    .child(
+                                        div()
+                                            .size_10()
+                                            .rounded(cx.theme().radius)
+                                            .bg(cx.theme().primary_foreground.opacity(0.18)),
+                                    )
+                                    .child(v_flex().child("design-notes.pdf").child(
+                                        div().text_xs().opacity(0.75).child("2.4 MB · PDF"),
+                                    )),
+                            ),
                         ),
                     ),
             )
             .child(
                 section("Custom style")
                     .description("Caller refinements override the surface defaults.")
-                    .w(px(680.))
+                    .w(rems(42.5))
                     .child(
                         start_bubble().content(
                             BubbleContent::new()
