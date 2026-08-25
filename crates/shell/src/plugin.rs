@@ -468,8 +468,8 @@ impl CapabilitiesFile {
         Capabilities::new()
             .read_roots(expand_all(&fs.read, plugin_dir, data_dir))
             .write_roots(expand_all(&fs.write, plugin_dir, data_dir))
-            .with_execute(execute)
-            .with_network_hosts(
+            .execute(execute)
+            .network_hosts(
                 self.network
                     .clone()
                     .unwrap_or_default()
@@ -1169,7 +1169,7 @@ mod tests {
         let capabilities = manifest.capabilities(&plugin_dir, &data_dir);
 
         assert_eq!(
-            capabilities.execute(),
+            capabilities.execute_grant(),
             &ExecuteGrant::Allowed(vec!["git".to_owned()])
         );
         assert!(capabilities.may_run("git"));
@@ -1216,7 +1216,7 @@ mod tests {
         assert!(!capabilities.has_store());
         assert!(!capabilities.has_read_access());
         assert!(!capabilities.has_write_access());
-        assert_eq!(capabilities.execute(), &ExecuteGrant::Denied);
+        assert_eq!(capabilities.execute_grant(), &ExecuteGrant::Denied);
     }
 
     #[test]
@@ -1367,7 +1367,7 @@ mod tests {
         let source = VALID.replacen("[\"git\"]", "\"*\"", 1);
         let manifest = PluginManifest::parse(&source).expect("`*` is a valid execute grant");
         let capabilities = manifest.capabilities(Path::new("/plugins/a"), Path::new("/data/a"));
-        assert_eq!(capabilities.execute(), &ExecuteGrant::Unrestricted);
+        assert_eq!(capabilities.execute_grant(), &ExecuteGrant::Unrestricted);
         assert!(capabilities.may_run("anything"));
     }
 

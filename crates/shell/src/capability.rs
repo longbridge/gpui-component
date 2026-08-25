@@ -48,12 +48,12 @@ impl Capabilities {
         self
     }
 
-    pub fn with_execute(mut self, grant: ExecuteGrant) -> Self {
+    pub fn execute(mut self, grant: ExecuteGrant) -> Self {
         self.execute = grant;
         self
     }
 
-    pub fn with_network_hosts(mut self, hosts: impl IntoIterator<Item = String>) -> Self {
+    pub fn network_hosts(mut self, hosts: impl IntoIterator<Item = String>) -> Self {
         self.network_hosts = hosts.into_iter().collect();
         self
     }
@@ -85,7 +85,7 @@ impl Capabilities {
         self.clipboard_write
     }
 
-    pub fn execute(&self) -> &ExecuteGrant {
+    pub fn execute_grant(&self) -> &ExecuteGrant {
         &self.execute
     }
 
@@ -488,7 +488,7 @@ mod tests {
     fn execute_is_denied_by_default_and_allowlisted_when_granted() {
         assert!(!Capabilities::new().may_run("git"));
         let capabilities =
-            Capabilities::new().with_execute(ExecuteGrant::Allowed(vec!["git".into()]));
+            Capabilities::new().execute(ExecuteGrant::Allowed(vec!["git".into()]));
         assert!(capabilities.may_run("git"));
         assert!(!capabilities.may_run("curl"));
     }

@@ -86,8 +86,8 @@ script_view.update(cx, |view, cx| view.refresh(cx));
 ```rust
 gpui_shell::set_capabilities(
     Capabilities::new()
-        .with_read_roots([app_root.clone()])
-        .with_write_roots([data_dir.clone()])
+        .read_roots([app_root.clone()])
+        .write_roots([data_dir.clone()])
         .store(true),
 );
 gpui_shell::set_store_path(data_dir.join("store.json"));
