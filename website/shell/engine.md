@@ -93,6 +93,22 @@ A view holds **two** snapshots rather than one: the live description, and the on
 
 Nothing that crosses the boundary is an object. An element handle is an integer index into the arena, retained host state — an `InputState`'s rope, cursor and selection — lives in a GPUI entity the script addresses through a handle, and every argument and result is plain data.
 
+## What linking it costs
+
+Two numbers a host has to know before it takes the dependency: how much bigger the binary gets, and how much more memory it holds. Both were measured on the component gallery — a real GPUI application — by building it twice, once with `gpui-shell` in its dependencies and once with that dependency and its story removed.
+
+| | Without `gpui-shell` | With it | Added |
+| --- | --- | --- | --- |
+| Binary, stripped | 69.4 MiB | 74.0 MiB | **+4.7 MiB** (+6.7%) |
+| Binary, unstripped | 80.8 MiB | 86.7 MiB | +5.8 MiB |
+| Resident memory | 133.8 MiB | 138.1 MiB | **+4.3 MiB** |
+
+Most of the binary growth is the engine itself: QuickJS is a C interpreter compiled in, plus the bindings and the style table around it.
+
+Two caveats on the memory figure. It is a median of three runs, because the first run of either build reads about 15 MiB higher while caches are cold. And it is measured with the gallery's Shell story loaded — a live QuickJS runtime, its prelude, a script, and a quote board of twenty rows — so it covers a runtime doing work, not the floor for one sitting idle.
+
+The 256 MiB heap cap from [Capabilities](./capabilities.md#the-sandbox) is a ceiling, not a reservation; nothing is committed until a script allocates it.
+
 ## What is on each side
 
 The proportion is itself the argument for the seam: above it is the actual design, below it is "what does a script value look like".

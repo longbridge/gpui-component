@@ -640,8 +640,8 @@ fn path_digest(root: &Path) -> u64 {
 /// path with a manifest deciding instead.
 fn local_capabilities(root: &Path, store: &Path) -> Capabilities {
     Capabilities::new()
-        .with_read_roots([root.to_path_buf(), store.to_path_buf()])
-        .with_write_roots([store.to_path_buf()])
+        .read_roots([root.to_path_buf(), store.to_path_buf()])
+        .write_roots([store.to_path_buf()])
         .store(true)
 }
 

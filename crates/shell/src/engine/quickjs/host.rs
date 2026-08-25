@@ -32,7 +32,10 @@
 //! so `get` and `set` answer from memory; §17.1's requirement that `store.flush`
 //! become awaitable is still open, and is the only synchronous write left.
 
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    rc::Rc,
+};
 
 use gpui::{App, ClipboardItem};
 use rquickjs::{
@@ -44,6 +47,7 @@ use serde_json::Value as Json;
 
 use crate::{
     capability::{Access, Capabilities, CapabilityError, Grant},
+    policy::Policy,
     scope,
     store::{Store, persist},
 };
@@ -297,75 +301,85 @@ fn access_key(access: Access) -> &'static str {
     }
 }
 
-fn schedule_persist(ctx: &Ctx<'_>) {
-    let pending = with_store_unchecked(|store| {
-        if store.writing || !store.dirty {
-            return None;
-        }
-        match store.encode() {
-            Ok(Some(body)) => {
-                store.dirty = false;
-                store.writing = true;
-                Some((store.path.clone(), body))
-            }
-            Ok(None) => None,
-            Err(error) => {
-                tracing::error!("{error}");
-                store.dirty = false;
-                None
-            }
-        }
-    });
+/// Drives the store's write queue one step.
+///
+/// One write is in flight at a time and the completion drives the queue again,
+/// so a `set` made while a write was on its way is picked up by the next one
+/// rather than left in memory. That last part is not a refinement: with a
+/// `dirty` flag and no follow-up, a mutation during a write was lost for good
+/// unless another mutation happened to follow it.
+fn drive_store(host: &scheduler::Host, policy: &Rc<Policy>) {
+    // Settling is done outside `with_store`, always: a `flush` resolving from
+    // here re-enters script, which may call `gpui.store.set`.
+    let stalled = policy.with_store(Store::take_stalled).unwrap_or_default();
+    for wake in stalled {
+        wake();
+    }
 
-    let Some((path, body)) = pending.flatten() else {
+    let Some(pending) = policy.with_store(Store::begin_write).flatten() else {
         return;
     };
 
+    let revision = pending.revision();
+    let (path, body) = pending.into_parts();
+    let abandoned = policy.clone();
+    let policy = policy.clone();
+    let next = host.clone();
+
     // A failure is logged rather than thrown: nobody asked for this write, so
-    // there is no call to fail it. A script that wants to be told awaits
-    // `flush`, which does its own write and rejects.
-    let started = scheduler::detached(
-        ctx,
-        "gpui.store",
+    // there is no call to fail. A script that wants to be told awaits `flush`,
+    // which waits for this same write and rejects with it.
+    let started = scheduler::detached_on(
+        host,
         move || persist(&path, body),
-        |result| {
-            let again = with_store_unchecked(|store| {
-                store.writing = false;
-                store.dirty
-            });
-            if let Err(error) = result {
-                tracing::error!("the store could not be written: {error}");
+        move |result| {
+            // The policy that started the write, not whichever one happens to
+            // be in force now. This runs outside any host call, so an ambient
+            // lookup would find the *default* store and leave this one wedged
+            // with a write in flight that never completes.
+            let woken = policy
+                .with_store(|store| store.finish_write(revision, result))
+                .unwrap_or_default();
+            for wake in woken {
+                wake();
             }
-            let _ = again;
+            drive_store(&next, &policy);
         },
     );
 
     if !started {
-        // Only reachable outside a host call, which the capability check above
-        // has already ruled out. Leaving the flag set would stop every later
-        // write, so it is cleared rather than trusted.
-        with_store_unchecked(|store| {
-            store.writing = false;
-            store.dirty = true;
-        });
+        // The executor is gone. Leaving the revision in flight would stop every
+        // later write, so it is released rather than trusted.
+        abandoned.with_store(|store| store.abort_write(revision));
     }
 }
 
-/// Writes the store and resolves when it has landed.
-fn flush<'js>(ctx: Ctx<'js>) -> JsResult<Promise<'js>> {
-    let pending = with_store(&ctx, |store| {
-        store.dirty = false;
-        match store.encode() {
-            Ok(body) => Ok(body.map(|body| (store.path.clone(), body))),
-            Err(error) => Err(fail(&ctx, &error)),
-        }
-    })?;
+/// Kicks the queue from inside a host call.
+fn schedule_persist(ctx: &Ctx<'_>) {
+    let Ok(host) = scheduler::host_for(ctx, "gpui.store") else {
+        return;
+    };
+    drive_store(&host, &scope::policy());
+}
 
-    scheduler::blocking(&ctx, "gpui.store.flush()", move || match pending {
-        Some((path, body)) => persist(&path, body),
-        // Nothing has been read or written, so there is nothing to land.
-        None => Ok(()),
-    })
+/// Resolves once everything written so far has reached the disk.
+///
+/// A barrier rather than a second writer. It used to start its own write, which
+/// raced the automatic one through the same temporary file with nothing ordering
+/// them — so the older revision could land last and undo the newer.
+fn flush<'js>(ctx: Ctx<'js>) -> JsResult<Promise<'js>> {
+    let (promise, resolve, reject) = ctx.promise()?;
+    let settle = scheduler::deferred(&ctx, "gpui.store.flush()", resolve, reject)?;
+
+    // `with_store` also enforces the capability, so a denied flush throws here
+    // rather than resolving quietly.
+    if let Some(settle) = with_store(&ctx, |store| Ok(store.wait(settle)))? {
+        settle(Ok(()));
+        return Ok(promise);
+    }
+
+    schedule_persist(&ctx);
+    Ok(promise)
 }
 
 fn store_object<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
@@ -394,7 +408,7 @@ fn store_object<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
                         .values()
                         .map_err(|error| fail(&ctx, &error))?
                         .insert(key, value.0);
-                    store.dirty = true;
+                    store.touch();
                     Ok(())
                 })?;
                 schedule_persist(&ctx);
@@ -411,7 +425,7 @@ fn store_object<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
                     .values()
                     .map_err(|error| fail(&ctx, &error))?
                     .remove(&key);
-                store.dirty = true;
+                store.touch();
                 Ok(())
             })?;
             schedule_persist(&ctx);
@@ -458,15 +472,6 @@ fn with_store<R>(ctx: &Ctx<'_>, body: impl FnOnce(&mut Store) -> JsResult<R>) ->
              before the application runs",
         )),
     }
-}
-
-/// The store without the capability check, for the write machinery.
-///
-/// The check already happened at the entry point that made the store dirty;
-/// repeating it here would mean a mutation that was allowed could produce a
-/// write that was not.
-fn with_store_unchecked<R>(body: impl FnOnce(&mut Store) -> R) -> Option<R> {
-    scope::policy().with_store(body)
 }
 
 fn fail(ctx: &Ctx<'_>, message: &str) -> JsError {
@@ -799,7 +804,7 @@ mod tests {
     fn a_read_outside_the_granted_root_names_the_manifest_key() {
         let directory = TempDir::new();
         crate::capability::install(
-            Capabilities::new().with_read_roots([directory.path().to_path_buf()]),
+            Capabilities::new().read_roots([directory.path().to_path_buf()]),
         );
 
         let message = with_host(|ctx| error_of(ctx, "gpui.fs.read_text('../../etc/passwd')"));

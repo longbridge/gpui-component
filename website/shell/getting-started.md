@@ -29,8 +29,8 @@ gpui_platform::application()
         gpui_shell::set_store_path(store_directory.join("store.json"));
         gpui_shell::set_capabilities(
             Capabilities::new()
-                .with_read_roots([root.clone()])
-                .with_write_roots([store_directory.clone()])
+                .read_roots([root.clone()])
+                .write_roots([store_directory.clone()])
                 .store(true),
         );
 
@@ -159,7 +159,7 @@ This writes `gpui.d.ts` next to the application. Put `// @ts-check` at the top o
 The declarations can be trusted because they are **generated from the tables the runtime dispatches through**, not transcribed from this documentation:
 
 - style method names come from the same list the JavaScript prelude loops over to build the element prototype;
-- each parametric method's argument type is *probed* — the generator asks the runtime which literals that method accepts, so the difference between a length, a definite length, an absolute length, a colour and a bare number is decided by the code that enforces it;
+- each parametric method's argument type is _probed_ — the generator asks the runtime which literals that method accepts, so the difference between a length, a definite length, an absolute length, a colour and a bare number is decided by the code that enforces it;
 - the colour union comes from the installed palette's token names.
 
 Three things the declarations deliberately do not express, because no type could: whether a capability is **granted** (a denied `fs.read_text` still type-checks), the **lifetime** of an element or a `cx` (TypeScript has no affine types, so reusing an element still type-checks and still throws), and **which component a method suits** (every element shares one prototype, so `.checked(true)` is declared on all of them and is simply inert on a `div`).
@@ -190,11 +190,11 @@ gpui-shell types <directory>
 gpui-shell --help | --version
 ```
 
-| Argument | Meaning |
-| --- | --- |
-| `<directory>` | The application root, or the `main.js` inside it |
-| `check` | Load and render once without a window; exit `0` or `1` |
-| `types` | Write `gpui.d.ts` next to the application |
-| `--watch` | Reload when the sources change |
-| `--dev` | Development mode; implies `--watch` |
+| Argument       | Meaning                                                         |
+| -------------- | --------------------------------------------------------------- |
+| `<directory>`  | The application root, or the `main.js` inside it                |
+| `check`        | Load and render once without a window; exit `0` or `1`          |
+| `types`        | Write `gpui.d.ts` next to the application                       |
+| `--watch`      | Reload when the sources change                                  |
+| `--dev`        | Development mode; implies `--watch`                             |
 | `--print-spec` | With `check`, also print the element description that was built |

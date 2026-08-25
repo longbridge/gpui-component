@@ -53,10 +53,28 @@ use crate::{capability::Capabilities, native::NativeModules, store::Store};
 /// borrows it, and two plugins hold two.
 pub struct Policy {
     capabilities: Capabilities,
-    modules: Rc<NativeModules>,
+    /// A live handle, not a value — and deliberately unlike `capabilities`.
+    ///
+    /// A grant is frozen with the code it was given to: that is the whole point
+    /// of a policy, and a view that could have its permissions changed after it
+    /// was built would be back where this started. The module registry is the
+    /// opposite question. It is not the script's authority but the *host's own
+    /// surface*, and every module closure holds GPUI entity handles — so
+    /// [`crate::native::clear_modules`] has to actually revoke, or a host that
+    /// tears itself down leaves handles registered and GPUI reports the leak.
+    ///
+    /// Shared by every copy of a policy, so an edit made through
+    /// [`update_default`] reaches the views already holding the old one. Not
+    /// shared *between* policies: a plugin's registry is its own, and a host
+    /// clearing its modules does not reach into one.
+    modules: Rc<RefCell<Rc<NativeModules>>>,
     /// `None` when the host named no settings file, which is a denial with its
     /// own message rather than an empty store.
-    store: RefCell<Option<Store>>,
+    ///
+    /// Shared like `modules` and for a sharper reason: a store *is* its file, so
+    /// two caches for one path is never a thing anyone wants. Two would answer
+    /// `get` differently and run two write queues over the same temporary file.
+    store: Rc<RefCell<Option<Store>>>,
 }
 
 impl Default for Policy {
@@ -70,8 +88,8 @@ impl Policy {
     pub fn new() -> Self {
         Self {
             capabilities: Capabilities::default(),
-            modules: Rc::new(NativeModules::default()),
-            store: RefCell::new(None),
+            modules: Rc::new(RefCell::new(Rc::new(NativeModules::default()))),
+            store: Rc::new(RefCell::new(None)),
         }
     }
 
@@ -98,8 +116,8 @@ impl Policy {
     /// this plugin call" is exactly as much a grant as "which directories may it
     /// read". A global registry cannot express a host that gives one plugin a
     /// module and not another.
-    pub fn with_native_modules(mut self, modules: NativeModules) -> Self {
-        self.modules = Rc::new(modules);
+    pub fn with_native_modules(self, modules: NativeModules) -> Self {
+        *self.modules.borrow_mut() = Rc::new(modules);
         self
     }
 
@@ -108,7 +126,9 @@ impl Policy {
     }
 
     pub fn modules(&self) -> Rc<NativeModules> {
-        self.modules.clone()
+        // Cloned out rather than borrowed across the call: dispatching into a
+        // module may register modules again, and the borrow would still be open.
+        self.modules.borrow().clone()
     }
 
     /// Runs `body` against the settings file, if the host named one.
@@ -152,24 +172,97 @@ pub fn default() -> Rc<Policy> {
 }
 
 impl Policy {
-    /// A copy that shares the modules and the store but not the handle.
+    /// A copy that keeps the grant and shares everything else.
     ///
     /// Used when the default is edited while a view already holds it: the view
-    /// keeps what it was given, and the edit lands on a new default. A store is
-    /// deliberately *not* duplicated — two policies pointing at one file would
-    /// be two caches disagreeing about it — so the copy takes the path and reads
-    /// it again.
+    /// keeps what it was given, and the edit lands on a new default handle.
+    ///
+    /// The split is the rule this whole module exists for. **The capability
+    /// grant is the one thing a view freezes** — authority belongs to the code,
+    /// and a view whose permissions could be changed after it was built is
+    /// exactly the hole the policy replaced. Everything else here is the host's
+    /// live configuration of one application: revoking a module has to reach the
+    /// views that can call it, and a store has to stay one cache over one file.
     fn duplicate(&self) -> Self {
-        let store = self.store.borrow().as_ref().map(|store| store.path.clone());
-
-        let copy = Self {
+        Self {
             capabilities: self.capabilities.clone(),
             modules: self.modules.clone(),
-            store: RefCell::new(None),
-        };
-        match store {
-            Some(path) => copy.with_store_path(path),
-            None => copy,
+            store: self.store.clone(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::capability::Capabilities;
+
+    fn reading(root: &str) -> Policy {
+        Policy::new().with_capabilities(Capabilities::new().read_roots([PathBuf::from(root)]))
+    }
+
+    /// Two plugins loaded at once hold two grants. This is the whole point.
+    #[test]
+    fn two_policies_do_not_share_a_grant() {
+        let plugin = Rc::new(reading("/tmp/plugin"));
+        let application = Rc::new(Policy::new());
+
+        assert!(plugin.capabilities().has_read_access());
+        assert!(!application.capabilities().has_read_access());
+    }
+
+    /// Editing the default while a view holds it must not change what that view
+    /// was granted — otherwise a host that grants a second application something
+    /// silently widens the first.
+    #[test]
+    fn editing_the_default_does_not_widen_a_grant_already_handed_out() {
+        set_default(Policy::new());
+        let held = default();
+        assert!(!held.capabilities().has_read_access());
+
+        update_default(|policy| {
+            policy.with_capabilities(Capabilities::new().read_roots([PathBuf::from("/tmp")]))
+        });
+
+        assert!(
+            !held.capabilities().has_read_access(),
+            "the grant a view is holding is frozen"
+        );
+        assert!(default().capabilities().has_read_access());
+    }
+
+    /// The deliberate exception. A module closure holds GPUI entity handles, so
+    /// a host tearing itself down has to be able to revoke — leaving them
+    /// registered is a leak GPUI reports at shutdown.
+    #[test]
+    fn revoking_a_module_reaches_a_policy_already_handed_out() {
+        set_default(Policy::new().with_native_modules(crate::native::NativeModules::new()));
+        let held = default();
+
+        update_default(|policy| policy.with_native_modules(crate::native::NativeModules::new()));
+
+        assert!(
+            Rc::ptr_eq(&held.modules(), &default().modules()),
+            "the registry is one live handle, not a copy per holder"
+        );
+    }
+
+    /// One file, one cache, one write queue. Two would answer `get` differently
+    /// and race each other through the same temporary file.
+    #[test]
+    fn a_copy_of_a_policy_shares_its_store() {
+        let path = std::env::temp_dir().join("gpui-shell-policy-test.json");
+        set_default(Policy::new().with_store_path(path));
+        let held = default();
+
+        update_default(|policy| policy.with_capabilities(Capabilities::new()));
+
+        held.with_store(|store| store.touch());
+        assert!(
+            default()
+                .with_store(|store| store.is_dirty())
+                .expect("the copy has the same store"),
+            "the two handles are one store"
+        );
     }
 }

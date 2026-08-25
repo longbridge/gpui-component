@@ -28,8 +28,8 @@ gpui_platform::application()
         gpui_shell::set_store_path(store_directory.join("store.json"));
         gpui_shell::set_capabilities(
             Capabilities::new()
-                .with_read_roots([root.clone()])
-                .with_write_roots([store_directory.clone()])
+                .read_roots([root.clone()])
+                .write_roots([store_directory.clone()])
                 .store(true),
         );
 
@@ -189,11 +189,11 @@ gpui-shell types <directory>
 gpui-shell --help | --version
 ```
 
-| 参数 | 含义 |
-| --- | --- |
-| `<directory>` | 应用根目录，或其中的 `main.js` |
-| `check` | 不开窗口地加载并渲染一次，退出码 `0` 或 `1` |
-| `types` | 在应用旁边写出 `gpui.d.ts` |
-| `--watch` | 源码变化时重载 |
-| `--dev` | 开发模式，隐含 `--watch` |
-| `--print-spec` | 配合 `check`，额外打印构建出的元素描述 |
+| 参数           | 含义                                        |
+| -------------- | ------------------------------------------- |
+| `<directory>`  | 应用根目录，或其中的 `main.js`              |
+| `check`        | 不开窗口地加载并渲染一次，退出码 `0` 或 `1` |
+| `types`        | 在应用旁边写出 `gpui.d.ts`                  |
+| `--watch`      | 源码变化时重载                              |
+| `--dev`        | 开发模式，隐含 `--watch`                    |
+| `--print-spec` | 配合 `check`，额外打印构建出的元素描述      |

@@ -1,0 +1,48 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>gpui-shell 第三轮复审</title><style>
+:root{color-scheme:light dark;--bg:#f2f0e9;--paper:#fffdf8;--ink:#17201c;--muted:#68716b;--line:#d6d5cc;--red:#b42318;--amber:#9b5b00;--blue:#175cd3;--green:#18794e}@media(prefers-color-scheme:dark){:root{--bg:#101412;--paper:#191e1b;--ink:#eef2ee;--muted:#abb3ad;--line:#353d38;--red:#ff8a80;--amber:#ffc46b;--blue:#8cb4ff;--green:#75d6a7}}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.62 ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{max-width:1160px;margin:auto;padding:48px 26px 80px}.hero,.card{background:var(--paper);border:1px solid var(--line)}.hero{padding:40px;border-radius:22px}.eyebrow{font:700 12px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.13em;text-transform:uppercase;color:var(--red)}h1{font-size:clamp(36px,6vw,68px);line-height:.98;letter-spacing:-.055em;margin:18px 0}.lead{font-size:19px;color:var(--muted);max-width:900px}.verdict{margin-top:24px;padding:17px 20px;border-left:5px solid var(--red);background:color-mix(in srgb,var(--red) 8%,transparent);font-weight:650}.section{margin-top:40px}.section h2{font-size:25px;margin:0 0 14px}.card{padding:24px;border-radius:16px}.finding{display:grid;grid-template-columns:96px 1fr;gap:17px;padding:22px 0;border-top:1px solid var(--line)}.finding:first-of-type{border-top:0}.sev{font:800 12px/1.3 ui-monospace,SFMono-Regular,Menlo,monospace;text-transform:uppercase}.p0{color:var(--red)}.p1{color:var(--amber)}.finding h3{font-size:18px;margin:0}.finding p{margin:6px 0}.evidence{font:12.5px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--muted)}code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}code{background:color-mix(in srgb,var(--ink) 7%,transparent);padding:.1em .34em;border-radius:4px}pre{white-space:pre-wrap;background:color-mix(in srgb,var(--ink) 6%,transparent);padding:16px;border-radius:10px}table{width:100%;border-collapse:collapse;background:var(--paper);border:1px solid var(--line)}th,td{text-align:left;vertical-align:top;padding:12px 14px;border-bottom:1px solid var(--line)}th{font-size:12px;text-transform:uppercase;color:var(--muted)}.keep{color:var(--green);font-weight:700}.hide{color:var(--red);font-weight:700}.reshape{color:var(--amber);font-weight:700}.checks{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}.check{border:1px solid var(--line);border-radius:10px;padding:14px}.pass b{color:var(--green)}.fail b{color:var(--red)}.small,footer{color:var(--muted);font-size:13px}footer{margin-top:40px}@media(max-width:760px){main{padding:20px 13px}.hero{padding:24px}.finding{grid-template-columns:1fr}.checks{grid-template-columns:1fr}}
+</style></head><body><main>
+<section class="hero"><div class="eyebrow">Third pass · 3e2d8834 + working tree</div><h1>gpui-shell<br>继续复审</h1><p class="lead">本轮重点：Policy/Store 隔离重构，以及以 deep module 与最小 pub 原则审计 Rust 公共 Interface。</p><div class="verdict">继续 Request changes。Filesystem sandbox、watcher、materialize 分配和 Rust row 无障碍已经关闭；当前阻断项是异步 Policy 传播与 Store 写队列正确性。公开面也明显过宽：Rust 的 <code>pub</code> 本身就是下游契约，注释“reachable, not promised”不能取消 semver 责任。</div></section>
+
+<section class="section card"><h2>开放问题</h2>
+<article class="finding"><div class="sev p0">P0 · Worktree</div><div><h3>插件加载期异步任务丢失 Policy</h3><p>Plugin load 以 <code>view=None</code> 进入 Policy，但 TaskState 只保存 owner/view。模块顶层或 init 中创建的 timer、spawn、sleep、async fs 恢复时回落到 DEFAULT Policy，可能获得默认应用的 fs/native/store 权限。InputState 长生命周期 subscription 也以 <code>view=None</code> dispatch，有相同缺口。</p><p><strong>修复：</strong>任务与 subscription 创建时捕获 <code>Rc&lt;Policy&gt;</code>，恢复统一使用 <code>enter_with</code>；补双 Policy top-level await/timer/input 测试。</p><p class="evidence">plugin.rs:947–955 · scheduler.rs:498–515,538–581 · entity_api.rs:133–148 · engine/quickjs/mod.rs:404–431</p></div></article>
+<article class="finding"><div class="sev p1">P1 · Worktree</div><div><h3>插件 Store 完成回调修改默认 Store</h3><p>detached completion 没有 scope，却调用 <code>scope::policy()</code> 查 Store。插件 Store 会永久停在 <code>writing=true</code>，后续 mutation 不再持久化。</p><p><strong>修复：</strong>完成回调携带发起写入的 Policy/Store identity，禁止依赖 ambient lookup。</p></div></article>
+<article class="finding"><div class="sev p1">P1 · Commit</div><div><h3>写入期间的最后一次 mutation 可能永久丢失</h3><p>新 mutation 只标 dirty；完成回调观察 dirty 后没有排队下一次写。若之后没有 mutation，磁盘永远停在旧版本。</p><p class="evidence">engine/quickjs/host.rs:303–343</p></div></article>
+<article class="finding"><div class="sev p1">P1 · Worktree</div><div><h3>flush 与自动写并发，旧 revision 可覆盖新 revision</h3><p>两条 persist 使用同一 <code>&lt;path&gt;.tmp</code>，并且没有 revision serialization。应改成 per-Store 串行队列；flush 是等待目标 revision 的 barrier。</p></div></article>
+<article class="finding"><div class="sev p1">P1 · Worktree</div><div><h3>Native module 动态撤销不再对已有 view 生效</h3><p>ScriptView 保存旧 <code>Rc&lt;Policy&gt;</code>，而 <code>update_default</code> copy-on-write 创建新 Policy；<code>clear_native_modules</code> 无法撤销旧 view 捕获的闭包。要么共享可变 registry，要么把契约改为 startup-only。</p></div></article>
+<article class="finding"><div class="sev p1">P1 · Docs</div><div><h3>README/网站仍描述旧的同步 fs 与 flush API</h3><p>实际 API 已 Promise 化，但英文、中文网站和部分设计风险表仍是旧状态，应用作者会写出错误调用方式。</p></div></article>
+</section>
+
+<section class="section"><h2>最小 pub 审计</h2><table><thead><tr><th>当前公开面</th><th>建议</th><th>理由 / 替代 Interface</th></tr></thead><tbody>
+<tr><td><code>engine</code></td><td class="hide">pub(crate)</td><td>依赖隔离 implementation，不是外部 seam；根部仅导出 facade。</td></tr>
+<tr><td><code>materialize</code>, <code>spec</code>, <code>style</code>, <code>store</code></td><td class="hide">pub(crate)</td><td>内部 representation。外部测试不是扩大生产 Interface 的理由。</td></tr>
+<tr><td><code>scope</code></td><td class="reshape">模块隐藏</td><td>仅导出宿主真正需要的窄 helper，例如 <code>with_current_app</code>；隐藏 enter/guard/generation/policy。</td></tr>
+<tr><td><code>runtime</code>, <code>error</code></td><td class="hide">模块隐藏，类型根部导出</td><td>保留 ExitRequest/on_exit_request/ShellError；隐藏 resolver、error surface、registry。</td></tr>
+<tr><td><code>snapshot</code></td><td class="reshape">opaque type</td><td>保留 len/debug_tree；隐藏 root/arena/generation，避免泄漏 SpecArena。</td></tr>
+<tr><td><code>capability</code></td><td class="reshape">只导出 builder types</td><td>保留 Capabilities/ExecuteGrant；隐藏 Access/Grant/install/installed。</td></tr>
+<tr><td><code>policy</code></td><td class="reshape">保留 host builder</td><td>多应用需要 Policy；隐藏 <code>with_store</code>、default/update_default 和 Store mechanics。</td></tr>
+<tr><td><code>native</code></td><td class="reshape">保留 value/module builders</td><td>隐藏 modules/is_granted/dispatch/set_modules；统一经根 facade 配置。</td></tr>
+<tr><td><code>assets</code>, <code>typings</code>, <code>plugin_api</code></td><td class="hide">pub(crate) / support crate</td><td>主要服务本 package binary。二进制需要不等于核心库用户需要。</td></tr>
+<tr><td><code>watch</code></td><td class="reshape">仅高层 watcher handle</td><td>隐藏 SourceWatcher/poll/notice；提供可取消的 <code>watch_view</code>。</td></tr>
+<tr><td><code>metrics</code></td><td class="reshape">只保留 RuntimeMetrics</td><td>Metrics 的计时 mutation 属 implementation。</td></tr>
+<tr><td><code>theme</code>, <code>root</code></td><td class="keep">选择性保留</td><td>Palettes/ThemeMode、ShellRoot 与 overlay request types 是宿主真正需要的高杠杆 Interface。</td></tr>
+<tr><td><code>dock</code>, <code>plugin</code></td><td class="reshape">未接通前 crate-private</td><td>避免 speculative public surface；先完成 plugin→contribution→panel tracer。</td></tr>
+<tr><td><code>ShellRuntime</code>/<code>ScriptView</code></td><td class="reshape">更深的 host facade</td><td>隐藏 ViewType/ViewObject、arena、dispatch、callback retirement。</td></tr>
+</tbody></table></section>
+
+<section class="section card"><h2>建议的最小外部 Interface</h2><pre>init(cx)
+ShellConfig / PolicyBuilder
+Shell::new(config)
+Shell::load_view(path, entry, window, cx) -&gt; Entity&lt;ScriptView&gt;
+Shell::check(path, entry) -&gt; CheckReport
+Capabilities / ExecuteGrant
+NativeModules / NativeModule / NativeValue / NativeArguments
+ShellRoot + DialogOptions / ToastRequest / SheetSide
+Palettes / ThemeMode
+RuntimeMetrics
+ExitRequest + on_exit_request</pre><p>模块要做深：复杂度留在 implementation，调用者只学习少量高杠杆 Interface。现在的根模块把约 20 个实现目录公开，属于浅模块组合。</p></section>
+
+<section class="section"><h2>已确认关闭</h2><table><tbody><tr><td>Filesystem symlink/TOCTOU 与 metadata/read race</td><td class="keep">关闭：cap-std Dir handle + adversarial tests</td></tr><tr><td>Watcher 前台扫描</td><td class="keep">关闭：background scan</td></tr><tr><td>materialize 每节点 heap Vec</td><td class="keep">关闭：inline SmallVec</td></tr><tr><td>Rust quote row 无障碍</td><td class="keep">关闭：语义 Button + label</td></tr><tr><td>QuickJS seam 过度承诺</td><td class="keep">关闭：诚实定义为 dependency isolation</td></tr></tbody></table></section>
+
+<section class="section"><h2>验证</h2><div class="checks"><div class="check pass"><b>PASS · Tests</b><div class="small">164 unit + 10 CLI + 3 fs + 15 render + 10 snapshot + 3 benchmark；1 ignored。</div></div><div class="check pass"><b>PASS · Strict Clippy</b><div class="small">all targets / all features / -D warnings。</div></div><div class="check pass"><b>PASS · Story / diff check</b><div class="small">gpui-component-story 编译通过；diff 无 whitespace errors。</div></div><div class="check fail"><b>FAIL · Strict Rustdoc</b><div class="small">10 个 private/broken intra-doc links。</div></div></div></section>
+<footer>审查使用 code-review 双轴与 codebase-design 的 deep module、Interface、seam、leverage、locality 原则。状态：HEAD 3e2d8834 加当前未提交 Policy/Store 改动。</footer>
+</main></body></html>

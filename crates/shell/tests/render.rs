@@ -546,7 +546,7 @@ fn draw(context: &mut VisualTestContext, view: &gpui::Entity<ScriptView>) {
 fn a_granted_exit_reaches_the_host(cx: &mut TestAppContext) {
     cx.update(|cx| gpui_shell::init(cx));
     gpui_shell::set_capabilities(
-        gpui_shell::Capabilities::new().with_read_roots([std::env::temp_dir()]),
+        gpui_shell::Capabilities::new().read_roots([std::env::temp_dir()]),
     );
 
     let asked: std::rc::Rc<std::cell::Cell<Option<i32>>> = Default::default();
@@ -658,6 +658,51 @@ fn two_runtimes_share_a_thread_without_sharing_a_grant(cx: &mut TestAppContext) 
     let _second = ShellRuntime::new().expect("the second runtime");
 }
 
+/// A scope opened under a policy answers `gpui.fs` with *that* grant.
+///
+/// This is the seam every capability check goes through, and the half of the
+/// P0 fix that the scheduler's capture relies on: a task that kept its policy
+/// is only correct if restoring that policy actually changes what the engine
+/// sees.
+#[gpui::test]
+fn a_scope_answers_with_the_policy_it_was_opened_under(cx: &mut TestAppContext) {
+    cx.update(|cx| gpui_shell::init(cx));
+
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+
+    gpui_shell::set_capabilities(Capabilities::new());
+    let plugin = Rc::new(
+        Policy::new().with_capabilities(Capabilities::new().read_roots([PathBuf::from("/tmp/p")])),
+    );
+
+    context.update(|window, cx| {
+        assert!(
+            !gpui_shell::capability::installed().has_read_access(),
+            "the default grants nothing"
+        );
+
+        // No view: the case a plugin's module top level runs in.
+        let (guard, _) = gpui_shell::scope::enter_with(
+            window,
+            cx,
+            gpui_shell::scope::ScopePhase::Task,
+            None,
+            plugin.clone(),
+        );
+        assert!(
+            gpui_shell::capability::installed().has_read_access(),
+            "inside the scope the plugin's grant is what fs sees"
+        );
+        drop(guard);
+
+        assert!(
+            !gpui_shell::capability::installed().has_read_access(),
+            "and it does not outlive the call"
+        );
+    });
+}
+
 /// Two policies hold two grants at the same time.
 ///
 /// The point the single process-wide slot could not reach: authority belongs to
@@ -668,12 +713,12 @@ fn two_policies_hold_two_grants_at_once(cx: &mut TestAppContext) {
 
     let reader = Rc::new(
         Policy::default()
-            .with_capabilities(Capabilities::new().with_read_roots([PathBuf::from("/tmp/reader")])),
+            .with_capabilities(Capabilities::new().read_roots([PathBuf::from("/tmp/reader")])),
     );
-    let writer =
-        Rc::new(Policy::default().with_capabilities(
-            Capabilities::new().with_write_roots([PathBuf::from("/tmp/writer")]),
-        ));
+    let writer = Rc::new(
+        Policy::default()
+            .with_capabilities(Capabilities::new().write_roots([PathBuf::from("/tmp/writer")])),
+    );
 
     assert!(reader.capabilities().has_read_access());
     assert!(!reader.capabilities().has_write_access());

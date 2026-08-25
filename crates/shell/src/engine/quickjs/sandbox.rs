@@ -617,7 +617,7 @@ mod tests {
         let _policy = policy();
         let (_runtime, context) = sandboxed();
         crate::capability::install(
-            crate::capability::Capabilities::new().with_read_roots([std::env::temp_dir()]),
+            crate::capability::Capabilities::new().read_roots([std::env::temp_dir()]),
         );
         crate::runtime::clear_exit_handler();
 

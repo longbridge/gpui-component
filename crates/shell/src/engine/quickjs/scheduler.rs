@@ -66,6 +66,7 @@ use rquickjs::{
 };
 
 use crate::{
+    policy::Policy,
     scope::{self, ScopePhase},
     view::ScriptView,
 };
@@ -249,7 +250,7 @@ fn js_sleep<'js>(ctx: Ctx<'js>, ms: Opt<f64>) -> JsResult<Promise<'js>> {
             if let Readiness::Ready(owner) = sleeping.readiness()
                 && let Some(resolve) = sleeping.take_callback()
             {
-                resume(&host, owner, move |ctx, _| {
+                resume(&host, &sleeping.policy.clone(), owner, move |ctx, _| {
                     resolve.restore(ctx)?.call::<_, ()>(())
                 });
             }
@@ -399,11 +400,16 @@ fn schedule<'js>(
                 };
                 let Some(callback) = callback else { break };
 
-                resume(&host, owner, move |ctx, generation| {
-                    callback
-                        .restore(ctx)?
-                        .call::<_, ()>((context_object(ctx, generation)?,))
-                });
+                resume(
+                    &host,
+                    &ticking.policy.clone(),
+                    owner,
+                    move |ctx, generation| {
+                        callback
+                            .restore(ctx)?
+                            .call::<_, ()>((context_object(ctx, generation)?,))
+                    },
+                );
 
                 if repeat == Repeat::Once {
                     break;
@@ -468,11 +474,19 @@ impl<'js> FromJs<'js> for ScriptFailure {
 ///
 /// Captured while a host call is in progress, because that is the only time the
 /// window handle and the executors are reachable.
-struct Host {
+#[derive(Clone)]
+pub(super) struct Host {
     window: AnyWindowHandle,
     app: AsyncApp,
     foreground: ForegroundExecutor,
     background: BackgroundExecutor,
+}
+
+/// The executors and window handle a deferred call needs, taken from the scope
+/// that is running now. Held rather than re-derived, so work that outlives the
+/// call — a queue that drives itself — does not need a `Ctx` it cannot have.
+pub(super) fn host_for(ctx: &Ctx<'_>, api: &str) -> JsResult<Host> {
+    host(ctx, api)
 }
 
 fn host(ctx: &Ctx<'_>, api: &str) -> JsResult<Host> {
@@ -497,9 +511,11 @@ fn host(ctx: &Ctx<'_>, api: &str) -> JsResult<Host> {
 /// a `cx` of its own.
 fn resume(
     host: &Host,
+    policy: &Rc<Policy>,
     owner: Option<Entity<ScriptView>>,
     body: impl FnOnce(&Ctx<'_>, u64) -> JsResult<()>,
 ) {
+    let policy = policy.clone();
     let mut app = host.app.clone();
     let entered = host.window.update(&mut app, |_, window, cx| {
         let Some(runtime) = ShellRuntime::global(cx) else {
@@ -507,7 +523,9 @@ fn resume(
             return;
         };
 
-        let (guard, generation) = scope::enter(window, cx, ScopePhase::Task, owner);
+        // `enter_with` and not `enter`: there is no enclosing frame to inherit
+        // from out here, so `enter` would reach for the default policy.
+        let (guard, generation) = scope::enter_with(window, cx, ScopePhase::Task, owner, policy);
         if let Err(error) = runtime.with_js(|ctx| body(ctx, generation)) {
             tracing::error!("error in script task: {error}");
         }
@@ -542,6 +560,15 @@ struct TaskState {
     /// `None` means the task was created with `owner: null` and outlives every
     /// view deliberately.
     owner: Option<WeakEntity<ScriptView>>,
+    /// The authority the task was created under.
+    ///
+    /// Captured here rather than derived from the owner when the task resumes,
+    /// because an owner-less task has nothing to derive it from and would fall
+    /// back to the default policy — which for a plugin means running its timer
+    /// with the *host application's* permissions. A plugin's module top level
+    /// and its `init` both create tasks before its view exists, so this is the
+    /// ordinary case rather than an edge one.
+    policy: Rc<Policy>,
     cancelled: Cell<bool>,
     done: Cell<bool>,
     /// The script function to resume with: a timer handler, or a promise's
@@ -574,6 +601,7 @@ impl TaskState {
             }),
             api,
             owner,
+            policy: scope::policy(),
             cancelled: Cell::new(false),
             done: Cell::new(false),
             rejection: RefCell::new(None),
@@ -612,25 +640,20 @@ impl TaskState {
     }
 }
 
-/// Background work nobody is waiting for, with a completion the host handles.
+/// Work whose result nobody awaits, run off the main thread.
 ///
-/// The store's write is the caller: every mutation has to reach the disk whether
-/// or not the script asked, so there is no promise to settle and no call to
-/// fail — but it still must not happen on this thread. `done` runs back on the
-/// main thread and touches Rust state only, so it needs no script scope.
+/// The store's write queue is what this exists for. Nobody asked for the write,
+/// so there is no call to fail — a failure is logged, and a script that wants to
+/// be told awaits `flush` instead.
 ///
-/// Answers whether the work was started; outside a host call there is no
-/// executor to start it on.
-pub(super) fn detached(
-    ctx: &Ctx<'_>,
-    api: &'static str,
+/// Takes a [`Host`] rather than a `Ctx` because the completion drives the queue
+/// again, and out there no script call is in progress to take one from.
+pub(super) fn detached_on(
+    host: &Host,
     work: impl FnOnce() -> Result<(), String> + Send + 'static,
     done: impl FnOnce(Result<(), String>) + 'static,
 ) -> bool {
-    let Ok(host) = host(ctx, api) else {
-        return false;
-    };
-
+    let host = host.clone();
     host.foreground
         .clone()
         .spawn(async move {
@@ -638,6 +661,51 @@ pub(super) fn detached(
         })
         .detach();
     true
+}
+
+/// A promise something else will settle later.
+///
+/// [`blocking`] settles when its own work finishes. This is for a promise whose
+/// outcome is decided elsewhere — a `flush` waiting on a write another call
+/// started — so the resolver comes back as a closure the deciding code calls,
+/// once, from the main thread.
+pub(super) fn deferred<'js>(
+    ctx: &Ctx<'js>,
+    api: &'static str,
+    resolve: Function<'js>,
+    reject: Function<'js>,
+) -> JsResult<crate::store::Settle> {
+    let host = host(ctx, api)?;
+    let task = register(
+        TaskState::new(
+            api,
+            scope::current_view().map(|view| view.downgrade()),
+            Some(Persistent::save(ctx, resolve)),
+        )
+        .with_rejection(Persistent::save(ctx, reject)),
+    );
+
+    Ok(Box::new(move |outcome| {
+        if let Readiness::Ready(owner) = task.readiness() {
+            let resolve = task.take_callback();
+            let reject = task.take_rejection();
+            let policy = task.policy.clone();
+            resume(&host, &policy, owner, move |ctx, _| match outcome {
+                Ok(()) => match resolve {
+                    Some(resolve) => resolve.restore(ctx)?.call::<_, ()>(()),
+                    None => Ok(()),
+                },
+                Err(message) => match reject {
+                    Some(reject) => {
+                        let error = Exception::from_message(ctx.clone(), &message)?;
+                        reject.restore(ctx)?.call::<_, ()>((error,))
+                    }
+                    None => Ok(()),
+                },
+            });
+        }
+        finish(&task);
+    }))
 }
 
 /// A promise settled by work that must not run on this thread.
@@ -682,19 +750,24 @@ where
             if let Readiness::Ready(owner) = running.readiness() {
                 let resolve = running.take_callback();
                 let reject = running.take_rejection();
-                resume(&host, owner, move |ctx, _| match outcome {
-                    Ok(value) => match resolve {
-                        Some(resolve) => resolve.restore(ctx)?.call::<_, ()>((value,)),
-                        None => Ok(()),
+                resume(
+                    &host,
+                    &running.policy.clone(),
+                    owner,
+                    move |ctx, _| match outcome {
+                        Ok(value) => match resolve {
+                            Some(resolve) => resolve.restore(ctx)?.call::<_, ()>((value,)),
+                            None => Ok(()),
+                        },
+                        Err(message) => match reject {
+                            Some(reject) => {
+                                let error = Exception::from_message(ctx.clone(), &message)?;
+                                reject.restore(ctx)?.call::<_, ()>((error,))
+                            }
+                            None => Ok(()),
+                        },
                     },
-                    Err(message) => match reject {
-                        Some(reject) => {
-                            let error = Exception::from_message(ctx.clone(), &message)?;
-                            reject.restore(ctx)?.call::<_, ()>((error,))
-                        }
-                        None => Ok(()),
-                    },
-                });
+                );
             }
             finish(&running);
         })
@@ -1114,5 +1187,37 @@ mod tests {
         // `Persistent`, test teardown order is not ours to choose, and a
         // `Persistent` released after its runtime aborts the process.
         std::mem::forget(runtime);
+    }
+}
+
+#[cfg(test)]
+mod policy_capture_tests {
+    use super::*;
+    use crate::capability::Capabilities;
+
+    /// The P0 this closed: a task created before its view exists.
+    ///
+    /// A plugin's module top level and its `init` both run with no view — the
+    /// view is what they are building — so a timer, a `spawn` or an awaited
+    /// `gpui.fs` call there has no owner to take a policy from. Deriving one at
+    /// resume time therefore fell back to the *default* policy, which for a
+    /// plugin host is the grant of the application it is embedded in. Capturing
+    /// at creation is what makes the task keep its own.
+    #[test]
+    fn a_task_records_the_policy_it_was_created_under() {
+        let plugin = crate::policy::Policy::new().with_capabilities(
+            Capabilities::new().read_roots([std::path::PathBuf::from("/tmp/p")]),
+        );
+        crate::policy::set_default(plugin);
+        let expected = crate::policy::default();
+
+        // No owner: exactly the case that used to lose the policy.
+        let task = TaskState::new("test", None, None);
+        assert!(Rc::ptr_eq(&task.policy, &expected));
+
+        // The host reconfigures for something else. The task keeps its own.
+        crate::policy::set_default(crate::policy::Policy::new());
+        assert!(task.policy.capabilities().has_read_access());
+        assert!(!crate::policy::default().capabilities().has_read_access());
     }
 }

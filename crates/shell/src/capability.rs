@@ -38,12 +38,12 @@ impl Capabilities {
         Self::default()
     }
 
-    pub fn with_read_roots(mut self, roots: impl IntoIterator<Item = PathBuf>) -> Self {
+    pub fn read_roots(mut self, roots: impl IntoIterator<Item = PathBuf>) -> Self {
         self.read_roots = roots.into_iter().collect();
         self
     }
 
-    pub fn with_write_roots(mut self, roots: impl IntoIterator<Item = PathBuf>) -> Self {
+    pub fn write_roots(mut self, roots: impl IntoIterator<Item = PathBuf>) -> Self {
         self.write_roots = roots.into_iter().collect();
         self
     }
@@ -431,8 +431,8 @@ mod tests {
 
         fn granted(&self) -> Capabilities {
             Capabilities::new()
-                .with_read_roots([self.0.clone()])
-                .with_write_roots([self.0.clone()])
+                .read_roots([self.0.clone()])
+                .write_roots([self.0.clone()])
         }
     }
 
@@ -478,7 +478,7 @@ mod tests {
     fn a_write_grant_materializes_a_root_that_is_not_there_yet() {
         let root = Root::new("missing");
         let inner = root.0.join("not-yet");
-        let capabilities = Capabilities::new().with_write_roots([inner.clone()]);
+        let capabilities = Capabilities::new().write_roots([inner.clone()]);
 
         let grant = capabilities
             .open(Path::new("settings.json"), Access::Write)
@@ -487,7 +487,7 @@ mod tests {
         assert!(inner.is_dir());
 
         // A read grant has nothing to offer a directory that is not there.
-        let reading = Capabilities::new().with_read_roots([root.0.join("still-not-there")]);
+        let reading = Capabilities::new().read_roots([root.0.join("still-not-there")]);
         assert!(reading.open(Path::new("x"), Access::Read).is_err());
     }
 
@@ -543,8 +543,8 @@ mod symlink_tests {
 
         fn granted(&self) -> Capabilities {
             Capabilities::new()
-                .with_read_roots([self.root.join("inside")])
-                .with_write_roots([self.root.join("inside")])
+                .read_roots([self.root.join("inside")])
+                .write_roots([self.root.join("inside")])
         }
 
         fn link(&self, name: &str, target: &Path) {

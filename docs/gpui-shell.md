@@ -88,11 +88,11 @@ throw and point at the replacement, rather than with a bare `ReferenceError`.
 
 ### 2.2 Who it is for
 
-| Audience | Situation | What it needs |
-| --- | --- | --- |
-| Plugin authors | Adding a panel, command, or side tool to an existing Rust application | Stable contribution points, a sandbox, dock persistence |
-| Internal tool authors | Dashboards, ops panels, data viewers, one-off tools | Low start-up cost, complete system API, packaging |
-| Generated interfaces | A model writing the interface and its interactions | Common syntax, recoverable errors, hot reload, a typed API contract |
+| Audience              | Situation                                                             | What it needs                                                       |
+| --------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| Plugin authors        | Adding a panel, command, or side tool to an existing Rust application | Stable contribution points, a sandbox, dock persistence             |
+| Internal tool authors | Dashboards, ops panels, data viewers, one-off tools                   | Low start-up cost, complete system API, packaging                   |
+| Generated interfaces  | A model writing the interface and its interactions                    | Common syntax, recoverable errors, hot reload, a typed API contract |
 
 None of these is "rewrite the product core in a script." That distinction
 decides nearly every trade-off below.
@@ -250,7 +250,7 @@ explicit host action — which is also why quickjs-libc's `std` and `os` modules
 are never registered and there is no Node compatibility layer.
 
 **5.2 Elements are values, not objects.** `Button.new("id")` returns an element
-*description* that expires when the render pass ends. This is a direct
+_description_ that expires when the render pass ends. This is a direct
 consequence of GPUI's element model (§8.1), not a stylistic choice.
 
 **5.3 No DSL, no JSX.** Interfaces are built with builder chains that
@@ -295,30 +295,30 @@ engine has to justify why it could not (§6.5).
 
 ### 6.1 Modules
 
-| Module | Responsibility | Side of the seam |
-| --- | --- | --- |
-| `engine/` | VM lifecycle, module loading, method dispatch, callbacks, exception conversion | below |
-| `engine/quickjs/` | The engine: prelude, host API, scheduler, overlays, entity API, native bridge, theme API, sandbox | below |
-| `scope` | `CallScope`: the host-context stack, its phases, and generation checks | above |
-| `snapshot` | `RenderSnapshot`: what one script render publishes and every frame replays | above |
-| `metrics` | `RuntimeMetrics`: script renders and materializations, with their timings | above |
-| `spec` | `SpecArena`: element descriptions, single-use checks, `debug_tree` | above |
-| `materialize` | Replays a snapshot into real GPUI elements; pure Rust, non-destructive | above |
-| `style` | The reflected style table, the parametric bindings, spelling suggestions | above |
-| `theme` | The default semantic palette and token-name resolution | above |
-| `value` | `Bridged`: the neutral script argument value, and color and length coercion | above |
-| `error` | `ShellError`: the neutral error type | above |
-| `entities` | `EntityStore`: retained state by handle, one store per runtime | above |
-| `capability` | The capability set, the installed grant, the path resolver, and denial messages | above |
-| `runtime` | `CallbackArena<T>` in snapshot generations, application-root resolution, the failure surface | above |
-| `root` | `ShellRoot`: the window-level overlay stack | above |
-| `dock` | `ScriptPanel`, `ScriptDockSkin`, panel registration and name interning | above |
-| `native` | The host-registered native module registry | above |
-| `plugin_api` | The script API version and its compatibility check | above |
-| `view` | `ScriptView`: the one bridge into GPUI's render loop, and where a snapshot lives | above |
-| `assets` | Application-directory asset source for `svg(path)` | above |
-| `watch` | Source watching and in-place reload | above |
-| `typings` | `gpui.d.ts` generation | above |
+| Module            | Responsibility                                                                                    | Side of the seam |
+| ----------------- | ------------------------------------------------------------------------------------------------- | ---------------- |
+| `engine/`         | VM lifecycle, module loading, method dispatch, callbacks, exception conversion                    | below            |
+| `engine/quickjs/` | The engine: prelude, host API, scheduler, overlays, entity API, native bridge, theme API, sandbox | below            |
+| `scope`           | `CallScope`: the host-context stack, its phases, and generation checks                            | above            |
+| `snapshot`        | `RenderSnapshot`: what one script render publishes and every frame replays                        | above            |
+| `metrics`         | `RuntimeMetrics`: script renders and materializations, with their timings                         | above            |
+| `spec`            | `SpecArena`: element descriptions, single-use checks, `debug_tree`                                | above            |
+| `materialize`     | Replays a snapshot into real GPUI elements; pure Rust, non-destructive                            | above            |
+| `style`           | The reflected style table, the parametric bindings, spelling suggestions                          | above            |
+| `theme`           | The default semantic palette and token-name resolution                                            | above            |
+| `value`           | `Bridged`: the neutral script argument value, and color and length coercion                       | above            |
+| `error`           | `ShellError`: the neutral error type                                                              | above            |
+| `entities`        | `EntityStore`: retained state by handle, one store per runtime                                    | above            |
+| `capability`      | The capability set, the installed grant, the path resolver, and denial messages                   | above            |
+| `runtime`         | `CallbackArena<T>` in snapshot generations, application-root resolution, the failure surface      | above            |
+| `root`            | `ShellRoot`: the window-level overlay stack                                                       | above            |
+| `dock`            | `ScriptPanel`, `ScriptDockSkin`, panel registration and name interning                            | above            |
+| `native`          | The host-registered native module registry                                                        | above            |
+| `plugin_api`      | The script API version and its compatibility check                                                | above            |
+| `view`            | `ScriptView`: the one bridge into GPUI's render loop, and where a snapshot lives                  | above            |
+| `assets`          | Application-directory asset source for `svg(path)`                                                | above            |
+| `watch`           | Source watching and in-place reload                                                               | above            |
+| `typings`         | `gpui.d.ts` generation                                                                            | above            |
 
 The ratio is the argument. Above the seam are the element model, styling,
 theming, capabilities, and context safety — the actual design. Below it is what
@@ -425,14 +425,14 @@ one instance, and mounts it as the window's root view.
 
 Naming follows the Rust side directly:
 
-| Rust | JavaScript | Example |
-| --- | --- | --- |
-| Type plus `::new` | Capitalized type table with only `.new` | `Button::new(id)` → `Button.new(id)` |
-| Free function | Lowercase function | `div()`, `h_flex()`, `v_flex()`, `text(s)` |
-| State entity | Capitalized type table | `InputState::new(...)` → `InputState.new({...})` |
-| System capability | Lowercase module member | `fs`, `store`, `clipboard`, `log`, `process` |
-| Scheduling | Lowercase module member | `spawn`, `timer`, `sleep`, `with_cx` |
-| View base class | `class X extends View` | `export default class Counter extends View` |
+| Rust              | JavaScript                              | Example                                          |
+| ----------------- | --------------------------------------- | ------------------------------------------------ |
+| Type plus `::new` | Capitalized type table with only `.new` | `Button::new(id)` → `Button.new(id)`             |
+| Free function     | Lowercase function                      | `div()`, `h_flex()`, `v_flex()`, `text(s)`       |
+| State entity      | Capitalized type table                  | `InputState::new(...)` → `InputState.new({...})` |
+| System capability | Lowercase module member                 | `fs`, `store`, `clipboard`, `log`, `process`     |
+| Scheduling        | Lowercase module member                 | `spawn`, `timer`, `sleep`, `with_cx`             |
+| View base class   | `class X extends View`                  | `export default class Counter extends View`      |
 
 #### Style and behavior methods keep their Rust snake_case spelling
 
@@ -531,18 +531,18 @@ exports nothing.
 
 #### The two sides
 
-| Above the seam (no VM name appears in the source) | Below the seam (what an engine implements) |
-| --- | --- |
-| `snapshot.rs`: what a script render publishes and frames replay | Engine value → `Bridged` conversion |
-| `spec.rs`: description arena, single-use checks, `debug_tree` | Module system (ES modules and a resolver, versus `require` and a path list) |
-| `materialize.rs`: descriptions → real elements, pure Rust | Method dispatch (a shared prototype, versus an `__index` metamethod and a method cache) |
-| `scope.rs`: `CallScope`, phases, generation checks, the crate's only `unsafe` | Callback handle type (`Persistent<Function>`) |
-| `style.rs`: reflection table, parametric styles, spelling suggestions | Exception conversion (`ShellError` → the language's own exception) |
-| `theme.rs`: default palette and token resolution | View definition shape (`class extends View`) |
-| `capability.rs`: capability set, **the installed grant**, and path resolution | Sandbox specifics: language trimming, intrinsics, promise pumping (§19) |
-| `value.rs`, `error.rs`, `entities.rs`, `runtime.rs`, `root.rs`, `view.rs`, `watch.rs`, `typings.rs`, `assets.rs` | |
+| Above the seam (no VM name appears in the source)                                                                | Below the seam (what an engine implements)                                              |
+| ---------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `snapshot.rs`: what a script render publishes and frames replay                                                  | Engine value → `Bridged` conversion                                                     |
+| `spec.rs`: description arena, single-use checks, `debug_tree`                                                    | Module system (ES modules and a resolver, versus `require` and a path list)             |
+| `materialize.rs`: descriptions → real elements, pure Rust                                                        | Method dispatch (a shared prototype, versus an `__index` metamethod and a method cache) |
+| `scope.rs`: `CallScope`, phases, generation checks, the crate's only `unsafe`                                    | Callback handle type (`Persistent<Function>`)                                           |
+| `style.rs`: reflection table, parametric styles, spelling suggestions                                            | Exception conversion (`ShellError` → the language's own exception)                      |
+| `theme.rs`: default palette and token resolution                                                                 | View definition shape (`class extends View`)                                            |
+| `capability.rs`: capability set, **the installed grant**, and path resolution                                    | Sandbox specifics: language trimming, intrinsics, promise pumping (§19)                 |
+| `value.rs`, `error.rs`, `entities.rs`, `runtime.rs`, `root.rs`, `view.rs`, `watch.rs`, `typings.rs`, `assets.rs` |                                                                                         |
 
-The seam's load-bearing rule is about *when*, not what: `build_snapshot` is the
+The seam's load-bearing rule is about _when_, not what: `build_snapshot` is the
 only entry into script `render`, and nothing calls it per frame (§8.4). An engine
 that rendered opportunistically would put script cost back on the frame budget.
 Benchmark C (§20.3) is what catches it.
@@ -560,7 +560,7 @@ compile against, is work for when there is a second engine to write.
 live inside the QuickJS module, with the crate root calling into it and a silent
 no-op compiled in for any other build — so a second engine could compile, run,
 and ignore the security configuration without a word. A grant is a decision about
-the *application*, not about the interpreter, so it is above the seam now and an
+the _application_, not about the interpreter, so it is above the seam now and an
 engine can read it but cannot answer it. `set_store_path` and
 `set_development_mode` stayed engine-side but are part of the contract above, so
 an engine either provides them or does not build. There is no fallback left to be
@@ -605,11 +605,11 @@ resuming its own `await` promptly is what an author expects.
 Every object crossing between script and Rust belongs to exactly one of three
 classes.
 
-| Class | Rust side | Script side | Lifetime | Examples |
-| --- | --- | --- | --- | --- |
-| **Value** | Small `Copy`/`Clone` data | number, string, boolean, plain object | Copied on transfer | `Pixels`, `Hsla`, `ElementId`, enums |
-| **Description** | A node id in an arena | A lightweight object over a shared prototype, carrying `__id` | **One render pass** | `div()`, `Button.new(...)` |
-| **Entity** | `Entity<T>` behind a handle | A handle object with methods | Across frames, owned by GPUI | `InputState`, `ScriptView` |
+| Class           | Rust side                   | Script side                                                   | Lifetime                     | Examples                             |
+| --------------- | --------------------------- | ------------------------------------------------------------- | ---------------------------- | ------------------------------------ |
+| **Value**       | Small `Copy`/`Clone` data   | number, string, boolean, plain object                         | Copied on transfer           | `Pixels`, `Hsla`, `ElementId`, enums |
+| **Description** | A node id in an arena       | A lightweight object over a shared prototype, carrying `__id` | **One render pass**          | `div()`, `Button.new(...)`           |
+| **Entity**      | `Entity<T>` behind a handle | A handle object with methods                                  | Across frames, owned by GPUI | `InputState`, `ScriptView`           |
 
 ### 7.1 Values
 
@@ -617,14 +617,14 @@ classes.
 four cases — `Nil`, `Bool`, `Number`, `Str` — and everything above the seam sees
 only those.
 
-| Script input | Target | Rule |
-| --- | --- | --- |
-| `12` | `Pixels` | `px(12.)` |
-| `"50%"` | `DefiniteLength` | `relative(0.5)` |
-| `"12px"`, `"1rem"` | `AbsoluteLength` | Explicit unit |
-| `"auto"` | `Length` | `Length::Auto` |
-| `"#1e88e5"`, `"#1e88e5cc"`, `"#f00"` | `Hsla` | Hex parsing, three lengths |
-| `"accent"` | `Hsla` | Semantic token lookup (§13.3) |
+| Script input                         | Target           | Rule                          |
+| ------------------------------------ | ---------------- | ----------------------------- |
+| `12`                                 | `Pixels`         | `px(12.)`                     |
+| `"50%"`                              | `DefiniteLength` | `relative(0.5)`               |
+| `"12px"`, `"1rem"`                   | `AbsoluteLength` | Explicit unit                 |
+| `"auto"`                             | `Length`         | `Length::Auto`                |
+| `"#1e88e5"`, `"#1e88e5cc"`, `"#f00"` | `Hsla`           | Hex parsing, three lengths    |
+| `"accent"`                           | `Hsla`           | Semantic token lookup (§13.3) |
 
 `null` and `undefined` both collapse to `Bridged::Nil`, because at a call site
 they mean the same thing: the argument was not given.
@@ -643,7 +643,7 @@ at the call site.
 The length grammar is narrowed per method rather than parsed per method: the
 three GPUI length types nest (`Length` ⊃ `DefiniteLength` ⊃ `AbsoluteLength`),
 so `style.rs` parses once and narrows afterwards, which lets the error say
-*which* form was rejected. `.p("auto")` reports that padding needs a definite
+_which_ form was rejected. `.p("auto")` reports that padding needs a definite
 length; `.rounded("50%")` reports that radius needs an absolute one.
 
 `line_height` is the single exception in the grammar: a bare number is a
@@ -667,19 +667,21 @@ inputs does not leak handle space.
 const state = InputState.new({ placeholder: "Search" });
 state.set_value("hello");
 state.value();
-state.on("submit", (event, cx) => { /* ... */ });
+state.on("submit", (event, cx) => {
+  /* ... */
+});
 state.release();
 ```
 
 The rules:
 
 1. A handle that no longer resolves throws — `this input state has been
-   released` — rather than returning `undefined`. In JavaScript an `undefined`
+released` — rather than returning `undefined`. In JavaScript an `undefined`
    travels a long way before it fails, and where it finally fails says nothing
    about where it came from.
 2. Creating an entity needs a live host call and is refused during `render` and
    `layout`: `InputState.new(...) cannot run during render; create state in
-   init() or in an event handler and keep it on the view`.
+init() or in an event handler and keep it on the view`.
 3. **Subscriptions are owned by the store, not returned to the script.** A
    dropped GPUI `Subscription` stops delivering, and a script has nowhere
    sensible to keep one, so a handler that silently stopped firing would be
@@ -744,11 +746,11 @@ element by value, so an element value can be used exactly once.
 `.child(impl IntoElement)` likewise takes its child by value. And a view's
 `Render::render` rebuilds the entire tree from scratch on every redraw.
 
-The third fact is about *elements*, not about descriptions, and conflating the
+The third fact is about _elements_, not about descriptions, and conflating the
 two was the original mistake in this chapter. Elements must be rebuilt every
 redraw. The description they are built from must not be — see §8.4.
 
-A JavaScript object therefore cannot *be* an element, and a mapping from a
+A JavaScript object therefore cannot _be_ an element, and a mapping from a
 script `Button` object to a Rust `Button` entity does not exist, because
 `Button` was never an entity.
 
@@ -844,8 +846,8 @@ one in this runtime.
 
 GPUI repaints for reasons the script knows nothing about: a pointer crossing a
 button, a text cursor blinking, a list scrolling, an animation advancing. None of
-those is a reason to enter the VM. So a script `render` does not describe *this
-frame*. It describes the interface once, into a `RenderSnapshot`, and every
+those is a reason to enter the VM. So a script `render` does not describe _this
+frame_. It describes the interface once, into a `RenderSnapshot`, and every
 frame after that replays the snapshot in Rust:
 
 ```text
@@ -900,7 +902,7 @@ GPUI layout / paint (never re-entering script)
 **Publication is transactional.** The scratch arena and the open callback
 generation are staging; a script that throws half-way discards both and leaves
 the previously published snapshot — and the handlers registered with it —
-untouched. A failed render loses the *new* interface, never the old one.
+untouched. A failed render loses the _new_ interface, never the old one.
 
 **The dirty flag is cleared before the script runs, not after.** Draining the
 job queue at the end of a build can notify the same view, and that notify has to
@@ -920,7 +922,7 @@ very first render failed.
 
 #### What invalidates a snapshot
 
-- `cx.notify()` from an `Event` or `Task` phase — it marks the view dirty *and*
+- `cx.notify()` from an `Event` or `Task` phase — it marks the view dirty _and_
   notifies GPUI, leaving the scheduling and coalescing of the repaint to GPUI.
   Three notifies before the next frame rebuild one snapshot, not three.
 - `ScriptView::replace_object` — hot reload (§21.3). The entity, the window and
@@ -951,7 +953,7 @@ Two things materialization decides that the description cannot.
 
 **Text color is inherited while walking the description.** GPUI resolves
 inherited text color at paint time, but an `svg` will not paint at all unless
-the color is on its *own* style — and materialization is the last point at which
+the color is on its _own_ style — and materialization is the last point at which
 the description is available. So `materialize_node` carries a color down the
 tree: each node passes its own `text_color` if it set one and the ambient color
 otherwise, and an `svg` writes the result into its own style. That is what makes
@@ -963,7 +965,7 @@ have it follow its row.
 `hover` works on any interactive element, but `active` and `focus` need a stable
 element identity. A plain `div` therefore stays identity-free unless a state
 style demands one, at which point it takes an `ElementId` derived from its
-position in the description. That position is a *snapshot-local address*: it is
+position in the description. That position is a _snapshot-local address_: it is
 stable for as long as the snapshot lives, and stable across rebuilds only while
 the script builds the same tree in the same order — a conditional child appearing
 above it shifts every address below.
@@ -1025,7 +1027,7 @@ state during layout produces either an inconsistent frame or a recursive
 invalidation.
 
 `ScriptDockSkin` is the first thing to use it (§15). Every chrome callback runs
-inside `in_layout_scope`, which pushes a *new* frame rather than reusing an
+inside `in_layout_scope`, which pushes a _new_ frame rather than reusing an
 enclosing one — a dock area nested in a script view already has an outer scope —
 so each callback starts on a fresh render-time budget and a `cx` captured during
 an earlier call is still rejected. The scope inherits the enclosing view, because
@@ -1039,7 +1041,7 @@ Descriptions are now cached across frames wholesale (§8.4), which removes the
 problem memoization was first proposed for: repainting an unchanged view no
 longer costs a script render at all.
 
-What is left for `gpui.memo` is *sub*-tree granularity — skipping the part of a
+What is left for `gpui.memo` is _sub_-tree granularity — skipping the part of a
 rebuild whose data has not changed when the rest of the view has. That is a
 smaller win than it used to be, and it is not implemented. §20.4 places it
 against the other levers.
@@ -1103,12 +1105,12 @@ what to reach.
 
 ### 9.3 What each phase permits
 
-| Phase | Permits | Refuses |
-| --- | --- | --- |
-| `Render` | Reading state and the theme, building elements, registering callbacks | `notify`, creating entities, opening overlays |
-| `Event` | Everything: mutating state, `notify`, `spawn`, overlays | Blocking |
-| `Task` | Same as `Event` | Blocking |
-| `Layout` | Reading and building elements (§8.5) | `notify`, creating or destroying entities, `spawn` |
+| Phase    | Permits                                                               | Refuses                                            |
+| -------- | --------------------------------------------------------------------- | -------------------------------------------------- |
+| `Render` | Reading state and the theme, building elements, registering callbacks | `notify`, creating entities, opening overlays      |
+| `Event`  | Everything: mutating state, `notify`, `spawn`, overlays               | Blocking                                           |
+| `Task`   | Same as `Event`                                                       | Blocking                                           |
+| `Layout` | Reading and building elements (§8.5)                                  | `notify`, creating or destroying entities, `spawn` |
 
 Every refusal is a specific message, not undefined behavior:
 
@@ -1191,8 +1193,9 @@ bindings preserve that:
 
 ```js
 Checkbox.new("agree")
-  .checked(this.agreed)                    // the value comes from script state
-  .on_change((checked, cx) => {            // this is only a request
+  .checked(this.agreed) // the value comes from script state
+  .on_change((checked, cx) => {
+    // this is only a request
     this.agreed = checked;
     cx.notify();
   });
@@ -1228,7 +1231,7 @@ conditionally instead:
 ```js
 Button.new("save")
   .when(disabled, (el) => el.opacity(0.4))
-  .when(selected, (el) => el.bg("muted").border_color("foreground"))
+  .when(selected, (el) => el.bg("muted").border_color("foreground"));
 ```
 
 That is a real gap rather than a simplification, because it means the semantic
@@ -1260,11 +1263,11 @@ misspelling reports all of them.
 
 ### 11.1 Three layers
 
-| Layer | Where it lives | Suited to | After a change |
-| --- | --- | --- | --- |
-| View-local | Fields on the view instance (`this.count`) | Expansion, filters, drafts | `cx.notify()` |
-| Host entity | `Entity<T>` behind a handle (`InputState`) | Text, and later trees, tables, dock layout | The entity notifies itself |
-| Application-wide | `gpui.store` (§17.3) or module scope | Settings, caches | Subscribers notify explicitly |
+| Layer            | Where it lives                             | Suited to                                  | After a change                |
+| ---------------- | ------------------------------------------ | ------------------------------------------ | ----------------------------- |
+| View-local       | Fields on the view instance (`this.count`) | Expansion, filters, drafts                 | `cx.notify()`                 |
+| Host entity      | `Entity<T>` behind a handle (`InputState`) | Text, and later trees, tables, dock layout | The entity notifies itself    |
+| Application-wide | `gpui.store` (§17.3) or module scope       | Settings, caches                           | Subscribers notify explicitly |
 
 ### 11.2 There is no automatic dependency tracking
 
@@ -1287,12 +1290,16 @@ assumes the opposite: **there are no signals here, no
 import { View } from "gpui";
 
 export default class Counter extends View {
-  init(props = {}) {            // once, at construction; phase = Event
+  init(props = {}) {
+    // once, at construction; phase = Event
     this.count = props.start ?? 0;
   }
 
-  render(cx) {                  // phase = Render; returns exactly one element
-    return v_flex().gap(12).child(text(`${this.count}`));
+  render(cx) {
+    // phase = Render; returns exactly one element
+    return v_flex()
+      .gap(12)
+      .child(text(`${this.count}`));
   }
 }
 ```
@@ -1327,7 +1334,8 @@ not have: a clock, an owner for pending work, and somebody to pump the queue.
 ```js
 gpui.spawn(async (cx) => {
   await gpui.sleep(200);
-  gpui.with_cx((cx) => {      // obtain a context that belongs to this call
+  gpui.with_cx((cx) => {
+    // obtain a context that belongs to this call
     this.ready = true;
     cx.notify();
   });
@@ -1339,8 +1347,8 @@ promise reactions in a job queue that only runs on request, so every script
 entry point ends with `drain_jobs`: render, click dispatch, change dispatch,
 input events, and every resumption the scheduler drives. Two placement rules are
 load-bearing and are written into the function's own documentation. The drain
-must happen *outside* `Context::with`, because `execute_pending_job` takes the
-runtime lock that `Context::with` already holds. And it must happen *inside* the
+must happen _outside_ `Context::with`, because `execute_pending_job` takes the
+runtime lock that `Context::with` already holds. And it must happen _inside_ the
 entry point's scope guard, because a resumed continuation is script code that
 will ask for a `cx` of its own — which is why a render pass opens a fresh
 `ScopePhase::Task` scope around its drain rather than draining under `Render`.
@@ -1369,7 +1377,9 @@ synchronously; anything needing asynchronous start-up does it from `init` with
 ### 12.3 Ownership and cancellation
 
 ```js
-const task = gpui.timer.every(1000, (cx) => { /* ... */ });
+const task = gpui.timer.every(1000, (cx) => {
+  /* ... */
+});
 task.cancel();
 task.is_done();
 ```
@@ -1382,7 +1392,7 @@ Rust, because it does not panic — it silently mutates an object nobody will lo
 at.
 
 `opts.owner: null` is the deliberate opt-out for work that must outlive every
-view. Any *other* view is refused rather than silently ignored, because the
+view. Any _other_ view is refused rather than silently ignored, because the
 engine can only resolve the current view's script instance back to its entity,
 and a task that quietly took the wrong owner is exactly the bug ownership
 exists to prevent.
@@ -1487,8 +1497,12 @@ from the reflected ones at the call site:
 
 ```js
 v_flex()
-  .size_full().items_center()               // reflected
-  .bg("surface").p(12).rounded(8).gap(8);   // hand-bound
+  .size_full()
+  .items_center() // reflected
+  .bg("surface")
+  .p(12)
+  .rounded(8)
+  .gap(8); // hand-bound
 ```
 
 They divide as 9 size, 7 padding, 7 margin, 5 position, 6 flex, 6 paint, 8
@@ -1524,7 +1538,7 @@ suggestion, purely to produce the message; the arena is reset between the two
 passes and the flag is cleared afterwards. Errors are rare; a 30% tax on every
 frame is not.
 
-The cost of *that* is a string match — `error.to_string().contains("not a
+The cost of _that_ is a string match — `error.to_string().contains("not a
 function")` — deciding whether to re-run. It is a fragile hinge, and a QuickJS
 wording change would silently degrade the diagnostic to the bare `TypeError`
 rather than break anything visibly.
@@ -1568,7 +1582,7 @@ Token lookup is cached in a thread-local rather than read from the `App` on ever
 access, and that is a bug fix rather than an optimization. Lookups happen in two
 places with different access to the host: while a script records a style (inside
 a call scope, `App` reachable) and again while the description is materialized
-(outside any scope, `App` *not* reachable). Reading only through the scope made
+(outside any scope, `App` _not_ reachable). Reading only through the scope made
 every color silently resolve to `None` during materialization — a window that
 painted nothing but a black rectangle. The palette changes at most once per theme
 switch, so caching it is both correct and cheaper.
@@ -1675,7 +1689,7 @@ tables the runtime dispatches through**, not transcribed from documentation:
 
 - style methods come from `style::known_names()`, the same list the prelude
   loops over, so a name that type-checks is a name the dispatcher accepts;
-- a parametric method's argument type is *probed*: `argument_of` hands
+- a parametric method's argument type is _probed_: `argument_of` hands
   `style::apply_param` one literal of each shape and sees which are refused, so
   the difference between `Length`, `DefiniteLength`, `AbsoluteLength`, a color,
   and a bare number is decided by the code that enforces it. `.p("auto")` and
@@ -1690,7 +1704,7 @@ call site rather than silently accepting anything.
 
 Four things the declarations deliberately do not express, each stated in the
 generated file's own preamble. Capability grants: every `fs`, `store`,
-`clipboard`, and `process` call type-checks, and whether it is *granted* is a
+`clipboard`, and `process` call type-checks, and whether it is _granted_ is a
 runtime question types cannot carry. Element and `cx` lifetimes: TypeScript has
 no affine types, so reusing an element still type-checks and still throws.
 Which methods suit which component: every element shares one prototype, so
@@ -1714,23 +1728,23 @@ no style method collides with an element method, that every parametric method is
 classified, that every color token is in the union, and that no internal name
 (`__id`, `__apply`, `__gpui`) leaks into the declarations.
 
-Those tests do not catch a *missing* declaration, and there are several. `svg`,
+Those tests do not catch a _missing_ declaration, and there are several. `svg`,
 `Input`, `InputState`, and `accessibility_label` are bound at runtime and absent
 from the declarations; so is every overlay method on `cx` — the declared
 `Context` carries only `notify` and `phase` — and so are `native`, `theme`,
 `set_theme`, and `require_api`. Running `// @ts-check` against the generated
-declarations would flag the shipped example. The tests assert that what *is*
+declarations would flag the shipped example. The tests assert that what _is_
 declared matches the dispatcher; nothing asserts the converse, and a check that
 every `MODULE_EXPORTS` name appears in the output would close it.
 
 ### 14.6 A `gpui-component` module, later
 
-The natural second step is a `gpui-component` binding as a *second registry*
+The natural second step is a `gpui-component` binding as a _second registry_
 sharing the same render protocol, call scope, event model, and arena:
 
 ```js
-import { v_flex, text } from "gpui";              // base: the script owns presentation
-import { Button } from "gpui-component";          // product visuals, ready-made
+import { v_flex, text } from "gpui"; // base: the script owns presentation
+import { Button } from "gpui-component"; // product visuals, ready-made
 ```
 
 Four points decide it now rather than then. The protocol is one thing and the
@@ -1813,7 +1827,7 @@ the registry, `DockArea` substitutes a draw-nothing placeholder that answers
 `dump` with the `PanelState` it was handed, so the next save writes the panel —
 name, payload, and position — back out unchanged; a user can uninstall an
 application and reinstall it and its panels return to where they were. The
-extension covers the case base does not: a panel that *is* registered but whose
+extension covers the case base does not: a panel that _is_ registered but whose
 script throws on construction gets a `RetainedPanel` with the same behavior, so
 a broken script costs the user that panel's contents for the session rather than
 its place in the layout or its saved state.
@@ -1848,7 +1862,7 @@ itself.
 anchored to a viewport edge; the dialog stack in open order, each deferred at
 `10 + index` so a later dialog always paints over an earlier one regardless of
 element build order; and toasts above everything at `POPUP_PRIORITY + 1`. A
-sheet sits *below* the dialog stack because a sheet is a place in the window: a
+sheet sits _below_ the dialog stack because a sheet is a place in the window: a
 dialog raised from inside a sheet must be readable, and a sheet raised under a
 dialog must not cover it. Only the topmost dialog draws a backdrop, so a stack
 of three dims the window once rather than three times, and that single backdrop
@@ -1857,7 +1871,7 @@ is what separates the live dialog from the inert ones behind it.
 **Dismissal** is always one layer, never a cascade. Escape closes the topmost
 dialog only; lower dialogs render with keyboard handling disabled, so repeated
 presses unwind the stack one dialog at a time and never reach the sheet while a
-dialog is open. `escape_dismissable: false` withdraws the *key binding*, not the
+dialog is open. `escape_dismissable: false` withdraws the _key binding_, not the
 underlying cancel action, so a close control the script put inside the dialog
 still works — which is what makes an undismissable dialog one the user must
 answer rather than one they cannot leave. A backdrop press closes the topmost
@@ -1869,7 +1883,7 @@ than guessing what the content wants.
 **Focus** is recorded on open and restored on close, so a stack restores through
 its own history: closing the second dialog returns focus to the first, and
 closing the first returns it to wherever the window was. `close_all_dialogs`
-restores to where the *first* dialog took focus from, because restoring through
+restores to where the _first_ dialog took focus from, because restoring through
 each in turn would flicker focus across views about to be dropped. Tab and
 Shift-Tab honor base's focus trap, with a wrap-around loop bounded at 100 steps
 so a trap with no focusable child cannot spin.
@@ -1890,27 +1904,32 @@ const depth = cx.open_dialog(ConfirmClear, {
   props: { count, onConfirm },
   escape_dismissable: false,
 });
-cx.close_dialog();       // -> was anything open?
-cx.close_all_dialogs();  // -> how many closed
+cx.close_dialog(); // -> was anything open?
+cx.close_all_dialogs(); // -> how many closed
 
 cx.open_sheet("right", FiltersPanel, { props: { filters } });
 cx.close_sheet();
 
-cx.toast({ title: "Saved", description: "3 files", level: "success",
-           timeout: 4000, id: "save" });
+cx.toast({
+  title: "Saved",
+  description: "3 files",
+  level: "success",
+  timeout: 4000,
+  id: "save",
+});
 cx.dismiss_toast("save");
 cx.dismiss_all_toasts();
 ```
 
 Four details are worth stating because each was a decision.
 
-`open_dialog` and `open_sheet` take the view *class*, not an instance and not an
+`open_dialog` and `open_sheet` take the view _class_, not an instance and not an
 element. The runtime constructs it, passing `props` to the constructor, which
 `View` forwards to `init`.
 
 `open_dialog` returns the new stack depth rather than a handle. The root
 addresses dialogs by position and never by identity, so a handle would have to
-promise "close *this* dialog", which is not an operation that exists. The depth
+promise "close _this_ dialog", which is not an operation that exists. The depth
 is what a script can actually use.
 
 A misspelled option is refused, not ignored. `{ escapeDismissable: false }`
@@ -1972,7 +1991,7 @@ the system call.
 
 Three shapes are deliberate. `read_dir` sorts by name, so a script rendering a
 listing does not inherit the filesystem's arbitrary order and does not have to
-sort. `exists` *throws* on a denied path rather than answering `false`, because
+sort. `exists` _throws_ on a denied path rather than answering `false`, because
 "you may not look" and "it is not there" are different facts and collapsing them
 would let a script probe outside its roots one boolean at a time. `remove` is
 not recursive: write access is granted per root, so a recursive remove would turn
@@ -1983,7 +2002,7 @@ because a disk has no bound on how long it takes and blocking the main thread
 blocks the frame and the VM together — somewhere the interrupt budget cannot see,
 because the time is spent in the kernel rather than in script.
 
-The capability check does *not* move. It is cheap, it needs the ambient scope,
+The capability check does _not_ move. It is cheap, it needs the ambient scope,
 and it stays on the calling thread, so **a denial throws at the call site rather
 than rejecting**: a rejected promise nobody awaited is a denial nobody sees. That
 split is also why the symlink and denial tests need no executor at all.
@@ -2036,7 +2055,7 @@ setting because a script forgot to call `flush` is a worse failure than one extr
 rename; `flush` stays in the API as the durability barrier for when the write
 becomes an awaitable promise.
 
-A missing file is an empty store — a first run is not an error. A *malformed*
+A missing file is an empty store — a first run is not an error. A _malformed_
 file is an error, because silently discarding a user's settings is worse than
 refusing to start.
 
@@ -2082,7 +2101,7 @@ version did: the code went into a cell no production caller ever read, and the
 window stayed open. A request nobody answers is worse than a denial, because the
 script cannot tell the two apart.
 
-The `gpui-shell` binary installs the obvious policy for a host that *is* the
+The `gpui-shell` binary installs the obvious policy for a host that _is_ the
 process: it ends it, with the code the script asked for.
 
 `process` is installed as a global as well as a `gpui` module member, because
@@ -2138,7 +2157,7 @@ after the call unwinds.
 **Reaching native modules is itself the grant.** The default registry is empty
 and every entry point fails while it stays that way — the same shape as
 `Capabilities::default()`. There is deliberately no per-module capability: the
-host chose the module list, so the list *is* the grant. The two failures get
+host chose the module list, so the list _is_ the grant. The two failures get
 different sentences, because they are different facts: a host that registered
 nothing has not wired native access up, and telling that author "unknown module"
 would send them hunting for a typo that is not there.
@@ -2179,7 +2198,7 @@ blown Rust stack into a message at the call site.
 
 A host that runs one application from a directory needs none of this: the
 command line names the directory, the grant is decided by the act of typing the
-command, and storage is keyed by the path (§23). A host that runs *several*
+command, and storage is keyed by the path (§23). A host that runs _several_
 applications cannot do any of that, because identity, permission, and storage
 become per-plugin questions — and all three have to be answerable **before** the
 plugin's code runs. That is the whole reason a manifest exists.
@@ -2206,7 +2225,11 @@ mistaken for this one.
   "version": "1.2.0",
   "entry": "main.js",
   "capabilities": {
-    "fs": { "read": ["${pluginDir}", "${dataDir}"], "write": ["${dataDir}"], "execute": ["git"] },
+    "fs": {
+      "read": ["${pluginDir}", "${dataDir}"],
+      "write": ["${dataDir}"],
+      "execute": ["git"]
+    },
     "network": { "hosts": ["api.example.com"] },
     "store": true,
     "clipboard": { "write": true }
@@ -2250,7 +2273,7 @@ plugin that wants nothing.
 
 The manifest writes `${pluginDir}` and `${dataDir}` rather than real paths, for
 the same reason a plugin cannot name its own storage location: a path chosen by
-the plugin is a path the plugin can point anywhere. The *shape* of the grant
+the plugin is a path the plugin can point anywhere. The _shape_ of the grant
 comes from the manifest and nowhere else; the two directories it is anchored to
 come from the host and nowhere else. A relative path is anchored to the plugin
 directory; an absolute path is taken as written, and is exactly the case a host
@@ -2335,14 +2358,14 @@ exposure is therefore concentrated in four places — what the host injected, pa
 from a string to executable code, module resolution, and the shared built-in
 prototypes.
 
-| Treatment | Target | Notes |
-| --- | --- | --- |
-| **Never added** | quickjs-libc's `std` and `os` | These provide `open`, `exec`, `getenv`, and `popen`; registering either is full access. `rquickjs` does not inject them and the shell never registers them. This is "never added" rather than "removed", which is an order of magnitude more reliable — and `rquickjs-sys` does not compile that file at all, so a test asserts their absence as a guard on the build |
-| **Withheld** | `eval` and every function constructor | `globalThis.eval` is deleted outright; the `Function`, `AsyncFunction`, `GeneratorFunction`, and `AsyncGeneratorFunction` constructors are replaced with throwing stubs |
-| **Replaced** | The module resolver (static and dynamic `import` alike) | Resolves only the built-in `gpui` module and paths inside the application root; anything else is refused before it reaches the filesystem. Dynamic `import()` stays callable — it is how §18 does lazy loading |
-| **Frozen** | `Object`, `Array`, `Function`, `String`, and `Number` prototypes | One VM hosts several plugins, so the built-ins are shared mutable state |
-| **Capability-gated** | `gpui.fs.*`, `process.run`, `process.exit` | §17 |
-| **Throwing stub** | `setTimeout`, `setInterval`, `clearTimeout`, `clearInterval`, `fetch`, `require` | Present, and throwing a message that names the replacement |
+| Treatment            | Target                                                                           | Notes                                                                                                                                                                                                                                                                                                                                                                 |
+| -------------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Never added**      | quickjs-libc's `std` and `os`                                                    | These provide `open`, `exec`, `getenv`, and `popen`; registering either is full access. `rquickjs` does not inject them and the shell never registers them. This is "never added" rather than "removed", which is an order of magnitude more reliable — and `rquickjs-sys` does not compile that file at all, so a test asserts their absence as a guard on the build |
+| **Withheld**         | `eval` and every function constructor                                            | `globalThis.eval` is deleted outright; the `Function`, `AsyncFunction`, `GeneratorFunction`, and `AsyncGeneratorFunction` constructors are replaced with throwing stubs                                                                                                                                                                                               |
+| **Replaced**         | The module resolver (static and dynamic `import` alike)                          | Resolves only the built-in `gpui` module and paths inside the application root; anything else is refused before it reaches the filesystem. Dynamic `import()` stays callable — it is how §18 does lazy loading                                                                                                                                                        |
+| **Frozen**           | `Object`, `Array`, `Function`, `String`, and `Number` prototypes                 | One VM hosts several plugins, so the built-ins are shared mutable state                                                                                                                                                                                                                                                                                               |
+| **Capability-gated** | `gpui.fs.*`, `process.run`, `process.exit`                                       | §17                                                                                                                                                                                                                                                                                                                                                                   |
+| **Throwing stub**    | `setTimeout`, `setInterval`, `clearTimeout`, `clearInterval`, `fetch`, `require` | Present, and throwing a message that names the replacement                                                                                                                                                                                                                                                                                                            |
 
 Three of these are worth more than a table row.
 
@@ -2358,11 +2381,11 @@ because a `ReferenceError` cannot be mistaken for a working `eval` by feature
 detection while a throwing stub can.
 
 **This is the weaker of the two available layers, deliberately.** QuickJS makes
-evaluation an *optional intrinsic*: a context assembled with
+evaluation an _optional intrinsic_: a context assembled with
 `Context::custom::<(Date, RegExpCompiler, RegExp, Json, Proxy, MapSet,
 TypedArrays, Promise, Performance, WeakRef)>` — that is, `intrinsic::All` minus
 `intrinsic::Eval` — has no `eval` and no compiler to reach in the first place.
-The runtime uses `Context::full` instead, because `Ctx::eval` *is* `JS_Eval` and
+The runtime uses `Context::full` instead, because `Ctx::eval` _is_ `JS_Eval` and
 the same intrinsic gates it: dropping it also disables the engine's own
 `ctx.eval`, which is how the JavaScript prelude and the two policy snippets are
 installed. Reaching intrinsic level means converting the prelude to
@@ -2370,7 +2393,7 @@ installed. Reaching intrinsic level means converting the prelude to
 withholding layer above is what is actually in force.
 
 **The DOM names are absent rather than stubbed.** `window`, `document`, and
-`localStorage` are deliberately *not* given throwing stubs, even though
+`localStorage` are deliberately _not_ given throwing stubs, even though
 `setTimeout` and `fetch` are. Every bundle that does environment detection reads
 them through `typeof`, and `typeof window === "undefined"` is the answer that
 makes such a bundle take its non-browser branch; a throwing getter would turn a
@@ -2415,12 +2438,12 @@ persisting a decision in host configuration are all part of §18 and not built.
 
 ### 19.3 Resource limits
 
-| Limit | Mechanism | Value |
-| --- | --- | --- |
-| Runaway execution | `Runtime::set_interrupt_handler`, on a per-call deadline | 50 ms in `Render`/`Layout`, 500 ms in `Event`/`Task`, 5 s outside any scope |
-| Memory | `Runtime::set_memory_limit` | 256 MiB — a leak reports as a catchable exception on the offending allocation rather than an OOM kill of the host |
-| Stack | `Runtime::set_max_stack_size` | 1 MiB against QuickJS's 256 KiB default, so deep recursion is a `RangeError` a script can report rather than a native stack overflow, which is a process abort |
-| Microtask storms | Bounded drain (§12.2) | 100,000 jobs per drain |
+| Limit             | Mechanism                                                | Value                                                                                                                                                          |
+| ----------------- | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Runaway execution | `Runtime::set_interrupt_handler`, on a per-call deadline | 50 ms in `Render`/`Layout`, 500 ms in `Event`/`Task`, 5 s outside any scope                                                                                    |
+| Memory            | `Runtime::set_memory_limit`                              | 256 MiB — a leak reports as a catchable exception on the offending allocation rather than an OOM kill of the host                                              |
+| Stack             | `Runtime::set_max_stack_size`                            | 1 MiB against QuickJS's 256 KiB default, so deep recursion is a `RangeError` a script can report rather than a native stack overflow, which is a process abort |
+| Microtask storms  | Bounded drain (§12.2)                                    | 100,000 jobs per drain                                                                                                                                         |
 
 The budget is per host call, not global: every `scope::enter` mints a fresh
 generation, and a change of generation is the signal that a new call has begun
@@ -2438,7 +2461,7 @@ The interrupt is a real boundary, and the policy stays as it is.
 ### 19.4 Development mode
 
 `--dev` restores `eval` and leaves the built-in prototypes writable, which a
-REPL needs and a shipped application must not have. Capability gating is *not*
+REPL needs and a shipped application must not have. Capability gating is _not_
 relaxed: development mode makes the language easier to poke at and never hands
 out access the manifest did not declare, because a grant nobody wrote down is a
 grant that will be missing in production.
@@ -2478,7 +2501,7 @@ script invalidations    ×   script render cost      ← what the script costs
 The case that used to be the dangerous one — dragging, scrolling, typing,
 animating — is now mostly native: a scroll offset, a hover, a text cursor and an
 animation frame all repaint without a script render. What remains genuinely
-frequent is application state that *is* changing quickly, which is legitimate. A
+frequent is application state that _is_ changing quickly, which is legitimate. A
 view fed by a 10 Hz market data feed costs ten script renders a second, and at
 around 1.4 ms each (§20.3) that is 14 ms of CPU per second. The failure this
 design prevents is the same view costing 120 script renders a second because the
@@ -2524,27 +2547,27 @@ costs and reporting one was what hid the coupling:
 cargo test -p gpui-shell --release --test benchmark -- --nocapture
 ```
 
-| | Path | 443 nodes | Paid |
-| --- | --- | --- | --- |
-| **A** | script → snapshot | **1.4 ms** | per application invalidation |
-| **B** | snapshot → `AnyElement` | **0.7 ms** | per frame |
-| **C** | a full cached repaint | **1.8 ms**, **0 script renders** | per frame |
+|       | Path                    | 443 nodes                        | Paid                         |
+| ----- | ----------------------- | -------------------------------- | ---------------------------- |
+| **A** | script → snapshot       | **1.4 ms**                       | per application invalidation |
+| **B** | snapshot → `AnyElement` | **0.7 ms**                       | per frame                    |
+| **C** | a full cached repaint   | **1.8 ms**, **0 script renders** | per frame                    |
 
-| Metric | Target | Measured |
-| --- | --- | --- |
-| 120 Hz frame budget | 8.3 ms | Everything, including layout and paint |
-| Script description per invalidation | **< 1.5 ms** | **1.4 ms** for 443 nodes (A) |
-| Materialization, per frame | — | 0.7 ms for 443 nodes (B) |
-| Typical panel node count | 200 – 800 | 443 in the benchmark (40 rows × 5 cells plus wrappers) |
-| Operations per node, base-first | 6 – 12 | ~10 |
-| Implied `C_op` ceiling | ≈ 150 ns | ~320 ns measured |
+| Metric                              | Target       | Measured                                               |
+| ----------------------------------- | ------------ | ------------------------------------------------------ |
+| 120 Hz frame budget                 | 8.3 ms       | Everything, including layout and paint                 |
+| Script description per invalidation | **< 1.5 ms** | **1.4 ms** for 443 nodes (A)                           |
+| Materialization, per frame          | —            | 0.7 ms for 443 nodes (B)                               |
+| Typical panel node count            | 200 – 800    | 443 in the benchmark (40 rows × 5 cells plus wrappers) |
+| Operations per node, base-first     | 6 – 12       | ~10                                                    |
+| Implied `C_op` ceiling              | ≈ 150 ns     | ~320 ns measured                                       |
 
 **C is an assertion, not a timing.** Fifty repaints of an unchanged view enter
 the VM zero times; the test fails outright if that number moves, rather than
 merely getting slower. It is the regression gate for §8.4's invariants and the
 most important number in this chapter.
 
-Two caveats carried over. The figures are one machine's, and the *shape* — A
+Two caveats carried over. The figures are one machine's, and the _shape_ — A
 inside budget, B well under it, C exactly zero — is what should be read from them
 rather than the digits. And the measured `C_op` is above the ceiling the budget
 implies while the total is under it, which means the budget is met with fewer
@@ -2569,7 +2592,7 @@ array, and making the `__apply` entry allocation-free, are the most valuable
 changes available. **QuickJS has no JIT, so all of this is manual** — there is no
 trace to hope will remove part of the dispatch.
 
-**`gpui.memo`** would skip script construction for a *subtree* whose data has not
+**`gpui.memo`** would skip script construction for a _subtree_ whose data has not
 changed, within a rebuild the rest of the view still needs. Whole-view caching is
 already done (§8.4), which took most of what memoization was originally for; what
 is left is worth doing only for views where one small region changes constantly
@@ -2610,7 +2633,7 @@ screen. Three details are deliberate. It takes its colors from tokens rather tha
 hardcoding red, because a failure surface that hardcodes red is unreadable in
 half the themes it will be seen in; `destructive` appears once, as a hairline
 rule, because emphasis is a budget and the message is already the focal point.
-It has square corners, because it is not a card floating in the window — it *is*
+It has square corners, because it is not a card floating in the window — it _is_
 the window's content for as long as the failure lasts. And a stack trace exists
 to be pasted somewhere else, so copying it is a first-class action rather than
 something the reader retypes.
@@ -2736,7 +2759,7 @@ to a frozen prototype, `process.run` without a grant, `process.exit` without a
 grant, and the interrupt-swallowing case of §19.3. `host.rs` covers the path
 resolver: a read outside the granted root, a read with no grant at all, a store
 call without the capability, and a clipboard denial naming the half that was
-missing. Every one of these asserts on the *message*, because the message is the
+missing. Every one of these asserts on the _message_, because the message is the
 instruction for fixing it.
 
 These are security assertions and are not subject to the "avoid trivial tests"
@@ -2756,18 +2779,18 @@ one caller that rebuilds unconditionally — and invisible until it shows up as 
 frame-rate problem in an application nobody has written yet. So it is asserted
 directly, by counting entries into script `render`:
 
-| Test | What it proves |
-| --- | --- |
-| 65 repaints of a clean view | exactly 1 script render — invariants 1–3 |
-| one `on_change`, then a frame | exactly 2 — `notify` rebuilds, once |
-| three events, then one frame | exactly 2, and all three events reached the script: GPUI does the coalescing, and the runtime does not add a second scheduler |
-| a handler dispatched 32 frames later | still callable — invariant 7 |
-| a render that throws | the previous description survives — invariant 8 |
-| 16 frames after a failed render | no further script renders; a broken render is not frame-coupled either |
-| two views on one runtime, one rebuilding | the other's handlers stay callable |
-| a palette change | rebuilds, because tokens are resolved into the snapshot |
-| a bare `cx.notify()` from Rust, then `refresh` | the first repaints, the second re-runs the script |
-| the shell story's quote feed against its repaint feed | the same distinction end to end, at 50 ms, through a native module and a real script |
+| Test                                                  | What it proves                                                                                                                |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| 65 repaints of a clean view                           | exactly 1 script render — invariants 1–3                                                                                      |
+| one `on_change`, then a frame                         | exactly 2 — `notify` rebuilds, once                                                                                           |
+| three events, then one frame                          | exactly 2, and all three events reached the script: GPUI does the coalescing, and the runtime does not add a second scheduler |
+| a handler dispatched 32 frames later                  | still callable — invariant 7                                                                                                  |
+| a render that throws                                  | the previous description survives — invariant 8                                                                               |
+| 16 frames after a failed render                       | no further script renders; a broken render is not frame-coupled either                                                        |
+| two views on one runtime, one rebuilding              | the other's handlers stay callable                                                                                            |
+| a palette change                                      | rebuilds, because tokens are resolved into the snapshot                                                                       |
+| a bare `cx.notify()` from Rust, then `refresh`        | the first repaints, the second re-runs the script                                                                             |
+| the shell story's quote feed against its repaint feed | the same distinction end to end, at 50 ms, through a native module and a real script                                          |
 
 `ShellRuntime::metrics()` is what these read — `script_renders` against
 `materializations`, with the time each took. It exists for this suite and for the
@@ -2814,7 +2837,7 @@ one runtime, opens one window, and drives the source watcher when asked.
 Everything that outlives one invocation lives in the library.
 
 The directory argument may name the application root or the `main.js` inside it,
-and the root resolver handles both — along with being pointed at the *parent* of
+and the root resolver handles both — along with being pointed at the _parent_ of
 the real application directory, which is the other common way to start. Its error
 names what was expected and, where it can tell, where the application actually
 is.
@@ -2845,8 +2868,8 @@ installed plugin keeps its data across an upgrade that moves it.
 Assets — the files `svg(path)` names — are served from the application directory
 and nowhere else, with the same traversal check as the module resolver. Note the
 asymmetry, because it surprises people: `import "./counter.js"` resolves against
-the *importing file*, the way every JavaScript module system does, while
-`svg("icons/check.svg")` resolves against the *application root*, the way a web
+the _importing file_, the way every JavaScript module system does, while
+`svg("icons/check.svg")` resolves against the _application root_, the way a web
 application's public directory does. The runtime cannot tell which module called
 `svg`, so per-file asset paths are not available to it. A missing asset is not an
 error — GPUI asks for assets it may not need — but it is warned about once per
@@ -2882,36 +2905,36 @@ liability.
 This is a record, not a debate. Each of these was decided and none should be
 reopened without new information.
 
-| Alternative | Why it is not used |
-| --- | --- |
-| **A second engine (LuaJIT and similar)** | Removed rather than carried. A fallback nobody exercises rots, and this one had: no `svg`, `Input`, `InputState`, state styles, `accessibility_label`, scheduler, host API, sandbox, or overlays. The seam it justified is kept, because it is what makes the rest of the crate name no VM |
-| **The WASM component model** | Every call crosses a serialization boundary, which is the worst possible fit for high-frequency fine-grained UI calls. Heavy toolchain, poor debugging |
-| **Embedding Node.js or Deno** | The process model and the size do not match an in-process, main-thread, embedded runtime. Bringing npm in brings native dependencies and a supply chain with it. VS Code's approach requires a separate extension process to work at all |
-| **A pure-Rust scripting language** (Rhai, Steel, Koto) | Almost no ecosystem, a new language for every author, and a thin corpus — which is disqualifying for generated interfaces |
-| **Rust dylib plugins** | No stable ABI, no sandbox, and the compile cost remains, so it solves none of §2.1 |
-| **Rust hot reload** | Solves only the compile time. It does not address plugin distribution or third-party extension, and state preservation is fragile |
-| **A UI DSL or JSX** | A DSL is a second language with its own parser, diagnostics, editor support, and versioning. JSX needs a compile step, which returns the "edit, save, see it" property this runtime exists for (§5.3) |
-| **Object-literal element descriptions** | Exactly equivalent to the builder chain and therefore a second dialect of the same thing (§8.2) |
-| **A `class("...")` style string** | Equivalent to the chain, with the weakest completion and the weakest static checking of any form available (§13.2) |
-| **Automatic dependency tracking** | A second mental model beside GPUI's explicit `notify`, plus a permanent `Proxy` cost on the render path with no JIT to amortize it (§11.2) |
+| Alternative                                            | Why it is not used                                                                                                                                                                                                                                                                         |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **A second engine (LuaJIT and similar)**               | Removed rather than carried. A fallback nobody exercises rots, and this one had: no `svg`, `Input`, `InputState`, state styles, `accessibility_label`, scheduler, host API, sandbox, or overlays. The seam it justified is kept, because it is what makes the rest of the crate name no VM |
+| **The WASM component model**                           | Every call crosses a serialization boundary, which is the worst possible fit for high-frequency fine-grained UI calls. Heavy toolchain, poor debugging                                                                                                                                     |
+| **Embedding Node.js or Deno**                          | The process model and the size do not match an in-process, main-thread, embedded runtime. Bringing npm in brings native dependencies and a supply chain with it. VS Code's approach requires a separate extension process to work at all                                                   |
+| **A pure-Rust scripting language** (Rhai, Steel, Koto) | Almost no ecosystem, a new language for every author, and a thin corpus — which is disqualifying for generated interfaces                                                                                                                                                                  |
+| **Rust dylib plugins**                                 | No stable ABI, no sandbox, and the compile cost remains, so it solves none of §2.1                                                                                                                                                                                                         |
+| **Rust hot reload**                                    | Solves only the compile time. It does not address plugin distribution or third-party extension, and state preservation is fragile                                                                                                                                                          |
+| **A UI DSL or JSX**                                    | A DSL is a second language with its own parser, diagnostics, editor support, and versioning. JSX needs a compile step, which returns the "edit, save, see it" property this runtime exists for (§5.3)                                                                                      |
+| **Object-literal element descriptions**                | Exactly equivalent to the builder chain and therefore a second dialect of the same thing (§8.2)                                                                                                                                                                                            |
+| **A `class("...")` style string**                      | Equivalent to the chain, with the weakest completion and the weakest static checking of any form available (§13.2)                                                                                                                                                                         |
+| **Automatic dependency tracking**                      | A second mental model beside GPUI's explicit `notify`, plus a permanent `Proxy` cost on the render path with no JIT to amortize it (§11.2)                                                                                                                                                 |
 
 ---
 
 ## 25. Standing Risks
 
-| Risk | Impact | State |
-| --- | --- | --- |
-| **Cross-boundary call cost exceeds the budget.** Base-first raises operations per node and style has no batching form | Contained | Measured under budget at 443 nodes (§20.3), and no longer paid per frame (§8.4); the levers if it regresses are specialized call forms, subtree memoization, virtualization, and finer view granularity |
-| **Script render couples to frame rate again.** A repaint that enters the VM puts the whole description cost on the frame budget | Fatal | Prevented by the snapshot lifecycle (§8.4) and asserted by benchmark C plus `tests/snapshot.rs` (§20.3). It is a regression test rather than a convention precisely because the coupling is easy to reintroduce and invisible until it is a frame-rate problem |
-| **Presentation authority in script means uneven interface quality** | High | Mitigated by the default palette and by `examples/js_todolist/ui.js` as a worked example; a shipped preset (§13.4) and a `gpui-component` module (§14.6) are the real answers |
-| **Bindings drift from upstream** | High | The style surface is immune by construction; component bindings have no drift check at all (§14.5) |
-| **One thread, one runtime.** The capability grant, the store, the exit handler and the native module registry are thread state; two runtimes would share the last installer's policy | Medium | **Enforced, not documented.** `ShellRuntime::new` refuses a second one with a sentence saying why. Binding the state to the runtime would not have been the fix: per-plugin grants are a *within*-runtime problem, so when the plugin model gets a host driving it this state has to become per-call-context — which is the same work either way |
-| **Cycles across two collectors leak** | Medium | Render-bound callbacks are retired with their snapshot and long-lived ones are owner-bound (§7.4); retained state is a per-runtime `EntityStore` that drops with the runtime. The one global left is the native module registry, whose closures hold host entity handles — a host clears it with `clear_native_modules` when it goes away, and GPUI's leak check catches a host that forgets |
-| **A symlink escape from a filesystem grant** | Fatal | **Closed.** The resolver returns an open directory handle rather than a path, and every operation runs against it, so no name is resolved twice — `cap-std`, which is `openat2(RESOLVE_BENEATH)` on Linux and a per-component `openat` walk elsewhere. Two earlier attempts were not enough: comparing strings missed a link entirely, and comparing strings then canonicalizing caught a link that was already there but not one planted between the check and the syscall. `a_symlink_planted_after_the_check_is_still_refused` is the test for the case neither could cover |
-| **Sandbox escape**, with `Eval`, quickjs-libc, and prototype pollution as the largest surfaces | High | quickjs-libc is not compiled in; prototypes are frozen; every compiler path is closed at the JavaScript level, but the stronger intrinsic-level fix is not done (§19.1). The escape suite is real and asserts on messages |
-| **Generated code assumes Node or a browser** | Medium | Named stubs point at replacements, `gpui.d.ts` moves the error into the editor. Two stub messages are wrong: `fetch` points at a `gpui.http` that does not exist, and `setTimeout` points at `gpui.timer(ms, callback)` when the API is `gpui.timer.after(ms, fn)` |
-| **Per-plugin capability grants.** Two loaded plugins must be able to hold different permissions at once | High | Closed. The grant lives on a `Policy` carried by the call frame, so the engine reads the grant of whichever plugin owns the running code, and it survives an `await` (§18.3) |
-| **Interned `&'static str` accumulates** for script-registered names | Low | Reachable now that panel names are interned (§15). Bounded by applications loaded × panels each, tens of bytes apiece, and never reclaimed — deliberately, because a persisted layout may still refer to a name |
+| Risk                                                                                                                                                                                 | Impact    | State                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Cross-boundary call cost exceeds the budget.** Base-first raises operations per node and style has no batching form                                                                | Contained | Measured under budget at 443 nodes (§20.3), and no longer paid per frame (§8.4); the levers if it regresses are specialized call forms, subtree memoization, virtualization, and finer view granularity                                                                                                                                                                                                                                                                                                                                                                        |
+| **Script render couples to frame rate again.** A repaint that enters the VM puts the whole description cost on the frame budget                                                      | Fatal     | Prevented by the snapshot lifecycle (§8.4) and asserted by benchmark C plus `tests/snapshot.rs` (§20.3). It is a regression test rather than a convention precisely because the coupling is easy to reintroduce and invisible until it is a frame-rate problem                                                                                                                                                                                                                                                                                                                 |
+| **Presentation authority in script means uneven interface quality**                                                                                                                  | High      | Mitigated by the default palette and by `examples/js_todolist/ui.js` as a worked example; a shipped preset (§13.4) and a `gpui-component` module (§14.6) are the real answers                                                                                                                                                                                                                                                                                                                                                                                                  |
+| **Bindings drift from upstream**                                                                                                                                                     | High      | The style surface is immune by construction; component bindings have no drift check at all (§14.5)                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| **One thread, one runtime.** The capability grant, the store, the exit handler and the native module registry are thread state; two runtimes would share the last installer's policy | Medium    | **Enforced, not documented.** `ShellRuntime::new` refuses a second one with a sentence saying why. Binding the state to the runtime would not have been the fix: per-plugin grants are a _within_-runtime problem, so when the plugin model gets a host driving it this state has to become per-call-context — which is the same work either way                                                                                                                                                                                                                               |
+| **Cycles across two collectors leak**                                                                                                                                                | Medium    | Render-bound callbacks are retired with their snapshot and long-lived ones are owner-bound (§7.4); retained state is a per-runtime `EntityStore` that drops with the runtime. The one global left is the native module registry, whose closures hold host entity handles — a host clears it with `clear_native_modules` when it goes away, and GPUI's leak check catches a host that forgets                                                                                                                                                                                   |
+| **A symlink escape from a filesystem grant**                                                                                                                                         | Fatal     | **Closed.** The resolver returns an open directory handle rather than a path, and every operation runs against it, so no name is resolved twice — `cap-std`, which is `openat2(RESOLVE_BENEATH)` on Linux and a per-component `openat` walk elsewhere. Two earlier attempts were not enough: comparing strings missed a link entirely, and comparing strings then canonicalizing caught a link that was already there but not one planted between the check and the syscall. `a_symlink_planted_after_the_check_is_still_refused` is the test for the case neither could cover |
+| **Sandbox escape**, with `Eval`, quickjs-libc, and prototype pollution as the largest surfaces                                                                                       | High      | quickjs-libc is not compiled in; prototypes are frozen; every compiler path is closed at the JavaScript level, but the stronger intrinsic-level fix is not done (§19.1). The escape suite is real and asserts on messages                                                                                                                                                                                                                                                                                                                                                      |
+| **Generated code assumes Node or a browser**                                                                                                                                         | Medium    | Named stubs point at replacements, `gpui.d.ts` moves the error into the editor. Two stub messages are wrong: `fetch` points at a `gpui.http` that does not exist, and `setTimeout` points at `gpui.timer(ms, callback)` when the API is `gpui.timer.after(ms, fn)`                                                                                                                                                                                                                                                                                                             |
+| **Per-plugin capability grants.** Two loaded plugins must be able to hold different permissions at once                                                                              | High      | Closed. The grant lives on a `Policy` carried by the call frame, so the engine reads the grant of whichever plugin owns the running code, and it survives an `await` (§18.3)                                                                                                                                                                                                                                                                                                                                                                                                   |
+| **Interned `&'static str` accumulates** for script-registered names                                                                                                                  | Low       | Reachable now that panel names are interned (§15). Bounded by applications loaded × panels each, tens of bytes apiece, and never reclaimed — deliberately, because a persisted layout may still refer to a name                                                                                                                                                                                                                                                                                                                                                                |
 
 ---
 
@@ -3095,7 +3118,7 @@ sequence of `if`s:
 ```js
 label(item.caption).when(item.done, (el) =>
   el.text_color("muted_foreground").line_through(),
-)
+);
 ```
 
 **Bound methods are snake_case and the author's own are camelCase** —
@@ -3186,7 +3209,7 @@ Following `CLAUDE.md`:
   the field and reads with `is_`/`has_` (`DialogOptions::escape_dismissable` and
   `is_escape_dismissable`); a type with non-boolean fields prefixes setters with
   `with_` (`ToastRequest::with_description`). `Capabilities` is inconsistent
-  here — `with_read_roots` and `with_execute` beside a bare `store(bool)` and
+  here — `read_roots` and `with_execute` beside a bare `store(bool)` and
   `clipboard_read(bool)` — and should be brought in line.
 - `Context` is spelled out: `PanelBuildContext`, `TabGroupContext`, never
   `…Ctx`. `cx` is reserved for GPUI's `App`, `Context<T>`, and `AsyncApp`, and

@@ -56,8 +56,8 @@ fn every_fs_call_settles_through_a_promise(cx: &mut TestAppContext) {
     cx.update(|cx| gpui_shell::init(cx));
     gpui_shell::set_capabilities(
         Capabilities::new()
-            .with_read_roots([directory.clone()])
-            .with_write_roots([directory.clone()]),
+            .read_roots([directory.clone()])
+            .write_roots([directory.clone()]),
     );
 
     let runtime = ShellRuntime::new().expect("runtime");
@@ -113,7 +113,7 @@ fn an_oversized_read_is_refused_by_name(cx: &mut TestAppContext) {
     drop(file);
 
     cx.update(|cx| gpui_shell::init(cx));
-    gpui_shell::set_capabilities(Capabilities::new().with_read_roots([directory.clone()]));
+    gpui_shell::set_capabilities(Capabilities::new().read_roots([directory.clone()]));
 
     let runtime = ShellRuntime::new().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));

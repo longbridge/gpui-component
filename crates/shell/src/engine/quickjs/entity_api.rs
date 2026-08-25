@@ -133,6 +133,11 @@ pub fn install(ctx: &Ctx<'_>, module: &Object<'_>, runtime: Weak<ShellRuntime>) 
                 let saved = handler.0;
                 let dispatch = subscribe_runtime.clone();
                 let store = alive(&ctx, &subscribe_runtime)?;
+                // Captured here, not read when the event arrives: this
+                // subscription outlives the call that made it, and an input on a
+                // plugin's form must dispatch under that plugin's grant rather
+                // than under whatever the default policy happens to be.
+                let policy = scope::policy();
 
                 let subscribed = scope::with_current(|window, cx| {
                     store.entities().subscribe_input(
@@ -144,7 +149,7 @@ pub fn install(ctx: &Ctx<'_>, module: &Object<'_>, runtime: Weak<ShellRuntime>) 
                             let Some(runtime) = dispatch.upgrade() else {
                                 return;
                             };
-                            runtime.dispatch_input_event(&saved, emitted, window, cx);
+                            runtime.dispatch_input_event(&saved, &policy, emitted, window, cx);
                         },
                     )
                 })

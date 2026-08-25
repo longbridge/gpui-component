@@ -13,8 +13,8 @@ order: 7
 ```rust
 gpui_shell::set_capabilities(
     Capabilities::new()
-        .with_read_roots([application_root.clone()])
-        .with_write_roots([data_directory.clone()])
+        .read_roots([application_root.clone()])
+        .write_roots([data_directory.clone()])
         .store(true),
 );
 ```
@@ -23,14 +23,14 @@ gpui_shell::set_capabilities(
 
 从命令行运行一个目录，是一次明确的信任行为——与 `node app.js` 一样——所以 `gpui-shell <directory>` 授予的是一组具体且很窄的能力：
 
-| | |
-| --- | --- |
-| 读 | 应用目录，以及它自己的存储目录 |
-| 写 | 它自己的存储目录 |
-| 存储 | 授予 |
-| 剪贴板 | **不**授予 |
-| 进程执行 | **不**授予 |
-| 网络 | **不**授予 |
+|          |                                |
+| -------- | ------------------------------ |
+| 读       | 应用目录，以及它自己的存储目录 |
+| 写       | 它自己的存储目录               |
+| 存储     | 授予                           |
+| 剪贴板   | **不**授予                     |
+| 进程执行 | **不**授予                     |
+| 网络     | **不**授予                     |
 
 因此应用可以读自己的源码与资源、使用自己的存储，除此之外没有别的。它刻意比“全部放开”要窄，因为将来安装的插件会走同一条代码路径、由 manifest 来决定授权——而一个对本地运行足够宽松的默认，继承过去就是错的默认。
 
@@ -65,21 +65,27 @@ running `git` is not granted; add it to capabilities.fs.execute in the manifest
 import { fs } from "gpui";
 ```
 
-| 调用 | 返回 |
-| --- | --- |
-| `fs.read_text(path)` | 文件内容 |
-| `fs.write_text(path, contents)` | — |
-| `fs.read_dir(path)` | `[{ name, is_dir }]`，按名字排序 |
-| `fs.exists(path)` | `true` / `false` |
-| `fs.remove(path)` | — |
-| `fs.create_dir_all(path)` | — |
+每个调用都返回 promise。`await` 它们，或者接 `.then`——另见下面关于 `render` 的提示。
+
+| 调用                            | resolve 结果                     |
+| ------------------------------- | -------------------------------- |
+| `fs.read_text(path)`            | 文件内容                         |
+| `fs.write_text(path, contents)` | —                                |
+| `fs.read_dir(path)`             | `[{ name, is_dir }]`，按名字排序 |
+| `fs.exists(path)`               | `true` / `false`                 |
+| `fs.remove(path)`               | —                                |
+| `fs.create_dir_all(path)`       | —                                |
+
+```js
+const source = await fs.read_text("notes.md");
+await fs.write_text("notes.md", source + "\n");
+```
 
 相对路径相对某个已授权的根解析；绝对路径必须本来就在某个根之内。这套接口里的每一条路径都经过**同一个解析器**，所以不存在第二处让穿越漏洞藏身的地方。它先做归一化——`../../etc/passwd` 在到达文件系统之前就被拒绝——然后把「是否在根之内」这件事交给文件系统判定，而不是判定字符串：授权承诺的是一个**目录**，而 `data/escape/passwd` 在字面上位于根之内，一旦 `escape` 是符号链接就读到了 `/etc/passwd`。路径中已经存在的最深一段会被连同链接一起解析，其结果必须仍在根之下；解析不到任何目标的符号链接会被直接拒绝，而不是猜它指向哪里。
 
 **授权是一个句柄，不是一个字符串。** 解析器交回一个打开的目录，它无法被诱导指向自身之外的任何东西；读、写、列目录、删除、建目录全部对着**它**执行——于是一条路径永远不会被解析两次，「判定允许」与「实际使用」之间也就没有窗口。
 
 这一点要紧，是因为显而易见的写法行不通。先检查路径再调 `std::fs`，路径被解析了两次：检查时就在的链接会被抓住，而在两次解析**之间**替换掉某个目录组件的，会被第二次解析跟出根目录。这里用的是 [`cap-std`](https://docs.rs/cap-std)——在 Linux 上是 `openat2(RESOLVE_BENEATH)`，其他平台是逐级 `openat` 遍历。
-
 
 其中三项的行为值得说明，理由都是同一个：
 
@@ -107,15 +113,19 @@ import { fs } from "gpui";
 import { store } from "gpui";
 
 store.set("todolist.items", items);
-const saved = store.get("todolist.items");   // 键不存在时为 null
+const saved = store.get("todolist.items"); // 键不存在时为 null
 store.remove("todolist.items");
 store.keys();
-store.flush();
+await store.flush();
 ```
 
 值是 JSON：`null`、布尔、数字、字符串、数组与普通对象。函数与值为 `undefined` 的属性会像 `JSON.stringify` 一样被丢弃，所以心智模型可以直接迁移过来。`NaN` 与 `Infinity` 没有 JSON 形式，会被拒绝而不是悄悄变成 `null`。嵌套深度上限 64 层——真实配置远达不到，而引用环立刻就会超过。
 
-值缓存在内存里，因为 `get` 在 `render` 里也可达，每次渲染读一次文件是荒唐的。**每次写入立即持久化**，先写临时文件再改名覆盖目标——所以写到一半崩溃留下的是之前完整的配置，而不是一个被截断的文件。因此 `flush` 不必调用；它留在 API 里，是为了将来写入变成可 await 的 promise 时充当持久化屏障。
+`get`、`set`、`remove`、`keys` 是同步的，这是刻意的：`get` 在 `render` 里也可达，所以值缓存在内存里，读取从缓存回答。每次渲染读一次文件是荒唐的。
+
+**一次修改安排一次写入，而不是执行一次写入。** 文件在后台线程写出——先写临时文件再改名覆盖目标，所以写到一半崩溃留下的是之前完整的配置，而不是一个被截断的文件——并且同时只有一次写入在途，于是一连串 `set` 汇成一个文件，而不是一次一个文件。写入在途期间发生的改动，由下一次写入带上。
+
+需要确认落盘时 `await store.flush()`。它是**屏障，不是第二个写入者**：等待此前所有修改抵达磁盘，写入失败时用写入自己的错误 reject。若让它自己再写一次，就会与自动写入抢同一个临时文件，两者之间没有任何顺序保证——旧版本可能最后落盘，把新版本抹掉。
 
 ### 存储在哪里
 
@@ -123,11 +133,11 @@ store.flush();
 
 本地运行时，身份是**应用目录的规范化路径**，所以同一个目录总是访问到同一份数据，两个目录也永远不会冲突——包括同一个应用的两个 checkout，它们确实是不同的安装。路径是：
 
-| 平台 | 位置 |
-| --- | --- |
+| 平台              | 位置                                                                               |
+| ----------------- | ---------------------------------------------------------------------------------- |
 | Linux 与其他 Unix | `$XDG_DATA_HOME/gpui-shell/apps/<name>-<digest>/store.json`，默认 `~/.local/share` |
-| macOS | `~/Library/Application Support/gpui-shell/apps/<name>-<digest>/store.json` |
-| Windows | `%APPDATA%\gpui-shell\apps\<name>-<digest>\store.json` |
+| macOS             | `~/Library/Application Support/gpui-shell/apps/<name>-<digest>/store.json`         |
+| Windows           | `%APPDATA%\gpui-shell\apps\<name>-<digest>\store.json`                             |
 
 `<name>` 是应用目录名，保留下来是为了这个文件夹认得出来；`<digest>` 是完整路径的一个短哈希，只用来消歧。它放在用户数据目录而不是应用内部，因为应用目录可能只读、往往是一个 git checkout，也不是用户预期自己数据所在的地方。
 
@@ -144,7 +154,9 @@ export function load() {
     const saved = store.get(KEY);
     return Array.isArray(saved) ? saved : [];
   } catch (error) {
-    log.warn(`todolist: storage unavailable, starting empty (${error.message})`);
+    log.warn(
+      `todolist: storage unavailable, starting empty (${error.message})`,
+    );
     return [];
   }
 }
@@ -158,7 +170,7 @@ export function load() {
 import { clipboard } from "gpui";
 
 clipboard.write_text("copied");
-const text = clipboard.read_text();   // 剪贴板中没有文本时为 undefined
+const text = clipboard.read_text(); // 剪贴板中没有文本时为 undefined
 ```
 
 读与写是**两项独立授权**，拒绝信息会指出缺的是哪一半：
@@ -191,7 +203,7 @@ log.warn("could not save");
 ## `process`
 
 ```js
-import { process } from "gpui";   // 同时也是一个全局
+import { process } from "gpui"; // 同时也是一个全局
 
 const code = process.run("git", ["status"]);
 process.exit(0);
@@ -221,13 +233,13 @@ process.exit(0);
 
 **资源上限**，让失控的脚本报错而不是把窗口一起带走：
 
-| 上限 | 值 |
-| --- | --- |
-| 堆 | 256 MiB——泄漏表现为一个可捕获的 JavaScript 异常，而不是整个宿主被 OOM kill |
-| 解释器栈 | 1 MiB——深递归表现为 `RangeError`，而不是原生栈溢出 |
-| 单次调用耗时：render 与 layout | 50 ms |
-| 单次调用耗时：event 与 task | 500 ms |
-| 单次调用耗时：不在任何调用中，例如模块求值 | 5 秒 |
+| 上限                                       | 值                                                                         |
+| ------------------------------------------ | -------------------------------------------------------------------------- |
+| 堆                                         | 256 MiB——泄漏表现为一个可捕获的 JavaScript 异常，而不是整个宿主被 OOM kill |
+| 解释器栈                                   | 1 MiB——深递归表现为 `RangeError`，而不是原生栈溢出                         |
+| 单次调用耗时：render 与 layout             | 50 ms                                                                      |
+| 单次调用耗时：event 与 task                | 500 ms                                                                     |
+| 单次调用耗时：不在任何调用中，例如模块求值 | 5 秒                                                                       |
 
 时钟在每一次宿主调用时重置，这正是渲染路径能比事件回调有更紧预算的原因。**中断无法被 `catch` 吞掉**——这一点有测试来度量，因为如果能被吞掉，中断就根本不是一道防线。
 
@@ -243,6 +255,5 @@ process.exit(0);
 
 - **`gpui.http`（落地时返回 promise —— 一个 socket 可以花上一分钟，而文件系统已经演示过发布一个阻塞接口的代价）。** 能力模型里有 `capabilities.network.hosts`，`fetch` 的拒绝信息也提到了它，但没有 HTTP 接口。
 - **Manifest，以及它所属的插件模型。** 今天授权来自宿主。
-- **可 await 的 `store.flush`。** `fs` 已经是异步的；`store` 是带写穿的缓存，它的 flush 是仅剩的同步写入。
 - **`process.exit` 自己的那项能力。**
 - **向用户询问授权。** 授权在应用加载之前就已决定，不会在使用的那一刻弹出询问。

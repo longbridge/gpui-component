@@ -404,13 +404,19 @@ impl ShellRuntime {
     pub(super) fn dispatch_input_event(
         self: &Rc<Self>,
         handler: &Persistent<Function<'static>>,
+        policy: &Rc<crate::policy::Policy>,
         event: &gpui_base::input::InputEvent,
         window: &mut Window,
         cx: &mut App,
     ) {
         use gpui_base::input::InputEvent;
 
-        let (_guard, generation) = scope::enter(window, cx, ScopePhase::Event, None);
+        // The policy the subscription was made under. There is no view to take
+        // it from — a subscription belongs to the input entity, which outlives
+        // any one view — and no enclosing frame either, so `enter` would fall
+        // back to the default.
+        let (_guard, generation) =
+            scope::enter_with(window, cx, ScopePhase::Event, None, policy.clone());
 
         let result = self.with_js(|ctx| {
             let handler = handler.clone().restore(ctx)?;

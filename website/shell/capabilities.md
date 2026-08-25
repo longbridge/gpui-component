@@ -13,8 +13,8 @@ The host grants what it grants, because only the host knows how far it trusts th
 ```rust
 gpui_shell::set_capabilities(
     Capabilities::new()
-        .with_read_roots([application_root.clone()])
-        .with_write_roots([data_directory.clone()])
+        .read_roots([application_root.clone()])
+        .write_roots([data_directory.clone()])
         .store(true),
 );
 ```
@@ -23,14 +23,14 @@ gpui_shell::set_capabilities(
 
 Running a directory from the command line is an explicit act of trust — the same as `node app.js` — so `gpui-shell <directory>` grants a specific, narrow set:
 
-| | |
-| --- | --- |
-| Read | The application directory, and its own storage directory |
-| Write | Its own storage directory |
-| Storage | Granted |
-| Clipboard | **Not** granted |
-| Process execution | **Not** granted |
-| Network | **Not** granted |
+|                   |                                                          |
+| ----------------- | -------------------------------------------------------- |
+| Read              | The application directory, and its own storage directory |
+| Write             | Its own storage directory                                |
+| Storage           | Granted                                                  |
+| Clipboard         | **Not** granted                                          |
+| Process execution | **Not** granted                                          |
+| Network           | **Not** granted                                          |
 
 An application can therefore read its own sources and assets and use its own storage, and nothing else. It is deliberately narrower than "everything", because an installed plugin will one day run through the same code path with a manifest deciding instead — and a grant that is generous for a local run would be the wrong default to inherit.
 
@@ -65,21 +65,27 @@ The messages name manifest keys because that is where grants will come from when
 import { fs } from "gpui";
 ```
 
-| Call | Returns |
-| --- | --- |
-| `fs.read_text(path)` | The file's contents |
-| `fs.write_text(path, contents)` | — |
-| `fs.read_dir(path)` | `[{ name, is_dir }]`, sorted by name |
-| `fs.exists(path)` | `true` / `false` |
-| `fs.remove(path)` | — |
-| `fs.create_dir_all(path)` | — |
+Every call returns a promise. `await` them, or chain `.then` — and see the note below about `render`.
 
-A relative path resolves against a granted root; an absolute one must already be inside one. Every path in the surface goes through **one resolver**, so there is no second place for a traversal bug to hide. It normalizes the path — `../../etc/passwd` is rejected before it reaches the filesystem — and then settles containment against the filesystem rather than against the string, because a grant is a promise about a *directory*: `data/escape/passwd` is lexically inside the root and reads `/etc/passwd` if `escape` is a symlink. The deepest part of the path that exists is resolved, links and all, and has to still be under the root; a symlink that resolves to nothing is refused rather than guessed at.
+| Call                            | Resolves to                          |
+| ------------------------------- | ------------------------------------ |
+| `fs.read_text(path)`            | The file's contents                  |
+| `fs.write_text(path, contents)` | —                                    |
+| `fs.read_dir(path)`             | `[{ name, is_dir }]`, sorted by name |
+| `fs.exists(path)`               | `true` / `false`                     |
+| `fs.remove(path)`               | —                                    |
+| `fs.create_dir_all(path)`       | —                                    |
 
-**The grant is a handle, not a string.** The resolver hands back an open directory that cannot be made to name anything outside itself, and every read, write, listing, removal and mkdir runs against *that* — so a path is never resolved twice and there is no window between deciding it is allowed and using it.
+```js
+const source = await fs.read_text("notes.md");
+await fs.write_text("notes.md", source + "\n");
+```
 
-That matters because the obvious implementation does not work. Checking the path and then calling `std::fs` resolves it twice: a link already in place is caught by the check, and one that replaces a directory component *between* the two is followed out of the root by the second resolution. This is [`cap-std`](https://docs.rs/cap-std), which is `openat2(RESOLVE_BENEATH)` on Linux and a per-component `openat` walk elsewhere.
+A relative path resolves against a granted root; an absolute one must already be inside one. Every path in the surface goes through **one resolver**, so there is no second place for a traversal bug to hide. It normalizes the path — `../../etc/passwd` is rejected before it reaches the filesystem — and then settles containment against the filesystem rather than against the string, because a grant is a promise about a _directory_: `data/escape/passwd` is lexically inside the root and reads `/etc/passwd` if `escape` is a symlink. The deepest part of the path that exists is resolved, links and all, and has to still be under the root; a symlink that resolves to nothing is refused rather than guessed at.
 
+**The grant is a handle, not a string.** The resolver hands back an open directory that cannot be made to name anything outside itself, and every read, write, listing, removal and mkdir runs against _that_ — so a path is never resolved twice and there is no window between deciding it is allowed and using it.
+
+That matters because the obvious implementation does not work. Checking the path and then calling `std::fs` resolves it twice: a link already in place is caught by the check, and one that replaces a directory component _between_ the two is followed out of the root by the second resolution. This is [`cap-std`](https://docs.rs/cap-std), which is `openat2(RESOLVE_BENEATH)` on Linux and a per-component `openat` walk elsewhere.
 
 Three of these behave in a way worth stating, each for the same reason:
 
@@ -107,15 +113,19 @@ Key–value storage that survives a restart.
 import { store } from "gpui";
 
 store.set("todolist.items", items);
-const saved = store.get("todolist.items");   // null when the key is unset
+const saved = store.get("todolist.items"); // null when the key is unset
 store.remove("todolist.items");
 store.keys();
-store.flush();
+await store.flush();
 ```
 
 Values are JSON: `null`, booleans, numbers, strings, arrays and plain objects. Functions and `undefined` properties are dropped exactly as `JSON.stringify` drops them, so the mental model transfers. `NaN` and `Infinity` have no JSON form and are refused rather than silently becoming `null`. Nesting is capped at 64 levels, which no real configuration reaches and a reference cycle exceeds immediately.
 
-Values are cached in memory, because `get` is reachable from `render` and a file read per render would be absurd. **Every mutation persists immediately**, written to a temporary file and renamed over the target — so a crash mid-write leaves the previous settings intact rather than a truncated file. `flush` therefore does not need to be called; it stays in the API as the durability barrier for when the write becomes a promise you can await.
+`get`, `set`, `remove` and `keys` are synchronous, and deliberately: `get` is reachable from `render`, so the values are cached in memory and a read answers from there. A file read per render would be absurd.
+
+**A mutation schedules the write rather than performing it.** The file is written on a background thread — to a temporary file, renamed over the target, so a crash mid-write leaves the previous settings intact rather than a truncated one — and one write is in flight at a time, so a burst of `set` calls becomes one file rather than one file each. Whatever changed while a write was on its way is written by the next one.
+
+`await store.flush()` when you need to know it landed. It is a **barrier, not a second writer**: it waits for everything written so far to reach the disk and rejects with the write's own error if it does not. Starting its own write instead would race the automatic one through the same temporary file, with nothing ordering them — and the older revision could land last and undo the newer.
 
 ### Where storage lives
 
@@ -123,11 +133,11 @@ Storage is per application, and the host chooses the location — an application
 
 For a local run the identity is the **canonical path of the application directory**, so the same directory always reaches the same data and two directories never collide, including two checkouts of the same application, which are genuinely different installations. The path is:
 
-| Platform | Location |
-| --- | --- |
+| Platform             | Location                                                                                    |
+| -------------------- | ------------------------------------------------------------------------------------------- |
 | Linux and other Unix | `$XDG_DATA_HOME/gpui-shell/apps/<name>-<digest>/store.json`, defaulting to `~/.local/share` |
-| macOS | `~/Library/Application Support/gpui-shell/apps/<name>-<digest>/store.json` |
-| Windows | `%APPDATA%\gpui-shell\apps\<name>-<digest>\store.json` |
+| macOS                | `~/Library/Application Support/gpui-shell/apps/<name>-<digest>/store.json`                  |
+| Windows              | `%APPDATA%\gpui-shell\apps\<name>-<digest>\store.json`                                      |
 
 `<name>` is the application directory's name, kept so the folder is recognizable; `<digest>` is a short hash of the full path, there only to disambiguate. It lives under the user's data directory rather than inside the application, because an application directory may be read-only, is often a git checkout, and is not where a user expects their data to be.
 
@@ -144,7 +154,9 @@ export function load() {
     const saved = store.get(KEY);
     return Array.isArray(saved) ? saved : [];
   } catch (error) {
-    log.warn(`todolist: storage unavailable, starting empty (${error.message})`);
+    log.warn(
+      `todolist: storage unavailable, starting empty (${error.message})`,
+    );
     return [];
   }
 }
@@ -158,7 +170,7 @@ The example's footer then says so on screen — "Not saved — this host did not
 import { clipboard } from "gpui";
 
 clipboard.write_text("copied");
-const text = clipboard.read_text();   // undefined when the clipboard holds no text
+const text = clipboard.read_text(); // undefined when the clipboard holds no text
 ```
 
 Read and write are **separate grants**, and a denial names the half that is missing:
@@ -191,7 +203,7 @@ Output goes through `tracing` with the target `gpui_shell::script`, so script ou
 ## `process`
 
 ```js
-import { process } from "gpui";   // also available as a bare global
+import { process } from "gpui"; // also available as a bare global
 
 const code = process.run("git", ["status"]);
 process.exit(0);
@@ -201,7 +213,7 @@ process.exit(0);
 
 `process.exit` is **a request, never `exit(2)`** inside the runtime. It hands the code to a handler the host installed, which decides what to do — close the plugin's panel, close the window, end the process. One plugin must not be able to take the host process down, and the host may have unsaved state.
 
-The handler is not optional: a host that grants the capability without installing one makes the call **fail**, naming the omission. A request nobody answers is worse than a denial, because a script cannot tell the two apart. The `gpui-shell` binary installs the policy that suits a host which *is* the process — it ends it, with the code the script asked for.
+The handler is not optional: a host that grants the capability without installing one makes the call **fail**, naming the omission. A request nobody answers is worse than a denial, because a script cannot tell the two apart. The `gpui-shell` binary installs the policy that suits a host which _is_ the process — it ends it, with the code the script asked for.
 
 The name is a deliberate collision. `process` is what a JavaScript author — or a model generating JavaScript — reaches for, so the runtime puts its own capability-gated surface there rather than leaving the name free to look like Node's and behave differently.
 
@@ -213,7 +225,7 @@ The name is a deliberate collision. `process` is what a JavaScript author — or
 
 Beyond the capability grants, the runtime trims the language itself. All of it applies **unless development mode is on**.
 
-**No dynamic code.** `globalThis.eval` is deleted outright — a `ReferenceError` cannot be mistaken for a working `eval` by feature detection, which a throwing stub could be. All four function compilers are replaced: `Function`, and the constructors reachable through `(async function(){}).constructor`, `(function*(){}).constructor` and the async-generator equivalent. `Function` is *replaced* rather than deleted, keeping the real `Function.prototype`, so `x instanceof Function` and `.call` / `.apply` / `.bind` keep working and only construction throws.
+**No dynamic code.** `globalThis.eval` is deleted outright — a `ReferenceError` cannot be mistaken for a working `eval` by feature detection, which a throwing stub could be. All four function compilers are replaced: `Function`, and the constructors reachable through `(async function(){}).constructor`, `(function*(){}).constructor` and the async-generator equivalent. `Function` is _replaced_ rather than deleted, keeping the real `Function.prototype`, so `x instanceof Function` and `.call` / `.apply` / `.bind` keep working and only construction throws.
 
 **Frozen built-in prototypes.** `Object`, `Array`, `Function`, `String` and `Number` prototypes are frozen. One VM will host several plugins, which makes those prototypes shared mutable state: one plugin adding an enumerable property to `Object.prototype` changes `for...in` for every other plugin and for the runtime's own prelude. The cost is real — a library that patches `Array.prototype` stops working, at import time — so a host that knowingly runs one can turn the freeze off and keep every other part of the sandbox.
 
@@ -221,13 +233,13 @@ Beyond the capability grants, the runtime trims the language itself. All of it a
 
 **Resource limits**, so a runaway script reports rather than taking the window with it:
 
-| Limit | Value |
-| --- | --- |
-| Heap | 256 MiB — a leak becomes a catchable JavaScript exception, not an OOM kill |
-| Interpreter stack | 1 MiB — deep recursion becomes a `RangeError`, not a native stack overflow |
-| Time in one call: render and layout | 50 ms |
-| Time in one call: event and task | 500 ms |
-| Time in one call: outside any call, such as module evaluation | 5 s |
+| Limit                                                         | Value                                                                      |
+| ------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| Heap                                                          | 256 MiB — a leak becomes a catchable JavaScript exception, not an OOM kill |
+| Interpreter stack                                             | 1 MiB — deep recursion becomes a `RangeError`, not a native stack overflow |
+| Time in one call: render and layout                           | 50 ms                                                                      |
+| Time in one call: event and task                              | 500 ms                                                                     |
+| Time in one call: outside any call, such as module evaluation | 5 s                                                                        |
 
 The clock restarts on every host call, which is what lets the render path have a tighter budget than an event handler. **The interrupt cannot be swallowed by a `catch` block** — that is measured by a test, because if it could be, the interrupt would not be a defence at all.
 
@@ -243,6 +255,5 @@ Development mode never relaxes capability gating. It makes the language easier t
 
 - **`gpui.http`.** The capability model has `capabilities.network.hosts` and `fetch`'s refusal message names it, but there is no HTTP surface. When it lands it returns promises — a socket can take a minute, and the filesystem already demonstrated what shipping a blocking surface costs.
 - **The manifest, and the plugin model it belongs to.** Grants come from the host today.
-- **An awaitable `store.flush`.** `fs` is asynchronous; `store` is a cache with a write-through, and its flush is the one synchronous write left.
 - **A capability of its own for `process.exit`.**
 - **Prompting the user.** Grants are decided before the application loads; nothing asks at the moment of use.

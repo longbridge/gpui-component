@@ -459,8 +459,8 @@ impl CapabilitiesFile {
         };
 
         Capabilities::new()
-            .with_read_roots(expand_all(&fs.read, plugin_dir, data_dir))
-            .with_write_roots(expand_all(&fs.write, plugin_dir, data_dir))
+            .read_roots(expand_all(&fs.read, plugin_dir, data_dir))
+            .write_roots(expand_all(&fs.write, plugin_dir, data_dir))
             .with_execute(execute)
             .with_network_hosts(
                 self.network

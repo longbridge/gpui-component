@@ -13,6 +13,7 @@ default = ["tree-sitter"]
 [dependencies]
 anyhow.workspace = true
 gpui.workspace = true
+gpui-base.workspace = true
 gpui_platform.workspace = true
 gpui-component = { workspace = true }
 gpui-component-assets.workspace = true
@@ -61,7 +62,6 @@ gtk = { version = "0.18" }
 
 [dev-dependencies]
 gpui = { workspace = true, features = ["test-support"] }
-gpui-base.workspace = true
 
 [lints]
 workspace = true
