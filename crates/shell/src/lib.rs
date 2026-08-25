@@ -100,7 +100,55 @@ pub fn set_capabilities(capabilities: Capabilities) {
     capability::install(capabilities);
 }
 
-/// Points `gpui.store` at a directory.
+/// Names the application, and puts its data where that name says.
+///
+/// **This is how a host should place storage.** The bundle id is the
+/// application's identity, so its data survives the directory being renamed,
+/// moved, or replaced by an upgrade — which is what a user means by "my
+/// settings". Keying on the path instead means an upgrade silently starts the
+/// user over.
+///
+/// The id is the host's to decide and the runtime does not go looking for it in
+/// a file: only the layer that installed the application knows what it is
+/// called, and a runtime that read it out of a manifest of its own choosing
+/// would be claiming authority over something it does not own.
+///
+/// Returns the directory it chose, because a host that grants filesystem access
+/// needs to name it. The store is one file inside, which leaves room for other
+/// per-application state later.
+///
+/// ```rust,ignore
+/// let data = gpui_shell::set_bundle_id("com.example.notes")?;
+/// gpui_shell::set_capabilities(Capabilities::new().write_roots([data]));
+/// ```
+///
+/// A host running a directory it was pointed at — a command line, a dev
+/// server — has no such name, and passing the path is right there: the path is
+/// the identity while you are editing something. [`bundle_id_for_path`] builds
+/// one.
+///
+/// Fails when the id could reach outside the data directory: it is joined onto
+/// it, so `a-z`, `0-9`, `.`, `-`, `_` and no `..`.
+pub fn set_bundle_id(id: &str) -> anyhow::Result<PathBuf> {
+    let directory = runtime::app_data_dir(id)?;
+    set_store_path(directory.join("store.json"));
+    Ok(directory)
+}
+
+/// A bundle id for a directory that has no name of its own.
+///
+/// The directory name with a digest of its full path: the same directory always
+/// reaches the same data, and two never collide — including two checkouts of one
+/// source, which really are two installations of something being edited.
+pub fn bundle_id_for_path(root: &std::path::Path) -> String {
+    runtime::path_identity(root)
+}
+
+/// Points `gpui.store` at an exact file.
+///
+/// The mechanism under [`set_bundle_id`], which is what a host should normally
+/// call. This is for a host that places its own data — a test, or an embedder
+/// with its own layout.
 ///
 /// Storage is per application, and the host chooses where that is — an
 /// application cannot name its own storage location, or two applications could

@@ -57,14 +57,17 @@ use std::{
     time::{Duration, Instant},
 };
 
-use rquickjs::{Ctx, Exception, Object, Result as JsResult, function::Func, function::Opt};
+use rquickjs::{
+    Ctx, Exception, IntoJs, Object, Promise, Result as JsResult, Value,
+    function::{Func, Opt},
+};
 
 use crate::{
     capability::CapabilityError,
     scope::{self, ScopePhase},
 };
 
-use super::host;
+use super::{host, scheduler};
 
 /// Installs the sandbox policy into one context.
 ///
@@ -275,33 +278,78 @@ fn install_absent_globals(ctx: &Ctx<'_>) -> JsResult<()> {
 /// Note for the parent module: `import { process } from "gpui"` needs
 /// `"process"` added to `MODULE_EXPORTS`. Until then the global is the only way
 /// in.
+/// Runs a command and resolves with what it did.
+///
+/// A promise, for a sharper version of the reason `gpui.fs` is one. A file read
+/// has no bound; a child process has *less* — it can compute for minutes, wait
+/// on input that never comes, or outlive the window. `.status()` blocked the
+/// frame and the VM together for as long as that took, in the kernel, where the
+/// interrupt budget cannot see it. So the wait happens on the background
+/// executor and the promise settles on the main thread.
+///
+/// The capability check stays here, on the calling thread, so a denial is still
+/// a thrown error at the call site rather than a rejected promise nobody
+/// awaited.
+///
+/// Output is captured rather than inherited. A script that runs a command
+/// almost always wants what it said, and in a windowed application a child
+/// writing to the host's stdout is writing to nowhere a user will look.
+fn run<'js>(ctx: Ctx<'js>, command: String, args: Opt<Vec<String>>) -> JsResult<Promise<'js>> {
+    if !host::capabilities().may_run(&command) {
+        return Err(Exception::throw_type(
+            &ctx,
+            &CapabilityError::ExecuteDenied(command).to_string(),
+        ));
+    }
+
+    let args = args.0.unwrap_or_default();
+    scheduler::blocking(&ctx, "gpui.process.run(command, args)", move || {
+        std::process::Command::new(&command)
+            .args(args)
+            .output()
+            .map(Output::from)
+            .map_err(|error| format!("running `{command}` failed: {error}"))
+    })
+}
+
+/// What a command did: its status, and both streams.
+///
+/// A plain struct because it crosses threads — the work runs on the background
+/// executor and only the result comes back — so the conversion to a script value
+/// happens here, on the main thread, the way `DirEntry` does in `host`.
+struct Output {
+    code: i32,
+    stdout: String,
+    stderr: String,
+}
+
+impl From<std::process::Output> for Output {
+    fn from(output: std::process::Output) -> Self {
+        Self {
+            // `-1` for a process killed by a signal, which has no exit code.
+            // Not `null`: every caller would have to handle it, and the one
+            // fact they want — "did it succeed" — is `code === 0` either way.
+            code: output.status.code().unwrap_or(-1),
+            stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+        }
+    }
+}
+
+impl<'js> IntoJs<'js> for Output {
+    fn into_js(self, ctx: &Ctx<'js>) -> JsResult<Value<'js>> {
+        let object = Object::new(ctx.clone())?;
+        object.set("code", self.code)?;
+        object.set("stdout", self.stdout)?;
+        object.set("stderr", self.stderr)?;
+        Ok(object.into_value())
+    }
+}
+
 fn install_process(ctx: &Ctx<'_>) -> JsResult<()> {
     let process = Object::new(ctx.clone())?;
 
-    process.set(
-        "run",
-        Func::from(
-            |ctx: Ctx<'_>, command: String, args: Opt<Vec<String>>| -> JsResult<i32> {
-                if !host::capabilities().may_run(&command) {
-                    return Err(Exception::throw_type(
-                        &ctx,
-                        &CapabilityError::ExecuteDenied(command).to_string(),
-                    ));
-                }
-
-                std::process::Command::new(&command)
-                    .args(args.0.unwrap_or_default())
-                    .status()
-                    .map(|status| status.code().unwrap_or(-1))
-                    .map_err(|error| {
-                        Exception::throw_message(
-                            &ctx,
-                            &format!("running `{command}` failed: {error}"),
-                        )
-                    })
-            },
-        ),
-    )?;
+    process.set("run", Func::from(run))?;
 
     process.set(
         "exit",

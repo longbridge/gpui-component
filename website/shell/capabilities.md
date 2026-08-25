@@ -134,15 +134,26 @@ Values are JSON: `null`, booleans, numbers, strings, arrays and plain objects. F
 
 Storage is per application, and the host chooses the location — an application cannot name its own, or two applications could collide on purpose.
 
-For a local run the identity is the **canonical path of the application directory**, so the same directory always reaches the same data and two directories never collide, including two checkouts of the same application, which are genuinely different installations. The path is:
+**The host names the application, and its data follows that name:**
 
-| Platform             | Location                                                                                    |
-| -------------------- | ------------------------------------------------------------------------------------------- |
-| Linux and other Unix | `$XDG_DATA_HOME/gpui-shell/apps/<name>-<digest>/store.json`, defaulting to `~/.local/share` |
-| macOS                | `~/Library/Application Support/gpui-shell/apps/<name>-<digest>/store.json`                  |
-| Windows              | `%APPDATA%\gpui-shell\apps\<name>-<digest>\store.json`                                      |
+```rust
+let data = gpui_shell::set_bundle_id("com.example.notes")?;
+gpui_shell::set_capabilities(Capabilities::new().write_roots([data]));
+```
 
-`<name>` is the application directory's name, kept so the folder is recognizable; `<digest>` is a short hash of the full path, there only to disambiguate. It lives under the user's data directory rather than inside the application, because an application directory may be read-only, is often a git checkout, and is not where a user expects their data to be.
+| Platform             | Location                                                                       |
+| -------------------- | ------------------------------------------------------------------------------ |
+| Linux and other Unix | `$XDG_DATA_HOME/gpui-shell/apps/<id>/store.json`, defaulting to `~/.local/share` |
+| macOS                | `~/Library/Application Support/gpui-shell/apps/<id>/store.json`                  |
+| Windows              | `%APPDATA%\gpui-shell\apps\<id>\store.json`                                     |
+
+The id is the identity, so the data survives the directory being renamed, moved, or replaced by an upgrade — which is what a user means by "my settings". Keying on the path instead means an upgrade silently starts them over.
+
+**The runtime does not go looking for the id in a file.** Only the layer that installed the application knows what it is called; a runtime that read it out of a manifest of its own choosing would be claiming authority over something it does not own.
+
+A host that was merely *pointed at* a directory — this command line, a dev server — has no such name, and there the path really is the identity. `gpui_shell::bundle_id_for_path(root)` builds one from the directory's name and a digest of its full path, so the same directory always reaches the same data and two checkouts of one source stay apart. That is right while you are editing something and wrong once it is installed, which is exactly the difference declaring a real id makes.
+
+The id may hold `a-z`, `0-9`, `.`, `-` and `_`, and no `..`. That is not tidiness: it is joined onto the user's data directory, so an unchecked one reaches the rest of it. Data lives there rather than inside the application because an application directory may be read-only, is often a git checkout, and is not where a user expects their data to be.
 
 ### Degrading when it is not granted
 
@@ -208,11 +219,15 @@ Output goes through `tracing` with the target `gpui_shell::script`, so script ou
 ```js
 import { process } from "gpui"; // also available as a bare global
 
-const code = process.run("git", ["status"]);
+const { code, stdout, stderr } = await process.run("git", ["status"]);
 process.exit(0);
 ```
 
-`process.run` is gated on an execute grant, which is one of three: denied (the default), an allowlist of command names, or unrestricted.
+`process.run` returns a promise, for a sharper version of the reason `fs` does. A file read has no bound; a child process has less — it can compute for minutes, wait on input that never comes, or outlive the window. Waiting for one on this thread would stop the frame and the VM together, in the kernel, where the interrupt budget cannot see it.
+
+Output is **captured, not inherited**: a script that runs a command almost always wants what it said, and in a windowed application a child writing to the host's stdout is writing somewhere no user will look. `code` is `0` on success and `-1` when a signal killed it, which has no exit code of its own.
+
+It is gated on an execute grant, which is one of three: denied (the default), an allowlist of command names, or unrestricted. A denied command **throws at the call** rather than rejecting, like a denied `fs` path — a rejected promise nobody awaited is a denial nobody sees.
 
 `process.exit` is **a request, never `exit(2)`** inside the runtime. It hands the code to a handler the host installed, which decides what to do — close the plugin's panel, close the window, end the process. One plugin must not be able to take the host process down, and the host may have unsaved state.
 

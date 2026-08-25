@@ -20,6 +20,97 @@ use gpui_base::Button;
 
 use crate::{spec::CallbackId, view::ScriptView};
 
+/// Where an application's data lives, given who it is.
+pub(crate) fn app_data_dir(id: &str) -> Result<PathBuf> {
+    validate_identity(id)?;
+    Ok(data_home().join("gpui-shell").join("apps").join(id))
+}
+
+fn validate_identity(id: &str) -> Result<()> {
+    if id.is_empty() {
+        return Err(anyhow!("an application identity cannot be empty"));
+    }
+    if id.contains("..") {
+        return Err(anyhow!(
+            "`{id}` is not a usable application identity: it contains `..`, which would \
+             reach outside the data directory"
+        ));
+    }
+    if let Some(character) = id
+        .chars()
+        .find(|character| !matches!(character, 'a'..='z' | '0'..='9' | '.' | '-' | '_'))
+    {
+        return Err(anyhow!(
+            "`{id}` is not a usable application identity: `{character}` is not allowed. \
+             Use lower-case letters, digits, `.`, `-` and `_`"
+        ));
+    }
+    Ok(())
+}
+
+/// A bundle id for a host that has only a directory to go on.
+///
+/// The directory name keeps the folder recognizable and a digest of the full
+/// path disambiguates it, so the same directory always reaches the same data and
+/// two never collide — including two checkouts of the same source, which are
+/// genuinely different installations of something being developed.
+///
+/// Deliberately *not* what an installed application should use: data keyed by
+/// path does not survive the directory moving, which is right while you are
+/// editing it and wrong once it is installed.
+pub(crate) fn path_identity(root: &Path) -> String {
+    let name: String = root
+        .file_name()
+        .map(|name| name.to_string_lossy().to_lowercase())
+        .unwrap_or_default()
+        .chars()
+        .map(|character| match character {
+            'a'..='z' | '0'..='9' | '.' | '-' | '_' => character,
+            _ => '-',
+        })
+        .collect();
+
+    // The digest carries the identity, so a name that sanitizes to nothing — or
+    // to something with a leading dot — costs recognizability and not
+    // correctness.
+    let name = name.trim_matches(['.', '-', '_']);
+    let name = if name.is_empty() { "app" } else { name };
+    format!("{name}-{:016x}", path_digest(root))
+}
+
+/// The platform's per-user data directory, honouring the usual overrides.
+pub(crate) fn data_home() -> PathBuf {
+    if let Some(explicit) = std::env::var_os("XDG_DATA_HOME").filter(|it| !it.is_empty()) {
+        return PathBuf::from(explicit);
+    }
+
+    let home = std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .map(PathBuf::from)
+        .unwrap_or_else(std::env::temp_dir);
+
+    if cfg!(target_os = "macos") {
+        home.join("Library").join("Application Support")
+    } else if cfg!(target_os = "windows") {
+        std::env::var_os("APPDATA")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| home.join("AppData").join("Roaming"))
+    } else {
+        home.join(".local").join("share")
+    }
+}
+
+/// FNV-1a over the path. Not a security boundary — it only has to keep two
+/// directories that have no name of their own from sharing a folder.
+fn path_digest(root: &Path) -> u64 {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in root.to_string_lossy().as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    hash
+}
+
 /// Finds the directory an application is rooted at.
 ///
 /// Being pointed at the entry file itself, or at the parent of the real
@@ -527,4 +618,57 @@ fn copy_button(
 /// when the failure is that the theme never got installed.
 fn token(name: &str, fallback: Hsla) -> Hsla {
     crate::theme::token_color(name).unwrap_or(fallback)
+}
+
+#[cfg(test)]
+mod identity_tests {
+    use super::*;
+
+    /// The id is joined onto the user's data directory, so an unchecked one
+    /// reaches the rest of it. This is the only place that check happens.
+    #[test]
+    fn an_identity_that_could_escape_the_data_directory_is_refused() {
+        for escape in ["../other", "..", "a/b", "a\\b", "a..b"] {
+            let error = app_data_dir(escape)
+                .err()
+                .unwrap_or_else(|| panic!("`{escape}` must be refused"))
+                .to_string();
+            assert!(
+                error.contains(escape),
+                "the refusal has to name the id, got: {error}"
+            );
+        }
+
+        assert!(app_data_dir("").is_err(), "an empty id names nothing");
+    }
+
+    #[test]
+    fn a_reverse_dns_identity_is_one_path_component() {
+        let directory = app_data_dir("com.example.notes").expect("a valid id");
+        assert!(directory.ends_with("com.example.notes"));
+        assert!(directory.starts_with(data_home()));
+    }
+
+    /// Two directories that share a name must not share a folder, and the same
+    /// directory must reach the same one every time.
+    #[test]
+    fn a_path_identity_separates_two_checkouts_of_one_name() {
+        let left = path_identity(Path::new("/home/someone/dev/notes"));
+        let right = path_identity(Path::new("/home/someone/other/notes"));
+
+        assert_ne!(left, right);
+        assert!(left.starts_with("notes-"), "{left}");
+        assert_eq!(left, path_identity(Path::new("/home/someone/dev/notes")));
+        // And whatever it produces has to survive the same check a host's own
+        // id does, or the fallback could reach where a real id cannot.
+        assert!(app_data_dir(&left).is_ok());
+    }
+
+    /// A directory whose name is entirely unusable still has to land somewhere,
+    /// because the digest — not the name — is what keeps two of them apart.
+    #[test]
+    fn a_path_identity_survives_a_name_with_nothing_usable_in_it() {
+        let id = path_identity(Path::new("/tmp/../中文"));
+        assert!(app_data_dir(&id).is_ok(), "{id}");
+    }
 }

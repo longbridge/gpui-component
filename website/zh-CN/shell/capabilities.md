@@ -134,15 +134,26 @@ await store.flush();
 
 存储按应用划分，位置由宿主选择——应用不能指定自己的存储位置，否则两个应用可以故意撞在一起。
 
-本地运行时，身份是**应用目录的规范化路径**，所以同一个目录总是访问到同一份数据，两个目录也永远不会冲突——包括同一个应用的两个 checkout，它们确实是不同的安装。路径是：
+**宿主给应用起名字，数据跟着这个名字走：**
 
-| 平台              | 位置                                                                               |
-| ----------------- | ---------------------------------------------------------------------------------- |
-| Linux 与其他 Unix | `$XDG_DATA_HOME/gpui-shell/apps/<name>-<digest>/store.json`，默认 `~/.local/share` |
-| macOS             | `~/Library/Application Support/gpui-shell/apps/<name>-<digest>/store.json`         |
-| Windows           | `%APPDATA%\gpui-shell\apps\<name>-<digest>\store.json`                             |
+```rust
+let data = gpui_shell::set_bundle_id("com.example.notes")?;
+gpui_shell::set_capabilities(Capabilities::new().write_roots([data]));
+```
 
-`<name>` 是应用目录名，保留下来是为了这个文件夹认得出来；`<digest>` 是完整路径的一个短哈希，只用来消歧。它放在用户数据目录而不是应用内部，因为应用目录可能只读、往往是一个 git checkout，也不是用户预期自己数据所在的地方。
+| 平台              | 位置                                                                  |
+| ----------------- | --------------------------------------------------------------------- |
+| Linux 与其他 Unix | `$XDG_DATA_HOME/gpui-shell/apps/<id>/store.json`，默认 `~/.local/share` |
+| macOS             | `~/Library/Application Support/gpui-shell/apps/<id>/store.json`         |
+| Windows           | `%APPDATA%\gpui-shell\apps\<id>\store.json`                            |
+
+id 就是身份，所以目录被改名、被移动、被一次升级整个替换掉，数据都还在——这正是用户说"我的设置"时指的东西。改用路径作 key，一次升级就等于悄悄让用户从头开始。
+
+**运行时不会去某个文件里找这个 id。** 只有安装了这个应用的那一层知道它叫什么；运行时自己挑一个 manifest 去读，等于对一件不属于它的事情宣称权威。
+
+被"指向"某个目录的宿主——这个命令行、一个 dev server——没有这样一个名字，而在那种情况下路径确实就是身份。`gpui_shell::bundle_id_for_path(root)` 用目录名加完整路径的摘要造一个，于是同一个目录总是访问到同一份数据，同一份源码的两个 checkout 也互不干扰。这在你正在编辑它时是对的，在它已经被安装之后是错的——而这正是声明一个真名字带来的区别。
+
+id 允许 `a-z`、`0-9`、`.`、`-`、`_`，不允许 `..`。这不是整洁问题：它会被拼到用户数据目录后面，没检查的 id 能够到目录里的其他东西。数据放在那里而不是应用内部，因为应用目录可能只读、往往是一个 git checkout，也不是用户预期自己数据所在的地方。
 
 ### 未被授权时的退化
 
@@ -208,11 +219,15 @@ log.warn("could not save");
 ```js
 import { process } from "gpui"; // 同时也是一个全局
 
-const code = process.run("git", ["status"]);
+const { code, stdout, stderr } = await process.run("git", ["status"]);
 process.exit(0);
 ```
 
-`process.run` 受执行授权约束，授权有三种形态：拒绝（默认）、命令名白名单，或不受限。
+`process.run` 返回 promise，理由是 `fs` 那条的加强版。文件读取没有时间上界；子进程连上界的影子都没有——它可以算上几分钟、等一个永远不来的输入，甚至活得比窗口还久。在这个线程上等它，会把帧和 VM 一起卡住，而且卡在内核里，interrupt budget 看不见。
+
+输出是**捕获的，不是继承的**：跑一条命令的脚本几乎总是想要它说了什么，而在一个窗口程序里，子进程往宿主的 stdout 写，是写到没人会看的地方。`code` 成功时是 `0`，被信号杀死时是 `-1`——那种情况本来就没有退出码。
+
+它受执行授权约束，授权有三种形态：拒绝（默认）、命令名白名单，或不受限。被拒绝的命令**在调用处抛出**而不是 reject，和被拒绝的 `fs` 路径一样——没人 await 的 rejected promise，等于没人看见的拒绝。
 
 `process.exit` 在运行时内部是**一个请求，绝不是 `exit(2)`**。它把退出码交给宿主安装的处理函数，由后者决定怎么做——关闭插件的面板、关闭窗口、结束进程。一个插件不能把宿主进程带走，而宿主可能还有未保存的状态。
 

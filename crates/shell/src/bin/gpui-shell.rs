@@ -524,23 +524,21 @@ impl CheckOutcome {
     }
 }
 
-/// Where an application's storage lives, and how two applications stay apart.
-///
-/// The identity is the canonical path of the application root, so the same
-/// directory always reaches the same data and two directories never collide —
-/// including two checkouts of the same app, which are genuinely different
-/// installations. The directory name is kept in the path so the folder is
-/// recognizable, and a short digest of the full path disambiguates it.
-///
-/// Storage lives under the user's data directory rather than inside the
-/// application, because an application directory may be read-only, is often a
-/// git checkout, and is not where a user expects their data to be.
-///
-/// When the plugin model lands, a manifest `id` replaces the digest: an
-/// installed plugin should keep its data across an upgrade that moves it.
 /// Installs the storage location and the capability grant for a local run.
 fn grant_local_access(root: &Path) {
-    let store = store_directory(root);
+    // A directory this command was pointed at has no name of its own, so its
+    // path is its identity — which is right while someone is editing it, and is
+    // exactly what an installed application should not do. An installed one
+    // passes its own bundle id.
+    let id = gpui_shell::bundle_id_for_path(root);
+    let store = match gpui_shell::set_bundle_id(&id) {
+        Ok(store) => store,
+        Err(error) => {
+            tracing::warn!("storage is unavailable: {error}");
+            return;
+        }
+    };
+
     if let Err(error) = std::fs::create_dir_all(&store) {
         tracing::warn!(
             "storage is unavailable: cannot create {}: {error}",
@@ -549,9 +547,6 @@ fn grant_local_access(root: &Path) {
         return;
     }
 
-    // The grant covers the directory; the store itself is one file inside it,
-    // which keeps room for other per-application state later.
-    gpui_shell::set_store_path(store.join("store.json"));
     gpui_shell::set_capabilities(local_capabilities(root, &store));
     tracing::debug!("storage: {}", store.display());
 }
@@ -571,51 +566,6 @@ fn install_palette(cx: &mut App) {
         // that reached a user; the neutral fallback keeps the window legible.
         Err(error) => tracing::error!("shipped palette did not parse: {error}"),
     }
-}
-
-fn store_directory(root: &Path) -> PathBuf {
-    let name = root
-        .file_name()
-        .map(|name| name.to_string_lossy().to_string())
-        .unwrap_or_else(|| "app".to_owned());
-
-    data_home()
-        .join("gpui-shell")
-        .join("apps")
-        .join(format!("{name}-{:016x}", path_digest(root)))
-}
-
-/// The platform's per-user data directory, honouring the usual overrides.
-fn data_home() -> PathBuf {
-    if let Some(explicit) = std::env::var_os("XDG_DATA_HOME").filter(|it| !it.is_empty()) {
-        return PathBuf::from(explicit);
-    }
-
-    let home = std::env::var_os("HOME")
-        .or_else(|| std::env::var_os("USERPROFILE"))
-        .map(PathBuf::from)
-        .unwrap_or_else(std::env::temp_dir);
-
-    if cfg!(target_os = "macos") {
-        home.join("Library").join("Application Support")
-    } else if cfg!(target_os = "windows") {
-        std::env::var_os("APPDATA")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| home.join("AppData").join("Roaming"))
-    } else {
-        home.join(".local").join("share")
-    }
-}
-
-/// FNV-1a over the canonical path. Not a security boundary — it only has to
-/// keep two application directories from sharing a folder.
-fn path_digest(root: &Path) -> u64 {
-    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
-    for byte in root.to_string_lossy().as_bytes() {
-        hash ^= u64::from(*byte);
-        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
-    }
-    hash
 }
 
 /// What a locally run application is allowed to do.

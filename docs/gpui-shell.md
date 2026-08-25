@@ -2118,8 +2118,16 @@ which is the outcome §19.1 exists to avoid.
 
 ### 17.5 Processes
 
-`process.run(command, args?)` returns an exit code and requires the command to be
-on the `capabilities.fs.execute` allowlist. `process.exit(code?)` requires a
+`process.run(command, args?)` resolves to `{ code, stdout, stderr }` and requires
+the command to be on the `capabilities.fs.execute` allowlist. A promise, for a
+sharper version of §17.1's reason: a file read has no bound and a child process
+has less — it can compute for minutes, wait on input that never comes, or outlive
+the window — so waiting for one on the main thread stops the frame and the VM
+together, in the kernel, where the interrupt budget cannot see it. Output is
+captured rather than inherited, because a script that runs a command wants what
+it said and a child writing to a windowed host's stdout is writing nowhere. The
+grant is checked on the calling thread, so a denial throws at the call site
+rather than rejecting a promise nobody awaited. `process.exit(code?)` requires a
 filesystem grant and is a **request**: it hands the code to a handler the host
 installed with `gpui_shell::on_exit_request`, which decides what to do with it —
 close the panel, close the window, end the process. It is never `exit(2)` inside

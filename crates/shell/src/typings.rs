@@ -833,13 +833,29 @@ const CAPABILITIES: &str = r#"
   }
 
   export interface Process {
-    /** Runs a command to completion and answers its exit code. */
-    run(command: string, args?: string[]): number;
+    /**
+     * Runs a command and resolves with what it did.
+     *
+     * A promise: a child process has no bound on how long it takes, and waiting
+     * for one on this thread would stop the frame and the VM together. Output is
+     * captured, not inherited.
+     *
+     * A denied command throws here rather than rejecting, so a refusal is not a
+     * rejection nobody awaited.
+     */
+    run(command: string, args?: string[]): Promise<CommandOutput>;
     /**
      * Asks the host to close this application. A request, not `exit(2)`: the
      * host decides, and the call returns.
      */
     exit(code?: number): void;
+  }
+
+  export interface CommandOutput {
+    /** `0` on success. `-1` when a signal killed it, which has no exit code. */
+    code: number;
+    stdout: string;
+    stderr: string;
   }
 
   export const fs: FileSystem;
