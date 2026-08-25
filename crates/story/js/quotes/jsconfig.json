@@ -1,0 +1,26 @@
+{
+  "// why": [
+    "This file exists so an editor resolves `from \"gpui\"` and knows what the",
+    "module holds. Without it the imports are opaque and the 700-odd style",
+    "methods are invisible.",
+    "",
+    "`checkJs` is on but `strict` is off on purpose. What is worth catching here",
+    "is a misspelled style method, a colour token that does not exist, or a",
+    "native module that was never registered — all of which are typed. What is",
+    "not worth it is annotating every parameter to satisfy `noImplicitAny`:",
+    "this is application code in a scripting layer, and JSDoc on every argument",
+    "would cost more to read than it saves. The few annotations that do buy",
+    "completion are written where they pay."
+  ],
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022"],
+    "checkJs": true,
+    "strict": false,
+    "noImplicitAny": false,
+    "noEmit": true
+  },
+  "include": ["*.js", "*.d.ts"]
+}

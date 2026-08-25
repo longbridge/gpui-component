@@ -174,7 +174,7 @@ cx.open_dialog(view, options) needs a ShellRoot as the window's first view;
 this window was opened with another view
 ```
 
-See [Getting started](./getting-started.md#embed-the-runtime-in-a-rust-host).
+See [Getting started](./getting-started.md#add-the-runtime-to-a-rust-application).
 
 ## Not there yet
 

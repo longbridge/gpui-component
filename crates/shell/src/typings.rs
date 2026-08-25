@@ -40,6 +40,15 @@
 //!   runtime does not have.
 //! * **Retained entities** ([`crate::entities`]) and anything else not exported
 //!   by the `gpui` module today.
+//!
+//! # What an application adds
+//!
+//! Host-registered native modules cannot be generated here, because only the
+//! host knows what it registered. The declarations leave a `NativeModules`
+//! interface for an application to augment, which is what turns `native("...")`
+//! from `Record<string, (...args: any[]) => any>` into a checked name with
+//! completing functions. `crates/story/js/quotes/market.d.ts` is the worked
+//! example.
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
@@ -64,7 +73,7 @@ pub fn declarations() -> String {
     let (nullary, parametric) = style_methods();
 
     let mut out = String::with_capacity(160 * 1024);
-    out.push_str(PREAMBLE);
+    out.push_str(&PREAMBLE.replace("{version}", crate::plugin_api::VERSION));
     out.push_str("declare module \"gpui\" {\n");
     out.push_str(VALUE_TYPES);
     out.push_str(&color_types());
@@ -87,6 +96,125 @@ pub fn declarations() -> String {
     out.push_str(SCHEDULING);
     out.push_str("}\n");
     out
+}
+
+/// Refreshes the declarations in every directory of an application that imports
+/// the `gpui` module.
+///
+/// One file at the root is enough for an editor that has the whole application
+/// open, and not enough for anything else: a subdirectory opened on its own, a
+/// tool pointed at one file, a script vendored elsewhere. Since the file is
+/// generated and ignored rather than committed, a copy per directory costs
+/// nothing anybody has to look at.
+///
+/// Failures are collected rather than raised. A directory that cannot be written
+/// is a worse editing experience, not a reason to refuse to run the application.
+pub fn refresh_tree(root: &Path) -> Vec<PathBuf> {
+    directories_importing_gpui(root)
+        .into_iter()
+        .filter_map(|directory| match refresh(&directory) {
+            Ok(written) => written,
+            Err(error) => {
+                tracing::debug!("could not write {}: {error}", directory.display());
+                None
+            }
+        })
+        .collect()
+}
+
+/// Directories holding at least one script that imports `gpui`.
+///
+/// Bounded the way the source watcher is bounded, and for the same reason: an
+/// application directory is whatever someone pointed the runtime at, and a
+/// symlink farm or a vendored tree must not turn a startup step into an
+/// unbounded walk.
+fn directories_importing_gpui(root: &Path) -> Vec<PathBuf> {
+    const MAX_DEPTH: usize = 8;
+    const MAX_FILES: usize = 4_096;
+    const SKIPPED: [&str; 2] = ["node_modules", "target"];
+
+    let mut found = Vec::new();
+    let mut pending = vec![(root.to_path_buf(), 0usize)];
+    let mut seen = 0usize;
+
+    while let Some((directory, depth)) = pending.pop() {
+        let mut imports = false;
+
+        for entry in std::fs::read_dir(&directory)
+            .into_iter()
+            .flatten()
+            .flatten()
+        {
+            let path = entry.path();
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+
+            if name.starts_with('.') || SKIPPED.contains(&name.as_ref()) {
+                continue;
+            }
+
+            if path.is_dir() {
+                if depth < MAX_DEPTH {
+                    pending.push((path, depth + 1));
+                }
+                continue;
+            }
+
+            seen += 1;
+            if seen > MAX_FILES {
+                return found;
+            }
+
+            if !imports
+                && matches!(
+                    path.extension().and_then(|extension| extension.to_str()),
+                    Some("js" | "mjs")
+                )
+                && std::fs::read_to_string(&path).is_ok_and(|source| imports_gpui(&source))
+            {
+                imports = true;
+            }
+        }
+
+        if imports {
+            found.push(directory);
+        }
+    }
+
+    found
+}
+
+/// Whether a script imports the built-in module.
+///
+/// Matching the quoted specifier rather than the bare word, so a file that only
+/// mentions gpui in a comment or a string does not collect a copy it has no use
+/// for.
+fn imports_gpui(source: &str) -> bool {
+    ["\"gpui\"", "'gpui'"]
+        .iter()
+        .any(|specifier| source.contains(specifier))
+}
+
+/// Rewrites the declarations beside an application when they are not current.
+///
+/// This is what a host should call in a development build. An application never
+/// has to remember to regenerate anything, and cannot end up editing against a
+/// runtime it is not running: the process that will execute the script is the
+/// one that describes it.
+///
+/// Nothing is written when the file already matches, so an editor watching the
+/// directory is not woken on every launch, and a read-only checkout is not an
+/// error worth reporting. Returns the path only when it actually wrote.
+pub fn refresh(directory: &Path) -> std::io::Result<Option<PathBuf>> {
+    let path = directory.join(FILE_NAME);
+    let current = declarations();
+
+    if std::fs::read_to_string(&path).is_ok_and(|committed| committed == current) {
+        return Ok(None);
+    }
+
+    std::fs::write(&path, current)?;
+    Ok(Some(path))
 }
 
 /// Writes the declarations next to an application, so an editor picks them up.
@@ -253,10 +381,12 @@ fn nullary_styles(names: &[&'static str]) -> String {
 }
 
 const PREAMBLE: &str = "\
-// The built-in `gpui` module, as TypeScript declarations.
+// Auto-generated — add `gpui.d.ts` to your .gitignore.
 //
-// Generated by gpui-shell — do not edit. Regenerate with
-// `gpui-shell types <directory>` after upgrading the runtime.
+// The built-in `gpui` module, as TypeScript declarations, for script API
+// {version}. Do not edit: gpui-shell rewrites this on every run, in every
+// directory that imports the module, from the runtime that is about to execute
+// the script. A committed copy could only ever be the stale one.
 //
 // The style surface here is generated from the same tables the runtime
 // dispatches through, so a style method that type-checks exists at run time,
@@ -490,9 +620,37 @@ const CONSTRUCTORS: &str = r#"
    */
   export function require_api(version: string): string;
   /**
+   * The native modules this host registered, declared by the application.
+   *
+   * Empty here, because only the host knows what it granted. An application
+   * describes its own in a `.d.ts` beside its source, and from then on
+   * `native("...")` is typed — the module name is checked, and its functions
+   * complete:
+   *
+   * ```ts
+   * declare module "gpui" {
+   *   interface NativeModules {
+   *     market: {
+   *       quotes(): { symbol: string; last: string }[];
+   *       watch(symbol: string): boolean;
+   *     };
+   *   }
+   * }
+   * ```
+   *
+   * Declaring nothing costs nothing: with no entries the untyped overload
+   * below still applies, so an application that never writes one keeps working
+   * exactly as before.
+   */
+  export interface NativeModules {}
+
+  /**
    * A module the host registered in Rust. Throws when no such module exists,
    * naming the ones that do.
    */
+  export function native<Name extends keyof NativeModules & string>(
+    module: Name,
+  ): NativeModules[Name];
   export function native(module: string): Record<string, (...args: any[]) => any>;
 "#;
 
@@ -788,6 +946,42 @@ mod tests {
                 "`{name}` cannot be written as a TypeScript member name"
             );
         }
+    }
+
+    /// Refreshing writes once and then leaves the file alone.
+    ///
+    /// The second half is what makes this safe to run on every launch: an editor
+    /// watching the directory is not woken, and a checkout whose files are
+    /// read-only is not an error nobody can act on.
+    #[test]
+    fn refresh_writes_once_and_then_says_nothing() {
+        let directory =
+            std::env::temp_dir().join(format!("gpui-shell-refresh-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&directory);
+        std::fs::create_dir_all(&directory).expect("a temporary directory");
+
+        let written = refresh(&directory).expect("the first refresh");
+        assert_eq!(
+            written.as_deref(),
+            Some(directory.join(FILE_NAME).as_path())
+        );
+        assert_eq!(
+            std::fs::read_to_string(directory.join(FILE_NAME)).expect("the file"),
+            declarations()
+        );
+
+        assert_eq!(
+            refresh(&directory).expect("the second refresh"),
+            None,
+            "an up-to-date file must not be rewritten"
+        );
+
+        // A stale one is replaced, which is the case this exists for.
+        std::fs::write(directory.join(FILE_NAME), "// from an older runtime\n")
+            .expect("overwriting");
+        assert!(refresh(&directory).expect("the third refresh").is_some());
+
+        let _ = std::fs::remove_dir_all(&directory);
     }
 
     #[test]

@@ -63,12 +63,19 @@ fn main() {
     let arguments = match parse(std::env::args().skip(1)) {
         Ok(Invocation::Run(arguments)) => arguments,
         Ok(Invocation::Types(directory)) => {
+            // The root always, whether or not anything there imports the module:
+            // this command was asked for explicitly, and an empty directory is a
+            // reasonable place to start an application. Every other directory
+            // that imports `gpui` comes along with it.
             match gpui_shell::typings::write_to(&directory) {
                 Ok(path) => println!("wrote {}", path.display()),
                 Err(error) => {
                     eprintln!("gpui-shell: {error}");
                     std::process::exit(1);
                 }
+            }
+            for path in gpui_shell::typings::refresh_tree(&directory) {
+                println!("wrote {}", path.display());
             }
             return;
         }
@@ -310,6 +317,19 @@ fn run(arguments: Arguments) {
             // inside the window builder and hands the result back out here.
             grant_local_access(&root);
 
+            // The declarations describe the runtime that is about to run this
+            // script, which is the only version worth editing against. Doing it
+            // here rather than asking the author to remember a command is what
+            // keeps a stale `gpui.d.ts` from being possible at all.
+            //
+            // Every launch rather than development mode only: this binary runs an
+            // application from its source directory, which is where somebody is
+            // editing. Nothing is written when the file already matches, and a
+            // directory that refuses the write is logged rather than fatal.
+            for path in gpui_shell::typings::refresh_tree(&root) {
+                tracing::info!("wrote {}", path.display());
+            }
+
             let module = runtime.load_app(&root, ENTRY).map_err(|error| {
                 eprintln!("{error}");
                 error.to_string()
@@ -406,6 +426,14 @@ fn check(arguments: CheckArguments) -> ! {
             };
 
             grant_local_access(&root);
+
+            // A check is the closest thing this runtime has to a compiler, so it
+            // leaves the editor correct on its way past: whatever it reports, the
+            // declarations beside the source are the ones it just checked
+            // against.
+            for path in gpui_shell::typings::refresh_tree(&root) {
+                tracing::debug!("wrote {}", path.display());
+            }
 
             let module = runtime.load_app(&root, ENTRY);
             let window_sink = sink.clone();

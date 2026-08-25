@@ -20,11 +20,11 @@ The engine choice is the one decision in this runtime that could not be settled 
 
 Everything else in the design follows from GPUI's element model and can be argued about with a whiteboard. The engine cannot, because the whole approach stands or falls on a single number: **how long it takes script code to describe a realistic interface.** Every method call in a builder chain is one crossing of the language boundary, and if that per-call cost is too high, no amount of design fixes it.
 
-What the number is *compared against* changed once script renders stopped being frame renders. A description is built when application state moves and [replayed by every frame until it moves again](./state.md#when-render-runs), so the cost below is paid per user action rather than per repaint. That makes the boundary cost matter less than it did — but it does not make it free, and it is still the number that would decide a second engine.
+What the number is *compared against* changed once a script `render` stopped being a frame render. A description is built when application state moves and [replayed by every frame until it moves again](./state.md#when-render-runs), so the cost below is paid per user action rather than per repaint. That makes the boundary cost matter less than it did — but it does not make it free, and it is still the number that would decide a second engine.
 
 So the seam is a way of not having to be right in advance. The decision is made by measurement, and a second engine would be a new module rather than a rewrite.
 
-JavaScript is the default for one reason, and it is a product reason rather than a technical one: **application code reads better in it.** With presentation owned by the script, the vast majority of an application is composing elements, writing styles and handling events — and the readability of that code decides whether the runtime is worth using. Classes, arrow functions, template literals and destructuring land squarely on that kind of code. The secondary benefit is that JavaScript is the best-covered language in model training data, which matters for one of the [three audiences](./index.md#who-it-is-for).
+JavaScript is the default for one reason, and it is a product reason rather than a technical one: **application code reads better in it.** With presentation owned by the script, the vast majority of an application is composing elements, writing styles and handling events — and the readability of that code decides whether the runtime is worth using. Classes, arrow functions, template literals and destructuring land squarely on that kind of code. The secondary benefit is that JavaScript is the best-covered language in model training data, which matters for one of the [three settings](./index.md#where-it-fits).
 
 The cost is stated rather than glossed over. QuickJS **has no JIT** — it is a bytecode interpreter, so hot loops and per-call costs will not beat a JIT-compiled engine on principle. That is a real trade, and the benchmark below is where it would show up if it mattered.
 
@@ -40,26 +40,58 @@ cargo test -p gpui-shell --release --test benchmark -- --nocapture
 | --- | --- | --- | --- |
 | **A** | script → snapshot | **1.4 ms** | once per application change |
 | **B** | snapshot → GPUI elements | **0.7 ms** | every frame |
-| **C** | a full cached repaint | **1.8 ms**, **0 script renders** | every frame |
+| **C** | a full cached repaint | **1.8 ms**, **no JavaScript at all** | every frame |
 
 Run it in release or the figures mean nothing; the absolute numbers move with the machine.
 
-**C is the one that is an assertion rather than a timing.** Fifty repaints of an unchanged view enter the VM zero times. If that number is ever not zero, the runtime has regressed to charging script cost per frame, and the benchmark fails rather than merely getting slower.
+**C is the one that is an assertion rather than a timing.** Fifty repaints of an unchanged view run no JavaScript at all. If a single one of them ever does, the runtime has regressed to charging script cost per frame, and the benchmark fails rather than merely getting slower.
 
-A fourth test walks the same panel up through 2,103, 4,203 and 8,403 nodes, behind `--ignored` because the largest size costs seconds:
+One size cannot show which of the three costs scale, so a fourth test walks the same panel up to 8,403 nodes. It sits behind `--ignored` because the largest size takes seconds:
 
 ```bash
 cargo test -p gpui-shell --release --test benchmark -- --ignored --nocapture
 ```
 
-It exists because one size cannot show which of the three costs scale. A and B both do, close to linearly. What does not move is the render count — zero at every size — and the ratio between a real frame and one that rebuilt its description, which stays near 1.8× across the whole range. The [overview page](./index.md#performance-script-cost-is-paid-per-change-not-per-frame) has the table.
+Describing costs 1.1 ms at 443 nodes, then 5.1, 10.3 and 20.5 ms as the panel grows to 2,103, 4,203 and 8,403. A whole frame — B plus GPUI's layout and paint, which is what C measures — costs 1.3, 5.9, 12.0 and 27.0 ms. Both scale close to linearly with the node count. What does not scale is the JavaScript: no frame at any size runs a line of it. Three things that settles:
 
-Read A against the design's own budget — 1.5 ms for a script render — and it clears it, but with less room than hoped: the budget was derived from roughly 150 ns per recorded operation across 800 nodes, and the measurement reports about 320 ns across 443. A panel three times this size would not fit in one pass. What changed is how often that matters. At 120 FPS the old model would have spent 168 ms of every second describing an interface nobody had changed; the same panel now costs 1.4 ms when the user actually changes something, and 0.7 ms to repaint. The levers the design names for genuinely enormous panels — driving the per-call cost down, memoizing unchanged subtrees, virtualizing long lists — are still [not implemented](./elements.md#not-there-yet), and are now optimizations rather than prerequisites.
+- **4,203 nodes is where the snapshot decides the outcome.** 12 ms a frame holds 60 FPS; rebuilding the description for every frame would cost 22 ms and drop them. Below that size both models have room to spare, which is worth knowing before reading too much into the ratio.
+- **The description cost did not vanish, it moved.** 20 ms for 8,403 nodes is paid when the user acts rather than sixty times a second, but it is still 20 ms — which is why the per-call cost remains the number a second engine would be judged on.
+- **Past a few thousand nodes the bill is not script at all.** 27 ms a frame at that size, with the VM untouched, is materialization, layout and paint. A view that large wants virtualizing; a faster engine would not move it.
+
+Read A against the design's own budget — 1.5 ms for one script `render` — and it clears it, but with less room than hoped: the budget was derived from roughly 150 ns per recorded operation across 800 nodes, and the measurement reports about 320 ns across 443. A panel three times this size would not fit in one pass. What changed is how often that matters. At 120 FPS the old model would have spent 168 ms of every second describing an interface nobody had changed; the same panel now costs 1.4 ms when the user actually changes something, and 0.7 ms to repaint. The levers the design names for genuinely enormous panels — driving the per-call cost down, memoizing unchanged subtrees, virtualizing long lists — are still [not implemented](./elements.md#not-there-yet), and are now optimizations rather than prerequisites.
 
 Two implementation choices came out of the same measurement and are visible in the runtime today:
 
 - **Elements are plain objects sharing one prototype**, with the style methods installed on that prototype by a JavaScript prelude that loops over the name list. Not one class per element, not a fresh closure per property access, and not 3,000 Rust closures.
 - **The diagnostic `Proxy` prototype is not the default.** Wrapping the prototype in a `Proxy` so a mistyped method can be named costs about 30% of the whole description pass, so the runtime keeps a plain prototype and re-runs a failed render once against the diagnostic one purely to produce the message. See [Styling](./styling.md#unknown-methods).
+
+## Threads and memory
+
+The VM and GPUI's `App` share one thread — the main one — inside one process. `ShellRuntime` is an `Rc` with `RefCell` interiors, so it is neither `Send` nor `Sync`: the arrangement is enforced by the compiler rather than described in a comment. There is no worker and no second VM.
+
+<img class="architecture-light" src="/shell-threads-memory-light.svg" alt="The host process. On the main thread, GPUI's App and the QuickJS VM exchange plain function calls across the FFI boundary. A background thread holds only timers, which resolve back onto the foreground executor. Memory splits four ways: the JavaScript heap capped at 256 MiB, the description arena owned by the snapshot, the callback arena keyed by snapshot generation, and GPUI's frame arena which lasts one draw.">
+<img class="architecture-dark" src="/shell-threads-memory-dark.svg" alt="The host process. On the main thread, GPUI's App and the QuickJS VM exchange plain function calls across the FFI boundary. A background thread holds only timers, which resolve back onto the foreground executor. Memory splits four ways: the JavaScript heap capped at 256 MiB, the description arena owned by the snapshot, the callback arena keyed by snapshot generation, and GPUI's frame arena which lasts one draw.">
+
+Two things do run elsewhere, and neither touches the VM. Timers (`gpui.sleep`, `gpui.timer`) count down on the background executor and resolve back onto the foreground one, so the continuation itself runs on the main thread in a `Task` scope. And GPUI does its own work on its own threads once the elements exist.
+
+Three consequences matter when profiling:
+
+- **A builder call is a function call.** It crosses the FFI boundary and nothing else — no serialization, no IPC round trip, no copy beyond the conversion of the argument itself. That is why the per-call cost is measured in hundreds of nanoseconds.
+- **Blocking the VM blocks the frame.** The synchronous `fs` surface is the sharp edge here: a read from an event handler stalls the same thread that is about to paint.
+- **A runaway script cannot be preempted from another thread.** What cuts it off is the interpreter's own interrupt — 50 ms inside `render`, 500 ms inside an event handler — and a `catch` block cannot swallow it.
+
+Memory splits four ways, each with a different owner and a different moment of release:
+
+| What | Where it lives | Released when |
+| --- | --- | --- |
+| Objects, closures, module scope | The QuickJS heap, capped at 256 MiB | Its GC runs, or the runtime drops |
+| The element description arena | Rust; moved into the snapshot it produced | That snapshot drops |
+| Registered callbacks | A Rust arena keyed by snapshot generation | That snapshot drops and retires its generation |
+| GPUI elements | GPUI's own frame arena | The draw that built them ends |
+
+A view holds **two** snapshots rather than one: the live description, and the one it replaced. The previous is kept a generation longer because a frame already in flight may still be reading it, and releasing it early would retire callbacks that frame still needs.
+
+Nothing that crosses the boundary is an object. An element handle is an integer index into the arena, retained host state — an `InputState`'s rope, cursor and selection — lives in a GPUI entity the script addresses through a handle, and every argument and result is plain data.
 
 ## What is on each side
 
@@ -67,7 +99,7 @@ The proportion is itself the argument for the seam: above it is the actual desig
 
 | Above the seam — engine independent | Below the seam — what an engine implements |
 | --- | --- |
-| The render snapshot: what a script render produces and what frames replay | Converting an engine value to the runtime's neutral value type |
+| The render snapshot: what one script `render` produces and what frames replay | Converting an engine value to the runtime's neutral value type |
 | The element description arena, single-use checking, and the debug tree | The module system's shape — ES modules and a resolver, versus `require` and a path list |
 | Materialization: descriptions into real GPUI elements, pure Rust | Method dispatch — functions on a shared prototype, versus an `__index` metamethod |
 | The call scope: phases, generations, and the crate's only `unsafe` | The callback handle type |
@@ -88,7 +120,7 @@ The contract's load-bearing rule is about *when*, not what: **the engine's `buil
 
 If a second engine is ever added, **scripts will not be portable between them.** They would be different languages: a view is `class Counter extends View` in JavaScript and would be something else anywhere else.
 
-What has to be the same is everything around them — the binding surface, the render protocol, the phase rules, the capability model, the error messages. The requirement the design imposes is behavioural: the same use case must produce the **same description tree** under either engine, and the same application activity must produce the **same number of script renders**. That is what would keep the seam from rotting into two divergent runtimes.
+What has to be the same is everything around them — the binding surface, the render protocol, the phase rules, the capability model, the error messages. The requirement the design imposes is behavioural: the same use case must produce the **same description tree** under either engine, and the same application activity must trigger the **same number of script `render` calls**. That is what would keep the seam from rotting into two divergent runtimes.
 
 ## Known gap: async is not fully behind the seam
 

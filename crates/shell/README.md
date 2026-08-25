@@ -264,6 +264,65 @@ Deliberately absent:
 The design, what is implemented, and what is not are in
 [`docs/gpui-shell.md`](../../docs/gpui-shell.md).
 
+## Types for the Script
+
+`import ... from "gpui"` is opaque without declarations, and the style surface
+is far too large to memorize. **There is nothing to run.** Every `gpui-shell`
+invocation — running an application, `check`, `types` — writes `gpui.d.ts` into
+each directory that imports the module, from the runtime it is about to use:
+
+```bash
+cargo run -p gpui-shell -- path/to/app           # runs it, and writes them
+cargo run -p gpui-shell -- check path/to/app     # checks it, and writes them
+cargo run -p gpui-shell -- types path/to/app     # writes them and nothing else
+```
+
+Add `gpui.d.ts` to `.gitignore`; the file's own first line says so.
+
+The style methods, their argument types and the colour-token union are generated
+from the tables the runtime dispatches through, so a name that type-checks is a
+name the dispatcher accepts.
+
+Host-registered native modules cannot be generated — only the host knows what it
+granted — so an application declares its own and gets a checked module name with
+completing functions:
+
+```ts
+declare module "gpui" {
+  interface NativeModules {
+    market: { quotes(): Quote[]; watch(symbol: string): boolean };
+  }
+}
+```
+
+`crates/story/js/quotes/` has both files plus a `jsconfig.json` that turns on
+checking, and is the shape to copy.
+
+### Keeping it current
+
+`gpui.d.ts` is an **output**, not a source, and a stale one is worse than none:
+it completes methods that no longer exist and refuses ones that do, and nothing
+about editing against it feels wrong until the script runs. So it is not
+something to write down and remember — it is rewritten by whatever is about to
+run the script.
+
+| Situation | What keeps it current |
+| --- | --- |
+| The `gpui-shell` binary | Every run, `check` and `types` refreshes every directory that imports the module. Nothing to remember. |
+| An application embedded in a host | The host calls `gpui_shell::typings::refresh_tree(&app_root)` where it loads the application. Same guarantee, one line. |
+
+Nothing is written when the file already matches, so an editor watching the
+directory is not woken on every launch and a read-only checkout is not an error.
+A directory that refuses the write is logged, never fatal.
+
+Do not commit it. This repository ignores `gpui.d.ts` everywhere, including
+beside its own example and story scripts — a committed copy could only ever be
+the stale one. What *is* committed is the hand-written part: a `jsconfig.json`
+that turns checking on, and the application's own native-module declarations.
+
+The header names the script API version it was generated for, so a mismatch is
+visible on the first line rather than at the first call.
+
 ## Embedding It
 
 Three host-side calls carry most of the weight:

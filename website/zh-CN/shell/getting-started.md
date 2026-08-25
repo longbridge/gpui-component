@@ -1,24 +1,59 @@
 ---
-title: 快速开始
-description: 运行示例应用、写出最小应用，并在不开窗口的情况下检查它。
+title: Getting Started
+description: 把运行时接进一个 Rust 应用、写它要加载的脚本，并在不开窗口的情况下检查这个脚本。
 order: 2
 ---
 
-# 快速开始
+# Getting Started
 
-## 运行示例
+`gpui-shell` 首先是给一个 Rust GPUI 应用加上 JavaScript 扩展点的办法：由宿主构建运行时、决定脚本能碰到什么，并把脚本视图挂在它想挂的位置。直接运行一个脚本目录——也就是下面那个 `gpui-shell` 二进制——是随之而来的开发便利，而不是它的定位。
 
-`gpui-shell` 没有发布到 crates.io。克隆仓库后，在仓库根目录运行自带的示例应用：
+## 把运行时接进 Rust 应用
 
-```bash
-cargo run -p gpui-shell -- examples/js_todolist
+`gpui-shell` 二进制本身是一个很薄的宿主：解析命令行、装上日志 sink、建一个运行时、开一个窗口。任何嵌入这个库的宿主做的也是同样四件事。
+
+```rust
+use gpui_shell::{Capabilities, ScriptView, ShellRoot, ShellRuntime};
+
+gpui_platform::application()
+    .with_assets(gpui_shell::assets::AppAssets::new(root.clone()))
+    .run(move |cx| {
+        // 初始化 gpui-base、shell 的默认 token 调色板，以及样式反射表。
+        gpui_shell::init(cx);
+
+        let runtime = ShellRuntime::new().expect("script runtime");
+        runtime.set_global(cx);
+
+        // 在宿主开口之前，什么都不允许。
+        gpui_shell::set_store_path(store_directory.join("store.json"));
+        gpui_shell::set_capabilities(
+            Capabilities::new()
+                .with_read_roots([root.clone()])
+                .with_write_roots([store_directory.clone()])
+                .store(true),
+        );
+
+        let view_type = runtime.load_app(&root).expect("main.js");
+
+        cx.open_window(Default::default(), move |window, cx| {
+            let object = runtime.instantiate(&view_type, window, cx).expect("view");
+            let content = cx.new(|_| ScriptView::new(runtime.clone(), object));
+            // shell 窗口的第一层视图永远是 ShellRoot。
+            cx.new(|cx| ShellRoot::new(content.into(), window, cx))
+        })
+        .expect("window");
+    });
 ```
 
-窗口里会出现一个可用的 todo list：带留存状态的输入框、受控 checkbox、一个确认 dialog、一个 toast、从应用自身目录加载的图标，以及在未获授权时退化为内存存储的持久化。它的目的是把整个运行时都跑一遍，而不是做到最小——哪里坏了，通常先在这里露出来。
+其中两行承载的是规则而不是机制。
 
-参数是一个**目录**，不是文件。运行时解析该目录、读取其中的 `main.js`、取出该模块 default 导出的类、构造一个实例，并把它挂载为窗口的根视图。
+**`ShellRoot` 必须是窗口的第一层视图**，正如 `gpui-component` 窗口的第一层视图必须是 `Root`。它持有 dialog 栈、sheet、toast 栈、焦点恢复与 Tab 导航。`cx.open_dialog` 一族是通过窗口找到它的；用其他视图作为根打开的窗口，会用一条明确的信息拒绝这些调用。
 
-## 最小的应用
+**能力默认为空。** `Capabilities::default()` 什么都不授予——没有文件、没有存储、没有剪贴板、没有进程。由宿主决定，因为只有宿主知道它对即将运行的这段代码信任到什么程度。见 [Capabilities](./capabilities.md)。
+
+同时也要装上 `tracing` subscriber。运行时通过 `tracing` 报告脚本错误、未处理的 promise rejection 以及 phase 非法的调用；没有 subscriber 时，这些全部被丢弃，症状是一个安静地不再响应的界面。
+
+## 它加载的那个脚本
 
 一个文件就够了。新建一个目录，放一个 `main.js`：
 
@@ -67,13 +102,25 @@ cargo run -p gpui-shell -- hello
 
 **`"gpui"` 是唯一的内建模块。** 其余 `import` 只能解析到应用目录之内。这里没有 npm，没有 `require`，也没有 `node:fs`。
 
-**`main.js` 必须 `export default` 一个继承 `View` 的类。** `init` 在视图创建时只执行一次；`render` 返回恰好一个元素，并且是在视图被置为失效时执行，而不是每帧执行——见 [`render` 什么时候执行](./state.md#render-什么时候执行)。
+**`main.js` 必须 `export default` 一个继承 `View` 的类。** `init` 在视图创建时只执行一次；`render` 返回恰好一个元素，并且是在视图失效时执行，而不是每帧执行——见 [`render` 什么时候执行](./state.md#render-什么时候执行)。
 
 **样式方法是 snake_case，你自己写的代码是 camelCase。** `items_center`、`on_click`、`text_color`、`gap_2` 保留了 Rust 的拼写，因为无参样式接口是从 GPUI 的反射表生成的，而不是手写的。应用自己声明的一切——变量、方法、对象的键——都是普通的 JavaScript camelCase。这个对比是刻意的：snake_case 的调用是宿主接口，camelCase 的是你的代码。
 
 **没有任何东西会自动重绘。** 没有 signal，没有 `useState`，也没有依赖数组。改完状态，自己调用 `cx.notify()`。
 
-## 不运行也能检查应用
+## 单独运行一个脚本
+
+一个脚本目录也可以直接跑起来，不必先写宿主。自带的示例就是这么运行的；一段脚本在被它将来所属的那个应用加载之前，通常也是这样开发的。`gpui-shell` 没有发布到 crates.io，所以先克隆仓库，再在仓库根目录运行：
+
+```bash
+cargo run -p gpui-shell -- examples/js_todolist
+```
+
+窗口里会出现一个可用的 todo list：带留存状态的输入框、受控 checkbox、一个确认 dialog、一个 toast、从应用自身目录加载的图标，以及在未获授权时退化为内存存储的持久化。它的目的是把整个运行时都跑一遍，而不是做到最小——哪里坏了，通常先在这里露出来。
+
+参数是一个**目录**，不是文件。运行时解析该目录、读取其中的 `main.js`、取出该模块 default 导出的类、构造一个实例，并把它挂载为窗口的根视图。
+
+## 不运行也能检查脚本
 
 JavaScript 没有编译器，这个运行时也不打算造一个。它补上的是编译器本该替你做的那件事：
 
@@ -81,7 +128,7 @@ JavaScript 没有编译器，这个运行时也不打算造一个。它补上的
 cargo run -p gpui-shell -- check hello
 ```
 
-`check` 会加载应用，并向一个永远不显示的窗口渲染一帧，成功退出 `0`，失败退出 `1`。因为脚本接口是动态的——未知的样式方法、类型不对的参数、被重复使用的元素，都是运行期事实——所以"构建并渲染一次"是唯一诚实的检查方式。它能报出：
+`check` 会加载应用，并向一个永远不显示的窗口渲染一帧，成功退出 `0`，失败退出 `1`。因为脚本接口是动态的——未知的样式方法、类型不对的参数、被重复使用的元素，都是运行期事实——所以“构建并渲染一次”是唯一诚实的检查方式。它能报出：
 
 - 语法错误，并带上脚本自身的调用栈；
 - 无法解析的 import，以及越出应用目录的 import；
@@ -98,7 +145,7 @@ cargo run -p gpui-shell -- check hello
 cargo run -p gpui-shell -- check hello --print-spec
 ```
 
-这份输出是 arena 自己的调试转储——物化之前的组件与记录操作构成的树。当问题是"我这条链到底记录了什么"时，它很有用。
+这份输出是 arena 自己的调试输出——在它变成真实元素之前，由组件与记录操作构成的那棵树。当问题是“我这条链到底记录了什么”时，它很有用。
 
 ## 生成 TypeScript 声明
 
@@ -118,7 +165,7 @@ cargo run -p gpui-shell -- types hello
 
 升级运行时之后重新生成即可；输出是确定性的，所以 diff 是可以审阅的。
 
-## 开发时的循环
+## 存盘即重载
 
 ```bash
 cargo run -p gpui-shell -- hello --watch
@@ -130,53 +177,8 @@ cargo run -p gpui-shell -- hello --dev      # 隐含 --watch
 重载会在碰到实时视图之前，先把所有可能失败的工作做完。如果新代码加载失败，之前的视图继续运行，错误输出到 stderr，同时窗口里出现一个带固定 id 的 toast；下一次成功重载会把它撤回。存了一份坏代码，不会因此丢掉窗口。
 
 ::: warning `--dev` 还没有接完
-`--dev` 目前只启用源码监听。它本该打开的沙箱放宽项——恢复 `eval`、让内建原型保持可写——还无法从二进制里触达，运行时会打印一条警告说明这一点。见 [能力](./capabilities.md#沙箱)。
+`--dev` 目前只启用源码监听。它本该打开的沙箱放宽项——恢复 `eval`、让内建原型保持可写——还无法从二进制里触达，运行时会打印一条警告说明这一点。见 [Capabilities](./capabilities.md#沙箱)。
 :::
-
-## 在 Rust 宿主中嵌入运行时
-
-`gpui-shell` 二进制本身是一个很薄的宿主：解析命令行、装上日志 sink、建一个运行时、开一个窗口。任何嵌入这个库的宿主做的也是同样四件事。
-
-```rust
-use gpui_shell::{Capabilities, ScriptView, ShellRoot, ShellRuntime};
-
-gpui_platform::application()
-    .with_assets(gpui_shell::assets::AppAssets::new(root.clone()))
-    .run(move |cx| {
-        // 初始化 gpui-base、shell 的默认 token 调色板，以及样式反射表。
-        gpui_shell::init(cx);
-
-        let runtime = ShellRuntime::new().expect("script runtime");
-        runtime.set_global(cx);
-
-        // 在宿主开口之前，什么都不允许。
-        gpui_shell::set_store_path(store_directory.join("store.json"));
-        gpui_shell::set_capabilities(
-            Capabilities::new()
-                .with_read_roots([root.clone()])
-                .with_write_roots([store_directory.clone()])
-                .store(true),
-        );
-
-        let view_type = runtime.load_app(&root).expect("main.js");
-
-        cx.open_window(Default::default(), move |window, cx| {
-            let object = runtime.instantiate(&view_type, window, cx).expect("view");
-            let content = cx.new(|_| ScriptView::new(runtime.clone(), object));
-            // shell 窗口的第一层视图永远是 ShellRoot。
-            cx.new(|cx| ShellRoot::new(content.into(), window, cx))
-        })
-        .expect("window");
-    });
-```
-
-其中两行承载的是规则而不是机制。
-
-**`ShellRoot` 必须是窗口的第一层视图**，正如 `gpui-component` 窗口的第一层视图必须是 `Root`。它持有 dialog 栈、sheet、toast 栈、焦点恢复与 Tab 导航。`cx.open_dialog` 一族是通过窗口找到它的；用其他视图作为根打开的窗口，会用一条明确的信息拒绝这些调用。
-
-**能力默认为空。** `Capabilities::default()` 什么都不授予——没有文件、没有存储、没有剪贴板、没有进程。由宿主决定，因为只有宿主知道它对即将运行的这段代码信任到什么程度。见 [能力](./capabilities.md)。
-
-同时也要装上 `tracing` subscriber。运行时通过 `tracing` 报告脚本错误、未处理的 promise rejection 以及 phase 非法的调用；没有 subscriber 时，这些全部被丢弃，症状是一个安静地不再响应的界面。
 
 ## 命令一览
 

@@ -1,24 +1,60 @@
 ---
 title: Getting Started
-description: Run the bundled example, write the smallest application, and check it without opening a window.
+description: Add the runtime to a Rust application, write the script it loads, and check that script without opening a window.
 order: 2
 ---
 
 # Getting Started
 
-## Run the example
+`gpui-shell` is first of all a way to give a Rust GPUI application JavaScript extension points: the host builds the runtime, decides what a script may reach, and mounts script views where it wants them. Running a script directory on its own — the `gpui-shell` binary below — is the development convenience that comes with that, not the point of it.
 
-`gpui-shell` is not published to crates.io. Clone the repository and run the bundled application from its root:
+## Add the runtime to a Rust application
 
-```bash
-cargo run -p gpui-shell -- examples/js_todolist
+A host does four things: initialize the library, build a runtime, grant the capabilities it is willing to grant, and mount a script view under a `ShellRoot`. The `gpui-shell` binary is itself just a thin host that does exactly this.
+
+```rust
+use gpui_shell::{Capabilities, ScriptView, ShellRoot, ShellRuntime};
+
+gpui_platform::application()
+    .with_assets(gpui_shell::assets::AppAssets::new(root.clone()))
+    .run(move |cx| {
+        // Initializes gpui-base, the shell's default token palette, and the
+        // style reflection table.
+        gpui_shell::init(cx);
+
+        let runtime = ShellRuntime::new().expect("script runtime");
+        runtime.set_global(cx);
+
+        // Nothing is permitted until the host says so.
+        gpui_shell::set_store_path(store_directory.join("store.json"));
+        gpui_shell::set_capabilities(
+            Capabilities::new()
+                .with_read_roots([root.clone()])
+                .with_write_roots([store_directory.clone()])
+                .store(true),
+        );
+
+        let view_type = runtime.load_app(&root).expect("main.js");
+
+        cx.open_window(Default::default(), move |window, cx| {
+            let object = runtime.instantiate(&view_type, window, cx).expect("view");
+            let content = cx.new(|_| ScriptView::new(runtime.clone(), object));
+            // The first view of a shell window is always a ShellRoot.
+            cx.new(|cx| ShellRoot::new(content.into(), window, cx))
+        })
+        .expect("window");
+    });
 ```
 
-That opens a window with a working todo list: a text field with retained state, controlled checkboxes, a confirmation dialog, a toast, icons loaded from the application's own directory, and storage that falls back to memory when it has not been granted. It exists to exercise the runtime rather than to be minimal — if something is broken, it shows there first.
+Two of those lines carry rules rather than mechanics.
 
-The argument is a **directory**, not a file. The runtime resolves that directory, reads `main.js` from it, takes the class that module default-exports, constructs one instance, and mounts it as the window's root view.
+**`ShellRoot` must be the window's first view**, the same way `Root` must be for a `gpui-component` window. It owns the dialog stack, the sheet, the toast stack, focus restoration and Tab navigation. `cx.open_dialog` and friends reach it through the window; a window opened with any other root view refuses those calls with a message saying so.
 
-## The smallest application
+**Capabilities default to empty.** `Capabilities::default()` grants nothing at all — no file, no storage, no clipboard, no process. The host decides, because only the host knows how far it trusts the code it is about to run. See [Capabilities](./capabilities.md).
+
+Install a `tracing` subscriber too. The runtime reports script errors, unhandled promise rejections and illegal-phase calls through `tracing`; with no subscriber, every one of them is discarded and the symptom is a view that quietly stopped responding.
+
+## The script it loads
 
 One file is enough. Create a directory with a `main.js` in it:
 
@@ -73,7 +109,19 @@ Four things in that file are worth naming now, because everything else builds on
 
 **Nothing repaints on its own.** There are no signals, no `useState`, no dependency arrays. Change state, then call `cx.notify()`.
 
-## Check an application without running it
+## Running a script on its own
+
+A script directory can also be run directly, without writing a host. This is how the bundled example runs, and how a script is usually developed before it is loaded by the application that will own it. `gpui-shell` is not published to crates.io, so clone the repository and run it from the root:
+
+```bash
+cargo run -p gpui-shell -- examples/js_todolist
+```
+
+That opens a window with a working todo list: a text field with retained state, controlled checkboxes, a confirmation dialog, a toast, icons loaded from the application's own directory, and storage that falls back to memory when it has not been granted. It exists to exercise the runtime rather than to be minimal — if something is broken, it shows there first.
+
+The argument is a **directory**, not a file. The runtime resolves that directory, reads `main.js` from it, takes the class that module default-exports, constructs one instance, and mounts it as the window's root view.
+
+## Check a script without running it
 
 JavaScript has no compiler, and this runtime does not add one. What it adds is the thing a compiler would have done for you:
 
@@ -118,7 +166,7 @@ Three things the declarations deliberately do not express, because no type could
 
 Regenerate the file after upgrading the runtime; the output is deterministic, so the diff is reviewable.
 
-## Work on an application
+## Reload on save
 
 ```bash
 cargo run -p gpui-shell -- hello --watch
@@ -132,52 +180,6 @@ A reload does all of its fallible work before it touches the live view. If the n
 ::: warning `--dev` is not fully wired up
 `--dev` currently enables source watching only. The sandbox relaxations it is meant to turn on — restoring `eval` and leaving the built-in prototypes writable — are not reachable from the binary yet, and the runtime prints a warning saying so. See [Capabilities](./capabilities.md#the-sandbox).
 :::
-
-## Embed the runtime in a Rust host
-
-The `gpui-shell` binary is a thin host: it parses a command line, installs a log sink, builds one runtime, and opens one window. Anything embedding the library does the same four things.
-
-```rust
-use gpui_shell::{Capabilities, ScriptView, ShellRoot, ShellRuntime};
-
-gpui_platform::application()
-    .with_assets(gpui_shell::assets::AppAssets::new(root.clone()))
-    .run(move |cx| {
-        // Initializes gpui-base, the shell's default token palette, and the
-        // style reflection table.
-        gpui_shell::init(cx);
-
-        let runtime = ShellRuntime::new().expect("script runtime");
-        runtime.set_global(cx);
-
-        // Nothing is permitted until the host says so.
-        gpui_shell::set_store_path(store_directory.join("store.json"));
-        gpui_shell::set_capabilities(
-            Capabilities::new()
-                .with_read_roots([root.clone()])
-                .with_write_roots([store_directory.clone()])
-                .store(true),
-        );
-
-        let view_type = runtime.load_app(&root).expect("main.js");
-
-        cx.open_window(Default::default(), move |window, cx| {
-            let object = runtime.instantiate(&view_type, window, cx).expect("view");
-            let content = cx.new(|_| ScriptView::new(runtime.clone(), object));
-            // The first view of a shell window is always a ShellRoot.
-            cx.new(|cx| ShellRoot::new(content.into(), window, cx))
-        })
-        .expect("window");
-    });
-```
-
-Two of those lines carry rules rather than mechanics.
-
-**`ShellRoot` must be the window's first view**, the same way `Root` must be for a `gpui-component` window. It owns the dialog stack, the sheet, the toast stack, focus restoration and Tab navigation. `cx.open_dialog` and friends reach it through the window; a window opened with any other root view refuses those calls with a message saying so.
-
-**Capabilities default to empty.** `Capabilities::default()` grants nothing at all — no file, no storage, no clipboard, no process. The host decides, because only the host knows how far it trusts the code it is about to run. See [Capabilities](./capabilities.md).
-
-Install a `tracing` subscriber too. The runtime reports script errors, unhandled promise rejections and illegal-phase calls through `tracing`; with no subscriber, every one of them is discarded and the symptom is a view that quietly stopped responding.
 
 ## Command reference
 

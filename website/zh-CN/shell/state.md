@@ -1,10 +1,10 @@
 ---
-title: 状态与视图
+title: State and Views
 description: 视图、init 与 render、cx.notify()、留存的输入状态，以及异步工作。
 order: 5
 ---
 
-# 状态与视图
+# State and Views
 
 视图是这个运行时里唯一有身份、能跨帧存活、并且由 GPUI 拥有的东西。其余一切——元素、回调、传给某次调用的 `cx`——都属于产生它的那一次调用。
 
@@ -34,7 +34,7 @@ render(cx) must return an element built with gpui
 
 `main.js` 必须 `export default` 一个视图类。宿主构造一个实例并把它挂载为窗口的根视图；default 导出不是类的模块会被拒绝，并说明原因。
 
-永远不要把元素存在实例上。见 [元素](./elements.md#元素是一次性的)。
+永远不要把元素存在实例上。见 [Elements](./elements.md#元素是一次性的)。
 
 ## `cx.notify()`
 
@@ -71,9 +71,9 @@ snapshot 只在有东西让它失效时才重建：
 - 事件回调或异步任务里的 `cx.notify()`
 - [热重载](./getting-started.md)替换了脚本
 - 主题切换——因为 `bg("surface")` 是在 `render` 执行时解析成真实颜色的，已经烘进了 snapshot
-- 宿主调用 `ScriptView::refresh`——Rust 用它表示「我改了脚本会读到的状态」（通过[原生模块](./capabilities.md)）。宿主侧单纯的 `cx.notify()` 只是重绘，不会跑脚本：这是两个不同的请求
+- 宿主调用 `ScriptView::refresh`——Rust 用它表示“我改了脚本会读到的状态”（通过[原生模块](./capabilities.md)）。宿主侧单纯的 `cx.notify()` 只是重绘，不会跑脚本：这是两个不同的请求
 
-其余情况都在 Rust 里复用你已经产出的那份描述，不进入 VM。
+其余情况都在 Rust 里复用你已经产出的那份描述，不执行任何 JavaScript。
 
 三条值得记住的推论：
 
@@ -92,7 +92,7 @@ snapshot 只在有东西让它失效时才重建：
 | `render` | 构建元素树 | 读状态、构建元素、注册回调 | `notify`、打开浮层、创建留存状态 |
 | `event` | 处理点击或变更 | 全部 | 阻塞 |
 | `task` | 恢复异步工作 | 全部 | 阻塞 |
-| `layout` | 在 GPUI 布局阶段渲染一个虚拟化项 | 读状态、构建元素 | `notify`、打开浮层、创建留存状态 |
+| `layout` | 在 GPUI 布局过程中渲染一个虚拟化项 | 读状态、构建元素 | `notify`、打开浮层、创建留存状态 |
 
 `cx.phase()` 返回当前 phase，不在任何宿主调用中时返回 `"none"`。
 
@@ -107,7 +107,7 @@ request a re-render from an event handler instead
 
 ## `cx` 属于它所在的调用
 
-在 GPUI 里 `&mut Window` 与 `&mut App` 是借用：它们的存活期恰好是一次调用。脚本对象比任何借用都活得久，所以脚本侧的 `cx` 不能持有它们。它持有的是一个**代次号**，每次使用都与实时的作用域栈比对。
+在 GPUI 里 `&mut Window` 与 `&mut App` 是借用：它们的存活期恰好是一次调用。脚本对象比任何借用都活得久，所以脚本侧的 `cx` 不能持有它们。它持有的是一个 **generation 编号**，每次使用都与实时的作用域栈比对。
 
 把 `cx` 留到调用之外，得到的是一条错误，而不是一帧被破坏的画面：
 
@@ -116,7 +116,7 @@ cx is no longer valid: it was captured during an earlier call and used later.
 Use gpui.spawn or take cx from the callback arguments instead.
 ```
 
-`cx` 上除了函数什么都没有——`Object.keys(cx)` 只看得到方法，看不到代次——所以脚本无法伪造一个。
+`cx` 上除了函数什么都没有——`Object.keys(cx)` 只看得到方法，看不到 generation——所以脚本无法伪造一个。
 
 最常撞上这条的是 `await`：
 
@@ -128,7 +128,7 @@ async save(cx) {
 }
 ```
 
-`await` 会把控制权交回宿主，调用帧随之消失，借用也一起消失。`with_cx(fn)` 用来取一个属于"当前正在运行的这次调用"的新 `cx`。
+`await` 会把控制权交回宿主，调用帧随之消失，借用也一起消失。`with_cx(fn)` 用来取一个属于“当前正在运行的这次调用”的新 `cx`。
 
 ## 留存状态
 
@@ -163,7 +163,7 @@ render() {
 | `state.release()` | 释放句柄 |
 | `Input.new(state)` | 渲染它的元素 |
 
-**在 `init` 或事件回调里创建，绝不要在 `render` 里创建。** 创建实体需要一个实时窗口，而渲染阶段本来也是最不该做这件事的地方：
+**在 `init` 或事件回调里创建，绝不要在 `render` 里创建。** 创建实体需要一个实时窗口，而 `render` 本来也是最不该做这件事的地方：
 
 ```text
 InputState.new(...) cannot run during render; create state in init()
@@ -191,7 +191,7 @@ this.draft.on("submit", (event, cx) => this.add(cx));
 | `focus` | 获得焦点 |
 | `blur` | 失去焦点 |
 
-与渲染期注册的 `on_click` 不同，这个订阅**活得比创建它的那次渲染更久**。订阅由运行时的句柄存储持有而不是由脚本持有，因为脚本没有地方放它，而"因为某个值被回收所以处理函数不再触发"是那种没人找得到的 bug。它随句柄一起释放。
+与渲染期注册的 `on_click` 不同，这个订阅**活得比创建它的那次渲染更久**。订阅由运行时的句柄存储持有而不是由脚本持有，因为脚本没有地方放它，而“因为某个值被回收所以处理函数不再触发”是那种没人找得到的 bug。它随句柄一起释放。
 
 事件名拼错会列出合法值：
 
@@ -267,7 +267,7 @@ DOM 名字是刻意的例外：`window`、`document`、`localStorage` 是真正�
 ## 还没有的东西
 
 - **`gpui.http`。** 能力模型里声明了它，但没有实现。`fetch` 的拒绝信息提前提到了它。
-- **全局与跨视图状态。** 除了 [能力](./capabilities.md) 里的持久化层和普通模块作用域，没有别的 store。
+- **全局与跨视图状态。** 除了 [Capabilities](./capabilities.md) 里的持久化层和普通模块作用域，没有别的 store。
 - **Action 与快捷键。** `gpui.action` 与 `gpui.keymap` 设计了但没有绑定；今天唯一的按键处理是 `ShellRoot` 安装的那几个（Tab、Shift-Tab、Escape）。
 - **多窗口。** 窗口由宿主打开，没有 `gpui.open_window`。
 - **`gpui.gc_stats()`**，以及会读取它的调试面板。

@@ -31,6 +31,19 @@
 //! nothing the script reads has changed and the description it already
 //! published is simply drawn again.
 //!
+//! # Editing the script
+//!
+//! `js/quotes/` carries a generated `gpui.d.ts` and a hand-written
+//! `market.d.ts`, so an editor knows what `import ... from "gpui"` holds and
+//! what `native("market")` answers. A misspelled style method, a colour token
+//! that does not exist, or a native module nobody registered is an error in the
+//! editor rather than an exception on the next tick. Regenerate the first after
+//! a runtime change:
+//!
+//! ```bash
+//! cargo run -p gpui-shell -- types crates/story/js/quotes
+//! ```
+//!
 //! Nothing but plain data crosses. `quotes()` returns an array of records;
 //! `watch(symbol)` takes a string and answers a boolean, or fails with a
 //! sentence the script sees as an exception. The script cannot hand Rust a
@@ -45,10 +58,11 @@ use std::{path::PathBuf, rc::Rc, time::Duration};
 use gpui::{
     App, AppContext as _, Context, Entity, FocusHandle, Focusable, Hsla, InteractiveElement as _,
     IntoElement, ParentElement, Render, SharedString, StatefulInteractiveElement as _, Styled,
-    Window, div, prelude::FluentBuilder as _, px,
+    Window, div, prelude::FluentBuilder as _, px, relative,
 };
 use gpui_component::{
-    ActiveTheme as _, Colorize as _, Disableable as _, Sizable as _, StyledExt as _,
+    ActiveTheme as _, Colorize as _, Disableable as _, Selectable as _, Sizable as _,
+    StyledExt as _,
     button::{Button, ButtonVariants as _},
     h_flex,
     label::Label,
@@ -122,15 +136,13 @@ pub struct Market {
 /// There is no virtualization here yet, so a thousand-row board would be an
 /// honest measurement of something this runtime does not claim to do well. A
 /// watchlist is what it does claim.
+///
+/// US names first and only a handful of HK ones, because the board is read left
+/// to right and top to bottom by people who will recognize the first rows
+/// fastest. The mix is there at all so the symbol column has two shapes in it —
+/// a ticker and a numeric code — which is where a fixed-width column earns its
+/// keep.
 const BOARD: [(&str, &str, f32); 20] = [
-    ("700.HK", "Tencent", 372.40),
-    ("9988.HK", "Alibaba", 78.15),
-    ("3690.HK", "Meituan", 112.60),
-    ("1810.HK", "Xiaomi", 17.86),
-    ("0005.HK", "HSBC", 62.05),
-    ("0388.HK", "HKEX", 268.80),
-    ("1299.HK", "AIA", 54.35),
-    ("2318.HK", "Ping An", 38.72),
     ("AAPL.US", "Apple", 214.29),
     ("NVDA.US", "NVIDIA", 118.11),
     ("MSFT.US", "Microsoft", 421.53),
@@ -141,8 +153,16 @@ const BOARD: [(&str, &str, f32); 20] = [
     ("AVGO.US", "Broadcom", 168.44),
     ("AMD.US", "AMD", 152.61),
     ("NFLX.US", "Netflix", 678.90),
+    ("PLTR.US", "Palantir", 34.16),
+    ("MU.US", "Micron", 96.52),
     ("COIN.US", "Coinbase", 214.75),
     ("ARM.US", "Arm", 138.02),
+    ("700.HK", "Tencent", 372.40),
+    ("9988.HK", "Alibaba", 78.15),
+    ("3690.HK", "Meituan", 112.60),
+    ("1810.HK", "Xiaomi", 17.86),
+    ("0388.HK", "HKEX", 268.80),
+    ("0005.HK", "HSBC", 62.05),
 ];
 
 impl Market {
@@ -337,6 +357,34 @@ impl Feed {
     }
 }
 
+/// The board as one half last saw it.
+///
+/// Pausing works differently on the two sides, and the difference is worth
+/// seeing rather than hiding. The script half pauses by simply not being told
+/// its description is stale: it keeps drawing the snapshot it already published,
+/// which is a thing the runtime does for free. The Rust half has no snapshot —
+/// its render reads the entity every time — so pausing it means keeping a copy
+/// of what it read last.
+///
+/// That asymmetry is the argument. One side holds still because nobody
+/// invalidated it; the other holds still because somebody kept a copy.
+#[derive(Clone)]
+struct Frozen {
+    quotes: Vec<Quote>,
+    watched: usize,
+    ticks: u64,
+}
+
+impl Frozen {
+    fn capture(market: &Market) -> Self {
+        Self {
+            quotes: market.quotes.clone(),
+            watched: market.watched_count(),
+            ticks: market.ticks,
+        }
+    }
+}
+
 /// The feed the story opens with.
 ///
 /// Running rather than idle on purpose: a board that has to be switched on
@@ -487,6 +535,11 @@ pub struct ShellStory {
     /// a second is, and should not have to.
     sampled: RuntimeMetrics,
     rate: RuntimeMetrics,
+    /// Set while the Rust half is paused: what it was showing when it stopped.
+    frozen: Option<Frozen>,
+    /// Set while the script half is paused, which simply means it is no longer
+    /// told that its description went stale.
+    script_paused: bool,
 }
 
 impl super::Story for ShellStory {
@@ -523,7 +576,7 @@ impl ShellStory {
         // board — the feed, a Rust button or a script button — both halves are
         // looking at the same entity, so both are told.
         cx.observe(&market, |this, _, cx| {
-            if let Some(script) = &this.script {
+            if let Some(script) = &this.script.clone().filter(|_| !this.script_paused) {
                 // `refresh`, not `notify`: the board is state the script reads
                 // over a native call, so its description is now stale. A bare
                 // notify would redraw the panel from the snapshot it already
@@ -544,6 +597,8 @@ impl ShellStory {
             feed_generation: 0,
             sampled: RuntimeMetrics::default(),
             rate: RuntimeMetrics::default(),
+            frozen: None,
+            script_paused: false,
         };
 
         match ShellRuntime::new() {
@@ -625,6 +680,30 @@ impl ShellStory {
         .detach();
     }
 
+    /// Stops or restarts the Rust half.
+    fn toggle_rust(&mut self, cx: &mut Context<Self>) {
+        self.frozen = match self.frozen {
+            Some(_) => None,
+            None => Some(Frozen::capture(self.market.read(cx))),
+        };
+        cx.notify();
+    }
+
+    /// Stops or restarts the script half.
+    ///
+    /// Resuming refreshes rather than waiting for the next tick, so the board
+    /// catches up the moment the button is released rather than showing stale
+    /// prices for another interval.
+    fn toggle_script(&mut self, cx: &mut Context<Self>) {
+        self.script_paused = !self.script_paused;
+        if !self.script_paused
+            && let Some(script) = &self.script
+        {
+            script.update(cx, |view, cx| view.refresh(cx));
+        }
+        cx.notify();
+    }
+
     /// One tick of whichever feed is running.
     fn tick(&mut self, cx: &mut Context<Self>) {
         match self.feed {
@@ -684,17 +763,144 @@ impl ShellStory {
 /// Shared as constants because the two panels sit side by side and a reader is
 /// comparing them: a column that is 72 wide on the left and 70 on the right
 /// would make the comparison about alignment instead of about rendering.
+const SYMBOL_COLUMN: f32 = 78.;
 const PRICE_COLUMN: f32 = 68.;
 const PERCENT_COLUMN: f32 = 66.;
 const VOLUME_COLUMN: f32 = 82.;
+/// The watched dot at the end of a row. The header carries an empty cell of the
+/// same width, because a trailing column the header does not know about pushes
+/// every caption out of line with the numbers under it.
+const WATCH_MARKER: f32 = 6.;
+
+/// Row density, also shared with the script half.
+///
+/// A quote board is a dense surface — the reader is scanning a column of
+/// numbers, not reading paragraphs — so the rows sit close together and the
+/// separation comes from the alignment rather than from space. Twenty rows at
+/// this pitch is around 120px shorter than the comfortable spacing the rest of
+/// the gallery uses, which is the difference between a panel that fits on screen
+/// beside its Rust twin and one that does not.
+const ROW_PADDING: f32 = 2.;
+const ROW_GAP: f32 = 2.;
+
+/// The gap between the panel's parts — heading, header, rows, rule, actions.
+/// `SPACE.md` on the script side.
+const BLOCK_GAP: f32 = 12.;
+/// Horizontal padding inside a row. `SPACE.sm` on the script side.
+const ROW_INSET: f32 = 8.;
+
+/// The type scale, mirrored by `TYPE` in `ui.js`.
+///
+/// Spelled out in numbers on both sides rather than taken from either
+/// framework's named sizes, because `text_xs` here and `text_size(11)` there are
+/// not the same thing — and two boards set in different sizes are two boards of
+/// different heights, which is the one difference this story must not have.
+const TITLE_SIZE: f32 = 13.;
+const BODY_SIZE: f32 = 11.;
+const LINE_HEIGHT: f32 = 1.4;
 
 impl ShellStory {
-    fn rust_panel(&self, quotes: &[Quote], cx: &Context<Self>) -> impl IntoElement {
+    /// The board, laid out exactly as `main.js` lays out its own.
+    ///
+    /// Same blocks in the same order at the same gaps, so the two panels are the
+    /// same height and a reader comparing them is comparing the rendering rather
+    /// than the composition.
+    fn rust_panel(
+        &self,
+        quotes: &[Quote],
+        watched: usize,
+        ticks: u64,
+        cx: &Context<Self>,
+    ) -> impl IntoElement {
         v_flex()
             .w_full()
-            .gap_1()
+            .gap(px(BLOCK_GAP))
+            .child(self.rust_heading(quotes.len(), watched, ticks, cx))
             .child(self.rust_header(cx))
-            .children(quotes.iter().map(|quote| self.rust_row(quote, cx)))
+            .child(
+                v_flex()
+                    .w_full()
+                    .gap(px(ROW_GAP))
+                    .children(quotes.iter().map(|quote| self.rust_row(quote, cx))),
+            )
+            .child(rule(cx))
+            .child(self.rust_actions(quotes.len(), watched, cx))
+    }
+
+    fn rust_heading(
+        &self,
+        total: usize,
+        watched: usize,
+        ticks: u64,
+        cx: &Context<Self>,
+    ) -> impl IntoElement {
+        h_flex()
+            .w_full()
+            .items_start()
+            .justify_between()
+            .gap(px(ROW_INSET))
+            .child(
+                v_flex()
+                    .gap(px(2.))
+                    .child(title("Live quotes", cx))
+                    .child(muted(
+                        "Drawn by shell_story.rs · prices read from Entity<Market>",
+                        cx,
+                    )),
+            )
+            .child(
+                v_flex()
+                    .items_end()
+                    .gap(px(2.))
+                    .child(body(format!("{watched} / {total} watched"), cx))
+                    .child(muted(format!("tick {ticks}"), cx)),
+            )
+    }
+
+    fn rust_actions(&self, total: usize, watched: usize, cx: &Context<Self>) -> impl IntoElement {
+        h_flex()
+            .w_full()
+            .items_center()
+            .justify_between()
+            .gap(px(ROW_INSET))
+            .child(muted(
+                if watched == 0 {
+                    "Nothing on the watchlist".to_owned()
+                } else {
+                    format!("{watched} watched")
+                },
+                cx,
+            ))
+            .child(
+                h_flex()
+                    .gap(px(4.))
+                    .child(
+                        Button::new("watch-all")
+                            .xsmall()
+                            .primary()
+                            .label("Watch all")
+                            .disabled(watched == total)
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.market.update(cx, |market, cx| {
+                                    market.watch_all(true);
+                                    cx.notify();
+                                });
+                            })),
+                    )
+                    .child(
+                        Button::new("watch-none")
+                            .xsmall()
+                            .outline()
+                            .label("Clear")
+                            .disabled(watched == 0)
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.market.update(cx, |market, cx| {
+                                    market.watch_all(false);
+                                    cx.notify();
+                                });
+                            })),
+                    ),
+            )
     }
 
     fn rust_header(&self, cx: &Context<Self>) -> impl IntoElement {
@@ -703,26 +909,23 @@ impl ShellStory {
                 .w(px(width))
                 .flex_none()
                 .when(right, |this| this.text_right())
-                .child(
-                    Label::new(value)
-                        .text_xs()
-                        .text_color(cx.theme().muted_foreground),
-                )
+                .child(muted(value, cx))
         };
 
         h_flex()
             .w_full()
             .items_center()
-            .gap_2()
-            .px_2()
-            .pb_1()
+            .gap(px(ROW_INSET))
+            .px(px(ROW_INSET))
+            .pb(px(4.))
             .border_b_1()
             .border_color(cx.theme().border)
-            .child(caption("Symbol", 78., false))
+            .child(caption("Symbol", SYMBOL_COLUMN, false))
             .child(div().flex_1())
             .child(caption("Last", PRICE_COLUMN, true))
             .child(caption("Change", PERCENT_COLUMN, true))
             .child(caption("Volume", VOLUME_COLUMN, true))
+            .child(div().w(px(WATCH_MARKER)).flex_none())
     }
 
     fn rust_row(&self, quote: &Quote, cx: &Context<Self>) -> impl IntoElement {
@@ -734,9 +937,9 @@ impl ShellStory {
             .id(SharedString::from(format!("quote-{symbol}")))
             .w_full()
             .items_center()
-            .gap_2()
-            .px_2()
-            .py_1()
+            .gap(px(ROW_INSET))
+            .px(px(ROW_INSET))
+            .py(px(ROW_PADDING))
             .rounded(cx.theme().radius)
             .hover(|this| this.bg(cx.theme().muted))
             .on_click(cx.listener(move |this, _, _, cx| {
@@ -748,42 +951,41 @@ impl ShellStory {
             }))
             .child(
                 div()
-                    .w(px(78.))
+                    .w(px(SYMBOL_COLUMN))
                     .flex_none()
-                    .child(Label::new(quote.symbol.clone()).text_xs().font_medium()),
-            )
-            .child(
-                div().flex_1().truncate().child(
-                    Label::new(quote.name.clone())
-                        .text_xs()
-                        .text_color(cx.theme().muted_foreground),
-                ),
-            )
-            .child(
-                div().w(px(PRICE_COLUMN)).flex_none().text_right().child(
-                    Label::new(format!("{:.2}", quote.last))
-                        .text_xs()
-                        .text_color(moved),
-                ),
-            )
-            .child(
-                div().w(px(PERCENT_COLUMN)).flex_none().text_right().child(
-                    Label::new(format!("{:+.2}%", quote.change_percent()))
-                        .text_xs()
-                        .text_color(moved),
-                ),
-            )
-            .child(
-                div().w(px(VOLUME_COLUMN)).flex_none().text_right().child(
-                    Label::new(thousands(quote.volume))
-                        .text_xs()
-                        .text_color(cx.theme().muted_foreground),
-                ),
+                    .child(body(quote.symbol.clone(), cx).font_medium()),
             )
             .child(
                 div()
-                    .w(px(6.))
-                    .h(px(6.))
+                    .flex_1()
+                    .truncate()
+                    .child(muted(quote.name.clone(), cx)),
+            )
+            .child(
+                div()
+                    .w(px(PRICE_COLUMN))
+                    .flex_none()
+                    .text_right()
+                    .child(body(format!("{:.2}", quote.last), cx).text_color(moved)),
+            )
+            .child(
+                div()
+                    .w(px(PERCENT_COLUMN))
+                    .flex_none()
+                    .text_right()
+                    .child(body(format!("{:+.2}%", quote.change_percent()), cx).text_color(moved)),
+            )
+            .child(
+                div()
+                    .w(px(VOLUME_COLUMN))
+                    .flex_none()
+                    .text_right()
+                    .child(muted(thousands(quote.volume), cx)),
+            )
+            .child(
+                div()
+                    .w(px(WATCH_MARKER))
+                    .h(px(WATCH_MARKER))
                     .flex_none()
                     .rounded_full()
                     .when(watched, |this| this.bg(cx.theme().primary)),
@@ -819,6 +1021,26 @@ impl ShellStory {
                     ))
                     .child(reading("Feed", self.feed.caption(), self.feed.detail(), cx)),
             )
+            .when(self.frozen.is_some() || self.script_paused, |this| {
+                this.child(muted(
+                    match (self.frozen.is_some(), self.script_paused) {
+                        (true, true) => {
+                            "Both halves are paused. The feed still runs, so the counters show \
+                             what the window costs when neither board is following it."
+                        }
+                        (true, false) => {
+                            "The Rust half is paused: it is drawing a copy of what it last read, \
+                             because its render has no snapshot of its own to hold."
+                        }
+                        _ => {
+                            "The script half is paused: nobody is telling it its description went \
+                             stale, so it keeps drawing the one it already published — and the \
+                             script render count is zero while the board next to it moves."
+                        }
+                    },
+                    cx,
+                ))
+            })
             .child(
                 Label::new(match self.feed {
                     Feed::Idle => {
@@ -865,6 +1087,50 @@ impl ShellStory {
     }
 }
 
+/// Pause or resume one half. Selected while that half is holding still, because
+/// a paused panel that looks like a running one is a bug report waiting to be
+/// filed.
+fn pause_button(
+    id: &'static str,
+    paused: bool,
+    on_click: impl Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static,
+) -> Button {
+    Button::new(id)
+        .xsmall()
+        .outline()
+        .selected(paused)
+        .label(if paused { "Resume" } else { "Pause" })
+        .on_click(on_click)
+}
+
+/// The three type roles, mirroring `title`, `label` and `muted` in `ui.js`.
+fn title(value: impl Into<SharedString>, cx: &Context<ShellStory>) -> Label {
+    Label::new(value)
+        .text_size(px(TITLE_SIZE))
+        .line_height(relative(1.3))
+        .font_semibold()
+        .text_color(cx.theme().foreground)
+}
+
+fn body(value: impl Into<SharedString>, cx: &Context<ShellStory>) -> Label {
+    Label::new(value)
+        .text_size(px(BODY_SIZE))
+        .line_height(relative(LINE_HEIGHT))
+        .text_color(cx.theme().foreground)
+}
+
+fn muted(value: impl Into<SharedString>, cx: &Context<ShellStory>) -> Label {
+    Label::new(value)
+        .text_size(px(BODY_SIZE))
+        .line_height(relative(LINE_HEIGHT))
+        .text_color(cx.theme().muted_foreground)
+}
+
+/// The hairline between the rows and the actions under them.
+fn rule(cx: &Context<ShellStory>) -> impl IntoElement {
+    div().w_full().h(px(1.)).flex_none().bg(cx.theme().border)
+}
+
 /// Up is `success`, down is `danger`, flat is ordinary text. Both halves ask
 /// this question of the same theme, which is why the two panels agree.
 fn direction_color(direction: i32, cx: &Context<ShellStory>) -> Hsla {
@@ -893,9 +1159,14 @@ impl Focusable for ShellStory {
 
 impl Render for ShellStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let quotes = self.market.read(cx).quotes.clone();
-        let watched = self.market.read(cx).watched_count();
-        let total = quotes.len();
+        // What the Rust half draws: the live board, or the copy it kept when it
+        // was paused. The script half needs no equivalent here — it is holding
+        // its own published description.
+        let shown = match &self.frozen {
+            Some(frozen) => frozen.clone(),
+            None => Frozen::capture(self.market.read(cx)),
+        };
+        let (quotes, watched, ticks) = (shown.quotes, shown.watched, shown.ticks);
 
         v_flex()
             .size_full()
@@ -907,60 +1178,38 @@ impl Render for ShellStory {
                     .gap_4()
                     .child(
                         div().flex_1().child(
-                            section("Rust · gpui-component")
-                                .description(
-                                    "Rows built from crates/ui, reading the Entity<Market> both \
-                                     halves share.",
-                                )
-                                .sub_title(
-                                    h_flex()
-                                        .gap_2()
-                                        .child(
-                                            Button::new("watch-all")
-                                                .xsmall()
-                                                .primary()
-                                                .label("Watch all")
-                                                .disabled(watched == total)
-                                                .on_click(cx.listener(|this, _, _, cx| {
-                                                    this.market.update(cx, |market, cx| {
-                                                        market.watch_all(true);
-                                                        cx.notify();
-                                                    });
-                                                })),
-                                        )
-                                        .child(
-                                            Button::new("watch-none")
-                                                .xsmall()
-                                                .outline()
-                                                .label("Clear")
-                                                .disabled(watched == 0)
-                                                .on_click(cx.listener(|this, _, _, cx| {
-                                                    this.market.update(cx, |market, cx| {
-                                                        market.watch_all(false);
-                                                        cx.notify();
-                                                    });
-                                                })),
-                                        ),
-                                )
+                            section("Rust")
+                                .description("Rust implementation.")
+                                .sub_title(pause_button(
+                                    "pause-rust",
+                                    self.frozen.is_some(),
+                                    cx.listener(|this, _, _, cx| this.toggle_rust(cx)),
+                                ))
                                 .v_flex()
-                                .child(self.rust_panel(&quotes, cx)),
+                                .child(self.rust_panel(&quotes, watched, ticks, cx)),
                         ),
                     )
                     .child(
                         div().flex_1().child(
                             section("JavaScript · gpui-shell")
-                                .description(
-                                    "The same board, drawn by crates/story/js/quotes/main.js, \
-                                     read from disk at run time.",
-                                )
+                                .description("JavaScript implementation.")
                                 .sub_title(
-                                    Button::new("reload-script")
-                                        .xsmall()
-                                        .outline()
-                                        .label("Reload script")
-                                        .on_click(cx.listener(|this, _, window, cx| {
-                                            this.reload(window, cx);
-                                        })),
+                                    h_flex()
+                                        .gap(px(4.))
+                                        .child(pause_button(
+                                            "pause-script",
+                                            self.script_paused,
+                                            cx.listener(|this, _, _, cx| this.toggle_script(cx)),
+                                        ))
+                                        .child(
+                                            Button::new("reload-script")
+                                                .xsmall()
+                                                .outline()
+                                                .label("Reload script")
+                                                .on_click(cx.listener(|this, _, window, cx| {
+                                                    this.reload(window, cx);
+                                                })),
+                                        ),
                                 )
                                 .v_flex()
                                 .child(self.script_panel(cx)),
@@ -1135,6 +1384,73 @@ mod tests {
             description(&mut context, &script).contains("tick 1"),
             "and the description must be the one already published"
         );
+    }
+
+    /// Pausing one half must not pause the other, and the two mechanisms are
+    /// genuinely different: the script half stops because nothing invalidates
+    /// it, the Rust half because the story keeps a copy.
+    #[gpui::test]
+    fn each_half_pauses_on_its_own(cx: &mut TestAppContext) {
+        cx.update(gpui_component::init);
+        let window = cx.add_window(|window, cx| ShellStory::new(window, cx));
+        let story = cx.update(|cx| window.entity(cx)).expect("the story");
+        let mut context = VisualTestContext::from_window(*window.deref(), cx);
+
+        let (runtime, script) = story.read_with(&mut context, |story, _| {
+            (
+                story.runtime.clone().expect("a runtime"),
+                story.script.clone().expect("a script view"),
+            )
+        });
+        draw(&mut context, &script);
+
+        // Paused script: the feed keeps running and the board keeps its
+        // description, so the VM is never entered.
+        story.update(&mut context, |story, cx| story.toggle_script(cx));
+        let baseline = runtime.metrics().read().script_renders();
+        for _ in 0..8 {
+            tick(&mut context, &story, Feed::Quotes(50));
+            draw(&mut context, &script);
+        }
+        assert_eq!(
+            runtime.metrics().read().script_renders(),
+            baseline,
+            "a paused script half must not run"
+        );
+        assert!(description(&mut context, &script).contains("tick 0"));
+
+        // The Rust half was never paused, so it is looking at the live board.
+        story.read_with(&mut context, |story, cx| {
+            assert!(story.frozen.is_none());
+            assert_eq!(story.market.read(cx).ticks, 8);
+        });
+
+        // Resuming catches the script up on the spot rather than at the next
+        // tick.
+        story.update(&mut context, |story, cx| story.toggle_script(cx));
+        draw(&mut context, &script);
+        assert!(
+            description(&mut context, &script).contains("tick 8"),
+            "resuming must refresh rather than wait for the feed"
+        );
+
+        // Paused Rust: the copy stops moving while the board underneath does not.
+        story.update(&mut context, |story, cx| story.toggle_rust(cx));
+        let frozen_at = story
+            .read_with(&mut context, |story, _| story.frozen.clone())
+            .expect("a frozen copy")
+            .ticks;
+        for _ in 0..4 {
+            tick(&mut context, &story, Feed::Quotes(50));
+        }
+        story.read_with(&mut context, |story, cx| {
+            assert_eq!(
+                story.frozen.as_ref().expect("still frozen").ticks,
+                frozen_at,
+                "the copy must not follow the feed"
+            );
+            assert_eq!(story.market.read(cx).ticks, frozen_at + 4);
+        });
     }
 
     /// The board moves the same way twice, so the panel a reader sees on one run

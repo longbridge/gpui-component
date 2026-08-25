@@ -73,7 +73,7 @@ The snapshot is rebuilt when, and only when, something invalidates it:
 - a theme change, because `bg("surface")` resolves to a real colour while `render` runs and is baked into the snapshot
 - the host calling `ScriptView::refresh`, which is how Rust says it changed state your script reads through a [native module](./capabilities.md). A plain `cx.notify()` from the host is a repaint and runs no script — the two are different requests
 
-Everything else replays the description you already produced, in Rust, without entering the VM.
+Everything else replays the description you already produced, in Rust, without running any JavaScript.
 
 Three consequences worth holding on to:
 

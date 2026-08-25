@@ -1,10 +1,10 @@
 ---
-title: 样式
+title: Styling
 description: 流式样式接口、长度与颜色语法、语义主题 token，以及 hover / active / focus 状态样式。
 order: 4
 ---
 
-# 样式
+# Styling
 
 呈现权在脚本，所以一个应用的大部分代码都写在这里。所有元素接受同一套样式接口，写成一条流式链——与 Rust 侧写的一模一样：
 
@@ -23,7 +23,7 @@ v_flex().size_full().bg(surface).p(px(12.)).gap(px(8.)).rounded(px(6.))
 
 **无参方法来自 GPUI 的反射表。** `flex_col`、`items_center`、`gap_2`、`rounded_md`、`text_sm`、`size_full`、`font_semibold`、`truncate`、`cursor_pointer`——整个家族都取自 `gpui_base::styled_ext_reflection_methods` 与 `gpui::styled_reflection::methods`，零维护成本。这些名字没有一个写在运行时的任何地方。上游 GPUI 新增一个样式方法，脚本接口就有了，生成的 `gpui.d.ts` 也有了。
 
-本文写作时所用的构建暴露了 **3,146** 个。这个数字不是设计目标——它就是 GPUI 当前有多少个 `fn(self) -> Self` 形态的样式方法，GPUI 变它就变。`gpui-shell types` 会打印你这次构建的准确数字。
+本文写作时的这次构建里有 **3,146** 个。这个数字不是设计目标——它就是 GPUI 当前有多少个 `fn(self) -> Self` 形态的样式方法，GPUI 变它就变。`gpui-shell types` 会打印你这次构建的准确数字。
 
 **有参方法无法被反射**，所以有 **57** 个是手工绑定的。这份列表是样式层里唯一手工维护的表，而且刻意保持很小。
 
@@ -119,7 +119,7 @@ or a #rrggbb literal
 
 `gpui_base::Theme::default()` 的颜色 token 是 `#[derive(Default)]` 出来的，也就是说每一个都从 `Hsla { h: 0, s: 0, l: 0, a: 0 }` 开始——完全透明。只调用 `gpui_base::init` 的运行时会画出一个看不见的窗口。
 
-所以 `gpui-shell` 自带一份浅色与深色调色板，从一个 JSON 文件加载，用的是插件主题将来会用的同一套 `Serialize`/`Deserialize`/`JsonSchema` 派生。它是**便利品而不是契约**：shell 的 Rust 侧不做任何其他视觉决定，这份调色板存在的唯一理由，是别让"呈现权在脚本"从一块黑色矩形开始。
+所以 `gpui-shell` 自带一份浅色与深色调色板，从一个 JSON 文件加载，用的是插件主题将来会用的同一套 `Serialize`/`Deserialize`/`JsonSchema` 派生。它是**便利品而不是契约**：shell 的 Rust 侧不做任何其他视觉决定，这份调色板存在的唯一理由，是别让“呈现权在脚本”从一块黑色矩形开始。
 
 ## 状态样式
 
@@ -136,7 +136,7 @@ Button.new("save")
   .child(text("Save"));
 ```
 
-函数的返回值会被忽略，所以链式写法和块状写法都能用。里面写的就是**普通的样式方法**——"什么是样式"没有第二套语法，上面所有长度与颜色规则原样适用。
+函数的返回值会被忽略，所以链式写法和块状写法都能用。里面写的就是**普通的样式方法**——“什么是样式”没有第二套语法，上面所有长度与颜色规则原样适用。
 
 有两处实现细节会泄漏到使用者这边，值得知道：
 
@@ -169,7 +169,7 @@ unknown style method `text_colour` (did you mean: text_color?)
 
 这条信息背后有一处漂亮的机制，也解释了源码里的一个数字。QuickJS 报告缺失方法时只给一句 `TypeError: not a function`，**不带属性名**，所以拼错的样式名本来会毫无线索地到达使用者。用 `Proxy` 包住元素原型可以解决这一点——代价是实测占整个描述过程的约 30%（443 个节点从 1.09 ms 涨到 1.42 ms）。
 
-于是运行时默认使用快速的普通原型，只有当一次渲染以 "not a function" 失败时，才**用带诊断 `Proxy` 的原型把这次渲染重跑一遍**，纯粹为了产出那条信息。出错是罕见的，每次渲染多付 30% 不是。
+于是运行时默认使用快速的普通原型，只有当一次渲染以 “not a function” 失败时，才**用带诊断 `Proxy` 的原型把这次渲染重跑一遍**，纯粹为了产出那条信息。出错是罕见的，每次渲染多付 30% 不是。
 
 ## 还没有的东西
 

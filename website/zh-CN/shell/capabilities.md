@@ -1,10 +1,10 @@
 ---
-title: 能力
+title: Capabilities
 description: 默认全部拒绝的模型，fs / store / clipboard / log / process 接口，存储位置，以及沙箱裁掉了什么。
 order: 7
 ---
 
-# 能力
+# Capabilities
 
 脚本默认**什么都拿不到**。没有文件访问、没有存储、没有剪贴板、没有进程执行、没有网络。`Capabilities::default()` 就是空集，这一条写在代码里可断言，而不是写在注释里。
 
@@ -32,11 +32,11 @@ gpui_shell::set_capabilities(
 | 进程执行 | **不**授予 |
 | 网络 | **不**授予 |
 
-因此应用可以读自己的源码与资源、使用自己的存储，除此之外没有别的。它刻意比"全部放开"要窄，因为将来安装的插件会走同一条代码路径、由 manifest 来决定授权——而一个对本地运行足够宽松的默认，继承过去就是错的默认。
+因此应用可以读自己的源码与资源、使用自己的存储，除此之外没有别的。它刻意比“全部放开”要窄，因为将来安装的插件会走同一条代码路径、由 manifest 来决定授权——而一个对本地运行足够宽松的默认，继承过去就是错的默认。
 
 ## 拒绝信息会写明怎么修
 
-每一条拒绝都以"要声明什么"结尾，而不只是说了句拒绝：
+每一条拒绝都以“要声明什么”结尾，而不只是说了句拒绝：
 
 ```text
 filesystem read is not granted; declare capabilities.fs.read in the manifest
@@ -78,7 +78,7 @@ import { fs } from "gpui";
 
 其中三项的行为值得说明，理由都是同一个：
 
-**被拒绝的路径抛异常，而不是返回 `false`。** "你不能看"和"它不存在"是两个不同的事实，把它们合并会让脚本能一次一个布尔值地探测自己根目录之外的文件系统。
+**被拒绝的路径抛异常，而不是返回 `false`。** “你不能看”和“它不存在”是两个不同的事实，把它们合并会让脚本能一次一个布尔值地探测自己根目录之外的文件系统。
 
 **`remove` 不递归。** 写权限是按根授予的，递归删除会把一次路径笔误变成整个应用数据目录的丢失。真要这么做的脚本可以自己遍历。
 
@@ -139,7 +139,7 @@ export function load() {
 }
 ```
 
-示例的页脚随后会在界面上说明这一点——"Not saved — this host did not grant storage, so the list lasts for this run only"——这才是对的形态：在边界处吸收拒绝，并对用户说实话。
+示例的页脚随后会在界面上说明这一点——“Not saved — this host did not grant storage, so the list lasts for this run only”——这才是对的形态：在边界处吸收拒绝，并对用户说实话。
 
 ## `clipboard`
 

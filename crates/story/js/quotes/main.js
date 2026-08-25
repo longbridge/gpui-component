@@ -2,31 +2,23 @@
 //
 //   cargo run   →   Gallery   →   Shell
 //
-// This file is read from disk when the story opens and again every time the
-// "Reload script" button next to this panel is pressed. Editing it changes what
-// the right-hand side of that window draws, with no `cargo build` in between —
+// Read from disk when the story opens, and again on "Reload script". Editing
+// this file changes the right-hand panel with no `cargo build` in between,
 // which is the entire argument for a script layer.
 //
-// It owns no state. The board lives in a Rust `Entity<Market>` that the panel on
-// the left renders directly; this file reaches it through the two native
-// modules `shell_story.rs` registered before the runtime started:
+// It owns no state. The board lives in a Rust `Entity<Market>`, reached through
+// two native modules the story registered before the runtime started:
 //
 //   native("market")   quotes() · ticks() · watch(symbol) · watch_all(on)
 //   native("theme")    palette()
 //
-// Both are plain data in, plain data out. There is no host object to hold on
-// to here: a native call takes numbers, strings and records and gives them
-// back, so nothing this file writes can outlive the call that produced it.
-//
-// # What this panel is for
-//
-// It is a load, not a demonstration of features. Twelve rows of six cells each,
-// rebuilt from scratch every time a price moves — which, with the feed running
-// at 50 ms, is twenty times a second. The counters under the two panels report
-// what that costs, and what a repaint costs when nothing here has changed.
+// Twenty rows of six cells, rebuilt from scratch every time a price moves —
+// twenty times a second with the default feed. The counters under the panels
+// report what that costs, and what a repaint costs when nothing here changed.
 
 import { h_flex, v_flex, View, native } from "gpui";
 import {
+  ROW,
   SPACE,
   action,
   header,
@@ -41,18 +33,15 @@ import {
 
 export default class QuoteBoard extends View {
   render() {
-    // Read once per render; see `refreshPalette` for why it is not cached.
     refreshPalette();
 
     const market = native("market");
     const quotes = market.quotes();
     const watched = quotes.filter((quote) => quote.watched).length;
 
-    // The tick count. Painting it is what makes the counters' claim visible in
-    // the panel itself: with the quotes feed running this number climbs, and
-    // with the repaint feed running it holds still — because this render is not
-    // being called at all, and the frame being drawn is the one it produced
-    // last time.
+    // With the quotes feed running this climbs; with the repaint feed it holds
+    // still, because this render is not being called and the frame on screen is
+    // the one it produced last time.
     const ticks = market.ticks();
 
     return surface()
@@ -68,7 +57,7 @@ export default class QuoteBoard extends View {
       .w_full()
       .items_start()
       .justify_between()
-      .gap(SPACE.sm)
+      .gap(ROW.inset)
       .child(
         v_flex()
           .gap(SPACE.xxs)
@@ -84,6 +73,7 @@ export default class QuoteBoard extends View {
       );
   }
 
+  /** @param {Quote[]} quotes */
   rows(market, quotes) {
     if (quotes.length === 0) {
       return muted("The Rust panel is holding no quotes.");
@@ -91,15 +81,11 @@ export default class QuoteBoard extends View {
 
     return v_flex()
       .w_full()
-      .gap(SPACE.xxs)
+      .gap(ROW.gap)
       .children(
-        quotes.map((quote) =>
-          // Deliberately no `cx.notify()`. The native call asks Rust to change
-          // the board, and the Rust side notifies its observers — which
-          // re-renders this view *and* the panel next to it. One change, one
-          // notification, both halves in step.
-          quoteRow(quote, () => market.watch(quote.symbol)),
-        ),
+        // No `cx.notify()`: the native call asks Rust to change the board, Rust
+        // notifies its observers, and both halves re-render from one change.
+        quotes.map((quote) => quoteRow(quote, () => market.watch(quote.symbol))),
       );
   }
 
@@ -108,7 +94,7 @@ export default class QuoteBoard extends View {
       .w_full()
       .items_center()
       .justify_between()
-      .gap(SPACE.sm)
+      .gap(ROW.inset)
       .child(muted(watched === 0 ? "Nothing on the watchlist" : `${watched} watched`))
       .child(
         h_flex()

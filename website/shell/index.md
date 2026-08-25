@@ -1,12 +1,12 @@
 ---
 title: GPUI Shell
-description: A scriptable application runtime for GPUI — application code in JavaScript, rendering and system capabilities in Rust.
+description: JavaScript extension points for a Rust GPUI application — the host grants what a script may reach, and rendering and system capabilities stay in Rust.
 order: 1
 ---
 
 # GPUI Shell
 
-`gpui-shell` is a scriptable application runtime for [GPUI](https://gpui.rs), built directly on [`gpui-base`](/base/). The application is written in **JavaScript**, running on QuickJS inside the host process. Rust keeps rendering, layout, text editing, virtualization, focus, overlays and every system capability. The script owns composition, presentation and business logic.
+`gpui-shell` gives a Rust [GPUI](https://gpui.rs) application **JavaScript extension points**: the host builds the runtime and grants what a script may reach, and the script draws real interface inside the same process. It is built directly on [`gpui-base`](/base/), with QuickJS running on the host's own thread. Rust keeps rendering, layout, text editing, virtualization, focus, overlays and every system capability; the script owns composition, presentation and business logic. A script can also be run on its own, which is how one is usually developed.
 
 ```js
 import { View, v_flex, text, Button } from "gpui";
@@ -57,28 +57,28 @@ A script gets what a Rust application built on `gpui-base` gets: elements and la
 
 Around that: `--watch` reloads on save without costing you the window, a generated `gpui.d.ts` describes the whole API to an editor or a model, and `check` reports mistakes before the application runs.
 
-### Performance: script cost is paid per change, not per frame
+### Performance: the script is not in the frame
 
-`render` does **not** run once per frame. It describes the interface once into a snapshot, and every repaint until the next `cx.notify()` replays that snapshot in Rust without entering the VM. A pointer moving across the interface, a blinking cursor, a scrolling list and an advancing animation run no JavaScript at all.
+`render` does **not** run once per frame. It describes the interface once into a snapshot, and until the next `cx.notify()` every repaint replays that snapshot in Rust. A pointer crossing a button, a blinking cursor, a scrolling list and an advancing animation do not run JavaScript.
 
-The benchmark walks four panel sizes, because one size cannot show what that is worth:
+The runtime counts the two events separately, and the gallery's Shell story (`cargo run -- shell`) puts both counters on screen:
 
-| Panel | Describe, per change | Repaint, per frame | Script renders per repaint | A frame without the snapshot |
-| --- | --- | --- | --- | --- |
-| 443 nodes | 1.1 ms | 1.3 ms | **0** | 2.4 ms |
-| 2,103 nodes | 5.1 ms | 5.9 ms | **0** | 11.0 ms |
-| 4,203 nodes | 10.3 ms | 12.0 ms | **0** | 22.3 ms |
-| 8,403 nodes | 20.5 ms | 27.0 ms | **0** | 47.5 ms |
+<img class="architecture-light" src="/shell-render-frequency-light.svg" alt="One second of a live panel. With nothing JavaScript reads changing, 60 frames fire and the JavaScript track stays empty. With prices moving every 50 ms, 60 frames fire and JavaScript runs about 20 times.">
+<img class="architecture-dark" src="/shell-render-frequency-dark.svg" alt="One second of a live panel. With nothing JavaScript reads changing, 60 frames fire and the JavaScript track stays empty. With prices moving every 50 ms, 60 frames fire and JavaScript runs about 20 times.">
 
-```bash
-cargo test -p gpui-shell --release --test benchmark -- --ignored --nocapture
-```
 
-The last column is the first two added together: what each frame would cost if the description were rebuilt for it. It stays at **about 1.8×** the real figure across a nineteen-fold range of panel sizes — describing the interface is roughly 45% of a naive frame at every scale, and that is what the snapshot removes.
+| What the interface is doing | Frames a second | JavaScript runs a second |
+| --- | --- | --- |
+| Repainting, with nothing JavaScript reads changed | 60 | 0 |
+| Prices moving every 50 ms | 60 | 19 |
 
-The zero column is not merely observed. The 443-node row is asserted by a test that runs on every CI build: a repaint that enters the VM [fails the benchmark](./engine.md#the-measurement) rather than merely getting slower.
+The frame count belongs to the display, the JavaScript count to the data. In the second row the other 41 frames replay a description that already exists.
 
-The table also says where the ceiling is, and it is not in JavaScript: at 8,403 nodes a frame costs 27 ms with no script running at all. Past a few thousand nodes the bill is Rust-side materialization, layout and paint, so the answer there is virtualization rather than a faster engine — and a view that large is the wrong shape regardless of what describes it. Absolute figures are a release build on Apple Silicon and move with the machine; the ratio does not.
+Cost is therefore paid per user action rather than per frame. On a 443-node panel, running `render` and recording the whole interface into a snapshot takes 1.1 ms, paid only when state changes; each frame after it takes 1.3 ms, which is rendering itself — turning the snapshot into elements, laying out, painting, with no JavaScript in it.
+
+Without a snapshot every frame would run `render` again, putting a frame at 1.1 + 1.3 = 2.4 ms. With one, the 1.1 ms is paid on the change alone and every frame costs 1.3 ms.
+
+Growing the panel does not change that. The [benchmark](./engine.md#the-measurement) covers sizes up to 8,403 nodes, no frame at any of them runs JavaScript, and the smallest size is asserted on every CI build.
 
 ### Security: nothing by default, and a language trimmed to match
 
@@ -114,15 +114,15 @@ The consequence is the point. **Because the foundation ships no presentation, th
 
 What the script gains in exchange for the extra typing is the whole application layer. Changing a button's radius does not mean going back to Rust.
 
-## Who it is for
+## Where it fits
 
-| You are | What the runtime gives you |
+| | What the runtime provides |
 | --- | --- |
-| Adding panels, commands or tools to an existing Rust GPUI application | A sandboxed script surface with capability grants the host decides, so an extension does not mean a fork |
-| Writing an internal tool — a dashboard, an ops panel, a data viewer | A low starting cost, a real desktop window, and a save-and-see loop instead of a compile |
-| Generating interfaces with a model | The most widely covered language there is, errors that are recoverable rather than fatal, and a generated `gpui.d.ts` that describes the whole API |
+| **Adding plugin support to an existing GPUI application** | Plugins run inside the host process under capabilities the host grants one at a time, starting from none. Extending the product stops meaning a fork or a new release. |
+| **Writing a complete application in JavaScript on `gpui-shell`** | The whole application layer — elements, styling, view state, overlays and the system surfaces — while rendering, text editing, virtualization and animation stay in Rust. |
+| **Giving an application dynamic extension points** | Interface and business logic ship as script and change without recompiling or redistributing a binary, and a failing script surfaces as a recoverable error rather than taking the host down. |
 
-It is deliberately **not** a way to rewrite a product's core in JavaScript. Text editing, syntax highlighting, LSP, virtualization and animation stay in Rust, where they belong.
+Text editing, syntax highlighting, LSP, virtualization and animation stay in Rust. That is the division of labour rather than a gap in it: the script composes and presents, and the host owns everything that has to sit close to the GPU and the system.
 
 ## Where it sits
 

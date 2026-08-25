@@ -1,10 +1,10 @@
 ---
-title: 元素
+title: Elements
 description: 构造器、用 child / children / when 组合，以及元素描述为什么只能使用一次。
 order: 3
 ---
 
-# 元素
+# Elements
 
 `gpui-shell` 里的元素是一段**描述**，不是一个对象。它只在一次渲染中存在，被使用时即被消费。本页讲能构建什么、怎么组合，以及一段描述被用了两次时运行时会做什么。
 
@@ -32,7 +32,7 @@ import { div, h_flex, v_flex, text, svg, Button, Checkbox, Switch, Input, InputS
 
 ### 为什么是 `.new(id)` 而不是 `new Button(id)`
 
-JavaScript 的习惯写法是 `new Button(id)`。运行时不提供它，理由正是本页的主题：`new` 承诺的是一个有身份的对象——可以保存、可以挂在实例上、可以再次使用。而描述恰恰不是这种东西。`Button.new(id)` 读起来是"构造一段描述"，它做的也正是这件事，并且与 Rust 侧一字不差。
+JavaScript 的习惯写法是 `new Button(id)`。运行时不提供它，理由正是本页的主题：`new` 承诺的是一个有身份的对象——可以保存、可以挂在实例上、可以再次使用。而描述恰恰不是这种东西。`Button.new(id)` 读起来是“构造一段描述”，它做的也正是这件事，并且与 Rust 侧一字不差。
 
 视图是相反的情形，用的就是标准写法：`class Counter extends View`。视图确实有身份、有跨帧状态，并且由 GPUI 拥有。同一份文件里出现两种构造形态，是因为这两类东西的生命周期本来就不同。
 
@@ -42,7 +42,7 @@ JavaScript 的习惯写法是 `new Button(id)`。运行时不提供它，理由�
 
 其余元素——`div`、`h_flex`——的身份是**它在这次渲染所构建的树里所处的位置**。只要树的形状不变，这就够用；而一旦上方多出一个条件子节点，它下面的每个元素都会移位，按下状态、焦点以及其他按身份记录的东西都跟着移位。
 
-`.id(name)` 用来说明「这是哪个元素」，而不是「它落在了哪里」：
+`.id(name)` 用来说明“这是哪个元素”，而不是“它落在了哪里”：
 
 ```js
 div()
@@ -61,7 +61,7 @@ text(`${this.remaining} of ${this.items.length} remaining`);
 text(42);
 ```
 
-文本元素物化后是一个包含该字符串的 `div`，所以它和其他元素一样接受样式，也可以再挂子元素。
+文本元素最终变成一个包含该字符串的 `div`，所以它和其他元素一样接受样式，也可以再挂子元素。
 
 ### 图片
 
@@ -104,7 +104,7 @@ v_flex()
 when(...) must return the element
 ```
 
-这与 GPUI 自己的 `FluentBuilder`，以及本仓库 Rust 侧"元素构建保持一条流式链"的风格规则同源。
+这与 GPUI 自己的 `FluentBuilder`，以及本仓库 Rust 侧“元素构建保持一条流式链”的风格规则同源。
 
 如果条件是在两个元素之间二选一，普通三元表达式比 `when` 更清楚：
 
@@ -128,7 +128,7 @@ when(...) must return the element
 | `.selected(value)` | `Button` | 报告 selected 状态 |
 | `.checked(value)` | `Checkbox`、`Switch` | 受控值 |
 | `.accessibility_label(text)` | `Button`、`Checkbox` | 屏幕阅读器读出的内容 |
-| `.id(name)` | `div`、`h_flex`、`v_flex` | 一个稳定的身份，取代「在树中的位置」 |
+| `.id(name)` | `div`、`h_flex`、`v_flex` | 一个稳定的身份，取代“在树中的位置” |
 
 disabled、selected 与 checked 的**外观**由你来画。基础层只报告状态，脚本不说就什么都不会变：
 
@@ -174,7 +174,7 @@ Checkbox.new(`item-${item.id}`)
 });
 ```
 
-`platform` 在 macOS 上是 Command，其他平台是 Windows 键。这里只暴露基础层已经归一化过的语义——Base 把"回车激活按钮"与"点击按钮"归为同一个回调，脚本看不到这个差别。
+`platform` 在 macOS 上是 Command，其他平台是 Windows 键。这里只暴露基础层已经归一化过的语义——Base 把“回车激活按钮”与“点击按钮”归为同一个回调，脚本看不到这个差别。
 
 ::: tip 事件处理器请用箭头函数
 箭头函数不绑定自己的 `this`，所以处理函数里的 `this` 仍然是视图实例。用 `function () {}` 写会拿到错误的 `this`。这是为本运行时写脚本时最常见的一处错误，人和模型都一样。
@@ -213,7 +213,7 @@ this element belongs to a previous render pass; elements are single-use values
 and must be rebuilt each time render runs
 ```
 
-有一处毛刺值得知道：arena 每一趟都会清空并复用下标，所以一个过期元素偶尔会正好持有运行时刚分配给"它要挂上去的那个节点"的下标。误用仍然会被抓到，但信息变成 `an element cannot be added to itself`。两者含义相同——这个元素属于一趟已经结束的渲染。
+有一处毛刺值得知道：arena 每一趟都会清空并复用下标，所以一个过期元素偶尔会正好持有运行时刚分配给“它要挂上去的那个节点”的下标。误用仍然会被抓到，但信息变成 `an element cannot be added to itself`。两者含义相同——这个元素属于一趟已经结束的渲染。
 
 ### 为什么
 
@@ -243,7 +243,7 @@ render() {
 
 被替换掉的那份描述会多保留一代，因为事件可能针对一个已经被取代的帧派发。再晚到达的事件会被丢弃并记一条 `debug` 日志，而不是报错——作者没有做错什么，也没有什么可修。
 
-实际后果是：渲染期注册的回调不是订阅。需要活得比本次渲染更久的东西——比如响应输入框的 `change` 事件——见 [状态与视图](./state.md#输入事件)。
+实际后果是：渲染期注册的回调不是订阅。需要活得比本次渲染更久的东西——比如响应输入框的 `change` 事件——见 [State and Views](./state.md#输入事件)。
 
 ## 未知方法是错误
 
@@ -258,7 +258,7 @@ unknown element method `on_clicked`; it is neither a style method nor one of
 child, children, when, on_click, on_change, disabled, selected, checked, id
 ```
 
-这件事比看上去重要。拼错的样式名不会改变画面——它只是没起作用——没有诊断的话完全不可见。运行时如何在不给每次渲染加负担的前提下产生这条信息，见 [样式](./styling.md#未知方法)。
+这件事比看上去重要。拼错的样式名不会改变画面——它只是没起作用——没有诊断的话完全不可见。运行时如何在不给每次渲染加负担的前提下产生这条信息，见 [Styling](./styling.md#未知方法)。
 
 ## 还没有的东西
 
