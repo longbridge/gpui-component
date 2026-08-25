@@ -80,7 +80,7 @@ implementation.
 
 The module loader composes three resolvers/loaders in this order:
 
-1. Standard Runtime built-ins, including canonical and `node:` names;
+1. Standard Runtime built-ins under bare names such as `buffer` and `path`;
 2. the existing `gpui` built-in;
 3. application modules confined to the application root.
 
@@ -93,11 +93,11 @@ remain errors; this design does not add npm or Node package resolution.
 
 The first group is installed from LLRT with only compatibility wrappers:
 
-- `buffer` / `node:buffer`, including global `Buffer`;
-- `path` / `node:path`;
-- `url` / `node:url`, including the required URL globals;
-- `zlib` / `node:zlib`, using the pure-Rust compression backend;
-- `crypto` / `node:crypto` and Web Crypto, using one explicitly selected
+- `buffer`, including global `Buffer`;
+- `path`;
+- `url`, including the required URL globals;
+- `zlib`, using the pure-Rust compression backend;
+- `crypto` and Web Crypto, using one explicitly selected
   provider.
 
 Their transitive LLRT support crates are implementation details. Each module is
@@ -123,7 +123,7 @@ different behavior.
   a host request. LLRT's direct `std::process::exit`, signal delivery, uid/gid
   mutation, and unrestricted environment access are never registered.
 
-The standard `process` global and `node:process` module are authoritative.
+The standard `process` global and `process` module are authoritative.
 `gpui.process` is removed from the generated interface rather than maintaining
 a second process surface. Applications must migrate to the standard interface.
 
@@ -197,8 +197,9 @@ possible, and never resumes a destroyed runtime.
 - Invalid arguments, denied capabilities, unavailable exports, I/O failures,
   timeouts, and cancellation become JavaScript errors or promise rejections.
 - Script failures never panic or terminate the host.
-- Standard names follow the LLRT-supported subset and are documented as partial
-  compatibility, not Node.js compatibility as a whole.
+- Standard names follow the LLRT-supported subset but deliberately omit the
+  `node:` namespace. They are GPUI Shell modules, not a Node.js compatibility
+  claim.
 - `gpui` remains the host namespace for GPUI-specific capabilities. Standard
   modules are authoritative for FS, Process, and Console, so this change
   intentionally removes the corresponding handwritten `gpui` exports.

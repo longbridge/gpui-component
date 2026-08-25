@@ -55,6 +55,7 @@ mod native;
 mod overlay;
 pub(crate) mod sandbox;
 mod scheduler;
+mod standard;
 mod theme_api;
 
 /// Names exported by the built-in `gpui` module.
@@ -145,8 +146,14 @@ impl ShellRuntime {
         let context = JsContext::full(&js_runtime).map_err(js_setup_error)?;
 
         js_runtime.set_loader(
-            BuiltinResolver::default().with_module("gpui"),
-            ModuleLoader::default().with_module("gpui", GpuiModule),
+            (
+                standard::resolver(),
+                BuiltinResolver::default().with_module("gpui"),
+            ),
+            (
+                standard::loader(),
+                ModuleLoader::default().with_module("gpui", GpuiModule),
+            ),
         );
 
         // Resource limits belong to the sandbox policy, but only the engine
@@ -168,6 +175,7 @@ impl ShellRuntime {
         });
 
         runtime.install_globals()?;
+        runtime.with_js(standard::install)?;
         Ok(runtime)
     }
 
@@ -224,10 +232,12 @@ impl ShellRuntime {
 
         self.js_runtime.set_loader(
             (
+                standard::resolver(),
                 BuiltinResolver::default().with_module("gpui"),
                 AppModules::new(root.clone(), self.module_generation.clone()),
             ),
             (
+                standard::loader(),
                 ModuleLoader::default().with_module("gpui", GpuiModule),
                 AppModules::new(root.clone(), self.module_generation.clone()),
             ),

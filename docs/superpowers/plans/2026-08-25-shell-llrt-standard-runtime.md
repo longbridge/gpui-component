@@ -37,7 +37,7 @@
 
 - [ ] **Step 1: Add a failing JavaScript black-box test**
 
-Load a script importing `Buffer`, `node:path`, `node:url`, `node:zlib`, and `node:crypto`; render exact round-trip results for UTF-8 bytes, path joining, URL parsing, deflate/inflate, and SHA-256.
+Load a script importing `Buffer`, `path`, `url`, `zlib`, and `crypto`; render exact round-trip results for UTF-8 bytes, path joining, URL parsing, deflate/inflate, and SHA-256.
 
 - [ ] **Step 2: Verify the imports fail before integration**
 
@@ -112,12 +112,12 @@ git commit -m "refactor(shell): replace console with standard runtime"
 - Create: `crates/shell/src/tests/os.rs`
 
 **Interfaces:**
-- Produces: global `process`, `node:process`, `node:os`; `process.run(command, args?) -> Promise<{code,stdout,stderr}>`.
+- Produces: global `process`, `process`, and `os`; `process.run(command, args?) -> Promise<{code,stdout,stderr}>`.
 - Consumes: existing `crate::process::run`, `ExitRequest`, scheduler cancellation hooks, active Policy and application identity paths.
 
 - [ ] **Step 1: Migrate tests to standard imports and add denial tests**
 
-Change probes to use global `process` or `import process from "node:process"`. Assert `process.run` preserves limits; `process.exit` produces a host request; raw host environment, `kill`, `setuid`, and `setgid` are absent. Assert OS temp/home paths do not reveal ambient host paths.
+Change probes to use global `process` or `import process from "process"`. Assert `process.run` preserves limits; `process.exit` produces a host request; raw host environment, `kill`, `setuid`, and `setgid` are absent. Assert OS temp/home paths do not reveal ambient host paths.
 
 - [ ] **Step 2: Verify the migrated tests fail**
 
@@ -154,12 +154,12 @@ git commit -m "refactor(shell): replace process with safe standard adapter"
 - Modify: `crates/shell/src/tests/host_api.rs`
 
 **Interfaces:**
-- Produces: `fs`, `node:fs`, `fs/promises`, and `node:fs/promises` built-ins backed exclusively by `Capabilities::resolve` and `cap_std::fs::Dir`.
+- Produces: `fs` and `fs/promises` built-ins backed exclusively by `Capabilities::resolve` and `cap_std::fs::Dir`.
 - Consumes: the existing read/write/list/exists/mkdir/remove operations and `scheduler::blocking`.
 
 - [ ] **Step 1: Migrate FS probes to standard module names**
 
-Use `import * as fs from "node:fs/promises"` with `readFile`, `writeFile`, `readdir`, `access`, `mkdir`, `unlink`, and `rmdir`. Add tests showing an ungranted absolute path and a symlink escape are rejected.
+Use `import * as fs from "fs/promises"` with `readFile`, `writeFile`, `readdir`, `access`, `mkdir`, `unlink`, and `rmdir`. Add tests showing an ungranted absolute path and a symlink escape are rejected.
 
 - [ ] **Step 2: Verify imports fail**
 
@@ -264,7 +264,7 @@ git commit -m "feat(shell): add capability-gated fetch"
 - Create: `crates/shell/src/tests/net.rs`
 
 **Interfaces:**
-- Produces: `net` and `node:net` module subset with policy-gated connect/listen and bounded socket ownership.
+- Produces: a `net` module subset with policy-gated connect/listen and bounded socket ownership.
 - Consumes: `NetworkGrant`, Shell scheduler cancellation, LLRT Buffer/Event/Stream support modules.
 
 - [ ] **Step 1: Add loopback integration tests**
@@ -309,7 +309,7 @@ Assert declarations include supported globals/modules and omit `gpui.fs` and `gp
 
 - [ ] **Step 2: Migrate first-party JavaScript**
 
-Use `node:fs/promises`, global or `node:process`, and global Console. Keep GPUI-only imports in `gpui`.
+Use `fs/promises`, global or bare-module `process`, and global Console. Keep GPUI-only imports in `gpui`.
 
 - [ ] **Step 3: Update architecture documentation**
 

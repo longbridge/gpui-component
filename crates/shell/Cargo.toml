@@ -35,6 +35,13 @@ rquickjs = { version = "0.12", features = [
     "classes",
     "properties",
 ], optional = true }
+# LLRT is still pre-release. Keep every module on the same audited revision;
+# crates.io's 0.8.1-beta release uses rquickjs 0.11 and cannot share our VM.
+llrt_buffer = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb2778eca4b5a63111e74f51" }
+llrt_crypto = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb2778eca4b5a63111e74f51", default-features = false, features = ["crypto-rust"] }
+llrt_path = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb2778eca4b5a63111e74f51" }
+llrt_url = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb2778eca4b5a63111e74f51" }
+llrt_zlib = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb2778eca4b5a63111e74f51", default-features = false, features = ["compression-rust"] }
 cap-std = "4.0.3"
 
 anyhow.workspace = true
