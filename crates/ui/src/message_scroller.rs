@@ -1,15 +1,19 @@
-use std::ops::Range;
+use std::{ops::Range, time::Duration};
 
 use gpui::{
     AnyElement, App, Context, ElementId, Entity, FollowMode, InteractiveElement as _, IntoElement,
     ListAlignment, ListOffset, ListState, ParentElement as _, RenderOnce, SharedString,
-    StyleRefinement, Styled, Window, div, list, prelude::FluentBuilder as _, px,
+    StyleRefinement, Styled, Window, div, list, prelude::FluentBuilder as _, px, rems,
 };
+use gpui_base::motion::{Transition, transition};
 
-use crate::{ActiveTheme as _, IconName, Sizable as _, StyledExt as _, button::Button};
+use crate::{
+    ActiveTheme as _, Disableable as _, IconName, Sizable as _, StyledExt as _, button::Button,
+};
 use crate::{button::ButtonVariants as _, scroll::ScrollableElement as _};
 
 const LIST_OVERDRAW: gpui::Pixels = px(400.);
+const JUMP_BUTTON_TRANSITION: Duration = Duration::from_millis(200);
 
 /// The entity-owned scrolling state for a [`MessageScroller`].
 ///
@@ -157,6 +161,8 @@ pub struct MessageScroller {
     list_style: StyleRefinement,
     row_style: StyleRefinement,
     jump_button_style: StyleRefinement,
+    jump_button_renderer: Option<Box<dyn FnOnce(Button) -> Button>>,
+    jump_button_transition: Duration,
     scrollbar: bool,
     jump_button: bool,
     jump_button_label: SharedString,
@@ -184,6 +190,8 @@ impl MessageScroller {
             list_style: StyleRefinement::default(),
             row_style: StyleRefinement::default(),
             jump_button_style: StyleRefinement::default(),
+            jump_button_renderer: None,
+            jump_button_transition: JUMP_BUTTON_TRANSITION,
             scrollbar: true,
             jump_button: true,
             jump_button_label: "Jump to latest".into(),
@@ -231,6 +239,27 @@ impl MessageScroller {
         self.jump_button_style = style;
         self
     }
+
+    /// Customize the built-in jump button without replacing its scroll action.
+    ///
+    /// The callback receives the fully configured Button, so its variant,
+    /// semantic size, icon, tooltip, or instance styling may be adjusted.
+    pub fn with_jump_button_renderer(
+        mut self,
+        renderer: impl FnOnce(Button) -> Button + 'static,
+    ) -> Self {
+        self.jump_button_renderer = Some(Box::new(renderer));
+        self
+    }
+
+    /// Set how long the built-in jump button takes to enter or leave.
+    ///
+    /// A zero duration disables its transition. Reduced-motion preferences
+    /// always adopt the final state immediately.
+    pub fn with_jump_button_transition(mut self, duration: Duration) -> Self {
+        self.jump_button_transition = duration;
+        self
+    }
 }
 
 impl Styled for MessageScroller {
@@ -240,7 +269,7 @@ impl Styled for MessageScroller {
 }
 
 impl RenderOnce for MessageScroller {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let root_id = self.id.clone();
         let (list_state, show_jump_button) = {
             let state = self.state.read(cx);
@@ -249,25 +278,36 @@ impl RenderOnce for MessageScroller {
                 self.jump_button && state.is_scrolled_up(),
             )
         };
+        let jump_button_visibility = if self.jump_button {
+            transition(
+                (root_id.clone(), "jump-button-visibility"),
+                if show_jump_button { 1. } else { 0. },
+                Transition::new(self.jump_button_transition),
+                window,
+                cx,
+            )
+        } else {
+            0.
+        };
         let tokens = cx.theme().semantic_tokens();
-        let row_gap = tokens.spacing.xl;
         let row_style = self.row_style;
         let jump_button_style = self.jump_button_style;
+        let jump_button_renderer = self.jump_button_renderer;
         let mut renderer = self.renderer;
 
         let list = list(list_state.clone(), move |index, window, cx| {
             div()
                 .w_full()
                 .min_w_0()
-                .pb(row_gap)
+                .pb_8()
                 .refine_style(&row_style)
                 .child(renderer(index, window, cx))
                 .into_any_element()
         })
         .size_full()
         .min_h_0()
-        .px(tokens.spacing.md)
-        .py(tokens.spacing.sm)
+        .px_3()
+        .py_2()
         .refine_style(&self.list_style);
 
         let viewport = div()
@@ -286,7 +326,7 @@ impl RenderOnce for MessageScroller {
             .min_h_0()
             .overflow_hidden()
             .child(viewport)
-            .when(show_jump_button, |this| {
+            .when(self.jump_button && jump_button_visibility > 0., |this| {
                 let state = self.state.clone();
 
                 this.child(
@@ -294,16 +334,18 @@ impl RenderOnce for MessageScroller {
                         .absolute()
                         .left_0()
                         .right_0()
-                        .bottom(tokens.spacing.lg)
+                        .bottom(rems(0.5 + jump_button_visibility * 0.5))
                         .flex()
                         .justify_center()
+                        .opacity(jump_button_visibility)
                         .child(
                             Button::new((root_id, "jump-to-latest"))
                                 .secondary()
                                 .small()
+                                .size_7()
                                 .icon(IconName::ArrowDown)
                                 .tooltip(self.jump_button_label)
-                                .rounded(tokens.radius.full)
+                                .rounded(cx.theme().radius_full())
                                 .border_1()
                                 .border_color(tokens.colors.border)
                                 .bg(tokens.colors.background)
@@ -311,7 +353,11 @@ impl RenderOnce for MessageScroller {
                                 .refine_style(&jump_button_style)
                                 .on_click(move |_, _, cx| {
                                     state.update(cx, |state, cx| state.scroll_to_end(cx));
-                                }),
+                                })
+                                .when_some(jump_button_renderer, |button, renderer| {
+                                    renderer(button)
+                                })
+                                .when(!show_jump_button, |button| button.disabled(true)),
                         ),
                 )
             })
@@ -364,10 +410,14 @@ mod tests {
             .with_content_style(StyleRefinement::default())
             .with_list_style(StyleRefinement::default())
             .with_row_style(StyleRefinement::default())
-            .with_jump_button_style(StyleRefinement::default());
+            .with_jump_button_style(StyleRefinement::default())
+            .with_jump_button_renderer(|button| button.large())
+            .with_jump_button_transition(Duration::from_millis(300));
 
         assert!(!scroller.scrollbar);
         assert!(!scroller.jump_button);
         assert_eq!(scroller.jump_button_label, "Latest");
+        assert!(scroller.jump_button_renderer.is_some());
+        assert_eq!(scroller.jump_button_transition, Duration::from_millis(300));
     }
 }

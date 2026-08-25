@@ -35,7 +35,7 @@ MessageScroller::new(
     move |index, window, cx| render_message(&messages[index], window, cx),
 )
 .w_full()
-.h(px(480.))
+.h_96()
 ```
 
 Give the rendered row a stable element ID derived from the application's message ID. `MessageScroller` deliberately does not keep an index-to-ID map.
@@ -90,9 +90,24 @@ These readers query `ListState` directly instead of exposing a cached visible ra
 
 ## Styling and controls
 
-`MessageScroller` implements `Styled` for the root. `with_content_style(...)` refines the internal scrollbar viewport, `with_list_style(...)` refines the GPUI list after its default padding, and `with_row_style(...)` refines the full-width wrapper around every rendered row. The wrapper owns the Base UI 24 px transcript gap as stable trailing spacing, so GPUI's virtual list includes it in measured height across append and prepend updates.
+`MessageScroller` implements `Styled` for the root. `with_content_style(...)` refines the internal scrollbar viewport, `with_list_style(...)` refines the GPUI list after its default padding, and `with_row_style(...)` refines the full-width wrapper around every rendered row. The wrapper owns the transcript's `gap-8` spacing as stable trailing padding, so GPUI's virtual list includes it in measured height across append and prepend updates. Spacing, list padding, and the jump button use the application's shared `rem` scale.
 
-Use `.scrollbar(false)` to hide the built-in scrollbar. Use `.jump_button(false)` when the application needs to compose its own Button from `is_scrolled_up()` and `scroll_to_end()`. The built-in control is a 32 px circular secondary `Button` with an arrow icon. `with_jump_button_label(...)` localizes its tooltip, and `with_jump_button_style(...)` refines the Button without changing the scroller behavior.
+Use `.scrollbar(false)` to hide the built-in scrollbar. Use `.jump_button(false)` when the application needs to compose its own Button from `is_scrolled_up()` and `scroll_to_end()`. The built-in control uses the compact icon-button size, a theme-aware full radius, and a secondary variant. It fades and moves into view when the user leaves the conversation tail; reduced-motion preferences disable the transition automatically.
+
+- `with_jump_button_label(...)` localizes the button tooltip.
+- `with_jump_button_style(...)` refines the Button after its default style.
+- `with_jump_button_renderer(...)` receives the configured Button so an application can replace its variant, semantic size, icon, or styling while preserving the built-in scroll action.
+- `with_jump_button_transition(...)` changes the enter/leave duration; `Duration::ZERO` disables the animation.
+
+```rust
+MessageScroller::new("conversation", scroller, render_message)
+    .with_list_style(StyleRefinement::default().p_5())
+    .with_row_style(StyleRefinement::default().pb_6())
+    .with_jump_button_renderer(|button| button.outline())
+    .with_jump_button_transition(Duration::from_millis(250))
+```
+
+The application owns the surrounding Card-like composition, including its header, surface, input area, and content padding. `MessageScroller` owns only scrolling and its optional jump control.
 
 ## Component boundaries
 

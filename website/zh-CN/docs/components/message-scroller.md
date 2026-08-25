@@ -35,7 +35,7 @@ MessageScroller::new(
     move |index, window, cx| render_message(&messages[index], window, cx),
 )
 .w_full()
-.h(px(480.))
+.h_96()
 ```
 
 渲染出的 row 应使用由应用消息 ID 派生的稳定 element ID。`MessageScroller` 有意不保存 index 到 ID 的映射。
@@ -90,9 +90,24 @@ if let Some(index) = messages.iter().position(|message| message.id == first_unre
 
 ## 样式与控件
 
-`MessageScroller` 在 root 上实现了 `Styled`。`with_content_style(...)` 用于调整内部 scrollbar viewport，`with_list_style(...)` 会在默认 padding 之后调整 GPUI list，`with_row_style(...)` 用于调整每个渲染 row 外层的全宽包装。包装层用稳定的尾部间距实现 Base UI 的 24 px transcript gap，因此 GPUI 虚拟列表会在 append 与 prepend 前后持续把该间距计入 row 的测量高度。
+`MessageScroller` 在 root 上实现了 `Styled`。`with_content_style(...)` 用于调整内部 scrollbar viewport，`with_list_style(...)` 会在默认 padding 之后调整 GPUI list，`with_row_style(...)` 用于调整每个渲染 row 外层的全宽包装。包装层通过稳定的尾部 padding 实现会话的 `gap-8` 间距，因此 GPUI 虚拟列表会在 append 与 prepend 前后持续把该间距计入 row 的测量高度。消息间距、列表 padding 和跳转按钮均使用应用共享的 `rem` 缩放体系。
 
-使用 `.scrollbar(false)` 隐藏内置 scrollbar。当应用需要根据 `is_scrolled_up()` 与 `scroll_to_end()` 自行组合 Button 时，可使用 `.jump_button(false)`。内置控件是带箭头图标的 32 px 圆形 secondary `Button`；`with_jump_button_label(...)` 用于本地化 tooltip，`with_jump_button_style(...)` 可以在不改变滚动行为的前提下调整按钮样式。
+使用 `.scrollbar(false)` 隐藏内置 scrollbar。当应用需要根据 `is_scrolled_up()` 与 `scroll_to_end()` 自行组合 Button 时，可使用 `.jump_button(false)`。内置控件采用紧凑的图标按钮尺寸、跟随主题的 full radius，以及 secondary 变体。用户离开会话末尾时，按钮会通过透明度和位置过渡出现；系统开启 reduced motion 后会自动关闭过渡。
+
+- `with_jump_button_label(...)` 用于本地化按钮 tooltip。
+- `with_jump_button_style(...)` 在默认样式之后调整 Button。
+- `with_jump_button_renderer(...)` 接收已经配置完成的 Button，应用可以调整变体、语义尺寸、图标或实例样式，同时保留内置滚动操作。
+- `with_jump_button_transition(...)` 调整按钮显示与隐藏的过渡时长；传入 `Duration::ZERO` 可以关闭动画。
+
+```rust
+MessageScroller::new("conversation", scroller, render_message)
+    .with_list_style(StyleRefinement::default().p_5())
+    .with_row_style(StyleRefinement::default().pb_6())
+    .with_jump_button_renderer(|button| button.outline())
+    .with_jump_button_transition(Duration::from_millis(250))
+```
+
+外层 Card 风格容器、标题、背景、输入区域和内容 padding 由应用组合；`MessageScroller` 仅负责滚动及其可选的跳转按钮。
 
 ## 组件边界
 
