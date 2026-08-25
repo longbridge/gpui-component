@@ -7,10 +7,10 @@
 //
 //   cargo run -p gpui-shell -- examples/js_todolist
 
-import { View, v_flex, h_flex, InputState } from "gpui";
+import { View, v_flex, h_flex, InputState, open_dialog, push_toast } from "gpui";
 /** @import { Context, InputStateHandle } from "gpui" */
 import { load, save } from "./storage.js";
-import ConfirmClear from "./confirm.js";
+import confirmClear from "./confirm.js";
 import {
   SPACE,
   button,
@@ -106,22 +106,20 @@ export default class TodoList extends View {
     const count = this.completed;
     if (count === 0) return;
 
-    // Anything the dialog's own `init` should see rides in `props`; the rest of
-    // the object is how the dialog behaves, not what it shows.
-    cx.open_dialog(ConfirmClear, {
-      props: {
-        count,
-        onConfirm: (/** @type {Context} */ dialogCx) => {
-          this.items = this.items.filter((item) => !item.done);
-          this.persisted = save(this.items);
-          dialogCx.toast({
-            title: `Deleted ${count} ${count === 1 ? "item" : "items"}`,
-            level: "info",
-            id: "cleared",
-          });
-        },
-      },
-    });
+    // The dialog is a function returning an element. What it shows comes from
+    // what this call closed over, so there is no second channel for handing a
+    // view its starting state.
+    open_dialog(
+      confirmClear(count, () => {
+        this.items = this.items.filter((item) => !item.done);
+        this.persisted = save(this.items);
+        push_toast({
+          title: `Deleted ${count} ${count === 1 ? "item" : "items"}`,
+          level: "info",
+          id: "cleared",
+        });
+      }),
+    );
   }
 
   render() {

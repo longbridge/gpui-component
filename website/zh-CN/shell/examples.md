@@ -60,7 +60,7 @@ export function load() {
 
 `save()` 会返回这次写入有没有落盘，页脚则把它显示在界面上——“Not saved — this host did not grant storage, so the list lasts for this run only”。在边界上把拒绝吸收掉，然后如实告诉用户。
 
-**dialog 是一个视图，不是一个元素。** `confirm.js` default 导出一个带自己 `init` 与 `render` 的 `View` 类；`main.js` 把这个类本身交给 `cx.open_dialog(ConfirmClear, { props: { count } })` 来打开它。见 [Overlays](./overlays.md)。
+**dialog 是一个函数，不是一个元素。** `confirm.js` default 导出一个返回内容函数的函数；`main.js` 用 `open_dialog(confirmClear(count, onConfirm))` 打开它。数量和回调是闭包捕获的，不是交接过去的。见 [Overlays](./overlays.md)。
 
 **类型是配好的，一共三个文件。** `jsconfig.json` 打开 `checkJs`，`gpui.d.ts` 由 `gpui-shell types` 生成，`types.d.ts` 放这个应用自己的形状——`Todo`、`Filter`。编辑器补全与 `checkJs` 报错从此就能用，不需要任何构建步骤。
 

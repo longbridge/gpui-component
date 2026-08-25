@@ -48,7 +48,7 @@ cx.open_window(options, move |window, cx| {
 })
 ```
 
-`ShellRoot` 持有 dialog 栈、sheet、toast 栈、焦点恢复与 Tab 导航——正是 `Root` 对一个 `gpui-component` 窗口所起的作用。`cx.open_dialog` 这一类调用要经由窗口找到它，所以挂在别的根视图之下的脚本会拿到一条讲清原因的拒绝，而不是悄无声息地没反应。
+`ShellRoot` 持有 dialog 栈、sheet、toast 栈、焦点恢复与 Tab 导航——正是 `Root` 对一个 `gpui-component` 窗口所起的作用。`open_dialog` 这一类调用要经由窗口找到它，所以挂在别的根视图之下的脚本会拿到一条讲清原因的拒绝，而不是悄无声息地没反应。
 
 宿主也可以直接驱动同样这几个界面，插件面板与宿主自己的 UI 因此落在同一个栈里：
 

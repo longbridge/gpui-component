@@ -1120,7 +1120,7 @@ request a re-render from an event handler instead
 ```
 
 ```text
-cx.open_dialog(view, options) is not allowed during the `render` phase;
+open_dialog(content, options) is not allowed during the `render` phase;
 overlays may only be opened or closed while handling an event or a task
 ```
 
@@ -1900,26 +1900,45 @@ window was never delivered.
 ### 16.2 The script surface
 
 ```js
-const depth = cx.open_dialog(ConfirmClear, {
-  props: { count, onConfirm },
+import { open_dialog, close_dialog, open_sheet, push_toast } from "gpui";
+
+const depth = open_dialog(() => confirmClear(count, onConfirm), {
   escape_dismissable: false,
 });
-cx.close_dialog(); // -> was anything open?
-cx.close_all_dialogs(); // -> how many closed
+close_dialog(); // -> was anything open?
+close_all_dialogs(); // -> how many closed
+has_active_dialog();
 
-cx.open_sheet("right", FiltersPanel, { props: { filters } });
-cx.close_sheet();
+open_sheet(() => filtersPanel(filters)); // right, the default side
+open_sheet_at("left", () => navigation());
+close_sheet();
+has_active_sheet();
 
-cx.toast({
+push_toast({
   title: "Saved",
   description: "3 files",
   level: "success",
   timeout: 4000,
   id: "save",
 });
-cx.dismiss_toast("save");
-cx.dismiss_all_toasts();
+remove_toast("save");
+clear_toasts();
 ```
+
+These are flat exports rather than methods on `cx`, and rather than a `window`
+namespace. A dialog belongs to the window, not to the view that opened it, so
+they left `cx`. They stayed flat because in Rust `window.` is a *receiver* — a
+value every render and event function already holds — and the script has no such
+value; a namespace imitating it would be shape without substance. `fs` and
+`store` are namespaced because the name is the manifest's capability key, which
+an overlay does not have.
+
+The content is a **function returning an element**, not an element: an element
+belongs to the arena of the render pass that built it, and a dialog outlives the
+call that opened it. The function runs when the dialog draws and again whenever
+it redraws — the same contract `render` has — and whatever it closes over is the
+dialog's state. That is what removed `props`, which existed only because the
+dialog used to be a class the script handed over.
 
 Four details are worth stating because each was a decision.
 
@@ -3141,12 +3160,12 @@ export function save(items) {
 }
 ```
 
-One correction to the shipped example: `main.js` opens its confirmation dialog
-with `cx.open_dialog(ConfirmClear, { count, onConfirm })`, which throws, because
-those are not dialog options. The correct call passes them through `props`:
+One correction to the shipped example: `main.js` used to open its confirmation
+dialog by handing over a view class and a `props` object. Both are gone —
+`confirm.js` exports a function, and what the dialog shows is closed over:
 
 ```js
-cx.open_dialog(ConfirmClear, { props: { count, onConfirm } });
+open_dialog(confirmClear(count, onConfirm));
 ```
 
 ### Appendix B: Crate layout

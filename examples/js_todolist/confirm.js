@@ -1,46 +1,38 @@
 // A confirmation dialog, opened by the list when an action destroys work.
+//
+// A function returning an element, not a view class. It runs when the dialog
+// draws — an element belongs to the render pass that built it, and a dialog
+// outlives the call that opened it — so everything it shows comes from what the
+// caller closed over rather than from a `props` object handed across.
 
-import { View, v_flex, h_flex, text } from "gpui";
+import { v_flex, h_flex, close_dialog } from "gpui";
 import { SPACE, button, label, muted } from "./ui.js";
-/** @import { Context } from "gpui" */
 
-export default class ConfirmClear extends View {
-  /** @param {{ count?: number, onConfirm?: (cx: Context) => void }} [props] */
-  init(props) {
-    this.count = props?.count ?? 0;
-    this.onConfirm = props?.onConfirm;
-  }
-
-  render() {
-    return v_flex()
-      .w(360)
-      .bg("surface")
-      .border(1)
-      .border_color("border")
-      .p(SPACE.xl)
-      .gap(SPACE.md)
-      .child(label(`Delete ${this.count} completed ${this.count === 1 ? "item" : "items"}?`))
-      .child(muted("This cannot be undone."))
-      .child(
-        h_flex()
-          .justify_end()
-          .gap(SPACE.sm)
-          .pt(SPACE.sm)
-          .child(button("cancel", "Cancel", (_event, cx) => cx.close_dialog(), { variant: "ghost" }))
-          .child(
-            button(
-              "confirm",
-              "Delete",
-              (_event, cx) => {
-                // The callback is handed *this* call's cx. A cx captured when
-                // the dialog was opened belongs to a call that has returned,
-                // and using it throws.
-                if (this.onConfirm) this.onConfirm(cx);
-                cx.close_dialog();
-              },
-              { variant: "primary" },
-            ),
+/**
+ * @param {number} count
+ * @param {(cx: import("gpui").Context) => void} onConfirm
+ */
+export default (count, onConfirm) => () =>
+  v_flex()
+    .w(360)
+    .gap(SPACE.md)
+    .child(label(`Delete ${count} completed ${count === 1 ? "item" : "items"}?`))
+    .child(muted("This cannot be undone."))
+    .child(
+      h_flex()
+        .justify_end()
+        .gap(SPACE.sm)
+        .pt(SPACE.sm)
+        .child(button("cancel", "Cancel", () => close_dialog(), { variant: "ghost" }))
+        .child(
+          button(
+            "confirm",
+            "Delete",
+            (_event, cx) => {
+              onConfirm(cx);
+              close_dialog();
+            },
+            { variant: "primary" },
           ),
-      );
-  }
-}
+        ),
+    );

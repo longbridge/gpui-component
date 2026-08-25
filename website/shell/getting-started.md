@@ -48,7 +48,7 @@ gpui_platform::application()
 
 Two of those lines carry rules rather than mechanics.
 
-**`ShellRoot` must be the window's first view**, the same way `Root` must be for a `gpui-component` window. It owns the dialog stack, the sheet, the toast stack, focus restoration and Tab navigation. `cx.open_dialog` and friends reach it through the window; a window opened with any other root view refuses those calls with a message saying so.
+**`ShellRoot` must be the window's first view**, the same way `Root` must be for a `gpui-component` window. It owns the dialog stack, the sheet, the toast stack, focus restoration and Tab navigation. `open_dialog` and friends reach it through the window; a window opened with any other root view refuses those calls with a message saying so.
 
 **Capabilities default to empty.** `Capabilities::default()` grants nothing at all — no file, no storage, no clipboard, no process. The host decides, because only the host knows how far it trusts the code it is about to run. See [Capabilities](./capabilities.md).
 

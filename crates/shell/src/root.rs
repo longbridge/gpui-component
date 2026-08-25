@@ -389,7 +389,7 @@ impl ShellRoot {
     /// The toast stays mounted until its exit transition finishes, which is why
     /// this reports "started closing" rather than "removed": a caller that
     /// wants to know when it is gone should read [`ShellRoot::toast_count`].
-    pub fn dismiss_toast(&mut self, id: impl Into<SharedString>, cx: &mut Context<Self>) -> bool {
+    pub fn remove_toast(&mut self, id: impl Into<SharedString>, cx: &mut Context<Self>) -> bool {
         let dismissed = self
             .toasts
             .dismiss(&id.into(), cx.background_executor().now());
@@ -401,7 +401,7 @@ impl ShellRoot {
 
     /// Begins the exit of every active toast, for a script clearing its own
     /// notifications.
-    pub fn dismiss_all_toasts(&mut self, cx: &mut Context<Self>) {
+    pub fn clear_toasts(&mut self, cx: &mut Context<Self>) {
         if !self
             .toasts
             .dismiss_all(cx.background_executor().now())
@@ -588,7 +588,7 @@ impl ShellRoot {
                                 .transition_status(status)
                                 .occlude()
                                 .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
-                                    this.dismiss_toast(dismiss_id.clone(), cx);
+                                    this.remove_toast(dismiss_id.clone(), cx);
                                 }))
                                 .v_flex()
                                 .gap(spacing.xxs)
@@ -1137,7 +1137,7 @@ mod tests {
         });
         assert_eq!(root.read_with(cx, |root, _| root.toast_count()), 1);
 
-        assert!(root.update(cx, |root, cx| root.dismiss_toast("saved", cx)));
+        assert!(root.update(cx, |root, cx| root.remove_toast("saved", cx)));
         // Still mounted: dismissal starts the exit transition.
         assert_eq!(root.read_with(cx, |root, _| root.toast_count()), 1);
 

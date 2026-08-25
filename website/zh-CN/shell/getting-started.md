@@ -47,7 +47,7 @@ gpui_platform::application()
 
 其中两行承载的是规则而不是机制。
 
-**`ShellRoot` 必须是窗口的第一层视图**，正如 `gpui-component` 窗口的第一层视图必须是 `Root`。它持有 dialog 栈、sheet、toast 栈、焦点恢复与 Tab 导航。`cx.open_dialog` 一族是通过窗口找到它的；用其他视图作为根打开的窗口，会用一条明确的信息拒绝这些调用。
+**`ShellRoot` 必须是窗口的第一层视图**，正如 `gpui-component` 窗口的第一层视图必须是 `Root`。它持有 dialog 栈、sheet、toast 栈、焦点恢复与 Tab 导航。`open_dialog` 一族是通过窗口找到它的；用其他视图作为根打开的窗口，会用一条明确的信息拒绝这些调用。
 
 **能力默认为空。** `Capabilities::default()` 什么都不授予——没有文件、没有存储、没有剪贴板、没有进程。由宿主决定，因为只有宿主知道它对即将运行的这段代码信任到什么程度。见 [Capabilities](./capabilities.md)。
 

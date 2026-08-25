@@ -74,6 +74,18 @@ const MODULE_EXPORTS: &[&str] = &[
     "Switch",
     "Input",
     "InputState",
+    // Window-level overlays (`overlay`).
+    "open_dialog",
+    "close_dialog",
+    "close_all_dialogs",
+    "has_active_dialog",
+    "open_sheet",
+    "open_sheet_at",
+    "close_sheet",
+    "has_active_sheet",
+    "push_toast",
+    "remove_toast",
+    "clear_toasts",
     // System capabilities (`host`, `sandbox`).
     "fs",
     "process",
@@ -784,8 +796,44 @@ globalThis.__gpui = (() => {
     }
   }
 
+  // A dialog and a sheet are views whose `render` is the author's function.
+  // That is the whole of the wrapping: a script view is an object with a
+  // `render`, so a content function already is one, once it is given the name.
+  const contentView = (build, api) => {
+    if (typeof build !== "function") {
+      throw new TypeError(
+        api + " takes a function returning an element, not an element and not a view class",
+      );
+    }
+    return { render: () => build() };
+  };
+
   return {
     View,
+
+    // Overlays are window-level, not view-level: `cx.notify()` re-renders this
+    // view, `open_dialog()` changes what the user is looking at. That is why
+    // they left `cx`. They are flat rather than under a `window` object because
+    // in Rust `window.` is a *receiver* — a value every render and event
+    // function already holds — and the script has no such value; a namespace
+    // imitating it would be shape without substance. `fs` and `store` are
+    // namespaced because the name is the manifest's capability key, and an
+    // overlay has no grant.
+    open_dialog: (build, options) =>
+      __open_dialog(contentView(build, "open_dialog"), options ?? undefined),
+    close_dialog: () => __close_dialog(),
+    close_all_dialogs: () => __close_all_dialogs(),
+    has_active_dialog: () => __has_active_dialog(),
+
+    open_sheet: (build) => __open_sheet(undefined, contentView(build, "open_sheet")),
+    open_sheet_at: (side, build) =>
+      __open_sheet(String(side), contentView(build, "open_sheet_at")),
+    close_sheet: () => __close_sheet(),
+    has_active_sheet: () => __has_active_sheet(),
+
+    push_toast: (options) => __push_toast(options),
+    remove_toast: (id) => __remove_toast(String(id)),
+    clear_toasts: () => __clear_toasts(),
     div: () => element(__div()),
     h_flex: () => element(__h_flex()),
     v_flex: () => element(__v_flex()),
@@ -869,6 +917,9 @@ impl ShellRuntime {
                     },
                 ),
             )?;
+
+            // Before the prelude, which builds the `window` object over these.
+            overlay::install(ctx, &ctx.globals())?;
 
             ctx.eval::<(), _>(PRELUDE)?;
 
@@ -1039,8 +1090,6 @@ fn context_object<'js>(ctx: &Ctx<'js>, generation: u64) -> JsResult<Object<'js>>
             .map_err(|error| Exception::throw_type(&ctx, &error.to_string()))
         }),
     )?;
-
-    overlay::install(ctx, &object, generation)?;
 
     object.set(
         "phase",

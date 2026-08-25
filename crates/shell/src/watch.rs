@@ -445,7 +445,7 @@ fn retract_failure(handle: AnyWindowHandle, window: &mut Window, cx: &mut App) {
         return;
     };
     let _ = root.update(cx, |root, _, cx| {
-        root.dismiss_toast(RELOAD_TOAST, cx);
+        root.remove_toast(RELOAD_TOAST, cx);
     });
     let _ = window;
 }

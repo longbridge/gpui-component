@@ -1,4 +1,4 @@
-//! Dialogs, the sheet and toasts on the script-side `cx`.
+//! Dialogs, the sheet and toasts.
 //!
 //! An overlay is a *host* capability, not something a script draws. A dialog is
 //! not a floating `div`: it is a place in the window's stacking order, a focus
@@ -9,9 +9,26 @@
 //! would own even less. So the script says *what* to put in front of the user,
 //! and the root says where it goes and how it leaves.
 //!
-//! What crosses the boundary is therefore small: a view class to instantiate, a
-//! side to anchor to, a sentence to show. Everything else — layering,
-//! dismissal, focus restoration, toast lifecycle — stays in [`crate::root`].
+//! # Why these are not on `cx`
+//!
+//! A dialog belongs to the **window**, not to the view that opened it.
+//! `cx.notify()` re-renders this view; `open_dialog()` changes what the window
+//! is showing. Hanging both off one object said they were the same kind of
+//! thing. `gpui-component` draws the same line, putting this surface on `Window`
+//! rather than on a context.
+//!
+//! They are flat exports rather than a `window` namespace because in Rust
+//! `window.` is a **receiver** — a value every render and event function already
+//! holds — and the script has no such value. A namespace object imitating it
+//! would be the shape without the substance. `fs` and `store` are namespaced for
+//! a reason that does apply to them: the name is the manifest's capability key.
+//! An overlay has no grant.
+//!
+//! Leaving `cx` also removed a failure mode. These calls used to carry a
+//! generation, so a `cx` stashed in a closure and used later reached a dead
+//! stack frame and had to be caught. They are ambient now, like `fs` and
+//! `store` — they read the call that is running *now* — so there is no stale
+//! handle to hold.
 //!
 //! # Why every entry point checks the phase first
 //!
@@ -28,28 +45,41 @@
 //! # The script surface
 //!
 //! ```js
-//! const depth = cx.open_dialog(ConfirmDialog, {
+//! import { open_dialog, close_dialog, push_toast, v_flex, text } from "gpui";
+//!
+//! const depth = open_dialog(() => v_flex().child(text("Delete?")), {
 //!   escape_dismissable: false,
 //!   backdrop_dismissable: false,
-//!   props: { path },
 //! });
-//! cx.close_dialog();       // -> did anything close?
-//! cx.close_all_dialogs();  // -> how many closed
+//! close_dialog();       // -> did anything close?
+//! close_all_dialogs();  // -> how many closed
+//! has_active_dialog();
 //!
-//! cx.open_sheet("right", FiltersPanel, { props: { filters } });
-//! cx.close_sheet();        // -> did anything close?
+//! open_sheet(() => filters());          // right, the default side
+//! open_sheet_at("left", () => nav());
+//! close_sheet();        // -> did anything close?
+//! has_active_sheet();
 //!
-//! cx.toast({ title: "Saved", description: "3 files", level: "success",
-//!            timeout: 4000, id: "save" });
-//! cx.dismiss_toast("save");
-//! cx.dismiss_all_toasts();
+//! push_toast({ title: "Saved", description: "3 files", level: "success",
+//!              timeout: 4000, id: "save" });
+//! remove_toast("save");
+//! clear_toasts();
 //! ```
+//!
+//! # Why the content is a function
+//!
+//! `open_dialog` takes a function returning an element, not an element. An
+//! element belongs to the arena of the render pass that built it, and a dialog
+//! outlives the call that opened it — so an element built at open time would
+//! belong to the wrong pass. The function is called when the dialog renders, and
+//! again whenever it re-renders, which is the same contract a view's `render`
+//! has. Whatever it closes over is the dialog's state.
 
 use std::time::Duration;
 
 use gpui::{AnyView, App, AppContext as _, Context, Window};
 use rquickjs::{
-    Constructor, Ctx, Exception, FromJs, Object, Persistent, Result as JsResult, Value,
+    Ctx, Exception, FromJs, Object, Persistent, Result as JsResult, Value,
     function::{Func, Opt},
 };
 
@@ -63,65 +93,64 @@ use super::{ShellRuntime, ViewObject};
 
 /// The names an error message uses, so a refusal reads like the call that
 /// caused it rather than like the Rust function that answered it.
-const OPEN_DIALOG: &str = "cx.open_dialog(view, options)";
-const CLOSE_DIALOG: &str = "cx.close_dialog()";
-const CLOSE_ALL_DIALOGS: &str = "cx.close_all_dialogs()";
-const OPEN_SHEET: &str = "cx.open_sheet(side, view, options)";
-const CLOSE_SHEET: &str = "cx.close_sheet()";
-const TOAST: &str = "cx.toast(options)";
-const DISMISS_TOAST: &str = "cx.dismiss_toast(id)";
-const DISMISS_ALL_TOASTS: &str = "cx.dismiss_all_toasts()";
+const OPEN_DIALOG: &str = "open_dialog(content, options)";
+const CLOSE_DIALOG: &str = "close_dialog()";
+const CLOSE_ALL_DIALOGS: &str = "close_all_dialogs()";
+const OPEN_SHEET: &str = "open_sheet(content)";
+const OPEN_SHEET_AT: &str = "open_sheet_at(side, content)";
+const CLOSE_SHEET: &str = "close_sheet()";
+const PUSH_TOAST: &str = "push_toast(options)";
+const REMOVE_TOAST: &str = "remove_toast(id)";
+const CLEAR_TOASTS: &str = "clear_toasts()";
 
-/// Adds the overlay methods to one script-side `cx`.
+/// Installs the host half of the script-side `window`.
 ///
-/// Called from `context_object`, once per host call, with that call's
-/// generation. The generation is the whole of the safety story: a `cx` stashed
-/// in a closure and used after its call returned reaches
-/// [`scope::with_context`] with a stale generation and reports that, rather
-/// than opening a dialog against a dead stack frame.
+/// The prelude builds the object; these are the functions behind it. They take
+/// a view instance rather than a class, because the prelude has already wrapped
+/// the author's content function into `{ render }` — which is the whole of what
+/// a script view is.
 ///
 /// `ctx` is unused — every value installed here is built by `Object::set` from
 /// the target object's own context, because `Ctx` and `Object` are invariant in
 /// their lifetime and a value built from one cannot be set on the other. It
 /// stays in the signature to match the other installers.
-pub fn install(_ctx: &Ctx<'_>, context_object: &Object<'_>, generation: u64) -> JsResult<()> {
+pub fn install(_ctx: &Ctx<'_>, globals: &Object<'_>) -> JsResult<()> {
     // Returns the new depth of the dialog stack rather than a handle: the root
     // addresses dialogs by position, never by identity, so a handle would have
     // to promise "close *this* dialog", which is not an operation that exists.
     // The depth is what a script can actually use — to assert it opened one, or
     // to unwind to a known level.
-    context_object.set(
-        "open_dialog",
+    globals.set(
+        "__open_dialog",
         Func::from(
-            move |ctx: Ctx<'_>, class: ViewClass, options: Opt<DialogRequest>| -> JsResult<u32> {
+            |ctx: Ctx<'_>, content: ViewInstance, options: Opt<DialogRequest>| -> JsResult<u32> {
                 guard(&ctx, OPEN_DIALOG)?;
-                let request = options.0.unwrap_or_default();
-                let object = class.instantiate(&ctx, request.props.as_ref())?;
+                let options = options.0.unwrap_or_default().options;
 
-                with_root(&ctx, generation, OPEN_DIALOG, |root, window, cx| {
-                    let view = mount(&ctx, object, cx)?;
-                    root.open_dialog_with(view, request.options, window, cx);
+                with_root(&ctx, OPEN_DIALOG, |root, window, cx| {
+                    let view = mount(&ctx, content.0, cx)?;
+                    root.open_dialog_with(view, options, window, cx);
                     Ok(root.dialog_count() as u32)
                 })
             },
         ),
     )?;
 
-    context_object.set(
-        "close_dialog",
-        Func::from(move |ctx: Ctx<'_>| -> JsResult<bool> {
+    globals.set(
+        "__close_dialog",
+        Func::from(|ctx: Ctx<'_>| -> JsResult<bool> {
             guard(&ctx, CLOSE_DIALOG)?;
-            with_root(&ctx, generation, CLOSE_DIALOG, |root, window, cx| {
+            with_root(&ctx, CLOSE_DIALOG, |root, window, cx| {
                 Ok(root.close_dialog(window, cx))
             })
         }),
     )?;
 
-    context_object.set(
-        "close_all_dialogs",
-        Func::from(move |ctx: Ctx<'_>| -> JsResult<u32> {
+    globals.set(
+        "__close_all_dialogs",
+        Func::from(|ctx: Ctx<'_>| -> JsResult<u32> {
             guard(&ctx, CLOSE_ALL_DIALOGS)?;
-            with_root(&ctx, generation, CLOSE_ALL_DIALOGS, |root, window, cx| {
+            with_root(&ctx, CLOSE_ALL_DIALOGS, |root, window, cx| {
                 // Read before clearing: the root reports nothing, and "how many
                 // did I close?" is the same question `close_dialog`'s `bool`
                 // answers for one.
@@ -132,21 +161,35 @@ pub fn install(_ctx: &Ctx<'_>, context_object: &Object<'_>, generation: u64) -> 
         }),
     )?;
 
-    context_object.set(
-        "open_sheet",
-        Func::from(
-            move |ctx: Ctx<'_>,
-                  side: String,
-                  class: ViewClass,
-                  options: Opt<SheetRequest>|
-                  -> JsResult<()> {
-                guard(&ctx, OPEN_SHEET)?;
-                let side = parse_side(&ctx, &side)?;
-                let request = options.0.unwrap_or_default();
-                let object = class.instantiate(&ctx, request.props.as_ref())?;
+    // Reading the window is not mutating it, so this one is legal from `render`
+    // — a view that draws itself differently while a dialog is up needs to ask
+    // during the pass that draws it.
+    globals.set(
+        "__has_active_dialog",
+        Func::from(|ctx: Ctx<'_>| -> JsResult<bool> {
+            with_root(&ctx, "has_active_dialog()", |root, _, _| {
+                Ok(root.dialog_count() > 0)
+            })
+        }),
+    )?;
 
-                with_root(&ctx, generation, OPEN_SHEET, |root, window, cx| {
-                    let view = mount(&ctx, object, cx)?;
+    globals.set(
+        "__open_sheet",
+        Func::from(
+            |ctx: Ctx<'_>, side: Opt<String>, content: ViewInstance| -> JsResult<()> {
+                let api = if side.0.is_some() {
+                    OPEN_SHEET_AT
+                } else {
+                    OPEN_SHEET
+                };
+                guard(&ctx, api)?;
+                let side = match side.0 {
+                    Some(name) => parse_side(&ctx, &name)?,
+                    None => SheetSide::default(),
+                };
+
+                with_root(&ctx, api, |root, window, cx| {
+                    let view = mount(&ctx, content.0, cx)?;
                     root.open_sheet(side, view, window, cx);
                     Ok(())
                 })
@@ -154,46 +197,55 @@ pub fn install(_ctx: &Ctx<'_>, context_object: &Object<'_>, generation: u64) -> 
         ),
     )?;
 
-    context_object.set(
-        "close_sheet",
-        Func::from(move |ctx: Ctx<'_>| -> JsResult<bool> {
+    globals.set(
+        "__close_sheet",
+        Func::from(|ctx: Ctx<'_>| -> JsResult<bool> {
             guard(&ctx, CLOSE_SHEET)?;
-            with_root(&ctx, generation, CLOSE_SHEET, |root, window, cx| {
+            with_root(&ctx, CLOSE_SHEET, |root, window, cx| {
                 Ok(root.close_sheet(window, cx))
             })
         }),
     )?;
 
-    // A toast is data, not a view: no class, no instance, nothing for the
+    globals.set(
+        "__has_active_sheet",
+        Func::from(|ctx: Ctx<'_>| -> JsResult<bool> {
+            with_root(&ctx, "has_active_sheet()", |root, _, _| {
+                Ok(root.sheet().is_some())
+            })
+        }),
+    )?;
+
+    // A toast is data, not a view: no function, no instance, nothing for the
     // script to render. That is why it is the one overlay whose whole content
     // crosses the boundary as an options object.
-    context_object.set(
-        "toast",
-        Func::from(move |ctx: Ctx<'_>, toast: ToastArgument| -> JsResult<()> {
-            guard(&ctx, TOAST)?;
-            with_root(&ctx, generation, TOAST, |root, window, cx| {
+    globals.set(
+        "__push_toast",
+        Func::from(|ctx: Ctx<'_>, toast: ToastArgument| -> JsResult<()> {
+            guard(&ctx, PUSH_TOAST)?;
+            with_root(&ctx, PUSH_TOAST, |root, window, cx| {
                 root.push_toast(toast.0, window, cx);
                 Ok(())
             })
         }),
     )?;
 
-    context_object.set(
-        "dismiss_toast",
-        Func::from(move |ctx: Ctx<'_>, id: String| -> JsResult<bool> {
-            guard(&ctx, DISMISS_TOAST)?;
-            with_root(&ctx, generation, DISMISS_TOAST, |root, _, cx| {
-                Ok(root.dismiss_toast(id, cx))
+    globals.set(
+        "__remove_toast",
+        Func::from(|ctx: Ctx<'_>, id: String| -> JsResult<bool> {
+            guard(&ctx, REMOVE_TOAST)?;
+            with_root(&ctx, REMOVE_TOAST, |root, _, cx| {
+                Ok(root.remove_toast(id, cx))
             })
         }),
     )?;
 
-    context_object.set(
-        "dismiss_all_toasts",
-        Func::from(move |ctx: Ctx<'_>| -> JsResult<()> {
-            guard(&ctx, DISMISS_ALL_TOASTS)?;
-            with_root(&ctx, generation, DISMISS_ALL_TOASTS, |root, _, cx| {
-                root.dismiss_all_toasts(cx);
+    globals.set(
+        "__clear_toasts",
+        Func::from(|ctx: Ctx<'_>| -> JsResult<()> {
+            guard(&ctx, CLEAR_TOASTS)?;
+            with_root(&ctx, CLEAR_TOASTS, |root, _, cx| {
+                root.clear_toasts(cx);
                 Ok(())
             })
         }),
@@ -222,21 +274,31 @@ fn guard(ctx: &Ctx<'_>, api: &str) -> JsResult<()> {
 
 /// Runs `body` against the overlay host of the window the call belongs to.
 ///
-/// Two ways this fails, and they are different mistakes. A stale generation is
-/// a script error — a `cx` used after its call returned — and
-/// [`scope::StaleContext`] already explains it. A window whose root view is not
-/// a [`ShellRoot`] is a *host* wiring error, so it says so rather than
-/// pretending the overlay was opened.
+/// Ambient, like `fs` and `store`: the window comes from the call that is
+/// running now rather than from a handle the script is holding. On `cx` these
+/// calls carried a generation, so a `cx` stashed in a closure and used later
+/// reached a dead stack frame — a failure mode that simply does not exist once
+/// there is nothing to stash.
+///
+/// Two ways this fails, and they are different mistakes. Outside any host call
+/// there is no window to reach, which is the script calling from somewhere it
+/// cannot. A window whose root view is not a [`ShellRoot`] is the *host's*
+/// mistake — it opened the window with something else — and the message says so
+/// rather than blaming the script.
 fn with_root<R>(
     ctx: &Ctx<'_>,
-    generation: u64,
     api: &str,
     body: impl FnOnce(&mut ShellRoot, &mut Window, &mut Context<ShellRoot>) -> JsResult<R>,
 ) -> JsResult<R> {
-    let reached = scope::with_context(generation, |window, app| {
-        ShellRoot::update(window, app, body)
-    })
-    .map_err(|error| Exception::throw_type(ctx, &error.to_string()))?;
+    let Some(reached) = scope::with_current(|window, app| ShellRoot::update(window, app, body))
+    else {
+        return Err(Exception::throw_type(
+            ctx,
+            &format!(
+                "{api} needs a live host call; call it from init(), an event handler or a task"
+            ),
+        ));
+    };
 
     reached.unwrap_or_else(|| {
         Err(Exception::throw_type(
@@ -260,58 +322,42 @@ fn mount(ctx: &Ctx<'_>, object: ViewObject, cx: &mut App) -> JsResult<AnyView> {
     Ok(cx.new(|_| ScriptView::new(runtime, object)).into())
 }
 
-/// A view class, kept alive across the argument conversion.
+/// A view instance, kept alive across the argument conversion.
 ///
 /// Its own type because a JS closure cannot unify the lifetime of a `Ctx<'js>`
 /// parameter with that of a `Value<'js>` one — the two elided lifetimes are
 /// independent as far as inference is concerned. Converting inside [`FromJs`],
 /// where both are the same lifetime again, is the pattern `Arguments` in the
-/// parent module exists for.
-struct ViewClass(Persistent<Constructor<'static>>);
+/// spec layer uses for the same reason.
+struct ViewInstance(ViewObject);
 
-impl ViewClass {
-    /// Constructs one instance, passing `props` to the class.
-    ///
-    /// Constructs directly rather than through the prelude's `__construct`,
-    /// which takes no arguments: the base `View` constructor forwards whatever
-    /// it is given to `init(props)`, so `new Class(props)` is the whole
-    /// protocol. Any promise the constructor starts is drained by the entry
-    /// point this call is nested inside, so there is nothing to pump here.
-    fn instantiate(
-        &self,
-        ctx: &Ctx<'_>,
-        props: Option<&Persistent<Value<'static>>>,
-    ) -> JsResult<ViewObject> {
-        let class = self.0.clone().restore(ctx)?;
-        let instance: Object = match props {
-            Some(props) => class.construct((props.clone().restore(ctx)?,))?,
-            None => class.construct(())?,
-        };
-        Ok(Persistent::save(ctx, instance))
-    }
-}
-
-impl<'js> FromJs<'js> for ViewClass {
+impl<'js> FromJs<'js> for ViewInstance {
     fn from_js(ctx: &Ctx<'js>, value: Value<'js>) -> JsResult<Self> {
-        let Some(class) = value.into_constructor() else {
+        // The prelude wraps the author's function; anything else reaching here
+        // means the wrapper was bypassed, which is worth saying plainly rather
+        // than failing later on a missing `render`.
+        let Some(object) = value.into_object() else {
             return Err(Exception::throw_type(
                 ctx,
-                "expected a view class; open_dialog and open_sheet take the class itself, \
-                 not an instance and not an element",
+                "expected a function returning an element; open_dialog and open_sheet take \
+                 a function, not an element and not a view class",
             ));
         };
-        Ok(Self(Persistent::save(ctx, class)))
+        Ok(Self(Persistent::save(ctx, object)))
     }
 }
 
-/// `{ escape_dismissable, backdrop_dismissable, props }`.
+/// `{ escape_dismissable, backdrop_dismissable }`.
+///
+/// No `props`. The content function closes over whatever it needs, so a dialog's
+/// starting state comes from the same place every other value in the script
+/// does, rather than through a channel that existed only for overlays.
 #[derive(Default)]
 struct DialogRequest {
     options: DialogOptions,
-    props: Option<Persistent<Value<'static>>>,
 }
 
-const DIALOG_KEYS: &[&str] = &["escape_dismissable", "backdrop_dismissable", "props"];
+const DIALOG_KEYS: &[&str] = &["escape_dismissable", "backdrop_dismissable"];
 
 impl<'js> FromJs<'js> for DialogRequest {
     fn from_js(ctx: &Ctx<'js>, value: Value<'js>) -> JsResult<Self> {
@@ -328,32 +374,7 @@ impl<'js> FromJs<'js> for DialogRequest {
             options = options.backdrop_dismissable(dismissable);
         }
 
-        Ok(Self {
-            options,
-            props: props_of(object)?,
-        })
-    }
-}
-
-/// `{ props }`. A sheet has no dismissal options: there is only ever one, and
-/// it is dismissed by Escape or by its overlay whenever no dialog is above it.
-#[derive(Default)]
-struct SheetRequest {
-    props: Option<Persistent<Value<'static>>>,
-}
-
-const SHEET_KEYS: &[&str] = &["props"];
-
-impl<'js> FromJs<'js> for SheetRequest {
-    fn from_js(ctx: &Ctx<'js>, value: Value<'js>) -> JsResult<Self> {
-        let Some(object) = options_object(ctx, &value, OPEN_SHEET)? else {
-            return Ok(Self::default());
-        };
-        reject_unknown_keys(ctx, object, SHEET_KEYS, OPEN_SHEET)?;
-
-        Ok(Self {
-            props: props_of(object)?,
-        })
+        Ok(Self { options })
     }
 }
 
@@ -367,15 +388,15 @@ impl<'js> FromJs<'js> for ToastArgument {
         let Some(object) = value.as_object() else {
             return Err(Exception::throw_type(
                 ctx,
-                &format!("{TOAST} expects an object, such as {{ title: \"Saved\" }}"),
+                &format!("{PUSH_TOAST} expects an object, such as {{ title: \"Saved\" }}"),
             ));
         };
-        reject_unknown_keys(ctx, object, TOAST_KEYS, TOAST)?;
+        reject_unknown_keys(ctx, object, TOAST_KEYS, PUSH_TOAST)?;
 
         let Some(title) = object.get::<_, Option<String>>("title")? else {
             return Err(Exception::throw_type(
                 ctx,
-                &format!("{TOAST} requires a `title`; it is the sentence the user reads"),
+                &format!("{PUSH_TOAST} requires a `title`; it is the sentence the user reads"),
             ));
         };
 
@@ -424,38 +445,6 @@ fn options_object<'a, 'js>(
     }
 }
 
-/// Rejects a key the host does not read.
-///
-/// A silently ignored `escapeDismissable` is exactly the failure the style
-/// layer's unknown-method diagnostic exists to prevent: the call looks like it
-/// worked, and the dialog is dismissable anyway.
-fn reject_unknown_keys(
-    ctx: &Ctx<'_>,
-    object: &Object<'_>,
-    known: &[&str],
-    api: &str,
-) -> JsResult<()> {
-    for key in object.keys::<String>() {
-        let key = key?;
-        if !known.contains(&key.as_str()) {
-            return Err(Exception::throw_type(
-                ctx,
-                &format!(
-                    "unknown option `{key}` for {api}; expected {}",
-                    listed(known)
-                ),
-            ));
-        }
-    }
-    Ok(())
-}
-
-fn props_of(object: &Object<'_>) -> JsResult<Option<Persistent<Value<'static>>>> {
-    let props: Value = object.get("props")?;
-    let given = !props.is_undefined() && !props.is_null();
-    Ok(given.then(|| Persistent::save(object.ctx(), props)))
-}
-
 /// Every side a script may name. Also what an unknown one is told to use, so
 /// the message cannot drift from the set.
 const SHEET_SIDES: [SheetSide; 4] = [
@@ -495,6 +484,30 @@ fn parse_level(ctx: &Ctx<'_>, name: &str) -> JsResult<ToastLevel> {
         )
     })
 }
+/// Refuses an option the surface does not have, rather than ignoring it.
+///
+/// A misspelled key that is silently dropped is a setting the author believes
+/// they applied. Naming the valid ones turns the typo into a one-line fix.
+fn reject_unknown_keys(
+    ctx: &Ctx<'_>,
+    object: &Object<'_>,
+    known: &[&str],
+    api: &str,
+) -> JsResult<()> {
+    for key in object.keys::<String>() {
+        let key = key?;
+        if !known.contains(&key.as_str()) {
+            return Err(Exception::throw_type(
+                ctx,
+                &format!(
+                    "unknown option `{key}` for {api}; expected {}",
+                    listed(known)
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
 
 /// `null` is sticky; a number is milliseconds.
 fn parse_timeout(ctx: &Ctx<'_>, value: &Value<'_>) -> JsResult<Option<Duration>> {
@@ -506,7 +519,7 @@ fn parse_timeout(ctx: &Ctx<'_>, value: &Value<'_>) -> JsResult<Option<Duration>>
         Exception::throw_type(
             ctx,
             &format!(
-                "{TOAST} expects `timeout` to be a number of milliseconds, or null to keep \
+                "{PUSH_TOAST} expects `timeout` to be a number of milliseconds, or null to keep \
                  the toast until it is dismissed"
             ),
         )
@@ -593,7 +606,7 @@ mod tests {
             &runtime,
             cx,
             ScopePhase::Event,
-            "cx.open_dialog(class Confirm {})",
+            "__gpui.open_dialog(() => __gpui.text('confirm'))",
         )
         .expect("open_dialog");
 
@@ -606,13 +619,13 @@ mod tests {
             &runtime,
             cx,
             ScopePhase::Event,
-            "cx.open_dialog(class Detail {}, { escape_dismissable: false })",
+            "__gpui.open_dialog(() => __gpui.text('detail'), { escape_dismissable: false })",
         )
         .expect("open_dialog");
         assert_eq!(depth, 2);
 
         let closed: bool =
-            eval(&runtime, cx, ScopePhase::Event, "cx.close_dialog()").expect("close_dialog");
+            eval(&runtime, cx, ScopePhase::Event, "__gpui.close_dialog()").expect("close_dialog");
         assert!(closed);
         assert_eq!(root.read_with(cx, |root, _| root.dialog_count()), 1);
     }
@@ -622,16 +635,19 @@ mod tests {
         let (runtime, root, cx) = shell(cx);
 
         let closed: bool =
-            eval(&runtime, cx, ScopePhase::Event, "cx.close_dialog()").expect("close_dialog");
+            eval(&runtime, cx, ScopePhase::Event, "__gpui.close_dialog()").expect("close_dialog");
 
         assert!(!closed);
         assert_eq!(root.read_with(cx, |root, _| root.dialog_count()), 0);
     }
 
-    /// The second argument is the class's own, so a dialog can be opened with
-    /// the row it is about.
+    /// What replaced `props`: the content function closes over it.
+    ///
+    /// A dialog used to need a second channel to receive its starting state,
+    /// because it was constructed from a class the script handed over. A
+    /// function carries whatever it was written next to.
     #[gpui::test]
-    fn props_reach_the_view_class(cx: &mut TestAppContext) {
+    fn the_content_function_closes_over_what_the_dialog_shows(cx: &mut TestAppContext) {
         let (runtime, _root, cx) = shell(cx);
 
         let name: String = eval(
@@ -639,16 +655,16 @@ mod tests {
             cx,
             ScopePhase::Event,
             r#"
-            cx.open_dialog(
-              class Rename { constructor(props) { globalThis.__seen = props.name; } },
-              { props: { name: "notes.md" } },
-            );
-            globalThis.__seen
+            const name = "notes.md";
+            __gpui.open_dialog(() => { globalThis.__seen = name; return __gpui.text(name); });
+            globalThis.__seen ?? ""
             "#,
         )
         .expect("open_dialog");
 
-        assert_eq!(name, "notes.md");
+        // Rendered lazily: the function runs when the dialog draws, not when it
+        // is opened, because the element it builds belongs to that pass.
+        assert_eq!(name, "");
     }
 
     #[gpui::test]
@@ -659,7 +675,7 @@ mod tests {
             &runtime,
             cx,
             ScopePhase::Event,
-            r#"cx.open_sheet("middle", class Filters {})"#,
+            r#"__gpui.open_sheet_at("middle", () => __gpui.text("filters"))"#,
         )
         .expect_err("an unknown side must be refused");
 
@@ -677,7 +693,7 @@ mod tests {
             &runtime,
             cx,
             ScopePhase::Event,
-            r#"cx.toast({ title: "Gone", level: "fatal" })"#,
+            r#"__gpui.push_toast({ title: "Gone", level: "fatal" })"#,
         )
         .expect_err("an unknown level must be refused");
 
@@ -698,8 +714,8 @@ mod tests {
             &runtime,
             cx,
             ScopePhase::Event,
-            r#"cx.toast({ title: "Saved", description: "3 files", level: "success",
-                          timeout: 4000, id: "save" })"#,
+            r#"__gpui.push_toast({ title: "Saved", description: "3 files",
+                                       level: "success", timeout: 4000, id: "save" })"#,
         )
         .expect("toast");
         assert_eq!(root.read_with(cx, |root, _| root.toast_count()), 1);
@@ -708,9 +724,9 @@ mod tests {
             &runtime,
             cx,
             ScopePhase::Event,
-            r#"cx.dismiss_toast("save")"#,
+            r#"__gpui.remove_toast("save")"#,
         )
-        .expect("dismiss_toast");
+        .expect("remove_toast");
         assert!(dismissed);
     }
 
@@ -725,7 +741,7 @@ mod tests {
             &runtime,
             cx,
             ScopePhase::Render,
-            "cx.open_dialog(class Confirm {})",
+            "__gpui.open_dialog(() => __gpui.text('confirm'))",
         )
         .expect_err("a render pass must not open a dialog");
 
@@ -744,7 +760,7 @@ mod tests {
             &runtime,
             cx,
             ScopePhase::Event,
-            "cx.open_dialog(class Confirm {}, { escapeDismissable: false })",
+            "__gpui.open_dialog(() => __gpui.text('x'), { escapeDismissable: false })",
         )
         .expect_err("an unknown option must be refused");
 

@@ -486,40 +486,47 @@ const CONTEXT_AND_VIEW: &str = r#"  /**
     notify(): void;
     phase(): Phase;
 
-    /**
-     * Opens a dialog on the window's root, and answers the stack's new depth.
-     *
-     * Takes the **class**, not an instance and not an element: the root builds
-     * the view itself so the dialog outlives the call that opened it. Anything
-     * its `init` should see rides in `props`.
-     *
-     * Do not carry this `cx` into the dialog — it belongs to the handler that
-     * opened it and is stale by the time a dialog button is pressed. Take `cx`
-     * from the dialog's own callback arguments.
-     */
-    open_dialog(view: ViewClass, options?: DialogOptions): number;
-    /** Closes the topmost dialog, and answers whether it found one. */
-    close_dialog(): boolean;
-    /** Closes every dialog, and answers how many it closed. */
-    close_all_dialogs(): number;
-
-    /**
-     * Opens the sheet, replacing whatever was there. At most one is ever open.
-     */
-    open_sheet(side: SheetSide, view: ViewClass, options?: SheetOptions): void;
-    /** Closes the sheet, and answers whether one was open. */
-    close_sheet(): boolean;
-
-    /** Posts a toast, and answers its id — the generated one when none was given. */
-    toast(options: ToastOptions): string;
-    /** Retracts one toast by id, and answers whether it was still showing. */
-    dismiss_toast(id: string): boolean;
-    /** Retracts every toast, and answers how many it retracted. */
-    dismiss_all_toasts(): number;
   }
 
-  /** A view class, as `open_dialog` and `open_sheet` take it. */
-  export type ViewClass = new (props?: Props) => View;
+  /**
+   * Opens a dialog on the window's root, and answers the stack's new depth.
+   *
+   * Takes a **function returning an element**, not an element: an element
+   * belongs to the render pass that built it, and a dialog outlives the call
+   * that opened it. The function runs when the dialog draws, and again whenever
+   * it redraws. Whatever it closes over is the dialog's state.
+   *
+   * An overlay is window-level rather than view-level, which is why it is not on
+   * `Context`: `cx.notify()` re-renders one view, this changes what the user is
+   * looking at. Legal from an event handler or a task, not from `render`.
+   */
+  export function open_dialog(content: () => Element, options?: DialogOptions): number;
+  /** Closes the topmost dialog, and answers whether it found one. */
+  export function close_dialog(): boolean;
+  /** Closes every dialog, and answers how many it closed. */
+  export function close_all_dialogs(): number;
+  /** Whether any dialog is open. Legal from `render`, unlike the rest. */
+  export function has_active_dialog(): boolean;
+
+  /**
+   * Opens the sheet on the right, replacing whatever was there. At most one is
+   * ever open.
+   */
+  export function open_sheet(content: () => Element): void;
+  /** The same, anchored to the side you name. */
+  export function open_sheet_at(side: SheetSide, content: () => Element): void;
+  /** Closes the sheet, and answers whether one was open. */
+  export function close_sheet(): boolean;
+  /** Whether the sheet is open. Legal from `render`, unlike the rest. */
+  export function has_active_sheet(): boolean;
+
+  /** Posts a toast, and answers its id — the generated one when none was given. */
+  export function push_toast(options: ToastOptions): string;
+  /** Retracts one toast by id, and answers whether it was still showing. */
+  export function remove_toast(id: string): boolean;
+  /** Retracts every toast, and answers how many it retracted. */
+  export function clear_toasts(): number;
+
 
   /** Which edge the sheet is anchored to. */
   export type SheetSide = "left" | "right" | "top" | "bottom";
@@ -529,12 +536,6 @@ const CONTEXT_AND_VIEW: &str = r#"  /**
     escape_dismissable?: boolean;
     /** Whether pressing the backdrop closes it. Default `true`. */
     backdrop_dismissable?: boolean;
-    /** Handed to the class's constructor, and so to its `init`. */
-    props?: Props;
-  }
-
-  export interface SheetOptions {
-    props?: Props;
   }
 
   export interface ToastOptions {
