@@ -595,7 +595,10 @@ impl Render for TextViewState {
         node_cx.style = self.text_view_style.clone();
 
         v_flex()
-            .size_full()
+            .w_full()
+            // Clamped content must keep its natural height: stretching it to
+            // the capped box would hide the overflow the clamp has to measure.
+            .when(self.max_lines.is_none(), |this| this.h_full())
             .map(|this| match &mut self.parsed_error {
                 None => this.child(document.render_root(
                     if self.scrollable {

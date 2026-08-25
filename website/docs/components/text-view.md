@@ -48,13 +48,17 @@ TextView::html("html-preview", "<strong>Hello</strong>")
 
 Use `max_lines` to render a bounded preview of rich content — for example a
 collapsed "show more" section. The view's height is capped at `n` × the base
-line height, and the clip snaps up to the nearest whole-line boundary so a
-line of glyphs is never cut in half, across paragraphs, lists, headings, code
-blocks and tables:
+line height, and a line of glyphs is never cut in half: a line that would
+straddle the bottom of the box is left out whole, across paragraphs, lists,
+headings, code blocks and tables:
 
 ```rust
 TextView::markdown("preview", markdown_source).max_lines(5)
 ```
+
+Everything else is cut on the box edge, so an image or a rule crossing it
+shows the part that fits instead of disappearing and leaving blank space
+behind.
 
 `TextViewState::is_clamped()` reports whether the previous painted frame
 actually clipped content, so the caller can decide whether to render an

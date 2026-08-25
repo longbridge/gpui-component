@@ -1,7 +1,8 @@
 //! Clamp rendered Markdown to N whole lines with `TextView::max_lines`.
 //!
-//! - Drag the slider to change the line budget: the first card re-clamps and
-//!   the clip always lands on a whole-line boundary (no half-cut glyphs).
+//! - Drag the slider (1 to 60 lines) to change the line budget: the first card
+//!   re-clamps, and a line of text is never cut in half. The photo crossing the
+//!   edge is cut there, showing the part that fits.
 //! - An Expand / Collapse button shows only while `is_clamped()` reports true
 //!   (or the card is expanded).
 //! - The second card fits within the cap, so it renders at natural height and
@@ -33,9 +34,7 @@ legacy plans are ~~discontinued~~ and folded into `pro`.
 > The clip must land on a whole-line boundary: however you drag the slider,
 > no line of glyphs is ever cut in half.
 
-Reviewed by ![reviewer](https://avatars.githubusercontent.com/u/583231?v=4)
-octocat together with ![bot](https://avatars.githubusercontent.com/u/5518?v=4)
-the tooling team, inline within this very paragraph.
+Inline image mix: PNG avatars <img src="https://avatars.githubusercontent.com/u/5518" alt="Jason Lee avatar" width="32" height="32" /> and <img src="https://avatars.githubusercontent.com/u/28998859" alt="GitHub avatar" width="32" height="32" /> stay inside the same text flow, and an SVG badge ![Rust](https://rust-lang.org/static/images/rust-logo-blk.svg) wraps with the text around it.
 
 - Desktop DAU is up **24%**
   - macOS **+31%**, Windows *+19%*
@@ -49,7 +48,7 @@ the tooling team, inline within this very paragraph.
 | Mobile  | +9%    | steady               |
 | Web     | -3%    | migrating to desktop |
 
-![banner](https://avatars.githubusercontent.com/u/150917089?v=4)
+![Img](https://miro.medium.com/v2/resize:fit:1400/format:webp/1*WgEz5f3n3lD7MfC7NeQGOA.jpeg)
 
 ---
 
@@ -59,8 +58,8 @@ fn main() {
 }
 ```
 
-That table, banner image and code block only show once you press Expand — a
-block that does not fit as a whole is hidden entirely rather than sliced."#;
+Text lines are kept whole; the photo above is cut on the box edge instead, so
+the preview never holds blank space it could have filled."#;
 
 const SHORT_MARKDOWN: &str = "A **short** note that fits within the cap, so no button shows.";
 
@@ -84,7 +83,7 @@ impl MaxLinesExample {
         let slider = cx.new(|_| {
             SliderState::new()
                 .min(1.)
-                .max(20.)
+                .max(60.)
                 .step(1.)
                 .default_value(DEFAULT_MAX_LINES as f32)
         });
