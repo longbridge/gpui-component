@@ -76,6 +76,11 @@ import { fs } from "gpui";
 
 A relative path resolves against a granted root; an absolute one must already be inside one. Every path in the surface goes through **one resolver**, so there is no second place for a traversal bug to hide. It normalizes the path — `../../etc/passwd` is rejected before it reaches the filesystem — and then settles containment against the filesystem rather than against the string, because a grant is a promise about a *directory*: `data/escape/passwd` is lexically inside the root and reads `/etc/passwd` if `escape` is a symlink. The deepest part of the path that exists is resolved, links and all, and has to still be under the root; a symlink that resolves to nothing is refused rather than guessed at.
 
+**The grant is a handle, not a string.** The resolver hands back an open directory that cannot be made to name anything outside itself, and every read, write, listing, removal and mkdir runs against *that* — so a path is never resolved twice and there is no window between deciding it is allowed and using it.
+
+That matters because the obvious implementation does not work. Checking the path and then calling `std::fs` resolves it twice: a link already in place is caught by the check, and one that replaces a directory component *between* the two is followed out of the root by the second resolution. This is [`cap-std`](https://docs.rs/cap-std), which is `openat2(RESOLVE_BENEATH)` on Linux and a per-component `openat` walk elsewhere.
+
+
 Three of these behave in a way worth stating, each for the same reason:
 
 **A denied path throws rather than answering `false`.** "You may not look" and "it is not there" are different facts, and collapsing them would let a script map the filesystem outside its roots one boolean at a time.

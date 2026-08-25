@@ -41,11 +41,6 @@ const ENTRY: &str = "main.js";
 
 /// How often `--watch` samples the source tree.
 ///
-/// The watcher debounces on top of this, so the interval only bounds how late a
-/// reload can be. A quarter second is below the threshold where a save feels
-/// unacknowledged, and one `stat` per source file at 4Hz is not a cost worth
-/// tuning for a directory that holds a handful of them.
-
 /// Identity of the toast a failed reload posts.
 ///
 /// A stable id is what makes a broken file that is saved five times read as one

@@ -43,6 +43,7 @@ serde.workspace = true
 serde_json.workspace = true
 smallvec.workspace = true
 tracing.workspace = true
+cap-std = "4.0.3"
 
 [dev-dependencies]
 gpui = { workspace = true, features = ["test-support"] }

@@ -46,7 +46,7 @@ use rquickjs::{
 use serde_json::Value as Json;
 
 use crate::{
-    capability::{Access, Capabilities, CapabilityError},
+    capability::{Access, Capabilities, CapabilityError, Grant},
     scope,
 };
 
@@ -113,29 +113,61 @@ fn fs_object<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
 /// Named functions rather than closures because the returned promise borrows
 /// the context, and only a signature can say so.
 fn read_text<'js>(ctx: Ctx<'js>, path: String) -> JsResult<Promise<'js>> {
-    let path = resolve(&ctx, &path, Access::Read)?;
+    let grant = grant(&ctx, &path, Access::Read)?;
+    let name = grant.describe();
+    let (dir, relative) = grant.into_parts();
+
     scheduler::blocking(&ctx, "gpui.fs.read_text(path)", move || {
-        let size = std::fs::metadata(&path)
+        use std::io::Read as _;
+
+        // One open through the granted directory, then everything on the handle
+        // it returns. Asking a *path* for a size and then asking it again for
+        // the bytes is two resolutions, and nothing says they name the same
+        // inode.
+        let mut file = dir
+            .open(&relative)
+            .map_err(|error| message("read", &name, &error))?;
+        let size = file
+            .metadata()
             .map(|metadata| metadata.len())
-            .map_err(|error| message("read", &path, &error))?;
+            .map_err(|error| message("read", &name, &error))?;
         if size > MAX_READ_BYTES {
-            return Err(too_large(&path, size));
+            return Err(too_large(&name, size));
         }
-        std::fs::read_to_string(&path).map_err(|error| message("read", &path, &error))
+
+        // Bounded by the ceiling rather than by the size just read, so a file
+        // that grows between the two is truncated at the limit instead of being
+        // allowed past it.
+        let mut text = String::with_capacity(size as usize);
+        file.by_ref()
+            .take(MAX_READ_BYTES + 1)
+            .read_to_string(&mut text)
+            .map_err(|error| message("read", &name, &error))?;
+        if text.len() as u64 > MAX_READ_BYTES {
+            return Err(too_large(&name, text.len() as u64));
+        }
+        Ok(text)
     })
 }
 
 fn write_text<'js>(ctx: Ctx<'js>, path: String, contents: String) -> JsResult<Promise<'js>> {
-    let path = resolve(&ctx, &path, Access::Write)?;
+    let grant = grant(&ctx, &path, Access::Write)?;
+    let name = grant.describe();
+    let (dir, relative) = grant.into_parts();
+
     scheduler::blocking(&ctx, "gpui.fs.write_text(path, contents)", move || {
-        std::fs::write(&path, contents).map_err(|error| message("write", &path, &error))
+        dir.write(&relative, contents)
+            .map_err(|error| message("write", &name, &error))
     })
 }
 
 fn list_dir<'js>(ctx: Ctx<'js>, path: String) -> JsResult<Promise<'js>> {
-    let path = resolve(&ctx, &path, Access::Read)?;
+    let grant = grant(&ctx, &path, Access::Read)?;
+    let name = grant.describe();
+    let (dir, relative) = grant.into_parts();
+
     scheduler::blocking(&ctx, "gpui.fs.read_dir(path)", move || {
-        read_dir(&path).map_err(|error| message("list", &path, &error))
+        read_dir(&dir, &relative).map_err(|error| message("list", &name, &error))
     })
 }
 
@@ -143,8 +175,12 @@ fn list_dir<'js>(ctx: Ctx<'js>, path: String) -> JsResult<Promise<'js>> {
 /// "it is not there" are different facts, and collapsing them would let a script
 /// probe outside its roots one boolean at a time.
 fn exists<'js>(ctx: Ctx<'js>, path: String) -> JsResult<Promise<'js>> {
-    let path = resolve(&ctx, &path, Access::Read)?;
-    scheduler::blocking(&ctx, "gpui.fs.exists(path)", move || Ok(path.exists()))
+    let grant = grant(&ctx, &path, Access::Read)?;
+    let (dir, relative) = grant.into_parts();
+
+    scheduler::blocking(&ctx, "gpui.fs.exists(path)", move || {
+        Ok(dir.try_exists(&relative).unwrap_or(false))
+    })
 }
 
 /// Directory removal is not recursive. Write access is granted per root, so a
@@ -152,21 +188,32 @@ fn exists<'js>(ctx: Ctx<'js>, path: String) -> JsResult<Promise<'js>> {
 /// application's whole data directory; a script that means it can walk the tree
 /// itself.
 fn remove<'js>(ctx: Ctx<'js>, path: String) -> JsResult<Promise<'js>> {
-    let path = resolve(&ctx, &path, Access::Write)?;
+    let grant = grant(&ctx, &path, Access::Write)?;
+    let name = grant.describe();
+    let (dir, relative) = grant.into_parts();
+
     scheduler::blocking(&ctx, "gpui.fs.remove(path)", move || {
-        let removed = if path.is_dir() {
-            std::fs::remove_dir(&path)
+        let directory = dir
+            .metadata(&relative)
+            .map(|metadata| metadata.is_dir())
+            .unwrap_or(false);
+        let removed = if directory {
+            dir.remove_dir(&relative)
         } else {
-            std::fs::remove_file(&path)
+            dir.remove_file(&relative)
         };
-        removed.map_err(|error| message("remove", &path, &error))
+        removed.map_err(|error| message("remove", &name, &error))
     })
 }
 
 fn create_dir_all<'js>(ctx: Ctx<'js>, path: String) -> JsResult<Promise<'js>> {
-    let path = resolve(&ctx, &path, Access::Write)?;
+    let grant = grant(&ctx, &path, Access::Write)?;
+    let name = grant.describe();
+    let (dir, relative) = grant.into_parts();
+
     scheduler::blocking(&ctx, "gpui.fs.create_dir_all(path)", move || {
-        std::fs::create_dir_all(&path).map_err(|error| message("create", &path, &error))
+        dir.create_dir_all(&relative)
+            .map_err(|error| message("create", &name, &error))
     })
 }
 
@@ -182,15 +229,14 @@ const MAX_READ_BYTES: u64 = 64 * 1024 * 1024;
 ///
 /// Built off the main thread, where there is no `Ctx` to throw with, so it
 /// travels back as a string and becomes an `Error` when the promise rejects.
-fn message(verb: &str, path: &std::path::Path, error: &std::io::Error) -> String {
-    format!("cannot {verb} `{}`: {error}", path.display())
+fn message(verb: &str, name: &str, error: &std::io::Error) -> String {
+    format!("cannot {verb} `{name}`: {error}")
 }
 
-fn too_large(path: &std::path::Path, size: u64) -> String {
+fn too_large(name: &str, size: u64) -> String {
     format!(
-        "`{}` is {size} bytes, over the {MAX_READ_BYTES}-byte limit for gpui.fs.read_text; \
-         read it in pieces or keep it out of the script",
-        path.display()
+        "`{name}` is {size} bytes, over the {MAX_READ_BYTES}-byte limit for \
+         gpui.fs.read_text; read it in pieces or keep it out of the script"
     )
 }
 
@@ -214,9 +260,9 @@ impl<'js> IntoJs<'js> for DirEntry {
 
 /// Sorted by name, so a script that renders a listing does not have to sort it
 /// and does not inherit the filesystem's arbitrary order.
-fn read_dir(path: &Path) -> std::io::Result<Vec<DirEntry>> {
+fn read_dir(dir: &cap_std::fs::Dir, path: &Path) -> std::io::Result<Vec<DirEntry>> {
     let mut entries = Vec::new();
-    for entry in std::fs::read_dir(path)? {
+    for entry in dir.read_dir(path)? {
         let entry = entry?;
         entries.push(DirEntry {
             name: entry.file_name().to_string_lossy().into_owned(),
@@ -227,11 +273,11 @@ fn read_dir(path: &Path) -> std::io::Result<Vec<DirEntry>> {
     Ok(entries)
 }
 
-/// The single path gate. Nothing in this module opens a path it did not get
-/// back from here.
-fn resolve(ctx: &Ctx<'_>, path: &str, access: Access) -> JsResult<PathBuf> {
+/// The single path gate. Nothing in this module touches the filesystem except
+/// through a [`Grant`] it got back from here.
+fn grant(ctx: &Ctx<'_>, path: &str, access: Access) -> JsResult<Grant> {
     capabilities()
-        .resolve(Path::new(path), access)
+        .open(Path::new(path), access)
         .map_err(|error| Exception::throw_type(ctx, &denial(&error)))
 }
 
@@ -253,13 +299,6 @@ fn access_key(access: Access) -> &'static str {
         Access::Read => "read",
         Access::Write => "write",
     }
-}
-
-fn io_error(ctx: &Ctx<'_>, action: &str, path: &Path, error: &std::io::Error) -> JsError {
-    Exception::throw_message(
-        ctx,
-        &format!("cannot {action} `{}`: {error}", path.display()),
-    )
 }
 
 // -- Store -----------------------------------------------------------------

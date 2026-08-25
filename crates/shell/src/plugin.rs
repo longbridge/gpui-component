@@ -1219,9 +1219,15 @@ mod tests {
     #[test]
     fn capabilities_become_a_real_grant() {
         let manifest = PluginManifest::parse(VALID).expect("the manifest should parse");
-        let plugin_dir = Path::new("/plugins/inbox");
-        let data_dir = Path::new("/data/inbox");
-        let capabilities = manifest.capabilities(plugin_dir, data_dir);
+        // Real directories, because a grant is an open handle now: the
+        // placeholders still resolve to paths, but a path is only half of one.
+        let base = std::env::temp_dir().join(format!("gpui-shell-grant-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let plugin_dir = base.join("plugins/inbox");
+        let data_dir = base.join("data/inbox");
+        std::fs::create_dir_all(&plugin_dir).expect("a plugin directory");
+        std::fs::create_dir_all(&data_dir).expect("a data directory");
+        let capabilities = manifest.capabilities(&plugin_dir, &data_dir);
 
         assert_eq!(
             capabilities.execute(),
@@ -1236,24 +1242,28 @@ mod tests {
         // does not know the path of.
         assert_eq!(
             capabilities
-                .resolve(Path::new("main.js"), crate::capability::Access::Read)
-                .expect("the plugin directory should be readable"),
-            plugin_dir.join("main.js")
+                .open(Path::new("main.js"), crate::capability::Access::Read)
+                .expect("the plugin directory should be readable")
+                .path(),
+            Path::new("main.js")
         );
         assert_eq!(
             capabilities
-                .resolve(
+                .open(
                     &data_dir.join("items.json"),
                     crate::capability::Access::Write
                 )
-                .expect("the data directory should be writable"),
-            data_dir.join("items.json")
+                .expect("the data directory should be writable")
+                .path(),
+            Path::new("items.json")
         );
         assert!(
             capabilities
-                .resolve(Path::new("/etc/passwd"), crate::capability::Access::Read)
+                .open(Path::new("/etc/passwd"), crate::capability::Access::Read)
                 .is_err()
         );
+
+        let _ = std::fs::remove_dir_all(&base);
     }
 
     #[test]

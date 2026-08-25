@@ -9,6 +9,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use cap_std::{ambient_authority, fs::Dir};
+
 /// A capability grant. Every field is private so adding a capability later is
 /// not a breaking change for embedders.
 #[derive(Clone, Debug, Default)]
@@ -112,18 +114,24 @@ impl Capabilities {
         self.network_hosts.iter().any(|allowed| allowed == host)
     }
 
-    /// Resolves `path` against the granted roots, rejecting traversal.
+    /// Opens the granted directory a path belongs to, and the path within it.
     ///
-    /// The same resolver serves `gpui.fs` and the capability-gated `os.*`
-    /// functions, so there is no second path policy to keep in sync.
+    /// The caller gets a **capability**, not a string: a directory handle that
+    /// refuses to resolve outside itself, plus the path to use against it. Every
+    /// operation then goes through that handle, so no name is resolved twice and
+    /// there is no window between deciding a path is allowed and using it.
     ///
-    /// # Symlinks
+    /// That is the whole point, and the reason this replaced a resolver that
+    /// returned a `PathBuf`. The old one compared strings; the one before *that*
+    /// compared strings and then canonicalized, which caught a link that was
+    /// already there and not one swapped in afterwards. `std` cannot express the
+    /// difference — `cap-std` can, because a `Dir` carries the authority instead
+    /// of describing it.
     ///
-    /// A grant is a promise about a *directory*, and comparing strings cannot
-    /// keep it: `inside/escape/passwd` is lexically under the root and reads
-    /// `/etc/passwd` if `escape` is a link. So the check is made against the
-    /// filesystem — see [`contain`] — rather than against the text.
-    pub fn resolve(&self, path: &Path, access: Access) -> Result<PathBuf, CapabilityError> {
+    /// The same resolver serves `gpui.fs`, the capability-gated `os.*`
+    /// functions and the asset source, so there is no second path policy to keep
+    /// in sync.
+    pub fn open(&self, path: &Path, access: Access) -> Result<Grant, CapabilityError> {
         let roots = match access {
             Access::Read => &self.read_roots,
             Access::Write => &self.write_roots,
@@ -133,27 +141,59 @@ impl Capabilities {
         }
 
         for root in roots {
-            // The root is resolved the same way a path is. On macOS the
-            // temporary directory is reached through `/var`, which is a link to
-            // `/private/var`, so a grant and a path resolved differently would
-            // disagree about a directory neither of them left.
-            let Some(root) = resolved_root(root) else {
+            // Resolved the same way a path is, because a granted directory need
+            // not exist yet and a root reached through a link — `/var` on macOS
+            // — must agree with a path that was not.
+            let Some(resolved) = resolved_root(root) else {
                 continue;
             };
-            let candidate = if path.is_absolute() {
-                path.to_path_buf()
+
+            // An absolute path is allowed if it is already inside a root, so it
+            // becomes relative before `Dir` sees it; `Dir` refuses an absolute
+            // path outright, and rightly.
+            let relative = if path.is_absolute() {
+                // Resolved the same way the root was, or the two disagree about
+                // a directory neither of them left: on macOS a temporary path
+                // reaches `/private/var` through `/var`.
+                let normalized = resolved_root(path).unwrap_or_else(|| normalize(path));
+                match normalized.strip_prefix(&resolved) {
+                    Ok(relative) => relative.to_path_buf(),
+                    Err(_) => continue,
+                }
             } else {
-                root.join(path)
+                // Lexical first, so the ordinary `../..` is refused with a
+                // sentence about the grant rather than an `errno` from below.
+                let normalized = normalize(&resolved.join(path));
+                match normalized.strip_prefix(&resolved) {
+                    Ok(relative) => relative.to_path_buf(),
+                    Err(_) => continue,
+                }
             };
-            // Lexical first: it costs nothing and rejects the ordinary `../..`
-            // before anything touches the disk.
-            let normalized = normalize(&candidate);
-            if !normalized.starts_with(&root) {
+
+            // A granted directory need not exist yet — an application's data
+            // directory on first run is the ordinary case — and a write grant is
+            // the host saying that directory is the application's. Making it is
+            // honouring the grant, not exceeding it. A *read* grant on a missing
+            // directory has nothing to offer and stays a denial.
+            if access == Access::Write && !resolved.exists() {
+                let _ = std::fs::create_dir_all(&resolved);
+            }
+
+            let Ok(dir) = Dir::open_ambient_dir(&resolved, ambient_authority()) else {
                 continue;
-            }
-            if let Some(contained) = contain(&normalized, &root) {
-                return Ok(contained);
-            }
+            };
+
+            // `.` and the root itself normalize to nothing, which is a name no
+            // directory has. The root is a legitimate target — listing it is how
+            // a script finds out what it was given — so it gets the name that
+            // means it.
+            let relative = if relative.as_os_str().is_empty() {
+                PathBuf::from(".")
+            } else {
+                relative
+            };
+
+            return Ok(Grant { dir, relative });
         }
 
         Err(CapabilityError::OutsideRoots {
@@ -269,40 +309,55 @@ pub fn installed() -> Capabilities {
 ///
 /// # What this does not close
 ///
-/// A component can still be replaced with a link between this check and the
-/// syscall that follows it. Closing that needs descriptor-relative opens —
-/// `openat2(RESOLVE_BENEATH)` on Linux, `O_NOFOLLOW` walks elsewhere — which is
-/// a different piece of work and not portable in `std`. The window is narrow
-/// and requires a second writer inside the root; the escape this replaces
-/// needed only a link that was already there.
-/// Whether a path is really inside a directory, for a caller outside this
-/// module.
+/// **This is check-then-use, and the check does not travel with the path.** The
+/// caller gets a pathname back, and every `std::fs` call resolves it a second
+/// time. A component replaced with a link between the two resolutions is
+/// followed, out of the root, for a read, a write, a remove or a mkdir alike.
 ///
-/// The asset source asks the same question the `fs` grant does — "is this file
-/// actually in that directory?" — and asking it through one implementation is
-/// what keeps a symlink from being refused by one and followed by the other.
-pub fn contained_in(candidate: &Path, root: &Path) -> Option<PathBuf> {
-    contain(candidate, &resolved_root(root)?)
+/// Closing it means the syscall has to walk the path itself, so that no name is
+/// ever resolved twice: `openat2(RESOLVE_BENEATH)` on Linux, a per-component
+/// `openat` with `O_NOFOLLOW` elsewhere, with every operation performed on the
+/// verified descriptor rather than on a string. `std` offers none of that, so it
+/// needs a dependency (`cap-std` is built for exactly this) or a small platform
+/// abstraction here.
+///
+/// Until then this is a real narrowing and not a closure: it stops a link that
+/// was already there, which is the ordinary case, and it does not stop a
+/// concurrent writer inside the granted root. Nothing in the documentation may
+/// say the escape is closed while that is true.
+/// A granted directory, and the path to use against it.
+///
+/// Holding the directory open is what makes this a capability rather than a
+/// claim: the handle cannot be made to name something outside itself, so an
+/// operation on it cannot leave the grant however the filesystem changes
+/// underneath.
+#[derive(Debug)]
+pub struct Grant {
+    dir: Dir,
+    relative: PathBuf,
 }
 
-fn contain(candidate: &Path, root: &Path) -> Option<PathBuf> {
-    let (resolved, tail) = deepest_resolvable(candidate)?;
-
-    let mut out = resolved;
-    for (depth, name) in tail.iter().enumerate() {
-        out.push(name);
-        // Only the first component below the resolved ancestor can exist, and
-        // if it does it is a link that resolves to nothing — something a write
-        // would follow and create, at a target that cannot be proven.
-        if depth == 0 && std::fs::symlink_metadata(&out).is_ok() {
-            return None;
-        }
+impl Grant {
+    /// The directory every operation goes through.
+    pub fn dir(&self) -> &Dir {
+        &self.dir
     }
 
-    // Checked on the reconstructed path rather than on the resolved ancestor,
-    // because a root that does not exist yet — an application's data directory
-    // on first run — resolves to an ancestor *above* itself.
-    out.starts_with(root).then_some(out)
+    /// The path within it. Never absolute, never `..`.
+    pub fn path(&self) -> &Path {
+        &self.relative
+    }
+
+    /// What to call the target in a message. Not a path anything opens — the
+    /// handle is — but the words a script needs to recognize what it asked for.
+    pub fn describe(&self) -> String {
+        self.relative.display().to_string()
+    }
+
+    /// Splits into the two halves, for work that moves to another thread.
+    pub fn into_parts(self) -> (Dir, PathBuf) {
+        (self.dir, self.relative)
+    }
 }
 
 /// A root in the same form a resolved path takes, so the two can be compared.
@@ -363,32 +418,85 @@ fn normalize(path: &Path) -> PathBuf {
 mod tests {
     use super::*;
 
-    fn granted() -> Capabilities {
-        Capabilities::new()
-            .with_read_roots([PathBuf::from("/app/data")])
-            .with_write_roots([PathBuf::from("/app/data")])
+    /// A real directory, because a grant is now an open handle rather than a
+    /// string: there is nothing to hold onto a path that does not exist.
+    struct Root(PathBuf);
+
+    impl Root {
+        fn new(name: &str) -> Self {
+            let path = std::env::temp_dir()
+                .join(format!("gpui-shell-grant-{}-{name}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&path);
+            std::fs::create_dir_all(&path).expect("a root");
+            Self(path.canonicalize().expect("a canonical root"))
+        }
+
+        fn granted(&self) -> Capabilities {
+            Capabilities::new()
+                .with_read_roots([self.0.clone()])
+                .with_write_roots([self.0.clone()])
+        }
+    }
+
+    impl Drop for Root {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
     }
 
     #[test]
     fn traversal_out_of_a_root_is_rejected() {
-        let error = granted()
-            .resolve(Path::new("../../etc/passwd"), Access::Read)
+        let root = Root::new("traversal");
+        let error = root
+            .granted()
+            .open(Path::new("../../etc/passwd"), Access::Read)
             .unwrap_err();
         assert!(matches!(error, CapabilityError::OutsideRoots { .. }));
     }
 
     #[test]
     fn a_relative_path_resolves_inside_its_root() {
-        let path = granted()
-            .resolve(Path::new("items.json"), Access::Write)
-            .unwrap();
-        assert_eq!(path, PathBuf::from("/app/data/items.json"));
+        let root = Root::new("relative");
+        let grant = root
+            .granted()
+            .open(Path::new("items.json"), Access::Write)
+            .expect("a path inside the root");
+        assert_eq!(grant.path(), Path::new("items.json"));
+    }
+
+    #[test]
+    fn an_absolute_path_inside_a_root_becomes_relative_to_it() {
+        let root = Root::new("absolute");
+        let grant = root
+            .granted()
+            .open(&root.0.join("nested/items.json"), Access::Write)
+            .expect("a path inside the root");
+        assert_eq!(grant.path(), Path::new("nested/items.json"));
+    }
+
+    /// An application's data directory does not exist before its first run, and
+    /// a write grant is the host saying that directory is the application's.
+    #[test]
+    fn a_write_grant_materializes_a_root_that_is_not_there_yet() {
+        let root = Root::new("missing");
+        let inner = root.0.join("not-yet");
+        let capabilities = Capabilities::new().with_write_roots([inner.clone()]);
+
+        let grant = capabilities
+            .open(Path::new("settings.json"), Access::Write)
+            .expect("a write grant should make its own root");
+        assert_eq!(grant.path(), Path::new("settings.json"));
+        assert!(inner.is_dir());
+
+        // A read grant has nothing to offer a directory that is not there.
+        let reading = Capabilities::new().with_read_roots([root.0.join("still-not-there")]);
+        assert!(reading.open(Path::new("x"), Access::Read).is_err());
     }
 
     #[test]
     fn nothing_resolves_without_a_grant() {
         let error = Capabilities::new()
-            .resolve(Path::new("items.json"), Access::Read)
+            .open(Path::new("items.json"), Access::Read)
             .unwrap_err();
         assert_eq!(error, CapabilityError::NotGranted(Access::Read));
     }
@@ -458,31 +566,33 @@ mod symlink_tests {
 
     #[test]
     #[cfg(unix)]
-    fn a_symlink_out_of_a_root_does_not_resolve() {
+    fn a_symlink_out_of_a_root_cannot_be_read_through() {
         let sandbox = Sandbox::new("read");
         let outside = sandbox.outside();
         sandbox.link("escape", &outside);
         let capabilities = sandbox.granted();
 
-        // The lexical path is under the root; the file it names is not.
-        let escaped = capabilities.resolve(Path::new("escape/secret.txt"), Access::Read);
+        // The refusal is at the operation, not at the resolution: the grant
+        // hands back a directory that cannot be made to name anything outside
+        // itself, and that is what a read runs against. Testing the resolution
+        // would be testing the old design.
+        let grant = capabilities
+            .open(Path::new("escape/secret.txt"), Access::Read)
+            .expect("lexically inside the root");
         assert!(
-            escaped.is_err(),
-            "reading through a symlink left the granted root: {escaped:?}"
-        );
-
-        // The link itself is no better an answer than a path through it.
-        assert!(
-            capabilities
-                .resolve(Path::new("escape"), Access::Read)
-                .is_err()
+            grant.dir().read_to_string(grant.path()).is_err(),
+            "reading through a symlink left the granted root"
         );
 
         // And an ordinary path still works, which is the point of the grant.
-        assert!(
-            capabilities
-                .resolve(Path::new("ours.txt"), Access::Read)
-                .is_ok()
+        let ours = capabilities
+            .open(Path::new("ours.txt"), Access::Read)
+            .expect("a path inside the root");
+        assert_eq!(
+            ours.dir()
+                .read_to_string(ours.path())
+                .expect("our own file"),
+            "ours"
         );
     }
 
@@ -494,43 +604,71 @@ mod symlink_tests {
         sandbox.link("escape", &outside);
         let capabilities = sandbox.granted();
 
-        // A file that does not exist yet, below a link that does.
-        let escaped = capabilities.resolve(Path::new("escape/planted.txt"), Access::Write);
+        let planted = capabilities
+            .open(Path::new("escape/planted.txt"), Access::Write)
+            .expect("lexically inside the root");
         assert!(
-            escaped.is_err(),
-            "writing through a symlink left the granted root: {escaped:?}"
+            planted.dir().write(planted.path(), b"x").is_err(),
+            "writing through a symlink left the granted root"
         );
+        assert!(!outside.join("planted.txt").exists());
 
-        // Creating a directory through it is the same escape with a different
-        // syscall.
-        assert!(
-            capabilities
-                .resolve(Path::new("escape/planted"), Access::Write)
-                .is_err()
-        );
+        let made = capabilities
+            .open(Path::new("escape/planted"), Access::Write)
+            .expect("lexically inside the root");
+        assert!(made.dir().create_dir_all(made.path()).is_err());
+        assert!(!outside.join("planted").exists());
 
         // A new file directly in the root is still allowed.
+        let ours = capabilities
+            .open(Path::new("new.txt"), Access::Write)
+            .expect("a path inside the root");
+        ours.dir()
+            .write(ours.path(), b"ours")
+            .expect("our own file");
+    }
+
+    /// The case that check-then-use could never cover: the link appears *after*
+    /// the path was judged. A handle cannot be talked out of its directory, so
+    /// the timing stops mattering.
+    #[test]
+    #[cfg(unix)]
+    fn a_symlink_planted_after_the_check_is_still_refused() {
+        let sandbox = Sandbox::new("toctou");
+        let outside = sandbox.outside();
+        let capabilities = sandbox.granted();
+
+        // Judged while `escape` is an ordinary missing name.
+        let grant = capabilities
+            .open(Path::new("escape/secret.txt"), Access::Read)
+            .expect("lexically inside the root");
+
+        // Now somebody else makes it a link. Under the old resolver this is the
+        // window: the check had already passed and the syscall would resolve the
+        // name a second time.
+        sandbox.link("escape", &outside);
+
         assert!(
-            capabilities
-                .resolve(Path::new("new.txt"), Access::Write)
-                .is_ok()
+            grant.dir().read_to_string(grant.path()).is_err(),
+            "a link planted after the check was followed out of the root"
         );
     }
 
     #[test]
     #[cfg(unix)]
-    fn a_dangling_symlink_is_refused_rather_than_followed() {
+    fn a_dangling_symlink_is_not_followed() {
         let sandbox = Sandbox::new("dangling");
         let outside = sandbox.outside();
         sandbox.link("dangling", &outside.join("not-there.txt"));
         let capabilities = sandbox.granted();
 
-        // Nothing is there to canonicalize, so where it points cannot be
-        // proven — and a write would create the target, outside the root.
-        let escaped = capabilities.resolve(Path::new("dangling"), Access::Write);
+        let grant = capabilities
+            .open(Path::new("dangling"), Access::Write)
+            .expect("lexically inside the root");
         assert!(
-            escaped.is_err(),
-            "a dangling symlink was treated as a path that may be created: {escaped:?}"
+            grant.dir().write(grant.path(), b"x").is_err(),
+            "a write followed a dangling symlink out of the root"
         );
+        assert!(!outside.join("not-there.txt").exists());
     }
 }
