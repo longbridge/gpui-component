@@ -257,7 +257,7 @@ impl Render for MessageScrollerStory {
                                                     .header(
                                                         MessageHeader::new().child(message.author),
                                                     )
-                                                    .content(MessageContent::new().child(bubble)),
+                                                    .content(MessageContent::new().bubble(bubble)),
                                             );
 
                                         v_flex()

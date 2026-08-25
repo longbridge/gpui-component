@@ -22,7 +22,7 @@ use gpui_component::message::{
 Message::new()
     .avatar_slot(
         MessageAvatar::new()
-            .child(Avatar::new().name("Alice").small()),
+            .child(Avatar::new().name("Alice").size_8()),
     )
     .header(
         MessageHeader::new()
@@ -39,7 +39,7 @@ Message::new()
     )
 ```
 
-`MessageAvatar` reserves the shared `size-8` avatar baseline and keeps the avatar aligned with the visible surface when a footer is present. The `.avatar(...)` builder wraps any element in this slot as a convenience. Header, content, and footer are typed slots with arbitrary children. Header and footer use the `px-3` content inset by default; call `.content_inset(false)` on either slot for a ghost surface. Existing `.px_0()` refinements remain supported. Avatar geometry, typography, and spacing follow the application's `rem` scale. `Message` does not own sender records, timestamps, delivery state, or actions.
+`MessageAvatar` reserves the shared `size-8` avatar baseline and keeps the avatar aligned with the visible surface when a footer is present. The `.avatar(...)` builder wraps any element in this slot as a convenience. Header, content, and footer are typed slots with arbitrary children. Header and footer use the `px-3` content inset by default; a ghost surface added through `MessageContent::bubble(...)` removes both insets automatically. An explicit `.content_inset(...)` on either slot takes precedence, and existing `.px_0()` refinements remain supported. Avatar geometry, typography, and spacing follow the application's `rem` scale. `Message` does not own sender records, timestamps, delivery state, or actions.
 
 ## Alignment
 
@@ -48,7 +48,7 @@ Alignment is applied to the complete message and all named slots:
 ```rust
 Message::new()
     .alignment(MessageAlignment::End)
-    .avatar(Avatar::new().name("You").small())
+    .avatar(Avatar::new().name("You").size_8())
     .header(MessageHeader::new().child("You"))
     .content(MessageContent::new().child("Sent message"))
     .footer(MessageFooter::new().child("Delivered"))
@@ -74,7 +74,7 @@ Compose existing components in the slots instead of configuring message-specific
 Message::new()
     .content(
         MessageContent::new()
-            .child(Bubble::new().child("Hello"))
+            .bubble(Bubble::new().child("Hello"))
             .child(
                 Attachment::new()
                     .content(AttachmentContent::new().child(file_content)),
@@ -88,31 +88,39 @@ Message::new()
 
 ## Ghost surfaces and stack styling
 
-The inner stack can be refined independently from the message row. Header and
-footer insets are controlled independently, which is useful when the message
-surface has no frame of its own:
+The inner stack can be refined independently from the message row. A typed
+ghost bubble automatically removes the default header and footer insets:
 
 ```rust
 use gpui::{StyleRefinement, Styled as _};
+use gpui_component::bubble::{Bubble, BubbleVariant};
 
 Message::new()
     .with_stack_style(StyleRefinement::default().gap_3())
     .header(
         MessageHeader::new()
-            .content_inset(false)
             .child("System")
             .child("Just now"),
     )
     .content(
         MessageContent::new()
-            .child("The conversation has been archived."),
+            .bubble(
+                Bubble::new()
+                    .with_variant(BubbleVariant::Ghost)
+                    .child("The conversation has been archived."),
+            ),
     )
     .footer(
         MessageFooter::new()
-            .content_inset(false)
             .child("No further action required"),
     )
 ```
+
+Call `.content_inset(true)` to keep an individual slot inset even around a
+ghost bubble, or `.content_inset(false)` to remove it for any other content.
+The existing `.child(...)` builder still accepts arbitrary elements; because
+it erases their concrete type, use `.bubble(...)` when variant-aware layout
+inheritance is desired.
 
 ## Custom styling
 

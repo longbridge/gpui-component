@@ -72,6 +72,10 @@ impl Bubble {
         self
     }
 
+    pub(crate) fn is_ghost(&self) -> bool {
+        self.variant == BubbleVariant::Ghost
+    }
+
     /// Replace the visible content surface.
     pub fn content(mut self, content: BubbleContent) -> Self {
         self.content = content;

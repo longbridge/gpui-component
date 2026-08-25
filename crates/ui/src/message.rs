@@ -3,7 +3,7 @@ use gpui::{
     prelude::FluentBuilder as _, relative, rems,
 };
 
-use crate::{ActiveTheme as _, StyledExt as _, h_flex, v_flex};
+use crate::{ActiveTheme as _, StyledExt as _, bubble::Bubble, h_flex, v_flex};
 
 /// Horizontal alignment for a message and message-owned chat surfaces.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -148,6 +148,10 @@ impl RenderOnce for Message {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         let alignment = self.alignment;
         let has_footer = self.footer.is_some();
+        let has_ghost_bubble = self
+            .content
+            .as_ref()
+            .is_some_and(|content| content.has_ghost_bubble);
         let stack_style = self.stack_style;
 
         h_flex()
@@ -175,18 +179,22 @@ impl RenderOnce for Message {
                         MessageAlignment::End => this.items_end(),
                     })
                     .refine_style(&stack_style)
-                    .when_some(self.header, |this, header| this.child(header))
+                    .when_some(self.header, |this, header| {
+                        this.child(header.with_inherited_content_inset(!has_ghost_bubble))
+                    })
                     .when_some(self.content, |this, content| {
                         this.child(content.aligned(alignment))
                     })
-                    .when_some(self.footer, |this, footer| this.child(footer)),
+                    .when_some(self.footer, |this, footer| {
+                        this.child(footer.with_inherited_content_inset(!has_ghost_bubble))
+                    }),
             )
     }
 }
 
 /// The sender identity slot rendered beside a [`Message`].
 ///
-/// The slot reserves a 32 pixel baseline and moves above a message footer so
+/// The slot reserves the shared `size-8` baseline and moves above a message footer so
 /// the avatar remains aligned with the visible message surface.
 #[derive(IntoElement)]
 pub struct MessageAvatar {
@@ -253,7 +261,7 @@ impl RenderOnce for MessageAvatar {
 #[derive(IntoElement)]
 pub struct MessageHeader {
     style: StyleRefinement,
-    content_inset: bool,
+    content_inset: Option<bool>,
     children: Vec<AnyElement>,
 }
 
@@ -262,14 +270,19 @@ impl MessageHeader {
     pub fn new() -> Self {
         Self {
             style: StyleRefinement::default(),
-            content_inset: true,
+            content_inset: None,
             children: Vec::new(),
         }
     }
 
     /// Set whether the header keeps its default horizontal content inset.
     pub fn content_inset(mut self, content_inset: bool) -> Self {
-        self.content_inset = content_inset;
+        self.content_inset = Some(content_inset);
+        self
+    }
+
+    fn with_inherited_content_inset(mut self, content_inset: bool) -> Self {
+        self.content_inset.get_or_insert(content_inset);
         self
     }
 }
@@ -304,7 +317,7 @@ impl RenderOnce for MessageHeader {
             .line_height(relative(1.25))
             .font_medium()
             .text_color(tokens.colors.muted_foreground)
-            .when(self.content_inset, |this| this.px_3())
+            .when(self.content_inset.unwrap_or(true), |this| this.px_3())
             .refine_style(&self.style)
             .children(self.children)
     }
@@ -315,6 +328,7 @@ impl RenderOnce for MessageHeader {
 pub struct MessageContent {
     style: StyleRefinement,
     alignment: MessageAlignment,
+    has_ghost_bubble: bool,
     children: Vec<AnyElement>,
 }
 
@@ -324,8 +338,20 @@ impl MessageContent {
         Self {
             style: StyleRefinement::default(),
             alignment: MessageAlignment::Start,
+            has_ghost_bubble: false,
             children: Vec::new(),
         }
+    }
+
+    /// Add a typed bubble and inherit ghost-surface metadata layout.
+    ///
+    /// Ordinary `.child(...)` content remains available for arbitrary elements;
+    /// use this builder when surrounding message slots should react to a
+    /// bubble's variant.
+    pub fn bubble(mut self, bubble: Bubble) -> Self {
+        self.has_ghost_bubble |= bubble.is_ghost();
+        self.children.push(bubble.into_any_element());
+        self
     }
 
     fn aligned(mut self, alignment: MessageAlignment) -> Self {
@@ -372,7 +398,7 @@ impl RenderOnce for MessageContent {
 #[derive(IntoElement)]
 pub struct MessageFooter {
     style: StyleRefinement,
-    content_inset: bool,
+    content_inset: Option<bool>,
     children: Vec<AnyElement>,
 }
 
@@ -381,14 +407,19 @@ impl MessageFooter {
     pub fn new() -> Self {
         Self {
             style: StyleRefinement::default(),
-            content_inset: true,
+            content_inset: None,
             children: Vec::new(),
         }
     }
 
     /// Set whether the footer keeps its default horizontal content inset.
     pub fn content_inset(mut self, content_inset: bool) -> Self {
-        self.content_inset = content_inset;
+        self.content_inset = Some(content_inset);
+        self
+    }
+
+    fn with_inherited_content_inset(mut self, content_inset: bool) -> Self {
+        self.content_inset.get_or_insert(content_inset);
         self
     }
 }
@@ -423,7 +454,7 @@ impl RenderOnce for MessageFooter {
             .line_height(relative(1.25))
             .font_medium()
             .text_color(tokens.colors.muted_foreground)
-            .when(self.content_inset, |this| this.px_3())
+            .when(self.content_inset.unwrap_or(true), |this| this.px_3())
             .refine_style(&self.style)
             .children(self.children)
     }
@@ -451,8 +482,8 @@ mod tests {
         assert!(message.content.is_some());
         assert!(message.footer.is_some());
         assert!(!message.avatar.as_ref().unwrap().footer_offset);
-        assert!(!message.header.as_ref().unwrap().content_inset);
-        assert!(!message.footer.as_ref().unwrap().content_inset);
+        assert_eq!(message.header.as_ref().unwrap().content_inset, Some(false));
+        assert_eq!(message.footer.as_ref().unwrap().content_inset, Some(false));
 
         let group = MessageGroup::new().child("First").child("Second");
         assert_eq!(group.children.len(), 2);
@@ -463,5 +494,41 @@ mod tests {
         let avatar = MessageAvatar::new().with_footer_offset(true).child("ME");
         assert!(avatar.footer_offset);
         assert_eq!(avatar.children.len(), 1);
+    }
+
+    #[test]
+    fn test_ghost_bubble_inherits_message_slot_insets() {
+        let content = MessageContent::new()
+            .bubble(Bubble::new())
+            .bubble(Bubble::new().with_variant(crate::bubble::BubbleVariant::Ghost));
+
+        assert!(content.has_ghost_bubble);
+        assert_eq!(content.children.len(), 2);
+        assert_eq!(
+            MessageHeader::new()
+                .with_inherited_content_inset(false)
+                .content_inset,
+            Some(false)
+        );
+        assert_eq!(
+            MessageFooter::new()
+                .with_inherited_content_inset(false)
+                .content_inset,
+            Some(false)
+        );
+        assert_eq!(
+            MessageHeader::new()
+                .content_inset(true)
+                .with_inherited_content_inset(false)
+                .content_inset,
+            Some(true)
+        );
+        assert_eq!(
+            MessageFooter::new()
+                .content_inset(true)
+                .with_inherited_content_inset(false)
+                .content_inset,
+            Some(true)
+        );
     }
 }

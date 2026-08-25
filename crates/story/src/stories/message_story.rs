@@ -3,7 +3,7 @@ use gpui::{
     Render, StyleRefinement, Styled as _, Window, rems,
 };
 use gpui_component::{
-    ActiveTheme as _, Sizable as _, StyledExt as _,
+    ActiveTheme as _, StyledExt as _,
     avatar::Avatar,
     bubble::{Bubble, BubbleVariant},
     message::{
@@ -64,11 +64,11 @@ impl Render for MessageStory {
                     .child(
                         Message::new()
                             .avatar_slot(
-                                MessageAvatar::new().child(Avatar::new().name("Alice").small()),
+                                MessageAvatar::new().child(Avatar::new().name("Alice").size_8()),
                             )
                             .header(MessageHeader::new().child("Alice").child("10:24 AM"))
                             .content(
-                                MessageContent::new().child(
+                                MessageContent::new().bubble(
                                     Bubble::new()
                                         .with_variant(BubbleVariant::Secondary)
                                         .child("Can you review this?"),
@@ -79,10 +79,10 @@ impl Render for MessageStory {
                     .child(
                         Message::new()
                             .alignment(MessageAlignment::End)
-                            .avatar(Avatar::new().name("You").small())
+                            .avatar(Avatar::new().name("You").size_8())
                             .header(MessageHeader::new().child("You").child("10:25 AM"))
                             .content(
-                                MessageContent::new().child(
+                                MessageContent::new().bubble(
                                     Bubble::new().child("Sure — I will send notes shortly."),
                                 ),
                             )
@@ -97,10 +97,10 @@ impl Render for MessageStory {
                         MessageGroup::new()
                             .child(
                                 Message::new()
-                                    .avatar(Avatar::new().name("Alice").small())
+                                    .avatar(Avatar::new().name("Alice").size_8())
                                     .header(MessageHeader::new().child("Alice"))
                                     .content(
-                                        MessageContent::new().child(
+                                        MessageContent::new().bubble(
                                             Bubble::new()
                                                 .with_variant(BubbleVariant::Secondary)
                                                 .child("I attached the draft."),
@@ -111,7 +111,7 @@ impl Render for MessageStory {
                                 Message::new()
                                     .avatar_slot(MessageAvatar::new().bg(cx.theme().transparent))
                                     .content(
-                                        MessageContent::new().child(
+                                        MessageContent::new().bubble(
                                             Bubble::new()
                                                 .with_variant(BubbleVariant::Secondary)
                                                 .child("The second page needs attention."),
@@ -138,31 +138,20 @@ impl Render for MessageStory {
             )
             .child(
                 section("Ghost surface")
-                    .description(
-                        "Remove slot insets and refine the inner stack for a quiet surface.",
-                    )
+                    .description("Typed ghost bubbles automatically remove metadata insets.")
                     .w(rems(42.5))
                     .child(
                         Message::new()
                             .with_stack_style(StyleRefinement::default().gap_3())
-                            .header(
-                                MessageHeader::new()
-                                    .content_inset(false)
-                                    .child("System")
-                                    .child("Just now"),
-                            )
+                            .header(MessageHeader::new().child("System").child("Just now"))
                             .content(
-                                MessageContent::new().child(
+                                MessageContent::new().bubble(
                                     Bubble::new()
                                         .with_variant(BubbleVariant::Ghost)
                                         .child("The conversation has been archived."),
                                 ),
                             )
-                            .footer(
-                                MessageFooter::new()
-                                    .content_inset(false)
-                                    .child("No further action required"),
-                            ),
+                            .footer(MessageFooter::new().child("No further action required")),
                     ),
             )
     }
