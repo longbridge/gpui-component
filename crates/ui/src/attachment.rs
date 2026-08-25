@@ -1,10 +1,14 @@
 use gpui::{
     AnyElement, App, Axis, ElementId, ImageSource, InteractiveElement as _, IntoElement, ObjectFit,
     ParentElement, RenderOnce, SharedString, StatefulInteractiveElement as _, StyleRefinement,
-    Styled, StyledImage as _, Window, div, img, prelude::FluentBuilder as _,
+    Styled, StyledImage as _, Window, div, img, prelude::FluentBuilder as _, relative, rems,
 };
 
-use crate::{ActiveTheme as _, Sizable, Size, StyledExt as _, h_flex, v_flex};
+use crate::{
+    ActiveTheme as _, Sizable, Size, StyledExt as _, h_flex,
+    shimmer::{ShimmerStyle, ShimmerText},
+    v_flex,
+};
 
 /// The lifecycle status of an attachment.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -143,7 +147,7 @@ impl Attachment {
         self.content = self
             .content
             .take()
-            .map(|content| content.layout_for_axis(axis));
+            .map(|content| content.layout(axis, status));
         self.actions = self
             .actions
             .take()
@@ -157,23 +161,21 @@ impl RenderOnce for Attachment {
         let size = self.size;
         let axis = self.axis;
         let status = self.status;
+        let has_media = self.media.is_some();
         let has_content = self.content.is_some();
 
         self.layout_slots();
 
-        let (gap, padding_x, padding_y) = attachment_spacing(size, &tokens);
-
-        let mut element = div()
+        div()
             .relative()
             .flex()
             .flex_none()
             .max_w_full()
             .min_w_0()
-            .gap(gap)
             .rounded(if size == Size::XSmall {
-                tokens.radius.lg
-            } else {
                 tokens.radius.xl
+            } else {
+                cx.theme().radius_2xl()
             })
             .border_1()
             .border_color(if status.is_failed() {
@@ -182,26 +184,18 @@ impl RenderOnce for Attachment {
                 tokens.colors.border
             })
             .when(status.is_pending(), |this| this.border_dashed())
-            .bg(tokens.colors.surface)
-            .text_color(tokens.colors.surface_foreground)
-            .px(padding_x)
-            .py(padding_y)
-            .text_size(attachment_text_size(size, &tokens))
-            .line_height(tokens.typography.sm.line_height);
-
-        element = match axis {
-            Axis::Horizontal => element.min_w(gpui::px(160.)).items_center(),
-            Axis::Vertical => element
-                .w(if has_content {
-                    gpui::px(120.)
-                } else {
-                    gpui::px(96.)
-                })
-                .flex_col()
-                .items_start(),
-        };
-
-        element
+            .bg(cx.theme().group_box)
+            .text_color(cx.theme().group_box_foreground)
+            .line_height(relative(1.25))
+            .map(|this| attachment_size_style(this, size, has_media, has_content))
+            .map(|this| match axis {
+                Axis::Horizontal => this.min_w_40().items_center(),
+                Axis::Vertical => this
+                    .when(has_content, |this| this.w(rems(7.5)))
+                    .when(!has_content, |this| this.w_24())
+                    .flex_col()
+                    .items_start(),
+            })
             .when_some(self.media, |this, media| this.child(media))
             .when_some(self.content, |this, content| this.child(content))
             .when_some(self.actions, |this, actions| this.child(actions))
@@ -239,6 +233,21 @@ impl AttachmentMedia {
     /// Set an image preview source.
     pub fn src(mut self, source: impl Into<ImageSource>) -> Self {
         self.source = Some(source.into());
+        self
+    }
+
+    /// Add centered content above the preview without dimming it during loading.
+    pub fn overlay(mut self, overlay: impl IntoElement) -> Self {
+        self.children.push(
+            div()
+                .absolute()
+                .inset_0()
+                .flex()
+                .items_center()
+                .justify_center()
+                .child(overlay)
+                .into_any_element(),
+        );
         self
     }
 
@@ -281,8 +290,10 @@ impl RenderOnce for AttachmentMedia {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let tokens = cx.theme().semantic_tokens();
         let resolved_size = self.size.unwrap_or_default();
-        let size = media_size(resolved_size);
-        let radius = media_radius(resolved_size, &tokens);
+        let radius = match resolved_size {
+            Size::XSmall => tokens.radius.sm,
+            Size::Small | Size::Medium | Size::Large | Size::Size(_) => tokens.radius.md,
+        };
         let source = self.source;
         let has_source = source.is_some();
         let failed_media = self.status.is_failed() && !has_source;
@@ -293,14 +304,20 @@ impl RenderOnce for AttachmentMedia {
             );
         let children = self.children;
 
-        let element = div()
+        div()
             .relative()
             .flex()
             .flex_shrink_0()
             .items_center()
             .justify_center()
             .overflow_hidden()
-            .when(self.axis == Axis::Horizontal, |this| this.w(size).h(size))
+            .when(self.axis == Axis::Horizontal, |this| match resolved_size {
+                Size::XSmall => this.size_7(),
+                Size::Small => this.size_8(),
+                Size::Medium => this.size_10(),
+                Size::Large => this.size_12(),
+                Size::Size(size) => this.size(size),
+            })
             .when(self.axis == Axis::Vertical, |this| {
                 this.w_full().aspect_ratio(1.)
             })
@@ -316,13 +333,17 @@ impl RenderOnce for AttachmentMedia {
                 tokens.colors.foreground
             })
             .when_some(source, |this, source| {
-                this.child(img(source).size_full().object_fit(ObjectFit::Cover))
+                this.child(
+                    img(source)
+                        .absolute()
+                        .inset_0()
+                        .size_full()
+                        .object_fit(ObjectFit::Cover)
+                        .when(dimmed_image, |this| this.opacity(0.6)),
+                )
             })
-            .when(dimmed_image, |this| this.opacity(0.6))
-            .when(!has_source, |this| this.children(children))
-            .refine_style(&self.style);
-
-        element
+            .children(children)
+            .refine_style(&self.style)
     }
 }
 
@@ -331,7 +352,13 @@ impl RenderOnce for AttachmentMedia {
 pub struct AttachmentContent {
     style: StyleRefinement,
     vertical_layout: bool,
-    children: Vec<AnyElement>,
+    children: Vec<AttachmentContentChild>,
+}
+
+enum AttachmentContentChild {
+    Title(AttachmentTitle),
+    Description(AttachmentDescription),
+    Element(AnyElement),
 }
 
 impl AttachmentContent {
@@ -344,8 +371,38 @@ impl AttachmentContent {
         }
     }
 
-    fn layout_for_axis(mut self, axis: Axis) -> Self {
+    /// Add a title that automatically inherits the attachment lifecycle status.
+    pub fn title(mut self, title: AttachmentTitle) -> Self {
+        self.children.push(AttachmentContentChild::Title(title));
+        self
+    }
+
+    /// Add a description that automatically inherits the attachment lifecycle status.
+    pub fn description(mut self, description: AttachmentDescription) -> Self {
+        self.children
+            .push(AttachmentContentChild::Description(description));
+        self
+    }
+
+    fn layout(mut self, axis: Axis, status: AttachmentStatus) -> Self {
         self.vertical_layout = axis == Axis::Vertical;
+
+        for child in &mut self.children {
+            match child {
+                AttachmentContentChild::Title(title) => {
+                    if title.status.is_none() {
+                        title.status = Some(status);
+                    }
+                }
+                AttachmentContentChild::Description(description) => {
+                    if description.status.is_none() {
+                        description.status = Some(status);
+                    }
+                }
+                AttachmentContentChild::Element(_) => {}
+            }
+        }
+
         self
     }
 }
@@ -358,7 +415,8 @@ impl Default for AttachmentContent {
 
 impl ParentElement for AttachmentContent {
     fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
-        self.children.extend(elements);
+        self.children
+            .extend(elements.into_iter().map(AttachmentContentChild::Element));
     }
 }
 
@@ -369,19 +427,19 @@ impl Styled for AttachmentContent {
 }
 
 impl RenderOnce for AttachmentContent {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        let tokens = cx.theme().semantic_tokens();
-
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         v_flex()
             .max_w_full()
             .min_w_0()
             .flex_1()
-            .gap(tokens.spacing.xxs)
-            .line_height(tokens.typography.sm.line_height)
-            .when(self.vertical_layout, |this| {
-                this.w_full().px(tokens.spacing.xs)
-            })
-            .children(self.children)
+            .gap_0p5()
+            .line_height(relative(1.25))
+            .when(self.vertical_layout, |this| this.w_full().px_1())
+            .children(self.children.into_iter().map(|child| match child {
+                AttachmentContentChild::Title(title) => title.into_any_element(),
+                AttachmentContentChild::Description(description) => description.into_any_element(),
+                AttachmentContentChild::Element(element) => element,
+            }))
             .refine_style(&self.style)
     }
 }
@@ -391,6 +449,8 @@ impl RenderOnce for AttachmentContent {
 pub struct AttachmentTitle {
     style: StyleRefinement,
     text: SharedString,
+    status: Option<AttachmentStatus>,
+    shimmer_style: Option<ShimmerStyle>,
 }
 
 impl AttachmentTitle {
@@ -399,7 +459,21 @@ impl AttachmentTitle {
         Self {
             style: StyleRefinement::default(),
             text: text.into(),
+            status: None,
+            shimmer_style: None,
         }
+    }
+
+    /// Override the attachment lifecycle status used for the loading shimmer.
+    pub fn status(mut self, status: AttachmentStatus) -> Self {
+        self.status = Some(status);
+        self
+    }
+
+    /// Customize the shimmer used while this attachment is uploading or processing.
+    pub fn with_shimmer_style(mut self, style: ShimmerStyle) -> Self {
+        self.shimmer_style = Some(style);
+        self
     }
 }
 
@@ -410,16 +484,25 @@ impl Styled for AttachmentTitle {
 }
 
 impl RenderOnce for AttachmentTitle {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        let tokens = cx.theme().semantic_tokens();
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+        let loading = self.status.is_some_and(AttachmentStatus::is_in_progress);
 
         div()
             .max_w_full()
             .min_w_0()
             .truncate()
             .font_medium()
-            .line_height(tokens.typography.sm.line_height)
-            .child(self.text)
+            .map(|this| {
+                if loading {
+                    this.child(
+                        ShimmerText::new(self.text).when_some(self.shimmer_style, |this, style| {
+                            this.with_shimmer_style(style)
+                        }),
+                    )
+                } else {
+                    this.child(self.text)
+                }
+            })
             .refine_style(&self.style)
     }
 }
@@ -468,8 +551,8 @@ impl RenderOnce for AttachmentDescription {
             .max_w_full()
             .min_w_0()
             .truncate()
-            .text_size(tokens.typography.xs.size)
-            .line_height(tokens.typography.xs.line_height)
+            .text_xs()
+            .line_height(relative(1.25))
             .text_color(color)
             .child(self.text)
             .refine_style(&self.style)
@@ -522,49 +605,52 @@ impl Styled for AttachmentActions {
 }
 
 impl RenderOnce for AttachmentActions {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        let tokens = cx.theme().semantic_tokens();
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         div()
             .relative()
             .flex()
             .flex_shrink_0()
             .items_center()
-            .gap(tokens.spacing.xs)
+            .gap_1()
             .when(self.vertical_layout, |this| {
-                this.absolute()
-                    .top(tokens.spacing.md)
-                    .right(tokens.spacing.md)
+                this.absolute().top_3().right_3()
             })
             .children(self.children)
             .refine_style(&self.style)
     }
 }
 
-fn attachment_spacing(
+fn attachment_size_style<T: Styled + gpui::prelude::FluentBuilder>(
+    element: T,
     size: Size,
-    tokens: &gpui_base::SemanticThemeTokens,
-) -> (gpui::Pixels, gpui::Pixels, gpui::Pixels) {
+    has_media: bool,
+    has_content: bool,
+) -> T {
     match size {
-        Size::XSmall => (
-            tokens.spacing.xs + tokens.spacing.xxs,
-            tokens.spacing.xs + tokens.spacing.xxs,
-            tokens.spacing.xs,
-        ),
-        Size::Small => (
-            tokens.spacing.sm + tokens.spacing.xxs,
-            tokens.spacing.sm,
-            tokens.spacing.xs + tokens.spacing.xxs,
-        ),
-        Size::Medium => (
-            tokens.spacing.sm,
-            tokens.spacing.sm + tokens.spacing.xxs,
-            tokens.spacing.sm,
-        ),
-        Size::Large => (tokens.spacing.md, tokens.spacing.lg, tokens.spacing.md),
-        Size::Size(value) => {
-            let padding = value * 0.25;
-            (tokens.spacing.xs, padding, padding)
-        }
+        Size::XSmall => element
+            .gap_1p5()
+            .text_xs()
+            .when(has_content, |this| this.px_1p5().py_1())
+            .when(has_media, |this| this.p_1()),
+        Size::Small => element
+            .gap_2p5()
+            .text_xs()
+            .when(has_content, |this| this.px_2().py_1p5())
+            .when(has_media, |this| this.p_1p5()),
+        Size::Medium => element
+            .gap_2()
+            .text_sm()
+            .when(has_content, |this| this.px_2p5().py_2())
+            .when(has_media, |this| this.p_2()),
+        Size::Large => element
+            .gap_3()
+            .text_base()
+            .when(has_content, |this| this.px_4().py_3())
+            .when(has_media, |this| this.p_3()),
+        Size::Size(value) => element
+            .gap_1()
+            .text_size(value * 0.875)
+            .when(has_content || has_media, |this| this.p(value * 0.25)),
     }
 }
 
@@ -600,45 +686,16 @@ impl Styled for AttachmentGroup {
 }
 
 impl RenderOnce for AttachmentGroup {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        let tokens = cx.theme().semantic_tokens();
-
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         h_flex()
             .id(self.id)
             .w_full()
             .min_w_0()
-            .gap(tokens.spacing.md)
-            .py(tokens.spacing.xs)
+            .gap_3()
+            .py_1()
             .overflow_x_scroll()
             .refine_style(&self.style)
             .children(self.children)
-    }
-}
-
-fn attachment_text_size(size: Size, tokens: &gpui_base::SemanticThemeTokens) -> gpui::Pixels {
-    match size {
-        Size::XSmall => tokens.typography.xs.size,
-        Size::Small | Size::Medium => tokens.typography.sm.size,
-        Size::Large => tokens.typography.md.size,
-        Size::Size(value) => value * 0.875,
-    }
-}
-
-fn media_size(size: Size) -> gpui::Pixels {
-    match size {
-        Size::XSmall => gpui::px(28.),
-        Size::Small => gpui::px(32.),
-        Size::Medium => gpui::px(40.),
-        Size::Large => gpui::px(48.),
-        Size::Size(value) => value,
-    }
-}
-
-fn media_radius(size: Size, tokens: &gpui_base::SemanticThemeTokens) -> gpui::Pixels {
-    match size {
-        Size::XSmall => tokens.radius.md,
-        Size::Small => tokens.radius.md,
-        Size::Medium | Size::Large | Size::Size(_) => tokens.radius.lg,
     }
 }
 
@@ -655,8 +712,8 @@ mod tests {
             .media(AttachmentMedia::new().src("preview.png"))
             .content(
                 AttachmentContent::new()
-                    .child(AttachmentTitle::new("report.pdf"))
-                    .child(AttachmentDescription::new("Uploading")),
+                    .title(AttachmentTitle::new("report.pdf"))
+                    .description(AttachmentDescription::new("Uploading")),
             )
             .actions(AttachmentActions::new().child("Cancel"));
 
@@ -694,11 +751,113 @@ mod tests {
         let media = AttachmentMedia::new().child("icon");
         assert_eq!(media.children.len(), 1);
 
-        let content = AttachmentContent::new().child(AttachmentTitle::new("name"));
-        assert_eq!(content.children.len(), 1);
+        let content = AttachmentContent::new()
+            .title(AttachmentTitle::new("name"))
+            .description(AttachmentDescription::new("Details"))
+            .child("Custom progress");
+        assert_eq!(content.children.len(), 3);
+        assert!(matches!(
+            content.children[0],
+            AttachmentContentChild::Title(_)
+        ));
+        assert!(matches!(
+            content.children[1],
+            AttachmentContentChild::Description(_)
+        ));
+        assert!(matches!(
+            content.children[2],
+            AttachmentContentChild::Element(_)
+        ));
+
+        let legacy = AttachmentContent::new().child(AttachmentTitle::new("legacy"));
+        assert!(matches!(
+            legacy.children[0],
+            AttachmentContentChild::Element(_)
+        ));
 
         let actions = AttachmentActions::new().child("remove");
         assert_eq!(actions.children.len(), 1);
+    }
+
+    #[test]
+    fn test_attachment_typed_content_inherits_status() {
+        let mut attachment = Attachment::new()
+            .status(AttachmentStatus::Uploading)
+            .content(
+                AttachmentContent::new()
+                    .title(AttachmentTitle::new("report.pdf"))
+                    .description(AttachmentDescription::new("Uploading")),
+            );
+
+        attachment.layout_slots();
+
+        let content = attachment.content.unwrap();
+        let AttachmentContentChild::Title(title) = &content.children[0] else {
+            panic!("expected the typed title slot");
+        };
+        assert_eq!(title.status, Some(AttachmentStatus::Uploading));
+
+        let AttachmentContentChild::Description(description) = &content.children[1] else {
+            panic!("expected the typed description slot");
+        };
+        assert_eq!(description.status, Some(AttachmentStatus::Uploading));
+    }
+
+    #[test]
+    fn test_attachment_explicit_child_status_overrides_parent() {
+        let mut attachment = Attachment::new().status(AttachmentStatus::Failed).content(
+            AttachmentContent::new()
+                .title(AttachmentTitle::new("report.pdf").status(AttachmentStatus::Processing))
+                .description(
+                    AttachmentDescription::new("Previous upload completed")
+                        .status(AttachmentStatus::Complete),
+                ),
+        );
+
+        attachment.layout_slots();
+
+        let content = attachment.content.unwrap();
+        let AttachmentContentChild::Title(title) = &content.children[0] else {
+            panic!("expected the typed title slot");
+        };
+        assert_eq!(title.status, Some(AttachmentStatus::Processing));
+
+        let AttachmentContentChild::Description(description) = &content.children[1] else {
+            panic!("expected the typed description slot");
+        };
+        assert_eq!(description.status, Some(AttachmentStatus::Complete));
+    }
+
+    #[test]
+    fn test_attachment_title_keeps_custom_shimmer_style() {
+        let mut attachment = Attachment::new()
+            .status(AttachmentStatus::Processing)
+            .content(
+                AttachmentContent::new().title(
+                    AttachmentTitle::new("report.pdf")
+                        .with_shimmer_style(ShimmerStyle::new().spread(0.45).reverse(true)),
+                ),
+            );
+
+        attachment.layout_slots();
+
+        let content = attachment.content.unwrap();
+        let AttachmentContentChild::Title(title) = &content.children[0] else {
+            panic!("expected the typed title slot");
+        };
+        assert_eq!(title.status, Some(AttachmentStatus::Processing));
+        assert!(title.shimmer_style.is_some());
+    }
+
+    #[test]
+    fn test_attachment_media_preview_keeps_children_and_overlays() {
+        let media = AttachmentMedia::new()
+            .src("preview.png")
+            .child("Existing overlay")
+            .overlay("Centered overlay");
+
+        assert!(media.source.is_some());
+        assert_eq!(media.children.len(), 2);
     }
 
     #[test]

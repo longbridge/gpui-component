@@ -14,6 +14,7 @@ use gpui_component::attachment::{
     Attachment, AttachmentActions, AttachmentContent, AttachmentDescription, AttachmentGroup,
     AttachmentMedia, AttachmentStatus, AttachmentTitle,
 };
+use gpui_component::shimmer::ShimmerStyle;
 ```
 
 ## Composition
@@ -34,8 +35,8 @@ Attachment::new()
     .media(AttachmentMedia::new().child(Icon::new(IconName::File)))
     .content(
         AttachmentContent::new()
-            .child(AttachmentTitle::new("quarterly-report.pdf"))
-            .child(AttachmentDescription::new("PDF · 2.4 MB")),
+            .title(AttachmentTitle::new("quarterly-report.pdf"))
+            .description(AttachmentDescription::new("PDF · 2.4 MB")),
     )
     .actions(
         AttachmentActions::new().child(
@@ -56,17 +57,48 @@ Attachment::new()
     .status(AttachmentStatus::Uploading)
     .content(
         AttachmentContent::new()
-            .child(AttachmentTitle::new("design-assets.zip"))
-            .child(AttachmentDescription::new("Uploading · 68%"))
+            .title(AttachmentTitle::new("design-assets.zip"))
+            .description(AttachmentDescription::new("Uploading · 68%"))
             .child(Progress::new("attachment-progress").value(68.)),
     )
 ```
 
 `Progress` remains an independent component so determinate, indeterminate, and application-specific progress behavior stay available without duplicating its API.
 
+Titles and descriptions added through `.title(...)` and `.description(...)` automatically inherit their parent attachment's status. Uploading and processing titles use the shared shimmer treatment, and failed descriptions use the destructive theme color. An explicit `.status(...)` on either child takes precedence over the inherited status:
+
+```rust
+Attachment::new()
+    .status(AttachmentStatus::Failed)
+    .content(
+        AttachmentContent::new()
+            .title(AttachmentTitle::new("archive.zip"))
+            .description(
+                AttachmentDescription::new("Previous upload completed")
+                    .status(AttachmentStatus::Complete),
+            ),
+    )
+```
+
+Customize a title's loading animation with `AttachmentTitle::with_shimmer_style(...)`:
+
+```rust
+AttachmentTitle::new("design-assets.zip")
+    .with_shimmer_style(
+        ShimmerStyle::new()
+            .duration(std::time::Duration::from_secs(3))
+            .spread(0.45)
+            .reverse(true),
+    )
+```
+
+`ShimmerStyle::highlight_color(...)` can also replace the theme-aware default highlight.
+
+The existing `.child(AttachmentTitle::new(...))` and `.child(AttachmentDescription::new(...))` forms remain supported. Because `.child(...)` erases the concrete element type, these legacy children do not inherit the attachment status automatically; use the typed builders when status-aware appearance is required.
+
 ## Thumbnail and orientation
 
-Use `Axis::Vertical` for a preview above the metadata. Horizontal attachments have a 160 px minimum width. Vertical attachments are 96 px wide without content and 120 px wide with content, and their media uses a square aspect ratio. An explicit media size or any `Styled` refinement can still override those defaults.
+Use `Axis::Vertical` for a preview above the metadata. Horizontal attachments use the `min_w_40()` scale step. Vertical attachments use the `w_24()` step without content and the equivalent of Tailwind's `w-30` step with content; their media uses a square aspect ratio. All of these dimensions scale with the application's base font size. An explicit media size or any `Styled` refinement can still override those defaults.
 
 ```rust
 Attachment::new()
@@ -74,12 +106,24 @@ Attachment::new()
     .media(AttachmentMedia::new().src(preview_url))
     .content(
         AttachmentContent::new()
-            .child(AttachmentTitle::new("preview.png"))
-            .child(AttachmentDescription::new("PNG · 1280 × 720")),
+            .title(AttachmentTitle::new("preview.png"))
+            .description(AttachmentDescription::new("PNG · 1280 × 720")),
     )
 ```
 
-The image fills the styled media bounds with `ObjectFit::Cover`. Image previews dim while uploading, processing, or failed, and return to full opacity while pending or complete.
+The image fills the styled media bounds with `ObjectFit::Cover`. Image previews dim while uploading, processing, or failed, and return to full opacity while pending or complete. Children remain visible above image sources; `.overlay(...)` additionally centers an element across the entire media area:
+
+```rust
+Attachment::new()
+    .status(AttachmentStatus::Uploading)
+    .media(
+        AttachmentMedia::new()
+            .src(preview_url)
+            .overlay(Spinner::new().small()),
+    )
+```
+
+Only the image receives the loading opacity, so overlay icons, progress indicators, and custom controls remain fully legible.
 
 ## Groups
 
@@ -93,7 +137,9 @@ AttachmentGroup::new("message-attachments")
 
 ## Custom styling
 
-`Attachment` and every public slot implement `Styled`. Refinements apply after component defaults, so callers can replace width, spacing, radius, colors, media dimensions, typography, and action layout.
+`Attachment` and every public slot implement `Styled`. Refinements apply after component defaults, so callers can replace width, spacing, radius, colors, media dimensions, typography, and action layout. The default attachment radius derives from `Theme::radius_2xl()`, while media corners use a smaller theme radius; both follow the application theme. Attachment sizing, spacing, and typography use the shared rem-based design scale. Attachment surfaces use the existing `group_box.background` and `group_box.foreground` theme colors, keeping card-like surfaces independently configurable from popovers without introducing a component-specific theme token.
+
+Use `.title(...)` and `.description(...)` for status-aware metadata, `.child(...)` for arbitrary custom content, `.status(...)` on individual titles or descriptions to override inherited appearance, `.with_shimmer_style(...)` to customize a title's loading animation, and `.overlay(...)` or `.child(...)` to compose content above image previews.
 
 ## Component boundaries
 
