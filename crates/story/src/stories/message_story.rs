@@ -1,6 +1,6 @@
 use gpui::{
     App, AppContext as _, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement as _,
-    Render, Styled as _, Window, px,
+    Render, StyleRefinement, Styled as _, Window, rems,
 };
 use gpui_component::{
     ActiveTheme as _, Sizable as _, StyledExt as _,
@@ -58,7 +58,7 @@ impl Render for MessageStory {
             .child(
                 section("Alignment")
                     .description("The message owns alignment for all of its named slots.")
-                    .w(px(680.))
+                    .w(rems(42.5))
                     .v_flex()
                     .gap_5()
                     .child(
@@ -92,12 +92,12 @@ impl Render for MessageStory {
             .child(
                 section("Group")
                     .description("Group consecutive messages while keeping each row composable.")
-                    .w(px(680.))
+                    .w(rems(42.5))
                     .child(
                         MessageGroup::new()
                             .child(
                                 Message::new()
-                                    .avatar_slot(MessageAvatar::new())
+                                    .avatar(Avatar::new().name("Alice").small())
                                     .header(MessageHeader::new().child("Alice"))
                                     .content(
                                         MessageContent::new().child(
@@ -109,7 +109,7 @@ impl Render for MessageStory {
                             )
                             .child(
                                 Message::new()
-                                    .avatar(Avatar::new().name("Alice").small())
+                                    .avatar_slot(MessageAvatar::new().bg(cx.theme().transparent))
                                     .content(
                                         MessageContent::new().child(
                                             Bubble::new()
@@ -123,7 +123,7 @@ impl Render for MessageStory {
             .child(
                 section("Custom style")
                     .description("Every structural part accepts GPUI style refinements.")
-                    .w(px(680.))
+                    .w(rems(42.5))
                     .child(
                         Message::new()
                             .p_3()
@@ -134,6 +134,35 @@ impl Render for MessageStory {
                                 MessageContent::new().child("The conversation has been archived."),
                             )
                             .footer(MessageFooter::new().px_0().child("Just now")),
+                    ),
+            )
+            .child(
+                section("Ghost surface")
+                    .description(
+                        "Remove slot insets and refine the inner stack for a quiet surface.",
+                    )
+                    .w(rems(42.5))
+                    .child(
+                        Message::new()
+                            .with_stack_style(StyleRefinement::default().gap_3())
+                            .header(
+                                MessageHeader::new()
+                                    .content_inset(false)
+                                    .child("System")
+                                    .child("Just now"),
+                            )
+                            .content(
+                                MessageContent::new().child(
+                                    Bubble::new()
+                                        .with_variant(BubbleVariant::Ghost)
+                                        .child("The conversation has been archived."),
+                                ),
+                            )
+                            .footer(
+                                MessageFooter::new()
+                                    .content_inset(false)
+                                    .child("No further action required"),
+                            ),
                     ),
             )
     }

@@ -39,7 +39,7 @@ Message::new()
     )
 ```
 
-`MessageAvatar` reserves the Base UI 32 px avatar baseline and keeps the avatar aligned with the visible surface when a footer is present. The `.avatar(...)` builder wraps any element in this slot as a convenience. Header, content, and footer are typed slots with arbitrary children. `Message` does not own sender records, timestamps, delivery state, or actions.
+`MessageAvatar` reserves the shared `size-8` avatar baseline and keeps the avatar aligned with the visible surface when a footer is present. The `.avatar(...)` builder wraps any element in this slot as a convenience. Header, content, and footer are typed slots with arbitrary children. Header and footer use the `px-3` content inset by default; call `.content_inset(false)` on either slot for a ghost surface. Existing `.px_0()` refinements remain supported. Avatar geometry, typography, and spacing follow the application's `rem` scale. `Message` does not own sender records, timestamps, delivery state, or actions.
 
 ## Alignment
 
@@ -86,9 +86,37 @@ Message::new()
     )
 ```
 
+## Ghost surfaces and stack styling
+
+The inner stack can be refined independently from the message row. Header and
+footer insets are controlled independently, which is useful when the message
+surface has no frame of its own:
+
+```rust
+use gpui::{StyleRefinement, Styled as _};
+
+Message::new()
+    .with_stack_style(StyleRefinement::default().gap_3())
+    .header(
+        MessageHeader::new()
+            .content_inset(false)
+            .child("System")
+            .child("Just now"),
+    )
+    .content(
+        MessageContent::new()
+            .child("The conversation has been archived."),
+    )
+    .footer(
+        MessageFooter::new()
+            .content_inset(false)
+            .child("No further action required"),
+    )
+```
+
 ## Custom styling
 
-`Message`, `MessageGroup`, `MessageAvatar`, `MessageHeader`, `MessageContent`, and `MessageFooter` all implement `Styled`. Style refinements are applied after component defaults:
+`Message`, `MessageGroup`, `MessageAvatar`, `MessageHeader`, `MessageContent`, and `MessageFooter` all implement `Styled`. Style refinements are applied after component defaults. Use `with_stack_style(...)` for the named-slot stack; use the slot's own `Styled` refinement for its surface and typography:
 
 ```rust
 Message::new()

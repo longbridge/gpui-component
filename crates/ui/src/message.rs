@@ -1,6 +1,6 @@
 use gpui::{
     AnyElement, App, IntoElement, ParentElement, RenderOnce, StyleRefinement, Styled, Window,
-    prelude::FluentBuilder as _,
+    prelude::FluentBuilder as _, relative, rems,
 };
 
 use crate::{ActiveTheme as _, StyledExt as _, h_flex, v_flex};
@@ -51,12 +51,10 @@ impl Styled for MessageGroup {
 }
 
 impl RenderOnce for MessageGroup {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        let tokens = cx.theme().semantic_tokens();
-
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         v_flex()
             .min_w_0()
-            .gap(tokens.spacing.sm)
+            .gap_2()
             .refine_style(&self.style)
             .children(self.children)
     }
@@ -69,6 +67,7 @@ impl RenderOnce for MessageGroup {
 #[derive(IntoElement)]
 pub struct Message {
     style: StyleRefinement,
+    stack_style: StyleRefinement,
     alignment: MessageAlignment,
     avatar: Option<MessageAvatar>,
     header: Option<MessageHeader>,
@@ -81,6 +80,7 @@ impl Message {
     pub fn new() -> Self {
         Self {
             style: StyleRefinement::default(),
+            stack_style: StyleRefinement::default(),
             alignment: MessageAlignment::Start,
             avatar: None,
             header: None,
@@ -92,6 +92,12 @@ impl Message {
     /// Set whether the message is aligned to the leading or trailing edge.
     pub fn alignment(mut self, alignment: MessageAlignment) -> Self {
         self.alignment = alignment;
+        self
+    }
+
+    /// Refine the inner vertical stack that contains the named slots.
+    pub fn with_stack_style(mut self, style: StyleRefinement) -> Self {
+        self.stack_style = style;
         self
     }
 
@@ -139,19 +145,19 @@ impl Styled for Message {
 }
 
 impl RenderOnce for Message {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        let tokens = cx.theme().semantic_tokens();
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         let alignment = self.alignment;
         let has_footer = self.footer.is_some();
+        let stack_style = self.stack_style;
 
         h_flex()
             .relative()
             .w_full()
             .min_w_0()
             .items_end()
-            .gap(tokens.spacing.sm)
-            .text_size(tokens.typography.sm.size)
-            .line_height(tokens.typography.sm.line_height)
+            .gap_2()
+            .text_sm()
+            .line_height(relative(1.25))
             .when(alignment == MessageAlignment::End, |this| {
                 this.flex_row_reverse()
             })
@@ -163,11 +169,12 @@ impl RenderOnce for Message {
                 v_flex()
                     .w_full()
                     .min_w_0()
-                    .gap(tokens.spacing.sm + tokens.spacing.xxs)
+                    .gap(rems(0.625))
                     .map(|this| match alignment {
                         MessageAlignment::Start => this.items_start(),
                         MessageAlignment::End => this.items_end(),
                     })
+                    .refine_style(&stack_style)
                     .when_some(self.header, |this, header| this.child(header))
                     .when_some(self.content, |this, content| {
                         this.child(content.aligned(alignment))
@@ -228,15 +235,15 @@ impl RenderOnce for MessageAvatar {
 
         h_flex()
             .relative()
-            .min_w(tokens.spacing.xxl)
+            .min_w_8()
             .flex_none()
             .items_center()
             .justify_center()
             .self_end()
             .overflow_hidden()
-            .rounded(tokens.radius.full)
+            .rounded(cx.theme().radius_full())
             .bg(tokens.colors.muted)
-            .when(self.footer_offset, |this| this.bottom(tokens.spacing.xxl))
+            .when(self.footer_offset, |this| this.bottom_8())
             .refine_style(&self.style)
             .children(self.children)
     }
@@ -246,6 +253,7 @@ impl RenderOnce for MessageAvatar {
 #[derive(IntoElement)]
 pub struct MessageHeader {
     style: StyleRefinement,
+    content_inset: bool,
     children: Vec<AnyElement>,
 }
 
@@ -254,8 +262,15 @@ impl MessageHeader {
     pub fn new() -> Self {
         Self {
             style: StyleRefinement::default(),
+            content_inset: true,
             children: Vec::new(),
         }
+    }
+
+    /// Set whether the header keeps its default horizontal content inset.
+    pub fn content_inset(mut self, content_inset: bool) -> Self {
+        self.content_inset = content_inset;
+        self
     }
 }
 
@@ -284,12 +299,12 @@ impl RenderOnce for MessageHeader {
         h_flex()
             .max_w_full()
             .min_w_0()
-            .gap(tokens.spacing.xs)
-            .text_size(tokens.typography.xs.size)
-            .line_height(tokens.typography.xs.line_height)
+            .gap_1()
+            .text_xs()
+            .line_height(relative(1.25))
             .font_medium()
             .text_color(tokens.colors.muted_foreground)
-            .px(tokens.spacing.md)
+            .when(self.content_inset, |this| this.px_3())
             .refine_style(&self.style)
             .children(self.children)
     }
@@ -338,14 +353,12 @@ impl Styled for MessageContent {
 }
 
 impl RenderOnce for MessageContent {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        let tokens = cx.theme().semantic_tokens();
-
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         v_flex()
             .w_full()
             .max_w_full()
             .min_w_0()
-            .gap(tokens.spacing.sm + tokens.spacing.xxs)
+            .gap(rems(0.625))
             .map(|this| match self.alignment {
                 MessageAlignment::Start => this.items_start(),
                 MessageAlignment::End => this.items_end(),
@@ -359,6 +372,7 @@ impl RenderOnce for MessageContent {
 #[derive(IntoElement)]
 pub struct MessageFooter {
     style: StyleRefinement,
+    content_inset: bool,
     children: Vec<AnyElement>,
 }
 
@@ -367,8 +381,15 @@ impl MessageFooter {
     pub fn new() -> Self {
         Self {
             style: StyleRefinement::default(),
+            content_inset: true,
             children: Vec::new(),
         }
+    }
+
+    /// Set whether the footer keeps its default horizontal content inset.
+    pub fn content_inset(mut self, content_inset: bool) -> Self {
+        self.content_inset = content_inset;
+        self
     }
 }
 
@@ -397,12 +418,12 @@ impl RenderOnce for MessageFooter {
         h_flex()
             .max_w_full()
             .min_w_0()
-            .gap(tokens.spacing.xs)
-            .text_size(tokens.typography.xs.size)
-            .line_height(tokens.typography.xs.line_height)
+            .gap_1()
+            .text_xs()
+            .line_height(relative(1.25))
             .font_medium()
             .text_color(tokens.colors.muted_foreground)
-            .px(tokens.spacing.md)
+            .when(self.content_inset, |this| this.px_3())
             .refine_style(&self.style)
             .children(self.children)
     }
@@ -414,19 +435,24 @@ mod tests {
 
     #[test]
     fn test_message_builder() {
+        let stack_style = StyleRefinement::default().gap_1();
         let message = Message::new()
             .alignment(MessageAlignment::End)
+            .with_stack_style(stack_style.clone())
             .avatar_slot(MessageAvatar::new().child(gpui::div()))
-            .header(MessageHeader::new().child("Alice"))
+            .header(MessageHeader::new().content_inset(false).child("Alice"))
             .content(MessageContent::new().child("Hello"))
-            .footer(MessageFooter::new().child("Delivered"));
+            .footer(MessageFooter::new().content_inset(false).child("Delivered"));
 
         assert_eq!(message.alignment, MessageAlignment::End);
+        assert_eq!(message.stack_style, stack_style);
         assert!(message.avatar.is_some());
         assert!(message.header.is_some());
         assert!(message.content.is_some());
         assert!(message.footer.is_some());
         assert!(!message.avatar.as_ref().unwrap().footer_offset);
+        assert!(!message.header.as_ref().unwrap().content_inset);
+        assert!(!message.footer.as_ref().unwrap().content_inset);
 
         let group = MessageGroup::new().child("First").child("Second");
         assert_eq!(group.children.len(), 2);
