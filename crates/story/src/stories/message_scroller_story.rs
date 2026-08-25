@@ -2,14 +2,15 @@ use std::rc::Rc;
 
 use gpui::{
     App, AppContext as _, Context, Entity, FocusHandle, Focusable, InteractiveElement as _,
-    IntoElement, ParentElement as _, Render, SharedString, Styled as _, Window, div,
-    prelude::FluentBuilder as _, px,
+    IntoElement, ParentElement as _, Render, SharedString, StyleRefinement, Styled as _, Window,
+    div, prelude::FluentBuilder as _, rems,
 };
 use gpui_component::{
     ActiveTheme as _, StyledExt as _,
     bubble::{Bubble, BubbleVariant},
-    button::Button,
+    button::{Button, ButtonVariants as _},
     h_flex,
+    input::{Input, InputState},
     marker::{Marker, MarkerContent, MarkerVariant},
     message::{Message, MessageAlignment, MessageContent, MessageHeader},
     message_scroller::{MessageScroller, MessageScrollerState},
@@ -40,13 +41,14 @@ impl DemoMessage {
 pub struct MessageScrollerStory {
     focus_handle: FocusHandle,
     scroller: Entity<MessageScrollerState>,
+    composer: Entity<InputState>,
     messages: Vec<DemoMessage>,
     unread_index: usize,
     next_id: usize,
 }
 
 impl MessageScrollerStory {
-    fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
+    fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let messages = (0..32)
             .map(|index| {
                 let sent = index % 3 == 2;
@@ -63,10 +65,12 @@ impl MessageScrollerStory {
             .collect::<Vec<_>>();
         let scroller = cx.new(|cx| MessageScrollerState::new(messages.len(), cx));
         cx.observe(&scroller, |_, _, cx| cx.notify()).detach();
+        let composer = cx.new(|cx| InputState::new(window, cx).placeholder("Write a message…"));
 
         Self {
             focus_handle: cx.focus_handle(),
             scroller,
+            composer,
             messages,
             unread_index: 18,
             next_id: 32,
@@ -106,6 +110,22 @@ impl MessageScrollerStory {
         self.unread_index += COUNT;
         self.scroller
             .update(cx, |state, cx| _ = state.prepend(COUNT, cx));
+        cx.notify();
+    }
+
+    fn send_message(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let body = self.composer.read(cx).value();
+        if body.trim().is_empty() {
+            return;
+        }
+
+        let id = self.next_id;
+        self.next_id += 1;
+        self.messages.push(DemoMessage::new(id, true, body));
+        self.composer
+            .update(cx, |input, cx| input.set_value("", window, cx));
+        self.scroller
+            .update(cx, |state, cx| _ = state.append(1, cx));
         cx.notify();
     }
 
@@ -155,7 +175,7 @@ impl Render for MessageScrollerStory {
                 .description(
                     "Scroll upward, append a row, jump to unread, or prepend history to exercise each behavior.",
                 )
-                .w(px(720.))
+                .w(rems(45.))
                 .v_flex()
                 .gap_3()
                 .child(
@@ -184,58 +204,98 @@ impl Render for MessageScrollerStory {
                         ),
                 )
                 .child(
-                    div()
-                        .w_full()
-                        .h(px(460.))
+                    v_flex()
+                        .w_96()
+                        .max_w_full()
+                        .h(rems(35.))
+                        .overflow_hidden()
+                        .rounded(cx.theme().radius_4xl())
+                        .border_1()
+                        .border_color(cx.theme().border)
+                        .bg(cx.theme().group_box)
+                        .text_color(cx.theme().group_box_foreground)
                         .child(
-                            MessageScroller::new(
-                                "message-scroller-demo",
-                                self.scroller.clone(),
-                                move |index, _, _| {
-                                    let Some(message) = messages.get(index).cloned() else {
-                                        return div().into_any_element();
-                                    };
-                                    let alignment = if message.sent {
-                                        MessageAlignment::End
-                                    } else {
-                                        MessageAlignment::Start
-                                    };
-                                    let bubble = Bubble::new()
-                                        .when(!message.sent, |bubble| {
-                                            bubble.with_variant(BubbleVariant::Secondary)
-                                        })
-                                        .child(message.body);
-                                    let row = div()
-                                        .id(("message-scroller-row", message.id))
-                                        .w_full()
-                                        .child(
-                                            Message::new()
-                                                .alignment(alignment)
-                                                .header(MessageHeader::new().child(message.author))
-                                                .content(MessageContent::new().child(bubble)),
-                                        );
+                            v_flex()
+                                .w_full()
+                                .gap_1()
+                                .p_5()
+                                .border_b_1()
+                                .border_color(cx.theme().border)
+                                .child(div().font_semibold().child("New chat"))
+                                .child(
+                                    div()
+                                        .text_sm()
+                                        .text_color(cx.theme().muted_foreground)
+                                        .child("How can I help you today?"),
+                                ),
+                        )
+                        .child(
+                            div().flex_1().min_h_0().child(
+                                MessageScroller::new(
+                                    "message-scroller-demo",
+                                    self.scroller.clone(),
+                                    move |index, _, _| {
+                                        let Some(message) = messages.get(index).cloned() else {
+                                            return div().into_any_element();
+                                        };
+                                        let alignment = if message.sent {
+                                            MessageAlignment::End
+                                        } else {
+                                            MessageAlignment::Start
+                                        };
+                                        let bubble = Bubble::new()
+                                            .when(!message.sent, |bubble| {
+                                                bubble.with_variant(BubbleVariant::Secondary)
+                                            })
+                                            .child(message.body);
+                                        let row = div()
+                                            .id(("message-scroller-row", message.id))
+                                            .w_full()
+                                            .child(
+                                                Message::new()
+                                                    .alignment(alignment)
+                                                    .header(
+                                                        MessageHeader::new().child(message.author),
+                                                    )
+                                                    .content(MessageContent::new().child(bubble)),
+                                            );
 
-                                    v_flex()
-                                        .w_full()
-                                        .min_w_0()
-                                        .gap_3()
-                                        .when(index == unread_index, |this| {
-                                            this.child(
-                                                Marker::new()
-                                                    .with_variant(MarkerVariant::Separator)
-                                                    .content(
-                                                        MarkerContent::new().child("Unread"),
-                                                    ),
-                                            )
-                                        })
-                                        .child(row)
-                                        .into_any_element()
-                                },
-                            )
-                            .rounded(cx.theme().radius_lg)
-                            .border_1()
-                            .border_color(cx.theme().border)
-                            .bg(cx.theme().background),
+                                        v_flex()
+                                            .w_full()
+                                            .min_w_0()
+                                            .gap_3()
+                                            .when(index == unread_index, |this| {
+                                                this.child(
+                                                    Marker::new()
+                                                        .with_variant(MarkerVariant::Separator)
+                                                        .content(
+                                                            MarkerContent::new().child("Unread"),
+                                                        ),
+                                                )
+                                            })
+                                            .child(row)
+                                            .into_any_element()
+                                    },
+                                )
+                                .with_list_style(StyleRefinement::default().p_5()),
+                            ),
+                        )
+                        .child(
+                            h_flex()
+                                .w_full()
+                                .gap_2()
+                                .p_5()
+                                .border_t_1()
+                                .border_color(cx.theme().border)
+                                .child(Input::new(&self.composer).flex_1())
+                                .child(
+                                    Button::new("message-scroller-send")
+                                        .primary()
+                                        .label("Send")
+                                        .on_click(cx.listener(|this, _, window, cx| {
+                                            this.send_message(window, cx)
+                                        })),
+                                ),
                         ),
                 )
                 .child(
