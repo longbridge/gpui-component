@@ -15,11 +15,14 @@
 //! - frames are strictly last-in-first-out, enforced by [`CallScopeGuard`];
 //! - a frame's pointers are only reachable while its guard is alive.
 
-use std::cell::{Cell, RefCell};
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+};
 
 use gpui::{App, Entity, Window};
 
-use crate::view::ScriptView;
+use crate::{policy::Policy, view::ScriptView};
 
 /// What the current host call is allowed to do.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -56,6 +59,14 @@ struct Frame {
     phase: ScopePhase,
     generation: u64,
     view: Option<Entity<ScriptView>>,
+    /// Whose authority this code runs under.
+    ///
+    /// On the frame rather than on the thread or the runtime, because that is
+    /// the only place that survives an `await`: a continuation resuming later
+    /// brings its own frame back, and nothing can have been swapped underneath
+    /// it. See [`crate::policy`] for why the alternatives cannot be made
+    /// correct.
+    policy: Rc<Policy>,
 }
 
 thread_local! {
@@ -83,6 +94,30 @@ pub fn enter(
     phase: ScopePhase,
     view: Option<Entity<ScriptView>>,
 ) -> (CallScopeGuard, u64) {
+    // A view carries the policy its script runs under; without one — loading a
+    // module, constructing a view — the call inherits whatever the enclosing
+    // frame was running under, and the outermost such call falls back to the
+    // host's default.
+    let policy = view
+        .as_ref()
+        .and_then(|view| with_current_app(|cx| view.read(cx).policy()))
+        .or_else(current_policy)
+        .unwrap_or_else(crate::policy::default);
+
+    enter_with(window, app, phase, view, policy)
+}
+
+/// Opens a scope under a policy the caller names.
+///
+/// The entry points with no view yet use this: "under whose authority is this
+/// code being loaded" is a question the caller answers rather than inherits.
+pub fn enter_with(
+    window: &mut Window,
+    app: &mut App,
+    phase: ScopePhase,
+    view: Option<Entity<ScriptView>>,
+    policy: Rc<Policy>,
+) -> (CallScopeGuard, u64) {
     let generation = NEXT_GENERATION.with(|next| {
         let value = next.get();
         next.set(value + 1);
@@ -96,6 +131,7 @@ pub fn enter(
             phase,
             generation,
             view,
+            policy,
         })
     });
 
@@ -133,6 +169,20 @@ pub fn with_current<R>(f: impl FnOnce(&mut Window, &mut App) -> R) -> Option<R> 
     let pointers = STACK.with(|stack| stack.borrow().last().map(|frame| (frame.window, frame.app)));
     // SAFETY: see the module header.
     pointers.map(|(window, app)| f(unsafe { &mut *window }, unsafe { &mut *app }))
+}
+
+/// The policy the innermost scope runs under, if there is one.
+///
+/// Every read of a grant goes through here rather than through a thread-local,
+/// which is what makes two plugins in one runtime hold two different grants at
+/// the same time.
+pub fn current_policy() -> Option<Rc<Policy>> {
+    STACK.with(|stack| stack.borrow().last().map(|frame| frame.policy.clone()))
+}
+
+/// The policy in force, falling back to the host's default outside any call.
+pub fn policy() -> Rc<Policy> {
+    current_policy().unwrap_or_else(crate::policy::default)
 }
 
 /// The view the innermost scope belongs to, if any.

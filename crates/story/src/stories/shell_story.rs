@@ -933,7 +933,7 @@ impl ShellStory {
     fn rust_header(&self, cx: &Context<Self>) -> impl IntoElement {
         let caption = |value: &'static str, width: f32, right: bool| {
             div()
-                .w(px(width))
+                .w(rems(width))
                 .flex_none()
                 .when(right, |this| this.text_right())
                 .child(muted(value, cx))

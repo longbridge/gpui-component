@@ -114,15 +114,8 @@ pub struct ShellRuntime {
     js_runtime: JsRuntime,
 }
 
-thread_local! {
-    /// Whether a runtime is alive on this thread. See [`ShellRuntime::new`].
-    static LIVE: Cell<bool> = const { Cell::new(false) };
-}
-
 impl Drop for ShellRuntime {
     fn drop(&mut self) {
-        LIVE.with(|live| live.set(false));
-
         // Both hold `Persistent` script values, and a persistent handle
         // released after its runtime aborts the process.
         scheduler::shutdown();
@@ -139,29 +132,15 @@ struct RuntimeGlobal(Rc<ShellRuntime>);
 impl Global for RuntimeGlobal {}
 
 impl ShellRuntime {
-    /// Creates the runtime for this thread.
+    /// Creates a runtime.
     ///
-    /// **One at a time, and enforced rather than assumed.** The security policy
-    /// and the host policy — the capability grant, the store, the exit handler,
-    /// the native module registry — are thread state, not runtime state. Two
-    /// runtimes on one thread would share the last installer's permissions and
-    /// the last installer's idea of what `process.exit` means, and nothing would
-    /// say so: the second would simply run with the first's grant.
-    ///
-    /// So a second one is an error with a sentence, not a footnote in a design
-    /// document. When the plugin model gets a host driving it, per-plugin grants
-    /// will need this state to become per-call-context anyway — binding it to
-    /// the runtime would not have helped, because two plugins share one runtime.
+    /// More than one may be alive on a thread. That used to be refused, because
+    /// the capability grant and the store were thread state and a second runtime
+    /// would silently inherit the first one's: an error with a sentence was
+    /// better than running under someone else's permissions. Authority now
+    /// travels on the call frame — see [`crate::policy`] — so the two do not
+    /// collide, and the refusal has nothing left to protect.
     pub fn new() -> Result<Rc<Self>> {
-        if LIVE.with(Cell::get) {
-            return Err(anyhow!(
-                "a script runtime is already running on this thread; the capability grant, \
-                 the store and the exit handler belong to the thread rather than to a \
-                 runtime, so a second one would run under the first one's permissions. \
-                 Drop the first, or use another thread."
-            ));
-        }
-
         let js_runtime = JsRuntime::new().map_err(js_setup_error)?;
         let context = JsContext::full(&js_runtime).map_err(js_setup_error)?;
 
@@ -189,7 +168,6 @@ impl ShellRuntime {
         });
 
         runtime.install_globals()?;
-        LIVE.with(|live| live.set(true));
         Ok(runtime)
     }
 

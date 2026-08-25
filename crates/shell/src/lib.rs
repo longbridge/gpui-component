@@ -37,11 +37,13 @@ pub mod metrics;
 pub mod native;
 pub mod plugin;
 pub mod plugin_api;
+pub mod policy;
 pub mod root;
 pub mod runtime;
 pub mod scope;
 pub mod snapshot;
 pub mod spec;
+pub mod store;
 pub mod style;
 pub mod theme;
 pub mod typings;
@@ -59,7 +61,7 @@ pub use native::{
 };
 pub use plugin::{Plugin, PluginManager, PluginManifest};
 pub use root::{DialogOptions, SheetSide, ShellRoot, ToastLevel, ToastRequest};
-pub use runtime::{ExitHandler, clear_exit_handler, on_exit_request};
+pub use runtime::{ExitHandler, ExitRequest, clear_exit_handler, on_exit_request};
 pub use scope::ScopePhase;
 pub use snapshot::RenderSnapshot;
 pub use view::ScriptView;
@@ -75,7 +77,10 @@ use gpui::App;
 /// because only the host knows how much the code it is about to run is trusted.
 ///
 /// The grant lives above the engine seam, so no engine can be built that
-/// quietly ignores it.
+/// quietly ignores it. It sets the *default* policy — what a call inherits when
+/// nothing narrower is in force. A host running several applications at once
+/// gives each its own [`policy::Policy`] instead, so that two of them can hold
+/// two grants at the same time.
 pub fn set_capabilities(capabilities: Capabilities) {
     capability::install(capabilities);
 }
@@ -84,7 +89,8 @@ pub fn set_capabilities(capabilities: Capabilities) {
 ///
 /// Storage is per application, and the host chooses where that is — an
 /// application cannot name its own storage location, or two applications could
-/// collide on purpose.
+/// collide on purpose. Like [`set_capabilities`], this configures the default
+/// policy.
 pub fn set_store_path(path: PathBuf) {
     engine::set_store_path(path);
 }

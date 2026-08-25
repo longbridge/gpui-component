@@ -26,6 +26,7 @@ use gpui::{Context, IntoElement, ParentElement as _, Render, Styled as _, Window
 use crate::{
     engine::{ShellRuntime, ViewObject},
     materialize::materialize,
+    policy::Policy,
     runtime::{error_banner, error_overlay},
     snapshot::RenderSnapshot,
 };
@@ -61,16 +62,28 @@ pub struct ScriptView {
     /// every frame: a broken render is exactly as frame-coupled as a working one
     /// if the failure re-triggers the build.
     error: Option<String>,
+    /// Whose authority this view's script runs under.
+    ///
+    /// Captured when the view is constructed rather than read when it is used:
+    /// a callback firing three seconds later must run under the grant its own
+    /// script was loaded with, and no swap made in between can change that.
+    policy: Rc<Policy>,
     runtime: Rc<ShellRuntime>,
 }
 
 impl ScriptView {
+    /// Under the policy in force where the view was constructed.
     pub fn new(runtime: Rc<ShellRuntime>, object: ViewObject) -> Self {
+        Self::with_policy(runtime, object, crate::scope::policy())
+    }
+
+    pub fn with_policy(runtime: Rc<ShellRuntime>, object: ViewObject, policy: Rc<Policy>) -> Self {
         Self {
             object,
             current: None,
             previous: None,
             dirty: true,
+            policy,
             theme_generation: crate::theme::generation(),
             error: None,
             runtime,
@@ -129,6 +142,11 @@ impl ScriptView {
     }
 
     /// Whether the next GPUI render will enter the VM.
+    /// The authority this view's script runs under.
+    pub fn policy(&self) -> Rc<Policy> {
+        self.policy.clone()
+    }
+
     pub fn is_dirty(&self) -> bool {
         self.dirty || self.current.is_none() || self.theme_generation != crate::theme::generation()
     }

@@ -32,10 +32,7 @@
 //! so `get` and `set` answer from memory; §17.1's requirement that `store.flush`
 //! become awaitable is still open, and is the only synchronous write left.
 
-use std::{
-    cell::RefCell,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 use gpui::{App, ClipboardItem};
 use rquickjs::{
@@ -48,41 +45,28 @@ use serde_json::Value as Json;
 use crate::{
     capability::{Access, Capabilities, CapabilityError, Grant},
     scope,
+    store::{Store, persist},
 };
 
 use super::scheduler;
 
-thread_local! {
-    static STORE: RefCell<Option<Store>> = const { RefCell::new(None) };
-}
-
-/// The grant in force on this thread.
+/// The grant the code now running was given.
 ///
-/// Read from [`crate::capability`], which owns it. The engine asks; it does not
-/// get to answer.
+/// Read from the call frame rather than from the thread: two plugins inside one
+/// runtime hold two grants at the same time, and a continuation resuming after
+/// an `await` brings its own back with it. The engine asks; it does not get to
+/// answer.
 pub fn capabilities() -> Capabilities {
-    crate::capability::installed()
+    scope::policy().capabilities().clone()
 }
 
-/// Points `gpui.store` at its backing file, and reads it.
+/// Points the default policy's store at its backing file.
 ///
 /// Each application gets its own file so one cannot read another's settings
-/// (§17.3). Setting it drops whatever the previous application had cached, so a
-/// reload cannot serve stale values from the file it no longer owns.
-///
-/// **The read happens here, not on first use.** Loading lazily put a synchronous
-/// file read wherever the script first touched the store — `init`, or worse
-/// `render` — so a slow disk or a network home directory stalled a frame. A host
-/// calls this during start-up, before a window exists, where the same read
-/// delays a launch instead. That is the one place in this surface where blocking
-/// is the right answer rather than the easy one.
-///
-/// A failure is kept rather than raised: the host has no interface yet to report
-/// it on, and the script gets the message the first time it asks.
+/// (§17.3). A plugin host builds a policy per plugin instead; this is the
+/// single-application path.
 pub fn set_store_path(path: PathBuf) {
-    let mut store = Store::new(path);
-    store.warm = Some(store.load());
-    STORE.with_borrow_mut(|current| *current = Some(store));
+    crate::policy::update_default(|policy| policy.with_store_path(path));
 }
 
 /// The context argument is the engine's; the sub-objects are built from the
@@ -313,115 +297,6 @@ fn access_key(access: Access) -> &'static str {
     }
 }
 
-// -- Store -----------------------------------------------------------------
-
-/// The per-application settings file: a flat JSON object on disk.
-///
-/// Values are cached in memory because `get` is called from `render`, where a
-/// file read per frame would be absurd. Mutations write through immediately —
-/// see [`Store::persist`] for why `flush` is still part of the API.
-struct Store {
-    path: PathBuf,
-    values: Option<serde_json::Map<String, Json>>,
-    /// The outcome of the read done when the path was set, so the first script
-    /// call gets the answer rather than the syscall.
-    warm: Option<Result<serde_json::Map<String, Json>, String>>,
-    /// Mutated since the last write was scheduled.
-    dirty: bool,
-    /// A write is on its way to the disk. One at a time, so a burst of `set`
-    /// calls becomes one file rather than one file each — which is also what the
-    /// old synchronous version got wrong, quite apart from where it ran.
-    writing: bool,
-}
-
-impl Store {
-    fn new(path: PathBuf) -> Self {
-        Self {
-            path,
-            values: None,
-            warm: None,
-            dirty: false,
-            writing: false,
-        }
-    }
-
-    /// Loads on first use. A missing file is an empty store — a first run is
-    /// not an error. A malformed file is an error, because silently discarding
-    /// a user's settings is worse than refusing to start.
-    fn values(&mut self) -> Result<&mut serde_json::Map<String, Json>, String> {
-        if self.values.is_none() {
-            // Whatever [`set_store_path`] read at start-up. The fallback covers
-            // a host that never called it, which is already an error the store
-            // reports elsewhere — it must not also become a panic.
-            let loaded = match self.warm.take() {
-                Some(loaded) => loaded,
-                None => self.load(),
-            };
-            self.values = Some(loaded?);
-        }
-        Ok(self.values.as_mut().expect("just populated"))
-    }
-
-    /// Reads the file. A missing one is an empty store — a first run is not an
-    /// error. A malformed one is an error, because silently discarding a user's
-    /// settings is worse than refusing to start.
-    fn load(&self) -> Result<serde_json::Map<String, Json>, String> {
-        match std::fs::read(&self.path) {
-            Ok(bytes) => serde_json::from_slice(&bytes).map_err(|error| {
-                format!(
-                    "`{}` is not a valid store file: {error}",
-                    self.path.display()
-                )
-            }),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                Ok(serde_json::Map::new())
-            }
-            Err(error) => Err(format!("cannot read `{}`: {error}", self.path.display())),
-        }
-    }
-
-    /// Encodes the current values, for a write that will happen elsewhere.
-    ///
-    /// Encoding stays on this thread because it reads the cache, which is
-    /// thread-local; only the bytes travel.
-    fn encode(&self) -> Result<Option<Vec<u8>>, String> {
-        let Some(values) = &self.values else {
-            return Ok(None);
-        };
-        serde_json::to_vec_pretty(values)
-            .map(Some)
-            .map_err(|error| format!("cannot encode the store: {error}"))
-    }
-}
-
-/// Writes to a temporary file and renames it over the target, so a crash
-/// mid-write leaves the previous settings intact rather than a truncated file.
-///
-/// A free function rather than a method: it runs on the background executor,
-/// where the store itself — a thread-local — cannot go.
-fn persist(path: &Path, body: Vec<u8>) -> Result<(), String> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|error| format!("cannot create `{}`: {error}", parent.display()))?;
-    }
-
-    let mut temporary = path.to_path_buf().into_os_string();
-    temporary.push(".tmp");
-    let temporary = PathBuf::from(temporary);
-
-    std::fs::write(&temporary, body)
-        .map_err(|error| format!("cannot write `{}`: {error}", temporary.display()))?;
-    std::fs::rename(&temporary, path)
-        .map_err(|error| format!("cannot write `{}`: {error}", path.display()))
-}
-
-/// Schedules the write a mutation made necessary, if one is not already going.
-///
-/// Every mutation still reaches the disk without the script asking — losing a
-/// setting because nobody called `flush` is a worse failure than an extra rename
-/// — but it reaches it *from a background thread*, and a burst of mutations
-/// reaches it once rather than once each. `flush` is for a script that needs to
-/// know the write landed.
 fn schedule_persist(ctx: &Ctx<'_>) {
     let pending = with_store_unchecked(|store| {
         if store.writing || !store.dirty {
@@ -573,8 +448,8 @@ fn with_store<R>(ctx: &Ctx<'_>, body: impl FnOnce(&mut Store) -> JsResult<R>) ->
         ));
     }
 
-    STORE.with_borrow_mut(|store| match store {
-        Some(store) => body(store),
+    match scope::policy().with_store(body) {
+        Some(result) => result,
         // Not a manifest problem, so it does not name a capability key: the
         // embedder skipped `set_store_path`.
         None => Err(Exception::throw_message(
@@ -582,7 +457,7 @@ fn with_store<R>(ctx: &Ctx<'_>, body: impl FnOnce(&mut Store) -> JsResult<R>) ->
             "gpui.store has no backing file; the host must call set_store_path \
              before the application runs",
         )),
-    })
+    }
 }
 
 /// The store without the capability check, for the write machinery.
@@ -591,7 +466,7 @@ fn with_store<R>(ctx: &Ctx<'_>, body: impl FnOnce(&mut Store) -> JsResult<R>) ->
 /// repeating it here would mean a mutation that was allowed could produce a
 /// write that was not.
 fn with_store_unchecked<R>(body: impl FnOnce(&mut Store) -> R) -> Option<R> {
-    STORE.with_borrow_mut(|store| store.as_mut().map(body))
+    scope::policy().with_store(body)
 }
 
 fn fail(ctx: &Ctx<'_>, message: &str) -> JsError {

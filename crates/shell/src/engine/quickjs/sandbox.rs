@@ -328,8 +328,9 @@ fn install_process(ctx: &Ctx<'_>) -> JsResult<()> {
                 ));
             };
 
-            let code = code.0.unwrap_or(0);
-            crate::scope::with_current(|window, cx| handler(code, window, cx)).ok_or_else(|| {
+            let request =
+                crate::runtime::ExitRequest::new(code.0.unwrap_or(0), crate::scope::current_view());
+            crate::scope::with_current(|window, cx| handler(request, window, cx)).ok_or_else(|| {
                 Exception::throw_type(
                     &ctx,
                     "process.exit() needs a live host call; call it from init(), an event \

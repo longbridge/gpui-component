@@ -6,7 +6,8 @@
 //! keeps the fallback engine honest.
 
 use gpui::{AppContext as _, TestAppContext, VisualTestContext};
-use gpui_shell::{ScriptView, ShellRuntime};
+use gpui_shell::{ScriptView, ShellRuntime, capability::Capabilities, policy::Policy};
+use std::{path::PathBuf, rc::Rc};
 
 const COUNTER: &str = r#"
 import { View, v_flex, text, Button } from "gpui";
@@ -550,7 +551,7 @@ fn a_granted_exit_reaches_the_host(cx: &mut TestAppContext) {
 
     let asked: std::rc::Rc<std::cell::Cell<Option<i32>>> = Default::default();
     let recorded = asked.clone();
-    gpui_shell::on_exit_request(move |code, _, _| recorded.set(Some(code)));
+    gpui_shell::on_exit_request(move |request, _, _| recorded.set(Some(request.code())));
 
     let runtime = ShellRuntime::new().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
@@ -643,29 +644,42 @@ fn a_watcher_releases_its_view(cx: &mut TestAppContext) {
     let _ = std::fs::remove_dir_all(&directory);
 }
 
-/// A second runtime on one thread is refused, because the policy it would run
-/// under is not its own.
+/// Two runtimes coexist on one thread, each under its own authority.
 ///
-/// The capability grant, the store, the exit handler and the native module
-/// registry are thread state. Two runtimes would share the last installer's
-/// permissions with nothing saying so — the second would simply run under the
-/// first one's grant. Enforcing it beats documenting it.
+/// This used to be refused: the grant and the store were thread state, so a
+/// second runtime would silently run under the first one's permissions. They now
+/// live on a `Policy` that travels on the call frame, so the two cannot collide
+/// and the refusal has nothing left to protect.
 #[gpui::test]
-fn a_second_runtime_on_one_thread_is_refused(cx: &mut TestAppContext) {
+fn two_runtimes_share_a_thread_without_sharing_a_grant(cx: &mut TestAppContext) {
     cx.update(|cx| gpui_shell::init(cx));
 
-    let first = ShellRuntime::new().expect("the first runtime");
-    let error = ShellRuntime::new()
-        .err()
-        .expect("a second runtime must be refused")
-        .to_string();
-    assert!(
-        error.contains("already running") && error.contains("permissions"),
-        "the refusal has to say what would go wrong, got: {error}"
-    );
+    let _first = ShellRuntime::new().expect("the first runtime");
+    let _second = ShellRuntime::new().expect("the second runtime");
+}
 
-    // Dropping the first releases the thread, so a host that tears one down and
-    // starts another is not blocked.
-    drop(first);
-    let _second = ShellRuntime::new().expect("a runtime after the first was dropped");
+/// Two policies hold two grants at the same time.
+///
+/// The point the single process-wide slot could not reach: authority belongs to
+/// the code that is running, not to the moment it runs in.
+#[gpui::test]
+fn two_policies_hold_two_grants_at_once(cx: &mut TestAppContext) {
+    cx.update(|cx| gpui_shell::init(cx));
+
+    let reader = Rc::new(
+        Policy::default()
+            .with_capabilities(Capabilities::new().with_read_roots([PathBuf::from("/tmp/reader")])),
+    );
+    let writer =
+        Rc::new(Policy::default().with_capabilities(
+            Capabilities::new().with_write_roots([PathBuf::from("/tmp/writer")]),
+        ));
+
+    assert!(reader.capabilities().has_read_access());
+    assert!(!reader.capabilities().has_write_access());
+    assert!(writer.capabilities().has_write_access());
+    assert!(!writer.capabilities().has_read_access());
+
+    // Both are alive at the same instant, and neither is the other.
+    assert!(!Rc::ptr_eq(&reader, &writer));
 }

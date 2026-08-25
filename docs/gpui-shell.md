@@ -2282,20 +2282,26 @@ Data lives under the plugin's `id` rather than under its path, so it survives an
 upgrade that moves the plugin directory — which is exactly what §23's path digest
 cannot do for a directory run from the command line.
 
-### 18.3 The known limitation: one grant at a time
+### 18.3 Authority travels with the code, not with the moment
 
-`set_capabilities` and `set_store_path` write process-wide state — a thread-local
-in the engine host — so **one grant is in force at a time**. Two plugins loaded
-at once cannot hold different grants simultaneously; whichever was activated last
-is what `gpui.fs` and `gpui.store` see.
+Each loaded plugin holds a `Policy` — its grant, its store, its native modules —
+built once from its manifest at load. The policy rides on the **call frame**
+(`scope::Frame`), so every read of `gpui.fs` or `gpui.store` answers with the
+grant of whichever plugin owns the code that is running. Two plugins loaded at
+once hold two different grants at the same time, and neither can see the other's
+files.
 
-`PluginManager` does not pretend otherwise. It keeps each plugin's grant on the
-plugin, installs one around each call into that plugin, and remembers which is
-currently installed, so the limitation is one field and one method rather than
-something spread across call sites. The real fix does not change that type's
-surface: the capability set has to move from a host-side thread-local onto the
-script context, so the engine reads the grant of whichever plugin owns the code
-it is running. Until then, "loaded" and "permitted" are two different states.
+This replaced a single process-wide slot with a guard installed around each call
+into a plugin. The guard could not be made correct, and the reason is worth
+recording: a plugin that `await`s hands control back before its guard drops, so
+the grant in force during the continuation was whichever plugin happened to be
+running when the promise resolved. **`await` crosses time, and a time-scoped
+guard cannot describe authority that outlives the moment.** Neither does moving
+the slot onto the runtime help — two plugins share one runtime.
+
+A `ScriptView` captures its policy at construction rather than reading one when
+it renders, which is what makes a callback that fires three seconds later still
+run under the grant its own script was loaded with.
 
 ### 18.4 What is still missing
 
@@ -2400,9 +2406,9 @@ is what stops `import "../../../etc/passwd"` before the filesystem is touched.
 
 `Capabilities::default()` is the empty set, every field is private, and
 construction goes through a builder — so "no capability by default" is a fact
-about the type rather than a promise in prose. The grant lives in a thread-local
-and is re-read at every call, so revoking a capability takes effect on the next
-call rather than on the next restart.
+about the type rather than a promise in prose. The grant lives on the calling
+frame's `Policy` and is re-read at every call, so revoking a capability takes
+effect on the next call rather than on the next restart.
 
 The three-state `granted` / `denied` / `prompt` model, the authorization UI, and
 persisting a decision in host configuration are all part of §18 and not built.
@@ -2904,7 +2910,7 @@ reopened without new information.
 | **A symlink escape from a filesystem grant** | Fatal | **Closed.** The resolver returns an open directory handle rather than a path, and every operation runs against it, so no name is resolved twice — `cap-std`, which is `openat2(RESOLVE_BENEATH)` on Linux and a per-component `openat` walk elsewhere. Two earlier attempts were not enough: comparing strings missed a link entirely, and comparing strings then canonicalizing caught a link that was already there but not one planted between the check and the syscall. `a_symlink_planted_after_the_check_is_still_refused` is the test for the case neither could cover |
 | **Sandbox escape**, with `Eval`, quickjs-libc, and prototype pollution as the largest surfaces | High | quickjs-libc is not compiled in; prototypes are frozen; every compiler path is closed at the JavaScript level, but the stronger intrinsic-level fix is not done (§19.1). The escape suite is real and asserts on messages |
 | **Generated code assumes Node or a browser** | Medium | Named stubs point at replacements, `gpui.d.ts` moves the error into the editor. Two stub messages are wrong: `fetch` points at a `gpui.http` that does not exist, and `setTimeout` points at `gpui.timer(ms, callback)` when the API is `gpui.timer.after(ms, fn)` |
-| **One capability grant is in force at a time.** The grant is process-wide state, so two loaded plugins cannot hold different permissions at once | High | Acknowledged rather than hidden: `PluginManager` keeps each grant on its plugin and installs one per activation, so the limitation is one field and one method. The fix is to move the grant from a host thread-local onto the script context (§18.3) |
+| **Per-plugin capability grants.** Two loaded plugins must be able to hold different permissions at once | High | Closed. The grant lives on a `Policy` carried by the call frame, so the engine reads the grant of whichever plugin owns the running code, and it survives an `await` (§18.3) |
 | **Interned `&'static str` accumulates** for script-registered names | Low | Reachable now that panel names are interned (§15). Bounded by applications loaded × panels each, tens of bytes apiece, and never reclaimed — deliberately, because a persisted layout may still refer to a name |
 
 ---

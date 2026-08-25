@@ -58,12 +58,7 @@
 //! deliberately no per-module grant: the host chose the module list, so the
 //! list *is* the grant.
 
-use std::{
-    cell::{Cell, RefCell},
-    collections::BTreeMap,
-    fmt,
-    rc::Rc,
-};
+use std::{cell::Cell, collections::BTreeMap, fmt, rc::Rc};
 
 /// A value crossing the native boundary, in either direction.
 ///
@@ -490,15 +485,6 @@ thread_local! {
     /// The installed registry.
     ///
     /// Thread-local for the same reason the capability grant is: the VM and
-    /// GPUI's `App` never leave the main thread, so a lock would buy nothing
-    /// and a `Send` bound would be forced onto every host closure.
-    ///
-    /// Behind an `Rc` so a call can take a strong reference and drop the
-    /// borrow before running host code — a function that re-registers the
-    /// modules would otherwise panic on the outstanding `RefCell` borrow.
-    static REGISTRY: RefCell<Rc<NativeModules>> =
-        RefCell::new(Rc::new(NativeModules::default()));
-
     /// Depth guard for [`dispatch`].
     static IN_CALL: Cell<bool> = const { Cell::new(false) };
 }
@@ -509,7 +495,7 @@ thread_local! {
 /// registry is read at call time, so revoking a module takes effect on the next
 /// call rather than on the next restart.
 pub fn set_modules(modules: NativeModules) {
-    REGISTRY.with(|registry| *registry.borrow_mut() = Rc::new(modules));
+    crate::policy::update_default(|policy| policy.with_native_modules(modules));
 }
 
 /// Removes every installed module.
@@ -527,9 +513,12 @@ pub fn clear_modules() {
     set_modules(NativeModules::default());
 }
 
-/// The installed registry.
+/// The registry the code now running may reach.
+///
+/// Read through the calling frame, so a plugin sees the modules its own host
+/// registered for it rather than whichever set was installed most recently.
 pub fn modules() -> Rc<NativeModules> {
-    REGISTRY.with(|registry| registry.borrow().clone())
+    crate::scope::policy().modules()
 }
 
 /// Whether the host granted any native access at all.

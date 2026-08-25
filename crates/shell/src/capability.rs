@@ -4,10 +4,7 @@
 //! clipboard access until the host grants it. Grants come from a plugin manifest
 //! (§18.1) or directly from the embedding application.
 
-use std::{
-    cell::RefCell,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 use cap_std::{ambient_authority, fs::Dir};
 
@@ -266,32 +263,33 @@ impl std::error::Error for CapabilityError {}
 // The installed grant
 // ---------------------------------------------------------------------------
 
-thread_local! {
-    /// The VM and GPUI's `App` are both main-thread only, so a thread-local is
-    /// the whole story: no lock, and no `Send` bound forced onto
-    /// [`Capabilities`] for the sake of a runtime that never leaves its thread.
-    static INSTALLED: RefCell<Capabilities> = RefCell::new(Capabilities::default());
-}
-
-/// Installs the grant the loaded application runs under.
+/// Grants the application that is about to be loaded.
 ///
-/// **Above the seam on purpose.** An earlier arrangement kept this inside the
-/// QuickJS engine and had the crate root call into it, with a silent no-op for
-/// any other build — which meant a second engine could compile, run, and ignore
-/// the security configuration without anything saying so. A grant is a decision
-/// about the *application*, not about the interpreter, and there is now nowhere
-/// for an engine to answer it differently.
+/// The grant lives on the default [`Policy`](crate::policy), which is what a
+/// call inherits when nothing narrower is in force. A plugin host that runs
+/// several applications in one runtime builds a policy for each instead of
+/// calling this, so that two plugins can hold two different grants at the same
+/// time.
 ///
-/// The host calls this before loading an application. Loading a different one
-/// means calling it again; the default is [`Capabilities::default`], which
-/// allows nothing.
+/// This is deliberately not a knob on the engine. It used to be one, and an
+/// engine constructed any other way — in a test, in a second embedding — would
+/// then answer the security question differently from the one the host had
+/// configured. A grant is a decision about the *application*, not about the
+/// interpreter, and there is now nowhere for an engine to answer it
+/// differently.
+///
+/// The default is [`Capabilities::default`], which allows nothing.
 pub fn install(capabilities: Capabilities) {
-    INSTALLED.with_borrow_mut(|current| *current = capabilities);
+    crate::policy::update_default(|policy| policy.with_capabilities(capabilities));
 }
 
-/// The grant in force on this thread.
+/// The grant the code now running holds.
+///
+/// Inside a host call this is the calling frame's grant, so a callback that
+/// fires long after its script was loaded still answers with what *that* script
+/// was given. Outside any call it is the default policy's.
 pub fn installed() -> Capabilities {
-    INSTALLED.with_borrow(Clone::clone)
+    crate::scope::policy().capabilities().clone()
 }
 
 /// Holds a path to a root by asking the filesystem, not the string.

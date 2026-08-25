@@ -34,7 +34,7 @@ use std::{
     rc::Rc,
 };
 
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Result, bail};
 use gpui::{App, AppContext as _, Entity, Window};
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -42,6 +42,8 @@ use serde::Deserialize;
 use crate::{
     capability::{Capabilities, ExecuteGrant},
     engine::ShellRuntime,
+    policy::Policy,
+    scope::{self, ScopePhase},
     view::ScriptView,
 };
 
@@ -717,7 +719,10 @@ pub struct Plugin {
     root: PathBuf,
     data_dir: PathBuf,
     store_path: PathBuf,
-    capabilities: Capabilities,
+    /// The authority this plugin's code runs under, built once at load from its
+    /// manifest and then never swapped. Callbacks it registers capture it, so a
+    /// timer firing inside plugin A cannot run with plugin B's grant.
+    policy: Rc<Policy>,
     view: Option<Entity<ScriptView>>,
 }
 
@@ -749,7 +754,16 @@ impl Plugin {
     /// The grant in force while this plugin runs. It comes from the manifest
     /// and nowhere else.
     pub fn capabilities(&self) -> &Capabilities {
-        &self.capabilities
+        self.policy.capabilities()
+    }
+
+    /// The authority this plugin runs under.
+    ///
+    /// A host that wants to run something on the plugin's behalf outside its
+    /// view — evaluating a command handler, say — opens a scope with this so
+    /// that code sees the plugin's grant rather than whatever was in force.
+    pub fn policy(&self) -> &Rc<Policy> {
+        &self.policy
     }
 
     /// The view the entry module default-exported.
@@ -766,31 +780,24 @@ impl Plugin {
 
 /// Discovers, loads and unloads plugins.
 ///
-/// # The one process-wide seam
+/// Every loaded plugin holds its own [`Policy`] — its grant, its store, its
+/// native modules — and every call into its code runs under that policy because
+/// the policy travels on the call frame rather than in a process-wide slot. Two
+/// plugins loaded at once hold two different grants at the same time, and
+/// neither can see the other's files.
 ///
-/// `gpui_shell::set_capabilities` and `gpui_shell::set_store_path` write into
-/// process-wide state (a thread-local in the engine host), so **one grant is in
-/// force at a time**. Two plugins loaded at once therefore cannot hold
-/// different grants simultaneously; whichever was activated last is the one the
-/// host's `gpui.fs` and `gpui.store` see.
-///
-/// This manager does not pretend otherwise. It keeps every plugin's grant on
-/// the plugin, installs one around each call into that plugin
-/// ([`PluginManager::activate`], and internally around [`PluginManager::load`]),
-/// and remembers which plugin is currently installed
-/// ([`PluginManager::active`]). The limitation is therefore visible — one
-/// field, one method — instead of being spread across call sites, and the real
-/// fix does not change this type's surface: the capability set has to move from
-/// a host-side thread-local onto the script context, so that the engine reads
-/// the grant of whichever plugin owns the code it is executing. Until then,
-/// treat "loaded" and "permitted" as two different states.
+/// This used to be one slot with a guard around each call, and the guard could
+/// not be made correct: a plugin that `await`s hands control back before its
+/// guard drops, so the grant in force during the continuation was whichever
+/// plugin happened to be running when the promise resolved. Time is what the
+/// swap could not account for. Authority now belongs to the code rather than to
+/// the moment.
 pub struct PluginManager {
     directories: Vec<PathBuf>,
     data_home: PathBuf,
     catalog: Vec<CatalogEntry>,
     discovered: bool,
     loaded: BTreeMap<String, Plugin>,
-    active: Option<String>,
 }
 
 struct CatalogEntry {
@@ -809,7 +816,6 @@ impl PluginManager {
             catalog: Vec::new(),
             discovered: false,
             loaded: BTreeMap::new(),
-            active: None,
         }
     }
 
@@ -885,9 +891,9 @@ impl PluginManager {
 
     /// Evaluates a plugin's entry module and constructs its view.
     ///
-    /// This is the only method that runs script. It installs the plugin's own
-    /// grant and storage location first, because the entry module may read its
-    /// own files while registering.
+    /// This is the only method that runs script. The plugin's policy is built
+    /// before anything is evaluated and the whole load runs inside it, because
+    /// the entry module may read its own files while registering.
     pub fn load(
         &mut self,
         runtime: &Rc<ShellRuntime>,
@@ -932,24 +938,26 @@ impl PluginManager {
             );
         }
 
-        let capabilities = manifest.capabilities(&root, &data_dir);
-        let previous = self.active.clone();
-        install_grant(&capabilities, &store_path);
-        self.active = Some(id.to_owned());
+        let policy = Rc::new(
+            Policy::default()
+                .with_capabilities(manifest.capabilities(&root, &data_dir))
+                .with_store_path(store_path.clone()),
+        );
 
-        let loaded = runtime
-            .load_app(&root, manifest.entry())
-            .and_then(|view_type| runtime.instantiate(&view_type, window, cx));
-
-        let object = match loaded {
-            Ok(object) => object,
-            Err(error) => {
-                self.restore(previous.as_deref());
-                return Err(error.context(format!("loading plugin `{id}`")));
-            }
+        // The frame is what carries the grant, so everything the entry module
+        // does — including anything it defers — happens inside one.
+        let loaded = {
+            let (_scope, _) = scope::enter_with(window, cx, ScopePhase::Task, None, policy.clone());
+            runtime
+                .load_app(&root, manifest.entry())
+                .and_then(|view_type| runtime.instantiate(&view_type, window, cx))
         };
 
-        let view = cx.new(|_| ScriptView::new(runtime.clone(), object));
+        let object = loaded.map_err(|error| error.context(format!("loading plugin `{id}`")))?;
+
+        // Built with the policy rather than inheriting it: the view outlives
+        // this call, and every later render and callback reads it from here.
+        let view = cx.new(|_| ScriptView::with_policy(runtime.clone(), object, policy.clone()));
         self.loaded.insert(
             id.to_owned(),
             Plugin {
@@ -957,7 +965,7 @@ impl PluginManager {
                 root,
                 data_dir,
                 store_path,
-                capabilities,
+                policy,
                 view: Some(view),
             },
         );
@@ -965,18 +973,15 @@ impl PluginManager {
         Ok(())
     }
 
-    /// Drops a plugin's view and its grant. Returns whether there was one.
+    /// Drops a plugin's view, and with it its policy. Returns whether there was
+    /// one.
     ///
     /// Dropping the [`Entity<ScriptView>`] releases the script object with it,
     /// which is as much teardown as the current runtime can do: there is no
     /// `deactivate()` call yet because there is nothing registered to tear down
     /// (§18.2's registration API does not exist).
     pub fn unload(&mut self, id: &str) -> bool {
-        let removed = self.loaded.remove(id).is_some();
-        if removed && self.active.as_deref() == Some(id) {
-            self.restore(None);
-        }
-        removed
+        self.loaded.remove(id).is_some()
     }
 
     pub fn loaded(&self) -> impl Iterator<Item = &Plugin> {
@@ -987,36 +992,6 @@ impl PluginManager {
         self.loaded.get(id)
     }
 
-    /// The plugin whose grant is currently installed process-wide.
-    pub fn active(&self) -> Option<&str> {
-        self.active.as_deref()
-    }
-
-    /// Installs a plugin's grant for the duration of a call into it.
-    ///
-    /// A host holds the returned guard across anything that runs that plugin's
-    /// code — a command handler, an event dispatch, a render — and drops it
-    /// afterwards, which puts the previously active grant back. It is the
-    /// smallest honest mechanism on top of a single process-wide slot; see the
-    /// type documentation for what replaces it.
-    pub fn activate(&mut self, id: &str) -> Result<PluginActivation<'_>> {
-        let plugin = self
-            .loaded
-            .get(id)
-            .ok_or_else(|| anyhow!("plugin `{id}` is not loaded"))?;
-        let capabilities = plugin.capabilities.clone();
-        let store_path = plugin.store_path.clone();
-
-        let previous = self.active.clone();
-        install_grant(&capabilities, &store_path);
-        self.active = Some(id.to_owned());
-
-        Ok(PluginActivation {
-            manager: self,
-            previous,
-        })
-    }
-
     /// Where a plugin's data lives.
     ///
     /// Keyed by `id`, not by path: an upgrade that replaces the plugin
@@ -1025,23 +1000,6 @@ impl PluginManager {
     /// a directory run from the command line, where the path *is* the identity.
     pub fn data_dir(&self, id: &str) -> PathBuf {
         self.data_home.join("gpui-shell").join("plugins").join(id)
-    }
-
-    fn restore(&mut self, id: Option<&str>) {
-        match id.and_then(|id| self.loaded.get(id)) {
-            Some(plugin) => {
-                let capabilities = plugin.capabilities.clone();
-                let store_path = plugin.store_path.clone();
-                install_grant(&capabilities, &store_path);
-                self.active = id.map(str::to_owned);
-            }
-            None => {
-                // Outside a plugin call nothing is granted. Leaving the last
-                // plugin's grant installed would hand it to whatever ran next.
-                crate::set_capabilities(Capabilities::new());
-                self.active = None;
-            }
-        }
     }
 
     fn known_ids_hint(&self) -> String {
@@ -1063,32 +1021,6 @@ impl PluginManager {
             format!("; found {}", ids.join(", "))
         }
     }
-}
-
-/// Puts the previously active plugin's grant back when it is dropped.
-#[must_use = "the grant is uninstalled as soon as this guard is dropped"]
-pub struct PluginActivation<'a> {
-    manager: &'a mut PluginManager,
-    previous: Option<String>,
-}
-
-impl PluginActivation<'_> {
-    /// The plugin whose grant this guard installed.
-    pub fn id(&self) -> Option<&str> {
-        self.manager.active()
-    }
-}
-
-impl Drop for PluginActivation<'_> {
-    fn drop(&mut self) {
-        let previous = self.previous.take();
-        self.manager.restore(previous.as_deref());
-    }
-}
-
-fn install_grant(capabilities: &Capabilities, store_path: &Path) {
-    crate::set_capabilities(capabilities.clone());
-    crate::set_store_path(store_path.to_path_buf());
 }
 
 /// A configured directory is either one plugin or a directory of them.
@@ -1470,7 +1402,6 @@ mod tests {
         let available: Vec<&str> = manager.available().map(PluginManifest::id).collect();
         assert_eq!(available, vec!["com.example.inbox"]);
         assert_eq!(manager.loaded().count(), 0);
-        assert_eq!(manager.active(), None);
     }
 
     #[test]

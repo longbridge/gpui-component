@@ -302,7 +302,8 @@ fn run(arguments: Arguments) {
             // is working in — but this host *is* the process, so ending it is
             // the honest answer. An embedded host installs something else:
             // closing a panel, closing a window, or refusing.
-            gpui_shell::on_exit_request(|code, _, _| {
+            gpui_shell::on_exit_request(|request, _, _| {
+                let code = request.code();
                 tracing::info!("the application asked to exit with {code}");
                 std::process::exit(code);
             });

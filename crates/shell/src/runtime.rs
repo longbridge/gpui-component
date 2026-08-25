@@ -239,14 +239,45 @@ const GENERATION_MASK: u32 = 0xffff;
 ///
 /// A standalone CLI ends the process. An embedded host might close the plugin's
 /// panel, or its window, or refuse.
-pub type ExitHandler = Rc<dyn Fn(i32, &mut Window, &mut App)>;
+pub type ExitHandler = Rc<dyn Fn(ExitRequest, &mut Window, &mut App)>;
+
+/// Who asked to exit, and with what code.
+///
+/// The handler is installed once by the host and may be reached by any script
+/// the host is running, so "exit" is not answerable without knowing which one
+/// asked: a plugin host closes *that* plugin's panel, and a shell that quit the
+/// window instead would let one plugin end another's work.
+#[derive(Clone)]
+pub struct ExitRequest {
+    code: i32,
+    view: Option<Entity<ScriptView>>,
+}
+
+impl ExitRequest {
+    pub(crate) fn new(code: i32, view: Option<Entity<ScriptView>>) -> Self {
+        Self { code, view }
+    }
+
+    /// The status the script passed, or `0`.
+    pub fn code(self: &ExitRequest) -> i32 {
+        self.code
+    }
+
+    /// The view whose script asked.
+    ///
+    /// `None` when the request came from outside any view — a module still
+    /// loading, or a host call the runtime made itself.
+    pub fn view(&self) -> Option<&Entity<ScriptView>> {
+        self.view.as_ref()
+    }
+}
 
 thread_local! {
     static EXIT_HANDLER: RefCell<Option<ExitHandler>> = const { RefCell::new(None) };
 }
 
 /// Installs what an exit request does. Replaces any previous handler.
-pub fn on_exit_request(handler: impl Fn(i32, &mut Window, &mut App) + 'static) {
+pub fn on_exit_request(handler: impl Fn(ExitRequest, &mut Window, &mut App) + 'static) {
     EXIT_HANDLER.with(|installed| *installed.borrow_mut() = Some(Rc::new(handler)));
 }
 
