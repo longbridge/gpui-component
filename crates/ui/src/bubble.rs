@@ -3,7 +3,10 @@ use gpui::{
     prelude::FluentBuilder as _, relative, rems,
 };
 
-use crate::{ActiveTheme as _, Colorize as _, StyledExt as _, message::MessageAlignment, v_flex};
+use crate::{
+    ActiveTheme as _, Colorize as _, StyledExt as _, button::Button, message::MessageAlignment,
+    v_flex,
+};
 
 /// Visual treatment for a chat bubble.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -280,6 +283,11 @@ impl RenderOnce for BubbleGroup {
     }
 }
 
+enum BubbleReactionChild {
+    Action(Button),
+    Element(AnyElement),
+}
+
 /// A styleable reaction region positioned on a bubble edge.
 ///
 /// Compose existing [`crate::button::Button`] values inside this region to
@@ -289,7 +297,7 @@ pub struct BubbleReactions {
     style: StyleRefinement,
     side: BubbleReactionSide,
     alignment: MessageAlignment,
-    children: Vec<AnyElement>,
+    children: Vec<BubbleReactionChild>,
 }
 
 impl BubbleReactions {
@@ -314,6 +322,18 @@ impl BubbleReactions {
         self.alignment = alignment;
         self
     }
+
+    /// Add an interactive action that shares the reaction surface.
+    ///
+    /// Typed actions remove the reaction region's decorative content padding
+    /// and use the theme's full radius so the button reads as part of one
+    /// surface. The typed action owns that pill geometry; use `.child(...)`
+    /// for emoji, labels, and arbitrary elements when the child should retain
+    /// its own styling, including a custom button radius.
+    pub fn action(mut self, action: Button) -> Self {
+        self.children.push(BubbleReactionChild::Action(action));
+        self
+    }
 }
 
 impl Default for BubbleReactions {
@@ -324,7 +344,8 @@ impl Default for BubbleReactions {
 
 impl ParentElement for BubbleReactions {
     fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
-        self.children.extend(elements);
+        self.children
+            .extend(elements.into_iter().map(BubbleReactionChild::Element));
     }
 }
 
@@ -337,6 +358,16 @@ impl Styled for BubbleReactions {
 impl RenderOnce for BubbleReactions {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let tokens = cx.theme().semantic_tokens();
+        let has_action = self
+            .children
+            .iter()
+            .any(|child| matches!(child, BubbleReactionChild::Action(_)));
+        let action_radius = cx.theme().radius_full();
+        let children = self.children.into_iter().map(move |child| match child {
+            BubbleReactionChild::Action(action) => action.rounded(action_radius).into_any_element(),
+            BubbleReactionChild::Element(element) => element,
+        });
+
         div()
             .absolute()
             .flex()
@@ -349,8 +380,7 @@ impl RenderOnce for BubbleReactions {
             .border_color(tokens.colors.background)
             .bg(tokens.colors.muted)
             .text_color(tokens.colors.foreground)
-            .px_1p5()
-            .py_0p5()
+            .when(!has_action, |this| this.px_1p5().py_0p5())
             .text_sm()
             .when(self.side == BubbleReactionSide::Top, |this| {
                 this.top(-rems(0.75))
@@ -365,7 +395,7 @@ impl RenderOnce for BubbleReactions {
                 this.right_3()
             })
             .refine_style(&self.style)
-            .children(self.children)
+            .children(children)
     }
 }
 
@@ -397,5 +427,18 @@ mod tests {
         assert_eq!(reactions.side, BubbleReactionSide::Top);
         assert_eq!(reactions.alignment, MessageAlignment::Start);
         assert_eq!(reactions.children.len(), 1);
+
+        let reactions = BubbleReactions::new()
+            .action(Button::new("reaction-action"))
+            .child("👍");
+        assert_eq!(reactions.children.len(), 2);
+        assert!(matches!(
+            reactions.children.first(),
+            Some(BubbleReactionChild::Action(_))
+        ));
+        assert!(matches!(
+            reactions.children.get(1),
+            Some(BubbleReactionChild::Element(_))
+        ));
     }
 }

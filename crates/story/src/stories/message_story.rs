@@ -326,7 +326,7 @@ impl Render for MessageStory {
                                             .with_variant(BubbleVariant::Muted)
                                             .child("Keep lifecycle state on the attachment, preserve the sender's alignment, and expose every action as an existing semantic Button.")
                                             .reactions(
-                                                BubbleReactions::new().child(
+                                                BubbleReactions::new().action(
                                                     Button::new("message-bubble-like")
                                                         .ghost()
                                                         .xsmall()

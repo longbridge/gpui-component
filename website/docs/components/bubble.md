@@ -205,7 +205,8 @@ being repeated.
 ## Reactions and interactive content
 
 `BubbleReactions` positions a region at the top or bottom edge. Put semantic
-controls inside it; the region itself does not invent a reaction button API:
+controls inside it. Use the typed `action(Button)` builder for a button that
+should read as part of the reaction surface:
 
 ```rust
 Bubble::new()
@@ -216,13 +217,13 @@ Bubble::new()
         BubbleReactions::new()
             .side(BubbleReactionSide::Bottom)
             .alignment(MessageAlignment::End)
-            .child(
+            .action(
                 Button::new("bubble-like")
                     .ghost()
                     .xsmall()
                     .label("Like · 2"),
             )
-            .child(
+            .action(
                 Button::new("bubble-copy")
                     .ghost()
                     .xsmall()
@@ -238,11 +239,63 @@ region aligned to the leading edge:
 BubbleReactions::new()
     .side(BubbleReactionSide::Top)
     .alignment(MessageAlignment::Start)
-    .child(Button::new("bubble-more").ghost().xsmall().label("More"))
+    .action(Button::new("bubble-more").ghost().xsmall().label("More"))
 ```
 
-The reaction container supplies spacing, a rounded semantic surface, and a
-contrast border. Button focus, disabled state, and keyboard activation remain
+`action(Button)` tells `BubbleReactions` that the child is a semantic action.
+When a reaction region contains any typed action, the container removes its
+decorative content padding and applies the active theme's full/pill radius to
+each typed button, so the buttons and reaction surface read as one control
+group. The supplied `Button` remains customizable: its variant, size, icon,
+`.on_click(...)` callback, and `.tooltip(...)` are preserved. The typed action
+owns the pill corner radius so the button stays joined to the reaction surface;
+use the generic path below when a button needs a different radius. Multiple
+actions can be added with repeated `.action(...)` calls.
+
+Use `.child(...)` for emoji, text, a custom element, or an overlay composition
+that is not a direct `Button`. This generic path remains backward-compatible
+and does not opt that child into the compact action treatment. If the same
+region also contains any `.action(...)`, the whole reaction region still uses
+the compact surface layout:
+
+```rust
+BubbleReactions::new()
+    .child("👍 2")
+    .action(
+        Button::new("bubble-reply")
+            .ghost()
+            .xsmall()
+            .label("Reply"),
+    )
+```
+
+Nested interactive wrappers such as `Popover` remain on the generic
+`.child(...)` path because `action(...)` accepts a direct `Button`. If the
+wrapper's trigger should share the reaction geometry, opt into that layout
+explicitly with `p_0()` on the reaction region and a theme-derived full radius
+on the trigger button. The same escape hatch gives an arbitrary button its own
+radius or surface treatment.
+
+```rust
+BubbleReactions::new().p_0().child(
+    gpui_component::popover::Popover::new("bubble-more")
+        .trigger(
+            Button::new("bubble-more-trigger")
+                .ghost()
+                .xsmall()
+                .label("More")
+                .rounded(cx.theme().radius_full()),
+        )
+        .child(Button::new("bubble-copy").label("Copy")),
+)
+```
+
+The reaction container supplies the default spacing, rounded semantic surface,
+and contrast border. Caller `Styled` refinements are applied after those
+defaults, so an application can customize the reaction surface or the
+`Button` itself. There is no separate `BubbleAction` component or reaction data
+model; the application owns counts, selected state, and submitted actions.
+Button focus, disabled state, and keyboard activation remain
 the responsibility of `Button`. The current Button accessibility label comes
 from its visible `.label(...)` value; a tooltip is supplemental. For a URL
 inside a bubble use `Link`; for an in-app command use `Button`. A tooltip or
@@ -291,7 +344,7 @@ BubbleReactions::new()
     .px_2()
     .bg(cx.theme().background)
     .border_color(cx.theme().ring)
-    .child(Button::new("bubble-reaction").ghost().xsmall().label("👍"))
+    .action(Button::new("bubble-reaction").ghost().xsmall().label("👍"))
 ```
 
 ## Accessibility and state guidance
@@ -361,7 +414,8 @@ standalone `BubbleContent` therefore has the default `Filled` treatment.
 | `new()` | bottom, end aligned | Create a reaction region. |
 | `side(BubbleReactionSide)` | `Bottom` | Attach it above or below the bubble. |
 | `alignment(MessageAlignment)` | `End` | Align children along the bubble edge. |
-| `.child(...)` | — | Add buttons or other controls. |
+| `action(Button)` | — | Add a typed action that shares the reaction surface and full/pill radius. |
+| `.child(...)` | — | Add emoji, text, or arbitrary GPUI elements. |
 | `Styled` methods | themed reaction surface | Refine spacing, colors, and layout. |
 
 ### Related types

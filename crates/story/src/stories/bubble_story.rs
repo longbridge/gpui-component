@@ -121,7 +121,7 @@ impl Render for BubbleStory {
             )
             .child(
                 section("Reactions")
-                    .description("Reaction controls keep Button semantics and remain replaceable.")
+                    .description("Use action for integrated Button controls; child keeps emoji and arbitrary reactions composable.")
                     .w(rems(42.5))
                     .v_flex()
                     .gap_8()
@@ -131,7 +131,7 @@ impl Render for BubbleStory {
                             .with_variant(BubbleVariant::Outline)
                             .child("This bubble has reaction feedback.")
                             .reactions(
-                                BubbleReactions::new().child(
+                                BubbleReactions::new().action(
                                     Button::new("bubble-like")
                                         .ghost()
                                         .xsmall()
@@ -267,7 +267,7 @@ impl Render for BubbleStory {
                             .alignment(MessageAlignment::End)
                             .child("The updated registry route is live.")
                             .reactions(
-                                BubbleReactions::new().child(
+                                BubbleReactions::new().action(
                                     Button::new("bubble-delivery-details")
                                         .ghost()
                                         .xsmall()
@@ -287,13 +287,14 @@ impl Render for BubbleStory {
                             .with_variant(BubbleVariant::Destructive)
                             .child("The build command could not finish.")
                             .reactions(
-                                BubbleReactions::new().child(
+                                BubbleReactions::new().p_0().child(
                                     Popover::new("bubble-error-popover")
                                         .trigger(
                                             Button::new("bubble-show-error")
                                                 .ghost()
                                                 .xsmall()
                                                 .icon(IconName::Info)
+                                                .rounded(cx.theme().radius_full())
                                                 .tooltip("Show error details"),
                                         )
                                         .w_64()

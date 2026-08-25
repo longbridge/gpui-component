@@ -4,7 +4,6 @@ use gpui::{
 };
 use gpui_component::{
     ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt as _,
-    badge::Badge,
     button::{Button, ButtonVariants as _},
     link::Link,
     marker::{Marker, MarkerContent, MarkerIcon, MarkerLoadingStyle, MarkerVariant},
@@ -97,10 +96,7 @@ impl Render for MarkerStory {
                     )
                     .child(
                         Marker::new()
-                            .icon(
-                                MarkerIcon::new()
-                                    .child(Badge::new().count(3).child(Icon::new(IconName::Bell))),
-                            )
+                            .icon(MarkerIcon::new().child(Icon::new(IconName::Bell)))
                             .content(MarkerContent::new().child("Unread notifications")),
                     )
                     .child(

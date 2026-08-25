@@ -271,7 +271,8 @@ BubbleGroup::new()
 
 ## Reactions
 
-`BubbleReactions` 负责 reaction 区域的边缘定位与基础表面。把已有 `Button` 放入其中即可获得焦点、键盘、disabled 和 loading 行为：
+`BubbleReactions` 负责 reaction 区域的边缘定位与基础表面。对于需要和
+reaction 表面连成一体的按钮，使用类型明确的 `action(Button)`：
 
 ```rust
 Bubble::new()
@@ -281,13 +282,13 @@ Bubble::new()
         BubbleReactions::new()
             .side(BubbleReactionSide::Bottom)
             .alignment(MessageAlignment::End)
-            .child(
+            .action(
                 Button::new("like")
                     .ghost()
                     .small()
                     .label("👍 2"),
             )
-            .child(
+            .action(
                 Button::new("reply")
                     .ghost()
                     .small()
@@ -305,11 +306,58 @@ Bubble::new()
         BubbleReactions::new()
             .side(BubbleReactionSide::Top)
             .alignment(MessageAlignment::Start)
-            .child(Button::new("status").ghost().label("处理中")),
+            .action(Button::new("status").ghost().label("处理中")),
     )
 ```
 
-`BubbleReactions` 不提供 `BubbleAction` 或 reaction 数据模型。计数、选中状态、提交动作和错误提示由 Button 外层的应用状态负责。
+`action(Button)` 会让 `BubbleReactions` 识别出这是语义操作。当 reaction 区域
+包含任意一个类型化操作时，组件会移除装饰性内边距，并将每个类型化
+Button 的圆角设为当前主题的最大圆角（`radius_full()`），使按钮和外层表面连成一个
+整体。传入的 `Button` 仍可以自定义变体、尺寸、图标、`.on_click(...)` 点击回调和
+`.tooltip(...)`；类型化操作会保留这个胶囊圆角以维持整体外观，需要不同圆角时
+使用下面的通用路径。多个按钮可以重复调用 `.action(...)`。
+
+需要放入 emoji、文本、自定义子元素或直接 `Button` 之外的包装组件时，继续使用
+`.child(...)`。这个通用路径保持向后兼容，也不会自动启用操作按钮的紧凑样式。
+即使同一区域混合了 `.child(...)`，只要存在一个 `.action(...)`，整个 reaction 区域
+仍会采用紧凑表面布局；普通子元素继续按通用路径渲染：
+
+```rust
+BubbleReactions::new()
+    .child("👍 2")
+    .action(
+        Button::new("reply")
+            .ghost()
+            .small()
+            .label("回复"),
+    )
+```
+
+像 `Popover` 这样的嵌套交互包装组件也应继续使用 `.child(...)`，因为
+`action(...)` 接收的是直接的 `Button`。如果包装组件的触发按钮需要和 reaction
+表面共用几何样式，可以在 `BubbleReactions` 上显式使用 `p_0()`，并在触发按钮上
+使用主题的最大圆角；需要给普通 Button 保留其他圆角或表面样式时也使用这个通用路径：
+
+```rust
+BubbleReactions::new().p_0().child(
+    gpui_component::popover::Popover::new("bubble-more")
+        .trigger(
+            Button::new("bubble-more-trigger")
+                .ghost()
+                .small()
+                .label("更多")
+                .rounded(cx.theme().radius_full()),
+        )
+        .child(Button::new("bubble-copy").label("复制")),
+)
+```
+
+reaction 表面的默认样式仍由组件提供；调用方的 `Styled` 样式调整会在默认值之后
+应用，因此可以继续调整 `BubbleReactions` 或 `Button` 的其他样式。`.action(...)`
+会统一管理 Button 的胶囊圆角；需要恢复额外内边距或使用不同圆角时，使用
+`.child(...)`，或在 reaction 区域上明确调用 `px_2()`、`p_0()` 等样式方法。
+`BubbleReactions` 不额外提供 `BubbleAction` 或 reaction 数据模型；计数、选中状态、
+提交动作和错误提示由 Button 外层的应用状态负责。
 
 ## 自定义样式与主题 token
 
@@ -384,7 +432,8 @@ Bubble::new()
 | `new()` | 创建默认在底部、结束侧对齐的 reaction 区域。 |
 | `side(BubbleReactionSide)` | 选择 `Top` 或 `Bottom`。 |
 | `alignment(MessageAlignment)` | 选择 reaction 区域的起始侧或结束侧对齐。 |
-| `child(element)` | 添加 Button 或其他 reaction 内容。 |
+| `action(Button)` | 添加类型化操作；与 reaction 表面共用主题最大圆角，并自动使用紧凑布局。 |
+| `child(element)` | 添加 emoji、文本或任意 GPUI 子元素；保留通用组合能力。 |
 | `Styled` | 调整 reaction 表面与定位 refinement。 |
 
 ### 类型链接
