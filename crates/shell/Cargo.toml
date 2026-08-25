@@ -45,13 +45,8 @@ serde_json.workspace = true
 smallvec.workspace = true
 tracing.workspace = true
 
-
 [dev-dependencies]
 gpui = { workspace = true, features = ["test-support"] }
 
 [lints]
 workspace = true
-
-[profile.dev.package]
-rquickjs = { opt-level = 3 }
-cap-std = { opt-level = 3 }

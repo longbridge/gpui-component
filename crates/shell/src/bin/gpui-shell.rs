@@ -334,18 +334,18 @@ fn run(arguments: Arguments) {
             let window = cx
                 .open_window(window_options(&root, cx), move |window, cx| {
                     let content: AnyView = match &module {
-                        Ok(view_type) => match builder_runtime.instantiate(view_type, window, cx) {
-                            Ok(object) => {
-                                let view =
-                                    cx.new(|_| ScriptView::new(builder_runtime.clone(), object));
-                                *sink.borrow_mut() = Some(view.clone());
-                                view.into()
+                        Ok(view_type) => {
+                            match builder_runtime.instantiate_view(view_type, window, cx) {
+                                Ok(view) => {
+                                    *sink.borrow_mut() = Some(view.clone());
+                                    view.into()
+                                }
+                                Err(error) => {
+                                    eprintln!("{error}");
+                                    cx.new(|_| LoadFailure(error.to_string())).into()
+                                }
                             }
-                            Err(error) => {
-                                eprintln!("{error}");
-                                cx.new(|_| LoadFailure(error.to_string())).into()
-                            }
-                        },
+                        }
                         Err(message) => cx.new(|_| LoadFailure(message.clone())).into(),
                     };
 

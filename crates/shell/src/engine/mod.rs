@@ -18,6 +18,12 @@
 //! ShellRuntime::load_app(&Rc<Self>, &Path, entry: &str) -> anyhow::Result<ViewType>
 //! ShellRuntime::load_source(&Rc<Self>, &str, &str) -> anyhow::Result<ViewType>
 //! ShellRuntime::instantiate(&Rc<Self>, &ViewType) -> anyhow::Result<ViewObject>
+//! ShellRuntime::instantiate_view(&Rc<Self>, &ViewType, &mut Window, &mut App)
+//!     -> anyhow::Result<Entity<ScriptView>>
+//! ShellRuntime::instantiate_view_with_policy(&Rc<Self>, &ViewType, Rc<Policy>,
+//!     &mut Window, &mut App) -> anyhow::Result<Entity<ScriptView>>
+//! ShellRuntime::instantiate_for_view(&Rc<Self>, &ViewType, Entity<ScriptView>,
+//!     &mut Window, &mut App) -> anyhow::Result<ViewObject>
 //!
 //! ShellRuntime::build_snapshot(&Rc<Self>, &ViewObject, Option<Entity<ScriptView>>,
 //!     &mut Window, &mut App) -> anyhow::Result<RenderSnapshot>

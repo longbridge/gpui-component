@@ -42,7 +42,7 @@ use std::{
 };
 
 use anyhow::{Result, bail};
-use gpui::{App, AppContext as _, Entity, Window};
+use gpui::{App, Entity, Window};
 use schemars::JsonSchema;
 use serde::Deserialize;
 
@@ -965,7 +965,7 @@ impl PluginManager {
 
         // The frame is what carries the grant, so everything the entry module
         // does — including anything it defers — happens inside one.
-        let loaded = {
+        let view = {
             let (_scope, _) = scope::enter_with_runtime(
                 runtime,
                 window,
@@ -976,14 +976,12 @@ impl PluginManager {
             );
             runtime
                 .load_app(&root, manifest.entry())
-                .and_then(|view_type| runtime.instantiate(&view_type, window, cx))
+                .and_then(|view_type| {
+                    runtime.instantiate_view_with_policy(&view_type, policy.clone(), window, cx)
+                })
         };
 
-        let object = loaded.map_err(|error| error.context(format!("loading plugin `{id}`")))?;
-
-        // Built with the policy rather than inheriting it: the view outlives
-        // this call, and every later render and callback reads it from here.
-        let view = cx.new(|_| ScriptView::with_policy(runtime.clone(), object, policy.clone()));
+        let view = view.map_err(|error| error.context(format!("loading plugin `{id}`")))?;
         self.loaded.insert(
             id.to_owned(),
             Plugin {
@@ -1104,6 +1102,8 @@ fn default_data_home() -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gpui::{IntoElement as _, TestAppContext, VisualTestContext};
+    use std::ops::Deref as _;
     use std::sync::atomic::{AtomicU64, Ordering};
 
     const VALID: &str = r#"{
@@ -1156,6 +1156,99 @@ mod tests {
     impl Drop for TempTree {
         fn drop(&mut self) {
             let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[gpui::test]
+    fn async_init_runs_under_the_plugin_policy_and_notifies_its_view(cx: &mut TestAppContext) {
+        let plugins = TempTree::new("async-init");
+        let data = TempTree::new("async-init-data");
+        let manifest = r#"{
+            "id": "com.example.async-init",
+            "name": "Async Init",
+            "version": "1.0.0",
+            "entry": "main.js",
+            "capabilities": {
+                "fs": { "read": ["${pluginDir}"] }
+            }
+        }"#;
+        let root = plugins.plugin("async-init", manifest);
+        std::fs::write(root.join("message.txt"), "loaded through plugin policy")
+            .expect("write fixture");
+        std::fs::write(
+            root.join("main.js"),
+            r#"
+                import { View, v_flex, text, fs, spawn, with_cx } from "gpui";
+                export default class Panel extends View {
+                  init() {
+                    this.message = "pending";
+                    spawn(async (cx) => {
+                      this.message = await fs.read_text("message.txt");
+                      with_cx((cx) => cx.notify());
+                    });
+                  }
+                  render() { return v_flex().child(text(this.message)); }
+                }
+            "#,
+        )
+        .expect("write script");
+
+        cx.update(crate::init);
+        let runtime = ShellRuntime::new().expect("runtime");
+        cx.update(|cx| runtime.set_global(cx));
+        let window = cx.add_window(|_, _| Empty);
+        let mut context = VisualTestContext::from_window(*window.deref(), cx);
+        let mut manager = PluginManager::new(vec![plugins.path().to_path_buf()])
+            .with_data_home(data.path().to_path_buf());
+
+        context
+            .update(|window, cx| manager.load(&runtime, "com.example.async-init", window, cx))
+            .expect("load plugin");
+        let view = manager
+            .plugin("com.example.async-init")
+            .and_then(Plugin::view)
+            .expect("plugin view")
+            .clone();
+
+        draw(&mut context, &view);
+        assert!(snapshot_text(&mut context, &view).contains("pending"));
+        context.run_until_parked();
+        draw(&mut context, &view);
+
+        let settled = snapshot_text(&mut context, &view);
+        assert!(
+            settled.contains("loaded through plugin policy"),
+            "async init did not invalidate its own view: {settled}"
+        );
+    }
+
+    fn draw(context: &mut VisualTestContext, view: &Entity<ScriptView>) {
+        let view = view.clone();
+        context.draw(
+            gpui::Point::default(),
+            gpui::size(gpui::px(400.), gpui::px(300.)),
+            move |_, _| view.into_any_element(),
+        );
+    }
+
+    fn snapshot_text(context: &mut VisualTestContext, view: &Entity<ScriptView>) -> String {
+        context.update(|_, cx| {
+            view.read(cx)
+                .snapshot()
+                .map(crate::RenderSnapshot::debug_tree)
+                .unwrap_or_default()
+        })
+    }
+
+    struct Empty;
+
+    impl gpui::Render for Empty {
+        fn render(
+            &mut self,
+            _: &mut gpui::Window,
+            _: &mut gpui::Context<Self>,
+        ) -> impl gpui::IntoElement {
+            gpui::div()
         }
     }
 

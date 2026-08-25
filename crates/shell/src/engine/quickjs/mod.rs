@@ -21,7 +21,7 @@ use std::{
 };
 
 use anyhow::{Context as _, Result, anyhow};
-use gpui::{App, ClickEvent, Entity, Global, Window};
+use gpui::{App, AppContext as _, ClickEvent, Entity, Global, Window};
 use rquickjs::{
     Context as JsContext, Ctx, Error as JsError, Exception, FromJs, Function, Object, Persistent,
     Result as JsResult, Runtime as JsRuntime, Value,
@@ -280,11 +280,79 @@ impl ShellRuntime {
         cx: &mut App,
     ) -> Result<ViewObject> {
         let (_guard, _generation) = scope::enter_runtime(self, window, cx, ScopePhase::Event, None);
+        let instance = self.construct(view_type)?;
+        self.initialize(&instance)?;
+        Ok(instance)
+    }
+
+    /// Constructs and initializes a script view under its final owner.
+    ///
+    /// `init()` may start asynchronous work. Creating the GPUI entity first is
+    /// what gives those tasks an owner, so a later `cx.notify()` can invalidate
+    /// this view and dropping the view can cancel its work.
+    pub fn instantiate_view(
+        self: &Rc<Self>,
+        view_type: &ViewType,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Result<Entity<ScriptView>> {
+        self.instantiate_view_with_policy(view_type, crate::policy::default(), window, cx)
+    }
+
+    pub fn instantiate_view_with_policy(
+        self: &Rc<Self>,
+        view_type: &ViewType,
+        policy: Rc<crate::policy::Policy>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Result<Entity<ScriptView>> {
+        let (_guard, _) =
+            scope::enter_with_runtime(self, window, cx, ScopePhase::Event, None, policy.clone());
+        let object = self.construct(view_type)?;
+        let view = cx.new(|_| ScriptView::with_policy(self.clone(), object, policy.clone()));
+        let object = view.read(cx).object().clone();
+
+        let (_guard, _) = scope::enter_with_runtime(
+            self,
+            window,
+            cx,
+            ScopePhase::Event,
+            Some(view.clone()),
+            policy,
+        );
+        self.initialize(&object)?;
+        Ok(view)
+    }
+
+    pub fn instantiate_for_view(
+        self: &Rc<Self>,
+        view_type: &ViewType,
+        view: Entity<ScriptView>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Result<ViewObject> {
+        let policy = view.read(cx).policy();
+        let (_guard, _) =
+            scope::enter_with_runtime(self, window, cx, ScopePhase::Event, Some(view), policy);
+        let object = self.construct(view_type)?;
+        self.initialize(&object)?;
+        Ok(object)
+    }
+
+    fn construct(&self, view_type: &ViewType) -> Result<ViewObject> {
         self.with_js(|ctx| {
             let class = view_type.clone().restore(ctx)?;
             let construct: Function = ctx.globals().get("__construct")?;
             let instance: Object = construct.call((class,))?;
             Ok(Persistent::save(ctx, instance))
+        })
+    }
+
+    fn initialize(&self, object: &ViewObject) -> Result<()> {
+        self.with_js(|ctx| {
+            let instance = object.clone().restore(ctx)?;
+            let initialize: Function = ctx.globals().get("__initialize")?;
+            initialize.call::<_, ()>((instance,))
         })
     }
 
@@ -795,11 +863,22 @@ globalThis.__gpui = (() => {
     error: forward("error"),
   };
 
-  globalThis.__construct = (Class) => new Class();
+  let deferInit = false;
+  globalThis.__construct = (Class) => {
+    deferInit = true;
+    try {
+      return new Class();
+    } finally {
+      deferInit = false;
+    }
+  };
+  globalThis.__initialize = (instance) => {
+    if (typeof instance.init === "function") instance.init();
+  };
 
   class View {
     constructor(props) {
-      if (typeof this.init === "function") this.init(props);
+      if (!deferInit && typeof this.init === "function") this.init(props);
     }
   }
 

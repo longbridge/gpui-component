@@ -748,32 +748,37 @@ impl ShellStory {
 
         let loaded = runtime
             .load_app(&script_directory(), ENTRY)
-            .and_then(|view_type| runtime.instantiate(&view_type, window, cx));
-
-        match loaded {
-            Ok(object) => {
-                match self.script.clone() {
-                    Some(view) => view.update(cx, |view, cx| {
+            .and_then(|view_type| {
+                if let Some(view) = self.script.clone() {
+                    let object =
+                        runtime.instantiate_for_view(&view_type, view.clone(), window, cx)?;
+                    view.update(cx, |view, cx| {
                         view.replace_object(object);
                         cx.notify();
-                    }),
-                    None => {
-                        let view = cx.new(|_| ScriptView::new(runtime.clone(), object));
-                        // A debug build is the development build, so editing
-                        // main.js changes the panel without anyone pressing
-                        // anything. The Reload button stays for the case where
-                        // you want it now rather than in a quarter second.
-                        // Compiled out of a release build entirely.
-                        self.script_watch = Some(gpui_shell::watch::reload_in_debug(
-                            &runtime,
-                            &view,
-                            script_directory(),
-                            ENTRY,
-                            window,
-                            cx,
-                        ));
-                        self.script = Some(view);
-                    }
+                    });
+                    Ok(view)
+                } else {
+                    runtime.instantiate_view(&view_type, window, cx)
+                }
+            });
+
+        match loaded {
+            Ok(view) => {
+                if self.script.is_none() {
+                    // A debug build is the development build, so editing
+                    // main.js changes the panel without anyone pressing
+                    // anything. The Reload button stays for the case where
+                    // you want it now rather than in a quarter second.
+                    // Compiled out of a release build entirely.
+                    self.script_watch = Some(gpui_shell::watch::reload_in_debug(
+                        &runtime,
+                        &view,
+                        script_directory(),
+                        ENTRY,
+                        window,
+                        cx,
+                    ));
+                    self.script = Some(view);
                 }
                 self.script_error = None;
             }

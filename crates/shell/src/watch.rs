@@ -478,7 +478,7 @@ pub(crate) fn reload(
         .load_app(directory, entry)
         .with_context(|| format!("reloading {}", directory.display()))?;
     let object = runtime
-        .instantiate(&view_type, window, cx)
+        .instantiate_for_view(&view_type, view.clone(), window, cx)
         .with_context(|| format!("rebuilding the view from {}", directory.display()))?;
 
     view.update(cx, |view, cx| {

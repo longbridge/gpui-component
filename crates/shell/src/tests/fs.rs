@@ -7,14 +7,14 @@
 
 use std::ops::Deref;
 
-use crate::{Capabilities, ShellRuntime};
-use gpui::{TestAppContext, VisualTestContext};
+use crate::{Capabilities, ScriptView, ShellRuntime};
+use gpui::{Entity, IntoElement as _, TestAppContext, VisualTestContext};
 
 /// A view that does its filesystem work in a task and records the outcome, so
 /// the assertion can be made on what the script saw rather than on what the host
 /// did.
 const PROBE: &str = r#"
-import { View, v_flex, text, fs, spawn } from "gpui";
+import { View, v_flex, text, fs, spawn, with_cx } from "gpui";
 
 export default class Probe extends View {
   init() {
@@ -37,7 +37,7 @@ export default class Probe extends View {
       } catch (error) {
         this.state = `failed: ${error.message}`;
       }
-      cx.notify();
+      with_cx((cx) => cx.notify());
     });
   }
 
@@ -66,29 +66,23 @@ fn every_fs_call_settles_through_a_promise(cx: &mut TestAppContext) {
 
     let window = cx.add_window(|_, _| Empty);
     let mut context = VisualTestContext::from_window(*window.deref(), cx);
-    let object = context
-        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+    let view = context
+        .update(|window, cx| runtime.instantiate_view(&view_type, window, cx))
         .expect("instantiate");
 
     // Nothing has happened yet: the calls returned promises and the work is on
     // a background thread. That is the property this whole change is about.
-    let before = context.update(|window, cx| {
-        runtime
-            .render_to_spec(&object, None, window, cx)
-            .expect("render")
-    });
+    draw(&mut context, &view);
+    let before = snapshot_text(&mut context, &view);
     assert!(
         before.contains("pending"),
         "the first render should have found the work still in flight, got: {before}"
     );
 
     context.run_until_parked();
+    draw(&mut context, &view);
 
-    let after = context.update(|window, cx| {
-        runtime
-            .render_to_spec(&object, None, window, cx)
-            .expect("render")
-    });
+    let after = snapshot_text(&mut context, &view);
     assert!(
         after.contains("hello|notes.txt|true|true|true"),
         "the round trip did not settle as expected: {after}"
@@ -125,16 +119,13 @@ fn an_oversized_read_is_refused_by_name(cx: &mut TestAppContext) {
 
     let window = cx.add_window(|_, _| Empty);
     let mut context = VisualTestContext::from_window(*window.deref(), cx);
-    let object = context
-        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+    let view = context
+        .update(|window, cx| runtime.instantiate_view(&view_type, window, cx))
         .expect("instantiate");
     context.run_until_parked();
+    draw(&mut context, &view);
 
-    let rendered = context.update(|window, cx| {
-        runtime
-            .render_to_spec(&object, None, window, cx)
-            .expect("render")
-    });
+    let rendered = snapshot_text(&mut context, &view);
     assert!(
         rendered.contains("big.bin") && rendered.contains("limit"),
         "an oversized read should name the file and the limit: {rendered}"
@@ -162,7 +153,7 @@ impl gpui::Render for Empty {
 /// happens on a background thread. `flush` is for a script that has to know the
 /// write landed.
 const STORE_PROBE: &str = r#"
-import { View, v_flex, text, store, spawn } from "gpui";
+import { View, v_flex, text, store, spawn, with_cx } from "gpui";
 
 export default class Probe extends View {
   init() {
@@ -178,7 +169,7 @@ export default class Probe extends View {
     spawn(async (cx) => {
       await store.flush();
       this.state += "|flushed";
-      cx.notify();
+      with_cx((cx) => cx.notify());
     });
   }
 
@@ -205,28 +196,22 @@ fn the_store_answers_from_memory_and_persists_off_thread(cx: &mut TestAppContext
 
     let window = cx.add_window(|_, _| Empty);
     let mut context = VisualTestContext::from_window(*window.deref(), cx);
-    let object = context
-        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+    let view = context
+        .update(|window, cx| runtime.instantiate_view(&view_type, window, cx))
         .expect("instantiate");
 
     // The cache answered during `init`, before anything reached the disk.
-    let immediate = context.update(|window, cx| {
-        runtime
-            .render_to_spec(&object, None, window, cx)
-            .expect("render")
-    });
+    draw(&mut context, &view);
+    let immediate = snapshot_text(&mut context, &view);
     assert!(
         immediate.contains("Notes|window,theme"),
         "the store should answer from memory without awaiting: {immediate}"
     );
 
     context.run_until_parked();
+    draw(&mut context, &view);
 
-    let settled = context.update(|window, cx| {
-        runtime
-            .render_to_spec(&object, None, window, cx)
-            .expect("render")
-    });
+    let settled = snapshot_text(&mut context, &view);
     assert!(
         settled.contains("flushed"),
         "flush never resolved: {settled}"
@@ -242,4 +227,22 @@ fn the_store_answers_from_memory_and_persists_off_thread(cx: &mut TestAppContext
     );
 
     let _ = std::fs::remove_dir_all(&directory);
+}
+
+fn draw(context: &mut VisualTestContext, view: &Entity<ScriptView>) {
+    let view = view.clone();
+    context.draw(
+        gpui::Point::default(),
+        gpui::size(gpui::px(400.), gpui::px(300.)),
+        move |_, _| view.into_any_element(),
+    );
+}
+
+fn snapshot_text(context: &mut VisualTestContext, view: &Entity<ScriptView>) -> String {
+    context.update(|_, cx| {
+        view.read(cx)
+            .snapshot()
+            .map(crate::RenderSnapshot::debug_tree)
+            .unwrap_or_default()
+    })
 }
