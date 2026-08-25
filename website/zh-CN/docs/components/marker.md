@@ -13,6 +13,7 @@ description: 用于会话状态、通知边界和分隔标记的紧凑组合行�
 use gpui_component::marker::{
     Marker, MarkerContent, MarkerIcon, MarkerLoadingStyle, MarkerVariant,
 };
+use gpui_component::shimmer::{ShimmerStyle, ShimmerText};
 ```
 
 ## 状态标记
@@ -30,7 +31,7 @@ Marker::new()
     .content(MarkerContent::new().child("Alice 正在输入…"))
 ```
 
-`MarkerIcon` 提供 Base UI 的 16 px 图标 slot，`MarkerContent` 为文本或富内容提供独立样式入口。应用专属布局仍可直接添加 child。组件有意不提供 `Online`、`Typing`、`Read` 等状态 enum，这些含义和颜色由应用负责。
+`MarkerIcon` 提供紧凑的标准图标 slot，`MarkerContent` 为文本或富内容提供独立样式入口。图标、间距和文字共同跟随应用的 `rem` 比例。应用专属布局仍可直接添加 child。组件有意不提供 `Online`、`Typing`、`Read` 等状态 enum，这些含义和颜色由应用负责。
 
 ## Loading 样式
 
@@ -50,9 +51,44 @@ Marker::new()
 
 默认 loading 样式 `Spinner` 会在没有配置 `MarkerIcon` 时自动添加紧凑的 Spinner；显式组合的图标始终优先。
 
-`Shimmer` 会为 `MarkerContent::text(...)` 提供连续移动、自动适配主题的文字高光，可用于 ChatGPT 风格的 thinking 状态。文字布局保持稳定，亮色主题使用浅色光带，暗色主题使用深色光带。现有任意 `MarkerContent` child 仍然兼容，并以轻微透明度变化呈现加载状态。Icon 和分隔线保持静止；系统开启 reduced motion 时，文字完整显示且不会播放动画。
+`Shimmer` 会为 `MarkerContent::text(...)` 提供连续移动、自动适配主题的文字高光，可用于 ChatGPT 风格的 thinking 状态。高光基于继承的文字颜色和主题语义颜色计算，亮色、暗色主题均保持清晰的浅色光带。现有任意 `MarkerContent` child 仍然兼容，并以轻微透明度变化呈现加载状态。Icon 和分隔线保持静止；系统开启 reduced motion 时，文字完整显示且不会播放动画。
 
 动画保留继承的文字颜色以及调用方的颜色覆盖。两种 loading 样式均可搭配任意 `MarkerVariant`，默认不启用 loading。
+
+### 配置文字高光
+
+使用可复用的 `ShimmerStyle` 可以调整动画表现，同时保留原有 Marker 组合方式：
+
+```rust
+use std::time::Duration;
+
+Marker::new()
+    .loading(true)
+    .with_loading_style(MarkerLoadingStyle::Shimmer)
+    .with_shimmer_style(
+        ShimmerStyle::new()
+            .duration(Duration::from_secs(3))
+            .highlight_color(cx.theme().primary)
+            .spread(0.45)
+            .reverse(true),
+    )
+    .content(MarkerContent::new().text("正在处理…"))
+```
+
+默认动画周期为两秒，高光颜色跟随主题，归一化宽度为 `0.3`。`spread(...)` 接受相对于文本宽度的 `0.05..=1.0` 范围；`reverse(true)` 让高光从右向左移动。
+
+### 在其他组件中复用
+
+`ShimmerText` 可以独立使用，无需包裹 Marker：
+
+```rust
+ShimmerText::new("正在上传 report.pdf…")
+    .with_shimmer_style(ShimmerStyle::new().spread(0.4))
+    .text_sm()
+    .text_color(cx.theme().muted_foreground)
+```
+
+也可以通过 `duration(...)`、`highlight_color(...)`、`spread(...)` 和 `reverse(...)` 直接设置动画。`ShimmerText` 实现了 `Styled`，继承周围的文字样式和颜色，保留换行与截断行为，并在系统开启 reduced motion 时自动停止动画。
 
 ## 样式变体
 
@@ -118,8 +154,12 @@ Marker 是刻意保持轻量的便利组件。已有组件能够完整表达任�
 - [MarkerLoadingStyle]
 - [MarkerIcon]
 - [MarkerContent]
+- [ShimmerStyle]
+- [ShimmerText]
 
 [Marker]: https://docs.rs/gpui-component/latest/gpui_component/marker/struct.Marker.html
 [MarkerLoadingStyle]: https://docs.rs/gpui-component/latest/gpui_component/marker/enum.MarkerLoadingStyle.html
 [MarkerIcon]: https://docs.rs/gpui-component/latest/gpui_component/marker/struct.MarkerIcon.html
 [MarkerContent]: https://docs.rs/gpui-component/latest/gpui_component/marker/struct.MarkerContent.html
+[ShimmerStyle]: https://docs.rs/gpui-component/latest/gpui_component/shimmer/struct.ShimmerStyle.html
+[ShimmerText]: https://docs.rs/gpui-component/latest/gpui_component/shimmer/struct.ShimmerText.html

@@ -13,6 +13,7 @@ description: A compact composable row for conversation status, notifications, an
 use gpui_component::marker::{
     Marker, MarkerContent, MarkerIcon, MarkerLoadingStyle, MarkerVariant,
 };
+use gpui_component::shimmer::{ShimmerStyle, ShimmerText};
 ```
 
 ## Status marker
@@ -30,7 +31,7 @@ Marker::new()
     .content(MarkerContent::new().child("Alice is typing…"))
 ```
 
-`MarkerIcon` supplies the Base UI 16 px icon slot, while `MarkerContent` gives text or rich content its own style target. Direct children remain supported for application-specific layouts. The component intentionally has no `Online`, `Typing`, `Read`, or other status enum. Those meanings and colors belong to the application.
+`MarkerIcon` supplies the standard compact icon slot, while `MarkerContent` gives text or rich content its own style target. Their spacing and typography follow the application's `rem` scale. Direct children remain supported for application-specific layouts. The component intentionally has no `Online`, `Typing`, `Read`, or other status enum. Those meanings and colors belong to the application.
 
 ## Loading styles
 
@@ -50,9 +51,44 @@ Marker::new()
 
 `Spinner` is the default loading style and adds a compact spinner when no `MarkerIcon` was supplied. An explicitly composed icon always takes precedence.
 
-`Shimmer` moves a continuous, theme-aware highlight across text added with `MarkerContent::text(...)`, matching the text-only thinking treatment used by ChatGPT. The text keeps its normal layout while a light highlight moves across it in light themes and a dark highlight moves across it in dark themes. Existing arbitrary `MarkerContent` children remain supported through a gentle opacity pulse. Icons and separator lines stay static, and enabling reduced motion displays clear, non-animated text.
+`Shimmer` moves a continuous, theme-aware highlight across text added with `MarkerContent::text(...)`, matching the text-only thinking treatment used by ChatGPT. The highlight follows the inherited text color and semantic theme colors, staying visually bright in both light and dark themes. Existing arbitrary `MarkerContent` children remain supported through a gentle opacity pulse. Icons and separator lines stay static, and enabling reduced motion displays clear, non-animated text.
 
 The animation respects inherited and explicitly customized text colors. Both loading styles work with every `MarkerVariant`, and loading is disabled by default.
+
+### Configure the shimmer
+
+Use a reusable `ShimmerStyle` to adjust the sweep without replacing the Marker composition:
+
+```rust
+use std::time::Duration;
+
+Marker::new()
+    .loading(true)
+    .with_loading_style(MarkerLoadingStyle::Shimmer)
+    .with_shimmer_style(
+        ShimmerStyle::new()
+            .duration(Duration::from_secs(3))
+            .highlight_color(cx.theme().primary)
+            .spread(0.45)
+            .reverse(true),
+    )
+    .content(MarkerContent::new().text("Processing…"))
+```
+
+The default sweep takes two seconds, uses a theme-aware highlight, and has a normalized spread of `0.3`. `spread(...)` accepts the text-relative `0.05..=1.0` range. `reverse(true)` moves the highlight from right to left.
+
+### Reuse shimmer anywhere
+
+`ShimmerText` provides the same effect without requiring a Marker:
+
+```rust
+ShimmerText::new("Uploading report.pdf…")
+    .with_shimmer_style(ShimmerStyle::new().spread(0.4))
+    .text_sm()
+    .text_color(cx.theme().muted_foreground)
+```
+
+Its direct `duration(...)`, `highlight_color(...)`, `spread(...)`, and `reverse(...)` builders provide the same adjustments. `ShimmerText` implements `Styled`, inherits surrounding typography and text color, preserves wrapping and truncation, and disables animation automatically when reduced motion is enabled.
 
 ## Variants
 
@@ -118,8 +154,12 @@ Use Marker when those contents need one consistent conversation-row surface or m
 - [MarkerLoadingStyle]
 - [MarkerIcon]
 - [MarkerContent]
+- [ShimmerStyle]
+- [ShimmerText]
 
 [Marker]: https://docs.rs/gpui-component/latest/gpui_component/marker/struct.Marker.html
 [MarkerLoadingStyle]: https://docs.rs/gpui-component/latest/gpui_component/marker/enum.MarkerLoadingStyle.html
 [MarkerIcon]: https://docs.rs/gpui-component/latest/gpui_component/marker/struct.MarkerIcon.html
 [MarkerContent]: https://docs.rs/gpui-component/latest/gpui_component/marker/struct.MarkerContent.html
+[ShimmerStyle]: https://docs.rs/gpui-component/latest/gpui_component/shimmer/struct.ShimmerStyle.html
+[ShimmerText]: https://docs.rs/gpui-component/latest/gpui_component/shimmer/struct.ShimmerText.html

@@ -75,6 +75,7 @@ pub mod select;
 pub mod separator;
 pub mod setting;
 pub mod sheet;
+pub mod shimmer;
 pub mod sidebar;
 pub mod skeleton;
 pub mod slider;

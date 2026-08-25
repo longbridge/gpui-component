@@ -6,9 +6,11 @@ use gpui_component::{
     ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt as _,
     badge::Badge,
     marker::{Marker, MarkerContent, MarkerIcon, MarkerLoadingStyle, MarkerVariant},
+    shimmer::{ShimmerStyle, ShimmerText},
     spinner::Spinner,
     v_flex,
 };
+use std::time::Duration;
 
 use crate::{Story, section};
 
@@ -104,6 +106,25 @@ impl Render for MarkerStory {
                             .with_loading_style(MarkerLoadingStyle::Shimmer)
                             .icon(MarkerIcon::new().child(Icon::new(IconName::Info)))
                             .content(MarkerContent::new().text("正在探索 4 个文件…")),
+                    )
+                    .child(
+                        Marker::new()
+                            .loading(true)
+                            .with_loading_style(MarkerLoadingStyle::Shimmer)
+                            .with_shimmer_style(
+                                ShimmerStyle::new()
+                                    .duration(Duration::from_secs(3))
+                                    .highlight_color(cx.theme().primary)
+                                    .spread(0.45)
+                                    .reverse(true),
+                            )
+                            .content(
+                                MarkerContent::new().text("Custom color, width, and direction"),
+                            ),
+                    )
+                    .child(
+                        ShimmerText::new("Reusable shimmer without a Marker")
+                            .text_color(cx.theme().muted_foreground),
                     ),
             )
             .child(
