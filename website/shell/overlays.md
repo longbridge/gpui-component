@@ -6,41 +6,47 @@ order: 7
 
 # Overlays
 
-Dialogs, the sheet and toasts are **host** capabilities, imported from `"gpui"`. They are not something a script draws.
+Dialogs, the sheet and toasts are **host** capabilities, reached through the global `window`. They are not something a script draws.
 
 A dialog is not a floating `div`. It is a place in the window's stacking order, a focus trap, an Escape target, and a promise about what pressing the backdrop means — all of which the window's root has to decide, because only something that sees every overlay at once can order them. A script drawing its own dialog would own none of that, and two scripts drawing two dialogs would own even less.
 
 So the script says **what** to put in front of the user, and the root says where it goes and how it leaves. What crosses the boundary is small: a function returning an element, a side to anchor to, a sentence to show.
 
-These are not on `cx`, and not under a `window` object either. A dialog belongs to the window rather than to the view that opened it — `cx.notify()` re-renders one view, `open_dialog()` changes what the user is looking at — so they left `cx`. They stayed flat because in Rust `window.` is a *receiver*, a value every render and event function already holds, and the script has no such value; a namespace imitating it would be the shape without the substance. `fs` and `store` are namespaced for a reason that does apply to them: the name is the manifest's capability key. An overlay has no grant.
+They are on `window` rather than on `cx` because a dialog belongs to the window, not to the view that opened it: `cx.notify()` re-renders one view, `window.open_dialog()` changes what the user is looking at. `gpui-component` draws the same line, so the two halves of an application read as one vocabulary — and `window` is somewhere to grow. Overlays are what it carries today; `Window` in Rust also answers focus, size and appearance, and those land in a namespace that already exists.
 
 ## The surface
 
-```js
-import { open_dialog, close_dialog, open_sheet, push_toast } from "gpui";
+`window` is a **global**, like `cx`. There is nothing to import.
 
-const depth = open_dialog(() => confirmClear(count), {
+A callback parameter named `window` shadows it, which is ordinary scoping and not an error — and if a future callback ever hands one in, it would be this same object, because `window` is ambient: it reads the call that is running. That is also why it is not a parameter today. In Rust it has to be one, since Rust has no ambient state to read; here the read is available, which is the same reason `fs` and `store` are not parameters either.
+
+::: warning Do not copy Rust's `|event, window, cx|`
+A script handler takes `(event, cx)`. A three-parameter version binds `window` to the context and leaves `cx` undefined, and the failure reads as `close_dialog is not a function`. With `// @ts-check` the generated declarations catch it at the line where you wrote it.
+:::
+
+```js
+const depth = window.open_dialog(() => confirmClear(count), {
   escape_dismissable: false,
   backdrop_dismissable: false,
 });
-close_dialog();        // -> did anything close?
-close_all_dialogs();   // -> how many closed
-has_active_dialog();
+window.close_dialog();        // -> did anything close?
+window.close_all_dialogs();   // -> how many closed
+window.has_active_dialog();
 
-open_sheet(() => filters());           // right, the default side
-open_sheet_at("left", () => nav());
-close_sheet();         // -> did anything close?
-has_active_sheet();
+window.open_sheet(() => filters());           // right, the default side
+window.open_sheet_at("left", () => nav());
+window.close_sheet();         // -> did anything close?
+window.has_active_sheet();
 
-push_toast({ title: "Saved", description: "3 files", level: "success",
-             timeout: 4000, id: "save" });
-remove_toast("save");
-clear_toasts();
+window.push_toast({ title: "Saved", description: "3 files", level: "success",
+                    timeout: 4000, id: "save" });
+window.remove_toast("save");
+window.clear_toasts();
 ```
 
 ## Dialogs
 
-`open_dialog(content, options?)` takes a **function returning an element**, not an element:
+`window.open_dialog(content, options?)` takes a **function returning an element**, not an element:
 
 ```text
 expected a function returning an element; open_dialog and open_sheet take
@@ -53,7 +59,7 @@ The reason is lifetime, not taste. An element belongs to the arena of the render
 
 ```js
 // confirm.js
-import { v_flex, h_flex, text, close_dialog } from "gpui";
+import { v_flex, h_flex, text } from "gpui";
 
 export default (count, onConfirm) => () =>
   v_flex()
@@ -66,14 +72,14 @@ export default (count, onConfirm) => () =>
       h_flex()
         .justify_end()
         .gap(8)
-        .child(cancelButton(() => close_dialog()))
-        .child(deleteButton((_event, cx) => { onConfirm(cx); close_dialog(); })),
+        .child(cancelButton(() => window.close_dialog()))
+        .child(deleteButton((_event, cx) => { onConfirm(cx); window.close_dialog(); })),
     );
 ```
 
 ```js
 // main.js
-open_dialog(confirmClear(this.completed, (cx) => this.deleteCompleted(cx)));
+window.open_dialog(confirmClear(this.completed, (cx) => this.deleteCompleted(cx)));
 ```
 
 Note what the root supplies and what it does not. It supplies the backdrop, the position, the layering, the focus trap and the surface it sits on; the width, the padding, the border, the type and the buttons are the script's, like everything else in this runtime.
@@ -86,7 +92,7 @@ Note what the root supplies and what it does not. It supplies the backdrop, the 
 An unknown option is refused rather than ignored, which is the point:
 
 ```text
-unknown option `escapeDismissable` for open_dialog(content, options);
+unknown option `escapeDismissable` for window.open_dialog(content, options);
 expected escape_dismissable or backdrop_dismissable
 ```
 
@@ -103,11 +109,11 @@ The overlay calls themselves have no such hazard: they are ambient, like `fs` an
 ## The sheet
 
 ```js
-open_sheet(() => filtersPanel(filters));
-open_sheet_at("left", () => navigation());
+window.open_sheet(() => filtersPanel(filters));
+window.open_sheet_at("left", () => navigation());
 ```
 
-At most one sheet is open at a time. `open_sheet` anchors it to the right; `open_sheet_at` takes `"left"`, `"right"`, `"top"` or `"bottom"`. It has no options at all, because there is only ever one and it is dismissed by Escape or by its overlay whenever no dialog is above it.
+At most one sheet is open at a time. `window.open_sheet` anchors it to the right; `window.open_sheet_at` takes `"left"`, `"right"`, `"top"` or `"bottom"`. It has no options at all, because there is only ever one and it is dismissed by Escape or by its overlay whenever no dialog is above it.
 
 ```text
 unknown sheet side `middle`; expected left, right, top or bottom
@@ -162,7 +168,7 @@ Dismissal is always **one layer, never a cascade**:
 **An overlay may only be opened or closed from an event handler or a task.**
 
 ```text
-open_dialog(content, options) is not allowed during the `render` phase;
+window.open_dialog(content, options) is not allowed during the `render` phase;
 overlays may only be opened or closed while handling an event or a task
 ```
 
@@ -170,14 +176,14 @@ Opening or closing an overlay mutates the window, and the render pass is reading
 
 The refusal names the phase it came from, because that is the only clue the author has.
 
-`has_active_dialog()` and `has_active_sheet()` are the exception, and read the same rule: they ask a question rather than change anything, and a view that draws itself differently while a dialog is up has to ask during the pass that draws it.
+`window.has_active_dialog()` and `window.has_active_sheet()` are the exception, and read the same rule: they ask a question rather than change anything, and a view that draws itself differently while a dialog is up has to ask during the pass that draws it.
 
 ## Overlays need a `ShellRoot`
 
 Every one of these calls reaches the window's root view. A window whose first view is not a `ShellRoot` refuses them, and says which mistake it was — a host wiring problem, not a script one:
 
 ```text
-open_dialog(content, options) needs a ShellRoot as the window's first view;
+window.open_dialog(content, options) needs a ShellRoot as the window's first view;
 this window was opened with another view
 ```
 

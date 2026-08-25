@@ -1,4 +1,4 @@
-//! Dialogs, the sheet and toasts.
+//! Dialogs, the sheet and toasts, on the script-side `window`.
 //!
 //! An overlay is a *host* capability, not something a script draws. A dialog is
 //! not a floating `div`: it is a place in the window's stacking order, a focus
@@ -9,26 +9,26 @@
 //! would own even less. So the script says *what* to put in front of the user,
 //! and the root says where it goes and how it leaves.
 //!
-//! # Why these are not on `cx`
+//! # Why `window` and not `cx`
 //!
 //! A dialog belongs to the **window**, not to the view that opened it.
-//! `cx.notify()` re-renders this view; `open_dialog()` changes what the window
-//! is showing. Hanging both off one object said they were the same kind of
-//! thing. `gpui-component` draws the same line, putting this surface on `Window`
-//! rather than on a context.
+//! `cx.notify()` re-renders this view; `window.open_dialog()` changes what the
+//! window is showing. Hanging both off one object said they were the same kind
+//! of thing. `gpui-component` draws exactly this line — `window.open_dialog`,
+//! `window.push_notification` — and the script API spells it the same way, so a
+//! reader moving between the two halves of an application is reading one
+//! vocabulary rather than two.
 //!
-//! They are flat exports rather than a `window` namespace because in Rust
-//! `window.` is a **receiver** — a value every render and event function already
-//! holds — and the script has no such value. A namespace object imitating it
-//! would be the shape without the substance. `fs` and `store` are namespaced for
-//! a reason that does apply to them: the name is the manifest's capability key.
-//! An overlay has no grant.
+//! And `window` is somewhere to grow. Overlays are what it carries today;
+//! `Window` in Rust also answers focus, size and appearance, and a script will
+//! want some of that. Those land in a namespace that already exists. Flat
+//! exports would either sprawl across the module or have to be gathered into a
+//! namespace later, which is a rename every application would feel.
 //!
-//! Leaving `cx` also removed a failure mode. These calls used to carry a
-//! generation, so a `cx` stashed in a closure and used later reached a dead
-//! stack frame and had to be caught. They are ambient now, like `fs` and
-//! `store` — they read the call that is running *now* — so there is no stale
-//! handle to hold.
+//! It also removed a failure mode. On `cx` these calls carried a generation, so
+//! a `cx` stashed in a closure and used later reached a dead stack frame and had
+//! to be caught. `window` is ambient like `fs` and `store` — it reads the call
+//! that is running *now* — so there is no stale handle to hold.
 //!
 //! # Why every entry point checks the phase first
 //!
@@ -44,26 +44,28 @@
 //!
 //! # The script surface
 //!
-//! ```js
-//! import { open_dialog, close_dialog, push_toast, v_flex, text } from "gpui";
+//! `window` is a global, like `cx`. There is nothing to import.
 //!
-//! const depth = open_dialog(() => v_flex().child(text("Delete?")), {
+//! ```js
+//! import { v_flex, text } from "gpui";
+//!
+//! const depth = window.open_dialog(() => v_flex().child(text("Delete?")), {
 //!   escape_dismissable: false,
 //!   backdrop_dismissable: false,
 //! });
-//! close_dialog();       // -> did anything close?
-//! close_all_dialogs();  // -> how many closed
-//! has_active_dialog();
+//! window.close_dialog();       // -> did anything close?
+//! window.close_all_dialogs();  // -> how many closed
+//! window.has_active_dialog();
 //!
-//! open_sheet(() => filters());          // right, the default side
-//! open_sheet_at("left", () => nav());
-//! close_sheet();        // -> did anything close?
-//! has_active_sheet();
+//! window.open_sheet(() => filters());          // right, the default side
+//! window.open_sheet_at("left", () => nav());
+//! window.close_sheet();        // -> did anything close?
+//! window.has_active_sheet();
 //!
-//! push_toast({ title: "Saved", description: "3 files", level: "success",
-//!              timeout: 4000, id: "save" });
-//! remove_toast("save");
-//! clear_toasts();
+//! window.push_toast({ title: "Saved", description: "3 files", level: "success",
+//!                     timeout: 4000, id: "save" });
+//! window.remove_toast("save");
+//! window.clear_toasts();
 //! ```
 //!
 //! # Why the content is a function
@@ -93,15 +95,15 @@ use super::{ShellRuntime, ViewObject};
 
 /// The names an error message uses, so a refusal reads like the call that
 /// caused it rather than like the Rust function that answered it.
-const OPEN_DIALOG: &str = "open_dialog(content, options)";
-const CLOSE_DIALOG: &str = "close_dialog()";
-const CLOSE_ALL_DIALOGS: &str = "close_all_dialogs()";
-const OPEN_SHEET: &str = "open_sheet(content)";
-const OPEN_SHEET_AT: &str = "open_sheet_at(side, content)";
-const CLOSE_SHEET: &str = "close_sheet()";
-const PUSH_TOAST: &str = "push_toast(options)";
-const REMOVE_TOAST: &str = "remove_toast(id)";
-const CLEAR_TOASTS: &str = "clear_toasts()";
+const OPEN_DIALOG: &str = "window.open_dialog(content, options)";
+const CLOSE_DIALOG: &str = "window.close_dialog()";
+const CLOSE_ALL_DIALOGS: &str = "window.close_all_dialogs()";
+const OPEN_SHEET: &str = "window.open_sheet(content)";
+const OPEN_SHEET_AT: &str = "window.open_sheet_at(side, content)";
+const CLOSE_SHEET: &str = "window.close_sheet()";
+const PUSH_TOAST: &str = "window.push_toast(options)";
+const REMOVE_TOAST: &str = "window.remove_toast(id)";
+const CLEAR_TOASTS: &str = "window.clear_toasts()";
 
 /// Installs the host half of the script-side `window`.
 ///
@@ -167,7 +169,7 @@ pub fn install(_ctx: &Ctx<'_>, globals: &Object<'_>) -> JsResult<()> {
     globals.set(
         "__has_active_dialog",
         Func::from(|ctx: Ctx<'_>| -> JsResult<bool> {
-            with_root(&ctx, "has_active_dialog()", |root, _, _| {
+            with_root(&ctx, "window.has_active_dialog()", |root, _, _| {
                 Ok(root.dialog_count() > 0)
             })
         }),
@@ -210,7 +212,7 @@ pub fn install(_ctx: &Ctx<'_>, globals: &Object<'_>) -> JsResult<()> {
     globals.set(
         "__has_active_sheet",
         Func::from(|ctx: Ctx<'_>| -> JsResult<bool> {
-            with_root(&ctx, "has_active_sheet()", |root, _, _| {
+            with_root(&ctx, "window.has_active_sheet()", |root, _, _| {
                 Ok(root.sheet().is_some())
             })
         }),
@@ -606,7 +608,7 @@ mod tests {
             &runtime,
             cx,
             ScopePhase::Event,
-            "__gpui.open_dialog(() => __gpui.text('confirm'))",
+            "window.open_dialog(() => __gpui.text('confirm'))",
         )
         .expect("open_dialog");
 
@@ -619,13 +621,13 @@ mod tests {
             &runtime,
             cx,
             ScopePhase::Event,
-            "__gpui.open_dialog(() => __gpui.text('detail'), { escape_dismissable: false })",
+            "window.open_dialog(() => __gpui.text('detail'), { escape_dismissable: false })",
         )
         .expect("open_dialog");
         assert_eq!(depth, 2);
 
         let closed: bool =
-            eval(&runtime, cx, ScopePhase::Event, "__gpui.close_dialog()").expect("close_dialog");
+            eval(&runtime, cx, ScopePhase::Event, "window.close_dialog()").expect("close_dialog");
         assert!(closed);
         assert_eq!(root.read_with(cx, |root, _| root.dialog_count()), 1);
     }
@@ -635,7 +637,7 @@ mod tests {
         let (runtime, root, cx) = shell(cx);
 
         let closed: bool =
-            eval(&runtime, cx, ScopePhase::Event, "__gpui.close_dialog()").expect("close_dialog");
+            eval(&runtime, cx, ScopePhase::Event, "window.close_dialog()").expect("close_dialog");
 
         assert!(!closed);
         assert_eq!(root.read_with(cx, |root, _| root.dialog_count()), 0);
@@ -656,7 +658,7 @@ mod tests {
             ScopePhase::Event,
             r#"
             const name = "notes.md";
-            __gpui.open_dialog(() => { globalThis.__seen = name; return __gpui.text(name); });
+            window.open_dialog(() => { globalThis.__seen = name; return __gpui.text(name); });
             globalThis.__seen ?? ""
             "#,
         )
@@ -675,7 +677,7 @@ mod tests {
             &runtime,
             cx,
             ScopePhase::Event,
-            r#"__gpui.open_sheet_at("middle", () => __gpui.text("filters"))"#,
+            r#"window.open_sheet_at("middle", () => __gpui.text("filters"))"#,
         )
         .expect_err("an unknown side must be refused");
 
@@ -693,7 +695,7 @@ mod tests {
             &runtime,
             cx,
             ScopePhase::Event,
-            r#"__gpui.push_toast({ title: "Gone", level: "fatal" })"#,
+            r#"window.push_toast({ title: "Gone", level: "fatal" })"#,
         )
         .expect_err("an unknown level must be refused");
 
@@ -714,7 +716,7 @@ mod tests {
             &runtime,
             cx,
             ScopePhase::Event,
-            r#"__gpui.push_toast({ title: "Saved", description: "3 files",
+            r#"window.push_toast({ title: "Saved", description: "3 files",
                                        level: "success", timeout: 4000, id: "save" })"#,
         )
         .expect("toast");
@@ -724,7 +726,7 @@ mod tests {
             &runtime,
             cx,
             ScopePhase::Event,
-            r#"__gpui.remove_toast("save")"#,
+            r#"window.remove_toast("save")"#,
         )
         .expect("remove_toast");
         assert!(dismissed);
@@ -741,7 +743,7 @@ mod tests {
             &runtime,
             cx,
             ScopePhase::Render,
-            "__gpui.open_dialog(() => __gpui.text('confirm'))",
+            "window.open_dialog(() => __gpui.text('confirm'))",
         )
         .expect_err("a render pass must not open a dialog");
 
@@ -760,7 +762,7 @@ mod tests {
             &runtime,
             cx,
             ScopePhase::Event,
-            "__gpui.open_dialog(() => __gpui.text('x'), { escapeDismissable: false })",
+            "window.open_dialog(() => __gpui.text('x'), { escapeDismissable: false })",
         )
         .expect_err("an unknown option must be refused");
 

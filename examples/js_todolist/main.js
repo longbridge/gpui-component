@@ -7,7 +7,7 @@
 //
 //   cargo run -p gpui-shell -- examples/js_todolist
 
-import { View, v_flex, h_flex, InputState, open_dialog, push_toast } from "gpui";
+import { View, v_flex, h_flex, InputState } from "gpui";
 /** @import { Context, InputStateHandle } from "gpui" */
 import { load, save } from "./storage.js";
 import confirmClear from "./confirm.js";
@@ -109,11 +109,11 @@ export default class TodoList extends View {
     // The dialog is a function returning an element. What it shows comes from
     // what this call closed over, so there is no second channel for handing a
     // view its starting state.
-    open_dialog(
+    window.open_dialog(
       confirmClear(count, () => {
         this.items = this.items.filter((item) => !item.done);
         this.persisted = save(this.items);
-        push_toast({
+        window.push_toast({
           title: `Deleted ${count} ${count === 1 ? "item" : "items"}`,
           level: "info",
           id: "cleared",

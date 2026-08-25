@@ -6,41 +6,47 @@ order: 7
 
 # Overlays
 
-Dialog、sheet 与 toast 是**宿主**能力，从 `"gpui"` 导入。它们不是脚本画出来的东西。
+Dialog、sheet 与 toast 是**宿主**能力，通过全局的 `window` 访问。它们不是脚本画出来的东西。
 
 Dialog 不是一个浮动的 `div`。它是窗口层叠顺序中的一个位置、一个焦点陷阱、一个 Escape 目标，以及一个关于“按下遮罩意味着什么”的承诺——而这些都必须由窗口的根视图决定，因为只有能同时看到所有浮层的东西才能给它们排序。脚本自己画的 dialog 一样都拥有不了；两个脚本各画一个 dialog，拥有得更少。
 
 所以脚本说的是**放什么**到用户面前，根视图说的是它放在哪里、以及怎么离开。跨越这条边界的东西很少：一个返回元素的函数、一个贴靠的边、一句要显示的话。
 
-这些不在 `cx` 上，也没有放进一个 `window` 对象里。Dialog 属于窗口，而不属于打开它的那个 view——`cx.notify()` 重渲一个 view，`open_dialog()` 改变的是用户正在看的东西——所以它们离开了 `cx`。它们保持扁平，是因为 Rust 里的 `window.` 是**接收者**：那是每个 render 与事件函数手里已有的值，而脚本没有这样一个值；造一个命名空间去模仿它，只是有形无实。`fs` 和 `store` 有命名空间是另一回事：那个名字就是 manifest 里的能力键，而 overlay 没有授权门。
+它们在 `window` 上而不在 `cx` 上，是因为 dialog 属于窗口，不属于打开它的那个 view：`cx.notify()` 重渲一个 view，`window.open_dialog()` 改变的是用户正在看的东西。`gpui-component` 划的是同一条线，于是一个应用的两半读起来是同一套词汇——而且 `window` 是个能继续长的地方。今天它承载的是 overlay；Rust 里的 `Window` 还回答焦点、尺寸与外观，这些将来有现成的位置可放。
 
 ## 接口
 
-```js
-import { open_dialog, close_dialog, open_sheet, push_toast } from "gpui";
+`window` 是**全局的**，和 `cx` 一样，不需要 import。
 
-const depth = open_dialog(() => confirmClear(count), {
+回调参数如果叫 `window`，会遮蔽这个全局——这是普通的作用域规则，不是错误；而且将来即使某个回调真的传入一个 `window`，那也是同一个对象，因为 `window` 是 ambient 的：它读的是当前正在跑的那次调用。这也正是它今天不是参数的原因。Rust 里它必须是参数，因为 Rust 没有可读的 ambient 状态；这里可以读，`fs` 和 `store` 不是参数也是同一个道理。
+
+::: warning 不要照抄 Rust 的 `|event, window, cx|`
+脚本的处理函数签名是 `(event, cx)`。写成三个参数会把 `window` 绑到 context 上，而 `cx` 是 undefined，报错读起来是 `close_dialog is not a function`。加上 `// @ts-check`，生成的声明会在你写下那一行就报出来。
+:::
+
+```js
+const depth = window.open_dialog(() => confirmClear(count), {
   escape_dismissable: false,
   backdrop_dismissable: false,
 });
-close_dialog();        // -> 有没有关掉东西？
-close_all_dialogs();   // -> 关掉了几个
-has_active_dialog();
+window.close_dialog();        // -> 有没有关掉东西？
+window.close_all_dialogs();   // -> 关掉了几个
+window.has_active_dialog();
 
-open_sheet(() => filters());           // 默认贴右边
-open_sheet_at("left", () => nav());
-close_sheet();         // -> 有没有关掉东西？
-has_active_sheet();
+window.open_sheet(() => filters());           // 默认贴右边
+window.open_sheet_at("left", () => nav());
+window.close_sheet();         // -> 有没有关掉东西？
+window.has_active_sheet();
 
-push_toast({ title: "Saved", description: "3 files", level: "success",
-             timeout: 4000, id: "save" });
-remove_toast("save");
-clear_toasts();
+window.push_toast({ title: "Saved", description: "3 files", level: "success",
+                    timeout: 4000, id: "save" });
+window.remove_toast("save");
+window.clear_toasts();
 ```
 
 ## Dialog
 
-`open_dialog(content, options?)` 接受的是**一个返回元素的函数**，不是元素：
+`window.open_dialog(content, options?)` 接受的是**一个返回元素的函数**，不是元素：
 
 ```text
 expected a function returning an element; open_dialog and open_sheet take
@@ -53,7 +59,7 @@ a function, not an element and not a view class
 
 ```js
 // confirm.js
-import { v_flex, h_flex, text, close_dialog } from "gpui";
+import { v_flex, h_flex, text } from "gpui";
 
 export default (count, onConfirm) => () =>
   v_flex()
@@ -66,14 +72,14 @@ export default (count, onConfirm) => () =>
       h_flex()
         .justify_end()
         .gap(8)
-        .child(cancelButton(() => close_dialog()))
-        .child(deleteButton((_event, cx) => { onConfirm(cx); close_dialog(); })),
+        .child(cancelButton(() => window.close_dialog()))
+        .child(deleteButton((_event, cx) => { onConfirm(cx); window.close_dialog(); })),
     );
 ```
 
 ```js
 // main.js
-open_dialog(confirmClear(this.completed, (cx) => this.deleteCompleted(cx)));
+window.open_dialog(confirmClear(this.completed, (cx) => this.deleteCompleted(cx)));
 ```
 
 注意根视图提供了什么、又没有提供什么。它提供遮罩、位置、层叠、焦点陷阱，以及承载内容的表面；宽度、内边距、边框、文字与按钮和这个运行时里的其他一切一样，都是脚本的。
@@ -86,7 +92,7 @@ open_dialog(confirmClear(this.completed, (cx) => this.deleteCompleted(cx)));
 未知选项会被拒绝而不是被忽略，这正是重点：
 
 ```text
-unknown option `escapeDismissable` for open_dialog(content, options);
+unknown option `escapeDismissable` for window.open_dialog(content, options);
 expected escape_dismissable or backdrop_dismissable
 ```
 
@@ -103,11 +109,11 @@ overlay 调用本身没有这个隐患：它们是 ambient 的，和 `fs`、`sto
 ## Sheet
 
 ```js
-open_sheet(() => filtersPanel(filters));
-open_sheet_at("left", () => navigation());
+window.open_sheet(() => filtersPanel(filters));
+window.open_sheet_at("left", () => navigation());
 ```
 
-同时最多打开一个 sheet。`open_sheet` 贴靠右边；`open_sheet_at` 接受 `"left"`、`"right"`、`"top"` 或 `"bottom"`。它没有任何选项，因为总共只有一个，并且在没有 dialog 压在上面时由 Escape 或它的遮罩关闭。
+同时最多打开一个 sheet。`window.open_sheet` 贴靠右边；`window.open_sheet_at` 接受 `"left"`、`"right"`、`"top"` 或 `"bottom"`。它没有任何选项，因为总共只有一个，并且在没有 dialog 压在上面时由 Escape 或它的遮罩关闭。
 
 ```text
 unknown sheet side `middle`; expected left, right, top or bottom
@@ -162,7 +168,7 @@ unknown toast level `fatal`; expected info, success, warning or error
 **浮层只能从事件回调或任务中打开与关闭。**
 
 ```text
-open_dialog(content, options) is not allowed during the `render` phase;
+window.open_dialog(content, options) is not allowed during the `render` phase;
 overlays may only be opened or closed while handling an event or a task
 ```
 
@@ -175,7 +181,7 @@ overlays may only be opened or closed while handling an event or a task
 上述每一个调用最终都会到达窗口的根视图。第一层视图不是 `ShellRoot` 的窗口会拒绝它们，并指明这是哪一类错误——宿主接线问题，不是脚本问题：
 
 ```text
-open_dialog(content, options) needs a ShellRoot as the window's first view;
+window.open_dialog(content, options) needs a ShellRoot as the window's first view;
 this window was opened with another view
 ```
 

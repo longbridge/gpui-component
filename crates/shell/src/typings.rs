@@ -101,6 +101,7 @@ pub fn declarations() -> String {
     out.push_str(CAPABILITIES);
     out.push_str(SCHEDULING);
     out.push_str("}\n");
+    out.push_str(WINDOW_GLOBAL);
     out
 }
 
@@ -488,44 +489,6 @@ const CONTEXT_AND_VIEW: &str = r#"  /**
 
   }
 
-  /**
-   * Opens a dialog on the window's root, and answers the stack's new depth.
-   *
-   * Takes a **function returning an element**, not an element: an element
-   * belongs to the render pass that built it, and a dialog outlives the call
-   * that opened it. The function runs when the dialog draws, and again whenever
-   * it redraws. Whatever it closes over is the dialog's state.
-   *
-   * An overlay is window-level rather than view-level, which is why it is not on
-   * `Context`: `cx.notify()` re-renders one view, this changes what the user is
-   * looking at. Legal from an event handler or a task, not from `render`.
-   */
-  export function open_dialog(content: () => Element, options?: DialogOptions): number;
-  /** Closes the topmost dialog, and answers whether it found one. */
-  export function close_dialog(): boolean;
-  /** Closes every dialog, and answers how many it closed. */
-  export function close_all_dialogs(): number;
-  /** Whether any dialog is open. Legal from `render`, unlike the rest. */
-  export function has_active_dialog(): boolean;
-
-  /**
-   * Opens the sheet on the right, replacing whatever was there. At most one is
-   * ever open.
-   */
-  export function open_sheet(content: () => Element): void;
-  /** The same, anchored to the side you name. */
-  export function open_sheet_at(side: SheetSide, content: () => Element): void;
-  /** Closes the sheet, and answers whether one was open. */
-  export function close_sheet(): boolean;
-  /** Whether the sheet is open. Legal from `render`, unlike the rest. */
-  export function has_active_sheet(): boolean;
-
-  /** Posts a toast, and answers its id — the generated one when none was given. */
-  export function push_toast(options: ToastOptions): string;
-  /** Retracts one toast by id, and answers whether it was still showing. */
-  export function remove_toast(id: string): boolean;
-  /** Retracts every toast, and answers how many it retracted. */
-  export function clear_toasts(): number;
 
 
   /** Which edge the sheet is anchored to. */
@@ -731,6 +694,45 @@ const CONSTRUCTORS: &str = r#"
    * States the script API version this application needs, at the first line,
    * where a mismatch is still cheap. Throws when the runtime cannot satisfy it.
    */
+  export interface Window {
+    /**
+     * Opens a dialog on the window's root, and answers the stack's new depth.
+     *
+     * Takes a **function returning an element**, not an element: an element
+     * belongs to the render pass that built it, and a dialog outlives the call
+     * that opened it. The function runs when the dialog draws, and again
+     * whenever it redraws. Whatever it closes over is the dialog's state.
+     *
+     * Legal from an event handler or a task, not from `render`.
+     */
+    open_dialog(content: () => Element, options?: DialogOptions): number;
+    /** Closes the topmost dialog, and answers whether it found one. */
+    close_dialog(): boolean;
+    /** Closes every dialog, and answers how many it closed. */
+    close_all_dialogs(): number;
+    /** Whether any dialog is open. Legal from `render`, unlike the rest. */
+    has_active_dialog(): boolean;
+
+    /**
+     * Opens the sheet on the right, replacing whatever was there. At most one is
+     * ever open.
+     */
+    open_sheet(content: () => Element): void;
+    /** The same, anchored to the side you name. */
+    open_sheet_at(side: SheetSide, content: () => Element): void;
+    /** Closes the sheet, and answers whether one was open. */
+    close_sheet(): boolean;
+    /** Whether the sheet is open. Legal from `render`, unlike the rest. */
+    has_active_sheet(): boolean;
+
+    /** Posts a toast, and answers its id — the generated one when none was given. */
+    push_toast(options: ToastOptions): string;
+    /** Retracts one toast by id, and answers whether it was still showing. */
+    remove_toast(id: string): boolean;
+    /** Retracts every toast, and answers how many it retracted. */
+    clear_toasts(): number;
+  }
+
   export function require_api(version: string): string;
   /**
    * The native modules this host registered, declared by the application.
@@ -838,6 +840,25 @@ const CAPABILITIES: &str = r#"
   export const clipboard: Clipboard;
   export const log: Log;
   export const process: Process;
+"#;
+
+/// `window` is a global, like `cx` — see the runtime's `overlay` module.
+///
+/// Outside the `declare module` block, which is what makes it global: this file
+/// has no top-level import or export, so TypeScript reads it in script mode.
+const WINDOW_GLOBAL: &str = r#"
+/**
+ * The window the script is drawing into. A global, like `cx`; nothing to import.
+ *
+ * Ambient: every call reads the host call that is running now, and throws
+ * outside one. There is no handle to hold, so there is nothing to hold past the
+ * call that would have made it stale.
+ *
+ * An overlay belongs to the window rather than to the view that opened it —
+ * `cx.notify()` re-renders this view, `window.open_dialog()` changes what the
+ * user is looking at — which is why these are here and not on `Context`.
+ */
+declare const window: import("gpui").Window;
 "#;
 
 const SCHEDULING: &str = r#"
@@ -1007,8 +1028,13 @@ mod tests {
         for method in element_methods(&declarations) {
             assert!(!method.is_empty(), "a method line has no name");
         }
-        assert!(declarations.ends_with("}\n"));
         assert!(declarations.contains("declare module \"gpui\" {"));
+        // The global declaration follows the module block, and has to stay
+        // outside it: a `declare module` body cannot introduce a global, and
+        // this file is only in script mode because it has no top-level import
+        // or export of its own.
+        assert!(declarations.contains("\ndeclare const window:"));
+        assert!(declarations.ends_with(";\n"));
     }
 
     #[test]

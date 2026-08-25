@@ -1120,7 +1120,7 @@ request a re-render from an event handler instead
 ```
 
 ```text
-open_dialog(content, options) is not allowed during the `render` phase;
+window.open_dialog(content, options) is not allowed during the `render` phase;
 overlays may only be opened or closed while handling an event or a task
 ```
 
@@ -1900,38 +1900,39 @@ window was never delivered.
 ### 16.2 The script surface
 
 ```js
-import { open_dialog, close_dialog, open_sheet, push_toast } from "gpui";
-
-const depth = open_dialog(() => confirmClear(count, onConfirm), {
+const depth = window.open_dialog(() => confirmClear(count, onConfirm), {
   escape_dismissable: false,
 });
-close_dialog(); // -> was anything open?
-close_all_dialogs(); // -> how many closed
-has_active_dialog();
+window.close_dialog(); // -> was anything open?
+window.close_all_dialogs(); // -> how many closed
+window.has_active_dialog();
 
-open_sheet(() => filtersPanel(filters)); // right, the default side
-open_sheet_at("left", () => navigation());
-close_sheet();
-has_active_sheet();
+window.open_sheet(() => filtersPanel(filters)); // right, the default side
+window.open_sheet_at("left", () => navigation());
+window.close_sheet();
+window.has_active_sheet();
 
-push_toast({
+window.push_toast({
   title: "Saved",
   description: "3 files",
   level: "success",
   timeout: 4000,
   id: "save",
 });
-remove_toast("save");
-clear_toasts();
+window.remove_toast("save");
+window.clear_toasts();
 ```
 
-These are flat exports rather than methods on `cx`, and rather than a `window`
-namespace. A dialog belongs to the window, not to the view that opened it, so
-they left `cx`. They stayed flat because in Rust `window.` is a *receiver* — a
-value every render and event function already holds — and the script has no such
-value; a namespace imitating it would be shape without substance. `fs` and
-`store` are namespaced because the name is the manifest's capability key, which
-an overlay does not have.
+`window` is a global, like `cx`, and for the same reason: it names the window the
+script is already inside, which is not something a file opts into by importing
+it. Nothing collides — this runtime has no DOM.
+
+These are on `window` rather than on `cx` because a dialog belongs to the window,
+not to the view that opened it: `cx.notify()` re-renders one view,
+`window.open_dialog()` changes what the user is looking at. `gpui-component`
+draws the same line, so the two halves of an application read as one vocabulary.
+`window` is also somewhere to grow — overlays are what it carries today, and
+`Window` in Rust also answers focus, size and appearance.
 
 The content is a **function returning an element**, not an element: an element
 belongs to the arena of the render pass that built it, and a dialog outlives the
@@ -3165,7 +3166,7 @@ dialog by handing over a view class and a `props` object. Both are gone —
 `confirm.js` exports a function, and what the dialog shows is closed over:
 
 ```js
-open_dialog(confirmClear(count, onConfirm));
+window.open_dialog(confirmClear(count, onConfirm));
 ```
 
 ### Appendix B: Crate layout

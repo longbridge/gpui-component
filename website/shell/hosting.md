@@ -48,7 +48,7 @@ cx.open_window(options, move |window, cx| {
 })
 ```
 
-`ShellRoot` owns the dialog stack, the sheet, the toast stack, focus restoration and Tab navigation — the same role `Root` plays for a `gpui-component` window. `open_dialog` and friends reach it through the window, so a script mounted under any other root view gets a refusal naming the reason rather than a silent no-op.
+`ShellRoot` owns the dialog stack, the sheet, the toast stack, focus restoration and Tab navigation — the same role `Root` plays for a `gpui-component` window. `window.open_dialog` and friends reach it, so a script mounted under any other root view gets a refusal naming the reason rather than a silent no-op.
 
 The host can drive the same surfaces directly, which is how a plugin panel and the host's own UI end up in one stack:
 

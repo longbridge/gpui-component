@@ -5,7 +5,7 @@
 // outlives the call that opened it — so everything it shows comes from what the
 // caller closed over rather than from a `props` object handed across.
 
-import { v_flex, h_flex, close_dialog } from "gpui";
+import { v_flex, h_flex } from "gpui";
 import { SPACE, button, label, muted } from "./ui.js";
 
 /**
@@ -23,14 +23,14 @@ export default (count, onConfirm) => () =>
         .justify_end()
         .gap(SPACE.sm)
         .pt(SPACE.sm)
-        .child(button("cancel", "Cancel", () => close_dialog(), { variant: "ghost" }))
+        .child(button("cancel", "Cancel", () => window.close_dialog(), { variant: "ghost" }))
         .child(
           button(
             "confirm",
             "Delete",
             (_event, cx) => {
               onConfirm(cx);
-              close_dialog();
+              window.close_dialog();
             },
             { variant: "primary" },
           ),
