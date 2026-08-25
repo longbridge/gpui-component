@@ -16,7 +16,7 @@ order: 2
 use gpui_shell::{Capabilities, ScriptView, ShellRoot, ShellRuntime};
 
 gpui_platform::application()
-    .with_assets(gpui_shell::assets::AppAssets::new(root.clone()))
+    .with_assets(gpui_shell::AppAssets::new(root.clone()))
     .run(move |cx| {
         // 初始化 gpui-base、shell 的默认 token 调色板，以及样式反射表。
         gpui_shell::init(cx);

@@ -33,7 +33,7 @@ The cost is stated rather than glossed over. QuickJS **has no JIT** — it is a 
 There are three costs here, and treating them as one was the original mistake. The benchmark describes a 40 × 5 grid of styled cells — 443 description nodes, roughly ten recorded operations each — and reports each cost separately:
 
 ```bash
-cargo test -p gpui-shell --release --test benchmark -- --nocapture
+cargo test -p gpui-shell --release --lib benchmark -- --nocapture
 ```
 
 | | What it measures | 443 nodes | Paid |
@@ -49,7 +49,7 @@ Run it in release or the figures mean nothing. Every absolute number on this pag
 One size cannot show which of the three costs scale, so a fourth test walks the same panel up to 8,403 nodes. It sits behind `--ignored` because the largest size takes seconds:
 
 ```bash
-cargo test -p gpui-shell --release --test benchmark -- --ignored --nocapture
+cargo test -p gpui-shell --release --lib benchmark -- --ignored --nocapture
 ```
 
 Describing costs 1.1 ms at 443 nodes, then 5.1, 10.3 and 20.5 ms as the panel grows to 2,103, 4,203 and 8,403. A whole frame — B plus GPUI's layout and paint, which is what C measures — costs 1.3, 5.9, 12.0 and 27.0 ms. Both scale close to linearly with the node count. What does not scale is the JavaScript: no frame at any size runs a line of it. Three things that settles:

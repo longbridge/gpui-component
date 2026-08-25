@@ -180,10 +180,6 @@ impl ShellRuntime {
             .map(|global| global.0.clone())
     }
 
-    pub fn arena_mut(&self) -> RefMut<'_, SpecArena> {
-        self.arena.borrow_mut()
-    }
-
     /// What the runtime is spending: script renders and materializations, with
     /// the time each took.
     ///
@@ -209,7 +205,7 @@ impl ShellRuntime {
     ///
     /// Scoped to the runtime rather than shared, so one runtime cannot resolve
     /// another's handle — see [`crate::entities`].
-    pub fn entities(&self) -> RefMut<'_, EntityStore> {
+    pub(crate) fn entities(&self) -> RefMut<'_, EntityStore> {
         self.entities.borrow_mut()
     }
 
@@ -304,7 +300,7 @@ impl ShellRuntime {
     /// generation are staging; they are published together at the end, and a
     /// script that throws discards both, leaving whatever snapshot the caller
     /// already had untouched.
-    pub fn build_snapshot(
+    pub(crate) fn build_snapshot(
         self: &Rc<Self>,
         object: &ViewObject,
         view: Option<Entity<ScriptView>>,
@@ -367,11 +363,11 @@ impl ShellRuntime {
     ///
     /// Called by [`RenderSnapshot`] as it drops, which is what ties handler
     /// lifetime to snapshot lifetime rather than to a frame.
-    pub fn retire_callbacks(&self, generation: u32) {
+    pub(crate) fn retire_callbacks(&self, generation: u32) {
         self.callbacks.borrow_mut().retire(generation);
     }
 
-    pub fn dispatch_click(
+    pub(crate) fn dispatch_click(
         self: &Rc<Self>,
         id: CallbackId,
         event: &ClickEvent,
@@ -450,7 +446,7 @@ impl ShellRuntime {
 
     /// Controlled-value handlers report intent; the script stores the value and
     /// notifies. The host never mutates script state on its behalf.
-    pub fn dispatch_change(
+    pub(crate) fn dispatch_change(
         self: &Rc<Self>,
         id: CallbackId,
         checked: bool,

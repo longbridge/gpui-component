@@ -101,7 +101,7 @@ gpui_shell::set_native_modules(modules);
 运行时把两件事分开计数，而这两个数之间的差就是重点：
 
 ```rust
-let reading = runtime.metrics().read();
+let reading = runtime.read_metrics();
 reading.script_renders();      // 跟着 cx.notify()、重载、主题变化走
 reading.materializations();    // 跟着帧走
 reading.script_render_time();  // 脚本 render 里的总耗时
@@ -109,7 +109,7 @@ reading.native_time();         // 其中花在 native 模块里的部分
 reading.slowest_script_render();
 ```
 
-`RuntimeMetrics::since(&earlier)` 给出两次读数之间的差值，用它就能算出每秒速率而不必重置任何东西。`metrics().reset()` 则开始一次新的测量——Shell story 每次切换 feed 都会重置，这样读数回答的是“这个 feed 要花多少”，而不是“这个窗口从打开到现在干了多少”。
+`RuntimeMetrics::since(&earlier)` 给出两次读数之间的差值，每秒速率就是这么算的。这里没有重置：计数器属于运行时，把它们清零会把正在读它们的其他人一起挪动。要量某一段，就自己留一个基线再相减——Shell story 每次切换 feed 都会取一次基线，所以它的读数回答的是“这个 feed 要花多少”，而不是“这个窗口从打开到现在干了多少”。
 
 回归测试可以直接对 `script_renders` 做断言；[基准测试里的第三个数](./engine.md#那次实测)靠的正是这一点。
 

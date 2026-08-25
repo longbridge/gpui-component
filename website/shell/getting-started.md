@@ -16,7 +16,7 @@ A host does four things: initialize the library, build a runtime, grant the capa
 use gpui_shell::{Capabilities, ScriptView, ShellRoot, ShellRuntime};
 
 gpui_platform::application()
-    .with_assets(gpui_shell::assets::AppAssets::new(root.clone()))
+    .with_assets(gpui_shell::AppAssets::new(root.clone()))
     .run(move |cx| {
         // Initializes gpui-base, the shell's default token palette, and the
         // style reflection table.

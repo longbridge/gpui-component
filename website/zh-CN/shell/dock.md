@@ -1,44 +1,26 @@
 ---
 title: Dock Panels
-description: 把脚本视图放进可停靠布局——重启后还在的面板、被卸载后仍然保住位置的应用，以及 chrome 由谁来画。
+description: crate 内部已经写好的面板机制、它为什么还没公开，以及公开之后会是什么样子。
 order: 11
 ---
 
 # Dock Panels
 
-只能占满一个窗口的插件算不上插件。这一页讲的是脚本视图怎么变成停靠布局里的一块**面板**：可拖、可停靠、可缩放，重启之后还在原处。
+只能占满一个窗口的插件算不上插件。把脚本视图变成一块**面板**——可拖、可停靠、可缩放、重启之后还在原处——这件事在 crate 内部已经写好，也有测试。
 
-::: warning 脚本这一侧还没接通
-这一页的内容今天都能从 Rust 用起来。但让*脚本*自己声明面板钩子、或者自己画 dock chrome 的那两个 trait——`PanelScript` 与 `DockChrome`——虽然已经定义好也有测试，却还没有任何引擎实现它们；所以现在想要这两样的宿主，得先用 Rust 写。分界线画好了，脚本那一侧[还没有](#还没有的东西)。
+::: warning 还没有对外公开
+`gpui_shell::dock` 目前是 crate-private。没有东西在驱动它：脚本还不能贡献面板，也还没有宿主会加载插件；此时把 `ScriptPanel` 或 `register_panel` 公开出去，等于对一个从没有调用者用过的 API 作出承诺。这一页讲的是里面有什么、它在等什么——今天还调用不到。
 :::
 
 ## base 已经提供的部分
 
-`gpui_base::dock` 早就有了插件系统里难做的那一半：一棵**纯数据**的布局树、一个能按名字从持久化文件里重建面板的 `PanelRegistry`，以及跟着每块面板走的一份 `serde_json::Value`。它缺的只是“让面板来自宿主二进制之外”的办法，而这正是这个模块补上的东西。
+`gpui_base::dock` 早就有了插件系统里难做的那一半：一棵**纯数据**的布局树、一个能按名字从持久化文件里重建面板的 `PanelRegistry`，以及跟着每块面板走的一份 `serde_json::Value`。它缺的只是"让面板来自宿主二进制之外"的办法，而这个模块补的正是这个缺口。
 
-## 把脚本视图变成面板
+## 它长什么样
 
-```rust
-use gpui_shell::dock::ScriptPanel;
+`ScriptPanel` 只实现 `gpui_base::dock::Panel`——也就是行为——再往上的那一层不碰。它的标题、工具栏与菜单由一层 skin 用脚本自己的元素画出来；一旦牵扯到面板，"呈现权在脚本"指的就是这件事。它的名字会被 intern 且总是带前缀，所以脚本面板不可能和恰好同名的宿主面板撞车。
 
-let panel = ScriptPanel::new("quotes", script_view, cx)
-    .with_closable(true)
-    .with_zoomable(true);
-```
-
-`ScriptPanel` 只实现 `gpui_base::dock::Panel`——也就是行为——再往上的那一层不碰。它的标题、工具栏与菜单都不归它自己：那些由下面讲的 skin 用脚本的元素画出来。一旦牵扯到面板，“呈现权在脚本”指的就是这件事。
-
-名字会被 intern 并且总是带前缀，所以脚本面板不可能和恰好同名的宿主面板撞车。
-
-## 挺过一次重启
-
-布局是按数据保存的：有哪些面板、各在哪里、每块面板一份 JSON。要把面板**取回来**，得先按名字注册一个 builder：
-
-```rust
-let name = gpui_shell::dock::register_panel("todolist", "quotes", script, cx);
-```
-
-要在 `DockArea::load` 之前调用。builder 会先执行 `PanelScript::build` 造一个新的脚本视图，再把持久化下来的那份 payload 交给 `PanelScript::deserialize`。跨越边界的钩子只有三个：
+重启之后要把面板**取回来**，得有一个按名字注册的 builder：它先造一个新的脚本视图，再把持久化下来的 payload 交给它。跨越语言边界的钩子只有三个：
 
 | 钩子 | 什么时候 | 说明 |
 | --- | --- | --- |
@@ -48,25 +30,17 @@ let name = gpui_shell::dock::register_panel("todolist", "quotes", script, cx);
 
 面板的其余一切——它在哪、显不显示、叫什么——都是布局的事，从不进到脚本里。
 
-没有接上脚本钩子的 `ScriptPanel` 一样能用；它只会持久化自己的位置，别的什么都不留。
-
 ## 被卸载的应用仍然保住位置
 
-这一段值得在发布插件之前先知道。
+这一段值得在围绕它做设计之前先知道。
 
 如果一个应用**没有**被加载，那么它名下什么都没注册，`DockArea::load` 也就找不到对应的 builder。它不会把面板丢掉：base 会替换上一块什么都不画的占位面板，而这块占位面板对 `Panel::dump` 的回答，正是它收到的那份状态——于是下一次保存会把这块面板的名字、payload 与位置原样写回去。
 
 卸载一个应用，照常用这个窗口一星期，再把它装回来：它的面板会回到原来的位置，带着原来的状态。这个模块把同样的承诺又往里延伸了一步——已经注册、但 `build` 失败的面板，也按同样的方式被带走，而不是因为脚本坏了就把状态丢了。
 
-## chrome 由谁来画
+## chrome 将来由谁来画
 
-base **完全不画 chrome**。一个没有 renderer 的区域照样能停靠、拖动、调整大小、持久化，但除了面板本身之外什么都不画——没有标签栏、没有 dock 外框、没有拖拽条。这些都得经由三个 renderer trait 回来，而 `ScriptDockSkin` 把它们统一转发给一个 `DockChrome`：
-
-```rust
-use gpui_shell::dock::ScriptDockSkin;
-
-dock_area.with_renderer(ScriptDockSkin::new(chrome));
-```
+base **完全不画 chrome**。一个没有 renderer 的区域照样能停靠、拖动、调整大小、持久化，但除了面板本身之外什么都不画——没有标签栏、没有 dock 外框、没有拖拽条。这些都得经由三个 renderer trait 回来，而 `ScriptDockSkin` 把这三个统一转发给一个 `DockChrome`：
 
 | `DockChrome` 方法 | 画什么 |
 | --- | --- |
@@ -77,14 +51,13 @@ dock_area.with_renderer(ScriptDockSkin::new(chrome));
 | `tile_drag_bar` | 拖动一块 tile 用的那根条，高度固定为 base 的 `DRAG_BAR_HEIGHT` |
 | `tile_resize_handles` | 一块 tile 的缩放手柄，尺寸取自 base 的 `HANDLE_SIZE` |
 
-每个方法拿到的都是**已经解析好的**上下文——从不包含拖拽事件、鼠标位置或命中测试，因为 base 会把这些自己挂到拿回去的元素上。要做的事是把状态变成元素，并调用上下文自带的回调（`select_tab`、`close`、`toggle_zoom`、`resize_to`），而不是自己再实现一遍。
+每个方法拿到的都是**已经解析好的**上下文——从不包含拖拽事件、鼠标位置或命中测试，因为 base 会把这些自己挂到拿回去的元素上。要做的事是把状态变成元素，并调用上下文自带的回调（`select_tab`、`close`、`toggle_zoom`、`resize_to`），而不是自己再实现一遍。`tab_group_data`、`dock_data` 与 `tile_data` 则把各自上下文里的状态部分转成纯 JSON，正是引擎交给脚本代码的那种形态。
 
-`ScriptDockSkin::default()` 是一个什么都不画的 skin，这也正是 base 自己的行为：一个能用的 dock，里面只有光秃秃的面板。
+什么都不画的 chrome 也是一个能用的 dock，这也正是 base 自己的行为。
 
-为将来的脚本侧准备的还有 `tab_group_data`、`dock_data` 与 `tile_data`：它们把各自上下文里的状态部分转成纯 JSON，正是引擎交给脚本代码的那种形态。
+## 它在等什么
 
-## 还没有的东西
+两件事，而且第二件才是关键：
 
-- **这两个 trait 的脚本侧。** 还没有引擎实现 `PanelScript` 或 `DockChrome`，所以脚本还不能为自己的面板声明 `serialize()` / `deserialize(data)`，也还画不了标签栏。Rust 侧的 trait 与那几个 JSON 转换函数已经就位，等着引擎接上。
-- **脚本自己打开一块面板。** 面板由宿主创建，脚本侧没有 `cx.open_panel(...)`。
-- **从脚本改动布局。** 移动、拆分、关闭面板都是宿主的事，走 base 自己的 API。
+- **`PanelScript` 与 `DockChrome` 的引擎实现。** 这两个都做成 trait，是为了脚本那一侧每个引擎写一次；目前谁都还没有实现，所以脚本还不能为自己的面板声明 `serialize()` / `deserialize(data)`，也画不了标签栏。
+- **一个调用者。** 等有东西真正驱动它——一个会挂载面板的插件模型，或者一个提出这个需求的宿主——这个模块才会公开。在那之前就公开，等于在没有任何使用经验的情况下把 API 的形状定死。

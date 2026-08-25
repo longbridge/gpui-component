@@ -181,10 +181,12 @@ impl EntityStore {
 
     /// How many handles are live, for `gc_stats` and for tests that assert the
     /// store does not grow without bound.
+    #[cfg(test)]
     pub fn len(&self) -> usize {
         self.records.iter().filter(|slot| slot.is_some()).count()
     }
 
+    #[cfg(test)]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }

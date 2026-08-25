@@ -101,7 +101,7 @@ All three default to nothing: no file access, no storage location, no native mod
 The runtime counts two events separately, and the gap between them is the point:
 
 ```rust
-let reading = runtime.metrics().read();
+let reading = runtime.read_metrics();
 reading.script_renders();      // follows cx.notify(), reloads, theme changes
 reading.materializations();    // follows frames
 reading.script_render_time();  // total time inside script `render`
@@ -109,7 +109,7 @@ reading.native_time();         // of which, inside native modules
 reading.slowest_script_render();
 ```
 
-`RuntimeMetrics::since(&earlier)` gives the delta between two readings, which is how a per-second rate is built without resetting anything. `metrics().reset()` starts a fresh measurement — the Shell story resets it whenever its feed changes, so the readout answers "what is this feed costing" rather than "what has this window done since it opened".
+`RuntimeMetrics::since(&earlier)` gives the delta between two readings, which is how a per-second rate is built. There is no reset: the counters belong to the runtime, and zeroing them would move them under anything else that is reading. To measure one stretch, keep a baseline and subtract — the Shell story takes one whenever its feed changes, so its readout answers "what is this feed costing" rather than "what has this window done since it opened".
 
 A regression test can assert on `script_renders` directly; that is what keeps [the benchmark's third figure](./engine.md#the-measurement) honest.
 

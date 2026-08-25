@@ -132,7 +132,7 @@ impl ScriptView {
     }
 
     /// The script state behind this view, for host code that needs to read it.
-    pub fn object(&self) -> &ViewObject {
+    pub(crate) fn object(&self) -> &ViewObject {
         &self.object
     }
 

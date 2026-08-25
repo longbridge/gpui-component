@@ -33,7 +33,7 @@ JavaScript 是默认，理由只有一条，而且是产品理由不是技术理
 这里有三笔不同的成本，把它们当成一笔正是最初的错误。基准测试描述一个 40 × 5 的样式化单元格网格——443 个描述节点，每个约十次记录操作——并把每笔成本分开报告：
 
 ```bash
-cargo test -p gpui-shell --release --test benchmark -- --nocapture
+cargo test -p gpui-shell --release --lib benchmark -- --nocapture
 ```
 
 | | 测的是什么 | 443 个节点 | 什么时候付 |
@@ -49,7 +49,7 @@ cargo test -p gpui-shell --release --test benchmark -- --nocapture
 只测一个规模，看不出这三笔成本里哪几笔会随规模增长，所以第四个测试把同一个面板一路放大到 8,403 个节点。它挂在 `--ignored` 之后，因为最大的那一档要跑好几秒：
 
 ```bash
-cargo test -p gpui-shell --release --test benchmark -- --ignored --nocapture
+cargo test -p gpui-shell --release --lib benchmark -- --ignored --nocapture
 ```
 
 描述一次，443 个节点是 1.1 ms；面板放大到 2,103、4,203、8,403 个节点，则依次是 5.1、10.3、20.5 ms。而一整帧——也就是 B 加上 GPUI 的布局与绘制，即 C 量的那件事——对应是 1.3、5.9、12.0、27.0 ms。两笔都随节点数接近线性增长；不增长的是 JavaScript——每一档的每一帧都是零行。这三件事因此说清了：
