@@ -50,7 +50,7 @@ Marker::new()
 
 `Spinner` is the default loading style and adds a compact spinner when no `MarkerIcon` was supplied. An explicitly composed icon always takes precedence.
 
-`Shimmer` sweeps a highlight across text added with `MarkerContent::text(...)`, matching the text-only thinking treatment used by ChatGPT. Existing arbitrary `MarkerContent` children remain supported through a gentle opacity pulse. Icons and separator lines stay static, and enabling reduced motion displays clear, non-animated text.
+`Shimmer` moves a continuous, theme-aware highlight across text added with `MarkerContent::text(...)`, matching the text-only thinking treatment used by ChatGPT. The text keeps its normal layout while a light highlight moves across it in light themes and a dark highlight moves across it in dark themes. Existing arbitrary `MarkerContent` children remain supported through a gentle opacity pulse. Icons and separator lines stay static, and enabling reduced motion displays clear, non-animated text.
 
 The animation respects inherited and explicitly customized text colors. Both loading styles work with every `MarkerVariant`, and loading is disabled by default.
 

@@ -50,7 +50,7 @@ Marker::new()
 
 默认 loading 样式 `Spinner` 会在没有配置 `MarkerIcon` 时自动添加紧凑的 Spinner；显式组合的图标始终优先。
 
-`Shimmer` 会为 `MarkerContent::text(...)` 提供逐字符移动的文字高光，可用于 ChatGPT 风格的 thinking 状态。现有任意 `MarkerContent` child 仍然兼容，并以轻微透明度变化呈现加载状态。Icon 和分隔线保持静止；系统开启 reduced motion 时，文字完整显示且不会播放动画。
+`Shimmer` 会为 `MarkerContent::text(...)` 提供连续移动、自动适配主题的文字高光，可用于 ChatGPT 风格的 thinking 状态。文字布局保持稳定，亮色主题使用浅色光带，暗色主题使用深色光带。现有任意 `MarkerContent` child 仍然兼容，并以轻微透明度变化呈现加载状态。Icon 和分隔线保持静止；系统开启 reduced motion 时，文字完整显示且不会播放动画。
 
 动画保留继承的文字颜色以及调用方的颜色覆盖。两种 loading 样式均可搭配任意 `MarkerVariant`，默认不启用 loading。
 

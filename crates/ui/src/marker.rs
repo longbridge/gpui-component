@@ -1,7 +1,8 @@
 use gpui::{
-    Animation, AnimationExt as _, AnyElement, App, HighlightStyle, IntoElement, ParentElement,
-    RenderOnce, SharedString, StyleRefinement, Styled, StyledText, Window, div,
-    prelude::FluentBuilder as _,
+    Animation, AnimationExt as _, AnyElement, App, Bounds, ContentMask, Element, ElementId,
+    GlobalElementId, Hsla, InspectorElementId, IntoElement, LayoutId, LineLayout, ParentElement,
+    Pixels, Point, RenderOnce, SharedString, StyleRefinement, Styled, StyledText, TextAlign,
+    Window, WrapBoundary, div, point, prelude::FluentBuilder as _, px, size,
 };
 use instant::Duration;
 
@@ -260,7 +261,7 @@ impl MarkerContent {
         }
     }
 
-    /// Add text that can receive a character-by-character loading shimmer.
+    /// Add text that can receive a continuous loading shimmer.
     ///
     /// Arbitrary children remain supported through [`ParentElement`].
     pub fn text(mut self, text: impl Into<SharedString>) -> Self {
@@ -296,20 +297,23 @@ impl RenderOnce for MarkerContent {
             .iter()
             .any(|child| matches!(child, MarkerContentChild::Text(_)));
         let base_opacity = self.style.opacity.unwrap_or(1.);
+        let highlight_color = shimmer_highlight_color(
+            cx.theme().semantic_tokens().colors.background,
+            cx.theme().is_dark(),
+        );
         let children =
             self.children
                 .into_iter()
                 .enumerate()
                 .map(move |(index, child)| match child {
                     MarkerContentChild::Text(text) if animate => {
-                        let shimmer_text = text.clone();
-
-                        StyledText::new(text)
+                        MarkerShimmerText::new(text, highlight_color)
                             .with_animation(
                                 ("marker-loading-text", index),
                                 loading_animation(),
-                                move |this, phase| {
-                                    this.with_highlights(shimmer_highlights(&shimmer_text, phase))
+                                |mut this, phase| {
+                                    this.phase = phase;
+                                    this
                                 },
                             )
                             .into_any_element()
@@ -337,33 +341,238 @@ impl RenderOnce for MarkerContent {
     }
 }
 
-fn loading_animation() -> Animation {
-    Animation::new(Duration::from_secs(2))
-        .repeat_synced()
-        .with_max_fps(24.)
+const SHIMMER_LAYER_COUNT: usize = 12;
+const SHIMMER_BAND_HALF_WIDTH: f32 = 0.3;
+
+/// Paint an animated highlight over glyphs already laid out by `StyledText`.
+///
+/// Keeping `StyledText` as the layout owner preserves wrapping, truncation,
+/// inherited typography, and GPUI's glyph cache. Nested content masks produce
+/// a soft continuous band without rebuilding text runs on every frame.
+struct MarkerShimmerText {
+    text: StyledText,
+    highlight_color: Hsla,
+    phase: f32,
 }
 
-fn shimmer_highlights(text: &str, phase: f32) -> Vec<(std::ops::Range<usize>, HighlightStyle)> {
-    let character_count = text.chars().count() as f32;
-    let center = phase.mul_add(1.7, -0.35);
+impl MarkerShimmerText {
+    fn new(text: SharedString, highlight_color: Hsla) -> Self {
+        Self {
+            text: StyledText::new(text),
+            highlight_color,
+            phase: 0.,
+        }
+    }
 
-    text.char_indices()
-        .enumerate()
-        .map(|(index, (offset, character))| {
-            let position = (index as f32 + 0.5) / character_count;
-            let distance = ((position - center).abs() / 0.32).min(1.);
-            let intensity = 1. - distance;
-            let intensity = intensity * intensity * (3. - 2. * intensity);
+    fn paint_highlight(&self, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut App) {
+        let masks = std::array::from_fn::<_, SHIMMER_LAYER_COUNT, _>(|layer| {
+            shimmer_band_bounds(bounds, self.phase, layer).map(|bounds| ContentMask { bounds })
+        });
 
-            (
-                offset..offset + character.len_utf8(),
-                HighlightStyle {
-                    fade_out: Some((1. - intensity) * 0.55),
-                    ..Default::default()
-                },
-            )
-        })
-        .collect()
+        if masks.iter().all(Option::is_none) {
+            return;
+        }
+
+        let layout = self.text.layout();
+        let line_height = layout.line_height();
+        let text_align = window.text_style().text_align;
+        let mut line_origin = bounds.origin;
+
+        window.paint_layer(bounds, |window| {
+            for wrapped_line in layout.line_layouts() {
+                let line = &wrapped_line.unwrapped_layout;
+                let baseline_offset = point(
+                    px(0.),
+                    (line_height - line.ascent - line.descent) / 2. + line.ascent,
+                );
+                let mut wraps = wrapped_line.wrap_boundaries.iter().peekable();
+                let mut glyph_origin = point(
+                    shimmer_aligned_origin_x(
+                        line_origin,
+                        bounds.size.width,
+                        px(0.),
+                        text_align,
+                        line,
+                        wraps.peek().copied(),
+                    ),
+                    line_origin.y,
+                );
+                let mut previous_glyph_position = Point::default();
+
+                for (run_index, run) in line.runs.iter().enumerate() {
+                    let glyph_size = cx
+                        .text_system()
+                        .bounding_box(run.font_id, line.font_size)
+                        .size;
+
+                    for (glyph_index, glyph) in run.glyphs.iter().enumerate() {
+                        glyph_origin.x += glyph.position.x - previous_glyph_position.x;
+
+                        if wraps.peek().is_some_and(|wrap| {
+                            wrap.run_ix == run_index && wrap.glyph_ix == glyph_index
+                        }) {
+                            wraps.next();
+                            glyph_origin.x = shimmer_aligned_origin_x(
+                                line_origin,
+                                bounds.size.width,
+                                glyph.position.x,
+                                text_align,
+                                line,
+                                wraps.peek().copied(),
+                            );
+                            glyph_origin.y += line_height;
+                        }
+
+                        previous_glyph_position = glyph.position;
+
+                        if glyph.is_emoji {
+                            continue;
+                        }
+
+                        let glyph_bounds = Bounds::new(glyph_origin, glyph_size);
+                        let paint_origin =
+                            glyph_origin + baseline_offset + point(px(0.), glyph.position.y);
+
+                        for mask in masks.iter().flatten() {
+                            if !glyph_bounds.intersects(&mask.bounds) {
+                                continue;
+                            }
+
+                            window.with_content_mask(Some(*mask), |window| {
+                                let _ = window.paint_glyph(
+                                    paint_origin,
+                                    run.font_id,
+                                    glyph.id,
+                                    line.font_size,
+                                    self.highlight_color,
+                                );
+                            });
+                        }
+                    }
+                }
+
+                line_origin.y += wrapped_line.size(line_height).height;
+            }
+        });
+    }
+}
+
+impl IntoElement for MarkerShimmerText {
+    type Element = Self;
+
+    fn into_element(self) -> Self::Element {
+        self
+    }
+}
+
+impl Element for MarkerShimmerText {
+    type RequestLayoutState = ();
+    type PrepaintState = ();
+
+    fn id(&self) -> Option<ElementId> {
+        None
+    }
+
+    fn source_location(&self) -> Option<&'static std::panic::Location<'static>> {
+        None
+    }
+
+    fn request_layout(
+        &mut self,
+        global_id: Option<&GlobalElementId>,
+        inspector_id: Option<&InspectorElementId>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> (LayoutId, Self::RequestLayoutState) {
+        self.text
+            .request_layout(global_id, inspector_id, window, cx)
+    }
+
+    fn prepaint(
+        &mut self,
+        global_id: Option<&GlobalElementId>,
+        inspector_id: Option<&InspectorElementId>,
+        bounds: Bounds<Pixels>,
+        layout: &mut Self::RequestLayoutState,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Self::PrepaintState {
+        self.text
+            .prepaint(global_id, inspector_id, bounds, layout, window, cx);
+    }
+
+    fn paint(
+        &mut self,
+        global_id: Option<&GlobalElementId>,
+        inspector_id: Option<&InspectorElementId>,
+        bounds: Bounds<Pixels>,
+        layout: &mut Self::RequestLayoutState,
+        prepaint: &mut Self::PrepaintState,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        self.text.paint(
+            global_id,
+            inspector_id,
+            bounds,
+            layout,
+            prepaint,
+            window,
+            cx,
+        );
+        self.paint_highlight(bounds, window, cx);
+    }
+}
+
+fn loading_animation() -> Animation {
+    Animation::new(Duration::from_secs(2)).repeat_synced()
+}
+
+fn shimmer_highlight_color(background: Hsla, dark: bool) -> Hsla {
+    let peak_opacity: f32 = if dark { 0.6 } else { 0.75 };
+    let layer_opacity = 1. - (1. - peak_opacity).powf(1. / SHIMMER_LAYER_COUNT as f32);
+
+    background.opacity(layer_opacity)
+}
+
+fn shimmer_band_bounds(bounds: Bounds<Pixels>, phase: f32, layer: usize) -> Option<Bounds<Pixels>> {
+    let width = bounds.size.width.as_f32();
+
+    if width <= 0. || bounds.size.height <= px(0.) || layer >= SHIMMER_LAYER_COUNT {
+        return None;
+    }
+
+    let center = phase.mul_add(1.7, -0.35) * width;
+    let radius = width * SHIMMER_BAND_HALF_WIDTH * (1. - layer as f32 / SHIMMER_LAYER_COUNT as f32);
+    let left = (center - radius).max(0.);
+    let right = (center + radius).min(width);
+
+    (right > left).then(|| {
+        Bounds::new(
+            point(bounds.origin.x + px(left), bounds.origin.y),
+            size(px(right - left), bounds.size.height),
+        )
+    })
+}
+
+fn shimmer_aligned_origin_x(
+    origin: Point<Pixels>,
+    align_width: Pixels,
+    previous_glyph_x: Pixels,
+    align: TextAlign,
+    layout: &LineLayout,
+    next_wrap: Option<&WrapBoundary>,
+) -> Pixels {
+    let line_end = next_wrap
+        .map(|wrap| layout.runs[wrap.run_ix].glyphs[wrap.glyph_ix].position.x)
+        .unwrap_or(layout.width);
+    let line_width = line_end - previous_glyph_x;
+
+    match align {
+        TextAlign::Left => origin.x,
+        TextAlign::Center => (origin.x * 2. + align_width - line_width) / 2.,
+        TextAlign::Right => origin.x + align_width - line_width,
+    }
 }
 
 #[cfg(test)]
@@ -427,28 +636,40 @@ mod tests {
     }
 
     #[test]
-    fn test_marker_shimmer_highlights_preserve_utf8_boundaries() {
-        let text = "正在思考 🧠";
-        let highlights = shimmer_highlights(text, 0.5);
+    fn test_marker_shimmer_band_moves_smoothly_across_text() {
+        let bounds = Bounds::new(point(px(10.), px(20.)), size(px(100.), px(18.)));
 
-        assert_eq!(highlights.len(), text.chars().count());
-        assert_eq!(highlights.first().map(|(range, _)| range.start), Some(0));
-        assert_eq!(
-            highlights.last().map(|(range, _)| range.end),
-            Some(text.len())
+        assert!(shimmer_band_bounds(bounds, 0., 0).is_none());
+        assert!(shimmer_band_bounds(bounds, 1., 0).is_none());
+
+        let early = shimmer_band_bounds(bounds, 0.35, 0).unwrap();
+        let late = shimmer_band_bounds(bounds, 0.65, 0).unwrap();
+        assert!(early.origin.x < late.origin.x);
+
+        let outer = shimmer_band_bounds(bounds, 0.5, 0).unwrap();
+        let inner = shimmer_band_bounds(bounds, 0.5, SHIMMER_LAYER_COUNT - 1).unwrap();
+        assert!(inner.origin.x > outer.origin.x);
+        assert!(inner.size.width < outer.size.width);
+        assert!(shimmer_band_bounds(bounds, 0.5, SHIMMER_LAYER_COUNT).is_none());
+        assert!(
+            shimmer_band_bounds(Bounds::new(bounds.origin, size(px(0.), px(18.))), 0.5, 0)
+                .is_none()
         );
-        assert!(highlights.iter().all(|(range, style)| {
-            text.is_char_boundary(range.start)
-                && text.is_char_boundary(range.end)
-                && style
-                    .fade_out
-                    .is_some_and(|fade| (0. ..=0.55).contains(&fade))
-        }));
+    }
 
-        let early = shimmer_highlights("Thinking", 0.25);
-        let late = shimmer_highlights("Thinking", 0.75);
-        assert!(early[0].1.fade_out.unwrap() < early[early.len() - 1].1.fade_out.unwrap());
-        assert!(late[0].1.fade_out.unwrap() > late[late.len() - 1].1.fade_out.unwrap());
-        assert!(shimmer_highlights("", 0.5).is_empty());
+    #[test]
+    fn test_marker_shimmer_uses_theme_background_and_native_frame_rate() {
+        let light = shimmer_highlight_color(Hsla::white(), false);
+        let dark = shimmer_highlight_color(Hsla::black(), true);
+
+        assert_eq!(light.l, 1.);
+        assert_eq!(dark.l, 0.);
+        assert!(light.a > dark.a);
+        assert!((1. - (1. - light.a).powi(SHIMMER_LAYER_COUNT as i32) - 0.75).abs() < 0.001);
+        assert!((1. - (1. - dark.a).powi(SHIMMER_LAYER_COUNT as i32) - 0.6).abs() < 0.001);
+
+        let animation = loading_animation();
+        assert!(animation.synced);
+        assert_eq!(animation.max_fps, None);
     }
 }
