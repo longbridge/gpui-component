@@ -107,14 +107,14 @@
   <text class="layer"     x="24" y="522">gpui-base</text>
   <text class="layer-sub" x="24" y="538">behavior only</text>
   <text class="layer"     x="24" y="614">gpui</text>
-  <text class="layer-sub" x="24" y="630">gpui_platform</text>
+  <text class="layer-sub" x="24" y="630">rendering</text>
 
   <!-- the engine seam -->
   <path class="seam" d="M160,232 Q160,220 172,220 L836,220 Q848,220 848,232 L848,260 L160,260 Z"/>
   <path class="seam-edge" d="M160,260 L848,260"/>
   <text class="seam-name" x="180" y="245">engine seam</text>
   <text class="note" x="278" y="245">the only Rust that knows what a script value is</text>
-  <text class="note" x="828" y="245" text-anchor="end">QuickJS default · Lua behind a feature flag</text>
+  <text class="note" x="828" y="245" text-anchor="end">QuickJS, behind a cargo feature</text>
 
   <!-- flow: describe, down the left -->
   <path class="flow" d="M328,184 L328,278" marker-end="url(#arrow)"/>
@@ -159,7 +159,7 @@
   <text class="note" x="196" y="338">SpecOp: style · method · callback</text>
 
   <rect class="card stage" x="176" y="388" width="304" height="62" rx="9" style="animation-delay:-5.89s"/>
-  <text class="name mono" x="196" y="412">materialize</text>
+  <text class="name mono" x="196" y="412">Materialize</text>
   <text class="fact" x="196" y="431">pure Rust — it never calls the script</text>
   <text class="note" x="196" y="445">one pass, depth first</text>
 

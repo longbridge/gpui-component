@@ -322,7 +322,7 @@ fn click_target(context: &mut VisualTestContext, view: &Entity<ScriptView>) -> C
 fn first_change_callback(snapshot: &RenderSnapshot) -> Option<CallbackId> {
     (0..snapshot.len() as u32)
         .filter_map(|id| snapshot.arena().node(id))
-        .flat_map(|node| node.ops.iter())
+        .flat_map(|node| node.ops())
         .find_map(|op| match op {
             SpecOp::Callback("on_change", id) => Some(*id),
             _ => None,

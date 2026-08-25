@@ -23,7 +23,7 @@ The style surface has two halves, and they exist for different reasons.
 
 **No-argument methods come from GPUI's reflection table.** `flex_col`, `items_center`, `gap_2`, `rounded_md`, `text_sm`, `size_full`, `font_semibold`, `truncate`, `cursor_pointer` — the whole family, obtained from `gpui_base::styled_ext_reflection_methods` and `gpui::styled_reflection::methods` with no maintenance at all. Not one of these names is written down anywhere in the runtime. When upstream GPUI adds a style method, the script surface has it, and so does the generated `gpui.d.ts`.
 
-The build these pages were written against exposes **3,146** of them. That number is not a design target — it is however many `fn(self) -> Self` style methods GPUI currently has, and it moves when GPUI moves. `gpui-shell types` prints the exact figure for your build.
+The build these pages were written against exposes **3,146** of them. It is however many `fn(self) -> Self` style methods GPUI currently has, and it moves when GPUI moves. `gpui-shell types` prints the exact figure for your build.
 
 **Methods that take arguments cannot be reflected**, so there are **57** of them bound by hand. That list is the one hand-maintained table in the styling layer, and it is deliberately small.
 
@@ -57,7 +57,7 @@ Which of those a given method accepts follows **its Rust signature**, because th
 percentages and "auto" are not allowed here
 ```
 
-The distinction is not pedantry: `"auto"` padding and a percentage radius have no meaning in the layout engine underneath, and a runtime that accepted them would have to invent one.
+`"auto"` padding and a percentage radius have no meaning in the layout engine underneath, and a runtime that accepted them would have to invent one.
 
 ### The parametric methods
 

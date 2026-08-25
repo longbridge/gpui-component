@@ -166,14 +166,14 @@ Three things the declarations deliberately do not express, because no type could
 
 Regenerate the file after upgrading the runtime; the output is deterministic, so the diff is reviewable.
 
-## Reload on save
+## Hot-reload
 
 ```bash
 cargo run -p gpui-shell -- hello --watch
 cargo run -p gpui-shell -- hello --dev      # implies --watch
 ```
 
-`--watch` polls the application directory four times a second, debounces a burst of writes for 200 ms, and reloads. A reload re-reads **every** module, entry point included — a hot reload that quietly served a stale import would be worse than none, because it looks like it worked.
+`--watch` polls the application directory four times a second, debounces a burst of writes for 200 ms, and reloads. A reload re-reads **every** module, entry point included — a hot-reload that quietly served a stale import would be worse than none, because it looks like it worked.
 
 A reload does all of its fallible work before it touches the live view. If the new code fails to load, the previous view keeps running, the error goes to stderr, and a toast with a stable id reports it in the window; the next successful reload retracts that toast. A broken save never costs you the window.
 

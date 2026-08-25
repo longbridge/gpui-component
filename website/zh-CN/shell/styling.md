@@ -23,7 +23,7 @@ v_flex().size_full().bg(surface).p(px(12.)).gap(px(8.)).rounded(px(6.))
 
 **无参方法来自 GPUI 的反射表。** `flex_col`、`items_center`、`gap_2`、`rounded_md`、`text_sm`、`size_full`、`font_semibold`、`truncate`、`cursor_pointer`——整个家族都取自 `gpui_base::styled_ext_reflection_methods` 与 `gpui::styled_reflection::methods`，零维护成本。这些名字没有一个写在运行时的任何地方。上游 GPUI 新增一个样式方法，脚本接口就有了，生成的 `gpui.d.ts` 也有了。
 
-本文写作时的这次构建里有 **3,146** 个。这个数字不是设计目标——它就是 GPUI 当前有多少个 `fn(self) -> Self` 形态的样式方法，GPUI 变它就变。`gpui-shell types` 会打印你这次构建的准确数字。
+本文写作时的这次构建里有 **3,146** 个。这个数字就是 GPUI 当前有多少个 `fn(self) -> Self` 形态的样式方法，GPUI 变它就变。`gpui-shell types` 会打印你这次构建的准确数字。
 
 **有参方法无法被反射**，所以有 **57** 个是手工绑定的。这份列表是样式层里唯一手工维护的表，而且刻意保持很小。
 
@@ -57,7 +57,7 @@ v_flex().size_full().bg(surface).p(px(12.)).gap(px(8.)).rounded(px(6.))
 percentages and "auto" are not allowed here
 ```
 
-这个区分不是较真：`"auto"` 的内边距和百分比的圆角，在底层布局引擎里没有含义，接受它们的运行时就必须自己发明一个含义。
+`"auto"` 的内边距和百分比的圆角，在底层布局引擎里没有含义；接受它们的运行时就必须自己发明一个含义。
 
 ### 有参方法一览
 

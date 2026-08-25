@@ -309,7 +309,7 @@ engine has to justify why it could not (§6.5).
 | `value` | `Bridged`: the neutral script argument value, and color and length coercion | above |
 | `error` | `ShellError`: the neutral error type | above |
 | `entities` | `EntityStore`: retained state by handle, one store per runtime | above |
-| `capability` | The capability set, the path resolver, and denial messages | above |
+| `capability` | The capability set, the installed grant, the path resolver, and denial messages | above |
 | `runtime` | `CallbackArena<T>` in snapshot generations, application-root resolution, the failure surface | above |
 | `root` | `ShellRoot`: the window-level overlay stack | above |
 | `dock` | `ScriptPanel`, `ScriptDockSkin`, panel registration and name interning | above |
@@ -539,13 +539,23 @@ exports nothing.
 | `scope.rs`: `CallScope`, phases, generation checks, the crate's only `unsafe` | Callback handle type (`Persistent<Function>`) |
 | `style.rs`: reflection table, parametric styles, spelling suggestions | Exception conversion (`ShellError` → the language's own exception) |
 | `theme.rs`: default palette and token resolution | View definition shape (`class extends View`) |
-| `capability.rs`: capability set and path resolution | Sandbox specifics: language trimming, intrinsics, promise pumping (§19) |
+| `capability.rs`: capability set, **the installed grant**, and path resolution | Sandbox specifics: language trimming, intrinsics, promise pumping (§19) |
 | `value.rs`, `error.rs`, `entities.rs`, `runtime.rs`, `root.rs`, `view.rs`, `watch.rs`, `typings.rs`, `assets.rs` | |
 
 The seam's load-bearing rule is about *when*, not what: `build_snapshot` is the
 only entry into script `render`, and nothing calls it per frame (§8.4). An engine
 that rendered opportunistically would put script cost back on the frame budget.
 Benchmark C (§20.3) is what catches it.
+
+**Host configuration crosses this line in one direction only.** The grant used to
+live inside the QuickJS module, with the crate root calling into it and a silent
+no-op compiled in for any other build — so a second engine could compile, run,
+and ignore the security configuration without a word. A grant is a decision about
+the *application*, not about the interpreter, so it is above the seam now and an
+engine can read it but cannot answer it. `set_store_path` and
+`set_development_mode` stayed engine-side but are part of the contract above, so
+an engine either provides them or does not build. There is no fallback left to be
+silent with.
 
 #### Adding capability
 
@@ -1959,11 +1969,24 @@ would let a script probe outside its roots one boolean at a time. `remove` is
 not recursive: write access is granted per root, so a recursive remove would turn
 one mistyped path into the loss of an application's whole data directory.
 
-**These calls are synchronous.** The design requires them to be asynchronous —
-blocking IO on the render thread stalls the frame — and they are not yet. Every
-body is deliberately a capability check plus one `std::fs` call, so the move is
-mechanical: hand the closure body to `gpui.spawn` and return its promise,
-changing nothing about the checks. The generated declarations say so at the type.
+**These calls return promises.** The syscall runs on the background executor,
+because a disk has no bound on how long it takes and blocking the main thread
+blocks the frame and the VM together — somewhere the interrupt budget cannot see,
+because the time is spent in the kernel rather than in script.
+
+The capability check does *not* move. It is cheap, it needs the ambient scope,
+and it stays on the calling thread, so **a denial throws at the call site rather
+than rejecting**: a rejected promise nobody awaited is a denial nobody sees. That
+split is also why the symlink and denial tests need no executor at all.
+
+`read_text` refuses a file over 64 MiB by name. The alternative to a ceiling is a
+string that has to fit in the JavaScript heap, which is itself capped — so the
+failure without one is an out-of-memory inside the VM instead of a sentence
+naming the file.
+
+`store` is deliberately not like this: it is a cache with a write-through, so
+`get` and `set` answer from memory. Making `store.flush` awaitable is the one
+piece of §17.1 still open.
 
 ### 17.2 Network
 
@@ -1971,8 +1994,19 @@ Not implemented. `Capabilities` carries a host allowlist and `may_reach`, and
 nothing calls it. The `fetch` stub's message points at a `gpui.http` that does
 not exist yet.
 
-When it lands, the HTTP client must be **injected by the host** rather than
-hard-wired: a desktop host can pass Zed's `reqwest_client` (which `crates/story`
+When it lands it is **asynchronous, and not optionally so.** Every request
+returns a promise and the work happens off the main thread, for the reason §17.1
+gives about the filesystem — with a network the argument is not even close: a
+socket can take a minute. The capability check stays synchronous at the call
+site, so a host that is not on the allowlist is a thrown error rather than a
+rejected promise nobody awaited. `scheduler::blocking` is the shape to reuse.
+
+This is written down because the filesystem got it wrong first: those calls
+shipped synchronous behind a comment saying they should not be, and the comment
+outlived the reason it gave. A surface that blocks the frame is not a thing to
+fix later.
+
+The HTTP client must also be **injected by the host** rather than hard-wired: a desktop host can pass Zed's `reqwest_client` (which `crates/story`
 already uses) and a WebAssembly host a fetch adapter, which is what keeps the
 dependency restraint of §4.2. And it must not be called `fetch` or imitate its
 signature. A name that matches while the semantics only mostly match is worse
@@ -2026,10 +2060,21 @@ which is the outcome §19.1 exists to avoid.
 
 `process.run(command, args?)` returns an exit code and requires the command to be
 on the `capabilities.fs.execute` allowlist. `process.exit(code?)` requires a
-filesystem grant and is a **request**: it records a code the host polls for and
-decides what to do with — close the panel, close the window, or ignore it. It is
-never `exit(2)`, because one plugin must not be able to take down an application
-the user is working in.
+filesystem grant and is a **request**: it hands the code to a handler the host
+installed with `gpui_shell::on_exit_request`, which decides what to do with it —
+close the panel, close the window, end the process. It is never `exit(2)` inside
+the runtime, because one plugin must not be able to take down an application the
+user is working in.
+
+The handler is not optional. A host that grants the capability without
+installing one gets a **failure at the call**, naming the omission, rather than
+a script that reports success while nothing happens — which is what an earlier
+version did: the code went into a cell no production caller ever read, and the
+window stayed open. A request nobody answers is worse than a denial, because the
+script cannot tell the two apart.
+
+The `gpui-shell` binary installs the obvious policy for a host that *is* the
+process: it ends it, with the code the script asked for.
 
 `process` is installed as a global as well as a `gpui` module member, because
 `process` is the name a JavaScript author, or a model writing JavaScript, will
@@ -2893,7 +2938,9 @@ script cannot reach any of it.
 
 The plugin model: manifest parsing and its generated schema, discovery, load and
 unload, per-plugin capabilities and data directories, activation (§18). It
-compiles and is exported, and no caller uses it.
+compiles, it is exported, and **no host drives it yet** — which is a statement
+about callers, not about the code. §18 describes what is there; this section is
+the one that says whether anything uses it, and the two are not in conflict.
 
 ### Not built
 

@@ -37,6 +37,7 @@ pub use native::{
 };
 pub use plugin::{Plugin, PluginManager, PluginManifest};
 pub use root::{DialogOptions, SheetSide, ShellRoot, ToastLevel, ToastRequest};
+pub use runtime::{ExitHandler, clear_exit_handler, on_exit_request};
 pub use scope::ScopePhase;
 pub use snapshot::RenderSnapshot;
 pub use view::ScriptView;
@@ -50,38 +51,29 @@ use gpui::App;
 /// Nothing is permitted until this is called: a script gets no file, storage,
 /// clipboard or process access by default (design doc §5.7). The host decides,
 /// because only the host knows how much the code it is about to run is trusted.
-#[cfg(feature = "quickjs")]
+///
+/// The grant lives above the engine seam, so no engine can be built that
+/// quietly ignores it.
 pub fn set_capabilities(capabilities: Capabilities) {
-    engine::quickjs::host::set_capabilities(capabilities);
+    capability::install(capabilities);
 }
-
-#[cfg(not(feature = "quickjs"))]
-pub fn set_capabilities(_capabilities: Capabilities) {}
 
 /// Points `gpui.store` at a directory.
 ///
 /// Storage is per application, and the host chooses where that is — an
 /// application cannot name its own storage location, or two applications could
 /// collide on purpose.
-#[cfg(feature = "quickjs")]
 pub fn set_store_path(path: PathBuf) {
-    engine::quickjs::host::set_store_path(path);
+    engine::set_store_path(path);
 }
-
-#[cfg(not(feature = "quickjs"))]
-pub fn set_store_path(_path: PathBuf) {}
 
 /// Relaxes the sandbox for a development session.
 ///
 /// Restores `eval` and unfreezes the built-in prototypes, which a REPL needs
 /// and a shipped application must not have.
-#[cfg(feature = "quickjs")]
 pub fn set_development_mode(enabled: bool) {
-    engine::quickjs::sandbox::set_development_mode(enabled);
+    engine::set_development_mode(enabled);
 }
-
-#[cfg(not(feature = "quickjs"))]
-pub fn set_development_mode(_enabled: bool) {}
 
 /// Initializes the base layer, the shell's default semantic tokens, and the
 /// style reflection table.

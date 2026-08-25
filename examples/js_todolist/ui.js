@@ -10,17 +10,21 @@
 // 12/13/16/20.
 
 import { div, h_flex, v_flex, text, svg, Button, Checkbox, Input } from "gpui";
+/** @import { ClickEvent, Color, Context, Element, InputStateHandle } from "gpui" */
 
 export const SPACE = { xxs: 2, xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 };
 
 /// Body text. 12px is the showcase's `text_xs`, and at this density it is the
 /// size that keeps a row scannable.
+/** @param {string} value */
 export const label = (value) =>
   text(value).text_size(12).line_height(1).text_color("foreground");
 
+/** @param {string} value */
 export const muted = (value) =>
   text(value).text_size(12).line_height(1).text_color("muted_foreground");
 
+/** @param {string} value */
 export const title = (value) =>
   text(value).text_size(16).line_height(1).font_semibold().text_color("foreground");
 
@@ -36,18 +40,27 @@ export const surface = () =>
 /// Asset paths resolve against the application root — the directory passed to
 /// gpui-shell — not against this file, unlike the `import` above. It inherits
 /// the surrounding text color, so an icon in a muted row is muted.
+/** @param {string} name @param {number} [size] */
 export const icon = (name, size = 14) =>
   svg(`icons/${name}.svg`).w(size).h(size).flex_none();
 
 // Two variants, not five. The showcase has exactly this pair — a filled
 // primary and an outlined secondary — and a third would be a decision nobody
 // asked for.
+/** @type {Record<Variant, { bg: Color, fg: Color, border: Color, hover: Color }>} */
 const VARIANTS = {
   primary: { bg: "foreground", fg: "surface", border: "foreground", hover: "muted_foreground" },
   secondary: { bg: "surface", fg: "foreground", border: "border", hover: "muted" },
   ghost: { bg: "surface", fg: "muted_foreground", border: "surface", hover: "muted" },
+  danger: { bg: "surface", fg: "destructive", border: "border", hover: "muted" },
 };
 
+/**
+ * @param {string} id
+ * @param {string} caption
+ * @param {(event: ClickEvent, cx: Context) => void} onClick
+ * @param {ButtonOptions} [options]
+ */
 export const button = (id, caption, onClick, options = {}) => {
   const { variant = "secondary", disabled = false, selected = false, icon: name } = options;
   const palette = VARIANTS[variant] ?? VARIANTS.secondary;
@@ -69,12 +82,19 @@ export const button = (id, caption, onClick, options = {}) => {
     .when(!disabled, (el) => el.hover((style) => style.bg(palette.hover)))
     .when(disabled, (el) => el.opacity(0.4))
     .when(!disabled, (el) => el.on_click(onClick))
-    .when(Boolean(name), (el) => el.child(icon(name, 13)))
+    .when(Boolean(name), (el) => el.child(icon(name ?? "", 13)))
     .child(text(caption));
 };
 
 /// An icon-only button. It carries an accessibility label, because an icon
 /// alone announces nothing to a screen reader.
+/**
+ * @param {string} id
+ * @param {string} name
+ * @param {string} description
+ * @param {(event: ClickEvent, cx: Context) => void} onClick
+ * @param {{ disabled?: boolean }} [options]
+ */
 export const iconButton = (id, name, description, onClick, options = {}) => {
   const { disabled = false } = options;
 
@@ -99,6 +119,7 @@ export const iconButton = (id, name, description, onClick, options = {}) => {
 
 /// A text field. The runtime frames an input as a centered row that focuses on
 /// click; height, padding and color are still ours.
+/** @param {InputStateHandle} state */
 export const field = (state) =>
   Input.new(state)
     .flex_1()
@@ -110,6 +131,12 @@ export const field = (state) =>
     .text_size(12);
 
 /// A checkbox row, indicator and all: base draws neither.
+/**
+ * @param {string} id
+ * @param {boolean} checked
+ * @param {(checked: boolean, cx: Context) => void} onChange
+ * @param {Element} content
+ */
 export const checkbox = (id, checked, onChange, content) =>
   Checkbox.new(id)
     .checked(checked)
@@ -135,6 +162,7 @@ export const checkbox = (id, checked, onChange, content) =>
     )
     .child(content);
 
+/** @param {string} heading @param {string} hint */
 export const emptyState = (heading, hint) =>
   v_flex()
     .flex_1()

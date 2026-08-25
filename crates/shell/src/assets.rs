@@ -35,8 +35,11 @@ impl AppAssets {
 
     /// Resolves an asset path inside the root, rejecting traversal.
     ///
-    /// The check is the same shape as the module resolver's: join, normalize,
-    /// and require the result to still be under the root.
+    /// Join and normalize is the cheap half, and it is not the whole check: an
+    /// `icons` that is a link to somewhere else is lexically inside the root
+    /// and reads from outside it. So containment is settled against the
+    /// filesystem, by the same resolver the `fs` capability uses — one path
+    /// policy rather than two that can drift apart.
     fn resolve(&self, path: &str) -> Option<PathBuf> {
         let mut resolved = self.root.clone();
         for component in std::path::Path::new(path).components() {
@@ -49,7 +52,10 @@ impl AppAssets {
             }
         }
 
-        resolved.starts_with(&self.root).then_some(resolved)
+        if !resolved.starts_with(&self.root) {
+            return None;
+        }
+        crate::capability::contained_in(&resolved, &self.root)
     }
 }
 
@@ -123,5 +129,40 @@ mod tests {
     fn a_missing_asset_is_not_an_error() {
         let assets = AppAssets::new(std::env::temp_dir());
         assert!(assets.load("definitely-not-here.svg").unwrap().is_none());
+    }
+}
+
+#[cfg(test)]
+mod symlink_tests {
+    use super::*;
+
+    /// An asset path is a grant like any other: it names the application's own
+    /// directory, and a link inside it must not turn that into the filesystem.
+    #[test]
+    #[cfg(unix)]
+    fn an_asset_behind_a_symlink_is_refused() {
+        let base = std::env::temp_dir().join(format!("gpui-shell-assets-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let root = base.join("app");
+        let outside = base.join("outside");
+        std::fs::create_dir_all(&root).expect("an application");
+        std::fs::create_dir_all(&outside).expect("somewhere outside");
+        std::fs::write(outside.join("secret.svg"), b"secret").expect("a secret");
+        std::fs::write(root.join("real.svg"), b"real").expect("an asset");
+        std::os::unix::fs::symlink(&outside, root.join("icons")).expect("a symlink");
+
+        let assets = AppAssets::new(root.clone());
+
+        assert!(
+            assets.resolve("icons/secret.svg").is_none(),
+            "an asset was read through a symlink out of the application directory"
+        );
+        assert!(
+            assets.resolve("real.svg").is_some(),
+            "an ordinary asset must still resolve"
+        );
+        assert!(assets.resolve("../outside/secret.svg").is_none());
+
+        let _ = std::fs::remove_dir_all(&base);
     }
 }

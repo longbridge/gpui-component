@@ -286,6 +286,88 @@ fn is_source(name: &str) -> bool {
 /// When the serialization path lands, it belongs between steps 2 and 3 above —
 /// read the old object's state before the swap, hand it to the new object
 /// after — which is why the swap is a single statement at the end.
+/// How often an embedded watcher looks. The binary uses the same figure; a
+/// quarter second is under the threshold at which a save feels like it did not
+/// take, and far above the cost of one `stat` per source file.
+pub const POLL_INTERVAL: Duration = Duration::from_millis(250);
+
+/// Reloads a script view whenever its sources change, for a host that embeds the
+/// runtime — **and does nothing at all in a release build.**
+///
+/// The `gpui-shell` binary has `--watch` because the person running it is the
+/// person editing. A host that embeds the runtime has no such flag to offer, and
+/// the answer is not to invent one: a debug build *is* the development build, so
+/// editing a script and seeing the panel change is what should happen by
+/// default, and a shipped binary must never sit and poll a directory it has no
+/// reason to believe anyone is editing.
+///
+/// ```rust,ignore
+/// // Once, where the view is created.
+/// gpui_shell::watch::reload_in_debug(runtime.clone(), view.clone(), directory, "main.js", window, cx);
+/// ```
+///
+/// A failed reload leaves the running view alone and reports on the log, the one
+/// channel an embedded runtime can count on: it has no `ShellRoot` to raise a
+/// toast on, and a host that wants one can watch for the log or drive
+/// [`reload`] itself.
+///
+/// # What ends the loop
+///
+/// The view going away, the runtime going away, or the window closing —
+/// whichever comes first, checked every tick.
+///
+/// Both handles are weak on purpose. A strong `Entity<ScriptView>` here would
+/// keep a panel alive after the dock removed it: the view would never drop, the
+/// runtime it points at would never drop, and the poller would go on stating the
+/// directory for a panel nobody can see. Mount and unmount a few panels and the
+/// pollers accumulate. So the loop holds nothing and asks each tick whether
+/// there is still something to reload.
+pub fn reload_in_debug(
+    runtime: &Rc<ShellRuntime>,
+    view: &Entity<ScriptView>,
+    directory: PathBuf,
+    entry: &'static str,
+    window: &mut Window,
+    cx: &mut App,
+) {
+    if !cfg!(debug_assertions) {
+        return;
+    }
+
+    let handle = window.window_handle();
+    let mut watcher = SourceWatcher::new(directory.clone());
+    let runtime = Rc::downgrade(runtime);
+    let view = view.downgrade();
+
+    cx.spawn(async move |cx| {
+        loop {
+            cx.background_executor().timer(POLL_INTERVAL).await;
+
+            let (Some(runtime), Some(view)) = (runtime.upgrade(), view.upgrade()) else {
+                break;
+            };
+
+            if !watcher.poll() {
+                continue;
+            }
+
+            let reached = handle.update(cx, |_, window, cx| {
+                match reload(&runtime, &view, &directory, entry, window, cx) {
+                    Ok(()) => tracing::info!("reloaded {}", directory.display()),
+                    // `{error:#}` keeps the `anyhow` context chain, which is what
+                    // names the file and the stage that failed.
+                    Err(error) => tracing::error!("reload failed: {error:#}"),
+                }
+            });
+
+            if reached.is_err() {
+                break;
+            }
+        }
+    })
+    .detach();
+}
+
 pub fn reload(
     runtime: &Rc<ShellRuntime>,
     view: &Entity<ScriptView>,

@@ -328,6 +328,11 @@ visible on the first line rather than at the first call.
 Three host-side calls carry most of the weight:
 
 ```rust,ignore
+// Editing a script changes the window, with no rebuild and no button — in a
+// debug build. Compiled out of a release build, which must not poll a
+// directory nobody is editing.
+gpui_shell::watch::reload_in_debug(runtime, view.clone(), app_root, "main.js", window, cx);
+
 // The script changed something on screen? GPUI already knows. But when *Rust*
 // changes state the script reads, say so — a bare notify is only a repaint.
 script_view.update(cx, |view, cx| view.refresh(cx));

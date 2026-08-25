@@ -5,12 +5,16 @@
 //! to land on screen rather than take the host down. Only the type of the stored
 //! handler differs, so it is a type parameter.
 
-use std::path::{Path, PathBuf};
+use std::{
+    cell::RefCell,
+    path::{Path, PathBuf},
+    rc::Rc,
+};
 
 use anyhow::{Result, anyhow};
 use gpui::{
     AnyElement, App, ClipboardItem, Entity, Hsla, InteractiveElement, IntoElement, ParentElement,
-    SharedString, Styled, Window, div, px, relative, rgb,
+    SharedString, Styled, Window, div, px, relative, rems, rgb,
 };
 use gpui_base::Button;
 
@@ -92,9 +96,13 @@ Applications found below this directory:",
 
 /// A script callback together with the view it was registered from. The view is
 /// what a later notify has to reach.
-pub struct CallbackEntry<T> {
-    pub value: T,
-    pub view: Option<Entity<ScriptView>>,
+///
+/// `pub(crate)` throughout: an engine builds one and the dispatcher reads it,
+/// and nothing outside this crate has any use for either half. Narrowing it is
+/// what keeps a later field from being a breaking change to somebody else.
+pub(crate) struct CallbackEntry<T> {
+    pub(crate) value: T,
+    pub(crate) view: Option<Entity<ScriptView>>,
 }
 
 impl<T: Clone> Clone for CallbackEntry<T> {
@@ -118,7 +126,7 @@ impl<T: Clone> Clone for CallbackEntry<T> {
 /// [`commit`](Self::commit). A script render that fails half-way calls
 /// [`abort`](Self::abort) instead, so a failed build leaves no trace — the same
 /// transactional rule the snapshot itself follows.
-pub struct CallbackArena<T> {
+pub(crate) struct CallbackArena<T> {
     next_generation: u32,
     /// The generation currently being recorded, if a build is open.
     building: Option<(u32, Vec<CallbackEntry<T>>)>,
@@ -141,7 +149,7 @@ impl<T> Default for CallbackArena<T> {
 impl<T: Clone> CallbackArena<T> {
     /// Opens a generation. Any generation left open by an earlier failed build
     /// is discarded rather than committed.
-    pub fn begin(&mut self) -> u32 {
+    pub(crate) fn begin(&mut self) -> u32 {
         let generation = self.next_generation & GENERATION_MASK;
         self.next_generation = self.next_generation.wrapping_add(1);
         self.building = Some((generation, Vec::new()));
@@ -149,7 +157,7 @@ impl<T: Clone> CallbackArena<T> {
     }
 
     /// Publishes the open generation, so its handlers become callable.
-    pub fn commit(&mut self) {
+    pub(crate) fn commit(&mut self) {
         if let Some(entry) = self.building.take() {
             self.live.push(entry);
         }
@@ -157,7 +165,7 @@ impl<T: Clone> CallbackArena<T> {
 
     /// Drops the open generation. A failed script render must not leave
     /// callable handlers behind.
-    pub fn abort(&mut self) {
+    pub(crate) fn abort(&mut self) {
         self.building = None;
     }
 
@@ -167,7 +175,7 @@ impl<T: Clone> CallbackArena<T> {
     /// better message; the second run must start from an empty index space
     /// rather than stack its handlers on the abandoned ones. The generation
     /// number survives, because the caller is already holding it.
-    pub fn rollback(&mut self) {
+    pub(crate) fn rollback(&mut self) {
         if let Some((_, entries)) = self.building.as_mut() {
             entries.clear();
         }
@@ -175,11 +183,11 @@ impl<T: Clone> CallbackArena<T> {
 
     /// Releases the handlers of one committed generation, called when the
     /// snapshot that owns them is dropped.
-    pub fn retire(&mut self, generation: u32) {
+    pub(crate) fn retire(&mut self, generation: u32) {
         self.live.retain(|(live, _)| *live != generation);
     }
 
-    pub fn push(&mut self, entry: CallbackEntry<T>) -> CallbackId {
+    pub(crate) fn push(&mut self, entry: CallbackEntry<T>) -> CallbackId {
         let Some((generation, entries)) = self.building.as_mut() else {
             // Reached only if a handler is registered outside a script render,
             // which is a host bug. An id no lookup can match is the harmless
@@ -192,7 +200,7 @@ impl<T: Clone> CallbackArena<T> {
         (*generation << GENERATION_SHIFT) | (index & INDEX_MASK)
     }
 
-    pub fn get(&self, id: CallbackId) -> Option<CallbackEntry<T>> {
+    pub(crate) fn get(&self, id: CallbackId) -> Option<CallbackEntry<T>> {
         let generation = id >> GENERATION_SHIFT;
         let index = (id & INDEX_MASK) as usize;
         self.live
@@ -207,7 +215,7 @@ impl<T: Clone> CallbackArena<T> {
     /// Engines whose values must outlive nothing — QuickJS `Persistent` handles
     /// in particular — call this before tearing the VM down, because a handle
     /// released after its runtime aborts the process.
-    pub fn clear(&mut self) {
+    pub(crate) fn clear(&mut self) {
         self.building = None;
         self.live.clear();
     }
@@ -219,6 +227,43 @@ impl<T: Clone> CallbackArena<T> {
 const GENERATION_SHIFT: u32 = 16;
 const INDEX_MASK: u32 = 0xffff;
 const GENERATION_MASK: u32 = 0xffff;
+
+/// What `process.exit(code)` means, decided by the host.
+///
+/// The script only ever *asks*: one plugin must not be able to take down an
+/// application somebody is working in, so the runtime never calls `exit(2)`
+/// itself. But a request nobody answers is a lie told in the flattering
+/// direction — the script gets a success and nothing happens — so a host that
+/// grants the capability installs what it should do, and a host that grants it
+/// without installing one is told so at the call rather than never.
+///
+/// A standalone CLI ends the process. An embedded host might close the plugin's
+/// panel, or its window, or refuse.
+pub type ExitHandler = Rc<dyn Fn(i32, &mut Window, &mut App)>;
+
+thread_local! {
+    static EXIT_HANDLER: RefCell<Option<ExitHandler>> = const { RefCell::new(None) };
+}
+
+/// Installs what an exit request does. Replaces any previous handler.
+pub fn on_exit_request(handler: impl Fn(i32, &mut Window, &mut App) + 'static) {
+    EXIT_HANDLER.with(|installed| *installed.borrow_mut() = Some(Rc::new(handler)));
+}
+
+/// The installed handler, if the host installed one.
+///
+/// Cloned out rather than borrowed across the call: a handler that reinstalls
+/// itself — or that tears down a panel which drops something that does — would
+/// otherwise panic on the outstanding borrow.
+pub fn exit_handler() -> Option<ExitHandler> {
+    EXIT_HANDLER.with(|installed| installed.borrow().clone())
+}
+
+/// Forgets the installed handler. A host that goes away should not leave one
+/// behind pointing at state it owned.
+pub fn clear_exit_handler() {
+    EXIT_HANDLER.with(|installed| *installed.borrow_mut() = None);
+}
 
 /// A failure reported over an interface that still works.
 ///
@@ -260,17 +305,17 @@ pub fn error_banner(message: &str, window: &mut Window, cx: &mut App) -> AnyElem
                 .flex()
                 .items_center()
                 .justify_between()
-                .gap(px(16.))
-                .px(px(16.))
-                .py(px(10.))
+                .gap(rems(1.))
+                .px(rems(1.))
+                .py(rems(0.625))
                 .child(
                     div()
                         .flex()
                         .flex_col()
-                        .gap(px(2.))
+                        .gap(rems(0.125))
                         .child(
                             div()
-                                .text_size(px(12.))
+                                .text_size(rems(0.75))
                                 .line_height(relative(1.4))
                                 .text_color(foreground)
                                 .child(SharedString::from(
@@ -280,7 +325,7 @@ pub fn error_banner(message: &str, window: &mut Window, cx: &mut App) -> AnyElem
                         )
                         .child(
                             div()
-                                .text_size(px(11.))
+                                .text_size(rems(0.6875))
                                 .line_height(relative(1.45))
                                 .text_color(muted)
                                 .child(SharedString::from(first_line(message))),
@@ -354,13 +399,13 @@ pub fn failure_surface(
         .items_center()
         .justify_center()
         .bg(background)
-        .p(px(32.))
+        .p(rems(2.))
         .child(
             div()
                 .flex()
                 .flex_col()
                 .w_full()
-                .max_w(px(560.))
+                .max_w(rems(35.))
                 .bg(surface)
                 .border_1()
                 .border_color(border)
@@ -369,18 +414,18 @@ pub fn failure_surface(
                     div()
                         .flex()
                         .flex_col()
-                        .gap(px(12.))
-                        .p(px(24.))
+                        .gap(rems(0.75))
+                        .p(rems(1.5))
                         .child(
                             div()
-                                .text_size(px(16.))
+                                .text_size(rems(1.))
                                 .line_height(relative(1.4))
                                 .text_color(foreground)
                                 .child(SharedString::from(heading.to_owned())),
                         )
                         .child(
                             div()
-                                .text_size(px(13.))
+                                .text_size(rems(0.8125))
                                 .line_height(relative(1.55))
                                 .text_color(muted)
                                 .child(SharedString::from(message.to_owned())),
@@ -390,13 +435,13 @@ pub fn failure_surface(
                                 .flex()
                                 .items_center()
                                 .justify_between()
-                                .gap(px(16.))
-                                .pt(px(12.))
+                                .gap(rems(1.))
+                                .pt(rems(0.75))
                                 .border_t_1()
                                 .border_color(border)
                                 .child(
                                     div()
-                                        .text_size(px(12.))
+                                        .text_size(rems(0.75))
                                         .line_height(relative(1.5))
                                         .text_color(muted)
                                         .child(SharedString::from(recovery.to_owned())),
@@ -424,11 +469,11 @@ fn copy_button(
         .flex()
         .items_center()
         .justify_center()
-        .h(px(26.))
-        .px(px(12.))
+        .h(rems(1.625))
+        .px(rems(0.75))
         .border_1()
         .border_color(border)
-        .text_size(px(12.))
+        .text_size(rems(0.75))
         .line_height(relative(1.))
         .text_color(if copied { muted } else { foreground })
         .hover(|style| style.opacity(0.8))

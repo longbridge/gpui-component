@@ -6,7 +6,7 @@ order: 7
 
 # Capabilities
 
-A script gets **nothing** by default. No file access, no storage, no clipboard, no process execution, no network. `Capabilities::default()` is the empty set, and that is asserted in the code rather than described in a comment.
+A script gets **nothing** by default. No file access, no storage, no clipboard, no process execution, no network. `Capabilities::default()` is the empty set, and an assertion holds it there.
 
 The host grants what it grants, because only the host knows how far it trusts the code it is about to run. Every entry point re-reads the grant at call time, so revoking a capability takes effect on the next call rather than on the next restart.
 
@@ -74,7 +74,7 @@ import { fs } from "gpui";
 | `fs.remove(path)` | — |
 | `fs.create_dir_all(path)` | — |
 
-A relative path resolves against a granted root; an absolute one must already be inside one. Every path in the surface goes through **one resolver**, which normalizes it and then requires the result to still be under a root — so `../../etc/passwd` is rejected before it reaches the filesystem, and there is no second place for a traversal bug to hide.
+A relative path resolves against a granted root; an absolute one must already be inside one. Every path in the surface goes through **one resolver**, so there is no second place for a traversal bug to hide. It normalizes the path — `../../etc/passwd` is rejected before it reaches the filesystem — and then settles containment against the filesystem rather than against the string, because a grant is a promise about a *directory*: `data/escape/passwd` is lexically inside the root and reads `/etc/passwd` if `escape` is a symlink. The deepest part of the path that exists is resolved, links and all, and has to still be under the root; a symlink that resolves to nothing is refused rather than guessed at.
 
 Three of these behave in a way worth stating, each for the same reason:
 
@@ -84,8 +84,14 @@ Three of these behave in a way worth stating, each for the same reason:
 
 **`read_dir` is sorted.** A script that renders a listing should not have to sort it, and should not inherit the filesystem's arbitrary order.
 
-::: warning These calls block
-The filesystem surface is **synchronous** today: it returns a value rather than a promise, and it blocks the thread that renders. Making it asynchronous is planned, and it will change these signatures. Keep the amount of work small, and do not read a file from `render`.
+**Every call returns a promise.** The syscall runs off the main thread, because a disk has no bound on how long it takes and blocking here would stop the frame and the VM together — somewhere the interrupt budget cannot even see, since the time is spent in the kernel.
+
+A **denial still throws at the call site** rather than rejecting. The capability check costs nothing and stays on the calling thread, and a rejected promise nobody awaited is a denial nobody sees.
+
+`read_text` refuses a file over 64 MiB, naming it and the limit. The alternative to a ceiling is a string that has to fit in the JavaScript heap — which is itself capped — so the failure without one is an out-of-memory inside the VM rather than a sentence you can act on.
+
+::: tip Still do not read a file from `render`
+`render` describes the interface; it cannot await. Read in `init` or an event handler, keep the result on the view, and `cx.notify()` when it arrives.
 :::
 
 ## `store`
@@ -188,7 +194,9 @@ process.exit(0);
 
 `process.run` is gated on an execute grant, which is one of three: denied (the default), an allowlist of command names, or unrestricted.
 
-`process.exit` is **a request, never `exit(2)`**. It records the code; the host polls for it after a script call returns and decides what to do — close the plugin's panel, close the window, or ignore it. One plugin must not be able to take the host process down, and the host may have unsaved state.
+`process.exit` is **a request, never `exit(2)`** inside the runtime. It hands the code to a handler the host installed, which decides what to do — close the plugin's panel, close the window, end the process. One plugin must not be able to take the host process down, and the host may have unsaved state.
+
+The handler is not optional: a host that grants the capability without installing one makes the call **fail**, naming the omission. A request nobody answers is worse than a denial, because a script cannot tell the two apart. The `gpui-shell` binary installs the policy that suits a host which *is* the process — it ends it, with the code the script asked for.
 
 The name is a deliberate collision. `process` is what a JavaScript author — or a model generating JavaScript — reaches for, so the runtime puts its own capability-gated surface there rather than leaving the name free to look like Node's and behave differently.
 
@@ -228,8 +236,8 @@ Development mode never relaxes capability gating. It makes the language easier t
 
 ## Not there yet
 
-- **`gpui.http`.** The capability model has `capabilities.network.hosts` and `fetch`'s refusal message names it, but there is no HTTP surface.
+- **`gpui.http`.** The capability model has `capabilities.network.hosts` and `fetch`'s refusal message names it, but there is no HTTP surface. When it lands it returns promises — a socket can take a minute, and the filesystem already demonstrated what shipping a blocking surface costs.
 - **The manifest, and the plugin model it belongs to.** Grants come from the host today.
-- **Asynchronous `fs` and `store.flush`.** Both block.
+- **An awaitable `store.flush`.** `fs` is asynchronous; `store` is a cache with a write-through, and its flush is the one synchronous write left.
 - **A capability of its own for `process.exit`.**
 - **Prompting the user.** Grants are decided before the application loads; nothing asks at the moment of use.

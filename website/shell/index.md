@@ -6,7 +6,7 @@ order: 1
 
 # GPUI Shell
 
-`gpui-shell` gives a Rust [GPUI](https://gpui.rs) application **JavaScript extension points**: the host builds the runtime and grants what a script may reach, and the script draws real interface inside the same process. It is built directly on [`gpui-base`](/base/), with QuickJS running on the host's own thread. Rust keeps rendering, layout, text editing, virtualization, focus, overlays and every system capability; the script owns composition, presentation and business logic. A script can also be run on its own, which is how one is usually developed.
+`gpui-shell` gives a Rust [GPUI](https://gpui.rs) application **JavaScript extension points**: the host builds the runtime and grants what a script may reach, and the script draws real interface inside the same process. It is built directly on [`gpui-base`](/base/), with [QuickJS](https://github.com/quickjs-ng/quickjs) running on the host's own thread. Rust keeps rendering, layout, text editing, virtualization, focus, overlays and every system capability; the script owns composition, presentation and business logic. A script can also be run on its own, which is how one is usually developed.
 
 ```js
 import { View, v_flex, text, Button } from "gpui";
@@ -49,13 +49,17 @@ export default class Counter extends View {
 
 A script never holds a GPUI element. It records a **description** of one — every call in a builder chain writes an operation into an arena, and Rust replays those operations into real elements when a frame needs them. Layout, painting, hit testing, scrolling, IME and text editing stay in Rust and never call back into the script. [How a script becomes an interface](#how-a-script-becomes-an-interface) traces one pass of that.
 
-The engine is a parameter of the design rather than a part of it. QuickJS is the only one today, but everything above the seam — the arena, the materializer, the call scope, the style table, the theme, the capability model, the overlay host, hot reload — names no VM anywhere in its source. See [The engine seam](./engine.md).
+The engine is a parameter of the design rather than a part of it. QuickJS is the only one today, but everything above the seam — the arena, the materializer, the call scope, the style table, the theme, the capability model, the overlay host, hot-reload — names no VM anywhere in its source. See [The engine seam](./engine.md).
 
 ### Capability: a whole application layer, not a widget set
 
 A script gets what a Rust application built on `gpui-base` gets: elements and layout, a fluent style surface over semantic theme tokens, view state through `init` / `render` / `cx.notify()`, retained host state such as a text input's rope and selection, dialogs, a sheet and toasts, asynchronous tasks, and the gated system surfaces — `fs`, `store`, `clipboard`, `log`, `process`.
 
-Around that: `--watch` reloads on save without costing you the window, a generated `gpui.d.ts` describes the whole API to an editor or a model, and `check` reports mistakes before the application runs.
+Around that: `--watch` hot-reloads on save, with no restart, a generated `gpui.d.ts` describes the whole API to an editor or a model, and `check` reports mistakes before the application runs.
+
+::: tip
+`gpui.d.ts` can go in `.gitignore` — it is generated.
+:::
 
 ### Performance: the script is not in the frame
 
@@ -76,9 +80,14 @@ The frame count belongs to the display, the JavaScript count to the data. In the
 
 Cost is therefore paid per user action rather than per frame. On a 443-node panel, running `render` and recording the whole interface into a snapshot takes 1.1 ms, paid only when state changes; each frame after it takes 1.3 ms, which is rendering itself — turning the snapshot into elements, laying out, painting, with no JavaScript in it.
 
-Without a snapshot every frame would run `render` again, putting a frame at 1.1 + 1.3 = 2.4 ms. With one, the 1.1 ms is paid on the change alone and every frame costs 1.3 ms.
+| | Cost per frame |
+| --- | --- |
+| Without a snapshot | 1.1 ms (JS render) + 1.3 ms (Rust render) = **2.4 ms/frame render** |
+| With a snapshot | **1.3 ms** |
 
 Growing the panel does not change that. The [benchmark](./engine.md#the-measurement) covers sizes up to 8,403 nodes, no frame at any of them runs JavaScript, and the smallest size is asserted on every CI build.
+
+All figures here were taken on a MacBook Pro (M3, 8 cores, 24 GB): the frame and run counts from the Shell story, the milliseconds from a release build of the benchmark.
 
 ### Security: nothing by default, and a language trimmed to match
 
@@ -102,13 +111,13 @@ Three consequences follow directly, and each has a page below:
 - **The `cx` handed to a call belongs to that call.** It carries a generation number, checked against the live call stack, so a `cx` kept across an `await` reports a clear error instead of touching a dead stack frame. See [State and views](./state.md).
 - **Callbacks belong to the render that registered them.** They are replaced wholesale by the next render, which is what keeps script closures from accumulating in the host. See [Elements](./elements.md).
 
-None of that is a design flourish. It is what falls out of binding a script to an element model that consumes its values.
+All three fall out of binding a script to an element model that consumes its values.
 
 ## Presentation belongs to the script
 
 Most scripting layers hand a script a set of finished widgets and let it arrange them. This one has none to hand over, because the layer underneath it has none either.
 
-`gpui-base` controls carry no visual style at all. `Button::new("save")` in Rust has no padding, no background, no radius and no size, and that is a contract rather than an omission. The JavaScript bindings preserve it exactly: `Button.new("save")` with no styling draws nothing but its children.
+`gpui-base` controls carry no visual style at all. `Button::new("save")` in Rust has no padding, no background, no radius and no size, and that is the contract. The JavaScript bindings preserve it exactly: `Button.new("save")` with no styling draws nothing but its children.
 
 The consequence is the point. **Because the foundation ships no presentation, the script owns all of it** — every colour, every pixel of spacing, every hover state, every corner radius. That is the same trade a Rust application makes when it builds on `gpui-base` instead of `gpui-component`; the difference is that here the trade is made in a file you can save and see the result of immediately, with no `cargo build` in between.
 
@@ -116,13 +125,11 @@ What the script gains in exchange for the extra typing is the whole application 
 
 ## Where it fits
 
-| | What the runtime provides |
-| --- | --- |
-| **Adding plugin support to an existing GPUI application** | Plugins run inside the host process under capabilities the host grants one at a time, starting from none. Extending the product stops meaning a fork or a new release. |
-| **Writing a complete application in JavaScript on `gpui-shell`** | The whole application layer — elements, styling, view state, overlays and the system surfaces — while rendering, text editing, virtualization and animation stay in Rust. |
-| **Giving an application dynamic extension points** | Interface and business logic ship as script and change without recompiling or redistributing a binary, and a failing script surfaces as a recoverable error rather than taking the host down. |
+- **Adding plugin support to an existing GPUI application.** Plugins run inside the host process under capabilities the host grants one at a time, starting from none. Extending the product stops meaning a fork or a new release.
+- **Writing a complete application in JavaScript on `gpui-shell`.** The whole application layer — elements, styling, view state, overlays and the system surfaces — while rendering, text editing, virtualization and animation stay in Rust.
+- **Giving an application dynamic extension points.** Interface and business logic ship as script and change without recompiling or redistributing a binary, and a failing script surfaces as a recoverable error rather than taking the host down.
 
-Text editing, syntax highlighting, LSP, virtualization and animation stay in Rust. That is the division of labour rather than a gap in it: the script composes and presents, and the host owns everything that has to sit close to the GPU and the system.
+Text editing, syntax highlighting, LSP, virtualization and animation stay in Rust: the script composes and presents, and the host owns everything that has to sit close to the GPU and the system.
 
 ## Where it sits
 
@@ -138,7 +145,7 @@ Text editing, syntax highlighting, LSP, virtualization and animation stay in Rus
   gpui-base                    behavior · state · infrastructure (no style)
             │
             ▼
-  gpui / gpui_platform         elements · styling · rendering · GPU · platform
+  gpui                         elements · styling · rendering · GPU · platform
 ```
 
 `gpui-shell` sits beside `gpui-component` rather than beneath it: both are consumers of `gpui-base`, and both supply a presentation layer that Base does not. `gpui-component` supplies one in Rust, finished and coherent. `gpui-shell` supplies the machinery for a script to supply its own.

@@ -33,7 +33,12 @@ use rquickjs::{
     function::{Func, Rest},
 };
 
-use crate::native::{self, NativeArguments, NativeValue};
+use crate::{
+    native::{self, NativeArguments, NativeValue},
+    scope,
+};
+
+use super::ShellRuntime;
 
 /// How deep an argument may nest.
 ///
@@ -139,7 +144,24 @@ impl<'js> IntoJs<'js> for ModuleBinding {
                     move |ctx: Ctx<'_>, arguments: Rest<Argument>| -> JsResult<Bridged> {
                         let arguments =
                             NativeArguments::new(arguments.0.into_iter().map(|it| it.0));
-                        match native::dispatch(&module, &function, &arguments) {
+                        // Timed so a script render can be told apart from the
+                        // host work inside it: `quotes()` reading a board out of
+                        // an entity is not the script describing itself, and
+                        // charging it to JavaScript would be a lie in the
+                        // flattering direction.
+                        // Looked up and released before dispatching: a host
+                        // function reaches for the ambient `App` itself, and
+                        // holding it across the call would be two borrows of
+                        // one thing.
+                        let runtime =
+                            scope::with_current_app(|cx| ShellRuntime::global(cx)).flatten();
+                        let dispatched = match &runtime {
+                            Some(runtime) => runtime
+                                .metrics()
+                                .time_native(|| native::dispatch(&module, &function, &arguments)),
+                            None => native::dispatch(&module, &function, &arguments),
+                        };
+                        match dispatched {
                             Ok(value) => Ok(Bridged(value)),
                             // The registry's messages never name their own
                             // function, so the call site is named exactly once.

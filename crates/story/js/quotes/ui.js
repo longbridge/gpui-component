@@ -7,15 +7,45 @@
 // moves this half too.
 
 import { div, h_flex, v_flex, text, Button, native } from "gpui";
+/** @import { AbsoluteLength, ClickEvent, Context, Element } from "gpui" */
 
-export const SPACE = { xxs: 2, xs: 4, sm: 8, md: 12, lg: 16, xl: 24 };
+/// Every measurement here is in **rems**, so the panel scales with the window's
+/// text size instead of pinning itself to a pixel grid that only exists at the
+/// default zoom. The one exception is a hairline rule, which is a rule at any
+/// size rather than a measurement.
+///
+/// `shell_story.rs` carries the same numbers. The two boards sit side by side,
+/// so one that only lines up at 100% lines up by accident.
+/** @type {Record<"xxs" | "xs" | "sm" | "md" | "lg" | "xl", AbsoluteLength>} */
+export const SPACE = {
+  xxs: "0.125rem",
+  xs: "0.25rem",
+  sm: "0.5rem",
+  md: "0.75rem",
+  lg: "1rem",
+  xl: "1.5rem",
+};
 
-/// Column widths, row density and type sizes, all mirroring the constants in
-/// `shell_story.rs`. The two boards sit side by side, so a number that differs
-/// makes the comparison about layout instead of about rendering.
-export const COLUMN = { symbol: 78, price: 68, percent: 66, volume: 82 };
-export const ROW = { padding: 2, gap: 2, inset: 8, marker: 6 };
-export const TYPE = { title: 13, body: 11, lineHeight: 1.4 };
+/** @type {Record<"symbol" | "price" | "percent" | "volume", AbsoluteLength>} */
+export const COLUMN = {
+  symbol: "4.875rem",
+  price: "4.25rem",
+  percent: "4.125rem",
+  volume: "5.125rem",
+};
+
+/** @type {Record<"padding" | "gap" | "inset" | "marker" | "halfMarker", AbsoluteLength>} */
+export const ROW = {
+  padding: "0.125rem",
+  gap: "0.125rem",
+  inset: "0.5rem",
+  marker: "0.375rem",
+  /// Spelled out because a rem string cannot be halved by dividing.
+  halfMarker: "0.1875rem",
+};
+
+/** @type {{ title: AbsoluteLength, body: AbsoluteLength, lineHeight: number }} */
+export const TYPE = { title: "0.8125rem", body: "0.6875rem", lineHeight: 1.4 };
 
 /** @type {Palette | null} */
 let current = null;
@@ -31,6 +61,7 @@ export const palette = () => current ?? refreshPalette();
 
 /// Up is `success`, down is `danger`, flat is ordinary text — the same question
 /// the Rust panel asks of the same theme.
+/** @param {number} direction */
 export const directionColor = (direction) => {
   const colors = palette();
   if (direction > 0) return colors.success;
@@ -40,6 +71,7 @@ export const directionColor = (direction) => {
 
 // -- Type -------------------------------------------------------------------
 
+/** @param {string} value */
 export const title = (value) =>
   text(value)
     .text_size(TYPE.title)
@@ -47,9 +79,11 @@ export const title = (value) =>
     .font_semibold()
     .text_color(palette().foreground);
 
+/** @param {string} value */
 export const label = (value) =>
   text(value).text_size(TYPE.body).line_height(TYPE.lineHeight).text_color(palette().foreground);
 
+/** @param {string} value */
 export const muted = (value) =>
   text(value)
     .text_size(TYPE.body)
@@ -62,10 +96,13 @@ export const muted = (value) =>
 /// card, and the Rust board has no inner frame either.
 export const surface = () => v_flex().w_full().gap(SPACE.md);
 
+// One real pixel: a rule is a rule at any zoom, not a measurement that scales.
+// One real pixel: a rule is a rule at any zoom, not a measurement that scales.
 export const rule = () => div().w_full().h(1).flex_none().bg(palette().border);
 
 // -- Board parts ------------------------------------------------------------
 
+/** @param {AbsoluteLength} width @param {{ right?: boolean }} [options] */
 export const cell = (width, options = {}) => {
   const box = div().w(width).flex_none();
   return options.right ? box.text_right() : box;
@@ -92,7 +129,7 @@ export const header = () =>
 
 /// A full-width row that behaves like a button. The id is the symbol rather than
 /// the row's position, so identity follows the instrument if the board reorders.
-/** @param {Quote} quote */
+/** @param {Quote} quote @param {(event: ClickEvent, cx: Context) => void} onClick */
 export const quoteRow = (quote, onClick) =>
   Button.new(`quote-${quote.symbol}`)
     .accessibility_label(`Watch ${quote.name}`)
@@ -120,15 +157,22 @@ export const quoteRow = (quote, onClick) =>
     .child(cell(COLUMN.volume, { right: true }).child(muted(quote.volume)))
     .child(watchMarker(quote.watched));
 
+/** @param {boolean} watched */
 export const watchMarker = (watched) =>
   div()
     .w(ROW.marker)
     .h(ROW.marker)
     .flex_none()
-    .rounded(ROW.marker / 2)
+    .rounded(ROW.halfMarker)
     .when(watched, (el) => el.bg(palette().primary));
 
 /// A labelled action. Two treatments only — filled and outlined.
+/**
+ * @param {string} id
+ * @param {string} caption
+ * @param {(event: ClickEvent, cx: Context) => void} onClick
+ * @param {{ primary?: boolean, disabled?: boolean }} [options]
+ */
 export const action = (id, caption, onClick, options = {}) => {
   const { primary = false, disabled = false } = options;
   const colors = palette();
@@ -138,7 +182,7 @@ export const action = (id, caption, onClick, options = {}) => {
     .flex()
     .items_center()
     .justify_center()
-    .h(20)
+    .h("1.25rem")
     .px(SPACE.sm)
     .rounded(colors.radius)
     .border(1)

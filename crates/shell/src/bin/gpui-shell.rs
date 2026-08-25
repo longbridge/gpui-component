@@ -14,7 +14,6 @@ use std::{
     fmt::{self, Write as _},
     path::{Path, PathBuf},
     rc::Rc,
-    time::Duration,
 };
 
 use gpui::{
@@ -25,7 +24,7 @@ use gpui_shell::{
     Capabilities, ScriptView, ShellRoot, ShellRuntime, ToastLevel, ToastRequest,
     assets::AppAssets,
     theme::Palettes,
-    watch::{self, SourceWatcher},
+    watch::{self, POLL_INTERVAL, SourceWatcher},
 };
 use tracing::{
     Event, Level, Metadata, Subscriber,
@@ -46,7 +45,6 @@ const ENTRY: &str = "main.js";
 /// reload can be. A quarter second is below the threshold where a save feels
 /// unacknowledged, and one `stat` per source file at 4Hz is not a cost worth
 /// tuning for a directory that holds a handful of them.
-const POLL_INTERVAL: Duration = Duration::from_millis(250);
 
 /// Identity of the toast a failed reload posts.
 ///
@@ -303,6 +301,16 @@ fn run(arguments: Arguments) {
                 }
             };
             runtime.set_global(cx);
+
+            // What `process.exit(code)` means here. The runtime never decides
+            // this — one plugin must not be able to end an application somebody
+            // is working in — but this host *is* the process, so ending it is
+            // the honest answer. An embedded host installs something else:
+            // closing a panel, closing a window, or refusing.
+            gpui_shell::on_exit_request(|code, _, _| {
+                tracing::info!("the application asked to exit with {code}");
+                std::process::exit(code);
+            });
 
             // Resolving here rather than leaving it to `load_app` gives the window
             // title and the watcher the real application root even when the command

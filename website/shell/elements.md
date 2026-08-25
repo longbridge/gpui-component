@@ -217,7 +217,7 @@ One rough edge worth knowing about: the arena is cleared and its indices reused 
 
 ### Why
 
-It is not a restriction the runtime invented. GPUI's `RenderOnce::render` takes `self` **by value**, and `.child()` takes its child by value. In Rust the compiler enforces that with move semantics: using a moved value is a compile error. JavaScript has no move semantics and no compiler, so the runtime enforces the same rule at run time — and the description arena already has the bookkeeping needed to do it, because it marks a node as parented the moment it is attached.
+The restriction comes from GPUI itself: `RenderOnce::render` takes `self` **by value**, and `.child()` takes its child by value. In Rust the compiler enforces that with move semantics: using a moved value is a compile error. JavaScript has no move semantics and no compiler, so the runtime enforces the same rule at run time — and the description arena already has the bookkeeping needed to do it, because it marks a node as parented the moment it is attached.
 
 The alternative would be to copy the description on reuse. That was rejected: it would make the same script mean different things in Rust and in JavaScript, and reuse is almost always a mistake rather than an intention.
 

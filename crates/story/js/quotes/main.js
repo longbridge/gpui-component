@@ -17,6 +17,7 @@
 // report what that costs, and what a repaint costs when nothing here changed.
 
 import { h_flex, v_flex, View, native } from "gpui";
+/** @import { NativeModules } from "gpui" */
 import {
   ROW,
   SPACE,
@@ -52,6 +53,7 @@ export default class QuoteBoard extends View {
       .child(this.actions(market, quotes.length, watched));
   }
 
+  /** @param {number} total @param {number} watched @param {number} ticks */
   heading(total, watched, ticks) {
     return h_flex()
       .w_full()
@@ -73,7 +75,7 @@ export default class QuoteBoard extends View {
       );
   }
 
-  /** @param {Quote[]} quotes */
+  /** @param {NativeModules["market"]} market @param {Quote[]} quotes */
   rows(market, quotes) {
     if (quotes.length === 0) {
       return muted("The Rust panel is holding no quotes.");
@@ -89,6 +91,11 @@ export default class QuoteBoard extends View {
       );
   }
 
+  /**
+   * @param {NativeModules["market"]} market
+   * @param {number} total
+   * @param {number} watched
+   */
   actions(market, total, watched) {
     return h_flex()
       .w_full()

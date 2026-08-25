@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PR #2821 全面代码审查</title>
+  <style>
+    :root { color-scheme: light dark; --bg:#f4f1ea; --paper:#fffdf8; --ink:#18201d; --muted:#69716c; --line:#d7d5cc; --red:#b42318; --amber:#a15c00; --blue:#175cd3; --green:#18794e; --shadow:0 18px 60px rgba(32,35,31,.10); }
+    @media (prefers-color-scheme:dark){:root{--bg:#111513;--paper:#191e1b;--ink:#edf1ed;--muted:#aab2ac;--line:#353d38;--red:#ff8a80;--amber:#ffc46b;--blue:#8cb4ff;--green:#75d6a7;--shadow:none}}
+    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.65 ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif} main{max-width:1180px;margin:0 auto;padding:52px 28px 80px}.hero,.panel{background:var(--paper);border:1px solid var(--line);box-shadow:var(--shadow)}.hero{padding:42px;border-radius:20px}.eyebrow{font:700 12px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.12em;text-transform:uppercase;color:var(--red)}h1{font-size:clamp(34px,6vw,68px);line-height:.98;letter-spacing:-.055em;margin:18px 0 22px;max-width:850px}.lead{font-size:19px;max-width:850px;color:var(--muted)}.meta,.score{display:grid;gap:12px}.meta{grid-template-columns:repeat(4,minmax(0,1fr));margin-top:30px}.stat{border-top:1px solid var(--line);padding-top:12px}.stat b{display:block;font-size:22px}.stat span,.small{color:var(--muted);font-size:13px}.verdict{margin-top:28px;padding:18px 20px;border-left:5px solid var(--red);background:color-mix(in srgb,var(--red) 8%,transparent);font-weight:650}.section{margin-top:42px}.section h2{font-size:25px;letter-spacing:-.025em;margin:0 0 14px}.score{grid-template-columns:repeat(4,minmax(0,1fr))}.score .panel{padding:18px;border-radius:14px}.grade{font-size:28px;font-weight:800}.bad{color:var(--red)}.warn{color:var(--amber)}.good{color:var(--green)}.finding{display:grid;grid-template-columns:84px 1fr;gap:18px;padding:25px 0;border-top:1px solid var(--line)}.sev{font:800 12px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;text-transform:uppercase}.p0{color:var(--red)}.p1{color:var(--amber)}.p2{color:var(--blue)}.finding h3{font-size:18px;margin:0 0 7px}.finding p{margin:6px 0}.evidence{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;color:var(--muted)}code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;background:color-mix(in srgb,var(--ink) 7%,transparent);padding:.1em .35em;border-radius:4px}.panel{padding:24px;border-radius:16px}.checks{display:grid;grid-template-columns:1fr 1fr;gap:14px}.check{padding:15px 17px;border:1px solid var(--line);border-radius:10px}.check b{display:block}.pass b{color:var(--green)}.fail b{color:var(--red)}table{width:100%;border-collapse:collapse;background:var(--paper);border:1px solid var(--line)}th,td{text-align:left;vertical-align:top;padding:13px 15px;border-bottom:1px solid var(--line)}th{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}ul{padding-left:20px}.note{border-left:4px solid var(--blue)}footer{margin-top:44px;color:var(--muted);font-size:13px}@media(max-width:760px){main{padding:22px 14px 50px}.hero{padding:25px}.meta,.score,.checks{grid-template-columns:1fr 1fr}.finding{grid-template-columns:1fr;gap:6px}}
+  </style>
+</head>
+<body><main>
+  <section class="hero">
+    <div class="eyebrow">Architecture · API · Completeness · Performance · Security</div>
+    <h1>PR #2821<br>全面代码审查</h1>
+    <p class="lead"><strong>shell: Add gpui-shell, a scriptable application runtime on gpui-base</strong></p>
+    <div class="meta">
+      <div class="stat"><b>main…HEAD</b><span>审查基线</span></div>
+      <div class="stat"><b>87 files</b><span>28,346 additions / 60 deletions</span></div>
+      <div class="stat"><b>1 P0 · 5 P1</b><span>已提交改动的主要问题</span></div>
+      <div class="stat"><b>2026-08-25</b><span>Asia/Singapore</span></div>
+    </div>
+    <div class="verdict">结论：Request changes / 阻止合并。符号链接可绕过文件系统 capability 根目录，构成真实的读写越权；此外退出语义、异步 I/O、引擎抽象与键盘可达性仍未闭环。</div>
+  </section>
+
+  <section class="section">
+    <h2>维度评分</h2>
+    <div class="score">
+      <div class="panel"><div class="grade warn">B−</div><b>架构设计</b><div class="small">快照缓存方向正确；host 配置绕过 engine seam。</div></div>
+      <div class="panel"><div class="grade warn">C+</div><b>API 规范</b><div class="small">公开字段与静默 no-op fallback 削弱演进性和契约。</div></div>
+      <div class="panel"><div class="grade bad">C</div><b>功能完整性</b><div class="small">process.exit 成功返回但无生产消费者；范围明显扩张。</div></div>
+      <div class="panel"><div class="grade warn">B</div><b>性能</b><div class="small">快照避免逐帧进 VM；文件 I/O 仍同步阻塞 UI。</div></div>
+    </div>
+  </section>
+
+  <section class="section panel">
+    <h2>必须修复：已提交 PR 改动</h2>
+
+    <article class="finding"><div class="sev p0">P0 · Security</div><div><h3>文件系统 capability 可被符号链接绕过</h3><p><code>Capabilities::resolve</code> 只进行词法归一化与 <code>starts_with(root)</code> 检查，随后 <code>std::fs</code> 调用会跟随符号链接。若授权目录内存在 <code>escape -&gt; /etc</code>，脚本可读取 <code>escape/passwd</code>；写权限同样可越界写入。代码注释声称 syscall 时会再次检查，但实现不存在。<code>AppAssets</code> 使用同一类词法检查，也可经 symlink 读取根目录之外的资源。</p><p><strong>修复：</strong>使用 descriptor-relative/no-follow 文件操作，或在每次操作前 canonicalize 已存在祖先并再次验证 containment；写入需处理不存在的末级路径与 TOCTOU。增加 read/write/list/remove/create 与 asset symlink escape 测试。</p><p class="evidence">crates/shell/src/capability.rs:112–135, 201–204 · crates/shell/src/engine/quickjs/host.rs:102–160 · crates/shell/src/assets.rs:36–62 · spec §19.2</p></div></article>
+
+    <article class="finding"><div class="sev p1">P1 · Function</div><div><h3><code>process.exit()</code> 实际是成功的 no-op</h3><p>调用只写入 <code>EXIT_REQUEST</code>；读取函数 <code>take_exit_request</code> 没有任何生产调用者。获准调用的脚本得到成功结果，但窗口、panel 和 CLI 都不会退出，与设计中“host polls for the code”不符。</p><p><strong>修复：</strong>在所有脚本调用边界或 host 事件循环中消费退出请求，定义嵌入式 panel 与独立 CLI 的不同策略，并增加授权后的端到端退出测试。</p><p class="evidence">crates/shell/src/engine/quickjs/sandbox.rs:307–343 · docs/gpui-shell.md:2027–2032</p></div></article>
+
+    <article class="finding"><div class="sev p1">P1 · Perf</div><div><h3>所有 <code>gpui.fs</code> 方法同步阻塞 UI/VM 线程</h3><p><code>read_text</code>、<code>write_text</code>、<code>read_dir</code>、<code>exists</code>、<code>remove</code>、<code>create_dir_all</code> 均在 QuickJS host callback 内直接执行同步系统调用。慢磁盘、网络卷或大文件会冻结事件处理并突破执行预算；源码中的 TODO 与设计文档都明确要求 promise 异步化。</p><p><strong>修复：</strong>将 I/O 投递到 GPUI background executor，以 Promise 返回；限制读取大小，并验证调用不会同步占住主线程。</p><p class="evidence">crates/shell/src/engine/quickjs/host.rs:17–24, 99–164 · docs/gpui-shell.md:1962–1965</p></div></article>
+
+    <article class="finding"><div class="sev p1">P1 · Architecture</div><div><h3>公开 host 控制 API 绕过可替换引擎 seam</h3><p><code>set_capabilities</code>、<code>set_store_path</code>、<code>set_development_mode</code> 从 crate 根直接调用 QuickJS 私有模块；非 QuickJS 构建则静默 no-op。第二个引擎即使编译成功，也可能无声忽略安全配置。</p><p><strong>修复：</strong>把这些操作纳入 <code>ShellRuntime</code>/engine contract，删除静默 fallback；让不支持的配置在编译期或显式 <code>Result</code> 中失败，并为 feature 组合添加 compile tests。</p><p class="evidence">crates/shell/src/lib.rs:48–84 · docs/gpui-shell.md:481–506, 550–565</p></div></article>
+
+    <article class="finding"><div class="sev p1">P1 · A11y</div><div><h3>行情行是仅鼠标可操作的自定义点击容器</h3><p>每行使用 <code>h_flex().on_click(...)</code>，只有 hover 反馈，没有 focus handle、Tab stop、键盘 action、focus-visible 状态、role 或可访问名称。这违反项目“优先组合语义控件”和“每个动作可由键盘完成”的规范。</p><p><strong>修复：</strong>使用语义化 selectable list/control，或完整实现 focused composite contract；补 pointer、Enter/Space、Tab 顺序与 focus-visible 测试。</p><p class="evidence">crates/story/src/stories/shell_story.rs:952–967 · Coding Guides: Rendering and composition; Events, actions, and focus · Design Guides: Accessibility checklist</p></div></article>
+
+    <article class="finding"><div class="sev p1">P1 · Scope</div><div><h3>PR 描述与实际范围不一致</h3><p>PR body 将 entity-backed components、dock/panel、plugin manifest 和 <code>.d.ts</code> generation 标为 “Not there yet”，但分支已经加入 <code>dock.rs</code>、<code>plugin.rs</code>、<code>plugin_api.rs</code> 与 <code>typings.rs</code>，约 4K+ LOC。设计文档自身也同时声称 plugin 未构建和已实现但未使用。</p><p><strong>修复：</strong>拆分 follow-up PR，或更新 PR 契约并按扩展后的安全/API 面重新获得审查；统一设计文档的 built/not-built 状态。</p><p class="evidence">PR #2821 body · crates/shell/src/{dock,plugin,plugin_api,typings}.rs · docs/gpui-shell.md “What Is Built and What Is Not”</p></div></article>
+  </section>
+
+  <section class="section panel">
+    <h2>应修复：规范与 API 质量</h2>
+    <article class="finding"><div class="sev p2">P2 · API</div><div><h3>跨 seam 的公开数据结构暴露字段</h3><p><code>SpecNode</code> 与 <code>CallbackEntry&lt;T&gt;</code> 暴露 public fields，且所属模块公开。下游可构造结构字面量，未来新增字段会成为破坏性变更。</p><p><strong>修复：</strong>优先收窄到 <code>pub(crate)</code>；若确属公共 API，则私有化字段并提供最小 reader/builder。</p><p class="evidence">crates/shell/src/spec.rs:76–81, 128–130 · crates/shell/src/runtime.rs:93–98 · Coding Guides: Public API design</p></div></article>
+    <article class="finding"><div class="sev p2">P2 · Zoom</div><div><h3>Story 和错误界面大量使用 raw <code>px(...)</code></h3><p>行情板的字体、间距、行高、控件高度和宽度使用固定像素，绕过 <code>rem</code> 与语义 spacing；在非默认 zoom 下，Rust/JS 两侧都不能按项目规范缩放。1px hairline 属合理例外。</p><p><strong>修复：</strong>两侧建立同一 length/rem 模型，使用 spacing/type helpers 或主题 token，并在非默认 <code>window.rem_size()</code> 下验证。</p><p class="evidence">crates/story/src/stories/shell_story.rs:833–840, 857–870, 922–1007, 1122–1147 · crates/shell/src/runtime.rs:257–285, 351–432</p></div></article>
+    <article class="finding"><div class="sev p2">P2 · Semantics</div><div><h3>Primary 样式被用于普通命令和选择状态</h3><p><code>Watch all</code> 是普通 toolbar command，却使用 primary；feed 模式通过 primary/outline 表示选择，混淆“默认提交动作”和“当前选择”。</p><p><strong>修复：</strong>普通命令使用 default/outline；模式使用 segmented/radio-like selectable control 与持久 selected 语义。</p><p class="evidence">crates/story/src/stories/shell_story.rs:894–917, 1241–1247 · Design Guides: action priority and selection</p></div></article>
+  </section>
+
+  <section class="section">
+    <h2>未提交工作区改动（不计入 PR 通过条件）</h2>
+    <div class="panel note"><p><strong>P1 生命周期/性能：</strong><code>watch.rs</code> 新增的永久 250ms polling task 强引用 <code>Rc&lt;ShellRuntime&gt;</code> 和 <code>Entity&lt;ScriptView&gt;</code>，只在整个窗口关闭时结束。panel 被移除但窗口仍在时，view/runtime 会泄漏并继续扫描；反复 mount 会累积 poller。</p><p><strong>修复：</strong>捕获 <code>WeakEntity&lt;ScriptView&gt;</code>，upgrade 失败即退出，或返回与 embedding view 生命周期绑定的 cancellation handle；增加 disposal/cancellation 测试。</p><p class="evidence">crates/shell/src/watch.rs:316–352（working tree only）</p></div>
+  </section>
+
+  <section class="section">
+    <h2>验证记录</h2>
+    <div class="checks">
+      <div class="check pass"><b>PASS · cargo test -p gpui-shell --all-targets</b><span class="small">157 unit + 11 render + 10 snapshot + 3 benchmark；1 个 8,403-node release benchmark ignored。</span></div>
+      <div class="check fail"><b>FAIL · cargo clippy -p gpui-shell --all-targets -- -D warnings</b><span class="small">working tree 的 gpui-shell.rs:47 触发 empty_line_after_doc_comments。</span></div>
+      <div class="check fail"><b>FAIL · RUSTDOCFLAGS='-D warnings' cargo doc -p gpui-shell --no-deps</b><span class="small">8 个文档链接错误：private-intra-doc-links / broken-intra-doc-links。</span></div>
+      <div class="check pass"><b>PASS · git diff --check</b><span class="small">PR diff 与 working tree diff 均无 whitespace error。</span></div>
+    </div>
+  </section>
+
+  <section class="section">
+    <h2>建议合并门槛</h2>
+    <table><thead><tr><th>优先级</th><th>门槛</th><th>验收证据</th></tr></thead><tbody>
+      <tr><td>P0</td><td>关闭 symlink 读写/资源逃逸</td><td>真实 symlink 回归测试覆盖所有 fs 操作；无 TOCTOU 窗口</td></tr>
+      <tr><td>P1</td><td>兑现 exit、异步 I/O 与 engine seam 契约</td><td>端到端行为测试；feature/compile tests；主线程不阻塞</td></tr>
+      <tr><td>P1</td><td>修复 quote row 键盘与无障碍</td><td>Tab、Enter/Space、focus-visible、role/name 测试</td></tr>
+      <tr><td>P1</td><td>澄清或拆分扩张范围</td><td>PR body、设计文档、源码 built/not-built 一致</td></tr>
+      <tr><td>P2</td><td>收紧公共字段、rem 化 UI、修复文档构建</td><td>Clippy 与 rustdoc 在 <code>-D warnings</code> 下通过</td></tr>
+    </tbody></table>
+  </section>
+
+  <footer>审查依据：PR #2821 body、<code>docs/gpui-shell.md</code>、<code>CONTRIBUTING.md</code>、GPUI Component Coding Guides / Design Guides，以及 <code>main...HEAD</code> 和独立的 working-tree diff。报告不修改产品代码。</footer>
+</main></body></html>

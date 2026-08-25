@@ -7,7 +7,8 @@
 //
 //   cargo run -p gpui-shell -- examples/js_todolist
 
-import { View, div, h_flex, v_flex, text, InputState } from "gpui";
+import { View, v_flex, h_flex, InputState } from "gpui";
+/** @import { Context, InputStateHandle } from "gpui" */
 import { load, save } from "./storage.js";
 import ConfirmClear from "./confirm.js";
 import {
@@ -26,6 +27,7 @@ import {
   title,
 } from "./ui.js";
 
+/** @type {{ id: Filter, caption: string }[]} */
 const FILTERS = [
   { id: "all", caption: "All" },
   { id: "active", caption: "Active" },
@@ -34,11 +36,18 @@ const FILTERS = [
 
 export default class TodoList extends View {
   init() {
+    // Annotated where they are assigned rather than declared as class fields.
+    // `View`'s constructor calls `init` from inside `super()`, so a field
+    // declaration — even one with no initializer — would run afterwards and
+    // write `undefined` over everything set here.
+    /** @type {InputStateHandle} */
     this.draft = InputState.new({ placeholder: "What needs doing?" });
     // Enter is how a list like this is actually used; the Add button is for
     // the pointer, not the primary path.
     this.draft.on("submit", (_event, cx) => this.add(cx));
+    /** @type {Todo[]} */
     this.items = load();
+    /** @type {Filter} */
     this.filter = "all";
     this.nextId = this.items.reduce((max, item) => Math.max(max, item.id), 0) + 1;
     this.persisted = true;
@@ -57,11 +66,13 @@ export default class TodoList extends View {
     return this.items.filter((item) => (this.filter === "done") === item.done);
   }
 
+  /** @param {Context} cx */
   commit(cx) {
     this.persisted = save(this.items);
     cx.notify();
   }
 
+  /** @param {Context} cx */
   add(cx) {
     const caption = this.draft.value().trim();
     if (caption === "") return;
@@ -72,21 +83,25 @@ export default class TodoList extends View {
     this.commit(cx);
   }
 
+  /** @param {number} id @param {boolean} done @param {Context} cx */
   toggle(id, done, cx) {
     this.items = this.items.map((item) => (item.id === id ? { ...item, done } : item));
     this.commit(cx);
   }
 
+  /** @param {number} id @param {Context} cx */
   remove(id, cx) {
     this.items = this.items.filter((item) => item.id !== id);
     this.commit(cx);
   }
 
+  /** @param {Filter} filter @param {Context} cx */
   setFilter(filter, cx) {
     this.filter = filter;
     cx.notify();
   }
 
+  /** @param {Context} cx */
   clearCompleted(cx) {
     const count = this.completed;
     if (count === 0) return;
@@ -96,7 +111,7 @@ export default class TodoList extends View {
     cx.open_dialog(ConfirmClear, {
       props: {
         count,
-        onConfirm: (dialogCx) => {
+        onConfirm: (/** @type {Context} */ dialogCx) => {
           this.items = this.items.filter((item) => !item.done);
           this.persisted = save(this.items);
           dialogCx.toast({
@@ -179,6 +194,7 @@ export default class TodoList extends View {
       );
   }
 
+  /** @param {Todo} item */
   row(item) {
     return checkbox(
       `item-${item.id}`,
@@ -219,6 +235,7 @@ export default class TodoList extends View {
       .child(muted(`${this.completed} completed`));
   }
 
+  /** @returns {[string, string]} */
   emptyCopy() {
     if (this.items.length === 0) {
       return ["No items yet", "Type above and press Add."];

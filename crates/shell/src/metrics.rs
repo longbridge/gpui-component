@@ -27,6 +27,8 @@ use std::{cell::Cell, time::Duration};
 pub struct RuntimeMetrics {
     script_renders: u64,
     script_render_time: Duration,
+    slowest_script_render: Duration,
+    native_time: Duration,
     materializations: u64,
     materialize_time: Duration,
 }
@@ -37,10 +39,51 @@ impl RuntimeMetrics {
         self.script_renders
     }
 
-    /// Total time spent inside script `render`, including argument conversion
-    /// and description recording.
+    /// Total time spent inside script `render`.
+    ///
+    /// The whole pass, which is more than JavaScript: every builder call
+    /// crossing into Rust, every `SpecOp` recorded, and every native module call
+    /// the script makes while describing itself. [`native_time`] is how much of
+    /// it was the last of those.
+    ///
+    /// [`native_time`]: Self::native_time
     pub fn script_render_time(&self) -> Duration {
         self.script_render_time
+    }
+
+    /// The slowest single script render in this reading.
+    ///
+    /// Reported next to the mean because the two disagree in a way worth
+    /// seeing. A mean that drifts with system load is wall-clock contention —
+    /// the render did not get slower, it got interrupted. A mean near the floor
+    /// with a much larger maximum is a collection, or a first render paying for
+    /// something the rest do not.
+    pub fn slowest_script_render(&self) -> Duration {
+        self.slowest_script_render
+    }
+
+    /// Of [`script_render_time`], how much was spent inside host functions the
+    /// script called — `native("market").quotes()` and the like.
+    ///
+    /// Subtracting it leaves the part that is genuinely the script describing
+    /// itself: JavaScript, the boundary crossings, and the arena.
+    ///
+    /// [`script_render_time`]: Self::script_render_time
+    pub fn native_time(&self) -> Duration {
+        self.native_time
+    }
+
+    /// What one script render costs without the host calls inside it.
+    pub fn mean_script_only(&self) -> Duration {
+        mean(
+            self.script_render_time.saturating_sub(self.native_time),
+            self.script_renders,
+        )
+    }
+
+    /// What one script render spends in host functions.
+    pub fn mean_native(&self) -> Duration {
+        mean(self.native_time, self.script_renders)
     }
 
     /// How many times a snapshot has been turned into GPUI elements. This one
@@ -75,6 +118,10 @@ impl RuntimeMetrics {
             script_render_time: self
                 .script_render_time
                 .saturating_sub(earlier.script_render_time),
+            // A maximum cannot be differenced. Reporting the run's worst is the
+            // honest answer for a reading that covers part of it.
+            slowest_script_render: self.slowest_script_render,
+            native_time: self.native_time.saturating_sub(earlier.native_time),
             materializations: self
                 .materializations
                 .saturating_sub(earlier.materializations),
@@ -101,6 +148,8 @@ fn mean(total: Duration, count: u64) -> Duration {
 pub struct Metrics {
     script_renders: Cell<u64>,
     script_render_nanos: Cell<u64>,
+    slowest_script_render_nanos: Cell<u64>,
+    native_nanos: Cell<u64>,
     materializations: Cell<u64>,
     materialize_nanos: Cell<u64>,
 }
@@ -110,9 +159,28 @@ impl Metrics {
     pub fn time_script_render<R>(&self, build: impl FnOnce() -> R) -> R {
         let started = instant::Instant::now();
         let result = build();
+        let elapsed = elapsed_nanos(started);
+
         self.script_renders.set(self.script_renders.get() + 1);
         self.script_render_nanos
-            .set(self.script_render_nanos.get() + elapsed_nanos(started));
+            .set(self.script_render_nanos.get() + elapsed);
+        self.slowest_script_render_nanos
+            .set(self.slowest_script_render_nanos.get().max(elapsed));
+        result
+    }
+
+    /// Times one host function called from script.
+    ///
+    /// Nested inside [`time_script_render`] when it happens during a render,
+    /// which is the usual case: this is the part of a render that is the host
+    /// answering rather than the script describing.
+    ///
+    /// [`time_script_render`]: Self::time_script_render
+    pub fn time_native<R>(&self, call: impl FnOnce() -> R) -> R {
+        let started = instant::Instant::now();
+        let result = call();
+        self.native_nanos
+            .set(self.native_nanos.get() + elapsed_nanos(started));
         result
     }
 
@@ -130,6 +198,8 @@ impl Metrics {
         RuntimeMetrics {
             script_renders: self.script_renders.get(),
             script_render_time: Duration::from_nanos(self.script_render_nanos.get()),
+            slowest_script_render: Duration::from_nanos(self.slowest_script_render_nanos.get()),
+            native_time: Duration::from_nanos(self.native_nanos.get()),
             materializations: self.materializations.get(),
             materialize_time: Duration::from_nanos(self.materialize_nanos.get()),
         }
@@ -140,6 +210,8 @@ impl Metrics {
     pub fn reset(&self) {
         self.script_renders.set(0);
         self.script_render_nanos.set(0);
+        self.slowest_script_render_nanos.set(0);
+        self.native_nanos.set(0);
         self.materializations.set(0);
         self.materialize_nanos.set(0);
     }

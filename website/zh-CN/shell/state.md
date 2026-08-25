@@ -69,7 +69,7 @@ cx.notify()  ──▶  render()  ──▶  snapshot  ──┬──▶  帧
 snapshot 只在有东西让它失效时才重建：
 
 - 事件回调或异步任务里的 `cx.notify()`
-- [热重载](./getting-started.md)替换了脚本
+- [hot-reload](./getting-started.md) 替换了脚本
 - 主题切换——因为 `bg("surface")` 是在 `render` 执行时解析成真实颜色的，已经烘进了 snapshot
 - 宿主调用 `ScriptView::refresh`——Rust 用它表示“我改了脚本会读到的状态”（通过[原生模块](./capabilities.md)）。宿主侧单纯的 `cx.notify()` 只是重绘，不会跑脚本：这是两个不同的请求
 

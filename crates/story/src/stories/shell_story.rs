@@ -58,14 +58,14 @@ use std::{path::PathBuf, rc::Rc, time::Duration};
 use gpui::{
     App, AppContext as _, Context, Entity, FocusHandle, Focusable, Hsla, InteractiveElement as _,
     IntoElement, ParentElement, Render, SharedString, StatefulInteractiveElement as _, Styled,
-    Window, div, prelude::FluentBuilder as _, px, relative,
+    Window, div, prelude::FluentBuilder as _, px, relative, rems,
 };
 use gpui_component::{
-    ActiveTheme as _, Colorize as _, Disableable as _, Selectable as _, Sizable as _,
-    StyledExt as _,
-    button::{Button, ButtonVariants as _},
+    ActiveTheme as _, Colorize as _, Disableable as _, Sizable as _, StyledExt as _,
+    button::Button,
     h_flex,
     label::Label,
+    tab::{Tab, TabBar},
     v_flex,
 };
 use gpui_shell::{
@@ -747,7 +747,23 @@ impl ShellStory {
                         view.replace_object(object);
                         cx.notify();
                     }),
-                    None => self.script = Some(cx.new(|_| ScriptView::new(runtime, object))),
+                    None => {
+                        let view = cx.new(|_| ScriptView::new(runtime.clone(), object));
+                        // A debug build is the development build, so editing
+                        // main.js changes the panel without anyone pressing
+                        // anything. The Reload button stays for the case where
+                        // you want it now rather than in a quarter second.
+                        // Compiled out of a release build entirely.
+                        gpui_shell::watch::reload_in_debug(
+                            &runtime,
+                            &view,
+                            script_directory(),
+                            ENTRY,
+                            window,
+                            cx,
+                        );
+                        self.script = Some(view);
+                    }
                 }
                 self.script_error = None;
             }
@@ -763,14 +779,21 @@ impl ShellStory {
 /// Shared as constants because the two panels sit side by side and a reader is
 /// comparing them: a column that is 72 wide on the left and 70 on the right
 /// would make the comparison about alignment instead of about rendering.
-const SYMBOL_COLUMN: f32 = 78.;
-const PRICE_COLUMN: f32 = 68.;
-const PERCENT_COLUMN: f32 = 66.;
-const VOLUME_COLUMN: f32 = 82.;
+/// Column widths in **rems**, so the board scales with the window's text size
+/// instead of pinning itself to a pixel grid that only exists at the default
+/// zoom. `ui.js` carries the same numbers as `"…rem"` strings; the two panels
+/// have to agree at every size, not only at 100%.
+///
+/// The values are the exact conversions of what they used to be at a 16px root,
+/// so nothing moves for a reader who never changes the setting.
+const SYMBOL_COLUMN: f32 = 4.875;
+const PRICE_COLUMN: f32 = 4.25;
+const PERCENT_COLUMN: f32 = 4.125;
+const VOLUME_COLUMN: f32 = 5.125;
 /// The watched dot at the end of a row. The header carries an empty cell of the
 /// same width, because a trailing column the header does not know about pushes
 /// every caption out of line with the numbers under it.
-const WATCH_MARKER: f32 = 6.;
+const WATCH_MARKER: f32 = 0.375;
 
 /// Row density, also shared with the script half.
 ///
@@ -780,14 +803,14 @@ const WATCH_MARKER: f32 = 6.;
 /// this pitch is around 120px shorter than the comfortable spacing the rest of
 /// the gallery uses, which is the difference between a panel that fits on screen
 /// beside its Rust twin and one that does not.
-const ROW_PADDING: f32 = 2.;
-const ROW_GAP: f32 = 2.;
+const ROW_PADDING: f32 = 0.125;
+const ROW_GAP: f32 = 0.125;
 
 /// The gap between the panel's parts — heading, header, rows, rule, actions.
 /// `SPACE.md` on the script side.
-const BLOCK_GAP: f32 = 12.;
+const BLOCK_GAP: f32 = 0.75;
 /// Horizontal padding inside a row. `SPACE.sm` on the script side.
-const ROW_INSET: f32 = 8.;
+const ROW_INSET: f32 = 0.5;
 
 /// The type scale, mirrored by `TYPE` in `ui.js`.
 ///
@@ -795,8 +818,8 @@ const ROW_INSET: f32 = 8.;
 /// framework's named sizes, because `text_xs` here and `text_size(11)` there are
 /// not the same thing — and two boards set in different sizes are two boards of
 /// different heights, which is the one difference this story must not have.
-const TITLE_SIZE: f32 = 13.;
-const BODY_SIZE: f32 = 11.;
+const TITLE_SIZE: f32 = 0.8125;
+const BODY_SIZE: f32 = 0.6875;
 const LINE_HEIGHT: f32 = 1.4;
 
 impl ShellStory {
@@ -814,13 +837,13 @@ impl ShellStory {
     ) -> impl IntoElement {
         v_flex()
             .w_full()
-            .gap(px(BLOCK_GAP))
+            .gap(rems(BLOCK_GAP))
             .child(self.rust_heading(quotes.len(), watched, ticks, cx))
             .child(self.rust_header(cx))
             .child(
                 v_flex()
                     .w_full()
-                    .gap(px(ROW_GAP))
+                    .gap(rems(ROW_GAP))
                     .children(quotes.iter().map(|quote| self.rust_row(quote, cx))),
             )
             .child(rule(cx))
@@ -838,10 +861,10 @@ impl ShellStory {
             .w_full()
             .items_start()
             .justify_between()
-            .gap(px(ROW_INSET))
+            .gap(rems(ROW_INSET))
             .child(
                 v_flex()
-                    .gap(px(2.))
+                    .gap(rems(0.125))
                     .child(title("Live quotes", cx))
                     .child(muted(
                         "Drawn by shell_story.rs · prices read from Entity<Market>",
@@ -851,7 +874,7 @@ impl ShellStory {
             .child(
                 v_flex()
                     .items_end()
-                    .gap(px(2.))
+                    .gap(rems(0.125))
                     .child(body(format!("{watched} / {total} watched"), cx))
                     .child(muted(format!("tick {ticks}"), cx)),
             )
@@ -862,7 +885,7 @@ impl ShellStory {
             .w_full()
             .items_center()
             .justify_between()
-            .gap(px(ROW_INSET))
+            .gap(rems(ROW_INSET))
             .child(muted(
                 if watched == 0 {
                     "Nothing on the watchlist".to_owned()
@@ -873,11 +896,15 @@ impl ShellStory {
             ))
             .child(
                 h_flex()
-                    .gap(px(4.))
+                    .gap(rems(0.25))
+                    // Outline, not primary. Both are ordinary toolbar commands
+                    // — neither is the action this panel exists to submit — and
+                    // spending the one emphasis a surface has on "Watch all"
+                    // leaves nothing to say when something actually is primary.
                     .child(
                         Button::new("watch-all")
                             .xsmall()
-                            .primary()
+                            .outline()
                             .label("Watch all")
                             .disabled(watched == total)
                             .on_click(cx.listener(|this, _, _, cx| {
@@ -915,9 +942,9 @@ impl ShellStory {
         h_flex()
             .w_full()
             .items_center()
-            .gap(px(ROW_INSET))
-            .px(px(ROW_INSET))
-            .pb(px(4.))
+            .gap(rems(ROW_INSET))
+            .px(rems(ROW_INSET))
+            .pb(rems(0.25))
             .border_b_1()
             .border_color(cx.theme().border)
             .child(caption("Symbol", SYMBOL_COLUMN, false))
@@ -925,7 +952,7 @@ impl ShellStory {
             .child(caption("Last", PRICE_COLUMN, true))
             .child(caption("Change", PERCENT_COLUMN, true))
             .child(caption("Volume", VOLUME_COLUMN, true))
-            .child(div().w(px(WATCH_MARKER)).flex_none())
+            .child(div().w(rems(WATCH_MARKER)).flex_none())
     }
 
     fn rust_row(&self, quote: &Quote, cx: &Context<Self>) -> impl IntoElement {
@@ -937,9 +964,9 @@ impl ShellStory {
             .id(SharedString::from(format!("quote-{symbol}")))
             .w_full()
             .items_center()
-            .gap(px(ROW_INSET))
-            .px(px(ROW_INSET))
-            .py(px(ROW_PADDING))
+            .gap(rems(ROW_INSET))
+            .px(rems(ROW_INSET))
+            .py(rems(ROW_PADDING))
             .rounded(cx.theme().radius)
             .hover(|this| this.bg(cx.theme().muted))
             .on_click(cx.listener(move |this, _, _, cx| {
@@ -951,7 +978,7 @@ impl ShellStory {
             }))
             .child(
                 div()
-                    .w(px(SYMBOL_COLUMN))
+                    .w(rems(SYMBOL_COLUMN))
                     .flex_none()
                     .child(body(quote.symbol.clone(), cx).font_medium()),
             )
@@ -963,29 +990,29 @@ impl ShellStory {
             )
             .child(
                 div()
-                    .w(px(PRICE_COLUMN))
+                    .w(rems(PRICE_COLUMN))
                     .flex_none()
                     .text_right()
                     .child(body(format!("{:.2}", quote.last), cx).text_color(moved)),
             )
             .child(
                 div()
-                    .w(px(PERCENT_COLUMN))
+                    .w(rems(PERCENT_COLUMN))
                     .flex_none()
                     .text_right()
                     .child(body(format!("{:+.2}%", quote.change_percent()), cx).text_color(moved)),
             )
             .child(
                 div()
-                    .w(px(VOLUME_COLUMN))
+                    .w(rems(VOLUME_COLUMN))
                     .flex_none()
                     .text_right()
                     .child(muted(thousands(quote.volume), cx)),
             )
             .child(
                 div()
-                    .w(px(WATCH_MARKER))
-                    .h(px(WATCH_MARKER))
+                    .w(rems(WATCH_MARKER))
+                    .h(rems(WATCH_MARKER))
                     .flex_none()
                     .rounded_full()
                     .when(watched, |this| this.bg(cx.theme().primary)),
@@ -1010,7 +1037,14 @@ impl ShellStory {
                     .child(reading(
                         "Script renders",
                         format!("{script}/s"),
-                        format!("{:.2} ms each", millis(self.rate.mean_script_render())),
+                        // Split, because the whole pass is not JavaScript: the
+                        // host answering `quotes()` is in there too, and
+                        // charging it to the script would flatter the runtime.
+                        format!(
+                            "{:.2} ms describing · {:.2} ms in host calls",
+                            millis(self.rate.mean_script_only()),
+                            millis(self.rate.mean_native()),
+                        ),
                         cx,
                     ))
                     .child(reading(
@@ -1041,6 +1075,15 @@ impl ShellStory {
                     cx,
                 ))
             })
+            .child(muted(
+                format!(
+                    "Slowest single script render this run: {:.2} ms. A mean that drifts with \
+                     load is the render being interrupted rather than getting slower; a mean near \
+                     the floor under a much larger maximum is a collection.",
+                    millis(self.sampled.slowest_script_render()),
+                ),
+                cx,
+            ))
             .child(
                 Label::new(match self.feed {
                     Feed::Idle => {
@@ -1087,9 +1130,11 @@ impl ShellStory {
     }
 }
 
-/// Pause or resume one half. Selected while that half is holding still, because
-/// a paused panel that looks like a running one is a bug report waiting to be
-/// filed.
+/// Pause or resume one half.
+///
+/// The label carries the state, so the button does not also wear a selected
+/// style: a control that says "Resume" is already telling you it is paused, and
+/// styling it as well spends emphasis on something the word has covered.
 fn pause_button(
     id: &'static str,
     paused: bool,
@@ -1098,7 +1143,6 @@ fn pause_button(
     Button::new(id)
         .xsmall()
         .outline()
-        .selected(paused)
         .label(if paused { "Resume" } else { "Pause" })
         .on_click(on_click)
 }
@@ -1106,7 +1150,7 @@ fn pause_button(
 /// The three type roles, mirroring `title`, `label` and `muted` in `ui.js`.
 fn title(value: impl Into<SharedString>, cx: &Context<ShellStory>) -> Label {
     Label::new(value)
-        .text_size(px(TITLE_SIZE))
+        .text_size(rems(TITLE_SIZE))
         .line_height(relative(1.3))
         .font_semibold()
         .text_color(cx.theme().foreground)
@@ -1114,14 +1158,14 @@ fn title(value: impl Into<SharedString>, cx: &Context<ShellStory>) -> Label {
 
 fn body(value: impl Into<SharedString>, cx: &Context<ShellStory>) -> Label {
     Label::new(value)
-        .text_size(px(BODY_SIZE))
+        .text_size(rems(BODY_SIZE))
         .line_height(relative(LINE_HEIGHT))
         .text_color(cx.theme().foreground)
 }
 
 fn muted(value: impl Into<SharedString>, cx: &Context<ShellStory>) -> Label {
     Label::new(value)
-        .text_size(px(BODY_SIZE))
+        .text_size(rems(BODY_SIZE))
         .line_height(relative(LINE_HEIGHT))
         .text_color(cx.theme().muted_foreground)
 }
@@ -1195,7 +1239,7 @@ impl Render for ShellStory {
                                 .description("JavaScript implementation.")
                                 .sub_title(
                                     h_flex()
-                                        .gap(px(4.))
+                                        .gap(rems(0.25))
                                         .child(pause_button(
                                             "pause-script",
                                             self.script_paused,
@@ -1222,16 +1266,27 @@ impl Render for ShellStory {
                         "A script render and a GPUI frame are not the same event. Change the feed \
                          and watch the two counters come apart.",
                     )
-                    .sub_title(h_flex().gap_2().children(FEEDS.map(|(id, feed)| {
-                        Button::new(id)
-                            .xsmall()
-                            .label(feed.caption())
-                            .when(self.feed == feed, |this| this.primary())
-                            .when(self.feed != feed, |this| this.outline())
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                this.set_feed(feed, cx);
+                    // A segmented control, because this is one setting with
+                    // four values rather than four commands. Swapping `primary`
+                    // onto whichever button was current said "this is the action
+                    // to take" where it meant "this is the one in force" — two
+                    // different things wearing one style.
+                    .sub_title(
+                        TabBar::new("feed")
+                            .segmented()
+                            .selected_index(
+                                FEEDS
+                                    .iter()
+                                    .position(|(_, feed)| *feed == self.feed)
+                                    .unwrap_or(0),
+                            )
+                            .on_click(cx.listener(|this, index: &usize, _, cx| {
+                                if let Some((_, feed)) = FEEDS.get(*index) {
+                                    this.set_feed(*feed, cx);
+                                }
                             }))
-                    })))
+                            .children(FEEDS.map(|(_, feed)| Tab::new().label(feed.caption()))),
+                    )
                     .v_flex()
                     .child(self.readout(cx)),
             )

@@ -29,7 +29,22 @@
 //!
 //! ShellRuntime::dispatch_click(&Rc<Self>, CallbackId, &ClickEvent, &mut Window, &mut App)
 //! ShellRuntime::dispatch_change(&Rc<Self>, CallbackId, bool, &mut Window, &mut App)
+//!
+//! set_store_path(PathBuf)
+//! set_development_mode(bool)
 //! ```
+//!
+//! # Host configuration goes through here, or above it
+//!
+//! The two module-level functions are part of the contract for a reason. They
+//! used to be called from the crate root straight into the QuickJS module, with
+//! a silent no-op for any other build — so a second engine could compile, run,
+//! and ignore host configuration without a word. There is no fallback now: an
+//! engine either provides them or does not build.
+//!
+//! Capabilities went further and left this file entirely. A grant is a decision
+//! about the *application*, not about the interpreter, so it lives in
+//! [`crate::capability`] where an engine can read it and cannot answer it.
 //!
 //! plus the associated handle types `ViewType` and `ViewObject`, which are
 //! opaque to every caller.
@@ -67,3 +82,20 @@ compile_error!("enable a scripting engine: `quickjs` is the default and the only
 pub(crate) mod quickjs;
 #[cfg(feature = "quickjs")]
 pub use quickjs::{ShellRuntime, ViewObject, ViewType};
+
+/// Points the script-visible store at its backing file.
+///
+/// Part of the contract rather than something the crate root reaches into an
+/// engine for. There is deliberately no fallback: an engine that cannot honour
+/// this does not compile, because the alternative — the one this replaced — was
+/// a build that quietly accepted the call and did nothing with it.
+#[cfg(feature = "quickjs")]
+pub fn set_store_path(path: std::path::PathBuf) {
+    quickjs::host::set_store_path(path);
+}
+
+/// Relaxes the sandbox for a development session.
+#[cfg(feature = "quickjs")]
+pub fn set_development_mode(enabled: bool) {
+    quickjs::sandbox::set_development_mode(enabled);
+}

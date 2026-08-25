@@ -73,11 +73,37 @@ pub enum SpecOp {
     StateStyle(&'static str, SpecId),
 }
 
+/// One described element: what constructed it, what was called on it, and what
+/// was put inside it.
+///
+/// The fields are private and read through methods. A `pub` field on a type that
+/// crosses a crate boundary makes every later field a breaking change, and this
+/// one will grow — a stable key, dependency metadata, a source span are all
+/// things a description might eventually carry (see the "Public Data Types
+/// Across the Seam" rule in `docs/ARCHITECTURE.md`).
 #[derive(Clone, Debug, Default)]
 pub struct SpecNode {
-    pub component: Option<Component>,
-    pub ops: SmallVec<[SpecOp; 8]>,
-    pub children: SmallVec<[SpecId; 4]>,
+    component: Option<Component>,
+    ops: SmallVec<[SpecOp; 8]>,
+    children: SmallVec<[SpecId; 4]>,
+}
+
+impl SpecNode {
+    /// What constructed this node. `None` only for a node that was never
+    /// pushed, which a reader should treat as absent.
+    pub fn component(&self) -> Option<&Component> {
+        self.component.as_ref()
+    }
+
+    /// The builder calls recorded on it, in the order the script made them.
+    pub fn ops(&self) -> &[SpecOp] {
+        &self.ops
+    }
+
+    /// The nodes attached to it, in order.
+    pub fn children(&self) -> &[SpecId] {
+        &self.children
+    }
 }
 
 /// Element descriptions for one script render.
@@ -201,7 +227,7 @@ impl SpecArena {
             Component::Input(handle) => out.push_str(&format!(" #{handle}")),
             _ => {}
         }
-        for op in &node.ops {
+        for op in node.ops() {
             match op {
                 SpecOp::NullaryStyle(index) => {
                     out.push_str(&format!(" .{}", crate::style::nullary_name(*index)))
@@ -213,7 +239,7 @@ impl SpecArena {
                     out.push_str(&format!(" :{name}("));
                     match self.node(*node) {
                         Some(state) => {
-                            for op in &state.ops {
+                            for op in state.ops() {
                                 match op {
                                     SpecOp::NullaryStyle(index) => out.push_str(&format!(
                                         ".{}",
@@ -233,7 +259,7 @@ impl SpecArena {
             }
         }
         out.push('\n');
-        for child in &node.children {
+        for child in node.children() {
             self.write_tree(*child, depth + 1, out);
         }
     }

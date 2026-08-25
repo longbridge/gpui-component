@@ -2,8 +2,10 @@
 
 import { View, v_flex, h_flex, text } from "gpui";
 import { SPACE, button, label, muted } from "./ui.js";
+/** @import { Context } from "gpui" */
 
 export default class ConfirmClear extends View {
+  /** @param {{ count?: number, onConfirm?: (cx: Context) => void }} [props] */
   init(props) {
     this.count = props?.count ?? 0;
     this.onConfirm = props?.onConfirm;

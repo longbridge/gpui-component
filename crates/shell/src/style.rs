@@ -70,71 +70,138 @@ use crate::value::{Bridged, arg};
 /// `text_bg`, `min_size` and `max_size` are bound even though the design doc
 /// does not name them: they are the same one-line shape as their neighbours and
 /// leaving them out would be an arbitrary hole in the surface.
-const PARAM_STYLES: &[&str] = &[
+/// Style methods that take an argument, with the sentence the declarations show.
+///
+/// The description is written here rather than reflected because these methods
+/// are bound by hand — reflection reaches no-argument methods only — so there is
+/// no upstream doc string to read. Keeping it beside the name is what makes a
+/// description that stops matching visible in the same diff as the change.
+///
+/// Which length type each one accepts is *not* written down: it is probed from
+/// the code that enforces it (`argument_of` in `crate::typings`), so the two can
+/// never disagree.
+const PARAM_STYLES: &[(&str, &str)] = &[
     // Size — `Length`, so `"auto"` is accepted.
-    "w",
-    "h",
-    "size",
-    "min_w",
-    "min_h",
-    "min_size",
-    "max_w",
-    "max_h",
-    "max_size",
+    ("w", "Sets the width."),
+    ("h", "Sets the height."),
+    ("size", "Sets the width and the height together."),
+    ("min_w", "Sets the minimum width."),
+    ("min_h", "Sets the minimum height."),
+    ("min_size", "Sets the minimum width and height together."),
+    ("max_w", "Sets the maximum width."),
+    ("max_h", "Sets the maximum height."),
+    ("max_size", "Sets the maximum width and height together."),
     // Padding — `DefiniteLength`.
-    "p",
-    "px",
-    "py",
-    "pt",
-    "pb",
-    "pl",
-    "pr",
+    ("p", "Sets the padding on all four sides."),
+    ("px", "Sets the padding on the left and right."),
+    ("py", "Sets the padding on the top and bottom."),
+    ("pt", "Sets the padding on the top."),
+    ("pb", "Sets the padding on the bottom."),
+    ("pl", "Sets the padding on the left."),
+    ("pr", "Sets the padding on the right."),
     // Margin — `Length`.
-    "m",
-    "mx",
-    "my",
-    "mt",
-    "mb",
-    "ml",
-    "mr",
+    ("m", "Sets the margin on all four sides."),
+    ("mx", "Sets the margin on the left and right."),
+    ("my", "Sets the margin on the top and bottom."),
+    ("mt", "Sets the margin on the top."),
+    ("mb", "Sets the margin on the bottom."),
+    ("ml", "Sets the margin on the left."),
+    ("mr", "Sets the margin on the right."),
     // Position — `Length`.
-    "inset",
-    "top",
-    "bottom",
-    "left",
-    "right",
+    ("inset", "Sets all four offsets of a positioned element."),
+    ("top", "Sets the top offset of a positioned element."),
+    ("bottom", "Sets the bottom offset of a positioned element."),
+    ("left", "Sets the left offset of a positioned element."),
+    ("right", "Sets the right offset of a positioned element."),
     // Flex.
-    "gap",
-    "gap_x",
-    "gap_y",
-    "flex_grow",
-    "flex_shrink",
-    "flex_basis",
+    ("gap", "Sets the gap between children on both axes."),
+    (
+        "gap_x",
+        "Sets the gap between children along the main axis.",
+    ),
+    (
+        "gap_y",
+        "Sets the gap between children along the cross axis.",
+    ),
+    (
+        "flex_grow",
+        "Sets how much of the free space this child takes.",
+    ),
+    (
+        "flex_shrink",
+        "Sets how readily this child gives space back.",
+    ),
+    (
+        "flex_basis",
+        "Sets the size this child starts from before growing or shrinking.",
+    ),
     // Paint.
-    "bg",
-    "text_color",
-    "text_bg",
-    "text_size",
-    "line_height",
-    "opacity",
+    ("bg", "Sets the background colour."),
+    (
+        "text_color",
+        "Sets the text colour, which children inherit.",
+    ),
+    (
+        "text_bg",
+        "Sets the background painted behind the text itself.",
+    ),
+    ("text_size", "Sets the font size."),
+    (
+        "line_height",
+        "Sets the line height. A bare number is a multiplier (`1.45`), not pixels; a string is a length.",
+    ),
+    (
+        "opacity",
+        "Sets the opacity of the element and everything in it, from 0 to 1.",
+    ),
     // Border and radius — `AbsoluteLength`.
-    "border",
-    "border_t",
-    "border_b",
-    "border_l",
-    "border_r",
-    "border_x",
-    "border_y",
-    "border_color",
-    "rounded",
-    "rounded_t",
-    "rounded_b",
-    "rounded_l",
-    "rounded_r",
-    "rounded_tl",
-    "rounded_tr",
-    "rounded_bl",
-    "rounded_br",
+    (
+        "border",
+        "Sets the border width on all four sides. Draws nothing without a colour.",
+    ),
+    ("border_t", "Sets the border width on the top."),
+    ("border_b", "Sets the border width on the bottom."),
+    ("border_l", "Sets the border width on the left."),
+    ("border_r", "Sets the border width on the right."),
+    ("border_x", "Sets the border width on the left and right."),
+    ("border_y", "Sets the border width on the top and bottom."),
+    (
+        "border_color",
+        "Sets the border colour. Draws nothing without a width.",
+    ),
+    ("rounded", "Sets the corner radius on all four corners."),
+    (
+        "rounded_t",
+        "Sets the corner radius on the two top corners.",
+    ),
+    (
+        "rounded_b",
+        "Sets the corner radius on the two bottom corners.",
+    ),
+    (
+        "rounded_l",
+        "Sets the corner radius on the two left corners.",
+    ),
+    (
+        "rounded_r",
+        "Sets the corner radius on the two right corners.",
+    ),
+    (
+        "rounded_tl",
+        "Sets the corner radius on the top-left corner.",
+    ),
+    (
+        "rounded_tr",
+        "Sets the corner radius on the top-right corner.",
+    ),
+    (
+        "rounded_bl",
+        "Sets the corner radius on the bottom-left corner.",
+    ),
+    (
+        "rounded_br",
+        "Sets the corner radius on the bottom-right corner.",
+    ),
 ];
 
 /// The reflected no-argument style methods, plus their name index.
@@ -224,6 +291,53 @@ pub fn nullary_name(index: u16) -> &'static str {
         .unwrap_or("<unknown style>")
 }
 
+/// GPUI's own documentation for a style method, when the reflection carries it.
+///
+/// The declarations in [`crate::typings`] emit this rather than a hand-written
+/// description, for the same reason the method list itself is reflected: a
+/// sentence transcribed from upstream is a sentence that can quietly stop being
+/// true. `EXTRA_NULLARY` and the parametric styles are named here rather than
+/// reflected, so they have none — which is honest, and better than inventing
+/// one.
+pub fn documentation(name: &str) -> Option<&'static str> {
+    if let Some((_, description)) = PARAM_STYLES
+        .iter()
+        .find(|(candidate, _)| *candidate == name)
+    {
+        return Some(description);
+    }
+    if let Some((_, description)) = EXTRA_NULLARY_DOCS
+        .iter()
+        .find(|(candidate, _)| *candidate == name)
+    {
+        return Some(description);
+    }
+
+    let table = table();
+    let index = *table.by_name.get(name)? as usize;
+    table.nullary.get(index)?.documentation
+}
+
+/// The hand-bound font weights, which reflection does not reach and so has no
+/// documentation for either.
+const EXTRA_NULLARY_DOCS: &[(&str, &str)] = &[
+    ("font_thin", "Sets the font weight to thin (100)."),
+    (
+        "font_extralight",
+        "Sets the font weight to extra light (200).",
+    ),
+    ("font_light", "Sets the font weight to light (300)."),
+    ("font_normal", "Sets the font weight to normal (400)."),
+    ("font_medium", "Sets the font weight to medium (500)."),
+    ("font_semibold", "Sets the font weight to semibold (600)."),
+    ("font_bold", "Sets the font weight to bold (700)."),
+    (
+        "font_extrabold",
+        "Sets the font weight to extra bold (800).",
+    ),
+    ("font_black", "Sets the font weight to black (900)."),
+];
+
 /// Applies a no-argument style method.
 ///
 /// An out-of-range index is a no-op rather than a panic, for the same reason
@@ -247,8 +361,8 @@ pub fn apply_nullary(index: u16, refinement: StyleRefinement) -> StyleRefinement
 pub fn param_style_name(name: &str) -> Option<&'static str> {
     PARAM_STYLES
         .iter()
-        .copied()
-        .find(|candidate| *candidate == name)
+        .find(|(candidate, _)| *candidate == name)
+        .map(|(name, _)| *name)
 }
 
 /// Applies a style method that takes arguments.
@@ -402,7 +516,7 @@ pub fn known_names() -> Vec<&'static str> {
         .iter()
         .map(|method| method.name)
         .chain(EXTRA_NULLARY.iter().map(|(name, _)| *name))
-        .chain(PARAM_STYLES.iter().copied())
+        .chain(PARAM_STYLES.iter().map(|(name, _)| *name))
         .collect();
     names.sort_unstable();
     names.dedup();
@@ -638,7 +752,7 @@ mod tests {
 
     #[test]
     fn every_parametric_name_is_bound_and_disjoint_from_reflection() {
-        for name in PARAM_STYLES {
+        for (name, _) in PARAM_STYLES {
             assert_eq!(param_style_name(name), Some(*name));
             assert!(
                 nullary_index(name).is_none(),

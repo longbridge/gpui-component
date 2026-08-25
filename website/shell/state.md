@@ -69,7 +69,7 @@ cx.notify()  ──▶  render()  ──▶  snapshot  ──┬──▶  frame
 The snapshot is rebuilt when, and only when, something invalidates it:
 
 - `cx.notify()` from an event handler or an async task
-- a [hot reload](./getting-started.md) replacing the script
+- a [hot-reload](./getting-started.md) replacing the script
 - a theme change, because `bg("surface")` resolves to a real colour while `render` runs and is baked into the snapshot
 - the host calling `ScriptView::refresh`, which is how Rust says it changed state your script reads through a [native module](./capabilities.md). A plain `cx.notify()` from the host is a repaint and runs no script — the two are different requests
 

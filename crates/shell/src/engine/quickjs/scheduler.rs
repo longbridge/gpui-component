@@ -60,7 +60,7 @@ use std::{
 
 use gpui::{AnyWindowHandle, AsyncApp, BackgroundExecutor, Entity, ForegroundExecutor, WeakEntity};
 use rquickjs::{
-    Ctx, Exception, FromJs, Function, Object, Persistent, Promise, Result as JsResult,
+    Ctx, Exception, FromJs, Function, IntoJs, Object, Persistent, Promise, Result as JsResult,
     Runtime as JsRuntime, Value,
     function::{Func, Opt, This},
 };
@@ -200,6 +200,7 @@ pub fn shutdown() {
         for task in tasks.values() {
             task.cancelled.set(true);
             task.callback.replace(None);
+            task.rejection.replace(None);
         }
         tasks.clear();
     });
@@ -547,6 +548,9 @@ struct TaskState {
     /// `resolve`. Held here rather than in the future so [`shutdown`] can
     /// release it while the QuickJS runtime is still alive.
     callback: RefCell<Option<Persistent<Function<'static>>>>,
+    /// A promise's `reject`, for work that can fail. Held for the same reason
+    /// and released at the same time.
+    rejection: RefCell<Option<Persistent<Function<'static>>>>,
 }
 
 /// Whether a task may run now, and the owner its scope belongs to.
@@ -572,6 +576,7 @@ impl TaskState {
             owner,
             cancelled: Cell::new(false),
             done: Cell::new(false),
+            rejection: RefCell::new(None),
             callback: RefCell::new(callback),
         }
     }
@@ -596,6 +601,106 @@ impl TaskState {
     fn clone_callback(&self) -> Option<Persistent<Function<'static>>> {
         self.callback.borrow().clone()
     }
+
+    fn with_rejection(self, reject: Persistent<Function<'static>>) -> Self {
+        self.rejection.replace(Some(reject));
+        self
+    }
+
+    fn take_rejection(&self) -> Option<Persistent<Function<'static>>> {
+        self.rejection.borrow_mut().take()
+    }
+}
+
+/// Background work nobody is waiting for, with a completion the host handles.
+///
+/// The store's write is the caller: every mutation has to reach the disk whether
+/// or not the script asked, so there is no promise to settle and no call to
+/// fail — but it still must not happen on this thread. `done` runs back on the
+/// main thread and touches Rust state only, so it needs no script scope.
+///
+/// Answers whether the work was started; outside a host call there is no
+/// executor to start it on.
+pub(super) fn detached(
+    ctx: &Ctx<'_>,
+    api: &'static str,
+    work: impl FnOnce() -> Result<(), String> + Send + 'static,
+    done: impl FnOnce(Result<(), String>) + 'static,
+) -> bool {
+    let Ok(host) = host(ctx, api) else {
+        return false;
+    };
+
+    host.foreground
+        .clone()
+        .spawn(async move {
+            done(host.background.spawn(async move { work() }).await);
+        })
+        .detach();
+    true
+}
+
+/// A promise settled by work that must not run on this thread.
+///
+/// The filesystem surface is what this exists for. A capability check is cheap
+/// and stays here, on the calling thread, so a denial is still a thrown error at
+/// the call site rather than a rejected promise nobody awaited. The syscall
+/// behind it is not cheap and has no bound: a network volume, a cold disk or a
+/// large file blocks for as long as it likes, and blocking here blocks the frame
+/// *and* the VM — the interrupt budget cannot even see it, because the time is
+/// spent in the kernel rather than in script.
+///
+/// So `work` runs on the background executor and the promise settles back on the
+/// main thread, in a scope of its own like any other resumption. A cancelled
+/// task leaves its promise pending for ever, which is what cancellation means.
+pub(super) fn blocking<'js, T>(
+    ctx: &Ctx<'js>,
+    api: &'static str,
+    work: impl FnOnce() -> Result<T, String> + Send + 'static,
+) -> JsResult<Promise<'js>>
+where
+    T: for<'a> IntoJs<'a> + Send + 'static,
+{
+    let host = host(ctx, api)?;
+    let (promise, resolve, reject) = ctx.promise()?;
+
+    let task = register(
+        TaskState::new(
+            api,
+            scope::current_view().map(|view| view.downgrade()),
+            Some(Persistent::save(ctx, resolve)),
+        )
+        .with_rejection(Persistent::save(ctx, reject)),
+    );
+
+    let running = task.clone();
+    host.foreground
+        .clone()
+        .spawn(async move {
+            let outcome = host.background.spawn(async move { work() }).await;
+
+            if let Readiness::Ready(owner) = running.readiness() {
+                let resolve = running.take_callback();
+                let reject = running.take_rejection();
+                resume(&host, owner, move |ctx, _| match outcome {
+                    Ok(value) => match resolve {
+                        Some(resolve) => resolve.restore(ctx)?.call::<_, ()>((value,)),
+                        None => Ok(()),
+                    },
+                    Err(message) => match reject {
+                        Some(reject) => {
+                            let error = Exception::from_message(ctx.clone(), &message)?;
+                            reject.restore(ctx)?.call::<_, ()>((error,))
+                        }
+                        None => Ok(()),
+                    },
+                });
+            }
+            finish(&running);
+        })
+        .detach();
+
+    Ok(promise)
 }
 
 fn register(task: TaskState) -> Rc<TaskState> {

@@ -17,6 +17,12 @@
 //!   JS prelude loops over when it builds the element prototype. A method GPUI
 //!   adds upstream appears here without anyone writing it down, and a name that
 //!   type-checks is a name the dispatcher will accept.
+//! * Their documentation is GPUI's own, carried on the same reflection entries,
+//!   so hovering `.items_center()` shows the sentence upstream wrote rather than
+//!   one transcribed here. The seventy-odd methods bound by hand — reflection
+//!   reaches no-argument methods only — carry a description written beside the
+//!   name in [`style`], which is where a description that stops matching shows
+//!   up in the same diff as the change.
 //! * A parametric method's argument type is *probed*: [`argument_of`] asks
 //!   [`style::apply_param`] which literals it accepts, so the difference
 //!   between `Length`, `DefiniteLength`, `AbsoluteLength`, a color and a bare
@@ -351,11 +357,7 @@ fn parametric_styles(names: &[&'static str]) -> String {
     out.push_str("    // `.rounded(\"50%\")` are type errors here for the same reason they\n");
     out.push_str("    // throw at run time.\n");
     for name in names {
-        if *name == "line_height" {
-            out.push_str(
-                "    /** A bare number is a multiplier (`1.45`), not pixels; a string is a length. */\n",
-            );
-        }
+        out.push_str(&doc_comment(style::documentation(name), 4));
         let _ = writeln!(
             out,
             "    {name}(value: {}): Element;",
@@ -371,12 +373,53 @@ fn nullary_styles(names: &[&'static str]) -> String {
     let _ = writeln!(
         out,
         "\n    // The {} no-argument style methods, generated from GPUI's reflection\n    \
-         // table. A name here is a name the runtime dispatches.",
+         // table. A name here is a name the runtime dispatches, and the\n    \
+         // documentation is GPUI's own.",
         names.len()
     );
     for name in names {
+        out.push_str(&doc_comment(style::documentation(name), 4));
         let _ = writeln!(out, "    {name}(): Element;");
     }
+    out
+}
+
+/// Renders a Rust doc comment as a JSDoc block at `indent` spaces.
+///
+/// The text comes from GPUI's reflection table rather than from anything
+/// written here, so it arrives as whatever upstream wrote: usually one sentence
+/// and a link to the Tailwind page the method is modelled on. A single line
+/// stays on one line, because six hundred four-line blocks would bury the
+/// surface they are describing.
+///
+/// Nothing is emitted for a method the table has no documentation for — the
+/// parametric styles and the handful named by hand — because inventing a
+/// sentence is how generated declarations start disagreeing with the runtime.
+fn doc_comment(documentation: Option<&str>, indent: usize) -> String {
+    let Some(text) = documentation else {
+        return String::new();
+    };
+
+    let pad = " ".repeat(indent);
+    // A doc that closed the comment early would take the rest of the file with
+    // it. Upstream has none today; this costs one scan to keep it that way.
+    let text = text.replace("*/", "*\u{200b}/");
+    let mut lines = text.lines().filter(|line| !line.trim().is_empty());
+
+    let Some(first) = lines.next() else {
+        return String::new();
+    };
+    let rest: Vec<&str> = lines.collect();
+
+    if rest.is_empty() {
+        return format!("{pad}/** {} */\n", first.trim());
+    }
+
+    let mut out = format!("{pad}/**\n{pad} * {}\n", first.trim());
+    for line in rest {
+        let _ = writeln!(out, "{pad} *\n{pad} * {}", line.trim());
+    }
+    let _ = writeln!(out, "{pad} */");
     out
 }
 
@@ -442,6 +485,75 @@ const CONTEXT_AND_VIEW: &str = r#"  /**
      */
     notify(): void;
     phase(): Phase;
+
+    /**
+     * Opens a dialog on the window's root, and answers the stack's new depth.
+     *
+     * Takes the **class**, not an instance and not an element: the root builds
+     * the view itself so the dialog outlives the call that opened it. Anything
+     * its `init` should see rides in `props`.
+     *
+     * Do not carry this `cx` into the dialog — it belongs to the handler that
+     * opened it and is stale by the time a dialog button is pressed. Take `cx`
+     * from the dialog's own callback arguments.
+     */
+    open_dialog(view: ViewClass, options?: DialogOptions): number;
+    /** Closes the topmost dialog, and answers whether it found one. */
+    close_dialog(): boolean;
+    /** Closes every dialog, and answers how many it closed. */
+    close_all_dialogs(): number;
+
+    /**
+     * Opens the sheet, replacing whatever was there. At most one is ever open.
+     */
+    open_sheet(side: SheetSide, view: ViewClass, options?: SheetOptions): void;
+    /** Closes the sheet, and answers whether one was open. */
+    close_sheet(): boolean;
+
+    /** Posts a toast, and answers its id — the generated one when none was given. */
+    toast(options: ToastOptions): string;
+    /** Retracts one toast by id, and answers whether it was still showing. */
+    dismiss_toast(id: string): boolean;
+    /** Retracts every toast, and answers how many it retracted. */
+    dismiss_all_toasts(): number;
+  }
+
+  /** A view class, as `open_dialog` and `open_sheet` take it. */
+  export type ViewClass = new (props?: Props) => View;
+
+  /** Which edge the sheet is anchored to. */
+  export type SheetSide = "left" | "right" | "top" | "bottom";
+
+  export interface DialogOptions {
+    /** Whether Escape closes it. Default `true`. */
+    escape_dismissable?: boolean;
+    /** Whether pressing the backdrop closes it. Default `true`. */
+    backdrop_dismissable?: boolean;
+    /** Handed to the class's constructor, and so to its `init`. */
+    props?: Props;
+  }
+
+  export interface SheetOptions {
+    props?: Props;
+  }
+
+  export interface ToastOptions {
+    /** The sentence the user reads. */
+    title: string;
+    /** A second line. */
+    description?: string;
+    /** Default `info`. */
+    level?: "info" | "success" | "warning" | "error";
+    /**
+     * Milliseconds, or `null` to stay until dismissed. Omitting it keeps the
+     * five-second default, which is why `null` and absent are not the same.
+     */
+    timeout?: number | null;
+    /**
+     * Identity, for replacing and dismissing. A repeated failure posted under
+     * one id is a standing message rather than a pile.
+     */
+    id?: string;
   }
 
   /** The modifier keys held when a click was delivered. */
@@ -664,20 +776,25 @@ const CAPABILITIES: &str = r#"
   /**
    * Filesystem access, confined to the roots the manifest grants.
    *
-   * These calls are **synchronous** today: they block the thread that renders,
-   * and they return a value rather than a promise. §17.1 makes them
-   * asynchronous later, and that will change these signatures.
+   * Every call returns a promise: the syscall runs off the main thread, because
+   * a disk has no bound on how long it takes and blocking here would stop the
+   * frame and the VM together.
+   *
+   * A **denial still throws at the call site** rather than rejecting, because
+   * the capability check costs nothing and a rejected promise nobody awaited is
+   * a denial nobody sees.
    */
   export interface FileSystem {
-    read_text(path: string): string;
-    write_text(path: string, contents: string): void;
+    /** Refuses a file over 64 MiB, naming it and the limit. */
+    read_text(path: string): Promise<string>;
+    write_text(path: string, contents: string): Promise<void>;
     /** Sorted by name. */
-    read_dir(path: string): DirEntry[];
+    read_dir(path: string): Promise<DirEntry[]>;
     /** Throws on a path outside the granted roots, rather than answering false. */
-    exists(path: string): boolean;
+    exists(path: string): Promise<boolean>;
     /** Not recursive: a directory must be empty. */
-    remove(path: string): void;
-    create_dir_all(path: string): void;
+    remove(path: string): Promise<void>;
+    create_dir_all(path: string): Promise<void>;
   }
 
   /** Key-value storage that survives a restart. Persisted on every write. */

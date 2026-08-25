@@ -53,7 +53,6 @@
 //! the layer that is actually in force.
 
 use std::{
-    cell::Cell,
     sync::atomic::{AtomicBool, Ordering},
     time::{Duration, Instant},
 };
@@ -316,9 +315,27 @@ fn install_process(ctx: &Ctx<'_>) -> JsResult<()> {
             }
 
             // A request, never `exit(2)`: one plugin must not be able to take
-            // the host process down, and the host may have unsaved state.
-            EXIT_REQUEST.with(|request| request.set(Some(code.0.unwrap_or(0))));
-            Ok(())
+            // the host process down, and the host may have unsaved state. What
+            // the request *does* is the host's to decide — and a host that
+            // granted the capability without deciding is told here, rather than
+            // handing the script a success while nothing happens.
+            let Some(handler) = crate::runtime::exit_handler() else {
+                return Err(Exception::throw_message(
+                    &ctx,
+                    "process.exit() is granted but this host installed no handler for it; \
+                     a host that grants exit has to say what exit means \
+                     (gpui_shell::on_exit_request)",
+                ));
+            };
+
+            let code = code.0.unwrap_or(0);
+            crate::scope::with_current(|window, cx| handler(code, window, cx)).ok_or_else(|| {
+                Exception::throw_type(
+                    &ctx,
+                    "process.exit() needs a live host call; call it from init(), an event \
+                     handler or a task",
+                )
+            })
         }),
     )?;
 
@@ -327,20 +344,6 @@ fn install_process(ctx: &Ctx<'_>) -> JsResult<()> {
         module.set("process", process)?;
     }
     Ok(())
-}
-
-thread_local! {
-    static EXIT_REQUEST: Cell<Option<i32>> = const { Cell::new(None) };
-}
-
-/// The exit code a script asked for, consumed once.
-///
-/// The host polls this after a script call returns and decides what to do —
-/// close the plugin's panel, close the window, or ignore it. The script only
-/// gets to ask.
-#[allow(dead_code)]
-pub fn take_exit_request() -> Option<i32> {
-    EXIT_REQUEST.with(|request| request.take())
 }
 
 // ---------------------------------------------------------------------------
@@ -594,6 +597,7 @@ mod tests {
     fn process_exit_refuses_without_a_grant_and_never_exits_the_host() {
         let _policy = policy();
         let (_runtime, context) = sandboxed();
+        crate::runtime::clear_exit_handler();
 
         let message = rejection(&context, "process.exit(0)")
             .expect("process.exit must refuse without a filesystem grant");
@@ -601,7 +605,27 @@ mod tests {
             message.contains("capabilities.fs"),
             "the refusal must name the key to declare, got: {message}"
         );
-        assert_eq!(take_exit_request(), None);
+    }
+
+    /// A granted exit that nobody answers used to be a success that did
+    /// nothing: the code went into a cell no production caller ever read. The
+    /// script cannot tell the difference between that and a working exit, which
+    /// is the worst shape a no-op can take.
+    #[test]
+    fn a_granted_exit_without_a_handler_says_so_rather_than_succeeding() {
+        let _policy = policy();
+        let (_runtime, context) = sandboxed();
+        crate::capability::install(
+            crate::capability::Capabilities::new().with_read_roots([std::env::temp_dir()]),
+        );
+        crate::runtime::clear_exit_handler();
+
+        let message = rejection(&context, "process.exit(3)")
+            .expect("a granted exit with no handler must not report success");
+        assert!(
+            message.contains("no handler"),
+            "the failure must name the host's omission, got: {message}"
+        );
     }
 
     #[test]

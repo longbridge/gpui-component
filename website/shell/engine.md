@@ -6,13 +6,13 @@ order: 8
 
 # The Engine Seam
 
-The scripting engine sits behind one internal interface. Everything above it — the element description arena, the materializer, the call scope, the style table, the theme, the capability model, the overlay host, hot reload — is engine independent, and only the engine module knows what a script value is.
+The scripting engine sits behind one internal interface. Everything above it — the element description arena, the materializer, the call scope, the style table, the theme, the capability model, the overlay host, hot-reload — is engine independent, and only the engine module knows what a script value is.
 
 ```bash
 cargo run -p gpui-shell -- examples/js_todolist
 ```
 
-QuickJS, via `rquickjs`, is the engine that ships and the only one today. It sits behind a `quickjs` cargo feature all the same, and building with no engine is a **compile error** rather than a crate that exports nothing.
+[QuickJS](https://github.com/quickjs-ng/quickjs), via [`rquickjs`](https://github.com/DelSkayn/rquickjs) — which vendors the `quickjs-ng` fork — is the engine that ships and the only one today. It sits behind a `quickjs` cargo feature all the same, and building with no engine is a **compile error** rather than a crate that exports nothing.
 
 ## Why there is a seam at all
 
@@ -42,7 +42,7 @@ cargo test -p gpui-shell --release --test benchmark -- --nocapture
 | **B** | snapshot → GPUI elements | **0.7 ms** | every frame |
 | **C** | a full cached repaint | **1.8 ms**, **no JavaScript at all** | every frame |
 
-Run it in release or the figures mean nothing; the absolute numbers move with the machine.
+Run it in release or the figures mean nothing. Every absolute number on this page comes from a release build on a MacBook Pro (M3, 8 cores, 24 GB), and moves with the machine.
 
 **C is the one that is an assertion rather than a timing.** Fifty repaints of an unchanged view run no JavaScript at all. If a single one of them ever does, the runtime has regressed to charging script cost per frame, and the benchmark fails rather than merely getting slower.
 
@@ -67,7 +67,7 @@ Two implementation choices came out of the same measurement and are visible in t
 
 ## Threads and memory
 
-The VM and GPUI's `App` share one thread — the main one — inside one process. `ShellRuntime` is an `Rc` with `RefCell` interiors, so it is neither `Send` nor `Sync`: the arrangement is enforced by the compiler rather than described in a comment. There is no worker and no second VM.
+The VM and GPUI's `App` share one thread — the main one — inside one process. `ShellRuntime` is an `Rc` with `RefCell` interiors, so it is neither `Send` nor `Sync`. There is no worker and no second VM.
 
 <img class="architecture-light" src="/shell-threads-memory-light.svg" alt="The host process. On the main thread, GPUI's App and the QuickJS VM exchange plain function calls across the FFI boundary. A background thread holds only timers, which resolve back onto the foreground executor. Memory splits four ways: the JavaScript heap capped at 256 MiB, the description arena owned by the snapshot, the callback arena keyed by snapshot generation, and GPUI's frame arena which lasts one draw.">
 <img class="architecture-dark" src="/shell-threads-memory-dark.svg" alt="The host process. On the main thread, GPUI's App and the QuickJS VM exchange plain function calls across the FFI boundary. A background thread holds only timers, which resolve back onto the foreground executor. Memory splits four ways: the JavaScript heap capped at 256 MiB, the description arena owned by the snapshot, the callback arena keyed by snapshot generation, and GPUI's frame arena which lasts one draw.">
@@ -76,7 +76,7 @@ Two things do run elsewhere, and neither touches the VM. Timers (`gpui.sleep`, `
 
 Three consequences matter when profiling:
 
-- **A builder call is a function call.** It crosses the FFI boundary and nothing else — no serialization, no IPC round trip, no copy beyond the conversion of the argument itself. That is why the per-call cost is measured in hundreds of nanoseconds.
+- **A builder call is a function call.** It crosses the FFI boundary and nothing else — no serialization, no IPC round trip, no copy beyond the conversion of the argument itself. The benchmark reports that cost per recorded operation, and across the four panel sizes it lands at **240–340 ns**.
 - **Blocking the VM blocks the frame.** The synchronous `fs` surface is the sharp edge here: a read from an event handler stalls the same thread that is about to paint.
 - **A runaway script cannot be preempted from another thread.** What cuts it off is the interpreter's own interrupt — 50 ms inside `render`, 500 ms inside an event handler — and a `catch` block cannot swallow it.
 
@@ -108,7 +108,7 @@ The proportion is itself the argument for the seam: above it is the actual desig
 | The capability model and path resolution | The language-specific part of the sandbox |
 | Length and colour coercion | |
 | The neutral error type, the callback arena, the error overlay | |
-| `ScriptView`, `ShellRoot`, hot reload | |
+| `ScriptView`, `ShellRoot`, hot-reload | |
 
 None of the modules on the left names a VM anywhere in its source. That is what makes the seam real: it is not a trait, it is the fact that the rest of the crate reaches the engine through about a dozen entry points and nothing else.
 
@@ -124,7 +124,7 @@ What has to be the same is everything around them — the binding surface, the r
 
 ## Known gap: async is not fully behind the seam
 
-The seam's contract does not yet cover asynchronous work, and that is a real hole rather than an oversight.
+The seam's contract does not yet cover asynchronous work.
 
 QuickJS requires the host to drain its job queue itself — nothing after an `await` runs until somebody asks — and that is not a shape every engine shares. So the scheduler cannot sit entirely above the seam. It needs two operations from an engine: turning a host task into something the script can await, and running the pending jobs.
 
@@ -136,6 +136,6 @@ Until both are addressed, the scheduler is QuickJS-specific. The rule it will be
 
 Two questions the seam invites.
 
-`gpui-shell` runs the VM **in the host process, on the main thread**, alongside GPUI's `App`. That is not a shortcut — it is what makes a per-call cost of a few hundred nanoseconds possible at all. A separate process would put an IPC round trip on every recorded builder call, and there is no budget for one even at the reduced frequency snapshots buy. For the same reason there is no `Worker`: the VM and the `App` are both main-thread only.
+`gpui-shell` runs the VM **in the host process, on the main thread**, alongside GPUI's `App`. That is what makes the 240–340 ns per recorded call possible at all. A separate process would put an IPC round trip on every recorded builder call, and there is no budget for one even at the reduced frequency snapshots buy. For the same reason there is no `Worker`: the VM and the `App` are both main-thread only.
 
-The wasm target is the other reason the seam is drawn where it is. QuickJS is plain C and compiles to WebAssembly; not every candidate engine does, and some generate machine code, which is a constraint on platforms that forbid writable-executable memory. Neither fact decides today's engine, but they are why "the engine is a parameter, not a part of the architecture" is written down rather than assumed.
+The wasm target is the other reason the seam is drawn where it is. QuickJS is plain C and compiles to WebAssembly; not every candidate engine does, and some generate machine code, which is a constraint on platforms that forbid writable-executable memory. Neither fact decides today's engine, but they are why "the engine is a parameter, not a part of the architecture" is written down at all.

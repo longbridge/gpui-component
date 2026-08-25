@@ -5,7 +5,7 @@
 //! plain data. They run against whichever engine is enabled, which is what
 //! keeps the fallback engine honest.
 
-use gpui::{TestAppContext, VisualTestContext};
+use gpui::{AppContext as _, TestAppContext, VisualTestContext};
 use gpui_shell::{ScriptView, ShellRuntime};
 
 const COUNTER: &str = r#"
@@ -431,4 +431,214 @@ export default class Reloading extends View {
     );
 
     std::fs::remove_dir_all(&directory).ok();
+}
+
+/// An embedded runtime reloads on a save, with no host doing anything but
+/// asking for it once.
+///
+/// The binary has `--watch` because the person running it is the person
+/// editing. A host that embeds the runtime has no flag to offer, so a debug
+/// build simply *is* the development build — and this is the test that says so,
+/// since the behaviour is otherwise invisible until someone saves a file.
+#[gpui::test]
+fn an_embedded_runtime_reloads_when_a_source_changes(cx: &mut TestAppContext) {
+    cx.update(|cx| gpui_shell::init(cx));
+
+    let runtime = ShellRuntime::new().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+
+    let directory = std::env::temp_dir().join(format!("gpui-shell-watch-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&directory);
+    std::fs::create_dir_all(&directory).expect("a temporary application");
+    let source = |caption: &str| {
+        format!(
+            "import {{ View, v_flex, text }} from \"gpui\";\n\
+             export default class Panel extends View {{\n\
+               render() {{ return v_flex().child(text(\"{caption}\")); }}\n\
+             }}\n"
+        )
+    };
+    std::fs::write(directory.join("main.js"), source("before")).expect("writing main.js");
+
+    let view_type = runtime.load_app(&directory, "main.js").expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+
+    let view = context.update(|window, cx| {
+        let object = runtime
+            .instantiate(&view_type, window, cx)
+            .expect("instantiate");
+        let view = cx.new(|_| ScriptView::new(runtime.clone(), object));
+        gpui_shell::watch::reload_in_debug(
+            &runtime,
+            &view,
+            directory.clone(),
+            "main.js",
+            window,
+            cx,
+        );
+        view
+    });
+
+    let description = |context: &mut VisualTestContext| {
+        context.update(|_, cx| {
+            view.read(cx)
+                .snapshot()
+                .map(gpui_shell::RenderSnapshot::debug_tree)
+                .unwrap_or_default()
+        })
+    };
+
+    draw(&mut context, &view);
+    assert!(description(&mut context).contains("before"));
+
+    // The watcher compares modification stamps, so the file has to look older
+    // than the write that follows it — a test that runs inside one filesystem
+    // tick would otherwise see nothing change.
+    std::thread::sleep(std::time::Duration::from_millis(20));
+    std::fs::write(directory.join("main.js"), source("after")).expect("rewriting main.js");
+
+    // Two polls, with real time in between. The poll interval is on the
+    // executor's clock, which `advance_clock` moves; the debounce is measured
+    // against the wall, because it is absorbing a burst of saves from an editor
+    // rather than counting frames. So the first poll notices the change and the
+    // second one — after the tree has been still for the debounce window —
+    // reports it.
+    let settle = |context: &mut VisualTestContext| {
+        context
+            .executor()
+            .advance_clock(gpui_shell::watch::POLL_INTERVAL * 2);
+        context.run_until_parked();
+    };
+    settle(&mut context);
+    std::thread::sleep(std::time::Duration::from_millis(250));
+    settle(&mut context);
+
+    draw(&mut context, &view);
+
+    assert!(
+        description(&mut context).contains("after"),
+        "a saved change should have reached the view without anyone asking: {}",
+        description(&mut context)
+    );
+
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+fn draw(context: &mut VisualTestContext, view: &gpui::Entity<ScriptView>) {
+    let view = view.clone();
+    context.draw(
+        gpui::Point::default(),
+        gpui::size(gpui::px(400.), gpui::px(300.)),
+        move |_, _| gpui::IntoElement::into_any_element(view),
+    );
+}
+
+/// A granted `process.exit` reaches the host, with the code the script asked
+/// for.
+///
+/// The request used to be written into a cell no production code read: the
+/// script got a success and the window stayed open. So the test is not "the
+/// flag was set" but "the host was told", which is the only version of this
+/// that can go wrong quietly.
+#[gpui::test]
+fn a_granted_exit_reaches_the_host(cx: &mut TestAppContext) {
+    cx.update(|cx| gpui_shell::init(cx));
+    gpui_shell::set_capabilities(
+        gpui_shell::Capabilities::new().with_read_roots([std::env::temp_dir()]),
+    );
+
+    let asked: std::rc::Rc<std::cell::Cell<Option<i32>>> = Default::default();
+    let recorded = asked.clone();
+    gpui_shell::on_exit_request(move |code, _, _| recorded.set(Some(code)));
+
+    let runtime = ShellRuntime::new().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+
+    let source = r#"
+import { View, v_flex, text } from "gpui";
+
+export default class Quitter extends View {
+  init() {
+    process.exit(7);
+  }
+
+  render() {
+    return v_flex().child(text("still here"));
+  }
+}
+"#;
+    let view_type = runtime.load_source("quitter.js", source).expect("load");
+
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .expect("instantiate");
+
+    assert_eq!(
+        asked.get(),
+        Some(7),
+        "the host was never told the script asked to exit"
+    );
+
+    gpui_shell::clear_exit_handler();
+}
+
+/// A watcher does not keep its view alive, and stops when the view goes.
+///
+/// The loop polls every quarter second for the life of the window. Holding the
+/// view strongly would mean a panel removed from a dock is never dropped — the
+/// runtime it points at is never dropped either — and the poller goes on stating
+/// a directory for a panel nobody can see. Mount and unmount a few and they
+/// accumulate.
+#[gpui::test]
+fn a_watcher_releases_its_view(cx: &mut TestAppContext) {
+    cx.update(|cx| gpui_shell::init(cx));
+
+    let runtime = ShellRuntime::new().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+
+    let directory = std::env::temp_dir().join(format!("gpui-shell-release-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&directory);
+    std::fs::create_dir_all(&directory).expect("a temporary application");
+    std::fs::write(
+        directory.join("main.js"),
+        "import { View, v_flex } from \"gpui\";\n\
+         export default class Panel extends View { render() { return v_flex(); } }\n",
+    )
+    .expect("writing main.js");
+
+    let view_type = runtime.load_app(&directory, "main.js").expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+
+    let weak = context.update(|window, cx| {
+        let object = runtime
+            .instantiate(&view_type, window, cx)
+            .expect("instantiate");
+        let view = cx.new(|_| ScriptView::new(runtime.clone(), object));
+        gpui_shell::watch::reload_in_debug(
+            &runtime,
+            &view,
+            directory.clone(),
+            "main.js",
+            window,
+            cx,
+        );
+        view.downgrade()
+    });
+
+    // Nothing else is holding it: the panel it stood for has been removed.
+    context
+        .executor()
+        .advance_clock(gpui_shell::watch::POLL_INTERVAL * 2);
+    context.run_until_parked();
+
+    assert!(
+        weak.upgrade().is_none(),
+        "the watcher is still holding the view it was watching for"
+    );
+
+    let _ = std::fs::remove_dir_all(&directory);
 }

@@ -121,7 +121,7 @@ fn materialize_node(
     let Some(node) = arena.node(id) else {
         return div().into_any_element();
     };
-    let Some(component) = node.component.clone() else {
+    let Some(component) = node.component().cloned() else {
         return div().into_any_element();
     };
 
@@ -129,7 +129,7 @@ fn materialize_node(
     let inherited = refinement.text.color.unwrap_or(inherited);
 
     let children: Vec<AnyElement> = node
-        .children
+        .children()
         .iter()
         .map(|child| materialize_node(runtime, arena, *child, inherited, window, cx))
         .collect();
@@ -361,7 +361,7 @@ fn resolve_ops(arena: &SpecArena, node: &SpecNode) -> (StyleRefinement, Behavior
     let mut behavior = Behavior::default();
     let mut states = StateStyles::default();
 
-    for op in &node.ops {
+    for op in node.ops() {
         match op {
             SpecOp::NullaryStyle(index) => {
                 refinement = style::apply_nullary(*index, refinement);
@@ -407,7 +407,7 @@ fn resolve_state(arena: &SpecArena, node: SpecId) -> StyleRefinement {
     };
 
     let mut refinement = StyleRefinement::default();
-    for op in &node.ops {
+    for op in node.ops() {
         match op {
             SpecOp::NullaryStyle(index) => refinement = style::apply_nullary(*index, refinement),
             SpecOp::ParamStyle(name, args) => {
