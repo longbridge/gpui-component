@@ -53,7 +53,7 @@ There is deliberately no per-module capability to grant on top of this. The host
 
 ## The boundary is plain data
 
-A native function receives [`NativeArguments`] and returns a `NativeValue`: null, boolean, number, string, array, or object. Those six cases are the intersection of what a script engine and JSON can both carry, which is what lets one registry serve any engine behind the [seam](./engine.md).
+A native function receives `NativeArguments` and returns a `NativeValue`: null, boolean, number, string, array, or object. Those six cases are the intersection of what a script engine and JSON can both carry, which is what lets one registry serve any engine behind the [seam](./engine.md).
 
 It never receives a script handle, and that is not a convenience. A handle would let the host keep a reference to a script value past the call that produced it — and past the call scope that made the surrounding context valid.
 
@@ -145,7 +145,7 @@ Run it with `cargo run -- shell`. The two panels read one entity through two pat
 
 ## Typing them
 
-`gpui-shell types` writes a `gpui.d.ts` that declares `native(name)` as returning `any`, because the runtime cannot know what a host registered. The generated file leaves an interface open for an application to augment:
+`gpui-shell types` cannot know what a host registered, so the generated `gpui.d.ts` leaves an empty `NativeModules` interface for the application to augment:
 
 ```ts
 declare module "gpui" {
@@ -160,10 +160,10 @@ declare module "gpui" {
 }
 ```
 
-Declaring that in the application's own `.d.ts` is what turns `native("market")` from `any` into a checked call.
+Declaring that in a `.d.ts` beside the script is what turns `native("market")` into a checked call — the module name is verified and its functions complete. Declaring nothing costs nothing: an untyped overload still applies, so an application that never writes one keeps working.
 
 ## Not there yet
 
 - **Asynchronous native functions.** A function returns a value, not a promise; long work blocks the thread that renders.
-- **Per-module grants.** The registry is all-or-nothing per host, by design — but a plugin model that gives two plugins two different module sets is what [`Policy`](./capabilities.md) exists for.
+- **Per-module grants.** The registry is one set per host by design. Giving two plugins two different sets is what a `Policy` is for, and the plugin model that hands them out is not documented yet.
 - **Streaming or callbacks into the host.** A script cannot hand a function to a native module; the module can only be called.

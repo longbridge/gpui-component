@@ -160,6 +160,8 @@ Text editing, syntax highlighting, LSP, virtualization and animation stay in Rus
 | [State and views](./state.md) | `init` / `render`, `cx.notify()`, retained state, async |
 | [Overlays](./overlays.md) | Dialogs, the sheet, toasts, and the phase rule |
 | [Capabilities](./capabilities.md) | The default-deny model, `fs` / `store` / `clipboard` / `log` / `process` |
+| [Native Modules](./native.md) | Lending the host's own Rust to a script, and the plain-data boundary |
+| [Hosting the Runtime](./hosting.md) | The Rust side in full: mounting, refreshing, metrics, exit, hot-reload |
 | [The engine seam](./engine.md) | QuickJS, why the seam exists, and the measurements that tell script cost from frame cost |
 
 ## Status
