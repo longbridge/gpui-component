@@ -9,6 +9,7 @@ node_modules/
 .claude/worktrees/
 /.superpowers/
 docs/superpowers/
+/.scratch/
 
 # WASM build artifacts
 crates/story-web/www/src/wasm/*.js
