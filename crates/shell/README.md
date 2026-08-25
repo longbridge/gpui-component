@@ -336,7 +336,10 @@ Three host-side calls carry most of the weight:
 // Editing a script changes the window, with no rebuild and no button — in a
 // debug build. Compiled out of a release build, which must not poll a
 // directory nobody is editing.
-gpui_shell::watch::reload_in_debug(runtime, view.clone(), app_root, "main.js", window, cx);
+let watch =
+    gpui_shell::watch::reload_in_debug(runtime, &view, app_root, "main.js", window, cx);
+// Keep the handle for as long as the view is mounted; dropping it stops the
+// watcher, so an unmounted panel does not leave one polling for it.
 
 // The script changed something on screen? GPUI already knows. But when *Rust*
 // changes state the script reads, say so — a bare notify is only a repaint.

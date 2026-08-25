@@ -1,7 +1,7 @@
 ---
 title: Styling
 description: The fluent style surface, length and colour grammars, semantic theme tokens, and hover / active / focus styles.
-order: 4
+order: 5
 ---
 
 # Styling

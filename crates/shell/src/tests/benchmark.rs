@@ -24,8 +24,8 @@
 
 use std::{ops::Deref, time::Instant};
 
+use crate::{RenderSnapshot, ScriptView, ShellRuntime, materialize::materialize};
 use gpui::{AppContext as _, Entity, IntoElement as _, TestAppContext, VisualTestContext};
-use gpui_shell::{RenderSnapshot, ScriptView, ShellRuntime, materialize::materialize};
 
 /// Rows and columns chosen to land near the doc's "typical panel" figure:
 /// 40 rows x 5 cells plus wrappers is ~250 nodes, each carrying 8-12 ops.
@@ -309,9 +309,9 @@ fn grid(
 ) -> (
     std::rc::Rc<ShellRuntime>,
     VisualTestContext,
-    gpui_shell::engine::ViewObject,
+    crate::engine::ViewObject,
 ) {
-    cx.update(|cx| gpui_shell::init(cx));
+    cx.update(|cx| crate::init(cx));
 
     let runtime = ShellRuntime::new().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));

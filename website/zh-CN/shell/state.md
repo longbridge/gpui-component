@@ -1,7 +1,7 @@
 ---
 title: State and Views
 description: 视图、init 与 render、cx.notify()、留存的输入状态，以及异步工作。
-order: 5
+order: 6
 ---
 
 # State and Views

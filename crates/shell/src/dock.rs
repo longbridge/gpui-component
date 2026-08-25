@@ -32,6 +32,13 @@
 //! `serde_json::Value`, which is what lets the dock work the same under either
 //! engine.
 
+#![allow(dead_code)]
+//
+// Designed and tested, but nothing in the crate drives it: a script cannot yet
+// contribute a panel, because the plugin → contribution → panel path is not
+// finished. The module is `pub(crate)` until it is — a public surface no host
+// can reach end to end is a promise about an API that has never been used.
+
 use std::{
     collections::HashSet,
     rc::Rc,

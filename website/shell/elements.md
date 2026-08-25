@@ -1,7 +1,7 @@
 ---
 title: Elements
 description: Constructors, composition with child / children / when, and why an element description can only be used once.
-order: 3
+order: 4
 ---
 
 # Elements

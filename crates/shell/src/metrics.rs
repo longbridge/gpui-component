@@ -145,7 +145,7 @@ fn mean(total: Duration, count: u64) -> Duration {
 /// main-thread only, and rather than a `RefCell` because a counter that could
 /// panic on a re-entrant borrow would be a poor thing to put on the render path.
 #[derive(Default)]
-pub struct Metrics {
+pub(crate) struct Metrics {
     script_renders: Cell<u64>,
     script_render_nanos: Cell<u64>,
     slowest_script_render_nanos: Cell<u64>,
@@ -203,17 +203,6 @@ impl Metrics {
             materializations: self.materializations.get(),
             materialize_time: Duration::from_nanos(self.materialize_nanos.get()),
         }
-    }
-
-    /// Zeroes every counter, so a measurement can start from a known point
-    /// rather than from whatever start-up happened to do.
-    pub fn reset(&self) {
-        self.script_renders.set(0);
-        self.script_render_nanos.set(0);
-        self.slowest_script_render_nanos.set(0);
-        self.native_nanos.set(0);
-        self.materializations.set(0);
-        self.materialize_nanos.set(0);
     }
 }
 

@@ -1,12 +1,12 @@
 ---
 title: Hosting the Runtime
 description: Rust 这一侧的全貌——运行时的生命周期、挂载脚本视图、从宿主状态刷新它、指标、退出请求与 hot-reload。
-order: 9
+order: 10
 ---
 
 # Hosting the Runtime
 
-[Getting Started](./getting-started.md) 给的是把脚本视图放上屏幕的那四行。这一页是 Rust 接口的其余部分：该调什么、什么时候调，以及那两三处"看起来该调的那个其实是错的"。
+[Getting Started](./getting-started.md) 给的是把脚本视图放上屏幕的那四行。这一页是 Rust 接口的其余部分：该调什么、什么时候调，以及那两三处“看起来该调的那个其实是错的”。
 
 ## 运行时
 
@@ -94,7 +94,7 @@ gpui_shell::set_store_path(data_dir.join("store.json"));
 gpui_shell::set_native_modules(modules);
 ```
 
-三项的默认都是"什么都没有"：没有文件访问、没有存储位置、没有 native 模块。见 [Capabilities](./capabilities.md) 与 [Native Modules](./native.md)。
+三项的默认都是“什么都没有”：没有文件访问、没有存储位置、没有 native 模块。见 [Capabilities](./capabilities.md) 与 [Native Modules](./native.md)。
 
 ## 观察它花了多少
 
@@ -109,7 +109,7 @@ reading.native_time();         // 其中花在 native 模块里的部分
 reading.slowest_script_render();
 ```
 
-`RuntimeMetrics::since(&earlier)` 给出两次读数之间的差值，用它就能算出每秒速率而不必重置任何东西。`metrics().reset()` 则开始一次新的测量——Shell story 每次切换 feed 都会重置，这样读数回答的是"这个 feed 要花多少"，而不是"这个窗口从打开到现在干了多少"。
+`RuntimeMetrics::since(&earlier)` 给出两次读数之间的差值，用它就能算出每秒速率而不必重置任何东西。`metrics().reset()` 则开始一次新的测量——Shell story 每次切换 feed 都会重置，这样读数回答的是“这个 feed 要花多少”，而不是“这个窗口从打开到现在干了多少”。
 
 回归测试可以直接对 `script_renders` 做断言；[基准测试里的第三个数](./engine.md#那次实测)靠的正是这一点。
 
@@ -132,16 +132,15 @@ gpui_shell::on_exit_request(|request, window, cx| {
 
 ## Hot-reload
 
-`--watch` 只是薄薄一层，下面那个 watcher 宿主自己也能驱动：
+一个调用就能开起来，`--watch` 用的也是这一个：
 
 ```rust
-let mut watcher = SourceWatcher::new(app_root.clone())
-    .with_debounce(Duration::from_millis(200));
-
-if watcher.poll() {
-    gpui_shell::watch::reload(&runtime, &view, &app_root, "main.js", window, cx)?;
-}
+gpui_shell::watch::reload_in_debug(
+    &runtime, &view, app_root.clone(), "main.js", window, cx,
+).forget();
 ```
+
+这个签名有两点要说。它在 **release 构建下什么都不做**——返回一个空句柄，所以把这行留在代码里只值一个分支。另外返回的 `Watch` 本身就是这次监听：把它 drop 掉，循环就停，这正是宿主卸下一块面板时想要的；而 `.forget()` 让它跟着视图一直活下去。视图、运行时或窗口任意一个消失时，循环也会自己结束——因为它对这三者都只持弱引用；这里若持强引用，dock 已经移除的面板，其运行时会一直不被释放。
 
 一次重载会重新读取**每一个**模块，入口也在内——一个悄悄用了旧 import 的 hot-reload 比没有更糟，因为它看起来是成功的。它会先把所有可能失败的活干完，再去碰活着的那个视图：新代码加载失败时，上一个视图继续运行，错误进 `tracing`，窗口里由一条固定 id 的 toast 报出来；下一次成功的重载会撤掉这条 toast。
 
@@ -157,4 +156,4 @@ if watcher.poll() {
 
 - **一个进程里两个运行时。** 全局句柄只有一个；第二个运行时得自己一路传下去。
 - **给卡住的脚本做监管。** 解释器自己的中断会切断一次调用，但没有东西会去重启一个反复撞上中断的运行时。
-- **插件模型。** `PluginManager`、`PluginManifest` 与按插件划分的 `Policy` 已经在 crate 里，但还没有文档；对一个只跑单个应用的宿主来说，上面那三项授权就是全部。
+- **插件模型。** `PluginManager` 和 `PluginManifest` 已经写好也有测试，但对外不可见——目前还没有任何东西真的去加载一个插件，把它们公开就等于对一套从未被调用过的 API 作出承诺。对一个只跑单个应用的宿主来说，上面那三项授权就是全部；要同时跑多个应用，公开的是 `Policy`。

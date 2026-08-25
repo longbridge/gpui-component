@@ -6,52 +6,65 @@
 
 // # The surface a host may rely on
 //
-// Everything below is reachable, and not everything below is a promise. A
-// module that is `pub` because something across a crate boundary needs one item
-// from it is not thereby a stable interface, and saying so here is cheaper than
-// discovering it in a changelog.
+// Everything `pub` here is a promise. That is the point of the list being
+// short: a module published because one item across a crate boundary needed it
+// is not thereby an interface, and the crate spent a while with `engine`,
+// `spec`, `materialize` and `scope` open for exactly that reason — an external
+// test needed them. Tests moved inside instead (`src/tests`), because an
+// integration test is a consumer like any other and a reason to publish an
+// internal representation is still a reason to publish it.
 //
-// **Host surface.** `init`, the `set_*` entry points and `on_exit_request` at
-// the root; `capability`, `native`, `plugin`, `plugin_api`, `dock`, `root`,
-// `theme`, `view`, `watch`, `typings`, `metrics`, `snapshot`, `error`. These
-// exist for an embedder and change with notice.
+// **What a host may name.** The root: `init`, the `set_*` entry points,
+// `on_exit_request`, `resolve_app_root`, `failure_surface`, and the types
+// re-exported below. The modules: `native` and `policy` to configure what a
+// script may reach, `root` and `theme` for the window it lives in, `view` and
+// `snapshot` for the view itself, `watch` for hot-reload, `typings` to generate
+// `gpui.d.ts`, `metrics` to measure.
 //
-// **Reachable, not promised.** `engine` is the seam and its shape follows
-// whatever is behind it. `scope` is here because a native module needs the
-// ambient `App` and there is no other way to reach it. `assets` and `style`
-// are here for the binary in this package, which is a separate crate. `spec`
-// and `materialize` are here so a test outside the crate can measure and assert
-// on a description without a GPU — they describe an internal representation and
-// will move when it does.
+// **Crate-private, and why.** `engine` is the seam and its shape follows
+// whatever is behind it. `spec`, `materialize`, `store` and `style` are an
+// internal representation. `capability` publishes `Capabilities` and
+// `ExecuteGrant` through the root and keeps the resolver — `Access`, `Grant` —
+// to itself. `scope` publishes `with_current_app`, which is how a native module
+// reaches the ambient `App`, and hides the frame stack. `runtime`, `error` and
+// `assets` publish their types through the root.
+//
+// **Designed, tested, not driven.** `dock`, `plugin` and `plugin_api`. Nothing
+// in the crate reaches them, because a script cannot yet contribute a panel and
+// no host loads a plugin. They stay private until something does; a public API
+// no caller has ever exercised is a promise made on a guess.
 //
 // **Not reachable at all.** `value` and `entities`: a `Bridged` and an entity
 // handle are the runtime talking to itself.
-pub mod assets;
-pub mod capability;
-pub mod dock;
-pub mod engine;
+pub(crate) mod assets;
+pub(crate) mod capability;
+pub(crate) mod dock;
+pub(crate) mod engine;
 pub(crate) mod entities;
-pub mod error;
-pub mod materialize;
+pub(crate) mod error;
+pub(crate) mod materialize;
 pub mod metrics;
 pub mod native;
-pub mod plugin;
-pub mod plugin_api;
+pub(crate) mod plugin;
+pub(crate) mod plugin_api;
 pub mod policy;
 pub mod root;
-pub mod runtime;
-pub mod scope;
+pub(crate) mod runtime;
+pub(crate) mod scope;
 pub mod snapshot;
-pub mod spec;
-pub mod store;
-pub mod style;
+pub(crate) mod spec;
+pub(crate) mod store;
+pub(crate) mod style;
+#[cfg(test)]
+mod tests;
 pub mod theme;
 pub mod typings;
 pub(crate) mod value;
 pub mod view;
 pub mod watch;
 
-pub use capability::Capabilities;
+pub use assets::AppAssets;
+pub use capability::{Capabilities, ExecuteGrant};
 pub use engine::ShellRuntime;
 pub use error::ShellError;
 pub use metrics::RuntimeMetrics;
@@ -59,10 +72,12 @@ pub use native::{
     NativeArguments, NativeError, NativeModule, NativeModules, NativeObject, NativeResult,
     NativeValue,
 };
-pub use plugin::{Plugin, PluginManager, PluginManifest};
 pub use root::{DialogOptions, SheetSide, ShellRoot, ToastLevel, ToastRequest};
-pub use runtime::{ExitHandler, ExitRequest, clear_exit_handler, on_exit_request};
-pub use scope::ScopePhase;
+pub use runtime::{
+    ExitHandler, ExitRequest, clear_exit_handler, failure_surface, on_exit_request,
+    resolve_app_root,
+};
+pub use scope::{ScopePhase, with_current_app};
 pub use snapshot::RenderSnapshot;
 pub use view::ScriptView;
 

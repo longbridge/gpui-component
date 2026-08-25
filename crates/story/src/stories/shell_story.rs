@@ -69,6 +69,7 @@ use gpui_component::{
     tab::{Tab, TabBar},
     v_flex,
 };
+use gpui_shell::watch::Watch;
 use gpui_shell::{
     RuntimeMetrics, ScriptView, ShellRuntime,
     native::{NativeError, NativeModules, NativeObject, NativeValue},
@@ -484,7 +485,7 @@ fn install_native_modules(market: &Entity<Market>) {
 /// as the script call that is on the stack. Outside one there is no honest
 /// answer, so this says so rather than reaching for a stale pointer.
 fn with_app<R>(read: impl FnOnce(&mut App) -> R) -> Result<R, NativeError> {
-    gpui_shell::scope::with_current_app(read).ok_or_else(|| {
+    gpui_shell::with_current_app(read).ok_or_else(|| {
         NativeError::new("the board is only reachable while a script call is in progress")
     })
 }
@@ -523,6 +524,12 @@ pub struct ShellStory {
     /// it, and dropping it would tear the JavaScript context down underneath.
     runtime: Option<Rc<ShellRuntime>>,
     script: Option<Entity<ScriptView>>,
+    /// The hot-reload watcher for the script above.
+    ///
+    /// Held rather than detached, so the assignment below drops the previous
+    /// one: Reload script mounts a new view, and a detached watcher would go on
+    /// polling for the view it was started for.
+    script_watch: Option<Watch>,
     /// The last load failure, kept visible instead of thrown away — a story
     /// that silently shows the previous script after a syntax error is worse
     /// than one that says what broke.
@@ -564,12 +571,12 @@ impl ShellStory {
     }
 
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        // Only the style reflection table. `gpui_shell::init` would also
-        // install the shell's own palette over the Base tokens this gallery
-        // projects from its `gpui-component` theme, and the script has no need
-        // of them: it reads colors from the host through `native("theme")`.
-        gpui_shell::style::init();
-
+        // `gpui_shell::init` is deliberately not called: it would install the
+        // shell's own palette over the Base tokens this gallery projects from
+        // its `gpui-component` theme, and the script has no need of them — it
+        // reads colors from the host through `native("theme")`. Nothing else in
+        // the runtime needs priming; the style reflection table builds itself on
+        // first use.
         let market = cx.new(|_| Market::open());
         install_native_modules(&market);
 
@@ -593,6 +600,7 @@ impl ShellStory {
             market,
             runtime: None,
             script: None,
+            script_watch: None,
             script_error: None,
             feed: Feed::Idle,
             feed_generation: 0,
@@ -629,7 +637,7 @@ impl ShellStory {
                     let Some(runtime) = &this.runtime else {
                         return;
                     };
-                    let reading = runtime.metrics().read();
+                    let reading = runtime.read_metrics();
                     this.rate = reading.since(&this.sampled);
                     this.sampled = reading;
                     cx.notify();
@@ -644,17 +652,18 @@ impl ShellStory {
 
     /// Switches the feed, and starts the loop that drives it.
     ///
-    /// The counters are reset here rather than accumulated, because the readout
+    /// A baseline is taken here rather than accumulated, because the readout
     /// answers "what is this feed costing", not "what has this window done since
-    /// it opened".
+    /// it opened". A baseline and not a reset: the counters belong to the
+    /// runtime, and zeroing them would move them under anything else reading.
     fn set_feed(&mut self, feed: Feed, cx: &mut Context<Self>) {
         self.feed_generation += 1;
         self.feed = feed;
 
-        if let Some(runtime) = &self.runtime {
-            runtime.metrics().reset();
-        }
-        self.sampled = RuntimeMetrics::default();
+        self.sampled = match &self.runtime {
+            Some(runtime) => runtime.read_metrics(),
+            None => RuntimeMetrics::default(),
+        };
         self.rate = RuntimeMetrics::default();
         cx.notify();
 
@@ -755,14 +764,14 @@ impl ShellStory {
                         // anything. The Reload button stays for the case where
                         // you want it now rather than in a quarter second.
                         // Compiled out of a release build entirely.
-                        gpui_shell::watch::reload_in_debug(
+                        self.script_watch = Some(gpui_shell::watch::reload_in_debug(
                             &runtime,
                             &view,
                             script_directory(),
                             ENTRY,
                             window,
                             cx,
-                        );
+                        ));
                         self.script = Some(view);
                     }
                 }
@@ -1425,14 +1434,14 @@ mod tests {
             "the script should be painting the tick count"
         );
 
-        let baseline = runtime.metrics().read().script_renders();
+        let baseline = runtime.read_metrics().script_renders();
 
         // A quote tick moves prices the script reads, so the description is
         // stale and has to be rebuilt.
         tick(&mut context, &story, Feed::Quotes(50));
         draw(&mut context, &script);
         assert_eq!(
-            runtime.metrics().read().script_renders(),
+            runtime.read_metrics().script_renders(),
             baseline + 1,
             "a quote tick must re-run the script"
         );
@@ -1444,7 +1453,7 @@ mod tests {
             draw(&mut context, &script);
         }
         assert_eq!(
-            runtime.metrics().read().script_renders(),
+            runtime.read_metrics().script_renders(),
             baseline + 1,
             "eight repaints must not enter the VM"
         );
@@ -1475,13 +1484,13 @@ mod tests {
         // Paused script: the feed keeps running and the board keeps its
         // description, so the VM is never entered.
         story.update(&mut context, |story, cx| story.toggle_script(cx));
-        let baseline = runtime.metrics().read().script_renders();
+        let baseline = runtime.read_metrics().script_renders();
         for _ in 0..8 {
             tick(&mut context, &story, Feed::Quotes(50));
             draw(&mut context, &script);
         }
         assert_eq!(
-            runtime.metrics().read().script_renders(),
+            runtime.read_metrics().script_renders(),
             baseline,
             "a paused script half must not run"
         );

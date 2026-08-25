@@ -1,7 +1,7 @@
 ---
 title: Hosting the Runtime
 description: The Rust side in full — runtime lifetime, mounting script views, refreshing them from host state, metrics, exit requests and hot-reload.
-order: 9
+order: 10
 ---
 
 # Hosting the Runtime
@@ -104,7 +104,7 @@ The runtime counts two events separately, and the gap between them is the point:
 let reading = runtime.metrics().read();
 reading.script_renders();      // follows cx.notify(), reloads, theme changes
 reading.materializations();    // follows frames
-reading.script_render_time();  // total time inside script render
+reading.script_render_time();  // total time inside script `render`
 reading.native_time();         // of which, inside native modules
 reading.slowest_script_render();
 ```
@@ -132,16 +132,15 @@ gpui_shell::on_exit_request(|request, window, cx| {
 
 ## Hot-reload
 
-The `--watch` flag is a thin wrapper over a watcher the host can drive itself:
+One call starts it, and it is the same one the `--watch` flag uses:
 
 ```rust
-let mut watcher = SourceWatcher::new(app_root.clone())
-    .with_debounce(Duration::from_millis(200));
-
-if watcher.poll() {
-    gpui_shell::watch::reload(&runtime, &view, &app_root, "main.js", window, cx)?;
-}
+gpui_shell::watch::reload_in_debug(
+    &runtime, &view, app_root.clone(), "main.js", window, cx,
+).forget();
 ```
+
+Two things about that signature. It **does nothing in a release build** — it returns an inert handle, so leaving the call in costs a branch. And the returned `Watch` is the watch: dropping it stops the loop, which is what a host unmounting a panel wants, while `.forget()` lets it run for as long as the view does. The loop also ends on its own when the view, the runtime or the window goes away, because it holds all three weakly — a strong handle here would keep a panel's runtime alive after the dock removed it.
 
 A reload re-reads **every** module, entry point included — a hot-reload that quietly served a stale import would be worse than none, because it looks like it worked. It does all of its fallible work before touching the live view: if the new code fails to load, the previous view keeps running, the error goes to `tracing`, and a toast with a stable id reports it in the window. The next successful reload retracts that toast.
 
@@ -157,4 +156,4 @@ Install a `tracing` subscriber. The runtime reports script errors, unhandled pro
 
 - **Two runtimes in one process.** There is one global handle; a second runtime has to be threaded by hand.
 - **A supervisor for scripts that hang.** The interpreter's own interrupt cuts a call off, but nothing restarts a runtime that keeps hitting it.
-- **The plugin model.** `PluginManager`, `PluginManifest` and per-plugin `Policy` exist in the crate and are not documented yet; the grants above are the whole story for a host running one application.
+- **The plugin model.** `PluginManager` and `PluginManifest` are written and tested but crate-private, because nothing loads a plugin yet: publishing them would be a promise about an API no caller has exercised. The grants above are the whole story for a host running one application, and `Policy` is public for a host running more than one.

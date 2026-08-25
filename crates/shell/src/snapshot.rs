@@ -60,16 +60,12 @@ impl RenderSnapshot {
         }
     }
 
-    pub fn root(&self) -> SpecId {
+    pub(crate) fn root(&self) -> SpecId {
         self.root
     }
 
-    pub fn arena(&self) -> &SpecArena {
+    pub(crate) fn arena(&self) -> &SpecArena {
         &self.arena
-    }
-
-    pub fn generation(&self) -> u32 {
-        self.generation
     }
 
     /// The description as text. Rendering never needs a GPU to be verified, and

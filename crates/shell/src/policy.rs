@@ -125,19 +125,15 @@ impl Policy {
         &self.capabilities
     }
 
-    pub fn modules(&self) -> Rc<NativeModules> {
+    pub(crate) fn modules(&self) -> Rc<NativeModules> {
         // Cloned out rather than borrowed across the call: dispatching into a
         // module may register modules again, and the borrow would still be open.
         self.modules.borrow().clone()
     }
 
     /// Runs `body` against the settings file, if the host named one.
-    pub fn with_store<R>(&self, body: impl FnOnce(&mut Store) -> R) -> Option<R> {
+    pub(crate) fn with_store<R>(&self, body: impl FnOnce(&mut Store) -> R) -> Option<R> {
         self.store.borrow_mut().as_mut().map(body)
-    }
-
-    pub fn has_store(&self) -> bool {
-        self.store.borrow().is_some()
     }
 }
 

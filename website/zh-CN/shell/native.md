@@ -1,7 +1,7 @@
 ---
 title: Native Modules
 description: 宿主如何把自己的 Rust 借给脚本——注册方式、纯数据边界，以及一个 native 函数要遵守的规则。
-order: 8
+order: 9
 ---
 
 # Native Modules
@@ -49,13 +49,13 @@ unknown native module `marker`; this host registered: market, theme
 native module `market` has no function `quote`; it provides: quotes, ticks, watch, watch_all
 ```
 
-在这之上刻意没有再加一层"按模块授权"。名单是宿主自己定的，所以**名单就是授权**——要收回一个模块，就是注册另一份名单，下一次调用即生效，不必等重启。
+在这之上刻意没有再加一层“按模块授权”。名单是宿主自己定的，所以**名单就是授权**——要收回一个模块，就是注册另一份名单，下一次调用即生效，不必等重启。
 
 ## 边界上只有纯数据
 
 一个 native 函数收到 `NativeArguments`，返回 `NativeValue`：null、布尔、数字、字符串、数组、对象。这六种是脚本引擎与 JSON 都能承载的交集，正因如此，同一份注册表可以服务[分界线](./engine.md)之下的任何引擎。
 
-它从不接收脚本句柄，这不是图方便：句柄会让宿主把一个脚本值的引用留到产生它的那次调用之后，也留到那个让上下文有效的 CallScope 之后。
+它从不接收脚本句柄。句柄会让宿主把一个脚本值的引用留到产生它的那次调用之后，也留到那个让上下文有效的 CallScope 之后。
 
 参数按位置取出，类型检查与错误信息一并包含在内：
 
@@ -85,11 +85,11 @@ NativeObject::new()
 
 **不能回调进脚本引擎。** 一次 native 调用发生在一次脚本调用**之内**，而后者又在一次宿主调用之内；从这里再进 VM，就是在引擎栈帧还在、渲染过程正在构建元素树的时候执行脚本代码。不持有脚本句柄让这件事很难被无意写出来，而派发器本身也会直接拒绝嵌套调用——这样即使宿主绕别的路（比如推动 GPUI 直到某个视图重渲染）也会拿到一条能诊断的错误，而不是未定义行为。
 
-**读写宿主状态正是它存在的意义。** 函数通过 `gpui_shell::scope::with_current_app` 拿到当前的 `App`，在活跃调用之外它是 `None`：
+**读写宿主状态正是它存在的意义。** 函数通过 `gpui_shell::with_current_app` 拿到当前的 `App`，在活跃调用之外它是 `None`：
 
 ```rust
 fn with_app<R>(read: impl FnOnce(&mut App) -> R) -> Result<R, NativeError> {
-    gpui_shell::scope::with_current_app(read)
+    gpui_shell::with_current_app(read)
         .ok_or_else(|| NativeError::new("only reachable while a script call is in progress"))
 }
 ```

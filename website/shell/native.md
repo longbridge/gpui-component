@@ -1,7 +1,7 @@
 ---
 title: Native Modules
 description: How a host lends its own Rust to a script — registration, the plain-data boundary, and the rules a native function runs under.
-order: 8
+order: 9
 ---
 
 # Native Modules
@@ -55,7 +55,7 @@ There is deliberately no per-module capability to grant on top of this. The host
 
 A native function receives `NativeArguments` and returns a `NativeValue`: null, boolean, number, string, array, or object. Those six cases are the intersection of what a script engine and JSON can both carry, which is what lets one registry serve any engine behind the [seam](./engine.md).
 
-It never receives a script handle, and that is not a convenience. A handle would let the host keep a reference to a script value past the call that produced it — and past the call scope that made the surrounding context valid.
+It never receives a script handle. A handle would let the host keep a reference to a script value past the call that produced it — and past the call scope that made the surrounding context valid.
 
 Arguments come out by position, with the type check and the error message included:
 
@@ -85,11 +85,11 @@ An error is a message, not a type: `NativeError::new("no such symbol")` reaches 
 
 **It must not call back into the script engine.** A native call happens inside a script call, which is inside a host call; re-entering the VM from there would run script code with an engine frame already on the stack, in the middle of a render pass. Holding no script handle makes that hard to express by accident, and the dispatcher refuses a nested call outright so a host that finds another route gets a diagnosable error rather than undefined behavior.
 
-**Reading and writing host state is the point.** A function reaches the ambient `App` through `gpui_shell::scope::with_current_app`, which is `None` outside a live call:
+**Reading and writing host state is the point.** A function reaches the ambient `App` through `gpui_shell::with_current_app`, which is `None` outside a live call:
 
 ```rust
 fn with_app<R>(read: impl FnOnce(&mut App) -> R) -> Result<R, NativeError> {
-    gpui_shell::scope::with_current_app(read)
+    gpui_shell::with_current_app(read)
         .ok_or_else(|| NativeError::new("only reachable while a script call is in progress"))
 }
 ```

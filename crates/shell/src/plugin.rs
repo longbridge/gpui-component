@@ -28,6 +28,13 @@
 //!   the manifest has nothing to say about it and this module publishes the
 //!   number the runtime implements instead: [`API_VERSION`].
 
+#![allow(dead_code)]
+//
+// Designed and tested, but nothing drives it: there is no host that loads a
+// plugin, because §18.1's registration API does not exist. The module is
+// `pub(crate)` until there is one — publishing `PluginManager` now would be a
+// promise about an API no caller has ever exercised.
+
 use std::{
     collections::BTreeMap,
     path::{Path, PathBuf},

@@ -1,7 +1,7 @@
 ---
 title: Overlays
 description: Dialogs, the sheet and toasts on cx, their stacking and dismissal order, and why they may only be opened from an event.
-order: 6
+order: 7
 ---
 
 # Overlays

@@ -128,7 +128,7 @@ impl Capabilities {
     /// The same resolver serves `gpui.fs`, the capability-gated `os.*`
     /// functions and the asset source, so there is no second path policy to keep
     /// in sync.
-    pub fn open(&self, path: &Path, access: Access) -> Result<Grant, CapabilityError> {
+    pub(crate) fn open(&self, path: &Path, access: Access) -> Result<Grant, CapabilityError> {
         let roots = match access {
             Access::Read => &self.read_roots,
             Access::Write => &self.write_roots,
@@ -201,7 +201,7 @@ impl Capabilities {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Access {
+pub(crate) enum Access {
     Read,
     Write,
 }
@@ -220,9 +220,7 @@ pub enum CapabilityError {
     NotGranted(Access),
     OutsideRoots { path: PathBuf, access: Access },
     ExecuteDenied(String),
-    NetworkDenied(String),
     StoreDenied,
-    ClipboardDenied,
 }
 
 impl std::fmt::Display for CapabilityError {
@@ -244,14 +242,8 @@ impl std::fmt::Display for CapabilityError {
                 f,
                 "running `{command}` is not granted; add it to capabilities.fs.execute in the manifest"
             ),
-            CapabilityError::NetworkDenied(host) => {
-                write!(f, "`{host}` is not in capabilities.network.hosts")
-            }
             CapabilityError::StoreDenied => {
                 f.write_str("storage is not granted; set capabilities.store to true")
-            }
-            CapabilityError::ClipboardDenied => {
-                f.write_str("clipboard access is not granted; declare capabilities.clipboard")
             }
         }
     }
@@ -279,17 +271,8 @@ impl std::error::Error for CapabilityError {}
 /// differently.
 ///
 /// The default is [`Capabilities::default`], which allows nothing.
-pub fn install(capabilities: Capabilities) {
+pub(crate) fn install(capabilities: Capabilities) {
     crate::policy::update_default(|policy| policy.with_capabilities(capabilities));
-}
-
-/// The grant the code now running holds.
-///
-/// Inside a host call this is the calling frame's grant, so a callback that
-/// fires long after its script was loaded still answers with what *that* script
-/// was given. Outside any call it is the default policy's.
-pub fn installed() -> Capabilities {
-    crate::scope::policy().capabilities().clone()
 }
 
 /// Holds a path to a root by asking the filesystem, not the string.
@@ -330,19 +313,21 @@ pub fn installed() -> Capabilities {
 /// operation on it cannot leave the grant however the filesystem changes
 /// underneath.
 #[derive(Debug)]
-pub struct Grant {
+pub(crate) struct Grant {
     dir: Dir,
     relative: PathBuf,
 }
 
 impl Grant {
     /// The directory every operation goes through.
-    pub fn dir(&self) -> &Dir {
+    #[cfg(test)]
+    pub(crate) fn dir(&self) -> &Dir {
         &self.dir
     }
 
     /// The path within it. Never absolute, never `..`.
-    pub fn path(&self) -> &Path {
+    #[cfg(test)]
+    pub(crate) fn path(&self) -> &Path {
         &self.relative
     }
 

@@ -1,7 +1,7 @@
 ---
 title: State and Views
 description: Views, init and render, cx.notify(), retained input state, and asynchronous work.
-order: 5
+order: 6
 ---
 
 # State and Views

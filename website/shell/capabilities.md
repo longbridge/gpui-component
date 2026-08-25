@@ -1,7 +1,7 @@
 ---
 title: Capabilities
 description: The default-deny model, the fs / store / clipboard / log / process surface, where storage lives, and what the sandbox withholds.
-order: 7
+order: 8
 ---
 
 # Capabilities

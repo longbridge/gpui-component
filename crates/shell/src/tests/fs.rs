@@ -7,8 +7,8 @@
 
 use std::ops::Deref;
 
+use crate::{Capabilities, ShellRuntime};
 use gpui::{TestAppContext, VisualTestContext};
-use gpui_shell::{Capabilities, ShellRuntime};
 
 /// A view that does its filesystem work in a task and records the outcome, so
 /// the assertion can be made on what the script saw rather than on what the host
@@ -53,8 +53,8 @@ fn every_fs_call_settles_through_a_promise(cx: &mut TestAppContext) {
     let _ = std::fs::remove_dir_all(&directory);
     std::fs::create_dir_all(&directory).expect("a granted root");
 
-    cx.update(|cx| gpui_shell::init(cx));
-    gpui_shell::set_capabilities(
+    cx.update(|cx| crate::init(cx));
+    crate::set_capabilities(
         Capabilities::new()
             .read_roots([directory.clone()])
             .write_roots([directory.clone()]),
@@ -112,8 +112,8 @@ fn an_oversized_read_is_refused_by_name(cx: &mut TestAppContext) {
     file.set_len(65 * 1024 * 1024).expect("a large length");
     drop(file);
 
-    cx.update(|cx| gpui_shell::init(cx));
-    gpui_shell::set_capabilities(Capabilities::new().read_roots([directory.clone()]));
+    cx.update(|cx| crate::init(cx));
+    crate::set_capabilities(Capabilities::new().read_roots([directory.clone()]));
 
     let runtime = ShellRuntime::new().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
@@ -195,9 +195,9 @@ fn the_store_answers_from_memory_and_persists_off_thread(cx: &mut TestAppContext
     std::fs::create_dir_all(&directory).expect("a directory for the store");
     let file = directory.join("store.json");
 
-    cx.update(|cx| gpui_shell::init(cx));
-    gpui_shell::set_capabilities(Capabilities::new().store(true));
-    gpui_shell::set_store_path(file.clone());
+    cx.update(|cx| crate::init(cx));
+    crate::set_capabilities(Capabilities::new().store(true));
+    crate::set_store_path(file.clone());
 
     let runtime = ShellRuntime::new().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));

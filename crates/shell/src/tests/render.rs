@@ -5,8 +5,8 @@
 //! plain data. They run against whichever engine is enabled, which is what
 //! keeps the fallback engine honest.
 
+use crate::{ScriptView, ShellRuntime, capability::Capabilities, policy::Policy};
 use gpui::{AppContext as _, TestAppContext, VisualTestContext};
-use gpui_shell::{ScriptView, ShellRuntime, capability::Capabilities, policy::Policy};
 use std::{path::PathBuf, rc::Rc};
 
 const COUNTER: &str = r#"
@@ -47,7 +47,7 @@ const ENTRY: &str = "counter.js";
 
 #[gpui::test]
 fn a_script_view_produces_an_element_description(cx: &mut TestAppContext) {
-    cx.update(|cx| gpui_shell::init(cx));
+    cx.update(|cx| crate::init(cx));
 
     let runtime = ShellRuntime::new().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
@@ -77,7 +77,7 @@ fn a_script_view_produces_an_element_description(cx: &mut TestAppContext) {
 
 #[gpui::test]
 fn an_element_cannot_be_added_to_two_parents(cx: &mut TestAppContext) {
-    cx.update(|cx| gpui_shell::init(cx));
+    cx.update(|cx| crate::init(cx));
 
     let runtime = ShellRuntime::new().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
@@ -113,7 +113,7 @@ export default class Broken extends View {
 
 #[gpui::test]
 fn an_unknown_style_method_suggests_the_closest_name(cx: &mut TestAppContext) {
-    cx.update(|cx| gpui_shell::init(cx));
+    cx.update(|cx| crate::init(cx));
 
     let runtime = ShellRuntime::new().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
@@ -148,7 +148,7 @@ export default class Typo extends View {
 
 #[gpui::test]
 fn a_view_renders_through_gpui(cx: &mut TestAppContext) {
-    cx.update(|cx| gpui_shell::init(cx));
+    cx.update(|cx| crate::init(cx));
 
     let runtime = ShellRuntime::new().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
@@ -192,7 +192,7 @@ use std::ops::Deref;
 
 #[gpui::test]
 fn the_bundled_example_application_loads_and_renders(cx: &mut TestAppContext) {
-    cx.update(|cx| gpui_shell::init(cx));
+    cx.update(|cx| crate::init(cx));
 
     let runtime = ShellRuntime::new().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
@@ -226,7 +226,7 @@ fn the_bundled_example_application_loads_and_renders(cx: &mut TestAppContext) {
 
 #[gpui::test]
 fn state_styles_reuse_the_ordinary_style_methods(cx: &mut TestAppContext) {
-    cx.update(|cx| gpui_shell::init(cx));
+    cx.update(|cx| crate::init(cx));
 
     let runtime = ShellRuntime::new().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
@@ -272,17 +272,17 @@ export default class Styled extends View {
 
 #[gpui::test]
 fn theme_tokens_resolve_outside_a_call_scope(cx: &mut TestAppContext) {
-    cx.update(|cx| gpui_shell::init(cx));
+    cx.update(|cx| crate::init(cx));
 
     // Materialization happens after the call scope closes, so a palette that
     // could only be read through the scope resolved every color to `None` and
     // painted an unstyled black window. This is that regression.
     assert!(
-        gpui_shell::theme::token_color("background").is_some(),
+        crate::theme::token_color("background").is_some(),
         "semantic tokens must resolve without an open call scope"
     );
-    assert!(gpui_shell::theme::token_color("primary").is_some());
-    assert!(gpui_shell::theme::token_color("not_a_token").is_none());
+    assert!(crate::theme::token_color("primary").is_some());
+    assert!(crate::theme::token_color("not_a_token").is_none());
 }
 
 /// The todo list exists to exercise the whole runtime at once: retained input
@@ -291,7 +291,7 @@ fn theme_tokens_resolve_outside_a_call_scope(cx: &mut TestAppContext) {
 /// this is the test that notices.
 #[gpui::test]
 fn the_todolist_example_exercises_the_runtime(cx: &mut TestAppContext) {
-    cx.update(|cx| gpui_shell::init(cx));
+    cx.update(|cx| crate::init(cx));
 
     let runtime = ShellRuntime::new().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
@@ -334,7 +334,7 @@ fn the_todolist_example_exercises_the_runtime(cx: &mut TestAppContext) {
 
 #[gpui::test]
 fn an_unknown_input_event_names_the_valid_ones(cx: &mut TestAppContext) {
-    cx.update(|cx| gpui_shell::init(cx));
+    cx.update(|cx| crate::init(cx));
 
     let runtime = ShellRuntime::new().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
@@ -374,7 +374,7 @@ export default class Bad extends View {
 /// first version of everything it imports — and looks like it worked.
 #[gpui::test]
 fn a_reload_picks_up_a_change_in_an_imported_module(cx: &mut TestAppContext) {
-    cx.update(|cx| gpui_shell::init(cx));
+    cx.update(|cx| crate::init(cx));
 
     let runtime = ShellRuntime::new().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
@@ -443,7 +443,7 @@ export default class Reloading extends View {
 /// since the behaviour is otherwise invisible until someone saves a file.
 #[gpui::test]
 fn an_embedded_runtime_reloads_when_a_source_changes(cx: &mut TestAppContext) {
-    cx.update(|cx| gpui_shell::init(cx));
+    cx.update(|cx| crate::init(cx));
 
     let runtime = ShellRuntime::new().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
@@ -470,7 +470,7 @@ fn an_embedded_runtime_reloads_when_a_source_changes(cx: &mut TestAppContext) {
             .instantiate(&view_type, window, cx)
             .expect("instantiate");
         let view = cx.new(|_| ScriptView::new(runtime.clone(), object));
-        gpui_shell::watch::reload_in_debug(
+        let watch = crate::watch::reload_in_debug(
             &runtime,
             &view,
             directory.clone(),
@@ -478,6 +478,7 @@ fn an_embedded_runtime_reloads_when_a_source_changes(cx: &mut TestAppContext) {
             window,
             cx,
         );
+        watch.forget();
         view
     });
 
@@ -485,7 +486,7 @@ fn an_embedded_runtime_reloads_when_a_source_changes(cx: &mut TestAppContext) {
         context.update(|_, cx| {
             view.read(cx)
                 .snapshot()
-                .map(gpui_shell::RenderSnapshot::debug_tree)
+                .map(crate::RenderSnapshot::debug_tree)
                 .unwrap_or_default()
         })
     };
@@ -508,7 +509,7 @@ fn an_embedded_runtime_reloads_when_a_source_changes(cx: &mut TestAppContext) {
     let settle = |context: &mut VisualTestContext| {
         context
             .executor()
-            .advance_clock(gpui_shell::watch::POLL_INTERVAL * 2);
+            .advance_clock(crate::watch::POLL_INTERVAL * 2);
         context.run_until_parked();
     };
     settle(&mut context);
@@ -544,14 +545,12 @@ fn draw(context: &mut VisualTestContext, view: &gpui::Entity<ScriptView>) {
 /// that can go wrong quietly.
 #[gpui::test]
 fn a_granted_exit_reaches_the_host(cx: &mut TestAppContext) {
-    cx.update(|cx| gpui_shell::init(cx));
-    gpui_shell::set_capabilities(
-        gpui_shell::Capabilities::new().read_roots([std::env::temp_dir()]),
-    );
+    cx.update(|cx| crate::init(cx));
+    crate::set_capabilities(crate::Capabilities::new().read_roots([std::env::temp_dir()]));
 
     let asked: std::rc::Rc<std::cell::Cell<Option<i32>>> = Default::default();
     let recorded = asked.clone();
-    gpui_shell::on_exit_request(move |request, _, _| recorded.set(Some(request.code())));
+    crate::on_exit_request(move |request, _, _| recorded.set(Some(request.code())));
 
     let runtime = ShellRuntime::new().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
@@ -583,7 +582,7 @@ export default class Quitter extends View {
         "the host was never told the script asked to exit"
     );
 
-    gpui_shell::clear_exit_handler();
+    crate::clear_exit_handler();
 }
 
 /// A watcher does not keep its view alive, and stops when the view goes.
@@ -595,7 +594,7 @@ export default class Quitter extends View {
 /// accumulate.
 #[gpui::test]
 fn a_watcher_releases_its_view(cx: &mut TestAppContext) {
-    cx.update(|cx| gpui_shell::init(cx));
+    cx.update(|cx| crate::init(cx));
 
     let runtime = ShellRuntime::new().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
@@ -619,7 +618,7 @@ fn a_watcher_releases_its_view(cx: &mut TestAppContext) {
             .instantiate(&view_type, window, cx)
             .expect("instantiate");
         let view = cx.new(|_| ScriptView::new(runtime.clone(), object));
-        gpui_shell::watch::reload_in_debug(
+        let watch = crate::watch::reload_in_debug(
             &runtime,
             &view,
             directory.clone(),
@@ -627,13 +626,14 @@ fn a_watcher_releases_its_view(cx: &mut TestAppContext) {
             window,
             cx,
         );
+        watch.forget();
         view.downgrade()
     });
 
     // Nothing else is holding it: the panel it stood for has been removed.
     context
         .executor()
-        .advance_clock(gpui_shell::watch::POLL_INTERVAL * 2);
+        .advance_clock(crate::watch::POLL_INTERVAL * 2);
     context.run_until_parked();
 
     assert!(
@@ -652,7 +652,7 @@ fn a_watcher_releases_its_view(cx: &mut TestAppContext) {
 /// and the refusal has nothing left to protect.
 #[gpui::test]
 fn two_runtimes_share_a_thread_without_sharing_a_grant(cx: &mut TestAppContext) {
-    cx.update(|cx| gpui_shell::init(cx));
+    cx.update(|cx| crate::init(cx));
 
     let _first = ShellRuntime::new().expect("the first runtime");
     let _second = ShellRuntime::new().expect("the second runtime");
@@ -666,38 +666,38 @@ fn two_runtimes_share_a_thread_without_sharing_a_grant(cx: &mut TestAppContext) 
 /// sees.
 #[gpui::test]
 fn a_scope_answers_with_the_policy_it_was_opened_under(cx: &mut TestAppContext) {
-    cx.update(|cx| gpui_shell::init(cx));
+    cx.update(|cx| crate::init(cx));
 
     let window = cx.add_window(|_, _| Empty);
     let mut context = VisualTestContext::from_window(*window.deref(), cx);
 
-    gpui_shell::set_capabilities(Capabilities::new());
+    crate::set_capabilities(Capabilities::new());
     let plugin = Rc::new(
         Policy::new().with_capabilities(Capabilities::new().read_roots([PathBuf::from("/tmp/p")])),
     );
 
     context.update(|window, cx| {
         assert!(
-            !gpui_shell::capability::installed().has_read_access(),
+            !crate::scope::policy().capabilities().has_read_access(),
             "the default grants nothing"
         );
 
         // No view: the case a plugin's module top level runs in.
-        let (guard, _) = gpui_shell::scope::enter_with(
+        let (guard, _) = crate::scope::enter_with(
             window,
             cx,
-            gpui_shell::scope::ScopePhase::Task,
+            crate::scope::ScopePhase::Task,
             None,
             plugin.clone(),
         );
         assert!(
-            gpui_shell::capability::installed().has_read_access(),
+            crate::scope::policy().capabilities().has_read_access(),
             "inside the scope the plugin's grant is what fs sees"
         );
         drop(guard);
 
         assert!(
-            !gpui_shell::capability::installed().has_read_access(),
+            !crate::scope::policy().capabilities().has_read_access(),
             "and it does not outlive the call"
         );
     });
@@ -709,7 +709,7 @@ fn a_scope_answers_with_the_policy_it_was_opened_under(cx: &mut TestAppContext) 
 /// the code that is running, not to the moment it runs in.
 #[gpui::test]
 fn two_policies_hold_two_grants_at_once(cx: &mut TestAppContext) {
-    cx.update(|cx| gpui_shell::init(cx));
+    cx.update(|cx| crate::init(cx));
 
     let reader = Rc::new(
         Policy::default()

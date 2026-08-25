@@ -8,13 +8,13 @@
 //! §17.6).
 //!
 //! ```no_run
-//! use gpui_shell::native::{NativeModules, NativeValue, set_modules};
+//! use gpui_shell::{NativeModules, NativeValue};
 //!
 //! let mut modules = NativeModules::new();
 //! modules.register("workspace", |module| {
 //!     module.function("project_name", |_| Ok(NativeValue::from("gpui-component")));
 //! });
-//! set_modules(modules);
+//! gpui_shell::set_native_modules(modules);
 //! ```
 //!
 //! ```js
@@ -494,7 +494,7 @@ thread_local! {
 /// May be called at any point before the script calls `native(...)`; the
 /// registry is read at call time, so revoking a module takes effect on the next
 /// call rather than on the next restart.
-pub fn set_modules(modules: NativeModules) {
+pub(crate) fn set_modules(modules: NativeModules) {
     crate::policy::update_default(|policy| policy.with_native_modules(modules));
 }
 
@@ -509,7 +509,7 @@ pub fn set_modules(modules: NativeModules) {
 ///
 /// So clearing is the installer's job, in the same place it would drop anything
 /// else it owns.
-pub fn clear_modules() {
+pub(crate) fn clear_modules() {
     set_modules(NativeModules::default());
 }
 
@@ -517,13 +517,8 @@ pub fn clear_modules() {
 ///
 /// Read through the calling frame, so a plugin sees the modules its own host
 /// registered for it rather than whichever set was installed most recently.
-pub fn modules() -> Rc<NativeModules> {
+pub(crate) fn modules() -> Rc<NativeModules> {
     crate::scope::policy().modules()
-}
-
-/// Whether the host granted any native access at all.
-pub fn is_granted() -> bool {
-    !modules().is_empty()
 }
 
 /// The one path from an engine into host code.
@@ -533,7 +528,7 @@ pub fn is_granted() -> bool {
 /// which the module header explains is not allowed. Reporting it is the whole
 /// value here; the alternative is a re-entrant render pass that fails somewhere
 /// else entirely.
-pub fn dispatch(module: &str, function: &str, arguments: &NativeArguments) -> NativeResult {
+pub(crate) fn dispatch(module: &str, function: &str, arguments: &NativeArguments) -> NativeResult {
     if IN_CALL.with(Cell::get) {
         return Err(NativeError::new(format!(
             "`{module}.{function}` was reached from inside another native call: \
@@ -741,7 +736,7 @@ mod tests {
         );
 
         set_modules(NativeModules::new());
-        assert!(!is_granted());
+        assert!(modules().is_empty());
     }
 
     #[test]

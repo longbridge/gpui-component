@@ -105,8 +105,12 @@ compile_error!("enable a scripting engine: `quickjs` is the default and the only
 
 #[cfg(feature = "quickjs")]
 pub(crate) mod quickjs;
+/// Only `dock`'s tests name it; every other caller passes it straight from
+/// `load_app` into `instantiate` without spelling the type.
+#[cfg(test)]
+pub(crate) use quickjs::ViewType;
 #[cfg(feature = "quickjs")]
-pub use quickjs::{ShellRuntime, ViewObject, ViewType};
+pub use quickjs::{ShellRuntime, ViewObject};
 
 /// Points the script-visible store at its backing file.
 ///

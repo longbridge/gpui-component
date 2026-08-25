@@ -47,9 +47,14 @@ use std::{
 };
 
 use anyhow::{Context as _, Result, bail};
-use gpui::{App, Entity, Window};
+use gpui::{AnyWindowHandle, App, Entity, Task, Window};
 
-use crate::{engine::ShellRuntime, scope, view::ScriptView};
+use crate::{
+    engine::ShellRuntime,
+    root::{ShellRoot, ToastLevel, ToastRequest},
+    scope,
+    view::ScriptView,
+};
 
 /// The default quiet period. An editor writes a file several times in a burst —
 /// truncate, write, rename — and each of those is a distinct change. Reloading
@@ -78,7 +83,7 @@ const SKIPPED_DIRECTORIES: [&str; 2] = ["node_modules", "target"];
 /// The watcher answers one question — "has the tree settled after a change?" —
 /// and deliberately does not know what to do about it. Deciding to reload, and
 /// what to do when the reload fails, belongs to the host.
-pub struct SourceWatcher {
+pub(crate) struct SourceWatcher {
     directory: PathBuf,
     debounce: Duration,
     /// The stamp reported by the last scan. A change is a difference from this.
@@ -97,7 +102,7 @@ impl SourceWatcher {
     /// starting a watcher does not itself look like a change.
     ///
     /// [`poll`]: Self::poll
-    pub fn new(directory: PathBuf) -> Self {
+    pub(crate) fn new(directory: PathBuf) -> Self {
         let stamp = scan(&directory);
         Self {
             directory,
@@ -115,19 +120,10 @@ impl SourceWatcher {
     /// the very poll that observes it.
     ///
     /// [`poll`]: Self::poll
-    pub fn with_debounce(mut self, window: Duration) -> Self {
+    #[cfg(test)]
+    pub(crate) fn with_debounce(mut self, window: Duration) -> Self {
         self.debounce = window;
         self
-    }
-
-    /// The directory being watched.
-    pub fn directory(&self) -> &Path {
-        &self.directory
-    }
-
-    /// The debounce window.
-    pub fn debounce(&self) -> Duration {
-        self.debounce
     }
 
     /// Returns true when the tree changed since the last poll and has been
@@ -137,7 +133,7 @@ impl SourceWatcher {
     /// change, so a host that polls in a loop reloads once per save rather than
     /// once per poll. A directory that has been deleted reads as an empty tree,
     /// which is a change like any other and then stays quiet.
-    pub fn poll(&mut self) -> bool {
+    pub(crate) fn poll(&mut self) -> bool {
         let stamp = scan(&self.directory);
         if stamp != self.stamp {
             self.stamp = stamp;
@@ -151,16 +147,6 @@ impl SourceWatcher {
             }
             _ => false,
         }
-    }
-
-    /// Records a change observed by someone else — a host-injected `notify`
-    /// watcher, or a menu command that forces a reload.
-    ///
-    /// The change still goes through the debounce window, so an external event
-    /// stream and the poll loop can be mixed without reloading twice for one
-    /// save.
-    pub fn notice(&mut self) {
-        self.changed_at = Some(Instant::now());
     }
 }
 
@@ -289,7 +275,7 @@ fn is_source(name: &str) -> bool {
 /// How often an embedded watcher looks. The binary uses the same figure; a
 /// quarter second is under the threshold at which a save feels like it did not
 /// take, and far above the cost of one `stat` per source file.
-pub const POLL_INTERVAL: Duration = Duration::from_millis(250);
+pub(crate) const POLL_INTERVAL: Duration = Duration::from_millis(250);
 
 /// Reloads a script view whenever its sources change, for a host that embeds the
 /// runtime — **and does nothing at all in a release build.**
@@ -329,17 +315,33 @@ pub fn reload_in_debug(
     entry: &'static str,
     window: &mut Window,
     cx: &mut App,
-) {
+) -> Watch {
     if !cfg!(debug_assertions) {
-        return;
+        return Watch { task: None };
     }
 
+    watch_view(runtime, view, directory, entry, window, cx)
+}
+
+/// Watches whatever the build is, and hands back the handle that stops it.
+///
+/// [`reload_in_debug`] is this with the release-build question already
+/// answered, which is the right default for a panel; a host that has its own
+/// `--watch` flag decides for itself and calls this.
+pub fn watch_view(
+    runtime: &Rc<ShellRuntime>,
+    view: &Entity<ScriptView>,
+    directory: PathBuf,
+    entry: &'static str,
+    window: &mut Window,
+    cx: &mut App,
+) -> Watch {
     let handle = window.window_handle();
     let mut watcher = SourceWatcher::new(directory.clone());
     let runtime = Rc::downgrade(runtime);
     let view = view.downgrade();
 
-    cx.spawn(async move |cx| {
+    let task = cx.spawn(async move |cx| {
         loop {
             cx.background_executor().timer(POLL_INTERVAL).await;
 
@@ -367,10 +369,17 @@ pub fn reload_in_debug(
 
             let reached = handle.update(cx, |_, window, cx| {
                 match reload(&runtime, &view, &directory, entry, window, cx) {
-                    Ok(()) => tracing::info!("reloaded {}", directory.display()),
+                    Ok(()) => {
+                        tracing::info!("reloaded {}", directory.display());
+                        retract_failure(handle, window, cx);
+                    }
                     // `{error:#}` keeps the `anyhow` context chain, which is what
                     // names the file and the stage that failed.
-                    Err(error) => tracing::error!("reload failed: {error:#}"),
+                    Err(error) => {
+                        let message = format!("{error:#}");
+                        tracing::error!("reload failed: {message}");
+                        report_failure(handle, &message, window, cx);
+                    }
                 }
             });
 
@@ -378,11 +387,70 @@ pub fn reload_in_debug(
                 break;
             }
         }
-    })
-    .detach();
+    });
+
+    Watch { task: Some(task) }
 }
 
-pub fn reload(
+/// A running watcher. Dropping it stops the loop.
+///
+/// Returned rather than detached so a host that unmounts a panel can stop
+/// watching for it. The loop also ends on its own when the view, the runtime or
+/// the window goes away — the handle is for the case where none of those has
+/// happened and the host simply wants it to stop.
+#[must_use = "dropping the handle stops the watcher; use `.forget()` to keep it running"]
+pub struct Watch {
+    task: Option<Task<()>>,
+}
+
+impl Watch {
+    /// Lets the watcher run for as long as the view does.
+    pub fn forget(mut self) {
+        if let Some(task) = self.task.take() {
+            task.detach();
+        }
+    }
+}
+
+/// The toast id, fixed so a repeated failure replaces the standing message
+/// rather than stacking a column of them.
+const RELOAD_TOAST: &str = "shell-reload";
+
+/// Reports a failed reload in the window, when the host mounted a [`ShellRoot`].
+///
+/// The log is the one channel that always works, and it is written either way.
+/// But a developer with the window in front of them is looking at the window,
+/// and this used to be something only the `gpui-shell` binary did — so an
+/// embedded panel silently kept rendering its old view and the reason was in a
+/// terminal nobody had open.
+fn report_failure(handle: AnyWindowHandle, message: &str, window: &mut Window, cx: &mut App) {
+    let Some(root) = handle.downcast::<ShellRoot>() else {
+        return;
+    };
+    let _ = root.update(cx, |root, _, cx| {
+        root.push_toast(
+            ToastRequest::new("Reload failed")
+                .with_description(message.to_owned())
+                .with_level(ToastLevel::Error)
+                .with_timeout(None)
+                .with_id(RELOAD_TOAST),
+            window,
+            cx,
+        );
+    });
+}
+
+fn retract_failure(handle: AnyWindowHandle, window: &mut Window, cx: &mut App) {
+    let Some(root) = handle.downcast::<ShellRoot>() else {
+        return;
+    };
+    let _ = root.update(cx, |root, _, cx| {
+        root.dismiss_toast(RELOAD_TOAST, cx);
+    });
+    let _ = window;
+}
+
+pub(crate) fn reload(
     runtime: &Rc<ShellRuntime>,
     view: &Entity<ScriptView>,
     directory: &Path,

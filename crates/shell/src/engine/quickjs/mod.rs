@@ -190,8 +190,19 @@ impl ShellRuntime {
     /// The two counters follow different things — application activity and
     /// frame count — and the gap between them is what the snapshot lifecycle
     /// exists to produce. See [`crate::metrics`].
-    pub fn metrics(&self) -> &Metrics {
+    pub(crate) fn metrics(&self) -> &Metrics {
         &self.metrics
+    }
+
+    /// A reading of the two counters, taken now.
+    ///
+    /// The host gets the reading rather than the instrument: `Metrics` is the
+    /// timing side, and a host holding it could reset the counters under a
+    /// measurement someone else was taking. Subtract two readings with
+    /// [`RuntimeMetrics::since`](crate::RuntimeMetrics::since) to measure an
+    /// interval.
+    pub fn read_metrics(&self) -> crate::metrics::RuntimeMetrics {
+        self.metrics.read()
     }
 
     /// This runtime's retained state.

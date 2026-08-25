@@ -14,11 +14,11 @@
 
 use std::ops::Deref;
 
-use gpui::{AppContext as _, Entity, IntoElement as _, TestAppContext, VisualTestContext};
-use gpui_shell::{
+use crate::{
     RenderSnapshot, ScriptView, ShellRuntime,
     spec::{CallbackId, SpecOp},
 };
+use gpui::{AppContext as _, Entity, IntoElement as _, TestAppContext, VisualTestContext};
 
 const TOGGLE: &str = r#"
 import { View, v_flex, text, Checkbox } from "gpui";
@@ -284,7 +284,7 @@ fn a_palette_change_rebuilds_the_snapshot(cx: &mut TestAppContext) {
     // baked into the snapshot. Repainting cannot pick up a new palette; only a
     // rebuild can.
     context.update(|_, cx| {
-        gpui_shell::theme::set_mode(gpui_shell::theme::ThemeMode::Dark, cx);
+        crate::theme::set_mode(crate::theme::ThemeMode::Dark, cx);
     });
     render_once(&mut context, &view);
 
@@ -380,7 +380,7 @@ fn script_view(
     VisualTestContext,
     Entity<ScriptView>,
 ) {
-    cx.update(|cx| gpui_shell::init(cx));
+    cx.update(|cx| crate::init(cx));
 
     let runtime = ShellRuntime::new().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));

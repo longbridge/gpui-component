@@ -21,10 +21,7 @@ use gpui::{
     Window, WindowBounds, WindowHandle, WindowOptions, px, size,
 };
 use gpui_shell::{
-    Capabilities, ScriptView, ShellRoot, ShellRuntime, ToastLevel, ToastRequest,
-    assets::AppAssets,
-    theme::Palettes,
-    watch::{self, POLL_INTERVAL, SourceWatcher},
+    AppAssets, Capabilities, ScriptView, ShellRoot, ShellRuntime, theme::Palettes, watch,
 };
 use tracing::{
     Event, Level, Metadata, Subscriber,
@@ -38,15 +35,6 @@ use tracing::{
 /// resolved directory for the window title and for the watcher, both of which
 /// are decided before any script is loaded.
 const ENTRY: &str = "main.js";
-
-/// How often `--watch` samples the source tree.
-///
-/// Identity of the toast a failed reload posts.
-///
-/// A stable id is what makes a broken file that is saved five times read as one
-/// standing problem rather than five notifications, and it is what lets the next
-/// successful reload retract the message it replaces.
-const RELOAD_TOAST: &str = "shell-reload";
 
 /// The exit code for a command line this binary could not act on. Distinct from
 /// 1, which is a runtime that failed to start.
@@ -272,7 +260,7 @@ fn run(arguments: Arguments) {
     // here rather than inside the loop is what makes that possible; a path that
     // does not resolve falls back to the argument and fails later with the
     // message that explains why.
-    let asset_root = gpui_shell::runtime::resolve_app_root(&arguments.directory, ENTRY)
+    let asset_root = gpui_shell::resolve_app_root(&arguments.directory, ENTRY)
         .unwrap_or_else(|_| arguments.directory.clone());
 
     gpui_platform::application()
@@ -312,7 +300,7 @@ fn run(arguments: Arguments) {
             // title and the watcher the real application root even when the command
             // line named `main.js`. A path that does not resolve is not reported
             // twice: the load below fails with the message that explains why.
-            let root = gpui_shell::runtime::resolve_app_root(&arguments.directory, ENTRY)
+            let root = gpui_shell::resolve_app_root(&arguments.directory, ENTRY)
                 .unwrap_or_else(|_| arguments.directory.clone());
 
             // Evaluating the module needs no window; constructing the view does.
@@ -401,7 +389,7 @@ fn check(arguments: CheckArguments) -> ! {
     // here rather than inside the loop is what makes that possible; a path that
     // does not resolve falls back to the argument and fails later with the
     // message that explains why.
-    let asset_root = gpui_shell::runtime::resolve_app_root(&arguments.directory, ENTRY)
+    let asset_root = gpui_shell::resolve_app_root(&arguments.directory, ENTRY)
         .unwrap_or_else(|_| arguments.directory.clone());
 
     gpui_platform::application()
@@ -420,7 +408,7 @@ fn check(arguments: CheckArguments) -> ! {
             };
             runtime.set_global(cx);
 
-            let root = match gpui_shell::runtime::resolve_app_root(&arguments.directory, ENTRY) {
+            let root = match gpui_shell::resolve_app_root(&arguments.directory, ENTRY) {
                 Ok(root) => root,
                 Err(error) => {
                     sink.borrow_mut().fail(format!("{error:#}"));
@@ -669,23 +657,12 @@ fn window_options(root: &Path, cx: &App) -> WindowOptions {
 
 /// Polls the application directory and reloads the view when it changes.
 ///
-/// The loop runs on the foreground executor, which is where [`SourceWatcher`]
-/// expects to be driven from and where [`watch::reload`] has to run: a reload
-/// mutates a view and requests a repaint. Between ticks the task is parked, so
-/// an idle watcher costs one wakeup per [`POLL_INTERVAL`].
-///
-/// # What a failed reload does
-///
-/// Nothing to the window. [`watch::reload`] does all of its fallible work before
-/// it touches the live entity, so a save that does not compile leaves the
-/// previous view running; this reports the error on both channels a developer
-/// might be watching — stderr for the terminal, a toast for the window — and
-/// waits for the next save. The toast carries a fixed id so a repeated failure
-/// replaces the standing message, and the next successful reload retracts it.
-///
-/// The loop ends when the window does: `update` on a closed window is an error,
-/// which is the only exit condition. Everything else is a script problem, and a
-/// script problem must not stop the mechanism that lets the author fix it.
+/// The loop, the failure toast and the exit conditions all live in
+/// [`gpui_shell::watch`] — the binary used to carry its own copy of them, which
+/// meant an embedded host got a quieter hot-reload than the CLI for no reason
+/// anyone had decided. `--watch` is the one thing that is this binary's to
+/// answer, because the person running it is the person editing; an embedded
+/// host has no such flag and takes the debug build as the answer.
 fn watch_sources(
     runtime: Rc<ShellRuntime>,
     view: Entity<ScriptView>,
@@ -693,59 +670,16 @@ fn watch_sources(
     directory: PathBuf,
     cx: &mut App,
 ) {
-    let mut watcher = SourceWatcher::new(directory.clone());
+    let started = window.update(cx, |_, window, cx| {
+        watch::watch_view(&runtime, &view, directory, ENTRY, window, cx)
+    });
 
-    cx.spawn(async move |cx| {
-        loop {
-            cx.background_executor().timer(POLL_INTERVAL).await;
-
-            // Scanned off the foreground for the same reason the embedded
-            // watcher does it: a bounded walk is still one `stat` per source
-            // file four times a second, and on a slow directory that is a
-            // periodic stall a user feels as the window hitching.
-            let (changed, scanned) = cx
-                .background_executor()
-                .spawn(async move {
-                    let changed = watcher.poll();
-                    (changed, watcher)
-                })
-                .await;
-            watcher = scanned;
-
-            if !changed {
-                continue;
-            }
-
-            let reported = window.update(cx, |root, window, cx| {
-                match watch::reload(&runtime, &view, &directory, ENTRY, window, cx) {
-                    Ok(()) => {
-                        tracing::info!("reloaded {}", directory.display());
-                        root.dismiss_toast(RELOAD_TOAST, cx);
-                    }
-                    Err(error) => {
-                        // `{error:#}` keeps the `anyhow` context chain, which is
-                        // what names the file and the stage that failed.
-                        let message = format!("{error:#}");
-                        eprintln!("reload failed: {message}");
-                        root.push_toast(
-                            ToastRequest::new("Reload failed")
-                                .with_description(message)
-                                .with_level(ToastLevel::Error)
-                                .with_timeout(None)
-                                .with_id(RELOAD_TOAST),
-                            window,
-                            cx,
-                        );
-                    }
-                }
-            });
-
-            if reported.is_err() {
-                break;
-            }
-        }
-    })
-    .detach();
+    match started {
+        // Detached on purpose: this watcher lasts as long as the window, and
+        // the window is the whole application.
+        Ok(watch) => watch.forget(),
+        Err(error) => tracing::error!("cannot watch for changes: {error}"),
+    }
 }
 
 /// What the window shows when the application could not be loaded.
@@ -756,7 +690,7 @@ struct LoadFailure(String);
 
 impl Render for LoadFailure {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        gpui_shell::runtime::failure_surface(
+        gpui_shell::failure_surface(
             "This application could not be loaded",
             &self.0,
             "gpui-shell <directory> expects main.js in that directory, \

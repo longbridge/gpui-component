@@ -155,6 +155,7 @@ GPUI 的元素是**被消费**的值：`RenderOnce::render` 按值取走 `self`�
 | 页面 | 内容 |
 | --- | --- |
 | [Getting Started](./getting-started.md) | 运行示例、最小应用、`check` 与 `types` |
+| [Examples](./examples.md) | 仓库里的两个应用，以及可以从中照抄什么 |
 | [Elements](./elements.md) | 构造器、`child` / `children` / `when`，以及元素为什么是一次性的 |
 | [Styling](./styling.md) | 流式样式接口、长度与颜色、语义 token、状态样式 |
 | [State and Views](./state.md) | `init` / `render`、`cx.notify()`、留存状态、异步 |
@@ -162,6 +163,7 @@ GPUI 的元素是**被消费**的值：`RenderOnce::render` 按值取走 `self`�
 | [Capabilities](./capabilities.md) | 默认全部拒绝的模型，`fs` / `store` / `clipboard` / `log` / `process` |
 | [Native Modules](./native.md) | 把宿主自己的 Rust 借给脚本，以及那条纯数据边界 |
 | [Hosting the Runtime](./hosting.md) | Rust 这一侧的全貌：挂载、刷新、指标、退出、hot-reload |
+| [Dock Panels](./dock.md) | 把脚本视图变成可停靠面板，以及重启后什么会留下 |
 | [The Engine Seam](./engine.md) | QuickJS、这条分界线存在的理由，以及把脚本成本与帧成本分开的三项实测 |
 
 ## 当前状态

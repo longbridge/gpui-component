@@ -155,6 +155,7 @@ Text editing, syntax highlighting, LSP, virtualization and animation stay in Rus
 | Page | What it covers |
 | --- | --- |
 | [Getting started](./getting-started.md) | Running the example, the smallest application, `check` and `types` |
+| [Examples](./examples.md) | The two applications in the repository, and what to copy from them |
 | [Elements](./elements.md) | Constructors, `child` / `children` / `when`, and why an element is single-use |
 | [Styling](./styling.md) | The fluent style surface, lengths, colour tokens and state styles |
 | [State and views](./state.md) | `init` / `render`, `cx.notify()`, retained state, async |
@@ -162,6 +163,7 @@ Text editing, syntax highlighting, LSP, virtualization and animation stay in Rus
 | [Capabilities](./capabilities.md) | The default-deny model, `fs` / `store` / `clipboard` / `log` / `process` |
 | [Native Modules](./native.md) | Lending the host's own Rust to a script, and the plain-data boundary |
 | [Hosting the Runtime](./hosting.md) | The Rust side in full: mounting, refreshing, metrics, exit, hot-reload |
+| [Dock Panels](./dock.md) | A script view as a dockable panel, and what survives a restart |
 | [The engine seam](./engine.md) | QuickJS, why the seam exists, and the measurements that tell script cost from frame cost |
 
 ## Status

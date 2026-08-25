@@ -1,7 +1,7 @@
 ---
 title: The Engine Seam
 description: QuickJS 位于一条内部接口之后、这条分界线存在的理由，以及把脚本成本与帧成本分开的三项实测。
-order: 10
+order: 12
 ---
 
 # The Engine Seam
@@ -69,8 +69,8 @@ cargo test -p gpui-shell --release --test benchmark -- --ignored --nocapture
 
 VM 与 GPUI 的 `App` 共用一个线程——主线程——在同一个进程里。`ShellRuntime` 是一个内部用 `RefCell` 的 `Rc`，既不是 `Send` 也不是 `Sync`。这里没有 worker，也没有第二个 VM。
 
-<img class="architecture-light" src="/shell-threads-memory-light.svg" alt="宿主进程。主线程上，GPUI 的 App 与 QuickJS VM 通过 FFI 边界互相调用普通函数。后台线程只跑计时器，到点后回到前台执行器。内存分为四块：上限 256 MiB 的 JavaScript 堆、由 snapshot 拥有的描述 arena、按 snapshot 代次索引的回调 arena，以及只存活一次绘制的 GPUI 帧 arena。">
-<img class="architecture-dark" src="/shell-threads-memory-dark.svg" alt="宿主进程。主线程上，GPUI 的 App 与 QuickJS VM 通过 FFI 边界互相调用普通函数。后台线程只跑计时器，到点后回到前台执行器。内存分为四块：上限 256 MiB 的 JavaScript 堆、由 snapshot 拥有的描述 arena、按 snapshot 代次索引的回调 arena，以及只存活一次绘制的 GPUI 帧 arena。">
+<img class="architecture-light" src="/shell-threads-memory-light.svg" alt="宿主进程。主线程上，GPUI 的 App 与 QuickJS VM 通过 FFI 边界互相调用普通函数。后台线程只跑计时器，到点后回到前台执行器。内存分为四块：上限 256 MiB 的 JavaScript 堆、由 snapshot 拥有的描述 arena、按 snapshot generation 索引的回调 arena，以及只存活一次绘制的 GPUI 帧 arena。">
+<img class="architecture-dark" src="/shell-threads-memory-dark.svg" alt="宿主进程。主线程上，GPUI 的 App 与 QuickJS VM 通过 FFI 边界互相调用普通函数。后台线程只跑计时器，到点后回到前台执行器。内存分为四块：上限 256 MiB 的 JavaScript 堆、由 snapshot 拥有的描述 arena、按 snapshot generation 索引的回调 arena，以及只存活一次绘制的 GPUI 帧 arena。">
 
 确实跑在别处的只有两件事，而且都不碰 VM。计时器（`gpui.sleep`、`gpui.timer`）在后台执行器上倒计时，到点后回到前台执行器，所以续体本身仍在主线程、在一个 `Task` scope 里执行。另一件是元素产出之后，GPUI 用自己的线程做自己的事。
 
@@ -86,7 +86,7 @@ VM 与 GPUI 的 `App` 共用一个线程——主线程——在同一个进程�
 | --- | --- | --- |
 | 对象、闭包、模块作用域 | QuickJS 堆，上限 256 MiB | 它自己的 GC 跑过，或者运行时销毁 |
 | 元素描述 arena | Rust 侧；移交给它产出的那份 snapshot | 那份 snapshot 销毁时 |
-| 已注册的回调 | Rust 侧的 arena，按 snapshot 的代次索引 | 那份 snapshot 销毁并退役它那一代时 |
+| 已注册的回调 | Rust 侧的 arena，按 snapshot 的 generation 索引 | 那份 snapshot 销毁并退役它那一代时 |
 | GPUI 元素 | GPUI 自己的帧 arena | 构建它们的那次绘制结束时 |
 
 一个视图持有的是**两份** snapshot 而不是一份：当前生效的那份描述，以及被它替换掉的上一份。上一份要多留一代，因为一个已经在途的帧可能仍在读它，提前释放会把那一帧还需要的回调一并退役掉。
