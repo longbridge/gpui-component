@@ -65,20 +65,20 @@ The benchmark walks four panel sizes, because one size cannot show what that is 
 
 | Panel | Describe, per change | Repaint, per frame | Script renders per repaint | A frame without the snapshot |
 | --- | --- | --- | --- | --- |
-| 443 nodes | 1.5 ms | 1.3 ms | **0** | 2.8 ms |
-| 2,103 nodes | 5.9 ms | 7.3 ms | **0** | 13.2 ms |
-| 4,203 nodes | 10.2 ms | 11.8 ms | **0** | 22.0 ms |
-| 8,403 nodes | 20.8 ms | 26.4 ms | **0** | 47.2 ms |
+| 443 nodes | 1.1 ms | 1.3 ms | **0** | 2.4 ms |
+| 2,103 nodes | 5.1 ms | 5.9 ms | **0** | 11.0 ms |
+| 4,203 nodes | 10.3 ms | 12.0 ms | **0** | 22.3 ms |
+| 8,403 nodes | 20.5 ms | 27.0 ms | **0** | 47.5 ms |
 
 ```bash
 cargo test -p gpui-shell --release --test benchmark -- --ignored --nocapture
 ```
 
-The last column is the first two added together: what each frame would cost if the description were rebuilt for it. It is **1.8 to 2.1 times** the real figure at every size, and that ratio is the whole of what the snapshot buys — describing the interface is about half the cost of a naive frame, at any scale.
+The last column is the first two added together: what each frame would cost if the description were rebuilt for it. It stays at **about 1.8×** the real figure across a nineteen-fold range of panel sizes — describing the interface is roughly 45% of a naive frame at every scale, and that is what the snapshot removes.
 
-The zero is an assertion rather than an observation. It holds at every size in the table, and a repaint that ever enters the VM [fails the benchmark](./engine.md#the-measurement) instead of merely getting slower.
+The zero column is not merely observed. The 443-node row is asserted by a test that runs on every CI build: a repaint that enters the VM [fails the benchmark](./engine.md#the-measurement) rather than merely getting slower.
 
-The table also says where the ceiling is, and it is not in JavaScript: at 8,403 nodes a frame costs 26 ms with no script running at all. Past a few thousand nodes the bill is Rust-side materialization, layout and paint, so the answer there is virtualization rather than a faster engine. Absolute figures are a release build on Apple Silicon and move with the machine; the ratio and the zero do not.
+The table also says where the ceiling is, and it is not in JavaScript: at 8,403 nodes a frame costs 27 ms with no script running at all. Past a few thousand nodes the bill is Rust-side materialization, layout and paint, so the answer there is virtualization rather than a faster engine — and a view that large is the wrong shape regardless of what describes it. Absolute figures are a release build on Apple Silicon and move with the machine; the ratio does not.
 
 ### Security: nothing by default, and a language trimmed to match
 

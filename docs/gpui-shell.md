@@ -2707,12 +2707,12 @@ directly, by counting entries into script `render`:
 | two views on one runtime, one rebuilding | the other's handlers stay callable |
 | a palette change | rebuilds, because tokens are resolved into the snapshot |
 | a bare `cx.notify()` from Rust, then `refresh` | the first repaints, the second re-runs the script |
-| the shell story's data feed against its repaint feed | the same distinction end to end, through a native module and a real script |
+| the shell story's quote feed against its repaint feed | the same distinction end to end, at 50 ms, through a native module and a real script |
 
 `ShellRuntime::metrics()` is what these read — `script_renders` against
 `materializations`, with the time each took. It exists for this suite and for the
-readout in the shell story, which shows the same two numbers as live rates while
-a feed drives the panel. A claim about render frequency that cannot be observed
+readout in the shell story, whose quote board ticks every 50 ms and shows the
+same two numbers as live rates. A claim about render frequency that cannot be observed
 cannot be regression-tested, and one nobody can watch is hard to believe.
 
 Benchmark C in `tests/benchmark.rs` (§20.3) makes the same assertion under a

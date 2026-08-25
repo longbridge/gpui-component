@@ -1,42 +1,55 @@
-//! One window, two languages.
+//! One window, two languages, one ticking quote board.
 //!
 //! The left panel is ordinary Rust built from `gpui-component`. The right panel
 //! is a `gpui-shell` script view whose JavaScript lives in
-//! `crates/story/js/checklist/` and is read from disk when the story opens.
-//! Neither half owns the data: a single `Entity<Checklist>` does, and the script
+//! `crates/story/js/quotes/` and is read from disk when the story opens.
+//! Neither half owns the data: a single `Entity<Market>` does, and the script
 //! reaches it through a **native module** this story registers before the
 //! script runtime starts.
 //!
 //! ```text
 //!   Rust panel ──┐                                  ┌── main.js
-//!   (Checkbox,   │                                  │   (div, Button,
-//!    Button)     ▼                                  ▼    text)
-//!             Entity<Checklist>  ◀── native("checklist") ──┐
-//!                    │                steps / toggle / set_all
+//!   (rows drawn  │                                  │   (rows drawn
+//!    with        ▼                                  ▼    with div/text)
+//!    Label)   Entity<Market>  ◀── native("market") ──┐
+//!                    │            quotes / ticks / watch
 //!                    │ cx.notify()
 //!                    ▼
 //!              cx.observe(...) ──▶ re-renders both halves
 //! ```
 //!
-//! Nothing but plain data crosses. `steps()` returns an array of records;
-//! `toggle(id)` takes a number and answers a boolean, or fails with a sentence
-//! the script sees as an exception. The script cannot hand Rust a callback and
-//! Rust cannot hand the script a handle — which is also why the script's colors
-//! arrive as hex strings from a second module, `theme`: the host answers "what
-//! is `primary` in the current theme?", and the script decides what to paint
-//! with the answer. Switch the gallery's theme or radius and the script half
-//! follows.
+//! # Why a quote board
+//!
+//! Because it is the load that decides whether a scripting layer is viable. A
+//! feed arrives on its own, several times a second, while the window is already
+//! repainting for reasons of its own — and the question the runtime has to
+//! answer is which of those two frequencies the script pays for.
+//!
+//! The board ticks every 50 ms out of the box, and the counters under it show
+//! both numbers as live rates. Switch the feed to **Repaint only** and watch
+//! them come apart: frames keep climbing, script renders drop to zero, because
+//! nothing the script reads has changed and the description it already
+//! published is simply drawn again.
+//!
+//! Nothing but plain data crosses. `quotes()` returns an array of records;
+//! `watch(symbol)` takes a string and answers a boolean, or fails with a
+//! sentence the script sees as an exception. The script cannot hand Rust a
+//! callback and Rust cannot hand the script a handle — which is also why the
+//! script's colors arrive as hex strings from a second module, `theme`: the host
+//! answers "what is `success` in the current theme?", and the script decides
+//! what to paint with the answer. Switch the gallery's theme or radius and the
+//! script half follows.
 
 use std::{path::PathBuf, rc::Rc, time::Duration};
 
 use gpui::{
-    App, AppContext as _, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement,
-    Render, SharedString, Styled, Window, div, prelude::FluentBuilder as _,
+    App, AppContext as _, Context, Entity, FocusHandle, Focusable, Hsla, InteractiveElement as _,
+    IntoElement, ParentElement, Render, SharedString, StatefulInteractiveElement as _, Styled,
+    Window, div, prelude::FluentBuilder as _, px,
 };
 use gpui_component::{
     ActiveTheme as _, Colorize as _, Disableable as _, Sizable as _, StyledExt as _,
     button::{Button, ButtonVariants as _},
-    checkbox::Checkbox,
     h_flex,
     label::Label,
     v_flex,
@@ -48,13 +61,42 @@ use gpui_shell::{
 
 use crate::section;
 
-/// One line of the checklist. The only data either half of the window reads.
+/// One instrument on the board. The only data either half of the window reads.
 #[derive(Clone)]
-struct Step {
-    id: u32,
-    title: SharedString,
-    owner: SharedString,
-    done: bool,
+struct Quote {
+    symbol: SharedString,
+    name: SharedString,
+    /// The session's opening price, so a change is a fact rather than a memory
+    /// of the previous frame.
+    open: f32,
+    last: f32,
+    volume: u64,
+    watched: bool,
+}
+
+impl Quote {
+    fn change(&self) -> f32 {
+        self.last - self.open
+    }
+
+    fn change_percent(&self) -> f32 {
+        if self.open == 0. {
+            0.
+        } else {
+            self.change() / self.open * 100.
+        }
+    }
+
+    /// Up, down, or flat. Both halves colour from this rather than each deciding
+    /// what "unchanged" means, because the two panels sitting side by side is
+    /// the whole point of the story.
+    fn direction(&self) -> i32 {
+        match self.change() {
+            change if change > 0.0005 => 1,
+            change if change < -0.0005 => -1,
+            _ => 0,
+        }
+    }
 }
 
 /// The shared state, owned by GPUI and reachable from both languages.
@@ -63,104 +105,172 @@ struct Step {
 /// hold it: a native function is a plain closure with no access to the story's
 /// `&mut self`, and an entity handle is the one way to reach host state from
 /// inside a script call and still notify observers afterwards.
-pub struct Checklist {
-    steps: Vec<Step>,
-    /// A number a live feed moves, so there is something changing that nobody
-    /// clicked. It stands in for the case that actually stresses a scripting
-    /// runtime: data arriving on its own, several times a second, while the
-    /// window is repainting for its own reasons.
-    reading: u32,
+pub struct Market {
+    quotes: Vec<Quote>,
+    /// How many feed ticks have landed. The script paints it, which is what
+    /// makes "the script did not run" visible rather than merely asserted.
+    ticks: u64,
+    /// Deterministic, so the board moves the same way on every run and a test
+    /// can assert on it. A real feed is not random either — it is just not ours.
+    seed: u64,
 }
 
-impl Checklist {
-    fn seed() -> Self {
-        let steps = [
-            (1, "Freeze the changelog", "Jason"),
-            (2, "Tag the release commit", "Ana"),
-            (3, "Publish the crate", "Wei"),
-            (4, "Update the documentation site", "Ana"),
-            (5, "Announce in the release channel", "Jason"),
-        ];
+/// The board. A watchlist-sized twenty rows, which is around three hundred
+/// description nodes once the cells and the wrappers are counted — a real
+/// description to rebuild, and still a panel a reader can take in at a glance.
+///
+/// There is no virtualization here yet, so a thousand-row board would be an
+/// honest measurement of something this runtime does not claim to do well. A
+/// watchlist is what it does claim.
+const BOARD: [(&str, &str, f32); 20] = [
+    ("700.HK", "Tencent", 372.40),
+    ("9988.HK", "Alibaba", 78.15),
+    ("3690.HK", "Meituan", 112.60),
+    ("1810.HK", "Xiaomi", 17.86),
+    ("0005.HK", "HSBC", 62.05),
+    ("0388.HK", "HKEX", 268.80),
+    ("1299.HK", "AIA", 54.35),
+    ("2318.HK", "Ping An", 38.72),
+    ("AAPL.US", "Apple", 214.29),
+    ("NVDA.US", "NVIDIA", 118.11),
+    ("MSFT.US", "Microsoft", 421.53),
+    ("TSLA.US", "Tesla", 249.83),
+    ("AMZN.US", "Amazon", 186.34),
+    ("GOOGL.US", "Alphabet", 165.27),
+    ("META.US", "Meta", 502.18),
+    ("AVGO.US", "Broadcom", 168.44),
+    ("AMD.US", "AMD", 152.61),
+    ("NFLX.US", "Netflix", 678.90),
+    ("COIN.US", "Coinbase", 214.75),
+    ("ARM.US", "Arm", 138.02),
+];
 
+impl Market {
+    fn open() -> Self {
         Self {
-            steps: steps
+            quotes: BOARD
                 .into_iter()
-                .map(|(id, title, owner)| Step {
-                    id,
-                    title: title.into(),
-                    owner: owner.into(),
-                    done: id == 1,
+                .map(|(symbol, name, open)| Quote {
+                    symbol: symbol.into(),
+                    name: name.into(),
+                    open,
+                    last: open,
+                    volume: 0,
+                    watched: false,
                 })
                 .collect(),
-            reading: 0,
+            ticks: 0,
+            seed: 0x2545_f491_4f6c_dd1d,
         }
     }
 
-    /// Moves the live reading. One tick of a feed.
-    fn advance(&mut self) {
-        self.reading = self.reading.wrapping_add(1);
-    }
-
-    fn done_count(&self) -> usize {
-        self.steps.iter().filter(|step| step.done).count()
-    }
-
-    /// Sets one step, for the Rust checkbox, which already knows the value it
-    /// wants.
-    fn set(&mut self, id: u32, done: bool) {
-        if let Some(step) = self.steps.iter_mut().find(|step| step.id == id) {
-            step.done = done;
-        }
-    }
-
-    /// Flips one step, for the script, which asks by identifier only.
+    /// One tick of the feed: every price moves a little, every volume grows.
     ///
-    /// An unknown identifier is the script's mistake, so it gets a sentence
-    /// naming what does exist rather than a silent no-op.
-    fn toggle(&mut self, id: u32) -> Result<bool, NativeError> {
-        let known = self
-            .steps
-            .iter()
-            .map(|step| step.id.to_string())
-            .collect::<Vec<_>>()
-            .join(", ");
-
-        match self.steps.iter_mut().find(|step| step.id == id) {
-            Some(step) => {
-                step.done = !step.done;
-                Ok(step.done)
-            }
-            None => Err(NativeError::new(format!(
-                "no step with id {id}; the checklist holds {known}"
-            ))),
+    /// This is deliberately a *whole-board* update. A feed that moved one row
+    /// would let a future subtree memoization hide the cost this story exists to
+    /// show.
+    fn tick(&mut self) {
+        self.ticks = self.ticks.wrapping_add(1);
+        for index in 0..self.quotes.len() {
+            let drift = self.next_signed();
+            let traded = self.next_unsigned() % 4_000;
+            let quote = &mut self.quotes[index];
+            // Proportional, so a 400-dollar name and a 17-dollar one move by
+            // amounts that look alike on screen.
+            quote.last = (quote.last * (1. + drift * 0.0012)).max(0.01);
+            quote.volume = quote.volume.wrapping_add(traded);
         }
     }
 
-    /// Returns how many steps actually moved, so the script can report a
-    /// no-op as a no-op.
-    fn set_all(&mut self, done: bool) -> usize {
+    /// xorshift64. A dependency-free generator is worth more here than a good
+    /// one: the board only has to move plausibly, and it has to move the same
+    /// way twice.
+    fn next_unsigned(&mut self) -> u64 {
+        self.seed ^= self.seed << 13;
+        self.seed ^= self.seed >> 7;
+        self.seed ^= self.seed << 17;
+        self.seed
+    }
+
+    /// Roughly -1.0 to 1.0.
+    fn next_signed(&mut self) -> f32 {
+        (self.next_unsigned() % 2_001) as f32 / 1_000. - 1.
+    }
+
+    fn watched_count(&self) -> usize {
+        self.quotes.iter().filter(|quote| quote.watched).count()
+    }
+
+    /// Sets one row, for the Rust button, which already knows the value it
+    /// wants.
+    fn set_watched(&mut self, symbol: &str, watched: bool) {
+        if let Some(quote) = self.quotes.iter_mut().find(|quote| quote.symbol == symbol) {
+            quote.watched = watched;
+        }
+    }
+
+    /// Flips one row, for the script, which asks by symbol only.
+    ///
+    /// An unknown symbol is the script's mistake, so it gets a sentence naming
+    /// what does exist rather than a silent no-op.
+    fn watch(&mut self, symbol: &str) -> Result<bool, NativeError> {
+        match self
+            .quotes
+            .iter_mut()
+            .find(|quote| quote.symbol.as_ref() == symbol)
+        {
+            Some(quote) => {
+                quote.watched = !quote.watched;
+                Ok(quote.watched)
+            }
+            None => {
+                let known = self
+                    .quotes
+                    .iter()
+                    .map(|quote| quote.symbol.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                Err(NativeError::new(format!(
+                    "no quote for `{symbol}`; the board holds {known}"
+                )))
+            }
+        }
+    }
+
+    /// Returns how many rows actually moved, so the script can report a no-op as
+    /// a no-op.
+    fn watch_all(&mut self, watched: bool) -> usize {
         let mut changed = 0;
-        for step in &mut self.steps {
-            if step.done != done {
-                step.done = done;
+        for quote in &mut self.quotes {
+            if quote.watched != watched {
+                quote.watched = watched;
                 changed += 1;
             }
         }
         changed
     }
 
-    /// The checklist as it crosses the boundary: an array of records.
+    /// The board as it crosses the boundary: an array of records.
+    ///
+    /// The numbers are formatted here rather than in the script, so both halves
+    /// round the same way. A price that reads 372.40 on the left and 372.4 on
+    /// the right would make the comparison about formatting instead of about
+    /// rendering.
     fn to_native(&self) -> NativeValue {
         NativeValue::Array(
-            self.steps
+            self.quotes
                 .iter()
-                .map(|step| {
+                .map(|quote| {
                     NativeValue::from(
                         NativeObject::new()
-                            .field("id", step.id)
-                            .field("title", step.title.to_string())
-                            .field("owner", step.owner.to_string())
-                            .field("done", step.done),
+                            .field("symbol", quote.symbol.to_string())
+                            .field("name", quote.name.to_string())
+                            .field("last", format!("{:.2}", quote.last))
+                            .field("change", format!("{:+.2}", quote.change()))
+                            .field("percent", format!("{:+.2}%", quote.change_percent()))
+                            .field("volume", thousands(quote.volume))
+                            .field("direction", quote.direction())
+                            .field("watched", quote.watched),
                     )
                 })
                 .collect(),
@@ -168,10 +278,24 @@ impl Checklist {
     }
 }
 
+/// `1234567` as `1,234,567`. Both halves call it, for the same reason the prices
+/// are formatted in Rust.
+fn thousands(value: u64) -> String {
+    let digits = value.to_string();
+    let mut out = String::with_capacity(digits.len() + digits.len() / 3);
+    for (index, digit) in digits.chars().enumerate() {
+        if index > 0 && (digits.len() - index) % 3 == 0 {
+            out.push(',');
+        }
+        out.push(digit);
+    }
+    out
+}
+
 /// What is driving the script view right now.
 ///
 /// Two feeds rather than one, because they separate the two frequencies this
-/// runtime keeps apart. A **data** feed moves state the script reads, so the
+/// runtime keeps apart. A **quotes** feed moves prices the script reads, so the
 /// script re-renders; a **repaint** feed only tells GPUI the view needs drawing
 /// again, which is what a hover, a scroll, a cursor blink or an animation does.
 ///
@@ -180,41 +304,52 @@ impl Checklist {
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Feed {
     Idle,
-    /// Changes the checklist's reading, which invalidates the script view.
-    Data(u32),
+    /// Ticks the board, which invalidates the script view. The number is the
+    /// interval in milliseconds — a feed is described by how often it arrives,
+    /// not by a frequency nobody quotes.
+    Quotes(u64),
     /// Notifies the script view without changing anything it reads.
-    Repaint(u32),
+    Repaint(u64),
 }
 
 impl Feed {
-    fn hz(self) -> Option<u32> {
+    fn interval(self) -> Option<Duration> {
         match self {
             Feed::Idle => None,
-            Feed::Data(hz) | Feed::Repaint(hz) => Some(hz),
+            Feed::Quotes(ms) | Feed::Repaint(ms) => Some(Duration::from_millis(ms.max(1))),
         }
     }
 
-    fn interval(self) -> Option<Duration> {
-        self.hz()
-            .filter(|hz| *hz > 0)
-            .map(|hz| Duration::from_secs_f64(1.0 / f64::from(hz)))
+    fn detail(self) -> String {
+        match self {
+            Feed::Idle => "nothing is driving the board".to_owned(),
+            Feed::Quotes(ms) => format!("every price moves every {ms} ms"),
+            Feed::Repaint(ms) => format!("the view is redrawn every {ms} ms"),
+        }
     }
 
-    fn label(self) -> &'static str {
+    fn caption(self) -> String {
         match self {
-            Feed::Idle => "Idle",
-            Feed::Data(_) => "Data",
-            Feed::Repaint(_) => "Repaint",
+            Feed::Idle => "Off".to_owned(),
+            Feed::Quotes(ms) => format!("Quotes · {ms} ms"),
+            Feed::Repaint(ms) => format!("Repaint only · {ms} ms"),
         }
     }
 }
 
+/// The feed the story opens with.
+///
+/// Running rather than idle on purpose: a board that has to be switched on
+/// before it does anything is a board most readers will look at once, in its
+/// resting state, and conclude nothing from.
+const OPENING_FEED: Feed = Feed::Quotes(50);
+
 /// The choices offered, in the order they answer the question.
-const FEEDS: [(&str, &str, Feed); 4] = [
-    ("feed-off", "Off", Feed::Idle),
-    ("feed-data-10", "Data · 10 Hz", Feed::Data(10)),
-    ("feed-data-60", "Data · 60 Hz", Feed::Data(60)),
-    ("feed-repaint-60", "Repaint · 60 Hz", Feed::Repaint(60)),
+const FEEDS: [(&str, Feed); 4] = [
+    ("feed-off", Feed::Idle),
+    ("feed-quotes-50", Feed::Quotes(50)),
+    ("feed-quotes-16", Feed::Quotes(16)),
+    ("feed-repaint-16", Feed::Repaint(16)),
 ];
 
 /// How often the readout re-reads the counters. One second, because the numbers
@@ -230,56 +365,57 @@ const ENTRY: &str = "main.js";
 /// `cargo run` finds it from anywhere — and so editing the file is enough to
 /// change the panel, with no rebuild.
 fn script_directory() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("js/checklist")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("js/quotes")
 }
 
 /// Grants the script the two modules it may reach, and nothing else.
 ///
 /// This is the whole extension surface: a script cannot load native code, so
 /// what the host registers here is exactly what it can call (design doc §17.6).
-/// Registering an empty set — the default — would leave `native("checklist")`
+/// Registering an empty set — the default — would leave `native("market")`
 /// failing with a message saying this host granted none.
-fn install_native_modules(checklist: &Entity<Checklist>) {
+fn install_native_modules(market: &Entity<Market>) {
     let mut modules = NativeModules::new();
 
-    modules.register("checklist", |module| {
-        let read = checklist.clone();
-        module.function("steps", move |_| with_app(|cx| read.read(cx).to_native()));
+    modules.register("market", |module| {
+        let read = market.clone();
+        module.function("quotes", move |_| with_app(|cx| read.read(cx).to_native()));
 
-        // Read separately from `steps()` so the script can paint the feed
-        // without the checklist itself having to change: the two move for
-        // different reasons and at very different rates.
-        let reading = checklist.clone();
-        module.function("reading", move |_| {
-            with_app(|cx| NativeValue::from(reading.read(cx).reading))
+        // Read separately from `quotes()` so the script can paint how many ticks
+        // it has actually seen. When the feed is only asking for repaints this
+        // number stops moving on screen, which is the counters' claim made
+        // visible in the panel itself.
+        let ticks = market.clone();
+        module.function("ticks", move |_| {
+            with_app(|cx| NativeValue::from(ticks.read(cx).ticks as f64))
         });
 
-        let flip = checklist.clone();
-        module.function("toggle", move |arguments| {
-            let id = arguments.integer(0)? as u32;
+        let flip = market.clone();
+        module.function("watch", move |arguments| {
+            let symbol = arguments.string(0)?;
             with_app(|cx| {
-                flip.update(cx, |checklist, cx| {
-                    let done = checklist.toggle(id)?;
+                flip.update(cx, |market, cx| {
+                    let watched = market.watch(&symbol)?;
                     // The notification is what keeps the two halves in step:
                     // the story observes this entity and re-renders itself and
                     // the script view together. It is delivered after this call
                     // unwinds, so it cannot re-enter the script engine.
                     cx.notify();
-                    Ok(NativeValue::from(done))
+                    Ok(NativeValue::from(watched))
                 })
             })?
         });
 
-        let bulk = checklist.clone();
-        module.function("set_all", move |arguments| {
-            let done = arguments.boolean(0)?;
+        let bulk = market.clone();
+        module.function("watch_all", move |arguments| {
+            let watched = arguments.boolean(0)?;
             with_app(|cx| {
-                bulk.update(cx, |checklist, cx| {
-                    let changed = checklist.set_all(done);
+                bulk.update(cx, |market, cx| {
+                    let changed = market.watch_all(watched);
                     if changed > 0 {
                         cx.notify();
                     }
-                    NativeValue::from(changed)
+                    NativeValue::from(changed as f64)
                 })
             })
         });
@@ -300,7 +436,7 @@ fn install_native_modules(checklist: &Entity<Checklist>) {
 /// answer, so this says so rather than reaching for a stale pointer.
 fn with_app<R>(read: impl FnOnce(&mut App) -> R) -> Result<R, NativeError> {
     gpui_shell::scope::with_current_app(read).ok_or_else(|| {
-        NativeError::new("the checklist is only reachable while a script call is in progress")
+        NativeError::new("the board is only reachable while a script call is in progress")
     })
 }
 
@@ -333,7 +469,7 @@ fn palette(cx: &mut App) -> NativeValue {
 
 pub struct ShellStory {
     focus_handle: FocusHandle,
-    checklist: Entity<Checklist>,
+    market: Entity<Market>,
     /// Held for as long as the script view is mounted: the view renders through
     /// it, and dropping it would tear the JavaScript context down underneath.
     runtime: Option<Rc<ShellRuntime>>,
@@ -359,7 +495,8 @@ impl super::Story for ShellStory {
     }
 
     fn description() -> &'static str {
-        "Run a JavaScript view beside a Rust panel, sharing state through a native module."
+        "Run a ticking JavaScript quote board beside a Rust one, sharing state \
+         through a native module."
     }
 
     fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
@@ -379,18 +516,18 @@ impl ShellStory {
         // of them: it reads colors from the host through `native("theme")`.
         gpui_shell::style::init();
 
-        let checklist = cx.new(|_| Checklist::seed());
-        install_native_modules(&checklist);
+        let market = cx.new(|_| Market::open());
+        install_native_modules(&market);
 
         // The single place a change becomes two re-renders. Whoever moved the
-        // checklist — a Rust checkbox or a script button — both halves are
+        // board — the feed, a Rust button or a script button — both halves are
         // looking at the same entity, so both are told.
-        cx.observe(&checklist, |this, _, cx| {
+        cx.observe(&market, |this, _, cx| {
             if let Some(script) = &this.script {
-                // `refresh`, not `notify`: the checklist is state the script
-                // reads over a native call, so its description is now stale.
-                // A bare notify would redraw the panel from the snapshot it
-                // already published — correct for a repaint, wrong here.
+                // `refresh`, not `notify`: the board is state the script reads
+                // over a native call, so its description is now stale. A bare
+                // notify would redraw the panel from the snapshot it already
+                // published — correct for a repaint, wrong here.
                 script.update(cx, |view, cx| view.refresh(cx));
             }
             cx.notify();
@@ -399,7 +536,7 @@ impl ShellStory {
 
         let mut story = Self {
             focus_handle: cx.focus_handle(),
-            checklist,
+            market,
             runtime: None,
             script: None,
             script_error: None,
@@ -419,6 +556,7 @@ impl ShellStory {
         }
 
         story.sample_metrics(cx);
+        story.set_feed(OPENING_FEED, cx);
         story
     }
 
@@ -491,10 +629,10 @@ impl ShellStory {
     fn tick(&mut self, cx: &mut Context<Self>) {
         match self.feed {
             Feed::Idle => {}
-            // Changing the entity notifies its observers, which invalidates the
+            // Moving the board notifies its observers, which invalidates the
             // script view: the script has to run, because what it reads moved.
-            Feed::Data(_) => self.checklist.update(cx, |checklist, cx| {
-                checklist.advance();
+            Feed::Quotes(_) => self.market.update(cx, |market, cx| {
+                market.tick();
                 cx.notify();
             }),
             // Nothing the script reads has changed, so this is a repaint and
@@ -513,7 +651,7 @@ impl ShellStory {
     /// Re-reads the script from disk and swaps it into the live view.
     ///
     /// The entity survives, so the panel keeps its place in the window and the
-    /// checklist keeps its state: only what the script produced is replaced.
+    /// board keeps its state: only what the script produced is replaced.
     fn reload(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(runtime) = self.runtime.clone() else {
             return;
@@ -539,33 +677,117 @@ impl ShellStory {
 
         cx.notify();
     }
+}
 
-    fn rust_panel(&self, steps: &[Step], cx: &Context<Self>) -> impl IntoElement {
-        v_flex().w_full().gap_2().children(steps.iter().map(|step| {
-            let id = step.id;
+/// The column widths both halves lay out to.
+///
+/// Shared as constants because the two panels sit side by side and a reader is
+/// comparing them: a column that is 72 wide on the left and 70 on the right
+/// would make the comparison about alignment instead of about rendering.
+const PRICE_COLUMN: f32 = 68.;
+const PERCENT_COLUMN: f32 = 66.;
+const VOLUME_COLUMN: f32 = 82.;
 
-            h_flex()
-                .w_full()
-                .items_center()
-                .justify_between()
-                .gap_2()
+impl ShellStory {
+    fn rust_panel(&self, quotes: &[Quote], cx: &Context<Self>) -> impl IntoElement {
+        v_flex()
+            .w_full()
+            .gap_1()
+            .child(self.rust_header(cx))
+            .children(quotes.iter().map(|quote| self.rust_row(quote, cx)))
+    }
+
+    fn rust_header(&self, cx: &Context<Self>) -> impl IntoElement {
+        let caption = |value: &'static str, width: f32, right: bool| {
+            div()
+                .w(px(width))
+                .flex_none()
+                .when(right, |this| this.text_right())
                 .child(
-                    Checkbox::new(SharedString::from(format!("step-{id}")))
-                        .label(step.title.clone())
-                        .checked(step.done)
-                        .on_click(cx.listener(move |this, checked: &bool, _, cx| {
-                            this.checklist.update(cx, |checklist, cx| {
-                                checklist.set(id, *checked);
-                                cx.notify();
-                            });
-                        })),
-                )
-                .child(
-                    Label::new(step.owner.clone())
+                    Label::new(value)
                         .text_xs()
                         .text_color(cx.theme().muted_foreground),
                 )
-        }))
+        };
+
+        h_flex()
+            .w_full()
+            .items_center()
+            .gap_2()
+            .px_2()
+            .pb_1()
+            .border_b_1()
+            .border_color(cx.theme().border)
+            .child(caption("Symbol", 78., false))
+            .child(div().flex_1())
+            .child(caption("Last", PRICE_COLUMN, true))
+            .child(caption("Change", PERCENT_COLUMN, true))
+            .child(caption("Volume", VOLUME_COLUMN, true))
+    }
+
+    fn rust_row(&self, quote: &Quote, cx: &Context<Self>) -> impl IntoElement {
+        let symbol = quote.symbol.clone();
+        let watched = quote.watched;
+        let moved = direction_color(quote.direction(), cx);
+
+        h_flex()
+            .id(SharedString::from(format!("quote-{symbol}")))
+            .w_full()
+            .items_center()
+            .gap_2()
+            .px_2()
+            .py_1()
+            .rounded(cx.theme().radius)
+            .hover(|this| this.bg(cx.theme().muted))
+            .on_click(cx.listener(move |this, _, _, cx| {
+                let symbol = symbol.clone();
+                this.market.update(cx, |market, cx| {
+                    market.set_watched(&symbol, !watched);
+                    cx.notify();
+                });
+            }))
+            .child(
+                div()
+                    .w(px(78.))
+                    .flex_none()
+                    .child(Label::new(quote.symbol.clone()).text_xs().font_medium()),
+            )
+            .child(
+                div().flex_1().truncate().child(
+                    Label::new(quote.name.clone())
+                        .text_xs()
+                        .text_color(cx.theme().muted_foreground),
+                ),
+            )
+            .child(
+                div().w(px(PRICE_COLUMN)).flex_none().text_right().child(
+                    Label::new(format!("{:.2}", quote.last))
+                        .text_xs()
+                        .text_color(moved),
+                ),
+            )
+            .child(
+                div().w(px(PERCENT_COLUMN)).flex_none().text_right().child(
+                    Label::new(format!("{:+.2}%", quote.change_percent()))
+                        .text_xs()
+                        .text_color(moved),
+                ),
+            )
+            .child(
+                div().w(px(VOLUME_COLUMN)).flex_none().text_right().child(
+                    Label::new(thousands(quote.volume))
+                        .text_xs()
+                        .text_color(cx.theme().muted_foreground),
+                ),
+            )
+            .child(
+                div()
+                    .w(px(6.))
+                    .h(px(6.))
+                    .flex_none()
+                    .rounded_full()
+                    .when(watched, |this| this.bg(cx.theme().primary)),
+            )
     }
 
     /// The two counters, side by side, with what they mean underneath.
@@ -595,21 +817,7 @@ impl ShellStory {
                         format!("{:.2} ms each", millis(self.rate.mean_materialize())),
                         cx,
                     ))
-                    .child(reading(
-                        "Feed",
-                        match self.feed.hz() {
-                            Some(hz) => format!("{} · {hz} Hz", self.feed.label()),
-                            None => self.feed.label().to_owned(),
-                        },
-                        match self.feed {
-                            Feed::Idle => "nothing is driving the panel".to_owned(),
-                            Feed::Data(hz) => format!("the reading moves {hz} times a second"),
-                            Feed::Repaint(hz) => {
-                                format!("the view is redrawn {hz} times a second")
-                            }
-                        },
-                        cx,
-                    )),
+                    .child(reading("Feed", self.feed.caption(), self.feed.detail(), cx)),
             )
             .child(
                 Label::new(match self.feed {
@@ -617,13 +825,14 @@ impl ShellStory {
                         "Counters are cleared when the feed changes. With no feed running, \
                          hovering the script panel still draws frames — and still runs no script."
                     }
-                    Feed::Data(_) => {
-                        "The reading is state the script reads, so every tick invalidates its \
-                         snapshot: script renders track the feed rate."
+                    Feed::Quotes(_) => {
+                        "Prices are state the script reads, so every tick invalidates its \
+                         snapshot: script renders track the feed, whatever the frame rate is."
                     }
                     Feed::Repaint(_) => {
                         "Nothing the script reads has changed, so every tick is a repaint of the \
-                         snapshot it already published: frames climb, script renders stay at zero."
+                         snapshot it already published: frames climb, script renders stay at zero, \
+                         and the tick count in the panel stops moving."
                     }
                 })
                 .text_xs()
@@ -656,8 +865,18 @@ impl ShellStory {
     }
 }
 
-/// The native modules this story installed capture its `Entity<Checklist>`, and
-/// the registry they live in is process-wide. Leaving them there would keep the
+/// Up is `success`, down is `danger`, flat is ordinary text. Both halves ask
+/// this question of the same theme, which is why the two panels agree.
+fn direction_color(direction: i32, cx: &Context<ShellStory>) -> Hsla {
+    match direction {
+        1 => cx.theme().success,
+        -1 => cx.theme().danger,
+        _ => cx.theme().foreground,
+    }
+}
+
+/// The native modules this story installed capture its `Entity<Market>`, and the
+/// registry they live in is process-wide. Leaving them there would keep the
 /// entity alive after the story is gone — which GPUI reports as a leaked handle,
 /// and which is exactly the shape of leak a plugin host would hit on unload.
 impl Drop for ShellStory {
@@ -674,9 +893,9 @@ impl Focusable for ShellStory {
 
 impl Render for ShellStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let steps = self.checklist.read(cx).steps.clone();
-        let done = self.checklist.read(cx).done_count();
-        let total = steps.len();
+        let quotes = self.market.read(cx).quotes.clone();
+        let watched = self.market.read(cx).watched_count();
+        let total = quotes.len();
 
         v_flex()
             .size_full()
@@ -690,48 +909,48 @@ impl Render for ShellStory {
                         div().flex_1().child(
                             section("Rust · gpui-component")
                                 .description(
-                                    "Checkbox, Button and Label from crates/ui, driving the \
-                                     Entity<Checklist> both halves read.",
+                                    "Rows built from crates/ui, reading the Entity<Market> both \
+                                     halves share.",
                                 )
                                 .sub_title(
                                     h_flex()
                                         .gap_2()
                                         .child(
-                                            Button::new("mark-all")
+                                            Button::new("watch-all")
                                                 .xsmall()
                                                 .primary()
-                                                .label("Mark all done")
-                                                .disabled(done == total)
+                                                .label("Watch all")
+                                                .disabled(watched == total)
                                                 .on_click(cx.listener(|this, _, _, cx| {
-                                                    this.checklist.update(cx, |checklist, cx| {
-                                                        checklist.set_all(true);
+                                                    this.market.update(cx, |market, cx| {
+                                                        market.watch_all(true);
                                                         cx.notify();
                                                     });
                                                 })),
                                         )
                                         .child(
-                                            Button::new("clear-all")
+                                            Button::new("watch-none")
                                                 .xsmall()
                                                 .outline()
-                                                .label("Clear all")
-                                                .disabled(done == 0)
+                                                .label("Clear")
+                                                .disabled(watched == 0)
                                                 .on_click(cx.listener(|this, _, _, cx| {
-                                                    this.checklist.update(cx, |checklist, cx| {
-                                                        checklist.set_all(false);
+                                                    this.market.update(cx, |market, cx| {
+                                                        market.watch_all(false);
                                                         cx.notify();
                                                     });
                                                 })),
                                         ),
                                 )
                                 .v_flex()
-                                .child(self.rust_panel(&steps, cx)),
+                                .child(self.rust_panel(&quotes, cx)),
                         ),
                     )
                     .child(
                         div().flex_1().child(
                             section("JavaScript · gpui-shell")
                                 .description(
-                                    "A ScriptView rendering crates/story/js/checklist/main.js, \
+                                    "The same board, drawn by crates/story/js/quotes/main.js, \
                                      read from disk at run time.",
                                 )
                                 .sub_title(
@@ -751,13 +970,13 @@ impl Render for ShellStory {
             .child(
                 section("Render frequency")
                     .description(
-                        "A script render and a GPUI frame are not the same event. Drive the \
-                         panel and watch the two counters come apart.",
+                        "A script render and a GPUI frame are not the same event. Change the feed \
+                         and watch the two counters come apart.",
                     )
-                    .sub_title(h_flex().gap_2().children(FEEDS.map(|(id, label, feed)| {
+                    .sub_title(h_flex().gap_2().children(FEEDS.map(|(id, feed)| {
                         Button::new(id)
                             .xsmall()
-                            .label(label)
+                            .label(feed.caption())
                             .when(self.feed == feed, |this| this.primary())
                             .when(self.feed != feed, |this| this.outline())
                             .on_click(cx.listener(move |this, _, _, cx| {
@@ -780,8 +999,8 @@ impl Render for ShellStory {
                             .w_full()
                             .gap_1()
                             .child(boundary_line(
-                                "native(\"checklist\")",
-                                "steps() · toggle(id) · set_all(done)",
+                                "native(\"market\")",
+                                "quotes() · ticks() · watch(symbol) · watch_all(on)",
                                 cx,
                             ))
                             .child(boundary_line(
@@ -857,14 +1076,14 @@ mod tests {
 
     use super::*;
 
-    /// The claim the readout under the panel makes, checked without a person
-    /// having to watch two counters.
+    /// The claim the counters under the panels make, checked without a person
+    /// having to watch two numbers.
     ///
     /// It is worth an end-to-end test rather than a unit one because it spans
     /// every part that has to agree: the entity, the native module, the script's
-    /// `reading()` call, and the difference between `refresh` and `notify`.
+    /// `ticks()` call, and the difference between `refresh` and `notify`.
     #[gpui::test]
-    fn a_data_feed_re_runs_the_script_and_a_repaint_feed_does_not(cx: &mut TestAppContext) {
+    fn a_quote_tick_re_runs_the_script_and_a_repaint_does_not(cx: &mut TestAppContext) {
         // The story reads the gallery's theme through `native("theme")`, so
         // the theme has to exist before the script's first render.
         cx.update(gpui_component::init);
@@ -885,25 +1104,26 @@ mod tests {
 
         draw(&mut context, &script);
         assert!(
-            description(&mut context, &script).contains("reading 0"),
-            "the script should be painting the live reading"
+            description(&mut context, &script).contains("tick 0"),
+            "the script should be painting the tick count"
         );
 
         let baseline = runtime.metrics().read().script_renders();
 
-        // A data tick moves state the script reads, so the description is stale.
-        tick(&mut context, &story, Feed::Data(10));
+        // A quote tick moves prices the script reads, so the description is
+        // stale and has to be rebuilt.
+        tick(&mut context, &story, Feed::Quotes(50));
         draw(&mut context, &script);
         assert_eq!(
             runtime.metrics().read().script_renders(),
             baseline + 1,
-            "a data tick must re-run the script"
+            "a quote tick must re-run the script"
         );
-        assert!(description(&mut context, &script).contains("reading 1"));
+        assert!(description(&mut context, &script).contains("tick 1"));
 
         // A repaint tick changes nothing the script can see.
         for _ in 0..8 {
-            tick(&mut context, &story, Feed::Repaint(60));
+            tick(&mut context, &story, Feed::Repaint(16));
             draw(&mut context, &script);
         }
         assert_eq!(
@@ -912,8 +1132,33 @@ mod tests {
             "eight repaints must not enter the VM"
         );
         assert!(
-            description(&mut context, &script).contains("reading 1"),
+            description(&mut context, &script).contains("tick 1"),
             "and the description must be the one already published"
+        );
+    }
+
+    /// The board moves the same way twice, so the panel a reader sees on one run
+    /// is the panel they saw on the last one.
+    #[gpui::test]
+    fn the_feed_is_deterministic(_: &mut TestAppContext) {
+        let mut first = Market::open();
+        let mut second = Market::open();
+        for _ in 0..64 {
+            first.tick();
+            second.tick();
+        }
+
+        let prices = |market: &Market| {
+            market
+                .quotes
+                .iter()
+                .map(|quote| format!("{:.4}", quote.last))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(prices(&first), prices(&second));
+        assert!(
+            prices(&first) != prices(&Market::open()),
+            "sixty-four ticks should have moved something"
         );
     }
 
@@ -928,7 +1173,7 @@ mod tests {
         let script = script.clone();
         context.draw(
             gpui::Point::default(),
-            gpui::size(gpui::px(480.), gpui::px(360.)),
+            gpui::size(gpui::px(520.), gpui::px(420.)),
             move |_, _| script.into_any_element(),
         );
     }

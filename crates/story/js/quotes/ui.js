@@ -16,11 +16,18 @@ import { div, h_flex, v_flex, text, Button, native } from "gpui";
 /// The spacing scale, matching the semantic steps the host uses.
 export const SPACE = { xxs: 2, xs: 4, sm: 8, md: 12, lg: 16, xl: 24 };
 
+/// The column widths, matching the Rust panel's constants.
+///
+/// The two boards sit side by side and the reader is comparing them, so a
+/// column that is 68 wide over there and 70 here would turn the comparison into
+/// one about alignment.
+export const COLUMN = { symbol: 78, price: 68, percent: 66, volume: 82 };
+
 let current = null;
 
 /// Re-reads the host palette. Called once at the top of a render.
 ///
-/// Not cached across frames on purpose: the gallery can switch theme, mode and
+/// Not cached across renders on purpose: the gallery can switch theme, mode and
 /// radius while this view is mounted, and a palette captured once would leave
 /// this half painted in the previous theme with no way to notice.
 export const refreshPalette = () => {
@@ -28,8 +35,17 @@ export const refreshPalette = () => {
   return current;
 };
 
-/// The palette read at the start of this frame.
+/// The palette read at the start of this render.
 export const palette = () => current ?? refreshPalette();
+
+/// Up is `success`, down is `danger`, flat is ordinary text — the same question
+/// the Rust panel asks of the same theme, which is why the two agree.
+export const directionColor = (direction) => {
+  const colors = palette();
+  if (direction > 0) return colors.success;
+  if (direction < 0) return colors.danger;
+  return colors.foreground;
+};
 
 // -- Type -------------------------------------------------------------------
 
@@ -37,7 +53,7 @@ export const title = (value) =>
   text(value).text_size(13).line_height(1.3).font_semibold().text_color(palette().foreground);
 
 export const label = (value) =>
-  text(value).text_size(12).line_height(1.4).text_color(palette().foreground);
+  text(value).text_size(11).line_height(1.4).text_color(palette().foreground);
 
 export const muted = (value) =>
   text(value).text_size(11).line_height(1.45).text_color(palette().muted_foreground);
@@ -59,49 +75,75 @@ export const surface = () =>
 
 export const rule = () => div().w_full().h(1).flex_none().bg(palette().border);
 
-export const row = () => h_flex().items_center().gap(SPACE.sm);
+// -- Board parts ------------------------------------------------------------
 
-// -- Parts ------------------------------------------------------------------
-
-/// A progress bar. Two divs: the track, and a fill measured in percent.
-export const bar = (fraction) => {
-  const filled = `${Math.round(Math.max(0, Math.min(1, fraction)) * 100)}%`;
-
-  return div()
-    .w_full()
-    .h(6)
-    .flex_none()
-    .rounded(3)
-    .bg(palette().secondary)
-    .child(div().h_full().w(filled).rounded(3).bg(palette().primary));
+/// One cell. Fixed width and right-aligned for the numbers, so the columns line
+/// up with the Rust panel's without either side measuring the other.
+export const cell = (width, options = {}) => {
+  const { right = false } = options;
+  const box = div().w(width).flex_none();
+  return right ? box.text_right() : box;
 };
 
-/// The done/not-done marker in front of a step.
-export const marker = (done) =>
-  div()
-    .w(12)
-    .h(12)
-    .flex_none()
-    .rounded(6)
-    .border(1)
-    .border_color(done ? palette().primary : palette().border)
-    .when(done, (el) => el.bg(palette().primary));
+/// The header row, which is a rule with captions on it rather than a row of its
+/// own: the reader needs the column names once, quietly.
+export const header = () =>
+  h_flex()
+    .w_full()
+    .items_center()
+    .gap(SPACE.sm)
+    .px(SPACE.sm)
+    .pb(SPACE.xs)
+    .border_b(1)
+    .border_color(palette().border)
+    .child(cell(COLUMN.symbol).child(muted("Symbol")))
+    .child(div().flex_1())
+    .child(cell(COLUMN.price, { right: true }).child(muted("Last")))
+    .child(cell(COLUMN.percent, { right: true }).child(muted("Change")))
+    .child(cell(COLUMN.volume, { right: true }).child(muted("Volume")));
 
 /// A full-width row that behaves like a button: no fill of its own, a hover
 /// wash, and the whole row is the target.
-export const stepButton = (id, description, onClick) =>
-  Button.new(id)
-    .accessibility_label(description)
+///
+/// The id is the symbol rather than the row's position, so a board that
+/// reorders keeps each row's identity — and its pressed state — attached to the
+/// instrument rather than to the slot it happened to be in.
+export const quoteRow = (quote, onClick) =>
+  Button.new(`quote-${quote.symbol}`)
+    .accessibility_label(`Watch ${quote.name}`)
     .flex()
     .w_full()
     .items_center()
-    .justify_between()
     .gap(SPACE.sm)
     .px(SPACE.sm)
     .py(SPACE.xs)
     .rounded(palette().radius)
     .hover((style) => style.bg(palette().muted))
-    .on_click(onClick);
+    .on_click(onClick)
+    .child(cell(COLUMN.symbol).child(label(quote.symbol).font_medium()))
+    .child(div().flex_1().child(muted(quote.name)))
+    .child(
+      cell(COLUMN.price, { right: true }).child(
+        label(quote.last).text_color(directionColor(quote.direction)),
+      ),
+    )
+    .child(
+      cell(COLUMN.percent, { right: true }).child(
+        label(quote.percent).text_color(directionColor(quote.direction)),
+      ),
+    )
+    .child(cell(COLUMN.volume, { right: true }).child(muted(quote.volume)))
+    .child(watchMarker(quote.watched));
+
+/// The watched dot at the end of a row. Six pixels, because it is a state and
+/// not a control: the row is the control.
+export const watchMarker = (watched) =>
+  div()
+    .w(6)
+    .h(6)
+    .flex_none()
+    .rounded(3)
+    .when(watched, (el) => el.bg(palette().primary));
 
 /// A labelled action. Two treatments only — filled and outlined — because a
 /// third would be a distinction this panel does not make.

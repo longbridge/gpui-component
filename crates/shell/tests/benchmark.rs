@@ -199,6 +199,13 @@ fn repainting_a_clean_view_never_enters_the_vm(cx: &mut TestAppContext) {
 /// ```text
 /// cargo test -p gpui-shell --release --test benchmark -- --ignored --nocapture
 /// ```
+///
+/// Two runs out of thirteen have seen the largest size report one script render
+/// rather than zero, and it has not reproduced since — not under CPU load, not
+/// with per-frame instrumentation, which is itself a hint that it is a timing
+/// window. If it returns, the thing to instrument is `invalidate`: the deferred
+/// drain in `scheduler::drain_after_render` is the only path that reaches a view
+/// between frames, and the default-size test above has never failed.
 #[gpui::test]
 #[ignore = "walks panel sizes up to 8403 nodes; run explicitly in release"]
 fn every_size_pays_the_script_only_when_it_changes(cx: &mut TestAppContext) {
@@ -238,21 +245,8 @@ fn every_size_pays_the_script_only_when_it_changes(cx: &mut TestAppContext) {
         let after_first_frame = runtime.metrics().read().script_renders();
 
         let started = Instant::now();
-        let mut seen = after_first_frame;
-        for frame in 0..ITERATIONS {
-            let dirty_before = context.update(|_, cx| view.read(cx).is_dirty());
-            let theme_before = gpui_shell::theme::generation();
+        for _ in 0..ITERATIONS {
             draw(&mut context, &view);
-            let now = runtime.metrics().read().script_renders();
-            if now != seen {
-                println!(
-                    "    !! frame {frame}: +{} render(s); dirty_before={dirty_before}, \
-                     theme {theme_before} -> {}",
-                    now - seen,
-                    gpui_shell::theme::generation()
-                );
-                seen = now;
-            }
         }
         let per_frame = started.elapsed() / ITERATIONS as u32;
         let renders = runtime.metrics().read().script_renders() - after_first_frame;

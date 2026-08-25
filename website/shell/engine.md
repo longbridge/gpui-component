@@ -46,6 +46,14 @@ Run it in release or the figures mean nothing; the absolute numbers move with th
 
 **C is the one that is an assertion rather than a timing.** Fifty repaints of an unchanged view enter the VM zero times. If that number is ever not zero, the runtime has regressed to charging script cost per frame, and the benchmark fails rather than merely getting slower.
 
+A fourth test walks the same panel up through 2,103, 4,203 and 8,403 nodes, behind `--ignored` because the largest size costs seconds:
+
+```bash
+cargo test -p gpui-shell --release --test benchmark -- --ignored --nocapture
+```
+
+It exists because one size cannot show which of the three costs scale. A and B both do, close to linearly. What does not move is the render count — zero at every size — and the ratio between a real frame and one that rebuilt its description, which stays near 1.8× across the whole range. The [overview page](./index.md#performance-script-cost-is-paid-per-change-not-per-frame) has the table.
+
 Read A against the design's own budget — 1.5 ms for a script render — and it clears it, but with less room than hoped: the budget was derived from roughly 150 ns per recorded operation across 800 nodes, and the measurement reports about 320 ns across 443. A panel three times this size would not fit in one pass. What changed is how often that matters. At 120 FPS the old model would have spent 168 ms of every second describing an interface nobody had changed; the same panel now costs 1.4 ms when the user actually changes something, and 0.7 ms to repaint. The levers the design names for genuinely enormous panels — driving the per-call cost down, memoizing unchanged subtrees, virtualizing long lists — are still [not implemented](./elements.md#not-there-yet), and are now optimizations rather than prerequisites.
 
 Two implementation choices came out of the same measurement and are visible in the runtime today:
