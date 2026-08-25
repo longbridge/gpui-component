@@ -23,8 +23,8 @@ exists and what does not.
 The crate is under active development, so §26 in particular is a snapshot and
 will need re-checking against the source. Two modules are complete in Rust with
 nothing above them yet: `dock.rs` has no engine binding, so a script cannot reach
-a panel, and `plugin.rs` compiles and is exported but has no caller, so nothing
-loads a plugin. Both are noted where they appear below.
+a panel, and `PluginManager` has no production caller, so the CLI does not load
+plugins. Both are exercised inside the crate and noted where they appear below.
 
 ---
 
@@ -47,8 +47,9 @@ Four things make up the runtime:
 4. a command-line host that runs an application directory, checks it, and
    generates its type declarations (§23).
 
-The plugin model — manifests, contribution points, distribution — is not built.
-The capability type it would populate is (§18).
+The plugin runtime model — manifests, discovery, isolated policy, storage, load
+and unload — is built (§18). Contribution registration, authorization UI,
+packaging and distribution are not.
 
 The goal is one sentence: build an application layer at the iteration speed of
 a scripting language while keeping Rust and the GPU on the render path.
@@ -131,11 +132,11 @@ Seven things are deliberately absent, and will stay absent:
 5. **There is no dynamic native plugin loading.** Rust has no stable ABI, and
    `dlopen`ed native code inside the process defeats the sandbox outright.
 6. **`gpui-base` is not modified.** Everything lives in `crates/shell`.
-7. **There is no Node.js or browser compatibility layer.** No `document`, no
-   `window`, no `fetch`, no `require`, no `process` module, no npm. A partial
-   compatibility layer would pull the whole npm ecosystem in and then shatter on
-   the first native dependency. Host capability goes through one namespace,
-   `gpui` (§17).
+7. **There is no Node.js or browser compatibility layer.** No DOM `document`,
+   browser `window`, `fetch`, `require`, Node module system, or npm. The shell's
+   narrow `window` and `process` globals expose GPUI/host capabilities only; they
+   do not claim browser or Node compatibility. Host capability also appears in
+   the `gpui` module (§17).
 
 ---
 
@@ -333,17 +334,24 @@ view, dialog body, and sheet body is carried by one:
 pub struct ScriptView {
     runtime: Rc<ShellRuntime>,
     object: ViewObject,
+    policy: Rc<Policy>,
+    current: Option<RenderSnapshot>,
+    dirty: bool,
 }
 
 impl Render for ScriptView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let runtime = self.runtime.clone();
-        let object = self.object.clone();
-        let entity = cx.entity();
-        runtime.render_view(object, entity, window, cx)
+        if self.is_dirty() {
+            self.rebuild(window, cx);
+        }
+        materialize(&self.runtime, self.current.as_ref().unwrap(), window, cx)
     }
 }
 ```
+
+The real implementation also overlays a recoverable error on the previous good
+snapshot and handles the no-snapshot failure case; the sketch shows the normal
+path and, critically, that a clean render only materializes cached data.
 
 `ScriptView` carries `ViewObject` and the render state of §8.4 — the published
 snapshot, the one it replaced, the dirty flag. Under QuickJS a `ViewObject` is a
@@ -492,9 +500,15 @@ ShellRuntime::load_app(&Rc<Self>, &Path, entry: &str) -> anyhow::Result<ViewType
 ShellRuntime::load_source(&Rc<Self>, &str, &str) -> anyhow::Result<ViewType>
 ShellRuntime::instantiate(&Rc<Self>, &ViewType, &mut Window, &mut App)
     -> anyhow::Result<ViewObject>
+ShellRuntime::instantiate_view(&Rc<Self>, &ViewType, &mut Window, &mut App)
+    -> anyhow::Result<Entity<ScriptView>>
+ShellRuntime::instantiate_view_with_policy(&Rc<Self>, &ViewType, Rc<Policy>,
+    &mut Window, &mut App) -> anyhow::Result<Entity<ScriptView>>
+ShellRuntime::instantiate_for_view(&Rc<Self>, &ViewType, Entity<ScriptView>,
+    &mut Window, &mut App) -> anyhow::Result<ViewObject>
 
-ShellRuntime::render_view(&Rc<Self>, ViewObject, Entity<ScriptView>, &mut Window, &mut App)
-    -> AnyElement
+ShellRuntime::build_snapshot(&Rc<Self>, &ViewObject, Option<Entity<ScriptView>>,
+    Rc<Policy>, &mut Window, &mut App) -> anyhow::Result<RenderSnapshot>
 ShellRuntime::render_to_spec(&Rc<Self>, &ViewObject, Option<Entity<ScriptView>>,
     &mut Window, &mut App) -> anyhow::Result<String>
 
@@ -508,10 +522,13 @@ entry points. A trait would not work — `ViewType` and `ViewObject` carry their
 own lifetimes and `'js` annotations, and forcing them through one would move the
 complexity into the type system rather than removing it.
 
-`instantiate` takes a `Window` and an `App` because a view's `init` is where it
-creates the state it keeps across frames, and creating a GPUI entity needs both.
-Construction therefore opens a scope of its own rather than running in the gap
-between host calls.
+The distinction between `instantiate` and `instantiate_view` is load-bearing.
+The former is the low-level object path used by description tests. The latter
+constructs the JavaScript object without running `init`, creates the
+`ScriptView` entity under its final `Policy`, and only then calls `init` inside a
+scope carrying that entity. Work started in `init` therefore inherits the right
+runtime, policy and weak owner from birth. `instantiate_for_view` applies the
+same rule to hot reload while preserving the existing entity.
 
 `load_app` takes the entry file name rather than assuming `main.js`, because a
 plugin declares its own entry in its manifest (§18) and the engine is the only
@@ -528,6 +545,29 @@ An engine exports `ShellRuntime`, `ViewType`, and `ViewObject`; two of them woul
 make those names ambiguous, which is why the feature is a selection rather than a
 set. Building with none fails at compile time rather than producing a crate that
 exports nothing.
+
+This means one engine implementation per build, **not one runtime instance per
+process**. Several `ShellRuntime`s may coexist on the same UI thread. Each owns
+its QuickJS VM, heap limit, globals, module cache, callbacks, retained entities
+and pending tasks; dropping one runtime cancels only its work. A continuation
+keeps a `Weak<ShellRuntime>` and resumes against the VM that created it rather
+than consulting the current global runtime.
+
+The practical boundary is:
+
+```text
+Policy       permission and host-capability boundary
+ShellRuntime VM, heap, modules and lifecycle boundary
+OS process   strong security and crash-isolation boundary
+```
+
+The default deployment is one runtime per independent application, with
+multiple trusted views or plugins sharing it under separate policies. A host
+uses separate runtimes when applications need independent globals, memory
+ceilings, module caches, reload teardown or shutdown. Separate runtimes are
+stronger VM-state isolation, but they are not a security sandbox: all VMs and
+Rust bridges still live in one native process. Truly untrusted code needs a
+process boundary.
 
 #### The two sides
 
@@ -1391,6 +1431,13 @@ nothing will ever render again. That failure mode is worse in script than in
 Rust, because it does not panic — it silently mutates an object nobody will look
 at.
 
+This includes work started in `init`. The runtime constructs the JavaScript
+object first, creates its `ScriptView`, and invokes `init` only after entering a
+scope with that entity and its policy. Calling `init` from the JavaScript base
+constructor would be too early: the entity would not exist yet, so a promise
+continuation could retain the policy but have no view to invalidate or owner to
+cancel with.
+
 `opts.owner: null` is the deliberate opt-out for work that must outlive every
 view. Any _other_ view is refused rather than silently ignored, because the
 engine can only resolve the current view's script instance back to its entity,
@@ -1403,6 +1450,9 @@ a cancelled timer does not fire again, a cancelled `sleep` leaves its promise
 pending forever, and a cancelled `spawn` stops having its outcome adopted. A
 cancelled task reports itself done and its registry entry is reaped immediately,
 so a long-running application does not accumulate one entry per elapsed timer.
+Host operations that support physical cancellation add a cancellation hook.
+`process.run` uses it to kill and reap its child when the task, owner or runtime
+goes away; cancellation is not merely dropping the JavaScript continuation.
 
 ### 12.4 No background script
 
@@ -2110,11 +2160,8 @@ space-separated the way `console.log` behaves, and any value prints — structur
 values as JSON, an unprintable one as a placeholder rather than aborting the call
 it was describing.
 
-There is no `console`. The design called for `console.log` as an alias for
-`log.info`, on the argument that its semantics are simple enough to map exactly
-and that it is a JavaScript author's first reflex. That argument still holds and
-the alias is simply not there, so `console.log` is a bare `ReferenceError` —
-which is the outcome §19.1 exists to avoid.
+`console.debug/log/info/warn/error` are aliases over the same `gpui.log` sink;
+they do not create a second logging subsystem or bypass filtering.
 
 ### 17.5 Processes
 
@@ -2129,7 +2176,10 @@ it said and a child writing to a windowed host's stdout is writing nowhere. The
 grant is checked on the calling thread, so a denial throws at the call site
 rather than rejecting a promise nobody awaited. Execution is bounded to 30
 seconds and 8 MiB for each output stream; crossing a bound kills and reaps the
-child. `process.exit(code?)` requires `capabilities.process.exit` and is a
+child. The two pipes are drained concurrently, so a child cannot deadlock by
+filling stderr while the host waits on stdout. Owner loss, task cancellation and
+runtime shutdown use the same kill-and-reap path. `process.exit(code?)` requires
+`capabilities.process.exit` and is a
 **request**: it hands the code to a handler the host
 installed with `gpui_shell::on_exit_request`, which decides what to do with it —
 close the panel, close the window, end the process. It is never `exit(2)` inside
@@ -2246,12 +2296,13 @@ become per-plugin questions — and all three have to be answerable **before** t
 plugin's code runs. That is the whole reason a manifest exists.
 
 `plugin.rs` implements it: manifest parsing with a generated JSON Schema,
-discovery, load and unload, per-plugin capabilities and data directories, and
-activation. `plugin_api.rs` implements the version check behind
+discovery, load and unload, per-plugin policies, capabilities and data
+directories. `plugin_api.rs` implements the version check behind
 `gpui.require_api("1.0")`, which is reachable from script. **`PluginManager`
-itself has no caller** — neither the binary nor the engine uses it, so nothing
-yet loads a plugin. The rest of this section describes what it does, because the
-shape is what the design is about.
+has no production caller** — neither the binary nor the engine drives it yet.
+Its integration test does load and run a plugin, including asynchronous `init`
+under the manifest-derived policy. The rest of this section describes what it
+does, because the shape is what the design is about.
 
 ### 18.1 The manifest
 
@@ -2366,7 +2417,11 @@ the slot onto the runtime help — two plugins share one runtime.
 
 A `ScriptView` captures its policy at construction rather than reading one when
 it renders, which is what makes a callback that fires three seconds later still
-run under the grant its own script was loaded with.
+run under the grant its own script was loaded with. Construction precedes
+`init`, so a filesystem, process or timer promise started during initialization
+captures the same policy and a weak reference to the final view. Every async
+resumption also carries a `Weak<ShellRuntime>`; it never consults whichever
+runtime happens to be global when it wakes up.
 
 ### 18.4 What is still missing
 
@@ -2380,8 +2435,9 @@ registry: there is no `gpui.command`, `gpui.keymap`, `gpui.register_panel`, or
 Today the grant comes from the host directly. Running a directory from the
 command line is an explicit act of trust, the same as `node app.js`, and
 `gpui-shell` grants read access to the application root and its storage
-directory, write access to the storage directory, and `store` — no network, no
-process execution, no clipboard, nothing else (§23).
+directory, write access to the storage directory, `store`, and the right to
+request that this standalone host exits. It grants no network, child-process
+execution, or clipboard access (§23).
 
 ---
 
@@ -2486,6 +2542,7 @@ persisting a decision in host configuration are all part of §18 and not built.
 | Memory            | `Runtime::set_memory_limit`                              | 256 MiB — a leak reports as a catchable exception on the offending allocation rather than an OOM kill of the host                                              |
 | Stack             | `Runtime::set_max_stack_size`                            | 1 MiB against QuickJS's 256 KiB default, so deep recursion is a `RangeError` a script can report rather than a native stack overflow, which is a process abort |
 | Microtask storms  | Bounded drain (§12.2)                                    | 100,000 jobs per drain                                                                                                                                         |
+| Child processes   | Bounded adapter plus cancellation hook                   | 30 seconds; 8 MiB stdout and 8 MiB stderr; kill and reap on timeout, overflow, cancellation, owner loss or runtime shutdown                                    |
 
 The budget is per host call, not global: every `scope::enter` mints a fresh
 generation, and a change of generation is the signal that a new call has begun
@@ -2847,7 +2904,28 @@ release build and a realistic node count.
 shape, an element added to two parents, a mistyped style name's suggestion, input
 events, reload, and a real paint that must not panic.
 
-### 22.4 Interaction tests
+### 22.4 JavaScript host-API integration tests
+
+The system APIs are not considered covered merely because their Rust adapters
+have unit tests. `tests/fs.rs`, `tests/process.rs`, and `tests/host_api.rs` load
+real JavaScript modules, create real `ScriptView` entities, drive the GPUI event
+loop, and assert the snapshot JavaScript published after its promise resumed.
+They cover:
+
+- filesystem calls and the store flush path;
+- process success, non-zero status, spawn failure, both captured streams, and
+  output-limit rejection;
+- clipboard read/write, timer cancellation, and a host-registered native module;
+- `with_cx` returning a live context to the original view after `await`.
+
+The plugin integration test adds the boundary above them: manifest declaration
+to `Policy`, async work started from `init`, filesystem access under that policy,
+and notification of the final view. This is why view construction is split into
+object construction, entity creation, and initialization (§6.5): a test that
+manually calls `render_to_spec` after the promise settles would miss a lost
+owner or a lost `cx.notify()`.
+
+### 22.5 Interaction tests
 
 `overlay.rs` and `root.rs` drive `TestAppContext` and `VisualTestContext`
 directly: opening and stacking dialogs, Escape unwinding one layer, focus
@@ -2855,7 +2933,7 @@ restoration through a stack, sheet replacement, every layer drawing at once,
 toast timeout and dismissal, and phase refusal from a render pass. These are the
 tests that catch a duplicated element id or a missing hitbox.
 
-### 22.5 Relation to the repository's testing rules
+### 22.6 Relation to the repository's testing rules
 
 Following `.claude/COMPONENT_TEST_RULES.md`: no tests assert presentation
 dimensions, and coverage concentrates on complex logic — call-scope validity,
@@ -2970,11 +3048,11 @@ reopened without new information.
 | **Script render couples to frame rate again.** A repaint that enters the VM puts the whole description cost on the frame budget                                                      | Fatal     | Prevented by the snapshot lifecycle (§8.4) and asserted by benchmark C plus `tests/snapshot.rs` (§20.3). It is a regression test rather than a convention precisely because the coupling is easy to reintroduce and invisible until it is a frame-rate problem                                                                                                                                                                                                                                                                                                                 |
 | **Presentation authority in script means uneven interface quality**                                                                                                                  | High      | Mitigated by the default palette and by `examples/js_todolist/ui.js` as a worked example; a shipped preset (§13.4) and a `gpui-component` module (§14.6) are the real answers                                                                                                                                                                                                                                                                                                                                                                                                  |
 | **Bindings drift from upstream**                                                                                                                                                     | High      | The style surface is immune by construction; component bindings have no drift check at all (§14.5)                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| **One thread, one runtime.** The capability grant, the store, the exit handler and the native module registry are thread state; two runtimes would share the last installer's policy | Medium    | **Enforced, not documented.** `ShellRuntime::new` refuses a second one with a sentence saying why. Binding the state to the runtime would not have been the fix: per-plugin grants are a _within_-runtime problem, so when the plugin model gets a host driving it this state has to become per-call-context — which is the same work either way                                                                                                                                                                                                                               |
-| **Cycles across two collectors leak**                                                                                                                                                | Medium    | Render-bound callbacks are retired with their snapshot and long-lived ones are owner-bound (§7.4); retained state is a per-runtime `EntityStore` that drops with the runtime. The one global left is the native module registry, whose closures hold host entity handles — a host clears it with `clear_native_modules` when it goes away, and GPUI's leak check catches a host that forgets                                                                                                                                                                                   |
+| **A continuation resumes against the wrong runtime.** Several runtimes can share one UI thread, so consulting a process/thread global after `await` would cross VM and policy boundaries | Fatal     | **Closed.** Tasks retain `Weak<ShellRuntime>` plus their `Policy` and weak view owner. Runtime shutdown filters the task registry by runtime identity; destroying runtime A leaves runtime B's work intact. Scheduler and failed-render continuation tests cover both cases (§12.3)                                                                                                                                                                                                                                                                                              |
+| **Cycles across two collectors leak**                                                                                                                                                | Medium    | Render-bound callbacks are retired with their snapshot and long-lived ones are owner-bound (§7.4); retained state is a per-runtime `EntityStore` that drops with the runtime. Native module registries live on `Policy`, and runtime-owned persistent values are released before QuickJS is dropped                                                                                                                                                                                                                                                                               |
 | **A symlink escape from a filesystem grant**                                                                                                                                         | Fatal     | **Closed.** The resolver returns an open directory handle rather than a path, and every operation runs against it, so no name is resolved twice — `cap-std`, which is `openat2(RESOLVE_BENEATH)` on Linux and a per-component `openat` walk elsewhere. Two earlier attempts were not enough: comparing strings missed a link entirely, and comparing strings then canonicalizing caught a link that was already there but not one planted between the check and the syscall. `a_symlink_planted_after_the_check_is_still_refused` is the test for the case neither could cover |
 | **Sandbox escape**, with `Eval`, quickjs-libc, and prototype pollution as the largest surfaces                                                                                       | High      | quickjs-libc is not compiled in; prototypes are frozen; every compiler path is closed at the JavaScript level, but the stronger intrinsic-level fix is not done (§19.1). The escape suite is real and asserts on messages                                                                                                                                                                                                                                                                                                                                                      |
-| **Generated code assumes Node or a browser**                                                                                                                                         | Medium    | Named stubs point at replacements, `gpui.d.ts` moves the error into the editor. Two stub messages are wrong: `fetch` points at a `gpui.http` that does not exist, and `setTimeout` points at `gpui.timer(ms, callback)` when the API is `gpui.timer.after(ms, fn)`                                                                                                                                                                                                                                                                                                             |
+| **Generated code assumes Node or a browser**                                                                                                                                         | Medium    | Named stubs fail with the available replacement or capability boundary, and `gpui.d.ts` moves unsupported API errors into the editor. A complete browser/Node standard library is deliberately outside Core (§3, §19.1)                                                                                                                                                                                                                                                                                                                                                         |
 | **Per-plugin capability grants.** Two loaded plugins must be able to hold different permissions at once                                                                              | High      | Closed. The grant lives on a `Policy` carried by the call frame, so the engine reads the grant of whichever plugin owns the running code, and it survives an `await` (§18.3)                                                                                                                                                                                                                                                                                                                                                                                                   |
 | **Interned `&'static str` accumulates** for script-registered names                                                                                                                  | Low       | Reachable now that panel names are interned (§15). Bounded by applications loaded × panels each, tens of bytes apiece, and never reclaimed — deliberately, because a persisted layout may still refer to a name                                                                                                                                                                                                                                                                                                                                                                |
 
@@ -3000,7 +3078,9 @@ and switchable with `gpui.set_theme()`. Callbacks with per-pass lifetime and
 generation-checked dispatch. State styles for hover, active, and focus.
 Asynchrony: promises bridged to GPUI tasks, job-queue draining, `spawn`,
 `sleep`, `timer.after`/`every`, `with_cx`, owner-bound cancellation, and
-unhandled-rejection reporting. `ShellRoot` with the dialog stack, one sheet, the
+unhandled-rejection reporting. Multiple runtimes may coexist; tasks retain their
+originating runtime and policy, and initialization runs only after the final
+`ScriptView` exists. `ShellRoot` with the dialog stack, one sheet, the
 toast stack, focus restoration, and Tab navigation, reached through `cx`. System
 capabilities for `fs`, `store`, `clipboard`, `log`, and `process`, all
 default-denied through one path resolver. Host-registered native modules through
@@ -3019,10 +3099,10 @@ JSON projections of each renderer context (§15). A host can drive all of it; a
 script cannot reach any of it.
 
 The plugin model: manifest parsing and its generated schema, discovery, load and
-unload, per-plugin capabilities and data directories, activation (§18). It
-compiles, it is exported, and **no host drives it yet** — which is a statement
-about callers, not about the code. §18 describes what is there; this section is
-the one that says whether anything uses it, and the two are not in conflict.
+unload, per-plugin policies, capabilities and data directories (§18). It is
+crate-private and **no production host drives it yet**; an integration test does
+load a real plugin and exercises its asynchronous initialization under the
+manifest-derived policy.
 
 ### Not built
 
@@ -3035,11 +3115,10 @@ Actions and key bindings. Animation. `gpui.open_window` and multi-window
 applications. `gpui.http`. A contribution registry — no `gpui.command`,
 `gpui.keymap`, `gpui.register_panel`, or `gpui.register_theme`. The capability
 authorization model: prompting, persistence, host policy, and re-asking on
-upgrade. Per-plugin grants that can coexist. The binding table and the
-rustdoc-JSON drift check. Packaging and distribution. `--dev`'s sandbox
-relaxations and the development-mode marker. The intrinsic-level `Eval`
+upgrade. The binding table and the rustdoc-JSON drift check. Packaging and
+distribution. The intrinsic-level `Eval`
 withholding. DevTools and `gc_stats`. State preservation across a reload. A
-shipped preset module. The `gpui-component` binding registry. `console`.
+shipped preset module. The `gpui-component` binding registry.
 
 ---
 
@@ -3080,8 +3159,8 @@ shipped preset module. The `gpui-component` binding registry. `console`.
    `structuredClone`, `TextEncoder`, `URL`, `crypto.randomUUID`? The draft
    criterion is that anything mapping exactly may be provided and anything
    mapping approximately may not — the same rule that refuses to name the HTTP
-   API `fetch` (§17.2). `console` is the live case: it maps exactly, it is a
-   JavaScript author's first reflex, and it is currently a `ReferenceError`.
+   API `fetch` (§17.2). `console` is the proven exact-mapping case: its methods
+   forward to `gpui.log` without adding a second logging subsystem.
 
 8. **When does a second engine become worth adding?** The Lua fallback was
    removed rather than repaired: it had fallen far enough behind (no `svg`,
@@ -3225,7 +3304,7 @@ crates/shell/                 # gpui-shell — depends on gpui-base + gpui only
     dock.rs                   # ScriptPanel · ScriptDockSkin · panel registration
     native.rs                 # the host-registered native module registry
     plugin_api.rs             # the script API version and its check
-    plugin.rs                 # manifest · discovery · load/unload  (no caller yet)
+    plugin.rs                 # manifest · discovery · isolated policy · load/unload
     view.rs                   # ScriptView — snapshot ownership and invalidation
     assets.rs                 # application-directory asset source
     watch.rs                  # source watching and in-place reload
@@ -3236,6 +3315,9 @@ crates/shell/                 # gpui-shell — depends on gpui-base + gpui only
     render.rs                 # end-to-end description tests
     snapshot.rs               # the render-frequency invariants (§22.3)
     benchmark.rs              # script build · materialization · cached render
+    fs.rs                     # JS → async filesystem/store → ScriptView
+    process.rs                # JS → bounded process Promise → ScriptView
+    host_api.rs               # JS clipboard · timer cancellation · native bridge
 examples/js_todolist/         # the reference application
 ```
 
