@@ -2004,7 +2004,19 @@ running `curl` is not granted; add it to capabilities.fs.execute in the manifest
 
 ### 17.1 Filesystem
 
-`read_text`, `write_text`, `read_dir`, `exists`, `remove`, `create_dir_all`.
+`read_text`, `write_text`, `read_dir`, `exists`, `remove_file`, `remove_dir`,
+`mkdir`.
+
+The names are Rust's where Rust and the JavaScript runtimes agree, and the
+runtimes' where they do not. `read_text` / `write_text` rather than Rust's
+`read_to_string` / `write`, because Rust's names the destination *type*, which
+means nothing here — and because `read` is reserved: it returns bytes in Rust,
+Deno and Bun alike, so a `read` that returned a string would contradict all
+three and burn the name binary I/O will want. Deno spells the same split
+`readTextFile` / `writeTextFile`. `remove_file` and `remove_dir` are Rust's,
+because one `remove` does not say whether a directory is in scope. `mkdir` is
+the runtimes', with `{ recursive }`, because that is the name every script
+author already has.
 Paths resolve against the granted roots; traversal is rejected by lexical
 normalization plus a `starts_with` check, and symbolic links are re-checked at
 the system call.

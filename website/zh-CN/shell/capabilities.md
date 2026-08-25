@@ -73,8 +73,9 @@ import { fs } from "gpui";
 | `fs.write_text(path, contents)` | —                                |
 | `fs.read_dir(path)`             | `[{ name, is_dir }]`，按名字排序 |
 | `fs.exists(path)`               | `true` / `false`                 |
-| `fs.remove(path)`               | —                                |
-| `fs.create_dir_all(path)`       | —                                |
+| `fs.remove_file(path)`          | —                                |
+| `fs.remove_dir(path)`           | —                                |
+| `fs.mkdir(path, options?)`      | —                                |
 
 ```js
 const source = await fs.read_text("notes.md");
@@ -91,7 +92,9 @@ await fs.write_text("notes.md", source + "\n");
 
 **被拒绝的路径抛异常，而不是返回 `false`。** “你不能看”和“它不存在”是两个不同的事实，把它们合并会让脚本能一次一个布尔值地探测自己根目录之外的文件系统。
 
-**`remove` 不递归。** 写权限是按根授予的，递归删除会把一次路径笔误变成整个应用数据目录的丢失。真要这么做的脚本可以自己遍历。
+**删文件和删目录是两个调用**，和 Rust 一样——单独一个 "remove" 说不清目录算不算在内。`remove_dir` 只收空目录：写权限是按根授予的，递归删除会把一次路径笔误变成整个应用数据目录的丢失。真要这么做的脚本可以自己遍历。
+
+**`mkdir` 就是别处那个 `mkdir`。** 不带参数时只建一层，父目录不存在就报错；`{ recursive: true }` 才把父目录一起建出来。它原来叫 `create_dir_all`——那个名字确实说清了它做什么，代价是它不是每个脚本作者已经认识的那个名字。
 
 **`read_dir` 已排序。** 渲染列表的脚本不该自己再排一遍，也不该继承文件系统的任意顺序。
 

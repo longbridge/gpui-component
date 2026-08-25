@@ -795,9 +795,16 @@ const CAPABILITIES: &str = r#"
     read_dir(path: string): Promise<DirEntry[]>;
     /** Throws on a path outside the granted roots, rather than answering false. */
     exists(path: string): Promise<boolean>;
-    /** Not recursive: a directory must be empty. */
-    remove(path: string): Promise<void>;
-    create_dir_all(path: string): Promise<void>;
+    remove_file(path: string): Promise<void>;
+    /** The directory must be empty: this is never a tree walk. */
+    remove_dir(path: string): Promise<void>;
+    /** Bare, the parent must already exist. `{ recursive: true }` creates it. */
+    mkdir(path: string, options?: MakeDirectoryOptions): Promise<void>;
+  }
+
+  export interface MakeDirectoryOptions {
+    /** Create missing parents too. Default `false`, as everywhere else. */
+    recursive?: boolean;
   }
 
   /** Key-value storage that survives a restart. Persisted on every write. */

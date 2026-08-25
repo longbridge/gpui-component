@@ -73,8 +73,9 @@ Every call returns a promise. `await` them, or chain `.then` — and see the not
 | `fs.write_text(path, contents)` | —                                    |
 | `fs.read_dir(path)`             | `[{ name, is_dir }]`, sorted by name |
 | `fs.exists(path)`               | `true` / `false`                     |
-| `fs.remove(path)`               | —                                    |
-| `fs.create_dir_all(path)`       | —                                    |
+| `fs.remove_file(path)`          | —                                    |
+| `fs.remove_dir(path)`           | —                                    |
+| `fs.mkdir(path, options?)`      | —                                    |
 
 ```js
 const source = await fs.read_text("notes.md");
@@ -91,7 +92,9 @@ Three of these behave in a way worth stating, each for the same reason:
 
 **A denied path throws rather than answering `false`.** "You may not look" and "it is not there" are different facts, and collapsing them would let a script map the filesystem outside its roots one boolean at a time.
 
-**`remove` is not recursive.** Write access is granted per root, so a recursive remove would turn one mistyped path into the loss of an application's whole data directory. A script that means it can walk the tree itself.
+**Removing a file and removing a directory are two calls**, as they are in Rust, because "remove" alone does not say whether a directory is in scope. `remove_dir` takes an empty one and nothing else: write access is granted per root, so a recursive remove would turn one mistyped path into the loss of an application's whole data directory. A script that means it walks the tree itself.
+
+**`mkdir` means what it means everywhere else.** Bare, it creates one directory and fails if the parent is missing; `{ recursive: true }` creates the parents too. It was `create_dir_all` — a name that said what it did, but only by not being the name every script author already knows.
 
 **`read_dir` is sorted.** A script that renders a listing should not have to sort it, and should not inherit the filesystem's arbitrary order.
 

@@ -41,7 +41,7 @@ use gpui::{App, ClipboardItem};
 use rquickjs::{
     Array, Ctx, Error as JsError, Exception, FromJs, IntoJs, Object, Promise, Result as JsResult,
     Value,
-    function::{Func, Rest},
+    function::{Func, Opt, Rest},
 };
 use serde_json::Value as Json;
 
@@ -96,8 +96,9 @@ fn fs_object<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
     fs.set("write_text", Func::from(write_text))?;
     fs.set("read_dir", Func::from(list_dir))?;
     fs.set("exists", Func::from(exists))?;
-    fs.set("remove", Func::from(remove))?;
-    fs.set("create_dir_all", Func::from(create_dir_all))?;
+    fs.set("remove_file", Func::from(remove_file))?;
+    fs.set("remove_dir", Func::from(remove_dir))?;
+    fs.set("mkdir", Func::from(mkdir))?;
 
     Ok(fs)
 }
@@ -183,38 +184,97 @@ fn exists<'js>(ctx: Ctx<'js>, path: String) -> JsResult<Promise<'js>> {
     })
 }
 
-/// Directory removal is not recursive. Write access is granted per root, so a
-/// recursive remove would turn one mistyped path into the loss of an
-/// application's whole data directory; a script that means it can walk the tree
-/// itself.
-fn remove<'js>(ctx: Ctx<'js>, path: String) -> JsResult<Promise<'js>> {
+/// Deleting a file, and deleting a directory, are two calls.
+///
+/// Rust splits them and so does this, because "remove" alone does not say
+/// whether a directory is in scope — and the answer here is that a directory
+/// only goes if it is empty. Write access is granted per root, so a recursive
+/// remove would turn one mistyped path into the loss of an application's whole
+/// data directory; a script that means it walks the tree itself.
+fn remove_file<'js>(ctx: Ctx<'js>, path: String) -> JsResult<Promise<'js>> {
     let grant = grant(&ctx, &path, Access::Write)?;
     let name = grant.describe();
     let (dir, relative) = grant.into_parts();
 
-    scheduler::blocking(&ctx, "gpui.fs.remove(path)", move || {
-        let directory = dir
-            .metadata(&relative)
-            .map(|metadata| metadata.is_dir())
-            .unwrap_or(false);
-        let removed = if directory {
-            dir.remove_dir(&relative)
-        } else {
-            dir.remove_file(&relative)
-        };
-        removed.map_err(|error| message("remove", &name, &error))
+    scheduler::blocking(&ctx, "gpui.fs.remove_file(path)", move || {
+        dir.remove_file(&relative)
+            .map_err(|error| message("remove", &name, &error))
     })
 }
 
-fn create_dir_all<'js>(ctx: Ctx<'js>, path: String) -> JsResult<Promise<'js>> {
+/// Removes an **empty** directory. A non-empty one is an error, not a tree walk.
+fn remove_dir<'js>(ctx: Ctx<'js>, path: String) -> JsResult<Promise<'js>> {
     let grant = grant(&ctx, &path, Access::Write)?;
     let name = grant.describe();
     let (dir, relative) = grant.into_parts();
 
-    scheduler::blocking(&ctx, "gpui.fs.create_dir_all(path)", move || {
-        dir.create_dir_all(&relative)
-            .map_err(|error| message("create", &name, &error))
+    scheduler::blocking(&ctx, "gpui.fs.remove_dir(path)", move || {
+        dir.remove_dir(&relative)
+            .map_err(|error| message("remove", &name, &error))
     })
+}
+
+/// Creates a directory. `{ recursive: true }` creates its parents too.
+///
+/// The name is `mkdir` and so are its semantics: bare, it creates one directory
+/// and fails if the parent is missing, which is what `mkdir` means in every
+/// runtime a script author has used. This used to be spelled `create_dir_all`
+/// and was always recursive — a name that said what it did, but only by not
+/// being the name everyone knows.
+fn mkdir<'js>(ctx: Ctx<'js>, path: String, options: Opt<MakeDirectory>) -> JsResult<Promise<'js>> {
+    let grant = grant(&ctx, &path, Access::Write)?;
+    let name = grant.describe();
+    let (dir, relative) = grant.into_parts();
+    let recursive = options.0.unwrap_or_default().recursive;
+
+    scheduler::blocking(&ctx, "gpui.fs.mkdir(path, options)", move || {
+        let made = if recursive {
+            dir.create_dir_all(&relative)
+        } else {
+            dir.create_dir(&relative)
+        };
+        made.map_err(|error| message("create", &name, &error))
+    })
+}
+
+/// `{ recursive }`, and nothing else.
+#[derive(Default)]
+struct MakeDirectory {
+    recursive: bool,
+}
+
+impl<'js> FromJs<'js> for MakeDirectory {
+    fn from_js(ctx: &Ctx<'js>, value: Value<'js>) -> JsResult<Self> {
+        if value.is_undefined() || value.is_null() {
+            return Ok(Self::default());
+        }
+
+        let Some(object) = value.into_object() else {
+            return Err(Exception::throw_type(
+                ctx,
+                "gpui.fs.mkdir(path, options) expects an object, such as { recursive: true }",
+            ));
+        };
+
+        // A misspelled key silently dropped is a setting the author believes
+        // they applied — here, the difference between one directory and a path.
+        for key in object.keys::<String>() {
+            let key = key?;
+            if key != "recursive" {
+                return Err(Exception::throw_type(
+                    ctx,
+                    &format!(
+                        "unknown option `{key}` for gpui.fs.mkdir(path, options); \
+                         expected recursive"
+                    ),
+                ));
+            }
+        }
+
+        Ok(Self {
+            recursive: object.get::<_, Option<bool>>("recursive")?.unwrap_or(false),
+        })
+    }
 }
 
 /// The ceiling on one `read_text`.

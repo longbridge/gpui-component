@@ -27,10 +27,10 @@ export default class Probe extends View {
         const names = (await fs.read_dir(".")).map((entry) => entry.name);
         const there = await fs.exists("notes.txt");
 
-        await fs.create_dir_all("nested/deeper");
+        await fs.mkdir("nested/deeper", { recursive: true });
         const nested = await fs.exists("nested/deeper");
 
-        await fs.remove("notes.txt");
+        await fs.remove_file("notes.txt");
         const gone = !(await fs.exists("notes.txt"));
 
         this.state = `${back}|${names.join(",")}|${there}|${nested}|${gone}`;
