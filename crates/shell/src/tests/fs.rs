@@ -14,7 +14,8 @@ use gpui::{Entity, IntoElement as _, TestAppContext, VisualTestContext};
 /// the assertion can be made on what the script saw rather than on what the host
 /// did.
 const PROBE: &str = r#"
-import { View, v_flex, text, fs, spawn, with_cx } from "gpui";
+import { View, v_flex, text, spawn, with_cx } from "gpui";
+import * as fs from "fs/promises";
 
 export default class Probe extends View {
   init() {
@@ -22,15 +23,15 @@ export default class Probe extends View {
 
     spawn(async (cx) => {
       try {
-        await fs.write_text("notes.txt", "hello");
-        const back = await fs.read_text("notes.txt");
-        const names = (await fs.read_dir(".")).map((entry) => entry.name);
+        await fs.writeFile("notes.txt", "hello");
+        const back = await fs.readFile("notes.txt");
+        const names = (await fs.readdir(".")).map((entry) => entry.name);
         const there = await fs.exists("notes.txt");
 
         await fs.mkdir("nested/deeper", { recursive: true });
         const nested = await fs.exists("nested/deeper");
 
-        await fs.remove_file("notes.txt");
+        await fs.unlink("notes.txt");
         const gone = !(await fs.exists("notes.txt"));
 
         this.state = `${back}|${names.join(",")}|${there}|${nested}|${gone}`;
@@ -112,8 +113,8 @@ fn an_oversized_read_is_refused_by_name(cx: &mut TestAppContext) {
     let runtime = ShellRuntime::new().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = PROBE.replace(
-        r#"await fs.write_text("notes.txt", "hello");"#,
-        r#"await fs.read_text("big.bin");"#,
+        r#"await fs.writeFile("notes.txt", "hello");"#,
+        r#"await fs.readFile("big.bin");"#,
     );
     let view_type = runtime.load_source("big.js", &source).expect("load");
 

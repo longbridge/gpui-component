@@ -74,7 +74,6 @@ use super::{host, scheduler};
 /// See the module header for the ordering requirement — this is the last thing
 /// `install_globals` does.
 pub fn install(ctx: &Ctx<'_>) -> JsResult<()> {
-    install_process(ctx)?;
     install_absent_globals(ctx)?;
 
     if !is_development_mode() {
@@ -335,7 +334,7 @@ impl<'js> IntoJs<'js> for crate::process::Output {
     }
 }
 
-fn install_process(ctx: &Ctx<'_>) -> JsResult<()> {
+pub(super) fn install_process(ctx: &Ctx<'_>) -> JsResult<()> {
     let process = Object::new(ctx.clone())?;
 
     process.set("run", Func::from(run))?;
@@ -377,10 +376,11 @@ fn install_process(ctx: &Ctx<'_>) -> JsResult<()> {
         }),
     )?;
 
-    ctx.globals().set("process", process.clone())?;
-    if let Ok(module) = ctx.globals().get::<_, Object>("__gpui") {
-        module.set("process", process)?;
-    }
+    process.set("platform", std::env::consts::OS)?;
+    process.set("arch", std::env::consts::ARCH)?;
+    process.set("env", Object::new(ctx.clone())?)?;
+    process.set("cwd", Func::from(|| "."))?;
+    ctx.globals().set("process", process)?;
     Ok(())
 }
 
@@ -497,7 +497,10 @@ mod tests {
     fn sandboxed() -> (JsRuntime, JsContext) {
         let runtime = JsRuntime::new().unwrap();
         let context = JsContext::full(&runtime).unwrap();
-        context.with(|ctx| install(&ctx).unwrap());
+        context.with(|ctx| {
+            install_process(&ctx).unwrap();
+            install(&ctx).unwrap();
+        });
         (runtime, context)
     }
 

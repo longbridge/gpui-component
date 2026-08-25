@@ -1142,7 +1142,7 @@ dependencies = [
  "maybe-owned",
  "rustix 1.1.4",
  "rustix-linux-procfs",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
  "winx",
 ]
 
@@ -2162,7 +2162,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -2467,7 +2467,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -3688,8 +3688,12 @@ dependencies = [
  "gpui_platform",
  "instant",
  "llrt_buffer",
+ "llrt_console",
  "llrt_crypto",
+ "llrt_fs",
+ "llrt_os",
  "llrt_path",
+ "llrt_process",
  "llrt_url",
  "llrt_zlib",
  "rquickjs",
@@ -4899,6 +4903,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "junction"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "160f2eade097f30263b548aae5deb12ad349c909baa710fa24b92c9090b2e006"
+dependencies = [
+ "scopeguard",
+ "windows-sys 0.59.0",
+]
+
+[[package]]
 name = "khronos-egl"
 version = "6.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5203,6 +5217,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "llrt_console"
+version = "0.9.0-beta"
+source = "git+https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a9b15e7ddfb2778eca4b5a63111e74f51"
+dependencies = [
+ "llrt_logging",
+ "llrt_utils",
+ "rquickjs",
+]
+
+[[package]]
 name = "llrt_context"
 version = "0.9.0-beta"
 source = "git+https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a9b15e7ddfb2778eca4b5a63111e74f51"
@@ -5286,6 +5310,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "llrt_fs"
+version = "0.9.0-beta"
+source = "git+https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a9b15e7ddfb2778eca4b5a63111e74f51"
+dependencies = [
+ "either",
+ "junction",
+ "llrt_buffer",
+ "llrt_encoding",
+ "llrt_path",
+ "llrt_utils",
+ "rand 0.10.2",
+ "rquickjs",
+ "tokio",
+]
+
+[[package]]
 name = "llrt_hooking"
 version = "0.9.0-beta"
 source = "git+https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a9b15e7ddfb2778eca4b5a63111e74f51"
@@ -5309,12 +5349,66 @@ dependencies = [
 ]
 
 [[package]]
+name = "llrt_logging"
+version = "0.9.0-beta"
+source = "git+https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a9b15e7ddfb2778eca4b5a63111e74f51"
+dependencies = [
+ "itoa",
+ "llrt_context",
+ "llrt_encoding",
+ "llrt_json",
+ "llrt_numbers",
+ "llrt_utils",
+ "rquickjs",
+ "ryu",
+]
+
+[[package]]
+name = "llrt_numbers"
+version = "0.9.0-beta"
+source = "git+https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a9b15e7ddfb2778eca4b5a63111e74f51"
+dependencies = [
+ "itoa",
+ "llrt_utils",
+ "rquickjs",
+ "ryu",
+]
+
+[[package]]
+name = "llrt_os"
+version = "0.9.0-beta"
+source = "git+https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a9b15e7ddfb2778eca4b5a63111e74f51"
+dependencies = [
+ "home",
+ "libc",
+ "llrt_utils",
+ "num_cpus",
+ "once_cell",
+ "rquickjs",
+ "uzers",
+ "whoami",
+ "windows-registry 0.6.1",
+ "windows-result 0.4.1",
+ "windows-version",
+]
+
+[[package]]
 name = "llrt_path"
 version = "0.9.0-beta"
 source = "git+https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a9b15e7ddfb2778eca4b5a63111e74f51"
 dependencies = [
  "llrt_utils",
  "memchr",
+ "rquickjs",
+]
+
+[[package]]
+name = "llrt_process"
+version = "0.9.0-beta"
+source = "git+https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a9b15e7ddfb2778eca4b5a63111e74f51"
+dependencies = [
+ "libc",
+ "llrt_utils",
  "rquickjs",
 ]
 
@@ -5951,7 +6045,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -6088,7 +6182,7 @@ version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "680998035259dcfcafe653688bf2aa6d3e2dc05e98be6ab46afb089dc84f1df8"
 dependencies = [
- "proc-macro-crate 3.5.0",
+ "proc-macro-crate 1.3.1",
  "proc-macro2",
  "quote",
  "syn 2.0.117",
@@ -8036,6 +8130,7 @@ version = "0.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4e04e4eedfb060b503b5f0a2644abb890b0b3620d3fb674f9455f230014964e4"
 dependencies = [
+ "either",
  "rquickjs-core",
  "rquickjs-macro",
 ]
@@ -8047,6 +8142,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "16e4f499ac5b943d97ee6dbc44f23c2c10426f420f7d2f1793d6318911b6608c"
 dependencies = [
  "async-lock",
+ "either",
  "half",
  "hashbrown 0.17.0",
  "relative-path",
@@ -8249,7 +8345,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -8922,7 +9018,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3a766e1110788c36f4fa1c2b71b387a7815aa65f88ce0229841826633d93723e"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -9004,7 +9100,7 @@ dependencies = [
  "cfg-if",
  "libc",
  "psm",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -9470,7 +9566,7 @@ dependencies = [
  "getrandom 0.4.2",
  "once_cell",
  "rustix 1.1.4",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -10423,7 +10519,7 @@ checksum = "f2f6fb2847f6742cd76af783a2a2c49e9375d0a111c7bef6f71cd9e738c72d6e"
 dependencies = [
  "memoffset",
  "tempfile",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -10648,6 +10744,15 @@ dependencies = [
  "serde_core",
  "sha1_smol",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "uzers"
+version = "0.12.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0b8275fb1afee25b4111d2dc8b5c505dbbc4afd0b990cb96deb2d88bff8be18d"
+dependencies = [
+ "libc",
 ]
 
 [[package]]
@@ -11358,6 +11463,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "whoami"
+version = "2.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "626c4bac6755d76ffc12cb01b2eac751db1996b9e0041de9aa02c8c211ddc82c"
+
+[[package]]
 name = "winapi"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -11379,7 +11490,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -11666,6 +11777,17 @@ dependencies = [
  "windows-link 0.1.3",
  "windows-result 0.3.4",
  "windows-strings 0.4.2",
+]
+
+[[package]]
+name = "windows-registry"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "02752bf7fbdcce7f2a27a742f798510f3e5ad88dbe84871e5168e2120c3d5720"
+dependencies = [
+ "windows-link 0.2.1",
+ "windows-result 0.4.1",
+ "windows-strings 0.5.1",
 ]
 
 [[package]]

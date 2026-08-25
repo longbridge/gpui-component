@@ -5,7 +5,23 @@
 
 use rquickjs::{Ctx, Result, loader::BuiltinResolver, loader::ModuleLoader};
 
-const NAMES: &[&str] = &["buffer", "crypto", "path", "url", "zlib"];
+mod console;
+mod fs;
+mod os;
+mod process;
+
+const NAMES: &[&str] = &[
+    "buffer",
+    "console",
+    "crypto",
+    "fs",
+    "fs/promises",
+    "os",
+    "path",
+    "process",
+    "url",
+    "zlib",
+];
 
 pub(super) fn resolver() -> BuiltinResolver {
     NAMES
@@ -18,8 +34,13 @@ pub(super) fn resolver() -> BuiltinResolver {
 pub(super) fn loader() -> ModuleLoader {
     ModuleLoader::default()
         .with_module("buffer", llrt_buffer::BufferModule)
+        .with_module("console", console::ConsoleModule)
         .with_module("crypto", llrt_crypto::CryptoModule)
+        .with_module("fs", fs::FsModule)
+        .with_module("fs/promises", fs::FsModule)
+        .with_module("os", os::OsModule)
         .with_module("path", llrt_path::PathModule)
+        .with_module("process", process::ProcessModule)
         .with_module("url", llrt_url::UrlModule)
         .with_module("zlib", llrt_zlib::ZlibModule)
 }
@@ -30,5 +51,7 @@ pub(super) fn install(ctx: &Ctx<'_>) -> Result<()> {
     llrt_buffer::init(ctx)?;
     llrt_url::init(ctx)?;
     llrt_crypto::init(ctx)?;
+    console::install(ctx)?;
+    super::sandbox::install_process(ctx)?;
     Ok(())
 }

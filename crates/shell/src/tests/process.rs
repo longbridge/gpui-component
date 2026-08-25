@@ -14,7 +14,8 @@ use gpui::{Entity, IntoElement as _, TestAppContext, VisualTestContext};
 use crate::{Capabilities, ExecuteGrant, ScriptView, ShellRuntime};
 
 const OUTPUT_PROBE: &str = r#"
-import { View, v_flex, text, spawn, process, with_cx } from "gpui";
+import { View, v_flex, text, spawn, with_cx } from "gpui";
+import process from "process";
 
 export default class Probe extends View {
   init() {
@@ -40,7 +41,8 @@ export default class Probe extends View {
 "#;
 
 const FAILURE_PROBE: &str = r#"
-import { View, v_flex, text, spawn, process, with_cx } from "gpui";
+import { View, v_flex, text, spawn, with_cx } from "gpui";
+import process from "process";
 
 export default class Probe extends View {
   init() {
@@ -63,7 +65,8 @@ export default class Probe extends View {
 "#;
 
 const OUTPUT_LIMIT_PROBE: &str = r#"
-import { View, v_flex, text, spawn, process, with_cx } from "gpui";
+import { View, v_flex, text, spawn, with_cx } from "gpui";
+import process from "process";
 
 export default class Probe extends View {
   init() {

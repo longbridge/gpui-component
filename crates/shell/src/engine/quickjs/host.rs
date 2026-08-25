@@ -81,7 +81,6 @@ pub fn set_store_path(path: PathBuf) {
 /// engine. They are the same context at run time.
 pub fn install(_ctx: &Ctx<'_>, module: &Object<'_>) -> JsResult<()> {
     let ctx = module.ctx();
-    module.set("fs", fs_object(ctx)?)?;
     module.set("store", store_object(ctx)?)?;
     module.set("clipboard", clipboard_object(ctx)?)?;
     module.set("log", log_object(ctx)?)?;
@@ -89,19 +88,6 @@ pub fn install(_ctx: &Ctx<'_>, module: &Object<'_>) -> JsResult<()> {
 }
 
 // -- Filesystem ------------------------------------------------------------
-
-fn fs_object<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
-    let fs = Object::new(ctx.clone())?;
-    fs.set("read_text", Func::from(read_text))?;
-    fs.set("write_text", Func::from(write_text))?;
-    fs.set("read_dir", Func::from(list_dir))?;
-    fs.set("exists", Func::from(exists))?;
-    fs.set("remove_file", Func::from(remove_file))?;
-    fs.set("remove_dir", Func::from(remove_dir))?;
-    fs.set("mkdir", Func::from(mkdir))?;
-
-    Ok(fs)
-}
 
 /// Every `fs` call is a capability check here and a syscall somewhere else.
 ///
@@ -113,7 +99,7 @@ fn fs_object<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
 ///
 /// Named functions rather than closures because the returned promise borrows
 /// the context, and only a signature can say so.
-fn read_text<'js>(ctx: Ctx<'js>, path: String) -> JsResult<Promise<'js>> {
+pub(super) fn read_text<'js>(ctx: Ctx<'js>, path: String) -> JsResult<Promise<'js>> {
     let grant = grant(&ctx, &path, Access::Read)?;
     let name = grant.describe();
     let (dir, relative) = grant.into_parts();
@@ -151,7 +137,11 @@ fn read_text<'js>(ctx: Ctx<'js>, path: String) -> JsResult<Promise<'js>> {
     })
 }
 
-fn write_text<'js>(ctx: Ctx<'js>, path: String, contents: String) -> JsResult<Promise<'js>> {
+pub(super) fn write_text<'js>(
+    ctx: Ctx<'js>,
+    path: String,
+    contents: String,
+) -> JsResult<Promise<'js>> {
     let grant = grant(&ctx, &path, Access::Write)?;
     let name = grant.describe();
     let (dir, relative) = grant.into_parts();
@@ -162,7 +152,7 @@ fn write_text<'js>(ctx: Ctx<'js>, path: String, contents: String) -> JsResult<Pr
     })
 }
 
-fn list_dir<'js>(ctx: Ctx<'js>, path: String) -> JsResult<Promise<'js>> {
+pub(super) fn list_dir<'js>(ctx: Ctx<'js>, path: String) -> JsResult<Promise<'js>> {
     let grant = grant(&ctx, &path, Access::Read)?;
     let name = grant.describe();
     let (dir, relative) = grant.into_parts();
@@ -175,7 +165,7 @@ fn list_dir<'js>(ctx: Ctx<'js>, path: String) -> JsResult<Promise<'js>> {
 /// A denied path throws rather than answering `false`: "you may not look" and
 /// "it is not there" are different facts, and collapsing them would let a script
 /// probe outside its roots one boolean at a time.
-fn exists<'js>(ctx: Ctx<'js>, path: String) -> JsResult<Promise<'js>> {
+pub(super) fn exists<'js>(ctx: Ctx<'js>, path: String) -> JsResult<Promise<'js>> {
     let grant = grant(&ctx, &path, Access::Read)?;
     let (dir, relative) = grant.into_parts();
 
@@ -191,7 +181,7 @@ fn exists<'js>(ctx: Ctx<'js>, path: String) -> JsResult<Promise<'js>> {
 /// only goes if it is empty. Write access is granted per root, so a recursive
 /// remove would turn one mistyped path into the loss of an application's whole
 /// data directory; a script that means it walks the tree itself.
-fn remove_file<'js>(ctx: Ctx<'js>, path: String) -> JsResult<Promise<'js>> {
+pub(super) fn remove_file<'js>(ctx: Ctx<'js>, path: String) -> JsResult<Promise<'js>> {
     let grant = grant(&ctx, &path, Access::Write)?;
     let name = grant.describe();
     let (dir, relative) = grant.into_parts();
@@ -203,7 +193,7 @@ fn remove_file<'js>(ctx: Ctx<'js>, path: String) -> JsResult<Promise<'js>> {
 }
 
 /// Removes an **empty** directory. A non-empty one is an error, not a tree walk.
-fn remove_dir<'js>(ctx: Ctx<'js>, path: String) -> JsResult<Promise<'js>> {
+pub(super) fn remove_dir<'js>(ctx: Ctx<'js>, path: String) -> JsResult<Promise<'js>> {
     let grant = grant(&ctx, &path, Access::Write)?;
     let name = grant.describe();
     let (dir, relative) = grant.into_parts();
@@ -221,7 +211,11 @@ fn remove_dir<'js>(ctx: Ctx<'js>, path: String) -> JsResult<Promise<'js>> {
 /// runtime a script author has used. This used to be spelled `create_dir_all`
 /// and was always recursive — a name that said what it did, but only by not
 /// being the name everyone knows.
-fn mkdir<'js>(ctx: Ctx<'js>, path: String, options: Opt<MakeDirectory>) -> JsResult<Promise<'js>> {
+pub(super) fn mkdir<'js>(
+    ctx: Ctx<'js>,
+    path: String,
+    options: Opt<MakeDirectory>,
+) -> JsResult<Promise<'js>> {
     let grant = grant(&ctx, &path, Access::Write)?;
     let name = grant.describe();
     let (dir, relative) = grant.into_parts();
@@ -239,7 +233,7 @@ fn mkdir<'js>(ctx: Ctx<'js>, path: String, options: Opt<MakeDirectory>) -> JsRes
 
 /// `{ recursive }`, and nothing else.
 #[derive(Default)]
-struct MakeDirectory {
+pub(super) struct MakeDirectory {
     recursive: bool,
 }
 
@@ -715,7 +709,7 @@ fn with_app<R>(ctx: &Ctx<'_>, what: &str, body: impl FnOnce(&mut App) -> R) -> J
 
 // -- Log -------------------------------------------------------------------
 
-fn log_object<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
+pub(super) fn log_object<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
     let log = Object::new(ctx.clone())?;
 
     // No capability: a script that can run can already say something. Denying
@@ -728,6 +722,12 @@ fn log_object<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
     )?;
     log.set(
         "info",
+        Func::from(|message: Printable, rest: Rest<Printable>| {
+            tracing::info!(target: SCRIPT_TARGET, "{}", line(message, rest));
+        }),
+    )?;
+    log.set(
+        "log",
         Func::from(|message: Printable, rest: Rest<Printable>| {
             tracing::info!(target: SCRIPT_TARGET, "{}", line(message, rest));
         }),

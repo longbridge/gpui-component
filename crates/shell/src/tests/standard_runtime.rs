@@ -66,6 +66,76 @@ fn llrt_pure_modules_execute_inside_the_shell_runtime(cx: &mut TestAppContext) {
     );
 }
 
+#[test]
+fn node_prefixed_modules_are_not_part_of_the_shell_contract() {
+    let runtime = ShellRuntime::new().expect("runtime");
+    let error = runtime
+        .load_source(
+            "node-prefix.js",
+            r#"import { Buffer } from "node:buffer"; export default Buffer;"#,
+        )
+        .expect_err("the shell must not advertise Node.js module names");
+    assert!(error.to_string().contains("node:buffer"), "{error:#}");
+}
+
+#[gpui::test]
+fn safe_host_standard_modules_replace_the_old_gpui_exports(cx: &mut TestAppContext) {
+    let source = r#"
+import { View, v_flex, text } from "gpui";
+import console from "console";
+import os from "os";
+import process from "process";
+
+export default class Probe extends View {
+  render() {
+    console.log("standard runtime", os.platform());
+    return v_flex().child(text([
+      typeof process.run,
+      process.cwd(),
+      Object.keys(process.env).length,
+      os.homedir(),
+      os.tmpdir(),
+    ].join("|")));
+  }
+}
+"#;
+    cx.update(crate::init);
+    let runtime = ShellRuntime::new().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let view_type = runtime
+        .load_source("host-standard.js", source)
+        .expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let view = context
+        .update(|window, cx| runtime.instantiate_view(&view_type, window, cx))
+        .expect("instantiate");
+    let view_to_draw = view.clone();
+    context.draw(
+        gpui::Point::default(),
+        gpui::size(gpui::px(400.), gpui::px(300.)),
+        move |_, _| view_to_draw.into_any_element(),
+    );
+    let rendered = context.update(|_, cx| {
+        view.read(cx)
+            .snapshot()
+            .map(crate::RenderSnapshot::debug_tree)
+            .unwrap_or_default()
+    });
+    assert!(rendered.contains("function|.|0|.|."), "{rendered}");
+
+    let error = runtime
+        .load_source(
+            "old-host-exports.js",
+            r#"import { fs, process } from "gpui"; export default fs || process;"#,
+        )
+        .expect_err("the old gpui.fs/process exports must be removed");
+    assert!(
+        error.to_string().to_ascii_lowercase().contains("not find"),
+        "{error:#}"
+    );
+}
+
 struct Empty;
 
 impl gpui::Render for Empty {

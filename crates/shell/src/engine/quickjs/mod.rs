@@ -76,8 +76,6 @@ const MODULE_EXPORTS: &[&str] = &[
     "Input",
     "InputState",
     // System capabilities (`host`, `sandbox`).
-    "fs",
-    "process",
     "store",
     "clipboard",
     "log",
@@ -859,19 +857,6 @@ globalThis.__gpui = (() => {
     on: (event, handler) => __input_on(handle, String(event), handler),
     release: () => __input_release(handle),
   });
-
-  // `console` is the first thing a JavaScript author types. It is an alias for
-  // `gpui.log`, not a second logging system: same sink, same plugin field.
-  // Resolved at call time, not here: `gpui.log` is installed after this
-  // prelude runs.
-  const forward = (level) => (...args) => globalThis.__gpui.log[level](...args);
-  globalThis.console = {
-    debug: forward("debug"),
-    log: forward("info"),
-    info: forward("info"),
-    warn: forward("warn"),
-    error: forward("error"),
-  };
 
   let deferInit = false;
   globalThis.__construct = (Class) => {
