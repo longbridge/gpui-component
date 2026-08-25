@@ -119,6 +119,7 @@ impl Gallery {
                 StoryContainer::panel::<SeparatorStory>(window, cx),
                 StoryContainer::panel::<SettingsStory>(window, cx),
                 StoryContainer::panel::<SheetStory>(window, cx),
+                StoryContainer::panel::<ShimmerStory>(window, cx),
                 StoryContainer::panel::<SidebarStory>(window, cx),
                 StoryContainer::panel::<SkeletonStory>(window, cx),
                 StoryContainer::panel::<SliderStory>(window, cx),

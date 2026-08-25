@@ -3,13 +3,16 @@ use gpui::{
     Render, Styled as _, Window, div, rems,
 };
 use gpui_component::{
-    ActiveTheme as _, Sizable as _, StyledExt as _,
+    ActiveTheme as _, IconName, Sizable as _, StyledExt as _,
     bubble::{
         Bubble, BubbleContent, BubbleGroup, BubbleReactionSide, BubbleReactions, BubbleVariant,
     },
     button::{Button, ButtonVariants as _},
+    collapsible::Collapsible,
     h_flex,
+    link::Link,
     message::MessageAlignment,
+    popover::Popover,
     v_flex,
 };
 
@@ -17,6 +20,7 @@ use crate::{Story, section};
 
 pub struct BubbleStory {
     focus_handle: FocusHandle,
+    expanded: bool,
 }
 
 fn start_bubble() -> Bubble {
@@ -27,6 +31,7 @@ impl BubbleStory {
     fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
         Self {
             focus_handle: cx.focus_handle(),
+            expanded: false,
         }
     }
 
@@ -127,7 +132,11 @@ impl Render for BubbleStory {
                             .child("This bubble has reaction feedback.")
                             .reactions(
                                 BubbleReactions::new().child(
-                                    Button::new("bubble-like").ghost().xsmall().label("👍 2"),
+                                    Button::new("bubble-like")
+                                        .ghost()
+                                        .xsmall()
+                                        .label("👍 2")
+                                        .tooltip("Like this message"),
                                 ),
                             ),
                     )
@@ -147,6 +156,8 @@ impl Render for BubbleStory {
                 section("Group")
                     .description("Group consecutive bubbles using the shared spacing scale.")
                     .w(rems(42.5))
+                    .v_flex()
+                    .gap_5()
                     .child(
                         BubbleGroup::new()
                             .w_full()
@@ -160,12 +171,145 @@ impl Render for BubbleStory {
                                     .with_variant(BubbleVariant::Secondary)
                                     .child("The registry route was stale."),
                             ),
+                    )
+                    .child(
+                        BubbleGroup::new()
+                            .w_full()
+                            .child(
+                                Bubble::new()
+                                    .alignment(MessageAlignment::End)
+                                    .child("I removed the stale route."),
+                            )
+                            .child(
+                                Bubble::new()
+                                    .alignment(MessageAlignment::End)
+                                    .child("The updated registry is ready to review."),
+                            ),
+                    ),
+            )
+            .child(
+                section("Links and buttons")
+                    .description("Compose external links and application actions inside a bubble.")
+                    .w(rems(42.5))
+                    .v_flex()
+                    .gap_3()
+                    .child(
+                        start_bubble().with_variant(BubbleVariant::Outline).content(
+                            BubbleContent::new().child(
+                                v_flex()
+                                    .gap_2()
+                                    .child("The implementation guide is available online.")
+                                    .child(
+                                        Link::new("bubble-documentation-link")
+                                            .href("https://longbridge.github.io/gpui-component/")
+                                            .child("Open the component documentation"),
+                                    ),
+                            ),
+                        ),
+                    )
+                    .child(
+                        start_bubble().with_variant(BubbleVariant::Muted).content(
+                            BubbleContent::new().child(
+                                h_flex()
+                                    .gap_3()
+                                    .child("The generated report is ready.")
+                                    .child(
+                                        Button::new("bubble-open-report")
+                                            .ghost()
+                                            .small()
+                                            .label("Open report"),
+                                    ),
+                            ),
+                        ),
+                    ),
+            )
+            .child(
+                section("Collapsible content")
+                    .description("Keep long responses readable with an explicit disclosure action.")
+                    .w(rems(42.5))
+                    .child(
+                        start_bubble().with_variant(BubbleVariant::Muted).content(
+                            BubbleContent::new().child(
+                                Collapsible::new()
+                                    .gap_2()
+                                    .open(self.expanded)
+                                    .child(
+                                        "The accessibility review found two focus states that need more contrast.",
+                                    )
+                                    .content(
+                                        v_flex()
+                                            .gap_2()
+                                            .child("Dialog and sheet controls already keep their focus rings visible.")
+                                            .child("Update the menu focus token separately from its pointer hover state."),
+                                    )
+                                    .child(
+                                        Button::new("bubble-toggle-details")
+                                            .ghost()
+                                            .small()
+                                            .icon(IconName::ChevronsUpDown)
+                                            .label(if self.expanded { "Show less" } else { "Show more" })
+                                            .on_click(cx.listener(|this, _, _, cx| {
+                                                this.expanded = !this.expanded;
+                                                cx.notify();
+                                            })),
+                                    ),
+                            ),
+                        ),
+                    ),
+            )
+            .child(
+                section("Tooltip")
+                    .description("Label icon-only reaction controls with their concrete meaning.")
+                    .w(rems(42.5))
+                    .py_4()
+                    .child(
+                        Bubble::new()
+                            .alignment(MessageAlignment::End)
+                            .child("The updated registry route is live.")
+                            .reactions(
+                                BubbleReactions::new().child(
+                                    Button::new("bubble-delivery-details")
+                                        .ghost()
+                                        .xsmall()
+                                        .icon(IconName::CircleCheck)
+                                        .tooltip("Read today at 4:32 PM"),
+                                ),
+                            ),
+                    ),
+            )
+            .child(
+                section("Popover")
+                    .description("Use a semantic popover for contextual failure details.")
+                    .w(rems(42.5))
+                    .py_4()
+                    .child(
+                        start_bubble()
+                            .with_variant(BubbleVariant::Destructive)
+                            .child("The build command could not finish.")
+                            .reactions(
+                                BubbleReactions::new().child(
+                                    Popover::new("bubble-error-popover")
+                                        .trigger(
+                                            Button::new("bubble-show-error")
+                                                .ghost()
+                                                .xsmall()
+                                                .icon(IconName::Info)
+                                                .tooltip("Show error details"),
+                                        )
+                                        .w_64()
+                                        .gap_2()
+                                        .child("Build command failed")
+                                        .child("The workspace lockfile could not be found."),
+                                ),
+                            ),
                     ),
             )
             .child(
                 section("Rich content")
                     .description("Any GPUI element can be placed directly in the surface.")
                     .w(rems(42.5))
+                    .v_flex()
+                    .gap_3()
                     .child(
                         start_bubble().content(
                             BubbleContent::new().child(
@@ -182,6 +326,13 @@ impl Render for BubbleStory {
                                     )),
                             ),
                         ),
+                    )
+                    .child(
+                        start_bubble()
+                            .with_variant(BubbleVariant::Secondary)
+                            .child(
+                                "A longer message wraps naturally within the bubble's available width, preserving the shared text scale, comfortable reading rhythm, and leading alignment.",
+                            ),
                     ),
             )
             .child(
@@ -192,9 +343,9 @@ impl Render for BubbleStory {
                         start_bubble().content(
                             BubbleContent::new()
                                 .rounded(cx.theme().radius)
-                                .bg(cx.theme().green.opacity(0.15))
-                                .text_color(cx.theme().green)
-                                .border_color(cx.theme().green.opacity(0.35))
+                                .bg(cx.theme().success.opacity(0.15))
+                                .text_color(cx.theme().success)
+                                .border_color(cx.theme().success.opacity(0.35))
                                 .child("Custom semantic color"),
                         ),
                     ),

@@ -1,10 +1,12 @@
 use gpui::{
     App, AppContext as _, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement as _,
-    Render, Styled as _, Window, px,
+    Render, StyleRefinement, Styled as _, Window, rems,
 };
 use gpui_component::{
     ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt as _,
     badge::Badge,
+    button::{Button, ButtonVariants as _},
+    link::Link,
     marker::{Marker, MarkerContent, MarkerIcon, MarkerLoadingStyle, MarkerVariant},
     shimmer::{ShimmerStyle, ShimmerText},
     spinner::Spinner,
@@ -55,16 +57,36 @@ impl Render for MarkerStory {
         v_flex()
             .gap_4()
             .child(
+                section("Variants")
+                    .description(
+                        "Choose a plain row, a centered separator, or a bordered boundary.",
+                    )
+                    .w(rems(42.5))
+                    .v_flex()
+                    .gap_4()
+                    .child(Marker::new().content(MarkerContent::new().child("Plain status update")))
+                    .child(
+                        Marker::new()
+                            .with_variant(MarkerVariant::Separator)
+                            .content(MarkerContent::new().child("Earlier messages")),
+                    )
+                    .child(
+                        Marker::new()
+                            .with_variant(MarkerVariant::Border)
+                            .content(MarkerContent::new().child("Unread messages")),
+                    ),
+            )
+            .child(
                 section("Status")
                     .description(
                         "Compose icons, spinners, and labels without a fixed status model.",
                     )
-                    .w(px(640.))
+                    .w(rems(42.5))
                     .v_flex()
                     .gap_3()
                     .child(
                         Marker::new()
-                            .text_color(cx.theme().green)
+                            .text_color(cx.theme().success)
                             .icon(MarkerIcon::new().child(Icon::new(IconName::CircleCheck)))
                             .content(MarkerContent::new().child("Online")),
                     )
@@ -80,12 +102,38 @@ impl Render for MarkerStory {
                                     .child(Badge::new().count(3).child(Icon::new(IconName::Bell))),
                             )
                             .content(MarkerContent::new().child("Unread notifications")),
+                    )
+                    .child(
+                        Marker::new()
+                            .text_color(cx.theme().danger)
+                            .icon(MarkerIcon::new().child(Icon::new(IconName::Info)))
+                            .content(MarkerContent::new().child("Message could not be delivered")),
+                    ),
+            )
+            .child(
+                section("With icon")
+                    .description("Icons can communicate sender activity, notices, and saved items.")
+                    .w(rems(42.5))
+                    .v_flex()
+                    .gap_3()
+                    .child(
+                        Marker::new()
+                            .icon(MarkerIcon::new().child(Icon::new(IconName::Info)))
+                            .content(MarkerContent::new().child("Conversation details updated")),
+                    )
+                    .child(
+                        Marker::new()
+                            .icon(MarkerIcon::new().child(Icon::new(IconName::Star)))
+                            .content(MarkerContent::new().child("Pinned for your team")),
+                    )
+                    .child(
+                        Marker::new().content(MarkerContent::new().child("No icon is required")),
                     ),
             )
             .child(
                 section("Loading styles")
                     .description("Choose a spinner or a sweeping, ChatGPT-style text shimmer.")
-                    .w(px(640.))
+                    .w(rems(42.5))
                     .v_flex()
                     .gap_4()
                     .child(
@@ -128,30 +176,136 @@ impl Render for MarkerStory {
                     ),
             )
             .child(
+                section("Shimmer settings")
+                    .description(
+                        "Customize timing, highlight width, direction, and playback independently.",
+                    )
+                    .w(rems(42.5))
+                    .v_flex()
+                    .gap_3()
+                    .child(
+                        Marker::new()
+                            .loading(true)
+                            .with_loading_style(MarkerLoadingStyle::Shimmer)
+                            .with_shimmer_style(
+                                ShimmerStyle::new().duration(Duration::from_millis(900)),
+                            )
+                            .content(MarkerContent::new().text("Faster highlight sweep")),
+                    )
+                    .child(
+                        Marker::new()
+                            .loading(true)
+                            .with_loading_style(MarkerLoadingStyle::Shimmer)
+                            .with_shimmer_style(ShimmerStyle::new().spread(0.55))
+                            .content(MarkerContent::new().text("Wider highlight band")),
+                    )
+                    .child(
+                        Marker::new()
+                            .loading(true)
+                            .with_loading_style(MarkerLoadingStyle::Shimmer)
+                            .with_shimmer_style(ShimmerStyle::new().reverse(true))
+                            .content(MarkerContent::new().text("Right-to-left sweep")),
+                    )
+                    .child(
+                        Marker::new()
+                            .loading(true)
+                            .with_loading_style(MarkerLoadingStyle::Shimmer)
+                            .with_shimmer_style(
+                                ShimmerStyle::new().highlight_color(cx.theme().primary),
+                            )
+                            .content(MarkerContent::new().text("Semantic primary highlight")),
+                    )
+                    .child(
+                        Marker::new()
+                            .loading(true)
+                            .with_loading_style(MarkerLoadingStyle::Shimmer)
+                            .with_shimmer_style(ShimmerStyle::new().once(true))
+                            .content(MarkerContent::new().text("Play the highlight once")),
+                    )
+                    .child(
+                        Marker::new()
+                            .loading(false)
+                            .with_loading_style(MarkerLoadingStyle::Shimmer)
+                            .content(MarkerContent::new().text("Loading is disabled")),
+                    ),
+            )
+            .child(
                 section("Separator")
                     .description("Place a conversation boundary between two semantic lines.")
-                    .w(px(640.))
+                    .w(rems(42.5))
+                    .v_flex()
+                    .gap_4()
                     .child(
                         Marker::new()
                             .with_variant(MarkerVariant::Separator)
                             .content(MarkerContent::new().child("Today")),
+                    )
+                    .child(
+                        Marker::new()
+                            .with_variant(MarkerVariant::Separator)
+                            .separator_style(
+                                StyleRefinement::default().bg(cx.theme().primary.opacity(0.35)),
+                            )
+                            .icon(MarkerIcon::new().child(Icon::new(IconName::Star)))
+                            .content(MarkerContent::new().child("Pinned messages")),
                     ),
             )
             .child(
                 section("Border")
                     .description("Use a bottom edge for an unread or section boundary.")
-                    .w(px(640.))
+                    .w(rems(42.5))
+                    .v_flex()
+                    .gap_3()
                     .child(
                         Marker::new()
                             .with_variant(MarkerVariant::Border)
                             .icon(MarkerIcon::new().child(Icon::new(IconName::Info)))
                             .content(MarkerContent::new().child("3 unread messages")),
+                    )
+                    .child(
+                        Marker::new()
+                            .with_variant(MarkerVariant::Border)
+                            .border_color(cx.theme().primary.opacity(0.4))
+                            .content(
+                                MarkerContent::new().child("New replies since your last visit"),
+                            ),
+                    ),
+            )
+            .child(
+                section("Links and buttons")
+                    .description(
+                        "Keep external destinations and in-app commands semantically distinct.",
+                    )
+                    .w(rems(42.5))
+                    .v_flex()
+                    .gap_3()
+                    .child(
+                        Marker::new()
+                            .icon(MarkerIcon::new().child(Icon::new(IconName::Info)))
+                            .content(
+                                MarkerContent::new().child(
+                                    Link::new("marker-documentation-link")
+                                        .href("https://longbridge.github.io/gpui-component/")
+                                        .child("Open the component documentation"),
+                                ),
+                            ),
+                    )
+                    .child(
+                        Marker::new()
+                            .icon(MarkerIcon::new().child(Icon::new(IconName::Star)))
+                            .content(MarkerContent::new().child("A saved draft is ready"))
+                            .child(
+                                Button::new("marker-open-draft")
+                                    .ghost()
+                                    .small()
+                                    .label("Open draft"),
+                            ),
                     ),
             )
             .child(
                 section("Custom style")
                     .description("Caller refinements can replace spacing, color, and surface.")
-                    .w(px(640.))
+                    .w(rems(42.5))
                     .child(
                         Marker::new()
                             .px_3()

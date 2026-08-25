@@ -78,7 +78,8 @@ impl Render for AttachmentStory {
                                     Button::new("remove-report")
                                         .ghost()
                                         .xsmall()
-                                        .icon(IconName::Close),
+                                        .icon(IconName::Close)
+                                        .tooltip("Remove quarterly-report.pdf"),
                                 ),
                             ),
                     )
@@ -126,7 +127,8 @@ impl Render for AttachmentStory {
                                     Button::new("cancel-upload")
                                         .ghost()
                                         .xsmall()
-                                        .icon(IconName::Close),
+                                        .icon(IconName::Close)
+                                        .tooltip("Cancel upload"),
                                 ),
                             ),
                     )
@@ -163,8 +165,66 @@ impl Render for AttachmentStory {
                                         Button::new("remove-failed-upload")
                                             .danger()
                                             .xsmall()
-                                            .icon(IconName::Delete),
+                                            .icon(IconName::Delete)
+                                            .tooltip("Remove archive.zip"),
                                     ),
+                            ),
+                    )
+                    .child(
+                        Attachment::new()
+                            .status(AttachmentStatus::Complete)
+                            .media(
+                                AttachmentMedia::new()
+                                    .text_color(cx.theme().success)
+                                    .child(Icon::new(IconName::CircleCheck)),
+                            )
+                            .content(
+                                AttachmentContent::new()
+                                    .title(AttachmentTitle::new("published-report.pdf"))
+                                    .description(AttachmentDescription::new("Uploaded · 1.8 MB")),
+                            )
+                            .actions(
+                                AttachmentActions::new().child(
+                                    Button::new("remove-complete-upload")
+                                        .ghost()
+                                        .xsmall()
+                                        .icon(IconName::Close)
+                                        .tooltip("Remove published-report.pdf"),
+                                ),
+                            ),
+                    ),
+            )
+            .child(
+                section("Optional slots")
+                    .description("Media, metadata, and actions remain independently composable.")
+                    .w(rems(42.5))
+                    .v_flex()
+                    .gap_3()
+                    .child(
+                        Attachment::new().media(
+                            AttachmentMedia::new().child(Icon::new(IconName::File)),
+                        ),
+                    )
+                    .child(
+                        Attachment::new().content(
+                            AttachmentContent::new()
+                                .title(AttachmentTitle::new("metadata-only.txt"))
+                                .description(AttachmentDescription::new("Text · 1 KB")),
+                        ),
+                    )
+                    .child(
+                        Attachment::new()
+                            .content(
+                                AttachmentContent::new()
+                                    .title(AttachmentTitle::new("ready-for-review.pdf")),
+                            )
+                            .actions(
+                                AttachmentActions::new().child(
+                                    Button::new("attachment-review-file")
+                                        .ghost()
+                                        .small()
+                                        .label("Open"),
+                                ),
                             ),
                     ),
             )
@@ -192,7 +252,8 @@ impl Render for AttachmentStory {
                                     Button::new("remove-preview")
                                         .ghost()
                                         .xsmall()
-                                        .icon(IconName::Close),
+                                        .icon(IconName::Close)
+                                        .tooltip("Remove sdk-preview.svg"),
                                 ),
                             ),
                     ),
@@ -222,10 +283,66 @@ impl Render for AttachmentStory {
                     ),
             )
             .child(
-                section("Sizes and group")
-                    .description(
-                        "Attachments size to their content and groups scroll horizontally.",
+                section("Sizes")
+                    .description("Semantic sizes keep the media, text, and action density aligned.")
+                    .w(rems(42.5))
+                    .v_flex()
+                    .gap_3()
+                    .child(
+                        Attachment::new()
+                            .large()
+                            .media(AttachmentMedia::new().child(Icon::new(IconName::File)))
+                            .content(
+                                AttachmentContent::new()
+                                    .title(AttachmentTitle::new("large.pdf"))
+                                    .description(AttachmentDescription::new("Large · PDF · 3.1 MB")),
+                            ),
                     )
+                    .child(
+                        Attachment::new()
+                            .media(AttachmentMedia::new().child(Icon::new(IconName::File)))
+                            .content(
+                                AttachmentContent::new()
+                                    .title(AttachmentTitle::new("medium.pdf"))
+                                    .description(AttachmentDescription::new("Medium · PDF · 2.4 MB")),
+                            ),
+                    )
+                    .child(
+                        Attachment::new()
+                            .small()
+                            .media(AttachmentMedia::new().child(Icon::new(IconName::File)))
+                            .content(
+                                AttachmentContent::new()
+                                    .title(AttachmentTitle::new("small.csv"))
+                                    .description(AttachmentDescription::new("Small · CSV · 840 KB")),
+                            ),
+                    )
+                    .child(
+                        Attachment::new()
+                            .xsmall()
+                            .media(AttachmentMedia::new().child(Icon::new(IconName::File)))
+                            .content(
+                                AttachmentContent::new().title(AttachmentTitle::new("xsmall.txt")),
+                            ),
+                    )
+                    .child(
+                        Attachment::new()
+                            .small()
+                            .media(
+                                AttachmentMedia::new()
+                                    .large()
+                                    .child(Icon::new(IconName::File)),
+                            )
+                            .content(
+                                AttachmentContent::new()
+                                    .title(AttachmentTitle::new("custom-media.pdf"))
+                                    .description(AttachmentDescription::new("Large media in a small attachment")),
+                            ),
+                    ),
+            )
+            .child(
+                section("Group")
+                    .description("Attachment groups arrange multiple files in a scrollable row.")
                     .w(rems(42.5))
                     .child(
                         AttachmentGroup::new("attachment-story-group")
@@ -257,6 +374,93 @@ impl Render for AttachmentStory {
                                             .title(AttachmentTitle::new("compact.txt")),
                                     ),
                             ),
+                    ),
+            )
+            .child(
+                section("Orientation")
+                    .description("The same named slots support horizontal and vertical layouts.")
+                    .w(rems(42.5))
+                    .v_flex()
+                    .gap_3()
+                    .child(
+                        Attachment::new()
+                            .axis(Axis::Horizontal)
+                            .media(AttachmentMedia::new().child(Icon::new(IconName::File)))
+                            .content(
+                                AttachmentContent::new()
+                                    .title(AttachmentTitle::new("horizontal.pdf"))
+                                    .description(AttachmentDescription::new("Horizontal layout")),
+                            ),
+                    )
+                    .child(
+                        Attachment::new()
+                            .axis(Axis::Vertical)
+                            .media(AttachmentMedia::new().child(Icon::new(IconName::File)))
+                            .content(
+                                AttachmentContent::new()
+                                    .title(AttachmentTitle::new("vertical.pdf"))
+                                    .description(AttachmentDescription::new("Vertical layout")),
+                            ),
+                    ),
+            )
+            .child(
+                section("Status inheritance")
+                    .description("Typed children inherit lifecycle state unless explicitly overridden.")
+                    .w(rems(42.5))
+                    .v_flex()
+                    .gap_3()
+                    .child(
+                        Attachment::new()
+                            .status(AttachmentStatus::Uploading)
+                            .media(AttachmentMedia::new().child(Icon::new(IconName::File)))
+                            .content(
+                                AttachmentContent::new()
+                                    .title(AttachmentTitle::new("inherited-title.pdf"))
+                                    .description(AttachmentDescription::new("Inherited loading appearance")),
+                            ),
+                    )
+                    .child(
+                        Attachment::new()
+                            .status(AttachmentStatus::Uploading)
+                            .media(AttachmentMedia::new().child(Icon::new(IconName::File)))
+                            .content(
+                                AttachmentContent::new()
+                                    .title(
+                                        AttachmentTitle::new("stable-title.pdf")
+                                            .status(AttachmentStatus::Complete),
+                                    )
+                                    .description(AttachmentDescription::new("Explicit title status disables its shimmer")),
+                            ),
+                    ),
+            )
+            .child(
+                section("Long filenames")
+                    .description("Long metadata truncates within a constrained, zoom-aware surface.")
+                    .w(rems(42.5))
+                    .child(
+                        Attachment::new()
+                            .w_72()
+                            .media(AttachmentMedia::new().child(Icon::new(IconName::File)))
+                            .content(
+                                AttachmentContent::new()
+                                    .title(AttachmentTitle::new(
+                                        "accessibility-review-and-keyboard-navigation-findings.pdf",
+                                    ))
+                                    .description(AttachmentDescription::new(
+                                        "Final report · reviewed by the desktop experience team",
+                                    )),
+                            ),
+                    ),
+            )
+            .child(
+                section("Attachment trigger")
+                    .description("Use the existing Button component to add files to a composer.")
+                    .w(rems(42.5))
+                    .child(
+                        Button::new("attachment-add-files")
+                            .outline()
+                            .icon(IconName::File)
+                            .label("Add files…"),
                     ),
             )
             .child(

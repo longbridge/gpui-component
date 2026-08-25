@@ -1,38 +1,46 @@
 ---
 title: Attachment
-description: Composable file and media attachment surfaces with upload states, previews, and actions.
+description: A composable file and media attachment surface with lifecycle states, previews, and actions.
 ---
 
 # Attachment
 
-`Attachment` presents a file or media item in a conversation. Its typed slots keep the shared layout consistent while existing GPUI Component controls provide progress and actions.
+`Attachment` presents one file or media item. It provides stable layout for a
+media preview, metadata, and optional actions while leaving upload state,
+selection, retry, and navigation in the application. Each public slot is
+styleable and accepts arbitrary GPUI children.
+
+The component is intentionally a composition primitive. `AttachmentActions`
+does not invent an attachment-specific action model; put `Button`, `Link`, or
+another semantic control inside it. `AttachmentGroup` only owns horizontal
+spacing and scrolling. Selection and preview behavior remain application
+concerns.
 
 ## Import
 
 ```rust
-use gpui_component::attachment::{
-    Attachment, AttachmentActions, AttachmentContent, AttachmentDescription, AttachmentGroup,
-    AttachmentMedia, AttachmentStatus, AttachmentTitle,
+use gpui::{Axis, ParentElement as _, Styled as _};
+use gpui_component::{
+    ActiveTheme as _, Colorize as _, Icon, IconName, Sizable as _, Size,
+    attachment::{
+        Attachment, AttachmentActions, AttachmentContent, AttachmentDescription,
+        AttachmentGroup, AttachmentMedia, AttachmentStatus, AttachmentTitle,
+    },
+    button::{Button, ButtonVariants as _},
+    badge::Badge,
+    progress::Progress,
+    shimmer::ShimmerStyle,
+    spinner::Spinner,
 };
-use gpui_component::shimmer::ShimmerStyle;
 ```
 
-## Composition
+## Anatomy and basic usage
 
-```text
-Attachment
-├── AttachmentMedia
-├── AttachmentContent
-│   ├── AttachmentTitle
-│   ├── AttachmentDescription
-│   └── Progress (optional)
-└── AttachmentActions
-    └── Button (optional)
-```
+The typed builders make the common file shape explicit:
 
 ```rust
 Attachment::new()
-    .media(AttachmentMedia::new().child(Icon::new(IconName::File)))
+    .media(AttachmentMedia::new().child(Icon::new(IconName::File)));
     .content(
         AttachmentContent::new()
             .title(AttachmentTitle::new("quarterly-report.pdf"))
@@ -43,29 +51,146 @@ Attachment::new()
             Button::new("remove-report")
                 .ghost()
                 .xsmall()
-                .icon(IconName::Close),
+                .icon(IconName::Close)
+                .label("Remove"),
         ),
     )
 ```
 
-## Upload lifecycle
+The slots are optional. A media-only attachment, metadata-only attachment, or
+action-only attachment is valid when the product needs it:
 
-Use `AttachmentStatus::{Pending, Uploading, Processing, Failed, Complete}` for lifecycle styling. Keep the status meaning visible in `AttachmentDescription`; color alone should not communicate failure.
+```rust
+Attachment::new()
+    .media(AttachmentMedia::new().child(Icon::new(IconName::File)));
+
+Attachment::new().content(
+    AttachmentContent::new()
+        .title(AttachmentTitle::new("notes.txt"))
+        .description(AttachmentDescription::new("TXT · 12 KB")),
+)
+```
+
+The default state is:
+
+| Property | Default | Meaning |
+| --- | --- | --- |
+| Status | `Complete` | The item is ready. |
+| Size | `Medium` | Uses the standard conversation density. |
+| Axis | `Horizontal` | Media, metadata, and actions share one row. |
+| Media/content/actions | absent | Add only the slots the item needs. |
+| Surface | `group_box` background and foreground | Follows the active theme. |
+| Radius | `radius_2xl()` (`radius_xl` for `XSmall`) | Shared semantic radius. |
+
+`Attachment` sizes itself to its content and never owns a product-level file
+model. Keep the file ID and state in the parent view, then render the current
+record into this element.
+
+## Media and image previews
+
+Use children for an icon-style media slot and `src(...)` for an image preview:
+
+```rust
+Attachment::new()
+    .media(
+        AttachmentMedia::new()
+            .src("https://example.com/previews/sdk.svg")
+            .overlay(Icon::new(IconName::Download)),
+    )
+    .content(
+        AttachmentContent::new()
+            .title(AttachmentTitle::new("sdk-preview.svg"))
+            .description(AttachmentDescription::new("SVG · 1280 × 720")),
+    )
+```
+
+The image is rendered with `ObjectFit::Cover` inside the media bounds. Children
+and `overlay(...)` are painted above the image. `overlay(...)` centers an
+element over the whole media area, which is useful for a spinner, play icon, or
+preview action:
 
 ```rust
 Attachment::new()
     .status(AttachmentStatus::Uploading)
+    .axis(Axis::Vertical)
+    .media(
+        AttachmentMedia::new()
+            .src(preview_url)
+            .overlay(Spinner::new().small()),
+    )
+```
+
+Only a source image is dimmed while `Uploading`, `Processing`, or `Failed`.
+Overlays and custom children keep full contrast. With no source, the media
+slot is a themed muted area; in a failed state it uses the destructive semantic
+surface and foreground so an error icon remains legible.
+
+`AttachmentMedia` is independently styleable. Use `with_size(...)` to override
+the inherited media size, or use normal GPUI refinements for a custom preview
+ratio and surface:
+
+```rust
+AttachmentMedia::new()
+    .with_size(Size::Large)
+    .aspect_ratio(16. / 9.)
+    .rounded(cx.theme().radius_lg)
+    .child(Icon::new(IconName::Image))
+```
+
+An explicit media size takes precedence over the attachment size. A vertical
+attachment makes the media full width and square by default; the media's own
+style can replace that geometry when the application has a different preview
+design.
+
+## Lifecycle states
+
+`AttachmentStatus` has five explicit states. The parent status is passed to the
+typed title, description, media, and action layout during rendering:
+
+| State | Surface/layout behavior | Recommended content |
+| --- | --- | --- |
+| `Pending` | Dashed border; preview is not dimmed. | “Ready to upload” and a start action. |
+| `Uploading` | Preview dims; typed title shimmers. | Progress value and a Cancel button. |
+| `Processing` | Preview dims; typed title shimmers. | “Processing…” and a non-destructive wait state. |
+| `Failed` | Destructive border/description; preview dims when present. | Error reason plus Retry or Remove. |
+| `Complete` | Ready surface; preview is full opacity. | File metadata and normal actions. |
+
+```rust
+Attachment::new()
+    .status(AttachmentStatus::Uploading)
+    .media(AttachmentMedia::new().child(Icon::new(IconName::File)))
     .content(
         AttachmentContent::new()
             .title(AttachmentTitle::new("design-assets.zip"))
             .description(AttachmentDescription::new("Uploading · 68%"))
             .child(Progress::new("attachment-progress").value(68.)),
     )
+    .actions(
+        AttachmentActions::new()
+            .child(Button::new("cancel-upload").ghost().xsmall().label("Cancel")),
+    )
 ```
 
-`Progress` remains an independent component so determinate, indeterminate, and application-specific progress behavior stay available without duplicating its API.
+The status helpers are useful when application state maps to presentation:
 
-Titles and descriptions added through `.title(...)` and `.description(...)` automatically inherit their parent attachment's status. Uploading and processing titles use the shared shimmer treatment, and failed descriptions use the destructive theme color. An explicit `.status(...)` on either child takes precedence over the inherited status:
+```rust
+match status {
+    AttachmentStatus::Pending => "Ready to upload",
+    AttachmentStatus::Uploading => "Uploading…",
+    AttachmentStatus::Processing => "Processing…",
+    AttachmentStatus::Failed => "Upload failed",
+    AttachmentStatus::Complete => "Ready",
+}
+```
+
+`is_pending()`, `is_uploading()`, `is_processing()`, `is_failed()`,
+`is_complete()`, and `is_in_progress()` are pure readers. They do not update
+the attachment or the application upload task.
+
+## Status inheritance and overrides
+
+Titles and descriptions added through their typed builders inherit the parent
+status. An explicit child status wins over the inherited value:
 
 ```rust
 Attachment::new()
@@ -80,92 +205,256 @@ Attachment::new()
     )
 ```
 
-Customize a title's loading animation with `AttachmentTitle::with_shimmer_style(...)`:
+Use typed `.title(...)` and `.description(...)` whenever loading shimmer or
+failure coloring should follow the attachment. The generic `.child(...)` form
+still accepts arbitrary elements, but it cannot inspect the erased child's
+status and therefore does not inherit automatically:
 
 ```rust
-AttachmentTitle::new("design-assets.zip")
+AttachmentContent::new()
+    .title(AttachmentTitle::new("status-aware-title"))
+    .description(AttachmentDescription::new("status-aware-description"))
+    .child(custom_metadata_element)
+```
+
+Customize an in-progress title with a reusable shimmer style:
+
+```rust
+AttachmentTitle::new("transcript.pdf")
     .with_shimmer_style(
         ShimmerStyle::new()
             .duration(std::time::Duration::from_secs(3))
             .spread(0.45)
-            .reverse(true),
+            .reverse(true)
+            .once(false),
     )
 ```
 
-`ShimmerStyle::highlight_color(...)` can replace the theme-aware default highlight, and `.once(true)` limits an in-progress title to a single sweep.
+`AttachmentDescription` uses the destructive semantic color only for an
+explicit or inherited `Failed` status. The words in the description should
+still state what happened; color is a supporting cue.
 
-The existing `.child(AttachmentTitle::new(...))` and `.child(AttachmentDescription::new(...))` forms remain supported. Because `.child(...)` erases the concrete element type, these legacy children do not inherit the attachment status automatically; use the typed builders when status-aware appearance is required.
+## Sizes and axes
 
-## Thumbnail and orientation
+`Attachment` implements `Sizable`. The convenience builders map to `Size`:
 
-Use `Axis::Vertical` for a preview above the metadata. Horizontal attachments use the `min_w_40()` scale step. Vertical attachments use the `w_24()` step without content and the equivalent of Tailwind's `w-30` step with content; their media uses a square aspect ratio. All of these dimensions scale with the application's base font size. An explicit media size or any `Styled` refinement can still override those defaults.
+```rust
+Attachment::new().xsmall();
+Attachment::new().small();
+Attachment::new(); // medium (default)
+Attachment::new().large();
+Attachment::new().w_72() // application-owned width when a fixed measure is needed
+```
+
+The named sizes adjust gap, typography, padding, media baseline, and radius as
+one scale. Use them to keep attachments aligned with other component densities.
+`Size::Size(...)` is a custom density value, not a width setter; use the normal
+GPUI width refinements (`w_72()`, `w(...)`, or a parent layout) when the product
+needs a fixed measure. Named sizes are preferable for a coherent theme.
+
+Horizontal is the default and keeps the media, metadata, and actions in one
+row. Vertical moves the preview above the metadata and places actions over the
+preview's upper trailing corner:
 
 ```rust
 Attachment::new()
     .axis(Axis::Vertical)
+    .large()
     .media(AttachmentMedia::new().src(preview_url))
     .content(
         AttachmentContent::new()
-            .title(AttachmentTitle::new("preview.png"))
-            .description(AttachmentDescription::new("PNG · 1280 × 720")),
+            .title(AttachmentTitle::new("presentation.png"))
+            .description(AttachmentDescription::new("PNG · 1920 × 1080")),
+    )
+    .actions(
+        AttachmentActions::new()
+            .child(Button::new("remove-presentation").ghost().xsmall().label("Remove")),
     )
 ```
 
-The image fills the styled media bounds with `ObjectFit::Cover`. Image previews dim while uploading, processing, or failed, and return to full opacity while pending or complete. Children remain visible above image sources; `.overlay(...)` additionally centers an element across the entire media area:
+The vertical default is square media. Set a media aspect ratio or size when
+the content needs a landscape preview. `AttachmentContent` and
+`AttachmentActions` remain independent slots, so an application can omit one
+or place additional controls in either.
+
+## Content and actions
+
+`AttachmentContent` keeps titles and descriptions in a vertical metadata stack.
+It also accepts custom children for progress, badges, or a second line:
 
 ```rust
-Attachment::new()
-    .status(AttachmentStatus::Uploading)
-    .media(
-        AttachmentMedia::new()
-            .src(preview_url)
-            .overlay(Spinner::new().small()),
-    )
+AttachmentContent::new()
+    .title(AttachmentTitle::new("report.pdf"))
+    .description(AttachmentDescription::new("PDF · 2.4 MB"))
+    .child(Badge::new().count(3))
 ```
 
-Only the image receives the loading opacity, so overlay icons, progress indicators, and custom controls remain fully legible.
+Use `AttachmentActions` for one or more existing semantic controls:
+
+```rust
+AttachmentActions::new()
+    .child(Button::new("download").ghost().xsmall().label("Download"))
+    .child(Button::new("remove").danger().xsmall().label("Remove"))
+```
+
+`AttachmentActions` only supplies layout and does not make its children
+focusable, clickable, or disabled. A tooltip is supplemental; the current
+`Button` implementation derives its accessibility label from `.label(...)`, so
+use a visible label when an action must have a named accessible control. An
+icon-only button with only `.tooltip(...)` is not a substitute for that label.
 
 ## Groups
 
-`AttachmentGroup` provides the Base UI horizontal gap and scrolling behavior. It requires a stable GPUI element id for scroll state:
+`AttachmentGroup` provides a horizontally scrollable row with the shared group
+gap. Its ID is required because it owns GPUI's element-local scroll state:
 
 ```rust
 AttachmentGroup::new("message-attachments")
     .child(first_attachment)
     .child(second_attachment)
+    .child(third_attachment)
 ```
 
-## Custom styling
+The group is `w_full()`, `min_w_0()`, and uses horizontal scrolling. It does not
+provide selection, snapping, reorder handles, a “+N more” overflow label, or a
+preview dialog. Compose those behaviors in an application-owned wrapper. Keep
+the ID stable for the lifetime of the conversation row.
 
-`Attachment` and every public slot implement `Styled`. Refinements apply after component defaults, so callers can replace width, spacing, radius, colors, media dimensions, typography, and action layout. The default attachment radius derives from `Theme::radius_2xl()`, while media corners use a smaller theme radius; both follow the application theme. Attachment sizing, spacing, and typography use the shared rem-based design scale. Attachment surfaces use the existing `group_box.background` and `group_box.foreground` theme colors, keeping card-like surfaces independently configurable from popovers without introducing a component-specific theme token.
+## Custom styling and theme tokens
 
-Use `.title(...)` and `.description(...)` for status-aware metadata, `.child(...)` for arbitrary custom content, `.status(...)` on individual titles or descriptions to override inherited appearance, `.with_shimmer_style(...)` to customize a title's loading animation, and `.overlay(...)` or `.child(...)` to compose content above image previews.
+`Attachment`, `AttachmentGroup`, and every named slot implement `Styled`.
+Refinements are applied after component defaults, which gives developers control
+over the surface, spacing, media geometry, typography, and action layout:
+
+```rust
+Attachment::new()
+    .w_full()
+    .rounded(cx.theme().radius_lg)
+    .bg(cx.theme().group_box)
+    .border_color(cx.theme().ring)
+    .media(
+        AttachmentMedia::new()
+            .rounded(cx.theme().radius_lg)
+            .bg(cx.theme().primary.opacity(0.12))
+            .text_color(cx.theme().primary)
+            .child(Icon::new(IconName::File)),
+    )
+    .content(
+        AttachmentContent::new()
+            .title(AttachmentTitle::new("custom-theme.json").text_color(cx.theme().primary))
+            .description(AttachmentDescription::new("JSON · 16 KB")),
+    )
+```
+
+Prefer semantic roles from `cx.theme()` (`group_box`, `muted`, `border`,
+`destructive`, `foreground`, and their foreground counterparts) to raw colors.
+The component's default radii, spacing, and typography follow the shared design
+scale; application-specific density can be expressed with `Size` and typed
+style refinements at the composition boundary.
+
+Use `AttachmentContent::title(...)` and `.description(...)` for status-aware
+metadata, `.child(...)` for arbitrary custom content, child `.status(...)` for
+an explicit override, `AttachmentTitle::with_shimmer_style(...)` for loading
+motion, and `AttachmentMedia::overlay(...)` for controls above an image.
+
+## Accessibility and state guidance
+
+- Include the file name and useful type/size information in text. An icon-only
+  media preview is not enough to identify the attachment.
+- Put upload, retry, remove, download, and preview actions in semantic
+  `Button` or `Link` controls. A tooltip is supplemental; for the current
+  `Button` API, use `.label(...)` when the action needs an accessible name.
+- Describe `Pending`, `Uploading`, `Processing`, and `Failed` in text or a
+  control state. The dashed border, opacity, shimmer, and destructive color are
+  supporting cues.
+- Keep progress determinate when the application knows a byte or item count;
+  use `Progress` as a child rather than duplicating progress semantics in
+  `Attachment`.
+- Loading shimmer is disabled by `ShimmerText` when reduced motion is enabled.
+  Keep a readable title and description visible in that mode.
+- Ensure a vertical overlay action remains reachable from the keyboard; it must
+  not be available only through image hover.
 
 ## Component boundaries
 
-This API intentionally omits several shadcn/ui parts:
+These boundaries are deliberate:
 
-- Use `Button` directly instead of `AttachmentAction`; this preserves every Button variant, size, event, and accessibility option.
-- Compose application navigation or preview behavior instead of a full-card `AttachmentTrigger`; GPUI focus and click ownership should remain explicit.
-- `AttachmentGroup` stays thin and owns only the shared horizontal gap and overflow behavior. Use an application-owned container when snapping, selection, or custom scroll controls are required.
+- Use `Button` directly instead of an attachment-specific action component.
+  This preserves Button variants, sizes, loading, disabled behavior, focus, and
+  event handling.
 - Use `Progress` directly instead of an attachment-specific progress wrapper.
-
-The remaining named slots have stable attachment semantics and each owns meaningful default layout, so they are useful component boundaries rather than styling-only wrappers.
+- Compose preview navigation or selection in the application. There is no
+  `AttachmentTrigger` because the library cannot know whether the target is a
+  dialog, a browser, a file viewer, or a multi-select surface.
+- Use `AttachmentGroup` only for the shared horizontal row and overflow. Use an
+  application-owned container for selection, reordering, snapping, or custom
+  scroll controls.
 
 ## API reference
 
-- [Attachment]
-- [AttachmentGroup]
-- [AttachmentMedia]
-- [AttachmentContent]
-- [AttachmentTitle]
-- [AttachmentDescription]
-- [AttachmentActions]
+### `Attachment`
+
+| Method | Default | Purpose |
+| --- | --- | --- |
+| `new()` | `Complete`, `Medium`, `Horizontal`, no slots | Create an attachment. |
+| `status(AttachmentStatus)` | `Complete` | Set lifecycle styling. |
+| `axis(Axis)` | `Horizontal` | Choose horizontal or vertical layout. |
+| `with_size(Size)` | `Medium` | Set a named or custom size. |
+| `xsmall()` / `small()` / `large()` | — | Sizable shortcuts. |
+| `media(AttachmentMedia)` | none | Add a preview slot. |
+| `content(AttachmentContent)` | none | Add metadata. |
+| `actions(AttachmentActions)` | none | Add action controls. |
+
+### `AttachmentMedia`
+
+| Method | Default | Purpose |
+| --- | --- | --- |
+| `new()` | no source, no children | Create a media slot. |
+| `src(ImageSource)` | none | Render an image preview. |
+| `with_size(Size)` | inherited attachment size | Override media density. |
+| `overlay(element)` | none | Center an element over the media. |
+| `child(element)` | — | Add an icon or custom content above the preview. |
+| `Styled` methods | themed muted media | Refine geometry, radius, background, and typography. |
+
+### `AttachmentContent`, `AttachmentTitle`, and `AttachmentDescription`
+
+| Method | Default | Purpose |
+| --- | --- | --- |
+| `AttachmentContent::new()` | empty vertical metadata stack | Create content. |
+| `.title(AttachmentTitle)` | — | Add a status-aware single-line title. |
+| `.description(AttachmentDescription)` | — | Add a status-aware single-line description. |
+| `AttachmentTitle::new(text)` | no explicit child status | Create a title. |
+| `AttachmentTitle::status(status)` | inherits parent | Override title loading state. |
+| `AttachmentTitle::with_shimmer_style(style)` | default shimmer | Customize title animation. |
+| `AttachmentDescription::new(text)` | no explicit child status | Create a description. |
+| `AttachmentDescription::status(status)` | inherits parent | Override description color state. |
+| `.child(element)` | — | Add progress, badges, or custom metadata. |
+
+### `AttachmentActions` and `AttachmentGroup`
+
+| Method | Default | Purpose |
+| --- | --- | --- |
+| `AttachmentActions::new()` | empty action layout | Create the action slot. |
+| `.child(element)` | — | Add Button, Link, or another control. |
+| `AttachmentGroup::new(id)` | stable ID required | Create a horizontal scrolling group. |
+| `AttachmentGroup::child(element)` | — | Add attachments to the group. |
+
+### Related types
+
+- [`AttachmentStatus`] — `Pending`, `Uploading`, `Processing`, `Failed`, and
+  `Complete`.
+- [`Size`] — `XSmall`, `Small`, `Medium`, `Large`, or a custom `Pixels` value.
+- [`Axis`] — `Horizontal` or `Vertical` from GPUI.
+- [`ShimmerStyle`] — shared loading animation configuration.
 
 [Attachment]: https://docs.rs/gpui-component/latest/gpui_component/attachment/struct.Attachment.html
-[AttachmentGroup]: https://docs.rs/gpui-component/latest/gpui_component/attachment/struct.AttachmentGroup.html
 [AttachmentMedia]: https://docs.rs/gpui-component/latest/gpui_component/attachment/struct.AttachmentMedia.html
 [AttachmentContent]: https://docs.rs/gpui-component/latest/gpui_component/attachment/struct.AttachmentContent.html
 [AttachmentTitle]: https://docs.rs/gpui-component/latest/gpui_component/attachment/struct.AttachmentTitle.html
 [AttachmentDescription]: https://docs.rs/gpui-component/latest/gpui_component/attachment/struct.AttachmentDescription.html
 [AttachmentActions]: https://docs.rs/gpui-component/latest/gpui_component/attachment/struct.AttachmentActions.html
+[AttachmentGroup]: https://docs.rs/gpui-component/latest/gpui_component/attachment/struct.AttachmentGroup.html
+[AttachmentStatus]: https://docs.rs/gpui-component/latest/gpui_component/attachment/enum.AttachmentStatus.html
+[Size]: https://docs.rs/gpui-component/latest/gpui_component/enum.Size.html
+[Axis]: https://docs.rs/gpui/latest/gpui/enum.Axis.html
+[ShimmerStyle]: https://docs.rs/gpui-component/latest/gpui_component/shimmer/struct.ShimmerStyle.html
