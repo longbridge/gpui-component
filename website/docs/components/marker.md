@@ -75,7 +75,7 @@ Marker::new()
     .content(MarkerContent::new().text("Processing…"))
 ```
 
-The default sweep takes two seconds, uses a theme-aware highlight, and has a normalized spread of `0.3`. `spread(...)` accepts the text-relative `0.05..=1.0` range. `reverse(true)` moves the highlight from right to left.
+The default sweep takes two seconds, uses a theme-aware highlight, and has a normalized spread of `0.3`. `spread(...)` accepts the text-relative `0.05..=1.0` range. `reverse(true)` moves the highlight from right to left, and `once(true)` plays one sweep instead of repeating.
 
 ### Reuse shimmer anywhere
 
@@ -88,7 +88,7 @@ ShimmerText::new("Uploading report.pdf…")
     .text_color(cx.theme().muted_foreground)
 ```
 
-Its direct `duration(...)`, `highlight_color(...)`, `spread(...)`, and `reverse(...)` builders provide the same adjustments. `ShimmerText` implements `Styled`, inherits surrounding typography and text color, preserves wrapping and truncation, and disables animation automatically when reduced motion is enabled.
+Its direct `duration(...)`, `highlight_color(...)`, `spread(...)`, `reverse(...)`, and `once(...)` builders provide the same adjustments. `ShimmerText` implements `Styled`, inherits surrounding typography and text color, preserves wrapping and truncation, and disables animation automatically when reduced motion is enabled.
 
 ## Variants
 

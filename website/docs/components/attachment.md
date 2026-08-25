@@ -92,7 +92,7 @@ AttachmentTitle::new("design-assets.zip")
     )
 ```
 
-`ShimmerStyle::highlight_color(...)` can also replace the theme-aware default highlight.
+`ShimmerStyle::highlight_color(...)` can replace the theme-aware default highlight, and `.once(true)` limits an in-progress title to a single sweep.
 
 The existing `.child(AttachmentTitle::new(...))` and `.child(AttachmentDescription::new(...))` forms remain supported. Because `.child(...)` erases the concrete element type, these legacy children do not inherit the attachment status automatically; use the typed builders when status-aware appearance is required.
 

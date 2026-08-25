@@ -75,7 +75,7 @@ Marker::new()
     .content(MarkerContent::new().text("正在处理…"))
 ```
 
-默认动画周期为两秒，高光颜色跟随主题，归一化宽度为 `0.3`。`spread(...)` 接受相对于文本宽度的 `0.05..=1.0` 范围；`reverse(true)` 让高光从右向左移动。
+默认动画周期为两秒，高光颜色跟随主题，归一化宽度为 `0.3`。`spread(...)` 接受相对于文本宽度的 `0.05..=1.0` 范围；`reverse(true)` 让高光从右向左移动，`once(true)` 让动画只播放一次。
 
 ### 在其他组件中复用
 
@@ -88,7 +88,7 @@ ShimmerText::new("正在上传 report.pdf…")
     .text_color(cx.theme().muted_foreground)
 ```
 
-也可以通过 `duration(...)`、`highlight_color(...)`、`spread(...)` 和 `reverse(...)` 直接设置动画。`ShimmerText` 实现了 `Styled`，继承周围的文字样式和颜色，保留换行与截断行为，并在系统开启 reduced motion 时自动停止动画。
+也可以通过 `duration(...)`、`highlight_color(...)`、`spread(...)`、`reverse(...)` 和 `once(...)` 直接设置动画。`ShimmerText` 实现了 `Styled`，继承周围的文字样式和颜色，保留换行与截断行为，并在系统开启 reduced motion 时自动停止动画。
 
 ## 样式变体
 

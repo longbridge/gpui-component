@@ -22,6 +22,7 @@ pub struct ShimmerStyle {
     highlight_color: Option<Hsla>,
     spread: f32,
     reverse: bool,
+    once: bool,
 }
 
 impl ShimmerStyle {
@@ -61,8 +62,14 @@ impl ShimmerStyle {
         self
     }
 
+    /// Set whether the highlight should complete one sweep instead of looping.
+    pub fn once(mut self, once: bool) -> Self {
+        self.once = once;
+        self
+    }
+
     pub(crate) fn animation(self) -> Animation {
-        loading_animation(self.duration)
+        loading_animation(self.duration, self.once)
     }
 }
 
@@ -73,6 +80,7 @@ impl Default for ShimmerStyle {
             highlight_color: None,
             spread: DEFAULT_SHIMMER_SPREAD,
             reverse: false,
+            once: false,
         }
     }
 }
@@ -140,6 +148,12 @@ impl ShimmerText {
     /// Set whether the highlight should move from right to left.
     pub fn reverse(mut self, reverse: bool) -> Self {
         self.shimmer_style = self.shimmer_style.reverse(reverse);
+        self
+    }
+
+    /// Set whether the highlight should complete one sweep instead of looping.
+    pub fn once(mut self, once: bool) -> Self {
+        self.shimmer_style = self.shimmer_style.once(once);
         self
     }
 }
@@ -369,8 +383,12 @@ impl Element for ShimmerGlyphs {
     }
 }
 
-pub(crate) fn loading_animation(duration: Duration) -> Animation {
-    Animation::new(duration).repeat_synced()
+pub(crate) fn loading_animation(duration: Duration, once: bool) -> Animation {
+    if once {
+        Animation::new(duration)
+    } else {
+        Animation::new(duration).repeat_synced()
+    }
 }
 
 fn shimmer_highlight_color(
@@ -450,12 +468,14 @@ mod tests {
             .duration(Duration::from_secs(3))
             .highlight_color(color)
             .spread(0.45)
-            .reverse(true);
+            .reverse(true)
+            .once(true);
 
         assert_eq!(style.duration, Duration::from_secs(3));
         assert_eq!(style.highlight_color, Some(color));
         assert_eq!(style.spread, 0.45);
         assert!(style.reverse);
+        assert!(style.once);
 
         let text = ShimmerText::new("Thinking")
             .id("thinking")
@@ -463,12 +483,14 @@ mod tests {
             .duration(Duration::from_secs(4))
             .spread(0.5)
             .reverse(false)
+            .once(false)
             .opacity(0.8);
 
         assert_eq!(text.text.as_ref(), "Thinking");
         assert_eq!(text.shimmer_style.duration, Duration::from_secs(4));
         assert_eq!(text.shimmer_style.spread, 0.5);
         assert!(!text.shimmer_style.reverse);
+        assert!(!text.shimmer_style.once);
         assert_eq!(text.style.opacity, Some(0.8));
         assert_eq!(text.id, Some("thinking".into()));
 
@@ -538,9 +560,15 @@ mod tests {
         assert_eq!(custom.s, muted.s);
         assert_eq!(custom.l, muted.l);
 
-        let animation = loading_animation(Duration::from_secs(3));
+        let animation = loading_animation(Duration::from_secs(3), false);
         assert_eq!(animation.duration, Duration::from_secs(3));
         assert!(animation.synced);
+        assert!(!animation.oneshot);
         assert_eq!(animation.max_fps, None);
+
+        let animation = loading_animation(Duration::from_secs(3), true);
+        assert_eq!(animation.duration, Duration::from_secs(3));
+        assert!(animation.oneshot);
+        assert!(!animation.synced);
     }
 }

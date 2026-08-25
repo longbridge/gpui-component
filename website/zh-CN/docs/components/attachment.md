@@ -92,7 +92,7 @@ AttachmentTitle::new("design-assets.zip")
     )
 ```
 
-`ShimmerStyle::highlight_color(...)` 还可以将默认的主题高光替换成自定义颜色。
+`ShimmerStyle::highlight_color(...)` 可以将默认的主题高光替换成自定义颜色，`.once(true)` 可以让上传中或处理中的标题只播放一次动画。
 
 原有的 `.child(AttachmentTitle::new(...))` 和 `.child(AttachmentDescription::new(...))` 写法仍然可以使用。由于 `.child(...)` 会擦除元素的具体类型，通过这种方式添加的标题和描述无法自动继承 Attachment 状态；需要状态感知样式时，请使用对应的具名方法。
 
