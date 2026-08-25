@@ -5,7 +5,7 @@ use gpui::{
 use gpui_component::{
     ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt as _,
     badge::Badge,
-    marker::{Marker, MarkerContent, MarkerIcon, MarkerVariant},
+    marker::{Marker, MarkerContent, MarkerIcon, MarkerLoadingStyle, MarkerVariant},
     spinner::Spinner,
     v_flex,
 };
@@ -78,6 +78,32 @@ impl Render for MarkerStory {
                                     .child(Badge::new().count(3).child(Icon::new(IconName::Bell))),
                             )
                             .content(MarkerContent::new().child("Unread notifications")),
+                    ),
+            )
+            .child(
+                section("Loading styles")
+                    .description("Choose a spinner or a sweeping, ChatGPT-style text shimmer.")
+                    .w(px(640.))
+                    .v_flex()
+                    .gap_4()
+                    .child(
+                        Marker::new()
+                            .loading(true)
+                            .with_loading_style(MarkerLoadingStyle::Spinner)
+                            .content(MarkerContent::new().text("shadcn/ui · Loading messages…")),
+                    )
+                    .child(
+                        Marker::new()
+                            .loading(true)
+                            .with_loading_style(MarkerLoadingStyle::Shimmer)
+                            .content(MarkerContent::new().text("ChatGPT · Thinking")),
+                    )
+                    .child(
+                        Marker::new()
+                            .loading(true)
+                            .with_loading_style(MarkerLoadingStyle::Shimmer)
+                            .icon(MarkerIcon::new().child(Icon::new(IconName::Info)))
+                            .content(MarkerContent::new().text("正在探索 4 个文件…")),
                     ),
             )
             .child(

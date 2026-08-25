@@ -10,7 +10,9 @@ description: 用于会话状态、通知边界和分隔标记的紧凑组合行�
 ## 导入
 
 ```rust
-use gpui_component::marker::{Marker, MarkerContent, MarkerIcon, MarkerVariant};
+use gpui_component::marker::{
+    Marker, MarkerContent, MarkerIcon, MarkerLoadingStyle, MarkerVariant,
+};
 ```
 
 ## 状态标记
@@ -29,6 +31,28 @@ Marker::new()
 ```
 
 `MarkerIcon` 提供 Base UI 的 16 px 图标 slot，`MarkerContent` 为文本或富内容提供独立样式入口。应用专属布局仍可直接添加 child。组件有意不提供 `Online`、`Typing`、`Read` 等状态 enum，这些含义和颜色由应用负责。
+
+## Loading 样式
+
+启用 loading 时，Marker 的 variant、布局和普通状态外观保持不变：
+
+```rust
+Marker::new()
+    .loading(true)
+    .with_loading_style(MarkerLoadingStyle::Spinner)
+    .content(MarkerContent::new().text("正在加载消息…"))
+
+Marker::new()
+    .loading(true)
+    .with_loading_style(MarkerLoadingStyle::Shimmer)
+    .content(MarkerContent::new().text("正在思考…"))
+```
+
+默认 loading 样式 `Spinner` 会在没有配置 `MarkerIcon` 时自动添加紧凑的 Spinner；显式组合的图标始终优先。
+
+`Shimmer` 会为 `MarkerContent::text(...)` 提供逐字符移动的文字高光，可用于 ChatGPT 风格的 thinking 状态。现有任意 `MarkerContent` child 仍然兼容，并以轻微透明度变化呈现加载状态。Icon 和分隔线保持静止；系统开启 reduced motion 时，文字完整显示且不会播放动画。
+
+动画保留继承的文字颜色以及调用方的颜色覆盖。两种 loading 样式均可搭配任意 `MarkerVariant`，默认不启用 loading。
 
 ## 样式变体
 
@@ -91,9 +115,11 @@ Marker 是刻意保持轻量的便利组件。已有组件能够完整表达任�
 ## API 参考
 
 - [Marker]
+- [MarkerLoadingStyle]
 - [MarkerIcon]
 - [MarkerContent]
 
 [Marker]: https://docs.rs/gpui-component/latest/gpui_component/marker/struct.Marker.html
+[MarkerLoadingStyle]: https://docs.rs/gpui-component/latest/gpui_component/marker/enum.MarkerLoadingStyle.html
 [MarkerIcon]: https://docs.rs/gpui-component/latest/gpui_component/marker/struct.MarkerIcon.html
 [MarkerContent]: https://docs.rs/gpui-component/latest/gpui_component/marker/struct.MarkerContent.html

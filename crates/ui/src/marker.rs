@@ -1,9 +1,11 @@
 use gpui::{
-    AnyElement, App, IntoElement, ParentElement, RenderOnce, StyleRefinement, Styled, Window, div,
+    Animation, AnimationExt as _, AnyElement, App, HighlightStyle, IntoElement, ParentElement,
+    RenderOnce, SharedString, StyleRefinement, Styled, StyledText, Window, div,
     prelude::FluentBuilder as _,
 };
+use instant::Duration;
 
-use crate::{ActiveTheme as _, StyledExt as _, h_flex};
+use crate::{ActiveTheme as _, Sizable as _, StyledExt as _, h_flex, spinner::Spinner};
 
 /// The visual treatment used by a [`Marker`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -17,18 +19,37 @@ pub enum MarkerVariant {
     Border,
 }
 
+/// The visual treatment used while a [`Marker`] is loading.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum MarkerLoadingStyle {
+    /// Show a compact rotating spinner beside the marker content.
+    #[default]
+    Spinner,
+    /// Sweep a highlight across marker content without adding an icon.
+    Shimmer,
+}
+
+enum MarkerChild {
+    Icon(MarkerIcon),
+    Content(MarkerContent),
+    Element(AnyElement),
+}
+
 /// A compact, composable row for conversation status and system markers.
 ///
 /// `Marker` intentionally accepts arbitrary children. An icon, text, spinner,
 /// or action can be composed directly without introducing fixed icon and
 /// content slots. Use [`Styled`] methods on the marker to refine its layout or
-/// typography for an application-specific use.
+/// typography for an application-specific use. Loading effects only affect
+/// configured content slots, so icons and separators retain their appearance.
 #[derive(IntoElement)]
 pub struct Marker {
     style: StyleRefinement,
     separator_style: StyleRefinement,
     variant: MarkerVariant,
-    children: Vec<AnyElement>,
+    loading: bool,
+    loading_style: MarkerLoadingStyle,
+    children: Vec<MarkerChild>,
 }
 
 impl Marker {
@@ -38,6 +59,8 @@ impl Marker {
             style: StyleRefinement::default(),
             separator_style: StyleRefinement::default(),
             variant: MarkerVariant::default(),
+            loading: false,
+            loading_style: MarkerLoadingStyle::default(),
             children: Vec::new(),
         }
     }
@@ -45,6 +68,18 @@ impl Marker {
     /// Set the visual treatment of the marker.
     pub fn with_variant(mut self, variant: MarkerVariant) -> Self {
         self.variant = variant;
+        self
+    }
+
+    /// Set whether the marker should display its configured loading effect.
+    pub fn loading(mut self, loading: bool) -> Self {
+        self.loading = loading;
+        self
+    }
+
+    /// Set the visual treatment used when [`Self::loading`] is enabled.
+    pub fn with_loading_style(mut self, loading_style: MarkerLoadingStyle) -> Self {
+        self.loading_style = loading_style;
         self
     }
 
@@ -56,13 +91,13 @@ impl Marker {
 
     /// Add a configured icon slot.
     pub fn icon(mut self, icon: MarkerIcon) -> Self {
-        self.children.push(icon.into_any_element());
+        self.children.push(MarkerChild::Icon(icon));
         self
     }
 
     /// Add a configured content slot.
     pub fn content(mut self, content: MarkerContent) -> Self {
-        self.children.push(content.into_any_element());
+        self.children.push(MarkerChild::Content(content));
         self
     }
 }
@@ -75,7 +110,8 @@ impl Default for Marker {
 
 impl ParentElement for Marker {
     fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
-        self.children.extend(elements);
+        self.children
+            .extend(elements.into_iter().map(MarkerChild::Element));
     }
 }
 
@@ -89,7 +125,21 @@ impl RenderOnce for Marker {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let tokens = cx.theme().semantic_tokens();
         let variant = self.variant;
+        let loading = self.loading;
+        let loading_style = self.loading_style;
+        let has_icon = self
+            .children
+            .iter()
+            .any(|child| matches!(child, MarkerChild::Icon(_)));
         let separator_style = self.separator_style;
+        let children = self.children.into_iter().map(move |child| match child {
+            MarkerChild::Icon(icon) => icon.into_any_element(),
+            MarkerChild::Content(mut content) => {
+                content.shimmer = loading && loading_style == MarkerLoadingStyle::Shimmer;
+                content.into_any_element()
+            }
+            MarkerChild::Element(element) => element,
+        });
 
         h_flex()
             .w_full()
@@ -118,7 +168,11 @@ impl RenderOnce for Marker {
                         .refine_style(&separator_style),
                 )
             })
-            .children(self.children)
+            .when(
+                loading && loading_style == MarkerLoadingStyle::Spinner && !has_icon,
+                |this| this.child(MarkerIcon::new().child(Spinner::new().xsmall())),
+            )
+            .children(children)
             .when(variant == MarkerVariant::Separator, |this| {
                 this.child(
                     div()
@@ -187,7 +241,13 @@ impl RenderOnce for MarkerIcon {
 #[derive(IntoElement)]
 pub struct MarkerContent {
     style: StyleRefinement,
-    children: Vec<AnyElement>,
+    shimmer: bool,
+    children: Vec<MarkerContentChild>,
+}
+
+enum MarkerContentChild {
+    Text(SharedString),
+    Element(AnyElement),
 }
 
 impl MarkerContent {
@@ -195,8 +255,17 @@ impl MarkerContent {
     pub fn new() -> Self {
         Self {
             style: StyleRefinement::default(),
+            shimmer: false,
             children: Vec::new(),
         }
+    }
+
+    /// Add text that can receive a character-by-character loading shimmer.
+    ///
+    /// Arbitrary children remain supported through [`ParentElement`].
+    pub fn text(mut self, text: impl Into<SharedString>) -> Self {
+        self.children.push(MarkerContentChild::Text(text.into()));
+        self
     }
 }
 
@@ -208,7 +277,8 @@ impl Default for MarkerContent {
 
 impl ParentElement for MarkerContent {
     fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
-        self.children.extend(elements);
+        self.children
+            .extend(elements.into_iter().map(MarkerContentChild::Element));
     }
 }
 
@@ -219,12 +289,81 @@ impl Styled for MarkerContent {
 }
 
 impl RenderOnce for MarkerContent {
-    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
-        div()
-            .min_w_0()
-            .refine_style(&self.style)
-            .children(self.children)
+    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        let animate = self.shimmer && !cx.reduce_motion();
+        let has_text = self
+            .children
+            .iter()
+            .any(|child| matches!(child, MarkerContentChild::Text(_)));
+        let base_opacity = self.style.opacity.unwrap_or(1.);
+        let children =
+            self.children
+                .into_iter()
+                .enumerate()
+                .map(move |(index, child)| match child {
+                    MarkerContentChild::Text(text) if animate => {
+                        let shimmer_text = text.clone();
+
+                        StyledText::new(text)
+                            .with_animation(
+                                ("marker-loading-text", index),
+                                loading_animation(),
+                                move |this, phase| {
+                                    this.with_highlights(shimmer_highlights(&shimmer_text, phase))
+                                },
+                            )
+                            .into_any_element()
+                    }
+                    MarkerContentChild::Text(text) => StyledText::new(text).into_any_element(),
+                    MarkerContentChild::Element(element) => element,
+                });
+
+        let content = div().min_w_0().refine_style(&self.style).children(children);
+
+        if animate && !has_text {
+            content
+                .with_animation(
+                    "marker-loading-content",
+                    loading_animation(),
+                    move |this, phase| {
+                        let highlight = (phase * std::f32::consts::TAU).cos().mul_add(0.5, 0.5);
+                        this.opacity(base_opacity * highlight.mul_add(0.4, 0.6))
+                    },
+                )
+                .into_any_element()
+        } else {
+            content.into_any_element()
+        }
     }
+}
+
+fn loading_animation() -> Animation {
+    Animation::new(Duration::from_secs(2))
+        .repeat_synced()
+        .with_max_fps(24.)
+}
+
+fn shimmer_highlights(text: &str, phase: f32) -> Vec<(std::ops::Range<usize>, HighlightStyle)> {
+    let character_count = text.chars().count() as f32;
+    let center = phase.mul_add(1.7, -0.35);
+
+    text.char_indices()
+        .enumerate()
+        .map(|(index, (offset, character))| {
+            let position = (index as f32 + 0.5) / character_count;
+            let distance = ((position - center).abs() / 0.32).min(1.);
+            let intensity = 1. - distance;
+            let intensity = intensity * intensity * (3. - 2. * intensity);
+
+            (
+                offset..offset + character.len_utf8(),
+                HighlightStyle {
+                    fade_out: Some((1. - intensity) * 0.55),
+                    ..Default::default()
+                },
+            )
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -235,14 +374,81 @@ mod tests {
     fn test_marker_builder() {
         let marker = Marker::new()
             .with_variant(MarkerVariant::Separator)
+            .loading(true)
+            .with_loading_style(MarkerLoadingStyle::Shimmer)
             .separator_style(StyleRefinement::default())
             .content(MarkerContent::new().child("Today"));
 
         assert_eq!(marker.variant, MarkerVariant::Separator);
+        assert!(marker.loading);
+        assert_eq!(marker.loading_style, MarkerLoadingStyle::Shimmer);
         assert_eq!(marker.children.len(), 1);
         assert_eq!(Marker::default().variant, MarkerVariant::Plain);
+        assert!(!Marker::default().loading);
+        assert_eq!(Marker::default().loading_style, MarkerLoadingStyle::Spinner);
+
+        let content_first = Marker::new()
+            .content(MarkerContent::new().text("Thinking"))
+            .with_loading_style(MarkerLoadingStyle::Shimmer)
+            .loading(true);
+        assert!(content_first.loading);
+        assert_eq!(content_first.loading_style, MarkerLoadingStyle::Shimmer);
+        assert!(matches!(
+            &content_first.children[0],
+            MarkerChild::Content(_)
+        ));
+
+        let custom_icon = Marker::new()
+            .loading(true)
+            .icon(MarkerIcon::new().child("custom"))
+            .content(MarkerContent::new().text("Loading"));
+        assert_eq!(custom_icon.children.len(), 2);
+        assert!(matches!(&custom_icon.children[0], MarkerChild::Icon(_)));
+
+        let styled = Marker::new().opacity(0.37).child("Status").child("Details");
+
+        assert_eq!(styled.style.opacity, Some(0.37));
+        assert_eq!(styled.children.len(), 2);
 
         let icon = MarkerIcon::new().child("icon");
         assert_eq!(icon.children.len(), 1);
+
+        let content = MarkerContent::new()
+            .text("Thinking")
+            .child("…")
+            .text("正在思考");
+        assert_eq!(content.children.len(), 3);
+        assert!(matches!(&content.children[0], MarkerContentChild::Text(_)));
+        assert!(matches!(
+            &content.children[1],
+            MarkerContentChild::Element(_)
+        ));
+        assert!(matches!(&content.children[2], MarkerContentChild::Text(_)));
+    }
+
+    #[test]
+    fn test_marker_shimmer_highlights_preserve_utf8_boundaries() {
+        let text = "正在思考 🧠";
+        let highlights = shimmer_highlights(text, 0.5);
+
+        assert_eq!(highlights.len(), text.chars().count());
+        assert_eq!(highlights.first().map(|(range, _)| range.start), Some(0));
+        assert_eq!(
+            highlights.last().map(|(range, _)| range.end),
+            Some(text.len())
+        );
+        assert!(highlights.iter().all(|(range, style)| {
+            text.is_char_boundary(range.start)
+                && text.is_char_boundary(range.end)
+                && style
+                    .fade_out
+                    .is_some_and(|fade| (0. ..=0.55).contains(&fade))
+        }));
+
+        let early = shimmer_highlights("Thinking", 0.25);
+        let late = shimmer_highlights("Thinking", 0.75);
+        assert!(early[0].1.fade_out.unwrap() < early[early.len() - 1].1.fade_out.unwrap());
+        assert!(late[0].1.fade_out.unwrap() > late[late.len() - 1].1.fade_out.unwrap());
+        assert!(shimmer_highlights("", 0.5).is_empty());
     }
 }

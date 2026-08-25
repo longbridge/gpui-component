@@ -10,7 +10,9 @@ description: A compact composable row for conversation status, notifications, an
 ## Import
 
 ```rust
-use gpui_component::marker::{Marker, MarkerContent, MarkerIcon, MarkerVariant};
+use gpui_component::marker::{
+    Marker, MarkerContent, MarkerIcon, MarkerLoadingStyle, MarkerVariant,
+};
 ```
 
 ## Status marker
@@ -29,6 +31,28 @@ Marker::new()
 ```
 
 `MarkerIcon` supplies the Base UI 16 px icon slot, while `MarkerContent` gives text or rich content its own style target. Direct children remain supported for application-specific layouts. The component intentionally has no `Online`, `Typing`, `Read`, or other status enum. Those meanings and colors belong to the application.
+
+## Loading styles
+
+Enable loading without changing the marker variant, layout, or normal appearance:
+
+```rust
+Marker::new()
+    .loading(true)
+    .with_loading_style(MarkerLoadingStyle::Spinner)
+    .content(MarkerContent::new().text("Loading messages…"))
+
+Marker::new()
+    .loading(true)
+    .with_loading_style(MarkerLoadingStyle::Shimmer)
+    .content(MarkerContent::new().text("Thinking…"))
+```
+
+`Spinner` is the default loading style and adds a compact spinner when no `MarkerIcon` was supplied. An explicitly composed icon always takes precedence.
+
+`Shimmer` sweeps a highlight across text added with `MarkerContent::text(...)`, matching the text-only thinking treatment used by ChatGPT. Existing arbitrary `MarkerContent` children remain supported through a gentle opacity pulse. Icons and separator lines stay static, and enabling reduced motion displays clear, non-animated text.
+
+The animation respects inherited and explicitly customized text colors. Both loading styles work with every `MarkerVariant`, and loading is disabled by default.
 
 ## Variants
 
@@ -91,9 +115,11 @@ Use Marker when those contents need one consistent conversation-row surface or m
 ## API reference
 
 - [Marker]
+- [MarkerLoadingStyle]
 - [MarkerIcon]
 - [MarkerContent]
 
 [Marker]: https://docs.rs/gpui-component/latest/gpui_component/marker/struct.Marker.html
+[MarkerLoadingStyle]: https://docs.rs/gpui-component/latest/gpui_component/marker/enum.MarkerLoadingStyle.html
 [MarkerIcon]: https://docs.rs/gpui-component/latest/gpui_component/marker/struct.MarkerIcon.html
 [MarkerContent]: https://docs.rs/gpui-component/latest/gpui_component/marker/struct.MarkerContent.html
