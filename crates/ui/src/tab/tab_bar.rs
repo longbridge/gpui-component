@@ -14,7 +14,7 @@ use crate::button::{Button, ButtonVariants as _};
 use crate::menu::{DropdownMenu as _, PopupMenuItem};
 use crate::{
     ActiveTheme, ElementExt, Icon, InteractiveElementExt as _, Selectable, Sizable, Size,
-    StyledExt, h_flex,
+    StyledExt, h_flex, styled::raised_shadow,
 };
 
 /// Slide motion for the selected-tab indicator.
@@ -265,7 +265,7 @@ impl TabBar {
                         .h(inner_height)
                         .bg(cx.theme().tokens.background)
                         .rounded(inner_radius)
-                        .shadow_sm(),
+                        .shadow(raised_shadow()),
                 ),
                 TabVariant::Pill => el.flex().items_center().child(
                     div()
