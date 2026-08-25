@@ -44,6 +44,24 @@ TextView::markdown("preview", markdown_source)
 TextView::html("html-preview", "<strong>Hello</strong>")
 ```
 
+### Clamp to a number of lines
+
+Use `max_lines` to render a bounded preview of rich content — for example a
+collapsed "show more" section. The view's height is capped at `n` × the base
+line height, and the clip snaps up to the nearest whole-line boundary so a
+line of glyphs is never cut in half, across paragraphs, lists, headings, code
+blocks and tables:
+
+```rust
+TextView::markdown("preview", markdown_source).max_lines(5)
+```
+
+`TextViewState::is_clamped()` reports whether the previous painted frame
+actually clipped content, so the caller can decide whether to render an
+"expand" affordance. With paragraph spacing or oversized headings, fewer than
+`n` full lines may fit inside the capped height. `max_lines` only applies to
+the fit-content mode and is ignored when `scrollable` is set.
+
 ## Link Click Handling
 
 Use `on_link_click` when links should be routed by the application instead of

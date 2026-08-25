@@ -2,9 +2,10 @@ use std::sync::Arc;
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, App, Bounds, ClickEvent, Element, ElementId, Entity, GlobalElementId, Hitbox,
-    HitboxBehavior, InspectorElementId, InteractiveElement, IntoElement, LayoutId, MouseButton,
-    ParentElement, Pixels, SharedString, StyleRefinement, Styled, Window, div,
+    AnyElement, App, Bounds, ClickEvent, ContentMask, Element, ElementId, Entity, GlobalElementId,
+    Hitbox, HitboxBehavior, InspectorElementId, InteractiveElement, IntoElement, LayoutId,
+    MouseButton, ParentElement, Pixels, Refineable as _, SharedString, StyleRefinement, Styled,
+    Window, div, point, px,
 };
 
 use crate::StyledExt;
@@ -12,7 +13,7 @@ use crate::scroll::ScrollableElement;
 use crate::text::TextViewFormat;
 use crate::text::markdown_ext::{MarkdownExtensions, MarkdownNode, MarkdownPlugin};
 use crate::text::node::{CodeBlock, TableData};
-use crate::text::state::{SelectionFormat, TextViewState};
+use crate::text::state::{LineSpan, SelectionFormat, TextViewState};
 use crate::{global_state::UiGlobalState, text::TextViewStyle};
 
 /// Type for code block actions generator function.
@@ -73,6 +74,7 @@ pub struct TextView {
     selectable: bool,
     selection_format: SelectionFormat,
     scrollable: bool,
+    max_lines: Option<usize>,
     code_block_actions: Option<Arc<CodeBlockActionsFn>>,
     table_actions: Option<Arc<TableActionsFn>>,
     link_click_handler: Option<Arc<LinkClickHandlerFn>>,
@@ -115,6 +117,7 @@ impl TextView {
             selectable: false,
             selection_format: SelectionFormat::default(),
             scrollable: false,
+            max_lines: None,
             code_block_actions: None,
             table_actions: None,
             link_click_handler: None,
@@ -134,6 +137,7 @@ impl TextView {
             selectable: false,
             selection_format: SelectionFormat::default(),
             scrollable: false,
+            max_lines: None,
             code_block_actions: None,
             table_actions: None,
             link_click_handler: None,
@@ -153,6 +157,7 @@ impl TextView {
             selectable: false,
             selection_format: SelectionFormat::default(),
             scrollable: false,
+            max_lines: None,
             code_block_actions: None,
             table_actions: None,
             link_click_handler: None,
@@ -195,6 +200,23 @@ impl TextView {
     /// This mode is suitable for small content, such as a few lines of text, a label, etc.
     pub fn scrollable(mut self, scrollable: bool) -> Self {
         self.scrollable = scrollable;
+        self
+    }
+
+    /// Clamp the rendered content to at most `n` lines of body text.
+    ///
+    /// The view's height is capped at `n` × the base line height, and the
+    /// paint-time clip snaps up to the nearest whole-line boundary so a line
+    /// of glyphs is never cut in half — across paragraphs, lists, headings,
+    /// code blocks and tables. Check [`TextViewState::is_clamped`] (reflects
+    /// the previous painted frame) to decide whether to show an "expand"
+    /// affordance.
+    ///
+    /// With paragraph spacing or oversized headings, fewer than `n` full
+    /// lines may fit inside the capped height. Ignored when
+    /// [`Self::scrollable`] is set.
+    pub fn max_lines(mut self, max_lines: usize) -> Self {
+        self.max_lines = Some(max_lines);
         self
     }
 
@@ -311,9 +333,45 @@ pub struct TextViewLayoutState {
     element: AnyElement,
 }
 
+pub struct TextViewPrepaintState {
+    hitbox: Hitbox,
+    /// Absolute bottom of the `max_lines` clip when content was clipped this
+    /// frame — the largest whole-line boundary that fits inside the box.
+    clip_bottom: Option<Pixels>,
+}
+
+/// The largest whole-line bottom edge (derived from the spans reported by
+/// descendant `Inline`s) that fits within `box_bottom`, plus whether any
+/// reported line extends past the box (content is clipped).
+fn snapped_clip_bottom(spans: &[LineSpan], box_bottom: Pixels) -> (Option<Pixels>, bool) {
+    // Absorb sub-pixel layout jitter so a line that exactly touches the box
+    // bottom still counts as fitting.
+    let epsilon = px(1.);
+    let mut best: Option<Pixels> = None;
+    let mut clipped = false;
+
+    for span in spans {
+        if span.line_height <= px(0.) {
+            continue;
+        }
+        if span.bottom > box_bottom + epsilon {
+            clipped = true;
+        }
+        let mut bottom = span.top + span.line_height;
+        while bottom <= span.bottom + epsilon && bottom <= box_bottom + epsilon {
+            if best.is_none_or(|best| bottom > best) {
+                best = Some(bottom);
+            }
+            bottom += span.line_height;
+        }
+    }
+
+    (best, clipped)
+}
+
 impl Element for TextView {
     type RequestLayoutState = TextViewLayoutState;
-    type PrepaintState = Hitbox;
+    type PrepaintState = TextViewPrepaintState;
 
     fn id(&self) -> Option<ElementId> {
         Some(self.id.clone())
@@ -351,6 +409,10 @@ impl Element for TextView {
             state
         };
 
+        // `max_lines` needs the whole document laid out to snap the clip to a
+        // whole line, so it only applies to the fit-content mode.
+        let max_lines = self.max_lines.filter(|_| !self.scrollable);
+
         state.update(cx, |state, cx| {
             state.code_block_actions = self.code_block_actions.clone();
             state.table_actions = self.table_actions.clone();
@@ -359,6 +421,7 @@ impl Element for TextView {
             state.selectable = self.selectable;
             state.selection_format = self.selection_format;
             state.scrollable = self.scrollable;
+            state.max_lines = max_lines;
             if state.text_view_style != self.text_view_style {
                 state.selection_revision = state.selection_revision.wrapping_add(1);
             }
@@ -372,12 +435,22 @@ impl Element for TextView {
         let focus_handle = state.read(cx).focus_handle.clone();
         let list_state = state.read(cx).list_state.clone();
 
+        // Cap the box at `n` body-text lines (the effective text style may be
+        // refined by this view's own style, e.g. `.text_sm()`); hidden
+        // overflow also clips descendant hitboxes to the box during prepaint.
+        let max_lines_cap = max_lines.map(|max_lines| {
+            let mut text_style = window.text_style();
+            text_style.refine(&self.style.text);
+            text_style.line_height_in_pixels(window.rem_size()) * max_lines as f32
+        });
+
         let mut el = div()
             .key_context("TextView")
             .track_focus(&focus_handle)
             .when(self.scrollable, |this| {
                 this.size_full().vertical_scrollbar(&list_state)
             })
+            .when_some(max_lines_cap, |this, cap| this.max_h(cap).overflow_hidden())
             .relative()
             .on_action(move |_: &crate::input::Copy, window, cx| {
                 let text = gpui_base::TextSelection::selected_text(window, cx)
@@ -406,17 +479,60 @@ impl Element for TextView {
         window: &mut Window,
         cx: &mut App,
     ) -> Self::PrepaintState {
+        let state = request_layout.state.clone();
+        let max_lines_active = state.read(cx).max_lines.is_some();
+        if max_lines_active {
+            if let Ok(mut line_spans) = state.read(cx).line_spans.lock() {
+                line_spans.clear();
+            }
+            // Descendant `Inline`s report their line spans through the state
+            // stack during prepaint (in addition to the paint-time push below).
+            UiGlobalState::global_mut(cx)
+                .text_view_state_stack
+                .push(state.clone());
+        }
         request_layout.element.prepaint(window, cx);
-        window.insert_hitbox(bounds, HitboxBehavior::Normal)
+        if max_lines_active {
+            UiGlobalState::global_mut(cx).text_view_state_stack.pop();
+        }
+
+        let mut clip_bottom = None;
+        if max_lines_active {
+            let (snapped, clipped) = {
+                let state = state.read(cx);
+                let line_spans = state
+                    .line_spans
+                    .lock()
+                    .map(|spans| spans.clone())
+                    .unwrap_or_default();
+                snapped_clip_bottom(&line_spans, bounds.bottom())
+            };
+            // Notify on change so observers (e.g. an "expand" button gated on
+            // `is_clamped`) re-render once the flag flips.
+            if state.read(cx).clamped != clipped {
+                state.update(cx, |state, cx| {
+                    state.clamped = clipped;
+                    cx.notify();
+                });
+            }
+            if clipped {
+                clip_bottom = snapped.filter(|bottom| *bottom < bounds.bottom() - px(0.5));
+            }
+        }
+
+        TextViewPrepaintState {
+            hitbox: window.insert_hitbox(bounds, HitboxBehavior::Normal),
+            clip_bottom,
+        }
     }
 
     fn paint(
         &mut self,
         _: Option<&GlobalElementId>,
         _: Option<&InspectorElementId>,
-        _bounds: Bounds<Pixels>,
+        bounds: Bounds<Pixels>,
         request_layout: &mut Self::RequestLayoutState,
-        hitbox: &mut Self::PrepaintState,
+        prepaint: &mut Self::PrepaintState,
         window: &mut Window,
         cx: &mut App,
     ) {
@@ -428,7 +544,18 @@ impl Element for TextView {
         UiGlobalState::global_mut(cx)
             .text_view_state_stack
             .push(state.clone());
-        request_layout.element.paint(window, cx);
+        if let Some(clip_bottom) = prepaint.clip_bottom {
+            // Snap the `max_lines` clip to the last whole line that fits, so a
+            // line of glyphs is never cut in half.
+            let mask = ContentMask {
+                bounds: Bounds::from_corners(bounds.origin, point(bounds.right(), clip_bottom)),
+            };
+            window.with_content_mask(Some(mask), |window| {
+                request_layout.element.paint(window, cx);
+            });
+        } else {
+            request_layout.element.paint(window, cx);
+        }
         UiGlobalState::global_mut(cx).text_view_state_stack.pop();
 
         if self.selectable {
@@ -442,7 +569,7 @@ impl Element for TextView {
             };
             let document_order = UiGlobalState::global_mut(cx).next_selection_document_order();
             adapter.register(
-                hitbox.clone(),
+                prepaint.hitbox.clone(),
                 content_bounds,
                 scroll_offset,
                 document_order,
@@ -738,6 +865,102 @@ mod tests {
         let cx: &mut VisualTestContext = cx;
 
         cx.simulate_click(point(px(10.), px(34.)), Modifiers::default());
+
+        assert_eq!(cx.opened_url(), None);
+    }
+
+    struct MaxLinesTestRoot {
+        text_view: Entity<TextViewState>,
+        max_lines: usize,
+    }
+
+    impl MaxLinesTestRoot {
+        fn new(text: &str, max_lines: usize, cx: &mut Context<Self>) -> Self {
+            let text_view = cx.new(|cx| TextViewState::markdown(text, cx));
+            Self {
+                text_view,
+                max_lines,
+            }
+        }
+    }
+
+    impl Render for MaxLinesTestRoot {
+        fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+            div()
+                .w(px(200.))
+                .child(TextView::new(&self.text_view).max_lines(self.max_lines))
+        }
+    }
+
+    #[test]
+    fn snapped_clip_bottom_snaps_to_whole_lines() {
+        use super::snapped_clip_bottom;
+        use crate::text::state::LineSpan;
+
+        let spans = [
+            // Lines end at 20 / 40 / 60.
+            LineSpan {
+                top: px(0.),
+                bottom: px(60.),
+                line_height: px(20.),
+            },
+            // A second block after an 8px gap; lines end at 88 / 108 / 128.
+            LineSpan {
+                top: px(68.),
+                bottom: px(128.),
+                line_height: px(20.),
+            },
+        ];
+
+        // A box ending mid-line snaps down to the last whole line above it.
+        let (snap, clipped) = snapped_clip_bottom(&spans, px(100.));
+        assert_eq!(snap, Some(px(88.)));
+        assert!(clipped);
+
+        // A box that fits everything reports no clipping.
+        let (snap, clipped) = snapped_clip_bottom(&spans, px(130.));
+        assert_eq!(snap, Some(px(128.)));
+        assert!(!clipped);
+    }
+
+    #[gpui::test]
+    fn max_lines_clamps_overflowing_content(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (root, cx) = cx.add_window_view(|_, cx| {
+            MaxLinesTestRoot::new(
+                "first\n\nsecond\n\nthird\n\nfourth\n\nfifth\n\nsixth",
+                2,
+                cx,
+            )
+        });
+        let cx: &mut VisualTestContext = cx;
+
+        assert!(root.read_with(cx, |root, cx| root.text_view.read(cx).is_clamped()));
+    }
+
+    #[gpui::test]
+    fn max_lines_leaves_short_content_unclamped(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (root, cx) = cx.add_window_view(|_, cx| MaxLinesTestRoot::new("only line", 3, cx));
+        let cx: &mut VisualTestContext = cx;
+
+        assert!(!root.read_with(cx, |root, cx| root.text_view.read(cx).is_clamped()));
+    }
+
+    #[gpui::test]
+    fn max_lines_disables_links_hidden_by_the_clamp(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (_, cx) = cx.add_window_view(|_, cx| {
+            MaxLinesTestRoot::new(
+                "first\n\nsecond\n\nthird\n\n[hidden](https://example.com)",
+                2,
+                cx,
+            )
+        });
+        let cx: &mut VisualTestContext = cx;
+
+        // Click far below the clamped box, where the link would sit unclamped.
+        cx.simulate_click(point(px(10.), px(150.)), Modifiers::default());
 
         assert_eq!(cx.opened_url(), None);
     }

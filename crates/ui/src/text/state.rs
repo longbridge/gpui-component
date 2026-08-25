@@ -1,5 +1,10 @@
 use futures::Stream as _;
-use std::{ops::RangeInclusive, pin::Pin, sync::Arc, task::Poll};
+use std::{
+    ops::RangeInclusive,
+    pin::Pin,
+    sync::{Arc, Mutex},
+    task::Poll,
+};
 
 use gpui::{
     App, AppContext as _, Bounds, Context, FocusHandle, IntoElement, KeyBinding, ListState,
@@ -67,6 +72,16 @@ pub enum SelectionFormat {
     Source,
 }
 
+/// One text element's laid-out vertical extent, reported by `Inline` during
+/// prepaint so `TextView` can snap its `max_lines` clip to a whole-line
+/// boundary.
+#[derive(Clone, Copy)]
+pub(super) struct LineSpan {
+    pub(super) top: Pixels,
+    pub(super) bottom: Pixels,
+    pub(super) line_height: Pixels,
+}
+
 /// The state of a TextView.
 pub struct TextViewState {
     pub(super) focus_handle: FocusHandle,
@@ -78,6 +93,12 @@ pub struct TextViewState {
     pub(super) selectable: bool,
     pub(super) selection_format: SelectionFormat,
     pub(super) scrollable: bool,
+    pub(super) max_lines: Option<usize>,
+    /// Line spans reported by `Inline` during prepaint (collected only while
+    /// [`Self::max_lines`] is set); cleared by `TextView` at each frame start.
+    pub(super) line_spans: Arc<Mutex<Vec<LineSpan>>>,
+    /// Whether the last painted frame clipped content due to `max_lines`.
+    pub(super) clamped: bool,
     pub(super) text_view_style: TextViewStyle,
     pub(super) code_block_actions: Option<std::sync::Arc<CodeBlockActionsFn>>,
     pub(super) table_actions: Option<std::sync::Arc<TableActionsFn>>,
@@ -168,6 +189,9 @@ impl TextViewState {
             selectable: false,
             selection_format: SelectionFormat::default(),
             scrollable: false,
+            max_lines: None,
+            line_spans: Arc::default(),
+            clamped: false,
             // Measure all blocks (not just visible ones) so the scrollbar
             // thumb size stays stable. Without this, off-screen blocks count
             // as zero height until scrolled into view, which makes the
@@ -242,6 +266,12 @@ impl TextViewState {
         }
         self.scrollable = scrollable;
         cx.notify();
+    }
+
+    /// Whether the last painted frame clipped content because of
+    /// [`TextView::max_lines`](crate::text::TextView::max_lines).
+    pub fn is_clamped(&self) -> bool {
+        self.clamped
     }
 
     /// Set the text content.
