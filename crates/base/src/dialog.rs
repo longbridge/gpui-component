@@ -468,18 +468,13 @@ impl ParentElement for Dialog {
 }
 
 impl RenderOnce for Dialog {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, _: &mut App) -> impl IntoElement {
         let open = self
             .handle
             .as_ref()
             .map_or(self.open, DialogHandle::is_open);
         if !open {
             return div().into_any_element();
-        }
-        // A modal owns the window focus: reclaim it when focus escapes, or
-        // Confirm/Cancel (dispatched along the focus path) silently miss this host.
-        if self.topmost && !self.focus.contains_focused(window, cx) {
-            window.focus(&self.focus, cx);
         }
         let request_close = self.request_close;
         let cancel = self.on_cancel.clone();
