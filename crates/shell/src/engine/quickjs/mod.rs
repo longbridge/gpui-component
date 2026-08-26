@@ -1636,7 +1636,7 @@ fn js_setup_error(error: JsError) -> anyhow::Error {
 
 #[cfg(test)]
 mod module_lifecycle_tests {
-    use super::AppModules;
+    use super::{AppModules, ShellRuntime};
 
     #[test]
     fn registrations_for_the_same_root_are_generation_scoped_and_leased() {
@@ -1682,5 +1682,71 @@ mod module_lifecycle_tests {
                 .generation,
             second.generation()
         );
+    }
+
+    #[test]
+    fn an_older_same_root_class_keeps_its_import_generation() {
+        let runtime = ShellRuntime::new_isolated().expect("runtime");
+        let root = std::env::temp_dir().join(format!(
+            "gpui-shell-same-root-generation-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).expect("application directory");
+        std::fs::write(
+            root.join("main.js"),
+            "import './feature.js';\n\
+             export default class Panel {\n\
+               static async label() { return (await import('./feature.js')).label; }\n\
+             }",
+        )
+        .expect("entry module");
+        std::fs::write(root.join("feature.js"), "export const label = 'first';")
+            .expect("first feature");
+
+        let first = runtime.load_app(&root, "main.js").expect("first load");
+        std::fs::write(root.join("feature.js"), "export const label = 'second';")
+            .expect("second feature");
+        let second = runtime.load_app(&root, "main.js").expect("second load");
+
+        let label = |view_type: &super::ViewType| {
+            runtime
+                .with_js(|ctx| {
+                    let class = view_type.value.clone().restore(ctx)?;
+                    let label: rquickjs::Function = class.get("label")?;
+                    label.call::<_, rquickjs::Promise>(())?.finish::<String>()
+                })
+                .expect("dynamic import")
+        };
+        assert_eq!(label(&first), "first");
+        assert_eq!(label(&second), "second");
+
+        drop(first);
+        assert_eq!(runtime.app_modules.registration_count(), 1);
+        drop(second);
+        assert_eq!(runtime.app_modules.registration_count(), 0);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn a_failed_load_releases_its_module_registration() {
+        let runtime = ShellRuntime::new_isolated().expect("runtime");
+        let root = std::env::temp_dir().join(format!(
+            "gpui-shell-failed-module-generation-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).expect("application directory");
+        std::fs::write(
+            root.join("main.js"),
+            "import './missing.js'; export default class Panel {}",
+        )
+        .expect("entry module");
+
+        runtime
+            .load_app(&root, "main.js")
+            .expect_err("missing import must reject the load");
+        assert_eq!(runtime.app_modules.registration_count(), 0);
+        let _ = std::fs::remove_dir_all(root);
     }
 }
