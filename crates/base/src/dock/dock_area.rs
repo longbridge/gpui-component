@@ -137,11 +137,8 @@ pub struct DockArea {
     tiles: HashMap<NodeId, Cached<TilesState>>,
     panels: HashMap<PanelId, Arc<dyn PanelView>>,
 
-    /// Each tab-group leaf's on-screen rectangle, recorded during render
-    /// (via `on_prepaint`). Lets a host paint spatial overlays -- e.g. a
-    /// vimium-style pane picker badging each pane -- which the pure-data
-    /// tree cannot express. Stale entries for removed nodes are harmless:
-    /// node ids are unique, so a gone node is simply never queried.
+    /// Tab-group leaf rects, recorded in `on_prepaint`, for host-painted
+    /// spatial overlays. Pruned to live nodes on `reconcile`.
     node_bounds: HashMap<NodeId, Bounds<Pixels>>,
 
     locked: bool,
@@ -1111,6 +1108,8 @@ impl DockArea {
         self.groups.retain(|node, _| live_nodes.contains(node));
         self.splits.retain(|node, _| live_nodes.contains(node));
         self.tiles.retain(|node, _| live_nodes.contains(node));
+        // A removed leaf must report no bounds, not a stale rect.
+        self.node_bounds.retain(|node, _| live_nodes.contains(node));
 
         let departed: Vec<Arc<dyn PanelView>> = self
             .panels

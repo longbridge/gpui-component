@@ -502,12 +502,16 @@ impl TabGroupSkin {
                                 Some(tab_name) => this.child(tab_name),
                                 None => this.child(panel_title(panel, window, cx)),
                             })
-                            // A per-tab close (X) button, shown only for a
-                            // panel that reports itself closable. Stops
-                            // propagation so the click never also selects the
-                            // tab, and closes by id so it targets this tab
-                            // regardless of which one is active.
-                            .when(panel.closable(cx), |this| {
+                            // A per-tab close (X) button, shown only when the
+                            // panel reports itself closable and the group can
+                            // actually close it. `is_draggable` is the same
+                            // gate `TabGroup::close_panel` checks -- false for a
+                            // locked layout or a group's last visible panel --
+                            // so the button never draws when a click would do
+                            // nothing. Stops propagation so the click never also
+                            // selects the tab, and closes by id so it targets
+                            // this tab regardless of which one is active.
+                            .when(group.is_draggable() && panel.closable(cx), |this| {
                                 this.suffix(
                                     Button::new(("close-tab", ix))
                                         .icon(IconName::Close)
@@ -813,7 +817,8 @@ mod tests {
     use std::cell::{Cell, RefCell};
 
     use gpui::{
-        Entity, EventEmitter, FocusHandle, Focusable, Pixels, TestAppContext, VisualTestContext,
+        Entity, EventEmitter, FocusHandle, Focusable, Modifiers, MouseButton, Pixels,
+        TestAppContext, VisualTestContext,
     };
     use gpui_base::dock::{
         DockArea, DockAreaRenderer, DockLayout, DockPlacement, PanelEvent, TileContext,
@@ -1494,12 +1499,13 @@ mod tests {
         );
     }
 
-    /// A panel that reports a chosen `closable` and records whether the skin
-    /// routed its tab through [`Panel::render_tab`].
+    /// Panel with a chosen `closable` that records whether `render_tab` ran
+    /// and whether it was ever made active (i.e. a tab-select fired).
     struct TabProbe {
         focus_handle: FocusHandle,
         closable: bool,
         rendered_tab: Rc<Cell<bool>>,
+        activated: Rc<Cell<bool>>,
     }
 
     impl TabProbe {
@@ -1508,6 +1514,7 @@ mod tests {
                 focus_handle: cx.focus_handle(),
                 closable,
                 rendered_tab,
+                activated: Rc::new(Cell::new(false)),
             })
         }
     }
@@ -1519,6 +1526,12 @@ mod tests {
 
         fn closable(&self, _: &App) -> bool {
             self.closable
+        }
+
+        fn set_active(&mut self, active: bool, _: &mut Window, _: &mut Context<Self>) {
+            if active {
+                self.activated.set(true);
+            }
         }
     }
 
@@ -1606,6 +1619,60 @@ mod tests {
         assert!(
             rendered.get(),
             "the skin must route the panel's tab through Panel::render_tab"
+        );
+    }
+
+    /// Clicking a non-active tab's close button removes that panel by id and
+    /// does not select it (`stop_propagation`). The displayed tab is a
+    /// non-closable filler, so the only close button is the one under test.
+    #[gpui::test]
+    fn clicking_a_close_button_removes_only_that_tab(cx: &mut TestAppContext) {
+        cx.update(|cx| crate::init(cx));
+        let (area, cx) = cx.add_window_view(|window, cx| {
+            DockArea::new("skin", None, window, cx).with_renderer(DockSkin::new(cx))
+        });
+
+        let (closable_id, filler_id, activated) = cx.update(|window, cx| {
+            let filler = TabProbe::new(false, Rc::new(Cell::new(false)), cx);
+            let closable = TabProbe::new(true, Rc::new(Cell::new(false)), cx);
+            let activated = closable.read(cx).activated.clone();
+            let filler_handle = panel_handle(filler);
+            let closable_handle = panel_handle(closable);
+            let ids = (closable_handle.panel_id(cx), filler_handle.panel_id(cx));
+            // Filler at ix 0 is the displayed tab; the closable tab at ix 1 is
+            // never active, so its close button is the only one drawn.
+            let layout = DockLayout::tabs()
+                .panel_view(filler_handle, cx)
+                .panel_view(closable_handle, cx);
+            area.update(cx, |area, cx| area.set_center(layout, window, cx));
+            (ids.0, ids.1, activated)
+        });
+        cx.run_until_parked();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        assert!(
+            cx.update(|_, cx| area.read(cx).panel(closable_id).is_some()),
+            "the closable tab starts owned by the area"
+        );
+
+        let button = cx
+            .debug_bounds(CLOSE_BUTTON_SELECTOR)
+            .expect("the non-active closable tab draws a close button");
+        cx.simulate_mouse_down(button.center(), MouseButton::Left, Modifiers::none());
+        cx.simulate_mouse_up(button.center(), MouseButton::Left, Modifiers::none());
+        cx.run_until_parked();
+
+        assert!(
+            cx.update(|_, cx| area.read(cx).panel(closable_id).is_none()),
+            "the close click removes exactly the tab it belongs to"
+        );
+        assert!(
+            cx.update(|_, cx| area.read(cx).panel(filler_id).is_some()),
+            "the displayed filler tab is untouched"
+        );
+        assert!(
+            !activated.get(),
+            "stop_propagation keeps the close click from also selecting the tab"
         );
     }
 }

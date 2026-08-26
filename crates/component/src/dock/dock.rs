@@ -521,4 +521,55 @@ mod tests {
             left.size.height,
         );
     }
+
+    /// A removed leaf reports `None`, not the rect it was last drawn with.
+    #[gpui::test]
+    fn node_bounds_drops_a_removed_leaf(cx: &mut TestAppContext) {
+        cx.update(|cx| crate::init(cx));
+        let (area, cx) = cx.add_window_view(|window, cx| {
+            DockArea::new("test", None, window, cx).with_renderer(DockSkin::new(cx))
+        });
+        cx.simulate_resize(size(px(800.), px(600.)));
+        cx.update(|window, cx| {
+            area.update(cx, |area, cx| {
+                area.set_center(
+                    DockLayout::h_split()
+                        .child(DockLayout::tabs().panel(MeasuredProbe::new(Rc::default(), cx)), None)
+                        .child(DockLayout::tabs().panel(MeasuredProbe::new(Rc::default(), cx)), None),
+                    window,
+                    cx,
+                );
+            });
+        });
+        cx.run_until_parked();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        let (right_id, right_panel) = cx.update(|_, cx| {
+            let area = area.read(cx);
+            let tree = area.layout(DockPlacement::Center).expect("a center tree");
+            let PaneRef::Split { children, .. } = tree.root().kind() else {
+                panic!("the center root is a horizontal split");
+            };
+            let right = &children[1];
+            let PaneRef::Tabs { panels, .. } = right.kind() else {
+                panic!("the right child is a tab group");
+            };
+            (right.id(), panels[0])
+        });
+
+        assert!(
+            cx.update(|_, cx| area.read(cx).node_bounds(right_id).is_some()),
+            "the right leaf's rect is captured while it is on screen"
+        );
+
+        cx.update(|window, cx| {
+            area.update(cx, |area, cx| area.remove_panel_id(right_panel, window, cx));
+        });
+        cx.run_until_parked();
+
+        assert!(
+            cx.update(|_, cx| area.read(cx).node_bounds(right_id).is_none()),
+            "a removed leaf reports no bounds, not the rect it was last drawn with"
+        );
+    }
 }
