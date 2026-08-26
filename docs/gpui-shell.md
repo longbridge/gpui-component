@@ -2939,7 +2939,8 @@ a source file changes → debounce 200 ms → re-evaluate the module →
 construct a new view instance → swap the object in and notify
 ```
 
-`watch::reload` does **all** of its fallible work before it touches the live
+`Watch::start` drives reloads whose implementation does **all** of its fallible
+work before it touches the live
 entity: re-evaluating the module can throw, and constructing the view can throw,
 so both happen first and the swap is a single statement at the end. A save that
 does not compile returns an error and changes nothing on screen — the previous
@@ -2974,16 +2975,16 @@ its constructor, and the swap is one statement precisely so the restore can be
 inserted before it.
 
 `SourceWatcher` polls rather than subscribing, because the crate deliberately
-takes no dependency on `notify` — the host injects a watcher. Polling is honest
-for the job: a 250 ms tick, one `stat` per source file in a directory that holds
-a handful, bounded at depth 8 and 4,096 files so a symlink farm or a vendored
-tree cannot turn one poll into an unbounded walk. The stamp is three aggregates —
+takes no dependency on `notify`. Polling is honest for the job: a 250 ms tick,
+one `stat` per source file in a directory that holds a handful, bounded at depth
+8 and 4,096 files so a symlink farm or a vendored tree cannot turn one poll into
+an unbounded walk. The stamp is three aggregates —
 newest modification time, file count, total bytes — each covering a case the
 others miss, and what it cannot see is a change that preserves all three, such as
 swapping two files' names. A `notify`-based watcher would cut latency from one
 poll interval to milliseconds, stop scaling with file count, and see renames;
-feeding its events into `SourceWatcher::notice` is a smaller change than
-replacing the type.
+an event-backed watcher could replace this internal detector without changing
+the public `Watch::start` lifecycle.
 
 ### 21.3 Checking, declarations, and DevTools
 
