@@ -53,6 +53,7 @@
 //! the layer that is actually in force.
 
 use std::{
+    cell::Cell,
     sync::atomic::{AtomicBool, Ordering},
     time::{Duration, Instant},
 };
@@ -447,9 +448,10 @@ impl Default for Budgets {
 /// A deadline-based interrupt handler for `Runtime::set_interrupt_handler`.
 ///
 /// QuickJS calls this periodically while interpreting; returning `true` unwinds
-/// the current execution. The budget is per host call rather than global: every
-/// [`scope::enter`] mints a fresh generation, so a change of generation is the
-/// signal that a new call has begun and the clock restarts. That is what lets
+/// the current execution. The budget is per host call rather than global:
+/// [`scope::enter`] identifies scoped render/event/task calls, while
+/// [`begin_host_execution`] identifies prelude and module evaluations outside
+/// a scope. A change of either identity restarts the clock. That is what lets
 /// the render path have a tighter budget than an event handler without the
 /// handler needing to be reinstalled between calls.
 ///
@@ -460,14 +462,47 @@ pub fn interrupt_handler() -> impl FnMut() -> bool + 'static {
     deadline(Budgets::default())
 }
 
+thread_local! {
+    /// Monotonic identity for host-initiated evaluations that have no GPUI call
+    /// scope. Scoped calls already carry their own generation in `scope`.
+    static DETACHED_EXECUTION: Cell<u64> = const { Cell::new(0) };
+}
+
+/// Starts one host-initiated entry into the JavaScript context.
+///
+/// Module evaluation and the runtime prelude execute without a GPUI call
+/// scope, so [`scope::current_generation`] cannot distinguish one from the
+/// next. Advancing this epoch gives each such evaluation its own interrupt
+/// budget. Render, layout, event, and task calls continue to use their scope
+/// generation, so nested engine helpers cannot refresh those tighter budgets.
+pub(super) fn begin_host_execution() {
+    DETACHED_EXECUTION.with(|epoch| {
+        epoch.set(
+            epoch
+                .get()
+                .checked_add(1)
+                .expect("gpui-shell exhausted detached execution epochs"),
+        );
+    });
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ExecutionWindow {
+    Scoped(u64),
+    Detached(u64),
+}
+
 fn deadline(budgets: Budgets) -> impl FnMut() -> bool + 'static {
     let mut window = None;
     let mut started = Instant::now();
 
     move || {
-        let generation = scope::current_generation();
-        if window != generation {
-            window = generation;
+        let current = match scope::current_generation() {
+            Some(generation) => ExecutionWindow::Scoped(generation),
+            None => DETACHED_EXECUTION.with(|epoch| ExecutionWindow::Detached(epoch.get())),
+        };
+        if window != Some(current) {
+            window = Some(current);
             started = Instant::now();
         }
 
@@ -748,6 +783,24 @@ mod tests {
             started.elapsed() < Duration::from_secs(5),
             "and it must be cut off promptly"
         );
+    }
+
+    #[test]
+    fn detached_host_executions_receive_independent_budgets() {
+        let budget = Duration::from_millis(200);
+        let runtime = interrupting_runtime(budget);
+        let context = JsContext::full(&runtime).unwrap();
+
+        for _ in 0..2 {
+            begin_host_execution();
+            context
+                .with(|ctx| {
+                    ctx.eval::<(), _>(
+                        "{ const until = Date.now() + 120; while (Date.now() < until) {} }",
+                    )
+                })
+                .expect("each detached evaluation should receive a fresh budget");
+        }
     }
 
     /// §19.3 requires this to be measured rather than assumed: if a script could

@@ -712,6 +712,7 @@ impl ShellRuntime {
     /// Runs `body` inside the JS context, flattening any exception into an
     /// ordinary error carrying the script's message and stack.
     fn with_js<T>(&self, body: impl FnOnce(&Ctx<'_>) -> JsResult<T>) -> Result<T> {
+        sandbox::begin_host_execution();
         self.context.with(|ctx| match body(&ctx) {
             Ok(value) => Ok(value),
             Err(error) => Err(anyhow!("{}", describe(&ctx, error))),
