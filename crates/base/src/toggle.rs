@@ -4,7 +4,7 @@ use gpui::{
     AnyElement, App, ClickEvent, Div, ElementId, FocusHandle, InteractiveElement, Interactivity,
     IntoElement, MouseButton, ParentElement, Refineable as _, RenderOnce, Role, SharedString,
     Stateful, StatefulInteractiveElement, StyleRefinement, Styled, Toggled, Window, div,
-    prelude::FluentBuilder as _,
+    prelude::FluentBuilder as _, relative,
 };
 use smallvec::SmallVec;
 
@@ -170,6 +170,13 @@ impl RenderOnce for Toggle {
 
         self.base
             .role(Role::Button)
+            // Match Button's neutral control geometry: a fixed-size toggle
+            // centers ordinary content, while callers still own its size,
+            // spacing and visual treatment.
+            .flex()
+            .items_center()
+            .justify_center()
+            .line_height(relative(1.))
             .aria_toggled(if pressed {
                 Toggled::True
             } else {
@@ -206,6 +213,7 @@ impl RenderOnce for Toggle {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ElementExt as _;
     use std::{
         cell::{Cell, RefCell},
         rc::Rc,
@@ -301,6 +309,52 @@ mod tests {
         cx.simulate_click(point(px(10.), px(10.)), Modifiers::default());
         cx.simulate_keystrokes("enter space");
         assert!(changes.borrow().is_empty());
+    }
+
+    #[gpui::test]
+    fn fixed_height_toggle_centers_ordinary_child_geometry(cx: &mut TestAppContext) {
+        type Captured = Arc<
+            Mutex<(
+                Option<gpui::Bounds<gpui::Pixels>>,
+                Option<gpui::Bounds<gpui::Pixels>>,
+            )>,
+        >;
+
+        struct AlignmentProbe(Captured);
+
+        impl Render for AlignmentProbe {
+            fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+                let root_capture = self.0.clone();
+                let child_capture = self.0.clone();
+                Toggle::new("alignment-toggle")
+                    .w(px(120.))
+                    .h(px(40.))
+                    .child(
+                        div()
+                            .w(px(48.))
+                            .h(px(12.))
+                            .on_prepaint(move |bounds, _, _| {
+                                child_capture.lock().unwrap().1 = Some(bounds);
+                            }),
+                    )
+                    .on_prepaint(move |bounds, _, _| {
+                        root_capture.lock().unwrap().0 = Some(bounds);
+                    })
+            }
+        }
+
+        let captured = Arc::new(Mutex::new((None, None)));
+        let (_, context) = cx.add_window_view({
+            let captured = captured.clone();
+            move |_, _| AlignmentProbe(captured)
+        });
+        context.update(|window, cx| window.draw(cx).clear(cx));
+
+        let (root, child) = captured.lock().unwrap().clone();
+        assert_eq!(
+            child.expect("child bounds").center(),
+            root.expect("toggle bounds").center()
+        );
     }
 
     #[test]
