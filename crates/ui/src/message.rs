@@ -147,59 +147,80 @@ impl Styled for Message {
 impl RenderOnce for Message {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         let alignment = self.alignment;
-        let has_footer = self.footer.is_some();
+        let has_avatar = self.avatar.is_some();
         let has_ghost_bubble = self
             .content
             .as_ref()
             .is_some_and(|content| content.has_ghost_bubble);
         let stack_style = self.stack_style;
 
-        h_flex()
+        v_flex()
             .relative()
             .w_full()
             .min_w_0()
-            .items_end()
-            .gap_2()
+            .gap(rems(0.625))
             .text_sm()
             .line_height(relative(1.25))
-            .when(alignment == MessageAlignment::End, |this| {
-                this.flex_row_reverse()
+            .map(|this| match alignment {
+                MessageAlignment::Start => this.items_start(),
+                MessageAlignment::End => this.items_end(),
             })
             .refine_style(&self.style)
-            .when_some(self.avatar, |this, avatar| {
-                this.child(avatar.with_footer_offset(has_footer))
-            })
             .child(
-                v_flex()
+                // The footer lives outside this row so the bottom-anchored
+                // avatar always sits flush with the content's bottom edge,
+                // whatever the footer contains.
+                h_flex()
                     .w_full()
                     .min_w_0()
-                    .gap(rems(0.625))
-                    .map(|this| match alignment {
-                        MessageAlignment::Start => this.items_start(),
-                        MessageAlignment::End => this.items_end(),
+                    .items_end()
+                    .gap_2()
+                    .when(alignment == MessageAlignment::End, |this| {
+                        this.flex_row_reverse()
                     })
-                    .refine_style(&stack_style)
-                    .when_some(self.header, |this, header| {
-                        this.child(header.with_inherited_content_inset(!has_ghost_bubble))
-                    })
-                    .when_some(self.content, |this, content| {
-                        this.child(content.aligned(alignment))
-                    })
-                    .when_some(self.footer, |this, footer| {
-                        this.child(footer.with_inherited_content_inset(!has_ghost_bubble))
-                    }),
+                    .when_some(self.avatar, |this, avatar| this.child(avatar))
+                    .child(
+                        v_flex()
+                            .w_full()
+                            .min_w_0()
+                            .gap(rems(0.625))
+                            .map(|this| match alignment {
+                                MessageAlignment::Start => this.items_start(),
+                                MessageAlignment::End => this.items_end(),
+                            })
+                            .refine_style(&stack_style)
+                            .when_some(self.header, |this, header| {
+                                this.child(header.with_inherited_content_inset(!has_ghost_bubble))
+                            })
+                            .when_some(self.content, |this, content| {
+                                this.child(content.aligned(alignment))
+                            }),
+                    ),
             )
+            .when_some(self.footer, |this, footer| {
+                this.child(
+                    footer
+                        .with_inherited_content_inset(!has_ghost_bubble)
+                        // Align the footer with the content column: the
+                        // avatar's shared `size-8` baseline plus the row gap.
+                        .when(has_avatar && alignment == MessageAlignment::Start, |this| {
+                            this.ml(rems(2.5))
+                        })
+                        .when(has_avatar && alignment == MessageAlignment::End, |this| {
+                            this.mr(rems(2.5))
+                        }),
+                )
+            })
     }
 }
 
 /// The sender identity slot rendered beside a [`Message`].
 ///
-/// The slot reserves the shared `size-8` baseline and moves above a message footer so
-/// the avatar remains aligned with the visible message surface.
+/// The slot reserves the shared `size-8` baseline; the message row keeps it
+/// flush with the bottom edge of the visible message surface.
 #[derive(IntoElement)]
 pub struct MessageAvatar {
     style: StyleRefinement,
-    footer_offset: bool,
     children: Vec<AnyElement>,
 }
 
@@ -208,14 +229,8 @@ impl MessageAvatar {
     pub fn new() -> Self {
         Self {
             style: StyleRefinement::default(),
-            footer_offset: false,
             children: Vec::new(),
         }
-    }
-
-    fn with_footer_offset(mut self, footer_offset: bool) -> Self {
-        self.footer_offset = footer_offset;
-        self
     }
 }
 
@@ -251,7 +266,6 @@ impl RenderOnce for MessageAvatar {
             .overflow_hidden()
             .rounded(cx.theme().radius_full())
             .bg(tokens.colors.muted)
-            .when(self.footer_offset, |this| this.bottom_8())
             .refine_style(&self.style)
             .children(self.children)
     }
@@ -481,7 +495,6 @@ mod tests {
         assert!(message.header.is_some());
         assert!(message.content.is_some());
         assert!(message.footer.is_some());
-        assert!(!message.avatar.as_ref().unwrap().footer_offset);
         assert_eq!(message.header.as_ref().unwrap().content_inset, Some(false));
         assert_eq!(message.footer.as_ref().unwrap().content_inset, Some(false));
 
@@ -491,8 +504,7 @@ mod tests {
         let content = MessageContent::new().aligned(MessageAlignment::End);
         assert_eq!(content.alignment, MessageAlignment::End);
 
-        let avatar = MessageAvatar::new().with_footer_offset(true).child("ME");
-        assert!(avatar.footer_offset);
+        let avatar = MessageAvatar::new().child("ME");
         assert_eq!(avatar.children.len(), 1);
     }
 

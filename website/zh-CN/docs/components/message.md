@@ -124,7 +124,7 @@ Message::new()
     ))
 ```
 
-`MessageAvatar` 保留共享的 avatar 尺寸基线；如果存在 footer，头像会向上偏移，使其仍与可见消息表面对齐。身份 fallback、头像图片和名称文字由 `Avatar` 负责。
+`MessageAvatar` 保留共享的 avatar 尺寸基线，并始终与消息内容的底边对齐；footer 渲染在头像行之下、按内容列缩进。身份 fallback、头像图片和名称文字由 `Avatar` 负责。
 
 ### Header
 

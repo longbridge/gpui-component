@@ -125,11 +125,11 @@ Message::new()
     .content(MessageContent::new().child("A system update"))
 ```
 
-The avatar reserves the shared `size-8` baseline. When a footer exists, the
-slot moves above the footer so the identity stays aligned with the visible
-message surface. The message does not require an avatar; omit it for assistant
-messages, compact group chat, or system rows where identity is already present
-elsewhere.
+The avatar reserves the shared `size-8` baseline and always sits flush with
+the bottom edge of the message content; the footer renders below the avatar
+row, indented to the content column. The message does not require an avatar;
+omit it for assistant messages, compact group chat, or system rows where
+identity is already present elsewhere.
 
 ### Header
 
