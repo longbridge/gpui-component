@@ -116,6 +116,38 @@ impl<'js> FromJs<'js> for NestedViewProps {
     }
 }
 
+struct ViewStateCheckpoint(Persistent<Function<'static>>);
+
+#[derive(Clone)]
+struct NestedViewProvenance {
+    application: Option<Rc<ApplicationGeneration>>,
+    policy: Rc<Policy>,
+}
+
+impl NestedViewProvenance {
+    fn is_current(&self) -> bool {
+        let Some(policy) = scope::current_policy() else {
+            return false;
+        };
+        if !Rc::ptr_eq(&self.policy, &policy) {
+            return false;
+        }
+        match (&self.application, scope::current_application_generation()) {
+            (Some(expected), Some(current)) => {
+                expected.is_active() && Rc::ptr_eq(expected, &current)
+            }
+            (None, None) => true,
+            _ => false,
+        }
+    }
+}
+
+#[derive(Clone)]
+struct NestedViewAlias {
+    handle: EntityHandle,
+    provenance: NestedViewProvenance,
+}
+
 /// A synchronous-looking script operation deferred until the active
 /// `Context::with` entry has returned. This is what lets the implementation
 /// reuse the ordinary, non-reentrant transactional job drains.
@@ -131,11 +163,13 @@ enum PendingNestedOperation {
     Update {
         runtime: Weak<ShellRuntime>,
         token: u32,
+        provenance: NestedViewProvenance,
         props: Persistent<Value<'static>>,
     },
     Release {
         runtime: Weak<ShellRuntime>,
         token: u32,
+        provenance: NestedViewProvenance,
     },
 }
 
@@ -277,9 +311,9 @@ pub struct ShellRuntime {
     /// declared before `context` because it owns persistent JS values.
     pending_nested: RefCell<VecDeque<PendingNestedOperation>>,
     flushing_nested: Cell<bool>,
-    in_flight_nested: RefCell<HashSet<u32>>,
+    in_flight_nested: RefCell<HashMap<u32, NestedViewProvenance>>,
     initializing_views: RefCell<Vec<ViewObject>>,
-    nested_view_handles: RefCell<HashMap<u32, EntityHandle>>,
+    nested_view_handles: RefCell<HashMap<u32, NestedViewAlias>>,
     next_nested_view_token: Cell<u32>,
     /// A runtime whose opaque QuickJS job queue could not reach an ownership
     /// boundary safely is never entered again. QuickJS exposes no selective
@@ -380,7 +414,7 @@ impl ShellRuntime {
             entities: RefCell::new(entities),
             pending_nested: RefCell::new(VecDeque::new()),
             flushing_nested: Cell::new(false),
-            in_flight_nested: RefCell::new(HashSet::new()),
+            in_flight_nested: RefCell::new(HashMap::new()),
             initializing_views: RefCell::new(Vec::new()),
             nested_view_handles: RefCell::new(HashMap::new()),
             next_nested_view_token: Cell::new(0),
@@ -474,7 +508,7 @@ impl ShellRuntime {
     fn purge_released_view_aliases(&self, release: &crate::entities::EntityRelease) {
         self.nested_view_handles
             .borrow_mut()
-            .retain(|_, handle| !release.contains(*handle));
+            .retain(|_, alias| !release.contains(alias.handle));
     }
 
     /// Resolves a release entirely under the store borrow, then performs all
@@ -654,14 +688,14 @@ impl ShellRuntime {
             Ok(instance) => instance,
             Err(error) => {
                 if let Some(application) = application {
-                    cancel_application_tasks(&application);
+                    self.release_application_generation(&application, cx);
                 }
                 return Err(error);
             }
         };
         if let Err(error) = self.initialize(&instance, None) {
             if let Some(application) = application {
-                cancel_application_tasks(&application);
+                self.release_application_generation(&application, cx);
             }
             return Err(error);
         }
@@ -704,7 +738,7 @@ impl ShellRuntime {
             Ok(object) => object,
             Err(error) => {
                 if let Some(application) = application {
-                    cancel_application_tasks(&application);
+                    self.release_application_generation(&application, cx);
                 }
                 return Err(error);
             }
@@ -726,7 +760,7 @@ impl ShellRuntime {
         let nested = self.flush_pending_nested_views(window, cx);
         if let Err(error) = initialized.and(nested) {
             if let Some(application) = application {
-                cancel_application_tasks(&application);
+                self.release_application_generation(&application, cx);
             }
             return Err(error);
         }
@@ -777,6 +811,7 @@ impl ShellRuntime {
         };
 
         if self.entities().len() >= crate::entities::MAX_LIVE_ENTITIES {
+            self.rollback_retained_since(entity_checkpoint, task_checkpoint, cx);
             anyhow::bail!(
                 "the application reached gpui-shell's retained entity limit; release unused handles"
             );
@@ -873,22 +908,39 @@ impl ShellRuntime {
         token: u32,
         props: Persistent<Value<'static>>,
     ) -> JsResult<()> {
-        let resolved = self.nested_view_handles.borrow().get(&token).copied();
+        let resolved = self.nested_view_handles.borrow().get(&token).cloned();
         let pending = self.pending_nested.borrow();
-        let pending_create = pending.iter().any(|operation| {
-            matches!(operation, PendingNestedOperation::Create { token: candidate, .. } if *candidate == token)
+        let pending_create = pending.iter().find_map(|operation| match operation {
+            PendingNestedOperation::Create {
+                token: candidate,
+                view_type,
+                policy,
+                ..
+            } if *candidate == token => Some(NestedViewProvenance {
+                application: view_type.application.clone(),
+                policy: policy.clone(),
+            }),
+            _ => None,
         });
         let pending_release = pending.iter().any(|operation| {
             matches!(operation, PendingNestedOperation::Release { token: candidate, .. } if *candidate == token)
         });
         drop(pending);
-        if pending_release || (resolved.is_none() && !pending_create) {
+        let provenance = resolved
+            .as_ref()
+            .map(|alias| alias.provenance.clone())
+            .or(pending_create)
+            .or_else(|| self.in_flight_nested.borrow().get(&token).cloned());
+        if pending_release || provenance.as_ref().is_none_or(|owner| !owner.is_current()) {
             return Err(Exception::throw_type(
                 ctx,
                 "this ViewHandle has been released and can no longer be updated",
             ));
         }
-        if resolved.is_some_and(|handle| self.entities().view(handle).is_none()) {
+        if resolved
+            .as_ref()
+            .is_some_and(|alias| self.entities().view(alias.handle).is_none())
+        {
             self.nested_view_handles.borrow_mut().remove(&token);
             return Err(Exception::throw_type(
                 ctx,
@@ -900,38 +952,63 @@ impl ShellRuntime {
             .push_back(PendingNestedOperation::Update {
                 runtime: Rc::downgrade(self),
                 token,
+                provenance: provenance.expect("validated nested provenance"),
                 props,
             });
         Ok(())
     }
 
-    fn queue_nested_view_release(self: &Rc<Self>, token: u32) -> bool {
+    fn queue_nested_view_release(self: &Rc<Self>, ctx: &Ctx<'_>, token: u32) -> JsResult<bool> {
         let pending = self.pending_nested.borrow();
-        if pending.iter().any(|operation| {
+        let pending_release = pending.iter().any(|operation| {
             matches!(operation, PendingNestedOperation::Release { token: candidate, .. } if *candidate == token)
-        }) {
-            return false;
-        }
-        let pending_create = pending.iter().any(|operation| {
-            matches!(operation, PendingNestedOperation::Create { token: candidate, .. } if *candidate == token)
+        });
+        let pending_create = pending.iter().find_map(|operation| match operation {
+            PendingNestedOperation::Create {
+                token: candidate,
+                view_type,
+                policy,
+                ..
+            } if *candidate == token => Some(NestedViewProvenance {
+                application: view_type.application.clone(),
+                policy: policy.clone(),
+            }),
+            _ => None,
         });
         drop(pending);
-        let resolved = self.nested_view_handles.borrow().get(&token).copied();
-        if resolved.is_some_and(|handle| self.entities().view(handle).is_none()) {
-            self.nested_view_handles.borrow_mut().remove(&token);
-            return false;
+        let resolved = self.nested_view_handles.borrow().get(&token).cloned();
+        let provenance = resolved
+            .as_ref()
+            .map(|alias| alias.provenance.clone())
+            .or(pending_create)
+            .or_else(|| self.in_flight_nested.borrow().get(&token).cloned());
+        if provenance.as_ref().is_none_or(|owner| !owner.is_current()) {
+            return Err(Exception::throw_type(
+                ctx,
+                "this ViewHandle has been released and can no longer be released",
+            ));
         }
-        if resolved.is_none() && !pending_create && !self.in_flight_nested.borrow().contains(&token)
+        // Authority is checked before resolving entity liveness or changing
+        // the alias table. A foreign caller must not distinguish a live token
+        // from a dead one, nor clean up an alias owned by another application.
+        if resolved
+            .as_ref()
+            .is_some_and(|alias| self.entities().view(alias.handle).is_none())
         {
-            return false;
+            self.nested_view_handles.borrow_mut().remove(&token);
+            return Ok(false);
+        }
+        if pending_release {
+            return Ok(false);
         }
         self.pending_nested
             .borrow_mut()
             .push_back(PendingNestedOperation::Release {
                 runtime: Rc::downgrade(self),
                 token,
+                provenance: provenance.expect("validated nested provenance"),
             });
-        true
+        Ok(true)
     }
 
     /// Applies native nested-view requests only at an unlocked QuickJS
@@ -964,7 +1041,19 @@ impl ShellRuntime {
                         let runtime = runtime.upgrade().ok_or_else(|| {
                             anyhow!("the shell runtime shut down during child creation")
                         })?;
-                        runtime.in_flight_nested.borrow_mut().insert(token);
+                        let provenance = NestedViewProvenance {
+                            application: view_type.application.clone(),
+                            policy: policy.clone(),
+                        };
+                        if !provenance.is_current() {
+                            anyhow::bail!(
+                                "this ViewHandle creation does not belong to the current application"
+                            );
+                        }
+                        runtime
+                            .in_flight_nested
+                            .borrow_mut()
+                            .insert(token, provenance.clone());
                         let (_owner_scope, _) = scope::enter_with_application(
                             &runtime,
                             window,
@@ -986,39 +1075,79 @@ impl ShellRuntime {
                         runtime
                             .nested_view_handles
                             .borrow_mut()
-                            .insert(token, handle);
+                            .insert(token, NestedViewAlias { handle, provenance });
                         Ok(())
                     }
                     PendingNestedOperation::Update {
                         runtime,
                         token,
+                        provenance,
                         props,
                     } => {
                         let runtime = runtime.upgrade().ok_or_else(|| {
                             anyhow!("the shell runtime shut down during child update")
                         })?;
+                        if !provenance.is_current() {
+                            anyhow::bail!(
+                                "this ViewHandle does not belong to the current application"
+                            );
+                        }
                         let handle = runtime
                             .nested_view_handles
                             .borrow()
                             .get(&token)
-                            .copied()
+                            .filter(|alias| {
+                                Rc::ptr_eq(&alias.provenance.policy, &provenance.policy)
+                                    && match (
+                                        &alias.provenance.application,
+                                        &provenance.application,
+                                    ) {
+                                        (Some(left), Some(right)) => Rc::ptr_eq(left, right),
+                                        (None, None) => true,
+                                        _ => false,
+                                    }
+                            })
+                            .map(|alias| alias.handle)
                             .ok_or_else(|| {
                                 anyhow!("this ViewHandle was released before its update")
                             })?;
                         runtime.update_nested_view(handle, props, window, cx)?;
                         Ok(())
                     }
-                    PendingNestedOperation::Release { runtime, token } => {
+                    PendingNestedOperation::Release {
+                        runtime,
+                        token,
+                        provenance,
+                    } => {
                         let runtime = runtime.upgrade().ok_or_else(|| {
                             anyhow!("the shell runtime shut down during child release")
                         })?;
-                        let handle = runtime
+                        if !provenance.is_current() {
+                            anyhow::bail!(
+                                "this ViewHandle does not belong to the current application"
+                            );
+                        }
+                        let alias = runtime
                             .nested_view_handles
-                            .borrow_mut()
-                            .remove(&token)
+                            .borrow()
+                            .get(&token)
+                            .cloned()
+                            .filter(|alias| {
+                                Rc::ptr_eq(&alias.provenance.policy, &provenance.policy)
+                                    && match (
+                                        &alias.provenance.application,
+                                        &provenance.application,
+                                    ) {
+                                        (Some(left), Some(right)) => Rc::ptr_eq(left, right),
+                                        (None, None) => true,
+                                        _ => false,
+                                    }
+                            })
                             .ok_or_else(|| {
                                 anyhow!("this ViewHandle was released before its release operation")
                             })?;
+                        runtime.nested_view_handles.borrow_mut().remove(&token);
+                        let handle = alias.handle;
                         let released = runtime.release_view_handle(handle, cx);
                         if !released {
                             anyhow::bail!(
@@ -1037,8 +1166,13 @@ impl ShellRuntime {
         Ok(())
     }
 
-    /// Delivers props to an isolated copy of the child object and commits it
-    /// only after the whole bounded causal wave succeeds.
+    /// Delivers props to the child under a bounded ordinary-state/resource
+    /// rollback boundary, and refreshes only after the causal wave succeeds.
+    /// Ordinary properties on reachable objects and callable objects are
+    /// restorable only while their post-update descriptors remain legally
+    /// redefinable/deletable. Private/internal JS state, non-configurable
+    /// additions/hardening and destructive release of pre-existing native
+    /// handles are outside that boundary.
     fn update_nested_view(
         self: &Rc<Self>,
         handle: EntityHandle,
@@ -1059,15 +1193,9 @@ impl ShellRuntime {
                 child.application_generation(),
             )
         };
+        let state_checkpoint = self.checkpoint_view_object(&object)?;
         let entity_checkpoint = { self.entities().checkpoint() };
         let task_checkpoint = scheduler::checkpoint_runtime_tasks(self);
-        let candidate = match self.clone_view_object(&object) {
-            Ok(candidate) => candidate,
-            Err(error) => {
-                self.rollback_retained_since(entity_checkpoint, task_checkpoint, cx);
-                return Err(error);
-            }
-        };
         let (event_scope, _) = scope::enter_with_application(
             self,
             window,
@@ -1079,17 +1207,21 @@ impl ShellRuntime {
         );
         let updated = self.with_js(|ctx| {
             let props = props.restore(ctx)?;
-            self.update_in_context(ctx, &candidate, props)
+            self.update_in_context(ctx, &object, props)
         });
         let update_jobs = scheduler::drain_jobs_transactionally(self, window, cx);
         drop(event_scope);
         match update_jobs.and(updated) {
             Ok(()) => {
-                view.update(cx, |view, cx| view.commit_update(candidate, cx));
+                view.update(cx, |view, cx| view.refresh(cx));
                 Ok(())
             }
             Err(error) => {
+                let restored = self.restore_view_object(state_checkpoint);
                 self.rollback_retained_since(entity_checkpoint, task_checkpoint, cx);
+                if let Err(restore) = restored {
+                    return Err(error.context(format!("failed to restore child state: {restore}")));
+                }
                 Err(error)
             }
         }
@@ -1117,7 +1249,7 @@ impl ShellRuntime {
             Ok(object) => object,
             Err(error) => {
                 if let Some(application) = application {
-                    cancel_application_tasks(&application);
+                    self.release_application_generation(&application, cx);
                 }
                 return Err(error);
             }
@@ -1126,7 +1258,7 @@ impl ShellRuntime {
         let nested = self.flush_pending_nested_views(window, cx);
         if let Err(error) = initialized.and(nested) {
             if let Some(application) = application {
-                cancel_application_tasks(&application);
+                self.release_application_generation(&application, cx);
             }
             return Err(error);
         }
@@ -1146,18 +1278,26 @@ impl ShellRuntime {
         })
     }
 
-    /// Copies the instance shell before `update` so ordinary field mutations
-    /// are committed only when the entire bounded update wave succeeds.
-    fn clone_view_object(&self, object: &ViewObject) -> Result<ViewObject> {
+    /// Captures reachable ordinary objects and callable objects without invoking getters.
+    /// The returned closure restores descriptors in place only when their
+    /// post-update state still permits the required redefinition/deletion,
+    /// preserving object identity for callbacks and tasks that already captured
+    /// the instance. Private/internal slots, non-configurable additions, and a
+    /// property hardened from configurable to non-configurable cannot be
+    /// restored by JavaScript reflection.
+    fn checkpoint_view_object(&self, object: &ViewObject) -> Result<ViewStateCheckpoint> {
         self.with_js(|ctx| {
             let instance = object.value.clone().restore(ctx)?;
-            let clone_view: Function = ctx.globals().get("__clone_view")?;
-            let candidate: Object = clone_view.call((instance,))?;
-            Ok(ViewObject {
-                value: Persistent::save(ctx, candidate),
-                module_lease: object.module_lease.clone(),
-                application: object.application.clone(),
-            })
+            let checkpoint: Function = ctx.globals().get("__checkpoint_view")?;
+            let restore: Function = checkpoint.call((instance,))?;
+            Ok(ViewStateCheckpoint(Persistent::save(ctx, restore)))
+        })
+    }
+
+    fn restore_view_object(&self, checkpoint: ViewStateCheckpoint) -> Result<()> {
+        self.with_js(|ctx| {
+            let restore = checkpoint.0.restore(ctx)?;
+            restore.call::<_, ()>(())
         })
     }
 
@@ -2950,11 +3090,54 @@ globalThis.__gpui = (() => {
   globalThis.__initialize = (instance, props) => {
     if (typeof instance.init === "function") instance.init(props);
   };
-  globalThis.__clone_view = (instance) =>
-    Object.create(
-      Object.getPrototypeOf(instance),
-      Object.getOwnPropertyDescriptors(instance),
-    );
+  // This journals ordinary reachable object and callable descriptors only. Restoration succeeds
+  // only while post-update descriptors remain legally redefinable/deletable.
+  // Reflection cannot see private/internal slots or undo non-configurable
+  // additions/hardening; the public declaration documents that boundary.
+  globalThis.__checkpoint_view = (instance) => {
+    const snapshots = [];
+    const seen = new Set();
+    const pending = [instance];
+    let propertyCount = 0;
+    while (pending.length > 0) {
+      const value = pending.pop();
+      if (
+        value === null ||
+        (typeof value !== "object" && typeof value !== "function") ||
+        seen.has(value)
+      ) continue;
+      if (snapshots.length >= 10_000) {
+        throw new RangeError("a nested view update reached the 10,000-object rollback limit");
+      }
+      seen.add(value);
+      const descriptors = Object.getOwnPropertyDescriptors(value);
+      const keys = Reflect.ownKeys(descriptors);
+      propertyCount += keys.length;
+      if (propertyCount > 100_000) {
+        throw new RangeError("a nested view update reached the 100,000-property rollback limit");
+      }
+      snapshots.push([value, descriptors]);
+      for (const key of keys) {
+        const descriptor = descriptors[key];
+        if (Object.prototype.hasOwnProperty.call(descriptor, "value")) {
+          pending.push(descriptor.value);
+        }
+      }
+    }
+    return () => {
+      for (let index = snapshots.length - 1; index >= 0; index -= 1) {
+        const [value, descriptors] = snapshots[index];
+        const saved = new Set(Reflect.ownKeys(descriptors));
+        for (const key of Reflect.ownKeys(value)) {
+          if (!saved.has(key)) {
+            const current = Object.getOwnPropertyDescriptor(value, key);
+            if (current?.configurable) delete value[key];
+          }
+        }
+        Object.defineProperties(value, descriptors);
+      }
+    };
+  };
 
   class View {
     constructor(props) {
@@ -3581,7 +3764,7 @@ impl ShellRuntime {
                 Func::from(move |ctx: Ctx<'_>, token: u32| -> JsResult<bool> {
                     refuse_nested_view_mutation(&ctx, "ViewHandle.release()", "release")?;
                     let runtime = upgrade(&release_view, &ctx)?;
-                    Ok(runtime.queue_nested_view_release(token))
+                    runtime.queue_nested_view_release(&ctx, token)
                 }),
             )?;
 
@@ -3602,7 +3785,8 @@ impl ShellRuntime {
                         .nested_view_handles
                         .borrow()
                         .get(&token)
-                        .copied()
+                        .filter(|alias| alias.provenance.is_current())
+                        .map(|alias| alias.handle)
                         .ok_or_else(|| {
                             Exception::throw_type(
                                 &ctx,
@@ -4763,6 +4947,80 @@ mod nested_view_lifecycle_tests {
             .expect("load child view");
         view_type.application = Some(ApplicationGeneration::new(7));
         view_type
+    }
+
+    #[gpui::test]
+    fn foreign_release_cannot_probe_or_remove_a_dead_nested_alias(cx: &mut TestAppContext) {
+        let runtime = ShellRuntime::new_isolated().expect("runtime");
+        let owner_application = ApplicationGeneration::new(71);
+        let foreign_application = ApplicationGeneration::new(72);
+        let owner_policy = Rc::new(Policy::default());
+        let foreign_policy = Rc::new(Policy::default());
+        let mut view_type = child_type(
+            &runtime,
+            r#"
+import { View, text } from "gpui";
+export default class Child extends View { render() { return text("child"); } }
+"#,
+        );
+        view_type.application = Some(owner_application.clone());
+        let window = cx.add_window(|_, _| gpui::Empty);
+        let mut context = VisualTestContext::from_window(*window, cx);
+        let handle = context
+            .update(|window, cx| {
+                runtime.instantiate_nested_view(&view_type, owner_policy.clone(), None, window, cx)
+            })
+            .expect("child");
+        let token = 91;
+        runtime.nested_view_handles.borrow_mut().insert(
+            token,
+            NestedViewAlias {
+                handle,
+                provenance: NestedViewProvenance {
+                    application: Some(owner_application.clone()),
+                    policy: owner_policy.clone(),
+                },
+            },
+        );
+        let release = runtime
+            .entities()
+            .release_view(handle)
+            .expect("typed child release");
+        context.update(|_, cx| release.retire(cx));
+        assert!(runtime.entities().view(handle).is_none());
+
+        let foreign = context.update(|window, cx| {
+            let (_scope, _) = scope::enter_with_application(
+                &runtime,
+                window,
+                cx,
+                ScopePhase::Event,
+                None,
+                foreign_policy,
+                Some(foreign_application),
+            );
+            runtime.with_js(|ctx| runtime.queue_nested_view_release(ctx, token))
+        });
+        assert!(foreign.is_err(), "foreign authority must be rejected");
+        assert!(
+            runtime.nested_view_handles.borrow().contains_key(&token),
+            "foreign release observed liveness and removed the dead alias"
+        );
+
+        let owner = context.update(|window, cx| {
+            let (_scope, _) = scope::enter_with_application(
+                &runtime,
+                window,
+                cx,
+                ScopePhase::Event,
+                None,
+                owner_policy,
+                Some(owner_application),
+            );
+            runtime.with_js(|ctx| runtime.queue_nested_view_release(ctx, token))
+        });
+        assert_eq!(owner.expect("owner call"), false);
+        assert!(!runtime.nested_view_handles.borrow().contains_key(&token));
     }
 
     #[gpui::test]

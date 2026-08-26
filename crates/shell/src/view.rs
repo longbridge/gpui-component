@@ -169,12 +169,6 @@ impl ScriptView {
         self.dirty = true;
     }
 
-    /// Commits the isolated instance produced by a successful child update.
-    pub(crate) fn commit_update(&mut self, object: ViewObject, cx: &mut Context<Self>) {
-        self.object = object;
-        self.refresh(cx);
-    }
-
     /// The script state behind this view, for host code that needs to read it.
     pub(crate) fn object(&self) -> &ViewObject {
         &self.object

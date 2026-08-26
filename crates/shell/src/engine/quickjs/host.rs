@@ -1181,6 +1181,22 @@ mod tests {
     }
 
     #[test]
+    fn every_installed_host_member_is_also_a_named_export() {
+        // `install` puts these on the module object; `MODULE_EXPORTS` is what
+        // makes `import { open_url } from "gpui"` resolve. The two are separate
+        // lists, and a member added to one and not the other is a binding that
+        // works through `gpui.x` and fails at the import — which is how
+        // `open_url` first shipped: the call site was there, the import was
+        // not, and the only symptom was a browser that never opened.
+        for name in ["store", "clipboard", "log", "open_url"] {
+            assert!(
+                super::super::MODULE_EXPORTS.contains(&name),
+                "`{name}` is installed on the gpui module but is not a named export"
+            );
+        }
+    }
+
+    #[test]
     fn open_url_refuses_anything_that_is_not_an_http_page() {
         for target in [
             "file:///etc/passwd",

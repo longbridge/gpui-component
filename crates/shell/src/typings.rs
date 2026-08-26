@@ -644,6 +644,17 @@ const CONTEXT_AND_VIEW: &str = r#"  /**
    *
    * Create it once from `init`, an event handler or a task. Updating props
    * invokes the child's optional `update(props)` and rebuilds only that child.
+   * Phase, class and released-handle validation errors throw synchronously. Native
+   * construction/init/update is applied before the enclosing host entry returns;
+   * failures are reported by that host entry rather than being catchable around
+   * this synchronous-looking call.
+   *
+   * A failed `update` has a bounded shell rollback:
+   * - ordinary reachable properties, including callable objects, are restored only while their post-update descriptors remain legally redefinable or deletable;
+   * - shell-owned entities, tasks and nested views newly created by the update are released.
+   * Unsupported mutations include JavaScript private fields and internal slots;
+   * newly added non-configurable properties; making an existing configurable property non-configurable;
+   * and pre-existing native handles explicitly released by update.
    */
   export interface ViewHandle {
     set_props(props?: Props): void;
@@ -2687,6 +2698,27 @@ mod tests {
         ] {
             assert!(declarations.contains(expected), "missing: {expected}");
         }
+    }
+
+    #[test]
+    fn nested_update_rollback_contract_names_its_supported_boundary() {
+        let declarations = declarations();
+        for expected in [
+            "post-update descriptors remain legally redefinable or deletable",
+            "including callable objects",
+            "shell-owned entities, tasks and nested views newly created by the update",
+            "JavaScript private fields and internal slots",
+            "making an existing configurable property non-configurable",
+            "pre-existing native handles explicitly released by update",
+        ] {
+            assert!(declarations.contains(expected), "missing: {expected}");
+        }
+        assert!(
+            !declarations.contains("a failure rolls back")
+                && !declarations
+                    .contains("ordinary reachable configurable object properties are restored"),
+            "the public contract must not promise unconditional rollback"
+        );
     }
 
     /// The anchor union is generated from the table the runtime parses through,

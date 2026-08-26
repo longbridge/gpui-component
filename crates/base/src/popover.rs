@@ -7,7 +7,10 @@ use gpui::{
     prelude::FluentBuilder as _,
 };
 
-use crate::{DeferredPopover, GlobalState, Popup, Selectable, actions::{Cancel, Confirm}};
+use crate::{
+    DeferredPopover, GlobalState, Popup, Selectable,
+    actions::{Cancel, Confirm},
+};
 
 const CONTEXT: &str = "Popover";
 

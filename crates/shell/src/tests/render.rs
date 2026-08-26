@@ -895,9 +895,15 @@ fn failed_nested_update_rolls_back_script_fields_entities_and_tasks(cx: &mut Tes
 import { View, ViewHandle, child_view, v_flex, Checkbox, InputState, timer, text } from "gpui";
 
 class Child extends View {
-  init() { this.label = "good"; this.clicks = 0; }
+  init() {
+    this.callback = () => {};
+    this.callback.label = "callable-good";
+    this.state = { label: "good", clicks: 0 };
+  }
   update(props) {
-    this.label = props.label;
+    this.state.label = props.label;
+    this.state.partial = "must disappear";
+    this.callback.label = "callable-bad";
     this.input = InputState.new({ value: "must roll back" });
     this.tick = timer.every(60_000, () => {});
     Promise.resolve().then(() => {
@@ -907,8 +913,8 @@ class Child extends View {
   }
   render() {
     return Checkbox.new("child-after-failure")
-      .on_change((_checked, cx) => { this.clicks += 1; cx.notify(); })
-      .child(text(`${this.label}:${this.clicks}`));
+      .on_change((_checked, cx) => { this.state.clicks += 1; cx.notify(); })
+      .child(text(`${this.state.label}:${this.state.clicks}:${this.state.partial ?? "clean"}:${this.callback.label}`));
   }
 }
 
@@ -985,9 +991,112 @@ export default class Parent extends View {
             .unwrap_or_default()
     });
     assert!(
-        tree.contains("good:1"),
+        tree.contains("good:1:clean:callable-good"),
         "failed update leaked into child: {tree}"
     );
+}
+
+/// Native retained-view tokens remain authority-bearing even when two
+/// independently authorized applications intentionally share one runtime.
+#[gpui::test]
+fn nested_view_tokens_reject_foreign_application_mount_update_and_release(cx: &mut TestAppContext) {
+    cx.update(crate::init);
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let root = std::env::temp_dir().join(format!(
+        "gpui-shell-nested-token-provenance-{}",
+        std::process::id()
+    ));
+    let victim_dir = root.join("victim");
+    let attacker_dir = root.join("attacker");
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&victim_dir).expect("victim directory");
+    std::fs::create_dir_all(&attacker_dir).expect("attacker directory");
+    std::fs::write(
+        victim_dir.join("main.js"),
+        r#"import { View, ViewHandle, child_view, text } from "gpui";
+class Child extends View {
+  init(props) { this.label = props.label; }
+  update(props) { this.label = props.label; }
+  render() { return text(this.label); }
+}
+export default class Victim extends View {
+  init() { this.child = ViewHandle.new(Child, { label: "victim-intact" }); }
+  render() { return child_view(this.child); }
+}"#,
+    )
+    .expect("victim source");
+    std::fs::write(
+        attacker_dir.join("main.js"),
+        r#"import { View, text } from "gpui";
+export default class Attacker extends View {
+  init() {
+    this.results = [];
+    try { globalThis.__view_set_props(0, { label: "stolen" }); this.results.push("updated"); }
+    catch (_) { this.results.push("update-refused"); }
+    try { globalThis.__view_release(0); this.results.push("released"); }
+    catch (_) { this.results.push("release-refused"); }
+  }
+  render() {
+    try { globalThis.__child_view(0); this.results.push("mounted"); }
+    catch (_) { this.results.push("mount-refused"); }
+    return text(this.results.join(","));
+  }
+}"#,
+    )
+    .expect("attacker source");
+
+    let victim_type = runtime
+        .load_app(&victim_dir, "main.js")
+        .expect("load victim");
+    let attacker_type = runtime
+        .load_app(&attacker_dir, "main.js")
+        .expect("load attacker");
+    let victim_policy = Rc::new(Policy::default());
+    let attacker_policy = Rc::new(Policy::default());
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let victim = context
+        .update(|window, cx| {
+            runtime.instantiate_view_with_policy(&victim_type, victim_policy.clone(), window, cx)
+        })
+        .expect("instantiate victim");
+    draw(&mut context, &victim);
+    let victim_child = context.update(|_, cx| {
+        let snapshot = victim.read(cx).snapshot().expect("victim snapshot");
+        (0..snapshot.len() as u32)
+            .filter_map(|id| snapshot.arena().node(id))
+            .find_map(|node| match node.component() {
+                Some(crate::spec::Component::ChildView(child)) => Some(child.view().clone()),
+                _ => None,
+            })
+            .expect("victim child")
+    });
+    let attacker = context
+        .update(|window, cx| {
+            runtime.instantiate_view_with_policy(
+                &attacker_type,
+                attacker_policy.clone(),
+                window,
+                cx,
+            )
+        })
+        .expect("foreign operations must be synchronously catchable");
+    draw(&mut context, &attacker);
+    let tree = |view: &gpui::Entity<ScriptView>, context: &mut VisualTestContext| {
+        context.update(|_, cx| {
+            view.read(cx)
+                .snapshot()
+                .map(crate::RenderSnapshot::debug_tree)
+                .unwrap_or_default()
+        })
+    };
+    assert!(tree(&victim_child, &mut context).contains("victim-intact"));
+    let attacker_tree = tree(&attacker, &mut context);
+    assert!(attacker_tree.contains("update-refused"), "{attacker_tree}");
+    assert!(attacker_tree.contains("release-refused"), "{attacker_tree}");
+    assert!(attacker_tree.contains("mount-refused"), "{attacker_tree}");
+    let _ = std::fs::remove_dir_all(root);
 }
 
 /// The public release method is the complete subtree teardown boundary: typed
@@ -1247,6 +1356,51 @@ export default class Parent extends View {
         message.contains("expects a View subclass"),
         "unexpected class validation error: {message}"
     );
+}
+
+/// Constructor/init failures cannot be drained re-entrantly into the native
+/// call, so the explicit synchronous API contract reports them from the
+/// enclosing host entry. The failed public create still rolls back everything
+/// it retained before that error reached Rust.
+#[gpui::test]
+fn public_nested_constructor_failure_reaches_the_host_boundary_and_rolls_back(
+    cx: &mut TestAppContext,
+) {
+    cx.update(crate::init);
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View, ViewHandle, InputState, timer, text } from "gpui";
+class Child extends View {
+  constructor() {
+    super();
+    this.input = InputState.new({ value: "constructor allocation" });
+    this.tick = timer.every(60_000, () => {});
+    throw new Error("child constructor rejected");
+  }
+  render() { return text("unreachable"); }
+}
+export default class Parent extends View {
+  init() { this.child = ViewHandle.new(Child); }
+  render() { return text("parent"); }
+}
+"#;
+    let tasks = crate::engine::quickjs::task_count();
+    let view_type = runtime
+        .load_source("nested-public-constructor-failure.js", source)
+        .expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let error = context
+        .update(|window, cx| runtime.instantiate_view(&view_type, window, cx))
+        .expect_err("the enclosing host entry must report constructor failure");
+    assert!(
+        error.to_string().contains("child constructor rejected"),
+        "{error}"
+    );
+    assert!(runtime.entities().is_empty());
+    assert_eq!(runtime.nested_view_alias_count(), 0);
+    assert_eq!(crate::engine::quickjs::task_count(), tasks);
 }
 
 #[gpui::test]
@@ -3204,17 +3358,22 @@ fn hot_reload_keeps_replacement_children_and_retires_old_snapshots_and_aliases(
         std::env::temp_dir().join(format!("gpui-shell-nested-reload-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&directory);
     std::fs::create_dir_all(&directory).expect("application directory");
-    let source = |caption: &str| {
+    let source = |caption: &str, probe_stale_token: bool| {
+        let probe = if probe_stale_token {
+            "this.probe = []; try { globalThis.__view_set_props(0, {}); } catch (_) { this.probe.push('update-refused'); } try { globalThis.__view_release(0); } catch (_) { this.probe.push('release-refused'); }"
+        } else {
+            "this.probe = [];"
+        };
         format!(
-            "import {{ View, ViewHandle, child_view, text }} from \"gpui\";\n\
+            "import {{ View, ViewHandle, child_view, v_flex, text }} from \"gpui\";\n\
              class Child extends View {{ render() {{ return text(\"{caption}\"); }} }}\n\
              export default class Parent extends View {{\n\
-               init() {{ this.child = ViewHandle.new(Child); }}\n\
-               render() {{ return child_view(this.child); }}\n\
+               init() {{ this.child = ViewHandle.new(Child); {probe} }}\n\
+               render() {{ if ({probe_stale_token}) {{ try {{ globalThis.__child_view(0); }} catch (_) {{ this.probe.push('mount-refused'); }} }} return v_flex().child(child_view(this.child)).child(text(this.probe.join(','))); }}\n\
              }}\n"
         )
     };
-    std::fs::write(directory.join("main.js"), source("old child")).expect("initial source");
+    std::fs::write(directory.join("main.js"), source("old child", false)).expect("initial source");
 
     let view_type = runtime.load_app(&directory, "main.js").expect("load");
     let window = cx.add_window(|_, _| Empty);
@@ -3239,7 +3398,7 @@ fn hot_reload_keeps_replacement_children_and_retires_old_snapshots_and_aliases(
     assert_eq!(runtime.entities().len(), 1);
     assert_eq!(runtime.nested_view_alias_count(), 1);
 
-    std::fs::write(directory.join("main.js"), source("replacement child"))
+    std::fs::write(directory.join("main.js"), source("replacement child", true))
         .expect("replacement source");
     context
         .update(|window, cx| {
@@ -3272,6 +3431,16 @@ fn hot_reload_keeps_replacement_children_and_retires_old_snapshots_and_aliases(
             .unwrap_or_default()
     });
     assert!(tree.contains("replacement child"), "{tree}");
+    let parent_tree = context.update(|_, cx| {
+        parent
+            .read(cx)
+            .snapshot()
+            .map(crate::RenderSnapshot::debug_tree)
+            .unwrap_or_default()
+    });
+    assert!(parent_tree.contains("update-refused"), "{parent_tree}");
+    assert!(parent_tree.contains("release-refused"), "{parent_tree}");
+    assert!(parent_tree.contains("mount-refused"), "{parent_tree}");
     let _ = std::fs::remove_dir_all(directory);
 }
 

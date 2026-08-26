@@ -17,9 +17,9 @@ use std::{path::PathBuf, rc::Rc, time::Duration};
 use gpui::{
     Anchor, AnyElement, AnyView, App, AppContext as _, ClickEvent, ClipboardItem, Context,
     ElementId, Entity, FocusHandle, Global, Hsla, InteractiveElement as _, IntoElement, KeyBinding,
-    MouseButton, MouseDownEvent,
-    ParentElement as _, Render, SharedString, StatefulInteractiveElement as _, Styled as _,
-    WeakFocusHandle, Window, actions, deferred, div, hsla, prelude::FluentBuilder as _, px,
+    MouseButton, MouseDownEvent, ParentElement as _, Render, SharedString,
+    StatefulInteractiveElement as _, Styled as _, WeakFocusHandle, Window, actions, deferred, div,
+    hsla, prelude::FluentBuilder as _, px,
 };
 use gpui_base::{
     ColorTokens, Dialog, POPUP_PRIORITY, RadiusTokens, Sheet, SpacingTokens, StyledExt as _,
@@ -1162,9 +1162,7 @@ mod tests {
         }
     }
 
-    fn shell_root_with_field(
-        cx: &mut TestAppContext,
-    ) -> (FocusHandle, &mut VisualTestContext) {
+    fn shell_root_with_field(cx: &mut TestAppContext) -> (FocusHandle, &mut VisualTestContext) {
         cx.update(crate::init);
         let handle = std::rc::Rc::new(std::cell::RefCell::new(None));
         let (_, cx) = cx.add_window_view({
