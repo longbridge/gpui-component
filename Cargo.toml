@@ -21,6 +21,7 @@ members = [
     "examples/focus_trap",
     "examples/tooltip_top_edge",
     "examples/sidebar",
+    "examples/text_max_lines",
     "examples/text_selection",
     "examples/root_borderless",
     "examples/table_in_scrollable",
