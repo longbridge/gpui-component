@@ -3,7 +3,7 @@
 //! These tokens describe visual roles and scales. They intentionally do not
 //! contain component names such as `button`, `table`, or `sidebar`.
 
-use gpui::{BoxShadow, FontWeight, Hsla, Pixels, SharedString, hsla, point, px};
+use gpui::{BoxShadow, FontWeight, Hsla, Pixels, SharedString, point, px};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -16,7 +16,7 @@ pub struct SemanticThemeTokens {
     pub shadow: ShadowTokens,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct ColorTokens {
     pub background: Hsla,
     pub foreground: Hsla,
@@ -35,34 +35,6 @@ pub struct ColorTokens {
     pub border: Hsla,
     pub input: Hsla,
     pub ring: Hsla,
-}
-
-impl Default for ColorTokens {
-    fn default() -> Self {
-        // The unstyled Base layer still needs a visible, interoperable fallback.
-        // These roles are the semantic projection of gpui-component's Default
-        // Light theme; styled hosts replace the complete snapshot when their
-        // active theme changes.
-        Self {
-            background: hsla(0., 0., 1., 1.),
-            foreground: hsla(0., 0., 0.039, 1.),
-            surface: hsla(0., 0., 1., 1.),
-            surface_foreground: hsla(0., 0., 0.039, 1.),
-            primary: hsla(0., 0., 0.09, 1.),
-            primary_foreground: hsla(0., 0., 0.98, 1.),
-            secondary: hsla(0., 0., 0.898, 1.),
-            secondary_foreground: hsla(0., 0., 0.09, 1.),
-            muted: hsla(0., 0., 0.960_999_97, 1.),
-            muted_foreground: hsla(0., 0., 0.450_999_98, 1.),
-            accent: hsla(0., 0., 0.960_999_97, 1.),
-            accent_foreground: hsla(0., 0., 0.09, 1.),
-            destructive: hsla(0., 0.841_999_95, 0.602, 1.),
-            destructive_foreground: hsla(0., 0., 0.98, 1.),
-            border: hsla(0., 0., 0.898, 1.),
-            input: hsla(0., 0., 0.898, 1.),
-            ring: hsla(0., 0., 0.639, 1.),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, JsonSchema)]

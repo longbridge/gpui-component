@@ -47,7 +47,6 @@ mod progress;
 mod radio;
 mod radio_group;
 mod resizable;
-mod root;
 mod scrollbar;
 mod select;
 mod sheet;
@@ -131,7 +130,6 @@ pub use resizable::{
     ResizablePanel, ResizablePanelEvent, ResizablePanelGroup, ResizableState, ResizeHandleContext,
     ResizeHandleRenderer, h_resizable, resizable_panel, v_resizable,
 };
-pub use root::Root;
 pub use scrollbar::{
     Scrollbar, ScrollbarAxis, ScrollbarEntrance, ScrollbarHandle, ScrollbarMode, ScrollbarMotion,
     ScrollbarStyles, ScrollbarThumbStyle, ScrollbarTrackStyle,

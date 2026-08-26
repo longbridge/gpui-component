@@ -488,17 +488,6 @@ mod semantic_token_tests {
 
     use super::{RADIUS_FULL, Theme};
 
-    #[gpui::test]
-    fn base_color_defaults_match_the_default_component_theme(cx: &mut gpui::TestAppContext) {
-        cx.update(|cx| {
-            super::init(cx);
-            assert_eq!(
-                gpui_base::ColorTokens::default(),
-                Theme::global(cx).color_tokens()
-            );
-        });
-    }
-
     #[test]
     fn semantic_colors_are_a_live_projection_of_legacy_fields() {
         let mut theme = Theme::default();
