@@ -23,6 +23,35 @@ pub type SpecId = u32;
 /// Runtime-unique identifier for a script callback.
 pub type CallbackId = u64;
 
+/// Retained description of GPUI's reusable `Background` value.
+#[derive(Clone, Debug, PartialEq)]
+pub struct BackgroundSpec {
+    pub kind: BackgroundKind,
+    pub opacity: f32,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum BackgroundKind {
+    Solid {
+        color: String,
+    },
+    LinearGradient {
+        angle: f32,
+        from: (String, f32),
+        to: (String, f32),
+        color_space: String,
+    },
+    PatternSlash {
+        color: String,
+        width: f32,
+        interval: f32,
+    },
+    Checkerboard {
+        color: String,
+        size: f32,
+    },
+}
+
 /// Which constructor produced a node.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Component {
@@ -34,11 +63,107 @@ pub enum Component {
     Link(String),
     Checkbox(String),
     Switch(String),
+    /// A scrollbar the script places itself, driving the scroll area carrying
+    /// the same id. Pairing by name is the whole of the wiring — the two share
+    /// one `ScrollHandle` in window element state — which is what lets a bar
+    /// sit beside a fixed header, span two panes, or scroll a list that paints
+    /// no bar of its own.
+    Scrollbar(String),
     /// A text input, addressed by its entity handle rather than by an id: the
     /// state is what identifies it, and the state outlives the description.
     Input(crate::entities::EntityHandle),
+    /// Multi-line text, addressed by its entity handle for the same reason as
+    /// [`Component::Input`]. A separate variant rather than a flag on that one,
+    /// because `TextareaState` is a different Rust type: the store cannot hand
+    /// out one where the other was asked for, and `Textarea::new` will not take
+    /// an `InputState`.
+    Textarea(crate::entities::EntityHandle),
     /// A vector image, loaded from the application's own directory.
     Svg(String),
+    /// A full-color image, loaded from the application's own directory.
+    Image(String),
+    /// A native GPUI path. Its geometry is retained in method operations and
+    /// resolved against final element bounds during prepaint.
+    Path {
+        fill: bool,
+        background: BackgroundSpec,
+        stroke_width: f32,
+    },
+    /// A tab list. It holds no selection of its own: each `Tab` is told
+    /// whether it is selected and reports activation through `on_click`.
+    Tabs(String),
+    /// One tab in a [`Component::Tabs`].
+    Tab(String),
+    /// A progress root. It carries the progress role and the announced
+    /// `0..=100` value, and draws nothing: the visible bar is a
+    /// [`Component::ProgressTrack`] holding a [`Component::ProgressIndicator`],
+    /// both styled by the script.
+    Progress(String),
+    /// The groove of a progress bar. A plain element with no semantics of its
+    /// own — the announcement lives on the [`Component::Progress`] around it.
+    ProgressTrack,
+    /// The filled part of a progress bar, sized by the script from the same
+    /// number it gave [`Component::Progress`].
+    ProgressIndicator,
+    /// One option in a radio group. It reports only *becoming* checked: base
+    /// drops the handler once the radio is checked or disabled, because a
+    /// radio cannot deselect itself.
+    Radio(String),
+    /// A button that stays down. Controlled through `pressed`.
+    Toggle(String),
+    /// A set of radios. It holds no selection of its own: each radio is told
+    /// whether it is checked and reports the change through `on_change`.
+    RadioGroup(String),
+    /// A set of toggles, announced as a toolbar. Like [`Component::RadioGroup`]
+    /// it holds no state; each toggle carries its own.
+    ToggleGroup(String),
+    /// A semantic table root. It has no data source and no delegate: the
+    /// script nests the groups, rows and cells itself, exactly as HTML does.
+    Table(String),
+    /// The header row group of a [`Component::Table`].
+    TableHeader(String),
+    /// The body row group of a [`Component::Table`].
+    TableBody(String),
+    /// One row, carrying the one-based index it occupies in the whole table so
+    /// a screen reader can place it even when only a window of rows is drawn.
+    TableRow(String, usize),
+    /// One column header, carrying its one-based column index.
+    TableHead(String, usize),
+    /// One data cell, carrying its one-based column index.
+    TableCell(String, usize),
+    /// The slot a caption belongs in. It carries no caption role today, so it
+    /// says where a caption goes rather than what one means.
+    TableCaption(String),
+    /// A region whose `content` slot is rendered only while it is open.
+    /// Ordinary children are always rendered; the gate applies to the slot
+    /// alone.
+    Collapsible,
+    /// A click-driven anchored surface with a `trigger` slot and a `content`
+    /// slot. Controlled: the script holds the open state and is told when the
+    /// pointer changed it.
+    Popover(String),
+    /// A hover-driven anchored surface with the same two slots. It owns its own
+    /// open state, so there is nothing to control — only how long the pointer
+    /// has to rest before it appears and after it leaves.
+    HoverCard(String),
+    /// The bare anchored surface underneath [`Component::Popover`]: trigger
+    /// measurement, corner arithmetic, deferred paint above the rest of the
+    /// window, and window-edge snapping. It holds no open state at all — it
+    /// shows whatever is in its `content` slot, so a script opens and closes it
+    /// by filling that slot or leaving it empty.
+    Popup(String),
+    /// A combobox root. It holds no options and no value: it owns the combobox
+    /// role, the controlled `open` state, and the transfer of the keyboard
+    /// between the trigger and the popup content.
+    Select(String),
+    /// The same root, announced and keyed as a combobox whose trigger is an
+    /// editable field. Base forwards it to `Select` verbatim.
+    Combobox(String),
+    /// A date-picker root, carrying the focus handle its trigger takes the
+    /// keyboard through. The handle is a constructor argument because base's
+    /// `DatePicker::new` requires it: a picker without one has no trigger the
+    /// keyboard can reach. It holds no date — the calendar does.
+    DatePicker(String, crate::entities::EntityHandle),
 }
 
 impl Component {
@@ -52,8 +177,36 @@ impl Component {
             Component::Link(_) => "Link",
             Component::Checkbox(_) => "Checkbox",
             Component::Switch(_) => "Switch",
+            Component::Scrollbar(_) => "Scrollbar",
             Component::Input(_) => "Input",
+            Component::Textarea(_) => "Textarea",
             Component::Svg(_) => "svg",
+            Component::Image(_) => "image",
+            Component::Path { fill: true, .. } => "path fill",
+            Component::Path { fill: false, .. } => "path stroke",
+            Component::Tabs(_) => "Tabs",
+            Component::Tab(_) => "Tab",
+            Component::Progress(_) => "Progress",
+            Component::ProgressTrack => "ProgressTrack",
+            Component::ProgressIndicator => "ProgressIndicator",
+            Component::Radio(_) => "Radio",
+            Component::Toggle(_) => "Toggle",
+            Component::RadioGroup(_) => "RadioGroup",
+            Component::ToggleGroup(_) => "ToggleGroup",
+            Component::Table(_) => "Table",
+            Component::TableHeader(_) => "TableHeader",
+            Component::TableBody(_) => "TableBody",
+            Component::TableRow(..) => "TableRow",
+            Component::TableHead(..) => "TableHead",
+            Component::TableCell(..) => "TableCell",
+            Component::TableCaption(_) => "TableCaption",
+            Component::Collapsible => "Collapsible",
+            Component::Popover(_) => "Popover",
+            Component::HoverCard(_) => "HoverCard",
+            Component::Popup(_) => "Popup",
+            Component::Select(_) => "Select",
+            Component::Combobox(_) => "Combobox",
+            Component::DatePicker(..) => "DatePicker",
         }
     }
 }
@@ -73,6 +226,15 @@ pub enum SpecOp {
     /// into a detached node. Reusing the ordinary style methods there is what
     /// keeps state styling from needing a second value grammar.
     StateStyle(&'static str, SpecId),
+    /// A named element slot: an element the component renders in a place of
+    /// its own rather than among its children — a `Collapsible`'s content, a
+    /// popover's trigger, a number input's buttons.
+    ///
+    /// The element is detached from the tree when the slot is filled, which is
+    /// what stops it from also being drawn as an ordinary child. One `children`
+    /// list cannot express any of this: the component has to be able to render
+    /// this element somewhere else, or not at all.
+    Slot(&'static str, SpecId),
 }
 
 /// One described element: what constructed it, what was called on it, and what
@@ -117,8 +279,8 @@ pub struct SpecArena {
     /// language.
     parented: Vec<bool>,
     /// Nodes consumed by an op rather than by a parent — a state style's
-    /// declarations, for instance. They still take style ops, but they can
-    /// never enter the tree.
+    /// declarations, or the element filling a named slot. They still take ops,
+    /// but they can never enter the tree.
     claimed: Vec<bool>,
 }
 
@@ -226,8 +388,38 @@ impl SpecArena {
             | Component::Link(value)
             | Component::Checkbox(value)
             | Component::Switch(value)
-            | Component::Svg(value) => out.push_str(&format!(" {value:?}")),
-            Component::Input(handle) => out.push_str(&format!(" #{handle}")),
+            | Component::Svg(value)
+            | Component::Image(value)
+            | Component::Tabs(value)
+            | Component::Tab(value)
+            | Component::Progress(value)
+            | Component::Radio(value)
+            | Component::Toggle(value)
+            | Component::RadioGroup(value)
+            | Component::ToggleGroup(value)
+            | Component::Popover(value)
+            | Component::HoverCard(value)
+            | Component::Popup(value)
+            | Component::Select(value)
+            | Component::Combobox(value) => out.push_str(&format!(" {value:?}")),
+            // The focus handle is part of what a `DatePicker` *is* rather than
+            // something called on it, so the dump carries it beside the id the
+            // way a row carries its index.
+            Component::DatePicker(value, handle) => out.push_str(&format!(" {value:?} #{handle}")),
+            Component::Table(value)
+            | Component::TableHeader(value)
+            | Component::TableBody(value)
+            | Component::TableCaption(value) => out.push_str(&format!(" {value:?}")),
+            // The index is part of what the node *is* rather than something
+            // called on it — a cell that lost it announces itself in the wrong
+            // column — so the dump carries it beside the id, not among the ops.
+            Component::TableRow(value, index)
+            | Component::TableHead(value, index)
+            | Component::TableCell(value, index) => out.push_str(&format!(" {value:?} #{index}")),
+            Component::Scrollbar(value) => out.push_str(&format!(" {value:?}")),
+            Component::Input(handle) | Component::Textarea(handle) => {
+                out.push_str(&format!(" #{handle}"))
+            }
             _ => {}
         }
         for op in node.ops() {
@@ -289,9 +481,22 @@ impl SpecArena {
                     }
                     out.push(')');
                 }
+                // A slot holds a whole subtree, so it is written under the
+                // node instead of on its line of calls.
+                SpecOp::Slot(..) => {}
             }
         }
         out.push('\n');
+        // A filled slot is detached from `children`, so walking children alone
+        // would leave the content out of the dump entirely — and these tests
+        // are the only place the description is ever read back.
+        for op in node.ops() {
+            if let SpecOp::Slot(name, slot) = op {
+                out.push_str(&"  ".repeat(depth + 1));
+                out.push_str(&format!("@{name}\n"));
+                self.write_tree(*slot, depth + 2, out);
+            }
+        }
         for child in node.children() {
             self.write_tree(*child, depth + 1, out);
         }
@@ -300,7 +505,9 @@ impl SpecArena {
 
 #[derive(Debug, PartialEq)]
 pub enum SpecError {
-    /// The node holds a state style's declarations and cannot enter the tree.
+    /// The node was consumed by a method that takes an element — a state
+    /// style's declarations, or a named slot — so it cannot also enter the
+    /// tree.
     Claimed,
     /// The node belongs to a previous render pass.
     Expired,
@@ -322,7 +529,8 @@ impl std::fmt::Display for SpecError {
                 "element `{component}` was already added to a parent; elements are single-use values"
             ),
             SpecError::Claimed => f.write_str(
-                "this element holds the declarations of a state style and cannot be added \
+                "this element was given to a method that takes one — a state style's \
+                 declarations, or a named slot such as content — and cannot also be added \
                  to the tree",
             ),
             SpecError::SelfParent => f.write_str("an element cannot be added to itself"),
@@ -393,5 +601,21 @@ mod tests {
         arena.attach(root, label).unwrap();
 
         assert_eq!(arena.debug_tree(root), "v_flex\n  text \"Save\"\n");
+    }
+
+    #[test]
+    fn a_filled_slot_is_dumped_under_the_node_holding_it() {
+        let mut arena = SpecArena::new();
+        let root = arena.push(Component::Collapsible);
+        let content = arena.push(Component::Text("body".into()));
+        arena.claim(content).unwrap();
+        arena
+            .push_op(root, SpecOp::Slot("content", content))
+            .unwrap();
+
+        assert_eq!(
+            arena.debug_tree(root),
+            "Collapsible\n  @content\n    text \"body\"\n"
+        );
     }
 }

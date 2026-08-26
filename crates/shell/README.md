@@ -132,7 +132,7 @@ camelCase one is script code.
 One import provides the whole namespace:
 
 ```js
-import { View, div, h_flex, v_flex, text, Button, Link, Checkbox, Switch } from "gpui";
+import { View, div, h_flex, v_flex, text, svg, image, Button, Link, Checkbox, Switch } from "gpui";
 ```
 
 | API | Form | Description |
@@ -140,6 +140,7 @@ import { View, div, h_flex, v_flex, text, Button, Link, Checkbox, Switch } from 
 | `div()` | function | An element with no layout of its own |
 | `h_flex()` / `v_flex()` | function | A row / column flex element |
 | `text(value)` | function | A text element |
+| `svg(path)` / `image(path)` | functions | A theme-tinted vector icon / full-colour application asset |
 | `Button.new(id)` | type | A base `Button`: activation, focus, disabled and selected state, no styling |
 | `Link.new(id)` | type | A base external link; pair it with `.href("https://…")` |
 | `Checkbox.new(id)` / `Switch.new(id)` | type | A base controlled toggle, no styling |
@@ -159,6 +160,8 @@ Functions are lowercase and types are capitalized and constructed through
 | `.href(url)` | Gives a `Link` an absolute HTTP(S) target opened by the host |
 | `.transition(property, policy)` | Animates a later target change in native Rust code |
 | `.spring(property, policy?)` | Springs a later target change in native Rust code |
+| `.overflow_scrollbar()` | Scrolls both axes and paints native scrollbars |
+| `.overflow_x_scrollbar()` / `.overflow_y_scrollbar()` | Scrolls one axis and paints its native scrollbar |
 
 ### Styling
 
@@ -178,6 +181,7 @@ fifty-seven methods that take arguments:
 | `.border(n)` and its per-edge forms, `.rounded(n)` and its per-corner forms | length |
 | `.bg(color)` `.text_color(color)` `.text_bg(color)` `.border_color(color)` | color |
 | `.text_size(n)` `.line_height(n)` | length |
+| `.font_family(name)` | string |
 
 A number is pixels. A string length is `"auto"`, `"50%"`, `"12px"` or `"1rem"`;
 which of those a given method accepts follows the Rust signature, so `.p()`

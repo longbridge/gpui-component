@@ -77,6 +77,7 @@ percentages and "auto" are not allowed here
 | Paint | `bg` `text_color` `text_bg` `border_color` | colour |
 | Paint | `text_size` | `AbsoluteLength` |
 | Paint | `line_height` | `DefiniteLength` |
+| Typography | `font_family` | string |
 | Paint | `opacity` | number |
 
 `line_height` is the one exception worth memorizing: a **bare number is a multiplier**, not pixels. `line_height(1.45)` means 1.45× the font size, because that is what it means everywhere else in the industry and 1.45px is never what anyone meant. A string still follows the ordinary grammar.
@@ -167,6 +168,11 @@ Use `.overflow_scroll()` for both axes, `.overflow_x_scroll()` for horizontal
 scrolling, or `.overflow_y_scroll()` for vertical scrolling. A stable `.id(...)`
 keeps the native scroll position attached to the same viewport across script
 renders.
+
+The corresponding `.overflow_scrollbar()`, `.overflow_x_scrollbar()` and
+`.overflow_y_scrollbar()` methods keep the same scrolling behavior and also
+paint gpui-component's native scrollbars. They require a stable `.id(...)` so
+each viewport keeps independent scrollbar and scroll-position state.
 
 ## Theme values
 

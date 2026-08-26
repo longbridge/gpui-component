@@ -45,7 +45,9 @@ use std::sync::OnceLock;
 
 use crate::error::{Result as ShellResult, ShellError};
 use gpui::inspector_reflection::FunctionReflection;
-use gpui::{AbsoluteLength, DefiniteLength, Length, StyleRefinement, Styled, px, relative, rems};
+use gpui::{
+    AbsoluteLength, DefiniteLength, FontWeight, Length, StyleRefinement, Styled, px, relative, rems,
+};
 use gpui_base::StyledExt as _;
 
 use crate::value::{Bridged, arg};
@@ -61,9 +63,10 @@ use crate::value::{Bridged, arg};
 /// * `shadow` — takes a `Vec<BoxShadow>`; the `shadow_*` presets are nullary and
 ///   already reflected, and a real shadow API belongs with the animation and
 ///   token work in §13.5 rather than as a positional argument list.
-/// * `cursor`, `text_align`, `text_overflow`, `font_weight` — take GPUI enums.
-///   They need an enum-name mapping of their own; every variant already has a
-///   nullary form (`cursor_pointer`, `text_center`, `font_bold`, …).
+/// * `cursor`, `text_align`, `text_overflow` — take GPUI enums. They need an
+///   enum-name mapping of their own; every variant already has a nullary form
+///   (`cursor_pointer`, `text_center`, …). `font_weight` is bound separately
+///   because GPUI deliberately represents it as a numeric value.
 /// * `scrollbar_width` — meaningful only together with overflow configuration
 ///   that the shell does not expose yet.
 ///
@@ -146,6 +149,11 @@ const PARAM_STYLES: &[(&str, &str)] = &[
         "Sets the background painted behind the text itself.",
     ),
     ("text_size", "Sets the font size."),
+    ("font_family", "Sets the font family."),
+    (
+        "font_weight",
+        "Sets the font weight to a number between 100 and 900.",
+    ),
     (
         "line_height",
         "Sets the line height. A bare number is a multiplier (`1.45`), not pixels; a string is a length.",
@@ -452,6 +460,8 @@ pub fn apply_param(
         "text_color" => refinement.text_color(color!()),
         "text_bg" => refinement.text_bg(color!()),
         "text_size" => refinement.text_size(absolute!()),
+        "font_family" => refinement.font_family(arg(args, 0, name)?.as_str()?.to_owned()),
+        "font_weight" => refinement.font_weight(font_weight(number!(), name)?),
         // Line height is the one length whose bare number is a multiplier, not
         // pixels: `line_height(1.45)` means 1.45x the font size everywhere else
         // in the industry, and 1.45px is never what anyone meant. A string
@@ -596,6 +606,16 @@ fn line_height(value: &Bridged, method: &str) -> ShellResult<DefiniteLength> {
     }
 }
 
+fn font_weight(value: f32, method: &str) -> ShellResult<FontWeight> {
+    if value.is_finite() && (100. ..=900.).contains(&value) {
+        Ok(FontWeight(value))
+    } else {
+        Err(ShellError::runtime(format!(
+            "`{method}` expects a finite number between 100 and 900; got {value}"
+        )))
+    }
+}
+
 fn definite_length(value: &Bridged, method: &str) -> ShellResult<DefiniteLength> {
     match parse_length(value, method)? {
         LengthLiteral::Absolute(absolute) => Ok(absolute.into()),
@@ -682,6 +702,29 @@ mod tests {
 
         let expected: Fill = Hsla::from(gpui::rgba(0xff0000ff)).into();
         assert_eq!(styled.background, Some(expected));
+    }
+
+    #[test]
+    fn font_weight_sets_gpui_font_weight_and_rejects_out_of_range_values() {
+        let styled = apply_param(
+            "font_weight",
+            &[Bridged::Number(600.)],
+            StyleRefinement::default(),
+        )
+        .unwrap();
+        let expected = StyleRefinement::default().font_weight(gpui::FontWeight(600.));
+        assert_eq!(styled, expected);
+
+        for weight in [99., 901.] {
+            let error = apply_param(
+                "font_weight",
+                &[Bridged::Number(weight)],
+                StyleRefinement::default(),
+            )
+            .unwrap_err()
+            .to_string();
+            assert!(error.contains("between 100 and 900"), "{error}");
+        }
     }
 
     #[test]

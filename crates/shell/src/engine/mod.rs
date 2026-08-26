@@ -33,6 +33,7 @@
 //!
 //! ShellRuntime::dispatch_click(&Rc<Self>, CallbackId, &ClickEvent, &mut Window, &mut App)
 //! ShellRuntime::dispatch_change(&Rc<Self>, CallbackId, bool, &mut Window, &mut App)
+//! ShellRuntime::dispatch_signal(&Rc<Self>, CallbackId, &mut Window, &mut App)
 //!
 //! set_store_path(PathBuf)
 //! set_development_mode(bool)

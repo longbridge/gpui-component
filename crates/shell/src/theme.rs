@@ -16,8 +16,8 @@
 
 use gpui::{App, Global, Hsla, Pixels};
 use gpui_base::{
-    ColorTokens, RadiusTokens, SemanticThemeTokens, ShadowTokens, SpacingTokens, Theme,
-    TypographyTokens,
+    ColorTokens, RadiusTokens, ScrollbarStyles, SemanticThemeTokens, ShadowTokens, SpacingTokens,
+    Theme, TypographyTokens,
 };
 use serde::Deserialize;
 use std::cell::{Cell, RefCell};
@@ -339,7 +339,16 @@ fn with_palettes<R>(f: impl FnOnce(&Palettes) -> R) -> R {
 fn install(mode: ThemeMode, cx: &mut App) {
     let tokens = with_palettes(|palettes| palettes.get(mode).tokens());
     CACHED.with(|cached| *cached.borrow_mut() = Some(tokens.clone()));
-    Theme::global_mut(cx).tokens = tokens;
+    let colors = tokens.colors;
+    let radius = tokens.radius.full;
+    let theme = Theme::global_mut(cx);
+    theme.tokens = tokens;
+    theme.scrollbar = theme.scrollbar.clone().with_styles(
+        ScrollbarStyles::default()
+            .thumb(|style| style.bg(colors.muted_foreground).radius(radius))
+            .thumb_hover(|style| style.bg(colors.foreground).radius(radius))
+            .thumb_active(|style| style.bg(colors.foreground).radius(radius)),
+    );
     cx.set_global(InstalledPalette { mode });
     GENERATION.with(|generation| generation.set(generation.get().wrapping_add(1)));
 }

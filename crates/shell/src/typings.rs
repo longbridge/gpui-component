@@ -61,6 +61,7 @@ use std::path::{Path, PathBuf};
 
 use gpui::StyleRefinement;
 
+use crate::a11y;
 use crate::scope::ScopePhase;
 use crate::style;
 use crate::theme::color_token_names;
@@ -83,6 +84,8 @@ pub fn declarations() -> String {
     out.push_str("declare module \"gpui\" {\n");
     out.push_str(VALUE_TYPES);
     out.push_str(&color_types());
+    out.push_str(&role_type());
+    out.push_str(&anchor_type());
     out.push_str(&view_types());
     out.push_str(MOTION_TYPES);
     out.push_str("  /**\n");
@@ -271,6 +274,7 @@ fn style_methods() -> (Vec<&'static str>, Vec<&'static str>) {
 /// distinction is that the Rust signature is what rejects `.p("auto")`.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Argument {
+    String,
     Length,
     DefiniteLength,
     AbsoluteLength,
@@ -285,6 +289,7 @@ enum Argument {
 impl Argument {
     fn ts_type(self) -> &'static str {
         match self {
+            Argument::String => "string",
             Argument::Length => "Length",
             Argument::DefiniteLength => "DefiniteLength",
             Argument::AbsoluteLength => "AbsoluteLength",
@@ -306,6 +311,12 @@ impl Argument {
 /// its bare number means a multiplier rather than pixels, and that is a
 /// documentation matter rather than a typing one.
 fn argument_of(name: &str) -> Argument {
+    if name == "font_family" {
+        return Argument::String;
+    }
+    if name == "font_weight" {
+        return Argument::Number;
+    }
     let accepts = |value: Bridged| style::apply_param(name, &[value], StyleRefinement::default());
 
     if accepts(Bridged::Str("#ff0000".into())).is_ok() {
@@ -344,6 +355,43 @@ fn color_types() -> String {
     out.push_str("   *     const palette = tone === \"blocking\" ? ... : ...;\n");
     out.push_str("   */\n");
     out.push_str("  export type Color = ColorToken | `#${string}`;\n\n");
+    out
+}
+
+/// The accessibility roles, generated from the same table `role(...)` parses
+/// through, so a name that type-checks is a name the runtime accepts.
+fn role_type() -> String {
+    let mut out = String::new();
+    out.push_str("  /**\n");
+    out.push_str("   * An accessibility role, mirroring `gpui::Role` in snake_case.\n");
+    out.push_str("   *\n");
+    out.push_str("   * `generic_container` is deliberately absent: GPUI filters that role\n");
+    out.push_str("   * out of the accessibility tree, so an element carrying it announces\n");
+    out.push_str("   * nothing while looking as though it announced something.\n");
+    out.push_str("   */\n");
+    out.push_str("  export type Role =\n");
+    for name in a11y::role_names() {
+        let _ = writeln!(out, "    | \"{name}\"");
+    }
+    out.push_str("    ;\n\n");
+    out
+}
+
+/// The anchors, generated from the same table `anchor(...)` parses through, so
+/// a corner that type-checks is a corner the runtime accepts.
+fn anchor_type() -> String {
+    let mut out = String::new();
+    out.push_str("  /**\n");
+    out.push_str("   * Which corner of an anchored surface is pinned to its trigger,\n");
+    out.push_str("   * mirroring `gpui::Anchor` in snake_case.\n");
+    out.push_str("   */\n");
+    out.push_str("  export type Anchor =\n");
+    for name in crate::materialize::ANCHOR_NAMES {
+        let _ = writeln!(out, "    | \"{name}\"");
+    }
+    out.push_str("    ;\n\n");
+    out.push_str("  /** Which pointer button opens a `Popover`. */\n");
+    out.push_str("  export type MouseButton = \"left\" | \"right\" | \"middle\";\n\n");
     out
 }
 
@@ -590,26 +638,188 @@ const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; 
     /** Adds several children, in order. */
     children(children: Iterable<Element>): Element;
     /**
+     * Fills the `content` slot of a `Collapsible`, a `Popover`, a `HoverCard`
+     * or a `Popup`.
+     *
+     * A slot is not a child: the element is consumed here and rendered by the
+     * component itself — for a `Collapsible`, only while it is `open`; for the
+     * two anchored surfaces, in a layer above the rest of the window. Adding it
+     * as a child as well throws.
+     *
+     * It takes an element, not a function returning one, and that is on purpose
+     * even though `window.open_dialog` takes a function. A dialog is a view of
+     * its own, opened from an event and outliving the render that opened it. A
+     * popover's content is part of *this* render: it is described beside its
+     * trigger and rebuilt with it, which is exactly what makes `cx.notify()`
+     * reach inside an open surface. A function would make it a separate view,
+     * invalidated separately — pick an item in an open menu, watch a count
+     * outside the menu change and the same count inside it stay put.
+     *
+     * A `HoverCard` wraps what it is given in an element of its own, so that
+     * moving the pointer onto the card keeps it open. Styles written here land
+     * on the inner element; the region the pointer has to reach is the wrapper
+     * around it.
+     */
+    content(element: Element): Element;
+    /**
+     * Fills the `trigger` slot of a `Popover` or a `HoverCard`: the element
+     * that is on screen while the surface is closed, and that opens it.
+     *
+     * Consumed exactly as `content` is. A surface with no trigger draws
+     * nothing at all. A `Popup` takes its trigger in `Popup.new(id, trigger)`
+     * instead, because its trigger's bounds are what the content is anchored
+     * to.
+     */
+    trigger(element: Element): Element;
+    /**
      * Applies `branch` only when `condition` is truthy, keeping the chain in
      * one piece. `branch` must return the element.
      */
     when(condition: unknown, branch: (el: Element) => Element): Element;
 
-    /** `handler(event, cx)`, on click and on keyboard activation. */
+    /**
+     * `handler(event, cx)` on activation. Keyboard activation is available
+     * only on components whose Base primitive supports it; `Tab` is currently
+     * pointer-only pending the compound keyboard behavior tracked in #2838.
+     */
     on_click(handler: (event: ClickEvent, cx: Context) => void): Element;
-    /** `handler(checked, cx)`, on a toggle. The script owns the new value. */
+    /**
+     * `handler(value, cx)`, on a toggle. The script owns the new value.
+     *
+     * A `Radio` only ever reports `true`. It cannot deselect itself, so an
+     * already checked — or disabled — radio reports nothing at all, and
+     * clearing a group is the script's own business.
+     */
     on_change(handler: (checked: boolean, cx: Context) => void): Element;
+    /**
+     * `handler(open, cx)`, when something other than the script changed a
+     * `Popover`'s open state: a press on the trigger, a press outside it, or
+     * Escape. Store the value and call `cx.notify()`, the way `on_change`
+     * stores a checkbox's.
+     *
+     * A `HoverCard` accepts this too, and today never calls it: the base layer
+     * only reports a change it observes between two of its own renders, which
+     * its open state cannot produce. A hover card's open state is its own, so
+     * nothing is lost except the notification.
+     */
+    on_open_change(handler: (open: boolean, cx: Context) => void): Element;
+    /**
+     * `handler(_, cx)` on Enter in an open `Select` or `Combobox`.
+     *
+     * There is no payload, because the root holds neither the options nor the
+     * selection: what was confirmed is whatever the script had highlighted, and
+     * the script is the only side that knows. Confirming a *closed* root opens
+     * it instead, so this never runs for that case.
+     */
+    on_confirm(handler: (event: {}, cx: Context) => void): Element;
+    /**
+     * `handler(_, cx)` on Escape in an open `Select` or `Combobox`, before
+     * `on_open_change(false)` — which is what lets a script commit a pending
+     * value on the way out.
+     */
+    on_dismiss(handler: (event: {}, cx: Context) => void): Element;
     /** Blocks activation and reports the disabled state. Draw it yourself. */
     disabled(value: boolean): Element;
     /** Reports the selected state of a `Button`. */
     selected(value: boolean): Element;
-    /** The controlled value of a `Checkbox` or `Switch`. */
+    /**
+     * This item's one-based position and its collection's total size, so a
+     * screen reader can announce "tab 2 of 5" or "option 2 of 5". Announced,
+     * never drawn: a tab list or radio group that omits it looks identical and
+     * says nothing about where the reader is in the set.
+     */
+    set_position(position: number, size: number): Element;
+    /** The controlled value of a `Checkbox`, `Switch` or `Radio`. */
     checked(value: boolean): Element;
+    /** The controlled state of a `Toggle`: a button that stays down. */
+    pressed(value: boolean): Element;
+    /**
+     * The announced progress percentage of a `Progress`, clamped to `0..=100`.
+     *
+     * It moves nothing on screen: size the `ProgressIndicator` from the same
+     * number to draw the bar.
+     */
+    value(percent: number): Element;
+    /**
+     * Withdraws a `Progress` value from the accessibility tree — "still
+     * working, no idea how far". It does not animate anything; a barber-pole
+     * or a sliding indicator is yours to draw, and `transition` on the
+     * indicator is how it moves.
+     */
+    indeterminate(value: boolean): Element;
     /**
      * What a screen reader announces. An icon-only control has no text of its
      * own and announces nothing without it.
      */
     accessibility_label(description: string): Element;
+    /**
+     * What this element announces itself as.
+     *
+     * Only where the element has one to give: a plain `div`, `h_flex` or
+     * `v_flex` — which is how a script builds the listbox, toolbar or dialog
+     * base has no component for — and a `Button` or `Checkbox`, whose role is
+     * an explicit override (a button that opens a menu, a checkbox that is a
+     * menu item). Every other component announces a role of its own, and a
+     * `role` there is reported and dropped rather than silently overwritten.
+     */
+    role(name: Role): Element;
+    /**
+     * The selected state of an option in a list the script built itself.
+     *
+     * Plain elements only. `Tab` and `Radio` announce their own selection from
+     * `selected(...)` and `checked(...)`.
+     */
+    aria_selected(value: boolean): Element;
+    /**
+     * Announces this element as the focused one while an ancestor actually
+     * holds the keyboard — the highlighted option of a combobox whose input
+     * keeps focus. It needs a `role` to produce a node at all, and GPUI
+     * ignores the claim unless a focused ancestor is present, so it is safe to
+     * set unconditionally on the highlighted child.
+     *
+     * Plain elements only.
+     */
+    aria_active_descendant(): Element;
+    /**
+     * Tracks a `FocusHandle` the script owns, so `handle.is_focused()` answers
+     * for this element and `handle.focus()` moves the keyboard onto it.
+     *
+     * Honoured by plain elements and by `Button`, `Checkbox`, `Radio`,
+     * `Toggle`, `Popup`, `Select` and `Combobox`. `Link`, `Switch` and the rest
+     * build their own focus handle and have no builder to replace it; a handle
+     * given to one of them is reported and dropped. A `DatePicker` takes its
+     * handle in `DatePicker.new(id, handle)` instead.
+     *
+     * On a `Select` or a `Combobox` this is the *trigger's* handle — what holds
+     * the keyboard while the list is shut. Put the same handle on the element
+     * you drew as the trigger, or nothing focusable is on screen and Escape and
+     * Enter reach nothing.
+     */
+    track_focus(handle: FocusHandleHandle): Element;
+    /**
+     * The handle a `Select` or `Combobox` moves the keyboard to when it opens,
+     * and away from when Escape closes it.
+     *
+     * Put the same handle on the element you drew as the list, and the list can
+     * then style itself from `handle.is_focused()`. It does **not** give you
+     * arrow-key navigation — see `Select` for what is and is not there.
+     */
+    content_focus_handle(handle: FocusHandleHandle): Element;
+    /**
+     * Where this element sits in the window's Tab order. A whole number;
+     * setting it also makes the element a tab stop.
+     *
+     * Honoured by plain elements and by every bound control except `Tab`,
+     * `Tabs` and the table, group and progress parts, which base leaves out of
+     * keyboard focus entirely.
+     */
+    tab_index(index: number): Element;
+    /**
+     * Whether Tab can land on this element. `false` keeps its place in the
+     * order without making it reachable, which is what a container that
+     * forwards focus to its first child wants.
+     */
+    tab_stop(value: boolean): Element;
     /** Sets the absolute HTTP(S) target opened by a `Link`. */
     href(url: string): Element;
     /**
@@ -620,8 +830,8 @@ const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; 
      * it, taking the pressed state, the focus and anything else keyed by
      * identity with it. Name anything whose identity has to survive that.
      *
-     * `Button`, `Link`, `Checkbox` and `Switch` take their identity from `new(id)` and
-     * ignore this.
+     * Any component whose factory takes an id is already identified by that id
+     * and ignores this.
      */
     id(name: string): Element;
     /** Owns wheel and touch scrolling on both axes for overflowing children. */
@@ -630,6 +840,94 @@ const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; 
     overflow_x_scroll(): Element;
     /** Owns vertical wheel and touch scrolling for overflowing children. */
     overflow_y_scroll(): Element;
+    /** Scrolls both axes and paints base-layer scrollbars. */
+    overflow_scrollbar(): Element;
+    /** Scrolls horizontally and paints a base-layer scrollbar. */
+    overflow_x_scrollbar(): Element;
+    /** Scrolls vertically and paints a base-layer scrollbar. */
+    overflow_y_scrollbar(): Element;
+    /**
+     * A `Scrollbar`'s visibility policy. Omitted, it follows the theme, which
+     * is what every bar painted by `overflow_*_scrollbar` does.
+     */
+    mode(value: ScrollbarMode): Element;
+    /**
+     * The content size a `Scrollbar` measures its thumb against, in pixels,
+     * for when the script knows it and the scroll area does not — a list that
+     * paints a window of rows rather than all of them.
+     */
+    scroll_size(width: number, height: number): Element;
+    /**
+     * Makes a `Scrollbar` take its viewport from its own box rather than from
+     * the scroll area it drives. The way to run a bar down the rows of a table
+     * without it reaching up over the fixed header.
+     */
+    viewport_from_layout(): Element;
+    /**
+     * The orientation a `RadioGroup` or `ToggleGroup` announces.
+     *
+     * Semantic only: it does **not** lay the group out. A group is a plain
+     * block until the script says `.flex().flex_row()` or `.flex_col()`, so set
+     * both — the axis for what a screen reader says, the layout for what is
+     * drawn. Omitted, each container keeps its own default: `RadioGroup` is
+     * vertical, `ToggleGroup` horizontal.
+     */
+    axis(value: GroupAxis): Element;
+    /**
+     * A `Table`'s total number of rows, including rows outside the range the
+     * script rendered, so a screen reader can announce "row 5 of 200". A table
+     * that draws every row it has does not need it.
+     */
+    row_count(count: number): Element;
+    /** A `Table`'s total number of columns, including unrendered ones. */
+    column_count(count: number): Element;
+    /**
+     * Whether a `Collapsible` renders the element in its `content` slot — its
+     * ordinary children are rendered either way — or whether a `Popover`,
+     * `Select`, `Combobox` or `DatePicker` is showing.
+     *
+     * Setting it at all makes a `Popover` controlled: the script holds the open
+     * state, is told about every change through `on_open_change`, and decides
+     * what to do about it. Leaving it off leaves the popover to open and close
+     * itself from `default_open`. The three combobox roots have no uncontrolled
+     * mode at all: they start shut and stay shut until the script says
+     * otherwise.
+     *
+     * A `Popup` has no open state to set. It shows whatever is in its `content`
+     * slot, so `.when(open, el => el.content(...))` is how one is opened.
+     */
+    open(value: boolean): Element;
+    /**
+     * Whether a `Popover` starts open. Read once, when the surface is first
+     * described; a controlled popover ignores it from then on.
+     */
+    default_open(value: boolean): Element;
+    /**
+     * Whether pressing outside an open `Popover` closes it. Default `true`.
+     */
+    overlay_closable(value: boolean): Element;
+    /**
+     * Which corner of a `Popover` or `HoverCard` is pinned to its trigger, and
+     * so where the surface opens. Omitted, each keeps its own default:
+     * `Popover` is `top_left`, `HoverCard` is `top_center`.
+     *
+     * The surface is clamped into the window either way, so an anchor near an
+     * edge is a preference rather than a promise.
+     */
+    anchor(value: Anchor): Element;
+    /** Which pointer button opens a `Popover`. Default `left`. */
+    mouse_button(value: MouseButton): Element;
+    /**
+     * How long, in milliseconds, the pointer must rest on a `HoverCard`'s
+     * trigger before the card appears. Default 600.
+     */
+    open_delay(ms: number): Element;
+    /**
+     * How long, in milliseconds, a `HoverCard` waits after the pointer leaves
+     * both the trigger and the card before closing. Default 300; it is what
+     * lets the pointer cross the gap between the two.
+     */
+    close_delay(ms: number): Element;
     /** Animates later target changes entirely in native GPUI code. */
     transition(property: MotionProperty, policy: number | TransitionPolicy): Element;
     /** Springs later target changes entirely in native GPUI code. */
@@ -693,6 +991,257 @@ const CONSTRUCTORS: &str = r#"
   export const Checkbox: ComponentType;
   /** A controlled switch. No styling. */
   export const Switch: ComponentType;
+  /**
+   * A tab list. It holds no selection of its own — each `Tab` is told whether
+   * it is selected, and reports activation through `on_click`, so the script
+   * keeps the selected index in its own state.
+   */
+  export const Tabs: ComponentType;
+  /** One tab. Controlled: `selected(...)` in, `on_click(...)` out. */
+  export const Tab: ComponentType;
+  /**
+   * A sub-part with no identity of its own, mirroring `ProgressTrack::new()`
+   * on the Rust side.
+   */
+  export interface PartType {
+    new: () => Element;
+  }
+
+  /**
+   * The progress root: the announcement, not the bar.
+   *
+   * It carries the progress role and the `0..=100` value a screen reader reads
+   * out, and draws exactly what any other empty element draws — nothing. The
+   * visible bar is a `ProgressTrack` you size and color, holding a
+   * `ProgressIndicator` whose width you set from the same number you passed to
+   * `value`. `Progress.new(...)` on its own puts nothing on screen.
+   */
+  export const Progress: ComponentType;
+  /**
+   * The groove. A plain element with your styles on it and no semantics of its
+   * own: give it a width, a height and a background, and put the indicator in
+   * it.
+   */
+  export const ProgressTrack: PartType;
+  /**
+   * The filled part. A plain element too — set its width from the percentage
+   * you announced, and add `transition("width", ...)` if it should slide.
+   */
+  export const ProgressIndicator: PartType;
+  /**
+   * One option in a radio group. No styling: draw the dot yourself.
+   *
+   * Controlled: `checked(...)` in, `on_change(...)` out — but only ever `true`,
+   * because a radio cannot deselect itself. The group lives in the script's own
+   * state, and so does clearing it.
+   */
+  export const Radio: ComponentType;
+  /**
+   * A button that stays down. Controlled: `pressed(...)` in, `on_change(...)`
+   * out, carrying the value the script would otherwise have to flip itself.
+   *
+   * No styling — an unstyled toggle is an invisible hit target with a button
+   * role — so the pressed look is the script's, usually through
+   * `.when(pressed, el => …)`.
+   */
+  export const Toggle: ComponentType;
+
+  /** The semantic orientation of a grouping container. Announced, not drawn. */
+  export type GroupAxis = "horizontal" | "vertical";
+
+  /**
+   * A set of radios, announced as one group. It holds no selection — each
+   * radio is told whether it is checked and reports the change back, so the
+   * script keeps the chosen value in its own state.
+   *
+   * `axis` only changes what is announced; the group has no layout until the
+   * script gives it one.
+   */
+  export const RadioGroup: ComponentType;
+  /**
+   * A set of toggles, announced as a toolbar. Like `RadioGroup` it holds no
+   * state of its own, and its `axis` is announced rather than drawn.
+   */
+  export const ToggleGroup: ComponentType;
+
+  /**
+   * A component type whose factory also takes a one-based accessibility index.
+   *
+   * The index is a constructor argument rather than a builder method because a
+   * row or cell that does not know where it sits announces itself in the wrong
+   * place. It must be a whole number of at least 1.
+   */
+  export interface IndexedComponentType {
+    new: (id: string | number, index: number) => Element;
+  }
+
+  /**
+   * A semantic table root, composed the way HTML composes one: no data source
+   * and no delegate, just the groups, rows and cells the script nests itself.
+   * No styling — draw the grid, the padding and the header weight yourself.
+   *
+   * `row_count` and `column_count` describe the whole table, including rows the
+   * script chose not to render. Give the root an `accessibility_label`; the
+   * visual `TableCaption` below is not associated with it by assistive
+   * technology.
+   */
+  export const Table: ComponentType;
+  /** The header row group of a `Table`. */
+  export const TableHeader: ComponentType;
+  /** The body row group of a `Table`. */
+  export const TableBody: ComponentType;
+  /** One row. `TableRow.new(id, row_index)`, one-based. */
+  export const TableRow: IndexedComponentType;
+  /** One column header. `TableHead.new(id, column_index)`, one-based. */
+  export const TableHead: IndexedComponentType;
+  /** One data cell. `TableCell.new(id, column_index)`, one-based. */
+  export const TableCell: IndexedComponentType;
+  /**
+   * The visual slot a caption belongs in. It is an identified container and
+   * nothing more: it carries no caption role, so assistive technology does not
+   * tie it to the table. Name the `Table` root with `accessibility_label(...)`.
+   */
+  export const TableCaption: ComponentType;
+
+  /**
+   * A region whose `content` is materialized and rendered only while `open` is
+   * true.
+   *
+   * That gating is the whole of it. Next to `div()` it adds one thing and
+   * nothing else: no role, no announced expanded state, no chevron, no
+   * animation and no trigger. Ordinary children are always rendered, so the
+   * header goes there; the open state, the control that flips it and any
+   * transition on the content are the script's own.
+   */
+  export const Collapsible: PartType;
+
+  /**
+   * A surface anchored to a trigger and opened by a press.
+   *
+   * It owns the press, the anchoring, the dismissal — outside press, Escape —
+   * and the focus that moves into the surface and back out again. It draws
+   * nothing: the trigger and the content are both elements you build and style,
+   * given to `trigger(...)` and `content(...)`.
+   *
+   * Controlled the way a `Checkbox` is. Read `open(...)` in from your own
+   * state, write it back from `on_open_change(...)`. Left uncontrolled, it
+   * opens and closes itself from `default_open`, and the script never learns
+   * where it got to.
+   *
+   * `track_focus(handle)` names what takes the keyboard when it opens — the
+   * search field of a picker, say — instead of the surface itself.
+   */
+  export const Popover: ComponentType;
+  /**
+   * A surface anchored to a trigger and opened by resting the pointer on it.
+   *
+   * It owns its own open state: there is no `open` to control and no press to
+   * handle, only `open_delay` and `close_delay`. Both delays are milliseconds,
+   * and the closing one is what lets the pointer cross the gap between the
+   * trigger and the card without dismissing it.
+   */
+  export const HoverCard: ComponentType;
+
+  /**
+   * The bare anchored surface underneath `Popover`, for when the open state
+   * already belongs to something else.
+   *
+   * It measures its trigger, pins the chosen corner of the content to it,
+   * paints that content in a layer above the rest of the window and keeps it
+   * clear of the window edges. It owns nothing else — no press handling, no
+   * dismissal, no open state. That is the point: a `Select` already owns those,
+   * and a `Popover` underneath it would be a second control fighting the first
+   * for the same Escape key.
+   *
+   * The trigger is a constructor argument, because the trigger's bounds are
+   * what the content is anchored to. Open and close it by filling the `content`
+   * slot or leaving it empty:
+   *
+   * ```js
+   * Popup.new("options", trigger).anchor("bottom_left")
+   *   .when(this.open, el => el.content(v_flex().children(options)))
+   * ```
+   *
+   * A popup is a real element, unlike `Popover`: styles, state styles, `role`
+   * and `track_focus` all land on it.
+   */
+  export interface PopupType {
+    new: (id: string | number, trigger: Element) => Element;
+  }
+
+  export const Popup: PopupType;
+
+  /**
+   * A combobox root: the semantics and the keyboard, none of the picture.
+   *
+   * It holds no options and no selected value. What it owns is the combobox
+   * role, the announced expanded state, the controlled `open` state, and the
+   * transfer of the keyboard between the trigger and the list. Everything on
+   * screen is yours — put the trigger and a `Popup` holding the list inside it
+   * as ordinary children.
+   *
+   * Controlled the way a `Checkbox` is: `open(...)` in, `on_open_change(...)`
+   * out. `track_focus(...)` names the trigger's focus handle and
+   * `content_focus_handle(...)` the list's; without the first, nothing on
+   * screen has the keyboard and no key reaches the root at all.
+   *
+   * **Arrow-key navigation of an open list is not there.** Base opens the list
+   * on ↑ / ↓ / Enter, moves the keyboard onto the content handle and then
+   * expects whatever is inside to run the highlight from its own key bindings.
+   * The shell has no key-binding layer, so nothing takes over: the pointer
+   * works, Escape closes, Enter and ↓ open, and moving the highlight with the
+   * keyboard once open does not. Say so in your UI rather than shipping a
+   * control that looks keyboard-operable and is not.
+   *
+   * **The highlighted option marks itself.** GPUI puts the active descendant on
+   * the option element rather than on the container, so the root cannot mark
+   * one for you: call `aria_active_descendant()` on whichever option you drew
+   * as highlighted, and give it a `role`.
+   *
+   * ```js
+   * Select.new("country")
+   *   .accessibility_label("Country")
+   *   .open(this.open)
+   *   .track_focus(this.trigger_focus)
+   *   .content_focus_handle(this.list_focus)
+   *   .on_open_change((open, cx) => { this.open = open; cx.notify(); })
+   *   .child(
+   *     Popup.new("country-list", trigger)
+   *       .when(this.open, el => el.content(list)),
+   *   );
+   * ```
+   */
+  export const Select: ComponentType;
+  /**
+   * The same root, keyed and announced as a combobox whose trigger is an
+   * editable field — a `Select` with a text input in front of it. Base forwards
+   * every builder to `Select` verbatim, so everything above applies here,
+   * including what is missing; the one difference is that it has no
+   * `accessibility_label` of its own, so name it through the input.
+   */
+  export const Combobox: ComponentType;
+  /**
+   * A date-picker root: the combobox role, the announced open state, and the
+   * trigger's place in the Tab order. **It holds no date** — the date lives
+   * wherever you keep it, and the calendar you draw inside it is your own.
+   *
+   * The focus handle is a constructor argument because base requires it: the
+   * picker takes the keyboard through that handle, and there is no builder to
+   * supply one later. `DatePicker.new(id, handle)` throws without a live one.
+   *
+   * **Enter and Escape do not reach it.** Base's picker handles both actions
+   * but sets no key context, and every key binding base installs is scoped to
+   * one — so nothing matches the keystroke and `on_open_change` never fires.
+   * Open and close it from a press on the trigger you drew instead, and treat
+   * `on_open_change` as wired for the day that changes. A `Select` does not
+   * have this problem; if you need the keyboard today, build the picker's
+   * trigger and calendar inside one.
+   */
+  export interface DatePickerType {
+    new: (id: string | number, focus_handle: FocusHandleHandle) => Element;
+  }
+
+  export const DatePicker: DatePickerType;
 
   /**
    * A vector image from the application's own directory.
@@ -703,6 +1252,89 @@ const CONSTRUCTORS: &str = r#"
    * color unless it sets its own.
    */
   export function svg(path: string): Element;
+
+  /**
+   * A full-color image from the application's own directory.
+   *
+   * Unlike `svg`, this preserves the source image's colors instead of using it
+   * as a theme-tinted icon mask. SVG, PNG, JPEG and other GPUI image formats
+   * are supported by the host image loader.
+   */
+  export function image(path: string): Element;
+
+  /** When a `Scrollbar` shows itself. */
+  export type ScrollbarMode = "scrolling" | "hover" | "always";
+
+  /**
+   * A scrollbar you place yourself, driving the scroll area that carries the
+   * same id.
+   *
+   * `overflow_y_scrollbar()` is the easy case: a bar along the edges of the
+   * element that scrolls. This is the other one — a bar beside a fixed table
+   * header, a bar spanning two panes, a bar for a list that paints none of its
+   * own. The two halves are matched **by name**, and nothing checks the match
+   * before it runs, so both are needed:
+   *
+   * ```js
+   * v_flex().relative().h(240)
+   *   .child(v_flex().id("watchlist").size_full().overflow_y_scroll().children(rows))
+   *   .child(Scrollbar.vertical("watchlist").absolute().inset_0());
+   * ```
+   *
+   * The area must be the one that actually scrolls: `.id(name)` together with
+   * `overflow_scroll` / `overflow_x_scroll` / `overflow_y_scroll`. Not
+   * `overflow_y_scrollbar`, which paints a bar of its own and shares nothing.
+   * A bar that finds no such area is reported in the log rather than drawn
+   * inert.
+   *
+   * The bar has no size or position of its own — it fills the element it is
+   * put in, so that element is the one you place — and its colors come from
+   * the theme.
+   */
+  export interface ScrollbarType {
+    /** Both axes. */
+    new: (id: string | number) => Element;
+    /** The horizontal bar alone. */
+    horizontal: (id: string | number) => Element;
+    /** The vertical bar alone. */
+    vertical: (id: string | number) => Element;
+  }
+
+  export const Scrollbar: ScrollbarType;
+
+  /** A coordinate in pixels or relative to the painted element's bounds. */
+  export type PathCoordinate = number | `${number}%`;
+  /** Immutable native GPUI geometry produced by `PathBuilder.build()`. */
+  export interface Path {}
+  export interface PathBuilderHandle {
+    move_to(x: PathCoordinate, y: PathCoordinate): PathBuilderHandle;
+    line_to(x: PathCoordinate, y: PathCoordinate): PathBuilderHandle;
+    curve_to(to_x: PathCoordinate, to_y: PathCoordinate, control_x: PathCoordinate, control_y: PathCoordinate): PathBuilderHandle;
+    cubic_bezier_to(to_x: PathCoordinate, to_y: PathCoordinate, control_a_x: PathCoordinate, control_a_y: PathCoordinate, control_b_x: PathCoordinate, control_b_y: PathCoordinate): PathBuilderHandle;
+    arc_to(radius_x: PathCoordinate, radius_y: PathCoordinate, rotation: number, large_arc: boolean, sweep: boolean, to_x: PathCoordinate, to_y: PathCoordinate): PathBuilderHandle;
+    add_polygon(points: ReadonlyArray<readonly [PathCoordinate, PathCoordinate]>, closed?: boolean): PathBuilderHandle;
+    close(): PathBuilderHandle;
+    dash_array(values: readonly number[]): PathBuilderHandle;
+    build(): Path;
+  }
+  export const PathBuilder: {
+    fill(): PathBuilderHandle;
+    stroke(width: number): PathBuilderHandle;
+  };
+  export interface BackgroundStop {}
+  export interface BackgroundValue {
+    opacity(factor: number): BackgroundValue;
+    color_space(space: "srgb" | "oklab"): BackgroundValue;
+  }
+  export const Background: {
+    solid(color: Color): BackgroundValue;
+    stop(color: Color, percentage: number): BackgroundStop;
+    linear_gradient(angle: number, from: Color | BackgroundStop, to: Color | BackgroundStop): BackgroundValue;
+    pattern_slash(color: Color, width: number, interval: number): BackgroundValue;
+    checkerboard(color: Color, size: number): BackgroundValue;
+  };
+  /** Paints immutable GPUI geometry with a reusable native Background. */
+  export function paint_path(path: Path, background: BackgroundValue | Color): Element;
 
   /**
    * Retained text state, created once and kept on the view.
@@ -730,6 +1362,69 @@ const CONSTRUCTORS: &str = r#"
 
   /** The frame around retained text state. */
   export const Input: InputType;
+
+  /**
+   * Retained multi-line text state, created once and kept on the view.
+   *
+   * Like `InputState.new(...)` this needs a live host call, so it belongs in
+   * `init` or in an event handler — never in `render`.
+   *
+   * Give it a height. Being multi-line is carried by the state's mode rather
+   * than by its layout, so the layout default is a single row even here: a
+   * textarea that says nothing else is the height of an input. Pass `rows`,
+   * call `set_auto_grow(...)`, or size the element with `.h(...)`.
+   */
+  export interface TextareaStateHandle {
+    value(): string;
+    set_value(next: string): void;
+    /** `change`, `submit`, `focus` or `blur`. */
+    on(event: "change" | "submit" | "focus" | "blur", handler: (event: any, cx: Context) => void): boolean;
+    /** Shows this many rows. */
+    set_rows(rows: number): void;
+    /** Grows with the content, between the two row counts. */
+    set_auto_grow(min_rows: number, max_rows: number): void;
+    /** Wraps long lines instead of scrolling sideways. Default is on. */
+    set_soft_wrap(wrap: boolean): void;
+    release(): boolean;
+  }
+
+  export interface TextareaStateType {
+    new: (options?: { placeholder?: string; value?: string; rows?: number }) => TextareaStateHandle;
+  }
+
+  export const TextareaState: TextareaStateType;
+
+  export interface TextareaType {
+    new: (state: TextareaStateHandle) => Element;
+  }
+
+  /** The frame around retained multi-line text state. */
+  export const Textarea: TextareaType;
+
+  /**
+   * A focus target the script owns, created once and kept on the view.
+   *
+   * Focus is a fact about the window that outlives any one render, so an
+   * element rebuilt every frame cannot own it. Hand the handle to an element
+   * with `track_focus(...)`, and it is that element the keyboard means.
+   *
+   * `FocusHandle.new()` needs a live host call and would produce a fresh
+   * handle on every frame, so it belongs in `init` or in an event handler —
+   * never in `render`.
+   */
+  export interface FocusHandleHandle {
+    /** Moves the keyboard onto the element tracking this handle. */
+    focus(): void;
+    /** Whether the element tracking this handle currently has the keyboard. */
+    is_focused(): boolean;
+    release(): boolean;
+  }
+
+  export interface FocusHandleType {
+    new: () => FocusHandleHandle;
+  }
+
+  export const FocusHandle: FocusHandleType;
 
   /** Semantic color roles, aligned with `gpui_base::ColorTokens`. */
   export type ColorTokens = { readonly [Role in ColorToken]: Color };
@@ -1057,18 +1752,50 @@ mod tests {
     const NON_STYLE_METHODS: &[&str] = &[
         "child",
         "children",
+        "content",
+        "trigger",
         "when",
         "on_click",
         "on_change",
+        "on_open_change",
+        "on_confirm",
+        "on_dismiss",
         "disabled",
         "selected",
         "checked",
         "accessibility_label",
+        "role",
+        "aria_selected",
+        "aria_active_descendant",
+        "track_focus",
+        "content_focus_handle",
+        "tab_index",
+        "tab_stop",
         "href",
         "id",
         "overflow_scroll",
         "overflow_x_scroll",
         "overflow_y_scroll",
+        "overflow_scrollbar",
+        "overflow_x_scrollbar",
+        "overflow_y_scrollbar",
+        "mode",
+        "scroll_size",
+        "viewport_from_layout",
+        "set_position",
+        "pressed",
+        "value",
+        "indeterminate",
+        "axis",
+        "row_count",
+        "column_count",
+        "open",
+        "default_open",
+        "overlay_closable",
+        "anchor",
+        "mouse_button",
+        "open_delay",
+        "close_delay",
         "transition",
         "spring",
         "hover",
@@ -1115,6 +1842,7 @@ mod tests {
             "    gap(value: DefiniteLength): Element;",
             "    rounded(value: AbsoluteLength): Element;",
             "    text_size(value: AbsoluteLength): Element;",
+            "    font_weight(value: number): Element;",
             "    opacity(value: number): Element;",
             "    flex_grow(value: number): Element;",
         ] {
@@ -1233,9 +1961,7 @@ mod tests {
     #[test]
     fn raw_tcp_reads_preserve_bytes_and_expose_eof() {
         let declarations = declarations();
-        assert!(declarations.contains(
-            "read(maxBytes?: number): Promise<Uint8Array | null>;"
-        ));
+        assert!(declarations.contains("read(maxBytes?: number): Promise<Uint8Array | null>;"));
     }
 
     #[test]
@@ -1265,6 +1991,60 @@ mod tests {
             styles.len(),
             "a style method is declared twice"
         );
+    }
+
+    /// The focus and accessibility surface is declared, and the role union is
+    /// generated from the table the runtime parses through rather than typed
+    /// out beside it.
+    #[test]
+    fn focus_and_accessibility_are_declared_from_the_runtime_tables() {
+        let declarations = declarations();
+        for expected in [
+            "    role(name: Role): Element;",
+            "    aria_selected(value: boolean): Element;",
+            "    aria_active_descendant(): Element;",
+            "    track_focus(handle: FocusHandleHandle): Element;",
+            "    tab_index(index: number): Element;",
+            "    tab_stop(value: boolean): Element;",
+            "  export const FocusHandle: FocusHandleType;",
+        ] {
+            assert!(declarations.contains(expected), "missing: {expected}");
+        }
+
+        for name in a11y::role_names() {
+            assert!(
+                declarations.contains(&format!("    | \"{name}\"\n")),
+                "the role union is missing `{name}`"
+            );
+        }
+        assert!(
+            !declarations.contains(&format!("| \"{}\"", a11y::FILTERED_ROLE)),
+            "a role GPUI filters out of the accessibility tree must not be offerable"
+        );
+    }
+
+    /// The anchor union is generated from the table the runtime parses through,
+    /// so a corner an editor accepts is one `anchor(...)` accepts.
+    #[test]
+    fn the_anchored_surfaces_are_declared_from_the_runtime_anchor_table() {
+        let declarations = declarations();
+        for name in crate::materialize::ANCHOR_NAMES {
+            assert!(
+                declarations.contains(&format!("    | \"{name}\"\n")),
+                "the anchor union is missing `{name}`"
+            );
+        }
+        for expected in [
+            "    anchor(value: Anchor): Element;",
+            "    mouse_button(value: MouseButton): Element;",
+            "    trigger(element: Element): Element;",
+            "    open_delay(ms: number): Element;",
+            "    close_delay(ms: number): Element;",
+            "  export const Popover: ComponentType;",
+            "  export const HoverCard: ComponentType;",
+        ] {
+            assert!(declarations.contains(expected), "missing: {expected}");
+        }
     }
 
     #[test]

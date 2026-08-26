@@ -43,6 +43,37 @@ export default class Toggle extends View {
 
 const ENTRY: &str = "toggle.js";
 
+const PATH: &str = r##"
+import { View, PathBuilder, Background, paint_path } from "gpui";
+
+export default class NativePath extends View {
+  render() {
+    const path = PathBuilder.fill()
+      .move_to(0, "100%")
+      .line_to("50%", 0)
+      .line_to("100%", "100%")
+      .close()
+      .build();
+    return paint_path(path, Background.solid("#16a34a"))
+      .w(200)
+      .h(80);
+  }
+}
+"##;
+
+#[gpui::test]
+fn path_builder_freezes_commands_in_the_render_snapshot(cx: &mut TestAppContext) {
+    let (_runtime, mut context, view) = script_view(cx, PATH);
+
+    render_once(&mut context, &view);
+
+    let tree = context.update(|_, cx| view.read(cx).snapshot().unwrap().debug_tree());
+    assert!(tree.contains("path fill"), "{tree}");
+    assert!(tree.contains("move_to"), "{tree}");
+    assert!(tree.contains("50%"), "{tree}");
+    assert!(tree.contains("close"), "{tree}");
+}
+
 /// A script whose `render` throws every other call, so a failed build can be
 /// observed next to a successful one.
 const FLAKY: &str = r#"

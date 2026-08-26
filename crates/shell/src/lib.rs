@@ -34,12 +34,14 @@
 // ordinary application loading updates it automatically.
 //
 // **Crate-private, and why.** `engine` is the seam and its shape follows
-// whatever is behind it. `spec`, `materialize`, `store` and `style` are an
-// internal representation. `capability` publishes `Capabilities` and
+// whatever is behind it. `spec`, `materialize`, `store`, `style` and `a11y` are
+// an internal representation. `capability` publishes `Capabilities` and
 // `ExecuteGrant` through the root and keeps the resolver — `Access`, `Grant` —
 // to itself. `scope` publishes `with_current_app`, which is how a native module
-// reaches the ambient `App`, and hides the frame stack. `runtime`, `error` and
-// `assets` publish their types through the root.
+// reaches the ambient `App`, and hides the frame stack. `scroll` is the one
+// scroll area `materialize` needs, kept here because the shell builds on
+// `gpui-base` alone and cannot borrow `gpui-component`'s copy. `runtime`,
+// `error` and `assets` publish their types through the root.
 //
 // **Designed, tested, not driven.** `dock`. A script cannot yet
 // contribute a panel. The plugin manifest is public because the shipped binary
@@ -47,6 +49,7 @@
 //
 // **Not reachable at all.** `value` and `entities`: a `Bridged` and an entity
 // handle are the runtime talking to itself.
+pub(crate) mod a11y;
 pub(crate) mod assets;
 pub(crate) mod capability;
 pub(crate) mod dock;
@@ -54,6 +57,7 @@ pub(crate) mod engine;
 pub(crate) mod entities;
 pub(crate) mod error;
 pub(crate) mod materialize;
+pub(crate) mod path;
 pub mod metrics;
 pub mod native;
 pub mod plugin;
@@ -62,6 +66,7 @@ pub(crate) mod process;
 pub mod root;
 pub(crate) mod runtime;
 pub(crate) mod scope;
+pub(crate) mod scroll;
 pub mod snapshot;
 pub(crate) mod spec;
 pub(crate) mod store;

@@ -134,12 +134,43 @@ const MODULE_EXPORTS: &[&str] = &[
     "v_flex",
     "text",
     "svg",
+    "image",
+    "PathBuilder",
+    "Background",
+    "paint_path",
     "Button",
     "Link",
     "Checkbox",
     "Switch",
+    "Tabs",
+    "Tab",
+    "Progress",
+    "ProgressTrack",
+    "ProgressIndicator",
+    "Radio",
+    "Toggle",
+    "RadioGroup",
+    "ToggleGroup",
+    "Table",
+    "TableHeader",
+    "TableBody",
+    "TableRow",
+    "TableHead",
+    "TableCell",
+    "TableCaption",
+    "Collapsible",
+    "Popover",
+    "HoverCard",
+    "Popup",
+    "Select",
+    "Combobox",
+    "DatePicker",
+    "Scrollbar",
     "Input",
     "InputState",
+    "Textarea",
+    "TextareaState",
+    "FocusHandle",
     // System capabilities (`host`, `sandbox`).
     "store",
     "clipboard",
@@ -814,6 +845,59 @@ impl ShellRuntime {
         scheduler::drain_jobs(&self.js_runtime);
     }
 
+    /// Delivers a handler that reports only that something happened.
+    ///
+    /// `on_confirm` and `on_dismiss` have no value to carry: the combobox root
+    /// they come from holds neither the options nor the selection, so the news
+    /// is the action itself. The script still receives `(payload, cx)` with an
+    /// empty payload, so every rendered handler has the same shape whether or
+    /// not there was anything to put in it.
+    pub(crate) fn dispatch_signal(
+        self: &Rc<Self>,
+        id: CallbackId,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        let Some(entry) = self.callbacks.borrow().get(id) else {
+            tracing::debug!("signal callback {id} belongs to a superseded render pass");
+            return;
+        };
+
+        if entry
+            .application
+            .as_ref()
+            .is_some_and(|application| !application.is_active())
+        {
+            tracing::debug!("signal callback {id} belongs to a retired application");
+            return;
+        }
+
+        let policy = entry
+            .view
+            .as_ref()
+            .map(|view| view.read(cx).policy())
+            .unwrap_or_else(crate::policy::default);
+        let (_guard, generation) = scope::enter_with_application(
+            self,
+            window,
+            cx,
+            ScopePhase::Event,
+            entry.view.clone(),
+            policy,
+            entry.application.clone(),
+        );
+
+        let result = self.with_js(|ctx| {
+            let handler = entry.value.clone().restore(ctx)?;
+            handler.call::<_, ()>((Object::new(ctx.clone())?, context_object(ctx, generation)?))
+        });
+
+        if let Err(error) = result {
+            tracing::error!("error in signal handler: {error}");
+        }
+        scheduler::drain_jobs(&self.js_runtime);
+    }
+
     /// Renders once, and on a "not a function" failure renders again with the
     /// diagnostic prototype installed so the error can name the method and
     /// suggest a correction. See the prelude for why this is two passes.
@@ -885,6 +969,31 @@ impl ShellRuntime {
             .map_err(|error| Exception::throw_type(ctx, &error.to_string()))?;
         self.push_op_checked(ctx, self.push_op(id, SpecOp::StateStyle(interned, node)))?;
         Ok(node)
+    }
+
+    /// Fills a named element slot, detaching the element from the tree.
+    ///
+    /// The same `claim` a state style's declarations use: an element a
+    /// component renders in a place of its own must not also be rendered among
+    /// its children, and a script that tries to use it twice gets an error
+    /// rather than a duplicate.
+    fn fill_slot(&self, ctx: &Ctx<'_>, id: SpecId, name: &str, element: SpecId) -> JsResult<()> {
+        let interned = match name {
+            "content" => "content",
+            "trigger" => "trigger",
+            other => {
+                return Err(Exception::throw_type(
+                    ctx,
+                    &format!("unknown element slot `{other}`"),
+                ));
+            }
+        };
+
+        self.arena
+            .borrow_mut()
+            .claim(element)
+            .map_err(|error| Exception::throw_type(ctx, &error.to_string()))?;
+        self.push_op_checked(ctx, self.push_op(id, SpecOp::Slot(interned, element)))
     }
 
     fn push_node(&self, component: Component) -> SpecId {
@@ -1172,6 +1281,42 @@ globalThis.__gpui = (() => {
     for (const child of list) __apply(this.__id, "child", [child.__id]);
     return this;
   };
+  // A named slot. The element is consumed exactly as `child` consumes one, so
+  // it cannot also be added to the tree — which is the point: the component
+  // renders it somewhere of its own, or not at all.
+  const slot = (name) =>
+    function (element) {
+      __apply(this.__id, name, [element.__id]);
+      return this;
+    };
+
+  methods.content = slot("content");
+  methods.trigger = slot("trigger");
+
+  // Focus is held by handle, so the element records the handle rather than the
+  // wrapper object around it — the same unwrapping `Input.new(state)` does.
+  methods.track_focus = function (handle) {
+    if (typeof handle?.__handle !== "number") {
+      throw new TypeError(
+        "track_focus(handle) expects a FocusHandle from FocusHandle.new(), not a name or an element",
+      );
+    }
+    __apply(this.__id, "track_focus", [handle.__handle]);
+    return this;
+  };
+  // The second handle a combobox root needs: the one the keyboard moves to when
+  // the surface opens. Checked here for the same reason `track_focus` is — a
+  // name or an element would otherwise be dropped on the Rust side and the
+  // focus would simply never move.
+  methods.content_focus_handle = function (handle) {
+    if (typeof handle?.__handle !== "number") {
+      throw new TypeError(
+        "content_focus_handle(handle) expects a FocusHandle from FocusHandle.new(), not a name or an element",
+      );
+    }
+    __apply(this.__id, "content_focus_handle", [handle.__handle]);
+    return this;
+  };
   // State styles reuse the ordinary style methods on a detached element, so
   // there is no second grammar for "what a style is".
   const state = (name) =>
@@ -1195,6 +1340,16 @@ globalThis.__gpui = (() => {
   const finitePositive = (value, name) => {
     if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
       throw new TypeError(name + " must be a finite positive number");
+    }
+    return value;
+  };
+
+  // A table index is one-based and whole. 0 and 1.5 are not values a screen
+  // reader rounds off; they are cells announced in the wrong column, so they
+  // are refused at the call site rather than cast quietly on the Rust side.
+  const oneBased = (value, name) => {
+    if (!Number.isInteger(value) || value < 1) {
+      throw new TypeError(name + " must be a whole number of at least 1");
     }
     return value;
   };
@@ -1247,6 +1402,179 @@ globalThis.__gpui = (() => {
     return this;
   };
 
+  // Announced, not laid out: `axis` sets the semantic orientation of a
+  // grouping container and never turns it into a row or a column. Checked here
+  // so a typo reports at the call site instead of silently announcing the
+  // container's default.
+  methods.axis = function (value) {
+    value = String(value);
+    if (!["horizontal", "vertical"].includes(value)) {
+      throw new TypeError(
+        "axis(value) must be horizontal or vertical; got " + JSON.stringify(value),
+      );
+    }
+    __apply(this.__id, "axis", [value]);
+    return this;
+  };
+
+  // A bar's visibility policy. Unset follows the theme, which is what every
+  // other scrollbar in the application does; the three named modes are checked
+  // here so a typo reports at the call site instead of silently falling back.
+  methods.mode = function (value) {
+    value = String(value);
+    if (!["scrolling", "hover", "always"].includes(value)) {
+      throw new TypeError(
+        "mode(value) must be scrolling, hover or always; got " + JSON.stringify(value),
+      );
+    }
+    __apply(this.__id, "mode", [value]);
+    return this;
+  };
+
+  // The content size a bar measures its thumb against. Both halves are
+  // required: one axis sized by the script and the other by the scroll area is
+  // a thumb that lies about one of them.
+  methods.scroll_size = function (width, height) {
+    __apply(this.__id, "scroll_size", [
+      finiteNonNegative(width, "scroll_size width"),
+      finiteNonNegative(height, "scroll_size height"),
+    ]);
+    return this;
+  };
+
+  // Which corner of an anchored surface is pinned to its trigger. The names
+  // come from the host so that the check here, the parser behind it and the
+  // union in gpui.d.ts cannot disagree. Checked at the call site because an
+  // unrecognized anchor would otherwise open the surface in the component's
+  // default corner, which looks like a positioning bug rather than a typo.
+  methods.anchor = function (value) {
+    value = String(value);
+    if (!__anchorNames.includes(value)) {
+      throw new TypeError(
+        "anchor(value) must be one of " +
+          __anchorNames.join(", ") +
+          "; got " +
+          JSON.stringify(value),
+      );
+    }
+    __apply(this.__id, "anchor", [value]);
+    return this;
+  };
+
+  // A popover opened by the wrong button is silence, not a visual mistake, so
+  // an unknown button name is refused rather than falling back to the left one.
+  methods.mouse_button = function (value) {
+    value = String(value);
+    if (!["left", "right", "middle"].includes(value)) {
+      throw new TypeError(
+        "mouse_button(value) must be left, right or middle; got " + JSON.stringify(value),
+      );
+    }
+    __apply(this.__id, "mouse_button", [value]);
+    return this;
+  };
+
+  // Milliseconds, as everywhere else a script names a duration.
+  const delay = (name) =>
+    function (ms) {
+      __apply(this.__id, name, [finiteNonNegative(ms, name)]);
+      return this;
+    };
+
+  methods.open_delay = delay("open_delay");
+  methods.close_delay = delay("close_delay");
+
+  const coordinate = (value, name) => {
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    if (typeof value === "string" && /^-?(?:\d+(?:\.\d*)?|\.\d+)%$/.test(value)) return value;
+    throw new TypeError(name + " must be a finite pixel number or percentage string");
+  };
+
+  const background = (kind, values, opacityFactor = 1, colorSpace = "srgb") => Object.freeze({
+    __background: true,
+    kind,
+    values: Object.freeze(values),
+    opacityFactor,
+    colorSpace,
+    opacity(factor) {
+      return background(kind, values, finiteNonNegative(factor, "background opacity"), colorSpace);
+    },
+    color_space(space) {
+      space = String(space).toLowerCase();
+      if (!['srgb', 'oklab'].includes(space)) throw new TypeError("background color_space must be srgb or oklab");
+      return background(kind, values, opacityFactor, space);
+    },
+  });
+
+  const asBackground = (value) => value?.__background
+    ? value
+    : background("solid", [String(value)]);
+
+  const pathBuilder = (fill, width) => {
+    const commands = [];
+    const builder = {};
+    const command = (name, arity, coordinateCount = arity) => (...args) => {
+      if (args.length < arity) throw new TypeError(name + " expects at least " + arity + " argument(s)");
+      for (let index = 0; index < coordinateCount; index++) coordinate(args[index], name + " coordinate");
+      commands.push(Object.freeze([name, ...args]));
+      return builder;
+    };
+    builder.move_to = command("move_to", 2);
+    builder.line_to = command("line_to", 2);
+    builder.curve_to = command("curve_to", 4);
+    builder.cubic_bezier_to = command("cubic_bezier_to", 6);
+    builder.arc_to = (...args) => {
+      if (args.length < 7) throw new TypeError("arc_to expects at least 7 argument(s)");
+      coordinate(args[0], "arc x radius");
+      coordinate(args[1], "arc y radius");
+      if (typeof args[2] !== "number" || !Number.isFinite(args[2])) throw new TypeError("arc rotation must be finite");
+      coordinate(args[5], "arc destination x");
+      coordinate(args[6], "arc destination y");
+      commands.push(Object.freeze(["arc_to", ...args]));
+      return builder;
+    };
+    builder.close = () => { commands.push(Object.freeze(["close"])); return builder; };
+    builder.dash_array = (values) => {
+      if (fill) throw new TypeError("dash_array is only available on stroke paths");
+      if (!Array.isArray(values) || values.some((value) => typeof value !== "number" || !Number.isFinite(value) || value <= 0)) {
+        throw new TypeError("dash_array(values) expects positive finite pixel numbers");
+      }
+      commands.push(Object.freeze(["dash_array", ...values]));
+      return builder;
+    };
+    builder.add_polygon = (points, closed = true) => {
+      if (!Array.isArray(points) || points.length === 0) throw new TypeError("add_polygon(points) expects a non-empty array");
+      points.forEach((point, index) => {
+        if (!Array.isArray(point) || point.length < 2) throw new TypeError("each polygon point must be [x, y]");
+        command(index === 0 ? "move_to" : "line_to", 2)(point[0], point[1]);
+      });
+      if (closed) builder.close();
+      return builder;
+    };
+    builder.build = () => Object.freeze({
+      __path: true,
+      fill,
+      width,
+      commands: Object.freeze(commands.slice()),
+    });
+    return builder;
+  };
+
+  const paintPath = (pathValue, paintValue) => {
+    if (!pathValue?.__path) throw new TypeError("paint_path(path, background) expects a Path built by PathBuilder");
+    const paint = asBackground(paintValue);
+    const object = element(__path(
+      pathValue.fill,
+      paint.kind,
+      paint.values.map(String).join("\u001f"),
+      paint.opacityFactor,
+      paint.colorSpace,
+      pathValue.width,
+    ));
+    for (const [name, ...args] of pathValue.commands) __apply(object.__id, name, args);
+    return object;
+  };
+
   methods.when = function (condition, branch) {
     if (!condition) return this;
     const produced = branch(this);
@@ -1264,6 +1592,31 @@ globalThis.__gpui = (() => {
     set_value: (next) => __input_set_value(handle, String(next ?? "")),
     on: (event, handler) => __input_on(handle, String(event), handler),
     release: () => __input_release(handle),
+  });
+
+  // The multi-line state shares almost all of its surface with the single-line
+  // one, and adds the three calls that only mean anything once text can wrap.
+  const textareaState = (handle) => ({
+    __handle: handle,
+    value: () => __textarea_value(handle),
+    set_value: (next) => __textarea_set_value(handle, String(next ?? "")),
+    on: (event, handler) => __textarea_on(handle, String(event), handler),
+    set_rows: (rows) => __textarea_set_rows(handle, oneBased(rows, "set_rows(rows)")),
+    set_auto_grow: (min_rows, max_rows) =>
+      __textarea_set_auto_grow(
+        handle,
+        oneBased(min_rows, "set_auto_grow(min_rows, max_rows) min_rows"),
+        oneBased(max_rows, "set_auto_grow(min_rows, max_rows) max_rows"),
+      ),
+    set_soft_wrap: (wrap) => __textarea_set_soft_wrap(handle, Boolean(wrap)),
+    release: () => __textarea_release(handle),
+  });
+
+  const focusHandle = (handle) => ({
+    __handle: handle,
+    focus: () => __focus_focus(handle),
+    is_focused: () => __focus_is_focused(handle),
+    release: () => __focus_release(handle),
   });
 
   let deferInit = false;
@@ -1353,17 +1706,126 @@ globalThis.__gpui = (() => {
     v_flex: () => element(__v_flex()),
     text: (value) => element(__text(String(value))),
     svg: (path) => element(__svg(String(path))),
+    image: (path) => element(__image(String(path))),
+    paint_path: paintPath,
+    PathBuilder: {
+      fill: () => pathBuilder(true, 0),
+      stroke: (width) => pathBuilder(false, finitePositive(width, "stroke width")),
+    },
+    Background: {
+      solid: (color) => background("solid", [String(color)]),
+      stop: (color, percentage) => {
+        if (typeof percentage !== "number" || !Number.isFinite(percentage)) throw new TypeError("background stop percentage must be finite");
+        return Object.freeze({ __backgroundStop: true, color: String(color), percentage });
+      },
+      linear_gradient: (angle, from, to) => {
+        angle = Number(angle);
+        if (!Number.isFinite(angle)) throw new TypeError("linear gradient angle must be finite");
+        const stop = (value, fallback, name) => {
+          if (typeof value === "string") return [value, fallback];
+          if (!value?.__backgroundStop) throw new TypeError(name + " must be a color or Background.stop(color, percentage)");
+          return [value.color, value.percentage];
+        };
+        const a = stop(from, 0, "gradient from stop");
+        const b = stop(to, 1, "gradient to stop");
+        return background("linear-gradient", [String(angle), a[0], String(a[1]), b[0], String(b[1])]);
+      },
+      pattern_slash: (color, width, interval) => background("pattern-slash", [
+        String(color),
+        String(finitePositive(width, "pattern width")),
+        String(finitePositive(interval, "pattern interval")),
+      ]),
+      checkerboard: (color, size) => background("checkerboard", [
+        String(color),
+        String(finitePositive(size, "checkerboard size")),
+      ]),
+    },
     theme: currentTheme,
     __context_theme: contextTheme,
     Button: { new: (id) => element(__button(String(id))) },
     Link: { new: (id) => element(__link(String(id))) },
     Checkbox: { new: (id) => element(__checkbox(String(id))) },
     Switch: { new: (id) => element(__switch(String(id))) },
+    Tabs: { new: (id) => element(__tabs(String(id))) },
+    Tab: { new: (id) => element(__tab(String(id))) },
+    Progress: { new: (id) => element(__progress(String(id))) },
+    ProgressTrack: { new: () => element(__progress_track()) },
+    ProgressIndicator: { new: () => element(__progress_indicator()) },
+    Radio: { new: (id) => element(__radio(String(id))) },
+    Toggle: { new: (id) => element(__toggle(String(id))) },
+    RadioGroup: { new: (id) => element(__radio_group(String(id))) },
+    ToggleGroup: { new: (id) => element(__toggle_group(String(id))) },
+    Table: { new: (id) => element(__table(String(id))) },
+    TableHeader: { new: (id) => element(__table_header(String(id))) },
+    TableBody: { new: (id) => element(__table_body(String(id))) },
+    TableCaption: { new: (id) => element(__table_caption(String(id))) },
+    TableRow: {
+      new: (id, row_index) =>
+        element(__table_row(String(id), oneBased(row_index, "TableRow.new row index"))),
+    },
+    TableHead: {
+      new: (id, column_index) =>
+        element(__table_head(String(id), oneBased(column_index, "TableHead.new column index"))),
+    },
+    TableCell: {
+      new: (id, column_index) =>
+        element(__table_cell(String(id), oneBased(column_index, "TableCell.new column index"))),
+    },
+    Collapsible: { new: () => element(__collapsible()) },
+    Popover: { new: (id) => element(__popover(String(id))) },
+    HoverCard: { new: (id) => element(__hover_card(String(id))) },
+    // The trigger is a constructor argument, as it is in base: a popup with no
+    // trigger has no bounds to anchor to, so there is no useful moment between
+    // `new` and the trigger being known.
+    Popup: {
+      new: (id, trigger) => {
+        if (typeof trigger?.__id !== "number") {
+          throw new TypeError(
+            "Popup.new(id, trigger) expects the trigger element; a popup anchors its content to the trigger's bounds, so it cannot be built without one",
+          );
+        }
+        return element(__popup(String(id))).trigger(trigger);
+      },
+    },
+    Select: { new: (id) => element(__select(String(id))) },
+    Combobox: { new: (id) => element(__combobox(String(id))) },
+    DatePicker: {
+      new: (id, focus_handle) => {
+        if (typeof focus_handle?.__handle !== "number") {
+          throw new TypeError(
+            "DatePicker.new(id, focus_handle) expects a FocusHandle from FocusHandle.new(); the picker takes the keyboard through that handle, and base has no builder to supply one later",
+          );
+        }
+        return element(__date_picker(String(id), focus_handle.__handle));
+      },
+    },
+    Scrollbar: {
+      new: (id) => element(__scrollbar(String(id))),
+      // `horizontal` and `vertical` are `new` plus the orientation the group
+      // containers already spell `axis`, so there is one word for orientation
+      // in the whole API rather than a second one here.
+      horizontal: (id) => element(__scrollbar(String(id))).axis("horizontal"),
+      vertical: (id) => element(__scrollbar(String(id))).axis("vertical"),
+    },
     InputState: {
       new: (options) =>
         inputState(__input_state_new(options?.placeholder ?? null, options?.value ?? null)),
     },
     Input: { new: (state) => element(__input_element(state.__handle)) },
+    TextareaState: {
+      new: (options) =>
+        textareaState(
+          __textarea_state_new(
+            options?.placeholder ?? null,
+            options?.value ?? null,
+            options?.rows === undefined || options?.rows === null
+              ? null
+              : oneBased(options.rows, "TextareaState.new rows"),
+          ),
+        ),
+    },
+    Textarea: { new: (state) => element(__textarea_element(state.__handle)) },
+    FocusHandle: { new: () => focusHandle(__focus_handle_new()) },
   };
 })();
 "#;
@@ -1384,15 +1846,36 @@ impl ShellRuntime {
             for (index, name) in [
                 "on_click",
                 "on_change",
+                "on_open_change",
+                "on_confirm",
+                "on_dismiss",
                 "disabled",
                 "selected",
                 "checked",
                 "accessibility_label",
+                "role",
+                "aria_selected",
+                "aria_active_descendant",
+                "tab_index",
+                "tab_stop",
                 "href",
                 "id",
                 "overflow_scroll",
                 "overflow_x_scroll",
                 "overflow_y_scroll",
+                "overflow_scrollbar",
+                "overflow_x_scrollbar",
+                "overflow_y_scrollbar",
+                "viewport_from_layout",
+                "set_position",
+                "pressed",
+                "value",
+                "indeterminate",
+                "row_count",
+                "column_count",
+                "open",
+                "default_open",
+                "overlay_closable",
             ]
             .into_iter()
             .enumerate()
@@ -1401,15 +1884,208 @@ impl ShellRuntime {
             }
             globals.set("__behaviorNames", behaviors)?;
 
+            // The prelude checks an anchor at the call site, so it needs the
+            // same eight names the parser accepts rather than a second copy of
+            // them.
+            let anchors = rquickjs::Array::new(ctx.clone())?;
+            for (index, name) in crate::materialize::ANCHOR_NAMES.into_iter().enumerate() {
+                anchors.set(index, name)?;
+            }
+            globals.set("__anchorNames", anchors)?;
+
             constructor(&globals, "__div", runtime.clone(), || Component::Div)?;
             constructor(&globals, "__h_flex", runtime.clone(), || Component::HFlex)?;
             constructor(&globals, "__v_flex", runtime.clone(), || Component::VFlex)?;
             text_constructor(&globals, "__text", runtime.clone(), Component::Text)?;
             text_constructor(&globals, "__svg", runtime.clone(), Component::Svg)?;
+            text_constructor(&globals, "__image", runtime.clone(), Component::Image)?;
+            let path_runtime = runtime.clone();
+            globals.set(
+                "__path",
+                Func::from(
+                    move |ctx: Ctx<'_>,
+                          fill: bool,
+                          kind: String,
+                          values: String,
+                          opacity: f64,
+                          color_space: String,
+                          width: f64|
+                          -> JsResult<SpecId> {
+                        if !width.is_finite() || width < 0.0 {
+                            return Err(Exception::throw_type(
+                                &ctx,
+                                "path stroke width must be finite and non-negative",
+                            ));
+                        }
+                        if !opacity.is_finite() || opacity < 0.0 {
+                            return Err(Exception::throw_type(
+                                &ctx,
+                                "path background opacity must be finite and non-negative",
+                            ));
+                        }
+                        let values = values.split('\u{1f}').collect::<Vec<_>>();
+                        let number = |index: usize, name: &str| -> JsResult<f32> {
+                            values
+                                .get(index)
+                                .and_then(|value| value.parse::<f32>().ok())
+                                .filter(|value| value.is_finite())
+                                .ok_or_else(|| Exception::throw_type(&ctx, name))
+                        };
+                        let text = |index: usize, name: &str| -> JsResult<String> {
+                            values
+                                .get(index)
+                                .map(|value| (*value).to_owned())
+                                .ok_or_else(|| Exception::throw_type(&ctx, name))
+                        };
+                        let kind = match kind.as_str() {
+                            "solid" => crate::spec::BackgroundKind::Solid {
+                                color: text(0, "solid background needs a color")?,
+                            },
+                            "linear-gradient" => crate::spec::BackgroundKind::LinearGradient {
+                                angle: number(0, "gradient angle must be finite")?,
+                                from: (
+                                    text(1, "gradient needs a from color")?,
+                                    number(2, "gradient from percentage must be finite")?,
+                                ),
+                                to: (
+                                    text(3, "gradient needs a to color")?,
+                                    number(4, "gradient to percentage must be finite")?,
+                                ),
+                                color_space,
+                            },
+                            "pattern-slash" => crate::spec::BackgroundKind::PatternSlash {
+                                color: text(0, "slash pattern needs a color")?,
+                                width: number(1, "slash pattern width must be finite")?,
+                                interval: number(2, "slash pattern interval must be finite")?,
+                            },
+                            "checkerboard" => crate::spec::BackgroundKind::Checkerboard {
+                                color: text(0, "checkerboard needs a color")?,
+                                size: number(1, "checkerboard size must be finite")?,
+                            },
+                            _ => {
+                                return Err(Exception::throw_type(&ctx, "unknown Background kind"));
+                            }
+                        };
+                        Ok(upgrade(&path_runtime, &ctx)?.push_node(Component::Path {
+                            fill,
+                            background: crate::spec::BackgroundSpec {
+                                kind,
+                                opacity: opacity as f32,
+                            },
+                            stroke_width: width as f32,
+                        }))
+                    },
+                ),
+            )?;
             text_constructor(&globals, "__button", runtime.clone(), Component::Button)?;
             text_constructor(&globals, "__link", runtime.clone(), Component::Link)?;
             text_constructor(&globals, "__checkbox", runtime.clone(), Component::Checkbox)?;
             text_constructor(&globals, "__switch", runtime.clone(), Component::Switch)?;
+            text_constructor(
+                &globals,
+                "__scrollbar",
+                runtime.clone(),
+                Component::Scrollbar,
+            )?;
+            text_constructor(&globals, "__tabs", runtime.clone(), Component::Tabs)?;
+            text_constructor(&globals, "__tab", runtime.clone(), Component::Tab)?;
+            text_constructor(&globals, "__progress", runtime.clone(), Component::Progress)?;
+            constructor(&globals, "__progress_track", runtime.clone(), || {
+                Component::ProgressTrack
+            })?;
+            constructor(&globals, "__progress_indicator", runtime.clone(), || {
+                Component::ProgressIndicator
+            })?;
+            text_constructor(&globals, "__radio", runtime.clone(), Component::Radio)?;
+            text_constructor(&globals, "__toggle", runtime.clone(), Component::Toggle)?;
+            text_constructor(
+                &globals,
+                "__radio_group",
+                runtime.clone(),
+                Component::RadioGroup,
+            )?;
+            text_constructor(
+                &globals,
+                "__toggle_group",
+                runtime.clone(),
+                Component::ToggleGroup,
+            )?;
+            text_constructor(&globals, "__table", runtime.clone(), Component::Table)?;
+            text_constructor(
+                &globals,
+                "__table_header",
+                runtime.clone(),
+                Component::TableHeader,
+            )?;
+            text_constructor(
+                &globals,
+                "__table_body",
+                runtime.clone(),
+                Component::TableBody,
+            )?;
+            text_constructor(
+                &globals,
+                "__table_caption",
+                runtime.clone(),
+                Component::TableCaption,
+            )?;
+            indexed_constructor(
+                &globals,
+                "__table_row",
+                runtime.clone(),
+                Component::TableRow,
+            )?;
+            indexed_constructor(
+                &globals,
+                "__table_head",
+                runtime.clone(),
+                Component::TableHead,
+            )?;
+            indexed_constructor(
+                &globals,
+                "__table_cell",
+                runtime.clone(),
+                Component::TableCell,
+            )?;
+            constructor(&globals, "__collapsible", runtime.clone(), || {
+                Component::Collapsible
+            })?;
+            text_constructor(&globals, "__popover", runtime.clone(), Component::Popover)?;
+            text_constructor(
+                &globals,
+                "__hover_card",
+                runtime.clone(),
+                Component::HoverCard,
+            )?;
+            text_constructor(&globals, "__popup", runtime.clone(), Component::Popup)?;
+            text_constructor(&globals, "__select", runtime.clone(), Component::Select)?;
+            text_constructor(&globals, "__combobox", runtime.clone(), Component::Combobox)?;
+
+            // The one constructor that takes retained state as well as an id.
+            // Base's `DatePicker::new` requires the focus handle, so a picker
+            // whose handle has already been released is refused where it was
+            // written rather than rendered as an unreachable trigger.
+            let date_picker_runtime = runtime.clone();
+            globals.set(
+                "__date_picker",
+                Func::from(
+                    move |ctx: Ctx<'_>,
+                          id: String,
+                          handle: crate::entities::EntityHandle|
+                          -> JsResult<SpecId> {
+                        let store = upgrade(&date_picker_runtime, &ctx)?;
+                        if store.entities().focus(handle).is_none() {
+                            return Err(Exception::throw_type(
+                                &ctx,
+                                "the focus handle given to DatePicker.new(id, focus_handle) has \
+                                 been released; a date picker takes the keyboard through that \
+                                 handle, so it needs a live one",
+                            ));
+                        }
+                        Ok(store.push_node(Component::DatePicker(id, handle)))
+                    },
+                ),
+            )?;
 
             let state_runtime = runtime.clone();
             globals.set(
@@ -1472,7 +2148,16 @@ impl ShellRuntime {
                 let attached = self.arena.borrow_mut().attach(id, child);
                 self.push_op_checked(ctx, attached)
             }
-            "on_click" | "on_change" => {
+            "content" | "trigger" => {
+                let element = args
+                    .first_value()
+                    .and_then(|value| value.as_f32().ok())
+                    .ok_or_else(|| {
+                        Exception::throw_type(ctx, &format!("{method}(element) expects an element"))
+                    })? as SpecId;
+                self.fill_slot(ctx, id, method, element)
+            }
+            "on_click" | "on_change" | "on_open_change" | "on_confirm" | "on_dismiss" => {
                 let saved = args.first_handler().ok_or_else(|| {
                     Exception::throw_type(ctx, &format!("{method}(handler) expects a function"))
                 })?;
@@ -1481,10 +2166,12 @@ impl ShellRuntime {
                     view: scope::current_view(),
                     application: scope::current_application_generation(),
                 });
-                let name = if method == "on_click" {
-                    "on_click"
-                } else {
-                    "on_change"
+                let name = match method {
+                    "on_click" => "on_click",
+                    "on_change" => "on_change",
+                    "on_confirm" => "on_confirm",
+                    "on_dismiss" => "on_dismiss",
+                    _ => "on_open_change",
                 };
                 self.push_op_checked(ctx, self.push_op(id, SpecOp::Callback(name, callback)))
             }
@@ -1492,11 +2179,38 @@ impl ShellRuntime {
             | "selected"
             | "checked"
             | "accessibility_label"
+            | "role"
+            | "aria_selected"
+            | "aria_active_descendant"
+            | "track_focus"
+            | "content_focus_handle"
+            | "tab_index"
+            | "tab_stop"
             | "href"
             | "id"
             | "overflow_scroll"
             | "overflow_x_scroll"
             | "overflow_y_scroll"
+            | "overflow_scrollbar"
+            | "overflow_x_scrollbar"
+            | "overflow_y_scrollbar"
+            | "mode"
+            | "scroll_size"
+            | "viewport_from_layout"
+            | "set_position"
+            | "pressed"
+            | "value"
+            | "indeterminate"
+            | "axis"
+            | "row_count"
+            | "column_count"
+            | "open"
+            | "default_open"
+            | "overlay_closable"
+            | "anchor"
+            | "mouse_button"
+            | "open_delay"
+            | "close_delay"
             | "transition"
             | "spring" => {
                 let bridged = args.values(method)?;
@@ -1504,10 +2218,37 @@ impl ShellRuntime {
                     "disabled" => "disabled",
                     "selected" => "selected",
                     "checked" => "checked",
+                    "role" => "role",
+                    "aria_selected" => "aria_selected",
+                    "aria_active_descendant" => "aria_active_descendant",
+                    "track_focus" => "track_focus",
+                    "content_focus_handle" => "content_focus_handle",
+                    "tab_index" => "tab_index",
+                    "tab_stop" => "tab_stop",
                     "id" => "id",
                     "overflow_scroll" => "overflow_scroll",
                     "overflow_x_scroll" => "overflow_x_scroll",
                     "overflow_y_scroll" => "overflow_y_scroll",
+                    "overflow_scrollbar" => "overflow_scrollbar",
+                    "overflow_x_scrollbar" => "overflow_x_scrollbar",
+                    "overflow_y_scrollbar" => "overflow_y_scrollbar",
+                    "mode" => "mode",
+                    "scroll_size" => "scroll_size",
+                    "viewport_from_layout" => "viewport_from_layout",
+                    "set_position" => "set_position",
+                    "pressed" => "pressed",
+                    "value" => "value",
+                    "indeterminate" => "indeterminate",
+                    "axis" => "axis",
+                    "row_count" => "row_count",
+                    "column_count" => "column_count",
+                    "open" => "open",
+                    "default_open" => "default_open",
+                    "overlay_closable" => "overlay_closable",
+                    "anchor" => "anchor",
+                    "mouse_button" => "mouse_button",
+                    "open_delay" => "open_delay",
+                    "close_delay" => "close_delay",
                     "transition" => "transition",
                     "spring" => "spring",
                     "href" => "href",
@@ -1525,6 +2266,80 @@ impl ShellRuntime {
                          must not change between renders",
                     ));
                 }
+                // A bar that silently sits at zero because the percentage
+                // arrived as a string is the kind of bug that gets blamed on
+                // the layout. Say it at the call site instead.
+                if name == "value" && bridged.first().and_then(finite_number).is_none() {
+                    return Err(Exception::throw_type(
+                        ctx,
+                        "value(percent) expects a number between 0 and 100",
+                    ));
+                }
+                if name == "set_position" {
+                    let position = bridged.first().and_then(finite_whole_number);
+                    let size = bridged.get(1).and_then(finite_whole_number);
+                    if !matches!((position, size), (Some(position), Some(size)) if position >= 1.0 && size >= position && size <= usize::MAX as f32)
+                    {
+                        return Err(Exception::throw_type(
+                            ctx,
+                            "set_position(position, size) expects whole finite numbers with 1 <= position <= size",
+                        ));
+                    }
+                }
+                if matches!(name, "row_count" | "column_count")
+                    && !bridged
+                        .first()
+                        .and_then(finite_whole_number)
+                        .is_some_and(|count| count >= 0.0 && count <= usize::MAX as f32)
+                {
+                    return Err(Exception::throw_type(
+                        ctx,
+                        &format!("{name}(count) expects a non-negative whole finite number"),
+                    ));
+                }
+                // An unknown role is silence in the accessibility tree, and
+                // silence is exactly what `role` was called to prevent. The
+                // one filtered variant is named separately, because "unknown
+                // role" is not the answer to a script that asked for it.
+                if name == "role" {
+                    let Some(named) = bridged.first().and_then(|value| value.as_str().ok()) else {
+                        return Err(Exception::throw_type(
+                            ctx,
+                            "role(name) expects a string; see the Role type in gpui.d.ts",
+                        ));
+                    };
+                    if named == crate::a11y::FILTERED_ROLE {
+                        return Err(Exception::throw_type(
+                            ctx,
+                            "role(\"generic_container\") announces nothing: GPUI filters that \
+                             role out of the accessibility tree. Leave the role off instead, \
+                             or name the role the element really has",
+                        ));
+                    }
+                    if crate::a11y::role_from_name(named).is_none() {
+                        return Err(Exception::throw_type(
+                            ctx,
+                            &format!(
+                                "unknown accessibility role `{named}`; the names mirror \
+                                 gpui::Role in snake_case — see the Role type in gpui.d.ts"
+                            ),
+                        ));
+                    }
+                }
+                // A tab index of 1.5 is not a position in the tab order; it is
+                // a number the script computed wrongly, and rounding it here
+                // would put the control somewhere nobody chose.
+                if name == "tab_index"
+                    && !bridged
+                        .first()
+                        .and_then(|value| value.as_f32().ok())
+                        .is_some_and(|index| index.fract() == 0.0)
+                {
+                    return Err(Exception::throw_type(
+                        ctx,
+                        "tab_index(index) expects a whole number",
+                    ));
+                }
                 if name == "href" {
                     let Some(target) = bridged.first().and_then(|value| value.as_str().ok()) else {
                         return Err(Exception::throw_type(ctx, "href(url) expects a string"));
@@ -1539,6 +2354,20 @@ impl ShellRuntime {
                         ));
                     }
                 }
+                self.push_op_checked(ctx, self.push_op(id, SpecOp::Method(name, bridged)))
+            }
+            "move_to" | "line_to" | "curve_to" | "cubic_bezier_to" | "arc_to" | "close"
+            | "dash_array" => {
+                let bridged = args.values(method)?;
+                let name = match method {
+                    "move_to" => "move_to",
+                    "line_to" => "line_to",
+                    "curve_to" => "curve_to",
+                    "cubic_bezier_to" => "cubic_bezier_to",
+                    "arc_to" => "arc_to",
+                    "close" => "close",
+                    _ => "dash_array",
+                };
                 self.push_op_checked(ctx, self.push_op(id, SpecOp::Method(name, bridged)))
             }
             _ => {
@@ -1569,6 +2398,14 @@ impl ShellRuntime {
     }
 }
 
+fn finite_number(value: &Bridged) -> Option<f32> {
+    value.as_f32().ok().filter(|number| number.is_finite())
+}
+
+fn finite_whole_number(value: &Bridged) -> Option<f32> {
+    finite_number(value).filter(|number| number.fract() == 0.0)
+}
+
 fn constructor(
     globals: &Object<'_>,
     name: &str,
@@ -1594,6 +2431,30 @@ fn text_constructor(
         Func::from(move |ctx: Ctx<'_>, value: String| -> JsResult<SpecId> {
             Ok(upgrade(&runtime, &ctx)?.push_node(build(value)))
         }),
+    )
+}
+
+/// A constructor whose second argument is a one-based accessibility index.
+///
+/// `TableRow::new(id, row_index)` and the two cell types take their index in
+/// the constructor rather than through a builder, because a cell that does not
+/// know its column is not merely unstyled — it announces itself in the wrong
+/// place. The script side refuses anything that is not a whole number of at
+/// least one, so the cast here cannot quietly floor a fraction into a
+/// plausible-looking index.
+fn indexed_constructor(
+    globals: &Object<'_>,
+    name: &str,
+    runtime: Weak<ShellRuntime>,
+    build: fn(String, usize) -> Component,
+) -> JsResult<()> {
+    globals.set(
+        name,
+        Func::from(
+            move |ctx: Ctx<'_>, value: String, index: usize| -> JsResult<SpecId> {
+                Ok(upgrade(&runtime, &ctx)?.push_node(build(value, index)))
+            },
+        ),
     )
 }
 
@@ -1747,7 +2608,8 @@ fn unknown_method(name: &str) -> String {
         None => format!(
             "unknown element method `{name}`; it is neither a style method nor one of \
              child, children, when, on_click, on_change, disabled, selected, checked, \
-             overflow_scroll, overflow_x_scroll, overflow_y_scroll"
+             overflow_scroll, overflow_x_scroll, overflow_y_scroll, overflow_scrollbar, \
+             overflow_x_scrollbar, overflow_y_scrollbar"
         ),
     }
 }

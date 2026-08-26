@@ -13,7 +13,7 @@ order: 4
 一次 import 就是整个命名空间：
 
 ```js
-import { div, h_flex, v_flex, text, svg, Button, Link, Checkbox, Switch, Input, InputState } from "gpui";
+import { div, h_flex, v_flex, text, svg, image, Button, Link, Checkbox, Switch, Input, InputState, FocusHandle } from "gpui";
 ```
 
 函数是小写的，组件类型首字母大写并通过 `.new` 构造。这与 Rust 侧一一对应：那边 `div()` 同样是自由函数，`Button::new(id)` 同样是类型上的关联函数。
@@ -24,7 +24,8 @@ import { div, h_flex, v_flex, text, svg, Button, Link, Checkbox, Switch, Input, 
 | `h_flex()` | 一行 |
 | `v_flex()` | 一列 |
 | `text(value)` | 文本元素，参数会被转成字符串 |
-| `svg(path)` | 来自应用自身目录的图片 |
+| `svg(path)` | 来自应用自身目录、跟随主题着色的矢量图标 |
+| `image(path)` | 来自应用自身目录的全彩图片 |
 | `Button.new(id)` | base 的 `Button`：激活、焦点、disabled 与 selected 状态，无样式 |
 | `Link.new(id)` | 可聚焦的外部 HTTP(S) 链接；用 `.href(url)` 设置目标 |
 | `Checkbox.new(id)` | base 的受控 checkbox，无样式也无勾选标记 |
@@ -68,15 +69,16 @@ text(42);
 
 ```js
 svg("icons/check.svg").w(14).h(14).flex_none();
+image("images/brand.png").w(120).h(40);
 ```
 
-`svg` 的路径相对于**应用根目录**——也就是交给 `gpui-shell` 的那个目录——而不是相对于调用它的文件。这个不对称常常让人意外，所以值得直说：`import "./ui.js"` 相对于发起 import 的文件解析，和所有 JavaScript 模块系统一样；而 `svg("icons/check.svg")` 相对于应用根目录解析，和 Web 应用的 public 目录一样。运行时无法知道是哪个模块调用了 `svg`，因此按文件解析的资源路径对它并不可得。
+两种路径都相对于**应用根目录**——也就是交给 `gpui-shell` 的那个目录——而不是相对于调用构造器的文件。这个不对称常常让人意外，所以值得直说：`import "./ui.js"` 相对于发起 import 的文件解析，和所有 JavaScript 模块系统一样；而 `svg("icons/check.svg")` 与 `image("images/brand.png")` 相对于应用根目录解析，和 Web 应用的 public 目录一样。运行时无法知道是哪个模块调用了 asset 构造器，因此按文件解析的资源路径对它并不可得。
 
 越出应用目录的路径会被拒绝。缺失的文件会按路径去重报告一次，并附上查找位置，而不是安静地什么都不画。
 
 单个 asset 最多 16 MiB。列举 asset tree 时最多接受 10,000 个 entry 与累计 1 MiB 的 UTF-8 文件名，避免 asset discovery 无界增长内存。
 
-图标会继承周围的文字颜色，所以深色按钮里的图标不用脚本说第二遍就是浅色的：
+单色图标应使用 `svg()`：它会继承周围的文字颜色，所以深色按钮里的图标不用脚本说第二遍就是浅色的。Logo、照片或插画等需要保留源文件颜色的内容应使用 `image()`。
 
 ```js
 renderIcon(cx) {
@@ -134,6 +136,9 @@ when(...) must return the element
 | `.checked(value)` | `Checkbox`、`Switch` | 受控值 |
 | `.accessibility_label(text)` | `Button`、`Checkbox` | 屏幕阅读器读出的内容 |
 | `.id(name)` | `div`、`h_flex`、`v_flex` | 一个稳定的身份，取代“在树中的位置” |
+| `.overflow_scrollbar()` | `div`、`h_flex`、`v_flex` | 双轴滚动并绘制原生 scrollbar |
+| `.overflow_x_scrollbar()` | `div`、`h_flex`、`v_flex` | 水平滚动并绘制原生 scrollbar |
+| `.overflow_y_scrollbar()` | `div`、`h_flex`、`v_flex` | 垂直滚动并绘制原生 scrollbar |
 
 disabled、selected 与 checked 的**外观**由你来画。基础层只报告状态，脚本不说就什么都不会变：
 
@@ -184,6 +189,67 @@ Checkbox.new(`item-${item.id}`)
 ::: tip 事件处理器请用箭头函数
 箭头函数不绑定自己的 `this`，所以处理函数里的 `this` 仍然是视图实例。用 `function () {}` 写会拿到错误的 `this`。这是为本运行时写脚本时最常见的一处错误，人和模型都一样。
 :::
+
+## 焦点与无障碍
+
+焦点目标由脚本自己持有。`FocusHandle.new()` 创建一个，它像 [`InputState`](./state.md#retained-state) 一样挂在视图上，再用 `.track_focus(handle)` 交给某个元素：
+
+```js
+init() {
+  this.search = FocusHandle.new();
+}
+
+render() {
+  return Button.new("search")
+    .tab_index(1)
+    .track_focus(this.search)
+    .child(text("Search"));
+}
+```
+
+`FocusHandle.new()` 需要一次活的宿主调用；而在 `render` 里创建的 handle 每一帧都是新的，它所跟踪的焦点会被下一次重绘丢掉。所以它属于 `init` 或事件处理器，在 `render` 里调用会抛错。
+
+| handle 上的方法 | 回答什么 |
+| --- | --- |
+| `handle.focus()` | 把键盘移到跟踪它的那个元素上 |
+| `handle.is_focused()` | 那个元素此刻是否持有键盘 |
+| `handle.release()` | 释放这个 handle |
+
+`Tab` 与 `Shift-Tab` 由窗口根视图处理：它按下表的顺序双向行走，并遵守已打开的 dialog 或 sheet 的 focus trap。
+
+| 方法 | 作用于 | 效果 |
+| --- | --- | --- |
+| `.track_focus(handle)` | `div`、`h_flex`、`v_flex`、`Button`、`Checkbox`、`Radio`、`Toggle` | 把元素绑定到脚本持有的 handle |
+| `.tab_index(n)` | 上述这些，外加 `Link`、`Switch` | 元素在窗口 Tab 顺序中的位置；同时也把它变成一个 tab stop |
+| `.tab_stop(value)` | 与 `tab_index` 相同 | Tab 是否能落到它上面。`false` 保留它在顺序中的位置但不可达 |
+| `.role(name)` | `div`、`h_flex`、`v_flex`、`Button`、`Checkbox` | 屏幕阅读器把这个元素读作什么 |
+| `.aria_selected(value)` | `div`、`h_flex`、`v_flex` | 脚本自己搭的列表里某一项的选中状态 |
+| `.aria_active_descendant()` | `div`、`h_flex`、`v_flex` | 在祖先持有键盘时，把本元素报读为当前焦点项——比如输入框保持焦点的 combobox 中被高亮的那一项 |
+
+三张表的范围不同，是因为组件本身不同。`Button`、`Checkbox`、`Radio`、`Toggle` 的焦点 handle 由一个你可以替换的值构建；`Link` 与 `Switch` 自己构建 handle，且没有可替换它的 builder。除 `Button` 与 `Checkbox` 之外的每个组件都自带 role——`Tab` 就是 tab，`Radio` 就是 radio——只有这两个把 role 当作可覆盖项，这正是「让一个按钮被读作菜单项」得以成立的原因。组件无法承接的调用会**写进日志**，而不是被悄悄丢掉：
+
+```text
+`role` is not wired on a Tab: base's Tab owns this part of its own focus and
+accessibility. Put it on an element around it
+```
+
+朴素元素六个方法全都接受，脚本正是靠它们搭出 base 没有对应组件的 listbox、toolbar 或 dialog：
+
+```js
+div()
+  .id(`cadence-${index}`)
+  .role("list_box_option")
+  .aria_selected(index === this.chosen)
+  .when(index === this.chosen, (el) => el.aria_active_descendant())
+  .child(text(name))
+```
+
+role 的取值逐字镜像 `gpui::Role` 的 snake_case 拼写——`list_box`、`list_box_option`、`combo_box`、`menu_item`——整套取值以 `Role` 联合类型写在 `gpui.d.ts` 里，编辑器能补全；不在其中的名字会在调用处失败：
+
+```text
+unknown accessibility role `listbox`; the names mirror gpui::Role in snake_case
+— see the Role type in gpui.d.ts
+```
 
 ## 元素是一次性的
 
@@ -271,6 +337,11 @@ child, children, when, on_click, on_change, disabled, selected, checked, id
 
 - Select、tabs、list、table、tree 以及 `gpui-base` 的其他组件；
 - `gpui.memo`——它能让未变化的子树跳过重建描述的那部分脚本工作；
-- dock 面板，以及让脚本绘制 dock 自身 chrome 的 renderer trait；
-- 脚本所创建控件的焦点归属、Tab 顺序与键盘导航；
-- `img()` 构造器——今天唯一的图片元素是 `svg()`。
+- dock 面板，以及让脚本绘制 dock 自身 chrome 的 renderer trait。
+
+焦点现在归脚本所有，但还不完整。仍然缺少的部分：
+
+- **复合控件内部的键盘导航。** Tab 与 Shift-Tab 能在控件之间移动；在 listbox、菜单或 tab list *内部*移动的方向键还没有，因为运行时还没有可供脚本使用的 action 与快捷键层。
+- **窗口尚无焦点时的第一次 Tab。** 只要还没有任何元素持有焦点，根视图的 Tab 绑定就没有可达的分发路径；焦点必须先以别的方式进入——点击，或者 `handle.focus()`。
+- **`Tab`、`Tabs`，以及 table、group、progress 的各个部件**不在 Tab 顺序里。base 本身就把它们排除在键盘焦点之外，对它们调用 `tab_index` 会被记录而不是被承接。
+- **`Link` 与 `Switch` 上的 `track_focus`**，原因相同：它们自己构建 handle，且不暴露替换它的 builder。

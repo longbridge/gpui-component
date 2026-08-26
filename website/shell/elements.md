@@ -13,7 +13,7 @@ An element in `gpui-shell` is a **description**, not an object. It exists for on
 One import provides the whole namespace:
 
 ```js
-import { div, h_flex, v_flex, text, svg, Button, Link, Checkbox, Switch, Input, InputState } from "gpui";
+import { div, h_flex, v_flex, text, svg, image, Button, Link, Checkbox, Switch, Input, InputState, FocusHandle } from "gpui";
 ```
 
 Functions are lowercase, and component types are capitalized and constructed through `.new`. That mirrors the Rust side one for one: `div()` is a free function there too, and `Button::new(id)` is an associated function on a type.
@@ -24,7 +24,8 @@ Functions are lowercase, and component types are capitalized and constructed thr
 | `h_flex()` | A row |
 | `v_flex()` | A column |
 | `text(value)` | A text element; the value is stringified |
-| `svg(path)` | An image from the application's own directory |
+| `svg(path)` | A theme-tinted vector icon from the application's own directory |
+| `image(path)` | A full-colour image from the application's own directory |
 | `Button.new(id)` | A base `Button`: activation, focus, disabled and selected state, no styling |
 | `Link.new(id)` | A focusable external HTTP(S) link; set its target with `.href(url)` |
 | `Checkbox.new(id)` | A base controlled checkbox, no styling and no indicator |
@@ -68,15 +69,16 @@ A text element is materialized as a `div` containing the string, so it takes sty
 
 ```js
 svg("icons/check.svg").w(14).h(14).flex_none();
+image("images/brand.png").w(120).h(40);
 ```
 
-An `svg` path resolves against the **application root** — the directory handed to `gpui-shell` — not against the file that called it. That asymmetry surprises people, so it is worth stating plainly: `import "./ui.js"` resolves relative to the importing file, the way every JavaScript module system does, while `svg("icons/check.svg")` resolves relative to the application root, the way a web application's public directory does. The runtime cannot tell which module called `svg`, so per-file asset paths are not available to it.
+Both paths resolve against the **application root** — the directory handed to `gpui-shell` — not against the file that called the constructor. That asymmetry surprises people, so it is worth stating plainly: `import "./ui.js"` resolves relative to the importing file, the way every JavaScript module system does, while `svg("icons/check.svg")` and `image("images/brand.png")` resolve relative to the application root, the way a web application's public directory does. The runtime cannot tell which module called an asset constructor, so per-file asset paths are not available to it.
 
 Paths outside the application directory are rejected. A missing file is reported once per path with the location it was looked for, rather than silently drawing nothing.
 
 One asset may contain at most 16 MiB. Listing the asset tree is bounded at 10,000 entries and 1 MiB of UTF-8 name bytes, so asset discovery cannot grow memory without limit.
 
-An icon inherits the surrounding text colour, so an icon inside a dark button comes out light without the script saying so twice:
+Use `svg()` for a monochrome icon: it inherits the surrounding text colour, so an icon inside a dark button comes out light without the script saying so twice. Use `image()` when the source colours must be preserved, such as a logo, photo or illustration.
 
 ```js
 renderIcon(cx) {
@@ -134,6 +136,9 @@ These are not styles; they report state to the base layer, which handles the int
 | `.checked(value)` | `Checkbox`, `Switch` | The controlled value |
 | `.accessibility_label(text)` | `Button`, `Checkbox` | What a screen reader announces |
 | `.id(name)` | `div`, `h_flex`, `v_flex` | A stable identity, instead of position in the tree |
+| `.overflow_scrollbar()` | `div`, `h_flex`, `v_flex` | Scrolls both axes and paints native scrollbars |
+| `.overflow_x_scrollbar()` | `div`, `h_flex`, `v_flex` | Scrolls horizontally and paints a native scrollbar |
+| `.overflow_y_scrollbar()` | `div`, `h_flex`, `v_flex` | Scrolls vertically and paints a native scrollbar |
 
 Disabled, selected and checked **appearance** is yours to draw. The base layer only reports the state; nothing changes on screen unless the script says so:
 
@@ -184,6 +189,67 @@ An `on_click` handler receives a plain object whose field names mirror the Rust 
 ::: tip Use arrow functions for handlers
 An arrow function does not bind its own `this`, so `this` inside the handler is still the view instance. A `function () {}` handler gets the wrong `this`. This is the single most common mistake in scripts written for this runtime, by people and by models alike.
 :::
+
+## Focus and accessibility
+
+A script owns its own focus targets. `FocusHandle.new()` creates one, it lives on the view the way an [`InputState`](./state.md#retained-state) does, and `.track_focus(handle)` gives it to an element:
+
+```js
+init() {
+  this.search = FocusHandle.new();
+}
+
+render() {
+  return Button.new("search")
+    .tab_index(1)
+    .track_focus(this.search)
+    .child(text("Search"));
+}
+```
+
+`FocusHandle.new()` needs a live host call, and a handle created inside `render` would be a new one on every frame — so the focus it tracked would be dropped by the next repaint. It belongs in `init` or in an event handler; calling it in `render` throws.
+
+| On the handle | Answers |
+| --- | --- |
+| `handle.focus()` | Moves the keyboard onto the element tracking it |
+| `handle.is_focused()` | Whether that element currently has the keyboard |
+| `handle.release()` | Drops the handle |
+
+`Tab` and `Shift-Tab` are handled by the window root, which walks the order below in both directions and honours the focus trap of an open dialog or sheet.
+
+| Method | On | Effect |
+| --- | --- | --- |
+| `.track_focus(handle)` | `div`, `h_flex`, `v_flex`, `Button`, `Checkbox`, `Radio`, `Toggle` | Binds the element to a handle the script owns |
+| `.tab_index(n)` | those, and `Link`, `Switch` | Where the element sits in the window's Tab order; it also makes the element a tab stop |
+| `.tab_stop(value)` | the same set | Whether Tab can land on it at all. `false` keeps its place in the order without making it reachable |
+| `.role(name)` | `div`, `h_flex`, `v_flex`, `Button`, `Checkbox` | What the element announces itself as |
+| `.aria_selected(value)` | `div`, `h_flex`, `v_flex` | The selected state of an option in a list the script built |
+| `.aria_active_descendant()` | `div`, `h_flex`, `v_flex` | Announces this element as the focused one while an ancestor holds the keyboard — the highlighted option of a combobox whose input keeps focus |
+
+The sets differ because the components differ. `Button`, `Checkbox`, `Radio` and `Toggle` build their focus handle from a value you can replace; `Link` and `Switch` build their own and have no builder to replace it. Every component except `Button` and `Checkbox` announces a role of its own — a `Tab` is a tab, a `Radio` is a radio — and only those two treat the role as an override, which is what lets a button announce itself as a menu item. A call a component cannot honour is **reported in the log**, not silently dropped:
+
+```text
+`role` is not wired on a Tab: base's Tab owns this part of its own focus and
+accessibility. Put it on an element around it
+```
+
+The plain elements take all six, which is how a script builds the listbox, toolbar or dialog the base layer has no component for:
+
+```js
+div()
+  .id(`cadence-${index}`)
+  .role("list_box_option")
+  .aria_selected(index === this.chosen)
+  .when(index === this.chosen, (el) => el.aria_active_descendant())
+  .child(text(name))
+```
+
+Role names mirror `gpui::Role` in snake_case — `list_box`, `list_box_option`, `combo_box`, `menu_item` — and the whole set is in `gpui.d.ts` as the `Role` union, so an editor completes them and a name that is not one fails at the call site:
+
+```text
+unknown accessibility role `listbox`; the names mirror gpui::Role in snake_case
+— see the Role type in gpui.d.ts
+```
 
 ## Elements are single-use
 
@@ -271,6 +337,11 @@ The element surface is the M0 set. Missing, deliberately, and each belonging to 
 
 - Select, tabs, list, table, tree and the other `gpui-base` components;
 - `gpui.memo`, which would let an unchanged subtree skip the script work that rebuilds its description;
-- dock panels, and the renderer traits that would let a script draw the dock's own chrome;
-- focus ownership, Tab order and keyboard navigation for script-created controls;
-- an `img()` constructor — `svg()` is the only image element today.
+- dock panels, and the renderer traits that would let a script draw the dock's own chrome.
+
+Focus is now the script's to own, but not all of it. Still missing:
+
+- **Keyboard navigation inside a composite.** Tab and Shift-Tab move between controls; the arrow keys that move within a listbox, a menu or a tab list do not exist, because the runtime has no action or key-binding layer for a script to reach.
+- **The first Tab into an unfocused window.** While nothing at all holds focus, the root's Tab binding has no dispatch path to reach; focus has to arrive some other way first — a click, or `handle.focus()`.
+- **`Tab`, `Tabs`, and the table, group and progress parts** stay out of the Tab order. Base leaves them out of keyboard focus, and `tab_index` on one of them is reported rather than honoured.
+- **`track_focus` on `Link` and `Switch`**, for the same reason: they build their own handle and expose no builder to replace it.
