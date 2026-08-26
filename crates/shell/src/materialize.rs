@@ -10,17 +10,24 @@
 //! but only to dispatch events: no path through this module calls into the
 //! script while an element is being built.
 
-use std::rc::{Rc, Weak};
+use std::{
+    rc::{Rc, Weak},
+    time::Duration,
+};
 
 use smallvec::SmallVec;
 
 use gpui::{
-    AnyElement, App, InteractiveElement, IntoElement, MouseButton, ParentElement, Refineable as _,
-    SharedString, StatefulInteractiveElement, StyleRefinement, Styled, Window, div,
+    AbsoluteLength, AnyElement, App, DefiniteLength, InteractiveElement, IntoElement, Length,
+    MouseButton, ParentElement, Pixels, Refineable as _, SharedString, StatefulInteractiveElement,
+    StyleRefinement, Styled, Window, div,
 };
 use gpui_base::{
-    Button, Checkbox, CheckboxState, Switch, h_flex,
+    Button, Checkbox, CheckboxState, Link, Switch,
+    animation::{ease_in_cubic, ease_in_out_cubic, ease_out_cubic},
+    h_flex,
     input::{Input, InputBase},
+    motion::{Spring, Transition, spring, transition},
     v_flex,
 };
 
@@ -72,8 +79,61 @@ struct Behavior {
     /// What a screen reader announces. An icon-only control has no text of its
     /// own, so without this it announces nothing.
     accessibility_label: Option<SharedString>,
+    href: Option<SharedString>,
     on_click: Option<CallbackId>,
     on_change: Option<CallbackId>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum MotionProperty {
+    Opacity,
+    Width,
+    Height,
+    Left,
+    Top,
+}
+
+impl MotionProperty {
+    fn parse(value: &str) -> Option<Self> {
+        match value {
+            "opacity" => Some(Self::Opacity),
+            "width" => Some(Self::Width),
+            "height" => Some(Self::Height),
+            "left" => Some(Self::Left),
+            "top" => Some(Self::Top),
+            _ => None,
+        }
+    }
+
+    fn channel(self) -> &'static str {
+        match self {
+            Self::Opacity => "opacity",
+            Self::Width => "width",
+            Self::Height => "height",
+            Self::Left => "left",
+            Self::Top => "top",
+        }
+    }
+}
+
+#[derive(Clone)]
+struct Motion {
+    property: MotionProperty,
+    policy: MotionPolicy,
+}
+
+#[derive(Clone)]
+enum MotionPolicy {
+    Transition {
+        duration: Duration,
+        delay: Duration,
+        easing: String,
+    },
+    Spring {
+        response: Duration,
+        damping: f32,
+        epsilon: f32,
+    },
 }
 
 /// Materializes a snapshot's root and every descendant.
@@ -134,7 +194,9 @@ fn materialize_node(
         return div().into_any_element();
     };
 
-    let (refinement, behavior, states) = resolve_ops(arena, node);
+    let (mut refinement, behavior, states, motions) = resolve_ops(arena, node);
+    let motion_identity = motion_element_id(id, behavior.key.clone(), &component);
+    apply_motion(motion_identity, &motions, &mut refinement, window, cx);
     let inherited = refinement.text.color.unwrap_or(inherited);
 
     // `SmallVec` rather than `Vec`: this runs per node, per frame, and the
@@ -177,6 +239,27 @@ fn materialize_node(
             let button = with_hover(button, &states);
             let button = with_active_and_focus(button, &states);
             finish(button, refinement, children)
+        }
+        Component::Link(id) => {
+            warn_ignored_key(&behavior, "Link");
+            let mut link = Link::new(SharedString::from(id)).disabled(behavior.disabled);
+            if let Some(label) = behavior.accessibility_label.clone() {
+                link = link.accessibility_label(label);
+            }
+            if let Some(href) = behavior.href.clone() {
+                link = link
+                    .href(href)
+                    .open_with(|href, _, _, cx| cx.open_url(href));
+            }
+            if let Some(callback) = behavior.on_click {
+                let runtime = Rc::downgrade(runtime);
+                link = link.on_activate(move |event, window, cx| {
+                    dispatch_click(&runtime, callback, event, window, cx);
+                });
+            }
+            let link = with_hover(link, &states);
+            let link = with_active_and_focus(link, &states);
+            finish(link, refinement, children)
         }
         Component::Checkbox(id) => {
             warn_ignored_key(&behavior, "Checkbox");
@@ -369,10 +452,42 @@ fn element_id(id: SpecId, key: Option<SharedString>) -> gpui::ElementId {
     }
 }
 
-fn resolve_ops(arena: &SpecArena, node: &SpecNode) -> (StyleRefinement, Behavior, StateStyles) {
+/// Resolves the identity used by native retained motion.
+///
+/// Controls and retained inputs already carry an identity that survives tree
+/// reordering. Falling back to the snapshot position for them would make the
+/// visual track jump to another control whenever a conditional sibling shifts
+/// its `SpecId`.
+fn motion_element_id(
+    id: SpecId,
+    key: Option<SharedString>,
+    component: &Component,
+) -> gpui::ElementId {
+    match component {
+        Component::Button(id)
+        | Component::Link(id)
+        | Component::Checkbox(id)
+        | Component::Switch(id) => gpui::ElementId::Name(id.clone().into()),
+        Component::Input(handle) => {
+            gpui::ElementId::NamedInteger("gpui-shell-input".into(), u64::from(*handle))
+        }
+        _ => element_id(id, key),
+    }
+}
+
+fn resolve_ops(
+    arena: &SpecArena,
+    node: &SpecNode,
+) -> (
+    StyleRefinement,
+    Behavior,
+    StateStyles,
+    SmallVec<[Motion; 2]>,
+) {
     let mut refinement = StyleRefinement::default();
     let mut behavior = Behavior::default();
     let mut states = StateStyles::default();
+    let mut motions = SmallVec::new();
 
     for op in node.ops() {
         match op {
@@ -388,6 +503,50 @@ fn resolve_ops(arena: &SpecArena, node: &SpecNode) -> (StyleRefinement, Behavior
                         // than a script error. Keep the frame renderable.
                         tracing::error!("style `{name}` failed during materialize: {error}");
                     }
+                }
+            }
+            SpecOp::Method("transition", args) => {
+                if let [
+                    Bridged::Str(property),
+                    Bridged::Number(duration),
+                    Bridged::Number(delay),
+                    Bridged::Str(easing),
+                ] = args.as_slice()
+                    && let Some(property) = MotionProperty::parse(property)
+                {
+                    set_motion(
+                        &mut motions,
+                        Motion {
+                            property,
+                            policy: MotionPolicy::Transition {
+                                duration: Duration::from_secs_f64((*duration).max(0.0) / 1000.0),
+                                delay: Duration::from_secs_f64((*delay).max(0.0) / 1000.0),
+                                easing: easing.clone(),
+                            },
+                        },
+                    );
+                }
+            }
+            SpecOp::Method("spring", args) => {
+                if let [
+                    Bridged::Str(property),
+                    Bridged::Number(response),
+                    Bridged::Number(damping),
+                    Bridged::Number(epsilon),
+                ] = args.as_slice()
+                    && let Some(property) = MotionProperty::parse(property)
+                {
+                    set_motion(
+                        &mut motions,
+                        Motion {
+                            property,
+                            policy: MotionPolicy::Spring {
+                                response: Duration::from_secs_f64((*response).max(0.0) / 1000.0),
+                                damping: *damping as f32,
+                                epsilon: *epsilon as f32,
+                            },
+                        },
+                    );
                 }
             }
             SpecOp::Method(name, args) => apply_behavior(&mut behavior, name, args),
@@ -408,7 +567,174 @@ fn resolve_ops(arena: &SpecArena, node: &SpecNode) -> (StyleRefinement, Behavior
         }
     }
 
-    (refinement, behavior, states)
+    (refinement, behavior, states, motions)
+}
+
+fn set_motion(motions: &mut SmallVec<[Motion; 2]>, motion: Motion) {
+    if let Some(existing) = motions
+        .iter_mut()
+        .find(|existing| existing.property == motion.property)
+    {
+        *existing = motion;
+    } else {
+        motions.push(motion);
+    }
+}
+
+fn apply_motion(
+    identity: gpui::ElementId,
+    motions: &[Motion],
+    refinement: &mut StyleRefinement,
+    window: &mut Window,
+    cx: &mut App,
+) {
+    for motion in motions {
+        let channel = motion.property.channel();
+        match motion.property {
+            MotionProperty::Opacity => {
+                if let Some(target) = refinement.opacity {
+                    refinement.opacity = Some(sample_f32(
+                        identity.clone(),
+                        channel,
+                        target,
+                        &motion.policy,
+                        window,
+                        cx,
+                    ));
+                }
+            }
+            MotionProperty::Width => animate_length(
+                &mut refinement.size.width,
+                identity.clone(),
+                channel,
+                &motion.policy,
+                window,
+                cx,
+            ),
+            MotionProperty::Height => animate_length(
+                &mut refinement.size.height,
+                identity.clone(),
+                channel,
+                &motion.policy,
+                window,
+                cx,
+            ),
+            MotionProperty::Left => animate_length(
+                &mut refinement.inset.left,
+                identity.clone(),
+                channel,
+                &motion.policy,
+                window,
+                cx,
+            ),
+            MotionProperty::Top => animate_length(
+                &mut refinement.inset.top,
+                identity.clone(),
+                channel,
+                &motion.policy,
+                window,
+                cx,
+            ),
+        }
+    }
+}
+
+fn animate_length(
+    target: &mut Option<Length>,
+    identity: gpui::ElementId,
+    channel: &'static str,
+    policy: &MotionPolicy,
+    window: &mut Window,
+    cx: &mut App,
+) {
+    let Some(Length::Definite(DefiniteLength::Absolute(AbsoluteLength::Pixels(pixels)))) = *target
+    else {
+        return;
+    };
+    let sampled = sample_pixels(identity, channel, pixels, policy, window, cx);
+    *target = Some(sampled.into());
+}
+
+fn transition_policy(duration: Duration, delay: Duration, easing: &str) -> Transition {
+    let policy = Transition::new(duration).delay(delay);
+    match easing {
+        "linear" => policy.ease(|value| value),
+        "ease-in" => policy.ease(ease_in_cubic),
+        "ease-in-out" => policy.ease(ease_in_out_cubic),
+        _ => policy.ease(ease_out_cubic),
+    }
+}
+
+fn sample_f32(
+    identity: gpui::ElementId,
+    channel: &'static str,
+    target: f32,
+    policy: &MotionPolicy,
+    window: &mut Window,
+    cx: &mut App,
+) -> f32 {
+    match policy {
+        MotionPolicy::Transition {
+            duration,
+            delay,
+            easing,
+        } => transition(
+            (identity, channel),
+            target,
+            transition_policy(*duration, *delay, easing),
+            window,
+            cx,
+        ),
+        MotionPolicy::Spring {
+            response,
+            damping,
+            epsilon,
+        } => spring(
+            (identity, channel),
+            target,
+            Spring::new(*response)
+                .with_damping(*damping)
+                .with_epsilon(*epsilon),
+            window,
+            cx,
+        ),
+    }
+}
+
+fn sample_pixels(
+    identity: gpui::ElementId,
+    channel: &'static str,
+    target: Pixels,
+    policy: &MotionPolicy,
+    window: &mut Window,
+    cx: &mut App,
+) -> Pixels {
+    match policy {
+        MotionPolicy::Transition {
+            duration,
+            delay,
+            easing,
+        } => transition(
+            (identity, channel),
+            target,
+            transition_policy(*duration, *delay, easing),
+            window,
+            cx,
+        ),
+        MotionPolicy::Spring {
+            response,
+            damping,
+            epsilon,
+        } => spring(
+            (identity, channel),
+            target,
+            Spring::new(*response)
+                .with_damping(*damping)
+                .with_epsilon(*epsilon),
+            window,
+            cx,
+        ),
+    }
 }
 
 /// Resolves a detached state node into a refinement. Only style ops are
@@ -449,10 +775,75 @@ fn apply_behavior(behavior: &mut Behavior, name: &str, args: &[Bridged]) {
                 .and_then(|value| value.as_str().ok())
                 .map(SharedString::from);
         }
+        "href" => {
+            behavior.href = args
+                .first()
+                .and_then(|value| value.as_str().ok())
+                .map(SharedString::from);
+        }
         "disabled" => behavior.disabled = flag.unwrap_or(true),
         "selected" => behavior.selected = flag.unwrap_or(true),
         "checked" => behavior.checked = flag.unwrap_or(true),
         _ => tracing::error!("unhandled component method `{name}` reached materialize"),
+    }
+}
+
+#[cfg(test)]
+mod motion_identity_tests {
+    use super::*;
+
+    #[test]
+    fn control_motion_uses_the_constructor_identity_instead_of_spec_position() {
+        assert_eq!(
+            motion_element_id(41, None, &Component::Button("save".into())),
+            gpui::ElementId::Name("save".into())
+        );
+        assert_eq!(
+            motion_element_id(7, None, &Component::Link("authorize".into())),
+            gpui::ElementId::Name("authorize".into())
+        );
+        assert_eq!(
+            motion_element_id(99, None, &Component::Checkbox("remember".into())),
+            gpui::ElementId::Name("remember".into())
+        );
+    }
+
+    #[test]
+    fn retained_input_motion_uses_its_entity_handle() {
+        assert_eq!(
+            motion_element_id(41, None, &Component::Input(23)),
+            gpui::ElementId::NamedInteger("gpui-shell-input".into(), 23)
+        );
+    }
+
+    #[test]
+    fn the_last_motion_policy_for_a_property_wins() {
+        let mut motions = SmallVec::new();
+        set_motion(
+            &mut motions,
+            Motion {
+                property: MotionProperty::Left,
+                policy: MotionPolicy::Transition {
+                    duration: Duration::from_millis(100),
+                    delay: Duration::ZERO,
+                    easing: "linear".to_owned(),
+                },
+            },
+        );
+        set_motion(
+            &mut motions,
+            Motion {
+                property: MotionProperty::Left,
+                policy: MotionPolicy::Spring {
+                    response: Duration::from_millis(300),
+                    damping: 0.8,
+                    epsilon: 0.001,
+                },
+            },
+        );
+
+        assert_eq!(motions.len(), 1);
+        assert!(matches!(motions[0].policy, MotionPolicy::Spring { .. }));
     }
 }
 

@@ -7,7 +7,10 @@
 
 use std::ops::Deref;
 
-use crate::{Capabilities, ScriptView, ShellRuntime};
+use crate::{
+    Capabilities, RenderSnapshot, ScriptView, ShellRuntime,
+    spec::{CallbackId, SpecOp},
+};
 use gpui::{Entity, IntoElement as _, TestAppContext, VisualTestContext};
 
 /// A view that does its filesystem work in a task and records the outcome, so
@@ -296,6 +299,85 @@ fn the_store_answers_from_memory_and_persists_off_thread(cx: &mut TestAppContext
     let _ = std::fs::remove_dir_all(&directory);
 }
 
+const STORE_RETRY_PROBE: &str = r#"
+import { View, v_flex, text, store, spawn, with_cx, Checkbox } from "gpui";
+
+export default class Probe extends View {
+  init() {
+    this.state = "failed write pending";
+    store.set("attempt", 1);
+  }
+
+  render() {
+    return v_flex()
+      .child(text(this.state))
+      .child(Checkbox.new("retry").on_change((_checked, cx) => {
+        spawn(async () => {
+          try {
+            await store.flush();
+            this.state = "flushed";
+          } catch (error) {
+            this.state = `rejected:${error.message}`;
+          }
+          with_cx((cx) => cx.notify());
+        });
+      }));
+  }
+}
+"#;
+
+/// A failed automatic write must park rather than drive the same revision in a
+/// tight loop. A later explicit durability request is allowed to retry it.
+#[gpui::test]
+fn a_failed_store_write_parks_until_flush_explicitly_retries_it(cx: &mut TestAppContext) {
+    let directory =
+        std::env::temp_dir().join(format!("gpui-shell-store-retry-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&directory);
+    std::fs::create_dir_all(&directory).expect("a directory for the store test");
+    let file = directory.join("store.json");
+
+    cx.update(crate::init);
+    crate::set_capabilities(Capabilities::new().store(true));
+    crate::set_store_path(file.clone());
+    // The store's startup read has already observed a normal first run. Change
+    // the target afterwards so only the asynchronous persistence step fails.
+    std::fs::create_dir(&file).expect("a directory that makes the first rename fail");
+
+    let runtime = ShellRuntime::new().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let view_type = runtime
+        .load_source("store-retry.js", STORE_RETRY_PROBE)
+        .expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let view = context
+        .update(|window, cx| runtime.instantiate_view(&view_type, window, cx))
+        .expect("instantiate");
+
+    draw(&mut context, &view);
+    context.run_until_parked();
+    assert!(
+        file.is_dir(),
+        "the failed revision should park without replacing its target"
+    );
+
+    std::fs::remove_dir(&file).expect("make the store path writable");
+    let callback = first_change_callback(&mut context, &view);
+    context.update(|window, cx| runtime.dispatch_change(callback, true, window, cx));
+    context.run_until_parked();
+    draw(&mut context, &view);
+
+    let rendered = snapshot_text(&mut context, &view);
+    assert!(
+        rendered.contains("flushed"),
+        "flush did not retry: {rendered}"
+    );
+    let written = std::fs::read_to_string(&file).expect("the retried store write landed");
+    assert!(written.contains("\"attempt\": 1"), "{written}");
+
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
 fn draw(context: &mut VisualTestContext, view: &Entity<ScriptView>) {
     let view = view.clone();
     context.draw(
@@ -312,4 +394,23 @@ fn snapshot_text(context: &mut VisualTestContext, view: &Entity<ScriptView>) -> 
             .map(crate::RenderSnapshot::debug_tree)
             .unwrap_or_default()
     })
+}
+
+fn first_change_callback(context: &mut VisualTestContext, view: &Entity<ScriptView>) -> CallbackId {
+    context.update(|_, cx| {
+        view.read(cx)
+            .snapshot()
+            .and_then(first_change_callback_in_snapshot)
+            .expect("the retry control should have a change handler")
+    })
+}
+
+fn first_change_callback_in_snapshot(snapshot: &RenderSnapshot) -> Option<CallbackId> {
+    (0..snapshot.len() as u32)
+        .filter_map(|id| snapshot.arena().node(id))
+        .flat_map(|node| node.ops())
+        .find_map(|op| match op {
+            SpecOp::Callback("on_change", id) => Some(*id),
+            _ => None,
+        })
 }

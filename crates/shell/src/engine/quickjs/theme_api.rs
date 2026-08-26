@@ -64,14 +64,14 @@ pub fn install(ctx: &Ctx<'_>, module: &Object<'_>) -> JsResult<()> {
 fn snapshot_json() -> String {
     let quote = |pairs: Vec<String>| pairs.join(",");
 
-    let colors = quote(
-        theme::color_token_names()
-            .iter()
-            .filter_map(|name| {
-                theme::token_color(name).map(|color| format!("\"{name}\":\"{}\"", hex(color)))
-            })
-            .collect(),
-    );
+    let color_pairs = theme::color_token_names()
+        .iter()
+        .filter_map(|name| {
+            theme::token_color(name).map(|color| format!("\"{name}\":\"{}\"", hex(color)))
+        })
+        .collect::<Vec<_>>();
+    let colors = quote(color_pairs.clone());
+    let direct_colors = quote(color_pairs);
     let spacing = quote(
         theme::spacing_token_names()
             .iter()
@@ -92,7 +92,7 @@ fn snapshot_json() -> String {
     let mode = crate::scope::with_current_app(|cx| theme::mode(cx)).unwrap_or(ThemeMode::Light);
 
     format!(
-        "{{\"colors\":{{{colors}}},\"spacing\":{{{spacing}}},\"radius\":{{{radius}}},\
+        "{{{direct_colors},\"colors\":{{{colors}}},\"spacing\":{{{spacing}}},\"radius\":{{{radius}}},\
          \"mode\":\"{}\",\"is_dark\":{}}}",
         mode.as_str(),
         mode.is_dark()

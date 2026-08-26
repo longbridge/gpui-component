@@ -96,6 +96,93 @@ fn repeated_gpui_renders_do_not_re_enter_the_script(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
+fn a_changed_motion_target_requests_native_frames_without_reentering_js(cx: &mut TestAppContext) {
+    let source = r#"
+import { View, div, Checkbox } from "gpui";
+
+export default class Panel extends View {
+  init() { this.expanded = false; }
+  render() {
+    return div()
+      .id("panel")
+      .w(this.expanded ? 320 : 64)
+      .transition("width", { duration: 180 })
+      .child(
+        Checkbox.new("expand").on_change((expanded, cx) => {
+          this.expanded = expanded;
+          cx.notify();
+        }),
+      );
+  }
+}
+"#;
+    let (runtime, mut context, view) = script_view(cx, source);
+    render_once(&mut context, &view);
+    let callback = click_target(&mut context, &view);
+    context.update(|window, cx| runtime.dispatch_change(callback, true, window, cx));
+    render_once(&mut context, &view);
+
+    let before_frames = runtime.metrics().read();
+    let mut native_frames = 0;
+    for _ in 0..120 {
+        context
+            .executor()
+            .advance_clock(std::time::Duration::from_millis(2));
+        native_frames += context.update(|window, cx| window.simulate_next_frame(cx));
+        render_once(&mut context, &view);
+    }
+    assert!(
+        native_frames > 1,
+        "retargeting width must schedule native animation frames"
+    );
+    let after_frames = runtime.metrics().read();
+    assert_eq!(
+        after_frames.script_renders(),
+        2,
+        "120 native animation frames must not enter QuickJS"
+    );
+    assert!(
+        after_frames.materializations() >= before_frames.materializations() + 120,
+        "animation frames must repeatedly materialize the retained snapshot"
+    );
+}
+
+#[gpui::test]
+fn a_changed_spring_target_requests_native_frames_without_reentering_js(cx: &mut TestAppContext) {
+    let source = r#"
+import { View, div, Checkbox } from "gpui";
+
+export default class Indicator extends View {
+  init() { this.selected = false; }
+  render() {
+    return div()
+      .id("indicator")
+      .left(this.selected ? 240 : 0)
+      .spring("left", { response: 250, damping: 0.85 })
+      .child(
+        Checkbox.new("select").on_change((selected, cx) => {
+          this.selected = selected;
+          cx.notify();
+        }),
+      );
+  }
+}
+"#;
+    let (runtime, mut context, view) = script_view(cx, source);
+    render_once(&mut context, &view);
+    let callback = click_target(&mut context, &view);
+    context.update(|window, cx| runtime.dispatch_change(callback, true, window, cx));
+    render_once(&mut context, &view);
+
+    let pending = context.update(|window, cx| window.simulate_next_frame(cx));
+    assert_eq!(
+        pending, 1,
+        "retargeting left must schedule a native spring frame"
+    );
+    assert_eq!(runtime.metrics().read().script_renders(), 2);
+}
+
+#[gpui::test]
 fn a_script_notify_causes_exactly_one_rebuild(cx: &mut TestAppContext) {
     let (runtime, mut context, view) = script_view(cx, TOGGLE);
 

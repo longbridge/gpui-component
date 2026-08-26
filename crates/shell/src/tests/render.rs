@@ -76,6 +76,153 @@ fn a_script_view_produces_an_element_description(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
+fn an_external_link_survives_the_script_render(cx: &mut TestAppContext) {
+    cx.update(crate::init);
+    let runtime = ShellRuntime::new().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { Link, View, text } from "gpui";
+export default class ExternalLink extends View {
+  render() {
+    return Link.new("authorize")
+      .href("https://example.com/device")
+      .child(text("Open authorization"));
+  }
+}
+"#;
+    let view_type = runtime
+        .load_source("external-link.js", source)
+        .expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .expect("instantiate");
+    let tree = context.update(|window, cx| {
+        runtime
+            .render_to_spec(&object, None, window, cx)
+            .expect("render")
+    });
+
+    assert!(tree.contains("Link \"authorize\""), "missing Link: {tree}");
+    assert!(
+        tree.contains(":href[Str(\"https://example.com/device\")]"),
+        "missing external target: {tree}"
+    );
+}
+
+#[gpui::test]
+fn an_external_link_requires_a_parseable_http_origin(cx: &mut TestAppContext) {
+    cx.update(crate::init);
+    let runtime = ShellRuntime::new().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { Link, View } from "gpui";
+export default class InvalidExternalLink extends View {
+  render() { return Link.new("broken").href("https://"); }
+}
+"#;
+    let view_type = runtime
+        .load_source("invalid-external-link.js", source)
+        .expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .expect("instantiate");
+
+    let error = context
+        .update(|window, cx| runtime.render_to_spec(&object, None, window, cx))
+        .expect_err("a URL without an origin must be refused at the call site");
+    assert!(
+        error.to_string().contains("absolute HTTP(S) URL"),
+        "unexpected error: {error}"
+    );
+}
+
+#[gpui::test]
+fn render_context_exposes_base_aligned_theme_tokens(cx: &mut TestAppContext) {
+    cx.update(crate::init);
+    let runtime = ShellRuntime::new().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View, text } from "gpui";
+export default class Themed extends View {
+  render(cx) {
+    return text("semantic")
+      .text_color(cx.theme().foreground)
+      .bg(cx.theme().surface)
+      .p(cx.theme().spacing.md)
+      .rounded(cx.theme().radius.md);
+  }
+}
+
+"#;
+    let view_type = runtime
+        .load_source("context-theme.js", source)
+        .expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .expect("instantiate");
+    let tree = context.update(|window, cx| {
+        runtime
+            .render_to_spec(&object, None, window, cx)
+            .expect("render with cx.theme()")
+    });
+    assert!(
+        tree.contains("text_color[Str(\"#"),
+        "theme color was not resolved: {tree}"
+    );
+    assert!(
+        tree.contains("p[Number("),
+        "theme spacing was not resolved: {tree}"
+    );
+}
+
+#[gpui::test]
+fn render_context_theme_snapshot_is_deeply_read_only(cx: &mut TestAppContext) {
+    cx.update(crate::init);
+    let runtime = ShellRuntime::new().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View, text } from "gpui";
+export default class Themed extends View {
+  render(cx) {
+    const theme = cx.theme();
+    if (!Object.isFrozen(theme)
+        || !Object.isFrozen(theme.colors)
+        || !Object.isFrozen(theme.spacing)
+        || !Object.isFrozen(theme.radius)) {
+      throw new Error("theme snapshot must be deeply frozen");
+    }
+    return text("semantic");
+  }
+}
+"#;
+    let view_type = runtime
+        .load_source("read-only-context-theme.js", source)
+        .expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .expect("instantiate");
+
+    context
+        .update(|window, cx| runtime.render_to_spec(&object, None, window, cx))
+        .expect("all nested theme token groups must be read-only");
+}
+
+#[test]
+fn link_typings_expose_a_real_external_target() {
+    let types = crate::typings::declarations();
+    assert!(types.contains("export const Link: ComponentType;"));
+    assert!(types.contains("href(url: string): Element;"));
+}
+
+#[gpui::test]
 fn an_element_cannot_be_added_to_two_parents(cx: &mut TestAppContext) {
     cx.update(|cx| crate::init(cx));
 
@@ -268,6 +415,198 @@ export default class Styled extends View {
         tree.contains(":active(.opacity"),
         "active not recorded: {tree}"
     );
+}
+
+#[gpui::test]
+fn transition_declarations_survive_the_script_render(cx: &mut TestAppContext) {
+    cx.update(|cx| crate::init(cx));
+
+    let runtime = ShellRuntime::new().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+
+    let source = r#"
+import { View, div } from "gpui";
+
+export default class Motion extends View {
+  render() {
+    return div()
+      .id("sidebar")
+      .w(320)
+      .transition("width", { duration: 180, delay: 20, easing: "ease-out" });
+  }
+}
+"#;
+
+    let view_type = runtime.load_source("motion", source).expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .expect("instantiate");
+
+    let tree = context.update(|window, cx| {
+        runtime
+            .render_to_spec(&object, None, window, cx)
+            .expect("render")
+    });
+
+    assert!(
+        tree.contains(":transition(width, 180ms, 20ms, ease-out)"),
+        "the native motion target and policy were not retained in the snapshot: {tree}"
+    );
+}
+
+#[gpui::test]
+fn motion_rejects_properties_the_native_layer_cannot_interpolate(cx: &mut TestAppContext) {
+    cx.update(|cx| crate::init(cx));
+
+    let runtime = ShellRuntime::new().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View, div } from "gpui";
+
+export default class BadMotion extends View {
+  render() {
+    return div().id("panel").transition("padding", 120);
+  }
+}
+"#;
+    let view_type = runtime.load_source("bad-motion", source).expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .expect("instantiate");
+
+    let error = context
+        .update(|window, cx| runtime.render_to_spec(&object, None, window, cx))
+        .expect_err("unsupported motion properties must fail at the script call site");
+
+    assert!(
+        error
+            .to_string()
+            .contains("opacity, width, height, left or top"),
+        "the error must name the supported native motion properties: {error}"
+    );
+}
+
+#[gpui::test]
+fn spring_declarations_survive_the_script_render(cx: &mut TestAppContext) {
+    cx.update(|cx| crate::init(cx));
+
+    let runtime = ShellRuntime::new().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View, div } from "gpui";
+
+export default class Motion extends View {
+  render() {
+    return div().id("indicator").left(48).spring("left", {
+      response: 250,
+      damping: 0.85,
+      epsilon: 0.25,
+    });
+  }
+}
+"#;
+    let view_type = runtime.load_source("spring-motion", source).expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .expect("instantiate");
+
+    let tree = context.update(|window, cx| {
+        runtime
+            .render_to_spec(&object, None, window, cx)
+            .expect("render")
+    });
+    assert!(
+        tree.contains(":spring(left, 250ms, 0.85, 0.25)"),
+        "the native spring target and policy were not retained in the snapshot: {tree}"
+    );
+}
+
+#[gpui::test]
+fn transition_rejects_an_unknown_native_easing(cx: &mut TestAppContext) {
+    cx.update(|cx| crate::init(cx));
+    let runtime = ShellRuntime::new().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View, div } from "gpui";
+export default class BadMotion extends View {
+  render() {
+    return div().opacity(0.5).transition("opacity", { duration: 120, easing: "bounce" });
+  }
+}
+"#;
+    let view_type = runtime.load_source("bad-easing", source).expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .expect("instantiate");
+    let error = context
+        .update(|window, cx| runtime.render_to_spec(&object, None, window, cx))
+        .expect_err("an easing Rust cannot sample must fail at the call site");
+    assert!(
+        error
+            .to_string()
+            .contains("linear, ease-in, ease-out or ease-in-out"),
+        "the error must name the snapshot-safe easing values: {error}"
+    );
+}
+
+#[gpui::test]
+fn motion_rejects_non_finite_or_physically_invalid_policies(cx: &mut TestAppContext) {
+    cx.update(|cx| crate::init(cx));
+    let runtime = ShellRuntime::new().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+
+    for (name, declaration, expected) in [
+        (
+            "nan-duration",
+            r#"div().opacity(0.5).transition("opacity", { duration: NaN })"#,
+            "duration must be a finite non-negative number",
+        ),
+        (
+            "negative-delay",
+            r#"div().opacity(0.5).transition("opacity", { duration: 120, delay: -1 })"#,
+            "delay must be a finite non-negative number",
+        ),
+        (
+            "negative-damping",
+            r#"div().left(20).spring("left", { damping: -0.1 })"#,
+            "damping must be a finite non-negative number",
+        ),
+        (
+            "zero-epsilon",
+            r#"div().left(20).spring("left", { epsilon: 0 })"#,
+            "epsilon must be a finite positive number",
+        ),
+    ] {
+        let source = format!(
+            r#"
+import {{ View, div }} from "gpui";
+export default class BadMotion extends View {{
+  render() {{ return {declaration}; }}
+}}
+"#
+        );
+        let view_type = runtime.load_source(name, &source).expect("load");
+        let object = context
+            .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+            .expect("instantiate");
+        let error = context
+            .update(|window, cx| runtime.render_to_spec(&object, None, window, cx))
+            .expect_err("invalid motion policies must fail at the script call site");
+        assert!(
+            error.to_string().contains(expected),
+            "`{name}` must explain its invalid field: {error}"
+        );
+    }
 }
 
 #[gpui::test]

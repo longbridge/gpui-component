@@ -31,6 +31,7 @@ pub enum Component {
     VFlex,
     Text(String),
     Button(String),
+    Link(String),
     Checkbox(String),
     Switch(String),
     /// A text input, addressed by its entity handle rather than by an id: the
@@ -48,6 +49,7 @@ impl Component {
             Component::VFlex => "v_flex",
             Component::Text(_) => "text",
             Component::Button(_) => "Button",
+            Component::Link(_) => "Link",
             Component::Checkbox(_) => "Checkbox",
             Component::Switch(_) => "Switch",
             Component::Input(_) => "Input",
@@ -221,6 +223,7 @@ impl SpecArena {
         match component {
             Component::Text(value)
             | Component::Button(value)
+            | Component::Link(value)
             | Component::Checkbox(value)
             | Component::Switch(value)
             | Component::Svg(value) => out.push_str(&format!(" {value:?}")),
@@ -233,6 +236,36 @@ impl SpecArena {
                     out.push_str(&format!(" .{}", crate::style::nullary_name(*index)))
                 }
                 SpecOp::ParamStyle(name, args) => out.push_str(&format!(" .{name}{args:?}")),
+                SpecOp::Method("transition", args) => {
+                    if let [
+                        Bridged::Str(property),
+                        Bridged::Number(duration),
+                        Bridged::Number(delay),
+                        Bridged::Str(easing),
+                    ] = args.as_slice()
+                    {
+                        out.push_str(&format!(
+                            " :transition({property}, {duration}ms, {delay}ms, {easing})"
+                        ));
+                    } else {
+                        out.push_str(" :transition(?)");
+                    }
+                }
+                SpecOp::Method("spring", args) => {
+                    if let [
+                        Bridged::Str(property),
+                        Bridged::Number(response),
+                        Bridged::Number(damping),
+                        Bridged::Number(epsilon),
+                    ] = args.as_slice()
+                    {
+                        out.push_str(&format!(
+                            " :spring({property}, {response}ms, {damping}, {epsilon})"
+                        ));
+                    } else {
+                        out.push_str(" :spring(?)");
+                    }
+                }
                 SpecOp::Method(name, args) => out.push_str(&format!(" :{name}{args:?}")),
                 SpecOp::Callback(name, _) => out.push_str(&format!(" :{name}(fn)")),
                 SpecOp::StateStyle(name, node) => {

@@ -36,6 +36,7 @@ quickjs = [
     "dep:llrt_url",
     "dep:llrt_zlib",
     "dep:reqwest",
+    "dep:tungstenite",
 ]
 
 [dependencies]
@@ -63,7 +64,9 @@ llrt_process = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7d
 llrt_url = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb2778eca4b5a63111e74f51", optional = true }
 llrt_zlib = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb2778eca4b5a63111e74f51", default-features = false, features = ["compression-rust"], optional = true }
 cap-std = "4.0.3"
+async-channel = "2.5"
 reqwest = { workspace = true, features = ["blocking"], optional = true }
+tungstenite = { version = "0.29", features = ["rustls-tls-webpki-roots", "url"], optional = true }
 
 anyhow.workspace = true
 instant.workspace = true

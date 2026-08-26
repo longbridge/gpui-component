@@ -12,6 +12,13 @@ mod net;
 mod os;
 mod process;
 mod upstream;
+mod websocket;
+
+#[cfg(test)]
+pub(super) fn direct_test_http_client()
+-> std::result::Result<reqwest::blocking::Client, reqwest::Error> {
+    fetch::direct_test_client()
+}
 
 const NAMES: &[&str] = &[
     "buffer",
@@ -60,5 +67,6 @@ pub(super) fn install(ctx: &Ctx<'_>) -> Result<()> {
     console::install(ctx)?;
     super::sandbox::install_process(ctx)?;
     fetch::install(ctx)?;
+    websocket::install(ctx)?;
     Ok(())
 }

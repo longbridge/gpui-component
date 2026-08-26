@@ -33,10 +33,9 @@
 // reaches the ambient `App`, and hides the frame stack. `runtime`, `error` and
 // `assets` publish their types through the root.
 //
-// **Designed, tested, not driven.** `dock`, `plugin` and `plugin_api`. Nothing
-// in the crate reaches them, because a script cannot yet contribute a panel and
-// no host loads a plugin. They stay private until something does; a public API
-// no caller has ever exercised is a promise made on a guess.
+// **Designed, tested, not driven.** `dock` and `plugin_api`. A script cannot yet
+// contribute a panel. The plugin manifest is public because the shipped binary
+// now applies a local application's declared capabilities before loading it.
 //
 // **Not reachable at all.** `value` and `entities`: a `Bridged` and an entity
 // handle are the runtime talking to itself.
@@ -49,7 +48,7 @@ pub(crate) mod error;
 pub(crate) mod materialize;
 pub mod metrics;
 pub mod native;
-pub(crate) mod plugin;
+pub mod plugin;
 pub(crate) mod plugin_api;
 pub mod policy;
 pub(crate) mod process;
@@ -69,7 +68,7 @@ pub mod view;
 pub mod watch;
 
 pub use assets::AppAssets;
-pub use capability::{Capabilities, ExecuteGrant};
+pub use capability::{Capabilities, ExecuteGrant, HttpRequestGrant};
 pub use engine::ShellRuntime;
 pub use error::ShellError;
 pub use metrics::RuntimeMetrics;

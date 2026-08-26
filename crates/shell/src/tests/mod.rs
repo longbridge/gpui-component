@@ -9,6 +9,7 @@
 mod benchmark;
 mod fs;
 mod host_api;
+mod http_request;
 mod network;
 mod process;
 mod render;

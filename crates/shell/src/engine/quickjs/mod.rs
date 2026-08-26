@@ -71,6 +71,7 @@ const MODULE_EXPORTS: &[&str] = &[
     "text",
     "svg",
     "Button",
+    "Link",
     "Checkbox",
     "Switch",
     "Input",
@@ -104,6 +105,14 @@ pub struct ShellRuntime {
     entities: RefCell<EntityStore>,
     /// What the runtime is spending. See [`Self::metrics`].
     metrics: Metrics,
+    /// An HTTP client supplied by tests that exercise a loopback server.
+    ///
+    /// This is deliberately runtime-scoped rather than process state: tests
+    /// run concurrently, and changing proxy environment variables would leak
+    /// into unrelated runtimes. Production builds do not carry this field and
+    /// continue to construct the normal system-configured client in `fetch`.
+    #[cfg(test)]
+    test_http_client: RefCell<Option<reqwest::blocking::Client>>,
     context: JsContext,
     /// Incremented per `load_app`, so a reload re-reads every module rather
     /// than serving the first version from QuickJS's module cache.
@@ -167,6 +176,8 @@ impl ShellRuntime {
             arena: RefCell::new(SpecArena::new()),
             entities: RefCell::new(EntityStore::new()),
             metrics: Metrics::default(),
+            #[cfg(test)]
+            test_http_client: RefCell::new(None),
             context,
             module_generation: Rc::new(Cell::new(0)),
             js_runtime,
@@ -193,6 +204,19 @@ impl ShellRuntime {
     /// exists to produce. See [`crate::metrics`].
     pub(crate) fn metrics(&self) -> &Metrics {
         &self.metrics
+    }
+
+    #[cfg(test)]
+    pub(crate) fn use_direct_http_for_tests(&self) {
+        *self.test_http_client.borrow_mut() = Some(
+            standard::direct_test_http_client()
+                .expect("the direct test HTTP client should be constructible"),
+        );
+    }
+
+    #[cfg(test)]
+    fn test_http_client(&self) -> Option<reqwest::blocking::Client> {
+        self.test_http_client.borrow().clone()
     }
 
     /// A reading of the two counters, taken now.
@@ -838,6 +862,68 @@ globalThis.__gpui = (() => {
   methods.active = state("active");
   methods.focus = state("focus");
 
+  const finiteNonNegative = (value, name) => {
+    if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+      throw new TypeError(name + " must be a finite non-negative number");
+    }
+    return value;
+  };
+
+  const finitePositive = (value, name) => {
+    if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+      throw new TypeError(name + " must be a finite positive number");
+    }
+    return value;
+  };
+
+  methods.transition = function (property, options) {
+    property = String(property);
+    if (!["opacity", "width", "height", "left", "top"].includes(property)) {
+      throw new TypeError(
+        "transition(property, policy) supports opacity, width, height, left or top; got " +
+          JSON.stringify(property),
+      );
+    }
+    const policy = typeof options === "number" ? { duration: options } : (options ?? {});
+    const duration = finiteNonNegative(policy.duration ?? 0, "transition duration");
+    const delay = finiteNonNegative(policy.delay ?? 0, "transition delay");
+    const easing = policy.easing ?? "ease-out";
+    if (!["linear", "ease-in", "ease-out", "ease-in-out"].includes(easing)) {
+      throw new TypeError(
+        "transition easing must be linear, ease-in, ease-out or ease-in-out; got " +
+          JSON.stringify(easing),
+      );
+    }
+    __apply(this.__id, "transition", [
+      property,
+      duration,
+      delay,
+      easing,
+    ]);
+    return this;
+  };
+
+  methods.spring = function (property, options) {
+    property = String(property);
+    if (!["opacity", "width", "height", "left", "top"].includes(property)) {
+      throw new TypeError(
+        "spring(property, policy) supports opacity, width, height, left or top; got " +
+          JSON.stringify(property),
+      );
+    }
+    const policy = options ?? {};
+    const response = finiteNonNegative(policy.response ?? 250, "spring response");
+    const damping = finiteNonNegative(policy.damping ?? 1, "spring damping");
+    const epsilon = finitePositive(policy.epsilon ?? 0.001, "spring epsilon");
+    __apply(this.__id, "spring", [
+      property,
+      response,
+      damping,
+      epsilon,
+    ]);
+    return this;
+  };
+
   methods.when = function (condition, branch) {
     if (!condition) return this;
     const produced = branch(this);
@@ -917,6 +1003,21 @@ globalThis.__gpui = (() => {
     clear_toasts: () => __clear_toasts(),
   };
 
+  let cachedThemeSource;
+  let cachedTheme;
+  const currentTheme = () => {
+    const source = __theme_snapshot();
+    if (source !== cachedThemeSource) {
+      cachedThemeSource = source;
+      cachedTheme = JSON.parse(source);
+      Object.freeze(cachedTheme.colors);
+      Object.freeze(cachedTheme.spacing);
+      Object.freeze(cachedTheme.radius);
+      Object.freeze(cachedTheme);
+    }
+    return cachedTheme;
+  };
+
   return {
     View,
     div: () => element(__div()),
@@ -924,8 +1025,9 @@ globalThis.__gpui = (() => {
     v_flex: () => element(__v_flex()),
     text: (value) => element(__text(String(value))),
     svg: (path) => element(__svg(String(path))),
-    theme: () => JSON.parse(__theme_snapshot()),
+    theme: currentTheme,
     Button: { new: (id) => element(__button(String(id))) },
+    Link: { new: (id) => element(__link(String(id))) },
     Checkbox: { new: (id) => element(__checkbox(String(id))) },
     Switch: { new: (id) => element(__switch(String(id))) },
     InputState: {
@@ -957,6 +1059,7 @@ impl ShellRuntime {
                 "selected",
                 "checked",
                 "accessibility_label",
+                "href",
                 "id",
             ]
             .into_iter()
@@ -972,6 +1075,7 @@ impl ShellRuntime {
             text_constructor(&globals, "__text", runtime.clone(), Component::Text)?;
             text_constructor(&globals, "__svg", runtime.clone(), Component::Svg)?;
             text_constructor(&globals, "__button", runtime.clone(), Component::Button)?;
+            text_constructor(&globals, "__link", runtime.clone(), Component::Link)?;
             text_constructor(&globals, "__checkbox", runtime.clone(), Component::Checkbox)?;
             text_constructor(&globals, "__switch", runtime.clone(), Component::Switch)?;
 
@@ -1051,13 +1155,23 @@ impl ShellRuntime {
                 };
                 self.push_op_checked(ctx, self.push_op(id, SpecOp::Callback(name, callback)))
             }
-            "disabled" | "selected" | "checked" | "accessibility_label" | "id" => {
+            "disabled"
+            | "selected"
+            | "checked"
+            | "accessibility_label"
+            | "href"
+            | "id"
+            | "transition"
+            | "spring" => {
                 let bridged = args.values(method)?;
                 let name = match method {
                     "disabled" => "disabled",
                     "selected" => "selected",
                     "checked" => "checked",
                     "id" => "id",
+                    "transition" => "transition",
+                    "spring" => "spring",
+                    "href" => "href",
                     _ => "accessibility_label",
                 };
                 if name == "id"
@@ -1071,6 +1185,20 @@ impl ShellRuntime {
                         "id(name) expects a string; it is the element's stable identity, so it \
                          must not change between renders",
                     ));
+                }
+                if name == "href" {
+                    let Some(target) = bridged.first().and_then(|value| value.as_str().ok()) else {
+                        return Err(Exception::throw_type(ctx, "href(url) expects a string"));
+                    };
+                    let valid = reqwest::Url::parse(target).is_ok_and(|url| {
+                        matches!(url.scheme(), "http" | "https") && url.host_str().is_some()
+                    });
+                    if !valid {
+                        return Err(Exception::throw_type(
+                            ctx,
+                            "href(url) expects an absolute HTTP(S) URL with a host",
+                        ));
+                    }
                 }
                 self.push_op_checked(ctx, self.push_op(id, SpecOp::Method(name, bridged)))
             }
@@ -1144,6 +1272,10 @@ fn element_id(ctx: &Ctx<'_>, value: &Value<'_>) -> JsResult<SpecId> {
 /// instead of touching a dead frame.
 fn context_object<'js>(ctx: &Ctx<'js>, generation: u64) -> JsResult<Object<'js>> {
     let object = Object::new(ctx.clone())?;
+
+    let module: Object = ctx.globals().get("__gpui")?;
+    let theme: Function = module.get("theme")?;
+    object.set("theme", theme)?;
 
     object.set(
         "notify",

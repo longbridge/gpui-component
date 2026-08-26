@@ -58,6 +58,7 @@ use std::{
     time::Duration,
 };
 
+use async_channel;
 use gpui::{AnyWindowHandle, AsyncApp, BackgroundExecutor, Entity, ForegroundExecutor, WeakEntity};
 use rquickjs::{
     Ctx, Exception, FromJs, Function, IntoJs, Object, Persistent, Promise, Result as JsResult,
@@ -499,6 +500,19 @@ pub(super) struct Host {
     runtime: std::rc::Weak<ShellRuntime>,
 }
 
+/// The only part of an actor-owned promise that crosses threads.
+///
+/// It deliberately contains no QuickJS value, foreground executor or task
+/// state. Its receiver is checked by a foreground task created with the normal
+/// task registry, so resumption retains the usual ownership and scope rules.
+pub(super) struct ActorCompletion<T = ()>(async_channel::Sender<std::result::Result<T, String>>);
+
+impl<T> ActorCompletion<T> {
+    pub(super) fn settle(self, outcome: std::result::Result<T, String>) {
+        let _ = self.0.try_send(outcome);
+    }
+}
+
 /// The executors and window handle a deferred call needs, taken from the scope
 /// that is running now. Held rather than re-derived, so work that outlives the
 /// call — a queue that drives itself — does not need a `Ctx` it cannot have.
@@ -727,7 +741,6 @@ pub(super) fn deferred<'js>(
         )
         .with_rejection(Persistent::save(ctx, reject)),
     );
-
     Ok(Box::new(move |outcome| {
         if let Readiness::Ready(owner) = task.readiness() {
             let resolve = task.take_callback();
@@ -749,6 +762,139 @@ pub(super) fn deferred<'js>(
         }
         finish(&task);
     }))
+}
+
+/// Creates a promise settled by an actor thread without moving any QuickJS or
+/// foreground-executor state off the main thread.
+pub(super) fn actor_deferred<'js>(
+    ctx: &Ctx<'js>,
+    api: &'static str,
+) -> JsResult<(Promise<'js>, ActorCompletion)> {
+    let host = host(ctx, api)?;
+    let (promise, resolve, reject) = ctx.promise()?;
+    let task = register(
+        TaskState::new(
+            api,
+            scope::current_view().map(|view| view.downgrade()),
+            Some(Persistent::save(ctx, resolve)),
+        )
+        .with_rejection(Persistent::save(ctx, reject)),
+    );
+    let (completion, receiver) = async_channel::bounded(1);
+    let running = task.clone();
+    let foreground = host.foreground.scheduler_executor();
+    host.foreground
+        .clone()
+        .spawn(async move {
+            let outcome = loop {
+                match receiver.try_recv() {
+                    Ok(outcome) => break outcome,
+                    Err(async_channel::TryRecvError::Closed) => {
+                        break Err("actor stopped before completing the operation".to_owned());
+                    }
+                    Err(async_channel::TryRecvError::Empty) => {
+                        foreground.timer(Duration::from_millis(10)).await;
+                    }
+                }
+            };
+            settle_actor_task(&running, &host, outcome);
+        })
+        .detach();
+    Ok((promise, ActorCompletion(completion)))
+}
+
+fn settle_actor_task(task: &Rc<TaskState>, host: &Host, outcome: std::result::Result<(), String>) {
+    if let Readiness::Ready(owner) = task.readiness() {
+        let resolve = task.take_callback();
+        let reject = task.take_rejection();
+        resume(
+            &host,
+            &task.policy.clone(),
+            owner,
+            move |ctx, _| match outcome {
+                Ok(()) => match resolve {
+                    Some(resolve) => resolve.restore(ctx)?.call::<_, ()>(()),
+                    None => Ok(()),
+                },
+                Err(message) => match reject {
+                    Some(reject) => {
+                        let error = Exception::from_message(ctx.clone(), &message)?;
+                        reject.restore(ctx)?.call::<_, ()>((error,))
+                    }
+                    None => Ok(()),
+                },
+            },
+        );
+    }
+    finish(&task);
+}
+
+/// Creates a promise whose Send value is supplied by a socket or other actor.
+///
+/// The actor sends exactly one outcome. Its foreground receiver checks the
+/// channel on a short timer, never occupying a shared background worker, so a
+/// pending read cannot prevent a write or close command from being submitted to
+/// the actor.
+pub(super) fn actor_blocking<'js, T>(
+    ctx: &Ctx<'js>,
+    api: &'static str,
+) -> JsResult<(Promise<'js>, ActorCompletion<T>)>
+where
+    T: for<'a> IntoJs<'a> + Send + 'static,
+{
+    let host = host(ctx, api)?;
+    let (promise, resolve, reject) = ctx.promise()?;
+    let task = register(
+        TaskState::new(
+            api,
+            scope::current_view().map(|view| view.downgrade()),
+            Some(Persistent::save(ctx, resolve)),
+        )
+        .with_rejection(Persistent::save(ctx, reject)),
+    );
+    let (completion, receiver) = async_channel::bounded(1);
+    let running = task.clone();
+    let foreground = host.foreground.scheduler_executor();
+    host.foreground
+        .clone()
+        .spawn(async move {
+            let outcome = loop {
+                match receiver.try_recv() {
+                    Ok(outcome) => break outcome,
+                    Err(async_channel::TryRecvError::Closed) => {
+                        break Err("actor stopped before completing the operation".to_owned());
+                    }
+                    Err(async_channel::TryRecvError::Empty) => {
+                        foreground.timer(Duration::from_millis(10)).await;
+                    }
+                }
+            };
+            if let Readiness::Ready(owner) = running.readiness() {
+                let resolve = running.take_callback();
+                let reject = running.take_rejection();
+                resume(
+                    &host,
+                    &running.policy.clone(),
+                    owner,
+                    move |ctx, _| match outcome {
+                        Ok(value) => match resolve {
+                            Some(resolve) => resolve.restore(ctx)?.call::<_, ()>((value,)),
+                            None => Ok(()),
+                        },
+                        Err(message) => match reject {
+                            Some(reject) => {
+                                let error = Exception::from_message(ctx.clone(), &message)?;
+                                reject.restore(ctx)?.call::<_, ()>((error,))
+                            }
+                            None => Ok(()),
+                        },
+                    },
+                );
+            }
+            finish(&running);
+        })
+        .detach();
+    Ok((promise, ActorCompletion(completion)))
 }
 
 /// A promise settled by work that must not run on this thread.
@@ -1092,6 +1238,12 @@ mod tests {
             ctx.eval::<Value, _>("globalThis.x = 1").expect("eval");
         });
         drain_jobs(&runtime);
+    }
+
+    #[test]
+    fn actor_completion_can_cross_an_actor_thread() {
+        fn assert_send<T: Send>() {}
+        assert_send::<ActorCompletion>();
     }
 
     #[test]

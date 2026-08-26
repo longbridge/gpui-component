@@ -49,15 +49,13 @@ fn main() {
             // reasonable place to start an application. Every other directory
             // that imports `gpui` comes along with it.
             match gpui_shell::typings::write_to(&directory) {
-                Ok(path) => println!("wrote {}", path.display()),
+                Ok(_) => {}
                 Err(error) => {
                     eprintln!("gpui-shell: {error}");
                     std::process::exit(1);
                 }
             }
-            for path in gpui_shell::typings::refresh_tree(&directory) {
-                println!("wrote {}", path.display());
-            }
+            gpui_shell::typings::refresh_tree(&directory);
             return;
         }
         Ok(Invocation::Check(arguments)) => {
@@ -318,9 +316,7 @@ fn run(arguments: Arguments) {
             // application from its source directory, which is where somebody is
             // editing. Nothing is written when the file already matches, and a
             // directory that refuses the write is logged rather than fatal.
-            for path in gpui_shell::typings::refresh_tree(&root) {
-                tracing::info!("wrote {}", path.display());
-            }
+            gpui_shell::typings::refresh_tree(&root);
 
             let module = runtime.load_app(&root, ENTRY).map_err(|error| {
                 eprintln!("{error}");
@@ -423,9 +419,7 @@ fn check(arguments: CheckArguments) -> ! {
             // leaves the editor correct on its way past: whatever it reports, the
             // declarations beside the source are the ones it just checked
             // against.
-            for path in gpui_shell::typings::refresh_tree(&root) {
-                tracing::debug!("wrote {}", path.display());
-            }
+            gpui_shell::typings::refresh_tree(&root);
 
             let module = runtime.load_app(&root, ENTRY);
             let window_sink = sink.clone();
@@ -577,10 +571,25 @@ fn install_palette(cx: &mut App) {
 /// directories — because an installed plugin will run through the same code
 /// path with a manifest deciding instead.
 fn local_capabilities(root: &Path, store: &Path) -> Capabilities {
-    Capabilities::new()
+    let manifest = root.join(gpui_shell::plugin::MANIFEST_FILE);
+    let capabilities = if manifest.exists() {
+        match gpui_shell::plugin::PluginManifest::read(root) {
+            Ok(manifest) => manifest.capabilities(root, store),
+            Err(error) => {
+                tracing::error!("ignoring invalid {}: {error}", manifest.display());
+                Capabilities::new()
+            }
+        }
+    } else {
+        // Preserve the original local-app experience for source directories
+        // that are not plugin bundles. Their private store is the only ambient
+        // state they receive; network and clipboard stay denied.
+        Capabilities::new().store(true)
+    };
+
+    capabilities
         .read_roots([root.to_path_buf(), store.to_path_buf()])
         .write_roots([store.to_path_buf()])
-        .store(true)
         .exit(true)
 }
 
@@ -846,5 +855,70 @@ mod tests {
         for flag in ["--watch", "--dev", "--help", "--version"] {
             assert!(help.contains(flag), "`{flag}` is missing from the help");
         }
+    }
+
+    #[test]
+    fn a_local_application_manifest_grants_its_declared_network_capabilities() {
+        let root = std::env::temp_dir().join(format!(
+            "gpui-shell-local-manifest-current-{}",
+            std::process::id()
+        ));
+        let data = root.join("data");
+        std::fs::create_dir_all(&root).expect("temporary app directory");
+        std::fs::write(
+            root.join("gpui-shell.json"),
+            r#"{
+              "id": "com.example.market",
+              "name": "Market",
+              "version": "1.0.0",
+              "entry": "main.js",
+              "capabilities": {
+                "network": { "hosts": ["quotes.example.com"] },
+                "store": true,
+                "clipboard": { "write": true }
+              }
+            }"#,
+        )
+        .expect("manifest");
+
+        let capabilities = local_capabilities(&root, &data);
+        assert!(capabilities.may_reach("quotes.example.com"));
+        assert!(capabilities.has_store());
+        assert!(capabilities.is_clipboard_writable());
+        assert!(!capabilities.is_clipboard_readable());
+        assert!(!capabilities.may_reach("trade.example.com"));
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn a_legacy_plugin_json_does_not_grant_local_application_capabilities() {
+        let root = std::env::temp_dir().join(format!(
+            "gpui-shell-local-manifest-legacy-{}",
+            std::process::id()
+        ));
+        let data = root.join("data");
+        std::fs::create_dir_all(&root).expect("temporary app directory");
+        std::fs::write(
+            root.join("plugin.json"),
+            r#"{
+              "id": "com.example.legacy",
+              "name": "Legacy",
+              "version": "1.0.0",
+              "entry": "main.js",
+              "capabilities": {
+                "network": { "hosts": ["quotes.example.com"] },
+                "clipboard": { "write": true }
+              }
+            }"#,
+        )
+        .expect("legacy manifest");
+
+        let capabilities = local_capabilities(&root, &data);
+        assert!(!capabilities.may_reach("quotes.example.com"));
+        assert!(!capabilities.is_clipboard_writable());
+        assert!(capabilities.has_store());
+
+        let _ = std::fs::remove_dir_all(root);
     }
 }

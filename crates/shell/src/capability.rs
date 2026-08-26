@@ -16,10 +16,59 @@ pub struct Capabilities {
     write_roots: Vec<PathBuf>,
     execute: ExecuteGrant,
     network_hosts: Vec<String>,
+    http_requests: Vec<HttpRequestGrant>,
     store: bool,
     clipboard_read: bool,
     clipboard_write: bool,
     exit: bool,
+}
+
+/// A method-and-path-scoped HTTP grant for one host.
+///
+/// This is deliberately separate from [`Capabilities::network_hosts`]: a
+/// plugin may read one REST resource without gaining TCP or WebSocket access to
+/// the same host, or permission to POST to another path on it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HttpRequestGrant {
+    host: String,
+    methods: Vec<String>,
+    paths: Vec<String>,
+    path_prefixes: Vec<String>,
+}
+
+impl HttpRequestGrant {
+    pub fn new<H, M, P, Q>(host: impl Into<String>, methods: H, paths: M, path_prefixes: P) -> Self
+    where
+        H: IntoIterator<Item = Q>,
+        M: IntoIterator,
+        M::Item: Into<String>,
+        P: IntoIterator,
+        P::Item: Into<String>,
+        Q: Into<String>,
+    {
+        Self {
+            host: host.into().to_ascii_lowercase(),
+            methods: methods
+                .into_iter()
+                .map(|method| method.into().to_ascii_uppercase())
+                .collect(),
+            paths: paths.into_iter().map(Into::into).collect(),
+            path_prefixes: path_prefixes.into_iter().map(Into::into).collect(),
+        }
+    }
+
+    fn allows(&self, host: &str, method: &str, path: &str) -> bool {
+        self.host.eq_ignore_ascii_case(host)
+            && self
+                .methods
+                .iter()
+                .any(|allowed| allowed.eq_ignore_ascii_case(method))
+            && (self.paths.iter().any(|allowed| allowed == path)
+                || self
+                    .path_prefixes
+                    .iter()
+                    .any(|allowed| path.starts_with(allowed)))
+    }
 }
 
 /// Which external commands a script may run.
@@ -59,6 +108,11 @@ impl Capabilities {
             .into_iter()
             .map(|host| host.to_ascii_lowercase())
             .collect();
+        self
+    }
+
+    pub fn http_requests(mut self, requests: impl IntoIterator<Item = HttpRequestGrant>) -> Self {
+        self.http_requests = requests.into_iter().collect();
         self
     }
 
@@ -125,6 +179,16 @@ impl Capabilities {
         self.network_hosts
             .iter()
             .any(|allowed| allowed.eq_ignore_ascii_case(host))
+    }
+
+    /// Whether an HTTP request is permitted by either a legacy unrestricted
+    /// host grant or a method-and-path-scoped HTTP grant.
+    pub fn may_request(&self, host: &str, method: &str, path: &str) -> bool {
+        self.may_reach(host)
+            || self
+                .http_requests
+                .iter()
+                .any(|grant| grant.allows(host, method, path))
     }
 
     /// Opens the granted directory a path belongs to, and the path within it.

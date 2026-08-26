@@ -47,7 +47,7 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 
 use crate::{
-    capability::{Capabilities, ExecuteGrant},
+    capability::{Capabilities, ExecuteGrant, HttpRequestGrant},
     engine::ShellRuntime,
     policy::Policy,
     scope::{self, ScopePhase},
@@ -73,11 +73,10 @@ pub const API_VERSION: &str = crate::plugin_api::VERSION;
 
 /// The file a plugin directory is recognized by.
 ///
-/// §18.1 shows the manifest's content but never names the file. `plugin.json`
-/// is chosen here because the directory is the plugin: nothing else in it needs
-/// the name, and `manifest.json` and `package.json` are both already spoken for
-/// by other ecosystems whose schemas would be mistaken for this one.
-pub const MANIFEST_FILE: &str = "plugin.json";
+/// §18.1 shows the manifest's content but never names the file.
+/// `gpui-shell.json` makes the owning runtime explicit and avoids colliding
+/// with generic `manifest.json`, `plugin.json`, and `package.json` conventions.
+pub const MANIFEST_FILE: &str = "gpui-shell.json";
 
 /// The entry file the engine can currently load. See [`PluginManager::load`].
 const ENGINE_ENTRY: &str = "main.js";
@@ -117,7 +116,7 @@ impl PluginManifest {
         Self::parse_inner(source).map_err(ManifestError::from)
     }
 
-    /// Reads `<directory>/plugin.json`.
+    /// Reads `<directory>/gpui-shell.json`.
     ///
     /// The path is carried into the error, because a host reads many manifests
     /// in one pass and "missing field `id`" is not actionable without it.
@@ -175,6 +174,7 @@ impl PluginManifest {
                 .map_err(|error| ManifestProblem::Capabilities(error.to_string()))?,
         };
         capabilities.validate_placeholders()?;
+        capabilities.validate_network()?;
 
         Ok(Self {
             id,
@@ -444,6 +444,20 @@ struct NetworkGrantFile {
     /// Hosts that may be reached, e.g. `api.example.com`.
     #[serde(default)]
     hosts: Vec<String>,
+    /// HTTP requests constrained by host, method and URL path.
+    #[serde(default)]
+    http: Vec<HttpRequestGrantFile>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct HttpRequestGrantFile {
+    host: String,
+    methods: Vec<String>,
+    #[serde(default)]
+    paths: Vec<String>,
+    #[serde(default)]
+    path_prefixes: Vec<String>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Deserialize, JsonSchema)]
@@ -476,18 +490,20 @@ impl CapabilitiesFile {
             Some(ExecuteFile::Allowed(commands)) => ExecuteGrant::Allowed(commands),
         };
 
+        let network = self.network.clone().unwrap_or_default();
         Capabilities::new()
             .read_roots(expand_all(&fs.read, plugin_dir, data_dir))
             .write_roots(expand_all(&fs.write, plugin_dir, data_dir))
             .execute(execute)
-            .network_hosts(
-                self.network
-                    .clone()
-                    .unwrap_or_default()
-                    .hosts
-                    .into_iter()
-                    .map(|host| host.to_lowercase()),
-            )
+            .network_hosts(network.hosts.into_iter().map(|host| host.to_lowercase()))
+            .http_requests(network.http.into_iter().map(|request| {
+                HttpRequestGrant::new(
+                    request.host,
+                    request.methods,
+                    request.paths,
+                    request.path_prefixes,
+                )
+            }))
             .store(self.store)
             .clipboard_read(clipboard.read)
             .clipboard_write(clipboard.write)
@@ -514,6 +530,50 @@ impl CapabilitiesFile {
             }
         }
 
+        Ok(())
+    }
+
+    fn validate_network(&self) -> Result<(), ManifestProblem> {
+        let Some(network) = &self.network else {
+            return Ok(());
+        };
+        for host in network
+            .hosts
+            .iter()
+            .chain(network.http.iter().map(|rule| &rule.host))
+        {
+            if host.is_empty() || host.contains("://") || host.contains('/') {
+                return Err(ManifestProblem::Capabilities(format!(
+                    "network host `{host}` must be a hostname without a scheme or path"
+                )));
+            }
+        }
+        for (index, rule) in network.http.iter().enumerate() {
+            if rule.methods.is_empty() {
+                return Err(ManifestProblem::Capabilities(format!(
+                    "network.http[{index}].methods must contain at least one HTTP method"
+                )));
+            }
+            for method in &rule.methods {
+                if !matches!(method.as_str(), "GET" | "POST") {
+                    return Err(ManifestProblem::Capabilities(format!(
+                        "network.http[{index}].methods contains invalid HTTP method `{method}`"
+                    )));
+                }
+            }
+            for (field, paths) in [
+                ("paths", &rule.paths),
+                ("path_prefixes", &rule.path_prefixes),
+            ] {
+                for path in paths {
+                    if !path.starts_with('/') {
+                        return Err(ManifestProblem::Capabilities(format!(
+                            "network.http[{index}].{field} entry `{path}` must start with `/`"
+                        )));
+                    }
+                }
+            }
+        }
         Ok(())
     }
 }
@@ -721,7 +781,7 @@ impl std::fmt::Display for ManifestProblem {
             ),
             ManifestProblem::Capabilities(error) => write!(
                 f,
-                "invalid `capabilities`: {error}. The block accepts fs (read, write, execute), network (hosts), store, clipboard (read, write) and process (exit)"
+                "invalid `capabilities`: {error}. The block accepts fs (read, write, execute), network (hosts, http), store, clipboard (read, write) and process (exit)"
             ),
         }
     }
@@ -1117,7 +1177,15 @@ mod tests {
                 "write": ["${dataDir}"],
                 "execute": ["git"]
             },
-            "network": { "hosts": ["api.example.com"] },
+            "network": {
+                "hosts": ["api.example.com"],
+                "http": [{
+                    "host": "readonly.example.com",
+                    "methods": ["GET"],
+                    "paths": ["/v1/account"],
+                    "path_prefixes": ["/v1/quotes/"]
+                }]
+            },
             "store": true,
             "clipboard": { "write": true },
             "process": { "exit": true }
@@ -1291,6 +1359,9 @@ mod tests {
         assert!(!capabilities.may_run("curl"));
         assert!(capabilities.may_reach("api.example.com"));
         assert!(!capabilities.may_reach("evil.example.com"));
+        assert!(capabilities.may_request("readonly.example.com", "GET", "/v1/account"));
+        assert!(capabilities.may_request("readonly.example.com", "GET", "/v1/quotes/AAPL.US"));
+        assert!(!capabilities.may_request("readonly.example.com", "POST", "/v1/account"));
 
         // The placeholders are the only way a manifest can name a directory it
         // does not know the path of.
@@ -1401,6 +1472,23 @@ mod tests {
         let message = error.to_string();
         assert!(message.contains("netwrok"), "{message}");
         assert!(message.contains("invalid `capabilities`"), "{message}");
+    }
+
+    #[test]
+    fn malformed_http_grants_are_rejected_at_manifest_parse_time() {
+        for (needle, replacement, expected) in [
+            (
+                "api.example.com",
+                "https://api.example.com",
+                "without a scheme",
+            ),
+            ("GET", "GETT", "invalid HTTP method"),
+            ("/v1/account", "v1/account", "must start with `/`"),
+        ] {
+            let source = VALID.replacen(needle, replacement, 1);
+            let error = PluginManifest::parse(&source).expect_err("invalid grant must fail fast");
+            assert!(error.to_string().contains(expected), "{error}");
+        }
     }
 
     #[test]
@@ -1527,6 +1615,32 @@ mod tests {
     }
 
     #[test]
+    fn discovery_and_read_recognize_only_gpui_shell_json() {
+        let tree = TempTree::new("manifest-name");
+        let current = tree.path().join("current");
+        let legacy = tree.path().join("legacy");
+        std::fs::create_dir_all(&current).expect("current application directory");
+        std::fs::create_dir_all(&legacy).expect("legacy application directory");
+        std::fs::write(current.join("gpui-shell.json"), VALID).expect("current manifest");
+        std::fs::write(
+            legacy.join("plugin.json"),
+            VALID.replacen("com.example.inbox", "com.example.legacy", 1),
+        )
+        .expect("legacy manifest");
+
+        let manifest = PluginManifest::read(&current).expect("the new manifest name is readable");
+        assert_eq!(manifest.id(), "com.example.inbox");
+
+        let mut manager = PluginManager::new(vec![tree.path().to_path_buf()]);
+        let results = manager.discover();
+        assert_eq!(results.len(), 1, "legacy plugin.json must be ignored");
+        assert_eq!(
+            results[0].as_ref().expect("current manifest is valid").id(),
+            "com.example.inbox"
+        );
+    }
+
+    #[test]
     fn a_directory_that_is_itself_a_plugin_is_discovered() {
         let tree = TempTree::new("single");
         let root = tree.plugin("inbox", VALID);
@@ -1604,6 +1718,10 @@ mod tests {
             "execute",
             "network",
             "hosts",
+            "http",
+            "methods",
+            "paths",
+            "path_prefixes",
             "store",
             "clipboard",
             "process",

@@ -66,6 +66,11 @@ pub struct Store {
     /// land in whatever order the disk chooses, so the older can finish last
     /// and undo the newer.
     in_flight: Option<u64>,
+    /// A revision whose persistence attempt failed. It remains dirty, but the
+    /// completion callback must not immediately retry it in a tight loop. A
+    /// later mutation has a newer revision; an explicit `flush` clears this
+    /// pause because the caller is deliberately asking to try again.
+    failed: Option<u64>,
     /// `flush` callers, each waiting for a revision.
     waiting: Vec<(u64, Settle)>,
     /// Waiters that an encode failure settled, parked for the driver to collect.
@@ -101,6 +106,7 @@ impl Store {
             revision: 0,
             written: 0,
             in_flight: None,
+            failed: None,
             waiting: Vec::new(),
             stalled: Vec::new(),
         }
@@ -157,7 +163,7 @@ impl Store {
     /// Encoding stays on this thread because it reads the cache, which does not
     /// leave it; only the bytes travel.
     pub fn begin_write(&mut self) -> Option<PendingWrite> {
-        if self.in_flight.is_some() || !self.is_dirty() {
+        if self.in_flight.is_some() || !self.is_dirty() || self.failed == Some(self.revision) {
             return None;
         }
 
@@ -215,8 +221,12 @@ impl Store {
             // failure rather than left pending, because the next write carries a
             // higher revision and would never satisfy them.
             tracing::error!("the store could not be written: {error}");
+            self.failed = Some(revision);
         } else {
             self.written = self.written.max(revision);
+            if self.failed.is_some_and(|failed| failed <= revision) {
+                self.failed = None;
+            }
         }
 
         self.settle_up_to(revision, &result)
@@ -238,6 +248,9 @@ impl Store {
     pub fn wait(&mut self, settle: Settle) -> Option<Settle> {
         if !self.is_dirty() && self.in_flight.is_none() {
             return Some(settle);
+        }
+        if self.in_flight.is_none() && self.failed == Some(self.revision) {
+            self.failed = None;
         }
         self.waiting.push((self.revision, settle));
         None
@@ -283,10 +296,33 @@ pub fn persist(path: &Path, body: Vec<u8>) -> Result<(), String> {
     temporary.push(".tmp");
     let temporary = PathBuf::from(temporary);
 
-    std::fs::write(&temporary, body)
+    write_private(&temporary, &body)
         .map_err(|error| format!("cannot write `{}`: {error}", temporary.display()))?;
     std::fs::rename(&temporary, path)
         .map_err(|error| format!("cannot write `{}`: {error}", path.display()))
+}
+
+#[cfg(unix)]
+fn write_private(path: &Path, body: &[u8]) -> std::io::Result<()> {
+    use std::{
+        fs::OpenOptions,
+        io::Write as _,
+        os::unix::fs::{OpenOptionsExt as _, PermissionsExt as _},
+    };
+
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(path)?;
+    file.set_permissions(std::fs::Permissions::from_mode(0o600))?;
+    file.write_all(body)
+}
+
+#[cfg(not(unix))]
+fn write_private(path: &Path, body: &[u8]) -> std::io::Result<()> {
+    std::fs::write(path, body)
 }
 
 #[cfg(test)]
@@ -301,6 +337,27 @@ mod tests {
         // Populates the cache, so `encode` has something to hand out.
         store.values().expect("the warm read succeeds");
         store
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn persisted_store_is_private_to_its_owner() {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let directory =
+            std::env::temp_dir().join(format!("gpui-shell-private-store-{}", std::process::id()));
+        std::fs::create_dir_all(&directory).expect("test directory");
+        let path = directory.join("store.json");
+        persist(&path, br#"{"token":"secret"}"#.to_vec()).expect("persist private store");
+
+        let mode = std::fs::metadata(&path)
+            .expect("store metadata")
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(mode, 0o600, "store files may contain OAuth tokens");
+
+        let _ = std::fs::remove_dir_all(directory);
     }
 
     /// The bug a `dirty` flag could not see: a change made *while* a write is on
@@ -393,10 +450,23 @@ mod tests {
         }
         assert_eq!(settled.take(), Some(Err("disk is full".to_owned())));
 
-        // And the queue is not wedged: the revision never landed, so it is still
-        // owed to the disk.
+        // The revision never landed, so it remains dirty, but its automatic
+        // completion must not immediately drive the same failing write again.
         assert!(store.is_dirty());
-        assert!(store.begin_write().is_some());
+        assert!(
+            store.begin_write().is_none(),
+            "the failed revision should park until new intent retries it"
+        );
+
+        // A later mutation is new intent and carries a newer revision.
+        store.touch();
+        assert_eq!(
+            store
+                .begin_write()
+                .expect("the later mutation retries")
+                .revision(),
+            2
+        );
     }
 
     /// A write that is never started must release the queue, or every later one

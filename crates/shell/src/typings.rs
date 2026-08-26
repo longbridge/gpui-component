@@ -84,6 +84,7 @@ pub fn declarations() -> String {
     out.push_str(VALUE_TYPES);
     out.push_str(&color_types());
     out.push_str(&view_types());
+    out.push_str(MOTION_TYPES);
     out.push_str("  /**\n");
     out.push_str("   * A description of one element, built by chaining.\n");
     out.push_str("   *\n");
@@ -487,6 +488,8 @@ const CONTEXT_AND_VIEW: &str = r#"  /**
      */
     notify(): void;
     phase(): Phase;
+    /** Reads the current `gpui_base::Theme` semantic token projection. */
+    theme(): Theme;
 
   }
 
@@ -592,6 +595,8 @@ const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; 
      * own and announces nothing without it.
      */
     accessibility_label(description: string): Element;
+    /** Sets the absolute HTTP(S) target opened by a `Link`. */
+    href(url: string): Element;
     /**
      * A stable name for this element, used as its identity.
      *
@@ -600,10 +605,14 @@ const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; 
      * it, taking the pressed state, the focus and anything else keyed by
      * identity with it. Name anything whose identity has to survive that.
      *
-     * `Button`, `Checkbox` and `Switch` take their identity from `new(id)` and
+     * `Button`, `Link`, `Checkbox` and `Switch` take their identity from `new(id)` and
      * ignore this.
      */
     id(name: string): Element;
+    /** Animates later target changes entirely in native GPUI code. */
+    transition(property: MotionProperty, policy: number | TransitionPolicy): Element;
+    /** Springs later target changes entirely in native GPUI code. */
+    spring(property: MotionProperty, policy?: SpringPolicy): Element;
 
     /**
      * Styles applied while the pointer is over the element. `declare` receives
@@ -615,6 +624,26 @@ const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; 
     active(declare: (el: Element) => Element | void): Element;
     /** Styles applied while the element has focus. */
     focus(declare: (el: Element) => Element | void): Element;
+"#;
+
+const MOTION_TYPES: &str = r#"  export type MotionProperty = "opacity" | "width" | "height" | "left" | "top";
+  export type MotionEasing = "linear" | "ease-in" | "ease-out" | "ease-in-out";
+  export interface TransitionPolicy {
+    /** Duration in milliseconds. */
+    duration: number;
+    /** Delay in milliseconds. */
+    delay?: number;
+    easing?: MotionEasing;
+  }
+  export interface SpringPolicy {
+    /** Approximate response period in milliseconds. */
+    response?: number;
+    /** Damping ratio; 1 has no overshoot. */
+    damping?: number;
+    /** Settling tolerance in the target's units. */
+    epsilon?: number;
+  }
+
 "#;
 
 const CONSTRUCTORS: &str = r#"
@@ -637,6 +666,8 @@ const CONSTRUCTORS: &str = r#"
 
   /** Activation, focus, disabled and selected state. No styling. */
   export const Button: ComponentType;
+  /** An external HTTP(S) resource opened through the system browser. */
+  export const Link: ComponentType;
   /** A controlled toggle. No styling: draw the indicator yourself. */
   export const Checkbox: ComponentType;
   /** A controlled switch. No styling. */
@@ -679,15 +710,30 @@ const CONSTRUCTORS: &str = r#"
   /** The frame around retained text state. */
   export const Input: InputType;
 
-  /** The theme the host installed. Read-only. */
-  export interface Theme {
-    colors: Record<ColorToken, string>;
-    spacing: Record<string, number>;
-    radius: Record<string, number>;
-    mode: "light" | "dark";
-    is_dark: boolean;
+  /** Semantic color roles, aligned with `gpui_base::ColorTokens`. */
+  export type ColorTokens = { readonly [Role in ColorToken]: Color };
+  /** Semantic spacing scale, aligned with `gpui_base::SpacingTokens`. */
+  export interface SpacingTokens {
+    readonly xxs: number; readonly xs: number; readonly sm: number;
+    readonly md: number; readonly lg: number; readonly xl: number; readonly xxl: number;
+  }
+  /** Semantic radius scale, aligned with `gpui_base::RadiusTokens`. */
+  export interface RadiusTokens {
+    readonly none: number; readonly sm: number; readonly md: number;
+    readonly lg: number; readonly xl: number; readonly full: number;
+  }
+  export interface SemanticThemeTokens {
+    readonly colors: ColorTokens;
+    readonly spacing: SpacingTokens;
+    readonly radius: RadiusTokens;
+  }
+  /** The Base-aligned semantic tokens plus shell appearance state. Read-only. */
+  export interface Theme extends SemanticThemeTokens, ColorTokens {
+    readonly mode: "light" | "dark";
+    readonly is_dark: boolean;
   }
 
+  /** Compatibility accessor; prefer the call-scoped `cx.theme()`. */
   export function theme(): Theme;
   /** Switches palette. Returns whether anything changed. */
   export function set_theme(mode: "light" | "dark"): boolean;
@@ -878,8 +924,36 @@ declare module "net" {
   const net: { connect: typeof connect };
   export default net;
 }
-interface ShellFetchResponse { readonly status: number; readonly ok: boolean; readonly url: string; text(): string; }
-declare function fetch(url: string): Promise<ShellFetchResponse>;
+interface WebSocketSocket {
+  /** Waits for the next text or binary message. */
+  read(): Promise<string | Uint8Array>;
+  /** Sends a text or binary message. */
+  write(data: string | Uint8Array): Promise<void>;
+  /** Sends and flushes a close frame. */
+  close(): Promise<void>;
+}
+interface WebSocketConnectOptions {
+  /** Additional protocol headers. Credential and WebSocket control headers are refused. */
+  headers?: Readonly<Record<string, string>>;
+}
+declare const WebSocket: {
+  connect(url: string, options?: WebSocketConnectOptions): Promise<WebSocketSocket>;
+};
+interface ShellFetchResponse {
+  readonly status: number;
+  readonly ok: boolean;
+  readonly url: string;
+  text(): string;
+  json(): unknown;
+}
+interface ShellFetchOptions {
+  /** GET by default; POST is available for OAuth-style form exchanges. */
+  method?: "GET" | "POST";
+  /** Client-managed framing headers such as Host and Content-Length are refused. */
+  headers?: Record<string, string>;
+  body?: string | Uint8Array;
+}
+declare function fetch(url: string, options?: ShellFetchOptions): Promise<ShellFetchResponse>;
 declare const process: typeof import("process").default;
 "#;
 
@@ -969,7 +1043,10 @@ mod tests {
         "selected",
         "checked",
         "accessibility_label",
+        "href",
         "id",
+        "transition",
+        "spring",
         "hover",
         "active",
         "focus",
@@ -1106,6 +1183,20 @@ mod tests {
     }
 
     #[test]
+    fn websocket_binary_and_text_messages_are_declared() {
+        let declarations = declarations();
+        assert!(declarations.contains("interface WebSocketSocket {"));
+        assert!(declarations.contains("read(): Promise<string | Uint8Array>;"));
+        assert!(declarations.contains("write(data: string | Uint8Array): Promise<void>;"));
+        assert!(declarations.contains("close(): Promise<void>;"));
+        assert!(declarations.contains("interface WebSocketConnectOptions {"));
+        assert!(declarations.contains("headers?: Readonly<Record<string, string>>;"));
+        assert!(declarations.contains(
+            "connect(url: string, options?: WebSocketConnectOptions): Promise<WebSocketSocket>;"
+        ));
+    }
+
+    #[test]
     fn every_element_method_is_accounted_for() {
         let declared = element_methods(&declarations());
         let styles: Vec<&String> = declared
@@ -1132,6 +1223,22 @@ mod tests {
             styles.len(),
             "a style method is declared twice"
         );
+    }
+
+    #[test]
+    fn motion_policies_are_declared_without_per_frame_callbacks() {
+        let declarations = declarations();
+        assert!(declarations.contains(
+            "transition(property: MotionProperty, policy: number | TransitionPolicy): Element;"
+        ));
+        assert!(
+            declarations
+                .contains("spring(property: MotionProperty, policy?: SpringPolicy): Element;")
+        );
+        assert!(declarations.contains(
+            "type MotionProperty = \"opacity\" | \"width\" | \"height\" | \"left\" | \"top\";"
+        ));
+        assert!(!declarations.contains("on_animation_frame"));
     }
 
     #[test]
