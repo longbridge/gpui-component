@@ -426,7 +426,7 @@ let watch = runtime.watch(&root, window, cx)?;
 
 // The script changed something on screen? GPUI already knows. But when *Rust*
 // changes state the script reads, say so — a bare notify is only a repaint.
-script_view.update(cx, |view, cx| view.refresh(cx));
+runtime.refresh(&root, cx)?;
 
 // What it is costing: script renders against frames, with the time each took.
 let reading = runtime.read_metrics();
