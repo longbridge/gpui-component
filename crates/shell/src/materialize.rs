@@ -772,7 +772,7 @@ fn resolve_state(arena: &SpecArena, node: SpecId) -> StyleRefinement {
 }
 
 fn apply_behavior(behavior: &mut Behavior, name: &str, args: &[Bridged]) {
-    let flag = args.first().map(|arg| arg.as_bool().unwrap_or(true));
+    let flag = args.first().map(Bridged::is_truthy);
     match name {
         "accessibility_label" => {
             behavior.accessibility_label = args
@@ -861,6 +861,31 @@ mod motion_identity_tests {
 
         assert_eq!(motions.len(), 1);
         assert!(matches!(motions[0].policy, MotionPolicy::Spring { .. }));
+    }
+
+    #[test]
+    fn boolean_behaviors_use_javascript_truthiness() {
+        for falsy in [
+            Bridged::Nil,
+            Bridged::Bool(false),
+            Bridged::Number(0.0),
+            Bridged::Number(f64::NAN),
+            Bridged::Str(String::new()),
+        ] {
+            let mut behavior = Behavior::default();
+            apply_behavior(&mut behavior, "disabled", &[falsy]);
+            assert!(!behavior.disabled);
+        }
+
+        for truthy in [
+            Bridged::Bool(true),
+            Bridged::Number(1.0),
+            Bridged::Str("false".to_owned()),
+        ] {
+            let mut behavior = Behavior::default();
+            apply_behavior(&mut behavior, "disabled", &[truthy]);
+            assert!(behavior.disabled);
+        }
     }
 }
 

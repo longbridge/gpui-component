@@ -32,14 +32,13 @@ impl Bridged {
         }
     }
 
-    pub fn as_bool(&self) -> ShellResult<bool> {
+    /// JavaScript truthiness after a value has crossed the bridge.
+    pub fn is_truthy(&self) -> bool {
         match self {
-            Bridged::Bool(b) => Ok(*b),
-            Bridged::Nil => Ok(false),
-            other => Err(ShellError::runtime(format!(
-                "expected a boolean, got {}",
-                other.describe()
-            ))),
+            Bridged::Nil => false,
+            Bridged::Bool(value) => *value,
+            Bridged::Number(value) => *value != 0.0 && !value.is_nan(),
+            Bridged::Str(value) => !value.is_empty(),
         }
     }
 
@@ -130,6 +129,28 @@ mod tests {
         assert!(parse_hex("ff000080").is_some());
         assert!(parse_hex("ff00").is_none());
         assert!(parse_hex("zzzzzz").is_none());
+    }
+
+    #[test]
+    fn bridge_truthiness_matches_javascript_primitives() {
+        for falsy in [
+            Bridged::Nil,
+            Bridged::Bool(false),
+            Bridged::Number(0.0),
+            Bridged::Number(-0.0),
+            Bridged::Number(f64::NAN),
+            Bridged::Str(String::new()),
+        ] {
+            assert!(!falsy.is_truthy(), "{falsy:?}");
+        }
+        for truthy in [
+            Bridged::Bool(true),
+            Bridged::Number(1.0),
+            Bridged::Number(-1.0),
+            Bridged::Str("false".to_owned()),
+        ] {
+            assert!(truthy.is_truthy(), "{truthy:?}");
+        }
     }
 
     #[test]
