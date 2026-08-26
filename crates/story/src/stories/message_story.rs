@@ -286,7 +286,7 @@ impl Render for MessageStory {
                                         Attachment::new()
                                             .media(
                                                 AttachmentMedia::new()
-                                                    .child(Icon::new(IconName::File)),
+                                                    .child(Icon::new(IconName::FileText)),
                                             )
                                             .content(
                                                 AttachmentContent::new()

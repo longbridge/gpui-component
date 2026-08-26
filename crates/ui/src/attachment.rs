@@ -1,7 +1,10 @@
+use std::rc::Rc;
+
 use gpui::{
-    AnyElement, App, Axis, ElementId, ImageSource, InteractiveElement as _, IntoElement, ObjectFit,
-    ParentElement, RenderOnce, SharedString, StatefulInteractiveElement as _, StyleRefinement,
-    Styled, StyledImage as _, Window, div, img, prelude::FluentBuilder as _, relative, rems,
+    AnyElement, App, Axis, ClickEvent, ElementId, ImageSource, InteractiveElement as _,
+    IntoElement, MouseButton, ObjectFit, ParentElement, RenderOnce, SharedString,
+    StatefulInteractiveElement as _, StyleRefinement, Styled, StyledImage as _, Window, div, img,
+    prelude::FluentBuilder as _, relative, rems,
 };
 
 use crate::{
@@ -61,6 +64,7 @@ impl AttachmentStatus {
 /// A file or image attachment composed from media, content, and actions slots.
 #[derive(IntoElement)]
 pub struct Attachment {
+    id: Option<ElementId>,
     style: StyleRefinement,
     status: AttachmentStatus,
     size: Size,
@@ -68,12 +72,14 @@ pub struct Attachment {
     media: Option<AttachmentMedia>,
     content: Option<AttachmentContent>,
     actions: Option<AttachmentActions>,
+    on_click: Option<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>>,
 }
 
 impl Attachment {
     /// Create an attachment in the [`AttachmentStatus::Complete`] state.
     pub fn new() -> Self {
         Self {
+            id: None,
             style: StyleRefinement::default(),
             status: AttachmentStatus::Complete,
             size: Size::Medium,
@@ -81,7 +87,27 @@ impl Attachment {
             media: None,
             content: None,
             actions: None,
+            on_click: None,
         }
+    }
+
+    /// Set a stable identity for the whole-card click layer.
+    pub fn id(mut self, id: impl Into<ElementId>) -> Self {
+        self.id = Some(id.into());
+        self
+    }
+
+    /// Make the whole card clickable, e.g. to open a preview.
+    ///
+    /// The click layer is painted below the actions slot, so action buttons
+    /// stay independently clickable. Click state needs a stable identity, so
+    /// the handler takes effect only together with [`Self::id`].
+    pub fn on_click(
+        mut self,
+        handler: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+    ) -> Self {
+        self.on_click = Some(Rc::new(handler));
+        self
     }
 
     /// Set the attachment lifecycle status.
@@ -163,6 +189,7 @@ impl RenderOnce for Attachment {
         let status = self.status;
         let has_media = self.media.is_some();
         let has_content = self.content.is_some();
+        let clickable = self.id.is_some() && self.on_click.is_some();
 
         self.layout_slots();
 
@@ -184,8 +211,17 @@ impl RenderOnce for Attachment {
                 tokens.colors.border
             })
             .when(status.is_pending(), |this| this.border_dashed())
-            .bg(cx.theme().group_box)
-            .text_color(cx.theme().group_box_foreground)
+            .bg(tokens.colors.background)
+            .text_color(tokens.colors.foreground)
+            // Register `hover` unconditionally: a conditionally registered
+            // hover style stays cached when the condition later flips off.
+            .hover(move |style| {
+                if clickable {
+                    style.bg(tokens.colors.muted.opacity(0.5))
+                } else {
+                    style
+                }
+            })
             .line_height(relative(1.25))
             .map(|this| attachment_size_style(this, size, has_media, has_content))
             .map(|this| match axis {
@@ -198,6 +234,17 @@ impl RenderOnce for Attachment {
             })
             .when_some(self.media, |this, media| this.child(media))
             .when_some(self.content, |this, content| this.child(content))
+            .when_some(self.id.zip(self.on_click), |this, (id, on_click)| {
+                // The click layer is painted before the actions slot, so the
+                // actions' hitboxes stay on top and their buttons keep working.
+                this.child(
+                    div()
+                        .id(id)
+                        .absolute()
+                        .inset_0()
+                        .on_click(move |event, window, cx| on_click(event, window, cx)),
+                )
+            })
             .when_some(self.actions, |this, actions| this.child(actions))
             .refine_style(&self.style)
     }
@@ -615,6 +662,12 @@ impl RenderOnce for AttachmentActions {
             .when(self.vertical_layout, |this| {
                 this.absolute().top_3().right_3()
             })
+            // The actions cluster owns its presses: an action (or the gap
+            // between actions) must not also arm the whole-card click layer
+            // below, mirroring the shadcn stacking where actions sit above
+            // the trigger. Buttons run first in the bubble phase, so they
+            // are unaffected.
+            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .children(self.children)
             .refine_style(&self.style)
     }
@@ -732,6 +785,18 @@ mod tests {
         );
         assert!(attachment.content.as_ref().unwrap().vertical_layout);
         assert!(attachment.actions.as_ref().unwrap().vertical_layout);
+    }
+
+    #[test]
+    fn test_attachment_whole_card_click_builder() {
+        assert!(Attachment::new().id.is_none());
+        assert!(Attachment::new().on_click.is_none());
+
+        let clickable = Attachment::new()
+            .id("report-attachment")
+            .on_click(|_, _, _| {});
+        assert_eq!(clickable.id, Some("report-attachment".into()));
+        assert!(clickable.on_click.is_some());
     }
 
     #[test]
@@ -883,5 +948,68 @@ mod tests {
             .child("Second");
 
         assert_eq!(group.children.len(), 2);
+    }
+
+    mod click_dispatch {
+        use std::{cell::Cell, rc::Rc};
+
+        use gpui::{Context, Modifiers, Render, TestAppContext, point, px};
+
+        use super::super::*;
+        use crate::button::Button;
+
+        struct AttachmentClickHarness {
+            card_clicks: Rc<Cell<usize>>,
+            action_clicks: Rc<Cell<usize>>,
+        }
+
+        impl Render for AttachmentClickHarness {
+            fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+                let card_clicks = self.card_clicks.clone();
+                let action_clicks = self.action_clicks.clone();
+
+                Attachment::new()
+                    .id("attachment")
+                    .w(px(200.))
+                    .h(px(60.))
+                    .on_click(move |_, _, _| card_clicks.set(card_clicks.get() + 1))
+                    .actions(
+                        AttachmentActions::new().child(
+                            Button::new("open")
+                                .w(px(40.))
+                                .h(px(40.))
+                                .on_click(move |_, _, _| {
+                                    action_clicks.set(action_clicks.get() + 1)
+                                }),
+                        ),
+                    )
+            }
+        }
+
+        #[gpui::test]
+        fn whole_card_click_stays_below_the_actions(cx: &mut TestAppContext) {
+            cx.update(crate::init);
+            let card_clicks = Rc::new(Cell::new(0));
+            let action_clicks = Rc::new(Cell::new(0));
+            let (_, cx) = cx.add_window_view({
+                let card_clicks = card_clicks.clone();
+                let action_clicks = action_clicks.clone();
+                move |_, _| AttachmentClickHarness {
+                    card_clicks,
+                    action_clicks,
+                }
+            });
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+
+            // A click on an action must not also fire the whole-card handler.
+            cx.simulate_click(point(px(20.), px(30.)), Modifiers::default());
+            assert_eq!(action_clicks.get(), 1);
+            assert_eq!(card_clicks.get(), 0);
+
+            // A click elsewhere on the card fires the whole-card handler.
+            cx.simulate_click(point(px(150.), px(30.)), Modifiers::default());
+            assert_eq!(action_clicks.get(), 1);
+            assert_eq!(card_clicks.get(), 1);
+        }
     }
 }

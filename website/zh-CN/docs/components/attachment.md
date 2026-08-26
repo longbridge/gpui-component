@@ -62,7 +62,7 @@ Attachment::new()
 
 ```rust
 Attachment::new()
-    .media(AttachmentMedia::new().child(Icon::new(IconName::File)))
+    .media(AttachmentMedia::new().child(Icon::new(IconName::FileText)))
     .content(
         AttachmentContent::new()
             .title(AttachmentTitle::new("quarterly-report.pdf"))
@@ -242,6 +242,29 @@ Attachment::new()
 
 `AttachmentActions` 不定义专用的 `AttachmentAction`，因此可以直接复用 Button 的 variant、尺寸、disabled、loading、tooltip 和事件 API。
 
+## 整卡点击
+
+设置 `.id(...)` 和 `.on_click(...)` 可以让整张卡片响应点击（例如打开预览）。点击层绘制在 `AttachmentActions` 之下，操作按钮仍然独立可点：
+
+```rust
+Attachment::new()
+    .id("design-attachment")
+    .on_click(|_, window, cx| {
+        // 打开预览。
+    })
+    .content(
+        AttachmentContent::new()
+            .title(AttachmentTitle::new("design-mockups.png"))
+            .description(AttachmentDescription::new("PNG · 1.8 MB")),
+    )
+    .actions(
+        AttachmentActions::new()
+            .child(Button::new("remove").ghost().xsmall().icon(IconName::Close)),
+    )
+```
+
+点击状态需要稳定标识，因此 handler 只在配合 `.id(...)` 时生效。可点击的卡片 hover 时会显示 muted 底色，让它读起来是可交互的。点击意味着什么——对话框、浏览器、文件预览还是选择——由应用决定。删除、重试等次要操作应留在 `AttachmentActions` 中，不要依赖整卡点击；同时把卡片的主操作以 `Button` 或 `Link` 的形式提供在键盘可达的位置——点击层只是指针便利，不参与焦点。
+
 ## 状态继承与局部覆盖
 
 通过具名 `.title(...)` 和 `.description(...)` 添加的 child 会继承父级状态：
@@ -336,7 +359,7 @@ Attachment::new()
 此 API 有意将以下职责留给组合层：
 
 - 直接使用 `Button`，不增加 `AttachmentAction`，保留 Button 的完整 variant、尺寸、事件和可访问性选项。
-- 应用自行组合卡片导航或预览触发器，不增加覆盖整个卡片的 `AttachmentTrigger`；点击和焦点所有权应保持明确。
+- 整卡点击通过 `.id(...)` 加 `.on_click(...)` 提供；卡片只上报点击，打开对话框、浏览器、预览还是切换选择由应用决定。
 - 直接使用 `Progress`，不增加附件专属进度包装。
 - `AttachmentGroup` 只负责横向间距和 overflow，不保存选择、拖拽、snap 或业务数据。
 
@@ -358,6 +381,8 @@ Attachment::new()
 | 方法 | 说明 |
 | --- | --- |
 | `new()` | 创建 `Complete`、横向、medium 尺寸的附件。 |
+| `id(ElementId)` | 设置整卡点击层的稳定标识。 |
+| `on_click(handler)` | 整卡点击；需配合 `id(...)`，绘制在 actions 之下。 |
 | `status(AttachmentStatus)` | 设置根生命周期状态。 |
 | `axis(Axis)` | 设置 `Horizontal` 或 `Vertical` 布局。 |
 | `media(AttachmentMedia)` | 设置预览 slot。 |

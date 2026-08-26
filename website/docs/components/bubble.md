@@ -151,7 +151,7 @@ Bubble::new()
             h_flex()
                 .gap_3()
                 .items_start()
-                .child(Icon::new(IconName::File))
+                .child(Icon::new(IconName::FileText))
                 .child(
                     v_flex()
                         .min_w_0()

@@ -3,7 +3,7 @@ use gpui::{
     ParentElement as _, Render, Styled as _, Window, rems,
 };
 use gpui_component::{
-    ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt as _,
+    ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt as _, WindowExt as _,
     attachment::{
         Attachment, AttachmentActions, AttachmentContent, AttachmentDescription, AttachmentGroup,
         AttachmentMedia, AttachmentStatus, AttachmentTitle,
@@ -67,7 +67,7 @@ impl Render for AttachmentStory {
                     .gap_3()
                     .child(
                         Attachment::new()
-                            .media(AttachmentMedia::new().child(Icon::new(IconName::File)))
+                            .media(AttachmentMedia::new().child(Icon::new(IconName::FileText)))
                             .content(
                                 AttachmentContent::new()
                                     .title(AttachmentTitle::new("quarterly-report.pdf"))
@@ -86,11 +86,47 @@ impl Render for AttachmentStory {
                     .child(
                         Attachment::new()
                             .small()
-                            .media(AttachmentMedia::new().child(Icon::new(IconName::File)))
+                            .media(AttachmentMedia::new().child(Icon::new(IconName::FileText)))
                             .content(
                                 AttachmentContent::new()
                                     .child(AttachmentTitle::new("research-data.csv"))
                                     .child(AttachmentDescription::new("CSV · 840 KB")),
+                            ),
+                    ),
+            )
+            .child(
+                section("Whole-card click")
+                    .description(
+                        "The card opens its target while actions stay independently clickable.",
+                    )
+                    .w(rems(42.5))
+                    .v_flex()
+                    .gap_3()
+                    .child(
+                        Attachment::new()
+                            .id("clickable-attachment")
+                            .on_click(|_, window, cx| {
+                                window.push_notification("Opening design-mockups.png…", cx);
+                            })
+                            .media(AttachmentMedia::new().child(Icon::new(IconName::FileText)))
+                            .content(
+                                AttachmentContent::new()
+                                    .title(AttachmentTitle::new("design-mockups.png"))
+                                    .description(AttachmentDescription::new("PNG · 1.8 MB")),
+                            )
+                            .actions(
+                                AttachmentActions::new().child(
+                                    Button::new("remove-clickable-attachment")
+                                        .ghost()
+                                        .xsmall()
+                                        .icon(IconName::Close)
+                                        .on_click(|_, window, cx| {
+                                            window.push_notification(
+                                                "Removed design-mockups.png",
+                                                cx,
+                                            );
+                                        }),
+                                ),
                             ),
                     ),
             )
@@ -105,7 +141,7 @@ impl Render for AttachmentStory {
                     .child(
                         Attachment::new()
                             .status(AttachmentStatus::Pending)
-                            .media(AttachmentMedia::new().child(Icon::new(IconName::File)))
+                            .media(AttachmentMedia::new().child(Icon::new(IconName::FileText)))
                             .content(
                                 AttachmentContent::new()
                                     .title(AttachmentTitle::new("meeting-notes.pdf"))
@@ -115,7 +151,7 @@ impl Render for AttachmentStory {
                     .child(
                         Attachment::new()
                             .status(AttachmentStatus::Uploading)
-                            .media(AttachmentMedia::new().child(Icon::new(IconName::File)))
+                            .media(AttachmentMedia::new().child(Icon::new(IconName::FileText)))
                             .content(
                                 AttachmentContent::new()
                                     .title(AttachmentTitle::new("design-assets.zip"))
@@ -135,7 +171,7 @@ impl Render for AttachmentStory {
                     .child(
                         Attachment::new()
                             .status(AttachmentStatus::Processing)
-                            .media(AttachmentMedia::new().child(Icon::new(IconName::File)))
+                            .media(AttachmentMedia::new().child(Icon::new(IconName::FileText)))
                             .content(
                                 AttachmentContent::new()
                                     .title(
@@ -152,7 +188,7 @@ impl Render for AttachmentStory {
                     .child(
                         Attachment::new()
                             .status(AttachmentStatus::Failed)
-                            .media(AttachmentMedia::new().child(Icon::new(IconName::File)))
+                            .media(AttachmentMedia::new().child(Icon::new(IconName::FileText)))
                             .content(
                                 AttachmentContent::new()
                                     .title(AttachmentTitle::new("archive.zip"))
@@ -202,7 +238,7 @@ impl Render for AttachmentStory {
                     .gap_3()
                     .child(
                         Attachment::new().media(
-                            AttachmentMedia::new().child(Icon::new(IconName::File)),
+                            AttachmentMedia::new().child(Icon::new(IconName::FileText)),
                         ),
                     )
                     .child(
@@ -291,7 +327,7 @@ impl Render for AttachmentStory {
                     .child(
                         Attachment::new()
                             .large()
-                            .media(AttachmentMedia::new().child(Icon::new(IconName::File)))
+                            .media(AttachmentMedia::new().child(Icon::new(IconName::FileText)))
                             .content(
                                 AttachmentContent::new()
                                     .title(AttachmentTitle::new("large.pdf"))
@@ -300,7 +336,7 @@ impl Render for AttachmentStory {
                     )
                     .child(
                         Attachment::new()
-                            .media(AttachmentMedia::new().child(Icon::new(IconName::File)))
+                            .media(AttachmentMedia::new().child(Icon::new(IconName::FileText)))
                             .content(
                                 AttachmentContent::new()
                                     .title(AttachmentTitle::new("medium.pdf"))
@@ -310,7 +346,7 @@ impl Render for AttachmentStory {
                     .child(
                         Attachment::new()
                             .small()
-                            .media(AttachmentMedia::new().child(Icon::new(IconName::File)))
+                            .media(AttachmentMedia::new().child(Icon::new(IconName::FileText)))
                             .content(
                                 AttachmentContent::new()
                                     .title(AttachmentTitle::new("small.csv"))
@@ -320,7 +356,7 @@ impl Render for AttachmentStory {
                     .child(
                         Attachment::new()
                             .xsmall()
-                            .media(AttachmentMedia::new().child(Icon::new(IconName::File)))
+                            .media(AttachmentMedia::new().child(Icon::new(IconName::FileText)))
                             .content(
                                 AttachmentContent::new().title(AttachmentTitle::new("xsmall.txt")),
                             ),
@@ -331,7 +367,7 @@ impl Render for AttachmentStory {
                             .media(
                                 AttachmentMedia::new()
                                     .large()
-                                    .child(Icon::new(IconName::File)),
+                                    .child(Icon::new(IconName::FileText)),
                             )
                             .content(
                                 AttachmentContent::new()
@@ -348,7 +384,7 @@ impl Render for AttachmentStory {
                         AttachmentGroup::new("attachment-story-group")
                             .child(
                                 Attachment::new()
-                                    .media(AttachmentMedia::new().child(Icon::new(IconName::File)))
+                                    .media(AttachmentMedia::new().child(Icon::new(IconName::FileText)))
                                     .content(
                                         AttachmentContent::new()
                                             .title(AttachmentTitle::new("default.pdf"))
@@ -358,7 +394,7 @@ impl Render for AttachmentStory {
                             .child(
                                 Attachment::new()
                                     .small()
-                                    .media(AttachmentMedia::new().child(Icon::new(IconName::File)))
+                                    .media(AttachmentMedia::new().child(Icon::new(IconName::FileText)))
                                     .content(
                                         AttachmentContent::new()
                                             .title(AttachmentTitle::new("small.csv"))
@@ -368,7 +404,7 @@ impl Render for AttachmentStory {
                             .child(
                                 Attachment::new()
                                     .xsmall()
-                                    .media(AttachmentMedia::new().child(Icon::new(IconName::File)))
+                                    .media(AttachmentMedia::new().child(Icon::new(IconName::FileText)))
                                     .content(
                                         AttachmentContent::new()
                                             .title(AttachmentTitle::new("compact.txt")),
@@ -385,7 +421,7 @@ impl Render for AttachmentStory {
                     .child(
                         Attachment::new()
                             .axis(Axis::Horizontal)
-                            .media(AttachmentMedia::new().child(Icon::new(IconName::File)))
+                            .media(AttachmentMedia::new().child(Icon::new(IconName::FileText)))
                             .content(
                                 AttachmentContent::new()
                                     .title(AttachmentTitle::new("horizontal.pdf"))
@@ -395,7 +431,7 @@ impl Render for AttachmentStory {
                     .child(
                         Attachment::new()
                             .axis(Axis::Vertical)
-                            .media(AttachmentMedia::new().child(Icon::new(IconName::File)))
+                            .media(AttachmentMedia::new().child(Icon::new(IconName::FileText)))
                             .content(
                                 AttachmentContent::new()
                                     .title(AttachmentTitle::new("vertical.pdf"))
@@ -412,7 +448,7 @@ impl Render for AttachmentStory {
                     .child(
                         Attachment::new()
                             .status(AttachmentStatus::Uploading)
-                            .media(AttachmentMedia::new().child(Icon::new(IconName::File)))
+                            .media(AttachmentMedia::new().child(Icon::new(IconName::FileText)))
                             .content(
                                 AttachmentContent::new()
                                     .title(AttachmentTitle::new("inherited-title.pdf"))
@@ -422,7 +458,7 @@ impl Render for AttachmentStory {
                     .child(
                         Attachment::new()
                             .status(AttachmentStatus::Uploading)
-                            .media(AttachmentMedia::new().child(Icon::new(IconName::File)))
+                            .media(AttachmentMedia::new().child(Icon::new(IconName::FileText)))
                             .content(
                                 AttachmentContent::new()
                                     .title(
@@ -440,7 +476,7 @@ impl Render for AttachmentStory {
                     .child(
                         Attachment::new()
                             .w_72()
-                            .media(AttachmentMedia::new().child(Icon::new(IconName::File)))
+                            .media(AttachmentMedia::new().child(Icon::new(IconName::FileText)))
                             .content(
                                 AttachmentContent::new()
                                     .title(AttachmentTitle::new(
@@ -459,7 +495,7 @@ impl Render for AttachmentStory {
                     .child(
                         Button::new("attachment-add-files")
                             .outline()
-                            .icon(IconName::File)
+                            .icon(IconName::FileText)
                             .label("Add files…"),
                     ),
             )
@@ -478,7 +514,7 @@ impl Render for AttachmentStory {
                                     .rounded(cx.theme().radius)
                                     .bg(cx.theme().primary.opacity(0.12))
                                     .text_color(cx.theme().primary)
-                                    .child(Icon::new(IconName::File)),
+                                    .child(Icon::new(IconName::FileText)),
                             )
                             .content(
                                 AttachmentContent::new()

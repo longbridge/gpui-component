@@ -40,7 +40,7 @@ The typed builders make the common file shape explicit:
 
 ```rust
 Attachment::new()
-    .media(AttachmentMedia::new().child(Icon::new(IconName::File)));
+    .media(AttachmentMedia::new().child(Icon::new(IconName::FileText)))
     .content(
         AttachmentContent::new()
             .title(AttachmentTitle::new("quarterly-report.pdf"))
@@ -62,7 +62,7 @@ action-only attachment is valid when the product needs it:
 
 ```rust
 Attachment::new()
-    .media(AttachmentMedia::new().child(Icon::new(IconName::File)));
+    .media(AttachmentMedia::new().child(Icon::new(IconName::FileText)));
 
 Attachment::new().content(
     AttachmentContent::new()
@@ -79,7 +79,7 @@ The default state is:
 | Size | `Medium` | Uses the standard conversation density. |
 | Axis | `Horizontal` | Media, metadata, and actions share one row. |
 | Media/content/actions | absent | Add only the slots the item needs. |
-| Surface | `group_box` background and foreground | Follows the active theme. |
+| Surface | `background` and `foreground` | The card surface, separated by the border like shadcn's `bg-card`. |
 | Radius | `radius_2xl()` (`radius_xl` for `XSmall`) | Shared semantic radius. |
 
 `Attachment` sizes itself to its content and never owns a product-level file
@@ -158,7 +158,7 @@ typed title, description, media, and action layout during rendering:
 ```rust
 Attachment::new()
     .status(AttachmentStatus::Uploading)
-    .media(AttachmentMedia::new().child(Icon::new(IconName::File)))
+    .media(AttachmentMedia::new().child(Icon::new(IconName::FileText)))
     .content(
         AttachmentContent::new()
             .title(AttachmentTitle::new("design-assets.zip"))
@@ -303,6 +303,38 @@ focusable, clickable, or disabled. A tooltip is supplemental; the current
 use a visible label when an action must have a named accessible control. An
 icon-only button with only `.tooltip(...)` is not a substitute for that label.
 
+## Whole-card click
+
+Set `.id(...)` and `.on_click(...)` to make the whole card activate, e.g. to
+open a preview. The click layer is painted below `AttachmentActions`, so action
+buttons stay independently clickable:
+
+```rust
+Attachment::new()
+    .id("design-attachment")
+    .on_click(|_, window, cx| {
+        // Open the preview.
+    })
+    .content(
+        AttachmentContent::new()
+            .title(AttachmentTitle::new("design-mockups.png"))
+            .description(AttachmentDescription::new("PNG · 1.8 MB")),
+    )
+    .actions(
+        AttachmentActions::new()
+            .child(Button::new("remove").ghost().xsmall().icon(IconName::Close)),
+    )
+```
+
+The handler takes effect only together with `.id(...)`; click state needs that
+stable identity. A clickable card shows a muted hover surface so it reads as
+interactive. What activation means — a dialog, a browser, a file viewer, or a
+selection — stays with the application. Keep destructive and secondary commands
+in `AttachmentActions` so they never depend on the card's primary activation,
+and offer the card's primary action as a `Button` or `Link` somewhere reachable
+from the keyboard: the click layer itself is a pointer convenience and takes no
+focus.
+
 ## Groups
 
 `AttachmentGroup` provides a horizontally scrollable row with the shared group
@@ -337,7 +369,7 @@ Attachment::new()
             .rounded(cx.theme().radius_lg)
             .bg(cx.theme().primary.opacity(0.12))
             .text_color(cx.theme().primary)
-            .child(Icon::new(IconName::File)),
+            .child(Icon::new(IconName::FileText)),
     )
     .content(
         AttachmentContent::new()
@@ -346,7 +378,7 @@ Attachment::new()
     )
 ```
 
-Prefer semantic roles from `cx.theme()` (`group_box`, `muted`, `border`,
+Prefer semantic roles from `cx.theme()` (`background`, `muted`, `border`,
 `destructive`, `foreground`, and their foreground counterparts) to raw colors.
 The component's default radii, spacing, and typography follow the shared design
 scale; application-specific density can be expressed with `Size` and typed
@@ -383,9 +415,9 @@ These boundaries are deliberate:
   This preserves Button variants, sizes, loading, disabled behavior, focus, and
   event handling.
 - Use `Progress` directly instead of an attachment-specific progress wrapper.
-- Compose preview navigation or selection in the application. There is no
-  `AttachmentTrigger` because the library cannot know whether the target is a
-  dialog, a browser, a file viewer, or a multi-select surface.
+- Use `.id(...)` with `.on_click(...)` for whole-card activation. The card only
+  reports the click; whether that opens a dialog, a browser, a file viewer, or
+  toggles a selection stays with the application.
 - Use `AttachmentGroup` only for the shared horizontal row and overflow. Use an
   application-owned container for selection, reordering, snapping, or custom
   scroll controls.
@@ -397,6 +429,8 @@ These boundaries are deliberate:
 | Method | Default | Purpose |
 | --- | --- | --- |
 | `new()` | `Complete`, `Medium`, `Horizontal`, no slots | Create an attachment. |
+| `id(ElementId)` | none | Stable identity for the whole-card click layer. |
+| `on_click(handler)` | none | Whole-card activation; requires `id(...)` and stays below the actions. |
 | `status(AttachmentStatus)` | `Complete` | Set lifecycle styling. |
 | `axis(Axis)` | `Horizontal` | Choose horizontal or vertical layout. |
 | `with_size(Size)` | `Medium` | Set a named or custom size. |
