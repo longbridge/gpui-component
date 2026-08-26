@@ -15,13 +15,22 @@ order: 10
 ```rust
 gpui_shell::init(cx);                     // gpui-base、默认 token 调色板、样式表
 
-let runtime = ShellRuntime::new()?;       // 一个 VM
-runtime.set_global(cx);                   // 之后可用 ShellRuntime::global(cx) 取回
+let runtime = ShellRuntime::new(cx)?;     // 一个 VM，并注册为当前 App 的默认 runtime
 ```
 
-`set_global` 的作用，是让回调、native 模块或 hot-reload 之后还能找回这个运行时，而不必让宿主把句柄一路传下去。跑一个应用的宿主调用它一次；全局只有一个，所以想要两个互相隔离的运行时的宿主，得自己拿着第二个句柄。
+`new(cx)` 让回调、native 模块与 hot reload 不必由宿主层层传递句柄，也能找到默认 runtime。明确管理多个 VM 的宿主可以用 `new_isolated()` 创建其他 runtime，并自行保留这些句柄。
 
 ## 加载与实例化
+
+普通应用窗口只需一次加载，并直接获得它的 `ShellRoot`：
+
+```rust
+cx.open_window(options, move |window, cx| runtime.load(&root, window, cx))?;
+```
+
+存在 `gpui-shell.json` 时，`load` 会验证其中的身份信息，并采用其 entry。capabilities 是能力请求，不等于宿主已经批准；两条路径都按宿主当前的默认 policy 运行，没有 manifest 时入口为 `main.js`。两条路径都会刷新 `gpui.d.ts`；加载失败会渲染可选择文字的错误界面，而不是让宿主 panic。
+
+下面的低层方法只供需要把脚本视图装进既有 Rust 组合的宿主使用。
 
 加载把源码变成一个**视图类型**——脚本 default 导出的那个类。实例化把这个类型变成一个**视图对象**，也就是一个活的实例：
 
@@ -158,6 +167,4 @@ gpui_shell::watch::reload_in_debug(
 
 ## 还没有的东西
 
-- **一个进程里两个运行时。** 全局句柄只有一个；第二个运行时得自己一路传下去。
 - **给卡住的脚本做监管。** 解释器自己的中断会切断一次调用，但没有东西会去重启一个反复撞上中断的运行时。
-- **插件模型。** `PluginManager` 和 `PluginManifest` 已经写好也有测试，但对外不可见——目前还没有任何东西真的去加载一个插件，把它们公开就等于对一套从未被调用过的 API 作出承诺。对一个只跑单个应用的宿主来说，上面那三项授权就是全部；要同时跑多个应用，公开的是 `Policy`。

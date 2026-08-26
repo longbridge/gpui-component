@@ -598,9 +598,8 @@ impl ShellStory {
             script_paused: false,
         };
 
-        match ShellRuntime::new() {
+        match ShellRuntime::new(cx) {
             Ok(runtime) => {
-                runtime.set_global(cx);
                 story.runtime = Some(runtime);
                 story.reload(window, cx);
                 story.reload_motion(window, cx);

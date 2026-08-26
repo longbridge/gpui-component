@@ -10,9 +10,8 @@
 //! directory calls anything else:
 //!
 //! ```text
-//! ShellRuntime::new() -> anyhow::Result<Rc<Self>>
-//! ShellRuntime::set_global(&Rc<Self>, &mut App)
-//! ShellRuntime::global(&App) -> Option<Rc<Self>>
+//! ShellRuntime::new(&mut App) -> anyhow::Result<Rc<Self>>
+//! ShellRuntime::new_isolated() -> anyhow::Result<Rc<Self>>
 //! ShellRuntime::arena_mut(&self) -> RefMut<'_, SpecArena>
 //!
 //! ShellRuntime::load_app(&Rc<Self>, &Path, entry: &str) -> anyhow::Result<ViewType>

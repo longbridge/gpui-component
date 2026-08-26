@@ -33,7 +33,7 @@ export default class Probe extends View {
 #[gpui::test]
 fn llrt_pure_modules_execute_inside_the_shell_runtime(cx: &mut TestAppContext) {
     cx.update(crate::init);
-    let runtime = ShellRuntime::new().expect("runtime");
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let view_type = runtime
         .load_source("standard-runtime.js", PURE_MODULES)
@@ -70,7 +70,7 @@ fn llrt_pure_modules_execute_inside_the_shell_runtime(cx: &mut TestAppContext) {
 
 #[test]
 fn node_prefixed_modules_are_not_part_of_the_shell_contract() {
-    let runtime = ShellRuntime::new().expect("runtime");
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
     let error = runtime
         .load_source(
             "node-prefix.js",
@@ -103,7 +103,7 @@ export default class Probe extends View {
 
 "#;
     cx.update(crate::init);
-    let runtime = ShellRuntime::new().expect("runtime");
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let view_type = runtime
         .load_source("host-standard.js", source)
@@ -160,7 +160,7 @@ export default class Probe extends View {
 }
 "#;
     cx.update(crate::init);
-    let runtime = ShellRuntime::new().expect("runtime");
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let view_type = runtime
         .load_source("host-task-limit.js", source)

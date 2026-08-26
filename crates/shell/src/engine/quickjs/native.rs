@@ -185,8 +185,9 @@ impl<'js> IntoJs<'js> for ModuleBinding {
                         // function reaches for the ambient `App` itself, and
                         // holding it across the call would be two borrows of
                         // one thing.
-                        let runtime =
-                            scope::with_current_app(|cx| ShellRuntime::global(cx)).flatten();
+                        let runtime = scope::current_runtime().or_else(|| {
+                            scope::with_current_app(|cx| ShellRuntime::global(cx)).flatten()
+                        });
                         let dispatched = match &runtime {
                             Some(runtime) => runtime
                                 .metrics()

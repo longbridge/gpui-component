@@ -13,7 +13,7 @@ order: 2
 A host does four things: initialize the library, build a runtime, grant the capabilities it is willing to grant, and mount a script view under a `ShellRoot`. The `gpui-shell` binary is itself just a thin host that does exactly this.
 
 ```rust
-use gpui_shell::{Capabilities, ScriptView, ShellRoot, ShellRuntime};
+use gpui_shell::{Capabilities, ShellRuntime};
 
 gpui_platform::application()
     .with_assets(gpui_shell::AppAssets::new(root.clone()))
@@ -22,8 +22,7 @@ gpui_platform::application()
         // style reflection table.
         gpui_shell::init(cx);
 
-        let runtime = ShellRuntime::new().expect("script runtime");
-        runtime.set_global(cx);
+        let runtime = ShellRuntime::new(cx).expect("script runtime");
 
         // Nothing is permitted until the host says so.
         gpui_shell::set_store_path(store_directory.join("store.json"));
@@ -34,13 +33,8 @@ gpui_platform::application()
                 .store(true),
         );
 
-        let view_type = runtime.load_app(&root, "main.js").expect("main.js");
-
         cx.open_window(Default::default(), move |window, cx| {
-            let object = runtime.instantiate(&view_type, window, cx).expect("view");
-            let content = cx.new(|_| ScriptView::new(runtime.clone(), object));
-            // The first view of a shell window is always a ShellRoot.
-            cx.new(|cx| ShellRoot::new(content.into(), window, cx))
+            runtime.load(&root, window, cx)
         })
         .expect("window");
     });
@@ -48,7 +42,7 @@ gpui_platform::application()
 
 Two of those lines carry rules rather than mechanics.
 
-**`ShellRoot` must be the window's first view**, the same way `Root` must be for a `gpui-component` window. It owns the dialog stack, the sheet, the toast stack, focus restoration and Tab navigation. `window.open_dialog` and friends reach it; a window opened with any other root view refuses those calls with a message saying so.
+**`runtime.load(...)` returns the window's `ShellRoot`**, the same role `Root` has in a `gpui-component` window. It owns the dialog stack, the sheet, the toast stack, focus restoration and Tab navigation. A manifest selects the application entry and records capability requests; it never approves those requests. Both manifest-backed and bare directories run under the host's current default policy, and a bare directory uses `main.js`.
 
 **Capabilities default to empty.** `Capabilities::default()` grants nothing at all — no file, no storage, no clipboard, no process. The host decides, because only the host knows how far it trusts the code it is about to run. See [Capabilities](./capabilities.md).
 

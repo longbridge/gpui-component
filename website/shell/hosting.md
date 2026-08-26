@@ -15,13 +15,28 @@ One `ShellRuntime` owns one VM. It is an `Rc` with interior mutability — neith
 ```rust
 gpui_shell::init(cx);                     // gpui-base, the token palette, the style table
 
-let runtime = ShellRuntime::new()?;       // one VM
-runtime.set_global(cx);                   // reachable later as ShellRuntime::global(cx)
+let runtime = ShellRuntime::new(cx)?;     // one VM, installed as this App's default
 ```
 
-`set_global` is what lets a callback, a native module or a hot-reload find the runtime again without the host threading a handle through everything. A host running one application calls it once; there is one global, so a host that wants two isolated runtimes keeps the second handle itself.
+`new(cx)` lets callbacks, native modules and hot reload find the default runtime without the host threading a handle through every layer. A host deliberately managing more than one VM can create additional runtimes with `new_isolated()` and retain those handles itself.
 
 ## Loading and instantiating
+
+For the usual application window, loading is one operation and returns its
+`ShellRoot` directly:
+
+```rust
+cx.open_window(options, move |window, cx| runtime.load(&root, window, cx))?;
+```
+
+If `gpui-shell.json` exists, `load` validates its identity metadata and applies
+its entry. Its capabilities are requests, not approval: both paths run
+under the host's current default policy, and without a manifest the entry is
+`main.js`. Either path refreshes `gpui.d.ts`; a load failure renders the
+selectable error surface instead of panicking the host.
+
+The lower-level methods below are for a host that needs to assemble a script
+view into an existing Rust composition.
 
 Loading turns source into a **view type** — the class the script default-exports. Instantiating turns that type into a **view object**, one live instance:
 
@@ -158,6 +173,4 @@ Install a `tracing` subscriber. The runtime reports script errors, unhandled pro
 
 ## Not there yet
 
-- **Two runtimes in one process.** There is one global handle; a second runtime has to be threaded by hand.
 - **A supervisor for scripts that hang.** The interpreter's own interrupt cuts a call off, but nothing restarts a runtime that keeps hitting it.
-- **The plugin model.** `PluginManager` and `PluginManifest` are written and tested but crate-private, because nothing loads a plugin yet: publishing them would be a promise about an API no caller has exercised. The grants above are the whole story for a host running one application, and `Policy` is public for a host running more than one.

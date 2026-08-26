@@ -401,7 +401,7 @@ fn net_close_does_not_wait_for_a_pending_read(cx: &mut TestAppContext) {
 fn network_is_denied_by_default(cx: &mut TestAppContext) {
     cx.update(crate::init);
     crate::set_capabilities(Capabilities::new());
-    let runtime = ShellRuntime::new().expect("runtime");
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = FETCH_PROBE.replace("__URL__", "http://127.0.0.1:9/");
     let view_type = runtime
@@ -426,7 +426,7 @@ fn net_connect_is_denied_by_default(cx: &mut TestAppContext) {
     cx.update(crate::init);
     crate::set_capabilities(Capabilities::new());
     let source = NET_PROBE.replace("__PORT__", "9");
-    let runtime = ShellRuntime::new().expect("runtime");
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let view_type = runtime.load_source("denied-net.js", &source).expect("load");
     let window = cx.add_window(|_, _| Empty);
@@ -447,7 +447,7 @@ fn net_connect_is_denied_by_default(cx: &mut TestAppContext) {
 fn websocket_is_denied_by_default(cx: &mut TestAppContext) {
     cx.update(crate::init);
     crate::set_capabilities(Capabilities::new());
-    let runtime = ShellRuntime::new().expect("runtime");
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let view_type = runtime
         .load_source("denied-websocket.js", WEBSOCKET_PROBE)
@@ -1009,7 +1009,7 @@ fn two_runtimes_keep_distinct_network_policies(cx: &mut TestAppContext) {
 
     cx.update(crate::init);
     crate::set_capabilities(Capabilities::new().network_hosts(["127.0.0.1".to_owned()]));
-    let allowed_runtime = ShellRuntime::new().expect("allowed runtime");
+    let allowed_runtime = ShellRuntime::new_isolated().expect("allowed runtime");
     allowed_runtime.use_direct_http_for_tests();
     cx.update(|cx| allowed_runtime.set_global(cx));
     let allowed_type = allowed_runtime
@@ -1022,7 +1022,7 @@ fn two_runtimes_keep_distinct_network_policies(cx: &mut TestAppContext) {
         .expect("allowed view");
 
     crate::set_capabilities(Capabilities::new());
-    let denied_runtime = ShellRuntime::new().expect("denied runtime");
+    let denied_runtime = ShellRuntime::new_isolated().expect("denied runtime");
     cx.update(|cx| denied_runtime.set_global(cx));
     let denied_type = denied_runtime
         .load_source("denied-network.js", &source)
@@ -1059,7 +1059,7 @@ fn probe(
 ) {
     cx.update(crate::init);
     crate::set_capabilities(Capabilities::new().network_hosts(["127.0.0.1".to_owned()]));
-    let runtime = ShellRuntime::new().expect("runtime");
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
     runtime.use_direct_http_for_tests();
     cx.update(|cx| runtime.set_global(cx));
     let view_type = runtime.load_source("network.js", source).expect("load");

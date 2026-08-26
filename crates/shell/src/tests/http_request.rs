@@ -125,7 +125,7 @@ fn probe_with_hosts<const N: usize>(
 ) {
     cx.update(crate::init);
     crate::set_capabilities(Capabilities::new().network_hosts(hosts.map(str::to_owned)));
-    let runtime = ShellRuntime::new().expect("runtime");
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
     runtime.use_direct_http_for_tests();
     cx.update(|cx| runtime.set_global(cx));
     let view_type = runtime

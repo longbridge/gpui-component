@@ -786,7 +786,7 @@ return Inbox
 
     fn boot(cx: &mut TestAppContext) -> (Rc<ShellRuntime>, ViewType) {
         cx.update(|cx| crate::init(cx));
-        let runtime = ShellRuntime::new().expect("runtime");
+        let runtime = ShellRuntime::new_isolated().expect("runtime");
         cx.update(|cx| runtime.set_global(cx));
         let view_type = runtime.load_source("inbox", PANEL_SOURCE).expect("load");
         (runtime, view_type)

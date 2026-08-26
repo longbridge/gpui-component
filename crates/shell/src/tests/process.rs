@@ -175,7 +175,7 @@ fn process_output_limit_rejects_the_javascript_promise(cx: &mut TestAppContext) 
 fn process_is_denied_and_ambient_authority_is_absent_on_every_platform(cx: &mut TestAppContext) {
     cx.update(crate::init);
     crate::set_capabilities(Capabilities::new());
-    let runtime = ShellRuntime::new().expect("runtime");
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let view_type = runtime
         .load_source("process-denial.js", DENIAL_PROBE)
@@ -213,7 +213,7 @@ fn probe(
         Capabilities::new().execute(ExecuteGrant::Allowed(vec![command.to_owned()])),
     );
 
-    let runtime = ShellRuntime::new().expect("runtime");
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let view_type = runtime.load_source(name, source).expect("load script");
 

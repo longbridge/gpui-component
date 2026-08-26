@@ -397,7 +397,7 @@ run the script.
 | Situation | What keeps it current |
 | --- | --- |
 | The `gpui-shell` binary | Every run, `check` and `types` refreshes every directory that imports the module. Nothing to remember. |
-| An application embedded in a host | The host calls `gpui_shell::typings::refresh_tree(&app_root)` where it loads the application. Same guarantee, one line. |
+| An application embedded in a host | `ShellRuntime::load` refreshes declarations while loading the application. Nothing else to call. |
 
 Nothing is written when the file already matches, so an editor watching the
 directory is not woken on every launch and a read-only checkout is not an error.

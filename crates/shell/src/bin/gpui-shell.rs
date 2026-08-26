@@ -48,14 +48,13 @@ fn main() {
             // this command was asked for explicitly, and an empty directory is a
             // reasonable place to start an application. Every other directory
             // that imports `gpui` comes along with it.
-            match gpui_shell::typings::write_to(&directory) {
+            match gpui_shell::write_type_declarations(&directory) {
                 Ok(_) => {}
                 Err(error) => {
                     eprintln!("gpui-shell: {error}");
                     std::process::exit(1);
                 }
             }
-            gpui_shell::typings::refresh_tree(&directory);
             return;
         }
         Ok(Invocation::Check(arguments)) => {
@@ -274,14 +273,13 @@ fn run(arguments: Arguments) {
                 tracing::debug!("development mode: eval and the built-in prototypes are open");
             }
 
-            let runtime = match ShellRuntime::new() {
+            let runtime = match ShellRuntime::new(cx) {
                 Ok(runtime) => runtime,
                 Err(error) => {
                     eprintln!("failed to start the script runtime: {error}");
                     std::process::exit(1);
                 }
             };
-            runtime.set_global(cx);
 
             // What `process.exit(code)` means here. The runtime never decides
             // this — one plugin must not be able to end an application somebody
@@ -326,8 +324,6 @@ fn run(arguments: Arguments) {
             // application from its source directory, which is where somebody is
             // editing. Nothing is written when the file already matches, and a
             // directory that refuses the write is logged rather than fatal.
-            gpui_shell::typings::refresh_tree(&root);
-
             let module = manifest
                 .map_err(|error| {
                     eprintln!("{error}");
@@ -411,7 +407,7 @@ fn check(arguments: CheckArguments) -> ! {
             gpui_shell::init(cx);
             install_palette(cx);
 
-            let runtime = match ShellRuntime::new() {
+            let runtime = match ShellRuntime::new(cx) {
                 Ok(runtime) => runtime,
                 Err(error) => {
                     sink.borrow_mut().fail(format!("{error:#}"));
@@ -419,7 +415,6 @@ fn check(arguments: CheckArguments) -> ! {
                     return;
                 }
             };
-            runtime.set_global(cx);
 
             let root = match gpui_shell::resolve_app_root(&arguments.directory, ENTRY) {
                 Ok(root) => root,
@@ -449,8 +444,6 @@ fn check(arguments: CheckArguments) -> ! {
             // leaves the editor correct on its way past: whatever it reports, the
             // declarations beside the source are the ones it just checked
             // against.
-            gpui_shell::typings::refresh_tree(&root);
-
             let module = runtime.load_app(&root, &entry);
             let window_sink = sink.clone();
             let print_spec = arguments.print_spec;

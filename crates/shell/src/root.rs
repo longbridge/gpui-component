@@ -12,7 +12,7 @@
 //! `gpui-base` only (see `docs/gpui-shell.md` §4.2), so the equivalent
 //! host has to be written here rather than reused.
 
-use std::time::Duration;
+use std::{rc::Rc, time::Duration};
 
 use gpui::{
     Anchor, AnyView, App, ClickEvent, ClipboardItem, Context, FocusHandle, Global, Hsla,
@@ -125,6 +125,9 @@ const TOAST_WIDTH: gpui::Pixels = px(320.);
 /// of what goes *inside* an overlay belongs to the script.
 pub struct ShellRoot {
     content: AnyView,
+    /// Retains a script application's policy and cancels its work when this
+    /// window root is dropped. Ordinary Rust content leaves it empty.
+    application_policy: Option<Rc<crate::policy::Policy>>,
     /// Open dialogs, oldest first. The last entry is the topmost and the only
     /// interactive one.
     dialogs: Vec<ActiveDialog>,
@@ -174,6 +177,7 @@ impl ShellRoot {
 
         Self {
             content,
+            application_policy: None,
             dialogs: Vec::new(),
             sheet: None,
             toasts: ToastManager::new(ToastMotion::sonner()),
@@ -181,6 +185,17 @@ impl ShellRoot {
             toast_focus_handle: cx.focus_handle().tab_stop(true),
             next_toast_ordinal: 0,
         }
+    }
+
+    pub(crate) fn with_application(
+        content: AnyView,
+        policy: Rc<crate::policy::Policy>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
+        let mut root = Self::new(content, window, cx);
+        root.application_policy = Some(policy);
+        root
     }
 
     /// Reaches the root of the window a call is happening in.
@@ -614,6 +629,14 @@ impl ShellRoot {
                 .w(TOAST_WIDTH),
         )
         .with_priority(TOAST_PRIORITY)
+    }
+}
+
+impl Drop for ShellRoot {
+    fn drop(&mut self) {
+        if let Some(policy) = self.application_policy.take() {
+            crate::engine::quickjs::cancel_policy_tasks(&policy);
+        }
     }
 }
 

@@ -266,6 +266,11 @@ pub(crate) fn cancel_policy(policy: &Rc<Policy>) {
     });
 }
 
+#[cfg(test)]
+pub(crate) fn task_count() -> usize {
+    TASKS.with_borrow(|tasks| tasks.len())
+}
+
 /// A drain that is bounded so a `for(;;) Promise.resolve().then(f)` cannot wedge
 /// the frame loop for ever. It is far above any legitimate burst.
 const MAX_JOBS_PER_DRAIN: usize = 100_000;
@@ -1519,8 +1524,8 @@ mod tests {
 
     #[test]
     fn shutting_down_one_runtime_keeps_another_runtimes_tasks() {
-        let first = ShellRuntime::new().expect("first runtime");
-        let second = ShellRuntime::new().expect("second runtime");
+        let first = ShellRuntime::new_isolated().expect("first runtime");
+        let second = ShellRuntime::new_isolated().expect("second runtime");
         let first_task =
             register_unchecked(TaskState::new("first", None, None).with_runtime(&first));
         let second_task =
@@ -1557,7 +1562,7 @@ mod tests {
     #[gpui::test]
     fn cancelling_a_policy_drops_its_queued_render_drain(cx: &mut TestAppContext) {
         cx.update(crate::init);
-        let runtime = ShellRuntime::new().expect("runtime");
+        let runtime = ShellRuntime::new_isolated().expect("runtime");
         cx.update(|cx| runtime.set_global(cx));
         runtime
             .with_js(|ctx| {
@@ -1609,7 +1614,7 @@ mod tests {
     async fn a_task_whose_owner_is_gone_is_skipped(cx: &mut gpui::TestAppContext) {
         use gpui::AppContext as _;
 
-        let runtime = ShellRuntime::new().expect("runtime");
+        let runtime = ShellRuntime::new_isolated().expect("runtime");
         let object = runtime
             .context
             .with(|ctx| Persistent::save(&ctx, Object::new(ctx.clone()).expect("object")));

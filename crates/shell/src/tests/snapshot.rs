@@ -236,7 +236,7 @@ fn a_script_notify_causes_exactly_one_rebuild(cx: &mut TestAppContext) {
 #[gpui::test]
 fn notify_from_an_input_subscription_rebuilds_its_own_view(cx: &mut TestAppContext) {
     cx.update(crate::init);
-    let runtime = ShellRuntime::new().expect("runtime");
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let view_type = runtime
         .load_source("input-subscription.js", INPUT_SUBSCRIPTION)
@@ -556,7 +556,7 @@ fn script_view(
 ) {
     cx.update(|cx| crate::init(cx));
 
-    let runtime = ShellRuntime::new().expect("runtime");
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
 
     let view_type = runtime.load_source(ENTRY, source).expect("load");

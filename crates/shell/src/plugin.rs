@@ -29,21 +29,14 @@
 //!   it accepts the current runtime; an explicit incompatible version is
 //!   rejected before the entry module can run.
 
-#![allow(dead_code)]
-//
-// Designed and tested, but nothing drives it: there is no host that loads a
-// plugin, because §18.1's registration API does not exist. The module is
-// `pub(crate)` until there is one — publishing `PluginManager` now would be a
-// promise about an API no caller has ever exercised.
-
 use std::{
     collections::BTreeMap,
     path::{Path, PathBuf},
     rc::Rc,
 };
 
-use anyhow::{Result, bail};
-use gpui::{App, Entity, Window};
+use anyhow::{Context as _, Result, bail};
+use gpui::{App, AppContext as _, Context, Entity, IntoElement, Render, Window};
 use schemars::JsonSchema;
 use semver::Version;
 use serde::Deserialize;
@@ -52,6 +45,8 @@ use crate::{
     capability::{Capabilities, ExecuteGrant, HttpRequestGrant},
     engine::ShellRuntime,
     policy::Policy,
+    root::ShellRoot,
+    runtime::failure_surface,
     scope::{self, ScopePhase},
     view::ScriptView,
 };
@@ -65,12 +60,9 @@ pub const SHELL_VERSION: &str = env!("CARGO_PKG_VERSION");
 /// `gpui-shell.json` makes the owning runtime explicit.
 pub const MANIFEST_FILE: &str = "gpui-shell.json";
 
-/// The entry file the engine can currently load. See [`PluginManager::load`].
-const ENGINE_ENTRY: &str = "main.js";
-
 /// The JSON Schema for a manifest, for editor validation.
 ///
-/// §18.1 keeps the schema worth generating but small enough to read: five
+/// §18.1 keeps the schema worth generating but small enough to read: six
 /// fields, one nested permission object. `crates/ui/src/theme/schema.rs` is the
 /// precedent for generating rather than hand-writing it — the schema and the
 /// parser then cannot disagree, because both come from the same type.
@@ -861,7 +853,7 @@ pub struct Plugin {
     /// manifest and then never swapped. Callbacks it registers capture it, so a
     /// timer firing inside plugin A cannot run with plugin B's grant.
     policy: Rc<Policy>,
-    view: Option<Entity<ScriptView>>,
+    view: Entity<ScriptView>,
 }
 
 impl Plugin {
@@ -905,15 +897,140 @@ impl Plugin {
     }
 
     /// The view the entry module default-exported.
-    ///
-    /// Optional because §18.1's entry module only *registers* — it need not
-    /// export a view at all. The current engine requires one (see
-    /// [`PluginManager::load`]), so today this is `Some` for every loaded
-    /// plugin; the option is what stops that from becoming an assumption
-    /// callers bake in.
-    pub fn view(&self) -> Option<&Entity<ScriptView>> {
-        self.view.as_ref()
+    pub fn view(&self) -> &Entity<ScriptView> {
+        &self.view
     }
+}
+
+impl Drop for Plugin {
+    fn drop(&mut self) {
+        crate::engine::quickjs::cancel_policy_tasks(&self.policy);
+    }
+}
+
+fn load_plugin(
+    runtime: &Rc<ShellRuntime>,
+    manifest: PluginManifest,
+    root: PathBuf,
+    data_dir: PathBuf,
+    window: &mut Window,
+    cx: &mut App,
+) -> Result<Plugin> {
+    let id = manifest.id().to_owned();
+    let store_path = data_dir.join("store.json");
+    if let Err(error) = std::fs::create_dir_all(&data_dir) {
+        tracing::warn!(
+            "storage is unavailable for `{id}`: cannot create {}: {error}",
+            data_dir.display()
+        );
+    }
+
+    let policy = Rc::new(
+        Policy::default()
+            .with_capabilities(manifest.capabilities(&root, &data_dir))
+            .with_store_path(store_path.clone()),
+    );
+
+    let view = load_view_with_policy(runtime, &root, manifest.entry(), policy.clone(), window, cx)
+        .with_context(|| format!("loading application `{id}`"))?;
+
+    Ok(Plugin {
+        manifest,
+        root,
+        data_dir,
+        store_path,
+        policy,
+        view,
+    })
+}
+
+fn load_view_with_policy(
+    runtime: &Rc<ShellRuntime>,
+    root: &Path,
+    entry: &str,
+    policy: Rc<Policy>,
+    window: &mut Window,
+    cx: &mut App,
+) -> Result<Entity<ScriptView>> {
+    let loaded = {
+        let (_scope, _) =
+            scope::enter_with_runtime(runtime, window, cx, ScopePhase::Task, None, policy.clone());
+        runtime.load_app(root, entry).and_then(|view_type| {
+            runtime.instantiate_view_with_policy(&view_type, policy.clone(), window, cx)
+        })
+    };
+
+    if loaded.is_err() {
+        crate::engine::quickjs::cancel_policy_tasks(&policy);
+    }
+    loaded
+}
+
+struct ApplicationLoadFailure {
+    message: String,
+}
+
+impl Render for ApplicationLoadFailure {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        failure_surface(
+            "This application could not be loaded",
+            &self.message,
+            "Fix the application and start it again.",
+            window,
+            cx,
+        )
+    }
+}
+
+impl ShellRuntime {
+    /// Loads one application as this window's root view.
+    ///
+    /// The common single-application host needs no plugin discovery or id
+    /// lookup. A manifest selects identity and entry metadata, but its
+    /// capability block is only a request: this method always uses the policy
+    /// the host installed. A load error becomes the normal selectable failure
+    /// surface so a bad script cannot crash the host while constructing its
+    /// window.
+    pub fn load(
+        self: &Rc<Self>,
+        root: impl AsRef<Path>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Entity<ShellRoot> {
+        let root = root.as_ref().to_path_buf();
+        let manifest_path = root.join(MANIFEST_FILE);
+        if !manifest_path.is_file() {
+            let policy = Rc::new(crate::policy::default().duplicate());
+            let loaded = load_view_with_policy(self, &root, "main.js", policy.clone(), window, cx);
+            return match loaded {
+                Ok(view) => {
+                    cx.new(|cx| ShellRoot::with_application(view.into(), policy, window, cx))
+                }
+                Err(error) => load_failure_root(error.to_string(), window, cx),
+            };
+        }
+
+        let loaded: Result<(Entity<ScriptView>, Rc<Policy>)> = (|| {
+            let manifest = PluginManifest::read(&root)?;
+            let policy = Rc::new(crate::policy::default().duplicate());
+            let view =
+                load_view_with_policy(self, &root, manifest.entry(), policy.clone(), window, cx)?;
+            Ok((view, policy))
+        })();
+
+        match loaded {
+            Ok((view, policy)) => {
+                cx.new(|cx| ShellRoot::with_application(view.into(), policy, window, cx))
+            }
+            Err(error) => load_failure_root(error.to_string(), window, cx),
+        }
+    }
+}
+
+fn load_failure_root(message: String, window: &mut Window, cx: &mut App) -> Entity<ShellRoot> {
+    tracing::error!("{message}");
+    let failure = cx.new(|_| ApplicationLoadFailure { message });
+    cx.new(|cx| ShellRoot::new(failure.into(), window, cx))
 }
 
 /// Discovers, loads and unloads plugins.
@@ -1029,13 +1146,15 @@ impl PluginManager {
 
     /// Evaluates a plugin's entry module and constructs its view.
     ///
-    /// This is the only method that runs script. The plugin's policy is built
-    /// before anything is evaluated and the whole load runs inside it, because
-    /// the entry module may read its own files while registering.
+    /// This is the only method that runs script. `authorize` is called with the
+    /// inert manifest before its requested capabilities become a policy; a
+    /// denial executes nothing. The whole approved load then runs inside that
+    /// policy, because the entry module may use capabilities while registering.
     pub fn load(
         &mut self,
         runtime: &Rc<ShellRuntime>,
         id: &str,
+        authorize: impl FnOnce(&PluginManifest) -> bool,
         window: &mut Window,
         cx: &mut App,
     ) -> Result<()> {
@@ -1051,67 +1170,13 @@ impl PluginManager {
             bail!("no plugin `{id}`{}", self.known_ids_hint());
         };
         let manifest = entry.manifest.clone();
+        if !authorize(&manifest) {
+            bail!("capabilities for plugin `{id}` were not approved");
+        }
         let root = entry.root.clone();
-
-        // `ShellRuntime::load_app` hardcodes `main.js` — it is also what sets
-        // the module resolver's root, so reading another entry file here would
-        // silently break every relative `import` inside the plugin. Refusing is
-        // the honest failure until the engine takes the entry name.
-        if manifest.entry() != ENGINE_ENTRY {
-            bail!(
-                "plugin `{id}` declares entry `{}`, but the runtime can only load `{ENGINE_ENTRY}` today",
-                manifest.entry()
-            );
-        }
-
         let data_dir = self.data_dir(id);
-        let store_path = data_dir.join("store.json");
-        if let Err(error) = std::fs::create_dir_all(&data_dir) {
-            // Not fatal: a plugin that never touches storage still runs, and a
-            // plugin that does will fail at the call, where the message can say
-            // which key it was reaching for.
-            tracing::warn!(
-                "storage is unavailable for `{id}`: cannot create {}: {error}",
-                data_dir.display()
-            );
-        }
-
-        let policy = Rc::new(
-            Policy::default()
-                .with_capabilities(manifest.capabilities(&root, &data_dir))
-                .with_store_path(store_path.clone()),
-        );
-
-        // The frame is what carries the grant, so everything the entry module
-        // does — including anything it defers — happens inside one.
-        let view = {
-            let (_scope, _) = scope::enter_with_runtime(
-                runtime,
-                window,
-                cx,
-                ScopePhase::Task,
-                None,
-                policy.clone(),
-            );
-            runtime
-                .load_app(&root, manifest.entry())
-                .and_then(|view_type| {
-                    runtime.instantiate_view_with_policy(&view_type, policy.clone(), window, cx)
-                })
-        };
-
-        let view = view.map_err(|error| error.context(format!("loading plugin `{id}`")))?;
-        self.loaded.insert(
-            id.to_owned(),
-            Plugin {
-                manifest,
-                root,
-                data_dir,
-                store_path,
-                policy,
-                view: Some(view),
-            },
-        );
+        let plugin = load_plugin(runtime, manifest, root, data_dir, window, cx)?;
+        self.loaded.insert(id.to_owned(), plugin);
 
         Ok(())
     }
@@ -1123,11 +1188,7 @@ impl PluginManager {
     /// deterministic and prevents owner-less work from retaining the unloaded
     /// plugin's authority.
     pub fn unload(&mut self, id: &str) -> bool {
-        let Some(plugin) = self.loaded.remove(id) else {
-            return false;
-        };
-        crate::engine::quickjs::cancel_policy_tasks(&plugin.policy);
-        true
+        self.loaded.remove(id).is_some()
     }
 
     pub fn loaded(&self) -> impl Iterator<Item = &Plugin> {
@@ -1224,7 +1285,7 @@ fn default_data_home() -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gpui::{IntoElement as _, TestAppContext, VisualTestContext};
+    use gpui::{TestAppContext, VisualTestContext};
     use std::ops::Deref as _;
     use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -1291,6 +1352,154 @@ mod tests {
     }
 
     #[gpui::test]
+    fn runtime_load_builds_the_window_root_without_plugin_manager_ceremony(
+        cx: &mut TestAppContext,
+    ) {
+        cx.update(crate::init);
+        let application = TempTree::new("direct-load");
+        std::fs::write(
+            application.path().join("main.js"),
+            r#"
+                import { View, text } from "gpui";
+                export default class App extends View {
+                  render() { return text("loaded"); }
+                }
+            "#,
+        )
+        .expect("application source");
+
+        let runtime = cx
+            .update(ShellRuntime::new)
+            .expect("default application runtime");
+        let installed = cx.update(|cx| ShellRuntime::global(cx).expect("installed runtime"));
+        assert!(Rc::ptr_eq(&runtime, &installed));
+        let duplicate = cx.update(ShellRuntime::new);
+        assert!(
+            duplicate
+                .as_ref()
+                .is_err_and(|error| error.to_string().contains("new_isolated")),
+            "constructing a second default runtime must not silently replace the first"
+        );
+
+        let window = cx.add_window(|_, _| gpui::Empty);
+        let mut context = VisualTestContext::from_window(*window.deref(), cx);
+        let root = context.update(|window, cx| runtime.load(application.path(), window, cx));
+        context.update(|_, cx| {
+            assert_eq!(root.read(cx).dialog_count(), 0);
+            assert!(
+                root.read(cx)
+                    .content()
+                    .clone()
+                    .downcast::<ScriptView>()
+                    .is_ok()
+            );
+        });
+    }
+
+    #[gpui::test]
+    fn runtime_load_uses_the_manifest_entry_without_plugin_manager_ceremony(
+        cx: &mut TestAppContext,
+    ) {
+        cx.update(crate::init);
+        let application = TempTree::new("direct-manifest-load");
+        std::fs::write(
+            application.path().join(MANIFEST_FILE),
+            r#"{
+                "id": "com.example.direct-load",
+                "name": "Direct load",
+                "entry": "application.js",
+                "capabilities": {
+                    "network": { "hosts": ["api.example.com"] },
+                    "process": { "exit": true }
+                }
+            }"#,
+        )
+        .expect("application manifest");
+        std::fs::write(
+            application.path().join("application.js"),
+            r#"
+                import { View, text } from "gpui";
+                export default class App extends View {
+                  render() { return text("manifest entry loaded"); }
+                }
+            "#,
+        )
+        .expect("application source");
+
+        let runtime = cx
+            .update(ShellRuntime::new)
+            .expect("default application runtime");
+        let window = cx.add_window(|_, _| gpui::Empty);
+        let mut context = VisualTestContext::from_window(*window.deref(), cx);
+        let root = context.update(|window, cx| runtime.load(application.path(), window, cx));
+        let policy = context.update(|_, cx| {
+            let view = root
+                .read(cx)
+                .content()
+                .clone()
+                .downcast::<ScriptView>()
+                .expect("manifest entry view");
+            view.read(cx).policy()
+        });
+        assert!(
+            !Rc::ptr_eq(&policy, &crate::policy::default()),
+            "each loaded application needs its own task-cancellation identity"
+        );
+        assert!(
+            !policy.capabilities().may_exit(),
+            "a manifest requests capabilities; runtime.load must not approve them"
+        );
+        assert!(
+            !policy.capabilities().may_reach("api.example.com"),
+            "the host's default policy remains the permission ceiling"
+        );
+    }
+
+    #[gpui::test]
+    fn runtime_load_cancels_tasks_when_initialization_fails(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let application = TempTree::new("failed-load-tasks");
+        std::fs::write(
+            application.path().join("main.js"),
+            r#"
+                import { View, timer } from "gpui";
+                export default class Broken extends View {
+                  init() {
+                    timer.every(1_000, () => {});
+                    throw new Error("initialization failed");
+                  }
+                  render() { throw new Error("unreachable"); }
+                }
+            "#,
+        )
+        .expect("application source");
+
+        let runtime = cx
+            .update(ShellRuntime::new)
+            .expect("default application runtime");
+        let tasks_before = crate::engine::quickjs::task_count();
+        let window = cx.add_window(|_, _| gpui::Empty);
+        let mut context = VisualTestContext::from_window(*window.deref(), cx);
+        let root = context.update(|window, cx| runtime.load(application.path(), window, cx));
+
+        context.update(|_, cx| {
+            assert!(
+                root.read(cx)
+                    .content()
+                    .clone()
+                    .downcast::<ScriptView>()
+                    .is_err(),
+                "a failed application must render the failure surface"
+            );
+        });
+        assert_eq!(
+            crate::engine::quickjs::task_count(),
+            tasks_before,
+            "tasks started before initialization failed must be cancelled"
+        );
+    }
+
+    #[gpui::test]
     fn async_init_runs_under_the_plugin_policy_and_notifies_its_view(cx: &mut TestAppContext) {
         let plugins = TempTree::new("async-init");
         let data = TempTree::new("async-init-data");
@@ -1327,19 +1536,29 @@ mod tests {
         .expect("write script");
 
         cx.update(crate::init);
-        let runtime = ShellRuntime::new().expect("runtime");
+        let runtime = ShellRuntime::new_isolated().expect("runtime");
         cx.update(|cx| runtime.set_global(cx));
         let window = cx.add_window(|_, _| Empty);
         let mut context = VisualTestContext::from_window(*window.deref(), cx);
         let mut manager = PluginManager::new(vec![plugins.path().to_path_buf()])
             .with_data_home(data.path().to_path_buf());
 
+        let denied = context
+            .update(|window, cx| {
+                manager.load(&runtime, "com.example.async-init", |_| false, window, cx)
+            })
+            .expect_err("an unapproved manifest must not execute");
+        assert!(denied.to_string().contains("not approved"), "{denied:#}");
+        assert_eq!(manager.loaded().count(), 0);
+
         context
-            .update(|window, cx| manager.load(&runtime, "com.example.async-init", window, cx))
+            .update(|window, cx| {
+                manager.load(&runtime, "com.example.async-init", |_| true, window, cx)
+            })
             .expect("load plugin");
         let view = manager
             .plugin("com.example.async-init")
-            .and_then(Plugin::view)
+            .map(Plugin::view)
             .expect("plugin view")
             .clone();
 

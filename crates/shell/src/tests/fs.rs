@@ -80,7 +80,7 @@ fn every_fs_call_settles_through_a_promise(cx: &mut TestAppContext) {
             .write_roots([directory.clone()]),
     );
 
-    let runtime = ShellRuntime::new().expect("runtime");
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let view_type = runtime.load_source("probe.js", PROBE).expect("load");
 
@@ -129,7 +129,7 @@ fn an_oversized_read_is_refused_by_name(cx: &mut TestAppContext) {
     cx.update(|cx| crate::init(cx));
     crate::set_capabilities(Capabilities::new().read_roots([directory.clone()]));
 
-    let runtime = ShellRuntime::new().expect("runtime");
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = PROBE.replace(
         r#"await fs.writeFile("notes.txt", "hello");"#,
@@ -163,7 +163,7 @@ fn an_oversized_write_is_refused_before_reaching_disk(cx: &mut TestAppContext) {
     cx.update(crate::init);
     crate::set_capabilities(Capabilities::new().write_roots([directory.clone()]));
 
-    let runtime = ShellRuntime::new().expect("runtime");
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = PROBE.replace(
         r#"await fs.writeFile("notes.txt", "hello");"#,
@@ -223,7 +223,7 @@ fn fs_module_cannot_follow_a_symlink_out_of_a_granted_root(cx: &mut TestAppConte
 fn denial_probe(cx: &mut TestAppContext, capabilities: Capabilities, path: &str) -> String {
     cx.update(crate::init);
     crate::set_capabilities(capabilities);
-    let runtime = ShellRuntime::new().expect("runtime");
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = DENIAL_PROBE.replace("__PATH__", path);
     let view_type = runtime.load_source("fs-denial.js", &source).expect("load");
@@ -293,7 +293,7 @@ fn the_store_answers_from_memory_and_persists_off_thread(cx: &mut TestAppContext
     crate::set_capabilities(Capabilities::new().store(true));
     crate::set_store_path(file.clone());
 
-    let runtime = ShellRuntime::new().expect("runtime");
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let view_type = runtime.load_source("store.js", STORE_PROBE).expect("load");
 
@@ -376,7 +376,7 @@ fn a_failed_store_write_parks_until_flush_explicitly_retries_it(cx: &mut TestApp
     // the target afterwards so only the asynchronous persistence step fails.
     std::fs::create_dir(&file).expect("a directory that makes the first rename fail");
 
-    let runtime = ShellRuntime::new().expect("runtime");
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let view_type = runtime
         .load_source("store-retry.js", STORE_RETRY_PROBE)

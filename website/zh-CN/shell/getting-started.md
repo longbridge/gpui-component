@@ -13,7 +13,7 @@ order: 2
 `gpui-shell` 二进制本身是一个很薄的宿主：解析命令行、装上日志 sink、建一个运行时、开一个窗口。任何嵌入这个库的宿主做的也是同样四件事。
 
 ```rust
-use gpui_shell::{Capabilities, ScriptView, ShellRoot, ShellRuntime};
+use gpui_shell::{Capabilities, ShellRuntime};
 
 gpui_platform::application()
     .with_assets(gpui_shell::AppAssets::new(root.clone()))
@@ -21,8 +21,7 @@ gpui_platform::application()
         // 初始化 gpui-base、shell 的默认 token 调色板，以及样式反射表。
         gpui_shell::init(cx);
 
-        let runtime = ShellRuntime::new().expect("script runtime");
-        runtime.set_global(cx);
+        let runtime = ShellRuntime::new(cx).expect("script runtime");
 
         // 在宿主开口之前，什么都不允许。
         gpui_shell::set_store_path(store_directory.join("store.json"));
@@ -33,13 +32,8 @@ gpui_platform::application()
                 .store(true),
         );
 
-        let view_type = runtime.load_app(&root, "main.js").expect("main.js");
-
         cx.open_window(Default::default(), move |window, cx| {
-            let object = runtime.instantiate(&view_type, window, cx).expect("view");
-            let content = cx.new(|_| ScriptView::new(runtime.clone(), object));
-            // shell 窗口的第一层视图永远是 ShellRoot。
-            cx.new(|cx| ShellRoot::new(content.into(), window, cx))
+            runtime.load(&root, window, cx)
         })
         .expect("window");
     });
@@ -47,7 +41,7 @@ gpui_platform::application()
 
 其中两行承载的是规则而不是机制。
 
-**`ShellRoot` 必须是窗口的第一层视图**，正如 `gpui-component` 窗口的第一层视图必须是 `Root`。它持有 dialog 栈、sheet、toast 栈、焦点恢复与 Tab 导航。`window.open_dialog` 一族是通过它找到根视图的；用其他视图作为根打开的窗口，会用一条明确的信息拒绝这些调用。
+**`runtime.load(...)` 返回窗口的 `ShellRoot`**，作用与 `gpui-component` 窗口中的 `Root` 相同。它持有 dialog 栈、sheet、toast 栈、焦点恢复与 Tab 导航。manifest 负责选择应用入口并记录能力请求，但不会自行批准这些请求。带 manifest 与不带 manifest 的目录都使用宿主当前的默认 policy；后者采用 `main.js`。
 
 **能力默认为空。** `Capabilities::default()` 什么都不授予——没有文件、没有存储、没有剪贴板、没有进程。由宿主决定，因为只有宿主知道它对即将运行的这段代码信任到什么程度。见 [Capabilities](./capabilities.md)。
 

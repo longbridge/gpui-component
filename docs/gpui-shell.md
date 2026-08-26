@@ -28,7 +28,7 @@ exists and what does not.
 The crate is under active development, so §26 in particular is a snapshot and
 will need re-checking against the source. Two modules are complete in Rust with
 nothing above them yet: `dock.rs` has no engine binding, so a script cannot reach
-a panel, and `PluginManager` has no production caller, so the CLI does not load
+a panel, and the CLI does not use the multi-plugin manager, so it does not load
 plugins. Both are exercised inside the crate and noted where they appear below.
 
 ---
@@ -72,7 +72,7 @@ gpui-shell = { path = "crates/shell" }
 
 ```rust
 gpui_shell::init(cx);
-let runtime = gpui_shell::ShellRuntime::new()?;
+let runtime = gpui_shell::ShellRuntime::new(cx)?;
 ```
 
 The shell pins every LLRT crate to commit
@@ -557,9 +557,8 @@ one `ShellRuntime` type plus two handle types, `ViewType` and `ViewObject`, that
 are opaque to every caller:
 
 ```text
-ShellRuntime::new() -> anyhow::Result<Rc<Self>>
-ShellRuntime::set_global(&Rc<Self>, &mut App)
-ShellRuntime::global(&App) -> Option<Rc<Self>>
+ShellRuntime::new(&mut App) -> anyhow::Result<Rc<Self>>
+ShellRuntime::new_isolated() -> anyhow::Result<Rc<Self>>
 ShellRuntime::arena_mut(&self) -> RefMut<'_, SpecArena>
 
 ShellRuntime::load_app(&Rc<Self>, &Path, entry: &str) -> anyhow::Result<ViewType>
@@ -2423,8 +2422,11 @@ plugin's code runs. That is the whole reason a manifest exists.
 discovery, load and unload, per-plugin policies, capabilities and data
 directories. Compatibility is manifest metadata rather than executable API:
 `shell-version` is validated during discovery, before the entry can run.
-**`PluginManager` has no production caller** — the CLI consumes a single manifest directly but
-does not drive discovery or the multi-plugin manager.
+The common single-application host calls `ShellRuntime::load`, which consumes a
+single manifest directly while keeping the host's default policy as the
+permission ceiling. Directory discovery and id-based lifecycle remain the
+multi-plugin manager's separate job; its `load` requires an explicit
+authorization callback before requested capabilities become a grant.
 Its integration test does load and run a plugin, including asynchronous `init`
 under the manifest-derived policy. The rest of this section describes what it
 does, because the shape is what the design is about.
@@ -2578,11 +2580,14 @@ authority after unload.
 
 ### 18.4 What is still missing
 
-The authorization model — `granted` / `denied` / `prompt`, a permission sheet
-shown before the first run, a decision persisted in host configuration rather
-than in the plugin directory, a host policy that can force denial, and re-asking
-when an update adds a capability — is not built. Neither is a contribution
-registry: there is no `gpui.command`, `gpui.keymap`, `gpui.register_panel`, or
+The complete authorization product — `granted` / `denied` / `prompt`, a
+permission sheet shown before the first run, a decision persisted in host
+configuration rather than in the plugin directory, and re-asking when an update
+adds a capability — is not built. The API boundary is present: a
+single-application `ShellRuntime::load` never promotes manifest requests beyond
+the host policy, and `PluginManager::load` requires the host to authorize the
+inert manifest before code runs. A contribution registry is also missing: there
+is no `gpui.command`, `gpui.keymap`, `gpui.register_panel`, or
 `gpui.register_theme` for a script to register into.
 
 Today the grant comes from the host directly. Running a directory from the
@@ -3302,9 +3307,10 @@ script cannot reach any of it.
 
 The plugin model: manifest parsing and its generated schema, discovery, load and
 unload, per-plugin policies, capabilities and data directories (§18). The CLI
-uses one local application's manifest directly; the multi-plugin manager remains
-crate-private with no production caller. An integration test loads a real plugin
-and exercises its asynchronous initialization under the manifest-derived policy.
+uses one local application's manifest directly, as does the public
+`ShellRuntime::load` convenience path; `PluginManager` remains available for
+hosts that actually need discovery and id-based unload. Integration tests cover
+both direct loading and asynchronous initialization under a manifest policy.
 
 ### Not built
 

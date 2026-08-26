@@ -315,13 +315,16 @@ fn with_root<R>(
 
 /// Wraps a freshly constructed script instance as a view the root can mount.
 fn mount(ctx: &Ctx<'_>, object: ViewObject, cx: &mut App) -> JsResult<AnyView> {
-    let Some(runtime) = ShellRuntime::global(cx) else {
+    let Some(runtime) = scope::current_runtime().or_else(|| ShellRuntime::global(cx)) else {
         return Err(Exception::throw_type(
             ctx,
             "the shell runtime is not installed on this application",
         ));
     };
-    Ok(cx.new(|_| ScriptView::new(runtime, object)).into())
+    let policy = scope::policy();
+    Ok(cx
+        .new(|_| ScriptView::with_policy(runtime, object, policy))
+        .into())
 }
 
 /// A view instance, kept alive across the argument conversion.
@@ -565,8 +568,7 @@ mod tests {
     ) -> (Rc<ShellRuntime>, Entity<ShellRoot>, &mut VisualTestContext) {
         cx.update(crate::init);
 
-        let runtime = ShellRuntime::new().expect("runtime");
-        cx.update(|cx| runtime.set_global(cx));
+        let runtime = cx.update(ShellRuntime::new).expect("runtime");
         // The views these tests open hold `Persistent` script values, and a
         // `Persistent` released after its runtime has gone aborts the process.
         // Teardown order is not ours to choose, so the runtime outlives the
@@ -592,7 +594,7 @@ mod tests {
         T: for<'js> FromJs<'js> + 'static,
     {
         cx.update(|window, app| {
-            let (_guard, generation) = scope::enter(window, app, phase, None);
+            let (_guard, generation) = scope::enter_runtime(runtime, window, app, phase, None);
             runtime.with_js(|ctx| {
                 ctx.globals().set("cx", context_object(ctx, generation)?)?;
                 ctx.eval::<T, _>(source)
@@ -630,6 +632,38 @@ mod tests {
             eval(&runtime, cx, ScopePhase::Event, "window.close_dialog()").expect("close_dialog");
         assert!(closed);
         assert_eq!(root.read_with(cx, |root, _| root.dialog_count()), 1);
+    }
+
+    #[gpui::test]
+    fn an_isolated_runtime_owns_the_overlay_view_it_constructs(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let default = cx.update(ShellRuntime::new).expect("default runtime");
+        let isolated = ShellRuntime::new_isolated().expect("isolated runtime");
+        std::mem::forget(default);
+        std::mem::forget(isolated.clone());
+
+        let (root, cx) = cx.add_window_view(|window, cx| {
+            let content = cx.new(|_| Empty).into();
+            ShellRoot::new(content, window, cx)
+        });
+        eval::<u32>(
+            &isolated,
+            cx,
+            ScopePhase::Event,
+            "window.open_dialog(() => __gpui.text('isolated'))",
+        )
+        .expect("open dialog from isolated runtime");
+
+        let mounted_runtime = root.read_with(cx, |root, cx| {
+            let view = root
+                .topmost_dialog()
+                .expect("dialog")
+                .clone()
+                .downcast::<ScriptView>()
+                .expect("script dialog");
+            view.read(cx).runtime()
+        });
+        assert!(Rc::ptr_eq(&mounted_runtime, &isolated));
     }
 
     #[gpui::test]

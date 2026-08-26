@@ -313,7 +313,7 @@ fn grid(
 ) {
     cx.update(|cx| crate::init(cx));
 
-    let runtime = ShellRuntime::new().expect("runtime");
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
 
     let view_type = runtime

@@ -22,8 +22,9 @@
 // `on_exit_request`, `resolve_app_root`, `failure_surface`, and the types
 // re-exported below. The modules: `native` and `policy` to configure what a
 // script may reach, `root` and `theme` for the window it lives in, `view` and
-// `snapshot` for the view itself, `watch` for hot-reload, `typings` to generate
-// `gpui.d.ts`, `metrics` to measure.
+// `snapshot` for the view itself, `watch` for hot-reload, `metrics` to measure.
+// `write_type_declarations` is the explicit tooling hook for `gpui.d.ts`;
+// ordinary application loading updates it automatically.
 //
 // **Crate-private, and why.** `engine` is the seam and its shape follows
 // whatever is behind it. `spec`, `materialize`, `store` and `style` are an
@@ -61,7 +62,7 @@ pub(crate) mod style;
 #[cfg(test)]
 mod tests;
 pub mod theme;
-pub mod typings;
+mod typings;
 pub(crate) mod value;
 pub mod view;
 pub mod watch;
@@ -87,6 +88,15 @@ pub use view::ScriptView;
 use std::path::PathBuf;
 
 use gpui::App;
+
+/// Writes current `gpui.d.ts` declarations into an application tree.
+///
+/// [`ShellRuntime::load`] already performs this best-effort for ordinary hosts.
+/// This explicit operation exists for tooling such as `gpui-shell types` that
+/// must report a write failure to its caller.
+pub fn write_type_declarations(root: &std::path::Path) -> std::io::Result<Vec<PathBuf>> {
+    typings::write_application(root)
+}
 
 /// Grants an application its capabilities.
 ///

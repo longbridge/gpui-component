@@ -62,6 +62,10 @@ mod scheduler;
 pub(crate) fn cancel_policy_tasks(policy: &Rc<Policy>) {
     scheduler::cancel_policy(policy);
 }
+#[cfg(test)]
+pub(crate) fn task_count() -> usize {
+    scheduler::task_count()
+}
 mod standard;
 mod theme_api;
 
@@ -146,15 +150,25 @@ struct RuntimeGlobal(Rc<ShellRuntime>);
 impl Global for RuntimeGlobal {}
 
 impl ShellRuntime {
-    /// Creates a runtime.
+    /// Creates the application's default runtime and makes it available to
+    /// shell callbacks registered on this [`App`].
+    pub fn new(cx: &mut App) -> Result<Rc<Self>> {
+        if Self::global(cx).is_some() {
+            return Err(anyhow!(
+                "a default gpui-shell runtime is already installed; use ShellRuntime::new_isolated() for an additional VM"
+            ));
+        }
+        let runtime = Self::new_isolated()?;
+        runtime.set_global(cx);
+        Ok(runtime)
+    }
+
+    /// Creates a runtime without installing it as the application's default.
     ///
-    /// More than one may be alive on a thread. That used to be refused, because
-    /// the capability grant and the store were thread state and a second runtime
-    /// would silently inherit the first one's: an error with a sentence was
-    /// better than running under someone else's permissions. Authority now
-    /// travels on the call frame — see [`crate::policy`] — so the two do not
-    /// collide, and the refusal has nothing left to protect.
-    pub fn new() -> Result<Rc<Self>> {
+    /// More than one may be alive on a thread because authority travels on the
+    /// call frame rather than in runtime-global state. Use this only when a host
+    /// deliberately owns multiple isolated runtimes.
+    pub fn new_isolated() -> Result<Rc<Self>> {
         let js_runtime = JsRuntime::new().map_err(js_setup_error)?;
         let context = JsContext::full(&js_runtime).map_err(js_setup_error)?;
 
@@ -193,11 +207,11 @@ impl ShellRuntime {
         Ok(runtime)
     }
 
-    pub fn set_global(self: &Rc<Self>, cx: &mut App) {
+    pub(crate) fn set_global(self: &Rc<Self>, cx: &mut App) {
         cx.set_global(RuntimeGlobal(self.clone()));
     }
 
-    pub fn global(cx: &App) -> Option<Rc<Self>> {
+    pub(crate) fn global(cx: &App) -> Option<Rc<Self>> {
         cx.try_global::<RuntimeGlobal>()
             .map(|global| global.0.clone())
     }
@@ -251,6 +265,12 @@ impl ShellRuntime {
     /// the first half of the sandbox's module policy (design doc §19.1).
     pub fn load_app(self: &Rc<Self>, dir: &Path, entry: &str) -> Result<ViewType> {
         let root = crate::runtime::resolve_app_root(dir, entry)?;
+        if let Err(error) = crate::write_type_declarations(&root) {
+            tracing::debug!(
+                "could not update declarations in {}: {error}",
+                root.display()
+            );
+        }
 
         // Every load is a new generation, which is what makes a reload pick up
         // a change in an imported module rather than only in the entry point.

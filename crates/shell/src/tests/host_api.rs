@@ -96,7 +96,7 @@ fn javascript_calls_a_host_registered_native_module(cx: &mut TestAppContext) {
         });
     });
     crate::set_native_modules(modules);
-    let runtime = ShellRuntime::new().expect("runtime");
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let view_type = runtime
         .load_source("native.js", NATIVE_PROBE)
@@ -127,7 +127,7 @@ fn script_view(
 ) {
     cx.update(crate::init);
     crate::set_capabilities(capabilities);
-    let runtime = ShellRuntime::new().expect("runtime");
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let view_type = runtime.load_source(name, source).expect("load script");
     let window = cx.add_window(|_, _| Empty);

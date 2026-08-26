@@ -49,7 +49,7 @@ const ENTRY: &str = "counter.js";
 fn a_script_view_produces_an_element_description(cx: &mut TestAppContext) {
     cx.update(|cx| crate::init(cx));
 
-    let runtime = ShellRuntime::new().expect("runtime");
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
 
     let view_type = runtime.load_source(ENTRY, COUNTER).expect("load");
@@ -78,7 +78,7 @@ fn a_script_view_produces_an_element_description(cx: &mut TestAppContext) {
 #[gpui::test]
 fn an_external_link_survives_the_script_render(cx: &mut TestAppContext) {
     cx.update(crate::init);
-    let runtime = ShellRuntime::new().expect("runtime");
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
 import { Link, View, text } from "gpui";
@@ -114,7 +114,7 @@ export default class ExternalLink extends View {
 #[gpui::test]
 fn an_external_link_requires_a_parseable_http_origin(cx: &mut TestAppContext) {
     cx.update(crate::init);
-    let runtime = ShellRuntime::new().expect("runtime");
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
 import { Link, View } from "gpui";
@@ -143,7 +143,7 @@ export default class InvalidExternalLink extends View {
 #[gpui::test]
 fn render_context_exposes_base_aligned_theme_tokens(cx: &mut TestAppContext) {
     cx.update(crate::init);
-    let runtime = ShellRuntime::new().expect("runtime");
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
 import { View, text } from "gpui";
@@ -184,7 +184,7 @@ export default class Themed extends View {
 #[gpui::test]
 fn render_context_theme_snapshot_is_deeply_read_only(cx: &mut TestAppContext) {
     cx.update(crate::init);
-    let runtime = ShellRuntime::new().expect("runtime");
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
 import { View, text } from "gpui";
@@ -218,7 +218,7 @@ export default class Themed extends View {
 #[gpui::test]
 fn render_context_theme_rejects_a_stale_context(cx: &mut TestAppContext) {
     cx.update(crate::init);
-    let runtime = ShellRuntime::new().expect("runtime");
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
 import { View, text } from "gpui";
@@ -262,7 +262,7 @@ fn link_typings_expose_a_real_external_target() {
 fn an_element_cannot_be_added_to_two_parents(cx: &mut TestAppContext) {
     cx.update(|cx| crate::init(cx));
 
-    let runtime = ShellRuntime::new().expect("runtime");
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
 
     let source = r#"
@@ -298,7 +298,7 @@ export default class Broken extends View {
 fn an_unknown_style_method_suggests_the_closest_name(cx: &mut TestAppContext) {
     cx.update(|cx| crate::init(cx));
 
-    let runtime = ShellRuntime::new().expect("runtime");
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
 
     let source = r#"
@@ -333,7 +333,7 @@ export default class Typo extends View {
 fn a_view_renders_through_gpui(cx: &mut TestAppContext) {
     cx.update(|cx| crate::init(cx));
 
-    let runtime = ShellRuntime::new().expect("runtime");
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
 
     let view_type = runtime.load_source(ENTRY, COUNTER).expect("load");
@@ -377,7 +377,7 @@ use std::ops::Deref;
 fn the_bundled_example_application_loads_and_renders(cx: &mut TestAppContext) {
     cx.update(|cx| crate::init(cx));
 
-    let runtime = ShellRuntime::new().expect("runtime");
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
 
     // The example is the contract with users: if it stops rendering, the
@@ -411,7 +411,7 @@ fn the_bundled_example_application_loads_and_renders(cx: &mut TestAppContext) {
 fn state_styles_reuse_the_ordinary_style_methods(cx: &mut TestAppContext) {
     cx.update(|cx| crate::init(cx));
 
-    let runtime = ShellRuntime::new().expect("runtime");
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
 
     let source = r#"
@@ -457,7 +457,7 @@ export default class Styled extends View {
 fn transition_declarations_survive_the_script_render(cx: &mut TestAppContext) {
     cx.update(|cx| crate::init(cx));
 
-    let runtime = ShellRuntime::new().expect("runtime");
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
 
     let source = r#"
@@ -496,7 +496,7 @@ export default class Motion extends View {
 fn native_overflow_scroll_behaviors_survive_script_render_and_materialize(cx: &mut TestAppContext) {
     cx.update(|cx| crate::init(cx));
 
-    let runtime = ShellRuntime::new().expect("runtime");
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
 import { View, text, v_flex } from "gpui";
@@ -536,7 +536,7 @@ export default class ScrollableQuotes extends View {
 fn motion_rejects_properties_the_native_layer_cannot_interpolate(cx: &mut TestAppContext) {
     cx.update(|cx| crate::init(cx));
 
-    let runtime = ShellRuntime::new().expect("runtime");
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
 import { View, div } from "gpui";
@@ -570,7 +570,7 @@ export default class BadMotion extends View {
 fn spring_declarations_survive_the_script_render(cx: &mut TestAppContext) {
     cx.update(|cx| crate::init(cx));
 
-    let runtime = ShellRuntime::new().expect("runtime");
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
 import { View, div } from "gpui";
@@ -606,7 +606,7 @@ export default class Motion extends View {
 #[gpui::test]
 fn transition_rejects_an_unknown_native_easing(cx: &mut TestAppContext) {
     cx.update(|cx| crate::init(cx));
-    let runtime = ShellRuntime::new().expect("runtime");
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
 import { View, div } from "gpui";
@@ -636,7 +636,7 @@ export default class BadMotion extends View {
 #[gpui::test]
 fn motion_rejects_non_finite_or_physically_invalid_policies(cx: &mut TestAppContext) {
     cx.update(|cx| crate::init(cx));
-    let runtime = ShellRuntime::new().expect("runtime");
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let window = cx.add_window(|_, _| Empty);
     let mut context = VisualTestContext::from_window(*window.deref(), cx);
@@ -708,7 +708,7 @@ fn theme_tokens_resolve_outside_a_call_scope(cx: &mut TestAppContext) {
 fn the_todolist_example_exercises_the_runtime(cx: &mut TestAppContext) {
     cx.update(|cx| crate::init(cx));
 
-    let runtime = ShellRuntime::new().expect("runtime");
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
 
     let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -751,7 +751,7 @@ fn the_todolist_example_exercises_the_runtime(cx: &mut TestAppContext) {
 fn an_unknown_input_event_names_the_valid_ones(cx: &mut TestAppContext) {
     cx.update(|cx| crate::init(cx));
 
-    let runtime = ShellRuntime::new().expect("runtime");
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
 
     let source = r#"
@@ -791,7 +791,7 @@ export default class Bad extends View {
 fn a_reload_picks_up_a_change_in_an_imported_module(cx: &mut TestAppContext) {
     cx.update(|cx| crate::init(cx));
 
-    let runtime = ShellRuntime::new().expect("runtime");
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
 
     let directory = std::env::temp_dir().join(format!("gpui-shell-reload-{}", std::process::id()));
@@ -852,7 +852,7 @@ export default class Reloading extends View {
 #[gpui::test]
 fn oversized_entry_and_imported_modules_are_refused(cx: &mut TestAppContext) {
     cx.update(crate::init);
-    let runtime = ShellRuntime::new().expect("runtime");
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
     let directory =
         std::env::temp_dir().join(format!("gpui-shell-module-limit-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&directory);
@@ -890,7 +890,7 @@ fn oversized_entry_and_imported_modules_are_refused(cx: &mut TestAppContext) {
 fn an_embedded_runtime_reloads_when_a_source_changes(cx: &mut TestAppContext) {
     cx.update(|cx| crate::init(cx));
 
-    let runtime = ShellRuntime::new().expect("runtime");
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
 
     let directory = std::env::temp_dir().join(format!("gpui-shell-watch-{}", std::process::id()));
@@ -993,7 +993,7 @@ fn a_granted_exit_reaches_the_host(cx: &mut TestAppContext) {
     let recorded = asked.clone();
     crate::on_exit_request(move |request, _, _| recorded.set(Some(request.code())));
 
-    let runtime = ShellRuntime::new().expect("runtime");
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
 
     let source = r#"
@@ -1037,7 +1037,7 @@ export default class Quitter extends View {
 fn a_watcher_releases_its_view(cx: &mut TestAppContext) {
     cx.update(|cx| crate::init(cx));
 
-    let runtime = ShellRuntime::new().expect("runtime");
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
 
     let directory = std::env::temp_dir().join(format!("gpui-shell-release-{}", std::process::id()));
@@ -1095,8 +1095,8 @@ fn a_watcher_releases_its_view(cx: &mut TestAppContext) {
 fn two_runtimes_share_a_thread_without_sharing_a_grant(cx: &mut TestAppContext) {
     cx.update(|cx| crate::init(cx));
 
-    let _first = ShellRuntime::new().expect("the first runtime");
-    let _second = ShellRuntime::new().expect("the second runtime");
+    let _first = ShellRuntime::new_isolated().expect("the first runtime");
+    let _second = ShellRuntime::new_isolated().expect("the second runtime");
 }
 
 /// A scope opened under a policy answers `fs` with *that* grant.
@@ -1116,7 +1116,7 @@ fn a_scope_answers_with_the_policy_it_was_opened_under(cx: &mut TestAppContext) 
     let plugin = Rc::new(
         Policy::new().with_capabilities(Capabilities::new().read_roots([PathBuf::from("/tmp/p")])),
     );
-    let runtime = ShellRuntime::new().expect("runtime");
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
 
     context.update(|window, cx| {
         assert!(

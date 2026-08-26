@@ -179,7 +179,7 @@ impl Policy {
     /// exactly the hole the policy replaced. Everything else here is the host's
     /// live configuration of one application: revoking a module has to reach the
     /// views that can call it, and a store has to stay one cache over one file.
-    fn duplicate(&self) -> Self {
+    pub(crate) fn duplicate(&self) -> Self {
         Self {
             capabilities: self.capabilities.clone(),
             modules: self.modules.clone(),

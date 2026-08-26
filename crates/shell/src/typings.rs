@@ -66,8 +66,8 @@ use crate::style;
 use crate::theme::color_token_names;
 use crate::value::Bridged;
 
-/// The file [`write_to`] writes. Fixed, because an editor finds the
-/// declarations by having them in the project, not by being told where.
+/// The declaration filename. Fixed because an editor finds the declarations by
+/// having them in the project, not by being told where.
 pub const FILE_NAME: &str = "gpui.d.ts";
 
 /// Emits the TypeScript declarations for the script API.
@@ -116,19 +116,33 @@ pub fn declarations() -> String {
 /// generated and ignored rather than committed, a copy per directory costs
 /// nothing anybody has to look at.
 ///
-/// Failures are collected rather than raised. A directory that cannot be written
-/// is a worse editing experience, not a reason to refuse to run the application.
-pub fn refresh_tree(root: &Path) -> Vec<PathBuf> {
-    directories_importing_gpui(root)
-        .into_iter()
-        .filter_map(|directory| match refresh(&directory) {
-            Ok(written) => written,
+/// The explicit tooling API reports write failures. Ordinary application loads
+/// log them at debug level and continue, because an unwritable declaration is a
+/// worse editing experience, not a reason to refuse to run the application.
+pub(crate) fn write_application(root: &Path) -> std::io::Result<Vec<PathBuf>> {
+    std::fs::create_dir_all(root)?;
+    let mut directories = vec![root.to_path_buf()];
+    directories.extend(
+        directories_importing_gpui(root)
+            .into_iter()
+            .filter(|directory| directory != root),
+    );
+
+    let mut written = Vec::new();
+    let mut first_error = None;
+    for directory in directories {
+        match refresh(&directory) {
+            Ok(Some(path)) => written.push(path),
+            Ok(None) => {}
             Err(error) => {
-                tracing::debug!("could not write {}: {error}", directory.display());
-                None
+                first_error.get_or_insert(error);
             }
-        })
-        .collect()
+        }
+    }
+    match first_error {
+        Some(error) => Err(error),
+        None => Ok(written),
+    }
 }
 
 /// Directories holding at least one script that imports `gpui`.
@@ -162,7 +176,14 @@ fn directories_importing_gpui(root: &Path) -> Vec<PathBuf> {
                 continue;
             }
 
-            if path.is_dir() {
+            let Ok(file_type) = entry.file_type() else {
+                continue;
+            };
+            if file_type.is_symlink() {
+                continue;
+            }
+
+            if file_type.is_dir() {
                 if depth < MAX_DEPTH {
                     pending.push((path, depth + 1));
                 }
@@ -216,6 +237,12 @@ fn imports_gpui(source: &str) -> bool {
 /// error worth reporting. Returns the path only when it actually wrote.
 pub fn refresh(directory: &Path) -> std::io::Result<Option<PathBuf>> {
     let path = directory.join(FILE_NAME);
+    if std::fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.file_type().is_symlink()) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            format!("refusing to replace symlink {}", path.display()),
+        ));
+    }
     let current = declarations();
 
     if std::fs::read_to_string(&path).is_ok_and(|committed| committed == current) {
@@ -224,18 +251,6 @@ pub fn refresh(directory: &Path) -> std::io::Result<Option<PathBuf>> {
 
     std::fs::write(&path, current)?;
     Ok(Some(path))
-}
-
-/// Writes the declarations next to an application, so an editor picks them up.
-///
-/// Creates `directory` when it is missing: the usual caller is a `types`
-/// subcommand pointed at a directory an application has not been written into
-/// yet, and failing on that would be a worse answer than making it.
-pub fn write_to(directory: &Path) -> std::io::Result<PathBuf> {
-    std::fs::create_dir_all(directory)?;
-    let path = directory.join(FILE_NAME);
-    std::fs::write(&path, declarations())?;
-    Ok(path)
 }
 
 /// Splits the style surface into the two halves that need different treatment:
@@ -1318,14 +1333,70 @@ mod tests {
     }
 
     #[test]
-    fn write_to_creates_the_file_beside_an_application() {
+    fn write_application_creates_the_file_beside_an_application() {
         let directory =
             std::env::temp_dir().join(format!("gpui-shell-typings-{}", std::process::id()));
-        let path = write_to(&directory).expect("declarations are writable");
+        let written = write_application(&directory).expect("declarations are writable");
+        let path = directory.join(FILE_NAME);
 
+        assert_eq!(written, vec![path.clone()]);
         assert_eq!(path.file_name().unwrap(), FILE_NAME);
         assert_eq!(std::fs::read_to_string(&path).unwrap(), declarations());
 
         let _ = std::fs::remove_dir_all(&directory);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_application_does_not_follow_directory_symlinks_outside_the_root() {
+        use std::os::unix::fs::symlink;
+
+        let unique = format!("{}", std::process::id());
+        let root = std::env::temp_dir().join(format!("gpui-shell-typings-root-{unique}"));
+        let outside = std::env::temp_dir().join(format!("gpui-shell-typings-outside-{unique}"));
+        let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::remove_dir_all(&outside);
+        std::fs::create_dir_all(&root).expect("application root");
+        std::fs::create_dir_all(&outside).expect("outside directory");
+        std::fs::write(outside.join("escape.js"), "import { View } from 'gpui';")
+            .expect("outside script");
+        symlink(&outside, root.join("escape")).expect("directory symlink");
+
+        write_application(&root).expect("root declarations");
+
+        assert!(root.join(FILE_NAME).is_file());
+        assert!(
+            !outside.join(FILE_NAME).exists(),
+            "the declaration writer must stay inside the application root"
+        );
+
+        let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::remove_dir_all(&outside);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn refresh_does_not_follow_a_declaration_file_symlink() {
+        use std::os::unix::fs::symlink;
+
+        let unique = format!("{}", std::process::id());
+        let root = std::env::temp_dir().join(format!("gpui-shell-typings-link-root-{unique}"));
+        let outside =
+            std::env::temp_dir().join(format!("gpui-shell-typings-link-target-{unique}.txt"));
+        let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::remove_file(&outside);
+        std::fs::create_dir_all(&root).expect("application root");
+        std::fs::write(&outside, "do not replace").expect("outside target");
+        symlink(&outside, root.join(FILE_NAME)).expect("declaration symlink");
+
+        let error = refresh(&root).expect_err("a declaration symlink must be refused");
+        assert_eq!(error.kind(), std::io::ErrorKind::PermissionDenied);
+        assert_eq!(
+            std::fs::read_to_string(&outside).expect("outside target"),
+            "do not replace"
+        );
+
+        let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::remove_file(&outside);
     }
 }
