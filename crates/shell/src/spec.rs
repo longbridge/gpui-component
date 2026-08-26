@@ -78,6 +78,13 @@ pub enum Component {
     /// out one where the other was asked for, and `Textarea::new` will not take
     /// an `InputState`.
     Textarea(crate::entities::EntityHandle),
+
+    /// A spinbutton frame over the same `InputState` a [`Component::Input`]
+    /// holds: there is no numeric state type, only a text state carrying a
+    /// step, a range and a numeric mask. So the handle identifies it exactly as
+    /// it identifies an input, and the element carries only what a step button
+    /// looks like and what happens when one is pressed.
+    NumberInput(crate::entities::EntityHandle),
     /// A vector image, loaded from the application's own directory.
     Svg(String),
     /// A full-color image, loaded from the application's own directory.
@@ -105,6 +112,21 @@ pub enum Component {
     /// The filled part of a progress bar, sized by the script from the same
     /// number it gave [`Component::Progress`].
     ProgressIndicator,
+    /// The native per-window performance HUD supplied by `gpui-fps`.
+    FpsMonitor,
+    /// A slider's behavior root, addressed by its entity handle for the same
+    /// reason [`Component::Input`] is: the state is what identifies it, and it
+    /// outlives the description. It draws nothing at all — the three parts
+    /// below are the whole of what is on screen — and announces the value.
+    Slider(crate::entities::EntityHandle),
+    /// The press and drag surface of a [`Component::Slider`].
+    SliderTrack(crate::entities::EntityHandle),
+    /// The groove, and the one part that records the box every pointer
+    /// position is measured against. A slider without one cannot be moved.
+    SliderIndicator(crate::entities::EntityHandle),
+    /// The knob. Its position along the axis is read from the state while it
+    /// is materialized, never described by the script.
+    SliderThumb(crate::entities::EntityHandle),
     /// One option in a radio group. It reports only *becoming* checked: base
     /// drops the handler once the radio is checked or disabled, because a
     /// radio cannot deselect itself.
@@ -134,6 +156,15 @@ pub enum Component {
     /// The slot a caption belongs in. It carries no caption role today, so it
     /// says where a caption goes rather than what one means.
     TableCaption(String),
+    /// A row or column of panes a user drags apart, carrying the axis its
+    /// constructor chose. The axis is part of what the node *is*: base decides
+    /// it in `h_resizable` / `v_resizable` and every panel inside reads it, so
+    /// there is no builder to change it afterwards.
+    Resizable(String, gpui::Axis),
+    /// One pane of a [`Component::Resizable`]. It has no id of its own: base
+    /// numbers the panels by their position in the group, which is also how the
+    /// group's stored sizes are addressed.
+    ResizablePanel,
     /// A region whose `content` slot is rendered only while it is open.
     /// Ordinary children are always rendered; the gate applies to the slot
     /// alone.
@@ -180,6 +211,7 @@ impl Component {
             Component::Scrollbar(_) => "Scrollbar",
             Component::Input(_) => "Input",
             Component::Textarea(_) => "Textarea",
+            Component::NumberInput(_) => "NumberInput",
             Component::Svg(_) => "svg",
             Component::Image(_) => "image",
             Component::Path { fill: true, .. } => "path fill",
@@ -189,6 +221,11 @@ impl Component {
             Component::Progress(_) => "Progress",
             Component::ProgressTrack => "ProgressTrack",
             Component::ProgressIndicator => "ProgressIndicator",
+            Component::FpsMonitor => "FpsMonitor",
+            Component::Slider(_) => "Slider",
+            Component::SliderTrack(_) => "SliderTrack",
+            Component::SliderIndicator(_) => "SliderIndicator",
+            Component::SliderThumb(_) => "SliderThumb",
             Component::Radio(_) => "Radio",
             Component::Toggle(_) => "Toggle",
             Component::RadioGroup(_) => "RadioGroup",
@@ -200,6 +237,11 @@ impl Component {
             Component::TableHead(..) => "TableHead",
             Component::TableCell(..) => "TableCell",
             Component::TableCaption(_) => "TableCaption",
+            // Named after the constructor rather than the type, because the
+            // axis is not a call a reader of the dump could otherwise see.
+            Component::Resizable(_, gpui::Axis::Horizontal) => "h_resizable",
+            Component::Resizable(_, gpui::Axis::Vertical) => "v_resizable",
+            Component::ResizablePanel => "resizable_panel",
             Component::Collapsible => "Collapsible",
             Component::Popover(_) => "Popover",
             Component::HoverCard(_) => "HoverCard",
@@ -410,6 +452,8 @@ impl SpecArena {
             | Component::TableHeader(value)
             | Component::TableBody(value)
             | Component::TableCaption(value) => out.push_str(&format!(" {value:?}")),
+            // The axis is already in the name, so only the id is left to write.
+            Component::Resizable(value, _) => out.push_str(&format!(" {value:?}")),
             // The index is part of what the node *is* rather than something
             // called on it — a cell that lost it announces itself in the wrong
             // column — so the dump carries it beside the id, not among the ops.
@@ -417,9 +461,13 @@ impl SpecArena {
             | Component::TableHead(value, index)
             | Component::TableCell(value, index) => out.push_str(&format!(" {value:?} #{index}")),
             Component::Scrollbar(value) => out.push_str(&format!(" {value:?}")),
-            Component::Input(handle) | Component::Textarea(handle) => {
-                out.push_str(&format!(" #{handle}"))
-            }
+            Component::Slider(handle)
+            | Component::SliderTrack(handle)
+            | Component::SliderIndicator(handle)
+            | Component::SliderThumb(handle) => out.push_str(&format!(" #{handle}")),
+            Component::Input(handle)
+            | Component::Textarea(handle)
+            | Component::NumberInput(handle) => out.push_str(&format!(" #{handle}")),
             _ => {}
         }
         for op in node.ops() {

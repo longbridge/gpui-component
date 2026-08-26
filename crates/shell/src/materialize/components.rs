@@ -21,12 +21,16 @@
 //! *which* component this is never leaves the one place that knows.
 
 pub(super) mod collapsible;
+pub(super) mod fps;
 pub(super) mod group;
+pub(super) mod number_input;
 pub(super) mod popover;
 pub(super) mod progress;
 pub(super) mod radio;
+pub(super) mod resizable;
 pub(super) mod scrollbar;
 pub(super) mod select;
+pub(super) mod slider;
 pub(super) mod table;
 pub(super) mod tabs;
 pub(super) mod textarea;

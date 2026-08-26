@@ -672,6 +672,43 @@ const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; 
      */
     trigger(element: Element): Element;
     /**
+     * Fills the editor slot of a `NumberInput`.
+     *
+     * Left empty, the frame draws the bare editor for the state it was built
+     * from, which is what a number input almost always wants. Fill it to put
+     * something else there — but not `Input.new(state)`: that is the *framed*
+     * editor, and a frame inside this frame draws two borders. Adornments
+     * beside the editor are ordinary `child(...)` calls on the number input.
+     */
+    input(element: Element): Element;
+    /**
+     * Supplies the look of a `NumberInput`'s decrement button.
+     *
+     * Not optional in practice. The step button is built by the base layer and
+     * is completely unstyled — no size, no content — so a number input that
+     * leaves this empty has a decrement control that cannot be seen and cannot
+     * be pressed.
+     *
+     * It behaves unlike every other slot: the element is not rendered, it is
+     * *replayed*. Its styles, its state styles, its accessibility label and its
+     * children are moved onto the button the base layer built, because that
+     * button is what receives the press. Give it an `h_flex()` or a `div()`. A
+     * `Button.new(id)` works too, but its id is dropped — the step button is
+     * already identified. A `text(...)` or an `svg(...)` on its own has no
+     * children to move and loses what it draws, so wrap it.
+     *
+     * `disabled(...)` and `on_click(...)` written here are overwritten: the
+     * number input owns whether stepping is allowed and what a press does.
+     */
+    decrement_button(element: Element): Element;
+    /** The increment button, replayed exactly as `decrement_button` is. */
+    increment_button(element: Element): Element;
+    /**
+     * Stacks both of a `NumberInput`'s step buttons to the right of the text,
+     * rather than putting one on each side of it.
+     */
+    controls_right(): Element;
+    /**
      * Applies `branch` only when `condition` is truthy, keeping the chain in
      * one piece. `branch` must return the element.
      */
@@ -691,6 +728,21 @@ const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; 
      * clearing a group is the script's own business.
      */
     on_change(handler: (checked: boolean, cx: Context) => void): Element;
+
+    /**
+     * `handler(action, cx)` on a `NumberInput`, where `action` is
+     * `"increment"` or `"decrement"`.
+     *
+     * **Replaces the built-in stepping.** Without a handler the control steps
+     * itself: it adds or subtracts the state's `set_step(...)`, clamps to
+     * `set_min(...)` and `set_max(...)`, and re-applies the numeric mask. All
+     * of that lives in the closure this replaces, so once a handler is set none
+     * of it runs — the script is the only thing that can move the value, and it
+     * moves it with `state.set_value(...)`.
+     *
+     * Both the step buttons and the Up and Down keys report through it.
+     */
+    on_step(handler: (action: "increment" | "decrement", cx: Context) => void): Element;
     /**
      * `handler(open, cx)`, when something other than the script changed a
      * `Popover`'s open state: a press on the trigger, a press outside it, or
@@ -864,6 +916,26 @@ const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; 
      */
     viewport_from_layout(): Element;
     /**
+     * How far a `resizable_panel()` may be dragged, in pixels.
+     *
+     * Two arguments rather than a range, which JavaScript cannot write. The
+     * minimum is required — a panel always has one, and base's own is 100 —
+     * while the maximum is optional and defaults to unbounded. Omit the call
+     * entirely to keep both of base's defaults.
+     */
+    size_range(min: number, max?: number): Element;
+    /**
+     * `handler(sizes, cx)` on an `h_resizable()` or `v_resizable()`, once a drag
+     * of one of its handles has ended. `sizes` is the pixel size of every panel,
+     * in the order they were added.
+     *
+     * Nothing has to be done with it. The sizes live in the window, keyed by the
+     * group's id, so dragging works and survives repaints whether or not this is
+     * wired: it is for persisting a layout or showing a width, not for making
+     * the group resize.
+     */
+    on_resize(handler: (sizes: number[], cx: Context) => void): Element;
+    /**
      * The orientation a `RadioGroup` or `ToggleGroup` announces.
      *
      * Semantic only: it does **not** lay the group out. A group is a plain
@@ -907,9 +979,10 @@ const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; 
      */
     overlay_closable(value: boolean): Element;
     /**
-     * Which corner of a `Popover` or `HoverCard` is pinned to its trigger, and
-     * so where the surface opens. Omitted, each keeps its own default:
-     * `Popover` is `top_left`, `HoverCard` is `top_center`.
+     * Which corner of a `Popover` or `HoverCard` is pinned to its trigger, or
+     * where an `fps_monitor()` is pinned inside its relative parent. Omitted,
+     * each keeps its own default: `Popover` is `top_left`, `HoverCard` is
+     * `top_center`, and `fps_monitor()` is `top_right`.
      *
      * The surface is clamped into the window either way, so an anchor near an
      * edge is a preference rather than a promise.
@@ -933,6 +1006,25 @@ const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; 
     /** Springs later target changes entirely in native GPUI code. */
     spring(property: MotionProperty, policy?: SpringPolicy): Element;
 
+    /**
+     * Which thumb of a range slider a `SliderThumb` is: the one at the start
+     * of the range, or the one at its end. Default `false`, the end — which
+     * is the only thumb a single-value slider has.
+     */
+    start(value: boolean): Element;
+    /**
+     * How the filled part of a `SliderIndicator` looks. `declare` receives a
+     * detached element that collects the styles, exactly as `hover` does; its
+     * return value is ignored.
+     *
+     * Only how it looks. Where it is comes from the state on every frame,
+     * because a fill the script positioned would be frozen at the value the
+     * render that positioned it saw — the user drags, the value changes, the
+     * screen reader announces the new one, and the bar stays put. An indicator
+     * with no `range_style` has no fill at all, which is a slider drawn as a
+     * groove and a knob.
+     */
+    range_style(declare: (el: Element) => Element | void): Element;
     /**
      * Styles applied while the pointer is over the element. `declare` receives
      * a detached element that collects the styles; its return value is
@@ -974,6 +1066,11 @@ const CONSTRUCTORS: &str = r#"
   export function v_flex(): Element;
   /** A text element. The value is stringified. */
   export function text(value: string | number | boolean): Element;
+  /**
+   * The native `gpui-fps` performance HUD, shared once per window and pinned
+   * to the top-right by default. Its parent must be `relative()`.
+   */
+  export function fps_monitor(): Element;
 
   /**
    * A component type: a table with one factory, mirroring `Button::new(id)` on
@@ -1102,6 +1199,52 @@ const CONSTRUCTORS: &str = r#"
    * tie it to the table. Name the `Table` root with `accessibility_label(...)`.
    */
   export const TableCaption: ComponentType;
+
+  /**
+   * A row of panes with draggable dividers between them. `v_resizable` is the
+   * same thing stacked, and the axis is the constructor: there is no builder to
+   * change it, because every panel inside is laid out from it.
+   *
+   * Children are `resizable_panel()` calls. Anything else is wrapped in a panel
+   * with base's default constraints, which is convenient and lossy — a wrapped
+   * element has no `size`, `size_range` or `visible` — so name the panels
+   * whenever any of the three matters.
+   *
+   * The group has no size of its own: it fills whatever it is put in, exactly as
+   * the Rust does, so give it a height (for `h_resizable`) or a width. Styles
+   * written on it land on that frame.
+   *
+   * Panel sizes are the window's, not the script's. They are kept under the
+   * group's id and survive every repaint, so a drag stays where the user put it
+   * without any state on the view — and the id must therefore be a stable name,
+   * not one built from a loop index.
+   *
+   * ```js
+   * h_resizable("workspace").h(400)
+   *   .child(resizable_panel().size(220).size_range(160, 320).child(sidebar))
+   *   .child(resizable_panel().child(editor));
+   * ```
+   */
+  export function h_resizable(id: string): Element;
+  /** A column of panes with draggable dividers. See `h_resizable`. */
+  export function v_resizable(id: string): Element;
+  /**
+   * One pane of an `h_resizable()` or `v_resizable()`, and only there: a panel
+   * anywhere else throws when it is added, because its size and its drag handle
+   * both belong to the group.
+   *
+   * Two method names mean something else here than they do anywhere else,
+   * because base's panel has inherent builders that shadow the styles of the
+   * same name — this reproduces that shadowing rather than inventing two new
+   * words for it:
+   *
+   * - `size(pixels)` is the panel's initial size along the group's axis, not a
+   *   width and a height. Use `w`/`h` for the cross axis.
+   * - `visible(value)` is whether the panel is drawn at all, not the
+   *   `visibility` style. A hidden panel keeps its place in the group, so its
+   *   siblings' sizes are undisturbed while it is away. Default `true`.
+   */
+  export function resizable_panel(): Element;
 
   /**
    * A region whose `content` is materialized and rendered only while `open` is
@@ -1347,6 +1490,23 @@ const CONSTRUCTORS: &str = r#"
     set_value(next: string): void;
     /** `change`, `submit`, `focus` or `blur`. */
     on(event: "change" | "submit" | "focus" | "blur", handler: (event: any, cx: Context) => void): boolean;
+    /**
+     * How much one step moves the value in a `NumberInput`. Default is 1;
+     * `null` gives up stepping entirely.
+     *
+     * There is no numeric state type — the step, the bounds and the mask are
+     * fields on this one, so a text state becomes a number state by being told
+     * about them.
+     */
+    set_step(step: number | null): void;
+    /** The lowest value stepping and blurring clamp to. `null` removes it. */
+    set_min(min: number | null): void;
+    /** The highest value stepping and blurring clamp to. `null` removes it. */
+    set_max(max: number | null): void;
+    /** Draws the text as a password. */
+    set_masked(masked: boolean): void;
+    /** Marks the state as working; the presentation is the application's. */
+    set_loading(loading: boolean): void;
     release(): boolean;
   }
 
@@ -1362,6 +1522,27 @@ const CONSTRUCTORS: &str = r#"
 
   /** The frame around retained text state. */
   export const Input: InputType;
+
+  export interface NumberInputType {
+    new: (state: InputStateHandle) => Element;
+  }
+
+  /**
+   * A spinbutton over the same `InputState` an `Input` holds.
+   *
+   * There is no numeric state type. Give an ordinary `InputState` a
+   * `set_step(...)` — and a `set_min(...)`/`set_max(...)` if the value is
+   * bounded — and hand it here.
+   *
+   * Three slots, and all three carry weight: `input` (defaults to the bare
+   * editor), `decrement_button` and `increment_button`. The base layer's step
+   * buttons are unstyled, so an undecorated one is invisible and unhittable.
+   *
+   * Up and Down step it from the keyboard with nothing wired: the frame
+   * declares its own key context, which the two bindings are registered
+   * against.
+   */
+  export const NumberInput: NumberInputType;
 
   /**
    * Retained multi-line text state, created once and kept on the view.
@@ -1400,6 +1581,110 @@ const CONSTRUCTORS: &str = r#"
 
   /** The frame around retained multi-line text state. */
   export const Textarea: TextareaType;
+
+  /** One thumb, or the two ends of a range. */
+  export type SliderValue = number | [number, number];
+
+  /**
+   * Retained slider state, created once and kept on the view.
+   *
+   * Like `InputState.new(...)` this needs a live host call, so it belongs in
+   * `init` or in an event handler — never in `render`.
+   *
+   * It is where a drag writes: the pointer moves, GPUI updates this, and the
+   * next frame reads it back without the script being asked to describe
+   * anything. Which is why the value is read out of the state — `value()` —
+   * rather than held beside it: a copy in the view would be a copy the drag
+   * never updated.
+   */
+  export interface SliderStateHandle {
+    /** The current value: a number, or `[start, end]` for a range slider. */
+    value(): SliderValue;
+    set_value(next: SliderValue): void;
+    min_value(): number;
+    max_value(): number;
+    step_value(): number;
+    /**
+     * `change` arrives on every pixel of a drag; `release` arrives once, when
+     * the pointer is let go. Take the first for a live readout and the second
+     * for anything that costs something — a request, a write, an undo entry.
+     */
+    on(event: "change" | "release", handler: (value: SliderValue, cx: Context) => void): boolean;
+    release(): boolean;
+  }
+
+  export interface SliderStateType {
+    /**
+     * Defaults are `0..100` in steps of 1, starting at `min`.
+     *
+     * A `"logarithmic"` scale needs a `min` above zero — it maps through
+     * `log(value / min)`, which has no answer at or below it.
+     */
+    new: (options?: {
+      min?: number;
+      max?: number;
+      step?: number;
+      scale?: "linear" | "logarithmic";
+      value?: SliderValue;
+    }) => SliderStateHandle;
+  }
+
+  export const SliderState: SliderStateType;
+
+  /** A component built from a slider's state rather than from an id. */
+  export interface SliderPartType {
+    new: (state: SliderStateHandle) => Element;
+  }
+
+  /**
+   * A slider, in four parts, none of which draws anything on its own.
+   *
+   * ```js
+   * Slider.new(this.volume).child(
+   *   SliderTrack.new(this.volume).flex().items_center().h(24).w_full().child(
+   *     SliderIndicator.new(this.volume)
+   *       .relative().w_full().h(6).rounded(3).bg("secondary")
+   *       .range_style((fill) => fill.rounded(3).bg("primary"))
+   *       .child(SliderThumb.new(this.volume).size(16).rounded(8).bg("primary").ml(-8)),
+   *   ),
+   * );
+   * ```
+   *
+   * All four are needed and all four take the same state. The root announces
+   * the value and owns the release; the track takes the press and the drag;
+   * the indicator records the box every pointer position is measured against —
+   * **a slider with no `SliderIndicator` cannot be moved at all**, which is
+   * reported in the log rather than drawn; the thumb drags itself.
+   *
+   * The two boxes that depend on the value — the fill and the thumb — are
+   * positioned by the shell, from the state, on every frame. That is not a
+   * convenience: a drag never re-enters the script, so a position the script
+   * computed would be the one the last render saw, and the slider would
+   * announce a value its knob had never moved to. Give the thumb a size and a
+   * look; the shell gives it a place.
+   *
+   * `axis("vertical")` is announced *and* used to place both, and each part is
+   * told separately, as in Rust. A vertical slider grows from the bottom.
+   */
+  export const Slider: SliderPartType;
+  /** The press and drag surface. Give it the height a pointer can hit. */
+  export const SliderTrack: SliderPartType;
+  /**
+   * The groove, and the part that records the geometry. It must span the whole
+   * travel of the slider: the box it records is what every pointer position is
+   * divided by, so an indicator sized to the value would make the value its own
+   * scale.
+   */
+  export const SliderIndicator: SliderPartType;
+  /**
+   * The knob. `start(true)` is the lower thumb of a range slider; the default
+   * is the upper one, which is the only thumb a single-value slider has.
+   *
+   * Unlike the other three it keeps `id(...)`, because two thumbs share one
+   * state and a `transition("left", ...)` needs to know which of them it is
+   * following.
+   */
+  export const SliderThumb: SliderPartType;
 
   /**
    * A focus target the script owns, created once and kept on the view.
@@ -1754,9 +2039,14 @@ mod tests {
         "children",
         "content",
         "trigger",
+        "input",
+        "decrement_button",
+        "increment_button",
+        "controls_right",
         "when",
         "on_click",
         "on_change",
+        "on_step",
         "on_open_change",
         "on_confirm",
         "on_dismiss",
@@ -1782,8 +2072,12 @@ mod tests {
         "mode",
         "scroll_size",
         "viewport_from_layout",
+        "size_range",
+        "on_resize",
         "set_position",
         "pressed",
+        "start",
+        "range_style",
         "value",
         "indeterminate",
         "axis",

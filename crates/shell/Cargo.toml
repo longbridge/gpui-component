@@ -43,6 +43,7 @@ quickjs = [
 gpui.workspace = true
 gpui_platform.workspace = true
 gpui-base = { workspace = true, features = ["inspector"] }
+gpui-fps.workspace = true
 
 rquickjs = { version = "0.12", features = [
     "macro",

@@ -13,7 +13,7 @@ order: 4
 一次 import 就是整个命名空间：
 
 ```js
-import { div, h_flex, v_flex, text, svg, image, Button, Link, Checkbox, Switch, Input, InputState, FocusHandle } from "gpui";
+import { div, h_flex, v_flex, text, svg, image, fps_monitor, Button, Link, Checkbox, Switch, Input, InputState, FocusHandle } from "gpui";
 ```
 
 函数是小写的，组件类型首字母大写并通过 `.new` 构造。这与 Rust 侧一一对应：那边 `div()` 同样是自由函数，`Button::new(id)` 同样是类型上的关联函数。
@@ -26,11 +26,26 @@ import { div, h_flex, v_flex, text, svg, image, Button, Link, Checkbox, Switch, 
 | `text(value)` | 文本元素，参数会被转成字符串 |
 | `svg(path)` | 来自应用自身目录、跟随主题着色的矢量图标 |
 | `image(path)` | 来自应用自身目录的全彩图片 |
+| `fps_monitor()` | 原生 `gpui-fps` 性能 HUD，每个窗口共享一个 monitor |
 | `Button.new(id)` | base 的 `Button`：激活、焦点、disabled 与 selected 状态，无样式 |
 | `Link.new(id)` | 可聚焦的外部 HTTP(S) 链接；用 `.href(url)` 设置目标 |
 | `Checkbox.new(id)` | base 的受控 checkbox，无样式也无勾选标记 |
 | `Switch.new(id)` | base 的受控 switch，无样式 |
 | `Input.new(state)` | 由 [`InputState`](./state.md#留存状态) 支撑的文本框 |
+
+### 性能监视器
+
+`fps_monitor()` 直接公开原生 `gpui-fps` HUD，不会把采样或绘制搬进 JavaScript。monitor 在首次使用时创建，并按窗口复用。一个窗口最多渲染一次，并把它放在设置了 `relative()` 的父元素中：
+
+```js
+div()
+  .relative()
+  .size_full()
+  .child(content)
+  .child(fps_monitor());
+```
+
+默认固定在右上角。可以沿用已有的 anchor 取值调整位置，例如 `fps_monitor().anchor("bottom_left")`。HUD 自己拥有完整外观，普通元素样式、children 和交互状态不会作用于它。
 
 ### 为什么是 `.new(id)` 而不是 `new Button(id)`
 

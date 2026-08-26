@@ -24,6 +24,7 @@ use gpui::{App, AppContext as _, Entity, FocusHandle, Subscription, Window};
 use gpui_base::input::{
     InputBaseState, InputEditorStyle, InputEvent, InputModeKind, InputState, TextareaState,
 };
+use gpui_base::slider::{SliderEvent, SliderScale, SliderState, SliderValue};
 
 use crate::runtime::ApplicationGeneration;
 
@@ -57,6 +58,16 @@ enum Record {
     /// methods, which is why everything below this point treats them together.
     Textarea {
         state: Entity<TextareaState>,
+        application: Option<Rc<ApplicationGeneration>>,
+        subscriptions: Vec<Subscription>,
+    },
+    /// A slider's value, bounds and scale.
+    ///
+    /// Retained because it is what a drag writes to: the pointer moves, GPUI's
+    /// listener updates this, and the next frame reads it back — all without
+    /// the description being rebuilt, which is what keeps a drag off the VM.
+    Slider {
+        state: Entity<SliderState>,
         application: Option<Rc<ApplicationGeneration>>,
         subscriptions: Vec<Subscription>,
     },
@@ -201,6 +212,57 @@ impl EntityStore {
         }
     }
 
+    /// Creates a slider state and returns its handle.
+    ///
+    /// Everything is set at construction because base's own builders take
+    /// `self` by value, and their order matters: `scale` asserts against the
+    /// bounds already set, and the defaults it would otherwise check —
+    /// `0..100` — are not bounds a logarithmic slider can have. The caller has
+    /// already refused anything these would assert on; reaching one of them
+    /// here would abort the host rather than report a script mistake.
+    ///
+    /// Unlike [`Self::create_input`] this needs no window: a `SliderState` is
+    /// a plain value until something draws it, and only `set_value` — which
+    /// the script reaches through a live host call — asks for one.
+    ///
+    /// Eight arguments because a slider is defined by five numbers and there is
+    /// no moment between `new` and the first read at which to set them: base's
+    /// builders take `self` by value.
+    #[allow(clippy::too_many_arguments)]
+    pub fn create_slider(
+        &mut self,
+        min: f32,
+        max: f32,
+        step: f32,
+        scale: SliderScale,
+        value: SliderValue,
+        application: Option<Rc<ApplicationGeneration>>,
+        cx: &mut App,
+    ) -> EntityHandle {
+        let state = cx.new(|_| {
+            SliderState::new()
+                .min(min)
+                .max(max)
+                .step(step)
+                .scale(scale)
+                .default_value(value)
+        });
+
+        self.push(Record::Slider {
+            state,
+            application,
+            subscriptions: Vec::new(),
+        })
+    }
+
+    /// The entity behind a slider handle, if it is still live and belongs here.
+    pub fn slider(&self, handle: EntityHandle) -> Option<Entity<SliderState>> {
+        match self.record(handle) {
+            Some(Record::Slider { state, .. }) => Some(state.clone()),
+            _ => None,
+        }
+    }
+
     /// Creates a focus handle and returns its handle.
     ///
     /// Only `&App` is needed — GPUI's own [`App::focus_handle`] takes no window
@@ -263,6 +325,42 @@ impl EntityStore {
         }
     }
 
+    /// Subscribes to one slider event for as long as the handle lives.
+    ///
+    /// Kept apart from [`Self::subscribe_input`] rather than made generic over
+    /// both: a slider event carries a value, and a handler that had to accept
+    /// either payload would be a handler that names neither.
+    pub fn subscribe_slider(
+        &mut self,
+        handle: EntityHandle,
+        event: SliderEventName,
+        window: &mut Window,
+        cx: &mut App,
+        handler: impl Fn(SliderValue, &mut Window, &mut App) + 'static,
+    ) -> bool {
+        // Resolved and cloned inside the match so the immutable borrow ends
+        // before the subscription is stored through a mutable one.
+        let state = match self.record(handle) {
+            Some(Record::Slider { state, .. }) => state.clone(),
+            _ => return false,
+        };
+
+        let subscription =
+            window.subscribe(&state, cx, move |_, emitted: &SliderEvent, window, cx| {
+                if let Some(value) = event.value(emitted) {
+                    handler(value, window, cx);
+                }
+            });
+
+        match self.record_mut(handle) {
+            Some(Record::Slider { subscriptions, .. }) => {
+                subscriptions.push(subscription);
+                true
+            }
+            _ => false,
+        }
+    }
+
     /// Drops a handle. The entity itself is released when GPUI has no other
     /// owner.
     pub fn release(&mut self, handle: EntityHandle) -> bool {
@@ -290,6 +388,9 @@ impl EntityStore {
                     application: owner, ..
                 }
                 | Record::Textarea {
+                    application: owner, ..
+                }
+                | Record::Slider {
                     application: owner, ..
                 }
                 | Record::Focus {
@@ -328,6 +429,19 @@ impl EntityStore {
                 _ => None,
             })
             .collect()
+    }
+
+    /// The first slider state this store holds.
+    ///
+    /// For the test that changes a value from Rust and asserts the frame that
+    /// follows never entered the VM — which is the whole claim of the slider
+    /// binding, and is not observable from the script side.
+    #[cfg(test)]
+    pub(crate) fn first_slider(&self) -> Option<Entity<SliderState>> {
+        self.records.values().find_map(|record| match record {
+            Record::Slider { state, .. } => Some(state.clone()),
+            _ => None,
+        })
     }
 
     #[cfg(test)]
@@ -429,6 +543,39 @@ impl InputEventName {
                 | (Self::Focus, InputEvent::Focus)
                 | (Self::Blur, InputEvent::Blur)
         )
+    }
+}
+
+/// The slider events a script can subscribe to.
+///
+/// Two, and the difference between them is what a script does with the value:
+/// `change` arrives on every pixel of a drag and is what a live readout wants;
+/// `release` arrives once and is what a commit — a request, a write, an undo
+/// entry — wants.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum SliderEventName {
+    Change,
+    Release,
+}
+
+impl SliderEventName {
+    pub fn from_name(name: &str) -> Option<Self> {
+        match name {
+            "change" => Some(Self::Change),
+            "release" => Some(Self::Release),
+            _ => None,
+        }
+    }
+
+    pub const NAMES: &'static [&'static str] = &["change", "release"];
+
+    /// The value this event carries, when it is the one subscribed to.
+    fn value(self, event: &SliderEvent) -> Option<SliderValue> {
+        match (self, event) {
+            (Self::Change, SliderEvent::Change(value))
+            | (Self::Release, SliderEvent::Release(value)) => Some(*value),
+            _ => None,
+        }
     }
 }
 

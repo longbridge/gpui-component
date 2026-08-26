@@ -13,7 +13,7 @@ An element in `gpui-shell` is a **description**, not an object. It exists for on
 One import provides the whole namespace:
 
 ```js
-import { div, h_flex, v_flex, text, svg, image, Button, Link, Checkbox, Switch, Input, InputState, FocusHandle } from "gpui";
+import { div, h_flex, v_flex, text, svg, image, fps_monitor, Button, Link, Checkbox, Switch, Input, InputState, FocusHandle } from "gpui";
 ```
 
 Functions are lowercase, and component types are capitalized and constructed through `.new`. That mirrors the Rust side one for one: `div()` is a free function there too, and `Button::new(id)` is an associated function on a type.
@@ -26,11 +26,26 @@ Functions are lowercase, and component types are capitalized and constructed thr
 | `text(value)` | A text element; the value is stringified |
 | `svg(path)` | A theme-tinted vector icon from the application's own directory |
 | `image(path)` | A full-colour image from the application's own directory |
+| `fps_monitor()` | The native `gpui-fps` performance HUD, shared once per window |
 | `Button.new(id)` | A base `Button`: activation, focus, disabled and selected state, no styling |
 | `Link.new(id)` | A focusable external HTTP(S) link; set its target with `.href(url)` |
 | `Checkbox.new(id)` | A base controlled checkbox, no styling and no indicator |
 | `Switch.new(id)` | A base controlled switch, no styling |
 | `Input.new(state)` | A text field backed by an [`InputState`](./state.md#retained-state) |
+
+### Performance monitor
+
+`fps_monitor()` exposes the native `gpui-fps` HUD without moving its sampling or painting into JavaScript. The monitor is created on first use and reused per window. Render it at most once in a window, inside a `relative()` parent:
+
+```js
+div()
+  .relative()
+  .size_full()
+  .child(content)
+  .child(fps_monitor());
+```
+
+It is pinned to the top right by default. Use the existing anchor vocabulary to move it, for example `fps_monitor().anchor("bottom_left")`. The HUD owns its presentation; ordinary element styles, children, and interaction states do not apply to it.
 
 ### Why `.new(id)` and not `new Button(id)`
 

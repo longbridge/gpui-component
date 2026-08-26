@@ -61,6 +61,108 @@ type Slots = SmallVec<[(&'static str, AnyElement); 2]>;
 /// The same list before the slots are materialized.
 type SlotSpecs = SmallVec<[(&'static str, SpecId); 2]>;
 
+/// The children of a node whose component takes a *typed* child.
+///
+/// [`materialize_node`] flattens every child into [`Children`], because
+/// `ParentElement::child` is what every component bound so far accepts. A few
+/// base containers do not: `ResizablePanelGroup::child` takes a
+/// `ResizablePanel`, and that type carries `size`, `size_range` and `visible` —
+/// constraints with no counterpart on an `AnyElement`. Base will wrap a finished
+/// element in a panel, but the panel it produces has already lost all three.
+///
+/// So those components are handed the *descriptions* instead of the elements.
+/// A parent looks at what constructed each child, builds the typed value itself
+/// for the ones it owns, and sends everything else back down the ordinary path.
+/// A `Tabs` that took `Tab` values, or a dock that takes panels, is the same
+/// shape — which is why this is a type rather than five more parameters on one
+/// component's function.
+#[derive(Clone, Copy)]
+struct ChildSpecs<'a> {
+    runtime: &'a Rc<ShellRuntime>,
+    arena: &'a SpecArena,
+    ids: &'a [SpecId],
+    /// The text color the parent passes down, already resolved.
+    inherited: gpui::Hsla,
+}
+
+impl<'a> ChildSpecs<'a> {
+    /// The described children, in the order the script attached them.
+    fn ids(&self) -> &'a [SpecId] {
+        self.ids
+    }
+
+    /// Wiring a callback is the one thing a component cannot do from a
+    /// description alone.
+    fn runtime(&self) -> &'a Rc<ShellRuntime> {
+        self.runtime
+    }
+
+    /// What constructed the child at `id`, so a parent can tell the children it
+    /// owns from the rest.
+    fn component(&self, id: SpecId) -> Option<&'a Component> {
+        self.arena.node(id).and_then(SpecNode::component)
+    }
+
+    /// The ordinary path, for every child the parent does not own.
+    fn element(&self, id: SpecId, window: &mut Window, cx: &mut App) -> AnyElement {
+        materialize_node(self.runtime, self.arena, id, self.inherited, window, cx)
+    }
+
+    /// Everything [`materialize_node`] resolves before it decides what to
+    /// construct. What is left is the construction, which is the part the parent
+    /// is here to do itself.
+    ///
+    /// Deliberately narrower than that preamble: a typed child is a container
+    /// the parent builds, so there is no retained path geometry to keep and no
+    /// slot to fill. A slot it filled anyway is reported, because filling one
+    /// detached the element from the tree — silence there is content that
+    /// vanished.
+    fn parts(&self, id: SpecId, window: &mut Window, cx: &mut App) -> Option<NodeParts> {
+        let node = self.arena.node(id)?;
+        let component = node.component()?;
+        let (mut refinement, behavior, states, motions, slots) = resolve_ops(self.arena, node);
+        apply_motion(
+            motion_element_id(id, behavior.key.clone(), component),
+            &motions,
+            &mut refinement,
+            window,
+            cx,
+        );
+        for (name, _) in slots.iter() {
+            tracing::warn!(
+                "{} has no `{name}` slot, so the element given to it is not rendered at all",
+                component.name()
+            );
+        }
+        let inherited = refinement.text.color.unwrap_or(self.inherited);
+        let children: Children = node
+            .children()
+            .iter()
+            .map(|child| materialize_node(self.runtime, self.arena, *child, inherited, window, cx))
+            .collect();
+        Some(NodeParts {
+            refinement,
+            behavior,
+            states,
+            children,
+        })
+    }
+}
+
+/// One child resolved but not yet constructed. See [`ChildSpecs::parts`].
+struct NodeParts {
+    refinement: StyleRefinement,
+    behavior: Behavior,
+    states: StateStyles,
+    children: Children,
+}
+
+/// Whether this component reads its children as descriptions. See
+/// [`ChildSpecs`].
+fn takes_typed_children(component: &Component) -> bool {
+    matches!(component, Component::Resizable(..))
+}
+
 /// Behavior collected from a node's ops, applied after styling.
 /// Style refinements that apply only in a runtime state.
 #[derive(Default)]
@@ -80,6 +182,10 @@ impl StateStyles {
 #[derive(Default)]
 struct Behavior {
     disabled: bool,
+
+    /// Whether a `NumberInput` stacks both step buttons to the right of the
+    /// text, rather than putting one on each side of it.
+    controls_right: bool,
     selected: bool,
     checked: bool,
     /// A `Toggle`'s controlled state. Separate from `checked` because that is
@@ -101,6 +207,14 @@ struct Behavior {
     href: Option<SharedString>,
     on_click: Option<CallbackId>,
     on_change: Option<CallbackId>,
+
+    /// Reports which way a `NumberInput` was asked to step.
+    ///
+    /// Setting it takes the stepping away from base entirely: the built-in
+    /// increment, the `min`/`max` clamp and the numeric mask all live in the
+    /// closure this one replaces, so from here on the script is the only thing
+    /// that can move the value.
+    on_step: Option<CallbackId>,
     /// Reports the open state of an anchored surface after something other than
     /// the script changed it — a click on the trigger, a click outside, Escape.
     on_open_change: Option<CallbackId>,
@@ -125,6 +239,22 @@ struct Behavior {
     /// Whether a `Scrollbar` takes its viewport from its own layout box rather
     /// than from the scroll area. The way to keep a bar off a fixed header.
     viewport_from_layout: bool,
+    /// A resizable panel's initial size along its group's axis.
+    ///
+    /// Recorded under a name no script spells. `ResizablePanel::size` is base's
+    /// own inherent builder and shadows `Styled::size` for that one type; the
+    /// prelude reproduces the shadowing with an own property on the panel
+    /// object, so the script still writes `.size(200)` and every other
+    /// element's `size` still means width-and-height.
+    panel_size: Option<Pixels>,
+    /// How far a resizable panel may be dragged. `None` keeps base's own
+    /// `PANEL_MIN_SIZE..Pixels::MAX`.
+    size_range: Option<std::ops::Range<Pixels>>,
+    /// Whether a resizable panel is rendered at all. `None` keeps base's
+    /// default, which is that it is.
+    visible: Option<bool>,
+    /// Reports the panel sizes of a resizable group once a drag has ended.
+    on_resize: Option<CallbackId>,
     /// This item's one-based position in its collection, and the collection's
     /// size — "tab 2 of 5". Announced, never drawn.
     position_in_set: Option<(usize, usize)>,
@@ -143,6 +273,15 @@ struct Behavior {
     /// the script rendered. A table that draws every row it has needs neither.
     row_count: Option<usize>,
     column_count: Option<usize>,
+    /// Which thumb of a range slider a `SliderThumb` is. `false`, the
+    /// default, is the thumb at the end of the range — the only one a
+    /// single-value slider has.
+    start: bool,
+    /// How the filled part of a `SliderIndicator` looks. Only how it looks:
+    /// where it is comes from the state on every frame, because a fill the
+    /// script positioned would be frozen at the value the render that
+    /// positioned it saw.
+    range_style: Option<StyleRefinement>,
     /// Whether a `Collapsible` renders the element in its `content` slot, or
     /// whether a `Popover` is showing.
     ///
@@ -330,11 +469,18 @@ fn materialize_node(
     // overwhelming majority of nodes have a handful of children or none. A
     // heap allocation for each of them is a cost the snapshot was supposed to
     // remove, arriving one layer down.
-    let children: Children = node
-        .children()
-        .iter()
-        .map(|child| materialize_node(runtime, arena, *child, inherited, window, cx))
-        .collect();
+    //
+    // A component that takes typed children is handed the descriptions instead:
+    // flattening them here would throw away the very thing it needs. See
+    // [`ChildSpecs`].
+    let children: Children = if takes_typed_children(&component) {
+        Children::new()
+    } else {
+        node.children()
+            .iter()
+            .map(|child| materialize_node(runtime, arena, *child, inherited, window, cx))
+            .collect()
+    };
 
     // A slot's element is built here, beside the children, so it inherits the
     // same text color: where the component chooses to put it is the component's
@@ -364,9 +510,17 @@ fn materialize_node(
         warn_unread_slots(&slots, component.name());
     }
 
+    // Reported here rather than in the component, because this is the last
+    // place the description is addressable: a `Slider` with no
+    // `SliderIndicator` under it records no geometry, and every pointer
+    // position it is later asked about divides by a zero-sized box.
+    if let Component::Slider(handle) = &component {
+        components::slider::warn_without_indicator(arena, id, *handle);
+    }
+
     materialize_component(
-        runtime, node, id, component, inherited, refinement, behavior, states, children, slots,
-        window, cx,
+        runtime, arena, node, id, component, inherited, refinement, behavior, states, children,
+        slots, slot_specs, window, cx,
     )
 }
 
@@ -380,6 +534,7 @@ fn materialize_node(
 #[allow(clippy::too_many_arguments)]
 fn materialize_component(
     runtime: &Rc<ShellRuntime>,
+    arena: &SpecArena,
     node: &SpecNode,
     id: SpecId,
     component: Component,
@@ -389,6 +544,7 @@ fn materialize_component(
     states: StateStyles,
     children: Children,
     slots: Slots,
+    slot_specs: SlotSpecs,
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
@@ -606,6 +762,9 @@ fn materialize_component(
         Component::ProgressIndicator => {
             components::progress::progress_indicator(refinement, behavior, states, children)
         }
+        Component::FpsMonitor => {
+            components::fps::fps_monitor(refinement, behavior, states, children, window, cx)
+        }
         Component::Radio(id) => {
             components::radio::radio(runtime, id, refinement, behavior, states, children)
         }
@@ -651,6 +810,38 @@ fn materialize_component(
         Component::TableCaption(id) => {
             components::table::table_caption(runtime, id, refinement, behavior, states, children)
         }
+        Component::Resizable(id, axis) => components::resizable::panel_group(
+            ChildSpecs {
+                runtime,
+                arena,
+                ids: node.children(),
+                inherited,
+            },
+            id,
+            axis,
+            refinement,
+            behavior,
+            states,
+            window,
+            cx,
+        ),
+        // Only reachable when the panel never made it into a group, which base
+        // cannot render at all.
+        Component::ResizablePanel => {
+            components::resizable::orphan_panel(refinement, behavior, states, children)
+        }
+        Component::Slider(handle) => {
+            components::slider::slider(runtime, handle, refinement, behavior, states, children)
+        }
+        Component::SliderTrack(handle) => components::slider::slider_track(
+            runtime, handle, refinement, behavior, states, children,
+        ),
+        Component::SliderIndicator(handle) => components::slider::slider_indicator(
+            runtime, handle, refinement, behavior, states, children, cx,
+        ),
+        Component::SliderThumb(handle) => components::slider::slider_thumb(
+            runtime, handle, refinement, behavior, states, children, cx,
+        ),
         Component::Collapsible => {
             components::collapsible::collapsible(refinement, behavior, states, slots, children)
         }
@@ -753,10 +944,21 @@ fn materialize_component(
         Component::Textarea(handle) => {
             components::textarea::textarea(runtime, handle, refinement, behavior, states, children)
         }
+        Component::NumberInput(handle) => components::number_input::number_input(
+            runtime, arena, handle, inherited, refinement, behavior, states, slot_specs, children,
+            window, cx,
+        ),
     }
 }
 
 fn materializes_slots(component: &Component, behavior: &Behavior) -> bool {
+    // A `NumberInput` skips them for the opposite reason a closed `Collapsible`
+    // does: not because they might not be drawn, but because it reads the
+    // descriptions itself. Building them here would be the same subtree built
+    // twice, under the same element id.
+    if matches!(component, Component::NumberInput(_)) {
+        return false;
+    }
     // A `Popover` or a `HoverCard` is not here, and not by oversight: its
     // `trigger` slot is what is on screen while it is shut, so skipping its
     // slots would remove the one element that has to stay. Skipping only the
@@ -1118,11 +1320,30 @@ fn motion_element_id(
         | Component::TableHead(id, _)
         | Component::TableCell(id, _) => gpui::ElementId::Name(id.clone().into()),
         Component::Scrollbar(id) => gpui::ElementId::Name(id.clone().into()),
+        // The group's id is also where base files the panel sizes, so motion
+        // has to key off the same name rather than a tree position.
+        Component::Resizable(id, _) => gpui::ElementId::Name(id.clone().into()),
+        // One state, four parts, so the handle alone would give all four the
+        // same motion channel. `SliderThumb` is left out on purpose: a range
+        // slider has two of them on one state, so the thumb keeps the script's
+        // `id(...)` and falls through to the address below.
+        Component::Slider(handle) => {
+            gpui::ElementId::NamedInteger("gpui-shell-slider".into(), *handle)
+        }
+        Component::SliderTrack(handle) => {
+            gpui::ElementId::NamedInteger("gpui-shell-slider-track".into(), *handle)
+        }
+        Component::SliderIndicator(handle) => {
+            gpui::ElementId::NamedInteger("gpui-shell-slider-indicator".into(), *handle)
+        }
         Component::Input(handle) => {
             gpui::ElementId::NamedInteger("gpui-shell-input".into(), *handle)
         }
         Component::Textarea(handle) => {
             gpui::ElementId::NamedInteger("gpui-shell-textarea".into(), *handle)
+        }
+        Component::NumberInput(handle) => {
+            gpui::ElementId::NamedInteger("gpui-shell-number-input".into(), *handle)
         }
         _ => element_id(id, key),
     }
@@ -1224,12 +1445,19 @@ fn resolve_ops(
                     "hover" => states.hover = Some(resolved),
                     "active" => states.active = Some(resolved),
                     "focus" => states.focus = Some(resolved),
+                    // Not a runtime state at all: the one style from which
+                    // a component draws a box of its own. It rides the same op
+                    // because what it collects is a refinement built from the
+                    // ordinary style methods, which is what a state style is.
+                    "range_style" => behavior.range_style = Some(resolved),
                     other => tracing::error!("unhandled state style `{other}`"),
                 }
             }
             SpecOp::Callback(name, id) => match *name {
                 "on_click" => behavior.on_click = Some(*id),
+                "on_resize" => behavior.on_resize = Some(*id),
                 "on_change" => behavior.on_change = Some(*id),
+                "on_step" => behavior.on_step = Some(*id),
                 "on_open_change" => behavior.on_open_change = Some(*id),
                 "on_confirm" => behavior.on_confirm = Some(*id),
                 "on_dismiss" => behavior.on_dismiss = Some(*id),
@@ -1570,6 +1798,7 @@ fn apply_behavior(behavior: &mut Behavior, name: &str, args: &[Bridged]) {
         "value" => behavior.value = args.first().and_then(|value| value.as_f32().ok()),
         "indeterminate" => behavior.indeterminate = flag.unwrap_or(true),
         "pressed" => behavior.pressed = flag.unwrap_or(true),
+        "start" => behavior.start = flag.unwrap_or(true),
         "overflow_scroll" => {
             behavior.scroll_x = true;
             behavior.scroll_y = true;
@@ -1612,6 +1841,23 @@ fn apply_behavior(behavior: &mut Behavior, name: &str, args: &[Bridged]) {
             }
         }
         "viewport_from_layout" => behavior.viewport_from_layout = true,
+        "controls_right" => behavior.controls_right = true,
+        "panel_visible" => behavior.visible = Some(flag.unwrap_or(true)),
+        "panel_size" => {
+            behavior.panel_size = args
+                .first()
+                .and_then(|value| value.as_f32().ok())
+                .map(gpui::px);
+        }
+        "size_range" => {
+            // The floor is required and the ceiling optional, because that is
+            // the shape of the constraint: a panel always has a minimum — base's
+            // own is `PANEL_MIN_SIZE` — and usually no maximum at all.
+            if let Some(min) = args.first().and_then(|value| value.as_f32().ok()) {
+                let max = args.get(1).and_then(|value| value.as_f32().ok());
+                behavior.size_range = Some(gpui::px(min)..max.map_or(Pixels::MAX, gpui::px));
+            }
+        }
         "set_position" => {
             // Both halves or neither: "tab 2 of" announces nothing a reader
             // can place, so a malformed pair is dropped rather than halved.
@@ -1893,6 +2139,24 @@ mod motion_identity_tests {
             assert!(behavior.disabled);
         }
     }
+}
+
+/// Hands a resizable group's panel sizes, in pixels, to the script.
+///
+/// Base's own callback is given the `ResizableState` entity; a script has no
+/// handle for one, and the sizes are the whole of what that entity is read for
+/// here.
+fn dispatch_resize(
+    runtime: &Weak<ShellRuntime>,
+    callback: CallbackId,
+    sizes: Vec<f32>,
+    window: &mut Window,
+    cx: &mut App,
+) {
+    let Some(runtime) = runtime.upgrade() else {
+        return;
+    };
+    runtime.dispatch_resize(callback, sizes, window, cx);
 }
 
 fn dispatch_change(

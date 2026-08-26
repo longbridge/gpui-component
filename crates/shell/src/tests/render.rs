@@ -760,6 +760,205 @@ export default class Settings extends View {
     draw(&mut context, &view);
 }
 
+/// A logarithmic slider whose range reaches zero is a script mistake that base
+/// asserts on — which would take the whole application down rather than report
+/// anything. It has to arrive as a `TypeError`.
+#[gpui::test]
+fn a_logarithmic_slider_that_reaches_zero_is_refused_rather_than_asserted(cx: &mut TestAppContext) {
+    cx.update(|cx| crate::init(cx));
+
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View, SliderState, text } from "gpui";
+
+export default class Gain extends View {
+  init() { this.gain = SliderState.new({ min: 0, max: 1000, scale: "logarithmic" }); }
+  render() { return text("unreachable"); }
+}
+"#;
+    let view_type = runtime.load_source("gain", source).expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+
+    let Err(error) = context.update(|window, cx| runtime.instantiate(&view_type, window, cx))
+    else {
+        panic!("a logarithmic scale cannot start at zero");
+    };
+    assert!(
+        error.to_string().contains("logarithmic"),
+        "the error has to name what is wrong: {error}"
+    );
+}
+
+/// A slider is four parts the script composes, and one thing the script does
+/// not do: compute where the value is.
+///
+/// The description carries no position at all — that is the assertion below —
+/// because a drag never re-enters the VM. The value moves in the state, the
+/// frame after reads it back, and a position described here would be the one
+/// the last script render saw.
+#[gpui::test]
+fn a_slider_is_composed_by_the_script_and_positioned_by_the_shell(cx: &mut TestAppContext) {
+    cx.update(|cx| crate::init(cx));
+
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View, SliderState, Slider, SliderTrack, SliderIndicator, SliderThumb, text, v_flex } from "gpui";
+
+export default class Volume extends View {
+  init() {
+    this.volume = SliderState.new({ min: 0, max: 100, step: 5, value: 40 });
+    this.volume.on("change", (value, cx) => { this.latest = value; cx.notify(); });
+  }
+  render() {
+    return v_flex()
+      .child(text(`${this.volume.value()} of ${this.volume.max_value()}`))
+      .child(
+        Slider.new(this.volume).child(
+          SliderTrack.new(this.volume).flex().items_center().h(24).w_full().child(
+            SliderIndicator.new(this.volume)
+              .relative()
+              .w_full()
+              .h(6)
+              .bg("secondary")
+              .range_style((fill) => fill.bg("primary"))
+              .child(SliderThumb.new(this.volume).size(16).bg("primary")),
+          ),
+        ),
+      );
+  }
+}
+"#;
+    let view_type = runtime.load_source("slider", source).expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .expect("instantiate");
+
+    let tree = context
+        .update(|window, cx| runtime.render_to_spec(&object, None, window, cx))
+        .expect("Slider and its three parts must be supported components");
+
+    for part in [
+        "Slider #",
+        "SliderTrack #",
+        "SliderIndicator #",
+        "SliderThumb #",
+    ] {
+        assert!(tree.contains(part), "missing {part}: {tree}");
+    }
+    assert!(
+        tree.contains(":range_style("),
+        "the fill is declared as a style, not described as an element: {tree}"
+    );
+    // The value reached the script, which is what makes a readout beside the
+    // slider possible at all.
+    assert!(
+        tree.contains("40 of 100"),
+        "the state must be readable: {tree}"
+    );
+    // And none of the geometry did. `left`, `bottom` and `absolute` are what a
+    // script would have had to compute; finding one here would mean the thumb
+    // is pinned to the value this render saw.
+    for frozen in [".left[", ".bottom[", ".absolute"] {
+        assert!(
+            !tree.contains(frozen),
+            "the description must carry no slider geometry, found `{frozen}`: {tree}"
+        );
+    }
+
+    let view = context.update(|_, cx| cx.new(|_| ScriptView::new(runtime.clone(), object)));
+    draw(&mut context, &view);
+    let renders = runtime.metrics().read().script_renders();
+
+    // The claim, end to end: a value changed outside the script repaints the
+    // slider — new geometry, new announcement — without entering the VM.
+    let state = runtime
+        .entities()
+        .first_slider()
+        .expect("the script's slider state");
+    context.update(|window, cx| {
+        state.update(cx, |state, cx| state.set_value(80.0f32, window, cx));
+    });
+    draw(&mut context, &view);
+
+    assert_eq!(
+        runtime.metrics().read().script_renders(),
+        renders,
+        "moving a slider must repaint without re-entering the script"
+    );
+}
+
+/// A `NumberInput` holds no state of its own: the value lives in the same
+/// `InputState` a text field uses, and the step, the bounds and the mask are
+/// set on that state rather than on the element. What the element carries is
+/// the three slots — and all three have to survive into the description,
+/// because base's step buttons are unstyled and its frame has no editor.
+#[gpui::test]
+fn a_number_input_carries_three_slots_over_a_plain_input_state(cx: &mut TestAppContext) {
+    cx.update(|cx| crate::init(cx));
+
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View, NumberInput, InputState, h_flex, text } from "gpui";
+
+export default class Quantity extends View {
+  init() {
+    this.state = InputState.new({ value: "1" });
+    this.state.set_step(1);
+    this.state.set_min(0);
+    this.state.set_max(10);
+    this.stepped = null;
+  }
+  render() {
+    return NumberInput.new(this.state)
+      .decrement_button(h_flex().w(20).child(text("-")))
+      .increment_button(h_flex().w(20).child(text("+")))
+      .input(h_flex().flex_1())
+      .controls_right()
+      .on_step((action, cx) => { this.stepped = action; cx.notify(); });
+  }
+}
+"#;
+    let view_type = runtime.load_source("quantity", source).expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .expect("instantiate");
+
+    let tree = context
+        .update(|window, cx| runtime.render_to_spec(&object, None, window, cx))
+        .expect("NumberInput must be a supported component");
+
+    assert!(tree.contains("NumberInput #"), "missing the root: {tree}");
+    for slot in ["@input", "@decrement_button", "@increment_button"] {
+        assert!(
+            tree.contains(slot),
+            "a slot element is rendered by the component and never as a child, so {slot} must \
+             survive into the description: {tree}"
+        );
+    }
+    assert!(
+        tree.contains(":controls_right"),
+        "where the buttons go is the script's choice, so it must be described: {tree}"
+    );
+    assert!(
+        tree.contains(":on_step(fn)"),
+        "stepping is reported back, so the handler must be described: {tree}"
+    );
+
+    // And it has to materialize. The two button slots are replayed onto a
+    // `Button` the base layer builds rather than materialized into elements of
+    // their own, so a mistake in that replay fails here rather than in a story.
+    let view = context.update(|_, cx| cx.new(|_| ScriptView::new(runtime, object)));
+    draw(&mut context, &view);
+}
+
 /// A progress bar is three parts, and the script draws all of it: the root
 /// announces the number and paints nothing, the track and the indicator are the
 /// only things a user sees. So the description has to carry both the announced
@@ -791,6 +990,7 @@ export default class Download extends View {
               .bg("primary")));
   }
 }
+
 "#;
     let view_type = runtime.load_source("progress", source).expect("load");
     let window = cx.add_window(|_, _| Empty);
@@ -829,6 +1029,40 @@ export default class Download extends View {
     // And the whole thing has to materialize: the two parts are not
     // interactive, so a `finish` that assumed otherwise would fail here rather
     // than in a story.
+    let view = context.update(|_, cx| cx.new(|_| ScriptView::new(runtime, object)));
+    draw(&mut context, &view);
+}
+
+#[gpui::test]
+fn fps_monitor_is_available_as_a_native_overlay(cx: &mut TestAppContext) {
+    cx.update(|cx| crate::init(cx));
+
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View, div, fps_monitor } from "gpui";
+
+export default class Monitor extends View {
+  render() {
+    return div().relative().size_full().child(fps_monitor().anchor("bottom_left"));
+  }
+}
+"#;
+    let view_type = runtime.load_source("fps-monitor.js", source).expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .expect("instantiate");
+
+    let spec = context
+        .update(|window, cx| runtime.render_to_spec(&object, None, window, cx))
+        .expect("render spec");
+    assert!(
+        spec.contains("FpsMonitor :anchor"),
+        "the snapshot must retain the native monitor and its anchor: {spec}"
+    );
+
     let view = context.update(|_, cx| cx.new(|_| ScriptView::new(runtime, object)));
     draw(&mut context, &view);
 }
@@ -3288,4 +3522,152 @@ fn render_error(cx: &mut TestAppContext, name: &str, source: &str) -> String {
         .update(|window, cx| runtime.render_to_spec(&object, None, window, cx))
         .expect_err("the script must fail where the call was written")
         .to_string()
+}
+const RESIZABLE: &str = r#"
+import { View, div, h_resizable, resizable_panel, text } from "gpui";
+
+export default class Workspace extends View {
+  init() { this.sizes = []; }
+  render() {
+    return h_resizable("workspace")
+      .w(400)
+      .h(200)
+      .on_resize((sizes, cx) => { this.sizes = sizes.map((size) => Math.round(size)); cx.notify(); })
+      .child(
+        resizable_panel()
+          .size(220)
+          .size_range(120, 320)
+          .child(div().size_full().child(text("Sidebar"))))
+      .child(resizable_panel().visible(true).child(text(`Editor ${this.sizes.join("/")}`)));
+  }
+}
+"#;
+
+/// A resizable group is the first component that reads its children as
+/// descriptions rather than as elements: `size`, `size_range` and `visible`
+/// belong to `ResizablePanel` and have no counterpart on an `AnyElement`, so a
+/// panel built out of a finished element would have lost all three.
+///
+/// The drag is the other half. Nothing in the script holds the panel widths —
+/// they live in the window under the group's id — so this asserts both that
+/// dragging works with no state on the view and that the sizes reach the script
+/// as ordinary numbers.
+#[gpui::test]
+fn a_resizable_group_sizes_its_panels_and_reports_a_drag(cx: &mut TestAppContext) {
+    cx.update(|cx| crate::init(cx));
+
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let view_type = runtime
+        .load_source("workspace.js", RESIZABLE)
+        .expect("load");
+
+    let runtime_for_view = Rc::clone(&runtime);
+    let window = cx.add_window(move |window, cx| {
+        let object = runtime_for_view
+            .instantiate(&view_type, window, cx)
+            .expect("instantiate");
+        ScriptView::new(runtime_for_view, object)
+    });
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    context.update(|window, cx| window.draw(cx).clear(cx));
+
+    let view = window.root(&mut context).expect("view");
+    let tree = |context: &mut VisualTestContext| {
+        context.update(|_, cx| {
+            view.read(cx)
+                .snapshot()
+                .map(crate::RenderSnapshot::debug_tree)
+                .unwrap_or_default()
+        })
+    };
+
+    let described = tree(&mut context);
+    assert!(
+        described.contains("h_resizable \"workspace\""),
+        "the axis is the constructor, so the dump has to name which one: {described}"
+    );
+    assert!(
+        described.contains("resizable_panel :panel_size[Number(220.0)]"),
+        "a panel's initial size is the panel's, not a width and a height: {described}"
+    );
+    assert!(
+        described.contains(":size_range[Number(120.0), Number(320.0)]"),
+        "both ends of the range must survive into the description: {described}"
+    );
+    assert!(
+        described.contains(":panel_visible[Bool(true)]"),
+        "visibility is a panel builder, so it must be described: {described}"
+    );
+
+    // The boundary sits at 220; the handle straddles it, four pixels either
+    // side. Each event is followed by a frame, because the group reads the
+    // panel being dragged out of the state the previous frame left behind.
+    context.simulate_mouse_down(
+        point(px(218.), px(100.)),
+        gpui::MouseButton::Left,
+        Modifiers::default(),
+    );
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    context.simulate_mouse_move(
+        point(px(240.), px(100.)),
+        Some(gpui::MouseButton::Left),
+        Modifiers::default(),
+    );
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    context.simulate_mouse_move(
+        point(px(300.), px(100.)),
+        Some(gpui::MouseButton::Left),
+        Modifiers::default(),
+    );
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    context.simulate_mouse_up(
+        point(px(300.), px(100.)),
+        gpui::MouseButton::Left,
+        Modifiers::default(),
+    );
+    context.update(|window, cx| window.draw(cx).clear(cx));
+
+    let dragged = tree(&mut context);
+    assert!(
+        dragged.contains("text \"Editor 300/100\""),
+        "the drag must reach the script as a plain array of pixel sizes: {dragged}"
+    );
+}
+
+/// A `resizable_panel()` renders only inside a group — base's panel reads its
+/// size out of the group's state and panics without one — so putting it
+/// anywhere else is refused where the script can be pointed at the line that
+/// did it.
+#[gpui::test]
+fn a_resizable_panel_outside_a_group_is_refused_at_the_call_site(cx: &mut TestAppContext) {
+    cx.update(|cx| crate::init(cx));
+
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View, div, resizable_panel, text } from "gpui";
+
+export default class Loose extends View {
+  render() {
+    return div().child(resizable_panel().child(text("Nowhere")));
+  }
+}
+"#;
+    let view_type = runtime.load_source("loose.js", source).expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .expect("instantiate");
+
+    let error = context
+        .update(|window, cx| runtime.render_to_spec(&object, None, window, cx))
+        .expect_err("a panel outside a group must fail at the script call site");
+
+    assert!(
+        error.to_string().contains("h_resizable"),
+        "the error must name where a panel belongs: {error}"
+    );
 }

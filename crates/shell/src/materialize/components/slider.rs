@@ -49,9 +49,9 @@
 //! `update_value_by_position` divides by the recorded bounds. With no indicator
 //! in the tree those bounds stay `Bounds::default()`, the division is by zero,
 //! and the value becomes `NaN` — a slider that cannot be moved, reports no
-//! error, and looks exactly like one that can. The description is still at hand
-//! while the root is materialized, so the tree is checked for the indicator
-//! that would record them and the omission is reported once, here.
+//! error, and looks exactly like one that can. So [`warn_without_indicator`]
+//! walks the slider's subtree while the description is still addressable, and
+//! says so once.
 
 use std::rc::Rc;
 
@@ -192,7 +192,12 @@ pub(in crate::materialize) fn slider_indicator(
     if let Some(fill) = behavior.range_style.clone() {
         let mut element = div();
         element.style().refine(&fill);
-        span(element.style(), axis(&behavior), percentage.start, percentage.end);
+        span(
+            element.style(),
+            axis(&behavior),
+            percentage.start,
+            percentage.end,
+        );
         all.push(element.into_any_element());
     }
     all.extend(children);

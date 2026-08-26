@@ -147,6 +147,7 @@ const MODULE_EXPORTS: &[&str] = &[
     "Progress",
     "ProgressTrack",
     "ProgressIndicator",
+    "fps_monitor",
     "Radio",
     "Toggle",
     "RadioGroup",
@@ -158,6 +159,9 @@ const MODULE_EXPORTS: &[&str] = &[
     "TableHead",
     "TableCell",
     "TableCaption",
+    "h_resizable",
+    "v_resizable",
+    "resizable_panel",
     "Collapsible",
     "Popover",
     "HoverCard",
@@ -168,8 +172,14 @@ const MODULE_EXPORTS: &[&str] = &[
     "Scrollbar",
     "Input",
     "InputState",
+    "NumberInput",
     "Textarea",
     "TextareaState",
+    "SliderState",
+    "Slider",
+    "SliderTrack",
+    "SliderIndicator",
+    "SliderThumb",
     "FocusHandle",
     // System capabilities (`host`, `sandbox`).
     "store",
@@ -796,6 +806,119 @@ impl ShellRuntime {
         scheduler::drain_jobs(&self.js_runtime);
     }
 
+    /// Delivers a slider event to a long-lived script subscription.
+    ///
+    /// The value is the whole payload rather than a field of an object,
+    /// because the value is the whole of what a slider event carries: one
+    /// number, or the pair a two-thumbed slider moves between.
+    pub(super) fn dispatch_slider_event(
+        self: &Rc<Self>,
+        handler: &Persistent<Function<'static>>,
+        owner: &InputCallbackOwner,
+        value: gpui_base::slider::SliderValue,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        use gpui_base::slider::SliderValue;
+        use rquickjs::IntoJs as _;
+
+        // Captured when the script subscribed, for the same reason an input's
+        // are: the state outlives any one view, so the grant a handler runs
+        // under has to be the one it was registered with.
+        if owner
+            .application
+            .as_ref()
+            .is_some_and(|application| !application.is_active())
+        {
+            tracing::debug!("slider callback belongs to a retired application");
+            return;
+        }
+        let view = owner.view.as_ref().and_then(WeakEntity::upgrade);
+        let (_guard, generation) = scope::enter_with_application(
+            self,
+            window,
+            cx,
+            ScopePhase::Event,
+            view,
+            owner.policy.clone(),
+            owner.application.clone(),
+        );
+
+        let result = self.with_js(|ctx| {
+            let handler = handler.clone().restore(ctx)?;
+            let payload = match value {
+                SliderValue::Single(value) => f64::from(value).into_js(ctx)?,
+                SliderValue::Range(start, end) => {
+                    vec![f64::from(start), f64::from(end)].into_js(ctx)?
+                }
+            };
+            handler.call::<_, ()>((payload, context_object(ctx, generation)?))
+        });
+
+        if let Err(error) = result {
+            tracing::error!("error in slider handler: {error}");
+        }
+        scheduler::drain_jobs(&self.js_runtime);
+    }
+
+    /// Reports the panel sizes of a resizable group after a drag, in pixels and
+    /// in the group's child order.
+    ///
+    /// Sizes are not state the script has to keep: base files them in window
+    /// element state under the group's own id, so a drag survives every repaint
+    /// that never enters the VM. This is a notification — persist it, mirror it
+    /// into a title bar — and a group that ignores it still resizes.
+    pub(crate) fn dispatch_resize(
+        self: &Rc<Self>,
+        id: CallbackId,
+        sizes: Vec<f32>,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        let Some(entry) = self.callbacks.borrow().get(id) else {
+            tracing::debug!("resize callback {id} belongs to a superseded render pass");
+            return;
+        };
+
+        if entry
+            .application
+            .as_ref()
+            .is_some_and(|application| !application.is_active())
+        {
+            tracing::debug!("resize callback {id} belongs to a retired application");
+            return;
+        }
+
+        let policy = entry
+            .view
+            .as_ref()
+            .map(|view| view.read(cx).policy())
+            .unwrap_or_else(crate::policy::default);
+        let (_guard, generation) = scope::enter_with_application(
+            self,
+            window,
+            cx,
+            ScopePhase::Event,
+            entry.view.clone(),
+            policy,
+            entry.application.clone(),
+        );
+
+        let result = self.with_js(|ctx| {
+            let handler = entry.value.clone().restore(ctx)?;
+            let payload = rquickjs::Array::new(ctx.clone())?;
+            for (index, size) in sizes.iter().enumerate() {
+                payload.set(index, *size)?;
+            }
+            handler.call::<_, ()>((payload, context_object(ctx, generation)?))
+        });
+
+        if let Err(error) = result {
+            tracing::error!("error in resize handler: {error}");
+        }
+        scheduler::drain_jobs(&self.js_runtime);
+    }
+
     /// Controlled-value handlers report intent; the script stores the value and
     /// notifies. The host never mutates script state on its behalf.
     pub(crate) fn dispatch_change(
@@ -841,6 +964,60 @@ impl ShellRuntime {
 
         if let Err(error) = result {
             tracing::error!("error in change handler: {error}");
+        }
+        scheduler::drain_jobs(&self.js_runtime);
+    }
+
+    /// Reports which way a `NumberInput` stepped, by the two names base's
+    /// `StepAction` carries.
+    ///
+    /// A string rather than a boolean, and not because two directions could not
+    /// be one: `dispatch_change`'s `true` means "checked", and a handler reading
+    /// `true` as "up" would be reading the wrong word. The script gets
+    /// `"increment"` or `"decrement"`, which is what base calls them.
+    pub(crate) fn dispatch_step(
+        self: &Rc<Self>,
+        id: CallbackId,
+        action: &'static str,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        let Some(entry) = self.callbacks.borrow().get(id) else {
+            tracing::debug!("step callback {id} belongs to a superseded render pass");
+            return;
+        };
+
+        if entry
+            .application
+            .as_ref()
+            .is_some_and(|application| !application.is_active())
+        {
+            tracing::debug!("step callback {id} belongs to a retired application");
+            return;
+        }
+
+        let policy = entry
+            .view
+            .as_ref()
+            .map(|view| view.read(cx).policy())
+            .unwrap_or_else(crate::policy::default);
+        let (_guard, generation) = scope::enter_with_application(
+            self,
+            window,
+            cx,
+            ScopePhase::Event,
+            entry.view.clone(),
+            policy,
+            entry.application.clone(),
+        );
+
+        let result = self.with_js(|ctx| {
+            let handler = entry.value.clone().restore(ctx)?;
+            handler.call::<_, ()>((action, context_object(ctx, generation)?))
+        });
+
+        if let Err(error) = result {
+            tracing::error!("error in step handler: {error}");
         }
         scheduler::drain_jobs(&self.js_runtime);
     }
@@ -954,10 +1131,17 @@ impl ShellRuntime {
             "hover" => "hover",
             "active" => "active",
             "focus" => "focus",
+            // Not a runtime state, but the same mechanism: a detached node
+            // collecting ordinary style methods. A `SliderIndicator` draws its
+            // filled part from this one.
+            "range_style" => "range_style",
             other => {
                 return Err(Exception::throw_type(
                     ctx,
-                    &format!("unknown state style `{other}`; expected hover, active or focus"),
+                    &format!(
+                        "unknown state style `{other}`; expected hover, active, focus or \
+                         range_style"
+                    ),
                 ));
             }
         };
@@ -981,6 +1165,13 @@ impl ShellRuntime {
         let interned = match name {
             "content" => "content",
             "trigger" => "trigger",
+            // A number input's three. Unlike the two above, none of them is
+            // optional in practice: base's step buttons are unstyled, so an
+            // undecorated one is invisible and unhittable, and the frame has no
+            // editor of its own.
+            "input" => "input",
+            "decrement_button" => "decrement_button",
+            "increment_button" => "increment_button",
             other => {
                 return Err(Exception::throw_type(
                     ctx,
@@ -1293,6 +1484,12 @@ globalThis.__gpui = (() => {
   methods.content = slot("content");
   methods.trigger = slot("trigger");
 
+  // A number input's three. Every element carries them, as it carries `content`
+  // and `trigger`, because one prototype is shared by all of them.
+  methods.input = slot("input");
+  methods.decrement_button = slot("decrement_button");
+  methods.increment_button = slot("increment_button");
+
   // Focus is held by handle, so the element records the handle rather than the
   // wrapper object around it — the same unwrapping `Input.new(state)` does.
   methods.track_focus = function (handle) {
@@ -1329,6 +1526,10 @@ globalThis.__gpui = (() => {
   methods.hover = state("hover");
   methods.active = state("active");
   methods.focus = state("focus");
+  // Not a state: the filled part of a slider, declared the same way because
+  // it is the same thing — a detached element collecting styles. The shell
+  // positions the box; this says what it looks like.
+  methods.range_style = state("range_style");
 
   const finiteNonNegative = (value, name) => {
     if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
@@ -1484,6 +1685,38 @@ globalThis.__gpui = (() => {
   methods.open_delay = delay("open_delay");
   methods.close_delay = delay("close_delay");
 
+  // Two arguments rather than a range literal, which JavaScript has no spelling
+  // for. The floor is required — a panel always has one, and base's own is
+  // 100px — while the ceiling is optional, because most panels have none.
+  methods.size_range = function (min, max) {
+    const args = [finiteNonNegative(min, "size_range min")];
+    if (max !== undefined && max !== null) {
+      args.push(finiteNonNegative(max, "size_range max"));
+    }
+    __apply(this.__id, "size_range", args);
+    return this;
+  };
+
+  // `size` and `visible` on a resizable panel are base's own inherent builders
+  // — the initial size along the group's axis, and whether the panel is drawn —
+  // and in Rust each shadows the `Styled` method of the same name for that one
+  // type. Own properties on the panel object shadow the shared prototype by the
+  // same mechanism, so a script writes what the Rust writes and `.size(200)`
+  // still means width-and-height, `.visible()` still means `visibility`,
+  // everywhere else.
+  const resizablePanel = () => {
+    const object = element(__resizable_panel());
+    object.size = function (pixels) {
+      __apply(this.__id, "panel_size", [finiteNonNegative(pixels, "resizable_panel size")]);
+      return this;
+    };
+    object.visible = function (value) {
+      __apply(this.__id, "panel_visible", [Boolean(value)]);
+      return this;
+    };
+    return object;
+  };
+
   const coordinate = (value, name) => {
     if (typeof value === "number" && Number.isFinite(value)) return value;
     if (typeof value === "string" && /^-?(?:\d+(?:\.\d*)?|\.\d+)%$/.test(value)) return value;
@@ -1591,6 +1824,14 @@ globalThis.__gpui = (() => {
     value: () => __input_value(handle),
     set_value: (next) => __input_set_value(handle, String(next ?? "")),
     on: (event, handler) => __input_on(handle, String(event), handler),
+    // What makes a text state a number state. There is no `NumberInputState`:
+    // the step, the bounds and the mask are fields on this one, so a plain
+    // input becomes a numeric one by being told about them.
+    set_step: (step) => __input_set_step(handle, step === null || step === undefined ? null : Number(step)),
+    set_min: (min) => __input_set_min(handle, min === null || min === undefined ? null : Number(min)),
+    set_max: (max) => __input_set_max(handle, max === null || max === undefined ? null : Number(max)),
+    set_masked: (masked) => __input_set_masked(handle, Boolean(masked)),
+    set_loading: (loading) => __input_set_loading(handle, Boolean(loading)),
     release: () => __input_release(handle),
   });
 
@@ -1610,6 +1851,34 @@ globalThis.__gpui = (() => {
       ),
     set_soft_wrap: (wrap) => __textarea_set_soft_wrap(handle, Boolean(wrap)),
     release: () => __textarea_release(handle),
+  });
+
+  // A slider's value crosses as an array either way, because a bare number
+  // cannot say whether the script meant one thumb or two.
+  const sliderValue = (values) => (values.length === 1 ? values[0] : values);
+  const sliderValues = (value, api) => {
+    const finite = (each) => typeof each === "number" && Number.isFinite(each);
+    if (Array.isArray(value)) {
+      if (value.length !== 2 || !value.every(finite)) {
+        throw new TypeError(api + " expects a finite number, or a pair [start, end] of them");
+      }
+      return [value[0], value[1]];
+    }
+    if (!finite(value)) {
+      throw new TypeError(api + " expects a finite number, or a pair [start, end] of them");
+    }
+    return [value];
+  };
+
+  const sliderState = (handle) => ({
+    __handle: handle,
+    value: () => sliderValue(__slider_value(handle)),
+    set_value: (next) => __slider_set_value(handle, sliderValues(next, "set_value(value)")),
+    min_value: () => __slider_bounds(handle)[0],
+    max_value: () => __slider_bounds(handle)[1],
+    step_value: () => __slider_bounds(handle)[2],
+    on: (event, handler) => __slider_on(handle, String(event), handler),
+    release: () => __slider_release(handle),
   });
 
   const focusHandle = (handle) => ({
@@ -1751,6 +2020,7 @@ globalThis.__gpui = (() => {
     Progress: { new: (id) => element(__progress(String(id))) },
     ProgressTrack: { new: () => element(__progress_track()) },
     ProgressIndicator: { new: () => element(__progress_indicator()) },
+    fps_monitor: () => element(__fps_monitor()),
     Radio: { new: (id) => element(__radio(String(id))) },
     Toggle: { new: (id) => element(__toggle(String(id))) },
     RadioGroup: { new: (id) => element(__radio_group(String(id))) },
@@ -1759,6 +2029,11 @@ globalThis.__gpui = (() => {
     TableHeader: { new: (id) => element(__table_header(String(id))) },
     TableBody: { new: (id) => element(__table_body(String(id))) },
     TableCaption: { new: (id) => element(__table_caption(String(id))) },
+    // Free functions, not `Type.new(...)`, because that is what base exports:
+    // the group has no type a script ever names.
+    h_resizable: (id) => element(__h_resizable(String(id))),
+    v_resizable: (id) => element(__v_resizable(String(id))),
+    resizable_panel: resizablePanel,
     TableRow: {
       new: (id, row_index) =>
         element(__table_row(String(id), oneBased(row_index, "TableRow.new row index"))),
@@ -1812,6 +2087,10 @@ globalThis.__gpui = (() => {
         inputState(__input_state_new(options?.placeholder ?? null, options?.value ?? null)),
     },
     Input: { new: (state) => element(__input_element(state.__handle)) },
+
+    NumberInput: {
+      new: (state) => element(__number_input_element(state.__handle)),
+    },
     TextareaState: {
       new: (options) =>
         textareaState(
@@ -1825,6 +2104,44 @@ globalThis.__gpui = (() => {
         ),
     },
     Textarea: { new: (state) => element(__textarea_element(state.__handle)) },
+    SliderState: {
+      new: (options) => {
+        const settings = options ?? {};
+        const min = settings.min ?? 0;
+        const max = settings.max ?? 100;
+        const step = settings.step ?? 1;
+        const scale = String(settings.scale ?? "linear");
+        for (const [name, value] of [["min", min], ["max", max], ["step", step]]) {
+          if (typeof value !== "number" || !Number.isFinite(value)) {
+            throw new TypeError("SliderState.new " + name + " must be a finite number");
+          }
+        }
+        if (max <= min) throw new TypeError("SliderState.new needs a max greater than its min");
+        if (step <= 0) throw new TypeError("SliderState.new step must be greater than 0");
+        if (!["linear", "logarithmic"].includes(scale)) {
+          throw new TypeError("SliderState.new scale must be linear or logarithmic");
+        }
+        // A logarithmic scale maps through log(value / min), which has no
+        // answer at or below zero. Base asserts on it, and an assertion in the
+        // host is a lost application rather than a reported mistake.
+        if (scale === "logarithmic" && min <= 0) {
+          throw new TypeError("SliderState.new with a logarithmic scale needs a min greater than 0");
+        }
+        return sliderState(
+          __slider_state_new(
+            min,
+            max,
+            step,
+            scale,
+            sliderValues(settings.value ?? min, "SliderState.new value"),
+          ),
+        );
+      },
+    },
+    Slider: { new: (state) => element(__slider_element(state.__handle)) },
+    SliderTrack: { new: (state) => element(__slider_track_element(state.__handle)) },
+    SliderIndicator: { new: (state) => element(__slider_indicator_element(state.__handle)) },
+    SliderThumb: { new: (state) => element(__slider_thumb_element(state.__handle)) },
     FocusHandle: { new: () => focusHandle(__focus_handle_new()) },
   };
 })();
@@ -1849,6 +2166,7 @@ impl ShellRuntime {
                 "on_open_change",
                 "on_confirm",
                 "on_dismiss",
+                "on_step",
                 "disabled",
                 "selected",
                 "checked",
@@ -1867,8 +2185,11 @@ impl ShellRuntime {
                 "overflow_x_scrollbar",
                 "overflow_y_scrollbar",
                 "viewport_from_layout",
+                "controls_right",
+                "on_resize",
                 "set_position",
                 "pressed",
+                "start",
                 "value",
                 "indeterminate",
                 "row_count",
@@ -1996,6 +2317,9 @@ impl ShellRuntime {
             constructor(&globals, "__progress_indicator", runtime.clone(), || {
                 Component::ProgressIndicator
             })?;
+            constructor(&globals, "__fps_monitor", runtime.clone(), || {
+                Component::FpsMonitor
+            })?;
             text_constructor(&globals, "__radio", runtime.clone(), Component::Radio)?;
             text_constructor(&globals, "__toggle", runtime.clone(), Component::Toggle)?;
             text_constructor(
@@ -2047,6 +2371,17 @@ impl ShellRuntime {
                 runtime.clone(),
                 Component::TableCell,
             )?;
+            // The axis comes from the constructor, so each one is a closure
+            // over the variant rather than a second builder method.
+            text_constructor(&globals, "__h_resizable", runtime.clone(), |id| {
+                Component::Resizable(id, gpui::Axis::Horizontal)
+            })?;
+            text_constructor(&globals, "__v_resizable", runtime.clone(), |id| {
+                Component::Resizable(id, gpui::Axis::Vertical)
+            })?;
+            constructor(&globals, "__resizable_panel", runtime.clone(), || {
+                Component::ResizablePanel
+            })?;
             constructor(&globals, "__collapsible", runtime.clone(), || {
                 Component::Collapsible
             })?;
@@ -2145,10 +2480,33 @@ impl ShellRuntime {
                     .ok_or_else(|| {
                         Exception::throw_type(ctx, "child(element) expects an element")
                     })? as SpecId;
+                // A `resizable_panel()` is not an element anywhere else:
+                // base's panel reads its size out of the group's state and
+                // panics outright without one. Refused here, where the script
+                // can be pointed at the line that did it, rather than at paint
+                // time.
+                let orphan = {
+                    let arena = self.arena.borrow();
+                    let component = |node| {
+                        arena
+                            .node(node)
+                            .and_then(crate::spec::SpecNode::component)
+                            .cloned()
+                    };
+                    matches!(component(child), Some(Component::ResizablePanel))
+                        && !matches!(component(id), Some(Component::Resizable(..)))
+                };
+                if orphan {
+                    return Err(Exception::throw_type(
+                        ctx,
+                        "resizable_panel() belongs to an h_resizable() or v_resizable(): its size \
+                         and its drag handle are the group's. Use a div() here instead",
+                    ));
+                }
                 let attached = self.arena.borrow_mut().attach(id, child);
                 self.push_op_checked(ctx, attached)
             }
-            "content" | "trigger" => {
+            "content" | "trigger" | "input" | "decrement_button" | "increment_button" => {
                 let element = args
                     .first_value()
                     .and_then(|value| value.as_f32().ok())
@@ -2157,7 +2515,8 @@ impl ShellRuntime {
                     })? as SpecId;
                 self.fill_slot(ctx, id, method, element)
             }
-            "on_click" | "on_change" | "on_open_change" | "on_confirm" | "on_dismiss" => {
+            "on_click" | "on_resize" | "on_change" | "on_open_change" | "on_confirm"
+            | "on_dismiss" | "on_step" => {
                 let saved = args.first_handler().ok_or_else(|| {
                     Exception::throw_type(ctx, &format!("{method}(handler) expects a function"))
                 })?;
@@ -2168,9 +2527,11 @@ impl ShellRuntime {
                 });
                 let name = match method {
                     "on_click" => "on_click",
+                    "on_resize" => "on_resize",
                     "on_change" => "on_change",
                     "on_confirm" => "on_confirm",
                     "on_dismiss" => "on_dismiss",
+                    "on_step" => "on_step",
                     _ => "on_open_change",
                 };
                 self.push_op_checked(ctx, self.push_op(id, SpecOp::Callback(name, callback)))
@@ -2197,8 +2558,13 @@ impl ShellRuntime {
             | "mode"
             | "scroll_size"
             | "viewport_from_layout"
+            | "controls_right"
+            | "panel_visible"
+            | "panel_size"
+            | "size_range"
             | "set_position"
             | "pressed"
+            | "start"
             | "value"
             | "indeterminate"
             | "axis"
@@ -2235,8 +2601,13 @@ impl ShellRuntime {
                     "mode" => "mode",
                     "scroll_size" => "scroll_size",
                     "viewport_from_layout" => "viewport_from_layout",
+                    "controls_right" => "controls_right",
+                    "panel_visible" => "panel_visible",
+                    "panel_size" => "panel_size",
+                    "size_range" => "size_range",
                     "set_position" => "set_position",
                     "pressed" => "pressed",
+                    "start" => "start",
                     "value" => "value",
                     "indeterminate" => "indeterminate",
                     "axis" => "axis",

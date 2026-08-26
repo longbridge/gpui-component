@@ -132,7 +132,7 @@ camelCase one is script code.
 One import provides the whole namespace:
 
 ```js
-import { View, div, h_flex, v_flex, text, svg, image, Button, Link, Checkbox, Switch } from "gpui";
+import { View, div, h_flex, v_flex, text, svg, image, fps_monitor, Button, Link, Checkbox, Switch } from "gpui";
 ```
 
 | API | Form | Description |
@@ -141,6 +141,7 @@ import { View, div, h_flex, v_flex, text, svg, image, Button, Link, Checkbox, Sw
 | `h_flex()` / `v_flex()` | function | A row / column flex element |
 | `text(value)` | function | A text element |
 | `svg(path)` / `image(path)` | functions | A theme-tinted vector icon / full-colour application asset |
+| `fps_monitor()` | function | The native `gpui-fps` performance HUD; place it in a `relative()` parent |
 | `Button.new(id)` | type | A base `Button`: activation, focus, disabled and selected state, no styling |
 | `Link.new(id)` | type | A base external link; pair it with `.href("https://…")` |
 | `Checkbox.new(id)` / `Switch.new(id)` | type | A base controlled toggle, no styling |
