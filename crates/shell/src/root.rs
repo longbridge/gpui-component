@@ -15,20 +15,20 @@
 use std::time::Duration;
 
 use gpui::{
-    Anchor, AnyView, App, ClickEvent, Context, FocusHandle, Global, Hsla, InteractiveElement as _,
-    IntoElement, KeyBinding, ParentElement as _, Render, SharedString,
+    Anchor, AnyView, App, ClickEvent, ClipboardItem, Context, FocusHandle, Global, Hsla,
+    InteractiveElement as _, IntoElement, KeyBinding, ParentElement as _, Render, SharedString,
     StatefulInteractiveElement as _, Styled as _, WeakFocusHandle, Window, actions, deferred, div,
     hsla, prelude::FluentBuilder as _, px,
 };
 use gpui_base::{
-    ColorTokens, Dialog, POPUP_PRIORITY, RadiusTokens, Sheet, SpacingTokens, StyledExt as _, Theme,
-    Toast, ToastManager, ToastMotion, ToastOptions, ToastStack, ToastStackState, active_focus_trap,
-    v_flex,
+    ColorTokens, Dialog, POPUP_PRIORITY, RadiusTokens, Sheet, SpacingTokens, StyledExt as _,
+    TextSelection, TextSelectionLayer, Theme, Toast, ToastManager, ToastMotion, ToastOptions,
+    ToastStack, ToastStackState, active_focus_trap, v_flex,
 };
 
 use crate::scope;
 
-actions!(shell_root, [Tab, TabPrev]);
+actions!(shell_root, [Tab, TabPrev, Copy]);
 
 /// The key context the root installs. Overlay hosts add their own contexts
 /// (`Dialog`, `Sheet`) below this one, so a binding declared here is reachable
@@ -627,11 +627,20 @@ impl Render for ShellRoot {
             .key_context(CONTEXT)
             .on_action(cx.listener(Self::on_action_tab))
             .on_action(cx.listener(Self::on_action_tab_prev))
+            .on_action(cx.listener(|_, _: &Copy, window, cx| {
+                let text = TextSelection::selected_text(window, cx).trim().to_owned();
+                if text.is_empty() {
+                    cx.propagate();
+                } else {
+                    cx.write_to_clipboard(ClipboardItem::new_string(text));
+                }
+            }))
             .relative()
             .size_full()
             .bg(colors.background)
             .text_color(colors.foreground)
             // Painted back to front; see the stacking order on `ShellRoot`.
+            .child(TextSelectionLayer)
             .child(self.content.clone())
             .children(self.sheet_layer(&colors, &spacing, cx))
             .children(self.dialog_layer(&colors, &radius, &spacing, cx))
@@ -835,7 +844,7 @@ impl ToastRequest {
     }
 }
 
-/// Binds Tab and Shift-Tab once per `App`.
+/// Binds root navigation and selected-text copy once per `App`.
 fn install_key_bindings(cx: &mut App) {
     if cx.has_global::<KeyBindingsInstalled>() {
         return;
@@ -843,6 +852,10 @@ fn install_key_bindings(cx: &mut App) {
     cx.bind_keys([
         KeyBinding::new("tab", Tab, Some(CONTEXT)),
         KeyBinding::new("shift-tab", TabPrev, Some(CONTEXT)),
+        #[cfg(target_os = "macos")]
+        KeyBinding::new("cmd-c", Copy, Some(CONTEXT)),
+        #[cfg(not(target_os = "macos"))]
+        KeyBinding::new("ctrl-c", Copy, Some(CONTEXT)),
     ]);
     cx.set_global(KeyBindingsInstalled);
 }

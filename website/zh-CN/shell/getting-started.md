@@ -118,7 +118,7 @@ cargo run -p gpui-shell -- examples/js_todolist
 
 窗口里会出现一个可用的 todo list：带留存状态的输入框、受控 checkbox、一个确认 dialog、一个 toast、从应用自身目录加载的图标，以及在未获授权时退化为内存存储的持久化。它的目的是把整个运行时都跑一遍，而不是做到最小——哪里坏了，通常先在这里露出来。
 
-参数是一个**目录**，不是文件。运行时解析该目录、读取其中的 `main.js`、取出该模块 default 导出的类、构造一个实例，并把它挂载为窗口的根视图。如果目录中存在 `gpui-shell.json`，二进制会验证它并采用其中声明的 capabilities；旧名字 `plugin.json` 会被忽略。
+参数是一个**目录**，不是文件。运行时解析该目录，默认读取其中的 `main.js`，取出该模块 default 导出的类、构造一个实例，并把它挂载为窗口的根视图。如果目录中存在 `gpui-shell.json`，二进制会先验证它，并采用其中声明的 `entry` 与 capabilities。
 
 ## 不运行也能检查脚本
 

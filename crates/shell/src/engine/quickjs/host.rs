@@ -52,7 +52,10 @@ use crate::{
     store::{Store, persist},
 };
 
-use super::scheduler;
+use super::{
+    native::{MAX_BRIDGE_ARRAY_ITEMS, bridge_array_len},
+    scheduler,
+};
 
 /// The grant the code now running was given.
 ///
@@ -620,9 +623,18 @@ fn to_json(ctx: &Ctx<'_>, value: &Value<'_>, depth: usize) -> JsResult<Json> {
         return Ok(Json::String(text.to_string()?));
     }
     if let Some(array) = value.as_array() {
-        let mut items = Vec::with_capacity(array.len());
-        for entry in array.iter::<Value>() {
-            items.push(to_json(ctx, &entry?, depth + 1)?);
+        let length = bridge_array_len(ctx, &array)?;
+        let mut items = Vec::new();
+        items.try_reserve_exact(length).map_err(|_| {
+            Exception::throw_range(
+                ctx,
+                &format!(
+                    "array could not be reserved within the {MAX_BRIDGE_ARRAY_ITEMS}-item bridge limit"
+                ),
+            )
+        })?;
+        for index in 0..length {
+            items.push(to_json(ctx, &array.get(index)?, depth + 1)?);
         }
         return Ok(Json::Array(items));
     }
@@ -1013,6 +1025,16 @@ mod tests {
         with_host(|ctx| {
             ctx.eval::<(), _>("gpui.log.info('loaded', 3, { ok: true })")
                 .expect("logging is always available");
+        });
+    }
+
+    #[test]
+    fn logging_a_sparse_huge_array_is_safely_unprintable() {
+        with_host(|ctx| {
+            ctx.eval::<(), _>(
+                "const values = []; values.length = 0xffffffff; gpui.log.info(values)",
+            )
+            .expect("logging an oversized value must not panic or require a capability");
         });
     }
 

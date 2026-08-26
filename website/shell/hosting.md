@@ -96,7 +96,7 @@ gpui_shell::set_native_modules(modules);
 
 All three default to nothing: no file access, no storage location, no native modules. See [Capabilities](./capabilities.md) and [Native Modules](./native.md).
 
-The standalone binary also checks `<root>/gpui-shell.json`. When present and valid, its five manifest fields supply application identity, entry point metadata, and capability requests; `plugin.json` has no authority. Embedders may instead construct a `Policy` directly when each loaded application needs a distinct grant and native-module registry.
+The standalone binary also checks `<root>/gpui-shell.json`. Its recognized fields supply application identity, optional application/Shell version metadata, the entry point, and capability requests; only `id`, `name`, and `entry` are required. Embedders may instead construct a `Policy` directly when each loaded application needs a distinct grant and native-module registry.
 
 ## Watching what it costs
 

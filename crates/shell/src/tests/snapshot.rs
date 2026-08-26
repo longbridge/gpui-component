@@ -73,6 +73,25 @@ export default class AsyncFailure extends View {
 }
 "#;
 
+const INPUT_SUBSCRIPTION: &str = r#"
+import { View, v_flex, text, InputState } from "gpui";
+
+export default class InputSubscription extends View {
+  init() {
+    this.count = 0;
+    this.field = InputState.new({});
+    this.field.on("submit", (_event, cx) => {
+      this.count += 1;
+      cx.notify();
+    });
+  }
+
+  render() {
+    return v_flex().child(text(`submits: ${this.count}`));
+  }
+}
+"#;
+
 #[gpui::test]
 fn repeated_gpui_renders_do_not_re_enter_the_script(cx: &mut TestAppContext) {
     let (runtime, mut context, view) = script_view(cx, TOGGLE);
@@ -212,6 +231,47 @@ fn a_script_notify_causes_exactly_one_rebuild(cx: &mut TestAppContext) {
         2,
         "and the frame after that must be clean again"
     );
+}
+
+#[gpui::test]
+fn notify_from_an_input_subscription_rebuilds_its_own_view(cx: &mut TestAppContext) {
+    cx.update(crate::init);
+    let runtime = ShellRuntime::new().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let view_type = runtime
+        .load_source("input-subscription.js", INPUT_SUBSCRIPTION)
+        .expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let view = context
+        .update(|window, cx| runtime.instantiate_view(&view_type, window, cx))
+        .expect("instantiate under the final ScriptView owner");
+    render_once(&mut context, &view);
+
+    let input = runtime
+        .entities()
+        .first_input()
+        .expect("the script created an input state");
+    context.update(|_, cx| {
+        input.update(cx, |_, cx| {
+            cx.emit(gpui_base::input::InputEvent::PressEnter {
+                secondary: false,
+                shift: false,
+            });
+        });
+    });
+    context.run_until_parked();
+    assert!(
+        context.update(|_, cx| view.read(cx).is_dirty()),
+        "the subscription's cx.notify() did not invalidate its owner"
+    );
+    render_once(&mut context, &view);
+
+    assert!(
+        snapshot_text(&mut context, &view).contains("submits: 1"),
+        "cx.notify() from a retained input subscription must invalidate its owner"
+    );
+    assert_eq!(runtime.metrics().read().script_renders(), 2);
 }
 
 #[gpui::test]

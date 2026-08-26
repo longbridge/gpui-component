@@ -305,7 +305,17 @@ fn run(arguments: Arguments) {
             // A view's `init` is where it creates the state it keeps across frames,
             // and creating an entity needs a `Window`, so instantiation happens
             // inside the window builder and hands the result back out here.
-            grant_local_access(&root);
+            let manifest = read_local_manifest(&root);
+            let entry = manifest
+                .as_ref()
+                .ok()
+                .and_then(Option::as_ref)
+                .map(|manifest| manifest.entry())
+                .unwrap_or(ENTRY)
+                .to_owned();
+            if let Ok(manifest) = &manifest {
+                grant_local_access(&root, manifest.as_ref());
+            }
 
             // The declarations describe the runtime that is about to run this
             // script, which is the only version worth editing against. Doing it
@@ -318,10 +328,17 @@ fn run(arguments: Arguments) {
             // directory that refuses the write is logged rather than fatal.
             gpui_shell::typings::refresh_tree(&root);
 
-            let module = runtime.load_app(&root, ENTRY).map_err(|error| {
-                eprintln!("{error}");
-                error.to_string()
-            });
+            let module = manifest
+                .map_err(|error| {
+                    eprintln!("{error}");
+                    error
+                })
+                .and_then(|_| {
+                    runtime.load_app(&root, &entry).map_err(|error| {
+                        eprintln!("{error}");
+                        error.to_string()
+                    })
+                });
 
             let built: Rc<RefCell<Option<Entity<ScriptView>>>> = Rc::new(RefCell::new(None));
             let sink = built.clone();
@@ -353,13 +370,13 @@ fn run(arguments: Arguments) {
 
             if arguments.is_watching() {
                 match loaded {
-                    Ok(view) => watch_sources(runtime, view, window, root, cx),
+                    Ok(view) => watch_sources(runtime, view, window, root, entry, cx),
                     // A reload replaces the object inside a live `ScriptView`, and a
                     // failed first load never produced one. Saying so is better than
                     // a `--watch` that looks armed and never fires.
                     Err(()) => eprintln!(
                         "--watch is inactive: the application did not load, so there is \
-                     no view to reload into. Fix {ENTRY} and start gpui-shell again."
+                        no view to reload into. Fix the declared entry and start gpui-shell again."
                     ),
                 }
             }
@@ -413,7 +430,20 @@ fn check(arguments: CheckArguments) -> ! {
                 }
             };
 
-            grant_local_access(&root);
+            let manifest = match read_local_manifest(&root) {
+                Ok(manifest) => manifest,
+                Err(error) => {
+                    sink.borrow_mut().fail(error);
+                    cx.quit();
+                    return;
+                }
+            };
+            let entry = manifest
+                .as_ref()
+                .map(|manifest| manifest.entry())
+                .unwrap_or(ENTRY)
+                .to_owned();
+            grant_local_access(&root, manifest.as_ref());
 
             // A check is the closest thing this runtime has to a compiler, so it
             // leaves the editor correct on its way past: whatever it reports, the
@@ -421,7 +451,7 @@ fn check(arguments: CheckArguments) -> ! {
             // against.
             gpui_shell::typings::refresh_tree(&root);
 
-            let module = runtime.load_app(&root, ENTRY);
+            let module = runtime.load_app(&root, &entry);
             let window_sink = sink.clone();
             let print_spec = arguments.print_spec;
 
@@ -519,7 +549,7 @@ impl CheckOutcome {
 }
 
 /// Installs the storage location and the capability grant for a local run.
-fn grant_local_access(root: &Path) {
+fn grant_local_access(root: &Path, manifest: Option<&gpui_shell::plugin::PluginManifest>) {
     // A directory this command was pointed at has no name of its own, so its
     // path is its identity — which is right while someone is editing it, and is
     // exactly what an installed application should not do. An installed one
@@ -541,7 +571,7 @@ fn grant_local_access(root: &Path) {
         return;
     }
 
-    gpui_shell::set_capabilities(local_capabilities(root, &store));
+    gpui_shell::set_capabilities(local_capabilities(root, &store, manifest));
     tracing::debug!("storage: {}", store.display());
 }
 
@@ -562,6 +592,18 @@ fn install_palette(cx: &mut App) {
     }
 }
 
+/// Reads and validates inert application metadata before any entry code runs.
+fn read_local_manifest(root: &Path) -> Result<Option<gpui_shell::plugin::PluginManifest>, String> {
+    let path = root.join(gpui_shell::plugin::MANIFEST_FILE);
+    if !path.exists() {
+        return Ok(None);
+    }
+
+    gpui_shell::plugin::PluginManifest::read(root)
+        .map(Some)
+        .map_err(|error| format!("invalid {}: {error}", path.display()))
+}
+
 /// What a locally run application is allowed to do.
 ///
 /// Running a directory from the command line is an explicit act of trust, the
@@ -570,16 +612,13 @@ fn install_palette(cx: &mut App) {
 /// process execution, no clipboard, and no filesystem access outside those two
 /// directories — because an installed plugin will run through the same code
 /// path with a manifest deciding instead.
-fn local_capabilities(root: &Path, store: &Path) -> Capabilities {
-    let manifest = root.join(gpui_shell::plugin::MANIFEST_FILE);
-    let capabilities = if manifest.exists() {
-        match gpui_shell::plugin::PluginManifest::read(root) {
-            Ok(manifest) => manifest.capabilities(root, store),
-            Err(error) => {
-                tracing::error!("ignoring invalid {}: {error}", manifest.display());
-                Capabilities::new()
-            }
-        }
+fn local_capabilities(
+    root: &Path,
+    store: &Path,
+    manifest: Option<&gpui_shell::plugin::PluginManifest>,
+) -> Capabilities {
+    let capabilities = if let Some(manifest) = manifest {
+        manifest.capabilities(root, store)
     } else {
         // Preserve the original local-app experience for source directories
         // that are not plugin bundles. Their private store is the only ambient
@@ -628,10 +667,11 @@ fn watch_sources(
     view: Entity<ScriptView>,
     window: WindowHandle<ShellRoot>,
     directory: PathBuf,
+    entry: String,
     cx: &mut App,
 ) {
     let started = window.update(cx, |_, window, cx| {
-        watch::watch_view(&runtime, &view, directory, ENTRY, window, cx)
+        watch::watch_view(&runtime, &view, directory, entry, window, cx)
     });
 
     match started {
@@ -871,6 +911,7 @@ mod tests {
               "id": "com.example.market",
               "name": "Market",
               "version": "1.0.0",
+              "shell-version": "0.1.0",
               "entry": "main.js",
               "capabilities": {
                 "network": { "hosts": ["quotes.example.com"] },
@@ -881,7 +922,10 @@ mod tests {
         )
         .expect("manifest");
 
-        let capabilities = local_capabilities(&root, &data);
+        let manifest = read_local_manifest(&root)
+            .expect("valid manifest")
+            .expect("present manifest");
+        let capabilities = local_capabilities(&root, &data, Some(&manifest));
         assert!(capabilities.may_reach("quotes.example.com"));
         assert!(capabilities.has_store());
         assert!(capabilities.is_clipboard_writable());
@@ -892,32 +936,26 @@ mod tests {
     }
 
     #[test]
-    fn a_legacy_plugin_json_does_not_grant_local_application_capabilities() {
+    fn an_incompatible_local_manifest_is_refused_before_loading_script() {
         let root = std::env::temp_dir().join(format!(
-            "gpui-shell-local-manifest-legacy-{}",
+            "gpui-shell-local-manifest-version-{}",
             std::process::id()
         ));
-        let data = root.join("data");
         std::fs::create_dir_all(&root).expect("temporary app directory");
         std::fs::write(
-            root.join("plugin.json"),
+            root.join("gpui-shell.json"),
             r#"{
-              "id": "com.example.legacy",
-              "name": "Legacy",
+              "id": "com.example.future",
+              "name": "Future",
               "version": "1.0.0",
-              "entry": "main.js",
-              "capabilities": {
-                "network": { "hosts": ["quotes.example.com"] },
-                "clipboard": { "write": true }
-              }
+              "shell-version": "99.0.0",
+              "entry": "main.js"
             }"#,
         )
-        .expect("legacy manifest");
+        .expect("manifest");
 
-        let capabilities = local_capabilities(&root, &data);
-        assert!(!capabilities.may_reach("quotes.example.com"));
-        assert!(!capabilities.is_clipboard_writable());
-        assert!(capabilities.has_store());
+        let error = read_local_manifest(&root).expect_err("future shells are incompatible");
+        assert!(error.contains("requires gpui-shell 99.0.0"), "{error}");
 
         let _ = std::fs::remove_dir_all(root);
     }

@@ -7,16 +7,19 @@
 
 use std::{
     cell::RefCell,
+    ops::Range,
     path::{Path, PathBuf},
     rc::Rc,
 };
 
 use anyhow::{Result, anyhow};
 use gpui::{
-    AnyElement, App, ClipboardItem, Entity, Hsla, InteractiveElement, IntoElement, ParentElement,
-    SharedString, Styled, Window, div, px, relative, rems, rgb,
+    AnyElement, App, BorderStyle, Bounds, ClipboardItem, Corners, Edges, Element, ElementId,
+    Entity, GlobalElementId, Hitbox, Hsla, InspectorElementId, InteractiveElement, IntoElement,
+    LayoutId, PaintQuad, ParentElement, Pixels, Point, SharedString, StatefulInteractiveElement,
+    Styled, StyledText, Window, div, px, relative, rems, rgb, transparent_black,
 };
-use gpui_base::Button;
+use gpui_base::{Button, TextSelectionHandle, TextSelectionRegistration, TextSelectionRun};
 
 use crate::{spec::CallbackId, view::ScriptView};
 
@@ -463,7 +466,28 @@ pub fn error_banner(message: &str, window: &mut Window, cx: &mut App) -> AnyElem
 /// A banner has one line for the detail, so it shows the first one and the copy
 /// action carries the rest. A stack trace truncated mid-frame reads as noise.
 fn first_line(message: &str) -> String {
-    message.lines().next().unwrap_or(message).to_owned()
+    relative_error_paths(message.lines().next().unwrap_or(message))
+}
+
+/// Shortens paths owned by the process working directory while leaving every
+/// external path untouched. This is presentation only: copied diagnostics keep
+/// the original path and therefore remain unambiguous.
+fn relative_error_paths(message: &str) -> String {
+    let Ok(current_dir) = std::env::current_dir() else {
+        return message.to_owned();
+    };
+    let root = current_dir.to_string_lossy();
+    message.replace(&format!("{root}/"), "")
+}
+
+fn system_monospace_font() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "Menlo"
+    } else if cfg!(target_os = "windows") {
+        "Consolas"
+    } else {
+        "DejaVu Sans Mono"
+    }
 }
 
 /// A visible, non-fatal failure surface.
@@ -514,6 +538,13 @@ pub fn failure_surface(
         window.use_keyed_state(SharedString::from("shell-failure-copied"), cx, |_, _| false);
     let is_copied = copied.read(cx).to_owned();
     let payload = format!("{heading}\n\n{message}");
+    let displayed_message = relative_error_paths(message);
+    let selection = window.use_keyed_state(
+        SharedString::from("shell-failure-selection"),
+        cx,
+        |_, cx| TextSelectionHandle::new(displayed_message.clone(), cx),
+    );
+    let selection = selection.read(cx).clone();
 
     div()
         .size_full()
@@ -527,7 +558,7 @@ pub fn failure_surface(
                 .flex()
                 .flex_col()
                 .w_full()
-                .max_w(rems(35.))
+                .max_w(rems(42.))
                 .bg(surface)
                 .border_1()
                 .border_color(border)
@@ -536,21 +567,25 @@ pub fn failure_surface(
                     div()
                         .flex()
                         .flex_col()
-                        .gap(rems(0.75))
-                        .p(rems(1.5))
+                        .gap(rems(0.625))
+                        .p(rems(1.25))
                         .child(
                             div()
-                                .text_size(rems(1.))
+                                .text_size(rems(0.875))
                                 .line_height(relative(1.4))
                                 .text_color(foreground)
                                 .child(SharedString::from(heading.to_owned())),
                         )
                         .child(
                             div()
-                                .text_size(rems(0.8125))
-                                .line_height(relative(1.55))
+                                .id("shell-failure-detail")
+                                .max_h(rems(18.))
+                                .overflow_y_scroll()
+                                .font_family(system_monospace_font())
+                                .text_size(rems(0.75))
+                                .line_height(relative(1.5))
                                 .text_color(muted)
-                                .child(SharedString::from(message.to_owned())),
+                                .child(FailureDetailText::new(selection, displayed_message)),
                         )
                         .child(
                             div()
@@ -575,6 +610,146 @@ pub fn failure_surface(
                 ),
         )
         .into_any_element()
+}
+
+/// The error detail's `StyledText` adapter for gpui-base selection geometry.
+/// Selection state and gestures remain entirely owned by `TextSelection`.
+struct FailureDetailText {
+    selection: TextSelectionHandle,
+    text: SharedString,
+    styled_text: StyledText,
+}
+
+impl FailureDetailText {
+    fn new(selection: TextSelectionHandle, text: impl Into<SharedString>) -> Self {
+        let text = text.into();
+        Self {
+            selection,
+            styled_text: StyledText::new(text.clone()),
+            text,
+        }
+    }
+}
+
+impl IntoElement for FailureDetailText {
+    type Element = Self;
+
+    fn into_element(self) -> Self::Element {
+        self
+    }
+}
+
+impl Element for FailureDetailText {
+    type RequestLayoutState = ();
+    type PrepaintState = Hitbox;
+
+    fn id(&self) -> Option<ElementId> {
+        None
+    }
+    fn source_location(&self) -> Option<&'static std::panic::Location<'static>> {
+        None
+    }
+
+    fn request_layout(
+        &mut self,
+        id: Option<&GlobalElementId>,
+        inspector_id: Option<&InspectorElementId>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> (LayoutId, ()) {
+        self.styled_text
+            .request_layout(id, inspector_id, window, cx)
+    }
+
+    fn prepaint(
+        &mut self,
+        id: Option<&GlobalElementId>,
+        inspector_id: Option<&InspectorElementId>,
+        bounds: Bounds<Pixels>,
+        _: &mut (),
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Hitbox {
+        self.styled_text
+            .prepaint(id, inspector_id, bounds, &mut (), window, cx);
+        let hitbox = window.insert_hitbox(bounds, gpui::HitboxBehavior::Normal);
+        self.selection.register(
+            TextSelectionRegistration::new(hitbox.clone(), bounds).with_text_bounds(vec![bounds]),
+            window,
+            cx,
+        );
+        hitbox
+    }
+
+    fn paint(
+        &mut self,
+        id: Option<&GlobalElementId>,
+        inspector_id: Option<&InspectorElementId>,
+        bounds: Bounds<Pixels>,
+        _: &mut (),
+        _: &mut Hitbox,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        let layout = self.styled_text.layout().clone();
+        let projection = self.selection.update_runs(
+            &[TextSelectionRun::new(
+                self.text.clone(),
+                layout.clone(),
+                bounds,
+            )],
+            cx,
+        );
+        if let Some(range) = projection.ranges().first().and_then(Clone::clone) {
+            paint_selection(&layout, range, window);
+        }
+        self.styled_text
+            .paint(id, inspector_id, bounds, &mut (), &mut (), window, cx);
+    }
+}
+
+fn paint_selection(layout: &gpui::TextLayout, range: Range<usize>, window: &mut Window) {
+    let (Some(start), Some(end)) = (
+        layout.position_for_index(range.start),
+        layout.position_for_index(range.end),
+    ) else {
+        return;
+    };
+    let line_height = layout.line_height();
+    let bounds = layout.bounds();
+    let mut quads = Vec::new();
+    if start.y == end.y {
+        quads.push(Bounds::from_corners(
+            start,
+            Point::new(end.x, end.y + line_height),
+        ));
+    } else {
+        quads.push(Bounds::from_corners(
+            start,
+            Point::new(bounds.right(), start.y + line_height),
+        ));
+        if end.y > start.y + line_height {
+            quads.push(Bounds::from_corners(
+                Point::new(bounds.left(), start.y + line_height),
+                Point::new(bounds.right(), end.y),
+            ));
+        }
+        quads.push(Bounds::from_corners(
+            Point::new(bounds.left(), end.y),
+            Point::new(end.x, end.y + line_height),
+        ));
+    }
+    let color = token("primary", rgb(0x4d8cff).into()).opacity(0.28);
+    for bounds in quads {
+        window.paint_quad(PaintQuad {
+            bounds,
+            background: color.into(),
+            corner_radii: Corners::default(),
+            border_widths: Edges::default(),
+            border_color: transparent_black(),
+            border_style: BorderStyle::default(),
+        });
+    }
 }
 
 /// Copies the failure, and says so — a copy leaves no visible trace otherwise,
@@ -670,5 +845,21 @@ mod identity_tests {
     fn a_path_identity_survives_a_name_with_nothing_usable_in_it() {
         let id = path_identity(Path::new("/tmp/../中文"));
         assert!(app_data_dir(&id).is_ok(), "{id}");
+    }
+
+    #[test]
+    fn error_paths_inside_the_working_directory_are_relative() {
+        let root = std::env::current_dir().expect("a working directory");
+        let message = format!(
+            "{}:12: unexpected token",
+            root.join("src/main.js").display()
+        );
+        assert_eq!(
+            relative_error_paths(&message),
+            "src/main.js:12: unexpected token"
+        );
+
+        let external = "/opt/runtime/internal.js:3: host error";
+        assert_eq!(relative_error_paths(external), external);
     }
 }

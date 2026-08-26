@@ -72,6 +72,7 @@ ropey = { version = "=2.0.0-beta.1", features = [
 ] }
 rust-i18n = "4.2.0"
 schemars = "1"
+semver = "1"
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1"
 serde_repr = "0.1"

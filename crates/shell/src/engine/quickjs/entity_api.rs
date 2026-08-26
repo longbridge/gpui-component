@@ -138,6 +138,7 @@ pub fn install(ctx: &Ctx<'_>, module: &Object<'_>, runtime: Weak<ShellRuntime>) 
                 // plugin's form must dispatch under that plugin's grant rather
                 // than under whatever the default policy happens to be.
                 let policy = scope::policy();
+                let owner = scope::current_view().map(|view| view.downgrade());
 
                 let subscribed = scope::with_current(|window, cx| {
                     store.entities().subscribe_input(
@@ -149,7 +150,14 @@ pub fn install(ctx: &Ctx<'_>, module: &Object<'_>, runtime: Weak<ShellRuntime>) 
                             let Some(runtime) = dispatch.upgrade() else {
                                 return;
                             };
-                            runtime.dispatch_input_event(&saved, &policy, emitted, window, cx);
+                            runtime.dispatch_input_event(
+                                &saved,
+                                &policy,
+                                owner.as_ref(),
+                                emitted,
+                                window,
+                                cx,
+                            );
                         },
                     )
                 })

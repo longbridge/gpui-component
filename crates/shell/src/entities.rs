@@ -191,6 +191,14 @@ impl EntityStore {
         self.len() == 0
     }
 
+    #[cfg(test)]
+    pub(crate) fn first_input(&self) -> Option<Entity<InputState>> {
+        self.records.iter().find_map(|record| match record {
+            Some(Record::Input { state, .. }) => Some(state.clone()),
+            None => None,
+        })
+    }
+
     /// Splits a handle into its slot, refusing one that names another store.
     ///
     /// A cross-store handle is a host bug rather than a script mistake — a

@@ -3708,6 +3708,7 @@ dependencies = [
  "llrt_zlib",
  "rquickjs",
  "schemars",
+ "semver",
  "serde",
  "serde_json",
  "smallvec",

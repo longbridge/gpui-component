@@ -150,6 +150,24 @@ Two implementation facts leak far enough to be worth knowing:
 - **`active` and `focus` need a stable element identity.** A plain `div` acquires one lazily, derived from its position in the description, which is stable across renders for a stable tree. `Button`, `Checkbox` and `Input` already have one.
 - **A `Switch` ignores state styles.** The switch root is not the interactive element — its track is — so a state style on it has nowhere to land. The runtime logs a warning saying to style the row around it instead, rather than dropping the declaration silently.
 
+## Scrolling overflow
+
+Scrolling is element behavior rather than a style declaration. Give the viewport
+a bounded width or height, then choose the axes it owns:
+
+```js
+v_flex()
+  .id("activity")
+  .h(240)
+  .overflow_y_scroll()
+  .children(this.rows.map((row) => text(row)));
+```
+
+Use `.overflow_scroll()` for both axes, `.overflow_x_scroll()` for horizontal
+scrolling, or `.overflow_y_scroll()` for vertical scrolling. A stable `.id(...)`
+keeps the native scroll position attached to the same viewport across script
+renders.
+
 ## Theme values
 
 Read semantic values from the context that is rendering or handling the event:

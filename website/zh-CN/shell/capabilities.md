@@ -63,13 +63,14 @@ process.exit() is not granted; set capabilities.process.exit to true in the mani
 
 ## Manifest
 
-目录通过 **`gpui-shell.json`** 被识别；旧名字 `plugin.json` 会被刻意忽略。Manifest 是惰性数据——发现阶段只读取身份与请求的权限，不执行 entry module——并且严格只有 `id`、`name`、`version`、`entry` 与 `capabilities`：
+目录通过 **`gpui-shell.json`** 被识别。Manifest 是惰性数据——发现阶段只读取身份、可选版本元数据与请求的权限，不执行 entry module。它识别 `id`、`name`、`version`、`shell-version`、`entry` 与 `capabilities`；只有 `id`、`name` 和 `entry` 必填：
 
 ```json
 {
   "id": "com.example.quotes",
   "name": "Quotes",
   "version": "1.0.0",
+  "shell-version": "0.1.0",
   "entry": "main.js",
   "capabilities": {
     "fs": { "read": ["${pluginDir}"], "write": ["${dataDir}"] },
@@ -84,7 +85,7 @@ process.exit() is not granted; set capabilities.process.exit to true in the mani
 }
 ```
 
-未知字段、非法 reverse-DNS id、非 semver 版本、逃出目录的 entry，以及未知 `${...}` placeholder 都会在代码执行前令 manifest 失效。独立 CLI 会报告错误，并按本地应用的最小后备策略继续运行；非法 manifest 请求的授权不会生效。API 兼容性由可执行代码调用 `require_api("1.0")` 声明，而不是给 manifest 加第六个字段。
+未知字段、非法 reverse-DNS id、显式填写但不合法的 SemVer、不兼容的 `shell-version`、逃出目录的 entry，以及未知 `${...}` placeholder 都会在代码执行前令 manifest 失效。省略 `version` 时显示为 `unknown`。省略 `shell-version` 时接受当前 runtime；显式填写时，它表示应用所需的最早兼容 gpui-shell 版本。兼容规则遵循 SemVer：`0.x` 应用保持相同 minor，稳定版本保持相同 major。独立 CLI 会拒绝非法 manifest，不会在假设已经不一致时继续执行 entry。
 
 每条 scoped `network.http` 规则除了 host、method 与 path 外，还会绑定请求的 scheme 与有效端口。`scheme` 默认为 `https`；`port` 默认为该 scheme 的标准端口，仅非默认 endpoint 需要显式填写。
 

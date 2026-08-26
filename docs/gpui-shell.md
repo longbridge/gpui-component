@@ -381,7 +381,6 @@ engine has to justify why it could not (§6.5).
 | `root`            | `ShellRoot`: the window-level overlay stack                                                       | above            |
 | `dock`            | `ScriptPanel`, `ScriptDockSkin`, panel registration and name interning                            | above            |
 | `native`          | The host-registered native module registry                                                        | above            |
-| `plugin_api`      | The script API version and its compatibility check                                                | above            |
 | `view`            | `ScriptView`: the one bridge into GPUI's render loop, and where a snapshot lives                  | above            |
 | `assets`          | Application-directory asset source for `svg(path)`                                                | above            |
 | `watch`           | Source watching and in-place reload                                                               | above            |
@@ -1640,7 +1639,14 @@ with the animation and token work rather than as a positional argument list;
 `cursor`, `text_align`, `text_overflow`, and `font_weight` take GPUI enums and
 would each need a name mapping when every variant already has a nullary form
 (`cursor_pointer`, `text_center`, `font_bold`); and `scrollbar_width` is
-meaningless without overflow configuration the shell does not yet expose.
+not exposed because the shell owns native overflow behavior but does not yet
+offer configurable scrollbar presentation.
+
+Overflow itself is an element behavior rather than a `StyleRefinement` entry:
+`.overflow_scroll()`, `.overflow_x_scroll()`, and `.overflow_y_scroll()` wrap a
+bounded element in GPUI's retained native scroll container. The element gains
+an identity when needed, and an explicit `.id(...)` keeps its scroll offset
+attached to the same viewport when the script description changes around it.
 
 #### The cost of a good diagnostic
 
@@ -1725,8 +1731,11 @@ Rules for script:
 - This matches `CLAUDE.md`: the theme API exposes semantic tokens, not a growing
   set of component-specific fields.
 
-The preferred read is call-scoped: `const tokens = cx.theme()` inside
-`render(cx)`. It returns every color both as a direct semantic role and under
+The preferred read is call-scoped and explicit at each use site, for example
+`cx.theme().colors.surface`, `cx.theme().spacing.md`, or
+`cx.theme().radius.lg` inside `render(cx)`. Do not destructure or alias the
+theme snapshot: keeping the complete access path makes later API refactors
+mechanical. It returns every color both as a direct semantic role and under
 `colors`, the `spacing` and `radius` scales, and `mode` plus `is_dark`.
 `gpui.theme()` remains a compatibility accessor to the same snapshot. The
 snapshot and all three nested token groups are frozen, so scripts can select
@@ -1875,7 +1884,7 @@ classified, that every color token is in the union, and that no internal name
 
 The generated declarations now include `Link`/`href`, `cx.theme()`, the deeply
 read-only semantic token shapes, motion policies, overlays, retained input,
-native modules, the Standard Runtime surfaces, `set_theme`, and `require_api`.
+native modules, the Standard Runtime surfaces, and `set_theme`.
 The remaining limitation is structural: without the component binding table of
 §14.3 there is no general proof that every future hand-bound export was also
 added to the declarations. A check that every `MODULE_EXPORTS` name appears in
@@ -2402,8 +2411,9 @@ blown Rust stack into a message at the call site.
 
 A host that runs one application from a directory may omit the manifest and get
 the CLI's narrow local defaults, with storage keyed by the path (§23). When
-`gpui-shell.json` is present, the CLI parses it before loading code and installs
-its declared capabilities; an invalid manifest grants nothing and is reported.
+`gpui-shell.json` is present, the CLI parses it before loading code, checks its
+`shell-version`, and installs its declared capabilities; an invalid manifest is
+reported and its entry module is not executed.
 A host that runs _several_
 applications cannot do any of that, because identity, permission, and storage
 become per-plugin questions — and all three have to be answerable **before** the
@@ -2411,9 +2421,9 @@ plugin's code runs. That is the whole reason a manifest exists.
 
 `plugin.rs` implements it: manifest parsing with a generated JSON Schema,
 discovery, load and unload, per-plugin policies, capabilities and data
-directories. `plugin_api.rs` implements the version check behind
-`gpui.require_api("1.0")`, which is reachable from script. **`PluginManager`
-has no production caller** — the CLI consumes a single manifest directly but
+directories. Compatibility is manifest metadata rather than executable API:
+`shell-version` is validated during discovery, before the entry can run.
+**`PluginManager` has no production caller** — the CLI consumes a single manifest directly but
 does not drive discovery or the multi-plugin manager.
 Its integration test does load and run a plugin, including asynchronous `init`
 under the manifest-derived policy. The rest of this section describes what it
@@ -2421,16 +2431,18 @@ does, because the shape is what the design is about.
 
 ### 18.1 The manifest
 
-Five fields, no sixth: `id`, `name`, `version`, `entry`, `capabilities`. The
-file is `gpui-shell.json` — the name makes the owning runtime explicit and
-avoids collision with the generic `manifest.json`, `plugin.json`, and
-`package.json` conventions used by other ecosystems.
+Six recognized fields: `id`, `name`, `version`, `shell-version`, `entry`, and
+`capabilities`. Only `id`, `name`, and `entry` are required. An omitted
+`version` is reported as `unknown`; an omitted `shell-version` accepts the
+current runtime; omitted `capabilities` grants nothing. The file is
+`gpui-shell.json` — the name makes the owning runtime explicit.
 
 ```json
 {
   "id": "com.example.inbox",
   "name": "Inbox",
   "version": "1.2.0",
+  "shell-version": "0.1.0",
   "entry": "main.js",
   "capabilities": {
     "fs": {
@@ -2490,14 +2502,15 @@ beginning or ending with a separator, no `..`. Two of those rules are security
 rather than taste: no path separators and no `..`, because `<data home>/<id>`
 must stay inside the data directory; and no uppercase, because two ids differing
 only in case are one directory on a case-insensitive filesystem and two
-everywhere else. `version` must be semver-shaped, because it is compared across
-an upgrade. `entry` must be a path that cannot leave the plugin directory, which
+everywhere else. When present, `version` must be semver-shaped, because it is
+compared across an upgrade. An explicit `shell-version` must also be SemVer and
+names the oldest compatible runtime; during `0.x`, compatibility stays on the
+same minor line. `entry` must be a path that cannot leave the plugin directory, which
 is the same rule the module resolver applies to every `import` — so a manifest
 cannot ask for a file the resolver would refuse anyway.
 
-**`capabilities` is the one omittable field**, because absent and `{}` both mean
-the empty grant and requiring the key would add a line saying "nothing" to every
-plugin that wants nothing.
+Absent `capabilities` and `{}` both mean the empty grant; requiring the key
+would add a line saying "nothing" to every plugin that wants nothing.
 
 The manifest writes `${pluginDir}` and `${dataDir}` rather than real paths, for
 the same reason a plugin cannot name its own storage location: a path chosen by
@@ -3184,17 +3197,13 @@ not appear is among the hardest mistakes to find. One asset may contain at most
 16 MiB, and walking the asset tree stops at 10,000 entries or 1 MiB of UTF-8
 name bytes.
 
-The script API has its own version, independent of the crate version, and an
-application states what it needs in script rather than in its manifest:
-`gpui.require_api("1.0")` either agrees or refuses at the first line, before
-anything is built. That is the only moment where a mismatch is cheap — once a
-view has rendered, a missing method is an exception in the middle of an
-interface. The version tracks the script surface: adding a binding is a minor,
-changing or removing one is a major. The grammar it accepts is deliberately tiny,
-`"1"` or `"1.0"`, because a caret or a range would suggest the runtime resolves
-versions, and there is exactly one implementation present. A newer minor is
-refused with the action to take ("upgrade gpui-shell"); a different major is
-refused as incompatible.
+When present, the manifest's `shell-version` is the oldest compatible
+gpui-shell release the application requires. Omitting it accepts the current
+runtime. It is checked before the entry module executes, so a
+mismatch is a load error rather than an exception in the middle of an
+interface. Compatibility follows SemVer: before 1.0 the runtime and requirement
+must share a minor line; from 1.0 onward they must share a major line, and the
+runtime must never be older than the requirement.
 
 The engine belongs in neither the version number nor the manifest: one version
 number must mean the same capabilities and the same behavior under either engine.
@@ -3277,7 +3286,7 @@ capabilities for asynchronous `fs`, `store`, `clipboard`, `log`, `process`,
 scoped HTTP, TCP, and WebSocket, all default-denied. HTTP redirect
 reauthorization and the bounded text/binary WebSocket actor are part of that
 surface. Host-registered native modules through
-`native(name)`. `gpui.require_api` and the script API version. The sandbox:
+`native(name)`. Manifest-level `shell-version` compatibility. The sandbox:
 module confinement, compiler withholding, frozen prototypes, absent-global
 stubs, interrupt and memory limits. Hot reload with per-generation module
 invalidation. `gpui.d.ts` generation from the dispatch tables. The CLI, with
@@ -3480,7 +3489,7 @@ crates/shell/                 # gpui-shell — depends on gpui-base + gpui only
         overlay.rs            #   dialog · sheet · toast on the script-side cx
         entity_api.rs         #   the script face of retained state
         native.rs             #   value conversion for native(name)
-        theme_api.rs          #   theme · set_theme · require_api
+        theme_api.rs          #   theme · set_theme
     scope.rs                  # CallScope — the crate's only unsafe module
     snapshot.rs               # RenderSnapshot — one script render, many frames
     metrics.rs                # script renders vs materializations, and timings
@@ -3496,7 +3505,6 @@ crates/shell/                 # gpui-shell — depends on gpui-base + gpui only
     root.rs                   # ShellRoot
     dock.rs                   # ScriptPanel · ScriptDockSkin · panel registration
     native.rs                 # the host-registered native module registry
-    plugin_api.rs             # the script API version and its check
     plugin.rs                 # manifest · discovery · isolated policy · load/unload
     view.rs                   # ScriptView — snapshot ownership and invalidation
     assets.rs                 # application-directory asset source

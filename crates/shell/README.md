@@ -193,8 +193,9 @@ accepted for compatibility; a literal bypasses the theme.
 A style name that is neither reflected nor bound is an error at the call site,
 not a silently ignored no-op.
 
-Read semantic values once per render with `const tokens = cx.theme()`. The
-returned light/dark snapshot contains direct color roles plus `colors`,
+Read semantic values directly at the use site, such as
+`cx.theme().colors.surface` or `cx.theme().spacing.md`; do not destructure or
+alias the theme snapshot. The returned light/dark snapshot contains direct color roles plus `colors`,
 `spacing`, `radius`, `mode`, and `is_dark`; it and all nested token groups are
 frozen. `gpui.theme()` remains a compatibility accessor. Calling
 `set_theme("light" | "dark")` selects one of the shell palettes and refreshes
@@ -251,6 +252,7 @@ grant the CLI installs in `gpui-shell.json`:
   "id": "com.example.viewer",
   "name": "Viewer",
   "version": "1.0.0",
+  "shell-version": "0.1.0",
   "entry": "main.js",
   "capabilities": {
     "fs": { "read": ["${pluginDir}"], "write": ["${dataDir}"] },
@@ -406,8 +408,9 @@ beside its own example and story scripts — a committed copy could only ever be
 the stale one. What *is* committed is the hand-written part: a `jsconfig.json`
 that turns checking on, and the application's own native-module declarations.
 
-The header names the script API version it was generated for, so a mismatch is
-visible on the first line rather than at the first call.
+The header names the gpui-shell version that generated it. Application/runtime
+compatibility is declared separately by `shell-version` in `gpui-shell.json`
+and checked before the entry module executes.
 
 ## Embedding It
 

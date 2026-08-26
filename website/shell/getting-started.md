@@ -119,7 +119,7 @@ cargo run -p gpui-shell -- examples/js_todolist
 
 That opens a window with a working todo list: a text field with retained state, controlled checkboxes, a confirmation dialog, a toast, icons loaded from the application's own directory, and storage that falls back to memory when it has not been granted. It exists to exercise the runtime rather than to be minimal — if something is broken, it shows there first.
 
-The argument is a **directory**, not a file. The runtime resolves that directory, reads `main.js` from it, takes the class that module default-exports, constructs one instance, and mounts it as the window's root view. If the directory contains `gpui-shell.json`, the binary validates that manifest and uses its declared capabilities; the legacy name `plugin.json` is ignored.
+The argument is a **directory**, not a file. The runtime resolves that directory, reads `main.js` by default, takes the class that module default-exports, constructs one instance, and mounts it as the window's root view. If the directory contains `gpui-shell.json`, the binary validates that manifest first and uses its declared `entry` and capabilities.
 
 ## Check a script without running it
 

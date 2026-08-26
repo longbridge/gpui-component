@@ -82,6 +82,8 @@ struct Behavior {
     href: Option<SharedString>,
     on_click: Option<CallbackId>,
     on_change: Option<CallbackId>,
+    scroll_x: bool,
+    scroll_y: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -421,16 +423,25 @@ fn flex_element(
     children: Children,
 ) -> AnyElement {
     let element = with_hover(element, &states);
-    if behavior.key.is_none() && !states.needs_identity() {
+    if behavior.key.is_none()
+        && !states.needs_identity()
+        && !behavior.scroll_x
+        && !behavior.scroll_y
+    {
         return finish(element, refinement, children);
     }
 
+    let scroll_x = behavior.scroll_x;
+    let scroll_y = behavior.scroll_y;
     let stateful = element.id(element_id(id, behavior.key));
-    finish(
-        with_active_and_focus(stateful, &states),
-        refinement,
-        children,
-    )
+    let stateful = with_active_and_focus(stateful, &states);
+    let stateful = match (scroll_x, scroll_y) {
+        (true, true) => stateful.overflow_scroll(),
+        (true, false) => stateful.overflow_x_scroll(),
+        (false, true) => stateful.overflow_y_scroll(),
+        (false, false) => stateful,
+    };
+    finish(stateful, refinement, children)
 }
 
 /// A control that already takes an identity from `new(id)` has nowhere to put a
@@ -784,6 +795,12 @@ fn apply_behavior(behavior: &mut Behavior, name: &str, args: &[Bridged]) {
         "disabled" => behavior.disabled = flag.unwrap_or(true),
         "selected" => behavior.selected = flag.unwrap_or(true),
         "checked" => behavior.checked = flag.unwrap_or(true),
+        "overflow_scroll" => {
+            behavior.scroll_x = true;
+            behavior.scroll_y = true;
+        }
+        "overflow_x_scroll" => behavior.scroll_x = true,
+        "overflow_y_scroll" => behavior.scroll_y = true,
         _ => tracing::error!("unhandled component method `{name}` reached materialize"),
     }
 }

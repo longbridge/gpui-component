@@ -48,6 +48,38 @@ use super::ShellRuntime;
 /// record a native function has business receiving.
 const MAX_DEPTH: usize = 16;
 
+/// Maximum number of array slots converted across a JavaScript/Rust boundary.
+///
+/// Sparse arrays cost just as much as dense ones here because bridge semantics
+/// preserve every hole as `null`. Keeping one limit for native values and host
+/// JSON prevents either conversion path becoming an allocation bypass.
+pub(super) const MAX_BRIDGE_ARRAY_ITEMS: usize = 10_000;
+
+pub(super) fn bridge_array_len(ctx: &Ctx<'_>, array: &Array<'_>) -> JsResult<usize> {
+    // Do not use `Array::len`: rquickjs 0.12 asserts that QuickJS returned a
+    // signed integer, while valid JS arrays may have lengths above i32::MAX and
+    // QuickJS represents those as floating-point values.
+    let length: Value = array.as_object().get("length")?;
+    let Some(length) = length.as_number() else {
+        return Err(Exception::throw_type(ctx, "array length is not a number"));
+    };
+    if !length.is_finite() || length < 0.0 || length.fract() != 0.0 {
+        return Err(Exception::throw_type(
+            ctx,
+            "array length must be a finite non-negative integer",
+        ));
+    }
+    if length > MAX_BRIDGE_ARRAY_ITEMS as f64 {
+        return Err(Exception::throw_range(
+            ctx,
+            &format!(
+                "array has {length:.0} items, over the {MAX_BRIDGE_ARRAY_ITEMS}-item bridge limit"
+            ),
+        ));
+    }
+    Ok(length as usize)
+}
+
 /// Assembles a module object around the bound functions the host registered.
 ///
 /// In JS rather than Rust because a `Proxy` is the whole trick and it reads as
@@ -211,9 +243,16 @@ fn from_js<'js>(ctx: &Ctx<'js>, value: Value<'js>, depth: usize) -> JsResult<Nat
     }
     // Before the object case: an array is an object too.
     if let Some(array) = value.as_array() {
-        let mut values = Vec::with_capacity(array.len());
-        for entry in array.iter::<Value>() {
-            values.push(from_js(ctx, entry?, depth + 1)?);
+        let length = bridge_array_len(ctx, &array)?;
+        let mut values = Vec::new();
+        values.try_reserve_exact(length).map_err(|_| {
+            Exception::throw_range(
+                ctx,
+                "native array could not be reserved within memory limits",
+            )
+        })?;
+        for index in 0..length {
+            values.push(from_js(ctx, array.get(index)?, depth + 1)?);
         }
         return Ok(NativeValue::Array(values));
     }
@@ -273,4 +312,36 @@ fn into_js<'js>(ctx: &Ctx<'js>, value: NativeValue) -> JsResult<Value<'js>> {
             object.into_value()
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use rquickjs::{Context as JsContext, Error as JsError, Runtime as JsRuntime};
+
+    use super::*;
+
+    #[test]
+    fn a_sparse_huge_native_array_is_a_catchable_error() {
+        let runtime = JsRuntime::new().expect("runtime");
+        let context = JsContext::full(&runtime).expect("context");
+        context.with(|ctx| {
+            let value: Value = ctx
+                .eval("const values = []; values.length = 0xffffffff; values")
+                .expect("sparse array");
+            let error = match Argument::from_js(&ctx, value) {
+                Ok(_) => panic!("the bridge must refuse a huge sparse array"),
+                Err(error) => error,
+            };
+            assert!(matches!(error, JsError::Exception), "{error}");
+            let thrown = ctx.catch();
+            let message = thrown
+                .as_exception()
+                .and_then(|exception| exception.message())
+                .unwrap_or_else(|| format!("{thrown:?}"));
+            assert!(
+                message.contains("array") && message.contains("limit"),
+                "{message}"
+            );
+        });
+    }
 }

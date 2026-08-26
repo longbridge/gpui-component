@@ -63,13 +63,14 @@ process.exit() is not granted; set capabilities.process.exit to true in the mani
 
 ## The manifest
 
-A directory is recognized by **`gpui-shell.json`**. The legacy `plugin.json` name is deliberately ignored. The manifest is inert data — discovery reads identity and requested permissions without executing the entry module — and contains exactly `id`, `name`, `version`, `entry`, and `capabilities`:
+A directory is recognized by **`gpui-shell.json`**. The manifest is inert data — discovery reads identity, optional version metadata, and requested permissions without executing the entry module. It recognizes `id`, `name`, `version`, `shell-version`, `entry`, and `capabilities`; only `id`, `name`, and `entry` are required:
 
 ```json
 {
   "id": "com.example.quotes",
   "name": "Quotes",
   "version": "1.0.0",
+  "shell-version": "0.1.0",
   "entry": "main.js",
   "capabilities": {
     "fs": { "read": ["${pluginDir}"], "write": ["${dataDir}"] },
@@ -84,7 +85,7 @@ A directory is recognized by **`gpui-shell.json`**. The legacy `plugin.json` nam
 }
 ```
 
-Unknown fields, invalid reverse-DNS ids, non-semver versions, escaping entries, and unknown `${...}` placeholders invalidate the manifest before code runs. The standalone CLI reports that error and continues with the local application's minimal fallback policy; none of the invalid manifest's requested grants apply. API compatibility is declared by executable code with `require_api("1.0")`, not by adding a sixth manifest field.
+Unknown fields, invalid reverse-DNS ids, invalid explicitly declared SemVer values, incompatible `shell-version` values, escaping entries, and unknown `${...}` placeholders invalidate the manifest before code runs. Omitted `version` is reported as `unknown`. Omitted `shell-version` accepts the current runtime; when present, it names the oldest compatible gpui-shell release the application requires. Compatibility follows SemVer: `0.x` applications stay on the same minor line; stable releases stay on the same major line. The standalone CLI refuses an invalid manifest instead of executing its entry with silently different assumptions.
 
 Each scoped `network.http` rule binds the request scheme and effective port as well as its host, method and path. `scheme` defaults to `https`; `port` defaults to that scheme's standard port and only needs to be written for a non-default endpoint.
 

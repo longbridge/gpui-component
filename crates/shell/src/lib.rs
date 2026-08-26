@@ -33,7 +33,7 @@
 // reaches the ambient `App`, and hides the frame stack. `runtime`, `error` and
 // `assets` publish their types through the root.
 //
-// **Designed, tested, not driven.** `dock` and `plugin_api`. A script cannot yet
+// **Designed, tested, not driven.** `dock`. A script cannot yet
 // contribute a panel. The plugin manifest is public because the shipped binary
 // now applies a local application's declared capabilities before loading it.
 //
@@ -49,7 +49,6 @@ pub(crate) mod materialize;
 pub mod metrics;
 pub mod native;
 pub mod plugin;
-pub(crate) mod plugin_api;
 pub mod policy;
 pub(crate) mod process;
 pub mod root;

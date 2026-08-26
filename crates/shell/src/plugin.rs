@@ -8,8 +8,9 @@
 //! answerable **before** the plugin's code runs.
 //!
 //! That is the whole reason a manifest exists, and it is why the manifest has
-//! exactly five fields (design doc §18.1): `id`, `name`, `version`, `entry`,
-//! `capabilities`. Commands, panels, keybindings, settings and themes are
+//! six recognized fields: `id`, `name`, `version`, `shell-version`, `entry`,
+//! and `capabilities`. `version`, `shell-version`, and `capabilities` are
+//! optional. Commands, panels, keybindings, settings and themes are
 //! registered from script instead of being declared here a second time —
 //! *capabilities are permission, contributions are behavior*. A permission has
 //! to be shown to a user and approved before any code runs, so it belongs in
@@ -23,10 +24,10 @@
 //!   manifests and stops. A host with thirty installed plugins lists thirty
 //!   names, versions and permission sets without starting thirty programs.
 //!   Only [`PluginManager::load`] evaluates script.
-//! - **The API version is not in the manifest.** A plugin states its
-//!   requirement in script with `gpui.require_api("1.0")` (§18.1, §23.3), so
-//!   the manifest has nothing to say about it and this module publishes the
-//!   number the runtime implements instead: [`API_VERSION`].
+//! - **Compatibility is checked before execution when declared.**
+//!   `shell-version` names the oldest compatible gpui-shell release. Omitting
+//!   it accepts the current runtime; an explicit incompatible version is
+//!   rejected before the entry module can run.
 
 #![allow(dead_code)]
 //
@@ -44,6 +45,7 @@ use std::{
 use anyhow::{Result, bail};
 use gpui::{App, Entity, Window};
 use schemars::JsonSchema;
+use semver::Version;
 use serde::Deserialize;
 
 use crate::{
@@ -54,28 +56,13 @@ use crate::{
     view::ScriptView,
 };
 
-/// The script API version this runtime implements.
-///
-/// A plugin does not declare it in the manifest — it states it in script,
-/// `gpui.require_api("1.0")` (§18.1, §23.3) — so the only thing the host has to
-/// publish is its own number, and it has to be published by the module that
-/// defines what a plugin is. It cannot live in the manifest (five fields, no
-/// sixth), and it cannot live below the `engine/` seam: §23.1 requires one
-/// version to mean the same behaviors under either engine, and two copies below
-/// the seam would be two numbers that can drift.
-///
-/// The number itself is owned by [`crate::plugin_api`], which also implements
-/// the comparison a `require_api` binding performs
-/// ([`crate::plugin_api::check`], with the message a mismatch has to print).
-/// This is an alias, not a second definition, so the plugin model can be read
-/// without leaving this module while there is still exactly one number.
-pub const API_VERSION: &str = crate::plugin_api::VERSION;
+/// The gpui-shell release that parses and executes this manifest.
+pub const SHELL_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// The file a plugin directory is recognized by.
 ///
 /// §18.1 shows the manifest's content but never names the file.
-/// `gpui-shell.json` makes the owning runtime explicit and avoids colliding
-/// with generic `manifest.json`, `plugin.json`, and `package.json` conventions.
+/// `gpui-shell.json` makes the owning runtime explicit.
 pub const MANIFEST_FILE: &str = "gpui-shell.json";
 
 /// The entry file the engine can currently load. See [`PluginManager::load`].
@@ -101,6 +88,7 @@ pub struct PluginManifest {
     id: String,
     name: String,
     version: String,
+    shell_version: String,
     entry: String,
     capabilities: CapabilitiesFile,
 }
@@ -158,13 +146,27 @@ impl PluginManifest {
         let id = string_field(&fields, "id")?;
         validate_id(&id)?;
         let name = string_field(&fields, "name")?;
-        let version = string_field(&fields, "version")?;
-        validate_version(&version)?;
+        let version = match fields.get("version") {
+            None | Some(serde_json::Value::Null) => "unknown".to_owned(),
+            Some(_) => {
+                let version = string_field(&fields, "version")?;
+                validate_version(&version)?;
+                version
+            }
+        };
+        let shell_version = match fields.get("shell-version") {
+            None | Some(serde_json::Value::Null) => SHELL_VERSION.to_owned(),
+            Some(_) => {
+                let shell_version = string_field(&fields, "shell-version")?;
+                validate_shell_version(&shell_version)?;
+                shell_version
+            }
+        };
         let entry = string_field(&fields, "entry")?;
         validate_entry(&entry)?;
 
-        // `capabilities` is the one field that may be omitted, and the only one
-        // whose default cannot be an accident: absent means the empty grant
+        // An omitted `capabilities` has the one permission default that cannot
+        // be an accident: absent means the empty grant
         // (§5.7), which is also what an explicit `{}` means. Requiring the key
         // would add a line that says "nothing" to every plugin that wants
         // nothing.
@@ -180,6 +182,7 @@ impl PluginManifest {
             id,
             name,
             version,
+            shell_version,
             entry,
             capabilities,
         })
@@ -199,10 +202,14 @@ impl PluginManifest {
         &self.name
     }
 
-    /// The plugin's own version — not the API version (§23.1), which the
-    /// plugin states in script.
+    /// The plugin's own version, or `unknown` when the manifest omits it.
     pub fn version(&self) -> &str {
         &self.version
+    }
+
+    /// The oldest gpui-shell release this application requires.
+    pub fn shell_version(&self) -> &str {
+        &self.shell_version
     }
 
     /// The module evaluated at load, relative to the plugin directory.
@@ -226,7 +233,14 @@ impl PluginManifest {
     }
 }
 
-const FIELDS: [&str; 5] = ["id", "name", "version", "entry", "capabilities"];
+const FIELDS: [&str; 6] = [
+    "id",
+    "name",
+    "version",
+    "shell-version",
+    "entry",
+    "capabilities",
+];
 
 fn string_field(
     fields: &serde_json::Map<String, serde_json::Value>,
@@ -276,23 +290,32 @@ fn validate_id(id: &str) -> Result<(), ManifestProblem> {
     Ok(())
 }
 
-/// A plugin version is compared across an upgrade (§19.4: an update that adds
-/// capabilities asks again), and comparison needs an agreed shape. Semver's is
-/// the one §23 already uses.
+/// When supplied, a plugin version is compared across an upgrade (§19.4: an
+/// update that adds capabilities asks again), and comparison needs an agreed
+/// shape. Semver's is the one §23 already uses.
 fn validate_version(version: &str) -> Result<(), ManifestProblem> {
-    let core = version
-        .split_once(['-', '+'])
-        .map_or(version, |(core, _)| core);
-    let components: Vec<&str> = core.split('.').collect();
-    let well_formed = components.len() == 3
-        && components.iter().all(|component| {
-            !component.is_empty() && component.bytes().all(|b| b.is_ascii_digit())
-        });
+    Version::parse(version)
+        .map(|_| ())
+        .map_err(|_| ManifestProblem::InvalidVersion(version.to_owned()))
+}
 
-    if well_formed {
+fn validate_shell_version(version: &str) -> Result<(), ManifestProblem> {
+    let required = Version::parse(version)
+        .map_err(|_| ManifestProblem::InvalidShellVersion(version.to_owned()))?;
+    let runtime = Version::parse(SHELL_VERSION).expect("the crate version is semantic");
+    let compatible_line = if required.major == 0 {
+        runtime.major == 0 && runtime.minor == required.minor
+    } else {
+        runtime.major == required.major
+    };
+
+    if compatible_line && runtime >= required {
         Ok(())
     } else {
-        Err(ManifestProblem::InvalidVersion(version.to_owned()))
+        Err(ManifestProblem::IncompatibleShellVersion {
+            required: version.to_owned(),
+            runtime: SHELL_VERSION.to_owned(),
+        })
     }
 }
 
@@ -380,8 +403,12 @@ struct ManifestFile {
     id: String,
     /// Human-readable name, shown in menus and in the permission prompt.
     name: String,
-    /// The plugin's own semantic version, e.g. `1.2.0`.
-    version: String,
+    /// Optional plugin semantic version, e.g. `1.2.0`.
+    #[serde(default)]
+    version: Option<String>,
+    /// Optional oldest compatible gpui-shell release. Checked before `entry` executes.
+    #[serde(default, rename = "shell-version")]
+    shell_version: Option<String>,
     /// The module evaluated at load, relative to the plugin directory.
     entry: String,
     /// What the plugin is allowed to do. Absent means nothing.
@@ -709,6 +736,11 @@ pub enum ManifestProblem {
         first: PathBuf,
     },
     InvalidVersion(String),
+    InvalidShellVersion(String),
+    IncompatibleShellVersion {
+        required: String,
+        runtime: String,
+    },
     InvalidEntry(String),
     UnknownPlaceholder {
         field: String,
@@ -729,6 +761,7 @@ fn field_expectation(field: &str) -> &'static str {
             "a human-readable name such as \"Inbox\", shown in menus and in the permission prompt"
         }
         "version" => "the plugin's own semantic version such as \"1.2.0\"",
+        "shell-version" => "the oldest compatible gpui-shell semantic version, such as \"0.1.0\"",
         "entry" => {
             "the module to evaluate at load, such as \"main.js\", relative to the plugin directory"
         }
@@ -788,6 +821,14 @@ impl std::fmt::Display for ManifestProblem {
             ManifestProblem::InvalidVersion(version) => write!(
                 f,
                 "invalid `version` \"{version}\": expected a semantic version such as \"1.2.0\""
+            ),
+            ManifestProblem::InvalidShellVersion(version) => write!(
+                f,
+                "invalid `shell-version` \"{version}\": expected a semantic version such as \"0.1.0\""
+            ),
+            ManifestProblem::IncompatibleShellVersion { required, runtime } => write!(
+                f,
+                "this application requires gpui-shell {required}, but this runtime is {runtime} and is not compatible"
             ),
             ManifestProblem::InvalidEntry(entry) => write!(
                 f,
@@ -1191,6 +1232,7 @@ mod tests {
         "id": "com.example.inbox",
         "name": "Inbox",
         "version": "1.2.0",
+        "shell-version": "0.1.0",
         "entry": "main.js",
         "capabilities": {
             "fs": {
@@ -1256,6 +1298,7 @@ mod tests {
             "id": "com.example.async-init",
             "name": "Async Init",
             "version": "1.0.0",
+            "shell-version": "0.1.0",
             "entry": "main.js",
             "capabilities": {
                 "fs": { "read": ["${pluginDir}"] }
@@ -1349,6 +1392,7 @@ mod tests {
         assert_eq!(manifest.id(), "com.example.inbox");
         assert_eq!(manifest.name(), "Inbox");
         assert_eq!(manifest.version(), "1.2.0");
+        assert_eq!(manifest.shell_version(), SHELL_VERSION);
         assert_eq!(manifest.entry(), "main.js");
 
         let capabilities =
@@ -1357,6 +1401,28 @@ mod tests {
         assert!(capabilities.is_clipboard_writable());
         assert!(!capabilities.is_clipboard_readable());
         assert!(capabilities.may_exit());
+    }
+
+    #[test]
+    fn shell_version_is_declared_in_the_manifest_before_script_runs() {
+        let manifest = PluginManifest::parse(VALID)
+            .expect("the runtime version belongs in inert manifest metadata");
+        assert_eq!(manifest.shell_version(), SHELL_VERSION);
+    }
+
+    #[test]
+    fn an_omitted_shell_version_accepts_the_current_runtime() {
+        let source = VALID.replace("        \"shell-version\": \"0.1.0\",\n", "");
+        let manifest = PluginManifest::parse(&source)
+            .expect("omitting shell-version supports the runtime loading the application");
+        assert_eq!(manifest.shell_version(), SHELL_VERSION);
+    }
+
+    #[test]
+    fn an_omitted_application_version_is_reported_as_unknown() {
+        let source = VALID.replace("        \"version\": \"1.2.0\",\n", "");
+        let manifest = PluginManifest::parse(&source).expect("version metadata is optional");
+        assert_eq!(manifest.version(), "unknown");
     }
 
     #[test]
@@ -1433,7 +1499,7 @@ mod tests {
     #[test]
     fn an_absent_capabilities_block_grants_nothing() {
         let manifest = PluginManifest::parse(
-            r#"{"id": "a.b", "name": "B", "version": "0.1.0", "entry": "main.js"}"#,
+            r#"{"id": "a.b", "name": "B", "version": "0.1.0", "shell-version": "0.1.0", "entry": "main.js"}"#,
         )
         .expect("capabilities may be omitted");
 
@@ -1446,7 +1512,7 @@ mod tests {
 
     #[test]
     fn each_missing_field_names_itself() {
-        for field in ["id", "name", "version", "entry"] {
+        for field in ["id", "name", "entry"] {
             let mut fields: serde_json::Map<String, serde_json::Value> =
                 serde_json::from_str(VALID).expect("the fixture should be an object");
             fields.remove(field);
@@ -1470,7 +1536,7 @@ mod tests {
     #[test]
     fn a_field_of_the_wrong_type_says_which_and_what() {
         let error = PluginManifest::parse(
-            r#"{"id": "a.b", "name": 7, "version": "0.1.0", "entry": "main.js"}"#,
+            r#"{"id": "a.b", "name": 7, "version": "0.1.0", "shell-version": "0.1.0", "entry": "main.js"}"#,
         )
         .expect_err("a numeric name is not a name");
 
@@ -1662,32 +1728,6 @@ mod tests {
     }
 
     #[test]
-    fn discovery_and_read_recognize_only_gpui_shell_json() {
-        let tree = TempTree::new("manifest-name");
-        let current = tree.path().join("current");
-        let legacy = tree.path().join("legacy");
-        std::fs::create_dir_all(&current).expect("current application directory");
-        std::fs::create_dir_all(&legacy).expect("legacy application directory");
-        std::fs::write(current.join("gpui-shell.json"), VALID).expect("current manifest");
-        std::fs::write(
-            legacy.join("plugin.json"),
-            VALID.replacen("com.example.inbox", "com.example.legacy", 1),
-        )
-        .expect("legacy manifest");
-
-        let manifest = PluginManifest::read(&current).expect("the new manifest name is readable");
-        assert_eq!(manifest.id(), "com.example.inbox");
-
-        let mut manager = PluginManager::new(vec![tree.path().to_path_buf()]);
-        let results = manager.discover();
-        assert_eq!(results.len(), 1, "legacy plugin.json must be ignored");
-        assert_eq!(
-            results[0].as_ref().expect("current manifest is valid").id(),
-            "com.example.inbox"
-        );
-    }
-
-    #[test]
     fn a_directory_that_is_itself_a_plugin_is_discovered() {
         let tree = TempTree::new("single");
         let root = tree.plugin("inbox", VALID);
@@ -1747,7 +1787,14 @@ mod tests {
 
         assert_eq!(described.id, parsed.id);
         assert_eq!(described.name, parsed.name);
-        assert_eq!(described.version, parsed.version);
+        assert_eq!(
+            described.version.as_deref().unwrap_or("unknown"),
+            parsed.version
+        );
+        assert_eq!(
+            described.shell_version.as_deref().unwrap_or(SHELL_VERSION),
+            parsed.shell_version
+        );
         assert_eq!(described.entry, parsed.entry);
         assert_eq!(described.capabilities, parsed.capabilities);
     }
@@ -1781,7 +1828,7 @@ mod tests {
                 "the schema must mention `{grant}` inside capabilities"
             );
         }
-        // A sixth field must be a schema violation, not a silently ignored key.
+        // A seventh field must be a schema violation, not a silently ignored key.
         assert!(
             schema.contains("additionalProperties"),
             "the schema must refuse unknown fields as the parser does"
@@ -1789,11 +1836,29 @@ mod tests {
     }
 
     #[test]
-    fn the_plugin_model_and_the_runtime_publish_one_api_version() {
-        assert_eq!(API_VERSION, crate::plugin_api::VERSION);
-        assert!(
-            crate::plugin_api::check(API_VERSION).is_ok(),
-            "the runtime must satisfy its own version"
-        );
+    fn incompatible_shell_versions_are_rejected_before_discovery() {
+        for required in ["0.2.0", "1.0.0"] {
+            let source = VALID.replacen("\"0.1.0\"", &format!("\"{required}\""), 1);
+            let error = PluginManifest::parse(&source).expect_err("incompatible shell version");
+            assert!(
+                matches!(
+                    error.problem(),
+                    ManifestProblem::IncompatibleShellVersion { .. }
+                ),
+                "{error}"
+            );
+        }
+    }
+
+    #[test]
+    fn malformed_shell_versions_are_errors_not_panics() {
+        for required in ["0.1.0-", "00.1.0", "0.1.184467440737095516160", "latest"] {
+            let source = VALID.replacen("\"0.1.0\"", &format!("\"{required}\""), 1);
+            let error = PluginManifest::parse(&source).expect_err("invalid semantic version");
+            assert_eq!(
+                error.problem(),
+                &ManifestProblem::InvalidShellVersion(required.to_owned())
+            );
+        }
     }
 }

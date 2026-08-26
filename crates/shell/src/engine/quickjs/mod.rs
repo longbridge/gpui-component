@@ -21,7 +21,7 @@ use std::{
 };
 
 use anyhow::{Context as _, Result, anyhow};
-use gpui::{App, AppContext as _, ClickEvent, Entity, Global, Window};
+use gpui::{App, AppContext as _, ClickEvent, Entity, Global, WeakEntity, Window};
 use rquickjs::{
     Context as JsContext, Ctx, Error as JsError, Exception, FromJs, Function, Object, Persistent,
     Result as JsResult, Runtime as JsRuntime, Value,
@@ -89,10 +89,9 @@ const MODULE_EXPORTS: &[&str] = &[
     "log",
     // Native modules (`native`).
     "native",
-    // Theme and runtime version (`theme_api`).
+    // Theme (`theme_api`).
     "theme",
     "set_theme",
-    "require_api",
     // Scheduling (`scheduler`).
     "spawn",
     "timer",
@@ -343,13 +342,14 @@ impl ShellRuntime {
         window: &mut Window,
         cx: &mut App,
     ) -> Result<Entity<ScriptView>> {
-        let (_guard, _) =
+        let (construct_scope, _) =
             scope::enter_with_runtime(self, window, cx, ScopePhase::Event, None, policy.clone());
         let object = self.construct(view_type)?;
+        drop(construct_scope);
         let view = cx.new(|_| ScriptView::with_policy(self.clone(), object, policy.clone()));
         let object = view.read(cx).object().clone();
 
-        let (_guard, _) = scope::enter_with_runtime(
+        let (_initialize_scope, _) = scope::enter_with_runtime(
             self,
             window,
             cx,
@@ -535,18 +535,20 @@ impl ShellRuntime {
         self: &Rc<Self>,
         handler: &Persistent<Function<'static>>,
         policy: &Rc<crate::policy::Policy>,
+        owner: Option<&WeakEntity<ScriptView>>,
         event: &gpui_base::input::InputEvent,
         window: &mut Window,
         cx: &mut App,
     ) {
         use gpui_base::input::InputEvent;
 
-        // The policy the subscription was made under. There is no view to take
-        // it from — a subscription belongs to the input entity, which outlives
-        // any one view — and no enclosing frame either, so `enter` would fall
-        // back to the default.
+        // Both owner and policy are captured when the script subscribes. The
+        // input entity may outlive a view, so only a weak owner is retained; if
+        // that owner is gone the callback may still run, but notify has no dead
+        // view to keep alive or invalidate.
+        let owner = owner.and_then(WeakEntity::upgrade);
         let (_guard, generation) =
-            scope::enter_with_runtime(self, window, cx, ScopePhase::Event, None, policy.clone());
+            scope::enter_with_runtime(self, window, cx, ScopePhase::Event, owner, policy.clone());
 
         let result = self.with_js(|ctx| {
             let handler = handler.clone().restore(ctx)?;
@@ -1098,6 +1100,9 @@ impl ShellRuntime {
                 "accessibility_label",
                 "href",
                 "id",
+                "overflow_scroll",
+                "overflow_x_scroll",
+                "overflow_y_scroll",
             ]
             .into_iter()
             .enumerate()
@@ -1198,6 +1203,9 @@ impl ShellRuntime {
             | "accessibility_label"
             | "href"
             | "id"
+            | "overflow_scroll"
+            | "overflow_x_scroll"
+            | "overflow_y_scroll"
             | "transition"
             | "spring" => {
                 let bridged = args.values(method)?;
@@ -1206,6 +1214,9 @@ impl ShellRuntime {
                     "selected" => "selected",
                     "checked" => "checked",
                     "id" => "id",
+                    "overflow_scroll" => "overflow_scroll",
+                    "overflow_x_scroll" => "overflow_x_scroll",
+                    "overflow_y_scroll" => "overflow_y_scroll",
                     "transition" => "transition",
                     "spring" => "spring",
                     "href" => "href",
@@ -1444,7 +1455,8 @@ fn unknown_method(name: &str) -> String {
         Some(candidate) => format!("unknown element method `{name}` (did you mean `{candidate}`?)"),
         None => format!(
             "unknown element method `{name}`; it is neither a style method nor one of \
-             child, children, when, on_click, on_change, disabled, selected, checked"
+             child, children, when, on_click, on_change, disabled, selected, checked, \
+             overflow_scroll, overflow_x_scroll, overflow_y_scroll"
         ),
     }
 }

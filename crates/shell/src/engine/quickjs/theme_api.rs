@@ -1,4 +1,4 @@
-//! The theme and runtime-version surface.
+//! The theme surface.
 //!
 //! A script reads semantic tokens rather than colors: `theme().colors.surface`
 //! is a role, and a host that ships a different palette changes what it means
@@ -10,7 +10,7 @@ use rquickjs::{Ctx, Exception, Object, Result as JsResult, function::Func};
 
 use crate::theme::{self, ThemeMode};
 
-/// Installs `theme`, `set_theme` and `require_api` onto the module object.
+/// Installs `theme` and `set_theme` onto the module object.
 pub fn install(ctx: &Ctx<'_>, module: &Object<'_>) -> JsResult<()> {
     let _ = ctx;
 
@@ -40,16 +40,6 @@ pub fn install(ctx: &Ctx<'_>, module: &Object<'_>) -> JsResult<()> {
                     "set_theme(...) needs a live host call; call it from an event handler",
                 )
             })
-        }),
-    )?;
-
-    module.set(
-        "require_api",
-        Func::from(|ctx: Ctx<'_>, wanted: String| -> JsResult<String> {
-            match crate::plugin_api::check(&wanted) {
-                Ok(()) => Ok(crate::plugin_api::VERSION.to_owned()),
-                Err(message) => Err(Exception::throw_type(&ctx, &message)),
-            }
         }),
     )?;
 

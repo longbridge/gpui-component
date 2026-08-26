@@ -493,6 +493,46 @@ export default class Motion extends View {
 }
 
 #[gpui::test]
+fn native_overflow_scroll_behaviors_survive_script_render_and_materialize(cx: &mut TestAppContext) {
+    cx.update(|cx| crate::init(cx));
+
+    let runtime = ShellRuntime::new().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View, text, v_flex } from "gpui";
+
+export default class ScrollableQuotes extends View {
+  render() {
+    return v_flex()
+      .child(v_flex().id("both").size(80).overflow_scroll().child(text("Both")))
+      .child(v_flex().id("horizontal").size(80).overflow_x_scroll().child(text("Horizontal")))
+      .child(v_flex().id("watchlist-quotes").h(120).overflow_y_scroll()
+        .children(Array.from({ length: 30 }, (_, index) => text(`Quote ${index}`))));
+  }
+}
+"#;
+
+    let view_type = runtime.load_source("scroll-y", source).expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .expect("instantiate");
+
+    let tree = context
+        .update(|window, cx| runtime.render_to_spec(&object, None, window, cx))
+        .expect("native overflow scroll methods must be supported behaviors");
+    for behavior in ["overflow_scroll", "overflow_x_scroll", "overflow_y_scroll"] {
+        assert!(
+            tree.contains(&format!(":{behavior}")),
+            "missing {behavior}: {tree}"
+        );
+    }
+    let view = context.update(|_, cx| cx.new(|_| ScriptView::new(runtime, object)));
+    draw(&mut context, &view);
+}
+
+#[gpui::test]
 fn motion_rejects_properties_the_native_layer_cannot_interpolate(cx: &mut TestAppContext) {
     cx.update(|cx| crate::init(cx));
 

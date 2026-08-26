@@ -332,10 +332,11 @@ pub fn watch_view(
     runtime: &Rc<ShellRuntime>,
     view: &Entity<ScriptView>,
     directory: PathBuf,
-    entry: &'static str,
+    entry: impl Into<String>,
     window: &mut Window,
     cx: &mut App,
 ) -> Watch {
+    let entry = entry.into();
     let handle = window.window_handle();
     let mut watcher = SourceWatcher::new(directory.clone());
     let runtime = Rc::downgrade(runtime);
@@ -368,7 +369,7 @@ pub fn watch_view(
             }
 
             let reached = handle.update(cx, |_, window, cx| {
-                match reload(&runtime, &view, &directory, entry, window, cx) {
+                match reload(&runtime, &view, &directory, &entry, window, cx) {
                     Ok(()) => {
                         tracing::info!("reloaded {}", directory.display());
                         retract_failure(handle, window, cx);

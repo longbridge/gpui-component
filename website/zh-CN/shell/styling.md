@@ -150,6 +150,20 @@ renderSave(cx) {
 - **`active` 与 `focus` 需要稳定的元素身份。** 普通 `div` 会按需获得一个，由它在描述中的位置推出；只要树是稳定的，这个身份跨渲染就是稳定的。`Button`、`Checkbox` 与 `Input` 本来就有。
 - **`Switch` 会忽略状态样式。** switch 的根节点不是可交互元素——它的 track 才是——所以挂在根上的状态样式无处落地。运行时会记一条警告，提示改为给它外面那一行加样式，而不是不声不响地丢掉这条声明。
 
+## 滚动溢出内容
+
+滚动属于元素行为，不是样式声明。先为 viewport 设置有限的宽度或高度，再指定它负责的滚动方向：
+
+```js
+v_flex()
+  .id("activity")
+  .h(240)
+  .overflow_y_scroll()
+  .children(this.rows.map((row) => text(row)));
+```
+
+`.overflow_scroll()` 同时启用两个方向，`.overflow_x_scroll()` 只启用横向滚动，`.overflow_y_scroll()` 只启用纵向滚动。稳定的 `.id(...)` 会让原生滚动位置在多次脚本 render 之间始终归属于同一个 viewport。
+
 ## 主题值
 
 从正在 render 或处理事件的 context 读取语义值：

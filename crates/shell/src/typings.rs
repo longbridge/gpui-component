@@ -79,7 +79,7 @@ pub fn declarations() -> String {
     let (nullary, parametric) = style_methods();
 
     let mut out = String::with_capacity(160 * 1024);
-    out.push_str(&PREAMBLE.replace("{version}", crate::plugin_api::VERSION));
+    out.push_str(&PREAMBLE.replace("{version}", crate::plugin::SHELL_VERSION));
     out.push_str("declare module \"gpui\" {\n");
     out.push_str(VALUE_TYPES);
     out.push_str(&color_types());
@@ -429,7 +429,7 @@ fn doc_comment(documentation: Option<&str>, indent: usize) -> String {
 const PREAMBLE: &str = "\
 // Auto-generated — add `gpui.d.ts` to your .gitignore.
 //
-// The built-in `gpui` module, as TypeScript declarations, for script API
+// The built-in `gpui` module, as TypeScript declarations, for gpui-shell
 // {version}. Do not edit: gpui-shell rewrites this on every run, in every
 // directory that imports the module, from the runtime that is about to execute
 // the script. A committed copy could only ever be the stale one.
@@ -609,6 +609,12 @@ const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; 
      * ignore this.
      */
     id(name: string): Element;
+    /** Owns wheel and touch scrolling on both axes for overflowing children. */
+    overflow_scroll(): Element;
+    /** Owns horizontal wheel and touch scrolling for overflowing children. */
+    overflow_x_scroll(): Element;
+    /** Owns vertical wheel and touch scrolling for overflowing children. */
+    overflow_y_scroll(): Element;
     /** Animates later target changes entirely in native GPUI code. */
     transition(property: MotionProperty, policy: number | TransitionPolicy): Element;
     /** Springs later target changes entirely in native GPUI code. */
@@ -737,10 +743,6 @@ const CONSTRUCTORS: &str = r#"
   export function theme(): Theme;
   /** Switches palette. Returns whether anything changed. */
   export function set_theme(mode: "light" | "dark"): boolean;
-  /**
-   * States the script API version this application needs, at the first line,
-   * where a mismatch is still cheap. Throws when the runtime cannot satisfy it.
-   */
   export interface Window {
     /**
      * Opens a dialog on the window's root, and answers the stack's new depth.
@@ -780,7 +782,6 @@ const CONSTRUCTORS: &str = r#"
     clear_toasts(): number;
   }
 
-  export function require_api(version: string): string;
   /**
    * The native modules this host registered, declared by the application.
    *
@@ -1045,6 +1046,9 @@ mod tests {
         "accessibility_label",
         "href",
         "id",
+        "overflow_scroll",
+        "overflow_x_scroll",
+        "overflow_y_scroll",
         "transition",
         "spring",
         "hover",
@@ -1134,6 +1138,16 @@ mod tests {
             );
         }
         assert!(!declarations.contains("__"));
+    }
+
+    #[test]
+    fn compatibility_is_manifest_metadata_not_a_script_api() {
+        let declarations = declarations();
+        assert!(!declarations.contains("require_api"));
+        assert!(declarations.contains(&format!(
+            "for gpui-shell\n// {}",
+            crate::plugin::SHELL_VERSION
+        )));
     }
 
     #[test]
