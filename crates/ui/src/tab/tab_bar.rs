@@ -14,7 +14,7 @@ use crate::button::{Button, ButtonVariants as _};
 use crate::menu::{DropdownMenu as _, PopupMenuItem};
 use crate::{
     ActiveTheme, ElementExt, Icon, InteractiveElementExt as _, Selectable, Sizable, Size,
-    StyledExt, h_flex,
+    StyledExt, h_flex, styled::raised_shadow,
 };
 
 /// Slide motion for the selected-tab indicator.
@@ -192,6 +192,7 @@ impl TabBar {
     fn render_indicator(
         &self,
         bounds_rc: &Option<Rc<RefCell<TabIndicatorBounds>>>,
+        inset: Pixels,
         window: &mut Window,
         cx: &mut App,
     ) -> Option<(AnyElement, u64)> {
@@ -255,7 +256,7 @@ impl TabBar {
             .absolute()
             .top_0()
             .bottom_0()
-            .left(left)
+            .left(left + inset)
             .w(width)
             .map(|el| match variant {
                 TabVariant::Segmented => el.flex().items_center().child(
@@ -264,7 +265,7 @@ impl TabBar {
                         .h(inner_height)
                         .bg(cx.theme().tokens.background)
                         .rounded(inner_radius)
-                        .shadow_sm(),
+                        .shadow(raised_shadow()),
                 ),
                 TabVariant::Pill => el.flex().items_center().child(
                     div()
@@ -423,7 +424,8 @@ impl RenderOnce for TabBar {
             None
         };
 
-        let indicator = self.render_indicator(&bounds_rc, window, cx);
+        let padding_x = paddings.left;
+        let indicator = self.render_indicator(&bounds_rc, padding_x, window, cx);
         let indicator_epoch = indicator.as_ref().map(|(_, epoch)| *epoch).unwrap_or(0);
         let indicator_element = indicator.map(|(el, _)| el);
         let indicator_ready = indicator_element.is_some();
@@ -498,25 +500,33 @@ impl RenderOnce for TabBar {
             .refine_style(&self.style)
             .when_some(self.prefix, |this, prefix| this.child(prefix))
             .child(
-                h_flex().id("tabs").flex_1().overflow_x_hidden().child(
-                    h_flex()
-                        .id("tabs-inner")
-                        .relative()
-                        .gap(gap)
-                        .overflow_x_scroll()
-                        .lock_scroll_axis()
-                        .when_some(self.scroll_handle, |this, scroll_handle| {
-                            this.track_scroll(&scroll_handle)
-                        })
-                        .when_some(bounds_rc.clone(), |this, rc| {
-                            this.on_prepaint(move |bounds, _, _| {
-                                rc.borrow_mut().container = bounds;
+                h_flex()
+                    .id("tabs")
+                    .flex_1()
+                    .mx(-padding_x)
+                    .px(padding_x)
+                    .overflow_x_hidden()
+                    .child(
+                        h_flex()
+                            .id("tabs-inner")
+                            .mx(-padding_x)
+                            .px(padding_x)
+                            .relative()
+                            .gap(gap)
+                            .overflow_x_scroll()
+                            .lock_scroll_axis()
+                            .when_some(self.scroll_handle, |this, scroll_handle| {
+                                this.track_scroll(&scroll_handle)
                             })
-                        })
-                        .when_some(indicator_element, |this, ind| this.child(ind))
-                        .children(rendered_tabs)
-                        .when(has_suffix_or_menu, |this| this.child(self.last_empty_space)),
-                ),
+                            .when_some(bounds_rc.clone(), |this, rc| {
+                                this.on_prepaint(move |bounds, _, _| {
+                                    rc.borrow_mut().container = bounds;
+                                })
+                            })
+                            .when_some(indicator_element, |this, ind| this.child(ind))
+                            .children(rendered_tabs)
+                            .when(has_suffix_or_menu, |this| this.child(self.last_empty_space)),
+                    ),
             )
             .when(self.menu, |this| {
                 this.child(

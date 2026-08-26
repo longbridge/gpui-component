@@ -2149,7 +2149,7 @@ impl BlockNode {
                         .px_2()
                         .py_1()
                         .when(!is_last_col, |this| {
-                            this.border_r_1().border_color(cx.theme().border)
+                            this.border_r_1().border_color(cx.theme().table_row_border)
                         })
                         .refine_style(&style.table_cell)
                         .child(cell.children.render(node_cx, window, cx)),
@@ -2160,9 +2160,17 @@ impl BlockNode {
                     .id("row")
                     .w_full()
                     .when(row_ix < row_count - 1, |this| this.border_b_1())
-                    .border_color(cx.theme().border)
+                    .border_color(cx.theme().table_row_border)
                     .flex()
                     .flex_row()
+                    // The first row is the header, as everywhere else that
+                    // reads a table (`table_data`, `to_markdown`). The
+                    // refinement comes last so it can override the defaults.
+                    .when(row_ix == 0, |this| {
+                        this.bg(cx.theme().tokens.table_head)
+                            .text_color(cx.theme().table_head_foreground)
+                            .refine_style(&style.table_head)
+                    })
                     .children(cells),
             );
         }
@@ -2187,6 +2195,7 @@ impl BlockNode {
                     div()
                         .min_w_full()
                         .w(px(min_total_w))
+                        .bg(cx.theme().tokens.table)
                         .border_1()
                         .border_color(cx.theme().border)
                         .rounded(cx.theme().radius)
@@ -2246,7 +2255,7 @@ impl BlockNode {
                         .px_2()
                         .py_1()
                         .when(!is_last_col, |this| {
-                            this.border_r_1().border_color(cx.theme().border)
+                            this.border_r_1().border_color(cx.theme().table_row_border)
                         })
                         .refine_style(&style.table_cell)
                         .child(cell.children.render(node_cx, window, cx)),
@@ -2258,9 +2267,17 @@ impl BlockNode {
                     .id("row")
                     .w_full()
                     .when(row_ix < row_count - 1, |this| this.border_b_1())
-                    .border_color(cx.theme().border)
+                    .border_color(cx.theme().table_row_border)
                     .flex()
                     .flex_row()
+                    // The first row is the header, as everywhere else that
+                    // reads a table (`table_data`, `to_markdown`). The
+                    // refinement comes last so it can override the defaults.
+                    .when(row_ix == 0, |this| {
+                        this.bg(cx.theme().tokens.table_head)
+                            .text_color(cx.theme().table_head_foreground)
+                            .refine_style(&style.table_head)
+                    })
                     .children(cells),
             );
         }
@@ -2272,6 +2289,7 @@ impl BlockNode {
                 div()
                     .id(("table", options.ix))
                     .w_full()
+                    .bg(cx.theme().tokens.table)
                     .border_1()
                     .border_color(cx.theme().border)
                     .rounded(cx.theme().radius)
