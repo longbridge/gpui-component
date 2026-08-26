@@ -1,21 +1,18 @@
-//! Clamp rendered Markdown to N whole lines with `TextView::max_lines`.
+//! Clamp rendered Markdown to a number of whole lines with
+//! `TextView::max_lines`.
 //!
-//! - Drag the slider (1 to 60 lines) to change the line budget: the first card
-//!   re-clamps, and a line of text is never cut in half. The photo crossing the
-//!   edge is cut there, showing the part that fits.
-//! - An Expand / Collapse button shows only while `is_clamped()` reports true
-//!   (or the card is expanded).
-//! - The second card fits within the cap, so it renders at natural height and
-//!   no button shows.
-//! - Resize the window: reflow changes where lines wrap, and the clip keeps
-//!   snapping to whole lines.
+//! - Drag the slider to change the line budget: a line of text is never cut in
+//!   half, and nothing is shown with less than a line of itself to show.
+//! - The photo crossing the edge is cut there, keeping the part that fits.
+//! - "Show more" appears only while `TextViewState::is_clamped()` reports that
+//!   the previous painted frame clipped something.
 //!
 //! Run: `cargo run -p text_max_lines`
 
 use gpui::{prelude::FluentBuilder as _, *};
 use gpui_component::{
-    ActiveTheme as _,
-    button::Button,
+    ActiveTheme as _, IconName, Sizable as _,
+    button::{Button, ButtonVariants as _},
     scroll::ScrollableElement as _,
     slider::{Slider, SliderEvent, SliderState},
     text::{TextView, TextViewState},
@@ -31,8 +28,8 @@ const LONG_MARKDOWN: &str = r#"### Quarterly summary
 rollout and the new [market data](https://longbridge.com) subscriptions —
 legacy plans are ~~discontinued~~ and folded into `pro`.
 
-> The clip must land on a whole-line boundary: however you drag the slider,
-> no line of glyphs is ever cut in half.
+> The clip must land on a whole line: however you drag the slider, no line of
+> glyphs is ever cut in half.
 
 Inline image mix: PNG avatars <img src="https://avatars.githubusercontent.com/u/5518" alt="Jason Lee avatar" width="32" height="32" /> and <img src="https://avatars.githubusercontent.com/u/28998859" alt="GitHub avatar" width="32" height="32" /> stay inside the same text flow, and an SVG badge ![Rust](https://rust-lang.org/static/images/rust-logo-blk.svg) wraps with the text around it.
 
@@ -61,7 +58,8 @@ fn main() {
 Text lines are kept whole; the photo above is cut on the box edge instead, so
 the preview never holds blank space it could have filled."#;
 
-const SHORT_MARKDOWN: &str = "A **short** note that fits within the cap, so no button shows.";
+const SHORT_MARKDOWN: &str = "A **short** note that fits inside the cap, so it renders at its natural \
+     height and no button appears.";
 
 struct MaxLinesExample {
     long: Entity<TextViewState>,
@@ -75,8 +73,8 @@ impl MaxLinesExample {
     fn new(cx: &mut Context<Self>) -> Self {
         let long = cx.new(|cx| TextViewState::markdown(LONG_MARKDOWN, cx));
         let short = cx.new(|cx| TextViewState::markdown(SHORT_MARKDOWN, cx));
-        // `is_clamped` is written by TextView during draw; observe the states
-        // so the Expand button shows up as soon as the flag flips.
+        // `is_clamped` is written while the view paints; observe the states so
+        // the button follows it without the caller measuring the text again.
         cx.observe(&long, |_, _, cx| cx.notify()).detach();
         cx.observe(&short, |_, _, cx| cx.notify()).detach();
 
@@ -104,14 +102,22 @@ impl MaxLinesExample {
         }
     }
 
-    fn card(&self, content: impl IntoElement, cx: &App) -> Div {
+    /// Caption above a preview, then the preview itself on a hairline surface.
+    fn section(&self, caption: impl Into<SharedString>, body: Div, cx: &App) -> Div {
         v_flex()
-            .max_w(px(480.))
-            .p_3()
             .gap_2()
-            .rounded(cx.theme().radius_lg)
-            .bg(cx.theme().muted)
-            .child(content)
+            .child(
+                div()
+                    .text_xs()
+                    .text_color(cx.theme().muted_foreground)
+                    .child(caption.into()),
+            )
+            .child(
+                body.p_4()
+                    .rounded(cx.theme().radius)
+                    .border_1()
+                    .border_color(cx.theme().border),
+            )
     }
 }
 
@@ -123,47 +129,101 @@ impl Render for MaxLinesExample {
 
         v_flex()
             .size_full()
-            .p_4()
-            .gap_4()
+            .bg(cx.theme().background)
+            .text_color(cx.theme().foreground)
             .child(
-                h_flex()
-                    .max_w(px(480.))
-                    .gap_3()
-                    .items_center()
-                    .child(format!("max_lines: {max_lines}"))
-                    .child(div().flex_1().child(Slider::new(&self.slider))),
+                v_flex()
+                    .px_6()
+                    .pt_6()
+                    .pb_4()
+                    .gap_1()
+                    .child(div().text_lg().font_semibold().child("Clamped previews"))
+                    .child(
+                        div()
+                            .text_sm()
+                            .text_color(cx.theme().muted_foreground)
+                            .child(
+                                "Rendered Markdown bounded to a number of whole lines. \
+                                 Drag the slider, or resize the window to reflow the text.",
+                            ),
+                    ),
             )
             .child(
-                // The cards scroll while the slider stays pinned above.
+                h_flex()
+                    .px_6()
+                    .pb_4()
+                    .gap_3()
+                    .items_center()
+                    .child(
+                        div()
+                            .text_sm()
+                            .text_color(cx.theme().muted_foreground)
+                            .child("Lines"),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .max_w(px(320.))
+                            .child(Slider::new(&self.slider)),
+                    )
+                    // A fixed width keeps the slider still as the value grows.
+                    .child(div().w(px(24.)).text_sm().child(max_lines.to_string())),
+            )
+            .child(
                 v_flex()
                     .flex_1()
                     .min_h_0()
-                    .gap_4()
+                    .px_6()
+                    .pb_6()
+                    .gap_6()
                     .child(
-                        self.card(
-                            TextView::new(&self.long)
-                                .selectable(true)
-                                .when(!expanded, |this| this.max_lines(max_lines)),
+                        self.section(
+                            if expanded {
+                                "Expanded"
+                            } else {
+                                "Clamped to the line budget"
+                            },
+                            v_flex()
+                                .gap_3()
+                                .child(
+                                    TextView::new(&self.long)
+                                        .selectable(true)
+                                        .when(!expanded, |this| this.max_lines(max_lines)),
+                                )
+                                .when(clamped || expanded, |this| {
+                                    this.child(
+                                        h_flex().child(
+                                            Button::new("toggle")
+                                                .ghost()
+                                                .small()
+                                                .icon(if expanded {
+                                                    IconName::ChevronUp
+                                                } else {
+                                                    IconName::ChevronDown
+                                                })
+                                                .label(if expanded {
+                                                    "Show less"
+                                                } else {
+                                                    "Show more"
+                                                })
+                                                .on_click(cx.listener(|this, _, _, cx| {
+                                                    this.expanded = !this.expanded;
+                                                    cx.notify();
+                                                })),
+                                        ),
+                                    )
+                                }),
                             cx,
-                        )
-                        .when(clamped || expanded, |this| {
-                            this.child(
-                                h_flex().child(
-                                    Button::new("toggle")
-                                        .label(if expanded { "Collapse" } else { "Expand" })
-                                        .on_click(cx.listener(|this, _, _, cx| {
-                                            this.expanded = !this.expanded;
-                                            cx.notify();
-                                        })),
-                                ),
-                            )
-                        }),
+                        ),
                     )
                     .child(
-                        self.card(
-                            TextView::new(&self.short)
-                                .selectable(true)
-                                .max_lines(max_lines),
+                        self.section(
+                            "Shorter than the budget",
+                            v_flex().child(
+                                TextView::new(&self.short)
+                                    .selectable(true)
+                                    .max_lines(max_lines),
+                            ),
                             cx,
                         ),
                     )
@@ -186,7 +246,7 @@ fn main() {
         cx.set_http_client(std::sync::Arc::new(http_client));
 
         let window_options = WindowOptions {
-            window_bounds: Some(WindowBounds::centered(size(px(680.), px(620.)), cx)),
+            window_bounds: Some(WindowBounds::centered(size(px(720.), px(680.)), cx)),
             ..Default::default()
         };
 
