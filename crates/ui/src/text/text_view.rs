@@ -217,9 +217,10 @@ impl TextView {
     /// Check [`TextViewState::is_clamped`] (which answers for the frame that
     /// was last painted) to decide whether to show an "expand" affordance.
     ///
-    /// With paragraph spacing or oversized headings, fewer than `n` full lines
-    /// may fit inside the capped height. Ignored when [`Self::scrollable`] is
-    /// set.
+    /// `n` counts lines of body text, so paragraph spacing and taller lines
+    /// mean fewer of them fit inside the capped height. A line taller than the
+    /// whole budget keeps the part that fits rather than emptying the box.
+    /// Ignored when [`Self::scrollable`] is set.
     pub fn max_lines(mut self, max_lines: usize) -> Self {
         self.max_lines = Some(max_lines);
         self
@@ -407,15 +408,21 @@ fn line_safe_clip_bottom(
         }
     }
 
+    let Some((last_line_bottom, line_height)) = last_line_bottom_above(spans, clip) else {
+        // Leaving the straddling line out would leave nothing at all — a first
+        // line taller than the whole budget, a heading in a one-line box. It
+        // keeps the part that fits instead, because an empty clamp reads as
+        // broken where a cut one reads as more to come.
+        return None;
+    };
+
     // Snap away a scrap. Only content that continues past the box can leave
     // one: the space under the last line of a document that fits is the box's
     // own, not a piece of something below.
-    if content_bottom > box_bottom + CLIP_EPSILON
-        && let Some((bottom, line_height)) = last_line_bottom_above(spans, clip)
-    {
-        let strip = clip - bottom;
+    if content_bottom > box_bottom + CLIP_EPSILON {
+        let strip = clip - last_line_bottom;
         if strip > CLIP_EPSILON && strip < line_height {
-            clip = bottom;
+            clip = last_line_bottom;
         }
     }
 
@@ -999,6 +1006,21 @@ mod tests {
         // Nothing crosses the edge at all: the space under the last line is
         // the box's own, not a scrap of something below.
         assert_eq!(line_safe_clip_bottom(&spans, px(130.), px(128.)), None);
+    }
+
+    #[test]
+    fn a_line_taller_than_the_budget_keeps_the_part_that_fits() {
+        use super::line_safe_clip_bottom;
+        use crate::text::state::LineSpan;
+
+        // A heading line of 28px, in a box capped at one 26px body line.
+        let heading = [LineSpan {
+            top: px(70.),
+            bottom: px(98.),
+            line_height: px(28.),
+        }];
+
+        assert_eq!(line_safe_clip_bottom(&heading, px(96.), px(400.)), None);
     }
 
     #[test]

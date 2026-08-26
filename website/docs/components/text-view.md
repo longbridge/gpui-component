@@ -64,9 +64,11 @@ behind.
 
 `TextViewState::is_clamped()` reports whether the previous painted frame
 actually clipped content, so the caller can decide whether to render an
-"expand" affordance. With paragraph spacing or oversized headings, fewer than
-`n` full lines may fit inside the capped height. `max_lines` only applies to
-the fit-content mode and is ignored when `scrollable` is set.
+"expand" affordance. `n` counts lines of body text, so paragraph spacing and
+taller lines mean fewer of them fit inside the capped height, and a line taller
+than the whole budget keeps the part that fits rather than emptying the box.
+`max_lines` only applies to the fit-content mode and is ignored when
+`scrollable` is set.
 
 ## Link Click Handling
 
