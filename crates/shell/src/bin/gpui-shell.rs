@@ -664,7 +664,7 @@ fn watch_sources(
     cx: &mut App,
 ) {
     let started = window.update(cx, |_, window, cx| {
-        watch::watch_view(&runtime, &view, directory, entry, window, cx)
+        watch::Watch::start(&runtime, &view, directory, entry, window, cx)
     });
 
     match started {

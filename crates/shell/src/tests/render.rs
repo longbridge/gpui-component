@@ -916,9 +916,14 @@ fn an_embedded_runtime_reloads_when_a_source_changes(cx: &mut TestAppContext) {
             .expect("instantiate");
         let view = cx.new(|_| ScriptView::new(runtime.clone(), object));
         // Exercise the watcher itself in both debug and release test builds.
-        // `reload_in_debug` intentionally does nothing in release binaries.
-        let watch =
-            crate::watch::watch_view(&runtime, &view, directory.clone(), "main.js", window, cx);
+        let watch = crate::watch::Watch::start(
+            &runtime,
+            &view,
+            directory.clone(),
+            "main.js",
+            window,
+            cx,
+        );
         watch.forget();
         view
     });
@@ -1059,7 +1064,7 @@ fn a_watcher_releases_its_view(cx: &mut TestAppContext) {
             .instantiate(&view_type, window, cx)
             .expect("instantiate");
         let view = cx.new(|_| ScriptView::new(runtime.clone(), object));
-        let watch = crate::watch::reload_in_debug(
+        let watch = crate::watch::Watch::start(
             &runtime,
             &view,
             directory.clone(),

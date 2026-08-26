@@ -152,12 +152,12 @@ gpui_shell::on_exit_request(|request, window, cx| {
 One call starts it, and it is the same one the `--watch` flag uses:
 
 ```rust
-gpui_shell::watch::reload_in_debug(
+gpui_shell::watch::Watch::start(
     &runtime, &view, app_root.clone(), "main.js", window, cx,
 ).forget();
 ```
 
-Two things about that signature. It **does nothing in a release build** — it returns an inert handle, so leaving the call in costs a branch. And the returned `Watch` is the watch: dropping it stops the loop, which is what a host unmounting a panel wants, while `.forget()` lets it run for as long as the view does. The loop also ends on its own when the view, the runtime or the window goes away, because it holds all three weakly — a strong handle here would keep a panel's runtime alive after the dock removed it.
+`Watch::start` has no hidden build-mode policy: the CLI calls it after `--watch`, while an embedded host can put the call behind `#[cfg(debug_assertions)]`. The returned `Watch` is the watch: dropping it stops the loop, which is what a host unmounting a panel wants, while `.forget()` lets it run for as long as the view does. The loop also ends on its own when the view, the runtime or the window goes away, because it holds all three weakly — a strong handle here would keep a panel's runtime alive after the dock removed it.
 
 A reload re-reads **every** module, entry point included — a hot-reload that quietly served a stale import would be worse than none, because it looks like it worked. It does all of its fallible work before touching the live view: if the new code fails to load, the previous view keeps running, the error goes to `tracing`, and a toast with a stable id reports it in the window. The next successful reload retracts that toast.
 

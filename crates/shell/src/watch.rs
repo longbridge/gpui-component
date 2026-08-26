@@ -277,123 +277,7 @@ fn is_source(name: &str) -> bool {
 /// take, and far above the cost of one `stat` per source file.
 pub(crate) const POLL_INTERVAL: Duration = Duration::from_millis(250);
 
-/// Reloads a script view whenever its sources change, for a host that embeds the
-/// runtime — **and does nothing at all in a release build.**
-///
-/// The `gpui-shell` binary has `--watch` because the person running it is the
-/// person editing. A host that embeds the runtime has no such flag to offer, and
-/// the answer is not to invent one: a debug build *is* the development build, so
-/// editing a script and seeing the panel change is what should happen by
-/// default, and a shipped binary must never sit and poll a directory it has no
-/// reason to believe anyone is editing.
-///
-/// ```rust,ignore
-/// // Once, where the view is created.
-/// gpui_shell::watch::reload_in_debug(runtime.clone(), view.clone(), directory, "main.js", window, cx);
-/// ```
-///
-/// A failed reload leaves the running view alone and reports on the log, the one
-/// channel an embedded runtime can count on: it has no `ShellRoot` to raise a
-/// toast on, and a host that wants one can watch for the log or drive
-/// [`reload`] itself.
-///
-/// # What ends the loop
-///
-/// The view going away, the runtime going away, or the window closing —
-/// whichever comes first, checked every tick.
-///
-/// Both handles are weak on purpose. A strong `Entity<ScriptView>` here would
-/// keep a panel alive after the dock removed it: the view would never drop, the
-/// runtime it points at would never drop, and the poller would go on stating the
-/// directory for a panel nobody can see. Mount and unmount a few panels and the
-/// pollers accumulate. So the loop holds nothing and asks each tick whether
-/// there is still something to reload.
-pub fn reload_in_debug(
-    runtime: &Rc<ShellRuntime>,
-    view: &Entity<ScriptView>,
-    directory: PathBuf,
-    entry: &'static str,
-    window: &mut Window,
-    cx: &mut App,
-) -> Watch {
-    if !cfg!(debug_assertions) {
-        return Watch { task: None };
-    }
-
-    watch_view(runtime, view, directory, entry, window, cx)
-}
-
-/// Watches whatever the build is, and hands back the handle that stops it.
-///
-/// [`reload_in_debug`] is this with the release-build question already
-/// answered, which is the right default for a panel; a host that has its own
-/// `--watch` flag decides for itself and calls this.
-pub fn watch_view(
-    runtime: &Rc<ShellRuntime>,
-    view: &Entity<ScriptView>,
-    directory: PathBuf,
-    entry: impl Into<String>,
-    window: &mut Window,
-    cx: &mut App,
-) -> Watch {
-    let entry = entry.into();
-    let handle = window.window_handle();
-    let mut watcher = SourceWatcher::new(directory.clone());
-    let runtime = Rc::downgrade(runtime);
-    let view = view.downgrade();
-
-    let task = cx.spawn(async move |cx| {
-        loop {
-            cx.background_executor().timer(POLL_INTERVAL).await;
-
-            // The scan runs on a background thread. It is bounded — depth 8,
-            // 4,096 files — but that bound is a `stat` per source file, four
-            // times a second, and on a slow directory that is a steady periodic
-            // stall in a place a user would experience as the window hitching.
-            // Only the answer comes back.
-            let (changed, scanned) = cx
-                .background_executor()
-                .spawn(async move {
-                    let changed = watcher.poll();
-                    (changed, watcher)
-                })
-                .await;
-            watcher = scanned;
-
-            let (Some(runtime), Some(view)) = (runtime.upgrade(), view.upgrade()) else {
-                break;
-            };
-
-            if !changed {
-                continue;
-            }
-
-            let reached = handle.update(cx, |_, window, cx| {
-                match reload(&runtime, &view, &directory, &entry, window, cx) {
-                    Ok(()) => {
-                        tracing::info!("reloaded {}", directory.display());
-                        retract_failure(handle, window, cx);
-                    }
-                    // `{error:#}` keeps the `anyhow` context chain, which is what
-                    // names the file and the stage that failed.
-                    Err(error) => {
-                        let message = format!("{error:#}");
-                        tracing::error!("reload failed: {message}");
-                        report_failure(handle, &message, window, cx);
-                    }
-                }
-            });
-
-            if reached.is_err() {
-                break;
-            }
-        }
-    });
-
-    Watch { task: Some(task) }
-}
-
-/// A running watcher. Dropping it stops the loop.
+/// A running source watch. Dropping it stops the loop.
 ///
 /// Returned rather than detached so a host that unmounts a panel can stop
 /// watching for it. The loop also ends on its own when the view, the runtime or
@@ -405,6 +289,81 @@ pub struct Watch {
 }
 
 impl Watch {
+    /// Starts reloading `view` whenever application sources change.
+    ///
+    /// This method has no hidden build-mode policy. A command-line host can
+    /// call it after parsing `--watch`; an embedded host can place the call in
+    /// a `#[cfg(debug_assertions)]` block. A failed reload leaves the last good
+    /// view running and reports the error through tracing and, when available,
+    /// the window's [`ShellRoot`] toast stack.
+    ///
+    /// The watcher holds the runtime and view weakly, so it cannot keep an
+    /// unmounted application alive.
+    pub fn start(
+        runtime: &Rc<ShellRuntime>,
+        view: &Entity<ScriptView>,
+        directory: PathBuf,
+        entry: impl Into<String>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Self {
+        let entry = entry.into();
+        let handle = window.window_handle();
+        let mut watcher = SourceWatcher::new(directory.clone());
+        let runtime = Rc::downgrade(runtime);
+        let view = view.downgrade();
+
+        let task = cx.spawn(async move |cx| {
+            loop {
+                cx.background_executor().timer(POLL_INTERVAL).await;
+
+                // The scan runs on a background thread. It is bounded — depth 8,
+                // 4,096 files — but that bound is a `stat` per source file, four
+                // times a second, and on a slow directory that is a steady periodic
+                // stall in a place a user would experience as the window hitching.
+                // Only the answer comes back.
+                let (changed, scanned) = cx
+                    .background_executor()
+                    .spawn(async move {
+                        let changed = watcher.poll();
+                        (changed, watcher)
+                    })
+                    .await;
+                watcher = scanned;
+
+                let (Some(runtime), Some(view)) = (runtime.upgrade(), view.upgrade()) else {
+                    break;
+                };
+
+                if !changed {
+                    continue;
+                }
+
+                let reached = handle.update(cx, |_, window, cx| {
+                    match reload(&runtime, &view, &directory, &entry, window, cx) {
+                        Ok(()) => {
+                            tracing::info!("reloaded {}", directory.display());
+                            retract_failure(handle, window, cx);
+                        }
+                        // `{error:#}` keeps the `anyhow` context chain, which is what
+                        // names the file and the stage that failed.
+                        Err(error) => {
+                            let message = format!("{error:#}");
+                            tracing::error!("reload failed: {message}");
+                            report_failure(handle, &message, window, cx);
+                        }
+                    }
+                });
+
+                if reached.is_err() {
+                    break;
+                }
+            }
+        });
+
+        Self { task: Some(task) }
+    }
+
     /// Lets the watcher run for as long as the view does.
     pub fn forget(mut self) {
         if let Some(task) = self.task.take() {

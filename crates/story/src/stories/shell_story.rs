@@ -758,14 +758,17 @@ impl ShellStory {
                     // anything. The Reload button stays for the case where
                     // you want it now rather than in a quarter second.
                     // Compiled out of a release build entirely.
-                    self.script_watch = Some(gpui_shell::watch::reload_in_debug(
-                        &runtime,
-                        &view,
-                        script_directory(),
-                        ENTRY,
-                        window,
-                        cx,
-                    ));
+                    #[cfg(debug_assertions)]
+                    {
+                        self.script_watch = Some(Watch::start(
+                            &runtime,
+                            &view,
+                            script_directory(),
+                            ENTRY,
+                            window,
+                            cx,
+                        ));
+                    }
                     self.script = Some(view);
                 }
                 self.script_error = None;
@@ -802,14 +805,17 @@ impl ShellStory {
         match loaded {
             Ok(view) => {
                 if self.motion.is_none() {
-                    self.motion_watch = Some(gpui_shell::watch::reload_in_debug(
-                        &runtime,
-                        &view,
-                        motion_script_directory(),
-                        MOTION_ENTRY,
-                        window,
-                        cx,
-                    ));
+                    #[cfg(debug_assertions)]
+                    {
+                        self.motion_watch = Some(Watch::start(
+                            &runtime,
+                            &view,
+                            motion_script_directory(),
+                            MOTION_ENTRY,
+                            window,
+                            cx,
+                        ));
+                    }
                     self.motion = Some(view);
                 }
                 self.motion_error = None;

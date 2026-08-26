@@ -146,12 +146,12 @@ gpui_shell::on_exit_request(|request, window, cx| {
 一个调用就能开起来，`--watch` 用的也是这一个：
 
 ```rust
-gpui_shell::watch::reload_in_debug(
+gpui_shell::watch::Watch::start(
     &runtime, &view, app_root.clone(), "main.js", window, cx,
 ).forget();
 ```
 
-这个签名有两点要说。它在 **release 构建下什么都不做**——返回一个空句柄，所以把这行留在代码里只值一个分支。另外返回的 `Watch` 本身就是这次监听：把它 drop 掉，循环就停，这正是宿主卸下一块面板时想要的；而 `.forget()` 让它跟着视图一直活下去。视图、运行时或窗口任意一个消失时，循环也会自己结束——因为它对这三者都只持弱引用；这里若持强引用，dock 已经移除的面板，其运行时会一直不被释放。
+`Watch::start` 不暗藏构建模式策略：CLI 在解析到 `--watch` 后调用它，嵌入式宿主则可以把调用放进 `#[cfg(debug_assertions)]`。返回的 `Watch` 本身就是这次监听：把它 drop 掉，循环就停，这正是宿主卸下一块面板时想要的；而 `.forget()` 让它跟着视图一直活下去。视图、运行时或窗口任意一个消失时，循环也会自己结束——因为它对这三者都只持弱引用；这里若持强引用，dock 已经移除的面板，其运行时会一直不被释放。
 
 一次重载会重新读取**每一个**模块，入口也在内——一个悄悄用了旧 import 的 hot-reload 比没有更糟，因为它看起来是成功的。它会先把所有可能失败的活干完，再去碰活着的那个视图：新代码加载失败时，上一个视图继续运行，错误进 `tracing`，窗口里由一条固定 id 的 toast 报出来；下一次成功的重载会撤掉这条 toast。
 
