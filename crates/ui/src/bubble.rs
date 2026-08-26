@@ -284,7 +284,7 @@ impl RenderOnce for BubbleGroup {
 }
 
 enum BubbleReactionChild {
-    Action(Button),
+    Action(Box<Button>),
     Element(AnyElement),
 }
 
@@ -331,7 +331,8 @@ impl BubbleReactions {
     /// for emoji, labels, and arbitrary elements when the child should retain
     /// its own styling, including a custom button radius.
     pub fn action(mut self, action: Button) -> Self {
-        self.children.push(BubbleReactionChild::Action(action));
+        self.children
+            .push(BubbleReactionChild::Action(Box::new(action)));
         self
     }
 }
@@ -364,7 +365,9 @@ impl RenderOnce for BubbleReactions {
             .any(|child| matches!(child, BubbleReactionChild::Action(_)));
         let action_radius = cx.theme().radius_full();
         let children = self.children.into_iter().map(move |child| match child {
-            BubbleReactionChild::Action(action) => action.rounded(action_radius).into_any_element(),
+            BubbleReactionChild::Action(action) => {
+                (*action).rounded(action_radius).into_any_element()
+            }
             BubbleReactionChild::Element(element) => element,
         });
 
