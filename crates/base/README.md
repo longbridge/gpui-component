@@ -64,21 +64,33 @@ gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["fo
 
 ## Initialization
 
-Call `gpui_base::init(cx)` once before creating windows or using foundation controls. It installs the global theme and focus-trap infrastructure required by the base layer.
+Call `gpui_base::init(cx)` once before creating windows or using foundation controls. It installs the global theme and focus-trap infrastructure required by the base layer. Put `gpui_base::Root` at the first level of each window so descendants inherit the active Base typography font. The default is GPUI's `.SystemUIFont`; applications can replace `Theme::global_mut(cx).tokens.typography.sans` without applying `font_family` throughout their views.
 
 ```rust
 use gpui::*;
+
+struct EmptyView;
+
+impl Render for EmptyView {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        div()
+    }
+}
 
 fn main() {
     gpui_platform::application().run(|cx| {
         gpui_base::init(cx);
 
-        // Create windows and views after initialization.
+        cx.open_window(WindowOptions::default(), |_, cx| {
+            let view = cx.new(|_| EmptyView);
+            cx.new(|cx| gpui_base::Root::new(view, cx))
+        })
+        .expect("failed to open application window");
     });
 }
 ```
 
-If the application already calls `gpui_component::init(cx)`, do not call `gpui_base::init(cx)` again. The higher-level initializer includes base initialization.
+If the application already calls `gpui_component::init(cx)`, do not call `gpui_base::init(cx)` or use the Base root again. The higher-level initializer includes Base initialization, and `gpui_component::Root` owns the complete styled window root.
 
 ## Quick Start
 
@@ -253,7 +265,7 @@ theme.tokens.colors.primary = rgb(0x2563eb).into();
 theme.tokens.radius.md = px(8.);
 ```
 
-Tokens describe design semantics; they do not automatically style unstyled controls. Applications read and apply these tokens in their own component implementations.
+Tokens describe design semantics; they do not automatically style unstyled controls. `Root` applies only the inherited `typography.sans` window default; applications read and apply the remaining tokens in their own component implementations.
 
 ### General Data and Layout Utilities
 
@@ -275,7 +287,7 @@ The crates target different abstraction levels and can be used in the same appli
 | Default presentation | None                                                             | Included                                                       |
 | Visual style owner   | Application                                                      | Component library, customizable through its Theme and APIs     |
 | Best suited for      | Custom design systems, registry components, and foundation reuse | Building complete desktop applications quickly                 |
-| Initialization       | `gpui_base::init(cx)`                                            | `gpui_component::init(cx)`, which includes base initialization |
+| Initialization       | `gpui_base::init(cx)` plus one `gpui_base::Root` per window      | `gpui_component::init(cx)` plus its styled `Root`               |
 
 Do not migrate from `gpui-component` by mechanically replacing imports. For example, `gpui_component::button::Button` is a fully styled higher-level component, while `gpui_base::Button` requires the caller to provide its children and all presentation styles.
 

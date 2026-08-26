@@ -23,14 +23,12 @@ use gpui_base::{
     CalendarItemKind, CalendarState, Checkbox, CheckboxIndicator, CheckboxState, Collapsible,
     ColorPicker, ColorPickerState, ColorSwatch, Combobox, DatePicker, Dialog, DialogBackdrop,
     DialogDescription, DialogPopup, DialogTitle, Editor, HoverCard, Input, InputBase, OtpState,
-    Popup, Scrollbar, ScrollbarMode, Select, Sheet, Slider, SliderIndicator, SliderThumb,
+    Popup, Root, Scrollbar, ScrollbarMode, Select, Sheet, Slider, SliderIndicator, SliderThumb,
     SliderTrack, Switch, SwitchThumb, SwitchTrack, Tab, Table, TableBody, TableCell, TableHead,
     TableHeader, TableRow, Tabs, TextSelectionEvent, TextSelectionHandle, TextSelectionLayer,
     Textarea, Toast, ToastTransitionStatus, Toggle, ToggleGroup, Tooltip, Tree, TreeItem,
     TreeState, VirtualListScrollHandle, v_virtual_list,
 };
-#[cfg(target_family = "wasm")]
-use std::borrow::Cow;
 use std::{rc::Rc, sync::Arc};
 use syntect_highlighter::{ShowcaseHighlightStyles, SyntectHighlighter};
 
@@ -113,17 +111,6 @@ pub const COMPONENTS: &[&str] = &[
     "tree",
     "virtual-list",
 ];
-
-fn showcase_root(theme: &gpui_base::Theme) -> gpui::Div {
-    div()
-        .size_full()
-        .flex()
-        .flex_col()
-        .bg(rgb(0xffffff))
-        .text_color(rgb(0x171717))
-        .text_xs()
-        .font_family(theme.tokens.typography.sans.clone())
-}
 
 pub struct BaseShowcase {
     component: String,
@@ -460,7 +447,13 @@ impl Render for BaseShowcase {
         // Surfaces rather than parts: these take the whole viewport.
         let fills_viewport = matches!(self.component.as_str(), "dock");
         let entity = cx.entity().downgrade();
-        showcase_root(cx.global::<gpui_base::Theme>())
+        div()
+            .size_full()
+            .flex()
+            .flex_col()
+            .bg(rgb(0xffffff))
+            .text_color(rgb(0x171717))
+            .text_xs()
             .child(TextSelectionLayer)
             .when(show_back, |this| {
                 this.child(
@@ -508,9 +501,7 @@ impl Render for BaseShowcase {
                             // fill it instead: centering them inside a
                             // `flex_none` box leaves a percentage size with
                             // nothing to resolve against, and it collapses.
-                            .when(!fills_viewport, |this| {
-                                this.items_center().justify_center()
-                            })
+                            .when(!fills_viewport, |this| this.items_center().justify_center())
                             .p_4()
                             .child(
                                 div()
@@ -522,27 +513,6 @@ impl Render for BaseShowcase {
                             ),
                     ),
             )
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn showcase_root_uses_the_default_theme_font() {
-        let mut root = showcase_root(&gpui_base::Theme::default());
-
-        assert_eq!(root.text_style().font_family.as_deref(), Some(".SystemUIFont"));
-    }
-
-    #[test]
-    fn showcase_root_font_follows_the_theme_typography_token() {
-        let mut theme = gpui_base::Theme::default();
-        theme.tokens.typography.sans = "Application Sans".into();
-        let mut root = showcase_root(&theme);
-
-        assert_eq!(root.text_style().font_family.as_deref(), Some("Application Sans"));
     }
 }
 
@@ -561,19 +531,14 @@ pub fn run(app: Application, component: impl Into<String>) {
             })
             .detach();
         }
-        #[cfg(target_family = "wasm")]
-        cx.text_system()
-            .add_fonts(vec![Cow::Borrowed(
-                include_bytes!("../../../story-web/fonts/Inter-Regular.ttf").as_slice(),
-            )])
-            .expect("failed to load gpui-base example font");
         let options = WindowOptions {
             #[cfg(not(target_family = "wasm"))]
             window_bounds: Some(WindowBounds::centered(size(px(840.), px(640.)), cx)),
             ..WindowOptions::default()
         };
         cx.open_window(options, move |window, cx| {
-            cx.new(|cx| BaseShowcase::new(component, window, cx))
+            let showcase = cx.new(|cx| BaseShowcase::new(component, window, cx));
+            cx.new(|cx| Root::new(showcase, cx))
         })
         .expect("failed to open gpui-base example window");
         cx.activate(true);
@@ -585,13 +550,9 @@ pub fn run_embedded(app: Application, component: impl Into<String>) -> gpui::App
     let component = component.into();
     app.run_embedded(move |cx: &mut App| {
         gpui_base::init(cx);
-        cx.text_system()
-            .add_fonts(vec![Cow::Borrowed(
-                include_bytes!("../../../story-web/fonts/Inter-Regular.ttf").as_slice(),
-            )])
-            .expect("failed to load gpui-base example font");
         cx.open_window(WindowOptions::default(), move |window, cx| {
-            cx.new(|cx| BaseShowcase::new(component, window, cx))
+            let showcase = cx.new(|cx| BaseShowcase::new(component, window, cx));
+            cx.new(|cx| Root::new(showcase, cx))
         })
         .expect("failed to open gpui-base example window");
         cx.activate(true);

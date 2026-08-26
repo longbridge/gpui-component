@@ -516,7 +516,10 @@ The base `Theme` contains:
 - the minimal Resizable handle colors required by its infrastructure.
 
 Semantic tokens describe roles and scales, never component names. They do not
-automatically style base controls. A presentation layer reads and applies them.
+automatically style base controls. The one inherited window-level default is
+`typography.sans`: `gpui_base::Root` applies it around the application view so
+plain text and controls share the platform UI font unless the application
+overrides it. A presentation layer reads and applies the remaining tokens.
 
 `gpui-component` projects its active theme into the base theme during
 initialization and theme changes. Direct base users can mutate
@@ -552,6 +555,11 @@ Call `gpui_base::init(cx)` before constructing base controls. Initialization:
 
 Applications that call `gpui_component::init(cx)` must not initialize base a
 second time; the styled crate includes base initialization.
+
+Direct Base applications put one `gpui_base::Root` at the first level of each
+window. It establishes inherited typography from the Base theme and observes
+runtime theme changes. `gpui_component::Root` owns this boundary for
+applications using the styled crate, so the two roots are not nested.
 
 ## Relationship to `gpui-component`
 
