@@ -19,9 +19,9 @@ render(cx) {
 v_flex().size_full().bg(surface).p(px(12.)).gap(px(8.)).rounded(px(6.))
 ```
 
-## 两半接口，一套用法
+## 统一的样式 API
 
-样式接口分为两半，两半存在的理由不同。
+所有样式方法都通过同一套链式 API 调用。根据 GPUI 是否能够自动导出方法信息，实现分为以下两类。
 
 **无参方法来自 GPUI 的反射表。** `flex_col`、`items_center`、`gap_2`、`rounded_md`、`text_sm`、`size_full`、`font_semibold`、`truncate`、`cursor_pointer`——整个家族都取自 `gpui_base::styled_ext_reflection_methods` 与 `gpui::styled_reflection::methods`，零维护成本。这些名字没有一个写在运行时的任何地方。上游 GPUI 新增一个样式方法，脚本接口就有了，生成的 `gpui.d.ts` 也有了。
 
@@ -29,7 +29,7 @@ v_flex().size_full().bg(surface).p(px(12.)).gap(px(8.)).rounded(px(6.))
 
 **有参方法无法被反射**，所以有 **57** 个是手工绑定的。这份列表是样式层里唯一手工维护的表，而且刻意保持很小。
 
-两半永远不重叠：一个名字只属于其中之一，一旦某个名字同时落在两边，测试会让构建失败。
+两类方法不会重名。测试会检查每个名字只出现一次，发现冲突时直接让构建失败。
 
 ## 长度
 

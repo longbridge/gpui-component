@@ -12,7 +12,7 @@ Dialog 不是一个浮动的 `div`。它是窗口层叠顺序中的一个位置�
 
 所以脚本说的是**放什么**到用户面前，根视图说的是它放在哪里、以及怎么离开。跨越这条边界的东西很少：一个返回元素的函数、一个贴靠的边、一句要显示的话。
 
-它们在 `window` 上而不在 `cx` 上，是因为 dialog 属于窗口，不属于打开它的那个 view：`cx.notify()` 重渲一个 view，`window.open_dialog()` 改变的是用户正在看的东西。`gpui-component` 划的是同一条线，于是一个应用的两半读起来是同一套词汇——而且 `window` 是个能继续长的地方。今天它承载的是 overlay；Rust 里的 `Window` 还回答焦点、尺寸与外观，这些将来有现成的位置可放。
+这些 API 放在 `window` 而不是 `cx` 上，是因为 dialog 属于窗口，不属于打开它的 view：`cx.notify()` 重新渲染一个 view，`window.open_dialog()` 则改变窗口当前显示的内容。`gpui-component` 也采用相同的职责划分，因此 Rust 与 JavaScript 的 API 保持一致。以后若要暴露焦点、尺寸或窗口外观等能力，也可以继续放在 `window` 上。
 
 ## 接口
 
