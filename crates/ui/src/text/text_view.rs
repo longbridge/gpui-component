@@ -208,9 +208,11 @@ impl TextView {
     /// The view's height is capped at `n` × the base line height, and a line
     /// of glyphs is never cut in half: a line that would straddle the bottom
     /// of the box is left out whole, across paragraphs, lists, headings, code
-    /// blocks and tables. Everything else is cut on the box edge, so an image
-    /// or a rule crossing it shows the part that fits rather than disappearing
-    /// and leaving blank space behind.
+    /// blocks and tables. Nothing is shown with less than a line of itself to
+    /// show, so the border and padding a table row leads with never strands at
+    /// the bottom; whatever has more than that is cut on the box edge and keeps
+    /// the part that fits, rather than disappearing and leaving blank space
+    /// behind.
     ///
     /// Check [`TextViewState::is_clamped`] (which answers for the frame that
     /// was last painted) to decide whether to show an "expand" affordance.
@@ -344,37 +346,80 @@ pub struct TextViewPrepaintState {
     clip_bottom: Option<Pixels>,
 }
 
-/// Where to clip so that a line of glyphs is never cut in half: `Some(y)` when
-/// a line reported by a descendant `Inline` straddles `box_bottom`, pulling the
-/// clip up to that line's top.
+/// Absorbs sub-pixel layout jitter: a line ending within a pixel of the box
+/// bottom counts as fitting inside it.
+const CLIP_EPSILON: Pixels = px(1.);
+
+/// The bottom of the last whole line at or above `y`, with the height of a line
+/// where it sits.
+fn last_line_bottom_above(spans: &[LineSpan], y: Pixels) -> Option<(Pixels, Pixels)> {
+    let mut last: Option<(Pixels, Pixels)> = None;
+    let mut keep = |bottom: Pixels, line_height: Pixels| {
+        if bottom <= y + CLIP_EPSILON && last.is_none_or(|(last, _)| bottom > last) {
+            last = Some((bottom, line_height));
+        }
+    };
+
+    for span in spans {
+        if span.line_height <= px(0.) {
+            continue;
+        }
+        let mut bottom = span.top + span.line_height;
+        while bottom <= span.bottom + CLIP_EPSILON {
+            keep(bottom, span.line_height);
+            bottom += span.line_height;
+        }
+        // The span's own bottom covers a last line taller than the rest.
+        keep(span.bottom, span.line_height);
+    }
+
+    last
+}
+
+/// Where to clip, given the lines a descendant `Inline` reported. `None` leaves
+/// the clip on the box edge.
 ///
-/// `None` when no line straddles it, which leaves the clip on the box edge —
-/// content with no glyph lines of its own, an image or a rule, is cut there
-/// rather than dropped, and the box never holds blank space it could have
-/// filled.
-fn line_safe_clip_bottom(spans: &[LineSpan], box_bottom: Pixels) -> Option<Pixels> {
-    // Absorb sub-pixel layout jitter: a line ending within a pixel of the box
-    // bottom counts as fitting inside it.
-    let epsilon = px(1.);
-    let mut clip: Option<Pixels> = None;
+/// Two things are never shown: half a line of glyphs, and anything with less
+/// than a line of itself to show. A line straddling `box_bottom` is left out
+/// whole, and so is the strip between it and the line before — the border and
+/// padding a table row leads with reads as a rendering fault rather than as a
+/// row. Whatever has more than a line to show is cut on the edge and keeps the
+/// part that fits, so the box holds no blank space it could have filled.
+fn line_safe_clip_bottom(
+    spans: &[LineSpan],
+    box_bottom: Pixels,
+    content_bottom: Pixels,
+) -> Option<Pixels> {
+    let mut clip = box_bottom;
 
     for span in spans {
         if span.line_height <= px(0.)
-            || span.bottom <= box_bottom + epsilon
             || span.top >= box_bottom
+            || span.bottom <= box_bottom + CLIP_EPSILON
         {
             continue;
         }
         let whole_lines = ((box_bottom - span.top) / span.line_height).floor();
         let line_top = span.top + span.line_height * whole_lines;
         // A line starting on the box edge is not straddling it.
-        if line_top >= box_bottom - epsilon {
-            continue;
+        if line_top < box_bottom - CLIP_EPSILON {
+            clip = clip.min(line_top);
         }
-        clip = Some(clip.map_or(line_top, |clip: Pixels| clip.min(line_top)));
     }
 
-    clip
+    // Snap away a scrap. Only content that continues past the box can leave
+    // one: the space under the last line of a document that fits is the box's
+    // own, not a piece of something below.
+    if content_bottom > box_bottom + CLIP_EPSILON
+        && let Some((bottom, line_height)) = last_line_bottom_above(spans, clip)
+    {
+        let strip = clip - bottom;
+        if strip > CLIP_EPSILON && strip < line_height {
+            clip = bottom;
+        }
+    }
+
+    (clip < box_bottom - CLIP_EPSILON).then_some(clip)
 }
 
 impl Element for TextView {
@@ -530,7 +575,7 @@ impl Element for TextView {
                 });
             }
             if clipped {
-                clip_bottom = line_safe_clip_bottom(&line_spans, bounds.bottom());
+                clip_bottom = line_safe_clip_bottom(&line_spans, bounds.bottom(), content_bottom);
             }
         }
 
@@ -926,15 +971,62 @@ mod tests {
             },
         ];
 
-        // A box ending inside the line 88..108 leaves that line out whole.
-        assert_eq!(line_safe_clip_bottom(&spans, px(100.)), Some(px(88.)));
+        // Content continues well past the box in every case but the last.
+        let below = px(400.);
 
-        // A box ending on a line boundary, in a gap between blocks, or past
-        // all the text has no line to pull the clip up for — whatever else
-        // crosses the edge is cut there.
-        assert_eq!(line_safe_clip_bottom(&spans, px(88.)), None);
-        assert_eq!(line_safe_clip_bottom(&spans, px(64.)), None);
-        assert_eq!(line_safe_clip_bottom(&spans, px(130.)), None);
+        // A box ending inside the line 88..108 leaves that line out whole.
+        assert_eq!(
+            line_safe_clip_bottom(&spans, px(100.), below),
+            Some(px(88.))
+        );
+
+        // A box ending on a line boundary has nothing to pull the clip up for.
+        assert_eq!(line_safe_clip_bottom(&spans, px(88.), below), None);
+
+        // A strip below the last line shorter than a line — the border and
+        // padding a block leads with — is not worth showing.
+        assert_eq!(line_safe_clip_bottom(&spans, px(64.), below), Some(px(60.)));
+
+        // One taller than a line is: whatever crosses the edge keeps the part
+        // that fits rather than leaving the box half empty.
+        let one_block = [LineSpan {
+            top: px(0.),
+            bottom: px(60.),
+            line_height: px(20.),
+        }];
+        assert_eq!(line_safe_clip_bottom(&one_block, px(200.), below), None);
+
+        // Nothing crosses the edge at all: the space under the last line is
+        // the box's own, not a scrap of something below.
+        assert_eq!(line_safe_clip_bottom(&spans, px(130.), px(128.)), None);
+    }
+
+    #[test]
+    fn the_clip_does_not_stop_on_a_row_of_border_and_padding() {
+        use super::line_safe_clip_bottom;
+        use crate::text::state::LineSpan;
+
+        // Two table rows, each one line of text, 9px of border and padding
+        // between them.
+        let rows = [
+            LineSpan {
+                top: px(100.),
+                bottom: px(126.),
+                line_height: px(26.),
+            },
+            LineSpan {
+                top: px(135.),
+                bottom: px(161.),
+                line_height: px(26.),
+            },
+        ];
+
+        // Leaving out the second row's text would strand the 9px it leads
+        // with, so the clip goes back to the row above it.
+        assert_eq!(
+            line_safe_clip_bottom(&rows, px(148.), px(400.)),
+            Some(px(126.))
+        );
     }
 
     /// A clamped view nested the way an application nests one: inside a card,
@@ -944,6 +1036,7 @@ mod tests {
     /// box, nothing looks clipped and lines get cut in half.
     struct ClampedPageRoot {
         text_view: Entity<TextViewState>,
+        max_lines: usize,
     }
 
     impl Render for ClampedPageRoot {
@@ -966,7 +1059,7 @@ mod tests {
                                 .max_w(px(480.))
                                 .p_3()
                                 .gap_2()
-                                .child(TextView::new(&self.text_view).max_lines(3)),
+                                .child(TextView::new(&self.text_view).max_lines(self.max_lines)),
                         )
                         .overflow_y_scrollbar(),
                 )
@@ -983,7 +1076,10 @@ mod tests {
                     cx,
                 )
             });
-            ClampedPageRoot { text_view }
+            ClampedPageRoot {
+                text_view,
+                max_lines: 3,
+            }
         });
         let cx: &mut VisualTestContext = cx;
 

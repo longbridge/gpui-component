@@ -56,8 +56,10 @@ headings, code blocks and tables:
 TextView::markdown("preview", markdown_source).max_lines(5)
 ```
 
-Everything else is cut on the box edge, so an image or a rule crossing it
-shows the part that fits instead of disappearing and leaving blank space
+Nothing is shown with less than a line of itself to show, so the border and
+padding a table row leads with never strands at the bottom. Whatever has more
+than that is cut on the box edge and keeps the part that fits, so an image
+crossing the edge shows instead of disappearing and leaving blank space
 behind.
 
 `TextViewState::is_clamped()` reports whether the previous painted frame
