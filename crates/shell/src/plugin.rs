@@ -853,6 +853,7 @@ pub struct Plugin {
     /// manifest and then never swapped. Callbacks it registers capture it, so a
     /// timer firing inside plugin A cannot run with plugin B's grant.
     policy: Rc<Policy>,
+    runtime: Rc<ShellRuntime>,
     application: Option<Rc<crate::runtime::ApplicationGeneration>>,
     view: Entity<ScriptView>,
 }
@@ -897,6 +898,7 @@ impl Plugin {
 impl Drop for Plugin {
     fn drop(&mut self) {
         if let Some(application) = self.application.take() {
+            self.runtime.entities().release_application(&application);
             crate::engine::quickjs::cancel_application_tasks(&application);
         }
         crate::engine::quickjs::cancel_policy_tasks(&self.policy);
@@ -936,6 +938,7 @@ fn load_plugin(
         data_dir,
         store_path,
         policy,
+        runtime: runtime.clone(),
         application,
         view,
     })
@@ -1617,6 +1620,54 @@ mod tests {
         assert!(
             settled.contains("loaded through plugin policy"),
             "async init did not invalidate its own view: {settled}"
+        );
+    }
+
+    #[gpui::test]
+    fn unloading_a_plugin_releases_its_entities_and_subscriptions(cx: &mut TestAppContext) {
+        let plugins = TempTree::new("unload-entities");
+        let data = TempTree::new("unload-entities-data");
+        let manifest = r#"{
+            "id": "com.example.retained-input",
+            "name": "Retained input",
+            "entry": "main.js"
+        }"#;
+        let root = plugins.plugin("retained-input", manifest);
+        std::fs::write(
+            root.join("main.js"),
+            r#"
+                import { View, Input, InputState } from "gpui";
+                export default class Panel extends View {
+                  init() {
+                    this.field = InputState.new({ value: "owned by plugin" });
+                    this.field.on("change", () => {});
+                  }
+                  render() { return Input.new(this.field); }
+                }
+            "#,
+        )
+        .expect("write script");
+
+        cx.update(crate::init);
+        let runtime = ShellRuntime::new_isolated().expect("runtime");
+        cx.update(|cx| runtime.set_global(cx));
+        let window = cx.add_window(|_, _| Empty);
+        let mut context = VisualTestContext::from_window(*window.deref(), cx);
+        let mut manager = PluginManager::new(vec![plugins.path().to_path_buf()])
+            .with_data_home(data.path().to_path_buf());
+        assert!(manager.discover().iter().all(Result::is_ok));
+
+        context
+            .update(|window, cx| {
+                manager.load(&runtime, "com.example.retained-input", |_| true, window, cx)
+            })
+            .expect("load plugin");
+        assert_eq!(runtime.entities().len(), 1);
+
+        assert!(manager.unload("com.example.retained-input"));
+        assert!(
+            runtime.entities().is_empty(),
+            "unload must drop the input record and its GPUI subscriptions"
         );
     }
 

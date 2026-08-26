@@ -134,6 +134,7 @@ impl ScriptView {
                 .as_ref()
                 .is_none_or(|replacement| !Rc::ptr_eq(&previous, replacement))
         {
+            self.runtime.entities().release_application(&previous);
             crate::engine::quickjs::cancel_application_tasks(&previous);
         }
         self.object = object;
@@ -204,6 +205,7 @@ impl ScriptView {
 impl Drop for ScriptView {
     fn drop(&mut self) {
         if let Some(application) = self.object.application_generation() {
+            self.runtime.entities().release_application(&application);
             crate::engine::quickjs::cancel_application_tasks(&application);
         }
     }

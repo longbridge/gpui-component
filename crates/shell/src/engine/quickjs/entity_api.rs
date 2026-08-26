@@ -70,9 +70,13 @@ pub fn install(ctx: &Ctx<'_>, module: &Object<'_>, runtime: Weak<ShellRuntime>) 
 
                 let store = alive(&ctx, &create)?;
                 scope::with_current(|window, cx| {
-                    store
-                        .entities()
-                        .create_input(placeholder, value, window, cx)
+                    store.entities().create_input(
+                        placeholder,
+                        value,
+                        scope::current_application_generation(),
+                        window,
+                        cx,
+                    )
                 })
                 .ok_or_else(|| {
                     Exception::throw_type(

@@ -13,7 +13,10 @@
 //! - the script VM and GPUI's `App` are both main-thread only, so no other thread
 //!   can observe the stack;
 //! - frames are strictly last-in-first-out, enforced by [`CallScopeGuard`];
-//! - a frame's pointers are only reachable while its guard is alive.
+//! - a frame's pointers are only reachable while its guard is alive;
+//! - [`with_current_app`], [`with_current`] and [`with_context`] share one
+//!   runtime borrow guard, so a host callback cannot re-enter one of them while
+//!   another `&mut App` / `&mut Window` reconstructed from the frame is live.
 
 use std::{
     cell::{Cell, RefCell},
@@ -78,6 +81,30 @@ struct Frame {
 thread_local! {
     static STACK: RefCell<Vec<Frame>> = const { RefCell::new(Vec::new()) };
     static NEXT_GENERATION: Cell<u64> = const { Cell::new(1) };
+    static HOST_CONTEXT_BORROWED: Cell<bool> = const { Cell::new(false) };
+}
+
+struct HostContextBorrow;
+
+impl HostContextBorrow {
+    fn acquire() -> Option<Self> {
+        HOST_CONTEXT_BORROWED.with(|borrowed| {
+            if borrowed.replace(true) {
+                None
+            } else {
+                Some(Self)
+            }
+        })
+    }
+}
+
+impl Drop for HostContextBorrow {
+    fn drop(&mut self) {
+        HOST_CONTEXT_BORROWED.with(|borrowed| {
+            let was_borrowed = borrowed.replace(false);
+            debug_assert!(was_borrowed);
+        });
+    }
 }
 
 /// Pops the frame it owns when dropped.
@@ -275,9 +302,10 @@ pub fn current_phase() -> Option<ScopePhase> {
 /// Used by conversions that need to read globals (theme tokens) while a script
 /// call is in progress. Returns `None` outside any scope.
 pub fn with_current_app<R>(f: impl FnOnce(&mut App) -> R) -> Option<R> {
-    let app = STACK.with(|stack| stack.borrow().last().map(|frame| frame.app));
+    let app = STACK.with(|stack| stack.borrow().last().map(|frame| frame.app))?;
+    let _borrow = HostContextBorrow::acquire()?;
     // SAFETY: see the module header.
-    app.map(|app| f(unsafe { &mut *app }))
+    Some(f(unsafe { &mut *app }))
 }
 
 /// Runs `f` with the innermost scope's `Window` and `App`.
@@ -288,9 +316,11 @@ pub fn with_current_app<R>(f: impl FnOnce(&mut App) -> R) -> Option<R> {
 /// threaded through. Returns `None` outside any scope, which is the honest
 /// answer for "the script asked for this from nowhere".
 pub fn with_current<R>(f: impl FnOnce(&mut Window, &mut App) -> R) -> Option<R> {
-    let pointers = STACK.with(|stack| stack.borrow().last().map(|frame| (frame.window, frame.app)));
+    let pointers =
+        STACK.with(|stack| stack.borrow().last().map(|frame| (frame.window, frame.app)))?;
+    let _borrow = HostContextBorrow::acquire()?;
     // SAFETY: see the module header.
-    pointers.map(|(window, app)| f(unsafe { &mut *window }, unsafe { &mut *app }))
+    Some(f(unsafe { &mut *pointers.0 }, unsafe { &mut *pointers.1 }))
 }
 
 /// The policy the innermost scope runs under, if there is one.
@@ -338,12 +368,14 @@ pub fn with_context<R>(
             .map(|frame| (frame.window, frame.app))
     });
 
-    match pointers {
+    match (pointers, HostContextBorrow::acquire()) {
         // SAFETY: see the module header. The frame is the innermost one, its
         // guard is therefore still alive, and nothing else can be holding these
         // borrows on this thread while the script is running.
-        Some((window, app)) => Ok(f(unsafe { &mut *window }, unsafe { &mut *app })),
-        None => Err(StaleContext),
+        (Some((window, app)), Some(_borrow)) => {
+            Ok(f(unsafe { &mut *window }, unsafe { &mut *app }))
+        }
+        _ => Err(StaleContext),
     }
 }
 
@@ -361,3 +393,49 @@ impl std::fmt::Display for StaleContext {
 }
 
 impl std::error::Error for StaleContext {}
+
+#[cfg(test)]
+mod tests {
+    use gpui::{Render, TestAppContext, VisualTestContext};
+
+    use super::*;
+
+    struct Empty;
+
+    impl Render for Empty {
+        fn render(
+            &mut self,
+            _: &mut Window,
+            _: &mut gpui::Context<Self>,
+        ) -> impl gpui::IntoElement {
+            gpui::div()
+        }
+    }
+
+    #[gpui::test]
+    fn host_context_access_cannot_reenter(cx: &mut TestAppContext) {
+        let window = cx.add_window(|_, _| Empty);
+        let mut context = VisualTestContext::from_window(*window, cx);
+
+        context.update(|window, cx| {
+            let (_scope, generation) = enter(window, cx, ScopePhase::Task, None);
+            let nested = with_current(|_, _| {
+                (
+                    with_current_app(|_| ()),
+                    with_current(|_, _| ()),
+                    with_context(generation, |_, _| ()),
+                )
+            });
+            let Some((app, window_and_app, context)) = nested else {
+                panic!("the outer host-context borrow should succeed");
+            };
+            assert!(app.is_none());
+            assert!(window_and_app.is_none());
+            assert!(context.is_err());
+            assert!(
+                with_current_app(|_| ()).is_some(),
+                "dropping the outer borrow must allow the next access"
+            );
+        });
+    }
+}

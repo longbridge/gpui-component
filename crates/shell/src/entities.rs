@@ -18,10 +18,12 @@
 //! resolves to nothing and reports itself, instead of quietly resolving to
 //! whatever that index happens to hold here.
 
-use std::{cell::Cell, collections::HashMap};
+use std::{cell::Cell, collections::HashMap, rc::Rc};
 
 use gpui::{App, AppContext as _, Entity, Subscription, Window};
 use gpui_base::input::{InputEditorStyle, InputEvent, InputState};
+
+use crate::runtime::ApplicationGeneration;
 
 /// A script-visible reference to retained state.
 ///
@@ -38,6 +40,7 @@ const ENTITY_ID_MASK: u64 = u32::MAX as u64;
 enum Record {
     Input {
         state: Entity<InputState>,
+        application: Option<Rc<ApplicationGeneration>>,
         /// Subscriptions are stored, not returned, because a dropped
         /// `Subscription` stops delivering: a script that registers a handler
         /// and moves on would otherwise silently receive nothing.
@@ -90,6 +93,7 @@ impl EntityStore {
         &mut self,
         placeholder: Option<String>,
         value: Option<String>,
+        application: Option<Rc<ApplicationGeneration>>,
         window: &mut Window,
         cx: &mut App,
     ) -> EntityHandle {
@@ -108,6 +112,7 @@ impl EntityStore {
 
         self.push(Record::Input {
             state,
+            application,
             subscriptions: Vec::new(),
         })
     }
@@ -168,6 +173,21 @@ impl EntityStore {
         self.records.clear();
     }
 
+    /// Releases retained state created by one evaluated application.
+    ///
+    /// Dropping an input record also drops its GPUI subscriptions, so unload
+    /// cannot leave a handler (and its persistent JavaScript function) behind
+    /// in the runtime-wide store.
+    pub(crate) fn release_application(&mut self, application: &Rc<ApplicationGeneration>) {
+        self.records.retain(|_, record| match record {
+            Record::Input {
+                application: owner, ..
+            } => owner
+                .as_ref()
+                .is_none_or(|owner| !Rc::ptr_eq(owner, application)),
+        });
+    }
+
     /// How many handles are live, for `gc_stats` and for tests that assert the
     /// store does not grow without bound.
     #[cfg(test)]
@@ -182,9 +202,12 @@ impl EntityStore {
 
     #[cfg(test)]
     pub(crate) fn first_input(&self) -> Option<Entity<InputState>> {
-        self.records.values().find_map(|record| match record {
-            Record::Input { state, .. } => Some(state.clone()),
-        })
+        self.records
+            .values()
+            .map(|record| match record {
+                Record::Input { state, .. } => state.clone(),
+            })
+            .next()
     }
 
     /// Splits a handle into its entity id, refusing one that names another store.
@@ -321,18 +344,39 @@ mod tests {
         let window = cx.add_window(|_, _| gpui::Empty);
         let mut context = VisualTestContext::from_window(*window, cx);
 
-        let first = context.update(|window, cx| store.create_input(None, None, window, cx));
+        let first = context.update(|window, cx| store.create_input(None, None, None, window, cx));
         assert!(store.release(first));
-        let second = context.update(|window, cx| store.create_input(None, None, window, cx));
+        let second = context.update(|window, cx| store.create_input(None, None, None, window, cx));
         assert_ne!(first, second);
         assert!(store.input(first).is_none());
         assert!(store.input(second).is_some());
 
         store.clear();
-        let third = context.update(|window, cx| store.create_input(None, None, window, cx));
+        let third = context.update(|window, cx| store.create_input(None, None, None, window, cx));
         assert_ne!(second, third);
         assert!(store.input(second).is_none());
         assert!(store.input(third).is_some());
+    }
+
+    #[gpui::test]
+    fn releasing_an_application_drops_only_its_entities(cx: &mut TestAppContext) {
+        let mut store = EntityStore::try_new().expect("store id");
+        let first_application = ApplicationGeneration::new(1);
+        let second_application = ApplicationGeneration::new(2);
+        let window = cx.add_window(|_, _| gpui::Empty);
+        let mut context = VisualTestContext::from_window(*window, cx);
+
+        let first = context.update(|window, cx| {
+            store.create_input(None, None, Some(first_application.clone()), window, cx)
+        });
+        let second = context.update(|window, cx| {
+            store.create_input(None, None, Some(second_application.clone()), window, cx)
+        });
+
+        store.release_application(&first_application);
+
+        assert!(store.input(first).is_none());
+        assert!(store.input(second).is_some());
     }
 
     #[test]
