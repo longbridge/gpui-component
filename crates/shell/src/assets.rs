@@ -14,7 +14,12 @@
 //! missing asset says exactly where it was looked for rather than drawing
 //! nothing.
 
-use std::{borrow::Cow, cell::RefCell, collections::HashSet, path::PathBuf};
+use std::{
+    borrow::Cow,
+    cell::RefCell,
+    collections::{HashSet, VecDeque},
+    path::PathBuf,
+};
 
 use cap_std::{ambient_authority, fs::Dir};
 use gpui::{AssetSource, SharedString};
@@ -22,6 +27,7 @@ use gpui::{AssetSource, SharedString};
 const MAX_ASSET_BYTES: u64 = 16 * 1024 * 1024;
 const MAX_ASSET_LIST_ENTRIES: usize = 10_000;
 const MAX_ASSET_LIST_NAME_BYTES: usize = 1024 * 1024;
+const MAX_REPORTED_MISSING_ASSETS: usize = 256;
 
 /// Serves files from one application directory.
 #[derive(Clone, Debug)]
@@ -142,8 +148,40 @@ fn check_asset_list_budget(entries: usize, name_bytes: usize) -> Result<(), &'st
     Ok(())
 }
 
+#[derive(Default)]
+struct MissingAssetReports {
+    paths: HashSet<String>,
+    order: VecDeque<String>,
+}
+
+impl MissingAssetReports {
+    fn insert(&mut self, path: String) -> bool {
+        if self.paths.contains(&path) {
+            return false;
+        }
+        if self.paths.len() == MAX_REPORTED_MISSING_ASSETS
+            && let Some(oldest) = self.order.pop_front()
+        {
+            self.paths.remove(&oldest);
+        }
+        self.order.push_back(path.clone());
+        self.paths.insert(path)
+    }
+
+    #[cfg(test)]
+    fn clear(&mut self) {
+        self.paths.clear();
+        self.order.clear();
+    }
+
+    #[cfg(test)]
+    fn len(&self) -> usize {
+        self.paths.len()
+    }
+}
+
 thread_local! {
-    static REPORTED: RefCell<HashSet<String>> = RefCell::new(HashSet::new());
+    static REPORTED: RefCell<MissingAssetReports> = RefCell::new(MissingAssetReports::default());
 }
 
 fn report_missing(requested: &str, resolved: &std::path::Path) {
@@ -185,6 +223,24 @@ mod tests {
     fn a_missing_asset_is_not_an_error() {
         let assets = AppAssets::new(std::env::temp_dir());
         assert!(assets.load("definitely-not-here.svg").unwrap().is_none());
+    }
+
+    #[test]
+    fn missing_asset_report_history_is_bounded() {
+        REPORTED.with(|reported| {
+            let mut reported = reported.borrow_mut();
+            reported.clear();
+            for index in 0..257 {
+                reported.insert(format!("missing-{index}.svg"));
+            }
+            assert!(!reported.insert("missing-256.svg".to_owned()));
+            assert!(reported.insert("missing-0.svg".to_owned()));
+            assert!(
+                reported.len() <= MAX_REPORTED_MISSING_ASSETS,
+                "kept {} paths",
+                reported.len()
+            );
+        });
     }
 
     #[test]
