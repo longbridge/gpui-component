@@ -100,7 +100,7 @@ Bubble 的普通 variant 最大宽度为可用宽度的 80%，`Ghost` variant �
 | Variant | 适合表达的语义 | 默认 surface |
 | --- | --- | --- |
 | `Filled` | 主要消息内容，默认值。 | `primary` 与 `primary_foreground`。 |
-| `Secondary` | 次级强调的消息。 | `secondary` 与 `secondary_foreground`。 |
+| `Secondary` | 次级强调的消息。 | `muted` 底与 `secondary_foreground`（主题的 `secondary` 是按钮角色，比 shadcn 的会话 secondary 深一档）。 |
 | `Muted` | 低强调度的普通内容。 | `muted` 与普通前景色。 |
 | `Tinted` | 轻微使用 primary 色调的内容。 | 由主题背景与 primary 混合。 |
 | `Outline` | 需要清晰边界但不需要填充色的内容。 | 背景色与 `border`。 |

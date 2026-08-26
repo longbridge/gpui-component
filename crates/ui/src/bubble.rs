@@ -210,8 +210,12 @@ impl RenderOnce for BubbleContent {
                 BubbleVariant::Filled => this
                     .bg(tokens.colors.primary)
                     .text_color(tokens.colors.primary_foreground),
+                // The theme's `secondary` role is tuned for buttons and sits a
+                // tier darker than shadcn's conversation secondary; the
+                // near-background `muted` tier matches shadcn's value in both
+                // light and dark themes.
                 BubbleVariant::Secondary => this
-                    .bg(tokens.colors.secondary)
+                    .bg(tokens.colors.muted)
                     .text_color(tokens.colors.secondary_foreground),
                 BubbleVariant::Muted => this
                     .bg(tokens.colors.muted)
