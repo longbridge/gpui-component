@@ -259,10 +259,12 @@ handle.is_done();
 ### Timer 与标准宿主 API
 
 ```text
-`setTimeout` is not available in the shell: use timer.after(ms, callback)
+setTimeout  -> gpui.timer.after(ms, callback)
+setInterval -> gpui.timer.every(ms, callback)
+clearTimeout / clearInterval -> 对 after / every 返回的 Task 调用 cancel()
 ```
 
-`setTimeout`、`setInterval`、`clearTimeout` 与 `clearInterval` 是会抛错并指向 `timer.after` 或 `timer.every` 的 stub。全局 `fetch` 与 `WebSocket`，以及 [Capabilities](./capabilities.md) 中记录的安全标准模块，都是真实的异步宿主 API。CommonJS `require` 仍不可用；请使用 ES module。
+`setTimeout`、`setInterval`、`clearTimeout` 与 `clearInterval` 都是会抛错的 stub。一次性工作使用 `gpui.timer.after`，重复工作使用 `gpui.timer.every`；要停止其中任意一种，都对返回的 `Task` 调用 `cancel()`。全局 `fetch` 与 `WebSocket`，以及 [Capabilities](./capabilities.md) 中记录的安全标准模块，都是真实的异步宿主 API。CommonJS `require` 仍不可用；请使用 ES module。
 
 浏览器 DOM 与存储并不存在：没有 `document` 或 `localStorage`。全局 `window` 是 gpui-shell 用来承载 dialog、sheet 与 toast 的 overlay host，并不是浏览器 `Window`，也不提供 DOM。
 

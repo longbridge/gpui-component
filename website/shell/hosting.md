@@ -29,10 +29,9 @@ For the usual application window, loading is one operation and returns its
 cx.open_window(options, move |window, cx| {
     let root = runtime.load(&app_root, window, cx);
     #[cfg(debug_assertions)]
-    runtime
-        .watch(&root, window, cx)
-        .expect("loaded application")
-        .forget();
+    if let Ok(watch) = runtime.watch(&root, window, cx) {
+        watch.forget();
+    }
     root
 })?;
 ```
@@ -42,7 +41,9 @@ its entry. Its capabilities are requests, not approval: both paths run
 under the host's current default policy, and without a manifest the entry is
 `main.js`. Either path refreshes `gpui.d.ts`; a load failure renders the
 selectable error surface instead of panicking the host. A host that needs to
-handle the structured error itself uses `try_load`.
+handle the structured error itself uses `try_load`. A failure root has no
+application to watch, so `watch` returns `Err`; ignoring that error here keeps
+the selectable failure surface mounted.
 
 The lower-level methods below are for a host that needs to assemble a script
 view into an existing Rust composition.

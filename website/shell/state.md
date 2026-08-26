@@ -259,10 +259,12 @@ Cancelling a `sleep` leaves its promise **pending for ever**. That is what cance
 ### Timers and standard host APIs
 
 ```text
-`setTimeout` is not available in the shell: use timer.after(ms, callback)
+setTimeout  -> gpui.timer.after(ms, callback)
+setInterval -> gpui.timer.every(ms, callback)
+clearTimeout / clearInterval -> cancel() the Task returned by after / every
 ```
 
-`setTimeout`, `setInterval`, `clearTimeout` and `clearInterval` are throwing stubs that name `timer.after` or `timer.every` as the replacement. Global `fetch` and `WebSocket`, plus the safe standard modules documented under [Capabilities](./capabilities.md), are real asynchronous host APIs. CommonJS `require` remains unavailable; use ES modules.
+`setTimeout`, `setInterval`, `clearTimeout` and `clearInterval` are throwing stubs. Use `gpui.timer.after` for one-shot work, `gpui.timer.every` for repeated work, and call `cancel()` on the returned `Task` to stop either one. Global `fetch` and `WebSocket`, plus the safe standard modules documented under [Capabilities](./capabilities.md), are real asynchronous host APIs. CommonJS `require` remains unavailable; use ES modules.
 
 Browser DOM and storage are absent: there is no `document` or `localStorage`. The global `window` is gpui-shell's overlay host for dialogs, sheets and toasts; it is not a browser `Window` and exposes no DOM.
 
