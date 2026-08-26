@@ -437,7 +437,10 @@ fn kill_process_tree(tree: &mut ProcessTree, child: &mut std::process::Child) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{ffi::OsStr, time::Duration};
+    use std::time::Duration;
+
+    #[cfg(unix)]
+    use std::ffi::OsStr;
 
     #[cfg(unix)]
     #[test]
