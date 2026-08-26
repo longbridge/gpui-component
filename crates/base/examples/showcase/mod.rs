@@ -114,17 +114,6 @@ pub const COMPONENTS: &[&str] = &[
     "virtual-list",
 ];
 
-fn showcase_root(theme: &gpui_base::Theme) -> gpui::Div {
-    div()
-        .size_full()
-        .flex()
-        .flex_col()
-        .bg(rgb(0xffffff))
-        .text_color(rgb(0x171717))
-        .text_xs()
-        .font_family(theme.tokens.typography.sans.clone())
-}
-
 pub struct BaseShowcase {
     component: String,
     navigation_enabled: bool,
@@ -460,7 +449,14 @@ impl Render for BaseShowcase {
         // Surfaces rather than parts: these take the whole viewport.
         let fills_viewport = matches!(self.component.as_str(), "dock");
         let entity = cx.entity().downgrade();
-        showcase_root(cx.global::<gpui_base::Theme>())
+        div()
+            .size_full()
+            .flex()
+            .flex_col()
+            .bg(rgb(0xffffff))
+            .text_color(rgb(0x171717))
+            .text_xs()
+            .font_family("Inter Variable")
             .child(TextSelectionLayer)
             .when(show_back, |this| {
                 this.child(
@@ -522,27 +518,6 @@ impl Render for BaseShowcase {
                             ),
                     ),
             )
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn showcase_root_uses_the_default_theme_font() {
-        let mut root = showcase_root(&gpui_base::Theme::default());
-
-        assert_eq!(root.text_style().font_family.as_deref(), Some(".SystemUIFont"));
-    }
-
-    #[test]
-    fn showcase_root_font_follows_the_theme_typography_token() {
-        let mut theme = gpui_base::Theme::default();
-        theme.tokens.typography.sans = "Application Sans".into();
-        let mut root = showcase_root(&theme);
-
-        assert_eq!(root.text_style().font_family.as_deref(), Some("Application Sans"));
     }
 }
 

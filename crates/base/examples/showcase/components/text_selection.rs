@@ -313,7 +313,6 @@ mod tests {
 
     #[gpui::test]
     fn text_selection_footer_stays_fixed_when_document_scrolls(cx: &mut TestAppContext) {
-        cx.update(gpui_base::init);
         let (view, window) =
             cx.add_window_view(|window, cx| BaseShowcase::new("text-selection", window, cx));
         window.update(|window, cx| window.draw(cx).clear(cx));
