@@ -241,7 +241,10 @@ export default class Probe extends View {
     spawn(async () => {
       try {
         const socket = await WebSocket.connect("__URL__");
-        await socket.write("x".repeat(8 * 1024 * 1024));
+        const payload = "x".repeat(8 * 1024 * 1024);
+        for (let attempt = 0; attempt < 32; attempt += 1) {
+          await socket.write(payload);
+        }
         this.state = "write-resolved";
       } catch (error) {
         this.state = `rejected:${error.message}`;

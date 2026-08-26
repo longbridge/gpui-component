@@ -57,11 +57,13 @@ fn llrt_pure_modules_execute_inside_the_shell_runtime(cx: &mut TestAppContext) {
             .map(crate::RenderSnapshot::debug_tree)
             .unwrap_or_default()
     });
+    let joined_path = format!("a{}b", std::path::MAIN_SEPARATOR);
+    let expected = format!(
+        "7368656c6c|{joined_path}|example.com|shell|\
+         ce635c4eabff5e4f56dba8fb1e39ca235530aa2b6b18533eef1af3862016c577"
+    );
     assert!(
-        rendered.contains(
-            "7368656c6c|a/b|example.com|shell|\
-             ce635c4eabff5e4f56dba8fb1e39ca235530aa2b6b18533eef1af3862016c577"
-        ),
+        rendered.contains(&expected),
         "unexpected Standard Runtime result: {rendered}"
     );
 }
