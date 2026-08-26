@@ -182,6 +182,8 @@ impl ShellRuntime {
     /// call frame rather than in runtime-global state. Use this only when a host
     /// deliberately owns multiple isolated runtimes.
     pub fn new_isolated() -> Result<Rc<Self>> {
+        let entities = EntityStore::try_new()
+            .ok_or_else(|| anyhow!("gpui-shell entity store id space is exhausted"))?;
         let js_runtime = JsRuntime::new().map_err(js_setup_error)?;
         let context = JsContext::full(&js_runtime).map_err(js_setup_error)?;
 
@@ -210,7 +212,7 @@ impl ShellRuntime {
         let runtime = Rc::new(Self {
             callbacks: RefCell::new(CallbackArena::default()),
             arena: RefCell::new(SpecArena::new()),
-            entities: RefCell::new(EntityStore::new()),
+            entities: RefCell::new(entities),
             metrics: Metrics::default(),
             #[cfg(test)]
             test_http_client: RefCell::new(None),
@@ -508,7 +510,7 @@ impl ShellRuntime {
     ///
     /// Called by [`RenderSnapshot`] as it drops, which is what ties handler
     /// lifetime to snapshot lifetime rather than to a frame.
-    pub(crate) fn retire_callbacks(&self, generation: u32) {
+    pub(crate) fn retire_callbacks(&self, generation: u64) {
         self.callbacks.borrow_mut().retire(generation);
     }
 

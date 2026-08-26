@@ -37,7 +37,7 @@ use crate::{
 /// so a script render that fails leaves the previous snapshot untouched.
 pub struct RenderSnapshot {
     /// Identifies the callbacks registered while this snapshot was built.
-    generation: u32,
+    generation: u64,
     root: SpecId,
     arena: SpecArena,
     /// Weak so a snapshot never keeps the VM alive; a snapshot outliving its
@@ -48,7 +48,7 @@ pub struct RenderSnapshot {
 impl RenderSnapshot {
     pub(crate) fn new(
         runtime: &Rc<ShellRuntime>,
-        generation: u32,
+        generation: u64,
         root: SpecId,
         arena: SpecArena,
     ) -> Self {

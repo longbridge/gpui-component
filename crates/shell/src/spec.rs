@@ -20,8 +20,8 @@ use crate::value::Bridged;
 /// Index of a node inside a [`SpecArena`].
 pub type SpecId = u32;
 
-/// Index of a script callback, within the snapshot generation that registered it.
-pub type CallbackId = u32;
+/// Runtime-unique identifier for a script callback.
+pub type CallbackId = u64;
 
 /// Which constructor produced a node.
 #[derive(Clone, Debug, PartialEq)]

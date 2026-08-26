@@ -7,6 +7,7 @@
 
 use std::{
     cell::RefCell,
+    collections::HashMap,
     ops::Range,
     path::{Path, PathBuf},
     rc::Rc,
@@ -221,21 +222,23 @@ impl<T: Clone> Clone for CallbackEntry<T> {
 /// [`abort`](Self::abort) instead, so a failed build leaves no trace — the same
 /// transactional rule the snapshot itself follows.
 pub(crate) struct CallbackArena<T> {
-    next_generation: u32,
+    next_generation: u64,
+    next_callback: CallbackId,
     /// The generation currently being recorded, if a build is open.
-    building: Option<(u32, Vec<CallbackEntry<T>>)>,
-    /// Committed generations, one per live snapshot. A view keeps two — the
-    /// published snapshot and the one it just replaced — so this stays short
-    /// enough that a scan beats a map.
-    live: Vec<(u32, Vec<CallbackEntry<T>>)>,
+    building: Option<(u64, Vec<(CallbackId, CallbackEntry<T>)>)>,
+    /// Committed callbacks, indexed by their runtime-unique id. The generation
+    /// remains beside each entry so dropping a snapshot can retire its whole
+    /// group without making callback lookup linear in the number of handlers.
+    live: HashMap<CallbackId, (u64, CallbackEntry<T>)>,
 }
 
 impl<T> Default for CallbackArena<T> {
     fn default() -> Self {
         Self {
             next_generation: 0,
+            next_callback: 0,
             building: None,
-            live: Vec::new(),
+            live: HashMap::new(),
         }
     }
 }
@@ -243,17 +246,24 @@ impl<T> Default for CallbackArena<T> {
 impl<T: Clone> CallbackArena<T> {
     /// Opens a generation. Any generation left open by an earlier failed build
     /// is discarded rather than committed.
-    pub(crate) fn begin(&mut self) -> u32 {
-        let generation = self.next_generation & GENERATION_MASK;
-        self.next_generation = self.next_generation.wrapping_add(1);
+    pub(crate) fn begin(&mut self) -> u64 {
+        let generation = self.next_generation;
+        self.next_generation = self
+            .next_generation
+            .checked_add(1)
+            .expect("a shell runtime exhausted its callback generations");
         self.building = Some((generation, Vec::new()));
         generation
     }
 
     /// Publishes the open generation, so its handlers become callable.
     pub(crate) fn commit(&mut self) {
-        if let Some(entry) = self.building.take() {
-            self.live.push(entry);
+        if let Some((generation, entries)) = self.building.take() {
+            self.live.extend(
+                entries
+                    .into_iter()
+                    .map(|(id, entry)| (id, (generation, entry))),
+            );
         }
     }
 
@@ -277,31 +287,30 @@ impl<T: Clone> CallbackArena<T> {
 
     /// Releases the handlers of one committed generation, called when the
     /// snapshot that owns them is dropped.
-    pub(crate) fn retire(&mut self, generation: u32) {
-        self.live.retain(|(live, _)| *live != generation);
+    pub(crate) fn retire(&mut self, generation: u64) {
+        self.live
+            .retain(|_, (live_generation, _)| *live_generation != generation);
     }
 
     pub(crate) fn push(&mut self, entry: CallbackEntry<T>) -> CallbackId {
-        let Some((generation, entries)) = self.building.as_mut() else {
+        let Some((_, entries)) = self.building.as_mut() else {
             // Reached only if a handler is registered outside a script render,
             // which is a host bug. An id no lookup can match is the harmless
             // answer.
             tracing::error!("a callback was registered outside a snapshot build");
             return CallbackId::MAX;
         };
-        let index = entries.len() as u32;
-        entries.push(entry);
-        (*generation << GENERATION_SHIFT) | (index & INDEX_MASK)
+        let id = self.next_callback;
+        self.next_callback = self
+            .next_callback
+            .checked_add(1)
+            .expect("a shell runtime exhausted its callback ids");
+        entries.push((id, entry));
+        id
     }
 
     pub(crate) fn get(&self, id: CallbackId) -> Option<CallbackEntry<T>> {
-        let generation = id >> GENERATION_SHIFT;
-        let index = (id & INDEX_MASK) as usize;
-        self.live
-            .iter()
-            .find(|(live, _)| *live == generation)
-            .and_then(|(_, entries)| entries.get(index))
-            .cloned()
+        self.live.get(&id).map(|(_, entry)| entry.clone())
     }
 
     /// Releases every stored handler.
@@ -314,13 +323,6 @@ impl<T: Clone> CallbackArena<T> {
         self.live.clear();
     }
 }
-
-/// A [`CallbackId`] packs the generation into its high bits and the index into
-/// its low ones, so a handler from a retired snapshot resolves to `None`
-/// instead of to whatever now sits at that index.
-const GENERATION_SHIFT: u32 = 16;
-const INDEX_MASK: u32 = 0xffff;
-const GENERATION_MASK: u32 = 0xffff;
 
 /// What `process.exit(code)` means, decided by the host.
 ///
@@ -798,6 +800,33 @@ fn token(name: &str, fallback: Hsla) -> Hsla {
 #[cfg(test)]
 mod identity_tests {
     use super::*;
+
+    fn callback(value: u32) -> CallbackEntry<u32> {
+        CallbackEntry { value, view: None }
+    }
+
+    #[test]
+    fn callback_generations_do_not_wrap_at_the_old_sixteen_bit_boundary() {
+        let mut arena = CallbackArena::default();
+
+        let first_generation = arena.begin();
+        let first = arena.push(callback(1));
+        arena.commit();
+
+        arena.next_generation = u64::from(u16::MAX) + 1;
+        let later_generation = arena.begin();
+        let later = arena.push(callback(2));
+        arena.commit();
+
+        assert_ne!(first_generation, later_generation);
+        assert_ne!(first, later);
+        assert_eq!(arena.get(first).map(|entry| entry.value), Some(1));
+        assert_eq!(arena.get(later).map(|entry| entry.value), Some(2));
+
+        arena.retire(later_generation);
+        assert_eq!(arena.get(first).map(|entry| entry.value), Some(1));
+        assert!(arena.get(later).is_none());
+    }
 
     /// The id is joined onto the user's data directory, so an unchecked one
     /// reaches the rest of it. This is the only place that check happens.

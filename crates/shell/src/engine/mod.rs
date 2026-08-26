@@ -28,7 +28,7 @@
 //!     &mut Window, &mut App) -> anyhow::Result<RenderSnapshot>
 //! ShellRuntime::render_to_spec(&Rc<Self>, &ViewObject, Option<Entity<ScriptView>>,
 //!     &mut Window, &mut App) -> anyhow::Result<String>
-//! ShellRuntime::retire_callbacks(&self, generation: u32)
+//! ShellRuntime::retire_callbacks(&self, generation: u64)
 //! ShellRuntime::script_renders(&self) -> u64
 //!
 //! ShellRuntime::dispatch_click(&Rc<Self>, CallbackId, &ClickEvent, &mut Window, &mut App)

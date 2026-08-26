@@ -18,20 +18,21 @@
 //! resolves to nothing and reports itself, instead of quietly resolving to
 //! whatever that index happens to hold here.
 
-use std::cell::Cell;
+use std::{cell::Cell, collections::HashMap};
 
 use gpui::{App, AppContext as _, Entity, Subscription, Window};
 use gpui_base::input::{InputEditorStyle, InputEvent, InputState};
 
 /// A script-visible reference to retained state.
 ///
-/// The high [`STORE_SHIFT`] bits name the store, the low bits the slot. The
-/// first store in a process is store 0, so its handles are the plain indices a
-/// debug tree has always shown.
-pub type EntityHandle = u32;
+/// The high [`STORE_SHIFT`] bits name the store, the low bits are a monotonic
+/// id that is never reused. The 53-bit layout stays exactly representable by a
+/// JavaScript number.
+pub type EntityHandle = u64;
 
-const STORE_SHIFT: u32 = 16;
-const SLOT_MASK: u32 = 0xffff;
+const STORE_SHIFT: u32 = 32;
+const MAX_STORE_ID: u32 = (1 << 21) - 1;
+const ENTITY_ID_MASK: u64 = u32::MAX as u64;
 
 /// What a handle points at. One variant per entity type the script can create.
 enum Record {
@@ -57,32 +58,26 @@ thread_local! {
 /// would show up as a leaked handle at shutdown.
 pub struct EntityStore {
     id: u32,
-    records: Vec<Option<Record>>,
+    next_id: u32,
+    records: HashMap<u32, Record>,
 }
 
-impl Default for EntityStore {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-/// Creates an input state and returns its handle.
-///
-/// The editor style is installed here rather than left to the caller because
-/// `InputEditorStyle::default()` is entirely transparent: an input built
-/// without one renders invisible text, which is a failure no script author
-/// could diagnose. The shell owns the default palette, so it owns this too.
 impl EntityStore {
-    pub fn new() -> Self {
+    /// Creates a store with a process-unique JavaScript-safe namespace.
+    ///
+    /// Exhaustion is reported instead of wrapping: reusing a namespace could
+    /// make a stale handle from an earlier runtime name a new runtime's entity.
+    pub fn try_new() -> Option<Self> {
         let id = NEXT_STORE_ID.with(|next| {
-            let id = next.get();
-            next.set(id.wrapping_add(1));
-            id
-        });
-        Self {
+            let (id, following) = allocate_store_id(next.get())?;
+            next.set(following);
+            Some(id)
+        })?;
+        Some(Self {
             id,
-            records: Vec::new(),
-        }
+            next_id: 0,
+            records: HashMap::new(),
+        })
     }
 
     /// Creates an input state and returns its handle.
@@ -161,16 +156,10 @@ impl EntityStore {
     /// Drops a handle. The entity itself is released when GPUI has no other
     /// owner.
     pub fn release(&mut self, handle: EntityHandle) -> bool {
-        let Some(slot) = self.slot(handle) else {
+        let Some(id) = self.entity_id(handle) else {
             return false;
         };
-        match self.records.get_mut(slot) {
-            Some(record @ Some(_)) => {
-                *record = None;
-                true
-            }
-            _ => false,
-        }
+        self.records.remove(&id).is_some()
     }
 
     /// Releases every handle. The runtime dropping the store does this anyway;
@@ -183,7 +172,7 @@ impl EntityStore {
     /// store does not grow without bound.
     #[cfg(test)]
     pub fn len(&self) -> usize {
-        self.records.iter().filter(|slot| slot.is_some()).count()
+        self.records.len()
     }
 
     #[cfg(test)]
@@ -193,19 +182,18 @@ impl EntityStore {
 
     #[cfg(test)]
     pub(crate) fn first_input(&self) -> Option<Entity<InputState>> {
-        self.records.iter().find_map(|record| match record {
-            Some(Record::Input { state, .. }) => Some(state.clone()),
-            None => None,
+        self.records.values().find_map(|record| match record {
+            Record::Input { state, .. } => Some(state.clone()),
         })
     }
 
-    /// Splits a handle into its slot, refusing one that names another store.
+    /// Splits a handle into its entity id, refusing one that names another store.
     ///
     /// A cross-store handle is a host bug rather than a script mistake — a
     /// script can only ever have been given handles from its own runtime — so
     /// this logs rather than throwing, and resolves to nothing.
-    fn slot(&self, handle: EntityHandle) -> Option<usize> {
-        let store = handle >> STORE_SHIFT;
+    fn entity_id(&self, handle: EntityHandle) -> Option<u32> {
+        let store = (handle >> STORE_SHIFT) as u32;
         if store != self.id {
             tracing::error!(
                 "entity handle {handle} belongs to store {store}, not to store {}",
@@ -213,33 +201,31 @@ impl EntityStore {
             );
             return None;
         }
-        Some((handle & SLOT_MASK) as usize)
+        Some((handle & ENTITY_ID_MASK) as u32)
     }
 
     fn record(&self, handle: EntityHandle) -> Option<&Record> {
-        self.records.get(self.slot(handle)?)?.as_ref()
+        self.records.get(&self.entity_id(handle)?)
     }
 
     fn record_mut(&mut self, handle: EntityHandle) -> Option<&mut Record> {
-        let slot = self.slot(handle)?;
-        self.records.get_mut(slot)?.as_mut()
+        let id = self.entity_id(handle)?;
+        self.records.get_mut(&id)
     }
 
     fn push(&mut self, record: Record) -> EntityHandle {
-        // Reuse a released slot before growing: a long-lived app that opens and
-        // closes many inputs should not leak handle space.
-        let slot = match self.records.iter().position(Option::is_none) {
-            Some(slot) => {
-                self.records[slot] = Some(record);
-                slot
-            }
-            None => {
-                self.records.push(Some(record));
-                self.records.len() - 1
-            }
-        };
-        (self.id << STORE_SHIFT) | (slot as u32 & SLOT_MASK)
+        let id = self.next_id;
+        self.next_id = self
+            .next_id
+            .checked_add(1)
+            .expect("a shell runtime cannot create more than 2^32 retained entities");
+        self.records.insert(id, record);
+        (u64::from(self.id) << STORE_SHIFT) | u64::from(id)
     }
+}
+
+fn allocate_store_id(next: u32) -> Option<(u32, u32)> {
+    (next <= MAX_STORE_ID).then(|| (next, next + 1))
 }
 
 /// The events a script can subscribe to, named for what they mean rather than
@@ -298,33 +284,63 @@ fn editor_style() -> InputEditorStyle {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gpui::{TestAppContext, VisualTestContext};
 
     #[test]
     fn a_released_handle_stops_resolving() {
-        let mut store = EntityStore::new();
+        let mut store = EntityStore::try_new().expect("store id");
         // A handle that was never issued resolves to nothing rather than
         // panicking, which is what keeps a stale script reference reportable.
-        let unissued = store.id << STORE_SHIFT;
+        let unissued = u64::from(store.id) << STORE_SHIFT;
         assert!(store.input(unissued).is_none());
         assert!(!store.release(unissued));
     }
 
     #[test]
     fn a_store_starts_empty() {
-        let store = EntityStore::new();
+        let store = EntityStore::try_new().expect("store id");
         assert_eq!(store.len(), 0);
         assert!(store.is_empty());
     }
 
     #[test]
     fn a_handle_from_another_store_does_not_resolve() {
-        let first = EntityStore::new();
-        let second = EntityStore::new();
+        let first = EntityStore::try_new().expect("first store id");
+        let second = EntityStore::try_new().expect("second store id");
         assert_ne!(first.id, second.id, "stores must not share an id");
 
         // Slot 0 of the other store. Without the store bits this would be a
         // valid index here, which is exactly the confusion the bits prevent.
-        let foreign = second.id << STORE_SHIFT;
-        assert!(first.slot(foreign).is_none());
+        let foreign = u64::from(second.id) << STORE_SHIFT;
+        assert!(first.entity_id(foreign).is_none());
+    }
+
+    #[gpui::test]
+    fn released_and_cleared_handles_are_never_reissued(cx: &mut TestAppContext) {
+        let mut store = EntityStore::try_new().expect("store id");
+        let window = cx.add_window(|_, _| gpui::Empty);
+        let mut context = VisualTestContext::from_window(*window, cx);
+
+        let first = context.update(|window, cx| store.create_input(None, None, window, cx));
+        assert!(store.release(first));
+        let second = context.update(|window, cx| store.create_input(None, None, window, cx));
+        assert_ne!(first, second);
+        assert!(store.input(first).is_none());
+        assert!(store.input(second).is_some());
+
+        store.clear();
+        let third = context.update(|window, cx| store.create_input(None, None, window, cx));
+        assert_ne!(second, third);
+        assert!(store.input(second).is_none());
+        assert!(store.input(third).is_some());
+    }
+
+    #[test]
+    fn store_ids_stop_before_the_javascript_safe_namespace_would_wrap() {
+        assert_eq!(
+            allocate_store_id(MAX_STORE_ID),
+            Some((MAX_STORE_ID, MAX_STORE_ID + 1))
+        );
+        assert_eq!(allocate_store_id(MAX_STORE_ID + 1), None);
     }
 }

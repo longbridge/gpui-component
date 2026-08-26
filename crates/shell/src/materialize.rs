@@ -480,7 +480,7 @@ fn motion_element_id(
         | Component::Checkbox(id)
         | Component::Switch(id) => gpui::ElementId::Name(id.clone().into()),
         Component::Input(handle) => {
-            gpui::ElementId::NamedInteger("gpui-shell-input".into(), u64::from(*handle))
+            gpui::ElementId::NamedInteger("gpui-shell-input".into(), *handle)
         }
         _ => element_id(id, key),
     }
