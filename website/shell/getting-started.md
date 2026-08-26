@@ -67,14 +67,15 @@ export default class Hello extends View {
     this.clicks = 0;
   }
 
-  render() {
+  render(cx) {
+    const { colors } = cx.theme();
     return v_flex()
       .size_full()
       .items_center()
       .justify_center()
       .gap(12)
-      .bg("background")
-      .child(text(`Clicked ${this.clicks} times`).text_color("foreground"))
+      .bg(colors.background)
+      .child(text(`Clicked ${this.clicks} times`).text_color(colors.foreground))
       .child(
         Button.new("click")
           .h(28)
@@ -82,9 +83,9 @@ export default class Hello extends View {
           .items_center()
           .justify_center()
           .border(1)
-          .border_color("border")
-          .bg("surface")
-          .text_color("foreground")
+          .border_color(colors.border)
+          .bg(colors.surface)
+          .text_color(colors.foreground)
           .on_click((_event, cx) => {
             this.clicks += 1;
             cx.notify();

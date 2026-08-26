@@ -155,6 +155,39 @@ fn an_oversized_read_is_refused_by_name(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
+fn an_oversized_write_is_refused_before_reaching_disk(cx: &mut TestAppContext) {
+    let directory =
+        std::env::temp_dir().join(format!("gpui-shell-fs-big-write-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&directory);
+    std::fs::create_dir_all(&directory).expect("a granted root");
+    cx.update(crate::init);
+    crate::set_capabilities(Capabilities::new().write_roots([directory.clone()]));
+
+    let runtime = ShellRuntime::new().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = PROBE.replace(
+        r#"await fs.writeFile("notes.txt", "hello");"#,
+        r#"await fs.writeFile("notes.txt", "x".repeat(8 * 1024 * 1024 + 1));"#,
+    );
+    let view_type = runtime.load_source("big-write.js", &source).expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let view = context
+        .update(|window, cx| runtime.instantiate_view(&view_type, window, cx))
+        .expect("instantiate");
+    context.run_until_parked();
+    draw(&mut context, &view);
+
+    let rendered = snapshot_text(&mut context, &view);
+    assert!(
+        rendered.contains("write") && rendered.contains("limit"),
+        "{rendered}"
+    );
+    assert!(!directory.join("notes.txt").exists());
+    let _ = std::fs::remove_dir_all(directory);
+}
+
+#[gpui::test]
 fn fs_is_denied_by_default_through_the_javascript_module(cx: &mut TestAppContext) {
     let rendered = denial_probe(cx, Capabilities::new(), "notes.txt");
     assert!(

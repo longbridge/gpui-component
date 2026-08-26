@@ -9,7 +9,10 @@ order: 5
 呈现权在脚本，所以一个应用的大部分代码都写在这里。所有元素接受同一套样式接口，写成一条流式链——与 Rust 侧写的一模一样：
 
 ```js
-v_flex().size_full().bg("surface").p(12).gap(8).rounded(6);
+render(cx) {
+  const { colors } = cx.theme();
+  return v_flex().size_full().bg(colors.surface).p(12).gap(8).rounded(6);
+}
 ```
 
 ```rust
@@ -85,11 +88,15 @@ percentages and "auto" are not allowed here
 
 ## 颜色
 
-颜色要么是**语义 token 名**，要么是十六进制字面量：
+颜色通常从调用期主题读取。语义 token 名字符串仍为兼容性保留，固定颜色也可以使用十六进制字面量：
 
 ```js
-.bg("surface")            // 跟随主题
-.text_color("#1e88e5")    // 不跟随
+render(cx) {
+  const { colors } = cx.theme();
+  return element
+    .bg(colors.surface)         // 跟随主题
+    .text_color("#1e88e5");    // 不跟随
+}
 ```
 
 调色板定义了十七个 token：
@@ -106,7 +113,7 @@ percentages and "auto" are not allowed here
 
 十六进制字面量接受 `#rgb`、`#rrggbb` 与 `#rrggbbaa`。
 
-**优先用 token。** 字面量绕开了主题，切换主题时不会波及到它。示例应用恰好说明了这一点：它沿用 `crates/base/examples/showcase` 的视觉语言——那份 Rust 示例只能写死颜色，因为 Base 不带调色板——而示例应用读的是语义 token，因此同一份代码能跟随主题，Rust 版的 showcase 做不到。
+**优先使用 `cx.theme().colors` 中的值。** 字面量绕开了主题，切换主题时不会波及到它。示例应用恰好说明了这一点：它沿用 `crates/base/examples/showcase` 的视觉语言——那份 Rust 示例只能写死颜色，因为 Base 不带调色板——而示例应用读的是语义 token，因此同一份代码能跟随主题，Rust 版的 showcase 做不到。
 
 拼错 token 会列出整个集合，而不是含糊地失败：
 
@@ -126,14 +133,17 @@ or a #rrggbb literal
 `hover`、`active` 与 `focus` 接受一个函数，函数收到一个用于收集声明的游离元素：
 
 ```js
-Button.new("save")
-  .bg("surface")
-  .border(1)
-  .border_color("border")
-  .hover((style) => style.bg("muted").border_color("foreground"))
-  .active((style) => style.bg("border"))
-  .focus((style) => style.border_color("ring"))
-  .child(text("Save"));
+renderSave(cx) {
+  const { colors } = cx.theme();
+  return Button.new("save")
+    .bg(colors.surface)
+    .border(1)
+    .border_color(colors.border)
+    .hover((style) => style.bg(colors.muted).border_color(colors.foreground))
+    .active((style) => style.bg(colors.border))
+    .focus((style) => style.border_color(colors.ring))
+    .child(text("Save"));
+}
 ```
 
 函数的返回值会被忽略，所以链式写法和块状写法都能用。里面写的就是**普通的样式方法**——“什么是样式”没有第二套语法，上面所有长度与颜色规则原样适用。

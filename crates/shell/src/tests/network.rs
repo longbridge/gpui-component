@@ -78,6 +78,27 @@ export default class Probe extends View {
 }
 "#;
 
+const NET_PENDING_READ_CLOSE_PROBE: &str = r#"
+import { View, v_flex, text, spawn, sleep, with_cx } from "gpui";
+import { connect } from "net";
+
+export default class Probe extends View {
+  init() {
+    this.state = "pending";
+    spawn(async () => {
+      const socket = await connect("127.0.0.1", __PORT__);
+      const reading = socket.read(1).catch(() => undefined);
+      await sleep(50);
+      socket.close();
+      await reading;
+      this.state = "closed";
+      with_cx((cx) => cx.notify());
+    });
+  }
+  render() { return v_flex().child(text(this.state)); }
+}
+"#;
+
 const WEBSOCKET_PROBE: &str = r#"
 import { View, v_flex, text, spawn, with_cx } from "gpui";
 
@@ -256,6 +277,51 @@ export default class Probe extends View {
 }
 "#;
 
+const WEBSOCKET_QUEUE_LIMIT_PROBE: &str = r#"
+import { View, v_flex, text, spawn, with_cx } from "gpui";
+
+export default class Probe extends View {
+  init() {
+    this.state = "pending";
+    spawn(async () => {
+      const socket = await WebSocket.connect("__URL__");
+      const payload = "x".repeat(2 * 1024 * 1024);
+      const writes = [];
+      for (let index = 0; index < 16; index += 1) {
+        writes.push(socket.write(payload));
+      }
+      let close;
+      try {
+        close = socket.close();
+      } catch (error) {
+        this.state = `synchronous-close:${error.message}`;
+        with_cx((cx) => cx.notify());
+        return;
+      }
+      const outcomes = await Promise.allSettled([...writes, close]);
+      const errors = outcomes
+        .filter((outcome) => outcome.status === "rejected")
+        .map((outcome) => outcome.reason.message);
+      let reaped = "reaped";
+      try {
+        for (let batch = 0; batch < 80; batch += 1) {
+          const rejected = [];
+          for (let index = 0; index < 16; index += 1) {
+            rejected.push(socket.write("after-close"));
+          }
+          await Promise.allSettled(rejected);
+        }
+      } catch (error) {
+        reaped = `leaked:${error.message}`;
+      }
+      this.state = `${errors.join("|")}|${reaped}`;
+      with_cx((cx) => cx.notify());
+    });
+  }
+  render() { return v_flex().child(text(this.state)); }
+}
+"#;
+
 #[gpui::test]
 fn fetch_runs_off_thread_and_obeys_the_active_policy(cx: &mut TestAppContext) {
     let listener = TcpListener::bind("127.0.0.1:0").expect("HTTP listener");
@@ -300,6 +366,35 @@ fn net_connect_is_bounded_and_capability_gated(cx: &mut TestAppContext) {
     draw(&mut context, &view);
     assert!(snapshot(&mut context, &view).contains("pong"));
     server.join().expect("TCP server");
+}
+
+#[gpui::test]
+fn net_close_does_not_wait_for_a_pending_read(cx: &mut TestAppContext) {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("TCP listener");
+    let port = listener.local_addr().expect("listener address").port();
+    let server = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("TCP connection");
+        thread::sleep(Duration::from_millis(300));
+        let _ = stream.write_all(b"x");
+    });
+
+    let source = NET_PENDING_READ_CLOSE_PROBE.replace("__PORT__", &port.to_string());
+    let (_runtime, view, mut context) = probe(cx, &source);
+    context.run_until_parked();
+    thread::sleep(Duration::from_millis(20));
+    context.executor().advance_clock(Duration::from_millis(50));
+    let started = std::time::Instant::now();
+    context.run_until_parked();
+    let close_elapsed = started.elapsed();
+    draw(&mut context, &view);
+    let rendered = snapshot(&mut context, &view);
+
+    server.join().expect("TCP server");
+    assert!(
+        close_elapsed < Duration::from_millis(150),
+        "socket.close() waited {close_elapsed:?} for the pending read"
+    );
+    assert!(rendered.contains("closed"), "{rendered}");
 }
 
 #[gpui::test]
@@ -579,11 +674,18 @@ fn websocket_reads_and_writes_text_and_binary_messages(cx: &mut TestAppContext) 
     progress_receiver
         .recv_timeout(Duration::from_millis(500))
         .expect("first client write");
-    context.executor().advance_clock(Duration::from_millis(10));
-    context.run_until_parked();
-    progress_receiver
-        .recv_timeout(Duration::from_millis(500))
-        .expect("server messages after second client write");
+    let deadline = std::time::Instant::now() + Duration::from_secs(1);
+    loop {
+        context.executor().advance_clock(Duration::from_millis(10));
+        context.run_until_parked();
+        match progress_receiver.try_recv() {
+            Ok(()) => break,
+            Err(mpsc::TryRecvError::Empty) if std::time::Instant::now() < deadline => {
+                thread::sleep(Duration::from_millis(5));
+            }
+            Err(error) => panic!("server messages after second client write: {error}"),
+        }
+    }
     let _ = server.join().expect("WebSocket server");
     for _ in 0..4 {
         thread::sleep(Duration::from_millis(10));
@@ -738,6 +840,44 @@ fn websocket_write_rejects_when_the_peer_stops_reading(cx: &mut TestAppContext) 
     assert!(
         rendered.contains("rejected:WebSocket write timed out"),
         "a stalled WebSocket write must reject before the server is released: {rendered}"
+    );
+}
+
+#[gpui::test]
+fn websocket_large_writes_reject_when_the_command_queue_is_full(cx: &mut TestAppContext) {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("WebSocket listener");
+    let address = listener.local_addr().expect("listener address");
+    let (accepted, accepted_receiver) = mpsc::channel();
+    let (release, release_receiver) = mpsc::channel();
+    let server = thread::spawn(move || {
+        let (stream, _) = listener.accept().expect("WebSocket connection");
+        let _socket = tungstenite::accept(stream).expect("WebSocket handshake");
+        accepted.send(()).expect("accepted signal");
+        let _ = release_receiver.recv_timeout(Duration::from_secs(2));
+    });
+
+    let source = WEBSOCKET_QUEUE_LIMIT_PROBE.replace("__URL__", &format!("ws://{address}/queue"));
+    let (_runtime, view, mut context) = probe(cx, &source);
+    context.run_until_parked();
+    accepted_receiver
+        .recv_timeout(Duration::from_millis(500))
+        .expect("WebSocket handshake completed");
+    for _ in 0..20 {
+        thread::sleep(Duration::from_millis(25));
+        context.executor().advance_clock(Duration::from_millis(25));
+        context.run_until_parked();
+    }
+    draw(&mut context, &view);
+    let rendered = snapshot(&mut context, &view);
+
+    let _ = release.send(());
+    server.join().expect("WebSocket server");
+    assert!(
+        rendered.contains("WebSocket command queue is full")
+            && rendered.contains("reaped")
+            && !rendered.contains("synchronous-close:")
+            && !rendered.contains("leaked:"),
+        "large writes and close beyond the bounded queue must reject asynchronously without leaking tasks: {rendered}"
     );
 }
 

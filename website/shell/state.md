@@ -70,7 +70,7 @@ The snapshot is rebuilt when, and only when, something invalidates it:
 
 - `cx.notify()` from an event handler or an async task
 - a [hot-reload](./getting-started.md) replacing the script
-- a theme change, because `bg("surface")` resolves to a real colour while `render` runs and is baked into the snapshot
+- a theme change, because `bg(colors.surface)` records a real colour while `render` runs and bakes it into the snapshot
 - the host calling `ScriptView::refresh`, which is how Rust says it changed state your script reads through a [native module](./capabilities.md). A plain `cx.notify()` from the host is a repaint and runs no script — the two are different requests
 
 Everything else replays the description you already produced, in Rust, without running any JavaScript.
@@ -144,14 +144,15 @@ init() {
   this.draft.on("submit", (_event, cx) => this.add(cx));
 }
 
-render() {
+render(cx) {
+  const { colors } = cx.theme();
   return Input.new(this.draft)
     .flex_1()
     .h(28)
     .px(8)
     .border(1)
-    .border_color("input")
-    .bg("surface")
+    .border_color(colors.input)
+    .bg(colors.surface)
     .text_size(12);
 }
 ```
@@ -233,7 +234,7 @@ flash(cx) {
 ```
 
 ::: tip Two ways to import
-`import { spawn, sleep } from "gpui"` names what you use, and is what the example application does. `import * as gpui from "gpui"` puts the whole surface under one name — `gpui.spawn`, `gpui.fs`, `gpui.timer.after` — which is how the runtime's own error messages spell things. Both work; there is no default export.
+`import { spawn, sleep } from "gpui"` names what you use, and is what the example application does. `import * as gpui from "gpui"` puts the UI and scheduling surface under one name — for example `gpui.spawn` and `gpui.timer.after`. Filesystem and process APIs remain separate standard modules. There is no default export.
 :::
 
 **`spawn` adopts the promise, and that is the point.** An unhandled rejection is JavaScript's most common silent failure: the work stops, the interface keeps the state it had, and nothing is written anywhere. Here it reaches `tracing::error!` with the script's own stack.

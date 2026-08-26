@@ -1,6 +1,6 @@
 use std::{
     io::{Read as _, Write as _},
-    net::{Shutdown, TcpStream, ToSocketAddrs as _},
+    net::{Shutdown, TcpStream},
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -11,7 +11,10 @@ use rquickjs::{
     module::{Declarations, Exports, ModuleDef},
 };
 
-use super::super::{host, scheduler};
+use super::{
+    super::{host, scheduler},
+    connect as network_connect,
+};
 
 const IO_LIMIT: usize = 1024 * 1024;
 const TIMEOUT: Duration = Duration::from_secs(30);
@@ -45,25 +48,34 @@ fn connect<'js>(ctx: Ctx<'js>, host_name: String, port: u16) -> Result<Promise<'
         ));
     }
     scheduler::blocking(&ctx, "net.connect(host, port)", move || {
-        let address = (host_name.as_str(), port)
-            .to_socket_addrs()
-            .map_err(|error| format!("resolving {host_name}:{port} failed: {error}"))?
-            .next()
-            .ok_or_else(|| format!("{host_name}:{port} resolved to no address"))?;
-        let stream = TcpStream::connect_timeout(&address, TIMEOUT)
-            .map_err(|error| format!("connecting to {host_name}:{port} failed: {error}"))?;
+        let operation = format!("{host_name}:{port}");
+        let (stream, _) = network_connect::connect_tcp(&host_name, port, TIMEOUT, &operation)?;
         stream.set_read_timeout(Some(TIMEOUT)).ok();
         stream.set_write_timeout(Some(TIMEOUT)).ok();
-        Ok(Socket(Arc::new(Mutex::new(stream))))
+        let reader = stream
+            .try_clone()
+            .map_err(|error| format!("cloning {host_name}:{port} for reads failed: {error}"))?;
+        let writer = stream
+            .try_clone()
+            .map_err(|error| format!("cloning {host_name}:{port} for writes failed: {error}"))?;
+        Ok(Socket {
+            reader: Arc::new(Mutex::new(reader)),
+            writer: Arc::new(Mutex::new(writer)),
+            closer: stream,
+        })
     })
 }
 
-struct Socket(Arc<Mutex<TcpStream>>);
+struct Socket {
+    reader: Arc<Mutex<TcpStream>>,
+    writer: Arc<Mutex<TcpStream>>,
+    closer: TcpStream,
+}
 
 impl<'js> IntoJs<'js> for Socket {
     fn into_js(self, ctx: &Ctx<'js>) -> Result<Value<'js>> {
         let socket = Object::new(ctx.clone())?;
-        let writer = self.0.clone();
+        let writer = self.writer;
         socket.set(
             "write",
             Func::from(move |ctx: Ctx<'js>, data: String| -> Result<Promise<'js>> {
@@ -83,7 +95,7 @@ impl<'js> IntoJs<'js> for Socket {
                 })
             }),
         )?;
-        let reader = self.0.clone();
+        let reader = self.reader;
         socket.set(
             "read",
             Func::from(
@@ -109,11 +121,11 @@ impl<'js> IntoJs<'js> for Socket {
                 },
             ),
         )?;
-        let closer = self.0;
+        let closer = self.closer;
         socket.set(
             "close",
             Func::from(move || {
-                let _ = closer.lock().map(|stream| stream.shutdown(Shutdown::Both));
+                let _ = closer.shutdown(Shutdown::Both);
             }),
         )?;
         Ok(socket.into_value())

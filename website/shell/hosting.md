@@ -148,6 +148,8 @@ A reload re-reads **every** module, entry point included — a hot-reload that q
 
 The view survives a reload. `ScriptView::replace_object` swaps what the script produced while keeping the entity, and with it the window, the focus and the element identities.
 
+Plugin unload is a stronger lifecycle boundary than removing one view: the manager cancels every outstanding task carrying that plugin's `Policy`, including owner-less work, before dropping the plugin. No continuation may retain or exercise an unloaded plugin's authority.
+
 ## When a script fails
 
 A script that throws does not take the interface with it. The last good snapshot stays mounted and the failure is reported over it, so the reader keeps their scroll, their focus, and whatever they were reading. The runtime does not re-run a failing `render` until something invalidates the view again.

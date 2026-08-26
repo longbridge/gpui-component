@@ -74,13 +74,18 @@ svg("icons/check.svg").w(14).h(14).flex_none();
 
 越出应用目录的路径会被拒绝。缺失的文件会按路径去重报告一次，并附上查找位置，而不是安静地什么都不画。
 
+单个 asset 最多 16 MiB。列举 asset tree 时最多接受 10,000 个 entry 与累计 1 MiB 的 UTF-8 文件名，避免 asset discovery 无界增长内存。
+
 图标会继承周围的文字颜色，所以深色按钮里的图标不用脚本说第二遍就是浅色的：
 
 ```js
-div()
-  .bg("foreground")
-  .text_color("surface")
-  .child(svg("icons/check.svg").w(11).h(11));  // 以 surface 绘制
+renderIcon(cx) {
+  const { colors } = cx.theme();
+  return div()
+    .bg(colors.foreground)
+    .text_color(colors.surface)
+    .child(svg("icons/check.svg").w(11).h(11));  // 以 surface 绘制
+}
 ```
 
 ## 组合
@@ -227,12 +232,13 @@ and must be rebuilt each time render runs
 在 `render` 里构建，把重复部分抽成**每次返回新元素的函数**：
 
 ```js
-const label = (value) => text(value).text_size(12).text_color("foreground");
+const label = (value, colors) => text(value).text_size(12).text_color(colors.foreground);
 
-render() {
+render(cx) {
+  const { colors } = cx.theme();
   return v_flex()
-    .child(label("first"))
-    .child(label("second"));
+    .child(label("first", colors))
+    .child(label("second", colors));
 }
 ```
 

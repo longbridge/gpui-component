@@ -169,14 +169,27 @@ pub fn drain_after_render(
         return;
     }
 
-    let runtime = Rc::downgrade(runtime);
+    let mut task = TaskState::new("deferred render drain", Some(view.downgrade()), None);
+    task.policy.replace(Some(policy));
+    task.runtime = Rc::downgrade(runtime);
+    let task = match try_register(task) {
+        Ok(task) => task,
+        Err(error) => {
+            tracing::error!("deferred drain dropped: {error}");
+            return;
+        }
+    };
     let handle = window.window_handle();
     let mut app = cx.to_async();
     cx.foreground_executor()
         .spawn(async move {
             let entered = handle.update(&mut app, |_, window, cx| {
-                let Some(runtime) = runtime.upgrade() else {
+                let Some(runtime) = task.runtime.upgrade() else {
                     tracing::debug!("deferred drain dropped: the shell runtime has shut down");
+                    return;
+                };
+                let Readiness::Ready(Some(view)) = task.readiness() else {
+                    tracing::debug!("deferred drain dropped: its owner or policy was cancelled");
                     return;
                 };
                 let (guard, _) = scope::enter_with_runtime(
@@ -185,7 +198,7 @@ pub fn drain_after_render(
                     cx,
                     ScopePhase::Task,
                     Some(view),
-                    policy,
+                    task.policy(),
                 );
                 drain_jobs(&runtime.js_runtime);
                 drop(guard);
@@ -194,6 +207,7 @@ pub fn drain_after_render(
             if let Err(error) = entered {
                 tracing::debug!("deferred drain dropped: {error}");
             }
+            finish(&task);
         })
         .detach();
 }
@@ -219,8 +233,36 @@ pub fn shutdown(runtime: &ShellRuntime) {
             task.cancel_work();
             task.callback.replace(None);
             task.rejection.replace(None);
+            task.policy.replace(None);
         }
         tasks.retain(|_, task| task.runtime.as_ptr() != runtime);
+    });
+}
+
+/// Cancels every pending task created under one application policy.
+///
+/// Plugin unload uses this before dropping its view so owner-less timers and
+/// host operations cannot retain or exercise the unloaded plugin's authority.
+pub(crate) fn cancel_policy(policy: &Rc<Policy>) {
+    TASKS.with_borrow_mut(|tasks| {
+        let owned: Vec<_> = tasks
+            .values()
+            .filter(|task| {
+                task.policy
+                    .borrow()
+                    .as_ref()
+                    .is_some_and(|candidate| Rc::ptr_eq(candidate, policy))
+            })
+            .cloned()
+            .collect();
+        tasks.retain(|_, task| !owned.iter().any(|owned| owned.id == task.id));
+        for task in &owned {
+            task.cancelled.set(true);
+            task.cancel_work();
+            task.callback.replace(None);
+            task.rejection.replace(None);
+            task.policy.replace(None);
+        }
     });
 }
 
@@ -249,11 +291,14 @@ fn js_sleep<'js>(ctx: Ctx<'js>, ms: Opt<f64>) -> JsResult<Promise<'js>> {
     let host = host(&ctx, API)?;
     let (promise, resolve, _reject) = ctx.promise()?;
 
-    let task = register(TaskState::new(
-        API,
-        scope::current_view().map(|view| view.downgrade()),
-        Some(Persistent::save(&ctx, resolve)),
-    ));
+    let task = register(
+        &ctx,
+        TaskState::new(
+            API,
+            scope::current_view().map(|view| view.downgrade()),
+            Some(Persistent::save(&ctx, resolve)),
+        ),
+    )?;
 
     let sleeping = task.clone();
     host.foreground
@@ -267,7 +312,7 @@ fn js_sleep<'js>(ctx: Ctx<'js>, ms: Opt<f64>) -> JsResult<Promise<'js>> {
             if let Readiness::Ready(owner) = sleeping.readiness()
                 && let Some(resolve) = sleeping.take_callback()
             {
-                resume(&host, &sleeping.policy.clone(), owner, move |ctx, _| {
+                resume(&host, &sleeping.policy(), owner, move |ctx, _| {
                     resolve.restore(ctx)?.call::<_, ()>(())
                 });
             }
@@ -307,11 +352,14 @@ fn js_spawn<'js>(
     body: Function<'js>,
     opts: Opt<Value<'js>>,
 ) -> JsResult<Object<'js>> {
-    let task = register(TaskState::new(
-        "gpui.spawn(fn)",
-        owner_from_options(&ctx, opts.0.as_ref())?,
-        None,
-    ));
+    let task = register(
+        &ctx,
+        TaskState::new(
+            "gpui.spawn(fn)",
+            owner_from_options(&ctx, opts.0.as_ref())?,
+            None,
+        ),
+    )?;
 
     let started = match scope::current_generation() {
         Some(generation) => body.call::<_, Value>((context_object(&ctx, generation)?,)),
@@ -395,11 +443,14 @@ fn schedule<'js>(
 ) -> JsResult<Object<'js>> {
     let delay = duration(&ctx, api, ms)?;
     let host = host(&ctx, api)?;
-    let task = register(TaskState::new(
-        api,
-        owner_from_options(&ctx, opts.0.as_ref())?,
-        Some(Persistent::save(&ctx, handler)),
-    ));
+    let task = register(
+        &ctx,
+        TaskState::new(
+            api,
+            owner_from_options(&ctx, opts.0.as_ref())?,
+            Some(Persistent::save(&ctx, handler)),
+        ),
+    )?;
 
     let ticking = task.clone();
     host.foreground
@@ -417,16 +468,11 @@ fn schedule<'js>(
                 };
                 let Some(callback) = callback else { break };
 
-                resume(
-                    &host,
-                    &ticking.policy.clone(),
-                    owner,
-                    move |ctx, generation| {
-                        callback
-                            .restore(ctx)?
-                            .call::<_, ()>((context_object(ctx, generation)?,))
-                    },
-                );
+                resume(&host, &ticking.policy(), owner, move |ctx, generation| {
+                    callback
+                        .restore(ctx)?
+                        .call::<_, ()>((context_object(ctx, generation)?,))
+                });
 
                 if repeat == Repeat::Once {
                     break;
@@ -603,7 +649,7 @@ struct TaskState {
     /// with the *host application's* permissions. A plugin's module top level
     /// and its `init` both create tasks before its view exists, so this is the
     /// ordinary case rather than an edge one.
-    policy: Rc<Policy>,
+    policy: RefCell<Option<Rc<Policy>>>,
     runtime: std::rc::Weak<ShellRuntime>,
     cancelled: Cell<bool>,
     done: Cell<bool>,
@@ -638,7 +684,7 @@ impl TaskState {
             }),
             api,
             owner,
-            policy: scope::policy(),
+            policy: RefCell::new(Some(scope::policy())),
             runtime: scope::current_runtime()
                 .map_or_else(std::rc::Weak::new, |runtime| Rc::downgrade(&runtime)),
             cancelled: Cell::new(false),
@@ -650,7 +696,7 @@ impl TaskState {
     }
 
     fn readiness(&self) -> Readiness {
-        if self.cancelled.get() || self.done.get() {
+        if self.cancelled.get() || self.done.get() || self.policy.borrow().is_none() {
             return Readiness::Cancelled;
         }
         match &self.owner {
@@ -660,6 +706,13 @@ impl TaskState {
                 None => Readiness::OwnerGone,
             },
         }
+    }
+
+    fn policy(&self) -> Rc<Policy> {
+        self.policy
+            .borrow()
+            .clone()
+            .expect("a ready scheduler task must retain its policy")
     }
 
     fn take_callback(&self) -> Option<Persistent<Function<'static>>> {
@@ -734,18 +787,19 @@ pub(super) fn deferred<'js>(
 ) -> JsResult<crate::store::Settle> {
     let host = host(ctx, api)?;
     let task = register(
+        ctx,
         TaskState::new(
             api,
             scope::current_view().map(|view| view.downgrade()),
             Some(Persistent::save(ctx, resolve)),
         )
         .with_rejection(Persistent::save(ctx, reject)),
-    );
+    )?;
     Ok(Box::new(move |outcome| {
         if let Readiness::Ready(owner) = task.readiness() {
             let resolve = task.take_callback();
             let reject = task.take_rejection();
-            let policy = task.policy.clone();
+            let policy = task.policy();
             resume(&host, &policy, owner, move |ctx, _| match outcome {
                 Ok(()) => match resolve {
                     Some(resolve) => resolve.restore(ctx)?.call::<_, ()>(()),
@@ -773,13 +827,14 @@ pub(super) fn actor_deferred<'js>(
     let host = host(ctx, api)?;
     let (promise, resolve, reject) = ctx.promise()?;
     let task = register(
+        ctx,
         TaskState::new(
             api,
             scope::current_view().map(|view| view.downgrade()),
             Some(Persistent::save(ctx, resolve)),
         )
         .with_rejection(Persistent::save(ctx, reject)),
-    );
+    )?;
     let (completion, receiver) = async_channel::bounded(1);
     let running = task.clone();
     let foreground = host.foreground.scheduler_executor();
@@ -807,24 +862,19 @@ fn settle_actor_task(task: &Rc<TaskState>, host: &Host, outcome: std::result::Re
     if let Readiness::Ready(owner) = task.readiness() {
         let resolve = task.take_callback();
         let reject = task.take_rejection();
-        resume(
-            &host,
-            &task.policy.clone(),
-            owner,
-            move |ctx, _| match outcome {
-                Ok(()) => match resolve {
-                    Some(resolve) => resolve.restore(ctx)?.call::<_, ()>(()),
-                    None => Ok(()),
-                },
-                Err(message) => match reject {
-                    Some(reject) => {
-                        let error = Exception::from_message(ctx.clone(), &message)?;
-                        reject.restore(ctx)?.call::<_, ()>((error,))
-                    }
-                    None => Ok(()),
-                },
+        resume(&host, &task.policy(), owner, move |ctx, _| match outcome {
+            Ok(()) => match resolve {
+                Some(resolve) => resolve.restore(ctx)?.call::<_, ()>(()),
+                None => Ok(()),
             },
-        );
+            Err(message) => match reject {
+                Some(reject) => {
+                    let error = Exception::from_message(ctx.clone(), &message)?;
+                    reject.restore(ctx)?.call::<_, ()>((error,))
+                }
+                None => Ok(()),
+            },
+        });
     }
     finish(&task);
 }
@@ -845,13 +895,14 @@ where
     let host = host(ctx, api)?;
     let (promise, resolve, reject) = ctx.promise()?;
     let task = register(
+        ctx,
         TaskState::new(
             api,
             scope::current_view().map(|view| view.downgrade()),
             Some(Persistent::save(ctx, resolve)),
         )
         .with_rejection(Persistent::save(ctx, reject)),
-    );
+    )?;
     let (completion, receiver) = async_channel::bounded(1);
     let running = task.clone();
     let foreground = host.foreground.scheduler_executor();
@@ -874,7 +925,7 @@ where
                 let reject = running.take_rejection();
                 resume(
                     &host,
-                    &running.policy.clone(),
+                    &running.policy(),
                     owner,
                     move |ctx, _| match outcome {
                         Ok(value) => match resolve {
@@ -922,13 +973,14 @@ where
     let (promise, resolve, reject) = ctx.promise()?;
 
     let task = register(
+        ctx,
         TaskState::new(
             api,
             scope::current_view().map(|view| view.downgrade()),
             Some(Persistent::save(ctx, resolve)),
         )
         .with_rejection(Persistent::save(ctx, reject)),
-    );
+    )?;
 
     let running = task.clone();
     host.foreground
@@ -941,7 +993,7 @@ where
                 let reject = running.take_rejection();
                 resume(
                     &host,
-                    &running.policy.clone(),
+                    &running.policy(),
                     owner,
                     move |ctx, _| match outcome {
                         Ok(value) => match resolve {
@@ -978,6 +1030,7 @@ where
     let host = host(ctx, api)?;
     let (promise, resolve, reject) = ctx.promise()?;
     let task = register(
+        ctx,
         TaskState::new(
             api,
             scope::current_view().map(|view| view.downgrade()),
@@ -985,7 +1038,7 @@ where
         )
         .with_rejection(Persistent::save(ctx, reject))
         .with_cancellation(cancel),
-    );
+    )?;
 
     let running = task.clone();
     let watching = task.clone();
@@ -1018,7 +1071,7 @@ where
                 let reject = running.take_rejection();
                 resume(
                     &host,
-                    &running.policy.clone(),
+                    &running.policy(),
                     owner,
                     move |ctx, _| match outcome {
                         Ok(value) => match resolve {
@@ -1042,7 +1095,30 @@ where
     Ok(promise)
 }
 
-fn register(task: TaskState) -> Rc<TaskState> {
+const MAX_OUTSTANDING_TASKS_PER_RUNTIME: usize = 1024;
+
+fn register<'js>(ctx: &Ctx<'js>, task: TaskState) -> JsResult<Rc<TaskState>> {
+    try_register(task).map_err(|message| Exception::throw_range(ctx, &message))
+}
+
+fn try_register(task: TaskState) -> std::result::Result<Rc<TaskState>, String> {
+    let runtime = task.runtime.as_ptr();
+    let outstanding = TASKS.with_borrow(|tasks| {
+        tasks
+            .values()
+            .filter(|running| running.runtime.as_ptr() == runtime)
+            .count()
+    });
+    if outstanding >= MAX_OUTSTANDING_TASKS_PER_RUNTIME {
+        return Err(format!(
+            "{} exceeded the per-runtime outstanding host task limit of {MAX_OUTSTANDING_TASKS_PER_RUNTIME}",
+            task.api
+        ));
+    }
+    Ok(register_unchecked(task))
+}
+
+fn register_unchecked(task: TaskState) -> Rc<TaskState> {
     let task = Rc::new(task);
     TASKS.with_borrow_mut(|tasks| tasks.insert(task.id, task.clone()));
     task
@@ -1056,6 +1132,7 @@ fn finish(task: &Rc<TaskState>) {
     task.done.set(true);
     task.callback.replace(None);
     task.cancellation.replace(None);
+    task.policy.replace(None);
     TASKS.with_borrow_mut(|tasks| tasks.remove(&task.id));
 }
 
@@ -1075,6 +1152,8 @@ fn cancel(id: TaskId) {
     task.done.set(true);
     task.cancel_work();
     task.callback.replace(None);
+    task.rejection.replace(None);
+    task.policy.replace(None);
 }
 
 /// `handle.is_done()`. A task the registry has forgotten has run or been
@@ -1181,7 +1260,9 @@ fn describe_value<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gpui::{AppContext as _, TestAppContext, VisualTestContext};
     use rquickjs::{Context as JsContext, Object};
+    use std::ops::Deref as _;
 
     fn context() -> (JsRuntime, JsContext) {
         let runtime = JsRuntime::new().expect("runtime");
@@ -1408,7 +1489,7 @@ mod tests {
 
     #[test]
     fn a_cancelled_task_never_becomes_ready() {
-        let task = register(TaskState::new("test", None, None));
+        let task = register_unchecked(TaskState::new("test", None, None));
         assert!(matches!(task.readiness(), Readiness::Ready(None)));
         assert!(!is_done(task.id));
 
@@ -1427,7 +1508,7 @@ mod tests {
 
     #[test]
     fn a_finished_task_is_reaped() {
-        let task = register(TaskState::new("test", None, None));
+        let task = register_unchecked(TaskState::new("test", None, None));
         finish(&task);
 
         assert!(is_done(task.id));
@@ -1440,8 +1521,10 @@ mod tests {
     fn shutting_down_one_runtime_keeps_another_runtimes_tasks() {
         let first = ShellRuntime::new().expect("first runtime");
         let second = ShellRuntime::new().expect("second runtime");
-        let first_task = register(TaskState::new("first", None, None).with_runtime(&first));
-        let second_task = register(TaskState::new("second", None, None).with_runtime(&second));
+        let first_task =
+            register_unchecked(TaskState::new("first", None, None).with_runtime(&first));
+        let second_task =
+            register_unchecked(TaskState::new("second", None, None).with_runtime(&second));
 
         shutdown(&first);
 
@@ -1451,6 +1534,73 @@ mod tests {
             "dropping one runtime cancelled another runtime's task"
         );
         finish(&second_task);
+    }
+
+    #[test]
+    fn cancelling_one_policy_keeps_other_applications_tasks() {
+        let first_policy = Rc::new(Policy::default());
+        let second_policy = Rc::new(Policy::default());
+        let first = TaskState::new("first", None, None);
+        first.policy.replace(Some(first_policy.clone()));
+        let first = register_unchecked(first);
+        let second = TaskState::new("second", None, None);
+        second.policy.replace(Some(second_policy.clone()));
+        let second = register_unchecked(second);
+
+        cancel_policy(&first_policy);
+
+        assert!(matches!(first.readiness(), Readiness::Cancelled));
+        assert!(matches!(second.readiness(), Readiness::Ready(None)));
+        finish(&second);
+    }
+
+    #[gpui::test]
+    fn cancelling_a_policy_drops_its_queued_render_drain(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let runtime = ShellRuntime::new().expect("runtime");
+        cx.update(|cx| runtime.set_global(cx));
+        runtime
+            .with_js(|ctx| {
+                ctx.globals().set("deferred_drain_ran", false)?;
+                ctx.eval::<(), _>(
+                    "Promise.resolve().then(() => { globalThis.deferred_drain_ran = true; });",
+                )
+            })
+            .expect("queue promise job");
+        assert!(runtime.js_runtime.is_job_pending());
+
+        let object = runtime
+            .context
+            .with(|ctx| Persistent::save(&ctx, Object::new(ctx.clone()).expect("object")));
+        let window = cx.add_window(|_, _| Empty);
+        let mut context = VisualTestContext::from_window(*window.deref(), cx);
+        let view = context.update(|_, cx| cx.new(|_| ScriptView::new(runtime.clone(), object)));
+        let weak_view = view.downgrade();
+        let policy = Rc::new(Policy::default());
+
+        context.update(|window, cx| {
+            drain_after_render(&runtime, view.clone(), policy.clone(), window, cx)
+        });
+        cancel_policy(&policy);
+        drop(view);
+        context.update(|_, _| {});
+
+        assert_eq!(
+            Rc::strong_count(&policy),
+            1,
+            "a cancelled render drain retained the unloaded plugin policy"
+        );
+        assert!(
+            weak_view.upgrade().is_none(),
+            "a queued render drain retained the unloaded plugin view"
+        );
+        context.run_until_parked();
+        let ran = runtime
+            .with_js(|ctx| ctx.globals().get::<_, bool>("deferred_drain_ran"))
+            .expect("read marker");
+        assert!(!ran, "a cancelled policy resumed its queued promise job");
+
+        std::mem::forget(runtime);
     }
 
     /// The rule from §12.3: work whose panel has closed must not run. Note it is
@@ -1465,7 +1615,7 @@ mod tests {
             .with(|ctx| Persistent::save(&ctx, Object::new(ctx.clone()).expect("object")));
 
         let view = cx.update(|cx| cx.new(|_| ScriptView::new(runtime.clone(), object)));
-        let task = register(TaskState::new("test", Some(view.downgrade()), None));
+        let task = register_unchecked(TaskState::new("test", Some(view.downgrade()), None));
         assert!(matches!(task.readiness(), Readiness::Ready(Some(_))));
 
         drop(view);
@@ -1478,6 +1628,20 @@ mod tests {
         // `Persistent`, test teardown order is not ours to choose, and a
         // `Persistent` released after its runtime aborts the process.
         std::mem::forget(runtime);
+    }
+}
+
+#[cfg(test)]
+struct Empty;
+
+#[cfg(test)]
+impl gpui::Render for Empty {
+    fn render(
+        &mut self,
+        _: &mut gpui::Window,
+        _: &mut gpui::Context<Self>,
+    ) -> impl gpui::IntoElement {
+        gpui::div()
     }
 }
 
@@ -1504,11 +1668,11 @@ mod policy_capture_tests {
 
         // No owner: exactly the case that used to lose the policy.
         let task = TaskState::new("test", None, None);
-        assert!(Rc::ptr_eq(&task.policy, &expected));
+        assert!(Rc::ptr_eq(&task.policy(), &expected));
 
         // The host reconfigures for something else. The task keeps its own.
         crate::policy::set_default(crate::policy::Policy::new());
-        assert!(task.policy.capabilities().has_read_access());
+        assert!(task.policy().capabilities().has_read_access());
         assert!(!crate::policy::default().capabilities().has_read_access());
     }
 }

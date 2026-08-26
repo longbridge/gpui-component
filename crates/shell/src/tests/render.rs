@@ -215,6 +215,42 @@ export default class Themed extends View {
         .expect("all nested theme token groups must be read-only");
 }
 
+#[gpui::test]
+fn render_context_theme_rejects_a_stale_context(cx: &mut TestAppContext) {
+    cx.update(crate::init);
+    let runtime = ShellRuntime::new().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View, text } from "gpui";
+export default class Themed extends View {
+  render(cx) {
+    if (this.savedTheme) this.savedTheme();
+    else this.savedTheme = cx.theme;
+    return text("semantic");
+  }
+}
+"#;
+    let view_type = runtime
+        .load_source("stale-context-theme.js", source)
+        .expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .expect("instantiate");
+
+    context
+        .update(|window, cx| runtime.render_to_spec(&object, None, window, cx))
+        .expect("first render captures cx.theme");
+    let error = context
+        .update(|window, cx| runtime.render_to_spec(&object, None, window, cx))
+        .expect_err("a theme reader from an earlier render must be stale");
+    assert!(
+        error.to_string().contains("cx is no longer valid"),
+        "{error}"
+    );
+}
+
 #[test]
 fn link_typings_expose_a_real_external_target() {
     let types = crate::typings::declarations();
@@ -771,6 +807,36 @@ export default class Reloading extends View {
     );
 
     std::fs::remove_dir_all(&directory).ok();
+}
+
+#[gpui::test]
+fn oversized_entry_and_imported_modules_are_refused(cx: &mut TestAppContext) {
+    cx.update(crate::init);
+    let runtime = ShellRuntime::new().expect("runtime");
+    let directory =
+        std::env::temp_dir().join(format!("gpui-shell-module-limit-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&directory);
+    std::fs::create_dir_all(&directory).expect("application directory");
+
+    let entry = directory.join("main.js");
+    let file = std::fs::File::create(&entry).expect("entry module");
+    file.set_len(8 * 1024 * 1024 + 1).expect("sparse entry");
+    let error = runtime
+        .load_app(&directory, "main.js")
+        .expect_err("oversized entry module must fail");
+    assert!(error.to_string().contains("module") && error.to_string().contains("limit"));
+
+    std::fs::write(&entry, "import './huge.js'; export default class Panel {};")
+        .expect("entry module");
+    let imported = std::fs::File::create(directory.join("huge.js")).expect("imported module");
+    imported
+        .set_len(8 * 1024 * 1024 + 1)
+        .expect("sparse import");
+    let error = runtime
+        .load_app(&directory, "main.js")
+        .expect_err("oversized imported module must fail");
+    assert!(error.to_string().contains("module") && error.to_string().contains("limit"));
+    let _ = std::fs::remove_dir_all(directory);
 }
 
 /// An embedded runtime reloads on a save, with no host doing anything but

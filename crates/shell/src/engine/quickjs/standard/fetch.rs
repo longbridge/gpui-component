@@ -197,7 +197,13 @@ fn authorize_request(
     url: &reqwest::Url,
 ) -> std::result::Result<(), String> {
     let host_name = url.host_str().unwrap_or_default().to_ascii_lowercase();
-    if capabilities.may_request(&host_name, method.as_str(), url.path()) {
+    if capabilities.may_request(
+        url.scheme(),
+        &host_name,
+        url.port(),
+        method.as_str(),
+        url.path(),
+    ) {
         Ok(())
     } else {
         Err(format!(
@@ -500,6 +506,31 @@ mod tests {
         assert!(authorize_request(&capabilities, &reqwest::Method::GET, &allowed).is_ok());
         assert!(authorize_request(&capabilities, &reqwest::Method::POST, &allowed).is_err());
         assert!(authorize_request(&capabilities, &reqwest::Method::POST, &denied).is_err());
+    }
+
+    #[test]
+    fn an_http_rule_is_bound_to_scheme_effective_port_and_path_segments() {
+        let capabilities =
+            crate::Capabilities::new().http_requests([crate::HttpRequestGrant::new(
+                "api.example.test",
+                ["GET"],
+                std::iter::empty::<&str>(),
+                ["/v1/account"],
+            )]);
+        let https =
+            reqwest::Url::parse("https://api.example.test/v1/account/profile").expect("HTTPS URL");
+        let plaintext =
+            reqwest::Url::parse("http://api.example.test/v1/account/profile").expect("HTTP URL");
+        let alternate_port =
+            reqwest::Url::parse("https://api.example.test:8443/v1/account/profile")
+                .expect("alternate-port URL");
+        let adjacent = reqwest::Url::parse("https://api.example.test/v1/accounts-delete")
+            .expect("adjacent path URL");
+
+        assert!(authorize_request(&capabilities, &reqwest::Method::GET, &https).is_ok());
+        assert!(authorize_request(&capabilities, &reqwest::Method::GET, &plaintext).is_err());
+        assert!(authorize_request(&capabilities, &reqwest::Method::GET, &alternate_port).is_err());
+        assert!(authorize_request(&capabilities, &reqwest::Method::GET, &adjacent).is_err());
     }
 
     #[test]

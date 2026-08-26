@@ -38,6 +38,11 @@ use std::path::{Path, PathBuf};
 
 use serde_json::Value as Json;
 
+const MAX_STORE_BYTES: u64 = 8 * 1024 * 1024;
+const MAX_STORE_KEYS: usize = 4096;
+const MAX_STORE_VALUE_BYTES: usize = 1024 * 1024;
+const MAX_FLUSH_WAITERS: usize = 1024;
+
 /// Settles a `flush` once the revision it is waiting for reaches the disk.
 ///
 /// A boxed closure rather than anything engine-shaped: the store is above the
@@ -135,6 +140,25 @@ impl Store {
         self.revision += 1;
     }
 
+    pub fn set(&mut self, key: String, value: Json) -> Result<(), String> {
+        let value_size = serde_json::to_vec(&value)
+            .map_err(|error| format!("cannot encode store value `{key}`: {error}"))?
+            .len();
+        if value_size > MAX_STORE_VALUE_BYTES {
+            return Err(format!(
+                "store value `{key}` is {value_size} bytes, over the \
+                 {MAX_STORE_VALUE_BYTES}-byte per-value limit"
+            ));
+        }
+
+        let mut candidate = self.values()?.clone();
+        candidate.insert(key, value);
+        validate_values(&candidate)?;
+        self.values = Some(candidate);
+        self.touch();
+        Ok(())
+    }
+
     /// Whether memory is ahead of the disk.
     pub fn is_dirty(&self) -> bool {
         self.revision > self.written
@@ -144,13 +168,33 @@ impl Store {
     /// error. A malformed one is an error, because silently discarding a user's
     /// settings is worse than refusing to start.
     pub fn load(&self) -> Result<serde_json::Map<String, Json>, String> {
-        match std::fs::read(&self.path) {
-            Ok(bytes) => serde_json::from_slice(&bytes).map_err(|error| {
-                format!(
-                    "`{}` is not a valid store file: {error}",
-                    self.path.display()
-                )
-            }),
+        match std::fs::File::open(&self.path) {
+            Ok(mut file) => {
+                use std::io::Read as _;
+                let size = file
+                    .metadata()
+                    .map_err(|error| format!("cannot read `{}`: {error}", self.path.display()))?
+                    .len();
+                if size > MAX_STORE_BYTES {
+                    return Err(store_too_large(&self.path, size));
+                }
+                let mut bytes = Vec::with_capacity(size as usize);
+                file.by_ref()
+                    .take(MAX_STORE_BYTES + 1)
+                    .read_to_end(&mut bytes)
+                    .map_err(|error| format!("cannot read `{}`: {error}", self.path.display()))?;
+                if bytes.len() as u64 > MAX_STORE_BYTES {
+                    return Err(store_too_large(&self.path, bytes.len() as u64));
+                }
+                let values = serde_json::from_slice(&bytes).map_err(|error| {
+                    format!(
+                        "`{}` is not a valid store file: {error}",
+                        self.path.display()
+                    )
+                })?;
+                validate_values(&values)?;
+                Ok(values)
+            }
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
                 Ok(serde_json::Map::new())
             }
@@ -245,15 +289,29 @@ impl Store {
     /// that case so the caller settles it outside the borrow, for the same
     /// reason [`Store::finish_write`] returns rather than calls.
     #[must_use = "an already-satisfied waiter still has to be settled"]
-    pub fn wait(&mut self, settle: Settle) -> Option<Settle> {
+    pub fn wait(&mut self, settle: Settle) -> Result<Option<Settle>, String> {
         if !self.is_dirty() && self.in_flight.is_none() {
-            return Some(settle);
+            return Ok(Some(settle));
+        }
+        if self.waiting.len() == MAX_FLUSH_WAITERS {
+            return Err(format!(
+                "gpui.store.flush() exceeded the {MAX_FLUSH_WAITERS} pending-waiter limit"
+            ));
         }
         if self.in_flight.is_none() && self.failed == Some(self.revision) {
             self.failed = None;
         }
         self.waiting.push((self.revision, settle));
-        None
+        Ok(None)
+    }
+
+    pub fn ensure_waiter_capacity(&self) -> Result<(), String> {
+        if self.is_dirty() && self.waiting.len() == MAX_FLUSH_WAITERS {
+            return Err(format!(
+                "gpui.store.flush() exceeded the {MAX_FLUSH_WAITERS} pending-waiter limit"
+            ));
+        }
+        Ok(())
     }
 
     fn settle_up_to(&mut self, revision: u64, outcome: &Result<(), String>) -> Vec<Wake> {
@@ -275,10 +333,46 @@ impl Store {
         let Some(values) = &self.values else {
             return Ok(None);
         };
+        validate_values(values)?;
         serde_json::to_vec_pretty(values)
             .map(Some)
             .map_err(|error| format!("cannot encode the store: {error}"))
     }
+}
+
+fn validate_values(values: &serde_json::Map<String, Json>) -> Result<(), String> {
+    if values.len() > MAX_STORE_KEYS {
+        return Err(format!("store exceeded the {MAX_STORE_KEYS}-key limit"));
+    }
+    for (key, value) in values {
+        let size = serde_json::to_vec(value)
+            .map_err(|error| format!("cannot encode store value `{key}`: {error}"))?
+            .len();
+        if size > MAX_STORE_VALUE_BYTES {
+            return Err(format!(
+                "store value `{key}` is {size} bytes, over the \
+                 {MAX_STORE_VALUE_BYTES}-byte per-value limit"
+            ));
+        }
+    }
+    // Persistence uses pretty JSON, so enforce the limit against the bytes
+    // that will actually be written rather than a smaller compact estimate.
+    let size = serde_json::to_vec_pretty(values)
+        .map_err(|error| format!("cannot encode the store: {error}"))?
+        .len() as u64;
+    if size > MAX_STORE_BYTES {
+        return Err(format!(
+            "store is {size} bytes, over the {MAX_STORE_BYTES}-byte limit"
+        ));
+    }
+    Ok(())
+}
+
+fn store_too_large(path: &Path, size: u64) -> String {
+    format!(
+        "store `{}` is {size} bytes, over the {MAX_STORE_BYTES}-byte limit",
+        path.display()
+    )
 }
 
 /// Writes to a temporary file and renames it over the target, so a crash
@@ -298,8 +392,44 @@ pub fn persist(path: &Path, body: Vec<u8>) -> Result<(), String> {
 
     write_private(&temporary, &body)
         .map_err(|error| format!("cannot write `{}`: {error}", temporary.display()))?;
-    std::fs::rename(&temporary, path)
+    replace_file(&temporary, path)
         .map_err(|error| format!("cannot write `{}`: {error}", path.display()))
+}
+
+#[cfg(not(target_os = "windows"))]
+fn replace_file(temporary: &Path, path: &Path) -> std::io::Result<()> {
+    std::fs::rename(temporary, path)
+}
+
+#[cfg(target_os = "windows")]
+fn replace_file(temporary: &Path, path: &Path) -> std::io::Result<()> {
+    use std::os::windows::ffi::OsStrExt as _;
+    use windows::{
+        Win32::Storage::FileSystem::{
+            MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH, MoveFileExW,
+        },
+        core::PCWSTR,
+    };
+
+    let temporary = temporary
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    let path = path
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+
+    unsafe {
+        MoveFileExW(
+            PCWSTR(temporary.as_ptr()),
+            PCWSTR(path.as_ptr()),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+        )
+        .map_err(std::io::Error::other)
+    }
 }
 
 #[cfg(unix)]
@@ -360,6 +490,23 @@ mod tests {
         let _ = std::fs::remove_dir_all(directory);
     }
 
+    #[test]
+    fn persist_replaces_an_existing_store() {
+        let directory =
+            std::env::temp_dir().join(format!("gpui-shell-replace-store-{}", std::process::id()));
+        std::fs::create_dir_all(&directory).expect("test directory");
+        let path = directory.join("store.json");
+
+        persist(&path, br#"{"revision":1}"#.to_vec()).expect("first persist");
+        persist(&path, br#"{"revision":2}"#.to_vec()).expect("replacement persist");
+
+        assert_eq!(
+            std::fs::read(&path).expect("persisted store"),
+            br#"{"revision":2}"#
+        );
+        let _ = std::fs::remove_dir_all(directory);
+    }
+
     /// The bug a `dirty` flag could not see: a change made *while* a write is on
     /// its way has to be written after it.
     #[test]
@@ -409,6 +556,7 @@ mod tests {
         assert!(
             store
                 .wait(Box::new(move |outcome| record.set(Some(outcome))))
+                .expect("within waiter limit")
                 .is_none(),
             "a flush with a write in flight has to wait"
         );
@@ -425,7 +573,7 @@ mod tests {
     #[test]
     fn flush_resolves_at_once_when_the_disk_is_already_current() {
         let mut store = store();
-        let settle = store.wait(Box::new(|_| {}));
+        let settle = store.wait(Box::new(|_| {})).expect("within waiter limit");
         assert!(settle.is_some(), "nothing to wait for");
     }
 
@@ -442,6 +590,7 @@ mod tests {
         assert!(
             store
                 .wait(Box::new(move |outcome| record.set(Some(outcome))))
+                .expect("within waiter limit")
                 .is_none()
         );
 
@@ -479,5 +628,113 @@ mod tests {
         store.abort_write(pending.revision());
 
         assert!(store.begin_write().is_some(), "the queue has to move again");
+    }
+
+    #[test]
+    fn warm_load_refuses_an_oversized_store() {
+        let directory =
+            std::env::temp_dir().join(format!("gpui-shell-oversized-store-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&directory);
+        std::fs::create_dir_all(&directory).expect("directory");
+        let path = directory.join("store.json");
+        let file = std::fs::File::create(&path).expect("store");
+        file.set_len(MAX_STORE_BYTES + 1).expect("sparse store");
+
+        let error = Store::new(path)
+            .load()
+            .expect_err("oversized store must fail");
+        assert!(
+            error.contains("store") && error.contains("limit"),
+            "{error}"
+        );
+        let _ = std::fs::remove_dir_all(directory);
+    }
+
+    #[test]
+    fn warm_load_validates_key_count_and_value_size() {
+        let directory = std::env::temp_dir().join(format!(
+            "gpui-shell-invalid-store-shape-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&directory);
+        std::fs::create_dir_all(&directory).expect("directory");
+        let path = directory.join("store.json");
+
+        let too_many: serde_json::Map<String, Json> = (0..=MAX_STORE_KEYS)
+            .map(|index| (index.to_string(), Json::Bool(true)))
+            .collect();
+        std::fs::write(
+            &path,
+            serde_json::to_vec(&too_many).expect("encode fixture"),
+        )
+        .expect("write fixture");
+        let error = Store::new(path.clone()).load().expect_err("key limit");
+        assert!(error.contains("key limit"), "{error}");
+
+        let oversized = serde_json::json!({
+            "huge": "x".repeat(MAX_STORE_VALUE_BYTES + 1)
+        });
+        std::fs::write(
+            &path,
+            serde_json::to_vec(&oversized).expect("encode fixture"),
+        )
+        .expect("write fixture");
+        let error = Store::new(path).load().expect_err("value limit");
+        assert!(error.contains("per-value limit"), "{error}");
+        let _ = std::fs::remove_dir_all(directory);
+    }
+
+    #[test]
+    fn store_rejects_too_many_keys_and_an_oversized_value() {
+        let mut many_keys = store();
+        for index in 0..MAX_STORE_KEYS {
+            many_keys
+                .set(index.to_string(), Json::Bool(true))
+                .expect("within key limit");
+        }
+        let error = many_keys
+            .set("one-too-many".into(), Json::Bool(true))
+            .expect_err("key limit");
+        assert!(error.contains("key limit"), "{error}");
+
+        let mut store = store();
+        let error = store
+            .set(
+                "huge".into(),
+                Json::String("x".repeat(MAX_STORE_VALUE_BYTES + 1)),
+            )
+            .expect_err("value limit");
+        assert!(error.contains("per-value limit"), "{error}");
+    }
+
+    #[test]
+    fn encoded_store_aggregate_is_bounded() {
+        let values = (0..MAX_STORE_KEYS)
+            .map(|index| (index.to_string(), Json::String("x".repeat(2048))))
+            .collect();
+        let error = validate_values(&values).expect_err("aggregate limit must reject");
+        assert!(
+            error.contains("store is") && error.contains("byte limit"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn flush_waiters_are_bounded() {
+        let mut store = store();
+        store.touch();
+        for _ in 0..MAX_FLUSH_WAITERS {
+            assert!(
+                store
+                    .wait(Box::new(|_| {}))
+                    .expect("within limit")
+                    .is_none()
+            );
+        }
+        let error = match store.wait(Box::new(|_| {})) {
+            Err(error) => error,
+            Ok(_) => panic!("waiter limit must reject"),
+        };
+        assert!(error.contains("pending-waiter limit"), "{error}");
     }
 }

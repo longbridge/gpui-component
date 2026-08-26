@@ -35,6 +35,7 @@ use smallvec::SmallVec;
 use crate::{
     entities::EntityStore,
     metrics::Metrics,
+    policy::Policy,
     runtime::{CallbackArena, CallbackEntry},
     scope::{self, ScopePhase},
     snapshot::RenderSnapshot,
@@ -43,6 +44,8 @@ use crate::{
     value::Bridged,
     view::ScriptView,
 };
+
+const MAX_MODULE_BYTES: u64 = 8 * 1024 * 1024;
 
 /// A script value that defines a view type — a JS class.
 pub type ViewType = Persistent<Object<'static>>;
@@ -55,6 +58,10 @@ mod native;
 mod overlay;
 pub(crate) mod sandbox;
 mod scheduler;
+
+pub(crate) fn cancel_policy_tasks(policy: &Rc<Policy>) {
+    scheduler::cancel_policy(policy);
+}
 mod standard;
 mod theme_api;
 
@@ -265,8 +272,7 @@ impl ShellRuntime {
         );
 
         let entry = root.join(entry);
-        let source = std::fs::read_to_string(&entry)
-            .with_context(|| format!("reading {}", entry.display()))?;
+        let source = read_module_source(&entry)?;
 
         // The entry carries the generation too: it is a cached module like any
         // other, and a reload that re-read every import but served a stale
@@ -766,11 +772,36 @@ impl Loader for AppModules {
         _attributes: Option<ImportAttributes<'js>>,
     ) -> JsResult<Module<'js, Declared>> {
         let path = Self::untag(name);
-        let source = std::fs::read_to_string(path).map_err(|error| {
-            Exception::throw_message(ctx, &format!("cannot read module `{path}`: {error}"))
-        })?;
+        let source = read_module_source(Path::new(path))
+            .map_err(|error| Exception::throw_message(ctx, &error.to_string()))?;
         Module::declare(ctx.clone(), name, source)
     }
+}
+
+fn read_module_source(path: &Path) -> Result<String> {
+    use std::io::Read as _;
+
+    let mut file =
+        std::fs::File::open(path).with_context(|| format!("reading module {}", path.display()))?;
+    let size = file.metadata()?.len();
+    if size > MAX_MODULE_BYTES {
+        anyhow::bail!(
+            "module `{}` is {size} bytes, over the {MAX_MODULE_BYTES}-byte limit",
+            path.display()
+        );
+    }
+    let mut source = String::with_capacity(size as usize);
+    file.by_ref()
+        .take(MAX_MODULE_BYTES + 1)
+        .read_to_string(&mut source)
+        .with_context(|| format!("reading module {}", path.display()))?;
+    if source.len() as u64 > MAX_MODULE_BYTES {
+        anyhow::bail!(
+            "module `{}` grew over the {MAX_MODULE_BYTES}-byte limit",
+            path.display()
+        );
+    }
+    Ok(source)
 }
 
 /// The built-in `gpui` module. Its values are built at startup and stashed on
@@ -1018,6 +1049,11 @@ globalThis.__gpui = (() => {
     return cachedTheme;
   };
 
+  const contextTheme = (check) => () => {
+    check();
+    return currentTheme();
+  };
+
   return {
     View,
     div: () => element(__div()),
@@ -1026,6 +1062,7 @@ globalThis.__gpui = (() => {
     text: (value) => element(__text(String(value))),
     svg: (path) => element(__svg(String(path))),
     theme: currentTheme,
+    __context_theme: contextTheme,
     Button: { new: (id) => element(__button(String(id))) },
     Link: { new: (id) => element(__link(String(id))) },
     Checkbox: { new: (id) => element(__checkbox(String(id))) },
@@ -1274,7 +1311,12 @@ fn context_object<'js>(ctx: &Ctx<'js>, generation: u64) -> JsResult<Object<'js>>
     let object = Object::new(ctx.clone())?;
 
     let module: Object = ctx.globals().get("__gpui")?;
-    let theme: Function = module.get("theme")?;
+    let context_theme: Function = module.get("__context_theme")?;
+    let check = Func::from(move |ctx: Ctx<'_>| -> JsResult<()> {
+        scope::with_context(generation, |_, _| ())
+            .map_err(|error| Exception::throw_type(&ctx, &error.to_string()))
+    });
+    let theme: Function = context_theme.call((check,))?;
     object.set("theme", theme)?;
 
     object.set(

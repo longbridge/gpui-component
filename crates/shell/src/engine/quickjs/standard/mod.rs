@@ -5,6 +5,7 @@
 
 use rquickjs::{Ctx, Result, loader::BuiltinResolver, loader::ModuleLoader};
 
+mod connect;
 mod console;
 mod fetch;
 mod fs;

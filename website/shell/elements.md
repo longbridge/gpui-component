@@ -74,13 +74,18 @@ An `svg` path resolves against the **application root** — the directory handed
 
 Paths outside the application directory are rejected. A missing file is reported once per path with the location it was looked for, rather than silently drawing nothing.
 
+One asset may contain at most 16 MiB. Listing the asset tree is bounded at 10,000 entries and 1 MiB of UTF-8 name bytes, so asset discovery cannot grow memory without limit.
+
 An icon inherits the surrounding text colour, so an icon inside a dark button comes out light without the script saying so twice:
 
 ```js
-div()
-  .bg("foreground")
-  .text_color("surface")
-  .child(svg("icons/check.svg").w(11).h(11));  // draws in `surface`
+renderIcon(cx) {
+  const { colors } = cx.theme();
+  return div()
+    .bg(colors.foreground)
+    .text_color(colors.surface)
+    .child(svg("icons/check.svg").w(11).h(11));  // draws in `surface`
+}
 ```
 
 ## Composition
@@ -227,12 +232,13 @@ The alternative would be to copy the description on reuse. That was rejected: it
 Build in `render`, and factor repetition into **functions that return a new element each time**:
 
 ```js
-const label = (value) => text(value).text_size(12).text_color("foreground");
+const label = (value, colors) => text(value).text_size(12).text_color(colors.foreground);
 
-render() {
+render(cx) {
+  const { colors } = cx.theme();
   return v_flex()
-    .child(label("first"))
-    .child(label("second"));
+    .child(label("first", colors))
+    .child(label("second", colors));
 }
 ```
 

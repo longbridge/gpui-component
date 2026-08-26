@@ -16,22 +16,25 @@ missing feature. The JavaScript bindings preserve it: `Button.new("save")` with
 no styling draws nothing but its children.
 
 ```js
-// Unstyled: activation, focus and disabled state work, but nothing is drawn
-// around the label.
-Button.new("save").on_click(save).child(text("Save"));
+function saveButton(cx) {
+  const { colors } = cx.theme();
 
-// Styled: every visual decision is written out, in the script.
-Button.new("save")
-  .h(32)
-  .px(14)
-  .items_center()
-  .justify_center()
-  .text_sm()
-  .bg("primary")
-  .text_color("primary_foreground")
-  .rounded(6)
-  .on_click(save)
-  .child(text("Save"));
+  // Unstyled: activation, focus and disabled state work, but nothing is drawn.
+  Button.new("plain-save").on_click(save).child(text("Save"));
+
+  // Styled: every visual decision is written out, in the script.
+  return Button.new("save")
+    .h(32)
+    .px(14)
+    .items_center()
+    .justify_center()
+    .text_sm()
+    .bg(colors.primary)
+    .text_color(colors.primary_foreground)
+    .rounded(6)
+    .on_click(save)
+    .child(text("Save"));
+}
 ```
 
 This is the same trade the Rust side makes when an application builds directly
@@ -70,13 +73,14 @@ export default class Notes extends View {
     cx.notify();
   }
 
-  render() {
+  render(cx) {
+    const { colors } = cx.theme();
     return v_flex()
       .size_full()
       .p(24)
       .gap(12)
-      .bg("background")
-      .children(this.items.map((item) => text(item).text_color("foreground")));
+      .bg(colors.background)
+      .children(this.items.map((item) => text(item).text_color(colors.foreground)));
   }
 }
 ```
@@ -184,8 +188,9 @@ semantic token name — `background`, `foreground`, `surface`,
 `surface_foreground`, `primary`, `primary_foreground`, `secondary`,
 `secondary_foreground`, `muted`, `muted_foreground`, `accent`,
 `accent_foreground`, `destructive`, `destructive_foreground`, `border`, `input`,
-`ring` — or a `#rrggbb` literal. Token names are preferred; a literal bypasses
-the theme.
+`ring` — or a `#rrggbb` literal. Passing values from
+`const { colors } = cx.theme()` is preferred. Semantic token name strings remain
+accepted for compatibility; a literal bypasses the theme.
 
 A style name that is neither reflected nor bound is an error at the call site,
 not a silently ignored no-op.
@@ -224,9 +229,9 @@ export default class Counter extends View {
 }
 ```
 
-`cx.notify()` requests a re-render. It is legal only inside an event callback;
-calling it during `render` throws, because notifying yourself while rendering is
-a loop.
+`cx.notify()` requests a re-render. It is legal inside an event callback or a
+task; calling it during `render` throws, because notifying yourself while
+rendering is a loop.
 
 **`render` does not run every frame.** It runs when the view has been
 invalidated — a `notify`, a hot reload, a theme change — and publishes a
@@ -254,6 +259,7 @@ grant the CLI installs in `gpui-shell.json`:
     "network": {
       "hosts": ["stream.example.com"],
       "http": [{
+        "scheme": "https",
         "host": "api.example.com",
         "methods": ["GET"],
         "paths": ["/v1/profile"],
@@ -267,8 +273,10 @@ grant the CLI installs in `gpui-shell.json`:
 ```
 
 `network.hosts` grants the host to HTTP, raw TCP, and WebSocket clients;
-`network.http` narrows HTTP to listed methods and paths without granting TCP or
-WebSocket access. `fetch` supports GET/POST, safe headers, string or
+`network.http` narrows HTTP to a scheme, effective port, listed methods and
+paths without granting TCP or WebSocket access. Its default scheme is `https`
+and its default port is the scheme's standard port; specify `port` only for a
+non-default endpoint. `fetch` supports GET/POST, safe headers, string or
 `Uint8Array` bodies, a 30-second request timeout, and 8 MiB request/response
 limits. Every redirect target must be granted; HTTPS downgrade is refused, as
 are cross-origin POST replays and cross-origin redirects carrying Authorization
@@ -280,12 +288,22 @@ and messages are limited to 8 MiB. Connect/handshake and writes have 30-second
 transport deadlines. A pending `read()` has no public timeout and waits for a
 message, close, or error; only one read may be outstanding, while writes and
 close are still serviced as it waits. Credential and handshake-control headers
-are refused.
+are refused. Each socket has an 8-command queue shared by reads, writes, and
+close; a new operation rejects when that queue is full.
 
 Both `fs` and `fs/promises` expose the same promise-only subset: `readFile`,
 `writeFile`, `readdir`, `exists`, `unlink`, `rmdir`, and `mkdir`. Capability
 checks happen at the call site, then filesystem work runs off the UI/VM thread.
-There are no synchronous filesystem calls.
+There are no synchronous filesystem calls. `writeFile` is capped at 8 MiB;
+`readdir` at 10,000 entries or 1 MiB of UTF-8 name bytes.
+
+Resource ceilings are per boundary: a JavaScript module is at most 8 MiB; an
+asset is at most 16 MiB, and asset listing stops at 10,000 entries or 1 MiB of
+names. A runtime may have 1,024 outstanding host tasks. Store data is capped at
+8 MiB total, 4,096 keys, 1 MiB per JSON value, and 1,024 pending `flush()`
+waiters. Plugin unload cancels every task carrying that plugin's `Policy`, even
+owner-less work. `process.run` starts its child with a cleared environment, so
+host environment variables are not inherited.
 
 ## The Engine Seam
 
@@ -316,7 +334,7 @@ that.
 
 Present today: the element and style surface, state styles (`hover` / `active` /
 `focus`), `Button`, `Checkbox`, `Switch`, retained `InputState` with input
-events, icons through `svg()`, dialogs, sheets and toasts on `cx`, promises and
+events, icons through `svg()`, dialogs, sheets and toasts on `window`, promises and
 timers, `fs` / `store` / `clipboard` / `log` / `process` behind capabilities,
 capability-gated HTTP and text/binary WebSocket clients, native target-value
 transitions and springs, hot reload, `check`, and generated TypeScript

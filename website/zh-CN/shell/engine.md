@@ -69,10 +69,10 @@ cargo test -p gpui-shell --release --lib benchmark -- --ignored --nocapture
 
 VM 与 GPUI 的 `App` 共用一个线程——主线程——在同一个进程里。`ShellRuntime` 是一个内部用 `RefCell` 的 `Rc`，既不是 `Send` 也不是 `Sync`。这里没有 worker，也没有第二个 VM。
 
-<img class="architecture-light" src="/shell-threads-memory-light.svg" alt="宿主进程。主线程上，GPUI 的 App 与 QuickJS VM 通过 FFI 边界互相调用普通函数。后台线程只跑计时器，到点后回到前台执行器。内存分为四块：上限 256 MiB 的 JavaScript 堆、由 snapshot 拥有的描述 arena、按 snapshot generation 索引的回调 arena，以及只存活一次绘制的 GPUI 帧 arena。">
-<img class="architecture-dark" src="/shell-threads-memory-dark.svg" alt="宿主进程。主线程上，GPUI 的 App 与 QuickJS VM 通过 FFI 边界互相调用普通函数。后台线程只跑计时器，到点后回到前台执行器。内存分为四块：上限 256 MiB 的 JavaScript 堆、由 snapshot 拥有的描述 arena、按 snapshot generation 索引的回调 arena，以及只存活一次绘制的 GPUI 帧 arena。">
+<img class="architecture-light" src="/shell-threads-memory-light.svg" alt="宿主进程。主线程上，GPUI 的 App 与 QuickJS VM 通过 FFI 边界互相调用普通函数。后台 worker 处理计时器与阻塞 I/O，再回到前台执行器 settle，期间不接触 VM。内存分为四块：上限 256 MiB 的 JavaScript 堆、由 snapshot 拥有的描述 arena、按 snapshot generation 索引的回调 arena，以及只存活一次绘制的 GPUI 帧 arena。">
+<img class="architecture-dark" src="/shell-threads-memory-dark.svg" alt="宿主进程。主线程上，GPUI 的 App 与 QuickJS VM 通过 FFI 边界互相调用普通函数。后台 worker 处理计时器与阻塞 I/O，再回到前台执行器 settle，期间不接触 VM。内存分为四块：上限 256 MiB 的 JavaScript 堆、由 snapshot 拥有的描述 arena、按 snapshot generation 索引的回调 arena，以及只存活一次绘制的 GPUI 帧 arena。">
 
-确实跑在别处的只有两件事，而且都不碰 VM。计时器（`gpui.sleep`、`gpui.timer`）在后台执行器上倒计时，到点后回到前台执行器，所以续体本身仍在主线程、在一个 `Task` scope 里执行。另一件是元素产出之后，GPUI 用自己的线程做自己的事。
+后台工作从不接触 VM。计时器（`gpui.sleep`、`gpui.timer`）在那里倒计时，文件、进程、fetch、TCP 与 WebSocket 也把阻塞工作交给那里。结果回到前台执行器 settle，所以 JavaScript 续体仍在主线程、在一个 `Task` scope 里执行。元素产出之后，GPUI 也会用自己的线程完成自身工作。
 
 做性能分析时，有三条推论要紧：
 

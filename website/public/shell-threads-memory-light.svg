@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 500" width="100%" role="img" aria-labelledby="t d">
   <title id="t">One process, one thread for the VM, and four places memory lives</title>
-  <desc id="d">The host process contains a main thread and a background thread. On the main thread the QuickJS VM, the snapshot it produces and GPUI's App sit in a row: a notify runs render once and fills the snapshot across a plain FFI call, and every frame after that replays the snapshot without re-entering the VM. The background thread holds only timers, which resolve back onto the main thread. Memory splits four ways: the JavaScript heap capped at 256 MiB and freed by its own GC; the description arena owned by the snapshot that produced it, of which a view keeps two; the callback arena keyed by snapshot generation and retired with it; and GPUI's frame arena, which lasts exactly one draw.</desc>
+  <desc id="d">The host process contains a main thread and background workers. On the main thread the QuickJS VM, the snapshot it produces and GPUI's App sit in a row: a notify runs render once and fills the snapshot across a plain FFI call, and every frame after that replays the snapshot without re-entering the VM. Background workers handle timers and blocking I/O, then settle on the foreground executor without touching the VM. Memory splits four ways: the JavaScript heap capped at 256 MiB and freed by its own GC; the description arena owned by the snapshot that produced it, of which a view keeps two; the callback arena keyed by snapshot generation and retired with it; and GPUI's frame arena, which lasts exactly one draw.</desc>
   <defs>
     <style>
       text{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
@@ -79,10 +79,10 @@
   <rect class="band" x="16" y="216" width="848" height="66" rx="10"/>
   <text class="tag" x="30" y="236">BACKGROUND THREAD</text>
   <rect class="card" x="30" y="244" width="118" height="30" rx="6"/>
-  <text class="note" x="89" y="263" text-anchor="middle">timers only</text>
+  <text class="note" x="89" y="263" text-anchor="middle">timers + blocking I/O</text>
   <path class="dash" d="M89 244 V162"/>
   <circle class="dot-timer" cx="89" cy="242" r="4"/>
-  <text class="note" x="168" y="263">gpui.sleep and gpui.timer count down here; the continuation resolves back on the main thread, never off it</text>
+  <text class="note" x="168" y="263">timers and blocking I/O run here; results settle back on the main thread without touching the VM</text>
 
   <text class="h1" x="16" y="306">Where memory lives</text>
 

@@ -1,10 +1,10 @@
 use std::{
     collections::VecDeque,
-    net::{TcpStream, ToSocketAddrs as _},
+    net::TcpStream,
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
-        mpsc::{self, Receiver, Sender, TryRecvError},
+        mpsc::{self, Receiver, SyncSender, TryRecvError, TrySendError},
     },
     thread,
     time::Duration,
@@ -22,9 +22,13 @@ use tungstenite::{
     stream::MaybeTlsStream,
 };
 
-use super::super::{host, scheduler};
+use super::{
+    super::{host, scheduler},
+    connect as network_connect,
+};
 
 const MESSAGE_LIMIT: usize = 8 * 1024 * 1024;
+const COMMAND_QUEUE_LIMIT: usize = 8;
 const READ_SLICE: Duration = Duration::from_millis(50);
 #[cfg(not(test))]
 const IO_TIMEOUT: Duration = Duration::from_secs(30);
@@ -149,33 +153,17 @@ fn connect<'js>(ctx: Ctx<'js>, url: String, options: Opt<ConnectOptions>) -> Res
             .into_client_request()
             .map_err(|error| format!("WebSocket handshake failed: {error}"))?;
         request.headers_mut().extend(headers);
-        let addresses = (host_name.as_str(), port)
-            .to_socket_addrs()
-            .map_err(|error| format!("resolving WebSocket host failed: {error}"))?;
-        let mut stream = None;
-        let mut last_error = None;
-        for address in addresses {
-            match TcpStream::connect_timeout(&address, IO_TIMEOUT) {
-                Ok(connected) => {
-                    stream = Some(connected);
-                    break;
-                }
-                Err(error) => last_error = Some(error),
-            }
-        }
-        let stream = stream.ok_or_else(|| {
-            format!(
-                "WebSocket connection failed: {}",
-                last_error
-                    .map(|error| error.to_string())
-                    .unwrap_or_else(|| "host resolved to no addresses".to_owned())
-            )
-        })?;
+        let operation = format!("WebSocket host {host_name}:{port}");
+        let (stream, deadline) =
+            network_connect::connect_tcp(&host_name, port, IO_TIMEOUT, &operation)
+                .map_err(|error| format!("WebSocket connection failed: {error}"))?;
+        let handshake_timeout =
+            network_connect::remaining_io_timeout(deadline, "WebSocket handshake")?;
         stream
-            .set_read_timeout(Some(IO_TIMEOUT))
+            .set_read_timeout(Some(handshake_timeout))
             .map_err(|error| format!("setting WebSocket handshake timeout failed: {error}"))?;
         stream
-            .set_write_timeout(Some(IO_TIMEOUT))
+            .set_write_timeout(Some(handshake_timeout))
             .map_err(|error| format!("setting WebSocket handshake timeout failed: {error}"))?;
         let (mut socket, _) =
             tungstenite::client_tls_with_config(request, stream, Some(config), None).map_err(
@@ -198,7 +186,7 @@ fn connect<'js>(ctx: Ctx<'js>, url: String, options: Opt<ConnectOptions>) -> Res
 }
 
 struct Socket {
-    commands: Sender<Command>,
+    commands: SyncSender<Command>,
     read_outstanding: Arc<AtomicBool>,
 }
 
@@ -288,7 +276,7 @@ fn set_timeouts(
 impl Socket {
     fn new(mut socket: WebSocket<MaybeTlsStream<TcpStream>>) -> std::result::Result<Self, String> {
         set_timeouts(&mut socket)?;
-        let (commands, receiver) = mpsc::channel();
+        let (commands, receiver) = mpsc::sync_channel(COMMAND_QUEUE_LIMIT);
         thread::Builder::new()
             .name("gpui-websocket".to_owned())
             .spawn(move || run_actor(socket, receiver))
@@ -297,6 +285,26 @@ impl Socket {
             commands,
             read_outstanding: Arc::new(AtomicBool::new(false)),
         })
+    }
+}
+
+fn reject_command(command: Command, error: String) {
+    match command {
+        Command::Read(reply) => reply.settle(Err(error)),
+        Command::Write(_, reply) | Command::Close(reply) => reply.settle(Err(error)),
+    }
+}
+
+fn enqueue(commands: &SyncSender<Command>, command: Command) {
+    match commands.try_send(command) {
+        Ok(()) => {}
+        Err(TrySendError::Full(command)) => reject_command(
+            command,
+            "WebSocket command queue is full; wait for an outstanding operation".to_owned(),
+        ),
+        Err(TrySendError::Disconnected(command)) => {
+            reject_command(command, "WebSocket connection is closed".to_owned())
+        }
     }
 }
 
@@ -453,12 +461,7 @@ impl<'js> IntoJs<'js> for Socket {
                     let commands = writer.clone();
                     let (promise, reply) =
                         scheduler::actor_deferred(&ctx, "WebSocket.write(data)")?;
-                    if commands.send(Command::Write(message, reply)).is_err() {
-                        return Err(Exception::throw_type(
-                            &ctx,
-                            "WebSocket connection is closed",
-                        ));
-                    }
+                    enqueue(&commands, Command::Write(message, reply));
                     Ok(promise)
                 },
             ),
@@ -489,13 +492,7 @@ impl<'js> IntoJs<'js> for Socket {
                     reply,
                     outstanding: read_outstanding.clone(),
                 };
-                if commands.send(Command::Read(pending)).is_err() {
-                    read_outstanding.store(false, Ordering::Release);
-                    return Err(Exception::throw_type(
-                        &ctx,
-                        "WebSocket connection is closed",
-                    ));
-                }
+                enqueue(&commands, Command::Read(pending));
                 Ok(promise)
             }),
         )?;
@@ -505,12 +502,7 @@ impl<'js> IntoJs<'js> for Socket {
             Func::from(move |ctx: Ctx<'js>| -> Result<Promise<'js>> {
                 let commands = closer.clone();
                 let (promise, reply) = scheduler::actor_deferred(&ctx, "WebSocket.close()")?;
-                if commands.send(Command::Close(reply)).is_err() {
-                    return Err(Exception::throw_type(
-                        &ctx,
-                        "WebSocket connection is closed",
-                    ));
-                }
+                enqueue(&commands, Command::Close(reply));
                 Ok(promise)
             }),
         )?;

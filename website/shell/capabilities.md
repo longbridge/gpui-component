@@ -75,7 +75,7 @@ A directory is recognized by **`gpui-shell.json`**. The legacy `plugin.json` nam
     "fs": { "read": ["${pluginDir}"], "write": ["${dataDir}"] },
     "network": {
       "hosts": ["stream.example.com"],
-      "http": [{ "host": "api.example.com", "methods": ["GET"], "path_prefixes": ["/v1/"] }]
+      "http": [{ "scheme": "https", "host": "api.example.com", "methods": ["GET"], "path_prefixes": ["/v1/"] }]
     },
     "store": true,
     "clipboard": { "read": false, "write": true },
@@ -84,7 +84,9 @@ A directory is recognized by **`gpui-shell.json`**. The legacy `plugin.json` nam
 }
 ```
 
-Unknown fields, invalid reverse-DNS ids, non-semver versions, escaping entries, and unknown `${...}` placeholders are rejected before code runs. API compatibility is declared by executable code with `require_api("1.0")`, not by adding a sixth manifest field.
+Unknown fields, invalid reverse-DNS ids, non-semver versions, escaping entries, and unknown `${...}` placeholders invalidate the manifest before code runs. The standalone CLI reports that error and continues with the local application's minimal fallback policy; none of the invalid manifest's requested grants apply. API compatibility is declared by executable code with `require_api("1.0")`, not by adding a sixth manifest field.
+
+Each scoped `network.http` rule binds the request scheme and effective port as well as its host, method and path. `scheme` defaults to `https`; `port` defaults to that scheme's standard port and only needs to be written for a non-default endpoint.
 
 ## `fs`
 
@@ -131,6 +133,8 @@ A **denial still throws at the call site** rather than rejecting. The capability
 
 `readFile` refuses a file over 64 MiB, naming it and the limit. The alternative to a ceiling is a string that has to fit in the JavaScript heap — which is itself capped — so the failure without one is an out-of-memory inside the VM rather than a sentence you can act on.
 
+`writeFile` accepts at most 8 MiB per call. `readdir` stops at 10,000 entries or 1 MiB of UTF-8 name bytes, whichever comes first, so an adversarial directory cannot turn one promise into unbounded allocation.
+
 ::: tip Still do not read a file from `render`
 `render` describes the interface; it cannot await. Read in `init` or an event handler, keep the result on the view, and `cx.notify()` when it arrives.
 :::
@@ -156,6 +160,8 @@ Values are JSON: `null`, booleans, numbers, strings, arrays and plain objects. F
 **A mutation schedules the write rather than performing it.** The file is written on a background thread — to a temporary file, renamed over the target, so a crash mid-write leaves the previous settings intact rather than a truncated one — and one write is in flight at a time, so a burst of `set` calls becomes one file rather than one file each. Whatever changed while a write was on its way is written by the next one.
 
 `await store.flush()` when you need to know it landed. It is a **barrier, not a second writer**: it waits for everything written so far to reach the disk and rejects with the write's own error if it does not. Starting its own write instead would race the automatic one through the same temporary file, with nothing ordering them — and the older revision could land last and undo the newer.
+
+The cache and its wait queue are bounded: one store file may serialize to at most 8 MiB, contain at most 4,096 keys, and hold at most 1 MiB in any one JSON value. At most 1,024 unresolved `flush()` barriers may wait at once; another is rejected instead of growing an unbounded waiter list.
 
 ### Where storage lives
 
@@ -244,7 +250,7 @@ Output goes through `tracing` with the target `gpui_shell::script`, so script ou
 ## `process`
 
 ```js
-import { process } from "gpui"; // also available as a bare global
+import process from "process"; // also available as a bare global
 
 const { code, stdout, stderr } = await process.run("git", ["status"]);
 process.exit(0);
@@ -254,7 +260,7 @@ process.exit(0);
 
 Output is **captured, not inherited**: a script that runs a command almost always wants what it said, and in a windowed application a child writing to the host's stdout is writing somewhere no user will look. `code` is `0` on success and `-1` when a signal killed it, which has no exit code of its own.
 
-Execution is bounded: 30 seconds, 8 MiB of stdout and 8 MiB of stderr. Reaching a bound kills and reaps the child and rejects the promise. Cancelling owned work or tearing down its runtime also terminates the child.
+Execution is bounded: 30 seconds, 8 MiB of stdout and 8 MiB of stderr. Reaching a bound kills and reaps the child and rejects the promise. Cancelling owned work or tearing down its runtime also terminates the child. The child starts with a cleared environment rather than inheriting host secrets; the shell does not expose an option to add environment variables.
 
 It is gated on an execute grant, which is one of three: denied (the default), an allowlist of command names, or unrestricted. A denied command **throws at the call** rather than rejecting, like a denied `fs` path — a rejected promise nobody awaited is a denial nobody sees.
 
@@ -282,11 +288,13 @@ Beyond the capability grants, the runtime trims the language itself. All of it a
 | ------------------------------------------------------------- | -------------------------------------------------------------------------- |
 | Heap                                                          | 256 MiB — a leak becomes a catchable JavaScript exception, not an OOM kill |
 | Interpreter stack                                             | 1 MiB — deep recursion becomes a `RangeError`, not a native stack overflow |
+| Loaded JavaScript module                                      | 8 MiB per source file                                                       |
+| Outstanding host tasks                                        | 1,024 per runtime                                                           |
 | Time in one call: render and layout                           | 50 ms                                                                      |
 | Time in one call: event and task                              | 500 ms                                                                     |
 | Time in one call: outside any call, such as module evaluation | 5 s                                                                        |
 
-The clock restarts on every host call, which is what lets the render path have a tighter budget than an event handler. **The interrupt cannot be swallowed by a `catch` block** — that is measured by a test, because if it could be, the interrupt would not be a defence at all.
+The clock restarts on every host call, which is what lets the render path have a tighter budget than an event handler. **The interrupt cannot be swallowed by a `catch` block** — that is measured by a test, because if it could be, the interrupt would not be a defence at all. Each WebSocket also has an 8-command queue shared by `read`, `write`, and `close`; when full, a new operation rejects and tells the caller to wait for outstanding work.
 
 There is no `std` and no `os`: quickjs-libc is not compiled into the build in the first place.
 
@@ -300,7 +308,7 @@ Development mode never relaxes capability gating. It makes the language easier t
 
 Global `fetch(url, options?)` is promise-based and returns `{ status, ok, url, text(), json() }`. Its grant is narrower than raw networking: every request and redirect must match a declared HTTP host, method, and exact path or path prefix; HTTPS never downgrades to HTTP, and authorization or caller-supplied headers never cross origins.
 
-`net.connect(host, port)` and `WebSocket.connect(url, { headers? })` use `capabilities.network.hosts`. WebSockets support text and `Uint8Array` messages, serialize writes through one actor, and re-authorize redirects. Connect, handshake, and write operations have a 30-second timeout. A socket permits one outstanding `read()` at a time; a second is rejected immediately instead of competing for the next message. Credential and handshake-control headers are refused. Raw TCP and WebSocket access are intentionally broader than an HTTP request grant.
+`net.connect(host, port)` and `WebSocket.connect(url, { headers? })` use `capabilities.network.hosts`. WebSockets support text and `Uint8Array` messages and serialize writes through one actor. They do not follow redirects. Connect, handshake, and write operations have a 30-second timeout. A socket permits one outstanding `read()` at a time; a second is rejected immediately instead of competing for the next message. Credential and handshake-control headers are refused. Raw TCP and WebSocket access are intentionally broader than an HTTP request grant.
 
 The runtime also provides `buffer`, `path`, `url`, `crypto`, `zlib`, `console`, `process`, and `os`. These are the audited LLRT/host-backed subset declared in generated `gpui.d.ts`; `node:` aliases and arbitrary Node built-ins are not part of the shell contract.
 

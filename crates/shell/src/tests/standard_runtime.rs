@@ -100,6 +100,7 @@ export default class Probe extends View {
     ].join("|")));
   }
 }
+
 "#;
     cx.update(crate::init);
     let runtime = ShellRuntime::new().expect("runtime");
@@ -135,6 +136,55 @@ export default class Probe extends View {
     assert!(
         error.to_string().to_ascii_lowercase().contains("not find"),
         "{error:#}"
+    );
+}
+
+#[gpui::test]
+fn synchronous_unawaited_host_calls_hit_the_runtime_task_limit(cx: &mut TestAppContext) {
+    let source = r#"
+import { View, v_flex, text, sleep } from "gpui";
+
+export default class Probe extends View {
+  init() {
+    this.state = "unlimited";
+    for (let index = 0; index < 2000; index += 1) {
+      try {
+        sleep(60000);
+      } catch (error) {
+        this.state = `limited:${error.message}`;
+        break;
+      }
+    }
+  }
+  render() { return v_flex().child(text(this.state)); }
+}
+"#;
+    cx.update(crate::init);
+    let runtime = ShellRuntime::new().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let view_type = runtime
+        .load_source("host-task-limit.js", source)
+        .expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let view = context
+        .update(|window, cx| runtime.instantiate_view(&view_type, window, cx))
+        .expect("instantiate");
+    let view_to_draw = view.clone();
+    context.draw(
+        gpui::Point::default(),
+        gpui::size(gpui::px(400.), gpui::px(300.)),
+        move |_, _| view_to_draw.into_any_element(),
+    );
+    let rendered = context.update(|_, cx| {
+        view.read(cx)
+            .snapshot()
+            .map(crate::RenderSnapshot::debug_tree)
+            .unwrap_or_default()
+    });
+    assert!(
+        rendered.contains("limited:") && rendered.contains("outstanding host task limit"),
+        "synchronous calls must be stopped by a per-runtime hard limit: {rendered}"
     );
 }
 

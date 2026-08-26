@@ -148,6 +148,8 @@ gpui_shell::watch::reload_in_debug(
 
 视图本身能挺过重载。`ScriptView::replace_object` 只换掉脚本产出的那部分，实体保留下来，随之保留的还有窗口、焦点与元素身份。
 
+插件 unload 是比移除单个 view 更强的生命周期边界：manager 会在丢弃插件前取消所有携带该插件 `Policy` 的 outstanding task，包括没有 owner 的工作。任何 continuation 都不能继续保留或使用已卸载插件的权限。
+
 ## 脚本出错的时候
 
 抛异常的脚本不会把界面一起带走。最后一份可用的 snapshot 仍然挂在那里，失败信息报在它上面，读者的滚动位置、焦点、正在读的内容都还在。在有什么让视图失效之前，运行时不会重跑那个失败的 `render`。

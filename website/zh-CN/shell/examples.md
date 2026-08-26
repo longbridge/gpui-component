@@ -36,14 +36,14 @@ gpui.d.ts              自动生成；jsconfig.json 与 types.d.ts 把类型接�
 **`ui.js` 是一个由函数构成的组件库。** 它导出 `label`、`muted`、`title`、`button`、`iconButton`、`checkbox`、`field`、`row`、`surface`、`rule` 与 `emptyState`，于是 `main.js` 读起来就像在用一个组件库：
 
 ```js
-export const label = (value) =>
-  text(value).text_size(12).line_height(1).text_color("foreground");
+export const label = (value, colors) =>
+  text(value).text_size(12).line_height(1).text_color(colors.foreground);
 
-export const surface = () =>
-  v_flex().flex_1().bg("surface").border(1).border_color("border").overflow_hidden();
+export const surface = (colors) =>
+  v_flex().flex_1().bg(colors.surface).border(1).border_color(colors.border).overflow_hidden();
 ```
 
-这样做没有额外代价，因为[一次函数调用产出的正是一份新的描述](./elements.md)。这也是对“基础层不提供任何带样式的控件”的回答——带样式的那一层你在自己的文件里写一次，从此不必重复。
+`main.js` 在 `render(cx)` 中只读取一次 `const { colors } = cx.theme()`，再把这份调用期 palette 传给这些 helper。这样做没有额外代价，因为[一次函数调用产出的正是一份新的描述](./elements.md)。这也是对“基础层不提供任何带样式的控件”的回答——带样式的那一层你在自己的文件里写一次，从此不必重复。
 
 **存储是把拒绝吸收掉，而不是先去问有没有权限。** 宿主没授予存储时 `store` 会抛异常，而这是关于宿主的一个事实，不是这个应用的错误：
 

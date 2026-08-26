@@ -10,20 +10,21 @@ import { SPACE, button, label, muted } from "./ui.js";
 
 /**
  * @param {number} count
+ * @param {import("gpui").ColorTokens} colors
  * @param {(cx: import("gpui").Context) => void} onConfirm
  */
-export default (count, onConfirm) => () =>
+export default (count, colors, onConfirm) => () =>
   v_flex()
     .w(360)
     .gap(SPACE.md)
-    .child(label(`Delete ${count} completed ${count === 1 ? "item" : "items"}?`))
-    .child(muted("This cannot be undone."))
+    .child(label(`Delete ${count} completed ${count === 1 ? "item" : "items"}?`, colors))
+    .child(muted("This cannot be undone.", colors))
     .child(
       h_flex()
         .justify_end()
         .gap(SPACE.sm)
         .pt(SPACE.sm)
-        .child(button("cancel", "Cancel", () => window.close_dialog(), { variant: "ghost" }))
+        .child(button("cancel", "Cancel", () => window.close_dialog(), colors, { variant: "ghost" }))
         .child(
           button(
             "confirm",
@@ -32,6 +33,7 @@ export default (count, onConfirm) => () =>
               onConfirm(cx);
               window.close_dialog();
             },
+            colors,
             { variant: "primary" },
           ),
         ),

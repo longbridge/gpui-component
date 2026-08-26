@@ -144,6 +144,15 @@ pub(super) fn write_text<'js>(
 ) -> JsResult<Promise<'js>> {
     let grant = grant(&ctx, &path, Access::Write)?;
     let name = grant.describe();
+    if contents.len() > MAX_WRITE_BYTES {
+        return Err(Exception::throw_range(
+            &ctx,
+            &format!(
+                "`{name}` write is {} bytes, over the {MAX_WRITE_BYTES}-byte fs.writeFile limit",
+                contents.len()
+            ),
+        ));
+    }
     let (dir, relative) = grant.into_parts();
 
     scheduler::blocking(&ctx, "fs.writeFile(path, contents)", move || {
@@ -278,6 +287,9 @@ impl<'js> FromJs<'js> for MakeDirectory {
 /// JavaScript heap — which is itself capped, so the failure without this is an
 /// out-of-memory in the VM rather than a sentence naming the file.
 const MAX_READ_BYTES: u64 = 64 * 1024 * 1024;
+const MAX_WRITE_BYTES: usize = 8 * 1024 * 1024;
+const MAX_READDIR_ENTRIES: usize = 10_000;
+const MAX_READDIR_NAME_BYTES: usize = 1024 * 1024;
 
 /// A failure, worded the way [`io_error`] words one.
 ///
@@ -316,15 +328,29 @@ impl<'js> IntoJs<'js> for DirEntry {
 /// and does not inherit the filesystem's arbitrary order.
 fn read_dir(dir: &cap_std::fs::Dir, path: &Path) -> std::io::Result<Vec<DirEntry>> {
     let mut entries = Vec::new();
+    let mut name_bytes = 0;
     for entry in dir.read_dir(path)? {
         let entry = entry?;
+        let name = entry.file_name().to_string_lossy().into_owned();
+        name_bytes += name.len();
+        check_readdir_budget(entries.len(), name_bytes)?;
         entries.push(DirEntry {
-            name: entry.file_name().to_string_lossy().into_owned(),
+            name,
             is_dir: entry.file_type().map(|kind| kind.is_dir()).unwrap_or(false),
         });
     }
     entries.sort_by(|left, right| left.name.cmp(&right.name));
     Ok(entries)
+}
+
+fn check_readdir_budget(entries: usize, name_bytes: usize) -> std::io::Result<()> {
+    if entries == MAX_READDIR_ENTRIES || name_bytes > MAX_READDIR_NAME_BYTES {
+        return Err(std::io::Error::other(format!(
+            "directory exceeded the {MAX_READDIR_ENTRIES}-entry or \
+             {MAX_READDIR_NAME_BYTES}-name-byte fs.readdir limit"
+        )));
+    }
+    Ok(())
 }
 
 /// The single path gate. Nothing in this module touches the filesystem except
@@ -422,12 +448,19 @@ fn schedule_persist(ctx: &Ctx<'_>) {
 /// raced the automatic one through the same temporary file with nothing ordering
 /// them — so the older revision could land last and undo the newer.
 fn flush<'js>(ctx: Ctx<'js>) -> JsResult<Promise<'js>> {
+    with_store(&ctx, |store| {
+        store
+            .ensure_waiter_capacity()
+            .map_err(|error| fail(&ctx, &error))
+    })?;
     let (promise, resolve, reject) = ctx.promise()?;
     let settle = scheduler::deferred(&ctx, "gpui.store.flush()", resolve, reject)?;
 
     // `with_store` also enforces the capability, so a denied flush throws here
     // rather than resolving quietly.
-    if let Some(settle) = with_store(&ctx, |store| Ok(store.wait(settle)))? {
+    if let Some(settle) = with_store(&ctx, |store| {
+        store.wait(settle).map_err(|error| fail(&ctx, &error))
+    })? {
         settle(Ok(()));
         return Ok(promise);
     }
@@ -458,12 +491,7 @@ fn store_object<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
         Func::from(
             |ctx: Ctx<'_>, key: String, value: JsonValue| -> JsResult<()> {
                 with_store(&ctx, |store| {
-                    store
-                        .values()
-                        .map_err(|error| fail(&ctx, &error))?
-                        .insert(key, value.0);
-                    store.touch();
-                    Ok(())
+                    store.set(key, value.0).map_err(|error| fail(&ctx, &error))
                 })?;
                 schedule_persist(&ctx);
                 Ok(())
@@ -986,5 +1014,16 @@ mod tests {
             ctx.eval::<(), _>("gpui.log.info('loaded', 3, { ok: true })")
                 .expect("logging is always available");
         });
+    }
+
+    #[test]
+    fn readdir_budget_rejects_entry_and_name_aggregate_overflow() {
+        let entry_error =
+            check_readdir_budget(MAX_READDIR_ENTRIES, 1).expect_err("entry limit must reject");
+        assert!(entry_error.to_string().contains("entry"));
+
+        let name_error = check_readdir_budget(0, MAX_READDIR_NAME_BYTES + 1)
+            .expect_err("name-byte limit must reject");
+        assert!(name_error.to_string().contains("name-byte"));
     }
 }

@@ -452,12 +452,20 @@ struct NetworkGrantFile {
 #[derive(Clone, Debug, Default, PartialEq, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct HttpRequestGrantFile {
+    #[serde(default = "default_https_scheme")]
+    scheme: String,
     host: String,
+    #[serde(default)]
+    port: Option<u16>,
     methods: Vec<String>,
     #[serde(default)]
     paths: Vec<String>,
     #[serde(default)]
     path_prefixes: Vec<String>,
+}
+
+fn default_https_scheme() -> String {
+    "https".to_owned()
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Deserialize, JsonSchema)]
@@ -497,12 +505,17 @@ impl CapabilitiesFile {
             .execute(execute)
             .network_hosts(network.hosts.into_iter().map(|host| host.to_lowercase()))
             .http_requests(network.http.into_iter().map(|request| {
-                HttpRequestGrant::new(
+                let mut grant = HttpRequestGrant::new(
                     request.host,
                     request.methods,
                     request.paths,
                     request.path_prefixes,
                 )
+                .scheme(request.scheme);
+                if let Some(port) = request.port {
+                    grant = grant.port(port);
+                }
+                grant
             }))
             .store(self.store)
             .clipboard_read(clipboard.read)
@@ -549,6 +562,11 @@ impl CapabilitiesFile {
             }
         }
         for (index, rule) in network.http.iter().enumerate() {
+            if !matches!(rule.scheme.as_str(), "http" | "https") {
+                return Err(ManifestProblem::Capabilities(format!(
+                    "network.http[{index}].scheme must be `http` or `https`"
+                )));
+            }
             if rule.methods.is_empty() {
                 return Err(ManifestProblem::Capabilities(format!(
                     "network.http[{index}].methods must contain at least one HTTP method"
@@ -1057,15 +1075,18 @@ impl PluginManager {
         Ok(())
     }
 
-    /// Drops a plugin's view, and with it its policy. Returns whether there was
-    /// one.
+    /// Cancels work created under a plugin's policy, then drops its view and
+    /// policy. Returns whether the plugin was loaded.
     ///
-    /// Dropping the [`Entity<ScriptView>`] releases the script object with it,
-    /// which is as much teardown as the current runtime can do: there is no
-    /// `deactivate()` call yet because there is nothing registered to tear down
-    /// (§18.2's registration API does not exist).
+    /// There is no script `deactivate()` hook: host-owned task cancellation is
+    /// deterministic and prevents owner-less work from retaining the unloaded
+    /// plugin's authority.
     pub fn unload(&mut self, id: &str) -> bool {
-        self.loaded.remove(id).is_some()
+        let Some(plugin) = self.loaded.remove(id) else {
+            return false;
+        };
+        crate::engine::quickjs::cancel_policy_tasks(&plugin.policy);
+        true
     }
 
     pub fn loaded(&self) -> impl Iterator<Item = &Plugin> {
@@ -1359,9 +1380,27 @@ mod tests {
         assert!(!capabilities.may_run("curl"));
         assert!(capabilities.may_reach("api.example.com"));
         assert!(!capabilities.may_reach("evil.example.com"));
-        assert!(capabilities.may_request("readonly.example.com", "GET", "/v1/account"));
-        assert!(capabilities.may_request("readonly.example.com", "GET", "/v1/quotes/AAPL.US"));
-        assert!(!capabilities.may_request("readonly.example.com", "POST", "/v1/account"));
+        assert!(capabilities.may_request(
+            "https",
+            "readonly.example.com",
+            None,
+            "GET",
+            "/v1/account"
+        ));
+        assert!(capabilities.may_request(
+            "https",
+            "readonly.example.com",
+            None,
+            "GET",
+            "/v1/quotes/AAPL.US"
+        ));
+        assert!(!capabilities.may_request(
+            "https",
+            "readonly.example.com",
+            None,
+            "POST",
+            "/v1/account"
+        ));
 
         // The placeholders are the only way a manifest can name a directory it
         // does not know the path of.
@@ -1489,6 +1528,14 @@ mod tests {
             let error = PluginManifest::parse(&source).expect_err("invalid grant must fail fast");
             assert!(error.to_string().contains(expected), "{error}");
         }
+
+        let source = VALID.replacen(
+            "\"host\": \"readonly.example.com\"",
+            "\"scheme\": \"ftp\", \"host\": \"readonly.example.com\"",
+            1,
+        );
+        let error = PluginManifest::parse(&source).expect_err("invalid scheme must fail fast");
+        assert!(error.to_string().contains("must be `http` or `https`"));
     }
 
     #[test]
@@ -1719,6 +1766,8 @@ mod tests {
             "network",
             "hosts",
             "http",
+            "scheme",
+            "port",
             "methods",
             "paths",
             "path_prefixes",

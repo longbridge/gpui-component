@@ -70,7 +70,7 @@ snapshot 只在有东西让它失效时才重建：
 
 - 事件回调或异步任务里的 `cx.notify()`
 - [hot-reload](./getting-started.md) 替换了脚本
-- 主题切换——因为 `bg("surface")` 是在 `render` 执行时解析成真实颜色的，已经烘进了 snapshot
+- 主题切换——因为 `bg(colors.surface)` 在 `render` 执行时记录真实颜色，已经烘进了 snapshot
 - 宿主调用 `ScriptView::refresh`——Rust 用它表示“我改了脚本会读到的状态”（通过[原生模块](./capabilities.md)）。宿主侧单纯的 `cx.notify()` 只是重绘，不会跑脚本：这是两个不同的请求
 
 其余情况都在 Rust 里复用你已经产出的那份描述，不执行任何 JavaScript。
@@ -144,14 +144,15 @@ init() {
   this.draft.on("submit", (_event, cx) => this.add(cx));
 }
 
-render() {
+render(cx) {
+  const { colors } = cx.theme();
   return Input.new(this.draft)
     .flex_1()
     .h(28)
     .px(8)
     .border(1)
-    .border_color("input")
-    .bg("surface")
+    .border_color(colors.input)
+    .bg(colors.surface)
     .text_size(12);
 }
 ```
@@ -233,7 +234,7 @@ flash(cx) {
 ```
 
 ::: tip 两种 import 写法
-`import { spawn, sleep } from "gpui"` 按名字取用，示例应用就是这么写的。`import * as gpui from "gpui"` 把整个接口放在一个名字下——`gpui.spawn`、`gpui.fs`、`gpui.timer.after`——运行时自己的错误信息用的就是这种写法。两种都可以；没有 default 导出。
+`import { spawn, sleep } from "gpui"` 按名字取用，示例应用就是这么写的。`import * as gpui from "gpui"` 把 UI 与调度接口放在一个名字下，例如 `gpui.spawn` 与 `gpui.timer.after`；文件系统和进程 API 仍是独立的标准模块。这里没有 default 导出。
 :::
 
 **`spawn` 会接管 promise，这正是它的意义。** 未处理的 rejection 是 JavaScript 最常见的静默失败：工作停了，界面保持原状，什么都没写到任何地方。在这里它会带着脚本自己的调用栈进入 `tracing::error!`。

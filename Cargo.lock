@@ -3713,6 +3713,7 @@ dependencies = [
  "smallvec",
  "tracing",
  "tungstenite",
+ "windows 0.58.0",
  "zed-reqwest",
 ]
 

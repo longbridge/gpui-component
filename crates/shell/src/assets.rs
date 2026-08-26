@@ -19,6 +19,10 @@ use std::{borrow::Cow, cell::RefCell, collections::HashSet, path::PathBuf};
 use cap_std::{ambient_authority, fs::Dir};
 use gpui::{AssetSource, SharedString};
 
+const MAX_ASSET_BYTES: u64 = 16 * 1024 * 1024;
+const MAX_ASSET_LIST_ENTRIES: usize = 10_000;
+const MAX_ASSET_LIST_NAME_BYTES: usize = 1024 * 1024;
+
 /// Serves files from one application directory.
 #[derive(Clone, Debug)]
 pub struct AppAssets {
@@ -72,8 +76,25 @@ impl AssetSource for AppAssets {
             anyhow::bail!("`{path}` is outside the application directory");
         };
 
-        match dir.read(&resolved) {
-            Ok(bytes) => Ok(Some(Cow::Owned(bytes))),
+        match dir.open(&resolved) {
+            Ok(mut file) => {
+                use std::io::Read as _;
+
+                let size = file.metadata()?.len();
+                if size > MAX_ASSET_BYTES {
+                    anyhow::bail!(
+                        "asset `{path}` is {size} bytes, over the {MAX_ASSET_BYTES}-byte limit"
+                    );
+                }
+                let mut bytes = Vec::with_capacity(size as usize);
+                file.by_ref()
+                    .take(MAX_ASSET_BYTES + 1)
+                    .read_to_end(&mut bytes)?;
+                if bytes.len() as u64 > MAX_ASSET_BYTES {
+                    anyhow::bail!("asset `{path}` grew over the {MAX_ASSET_BYTES}-byte limit");
+                }
+                Ok(Some(Cow::Owned(bytes)))
+            }
             // A missing asset cannot be an error: GPUI asks for assets it may
             // not need, and returning one would fail the frame. But an icon
             // that silently does not appear is the hardest kind of mistake to
@@ -92,16 +113,33 @@ impl AssetSource for AppAssets {
             return Ok(Vec::new());
         };
 
-        let mut names: Vec<SharedString> = dir
-            .read_dir(&resolved)
-            .into_iter()
-            .flatten()
-            .flatten()
-            .map(|entry| SharedString::from(entry.file_name().to_string_lossy().to_string()))
-            .collect();
+        let mut names = Vec::new();
+        let mut name_bytes = 0;
+        let listing = match dir.read_dir(&resolved) {
+            Ok(listing) => listing,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(error) => return Err(error.into()),
+        };
+        for entry in listing {
+            let name = entry?.file_name().to_string_lossy().into_owned();
+            name_bytes += name.len();
+            check_asset_list_budget(names.len(), name_bytes)
+                .map_err(|error| anyhow::anyhow!("asset list `{path}` {error}"))?;
+            names.push(SharedString::from(name));
+        }
         names.sort();
         Ok(names)
     }
+}
+
+fn check_asset_list_budget(entries: usize, name_bytes: usize) -> Result<(), &'static str> {
+    if entries == MAX_ASSET_LIST_ENTRIES {
+        return Err("exceeded its entry limit");
+    }
+    if name_bytes > MAX_ASSET_LIST_NAME_BYTES {
+        return Err("exceeded its name-byte limit");
+    }
+    Ok(())
 }
 
 thread_local! {
@@ -147,6 +185,26 @@ mod tests {
     fn a_missing_asset_is_not_an_error() {
         let assets = AppAssets::new(std::env::temp_dir());
         assert!(assets.load("definitely-not-here.svg").unwrap().is_none());
+    }
+
+    #[test]
+    fn an_oversized_asset_is_refused_before_it_is_buffered() {
+        let base = sandbox("oversized");
+        let path = base.join("app/huge.svg");
+        let file = std::fs::File::create(&path).expect("asset");
+        file.set_len(MAX_ASSET_BYTES + 1).expect("sparse asset");
+
+        let error = AppAssets::new(base.join("app"))
+            .load("huge.svg")
+            .expect_err("oversized asset must fail");
+        assert!(error.to_string().contains("asset") && error.to_string().contains("limit"));
+        let _ = std::fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn asset_lists_bound_entries_and_aggregate_name_bytes() {
+        assert!(check_asset_list_budget(MAX_ASSET_LIST_ENTRIES, 1).is_err());
+        assert!(check_asset_list_budget(0, MAX_ASSET_LIST_NAME_BYTES + 1).is_err());
     }
 
     /// An asset path is a grant like any other: it names the application's own

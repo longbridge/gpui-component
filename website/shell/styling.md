@@ -9,7 +9,10 @@ order: 5
 The script owns presentation, so this is where most of an application's code goes. Every element accepts the same style surface, written as one fluent chain — exactly what the Rust side writes:
 
 ```js
-v_flex().size_full().bg("surface").p(12).gap(8).rounded(6);
+render(cx) {
+  const { colors } = cx.theme();
+  return v_flex().size_full().bg(colors.surface).p(12).gap(8).rounded(6);
+}
 ```
 
 ```rust
@@ -85,11 +88,15 @@ percentages and "auto" are not allowed here
 
 ## Colours
 
-A colour is either a **semantic token name** or a hex literal:
+A colour is normally read from the call-scoped theme. Semantic token name strings remain accepted for compatibility, and hex literals are available for fixed colours:
 
 ```js
-.bg("surface")            // follows the theme
-.text_color("#1e88e5")    // does not
+render(cx) {
+  const { colors } = cx.theme();
+  return element
+    .bg(colors.surface)         // follows the theme
+    .text_color("#1e88e5");    // does not
+}
 ```
 
 The palette defines seventeen tokens:
@@ -106,7 +113,7 @@ The palette defines seventeen tokens:
 
 Hex literals accept `#rgb`, `#rrggbb` and `#rrggbbaa`.
 
-**Prefer a token.** A literal bypasses the theme, and a theme switch will not reach it. The example application makes exactly this point: it follows the visual language of `crates/base/examples/showcase`, which has to write literal colours because Base ships no palette, and reads semantic tokens instead — so the same code follows a theme that the Rust showcase cannot.
+**Prefer a value from `cx.theme().colors`.** A literal bypasses the theme, and a theme switch will not reach it. The example application makes exactly this point: it follows the visual language of `crates/base/examples/showcase`, which has to write literal colours because Base ships no palette, and reads semantic tokens instead — so the same code follows a theme that the Rust showcase cannot.
 
 A mistyped token names the whole set rather than failing vaguely:
 
@@ -126,14 +133,17 @@ So `gpui-shell` ships a default light and dark palette, loaded from a JSON file 
 `hover`, `active` and `focus` take a function, which receives a detached element that collects the declarations:
 
 ```js
-Button.new("save")
-  .bg("surface")
-  .border(1)
-  .border_color("border")
-  .hover((style) => style.bg("muted").border_color("foreground"))
-  .active((style) => style.bg("border"))
-  .focus((style) => style.border_color("ring"))
-  .child(text("Save"));
+renderSave(cx) {
+  const { colors } = cx.theme();
+  return Button.new("save")
+    .bg(colors.surface)
+    .border(1)
+    .border_color(colors.border)
+    .hover((style) => style.bg(colors.muted).border_color(colors.foreground))
+    .active((style) => style.bg(colors.border))
+    .focus((style) => style.border_color(colors.ring))
+    .child(text("Save"));
+}
 ```
 
 The function's return value is ignored, so a chain and a block body both work. The declarations inside are the **ordinary style methods** — there is no second grammar for "what a style is", and every length and colour rule above applies unchanged.

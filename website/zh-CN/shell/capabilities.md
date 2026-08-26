@@ -75,7 +75,7 @@ process.exit() is not granted; set capabilities.process.exit to true in the mani
     "fs": { "read": ["${pluginDir}"], "write": ["${dataDir}"] },
     "network": {
       "hosts": ["stream.example.com"],
-      "http": [{ "host": "api.example.com", "methods": ["GET"], "path_prefixes": ["/v1/"] }]
+      "http": [{ "scheme": "https", "host": "api.example.com", "methods": ["GET"], "path_prefixes": ["/v1/"] }]
     },
     "store": true,
     "clipboard": { "read": false, "write": true },
@@ -84,7 +84,9 @@ process.exit() is not granted; set capabilities.process.exit to true in the mani
 }
 ```
 
-未知字段、非法 reverse-DNS id、非 semver 版本、逃出目录的 entry，以及未知 `${...}` placeholder 都会在代码执行前被拒绝。API 兼容性由可执行代码调用 `require_api("1.0")` 声明，而不是给 manifest 加第六个字段。
+未知字段、非法 reverse-DNS id、非 semver 版本、逃出目录的 entry，以及未知 `${...}` placeholder 都会在代码执行前令 manifest 失效。独立 CLI 会报告错误，并按本地应用的最小后备策略继续运行；非法 manifest 请求的授权不会生效。API 兼容性由可执行代码调用 `require_api("1.0")` 声明，而不是给 manifest 加第六个字段。
+
+每条 scoped `network.http` 规则除了 host、method 与 path 外，还会绑定请求的 scheme 与有效端口。`scheme` 默认为 `https`；`port` 默认为该 scheme 的标准端口，仅非默认 endpoint 需要显式填写。
 
 ## `fs`
 
@@ -131,6 +133,8 @@ await fs.writeFile("notes.md", source + "\n");
 
 `readFile` 会拒绝超过 64 MiB 的文件，并指出文件名和上限。没有这个上限的话，替代方案是一个必须塞进 JavaScript 堆的字符串——而那个堆本身也有上限——于是失败会表现为 VM 内部的内存耗尽，而不是一句你能据以行动的话。
 
+`writeFile` 每次最多接受 8 MiB。`readdir` 最多返回 10,000 个 entry 或累计 1 MiB 的 UTF-8 文件名（先触及哪个就按哪个停止），避免恶意目录让一个 promise 造成无界分配。
+
 ::: tip 仍然不要在 `render` 里读文件
 `render` 描述界面，它没法 await。在 `init` 或事件回调里读，把结果留在视图上，拿到后 `cx.notify()`。
 :::
@@ -156,6 +160,8 @@ await store.flush();
 **一次修改安排一次写入，而不是执行一次写入。** 文件在后台线程写出——先写临时文件再改名覆盖目标，所以写到一半崩溃留下的是之前完整的配置，而不是一个被截断的文件——并且同时只有一次写入在途，于是一连串 `set` 汇成一个文件，而不是一次一个文件。写入在途期间发生的改动，由下一次写入带上。
 
 需要确认落盘时 `await store.flush()`。它是**屏障，不是第二个写入者**：等待此前所有修改抵达磁盘，写入失败时用写入自己的错误 reject。若让它自己再写一次，就会与自动写入抢同一个临时文件，两者之间没有任何顺序保证——旧版本可能最后落盘，把新版本抹掉。
+
+cache 与等待队列都有上限：单个 store 文件序列化后最多 8 MiB，最多 4,096 个 key，单个 JSON value 最多 1 MiB。同时最多允许 1,024 个尚未完成的 `flush()` barrier；更多调用会 reject，而不是无限增长 waiter 列表。
 
 ### 存储在哪里
 
@@ -244,7 +250,7 @@ log.warn("could not save");
 ## `process`
 
 ```js
-import { process } from "gpui"; // 同时也是一个全局
+import process from "process"; // 同时也是一个全局
 
 const { code, stdout, stderr } = await process.run("git", ["status"]);
 process.exit(0);
@@ -254,7 +260,7 @@ process.exit(0);
 
 输出是**捕获的，不是继承的**：跑一条命令的脚本几乎总是想要它说了什么，而在一个窗口程序里，子进程往宿主的 stdout 写，是写到没人会看的地方。`code` 成功时是 `0`，被信号杀死时是 `-1`——那种情况本来就没有退出码。
 
-执行是有界的：30 秒、stdout 8 MiB、stderr 8 MiB。触及任一上限都会终止并回收子进程，同时 reject promise。取消所属任务或销毁 runtime 也会终止子进程。
+执行是有界的：30 秒、stdout 8 MiB、stderr 8 MiB。触及任一上限都会终止并回收子进程，同时 reject promise。取消所属任务或销毁 runtime 也会终止子进程。子进程从清空的环境开始，不会继承宿主 secret；shell 也不提供添加环境变量的选项。
 
 它受执行授权约束，授权有三种形态：拒绝（默认）、命令名白名单，或不受限。被拒绝的命令**在调用处抛出**而不是 reject，和被拒绝的 `fs` 路径一样——没人 await 的 rejected promise，等于没人看见的拒绝。
 
@@ -282,11 +288,13 @@ process.exit(0);
 | ------------------------------------------ | -------------------------------------------------------------------------- |
 | 堆                                         | 256 MiB——泄漏表现为一个可捕获的 JavaScript 异常，而不是整个宿主被 OOM kill |
 | 解释器栈                                   | 1 MiB——深递归表现为 `RangeError`，而不是原生栈溢出                         |
+| 已加载的 JavaScript module                 | 每个源码文件 8 MiB                                                         |
+| 尚未完成的 host task                       | 每个 runtime 1,024 个                                                       |
 | 单次调用耗时：render 与 layout             | 50 ms                                                                      |
 | 单次调用耗时：event 与 task                | 500 ms                                                                     |
 | 单次调用耗时：不在任何调用中，例如模块求值 | 5 秒                                                                       |
 
-时钟在每一次宿主调用时重置，这正是渲染路径能比事件回调有更紧预算的原因。**中断无法被 `catch` 吞掉**——这一点有测试来度量，因为如果能被吞掉，中断就根本不是一道防线。
+时钟在每一次宿主调用时重置，这正是渲染路径能比事件回调有更紧预算的原因。**中断无法被 `catch` 吞掉**——这一点有测试来度量，因为如果能被吞掉，中断就根本不是一道防线。每个 WebSocket 另有一条由 `read`、`write` 与 `close` 共用的 8-command 队列；队列已满时新操作会 reject，并要求调用方等待 outstanding work。
 
 这里没有 `std` 也没有 `os`：quickjs-libc 从一开始就没有被编进这个构建。
 
@@ -300,7 +308,7 @@ process.exit(0);
 
 全局 `fetch(url, options?)` 返回 promise，结果提供 `{ status, ok, url, text(), json() }`。它的授权比原始网络更窄：每次请求与 redirect 都必须匹配声明的 HTTP host、method，以及精确 path 或 path prefix；HTTPS 永不降级到 HTTP，authorization 与调用方 header 也不会跨 origin。
 
-`net.connect(host, port)` 与 `WebSocket.connect(url, { headers? })` 使用 `capabilities.network.hosts`。WebSocket 支持文本与 `Uint8Array` 消息，通过单一 actor 串行化写入，并在 redirect 时重新授权。Connect、handshake 与 write 操作都有 30 秒 timeout。每个 socket 同一时间只允许一个 outstanding `read()`；第二个会立即 reject，而不是与第一个争抢下一条消息。凭证 header 与握手控制 header 会被拒绝。Raw TCP 与 WebSocket 权限有意比 HTTP request grant 更宽。
+`net.connect(host, port)` 与 `WebSocket.connect(url, { headers? })` 使用 `capabilities.network.hosts`。WebSocket 支持文本与 `Uint8Array` 消息，并通过单一 actor 串行化写入；它不会跟随 redirect。Connect、handshake 与 write 操作都有 30 秒 timeout。每个 socket 同一时间只允许一个 outstanding `read()`；第二个会立即 reject，而不是与第一个争抢下一条消息。凭证 header 与握手控制 header 会被拒绝。Raw TCP 与 WebSocket 权限有意比 HTTP request grant 更宽。
 
 运行时还提供 `buffer`、`path`、`url`、`crypto`、`zlib`、`console`、`process` 与 `os`。它们是生成的 `gpui.d.ts` 所声明、经过审计的 LLRT/宿主子集；`node:` 别名和任意 Node 内建模块不属于 shell 契约。
 

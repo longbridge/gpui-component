@@ -23,14 +23,16 @@ pub struct Capabilities {
     exit: bool,
 }
 
-/// A method-and-path-scoped HTTP grant for one host.
+/// A scheme-, effective-port-, method-, and path-scoped HTTP grant for one host.
 ///
 /// This is deliberately separate from [`Capabilities::network_hosts`]: a
 /// plugin may read one REST resource without gaining TCP or WebSocket access to
 /// the same host, or permission to POST to another path on it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HttpRequestGrant {
+    scheme: String,
     host: String,
+    port: Option<u16>,
     methods: Vec<String>,
     paths: Vec<String>,
     path_prefixes: Vec<String>,
@@ -47,7 +49,9 @@ impl HttpRequestGrant {
         Q: Into<String>,
     {
         Self {
+            scheme: "https".to_owned(),
             host: host.into().to_ascii_lowercase(),
+            port: None,
             methods: methods
                 .into_iter()
                 .map(|method| method.into().to_ascii_uppercase())
@@ -57,18 +61,49 @@ impl HttpRequestGrant {
         }
     }
 
-    fn allows(&self, host: &str, method: &str, path: &str) -> bool {
-        self.host.eq_ignore_ascii_case(host)
+    /// Overrides the default HTTPS scheme for this grant.
+    pub fn scheme(mut self, scheme: impl Into<String>) -> Self {
+        self.scheme = scheme.into().to_ascii_lowercase();
+        self
+    }
+
+    /// Restricts this grant to a non-default effective port.
+    pub fn port(mut self, port: u16) -> Self {
+        self.port = Some(port);
+        self
+    }
+
+    fn allows(
+        &self,
+        scheme: &str,
+        host: &str,
+        port: Option<u16>,
+        method: &str,
+        path: &str,
+    ) -> bool {
+        self.scheme.eq_ignore_ascii_case(scheme)
+            && self.host.eq_ignore_ascii_case(host)
+            && effective_port(&self.scheme, self.port) == effective_port(scheme, port)
             && self
                 .methods
                 .iter()
                 .any(|allowed| allowed.eq_ignore_ascii_case(method))
             && (self.paths.iter().any(|allowed| allowed == path)
-                || self
-                    .path_prefixes
-                    .iter()
-                    .any(|allowed| path.starts_with(allowed)))
+                || self.path_prefixes.iter().any(|allowed| {
+                    path == allowed
+                        || path
+                            .strip_prefix(allowed)
+                            .is_some_and(|suffix| allowed.ends_with('/') || suffix.starts_with('/'))
+                }))
     }
+}
+
+fn effective_port(scheme: &str, port: Option<u16>) -> Option<u16> {
+    port.or_else(|| match scheme {
+        "http" => Some(80),
+        "https" => Some(443),
+        _ => None,
+    })
 }
 
 /// Which external commands a script may run.
@@ -182,13 +217,20 @@ impl Capabilities {
     }
 
     /// Whether an HTTP request is permitted by either a legacy unrestricted
-    /// host grant or a method-and-path-scoped HTTP grant.
-    pub fn may_request(&self, host: &str, method: &str, path: &str) -> bool {
+    /// host grant or a scoped HTTP grant.
+    pub fn may_request(
+        &self,
+        scheme: &str,
+        host: &str,
+        port: Option<u16>,
+        method: &str,
+        path: &str,
+    ) -> bool {
         self.may_reach(host)
             || self
                 .http_requests
                 .iter()
-                .any(|grant| grant.allows(host, method, path))
+                .any(|grant| grant.allows(scheme, host, port, method, path))
     }
 
     /// Opens the granted directory a path belongs to, and the path within it.

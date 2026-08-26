@@ -599,7 +599,8 @@ same rule to hot reload while preserving the existing entity.
 
 `load_app` takes the entry file name rather than assuming `main.js`, because a
 plugin declares its own entry in its manifest (§18) and the engine is the only
-thing that knows the extension a given engine loads.
+thing that knows the extension a given engine loads. Each source module is
+limited to 8 MiB before it enters QuickJS.
 
 #### Exactly one engine
 
@@ -1041,7 +1042,7 @@ very first render failed.
   right call for a host-side animation and the wrong one for host data. The two
   are separate methods because they are separate requests, and conflating them
   was the one behaviour change this lifecycle forced on embedders.
-- A palette change. `bg("surface")` resolves to a concrete `Hsla` while the
+- A palette change. `bg(colors.surface)` records a concrete `Hsla` while the
   script runs, so the palette is baked into the snapshot and a repaint cannot
   pick up a new one. `theme::generation()` is compared against the generation the
   snapshot was built at.
@@ -1319,11 +1320,14 @@ Hover, active, and focus styles reuse the ordinary style methods on a detached
 node, so there is no second grammar for what a style is:
 
 ```js
-Button.new("save")
-  .bg("primary")
-  .hover((style) => style.opacity(0.9))
-  .active((style) => style.opacity(0.8))
-  .focus((style) => style.border_color("ring"));
+function saveButton(cx) {
+  const { colors } = cx.theme();
+  return Button.new("save")
+    .bg(colors.primary)
+    .hover((style) => style.opacity(0.9))
+    .active((style) => style.opacity(0.8))
+    .focus((style) => style.border_color(colors.ring));
+}
 ```
 
 The declaring function receives a detached element; its return value is ignored,
@@ -1337,9 +1341,12 @@ checked, selected, disabled — are **not** bound. A script expresses those
 conditionally instead:
 
 ```js
-Button.new("save")
-  .when(disabled, (el) => el.opacity(0.4))
-  .when(selected, (el) => el.bg("muted").border_color("foreground"));
+function saveButton(cx, disabled, selected) {
+  const { colors } = cx.theme();
+  return Button.new("save")
+    .when(disabled, (el) => el.opacity(0.4))
+    .when(selected, (el) => el.bg(colors.muted).border_color(colors.foreground));
+}
 ```
 
 That is a real gap rather than a simplification, because it means the semantic
@@ -1521,6 +1528,9 @@ so a long-running application does not accumulate one entry per elapsed timer.
 Host operations that support physical cancellation add a cancellation hook.
 `process.run` uses it to kill and reap its child when the task, owner or runtime
 goes away; cancellation is not merely dropping the JavaScript continuation.
+The registry accepts at most 1,024 outstanding host tasks per runtime. A call
+over that ceiling fails instead of allowing timers or I/O promises to grow the
+registry without bound.
 
 ### 12.4 No background script
 
@@ -1614,13 +1624,16 @@ Fifty-seven methods are bound by hand in `style.rs`, and they are indistinguisha
 from the reflected ones at the call site:
 
 ```js
-v_flex()
-  .size_full()
-  .items_center() // reflected
-  .bg("surface")
-  .p(12)
-  .rounded(8)
-  .gap(8); // hand-bound
+function panel(cx) {
+  const { colors } = cx.theme();
+  return v_flex()
+    .size_full()
+    .items_center() // reflected
+    .bg(colors.surface)
+    .p(12)
+    .rounded(8)
+    .gap(8); // hand-bound
+}
 ```
 
 They divide as 9 size, 7 padding, 7 margin, 5 position, 6 flex, 6 paint, 8
@@ -1709,9 +1722,11 @@ switch, so caching it is both correct and cheaper.
 
 Rules for script:
 
-- Prefer a token name: `.bg("surface")`. Hex literals (`#rgb`, `#rrggbb`,
-  `#rrggbbaa`) are accepted for one-off tools, and the documentation says
-  plainly that a literal bypasses the theme and will not follow a theme switch.
+- Prefer a value read during the current call:
+  `const { colors } = cx.theme(); el.bg(colors.surface)`. Semantic token-name
+  strings remain accepted for compatibility. Hex literals (`#rgb`, `#rrggbb`,
+  `#rrggbbaa`) are accepted for one-off tools and bypass the theme, so they do
+  not follow a theme switch.
 - An unknown token is an error listing the valid set, never a transparent
   fallback — that would reproduce the exact failure this module exists to
   prevent.
@@ -2174,11 +2189,14 @@ split is also why the symlink and denial tests need no executor at all.
 `readFile` refuses a file over 64 MiB by name. The alternative to a ceiling is a
 string that has to fit in the JavaScript heap, which is itself capped — so the
 failure without one is an out-of-memory inside the VM instead of a sentence
-naming the file.
+naming the file. `writeFile` is capped at 8 MiB per call. `readdir` stops at
+10,000 entries or 1 MiB of UTF-8 name bytes, whichever comes first.
 
 `store` is deliberately not like this: it is a cache with a write-through, so
 `get` and `set` answer from memory. `store.flush()` returns a promise that
-settles when the current value is durable.
+settles when the current value is durable. Its serialized file is capped at
+8 MiB, with at most 4,096 keys and 1 MiB per JSON value. At most 1,024 pending
+flush barriers may wait for durability at once.
 
 ### 17.2 Network
 
@@ -2187,10 +2205,12 @@ supports bounded GET and POST requests, string or `Uint8Array` bodies, safe
 request headers, and resolves to `{ status, ok, url, text(), json() }`. Global
 `WebSocket.connect(url, { headers }?)` returns a socket with asynchronous
 text/binary `read`, `write`, and `close`. Bare module `net` provides raw
-`connect(host, port)` with bounded async `read`, `write`, and `close`; neither
+`connect(host, port)` with bounded async `read` and `write`; its synchronous
+`close(): void` immediately shuts down the cloned transport handles. Neither
 socket API provides a listening/server surface.
 
-All three are **asynchronous and capability-gated**. The host allowlist is
+All three are **capability-gated**, and their potentially blocking operations
+are asynchronous. The host allowlist is
 checked at the call site before background work starts. `fetch` handles
 redirects itself and authorizes every target against its method, host, and path
 grant. It refuses HTTPS downgrade. A non-GET request is never replayed across
@@ -2210,7 +2230,9 @@ transport error; each socket accepts only one outstanding read, rejecting a
 second immediately. The actor's short transport read slice is an internal
 scheduling mechanism, not a user-visible timeout; between slices it services
 writes and close, so a heartbeat write or close can complete while a read is
-pending. Raw socket reads/writes remain capped at 1 MiB per call.
+pending. The actor's command queue holds eight combined read/write/close
+operations; enqueueing another rejects immediately. Raw socket reads/writes
+remain capped at 1 MiB per call.
 
 The fetch subset remains deliberately small: GET and POST are the only methods,
 client-managed framing headers are refused, and streaming bodies, abort signals,
@@ -2274,7 +2296,9 @@ rather than rejecting a promise nobody awaited. Execution is bounded to 30
 seconds and 8 MiB for each output stream; crossing a bound kills and reaps the
 child. The two pipes are drained concurrently, so a child cannot deadlock by
 filling stderr while the host waits on stdout. Owner loss, task cancellation and
-runtime shutdown use the same kill-and-reap path. `process.exit(code?)` requires
+runtime shutdown use the same kill-and-reap path. The child environment is
+cleared before spawn, and the public surface has no option for restoring host
+variables. `process.exit(code?)` requires
 `capabilities.process.exit` and is a
 **request**: it hands the code to a handler the host
 installed with `gpui_shell::on_exit_request`, which decides what to do with it —
@@ -2425,6 +2449,7 @@ avoids collision with the generic `manifest.json`, `plugin.json`, and
     "network": {
       "hosts": ["quotes.example.com"],
       "http": [{
+        "scheme": "https",
         "host": "api.example.com",
         "methods": ["GET"],
         "paths": ["/v1/account"],
@@ -2439,8 +2464,11 @@ avoids collision with the generic `manifest.json`, `plugin.json`, and
 
 `network.hosts` is the backwards-compatible broad grant: every supported
 network API may reach that host. Use `network.http` when a plugin only needs
-selected REST operations. An HTTP request must match the rule's host, method,
-and either an exact `paths` entry or a `path_prefixes` entry. Redirects are
+selected REST operations. An HTTP request must match the rule's scheme,
+effective port, host, method, and either an exact `paths` entry or a
+`path_prefixes` entry. The scheme defaults to HTTPS and the port defaults to
+that scheme's standard port; a manifest writes `port` only for a non-default
+endpoint. Redirects are
 checked again with the same rule, so an allowed endpoint cannot redirect a
 credentialed request onto an unlisted path or host. An HTTP-only grant does not
 also grant TCP or WebSocket access to its host.
@@ -2537,6 +2565,11 @@ run under the grant its own script was loaded with. Construction precedes
 captures the same policy and a weak reference to the final view. Every async
 resumption also carries a `Weak<ShellRuntime>`; it never consults whichever
 runtime happens to be global when it wakes up.
+
+Plugin unload first cancels every scheduler entry carrying the plugin's `Policy`,
+including tasks that deliberately opted out of view ownership. Only then does
+the manager drop the plugin, so owner-less work cannot retain or exercise
+authority after unload.
 
 ### 18.4 What is still missing
 
@@ -2657,6 +2690,12 @@ persisting a decision in host configuration are all part of §18 and not built.
 | Memory            | `Runtime::set_memory_limit`                              | 256 MiB — a leak reports as a catchable exception on the offending allocation rather than an OOM kill of the host                                              |
 | Stack             | `Runtime::set_max_stack_size`                            | 1 MiB against QuickJS's 256 KiB default, so deep recursion is a `RangeError` a script can report rather than a native stack overflow, which is a process abort |
 | Microtask storms  | Bounded drain (§12.2)                                    | 100,000 jobs per drain                                                                                                                                         |
+| Host task fan-out | Per-runtime scheduler registry                           | 1,024 outstanding tasks                                                                                                                                        |
+| Module source     | Bounded module loader                                     | 8 MiB per module                                                                                                                                                |
+| Filesystem output | Bounded adapters                                          | 8 MiB per `writeFile`; `readdir` stops at 10,000 entries or 1 MiB of names                                                                                      |
+| Store             | Bounded cache and barriers                               | 8 MiB total; 4,096 keys; 1 MiB per value; 1,024 pending flush waiters                                                                                           |
+| Assets            | Bounded asset source                                     | 16 MiB per asset; listing stops at 10,000 entries or 1 MiB of names                                                                                             |
+| WebSocket queue   | Bounded actor channel                                     | 8 combined read/write/close commands                                                                                                                            |
 | Child processes   | Bounded adapter plus cancellation hook                   | 30 seconds; 8 MiB stdout and 8 MiB stderr; kill and reap on timeout, overflow, cancellation, owner loss or runtime shutdown                                    |
 
 The budget is per host call, not global: every `scope::enter` mints a fresh
@@ -3149,7 +3188,9 @@ application's public directory does. The runtime cannot tell which module called
 `svg`, so per-file asset paths are not available to it. A missing asset is not an
 error — GPUI asks for assets it may not need — but it is warned about once per
 path, saying exactly where it was looked for, because an icon that silently does
-not appear is among the hardest mistakes to find.
+not appear is among the hardest mistakes to find. One asset may contain at most
+16 MiB, and walking the asset tree stops at 10,000 entries or 1 MiB of UTF-8
+name bytes.
 
 The script API has its own version, independent of the crate version, and an
 application states what it needs in script rather than in its manifest:
@@ -3374,10 +3415,11 @@ export default class TodoList extends View {
     cx.notify();
   }
 
-  render() {
+  render(cx) {
+    const { colors } = cx.theme();
     return v_flex()
       .size_full()
-      .bg("background")
+      .bg(colors.background)
       .p(24)
       .gap(16)
       .child(this.composer())
@@ -3398,8 +3440,8 @@ builder style `CLAUDE.md` requires, instead of splitting into a temporary and a
 sequence of `if`s:
 
 ```js
-label(item.caption).when(item.done, (el) =>
-  el.text_color("muted_foreground").line_through(),
+label(item.caption, colors).when(item.done, (el) =>
+  el.text_color(colors.muted_foreground).line_through(),
 );
 ```
 
