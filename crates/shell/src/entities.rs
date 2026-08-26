@@ -159,6 +159,62 @@ pub struct EntityStore {
     records: HashMap<u32, StoredRecord>,
 }
 
+/// The store-only half of releasing retained state.
+///
+/// Records are removed while the store is mutably borrowed, then this plan is
+/// retired after that borrow has ended. In particular, `Entity::update` must
+/// never run while `EntityStore`'s `RefCell` is borrowed.
+pub(crate) struct EntityRelease {
+    handles: HashSet<EntityHandle>,
+    _records: Vec<StoredRecord>,
+    views: Vec<(Entity<ScriptView>, Weak<ShellRuntime>)>,
+}
+
+impl EntityRelease {
+    fn empty() -> Self {
+        Self {
+            handles: HashSet::new(),
+            _records: Vec::new(),
+            views: Vec::new(),
+        }
+    }
+
+    pub(crate) fn contains(&self, handle: EntityHandle) -> bool {
+        self.handles.contains(&handle)
+    }
+
+    fn cancel_owned_work(&self) {
+        for (view, runtime) in &self.views {
+            if let Some(runtime) = runtime.upgrade() {
+                runtime.retire_view_callbacks(view.entity_id());
+                crate::engine::quickjs::cancel_view_tasks(&runtime, view.entity_id());
+            }
+        }
+    }
+
+    /// Makes every released view inert before the plan and its records drop.
+    pub(crate) fn retire(self, cx: &mut impl gpui::AppContext) {
+        self.cancel_owned_work();
+        for (view, _) in &self.views {
+            view.update(cx, |view, _| view.retire());
+        }
+        // `records` and the extra entity clones drop only after every snapshot
+        // has been cleared. Script values therefore remain inside VM lifetime.
+    }
+
+    /// Best-effort cleanup for `Drop` paths where GPUI provides no context.
+    /// Removing the store records and cancelling owned work is still exact;
+    /// any frame-retained entity becomes unreachable when its root frame drops.
+    pub(crate) fn retire_without_context(self) {
+        self.cancel_owned_work();
+    }
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct EntityCheckpoint {
+    next_id: u32,
+}
+
 impl EntityStore {
     /// Creates a store with a process-unique JavaScript-safe namespace.
     ///
@@ -580,13 +636,13 @@ impl EntityStore {
     /// This is deliberately typed: retiring a view must synchronously clear
     /// its snapshots and callback generations even if GPUI still holds the
     /// entity for a rendered frame.
-    pub(crate) fn release_view(&mut self, handle: EntityHandle, cx: &mut App) -> bool {
+    pub(crate) fn release_view(&mut self, handle: EntityHandle) -> Option<EntityRelease> {
         let Some(id) = self.entity_id(handle) else {
-            return false;
+            return None;
         };
         let Some(Record::View { view, .. }) = self.records.get(&id).map(|stored| &stored.record)
         else {
-            return false;
+            return None;
         };
 
         // A child can create retained state, and eventually other child views,
@@ -613,27 +669,7 @@ impl EntityStore {
             }
         }
 
-        let views = removed
-            .iter()
-            .filter_map(|id| match &self.records.get(id)?.record {
-                Record::View { view, runtime, .. } => Some((view.clone(), runtime.clone())),
-                _ => None,
-            })
-            .collect::<Vec<_>>();
-
-        // Do all entity updates before mutating the map. Dropping a snapshot
-        // releases script values but never re-enters this store's RefCell.
-        for (view, runtime) in views {
-            if let Some(runtime) = runtime.upgrade() {
-                runtime.retire_view_callbacks(view.entity_id());
-                crate::engine::quickjs::cancel_view_tasks(&runtime, view.entity_id());
-            }
-            view.update(cx, |view, _| view.retire());
-        }
-        for id in removed {
-            self.records.remove(&id);
-        }
-        true
+        Some(self.take_records(removed))
     }
 
     /// Releases every handle. The runtime dropping the store does this anyway;
@@ -647,26 +683,11 @@ impl EntityStore {
     /// Dropping an input record also drops its GPUI subscriptions, so unload
     /// cannot leave a handler (and its persistent JavaScript function) behind
     /// in the runtime-wide store.
-    pub(crate) fn release_application(&mut self, application: &Rc<ApplicationGeneration>) {
-        let views = self
-            .records
-            .values()
-            .filter_map(|stored| match &stored.record {
-                Record::View {
-                    view,
-                    application: Some(owner),
-                    runtime,
-                } if Rc::ptr_eq(owner, application) => Some((view.entity_id(), runtime.clone())),
-                _ => None,
-            })
-            .collect::<Vec<_>>();
-        for (entity_id, runtime) in views {
-            if let Some(runtime) = runtime.upgrade() {
-                runtime.retire_view_callbacks(entity_id);
-                crate::engine::quickjs::cancel_view_tasks(&runtime, entity_id);
-            }
-        }
-        self.records.retain(|_, stored| {
+    pub(crate) fn release_application(
+        &mut self,
+        application: &Rc<ApplicationGeneration>,
+    ) -> EntityRelease {
+        let removed = self.records.iter().filter_map(|(id, stored)| {
             let owner = match &stored.record {
                 Record::View {
                     application: owner, ..
@@ -692,8 +713,53 @@ impl EntityStore {
             };
             owner
                 .as_ref()
-                .is_none_or(|owner| !Rc::ptr_eq(owner, application))
+                .is_some_and(|owner| Rc::ptr_eq(owner, application))
+                .then_some(*id)
         });
+        self.take_records(removed.collect())
+    }
+
+    /// Marks a boundary from which newly retained records can be rolled back.
+    pub(crate) fn checkpoint(&self) -> EntityCheckpoint {
+        EntityCheckpoint {
+            next_id: self.next_id,
+        }
+    }
+
+    /// Removes records allocated after `checkpoint` without reusing their ids.
+    pub(crate) fn rollback(&mut self, checkpoint: EntityCheckpoint) -> EntityRelease {
+        let removed = self
+            .records
+            .keys()
+            .copied()
+            .filter(|id| *id >= checkpoint.next_id)
+            .collect();
+        self.take_records(removed)
+    }
+
+    fn take_records(&mut self, ids: HashSet<u32>) -> EntityRelease {
+        if ids.is_empty() {
+            return EntityRelease::empty();
+        }
+        let handles = ids
+            .iter()
+            .map(|id| (u64::from(self.id) << STORE_SHIFT) | u64::from(*id))
+            .collect();
+        let mut records = Vec::with_capacity(ids.len());
+        let mut views = Vec::new();
+        for id in ids {
+            if let Some(stored) = self.records.remove(&id) {
+                if let Record::View { view, runtime, .. } = &stored.record {
+                    views.push((view.clone(), runtime.clone()));
+                }
+                records.push(stored);
+            }
+        }
+        EntityRelease {
+            handles,
+            _records: records,
+            views,
+        }
     }
 
     /// How many handles are live, for `gc_stats` and for tests that assert the
@@ -939,27 +1005,60 @@ impl OtpEventName {
     }
 }
 
+/// The editor style a script's input is given: none of it.
+///
+/// Base resolves every colour a text input paints with from the active palette
+/// on each render, so the answer to "what colour is the caret" is now asked at
+/// the moment it is painted rather than at the moment the state was built.
+///
+/// This used to project the palette here, with light literals behind each
+/// token in case none was installed yet — and a script that builds its inputs
+/// in `init` builds them before it has installed anything, so the literals won
+/// every time and then never changed. The input kept light-mode ink for the
+/// life of the application: right by accident under a light palette, a black
+/// caret and an invisible placeholder under a dark one. Projecting nothing is
+/// what lets base answer, and base answers every frame.
 fn editor_style() -> InputEditorStyle {
-    let color =
-        |name: &str, fallback: gpui::Hsla| crate::theme_tokens::token_color(name).unwrap_or(fallback);
-    let foreground = color("foreground", gpui::rgb(0x10151d).into());
-    let mut selection = color("accent", gpui::rgb(0xdde7fb).into());
-    // A selection must not hide the glyphs it selects.
-    selection.a = 0.4;
-
-    InputEditorStyle {
-        foreground,
-        muted_foreground: color("muted_foreground", gpui::rgb(0x5a6577).into()),
-        background: color("surface", gpui::rgb(0xffffff).into()),
-        border: color("border", gpui::rgb(0xd4dbe6).into()),
-        selection,
-        caret: foreground,
-        ..Default::default()
-    }
+    InputEditorStyle::default()
 }
 
 #[cfg(test)]
 mod tests {
+    #[gpui::test]
+    fn an_input_paints_with_the_palette_that_is_current_not_the_one_it_was_built_under(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        use gpui::hsla;
+
+        // Built with nothing installed, which is what a script that creates its
+        // inputs in `init` does: the palette arrives on a task afterwards.
+        let style = super::editor_style();
+        assert_eq!(
+            style.foreground.a, 0.,
+            "the shell must project nothing, or base cannot tell unset from chosen"
+        );
+
+        cx.update(|cx| {
+            let mut dark = gpui_base::SemanticThemeTokens::default();
+            dark.colors.foreground = hsla(0., 0., 0.98, 1.0);
+            dark.colors.muted_foreground = hsla(0., 0., 0.64, 1.0);
+            let resolved = style.resolved(&dark);
+
+            // The two the caret and the placeholder are drawn from.
+            assert_eq!(resolved.caret, dark.colors.foreground);
+            assert_eq!(resolved.muted_foreground, dark.colors.muted_foreground);
+
+            let mut light = gpui_base::SemanticThemeTokens::default();
+            light.colors.foreground = hsla(0., 0., 0.04, 1.0);
+            assert_ne!(
+                style.resolved(&light).caret,
+                resolved.caret,
+                "the same projected style must follow whichever palette is current"
+            );
+            let _ = cx;
+        });
+    }
+
     use super::*;
     use gpui::{TestAppContext, VisualTestContext};
 
@@ -1083,7 +1182,7 @@ mod tests {
         });
         let focus = context.update(|_, cx| store.create_focus(Some(first_application.clone()), cx));
 
-        store.release_application(&first_application);
+        store.release_application(&first_application).retire(cx);
 
         assert!(store.input(first).is_none());
         assert!(store.focus(focus).is_none());

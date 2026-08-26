@@ -896,8 +896,8 @@ impl Plugin {
 
     fn shutdown(mut self) {
         if let Some(application) = self.application.take() {
-            self.runtime.entities().release_application(&application);
-            crate::engine::quickjs::cancel_application_tasks(&application);
+            self.runtime
+                .release_application_generation_without_context(&application);
         }
         crate::engine::quickjs::cancel_policy_tasks(&self.policy);
     }

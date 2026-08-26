@@ -249,6 +249,7 @@ const MODULE_EXPORTS: &[&str] = &[
     "store",
     "clipboard",
     "log",
+    "open_url",
     // Native modules (`native`).
     "native",
     // Theme (`theme_api`).
@@ -468,6 +469,66 @@ impl ShellRuntime {
     /// another's handle — see [`crate::entities`].
     pub(crate) fn entities(&self) -> RefMut<'_, EntityStore> {
         self.entities.borrow_mut()
+    }
+
+    fn purge_released_view_aliases(&self, release: &crate::entities::EntityRelease) {
+        self.nested_view_handles
+            .borrow_mut()
+            .retain(|_, handle| !release.contains(*handle));
+    }
+
+    /// Resolves a release entirely under the store borrow, then performs all
+    /// GPUI and callback/task retirement after the borrow has ended.
+    pub(crate) fn release_view_handle(
+        &self,
+        handle: EntityHandle,
+        cx: &mut impl gpui::AppContext,
+    ) -> bool {
+        let release = { self.entities().release_view(handle) };
+        let Some(release) = release else {
+            return false;
+        };
+        self.purge_released_view_aliases(&release);
+        release.retire(cx);
+        true
+    }
+
+    pub(crate) fn release_application_generation(
+        &self,
+        application: &Rc<ApplicationGeneration>,
+        cx: &mut impl gpui::AppContext,
+    ) {
+        let release = { self.entities().release_application(application) };
+        self.purge_released_view_aliases(&release);
+        release.retire(cx);
+        cancel_application_tasks(application);
+    }
+
+    pub(crate) fn release_application_generation_without_context(
+        &self,
+        application: &Rc<ApplicationGeneration>,
+    ) {
+        let release = { self.entities().release_application(application) };
+        self.purge_released_view_aliases(&release);
+        release.retire_without_context();
+        cancel_application_tasks(application);
+    }
+
+    fn rollback_retained_since(
+        &self,
+        entities: crate::entities::EntityCheckpoint,
+        tasks: scheduler::TaskCheckpoint,
+        cx: &mut impl gpui::AppContext,
+    ) {
+        scheduler::rollback_runtime_tasks(tasks);
+        let release = { self.entities().rollback(entities) };
+        self.purge_released_view_aliases(&release);
+        release.retire(cx);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn nested_view_alias_count(&self) -> usize {
+        self.nested_view_handles.borrow().len()
     }
 
     fn job_queue_error(&self) -> Option<anyhow::Error> {
@@ -691,6 +752,8 @@ impl ShellRuntime {
         // installed. Otherwise an older parent reaction would be executed by
         // the child-init drain and acquire the child's ownership/authority.
         scheduler::drain_jobs_transactionally(self, window, cx)?;
+        let entity_checkpoint = { self.entities().checkpoint() };
+        let task_checkpoint = scheduler::checkpoint_runtime_tasks(self);
 
         let application = view_type.application.clone();
         let (construct_scope, _) = scope::enter_with_application(
@@ -705,8 +768,13 @@ impl ShellRuntime {
         let constructed = self.construct(view_type);
         let construction_jobs = scheduler::drain_jobs_transactionally(self, window, cx);
         drop(construct_scope);
-        construction_jobs?;
-        let object = constructed?;
+        let object = match construction_jobs.and(constructed) {
+            Ok(object) => object,
+            Err(error) => {
+                self.rollback_retained_since(entity_checkpoint, task_checkpoint, cx);
+                return Err(error);
+            }
+        };
 
         if self.entities().len() >= crate::entities::MAX_LIVE_ENTITIES {
             anyhow::bail!(
@@ -735,15 +803,13 @@ impl ShellRuntime {
         // wave here therefore assigns only init continuations to the child and
         // prevents a throwing init from leaving work beyond local rollback.
         let init_jobs = scheduler::drain_jobs_transactionally(self, window, cx);
-        nested?;
-        if let Err(error) = init_jobs {
-            let released = self.entities().release_view(handle, cx);
-            debug_assert!(released, "the failed child handle must still be live");
-            return Err(error);
-        }
-        if let Err(error) = initialized {
-            let released = self.entities().release_view(handle, cx);
+        if let Err(error) = initialized.and(nested).and(init_jobs) {
+            scheduler::rollback_runtime_tasks(task_checkpoint);
+            let released = self.release_view_handle(handle, cx);
             debug_assert!(released, "the candidate child handle must still be live");
+            let residual = { self.entities().rollback(entity_checkpoint) };
+            self.purge_released_view_aliases(&residual);
+            residual.retire(cx);
             return Err(error);
         }
         Ok(handle)
@@ -777,8 +843,8 @@ impl ShellRuntime {
             .last()
             .cloned()
             .unwrap_or(parent_object);
-        let application = scope::current_application_generation()
-            .or_else(|| provenance.application_generation());
+        let application =
+            scope::current_application_generation().or_else(|| provenance.application_generation());
         let token = self.next_nested_view_token.get();
         let next = token.checked_add(1).ok_or_else(|| {
             Exception::throw_range(ctx, "the nested ViewHandle token space is exhausted")
@@ -855,9 +921,7 @@ impl ShellRuntime {
             self.nested_view_handles.borrow_mut().remove(&token);
             return false;
         }
-        if resolved.is_none()
-            && !pending_create
-            && !self.in_flight_nested.borrow().contains(&token)
+        if resolved.is_none() && !pending_create && !self.in_flight_nested.borrow().contains(&token)
         {
             return false;
         }
@@ -955,9 +1019,11 @@ impl ShellRuntime {
                             .ok_or_else(|| {
                                 anyhow!("this ViewHandle was released before its release operation")
                             })?;
-                        let released = runtime.entities().release_view(handle, cx);
+                        let released = runtime.release_view_handle(handle, cx);
                         if !released {
-                            anyhow::bail!("this ViewHandle was released before its release operation");
+                            anyhow::bail!(
+                                "this ViewHandle was released before its release operation"
+                            );
                         }
                         Ok(())
                     }
@@ -971,8 +1037,8 @@ impl ShellRuntime {
         Ok(())
     }
 
-    /// Delivers props under the child event scope, drains the whole child
-    /// causal wave, and refreshes only after the update succeeds.
+    /// Delivers props to an isolated copy of the child object and commits it
+    /// only after the whole bounded causal wave succeeds.
     fn update_nested_view(
         self: &Rc<Self>,
         handle: EntityHandle,
@@ -985,10 +1051,23 @@ impl ShellRuntime {
         // JavaScript.
         let view = { self.entities().view(handle) }
             .ok_or_else(|| anyhow!("this ViewHandle has been released and cannot be updated"))?;
-        let child = view.read(cx);
-        let object = child.object().clone();
-        let policy = child.policy();
-        let application = child.application_generation();
+        let (object, policy, application) = {
+            let child = view.read(cx);
+            (
+                child.object().clone(),
+                child.policy(),
+                child.application_generation(),
+            )
+        };
+        let entity_checkpoint = { self.entities().checkpoint() };
+        let task_checkpoint = scheduler::checkpoint_runtime_tasks(self);
+        let candidate = match self.clone_view_object(&object) {
+            Ok(candidate) => candidate,
+            Err(error) => {
+                self.rollback_retained_since(entity_checkpoint, task_checkpoint, cx);
+                return Err(error);
+            }
+        };
         let (event_scope, _) = scope::enter_with_application(
             self,
             window,
@@ -1000,14 +1079,20 @@ impl ShellRuntime {
         );
         let updated = self.with_js(|ctx| {
             let props = props.restore(ctx)?;
-            self.update_in_context(ctx, &object, props)
+            self.update_in_context(ctx, &candidate, props)
         });
         let update_jobs = scheduler::drain_jobs_transactionally(self, window, cx);
         drop(event_scope);
-        update_jobs?;
-        updated?;
-        view.update(cx, |view, cx| view.refresh(cx));
-        Ok(())
+        match update_jobs.and(updated) {
+            Ok(()) => {
+                view.update(cx, |view, cx| view.commit_update(candidate, cx));
+                Ok(())
+            }
+            Err(error) => {
+                self.rollback_retained_since(entity_checkpoint, task_checkpoint, cx);
+                Err(error)
+            }
+        }
     }
 
     pub(crate) fn instantiate_for_view(
@@ -1057,6 +1142,21 @@ impl ShellRuntime {
                 value: Persistent::save(ctx, instance),
                 module_lease: view_type.module_lease.clone(),
                 application: view_type.application.clone(),
+            })
+        })
+    }
+
+    /// Copies the instance shell before `update` so ordinary field mutations
+    /// are committed only when the entire bounded update wave succeeds.
+    fn clone_view_object(&self, object: &ViewObject) -> Result<ViewObject> {
+        self.with_js(|ctx| {
+            let instance = object.value.clone().restore(ctx)?;
+            let clone_view: Function = ctx.globals().get("__clone_view")?;
+            let candidate: Object = clone_view.call((instance,))?;
+            Ok(ViewObject {
+                value: Persistent::save(ctx, candidate),
+                module_lease: object.module_lease.clone(),
+                application: object.application.clone(),
             })
         })
     }
@@ -2850,6 +2950,11 @@ globalThis.__gpui = (() => {
   globalThis.__initialize = (instance, props) => {
     if (typeof instance.init === "function") instance.init(props);
   };
+  globalThis.__clone_view = (instance) =>
+    Object.create(
+      Object.getPrototypeOf(instance),
+      Object.getOwnPropertyDescriptors(instance),
+    );
 
   class View {
     constructor(props) {
@@ -2922,7 +3027,7 @@ globalThis.__gpui = (() => {
     View,
     ViewHandle: {
       new: (Class, props) => {
-        if (typeof Class !== "function") {
+        if (typeof Class !== "function" || !(Class.prototype instanceof View)) {
           throw new TypeError("ViewHandle.new(Class, props) expects a View subclass");
         }
         return retainedViewHandle(__view_new(Class, props));
@@ -4707,7 +4812,7 @@ export default class Child extends View {
             .expect("rendered click callback");
         assert_eq!(runtime.live_callbacks(), 1);
 
-        assert!(context.update(|_, cx| runtime.entities().release_view(handle, cx)));
+        assert!(context.update(|_, cx| runtime.release_view_handle(handle, cx)));
         assert_eq!(
             runtime.live_callbacks(),
             0,
@@ -4722,7 +4827,7 @@ export default class Child extends View {
         assert_eq!(hits, 0, "a released callback must be inert");
         assert!(runtime.entities().view(handle).is_none());
         assert!(
-            !context.update(|_, cx| runtime.entities().release_view(handle, cx)),
+            !context.update(|_, cx| runtime.release_view_handle(handle, cx)),
             "typed release must reject a stale view handle"
         );
 
@@ -4814,7 +4919,7 @@ export default class Child extends View {
             "init work must be registered under the final child owner"
         );
 
-        assert!(context.update(|_, cx| runtime.entities().release_view(handle, cx)));
+        assert!(context.update(|_, cx| runtime.release_view_handle(handle, cx)));
         assert_eq!(
             task_count(),
             tasks_before,
@@ -4920,7 +5025,7 @@ export default class Child extends View {
         assert_eq!(runtime.entities().len(), records_before + 4);
         assert_eq!(task_count(), tasks_before + 2);
 
-        assert!(context.update(|_, cx| runtime.entities().release_view(child, cx)));
+        assert!(context.update(|_, cx| runtime.release_view_handle(child, cx)));
         assert_eq!(
             runtime.entities().len(),
             records_before + 2,
@@ -4932,7 +5037,7 @@ export default class Child extends View {
             "child release must preserve the parent continuation-owned timer"
         );
 
-        assert!(context.update(|_, cx| runtime.entities().release_view(parent, cx)));
+        assert!(context.update(|_, cx| runtime.release_view_handle(parent, cx)));
         assert_eq!(runtime.entities().len(), records_before);
         assert_eq!(task_count(), tasks_before);
         drop(parent_entity);
@@ -5046,7 +5151,7 @@ export default class BrokenChild extends View {
             "failed child rollback must preserve the parent continuation-owned timer"
         );
 
-        assert!(context.update(|_, cx| runtime.entities().release_view(parent, cx)));
+        assert!(context.update(|_, cx| runtime.release_view_handle(parent, cx)));
         assert_eq!(runtime.entities().len(), records_before);
         assert_eq!(task_count(), tasks_before);
         drop(parent_entity);
@@ -5146,7 +5251,7 @@ export default class BrokenChild extends View {
                 .to_string()
                 .contains("job queue")
         );
-        assert!(context.update(|_, cx| runtime.entities().release_view(parent, cx)));
+        assert!(context.update(|_, cx| runtime.release_view_handle(parent, cx)));
         drop(parent_entity);
     }
 
@@ -5203,7 +5308,7 @@ export default class Child extends View {
             1,
             "the retained child object must keep its evaluated module lease"
         );
-        runtime.entities().release_application(&application);
+        context.update(|_, cx| runtime.release_application_generation(&application, cx));
         cancel_application_tasks(&application);
         assert!(
             runtime.entities().view(handle).is_none(),
@@ -5241,7 +5346,7 @@ export default class Child extends View {
         let application_focus =
             context.update(|_, cx| runtime.entities().create_focus(Some(application), cx));
         assert!(
-            !context.update(|_, cx| runtime.entities().release_view(application_focus, cx)),
+            !context.update(|_, cx| runtime.release_view_handle(application_focus, cx)),
             "typed view release must reject a live handle of another retained type"
         );
         let first = context
@@ -5268,7 +5373,7 @@ export default class Child extends View {
             .expect("second child");
 
         assert_eq!(task_count(), tasks_before + 2);
-        assert!(context.update(|_, cx| runtime.entities().release_view(first, cx)));
+        assert!(context.update(|_, cx| runtime.release_view_handle(first, cx)));
         context.update(|_, _| {});
 
         assert!(runtime.entities().view(first).is_none());
@@ -5286,7 +5391,7 @@ export default class Child extends View {
             "nested cleanup must cancel only the released child's task"
         );
 
-        assert!(context.update(|_, cx| runtime.entities().release_view(second, cx)));
+        assert!(context.update(|_, cx| runtime.release_view_handle(second, cx)));
         assert!(runtime.entities().release(application_focus));
         context.update(|_, _| {});
         assert_eq!(task_count(), tasks_before);
@@ -5348,7 +5453,7 @@ export default class Child extends View {
             .expect("descendant entity clone");
 
         assert_eq!(task_count(), tasks_before + 2);
-        assert!(context.update(|_, cx| runtime.entities().release_view(parent, cx)));
+        assert!(context.update(|_, cx| runtime.release_view_handle(parent, cx)));
         assert!(runtime.entities().view(parent).is_none());
         assert!(runtime.entities().view(descendant).is_none());
         assert_eq!(
@@ -5423,12 +5528,12 @@ export default class Child extends View {
             "fresh Apps must reproduce the local EntityId collision exercised by this test"
         );
         assert!(
-            !context_b.update(|_, cx| runtime_b.entities().release_view(handle_a, cx)),
+            !context_b.update(|_, cx| runtime_b.release_view_handle(handle_a, cx)),
             "typed release must reject a handle from another runtime's store"
         );
         assert!(runtime_b.entities().view(handle_b).is_some());
         assert_eq!(task_count(), tasks_before + 2);
-        assert!(context_a.update(|_, cx| runtime_a.entities().release_view(handle_a, cx)));
+        assert!(context_a.update(|_, cx| runtime_a.release_view_handle(handle_a, cx)));
         assert_eq!(
             task_count(),
             tasks_before + 1,
@@ -5436,7 +5541,7 @@ export default class Child extends View {
         );
         assert!(runtime_b.entities().view(handle_b).is_some());
 
-        assert!(context_b.update(|_, cx| runtime_b.entities().release_view(handle_b, cx)));
+        assert!(context_b.update(|_, cx| runtime_b.release_view_handle(handle_b, cx)));
         assert_eq!(task_count(), tasks_before);
         drop(entity_a);
         drop(entity_b);

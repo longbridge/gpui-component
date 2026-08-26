@@ -53,7 +53,7 @@
 
 use std::{
     cell::{Cell, RefCell},
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     rc::Rc,
     time::Duration,
 };
@@ -62,13 +62,13 @@ use async_channel;
 use gpui::{
     AnyWindowHandle, AsyncApp, BackgroundExecutor, Entity, EntityId, ForegroundExecutor, WeakEntity,
 };
+#[cfg(test)]
+use rquickjs::Runtime as JsRuntime;
 use rquickjs::{
     Ctx, Exception, FromJs, Function, IntoJs, Object, Persistent, Promise, Result as JsResult,
     Value,
     function::{Func, Opt, This},
 };
-#[cfg(test)]
-use rquickjs::Runtime as JsRuntime;
 
 use crate::{
     policy::Policy,
@@ -412,6 +412,32 @@ pub(crate) fn cancel_view(runtime: &Rc<ShellRuntime>, entity_id: EntityId) {
                 .owner
                 .as_ref()
                 .is_some_and(|owner| owner.entity_id() == entity_id)
+    });
+}
+
+/// The exact task registry membership before a transactional host operation.
+/// The UI and VM are main-thread bound, so no unrelated runtime work can race
+/// this checkpoint while the operation is executing synchronously.
+pub(super) struct TaskCheckpoint {
+    runtime: *const ShellRuntime,
+    ids: HashSet<TaskId>,
+}
+
+pub(super) fn checkpoint_runtime_tasks(runtime: &Rc<ShellRuntime>) -> TaskCheckpoint {
+    let runtime = Rc::as_ptr(runtime);
+    let ids = TASKS.with_borrow(|tasks| {
+        tasks
+            .values()
+            .filter(|task| task.runtime.as_ptr() == runtime)
+            .map(|task| task.id)
+            .collect()
+    });
+    TaskCheckpoint { runtime, ids }
+}
+
+pub(super) fn rollback_runtime_tasks(checkpoint: TaskCheckpoint) {
+    cancel_where(|task| {
+        task.runtime.as_ptr() == checkpoint.runtime && !checkpoint.ids.contains(&task.id)
     });
 }
 

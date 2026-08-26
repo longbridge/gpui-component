@@ -87,7 +87,33 @@ pub fn install(_ctx: &Ctx<'_>, module: &Object<'_>) -> JsResult<()> {
     module.set("store", store_object(ctx)?)?;
     module.set("clipboard", clipboard_object(ctx)?)?;
     module.set("log", log_object(ctx)?)?;
+    module.set("open_url", Func::from(open_url))?;
     Ok(())
+}
+
+/// Hands a URL to whatever the system opens URLs with.
+///
+/// This is `Link`'s `href` without the element, and it carries exactly the
+/// authority that already does: the same absolute-HTTP(S)-with-a-host guard,
+/// and no grant of its own, because a script that can describe a `Link` can
+/// already open any address it likes. Adding a capability here would gate the
+/// imperative half of a pair whose declarative half is ungated, which reads as
+/// protection without being any.
+///
+/// The scheme check is the part that matters. Without it this becomes a way to
+/// hand an arbitrary URI to whatever handler the desktop has registered for
+/// its scheme, which is a considerably larger thing than opening a page.
+fn open_url(ctx: Ctx<'_>, url: String) -> JsResult<()> {
+    let valid = reqwest::Url::parse(&url).is_ok_and(|parsed| {
+        matches!(parsed.scheme(), "http" | "https") && parsed.host_str().is_some()
+    });
+    if !valid {
+        return Err(Exception::throw_type(
+            &ctx,
+            "open_url(url) expects an absolute HTTP(S) URL with a host",
+        ));
+    }
+    with_app(&ctx, "open_url(url)", move |app| app.open_url(&url))
 }
 
 // -- Filesystem ------------------------------------------------------------
@@ -1151,6 +1177,41 @@ mod tests {
         assert!(
             message.contains("capabilities.clipboard.write"),
             "unexpected message: {message}"
+        );
+    }
+
+    #[test]
+    fn open_url_refuses_anything_that_is_not_an_http_page() {
+        for target in [
+            "file:///etc/passwd",
+            "mailto:someone@example.com",
+            "/relative/path",
+            "https://",
+            "not a url",
+        ] {
+            let message = with_host(|ctx| error_of(ctx, &format!("gpui.open_url('{target}')")));
+            assert!(
+                message.contains("absolute HTTP(S) URL with a host"),
+                "{target} was not refused: {message}"
+            );
+        }
+    }
+
+    #[test]
+    fn open_url_takes_no_capability_and_fails_cleanly_outside_a_host_call() {
+        // No grant is installed here on purpose: a script that can describe a
+        // `Link` can already open any address, so gating this half alone would
+        // read as protection without being any.
+        crate::capability::install(Capabilities::new());
+
+        let message = with_host(|ctx| error_of(ctx, "gpui.open_url('https://example.com/x')"));
+        assert!(
+            message.contains("needs a live host call"),
+            "unexpected message: {message}"
+        );
+        assert!(
+            !message.contains("capabilities"),
+            "open_url must not ask for a grant: {message}"
         );
     }
 

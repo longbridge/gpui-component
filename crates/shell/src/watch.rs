@@ -530,6 +530,16 @@ pub(crate) fn reload(
         Err(error) => return Err(error),
     };
 
+    let previous = view.read(cx).object().application_generation();
+    let replacement = object.application_generation();
+    if let Some(previous) = previous
+        && replacement
+            .as_ref()
+            .is_none_or(|replacement| !Rc::ptr_eq(&previous, replacement))
+    {
+        runtime.release_application_generation(&previous, cx);
+    }
+
     view.update(cx, |view, cx| {
         view.replace_object(object);
         cx.notify();

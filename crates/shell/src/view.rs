@@ -165,19 +165,14 @@ impl ScriptView {
     /// description that the old instance built is now meaningless, so the view
     /// is invalidated with it.
     pub(crate) fn replace_object(&mut self, object: ViewObject) {
-        let previous = self.object.application_generation();
-        let replacement = object.application_generation();
-        if matches!(self.ownership, ViewOwnership::Root)
-            && let Some(previous) = previous
-            && replacement
-                .as_ref()
-                .is_none_or(|replacement| !Rc::ptr_eq(&previous, replacement))
-        {
-            self.runtime.entities().release_application(&previous);
-            crate::engine::quickjs::cancel_application_tasks(&previous);
-        }
         self.object = object;
         self.dirty = true;
+    }
+
+    /// Commits the isolated instance produced by a successful child update.
+    pub(crate) fn commit_update(&mut self, object: ViewObject, cx: &mut Context<Self>) {
+        self.object = object;
+        self.refresh(cx);
     }
 
     /// The script state behind this view, for host code that needs to read it.
@@ -266,8 +261,8 @@ impl Drop for ScriptView {
         match self.ownership {
             ViewOwnership::Root => {
                 if let Some(application) = self.object.application_generation() {
-                    self.runtime.entities().release_application(&application);
-                    crate::engine::quickjs::cancel_application_tasks(&application);
+                    self.runtime
+                        .release_application_generation_without_context(&application);
                 }
             }
             ViewOwnership::Nested(entity_id) => {

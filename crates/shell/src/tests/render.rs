@@ -883,6 +883,308 @@ export default class Parent extends View {
     assert!(runtime.entities().is_empty(), "the candidate remained live");
 }
 
+/// A throwing update runs against an isolated instance and a retained-work
+/// checkpoint. Neither object fields nor entities/tasks created by its causal
+/// wave may become part of the live child.
+#[gpui::test]
+fn failed_nested_update_rolls_back_script_fields_entities_and_tasks(cx: &mut TestAppContext) {
+    cx.update(crate::init);
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View, ViewHandle, child_view, v_flex, Checkbox, InputState, timer, text } from "gpui";
+
+class Child extends View {
+  init() { this.label = "good"; this.clicks = 0; }
+  update(props) {
+    this.label = props.label;
+    this.input = InputState.new({ value: "must roll back" });
+    this.tick = timer.every(60_000, () => {});
+    Promise.resolve().then(() => {
+      this.later = InputState.new({ value: "causal rollback" });
+    });
+    throw new Error("reject update");
+  }
+  render() {
+    return Checkbox.new("child-after-failure")
+      .on_change((_checked, cx) => { this.clicks += 1; cx.notify(); })
+      .child(text(`${this.label}:${this.clicks}`));
+  }
+}
+
+export default class Parent extends View {
+  init() { this.child = ViewHandle.new(Child); }
+  render() {
+    return v_flex()
+      .child(Checkbox.new("fail-update").on_change(() => {
+        this.child.set_props({ label: "half committed" });
+      }))
+      .child(child_view(this.child));
+  }
+}
+"#;
+    let view_type = runtime
+        .load_source("nested-update-rollback.js", source)
+        .expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let parent = context
+        .update(|window, cx| runtime.instantiate_view(&view_type, window, cx))
+        .expect("instantiate parent");
+    draw(&mut context, &parent);
+    let child = context.update(|_, cx| {
+        let snapshot = parent.read(cx).snapshot().expect("parent snapshot");
+        (0..snapshot.len() as u32)
+            .filter_map(|id| snapshot.arena().node(id))
+            .find_map(|node| match node.component() {
+                Some(crate::spec::Component::ChildView(child)) => Some(child.view().clone()),
+                _ => None,
+            })
+            .expect("child")
+    });
+    let change =
+        |context: &mut VisualTestContext, view: &gpui::Entity<ScriptView>, target: &str| {
+            context.update(|_, cx| {
+                let snapshot = view.read(cx).snapshot().expect("snapshot");
+                (0..snapshot.len() as u32)
+                    .filter_map(|id| snapshot.arena().node(id))
+                    .find(|node| {
+                        matches!(
+                            node.component(),
+                            Some(crate::spec::Component::Checkbox(id)) if id == target
+                        )
+                    })
+                    .and_then(|node| {
+                        node.ops().iter().find_map(|op| match op {
+                            crate::spec::SpecOp::Callback("on_change", id) => Some(*id),
+                            _ => None,
+                        })
+                    })
+                    .expect("change callback")
+            })
+        };
+    let retained_before = runtime.entities().len();
+    let aliases_before = runtime.nested_view_alias_count();
+    let tasks_before = crate::engine::quickjs::task_count();
+    let fail = change(&mut context, &parent, "fail-update");
+    context.update(|window, cx| runtime.dispatch_change(fail, true, window, cx));
+    assert_eq!(runtime.entities().len(), retained_before);
+    assert_eq!(runtime.nested_view_alias_count(), aliases_before);
+    assert_eq!(crate::engine::quickjs::task_count(), tasks_before);
+
+    // Force a fresh child build through its pre-update callback. If `update`
+    // touched the live object this would expose "half committed" here.
+    let refresh = change(&mut context, &child, "child-after-failure");
+    context.update(|window, cx| runtime.dispatch_change(refresh, true, window, cx));
+    draw(&mut context, &parent);
+    let tree = context.update(|_, cx| {
+        child
+            .read(cx)
+            .snapshot()
+            .map(crate::RenderSnapshot::debug_tree)
+            .unwrap_or_default()
+    });
+    assert!(
+        tree.contains("good:1"),
+        "failed update leaked into child: {tree}"
+    );
+}
+
+/// The public release method is the complete subtree teardown boundary: typed
+/// records, opaque aliases, tasks, callbacks and frame-retained snapshots all
+/// retire together while the parent stays mounted.
+#[gpui::test]
+fn public_nested_release_retires_descendants_callbacks_tasks_snapshots_and_aliases(
+    cx: &mut TestAppContext,
+) {
+    cx.update(crate::init);
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View, ViewHandle, child_view, v_flex, Checkbox, InputState, timer, text } from "gpui";
+class Grandchild extends View {
+  init() {
+    this.input = InputState.new({ value: "grandchild" });
+    this.tick = timer.every(60_000, () => {});
+  }
+  render() { return Checkbox.new("grandchild-event").on_change(() => {}).child(text("grandchild")); }
+}
+class Child extends View {
+  init() {
+    this.input = InputState.new({ value: "child" });
+    this.tick = timer.every(60_000, () => {});
+    this.grandchild = ViewHandle.new(Grandchild);
+  }
+  render() {
+    return v_flex()
+      .child(Checkbox.new("child-event").on_change(() => {}).child(text("child")))
+      .child(child_view(this.grandchild));
+  }
+}
+export default class Parent extends View {
+  init() { this.child = ViewHandle.new(Child); }
+  render() {
+    return v_flex()
+      .child(Checkbox.new("release-subtree").on_change(() => this.child.release()))
+      .child(child_view(this.child));
+  }
+}
+"#;
+    let baseline_tasks = crate::engine::quickjs::task_count();
+    let view_type = runtime
+        .load_source("nested-public-release-cleanup.js", source)
+        .expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let parent = context
+        .update(|window, cx| runtime.instantiate_view(&view_type, window, cx))
+        .expect("instantiate parent");
+    draw(&mut context, &parent);
+    let child = context.update(|_, cx| {
+        let snapshot = parent.read(cx).snapshot().expect("parent snapshot");
+        (0..snapshot.len() as u32)
+            .filter_map(|id| snapshot.arena().node(id))
+            .find_map(|node| match node.component() {
+                Some(crate::spec::Component::ChildView(child)) => Some(child.view().clone()),
+                _ => None,
+            })
+            .expect("child")
+    });
+    let grandchild = context.update(|_, cx| {
+        let snapshot = child.read(cx).snapshot().expect("child snapshot");
+        (0..snapshot.len() as u32)
+            .filter_map(|id| snapshot.arena().node(id))
+            .find_map(|node| match node.component() {
+                Some(crate::spec::Component::ChildView(child)) => Some(child.view().clone()),
+                _ => None,
+            })
+            .expect("grandchild")
+    });
+    assert_eq!(runtime.entities().len(), 4);
+    assert_eq!(runtime.nested_view_alias_count(), 2);
+    assert_eq!(crate::engine::quickjs::task_count(), baseline_tasks + 2);
+    assert_eq!(runtime.live_callbacks(), 3);
+
+    let release = context.update(|_, cx| {
+        let snapshot = parent.read(cx).snapshot().expect("parent snapshot");
+        (0..snapshot.len() as u32)
+            .filter_map(|id| snapshot.arena().node(id))
+            .find(|node| {
+                matches!(
+                    node.component(),
+                    Some(crate::spec::Component::Checkbox(id)) if id == "release-subtree"
+                )
+            })
+            .and_then(|node| {
+                node.ops().iter().find_map(|op| match op {
+                    crate::spec::SpecOp::Callback("on_change", id) => Some(*id),
+                    _ => None,
+                })
+            })
+            .expect("release callback")
+    });
+    context.update(|window, cx| runtime.dispatch_change(release, true, window, cx));
+
+    assert!(runtime.entities().is_empty());
+    assert_eq!(runtime.nested_view_alias_count(), 0);
+    assert_eq!(crate::engine::quickjs::task_count(), baseline_tasks);
+    assert_eq!(
+        runtime.live_callbacks(),
+        1,
+        "only the still-mounted parent's release callback may remain live"
+    );
+    assert!(context.update(|_, cx| child.read(cx).snapshot().is_none()));
+    assert!(context.update(|_, cx| grandchild.read(cx).snapshot().is_none()));
+}
+
+/// Child rendering uses the same transactional snapshot publication as a root:
+/// a failed replacement build records the error but leaves the last good child
+/// description mounted, without rebuilding the parent.
+#[gpui::test]
+fn child_render_failure_preserves_its_previous_good_snapshot(cx: &mut TestAppContext) {
+    cx.update(crate::init);
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View, ViewHandle, child_view, v_flex, Checkbox, text } from "gpui";
+class Child extends View {
+  init() { this.fail = false; }
+  render() {
+    if (this.fail) throw new Error("child render rejected");
+    return Checkbox.new("break-child")
+      .on_change((_checked, cx) => { this.fail = true; cx.notify(); })
+      .child(text("last good child"));
+  }
+}
+export default class Parent extends View {
+  init() { this.renders = 0; this.child = ViewHandle.new(Child); }
+  render() {
+    this.renders += 1;
+    return v_flex().child(text(`parent:${this.renders}`)).child(child_view(this.child));
+  }
+}
+"#;
+    let view_type = runtime
+        .load_source("nested-child-render-failure.js", source)
+        .expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let parent = context
+        .update(|window, cx| runtime.instantiate_view(&view_type, window, cx))
+        .expect("instantiate parent");
+    draw(&mut context, &parent);
+    let child = context.update(|_, cx| {
+        let snapshot = parent.read(cx).snapshot().expect("parent snapshot");
+        (0..snapshot.len() as u32)
+            .filter_map(|id| snapshot.arena().node(id))
+            .find_map(|node| match node.component() {
+                Some(crate::spec::Component::ChildView(child)) => Some(child.view().clone()),
+                _ => None,
+            })
+            .expect("child")
+    });
+    let previous = context.update(|_, cx| {
+        child
+            .read(cx)
+            .snapshot()
+            .expect("good child snapshot")
+            .debug_tree()
+    });
+    let callback = context.update(|_, cx| {
+        let snapshot = child.read(cx).snapshot().expect("child snapshot");
+        (0..snapshot.len() as u32)
+            .filter_map(|id| snapshot.arena().node(id))
+            .find_map(|node| {
+                node.ops().iter().find_map(|op| match op {
+                    crate::spec::SpecOp::Callback("on_change", id) => Some(*id),
+                    _ => None,
+                })
+            })
+            .expect("child callback")
+    });
+    context.update(|window, cx| runtime.dispatch_change(callback, true, window, cx));
+    draw(&mut context, &parent);
+
+    context.update(|_, cx| {
+        let child = child.read(cx);
+        assert_eq!(
+            child.snapshot().map(crate::RenderSnapshot::debug_tree),
+            Some(previous)
+        );
+        assert!(
+            child
+                .build_error()
+                .is_some_and(|error| error.contains("child render rejected"))
+        );
+        let parent = parent.read(cx);
+        let tree = parent
+            .snapshot()
+            .map(crate::RenderSnapshot::debug_tree)
+            .unwrap_or_default();
+        assert!(tree.contains("parent:1"), "parent rebuilt: {tree}");
+    });
+}
+
 #[gpui::test]
 fn a_released_nested_view_cannot_be_mounted_again(cx: &mut TestAppContext) {
     let message = nested_view_build_error(
@@ -926,7 +1228,29 @@ export default class Parent extends View {
 }
 
 #[gpui::test]
-fn nested_view_creation_and_updates_are_rejected_during_render(cx: &mut TestAppContext) {
+fn nested_view_creation_rejects_constructible_non_view_functions(cx: &mut TestAppContext) {
+    let message = nested_view_build_error(
+        cx,
+        "nested-view-class-contract.js",
+        r#"
+import { View, ViewHandle, text } from "gpui";
+function ConstructibleButNotAView() {}
+export default class Parent extends View {
+  render() {
+    ViewHandle.new(ConstructibleButNotAView);
+    return text("parent");
+  }
+}
+"#,
+    );
+    assert!(
+        message.contains("expects a View subclass"),
+        "unexpected class validation error: {message}"
+    );
+}
+
+#[gpui::test]
+fn nested_view_creation_updates_and_release_are_rejected_during_render(cx: &mut TestAppContext) {
     let creation = nested_view_build_error(
         cx,
         "nested-view-created-in-render.js",
@@ -965,13 +1289,33 @@ export default class Parent extends View {
         update.contains("set_props") && update.contains("during render"),
         "unexpected update error: {update}"
     );
+
+    let release = nested_view_build_error(
+        cx,
+        "nested-view-released-in-render.js",
+        r#"
+import { View, ViewHandle, text } from "gpui";
+class Child extends View { render() { return text("child"); } }
+export default class Parent extends View {
+  init() { this.child = ViewHandle.new(Child); }
+  render() {
+    this.child.release();
+    return text("parent");
+  }
+}
+"#,
+    );
+    assert!(
+        release.contains("release") && release.contains("during render"),
+        "unexpected release error: {release}"
+    );
 }
 
 /// Layout callbacks can catch their own API errors. Publishing the messages in
 /// the next parent snapshot proves the call failed at the JavaScript call site
 /// and that the diagnostic names layout rather than the broader render path.
 #[gpui::test]
-fn nested_view_creation_and_updates_name_the_layout_phase(cx: &mut TestAppContext) {
+fn nested_view_creation_updates_and_release_name_the_layout_phase(cx: &mut TestAppContext) {
     cx.update(crate::init);
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
@@ -992,6 +1336,7 @@ export default class Parent extends View {
         this.errors = [];
         try { ViewHandle.new(Child); } catch (error) { this.errors.push(String(error)); }
         try { this.child.set_props({ value: 2 }); } catch (error) { this.errors.push(String(error)); }
+        try { this.child.release(); } catch (error) { this.errors.push(String(error)); }
         return [text("row")];
       }));
   }
@@ -1029,7 +1374,8 @@ export default class Parent extends View {
         "creation error missing: {tree}"
     );
     assert!(tree.contains("set_props"), "update error missing: {tree}");
-    assert!(tree.matches("during layout").count() >= 2, "{tree}");
+    assert!(tree.contains("release"), "release error missing: {tree}");
+    assert!(tree.matches("during layout").count() >= 3, "{tree}");
 }
 
 fn nested_view_build_error(cx: &mut TestAppContext, name: &str, source: &str) -> String {
@@ -2844,6 +3190,91 @@ fn an_embedded_runtime_reloads_when_a_source_changes(cx: &mut TestAppContext) {
     let _ = std::fs::remove_dir_all(&directory);
 }
 
+/// Replacement init runs before the root swaps its object, so nested creation
+/// must take provenance from the replacement object rather than the old root.
+/// Committing the reload retires the old child's snapshots and token alias.
+#[gpui::test]
+fn hot_reload_keeps_replacement_children_and_retires_old_snapshots_and_aliases(
+    cx: &mut TestAppContext,
+) {
+    cx.update(crate::init);
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let directory =
+        std::env::temp_dir().join(format!("gpui-shell-nested-reload-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&directory);
+    std::fs::create_dir_all(&directory).expect("application directory");
+    let source = |caption: &str| {
+        format!(
+            "import {{ View, ViewHandle, child_view, text }} from \"gpui\";\n\
+             class Child extends View {{ render() {{ return text(\"{caption}\"); }} }}\n\
+             export default class Parent extends View {{\n\
+               init() {{ this.child = ViewHandle.new(Child); }}\n\
+               render() {{ return child_view(this.child); }}\n\
+             }}\n"
+        )
+    };
+    std::fs::write(directory.join("main.js"), source("old child")).expect("initial source");
+
+    let view_type = runtime.load_app(&directory, "main.js").expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let parent = context
+        .update(|window, cx| runtime.instantiate_view(&view_type, window, cx))
+        .expect("instantiate parent");
+    draw(&mut context, &parent);
+    let mounted_child = |context: &mut VisualTestContext| {
+        context.update(|_, cx| {
+            let snapshot = parent.read(cx).snapshot().expect("parent snapshot");
+            (0..snapshot.len() as u32)
+                .filter_map(|id| snapshot.arena().node(id))
+                .find_map(|node| match node.component() {
+                    Some(crate::spec::Component::ChildView(child)) => Some(child.view().clone()),
+                    _ => None,
+                })
+                .expect("mounted child")
+        })
+    };
+    let old_child = mounted_child(&mut context);
+    assert_eq!(runtime.entities().len(), 1);
+    assert_eq!(runtime.nested_view_alias_count(), 1);
+
+    std::fs::write(directory.join("main.js"), source("replacement child"))
+        .expect("replacement source");
+    context
+        .update(|window, cx| {
+            crate::watch::reload(&runtime, &parent, &directory, "main.js", window, cx)
+        })
+        .expect("reload");
+
+    assert!(
+        context.update(|_, cx| old_child.read(cx).snapshot().is_none()),
+        "application retirement left the old mounted child snapshot live"
+    );
+    assert_eq!(
+        runtime.entities().len(),
+        1,
+        "only the replacement child lives"
+    );
+    assert_eq!(
+        runtime.nested_view_alias_count(),
+        1,
+        "the old opaque token alias survived application release"
+    );
+
+    draw(&mut context, &parent);
+    let replacement = mounted_child(&mut context);
+    let tree = context.update(|_, cx| {
+        replacement
+            .read(cx)
+            .snapshot()
+            .map(crate::RenderSnapshot::debug_tree)
+            .unwrap_or_default()
+    });
+    assert!(tree.contains("replacement child"), "{tree}");
+    let _ = std::fs::remove_dir_all(directory);
+}
+
 #[gpui::test]
 fn reload_replaces_old_tasks_and_rolls_back_failed_new_tasks(cx: &mut TestAppContext) {
     cx.update(crate::init);
@@ -3591,7 +4022,9 @@ export default class LateFocus extends View {
   }
 }
 "#;
-    let view_type = runtime.load_source("late-focus-mutation", source).expect("load");
+    let view_type = runtime
+        .load_source("late-focus-mutation", source)
+        .expect("load");
     let window = cx.add_window(|_, _| Empty);
     let mut context = VisualTestContext::from_window(*window.deref(), cx);
     let object = context
@@ -3603,7 +4036,9 @@ export default class LateFocus extends View {
         .expect_err("focus mutation during render must be refused");
 
     assert!(
-        error.to_string().contains("cannot run during render or layout"),
+        error
+            .to_string()
+            .contains("cannot run during render or layout"),
         "the error must explain the phase boundary: {error}"
     );
 }
@@ -5389,7 +5824,9 @@ export default class SparseSizes extends View {
   }
 }
 "#;
-    let view_type = runtime.load_source("sparse-sizes.js", source).expect("load");
+    let view_type = runtime
+        .load_source("sparse-sizes.js", source)
+        .expect("load");
     let window = cx.add_window(|_, _| Empty);
     let mut context = VisualTestContext::from_window(*window.deref(), cx);
     let object = context

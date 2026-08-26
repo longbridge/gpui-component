@@ -2129,6 +2129,24 @@ const CAPABILITIES: &str = r#"
 
   export const store: Store;
   export const clipboard: Clipboard;
+
+  /**
+   * Hands a URL to whatever the system opens URLs with.
+   *
+   * `Link`'s `href` without the element, for the case where the address is not
+   * known until something has already happened — the end of a device
+   * authorization, say, where waiting for a second click to open the page the
+   * first click just asked for is a step nobody wanted.
+   *
+   * It takes an absolute `http`/`https` URL with a host and refuses everything
+   * else. That guard is not about the address bar: without it this is a way to
+   * hand an arbitrary URI to whichever handler the desktop registered for its
+   * scheme.
+   *
+   * Needs a live host call, so it belongs in an event handler or a task —
+   * never in `render`.
+   */
+  export function open_url(url: string): void;
   export const log: Log;
 "#;
 
