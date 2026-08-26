@@ -348,7 +348,7 @@ impl<'js> FromJs<'js> for ViewInstance {
                  a function, not an element and not a view class",
             ));
         };
-        Ok(Self(Persistent::save(ctx, object)))
+        Ok(Self(ViewObject::unscoped(Persistent::save(ctx, object))))
     }
 }
 

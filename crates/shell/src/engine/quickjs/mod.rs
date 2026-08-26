@@ -48,9 +48,44 @@ use crate::{
 const MAX_MODULE_BYTES: u64 = 8 * 1024 * 1024;
 
 /// A script value that defines a view type — a JS class.
-pub type ViewType = Persistent<Object<'static>>;
+#[derive(Clone)]
+pub struct ViewType {
+    value: Persistent<Object<'static>>,
+    module_lease: Option<ApplicationModuleLease>,
+}
+
+impl std::fmt::Debug for ViewType {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.debug_struct("ViewType").finish_non_exhaustive()
+    }
+}
+
 /// One instance of a view type.
-pub type ViewObject = Persistent<Object<'static>>;
+#[derive(Clone)]
+pub struct ViewObject {
+    value: Persistent<Object<'static>>,
+    #[allow(dead_code)] // Its drop owns the resolver registration lifetime.
+    module_lease: Option<ApplicationModuleLease>,
+}
+
+impl std::fmt::Debug for ViewObject {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.debug_struct("ViewObject").finish_non_exhaustive()
+    }
+}
+
+impl ViewObject {
+    fn unscoped(value: Persistent<Object<'static>>) -> Self {
+        Self {
+            value,
+            module_lease: None,
+        }
+    }
+
+    fn restore<'js>(self, ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
+        self.value.restore(ctx)
+    }
+}
 
 mod entity_api;
 pub(crate) mod host;
@@ -292,7 +327,8 @@ impl ShellRuntime {
 
         // Every load is a new generation, which is what makes a reload pick up
         // a change in an imported module rather than only in the entry point.
-        let (generation, previous_generation) = self.app_modules.register(root.clone());
+        let module_lease = self.app_modules.register(root.clone());
+        let generation = module_lease.generation();
 
         let entry = root.join(entry);
         let source = read_module_source(&entry)?;
@@ -300,20 +336,25 @@ impl ShellRuntime {
         // The entry carries the generation too: it is a cached module like any
         // other, and a reload that re-read every import but served a stale
         // `main.js` would be the same bug one level up.
-        let loaded = self.load_source(
+        self.load_source_with_lease(
             &format!("{}?v={}", entry.to_string_lossy(), generation),
             &source,
-        );
-        if loaded.is_err() {
-            self.app_modules
-                .rollback(&root, generation, previous_generation);
-        }
-        loaded
+            Some(module_lease),
+        )
     }
 
     /// Evaluates a module and returns its default export, which must be a view
     /// class.
     pub fn load_source(self: &Rc<Self>, name: &str, source: &str) -> Result<ViewType> {
+        self.load_source_with_lease(name, source, None)
+    }
+
+    fn load_source_with_lease(
+        self: &Rc<Self>,
+        name: &str,
+        source: &str,
+        module_lease: Option<ApplicationModuleLease>,
+    ) -> Result<ViewType> {
         self.with_js(|ctx| {
             let (module, promise) = rquickjs::Module::declare(ctx.clone(), name, source)?.eval()?;
             promise.finish::<()>()?;
@@ -325,7 +366,10 @@ impl ShellRuntime {
                     "main.js must `export default` a class that extends View",
                 ));
             };
-            Ok(Persistent::save(ctx, class.clone()))
+            Ok(ViewType {
+                value: Persistent::save(ctx, class.clone()),
+                module_lease,
+            })
         })
     }
 
@@ -403,16 +447,19 @@ impl ShellRuntime {
 
     fn construct(&self, view_type: &ViewType) -> Result<ViewObject> {
         self.with_js(|ctx| {
-            let class = view_type.clone().restore(ctx)?;
+            let class = view_type.value.clone().restore(ctx)?;
             let construct: Function = ctx.globals().get("__construct")?;
             let instance: Object = construct.call((class,))?;
-            Ok(Persistent::save(ctx, instance))
+            Ok(ViewObject {
+                value: Persistent::save(ctx, instance),
+                module_lease: view_type.module_lease.clone(),
+            })
         })
     }
 
     fn initialize(&self, object: &ViewObject) -> Result<()> {
         self.with_js(|ctx| {
-            let instance = object.clone().restore(ctx)?;
+            let instance = object.value.clone().restore(ctx)?;
             let initialize: Function = ctx.globals().get("__initialize")?;
             initialize.call::<_, ()>((instance,))
         })
@@ -652,7 +699,7 @@ impl ShellRuntime {
 
     fn call_render_once(&self, object: &ViewObject, generation: u64) -> Result<SpecId> {
         self.with_js(|ctx| {
-            let instance = object.clone().restore(ctx)?;
+            let instance = object.value.clone().restore(ctx)?;
             let render: Function = instance.get("render").map_err(|_| {
                 Exception::throw_message(ctx, "view class has no render(cx) method")
             })?;
@@ -737,35 +784,42 @@ struct ApplicationModules {
     generation: u32,
 }
 
+#[derive(Clone)]
+struct ApplicationModuleLease(Rc<ApplicationModuleRegistration>);
+
+struct ApplicationModuleRegistration {
+    applications: Rc<RefCell<Vec<ApplicationModules>>>,
+    root: std::path::PathBuf,
+    generation: u32,
+}
+
+impl ApplicationModuleLease {
+    fn generation(&self) -> u32 {
+        self.0.generation
+    }
+}
+
+impl Drop for ApplicationModuleRegistration {
+    fn drop(&mut self) {
+        self.applications.borrow_mut().retain(|application| {
+            application.root != self.root || application.generation != self.generation
+        });
+    }
+}
+
 impl AppModules {
-    fn register(&self, root: std::path::PathBuf) -> (u32, Option<u32>) {
+    fn register(&self, root: std::path::PathBuf) -> ApplicationModuleLease {
         let generation = self.next_generation.get().wrapping_add(1);
         self.next_generation.set(generation);
-        let mut applications = self.applications.borrow_mut();
-        let previous =
-            if let Some(application) = applications.iter_mut().find(|app| app.root == root) {
-                let previous = application.generation;
-                application.generation = generation;
-                Some(previous)
-            } else {
-                applications.push(ApplicationModules { root, generation });
-                None
-            };
-        (generation, previous)
-    }
-
-    fn rollback(&self, root: &Path, generation: u32, previous: Option<u32>) {
-        let mut applications = self.applications.borrow_mut();
-        let Some(index) = applications.iter().position(|application| {
-            application.root == root && application.generation == generation
-        }) else {
-            return;
-        };
-        if let Some(previous) = previous {
-            applications[index].generation = previous;
-        } else {
-            applications.remove(index);
-        }
+        self.applications.borrow_mut().push(ApplicationModules {
+            root: root.clone(),
+            generation,
+        });
+        ApplicationModuleLease(Rc::new(ApplicationModuleRegistration {
+            applications: self.applications.clone(),
+            root,
+            generation,
+        }))
     }
 
     /// Strips the generation tag a resolved name carries.
@@ -774,13 +828,25 @@ impl AppModules {
     }
 
     fn application_for_base(&self, base: &str) -> Option<ApplicationModules> {
+        let generation = Self::generation(base)?;
         let base = Path::new(Self::untag(base));
         self.applications
             .borrow()
             .iter()
-            .filter(|application| base.starts_with(&application.root))
+            .filter(|application| {
+                application.generation == generation && base.starts_with(&application.root)
+            })
             .max_by_key(|application| application.root.components().count())
             .cloned()
+    }
+
+    fn generation(name: &str) -> Option<u32> {
+        name.rsplit_once("?v=")?.1.parse().ok()
+    }
+
+    #[cfg(test)]
+    fn registration_count(&self) -> usize {
+        self.applications.borrow().len()
     }
 
     fn candidate(
@@ -1566,4 +1632,55 @@ fn describe(ctx: &Ctx<'_>, error: JsError) -> String {
 
 fn js_setup_error(error: JsError) -> anyhow::Error {
     anyhow!("failed to start the JavaScript runtime: {error}")
+}
+
+#[cfg(test)]
+mod module_lifecycle_tests {
+    use super::AppModules;
+
+    #[test]
+    fn registrations_for_the_same_root_are_generation_scoped_and_leased() {
+        let modules = AppModules::default();
+        let root = std::env::temp_dir().join("gpui-shell-module-lifecycle");
+
+        let first = modules.register(root.clone());
+        let second = modules.register(root.clone());
+
+        assert_ne!(first.generation(), second.generation());
+        assert_eq!(modules.registration_count(), 2);
+
+        let retained = first.clone();
+        drop(first);
+        assert_eq!(modules.registration_count(), 2);
+        drop(retained);
+        assert_eq!(modules.registration_count(), 1);
+        drop(second);
+        assert_eq!(modules.registration_count(), 0);
+    }
+
+    #[test]
+    fn importer_tags_select_the_exact_same_root_generation() {
+        let modules = AppModules::default();
+        let root = std::env::temp_dir().join("gpui-shell-module-generation");
+        let first = modules.register(root.clone());
+        let second = modules.register(root.clone());
+
+        let first_importer = format!("{}/main.js?v={}", root.display(), first.generation());
+        let second_importer = format!("{}/main.js?v={}", root.display(), second.generation());
+
+        assert_eq!(
+            modules
+                .application_for_base(&first_importer)
+                .expect("first generation")
+                .generation,
+            first.generation()
+        );
+        assert_eq!(
+            modules
+                .application_for_base(&second_importer)
+                .expect("second generation")
+                .generation,
+            second.generation()
+        );
+    }
 }

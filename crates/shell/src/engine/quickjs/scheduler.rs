@@ -1305,6 +1305,7 @@ fn describe_value<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::ViewObject;
     use gpui::{AppContext as _, TestAppContext, VisualTestContext};
     use rquickjs::{Context as JsContext, Object};
     use std::ops::Deref as _;
@@ -1642,9 +1643,12 @@ mod tests {
             .expect("queue promise job");
         assert!(runtime.js_runtime.is_job_pending());
 
-        let object = runtime
-            .context
-            .with(|ctx| Persistent::save(&ctx, Object::new(ctx.clone()).expect("object")));
+        let object = runtime.context.with(|ctx| {
+            ViewObject::unscoped(Persistent::save(
+                &ctx,
+                Object::new(ctx.clone()).expect("object"),
+            ))
+        });
         let window = cx.add_window(|_, _| Empty);
         let mut context = VisualTestContext::from_window(*window.deref(), cx);
         let view = context.update(|_, cx| cx.new(|_| ScriptView::new(runtime.clone(), object)));
@@ -1683,9 +1687,12 @@ mod tests {
         use gpui::AppContext as _;
 
         let runtime = ShellRuntime::new_isolated().expect("runtime");
-        let object = runtime
-            .context
-            .with(|ctx| Persistent::save(&ctx, Object::new(ctx.clone()).expect("object")));
+        let object = runtime.context.with(|ctx| {
+            ViewObject::unscoped(Persistent::save(
+                &ctx,
+                Object::new(ctx.clone()).expect("object"),
+            ))
+        });
 
         let view = cx.update(|cx| cx.new(|_| ScriptView::new(runtime.clone(), object)));
         let task = register_unchecked(TaskState::new("test", Some(view.downgrade()), None));
