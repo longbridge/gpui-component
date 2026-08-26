@@ -123,6 +123,24 @@ fn intern(name: &str) -> &'static str {
 /// layout's business and never reaches the script.
 #[allow(unused_variables)]
 pub trait PanelScript: 'static {
+    /// Whether the restored panel may be closed.
+    ///
+    /// Panel options belong to the application definition rather than the
+    /// persisted layout, so the registry asks the script again on every load.
+    fn closable(&self) -> bool {
+        true
+    }
+
+    /// Whether the restored panel may fill its dock.
+    fn zoomable(&self) -> bool {
+        true
+    }
+
+    /// Whether the restored panel is currently drawn.
+    fn visible(&self) -> bool {
+        true
+    }
+
     /// Builds a fresh script view for this panel.
     ///
     /// Called when [`PanelRegistry`](gpui_base::dock::PanelRegistry) rebuilds
@@ -342,7 +360,16 @@ fn build_panel(
         }
     }
 
-    Arc::new(cx.new(|cx| ScriptPanel::new(name, view, cx).with_script(script.clone())))
+    let closable = script.closable();
+    let zoomable = script.zoomable();
+    let visible = script.visible();
+    Arc::new(cx.new(|cx| {
+        ScriptPanel::new(name, view, cx)
+            .with_script(script.clone())
+            .with_closable(closable)
+            .with_zoomable(zoomable)
+            .with_visible(visible)
+    }))
 }
 
 /// Stands in for a registered panel whose script would not build.
@@ -766,6 +793,9 @@ return Inbox
         runtime: Rc<ShellRuntime>,
         payload: Option<Value>,
         restored: Rc<RefCell<Vec<Value>>>,
+        closable: bool,
+        zoomable: bool,
+        visible: bool,
     }
 
     impl PanelScript for Probe {
@@ -781,6 +811,18 @@ return Inbox
 
         fn deserialize(&self, _: &Entity<ScriptView>, data: &Value, _: &mut Window, _: &mut App) {
             self.restored.borrow_mut().push(data.clone());
+        }
+
+        fn closable(&self) -> bool {
+            self.closable
+        }
+
+        fn zoomable(&self) -> bool {
+            self.zoomable
+        }
+
+        fn visible(&self) -> bool {
+            self.visible
         }
     }
 
@@ -803,8 +845,67 @@ return Inbox
             runtime: runtime.clone(),
             payload,
             restored: restored.clone(),
+            closable: true,
+            zoomable: true,
+            visible: true,
         });
         (script, restored)
+    }
+
+    #[gpui::test]
+    fn registered_panel_restores_its_static_options(cx: &mut TestAppContext) {
+        let (runtime, view_type) = boot(cx);
+        let window = cx.add_window(|_, _| Empty);
+        let mut context = VisualTestContext::from_window(*window.deref(), cx);
+
+        let (script, _) = probe(&runtime, &view_type, None);
+        let mut script = Rc::try_unwrap(script).ok().expect("unique probe");
+        script.closable = false;
+        script.zoomable = false;
+        script.visible = false;
+        let script = Rc::new(script);
+        let name = context.update(|_, cx| register_panel("mail", "fixed", script.clone(), cx));
+
+        let saved = context.update(|window, cx| {
+            let object = runtime
+                .instantiate(&view_type, window, cx)
+                .expect("instance");
+            let view = cx.new(|_| ScriptView::new(runtime.clone(), object));
+            let panel = cx.new(|cx| {
+                ScriptPanel::new(name, view, cx)
+                    .with_script(script.clone())
+                    .with_closable(false)
+                    .with_zoomable(false)
+                    .with_visible(false)
+            });
+            let area = cx.new(|cx| DockArea::new("workspace", None, window, cx));
+            area.update(cx, |area, cx| {
+                area.set_center(DockLayout::tabs().panel(panel), window, cx);
+                area.dump(cx)
+            })
+        });
+
+        let area = context.update(|window, cx| {
+            let area = cx.new(|cx| DockArea::new("workspace", None, window, cx));
+            area.update(cx, |area, cx| {
+                area.load(saved, window, cx).expect("load");
+            });
+            area
+        });
+
+        context.read(|cx| {
+            let panel_id = area
+                .read(cx)
+                .layout(DockPlacement::Center)
+                .expect("center")
+                .panels()
+                .next()
+                .expect("restored panel");
+            let panel = area.read(cx).panel(panel_id).expect("live panel");
+            assert!(!panel.closable(cx));
+            assert!(!panel.zoomable(cx));
+            assert!(!panel.visible(cx));
+        });
     }
 
     /// The persisted leaf for `name`, wherever it sits in the tree.
