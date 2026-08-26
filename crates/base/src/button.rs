@@ -212,6 +212,13 @@ impl RenderOnce for Button {
         let on_click = self.on_click;
 
         self.base
+            // Centering is part of Button's control geometry. Without a flex
+            // formatting context an ordinary child starts at the root's
+            // leading edge, so a fixed-height unstyled Button cannot align its
+            // label even though its neutral line height is correct.
+            .flex()
+            .items_center()
+            .justify_center()
             // A neutral line height is geometry, not visual policy: with the
             // inherited value the text box is taller than the glyphs, so the
             // caller's padding no longer determines the control's height and a
@@ -253,6 +260,7 @@ impl RenderOnce for Button {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ElementExt as _;
     use std::{
         cell::Cell,
         rc::Rc,
@@ -369,6 +377,53 @@ mod tests {
 
         assert_eq!(button_clicks.get(), 0);
         assert_eq!(parent_clicks.get(), 0);
+    }
+
+    #[gpui::test]
+    fn fixed_height_button_centers_ordinary_child_geometry(cx: &mut TestAppContext) {
+        type Captured = Arc<
+            Mutex<(
+                Option<gpui::Bounds<gpui::Pixels>>,
+                Option<gpui::Bounds<gpui::Pixels>>,
+            )>,
+        >;
+
+        struct AlignmentProbe {
+            captured: Captured,
+        }
+
+        impl Render for AlignmentProbe {
+            fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+                let root_capture = self.captured.clone();
+                let child_capture = self.captured.clone();
+                Button::new("alignment-button")
+                    .w(px(120.))
+                    .h(px(40.))
+                    .child(
+                        div()
+                            .w(px(48.))
+                            .h(px(12.))
+                            .on_prepaint(move |bounds, _, _| {
+                                child_capture.lock().unwrap().1 = Some(bounds);
+                            }),
+                    )
+                    .on_prepaint(move |bounds, _, _| {
+                        root_capture.lock().unwrap().0 = Some(bounds);
+                    })
+            }
+        }
+
+        let captured = Arc::new(Mutex::new((None, None)));
+        let (_, context) = cx.add_window_view({
+            let captured = captured.clone();
+            move |_, _| AlignmentProbe { captured }
+        });
+        context.update(|window, cx| window.draw(cx).clear(cx));
+
+        let (root, child) = captured.lock().unwrap().clone();
+        let root = root.expect("button bounds");
+        let child = child.expect("child bounds");
+        assert_eq!(child.center(), root.center());
     }
 
     #[test]
