@@ -73,6 +73,13 @@ export default class AsyncFailure extends View {
 }
 "#;
 
+const ALWAYS_FAILS: &str = r#"
+import { View } from "gpui";
+export default class AlwaysFails extends View {
+  render() { throw new Error("first render failed on purpose"); }
+}
+"#;
+
 const INPUT_SUBSCRIPTION: &str = r#"
 import { View, v_flex, text, InputState } from "gpui";
 
@@ -405,6 +412,25 @@ fn a_failed_render_is_not_retried_every_frame(cx: &mut TestAppContext) {
         after_failure,
         "a broken render is as frame-coupled as a working one if failure re-triggers the build"
     );
+}
+
+#[gpui::test]
+fn a_failed_first_render_is_not_retried_every_frame(cx: &mut TestAppContext) {
+    let (runtime, mut context, view) = script_view(cx, ALWAYS_FAILS);
+
+    render_once(&mut context, &view);
+    let after_failure = runtime.metrics().read().script_renders();
+    assert_eq!(after_failure, 1);
+    for _ in 0..16 {
+        render_once(&mut context, &view);
+    }
+
+    assert_eq!(runtime.metrics().read().script_renders(), after_failure);
+    assert!(!view.read_with(&context, |view, _| view.is_dirty()));
+
+    view.update(&mut context, |view, _| view.invalidate());
+    render_once(&mut context, &view);
+    assert_eq!(runtime.metrics().read().script_renders(), after_failure + 1);
 }
 
 #[gpui::test]

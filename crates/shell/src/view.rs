@@ -152,7 +152,7 @@ impl ScriptView {
     }
 
     pub fn is_dirty(&self) -> bool {
-        self.dirty || self.current.is_none() || self.theme_generation != crate::theme::generation()
+        self.dirty || self.theme_generation != crate::theme::generation()
     }
 
     /// Runs the script and publishes what it produced.
