@@ -1,6 +1,6 @@
-//! The styling engine behind the the script fluent chain.
+//! The styling engine behind the script's fluent chain.
 //!
-//! the script writes exactly what Rust writes — `v_flex():size_full():bg("surface"):p(12)`
+//! The script writes exactly what Rust writes — `v_flex():size_full():bg("surface"):p(12)`
 //! — so this module has to answer one question for any method name a script
 //! calls: is it a style method, and if so how is it applied to a
 //! [`StyleRefinement`]?

@@ -272,4 +272,5 @@ child, children, when, on_click, on_change, disabled, selected, checked, id
 - Select、tabs、list、table、tree 以及 `gpui-base` 的其他组件；
 - `gpui.memo`——它能让未变化的子树跳过重建描述的那部分脚本工作；
 - dock 面板，以及让脚本绘制 dock 自身 chrome 的 renderer trait；
+- 脚本所创建控件的焦点归属、Tab 顺序与键盘导航；
 - `img()` 构造器——今天唯一的图片元素是 `svg()`。

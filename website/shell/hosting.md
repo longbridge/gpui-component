@@ -20,6 +20,12 @@ let runtime = ShellRuntime::new(cx)?;     // one VM, installed as this App's def
 
 `new(cx)` lets callbacks, native modules and hot reload find the default runtime without the host threading a handle through every layer. A host deliberately managing more than one VM can create additional runtimes with `new_isolated()` and retain those handles itself.
 
+`gpui-shell` uses GPUI's inspector reflection table to expose the fluent style
+methods, including in release builds. Depending on this crate therefore enables
+the `gpui-base/inspector` feature for the unified Cargo dependency graph. This
+is required for the JavaScript style surface; embedders should account for the
+additional release-build instrumentation and dependencies.
+
 ## Loading and instantiating
 
 For the usual application window, loading is one operation and returns its

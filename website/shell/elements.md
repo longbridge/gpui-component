@@ -272,4 +272,5 @@ The element surface is the M0 set. Missing, deliberately, and each belonging to 
 - Select, tabs, list, table, tree and the other `gpui-base` components;
 - `gpui.memo`, which would let an unchanged subtree skip the script work that rebuilds its description;
 - dock panels, and the renderer traits that would let a script draw the dock's own chrome;
+- focus ownership, Tab order and keyboard navigation for script-created controls;
 - an `img()` constructor — `svg()` is the only image element today.

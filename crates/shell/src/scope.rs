@@ -1,16 +1,16 @@
-//! Host context that is valid only for the duration of one Rust → the script call.
+//! Host context that is valid only for the duration of one Rust → script call.
 //!
-//! GPUI hands out `&mut Window` and `&mut App` as borrows. the script userdata outlives
+//! GPUI hands out `&mut Window` and `&mut App` as borrows. Script userdata outlives
 //! any borrow, so a `cx` captured during one call and used from a later timer
 //! would point at a dead stack frame. [`CallScope`] turns "am I inside a legal
 //! host call?" into a runtime-checkable fact: every entry point pushes a frame
-//! with a fresh generation, and the the script-side `cx` only carries that generation.
+//! with a fresh generation, and the script-side `cx` only carries that generation.
 //!
 //! # Safety
 //!
 //! The raw pointers below are sound because:
 //!
-//! - the the script VM and GPUI's `App` are both main-thread only, so no other thread
+//! - the script VM and GPUI's `App` are both main-thread only, so no other thread
 //!   can observe the stack;
 //! - frames are strictly last-in-first-out, enforced by [`CallScopeGuard`];
 //! - a frame's pointers are only reachable while its guard is alive.

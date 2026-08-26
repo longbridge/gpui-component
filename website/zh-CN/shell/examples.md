@@ -23,10 +23,10 @@ cargo run -p gpui-shell -- examples/js_todolist
 `examples/js_todolist/` 的目的是把整个运行时都跑一遍，而不是做到最小——`gpui-shell` 哪里坏了，通常先在这里露出来。
 
 ```text
-main.js       248 行   视图：状态、筛选、所有事件处理
-ui.js         176 行   呈现层，以函数形式导出
-storage.js     41 行   持久化，以及没拿到授权时怎么办
-confirm.js     46 行   确认 dialog，它自己也是一个视图
+main.js                视图：状态、筛选、所有事件处理
+ui.js                  呈现层，以函数形式导出
+storage.js             持久化，以及没拿到授权时怎么办
+confirm.js             确认 dialog，它自己也是一个视图
 icons/                 四个 SVG，相对应用根目录解析
 gpui.d.ts              自动生成；jsconfig.json 与 types.d.ts 把类型接上
 ```
@@ -71,7 +71,7 @@ export function load() {
 cargo run -- shell
 ```
 
-gallery 的 Shell story 并排跑着两块面板：左边那块由 Rust 的 `shell_story.rs` 画，右边那块由 `crates/story/js/quotes/main.js` 画——122 行 JavaScript——两边读的是同一份数据。
+gallery 的 Shell story 并排跑着两块面板：左边那块由 Rust 的 `shell_story.rs` 画，右边那块由 JavaScript 的 `crates/story/js/quotes/main.js` 画，两边读的是同一份数据。
 
 脚本自己不持有任何状态。这块行情板是一个 Rust 的 `Entity<Market>`，通过 story 在运行时启动前注册的 [native 模块](./native.md)访问：
 

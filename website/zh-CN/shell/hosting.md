@@ -20,6 +20,11 @@ let runtime = ShellRuntime::new(cx)?;     // 一个 VM，并注册为当前 App 
 
 `new(cx)` 让回调、native 模块与 hot reload 不必由宿主层层传递句柄，也能找到默认 runtime。明确管理多个 VM 的宿主可以用 `new_isolated()` 创建其他 runtime，并自行保留这些句柄。
 
+`gpui-shell` 通过 GPUI 的 inspector reflection table 暴露 fluent style
+方法，release 构建也不例外。因此，依赖这个 crate 会为 Cargo 统一后的依赖图启用
+`gpui-base/inspector` feature。这是 JavaScript 样式接口正常工作的必要条件；嵌入方
+应把 release 构建中新增的检测代码与依赖计入构建成本。
+
 ## 加载与实例化
 
 普通应用窗口只需一次加载，并直接获得它的 `ShellRoot`：

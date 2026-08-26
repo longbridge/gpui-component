@@ -23,10 +23,10 @@ cargo run -p gpui-shell -- examples/js_todolist
 `examples/js_todolist/` exists to exercise the whole runtime rather than to be minimal — if something in `gpui-shell` is broken, this is where it shows first.
 
 ```text
-main.js       248 lines   the view: state, filtering, every handler
-ui.js         176 lines   the presentation layer, exported as functions
-storage.js     41 lines   persistence, and what to do when it is not granted
-confirm.js     46 lines   the confirmation dialog, a view of its own
+main.js                   the view: state, filtering, every handler
+ui.js                     the presentation layer, exported as functions
+storage.js                persistence, and what to do when it is not granted
+confirm.js                the confirmation dialog, a view of its own
 icons/                    four SVGs, resolved against the application root
 gpui.d.ts                 generated; jsconfig.json and types.d.ts wire up typing
 ```
@@ -75,7 +75,7 @@ export function load() {
 cargo run -- shell
 ```
 
-The gallery's Shell story runs two panels side by side: the left one drawn by `shell_story.rs` in Rust, the right one by `crates/story/js/quotes/main.js` — 122 lines of JavaScript — reading the same data.
+The gallery's Shell story runs two panels side by side: the left one drawn by `shell_story.rs` in Rust, the right one by `crates/story/js/quotes/main.js` in JavaScript, reading the same data.
 
 The script owns no state at all. The board is a Rust `Entity<Market>`, reached through the [native module](./native.md) the story registered before the runtime started:
 

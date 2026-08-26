@@ -65,7 +65,7 @@ const DEFAULT_DEBOUNCE: Duration = Duration::from_millis(200);
 const MAX_DEPTH: usize = 8;
 
 /// The most files one scan will stat. Same reasoning as [`MAX_DEPTH`]: a poll
-/// runs on the UI thread and must have a bounded cost.
+/// repeats for the lifetime of the watcher and must have a bounded cost.
 const MAX_FILES: usize = 4096;
 
 /// Extensions a reload can be triggered by. Only sources the runtime actually
@@ -100,14 +100,14 @@ impl SourceWatcher {
     /// starting a watcher does not itself look like a change.
     ///
     /// [`poll`]: Self::poll
-    pub(crate) fn new(directory: PathBuf) -> Self {
-        let stamp = scan(&directory);
-        Self {
+    pub(crate) fn new(directory: PathBuf) -> Result<Self> {
+        let stamp = scan(&directory)?;
+        Ok(Self {
             directory,
             debounce: DEFAULT_DEBOUNCE,
             stamp,
             changed_at: None,
-        }
+        })
     }
 
     /// Sets the debounce window: how long the tree has to stay still before a
@@ -130,21 +130,23 @@ impl SourceWatcher {
     /// Returns true at most once per burst: reporting clears the pending
     /// change, so a host that polls in a loop reloads once per save rather than
     /// once per poll. A directory that has been deleted reads as an empty tree,
-    /// which is a change like any other and then stays quiet.
-    pub(crate) fn poll(&mut self) -> bool {
-        let stamp = scan(&self.directory);
+    /// which is a change like any other and then stays quiet. A source tree
+    /// beyond the scan limit returns an error rather than being watched only
+    /// partially.
+    pub(crate) fn poll(&mut self) -> Result<bool> {
+        let stamp = scan(&self.directory)?;
         if stamp != self.stamp {
             self.stamp = stamp;
             self.changed_at = Some(Instant::now());
         }
 
-        match self.changed_at {
+        Ok(match self.changed_at {
             Some(at) if at.elapsed() >= self.debounce => {
                 self.changed_at = None;
                 true
             }
             _ => false,
-        }
+        })
     }
 }
 
@@ -172,7 +174,11 @@ struct TreeStamp {
 /// A missing or unreadable directory is not an error: an application directory
 /// can vanish mid-edit (a checkout, a move), and the watcher's job is to keep
 /// running and report the tree it can see, which is an empty one.
-fn scan(directory: &Path) -> TreeStamp {
+fn scan(directory: &Path) -> Result<TreeStamp> {
+    scan_with_limit(directory, MAX_FILES)
+}
+
+fn scan_with_limit(directory: &Path, max_files: usize) -> Result<TreeStamp> {
     let mut stamp = TreeStamp::default();
     let mut pending = vec![(directory.to_path_buf(), 0usize)];
 
@@ -182,8 +188,11 @@ fn scan(directory: &Path) -> TreeStamp {
         };
 
         for entry in entries.flatten() {
-            if stamp.files >= MAX_FILES {
-                return stamp;
+            if stamp.files >= max_files {
+                bail!(
+                    "source watch for `{}` exceeds the {max_files}-file limit",
+                    directory.display()
+                );
             }
 
             let name = entry.file_name();
@@ -225,7 +234,7 @@ fn scan(directory: &Path) -> TreeStamp {
         }
     }
 
-    stamp
+    Ok(stamp)
 }
 
 /// Whether a file name is script source the runtime would evaluate.
@@ -311,7 +320,7 @@ impl Watch {
         }
         let entry = entry.into();
         let handle = window.window_handle();
-        let mut watcher = SourceWatcher::new(directory.clone());
+        let mut watcher = SourceWatcher::new(directory.clone())?;
         let runtime = Rc::downgrade(runtime);
         let view = view.downgrade();
 
@@ -335,6 +344,18 @@ impl Watch {
 
                 let (Some(runtime), Some(view)) = (runtime.upgrade(), view.upgrade()) else {
                     break;
+                };
+
+                let changed = match changed {
+                    Ok(changed) => changed,
+                    Err(error) => {
+                        let message = format!("source watch stopped: {error:#}");
+                        tracing::error!("{message}");
+                        let _ = handle.update(cx, |_, window, cx| {
+                            report_failure(handle, &message, window, cx);
+                        });
+                        break;
+                    }
                 };
 
                 if !changed {
@@ -569,11 +590,12 @@ mod tests {
         let tree = TempTree::new("quiet");
         tree.write("main.js", "export default class {}\n");
 
-        let mut watcher =
-            SourceWatcher::new(tree.path().to_path_buf()).with_debounce(Duration::ZERO);
+        let mut watcher = SourceWatcher::new(tree.path().to_path_buf())
+            .unwrap()
+            .with_debounce(Duration::ZERO);
 
-        assert!(!watcher.poll());
-        assert!(!watcher.poll());
+        assert!(!watcher.poll().unwrap());
+        assert!(!watcher.poll().unwrap());
     }
 
     #[test]
@@ -581,13 +603,17 @@ mod tests {
         let tree = TempTree::new("touched");
         tree.write("main.js", "export default class {}\n");
 
-        let mut watcher =
-            SourceWatcher::new(tree.path().to_path_buf()).with_debounce(Duration::ZERO);
-        assert!(!watcher.poll());
+        let mut watcher = SourceWatcher::new(tree.path().to_path_buf())
+            .unwrap()
+            .with_debounce(Duration::ZERO);
+        assert!(!watcher.poll().unwrap());
 
         tree.write("main.js", "export default class { render() {} }\n");
-        assert!(watcher.poll(), "an edited source file is a change");
-        assert!(!watcher.poll(), "the change is reported once, not per poll");
+        assert!(watcher.poll().unwrap(), "an edited source file is a change");
+        assert!(
+            !watcher.poll().unwrap(),
+            "the change is reported once, not per poll"
+        );
     }
 
     #[test]
@@ -595,11 +621,12 @@ mod tests {
         let tree = TempTree::new("non-source");
         tree.write("main.js", "export default class {}\n");
 
-        let mut watcher =
-            SourceWatcher::new(tree.path().to_path_buf()).with_debounce(Duration::ZERO);
+        let mut watcher = SourceWatcher::new(tree.path().to_path_buf())
+            .unwrap()
+            .with_debounce(Duration::ZERO);
 
         tree.write("README.md", "notes\n");
-        assert!(!watcher.poll());
+        assert!(!watcher.poll().unwrap());
     }
 
     #[test]
@@ -608,20 +635,25 @@ mod tests {
         tree.write("main.js", "export default class {}\n");
 
         let window = Duration::from_millis(300);
-        let mut watcher = SourceWatcher::new(tree.path().to_path_buf()).with_debounce(window);
+        let mut watcher = SourceWatcher::new(tree.path().to_path_buf())
+            .unwrap()
+            .with_debounce(window);
 
         // An editor's save: several writes in quick succession. None of them may
         // reload on its own, because the module is only whole after the last.
         tree.write("main.js", "");
-        assert!(!watcher.poll());
+        assert!(!watcher.poll().unwrap());
         tree.write("main.js", "export default class { render() {} }\n");
-        assert!(!watcher.poll());
+        assert!(!watcher.poll().unwrap());
         tree.write("helper.js", "export const helper = 1;\n");
-        assert!(!watcher.poll());
+        assert!(!watcher.poll().unwrap());
 
         std::thread::sleep(window + Duration::from_millis(120));
-        assert!(watcher.poll(), "the settled burst reloads exactly once");
-        assert!(!watcher.poll());
+        assert!(
+            watcher.poll().unwrap(),
+            "the settled burst reloads exactly once"
+        );
+        assert!(!watcher.poll().unwrap());
     }
 
     #[test]
@@ -629,25 +661,28 @@ mod tests {
         let tree = TempTree::new("missing");
         tree.write("main.js", "export default class {}\n");
 
-        let mut watcher =
-            SourceWatcher::new(tree.path().to_path_buf()).with_debounce(Duration::ZERO);
-        assert!(!watcher.poll());
+        let mut watcher = SourceWatcher::new(tree.path().to_path_buf())
+            .unwrap()
+            .with_debounce(Duration::ZERO);
+        assert!(!watcher.poll().unwrap());
 
         std::fs::remove_dir_all(tree.path()).expect("removing the tree");
 
         // Losing the tree is a change like any other, and then the watcher goes
         // quiet instead of reporting a change on every tick.
-        assert!(watcher.poll());
-        assert!(!watcher.poll());
+        assert!(watcher.poll().unwrap());
+        assert!(!watcher.poll().unwrap());
     }
 
     #[test]
     fn never_existing_directory_is_quiet() {
         let path = std::env::temp_dir().join("gpui-shell-watch-does-not-exist");
-        let mut watcher = SourceWatcher::new(path).with_debounce(Duration::ZERO);
+        let mut watcher = SourceWatcher::new(path)
+            .unwrap()
+            .with_debounce(Duration::ZERO);
 
-        assert!(!watcher.poll());
-        assert!(!watcher.poll());
+        assert!(!watcher.poll().unwrap());
+        assert!(!watcher.poll().unwrap());
     }
 
     #[test]
@@ -657,17 +692,31 @@ mod tests {
         std::fs::create_dir_all(tree.path().join("lib")).expect("creating a nested directory");
         std::fs::create_dir_all(tree.path().join(".cache")).expect("creating a hidden directory");
 
-        let mut watcher =
-            SourceWatcher::new(tree.path().to_path_buf()).with_debounce(Duration::ZERO);
+        let mut watcher = SourceWatcher::new(tree.path().to_path_buf())
+            .unwrap()
+            .with_debounce(Duration::ZERO);
 
         std::fs::write(tree.path().join(".cache/main.js"), "ignored\n").expect("writing");
         assert!(
-            !watcher.poll(),
+            !watcher.poll().unwrap(),
             "hidden directories are not application source"
         );
 
         std::fs::write(tree.path().join("lib/helper.js"), "export const a = 1;\n")
             .expect("writing");
-        assert!(watcher.poll(), "a nested source file is watched");
+        assert!(watcher.poll().unwrap(), "a nested source file is watched");
+    }
+
+    #[test]
+    fn an_oversized_source_tree_is_refused_instead_of_partially_watched() {
+        let tree = TempTree::new("oversized");
+        tree.write("a.js", "export const a = 1;\n");
+        tree.write("b.js", "export const b = 2;\n");
+
+        let error = scan_with_limit(tree.path(), 1).unwrap_err();
+        assert!(
+            error.to_string().contains("exceeds the 1-file limit"),
+            "the refusal should tell the host why hot reload cannot start: {error:#}"
+        );
     }
 }

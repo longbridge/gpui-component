@@ -121,7 +121,7 @@ const enSidebar = createSidebar("/docs/", "Introduction");
 const shellSidebar = createSidebar("/shell/", "GPUI Shell", "Introduction");
 const baseSidebar = createSidebar("/base/", "GPUI Base");
 const zhSidebar = createSidebar("/zh-CN/docs/", "文档");
-const zhShellSidebar = createSidebar("/zh-CN/shell/", "GPUI Shell", "Introduction");
+const zhShellSidebar = createSidebar("/zh-CN/shell/", "GPUI Shell", "简介");
 
 function createFooter(prefix = "", locale: "en" | "zh" = "en") {
   const designGuidesText = locale === "zh" ? "设计指南" : "Design Guides";

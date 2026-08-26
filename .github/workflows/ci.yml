@@ -111,6 +111,8 @@ jobs:
             --skip tests::fs \
             --skip tests::process \
             --skip tests::benchmark
+          cargo test -p gpui-shell --release tests::benchmark
+          cargo test -p gpui-shell --doc
       - name: Lint GPUI Shell
         run: cargo clippy -p gpui-shell --all-targets -- -D warnings
 
@@ -149,3 +151,7 @@ jobs:
           cargo test -p gpui-shell --release tests::fs
           cargo test -p gpui-shell --release tests::process
           cargo test -p gpui-shell --release tests::network
+          cargo test -p gpui-shell --release tests::render
+          cargo test -p gpui-shell --release tests::snapshot
+          cargo test -p gpui-shell --release tests::host_api
+          cargo test -p gpui-shell --release tests::http_request

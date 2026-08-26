@@ -397,37 +397,6 @@ pub(crate) fn install(capabilities: Capabilities) {
     crate::policy::update_default(|policy| policy.with_capabilities(capabilities));
 }
 
-/// Holds a path to a root by asking the filesystem, not the string.
-///
-/// The deepest ancestor that resolves is canonicalized — which follows every
-/// link on the way — and that real path must still be under the root. Whatever
-/// is below it does not exist, so nothing there can be a link to anywhere:
-/// `inside/new/file.txt` resolves through `inside`, and `inside/escape/x`
-/// resolves through `/etc` and is refused.
-///
-/// The one component that *can* exist below the deepest resolvable ancestor is
-/// the first: a dangling symlink resolves to nothing while still being
-/// something a write would follow and create. That is refused rather than
-/// guessed at, because where it points cannot be proven.
-///
-/// # What this does not close
-///
-/// **This is check-then-use, and the check does not travel with the path.** The
-/// caller gets a pathname back, and every `std::fs` call resolves it a second
-/// time. A component replaced with a link between the two resolutions is
-/// followed, out of the root, for a read, a write, a remove or a mkdir alike.
-///
-/// Closing it means the syscall has to walk the path itself, so that no name is
-/// ever resolved twice: `openat2(RESOLVE_BENEATH)` on Linux, a per-component
-/// `openat` with `O_NOFOLLOW` elsewhere, with every operation performed on the
-/// verified descriptor rather than on a string. `std` offers none of that, so it
-/// needs a dependency (`cap-std` is built for exactly this) or a small platform
-/// abstraction here.
-///
-/// Until then this is a real narrowing and not a closure: it stops a link that
-/// was already there, which is the ordinary case, and it does not stop a
-/// concurrent writer inside the granted root. Nothing in the documentation may
-/// say the escape is closed while that is true.
 /// A granted directory, and the path to use against it.
 ///
 /// Holding the directory open is what makes this a capability rather than a
@@ -468,12 +437,14 @@ impl Grant {
     }
 }
 
-/// A root in the same form a resolved path takes, so the two can be compared.
+/// Resolves a root by asking the filesystem, not by trusting the string.
 ///
 /// A granted directory need not exist yet, so this cannot simply canonicalize:
-/// it resolves as far as the filesystem goes and keeps the rest verbatim, which
-/// is safe for exactly the reason [`contain`] relies on — what does not exist
-/// cannot be a link.
+/// it resolves as far as the filesystem goes and keeps the rest verbatim. The
+/// deepest existing ancestor is canonicalized, following every link on the way.
+/// Whatever lies below it does not exist, so none of those components can yet
+/// be a link. A dangling symlink at the boundary is refused rather than guessed
+/// at, because its destination cannot be proven.
 fn resolved_root(root: &Path) -> Option<PathBuf> {
     let (resolved, tail) = deepest_resolvable(root)?;
     let mut out = resolved;

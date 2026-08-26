@@ -7,6 +7,13 @@
 //! The host owns rendering, layout, text editing, virtualization and system
 //! capabilities; the script owns composition, presentation and business logic. See
 //! `docs/gpui-shell.md` for the design this implements.
+//!
+//! # Cargo feature impact
+//!
+//! The JavaScript fluent-style surface is generated from GPUI's inspector
+//! reflection table, including in release builds. This crate therefore enables
+//! `gpui-base/inspector`, which Cargo unifies across the embedding application's
+//! dependency graph.
 
 // # The surface a host may rely on
 //
