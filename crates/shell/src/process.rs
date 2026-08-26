@@ -49,7 +49,7 @@ impl Default for Limits {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 impl Limits {
     fn for_test(timeout: Duration, output: usize) -> Self {
         Self {
@@ -217,12 +217,11 @@ fn kill_process_tree(child: &mut std::process::Child) {
     let _ = child.kill();
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
     use std::time::Duration;
 
-    #[cfg(unix)]
     #[test]
     fn captures_a_successful_command() {
         let result = run_bounded(
@@ -237,7 +236,6 @@ mod tests {
         assert_eq!(result.stderr, "err");
     }
 
-    #[cfg(unix)]
     #[test]
     fn kills_a_command_that_times_out() {
         let error = run_bounded(
@@ -250,7 +248,6 @@ mod tests {
         assert!(error.contains("timed out"), "{error}");
     }
 
-    #[cfg(unix)]
     #[test]
     fn a_descendant_inheriting_the_pipes_cannot_extend_the_timeout() {
         let started = Instant::now();
@@ -265,7 +262,6 @@ mod tests {
         assert!(started.elapsed() < Duration::from_secs(1));
     }
 
-    #[cfg(unix)]
     #[test]
     fn kills_a_command_whose_stdout_exceeds_the_limit() {
         let error = run_bounded(
@@ -278,7 +274,6 @@ mod tests {
         assert!(error.contains("stdout exceeded"), "{error}");
     }
 
-    #[cfg(unix)]
     #[test]
     fn kills_a_command_whose_stderr_exceeds_the_limit() {
         let error = run_bounded(
