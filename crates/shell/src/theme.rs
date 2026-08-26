@@ -224,7 +224,7 @@ impl Palette {
                 accent: gray(0.149_02),
                 accent_foreground: gray(0.980_392),
                 destructive: gpui::hsla(0., 0.907, 0.708, 1.),
-                destructive_foreground: gpui::hsla(0., 0.721, 0.506, 1.),
+                destructive_foreground: gray(0.090_196),
                 border: gray(0.149_02),
                 input: gray(0.184_314),
                 ring: gray(0.450_98),
@@ -243,7 +243,7 @@ impl Palette {
                 muted_foreground: gray(0.450_98),
                 accent: gray(0.960_784),
                 accent_foreground: gray(0.090_196),
-                destructive: gpui::hsla(0., 0.842, 0.602, 1.),
+                destructive: gpui::hsla(0., 0.721, 0.506, 1.),
                 destructive_foreground: gray(0.980_392),
                 border: gray(0.898_039),
                 input: gray(0.898_039),
@@ -443,6 +443,24 @@ mod tests {
         names
     }
 
+    fn contrast_ratio(foreground: Hsla, background: Hsla) -> f32 {
+        fn luminance(color: Hsla) -> f32 {
+            let rgb = color.to_rgb();
+            let linear = |channel: f32| {
+                if channel <= 0.04045 {
+                    channel / 12.92
+                } else {
+                    ((channel + 0.055) / 1.055).powf(2.4)
+                }
+            };
+            0.2126 * linear(rgb.r) + 0.7152 * linear(rgb.g) + 0.0722 * linear(rgb.b)
+        }
+
+        let foreground = luminance(foreground);
+        let background = luminance(background);
+        (foreground.max(background) + 0.05) / (foreground.min(background) + 0.05)
+    }
+
     #[test]
     fn a_supplied_palette_parses() {
         // The format is the host's entry point, so a malformed one must say so
@@ -477,6 +495,20 @@ mod tests {
                     mode.as_str()
                 );
             }
+        }
+    }
+
+    #[test]
+    fn destructive_foreground_is_legible_in_both_palettes() {
+        let palettes = Palettes::neutral();
+        for mode in [ThemeMode::Light, ThemeMode::Dark] {
+            let colors = palettes.get(mode).colors;
+            let contrast = contrast_ratio(colors.destructive_foreground, colors.destructive);
+            assert!(
+                contrast >= 4.5,
+                "destructive foreground contrast is {contrast:.2}:1 in the {} palette",
+                mode.as_str()
+            );
         }
     }
 
