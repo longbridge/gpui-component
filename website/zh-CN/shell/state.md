@@ -70,7 +70,7 @@ snapshot 只在有东西让它失效时才重建：
 
 - 事件回调或异步任务里的 `cx.notify()`
 - [hot-reload](./getting-started.md) 替换了脚本
-- 主题切换——因为 `bg(colors.surface)` 在 `render` 执行时记录真实颜色，已经烘进了 snapshot
+- 主题切换——因为 `bg(cx.theme().colors.surface)` 在 `render` 执行时记录真实颜色，已经烘进了 snapshot
 - 宿主调用 `ScriptView::refresh`——Rust 用它表示“我改了脚本会读到的状态”（通过[原生模块](./capabilities.md)）。宿主侧单纯的 `cx.notify()` 只是重绘，不会跑脚本：这是两个不同的请求
 
 其余情况都在 Rust 里复用你已经产出的那份描述，不执行任何 JavaScript。
@@ -145,14 +145,13 @@ init() {
 }
 
 render(cx) {
-  const { colors } = cx.theme();
   return Input.new(this.draft)
     .flex_1()
     .h(28)
     .px(8)
     .border(1)
-    .border_color(colors.input)
-    .bg(colors.surface)
+    .border_color(cx.theme().colors.input)
+    .bg(cx.theme().colors.surface)
     .text_size(12);
 }
 ```

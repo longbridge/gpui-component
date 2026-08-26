@@ -80,10 +80,9 @@ svg("icons/check.svg").w(14).h(14).flex_none();
 
 ```js
 renderIcon(cx) {
-  const { colors } = cx.theme();
   return div()
-    .bg(colors.foreground)
-    .text_color(colors.surface)
+    .bg(cx.theme().colors.foreground)
+    .text_color(cx.theme().colors.surface)
     .child(svg("icons/check.svg").w(11).h(11));  // 以 surface 绘制
 }
 ```
@@ -232,13 +231,12 @@ and must be rebuilt each time render runs
 在 `render` 里构建，把重复部分抽成**每次返回新元素的函数**：
 
 ```js
-const label = (value, colors) => text(value).text_size(12).text_color(colors.foreground);
+const label = (value, cx) => text(value).text_size(12).text_color(cx.theme().colors.foreground);
 
 render(cx) {
-  const { colors } = cx.theme();
   return v_flex()
-    .child(label("first", colors))
-    .child(label("second", colors));
+    .child(label("first", cx))
+    .child(label("second", cx));
 }
 ```
 

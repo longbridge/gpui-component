@@ -16,26 +16,26 @@ export const SPACE = { xxs: 2, xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 };
 
 /// Body text. 12px is the showcase's `text_xs`, and at this density it is the
 /// size that keeps a row scannable.
-/** @param {string} value @param {import("gpui").ColorTokens} colors */
-export const label = (value, colors) =>
-  text(value).text_size(12).line_height(1).text_color(colors.foreground);
+/** @param {string} value @param {import("gpui").Context} cx */
+export const label = (value, cx) =>
+  text(value).text_size(12).line_height(1).text_color(cx.theme().colors.foreground);
 
-/** @param {string} value @param {import("gpui").ColorTokens} colors */
-export const muted = (value, colors) =>
-  text(value).text_size(12).line_height(1).text_color(colors.muted_foreground);
+/** @param {string} value @param {import("gpui").Context} cx */
+export const muted = (value, cx) =>
+  text(value).text_size(12).line_height(1).text_color(cx.theme().colors.muted_foreground);
 
-/** @param {string} value @param {import("gpui").ColorTokens} colors */
-export const title = (value, colors) =>
-  text(value).text_size(16).line_height(1).font_semibold().text_color(colors.foreground);
+/** @param {string} value @param {import("gpui").Context} cx */
+export const title = (value, cx) =>
+  text(value).text_size(16).line_height(1).font_semibold().text_color(cx.theme().colors.foreground);
 
-/** @param {import("gpui").ColorTokens} colors */
-export const rule = (colors) => div().h(1).w_full().bg(colors.border);
+/** @param {import("gpui").Context} cx */
+export const rule = (cx) => div().h(1).w_full().bg(cx.theme().colors.border);
 
 /// The one content surface. Square, hairline bordered, no elevation: hierarchy
 /// comes from the border and the spacing, not from a shadow.
-/** @param {import("gpui").ColorTokens} colors */
-export const surface = (colors) =>
-  v_flex().flex_1().bg(colors.surface).border(1).border_color(colors.border).overflow_hidden();
+/** @param {import("gpui").Context} cx */
+export const surface = (cx) =>
+  v_flex().flex_1().bg(cx.theme().colors.surface).border(1).border_color(cx.theme().colors.border).overflow_hidden();
 
 /// An icon from the application's own `icons/` directory.
 ///
@@ -49,24 +49,24 @@ export const icon = (name, size = 14) =>
 // Two variants, not five. The showcase has exactly this pair — a filled
 // primary and an outlined secondary — and a third would be a decision nobody
 // asked for.
-/** @param {import("gpui").ColorTokens} colors @returns {Record<Variant, { bg: Color, fg: Color, border: Color, hover: Color }>} */
-const variants = (colors) => ({
-  primary: { bg: colors.foreground, fg: colors.surface, border: colors.foreground, hover: colors.muted_foreground },
-  secondary: { bg: colors.surface, fg: colors.foreground, border: colors.border, hover: colors.muted },
-  ghost: { bg: colors.surface, fg: colors.muted_foreground, border: colors.surface, hover: colors.muted },
-  danger: { bg: colors.surface, fg: colors.destructive, border: colors.border, hover: colors.muted },
+/** @param {import("gpui").Context} cx @returns {Record<Variant, { bg: Color, fg: Color, border: Color, hover: Color }>} */
+const variants = (cx) => ({
+  primary: { bg: cx.theme().colors.foreground, fg: cx.theme().colors.surface, border: cx.theme().colors.foreground, hover: cx.theme().colors.muted_foreground },
+  secondary: { bg: cx.theme().colors.surface, fg: cx.theme().colors.foreground, border: cx.theme().colors.border, hover: cx.theme().colors.muted },
+  ghost: { bg: cx.theme().colors.surface, fg: cx.theme().colors.muted_foreground, border: cx.theme().colors.surface, hover: cx.theme().colors.muted },
+  danger: { bg: cx.theme().colors.surface, fg: cx.theme().colors.destructive, border: cx.theme().colors.border, hover: cx.theme().colors.muted },
 });
 
 /**
  * @param {string} id
  * @param {string} caption
  * @param {(event: ClickEvent, cx: Context) => void} onClick
- * @param {import("gpui").ColorTokens} colors
+ * @param {import("gpui").Context} cx
  * @param {ButtonOptions} [options]
  */
-export const button = (id, caption, onClick, colors, options = {}) => {
+export const button = (id, caption, onClick, cx, options = {}) => {
   const { variant = "secondary", disabled = false, selected = false, icon: name } = options;
-  const palettes = variants(colors);
+  const palettes = variants(cx);
   const palette = palettes[variant] ?? palettes.secondary;
 
   return Button.new(id)
@@ -78,11 +78,11 @@ export const button = (id, caption, onClick, colors, options = {}) => {
     .px(SPACE.md)
     .gap(SPACE.xs)
     .border(1)
-    .border_color(selected ? colors.foreground : palette.border)
-    .bg(selected ? colors.muted : palette.bg)
+    .border_color(selected ? cx.theme().colors.foreground : palette.border)
+    .bg(selected ? cx.theme().colors.muted : palette.bg)
     .text_size(12)
     .line_height(1)
-    .text_color(selected ? colors.foreground : palette.fg)
+    .text_color(selected ? cx.theme().colors.foreground : palette.fg)
     .when(!disabled, (el) => el.hover((style) => style.bg(palette.hover)))
     .when(disabled, (el) => el.opacity(0.4))
     .when(!disabled, (el) => el.on_click(onClick))
@@ -97,10 +97,10 @@ export const button = (id, caption, onClick, colors, options = {}) => {
  * @param {string} name
  * @param {string} description
  * @param {(event: ClickEvent, cx: Context) => void} onClick
- * @param {import("gpui").ColorTokens} colors
+ * @param {import("gpui").Context} cx
  * @param {{ disabled?: boolean }} [options]
  */
-export const iconButton = (id, name, description, onClick, colors, options = {}) => {
+export const iconButton = (id, name, description, onClick, cx, options = {}) => {
   const { disabled = false } = options;
 
   return Button.new(id)
@@ -112,10 +112,10 @@ export const iconButton = (id, name, description, onClick, colors, options = {})
     .w(28)
     .h(28)
     .border(1)
-    .border_color(colors.surface)
-    .text_color(colors.muted_foreground)
+    .border_color(cx.theme().colors.surface)
+    .text_color(cx.theme().colors.muted_foreground)
     .when(!disabled, (el) =>
-      el.hover((style) => style.bg(colors.muted).border_color(colors.border).text_color(colors.foreground)),
+      el.hover((style) => style.bg(cx.theme().colors.muted).border_color(cx.theme().colors.border).text_color(cx.theme().colors.foreground)),
     )
     .when(disabled, (el) => el.opacity(0.4))
     .when(!disabled, (el) => el.on_click(onClick))
@@ -124,15 +124,15 @@ export const iconButton = (id, name, description, onClick, colors, options = {})
 
 /// A text field. The runtime frames an input as a centered row that focuses on
 /// click; height, padding and color are still ours.
-/** @param {InputStateHandle} state @param {import("gpui").ColorTokens} colors */
-export const field = (state, colors) =>
+/** @param {InputStateHandle} state @param {import("gpui").Context} cx */
+export const field = (state, cx) =>
   Input.new(state)
     .flex_1()
     .h(28)
     .px(SPACE.sm)
     .border(1)
-    .border_color(colors.input)
-    .bg(colors.surface)
+    .border_color(cx.theme().colors.input)
+    .bg(cx.theme().colors.surface)
     .text_size(12);
 
 /// A checkbox row, indicator and all: base draws neither.
@@ -141,9 +141,9 @@ export const field = (state, colors) =>
  * @param {boolean} checked
  * @param {(checked: boolean, cx: Context) => void} onChange
  * @param {Element} content
- * @param {import("gpui").ColorTokens} colors
+ * @param {import("gpui").Context} cx
  */
-export const checkbox = (id, checked, onChange, content, colors) =>
+export const checkbox = (id, checked, onChange, content, cx) =>
   Checkbox.new(id)
     .checked(checked)
     .flex()
@@ -152,7 +152,7 @@ export const checkbox = (id, checked, onChange, content, colors) =>
     .w_full()
     .py(SPACE.sm)
     .px(SPACE.md)
-    .hover((style) => style.bg(colors.muted))
+    .hover((style) => style.bg(cx.theme().colors.muted))
     .on_change(onChange)
     .child(
       div()
@@ -163,20 +163,20 @@ export const checkbox = (id, checked, onChange, content, colors) =>
         .items_center()
         .justify_center()
         .border(1)
-        .border_color(colors.foreground)
-        .when(checked, (el) => el.bg(colors.foreground).child(icon("check", 11).text_color(colors.surface))),
+        .border_color(cx.theme().colors.foreground)
+        .when(checked, (el) => el.bg(cx.theme().colors.foreground).child(icon("check", 11).text_color(cx.theme().colors.surface))),
     )
     .child(content);
 
-/** @param {string} heading @param {string} hint @param {import("gpui").ColorTokens} colors */
-export const emptyState = (heading, hint, colors) =>
+/** @param {string} heading @param {string} hint @param {import("gpui").Context} cx */
+export const emptyState = (heading, hint, cx) =>
   v_flex()
     .flex_1()
     .items_center()
     .justify_center()
     .gap(SPACE.xs)
     .py(SPACE.xxl)
-    .child(label(heading, colors))
-    .child(muted(hint, colors));
+    .child(label(heading, cx))
+    .child(muted(hint, cx));
 
 export const row = () => h_flex().items_center().gap(SPACE.md);

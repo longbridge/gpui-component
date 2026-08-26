@@ -36,15 +36,15 @@ Four things in it are worth copying.
 **`ui.js` is a component library made of functions.** It exports `label`, `muted`, `title`, `button`, `iconButton`, `checkbox`, `field`, `row`, `surface`, `rule` and `emptyState`, and `main.js` reads like it is using a component library:
 
 ```js
-export const label = (value, colors) =>
-  text(value).text_size(12).line_height(1).text_color(colors.foreground);
+export const label = (value, cx) =>
+  text(value).text_size(12).line_height(1).text_color(cx.theme().colors.foreground);
 
-export const surface = (colors) =>
-  v_flex().flex_1().bg(colors.surface).border(1).border_color(colors.border).overflow_hidden();
+export const surface = (cx) =>
+  v_flex().flex_1().bg(cx.theme().colors.surface).border(1).border_color(cx.theme().colors.border).overflow_hidden();
 ```
 
-`main.js` reads `const { colors } = cx.theme()` once in `render(cx)` and passes
-that call-scoped palette to these helpers. That costs nothing, because [a fresh
+`main.js` passes the current `cx` to these helpers, which read tokens directly
+through `cx.theme()`. That costs nothing, because [a fresh
 description is exactly what a function call produces](./elements.md). It is also
 the answer to "the base layer ships no styled widgets" — you write the styled
 layer once, in your own file, and stop repeating it.

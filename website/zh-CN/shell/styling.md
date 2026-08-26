@@ -10,8 +10,7 @@ order: 5
 
 ```js
 render(cx) {
-  const { colors } = cx.theme();
-  return v_flex().size_full().bg(colors.surface).p(12).gap(8).rounded(6);
+  return v_flex().size_full().bg(cx.theme().colors.surface).p(12).gap(8).rounded(6);
 }
 ```
 
@@ -92,9 +91,8 @@ percentages and "auto" are not allowed here
 
 ```js
 render(cx) {
-  const { colors } = cx.theme();
   return element
-    .bg(colors.surface)         // 跟随主题
+    .bg(cx.theme().colors.surface)         // 跟随主题
     .text_color("#1e88e5");    // 不跟随
 }
 ```
@@ -134,14 +132,13 @@ or a #rrggbb literal
 
 ```js
 renderSave(cx) {
-  const { colors } = cx.theme();
   return Button.new("save")
-    .bg(colors.surface)
+    .bg(cx.theme().colors.surface)
     .border(1)
-    .border_color(colors.border)
-    .hover((style) => style.bg(colors.muted).border_color(colors.foreground))
-    .active((style) => style.bg(colors.border))
-    .focus((style) => style.border_color(colors.ring))
+    .border_color(cx.theme().colors.border)
+    .hover((style) => style.bg(cx.theme().colors.muted).border_color(cx.theme().colors.foreground))
+    .active((style) => style.bg(cx.theme().colors.border))
+    .focus((style) => style.border_color(cx.theme().colors.ring))
     .child(text("Save"));
 }
 ```
@@ -159,12 +156,11 @@ renderSave(cx) {
 
 ```js
 render(cx) {
-  const { colors, spacing, radius, mode, is_dark } = cx.theme();
   return v_flex()
-    .gap(spacing.md)
-    .rounded(radius.lg)
-    .bg(colors.surface)
-    .child(text(`${mode}: ${is_dark ? "dark" : "light"}`));
+    .gap(cx.theme().spacing.md)
+    .rounded(cx.theme().radius.lg)
+    .bg(cx.theme().colors.surface)
+    .child(text(`${cx.theme().mode}: ${cx.theme().is_dark ? "dark" : "light"}`));
 }
 ```
 
@@ -184,22 +180,6 @@ div()
 ```
 
 参与动画的长度目标**只能是数值像素**。`"50%"`、`"1rem"` 与 `"auto"` 之类相对值无法采样成稳定的原生通道，因此会被拒绝。请给元素稳定的 `.id(...)`（控件已使用构造器 id），否则树位置变化会改变动画 identity。
-
-## 这里没有 `class("...")`
-
-考虑到这些名字的写法，这是个合理的问题：为什么不接受一串样式名字符串，像 utility CSS 框架那样？
-
-```js
-div().class("flex items-center gap-2 bg-surface");   // 不提供
-```
-
-三条理由，按分量排列。
-
-**字符串里的拼写错误是隐形的。** `class("items-centre")` 不会改变画面——它只是没起作用。而方法调用可以在调用点检查，运行时也确实这么做了：未知名字会立刻抛出并附带建议。仅这一条属性，就足以决定这套接口是方法而不是字符串。
-
-**它会成为写同一件事的第二种方式。** 两种等价写法会立刻把示例、文档、生成的 `.d.ts` 以及模型产出的代码劈成两派，而这个运行时一贯拒绝这笔交易。
-
-**那个解析器会是第二套语法。** `bg-surface`、`p-12`、`w-1/2` 是一门语言，有自己的转义、自己的错误信息，还要自己跟 GPUI 的方法名对齐版本。方法接口没有这些负担，而且因为是生成的，维护成本为零。
 
 ## 未知方法
 

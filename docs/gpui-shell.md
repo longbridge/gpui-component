@@ -1042,7 +1042,7 @@ very first render failed.
   right call for a host-side animation and the wrong one for host data. The two
   are separate methods because they are separate requests, and conflating them
   was the one behaviour change this lifecycle forced on embedders.
-- A palette change. `bg(colors.surface)` records a concrete `Hsla` while the
+- A palette change. `bg(cx.theme().colors.surface)` records a concrete `Hsla` while the
   script runs, so the palette is baked into the snapshot and a repaint cannot
   pick up a new one. `theme::generation()` is compared against the generation the
   snapshot was built at.
@@ -1321,12 +1321,11 @@ node, so there is no second grammar for what a style is:
 
 ```js
 function saveButton(cx) {
-  const { colors } = cx.theme();
   return Button.new("save")
-    .bg(colors.primary)
+    .bg(cx.theme().colors.primary)
     .hover((style) => style.opacity(0.9))
     .active((style) => style.opacity(0.8))
-    .focus((style) => style.border_color(colors.ring));
+    .focus((style) => style.border_color(cx.theme().colors.ring));
 }
 ```
 
@@ -1342,10 +1341,9 @@ conditionally instead:
 
 ```js
 function saveButton(cx, disabled, selected) {
-  const { colors } = cx.theme();
   return Button.new("save")
     .when(disabled, (el) => el.opacity(0.4))
-    .when(selected, (el) => el.bg(colors.muted).border_color(colors.foreground));
+    .when(selected, (el) => el.bg(cx.theme().colors.muted).border_color(cx.theme().colors.foreground));
 }
 ```
 
@@ -1625,11 +1623,10 @@ from the reflected ones at the call site:
 
 ```js
 function panel(cx) {
-  const { colors } = cx.theme();
   return v_flex()
     .size_full()
     .items_center() // reflected
-    .bg(colors.surface)
+    .bg(cx.theme().colors.surface)
     .p(12)
     .rounded(8)
     .gap(8); // hand-bound
@@ -1644,11 +1641,6 @@ with the animation and token work rather than as a positional argument list;
 would each need a name mapping when every variant already has a nullary form
 (`cursor_pointer`, `text_center`, `font_bold`); and `scrollbar_width` is
 meaningless without overflow configuration the shell does not yet expose.
-
-There is no `.class("flex gap_2")` string form. It would be exactly equivalent
-to the chain while becoming a second style syntax that examples, declarations,
-editor completion, and generated code would all have to support — and the string
-form is the one with the weakest completion and the weakest static checking.
 
 #### The cost of a good diagnostic
 
@@ -1723,7 +1715,7 @@ switch, so caching it is both correct and cheaper.
 Rules for script:
 
 - Prefer a value read during the current call:
-  `const { colors } = cx.theme(); el.bg(colors.surface)`. Semantic token-name
+  `el.bg(cx.theme().colors.surface)`. Semantic token-name
   strings remain accepted for compatibility. Hex literals (`#rgb`, `#rrggbb`,
   `#rrggbbaa`) are accepted for one-off tools and bypass the theme, so they do
   not follow a theme switch.
@@ -3231,7 +3223,6 @@ reopened without new information.
 | **Rust hot reload**                                    | Solves only the compile time. It does not address plugin distribution or third-party extension, and state preservation is fragile                                                                                                                                                          |
 | **A UI DSL or JSX**                                    | A DSL is a second language with its own parser, diagnostics, editor support, and versioning. JSX needs a compile step, which returns the "edit, save, see it" property this runtime exists for (§5.3)                                                                                      |
 | **Object-literal element descriptions**                | Exactly equivalent to the builder chain and therefore a second dialect of the same thing (§8.2)                                                                                                                                                                                            |
-| **A `class("...")` style string**                      | Equivalent to the chain, with the weakest completion and the weakest static checking of any form available (§13.2)                                                                                                                                                                         |
 | **Automatic dependency tracking**                      | A second mental model beside GPUI's explicit `notify`, plus a permanent `Proxy` cost on the render path with no JIT to amortize it (§11.2)                                                                                                                                                 |
 
 ---
@@ -3416,14 +3407,13 @@ export default class TodoList extends View {
   }
 
   render(cx) {
-    const { colors } = cx.theme();
     return v_flex()
       .size_full()
-      .bg(colors.background)
+      .bg(cx.theme().colors.background)
       .p(24)
       .gap(16)
-      .child(this.composer())
-      .children(this.items.map((item) => this.row(item)));
+      .child(this.composer(cx))
+      .children(this.items.map((item) => this.row(item, cx)));
   }
 }
 ```
@@ -3440,8 +3430,8 @@ builder style `CLAUDE.md` requires, instead of splitting into a temporary and a
 sequence of `if`s:
 
 ```js
-label(item.caption, colors).when(item.done, (el) =>
-  el.text_color(colors.muted_foreground).line_through(),
+label(item.caption, cx).when(item.done, (el) =>
+  el.text_color(cx.theme().colors.muted_foreground).line_through(),
 );
 ```
 

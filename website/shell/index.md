@@ -17,22 +17,21 @@ export default class Counter extends View {
   }
 
   render(cx) {
-    const { colors } = cx.theme();
     return v_flex()
       .size_full()
       .items_center()
       .justify_center()
       .gap(20)
-      .bg(colors.background)
-      .child(text(`${this.count}`).text_3xl().text_color(colors.foreground))
+      .bg(cx.theme().colors.background)
+      .child(text(`${this.count}`).text_3xl().text_color(cx.theme().colors.foreground))
       .child(
         Button.new("increment")
           .h(32)
           .px(14)
           .items_center()
           .justify_center()
-          .bg(colors.primary)
-          .text_color(colors.primary_foreground)
+          .bg(cx.theme().colors.primary)
+          .text_color(cx.theme().colors.primary_foreground)
           .rounded(6)
           .on_click((_event, cx) => {
             this.count += 1;

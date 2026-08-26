@@ -105,13 +105,11 @@ export default class TodoList extends View {
   clearCompleted(cx) {
     const count = this.completed;
     if (count === 0) return;
-    const { colors } = cx.theme();
-
     // The dialog is a function returning an element. What it shows comes from
     // what this call closed over, so there is no second channel for handing a
     // view its starting state.
     window.open_dialog(
-      confirmClear(count, colors, () => {
+      confirmClear(count, cx, () => {
         this.items = this.items.filter((item) => !item.done);
         this.persisted = save(this.items);
         window.push_toast({
@@ -125,61 +123,60 @@ export default class TodoList extends View {
 
   /** @param {Context} cx */
   render(cx) {
-    const { colors } = cx.theme();
     const visible = this.visible();
 
     return v_flex()
       .size_full()
-      .bg(colors.background)
+      .bg(cx.theme().colors.background)
       .p(SPACE.xl)
       .gap(SPACE.lg)
-      .child(this.header(colors))
-      .child(this.composer(colors))
+      .child(this.header(cx))
+      .child(this.composer(cx))
       .child(
-        surface(colors)
-          .child(this.toolbar(colors))
-          .child(rule(colors))
+        surface(cx)
+          .child(this.toolbar(cx))
+          .child(rule(cx))
           .child(
             visible.length === 0
-              ? emptyState(...this.emptyCopy(), colors)
-              : v_flex().flex_1().py(SPACE.xs).children(visible.map((item) => this.row(item, colors))),
+              ? emptyState(...this.emptyCopy(), cx)
+              : v_flex().flex_1().py(SPACE.xs).children(visible.map((item) => this.row(item, cx))),
           ),
       )
-      .child(this.footer(colors));
+      .child(this.footer(cx));
   }
 
-  /** @param {import("gpui").ColorTokens} colors */
-  header(colors) {
+  /** @param {Context} cx */
+  header(cx) {
     return h_flex()
       .items_center()
       .justify_between()
-      .child(row().gap(SPACE.sm).child(icon("list", 18)).child(title("Todo", colors)))
+      .child(row().gap(SPACE.sm).child(icon("list", 18)).child(title("Todo", cx)))
       .child(
         muted(
           this.items.length === 0
             ? "Nothing yet"
             : `${this.remaining} of ${this.items.length} remaining`,
-          colors,
+          cx,
         ),
       );
   }
 
-  /** @param {import("gpui").ColorTokens} colors */
-  composer(colors) {
+  /** @param {Context} cx */
+  composer(cx) {
     return row()
-      .child(field(this.draft, colors))
+      .child(field(this.draft, cx))
       .child(
-        button("add", "Add", (_event, cx) => this.add(cx), colors, {
+        button("add", "Add", (_event, cx) => this.add(cx), cx, {
           variant: "primary",
           icon: "plus",
         }),
       );
   }
 
-  /** @param {import("gpui").ColorTokens} colors */
-  toolbar(colors) {
+  /** @param {Context} cx */
+  toolbar(cx) {
     const filters = FILTERS.map((entry) =>
-      button(`filter-${entry.id}`, entry.caption, (_event, cx) => this.setFilter(entry.id, cx), colors, {
+      button(`filter-${entry.id}`, entry.caption, (_event, cx) => this.setFilter(entry.id, cx), cx, {
         variant: "ghost",
         selected: this.filter === entry.id,
       }),
@@ -192,15 +189,15 @@ export default class TodoList extends View {
       .py(SPACE.sm)
       .child(h_flex().gap(SPACE.xs).children(filters))
       .child(
-        button("clear", "Clear completed…", (_event, cx) => this.clearCompleted(cx), colors, {
+        button("clear", "Clear completed…", (_event, cx) => this.clearCompleted(cx), cx, {
           variant: "danger",
           disabled: this.completed === 0,
         }),
       );
   }
 
-  /** @param {Todo} item @param {import("gpui").ColorTokens} colors */
-  row(item, colors) {
+  /** @param {Todo} item @param {Context} cx */
+  row(item, cx) {
     return checkbox(
       `item-${item.id}`,
       item.done,
@@ -211,8 +208,8 @@ export default class TodoList extends View {
         .justify_between()
         .gap(SPACE.md)
         .child(
-          label(item.caption, colors).when(item.done, (el) =>
-            el.text_color(colors.muted_foreground).line_through(),
+          label(item.caption, cx).when(item.done, (el) =>
+            el.text_color(cx.theme().colors.muted_foreground).line_through(),
           ),
         )
         .child(
@@ -221,15 +218,15 @@ export default class TodoList extends View {
             "trash",
             `Remove “${item.caption}”`,
             (_event, cx) => this.remove(item.id, cx),
-            colors,
+            cx,
           ),
         ),
-      colors,
+      cx,
     );
   }
 
-  /** @param {import("gpui").ColorTokens} colors */
-  footer(colors) {
+  /** @param {Context} cx */
+  footer(cx) {
     return h_flex()
       .items_center()
       .justify_between()
@@ -238,10 +235,10 @@ export default class TodoList extends View {
           this.persisted
             ? "Saved"
             : "Not saved — this host did not grant storage, so the list lasts for this run only",
-          colors,
+          cx,
         ),
       )
-      .child(muted(`${this.completed} completed`, colors));
+      .child(muted(`${this.completed} completed`, cx));
   }
 
   /** @returns {[string, string]} */

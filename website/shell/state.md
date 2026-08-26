@@ -70,7 +70,7 @@ The snapshot is rebuilt when, and only when, something invalidates it:
 
 - `cx.notify()` from an event handler or an async task
 - a [hot-reload](./getting-started.md) replacing the script
-- a theme change, because `bg(colors.surface)` records a real colour while `render` runs and bakes it into the snapshot
+- a theme change, because `bg(cx.theme().colors.surface)` records a real colour while `render` runs and bakes it into the snapshot
 - the host calling `ScriptView::refresh`, which is how Rust says it changed state your script reads through a [native module](./capabilities.md). A plain `cx.notify()` from the host is a repaint and runs no script — the two are different requests
 
 Everything else replays the description you already produced, in Rust, without running any JavaScript.
@@ -145,14 +145,13 @@ init() {
 }
 
 render(cx) {
-  const { colors } = cx.theme();
   return Input.new(this.draft)
     .flex_1()
     .h(28)
     .px(8)
     .border(1)
-    .border_color(colors.input)
-    .bg(colors.surface)
+    .border_color(cx.theme().colors.input)
+    .bg(cx.theme().colors.surface)
     .text_size(12);
 }
 ```

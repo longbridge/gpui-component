@@ -17,7 +17,6 @@ no styling draws nothing but its children.
 
 ```js
 function saveButton(cx) {
-  const { colors } = cx.theme();
 
   // Unstyled: activation, focus and disabled state work, but nothing is drawn.
   Button.new("plain-save").on_click(save).child(text("Save"));
@@ -29,8 +28,8 @@ function saveButton(cx) {
     .items_center()
     .justify_center()
     .text_sm()
-    .bg(colors.primary)
-    .text_color(colors.primary_foreground)
+    .bg(cx.theme().colors.primary)
+    .text_color(cx.theme().colors.primary_foreground)
     .rounded(6)
     .on_click(save)
     .child(text("Save"));
@@ -74,13 +73,12 @@ export default class Notes extends View {
   }
 
   render(cx) {
-    const { colors } = cx.theme();
     return v_flex()
       .size_full()
       .p(24)
       .gap(12)
-      .bg(colors.background)
-      .children(this.items.map((item) => text(item).text_color(colors.foreground)));
+      .bg(cx.theme().colors.background)
+      .children(this.items.map((item) => text(item).text_color(cx.theme().colors.foreground)));
   }
 }
 ```
@@ -189,7 +187,7 @@ semantic token name — `background`, `foreground`, `surface`,
 `secondary_foreground`, `muted`, `muted_foreground`, `accent`,
 `accent_foreground`, `destructive`, `destructive_foreground`, `border`, `input`,
 `ring` — or a `#rrggbb` literal. Passing values from
-`const { colors } = cx.theme()` is preferred. Semantic token name strings remain
+`cx.theme().colors` is preferred. Semantic token name strings remain
 accepted for compatibility; a literal bypasses the theme.
 
 A style name that is neither reflected nor bound is an error at the call site,

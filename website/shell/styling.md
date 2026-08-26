@@ -10,8 +10,7 @@ The script owns presentation, so this is where most of an application's code goe
 
 ```js
 render(cx) {
-  const { colors } = cx.theme();
-  return v_flex().size_full().bg(colors.surface).p(12).gap(8).rounded(6);
+  return v_flex().size_full().bg(cx.theme().colors.surface).p(12).gap(8).rounded(6);
 }
 ```
 
@@ -92,9 +91,8 @@ A colour is normally read from the call-scoped theme. Semantic token name string
 
 ```js
 render(cx) {
-  const { colors } = cx.theme();
   return element
-    .bg(colors.surface)         // follows the theme
+    .bg(cx.theme().colors.surface)         // follows the theme
     .text_color("#1e88e5");    // does not
 }
 ```
@@ -134,14 +132,13 @@ So `gpui-shell` ships a default light and dark palette, loaded from a JSON file 
 
 ```js
 renderSave(cx) {
-  const { colors } = cx.theme();
   return Button.new("save")
-    .bg(colors.surface)
+    .bg(cx.theme().colors.surface)
     .border(1)
-    .border_color(colors.border)
-    .hover((style) => style.bg(colors.muted).border_color(colors.foreground))
-    .active((style) => style.bg(colors.border))
-    .focus((style) => style.border_color(colors.ring))
+    .border_color(cx.theme().colors.border)
+    .hover((style) => style.bg(cx.theme().colors.muted).border_color(cx.theme().colors.foreground))
+    .active((style) => style.bg(cx.theme().colors.border))
+    .focus((style) => style.border_color(cx.theme().colors.ring))
     .child(text("Save"));
 }
 ```
@@ -159,12 +156,11 @@ Read semantic values from the context that is rendering or handling the event:
 
 ```js
 render(cx) {
-  const { colors, spacing, radius, mode, is_dark } = cx.theme();
   return v_flex()
-    .gap(spacing.md)
-    .rounded(radius.lg)
-    .bg(colors.surface)
-    .child(text(`${mode}: ${is_dark ? "dark" : "light"}`));
+    .gap(cx.theme().spacing.md)
+    .rounded(cx.theme().radius.lg)
+    .bg(cx.theme().colors.surface)
+    .child(text(`${cx.theme().mode}: ${cx.theme().is_dark ? "dark" : "light"}`));
 }
 ```
 
@@ -184,22 +180,6 @@ div()
 ```
 
 Animated length targets are **numeric pixels only**. Relative values such as `"50%"`, `"1rem"`, and `"auto"` cannot be sampled into a stable native channel and are rejected. Give the element a stable `.id(...)` (controls already use their constructor id), otherwise a changing tree position changes the motion identity.
-
-## There is no `class("...")`
-
-A reasonable question, given how the names read: why not accept a string of style names, the way a utility-CSS framework does?
-
-```js
-div().class("flex items-center gap-2 bg-surface");   // not available
-```
-
-Three reasons, in order of weight.
-
-**A typo in a string is invisible.** `class("items-centre")` changes nothing on screen — it simply fails to. A method call can be checked at the call site, and is: an unknown name throws immediately with a suggestion. That single property is why the surface is methods.
-
-**It would be a second way to write the same thing.** Two equivalent spellings split the examples, the documentation, the generated `.d.ts` and the code a model produces, and the runtime consistently refuses that trade.
-
-**The parser would be a second grammar.** `bg-surface`, `p-12`, `w-1/2` are a language, with its own escaping, its own errors, and its own version skew against GPUI's method names. The method surface has none of that, and costs nothing to maintain because it is generated.
 
 ## Unknown methods
 

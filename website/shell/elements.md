@@ -80,10 +80,9 @@ An icon inherits the surrounding text colour, so an icon inside a dark button co
 
 ```js
 renderIcon(cx) {
-  const { colors } = cx.theme();
   return div()
-    .bg(colors.foreground)
-    .text_color(colors.surface)
+    .bg(cx.theme().colors.foreground)
+    .text_color(cx.theme().colors.surface)
     .child(svg("icons/check.svg").w(11).h(11));  // draws in `surface`
 }
 ```
@@ -232,13 +231,12 @@ The alternative would be to copy the description on reuse. That was rejected: it
 Build in `render`, and factor repetition into **functions that return a new element each time**:
 
 ```js
-const label = (value, colors) => text(value).text_size(12).text_color(colors.foreground);
+const label = (value, cx) => text(value).text_size(12).text_color(cx.theme().colors.foreground);
 
 render(cx) {
-  const { colors } = cx.theme();
   return v_flex()
-    .child(label("first", colors))
-    .child(label("second", colors));
+    .child(label("first", cx))
+    .child(label("second", cx));
 }
 ```
 
