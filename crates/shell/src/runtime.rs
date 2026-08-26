@@ -77,6 +77,7 @@ pub(crate) fn path_identity(root: &Path) -> String {
     // The digest carries the identity, so a name that sanitizes to nothing — or
     // to something with a leading dot — costs recognizability and not
     // correctness.
+    let name = name.replace("..", "-");
     let name = name.trim_matches(['.', '-', '_']);
     let name = if name.is_empty() { "app" } else { name };
     format!("{name}-{:016x}", path_digest(root))
@@ -912,6 +913,14 @@ mod identity_tests {
     fn a_path_identity_survives_a_name_with_nothing_usable_in_it() {
         let id = path_identity(Path::new("/tmp/../中文"));
         assert!(app_data_dir(&id).is_ok(), "{id}");
+    }
+
+    #[test]
+    fn a_path_identity_sanitizes_parent_marker_like_directory_names() {
+        let id = path_identity(Path::new("/tmp/my..app"));
+
+        assert!(app_data_dir(&id).is_ok(), "{id}");
+        assert!(!id.contains(".."), "{id}");
     }
 
     #[test]
