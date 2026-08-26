@@ -25,7 +25,6 @@ import {
   label,
   muted,
   quoteRow,
-  refreshPalette,
   rule,
   surface,
   title,
@@ -33,8 +32,6 @@ import {
 
 export default class QuoteBoard extends View {
   render(cx) {
-    refreshPalette(cx.theme());
-
     const market = native("market");
     const quotes = market.quotes();
     const watched = quotes.filter((quote) => quote.watched).length;
@@ -45,15 +42,20 @@ export default class QuoteBoard extends View {
     const ticks = market.ticks();
 
     return surface()
-      .child(this.heading(quotes.length, watched, ticks))
-      .child(header())
-      .child(this.rows(market, quotes))
-      .child(rule())
-      .child(this.actions(market, quotes.length, watched));
+      .child(this.heading(quotes.length, watched, ticks, cx))
+      .child(header(cx))
+      .child(this.rows(market, quotes, cx))
+      .child(rule(cx))
+      .child(this.actions(market, quotes.length, watched, cx));
   }
 
-  /** @param {number} total @param {number} watched @param {number} ticks */
-  heading(total, watched, ticks) {
+  /**
+   * @param {number} total
+   * @param {number} watched
+   * @param {number} ticks
+   * @param {import("gpui").Context} cx
+   */
+  heading(total, watched, ticks, cx) {
     return h_flex()
       .w_full()
       .items_start()
@@ -62,22 +64,26 @@ export default class QuoteBoard extends View {
       .child(
         v_flex()
           .gap(SPACE.xxs)
-          .child(title("Live quotes"))
-          .child(muted("Drawn by main.js · prices read over native(\"market\")")),
+          .child(title("Live quotes", cx))
+          .child(muted("Drawn by main.js · prices read over native(\"market\")", cx)),
       )
       .child(
         v_flex()
           .items_end()
           .gap(SPACE.xxs)
-          .child(label(`${watched} / ${total} watched`))
-          .child(muted(`tick ${ticks}`)),
+          .child(label(`${watched} / ${total} watched`, cx))
+          .child(muted(`tick ${ticks}`, cx)),
       );
   }
 
-  /** @param {NativeModules["market"]} market @param {Quote[]} quotes */
-  rows(market, quotes) {
+  /**
+   * @param {NativeModules["market"]} market
+   * @param {Quote[]} quotes
+   * @param {import("gpui").Context} cx
+   */
+  rows(market, quotes, cx) {
     if (quotes.length === 0) {
-      return muted("The Rust panel is holding no quotes.");
+      return muted("The Rust panel is holding no quotes.", cx);
     }
 
     return v_flex()
@@ -86,7 +92,7 @@ export default class QuoteBoard extends View {
       .children(
         // No `cx.notify()`: the native call asks Rust to change the board, Rust
         // notifies its observers, and both halves re-render from one change.
-        quotes.map((quote) => quoteRow(quote, () => market.watch(quote.symbol))),
+        quotes.map((quote) => quoteRow(quote, () => market.watch(quote.symbol), cx)),
       );
   }
 
@@ -94,25 +100,26 @@ export default class QuoteBoard extends View {
    * @param {NativeModules["market"]} market
    * @param {number} total
    * @param {number} watched
+   * @param {import("gpui").Context} cx
    */
-  actions(market, total, watched) {
+  actions(market, total, watched, cx) {
     return h_flex()
       .w_full()
       .items_center()
       .justify_between()
       .gap(ROW.inset)
-      .child(muted(watched === 0 ? "Nothing on the watchlist" : `${watched} watched`))
+      .child(muted(watched === 0 ? "Nothing on the watchlist" : `${watched} watched`, cx))
       .child(
         h_flex()
           .gap(SPACE.xs)
           .child(
-            action("watch-all", "Watch all", () => market.watch_all(true), {
+            action("watch-all", "Watch all", () => market.watch_all(true), cx, {
               primary: true,
               disabled: watched === total,
             }),
           )
           .child(
-            action("watch-none", "Clear", () => market.watch_all(false), {
+            action("watch-none", "Clear", () => market.watch_all(false), cx, {
               disabled: watched === 0,
             }),
           ),

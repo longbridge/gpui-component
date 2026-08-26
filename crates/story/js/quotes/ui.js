@@ -7,7 +7,7 @@
 // moves this half too.
 
 import { div, h_flex, v_flex, text, Button } from "gpui";
-/** @import { AbsoluteLength, ClickEvent, Context, Element, Theme } from "gpui" */
+/** @import { AbsoluteLength, ClickEvent, Context } from "gpui" */
 
 /// Every measurement here is in **rems**, so the panel scales with the window's
 /// text size instead of pinning itself to a pixel grid that only exists at the
@@ -47,52 +47,38 @@ export const ROW = {
 /** @type {{ title: AbsoluteLength, body: AbsoluteLength, lineHeight: number }} */
 export const TYPE = { title: "0.8125rem", body: "0.6875rem", lineHeight: 1.4 };
 
-/** @type {Theme | null} */
-let current = null;
-
-/// Captures the call-scoped theme once at the top of a render. It is not kept
-/// across renders: the host can switch theme while this view is mounted.
-/** @param {Theme} theme */
-export const refreshPalette = (theme) => {
-  current = theme;
-  return current;
-};
-
-export const palette = () => {
-  if (current === null) throw new Error("theme must be captured during render");
-  return current;
-};
-
 /// Up is `accent`, down is `destructive`, flat is ordinary text — the same question
 /// the Rust panel asks of the same theme.
-/** @param {number} direction */
-export const directionColor = (direction) => {
-  const colors = palette();
-  if (direction > 0) return colors.accent;
-  if (direction < 0) return colors.destructive;
-  return colors.foreground;
+/** @param {number} direction @param {Context} cx */
+export const directionColor = (direction, cx) => {
+  if (direction > 0) return cx.theme().colors.accent;
+  if (direction < 0) return cx.theme().colors.destructive;
+  return cx.theme().colors.foreground;
 };
 
 // -- Type -------------------------------------------------------------------
 
-/** @param {string} value */
-export const title = (value) =>
+/** @param {string} value @param {Context} cx */
+export const title = (value, cx) =>
   text(value)
     .text_size(TYPE.title)
     .line_height(1.3)
     .font_semibold()
-    .text_color(palette().foreground);
+    .text_color(cx.theme().colors.foreground);
 
-/** @param {string} value */
-export const label = (value) =>
-  text(value).text_size(TYPE.body).line_height(TYPE.lineHeight).text_color(palette().foreground);
-
-/** @param {string} value */
-export const muted = (value) =>
+/** @param {string} value @param {Context} cx */
+export const label = (value, cx) =>
   text(value)
     .text_size(TYPE.body)
     .line_height(TYPE.lineHeight)
-    .text_color(palette().muted_foreground);
+    .text_color(cx.theme().colors.foreground);
+
+/** @param {string} value @param {Context} cx */
+export const muted = (value, cx) =>
+  text(value)
+    .text_size(TYPE.body)
+    .line_height(TYPE.lineHeight)
+    .text_color(cx.theme().colors.muted_foreground);
 
 // -- Surfaces ---------------------------------------------------------------
 
@@ -101,8 +87,8 @@ export const muted = (value) =>
 export const surface = () => v_flex().w_full().gap(SPACE.md);
 
 // One real pixel: a rule is a rule at any zoom, not a measurement that scales.
-// One real pixel: a rule is a rule at any zoom, not a measurement that scales.
-export const rule = () => div().w_full().h(1).flex_none().bg(palette().border);
+/** @param {Context} cx */
+export const rule = (cx) => div().w_full().h(1).flex_none().bg(cx.theme().colors.border);
 
 // -- Board parts ------------------------------------------------------------
 
@@ -115,7 +101,8 @@ export const cell = (width, options = {}) => {
 /// The header. It ends with an empty cell the width of the watched marker,
 /// because a trailing column the header does not know about puts every caption
 /// out of line with the numbers under it.
-export const header = () =>
+/** @param {Context} cx */
+export const header = (cx) =>
   h_flex()
     .w_full()
     .items_center()
@@ -123,18 +110,22 @@ export const header = () =>
     .px(ROW.inset)
     .pb(SPACE.xs)
     .border_b(1)
-    .border_color(palette().border)
-    .child(cell(COLUMN.symbol).child(muted("Symbol")))
+    .border_color(cx.theme().colors.border)
+    .child(cell(COLUMN.symbol).child(muted("Symbol", cx)))
     .child(div().flex_1())
-    .child(cell(COLUMN.price, { right: true }).child(muted("Last")))
-    .child(cell(COLUMN.percent, { right: true }).child(muted("Change")))
-    .child(cell(COLUMN.volume, { right: true }).child(muted("Volume")))
+    .child(cell(COLUMN.price, { right: true }).child(muted("Last", cx)))
+    .child(cell(COLUMN.percent, { right: true }).child(muted("Change", cx)))
+    .child(cell(COLUMN.volume, { right: true }).child(muted("Volume", cx)))
     .child(cell(ROW.marker));
 
 /// A full-width row that behaves like a button. The id is the symbol rather than
 /// the row's position, so identity follows the instrument if the board reorders.
-/** @param {Quote} quote @param {(event: ClickEvent, cx: Context) => void} onClick */
-export const quoteRow = (quote, onClick) =>
+/**
+ * @param {Quote} quote
+ * @param {(event: ClickEvent, cx: Context) => void} onClick
+ * @param {Context} cx
+ */
+export const quoteRow = (quote, onClick, cx) =>
   Button.new(`quote-${quote.symbol}`)
     .accessibility_label(`Watch ${quote.name}`)
     .flex()
@@ -143,43 +134,43 @@ export const quoteRow = (quote, onClick) =>
     .gap(ROW.inset)
     .px(ROW.inset)
     .py(ROW.padding)
-    .rounded(palette().radius.md)
-    .hover((style) => style.bg(palette().muted))
+    .rounded(cx.theme().radius.md)
+    .hover((style) => style.bg(cx.theme().colors.muted))
     .on_click(onClick)
-    .child(cell(COLUMN.symbol).child(label(quote.symbol).font_medium()))
-    .child(div().flex_1().child(muted(quote.name)))
+    .child(cell(COLUMN.symbol).child(label(quote.symbol, cx).font_medium()))
+    .child(div().flex_1().child(muted(quote.name, cx)))
     .child(
       cell(COLUMN.price, { right: true }).child(
-        label(quote.last).text_color(directionColor(quote.direction)),
+        label(quote.last, cx).text_color(directionColor(quote.direction, cx)),
       ),
     )
     .child(
       cell(COLUMN.percent, { right: true }).child(
-        label(quote.percent).text_color(directionColor(quote.direction)),
+        label(quote.percent, cx).text_color(directionColor(quote.direction, cx)),
       ),
     )
-    .child(cell(COLUMN.volume, { right: true }).child(muted(quote.volume)))
-    .child(watchMarker(quote.watched));
+    .child(cell(COLUMN.volume, { right: true }).child(muted(quote.volume, cx)))
+    .child(watchMarker(quote.watched, cx));
 
-/** @param {boolean} watched */
-export const watchMarker = (watched) =>
+/** @param {boolean} watched @param {Context} cx */
+export const watchMarker = (watched, cx) =>
   div()
     .w(ROW.marker)
     .h(ROW.marker)
     .flex_none()
     .rounded(ROW.halfMarker)
-    .when(watched, (el) => el.bg(palette().primary));
+    .when(watched, (el) => el.bg(cx.theme().colors.primary));
 
 /// A labelled action. Two treatments only — filled and outlined.
 /**
  * @param {string} id
  * @param {string} caption
  * @param {(event: ClickEvent, cx: Context) => void} onClick
+ * @param {Context} cx
  * @param {{ primary?: boolean, disabled?: boolean }} [options]
  */
-export const action = (id, caption, onClick, options = {}) => {
+export const action = (id, caption, onClick, cx, options = {}) => {
   const { primary = false, disabled = false } = options;
-  const colors = palette();
 
   return Button.new(id)
     .disabled(disabled)
@@ -188,20 +179,26 @@ export const action = (id, caption, onClick, options = {}) => {
     .justify_center()
     .h("1.25rem")
     .px(SPACE.sm)
-    .rounded(colors.radius.md)
+    .rounded(cx.theme().radius.md)
     .border(1)
-    .border_color(primary ? colors.primary : colors.border)
-    .bg(primary ? colors.primary : colors.background)
+    .border_color(primary ? cx.theme().colors.primary : cx.theme().colors.border)
+    .bg(primary ? cx.theme().colors.primary : cx.theme().colors.background)
     .when(disabled, (el) => el.opacity(0.5))
     .when(!disabled, (el) =>
       el
-        .hover((style) => style.bg(primary ? colors.accent : colors.muted))
+        .hover((style) =>
+          style.bg(primary ? cx.theme().colors.accent : cx.theme().colors.muted),
+        )
         .on_click(onClick),
     )
     .child(
       text(caption)
         .text_size(TYPE.body)
         .line_height(1)
-        .text_color(primary ? colors.primary_foreground : colors.foreground),
+        .text_color(
+          primary
+            ? cx.theme().colors.primary_foreground
+            : cx.theme().colors.foreground,
+        ),
     );
 };

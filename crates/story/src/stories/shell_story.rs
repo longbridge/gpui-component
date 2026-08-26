@@ -1666,6 +1666,8 @@ mod tests {
     fn quote_and_motion_scripts_keep_their_contracts_separate() {
         let quote_source = std::fs::read_to_string(script_directory().join(ENTRY))
             .expect("the checked-in shell story script");
+        let quote_ui_source = std::fs::read_to_string(script_directory().join("ui.js"))
+            .expect("the checked-in shell story presentation helpers");
         let motion_source = std::fs::read_to_string(
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("js/motion/main.js"),
         )
@@ -1717,6 +1719,28 @@ mod tests {
         assert!(
             !motion_source.contains("rem"),
             "the motion script must not reintroduce relative-length targets"
+        );
+        for forbidden in ["const colors = cx.theme()", "palette()", "refreshPalette"] {
+            assert!(
+                !motion_source.contains(forbidden),
+                "the motion example must read theme values directly through cx.theme(); found `{forbidden}`"
+            );
+        }
+        assert!(
+            motion_source.contains("cx.theme().colors.foreground"),
+            "the motion example must demonstrate explicit nested theme-token access"
+        );
+        for source in [&quote_source, &quote_ui_source] {
+            for forbidden in ["palette()", "refreshPalette", "const colors = cx.theme()"] {
+                assert!(
+                    !source.contains(forbidden),
+                    "the quote example must not cache or alias its theme; found `{forbidden}`"
+                );
+            }
+        }
+        assert!(
+            quote_ui_source.contains("cx.theme().colors.foreground"),
+            "the quote helpers must read semantic colors from the current context"
         );
         assert!(
             motion_source.contains(".left(active ? 960 : 20)"),
