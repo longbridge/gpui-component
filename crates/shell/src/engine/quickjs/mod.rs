@@ -123,6 +123,7 @@ enum PendingNestedOperation {
     Create {
         runtime: Weak<ShellRuntime>,
         token: u32,
+        owner: Entity<ScriptView>,
         view_type: ViewType,
         policy: Rc<crate::policy::Policy>,
         props: Persistent<Value<'static>>,
@@ -132,6 +133,18 @@ enum PendingNestedOperation {
         token: u32,
         props: Persistent<Value<'static>>,
     },
+    Release {
+        runtime: Weak<ShellRuntime>,
+        token: u32,
+    },
+}
+
+struct NestedFlushGuard<'a>(&'a Cell<bool>);
+
+impl Drop for NestedFlushGuard<'_> {
+    fn drop(&mut self) {
+        self.0.set(false);
+    }
 }
 
 mod entity_api;
@@ -262,6 +275,9 @@ pub struct ShellRuntime {
     /// after the enclosing QuickJS entry unlocks the context. The queue is
     /// declared before `context` because it owns persistent JS values.
     pending_nested: RefCell<VecDeque<PendingNestedOperation>>,
+    flushing_nested: Cell<bool>,
+    in_flight_nested: RefCell<HashSet<u32>>,
+    initializing_views: RefCell<Vec<ViewObject>>,
     nested_view_handles: RefCell<HashMap<u32, EntityHandle>>,
     next_nested_view_token: Cell<u32>,
     /// A runtime whose opaque QuickJS job queue could not reach an ownership
@@ -362,6 +378,9 @@ impl ShellRuntime {
             arena: RefCell::new(SpecArena::new()),
             entities: RefCell::new(entities),
             pending_nested: RefCell::new(VecDeque::new()),
+            flushing_nested: Cell::new(false),
+            in_flight_nested: RefCell::new(HashSet::new()),
+            initializing_views: RefCell::new(Vec::new()),
             nested_view_handles: RefCell::new(HashMap::new()),
             next_nested_view_token: Cell::new(0),
             terminal_job_error: RefCell::new(None),
@@ -642,7 +661,9 @@ impl ShellRuntime {
             policy,
             application.clone(),
         );
-        if let Err(error) = self.initialize(&object, None) {
+        let initialized = self.initialize(&object, None);
+        let nested = self.flush_pending_nested_views(window, cx);
+        if let Err(error) = initialized.and(nested) {
             if let Some(application) = application {
                 cancel_application_tasks(&application);
             }
@@ -669,7 +690,7 @@ impl ShellRuntime {
         // Establish an empty queue boundary while the caller's scope is still
         // installed. Otherwise an older parent reaction would be executed by
         // the child-init drain and acquire the child's ownership/authority.
-        scheduler::drain_jobs_transactionally(self)?;
+        scheduler::drain_jobs_transactionally(self, window, cx)?;
 
         let application = view_type.application.clone();
         let (construct_scope, _) = scope::enter_with_application(
@@ -682,7 +703,7 @@ impl ShellRuntime {
             application.clone(),
         );
         let constructed = self.construct(view_type);
-        let construction_jobs = scheduler::drain_jobs_transactionally(self);
+        let construction_jobs = scheduler::drain_jobs_transactionally(self, window, cx);
         drop(construct_scope);
         construction_jobs?;
         let object = constructed?;
@@ -709,10 +730,12 @@ impl ShellRuntime {
             application,
         );
         let initialized = self.initialize(&object, initial_props);
+        let nested = self.flush_pending_nested_views(window, cx);
         // The queue was empty before init entered. Draining its whole causal
         // wave here therefore assigns only init continuations to the child and
         // prevents a throwing init from leaving work beyond local rollback.
-        let init_jobs = scheduler::drain_jobs_transactionally(self);
+        let init_jobs = scheduler::drain_jobs_transactionally(self, window, cx);
+        nested?;
         if let Err(error) = init_jobs {
             let released = self.entities().release_view(handle, cx);
             debug_assert!(released, "the failed child handle must still be live");
@@ -748,6 +771,14 @@ impl ShellRuntime {
             (parent.object().clone(), parent.policy())
         })
         .ok_or_else(|| nested_view_needs_call(ctx, "ViewHandle.new(Class, props)"))?;
+        let provenance = self
+            .initializing_views
+            .borrow()
+            .last()
+            .cloned()
+            .unwrap_or(parent_object);
+        let application = scope::current_application_generation()
+            .or_else(|| provenance.application_generation());
         let token = self.next_nested_view_token.get();
         let next = token.checked_add(1).ok_or_else(|| {
             Exception::throw_range(ctx, "the nested ViewHandle token space is exhausted")
@@ -758,10 +789,11 @@ impl ShellRuntime {
             .push_back(PendingNestedOperation::Create {
                 runtime: Rc::downgrade(self),
                 token,
+                owner: parent,
                 view_type: ViewType {
                     value: class,
-                    module_lease: parent_object.module_lease.clone(),
-                    application: parent_object.application.clone(),
+                    module_lease: provenance.module_lease.clone(),
+                    application,
                 },
                 policy,
                 props,
@@ -776,10 +808,15 @@ impl ShellRuntime {
         props: Persistent<Value<'static>>,
     ) -> JsResult<()> {
         let resolved = self.nested_view_handles.borrow().get(&token).copied();
-        let pending = self.pending_nested.borrow().iter().any(|operation| {
+        let pending = self.pending_nested.borrow();
+        let pending_create = pending.iter().any(|operation| {
             matches!(operation, PendingNestedOperation::Create { token: candidate, .. } if *candidate == token)
         });
-        if resolved.is_none() && !pending {
+        let pending_release = pending.iter().any(|operation| {
+            matches!(operation, PendingNestedOperation::Release { token: candidate, .. } if *candidate == token)
+        });
+        drop(pending);
+        if pending_release || (resolved.is_none() && !pending_create) {
             return Err(Exception::throw_type(
                 ctx,
                 "this ViewHandle has been released and can no longer be updated",
@@ -802,10 +839,49 @@ impl ShellRuntime {
         Ok(())
     }
 
+    fn queue_nested_view_release(self: &Rc<Self>, token: u32) -> bool {
+        let pending = self.pending_nested.borrow();
+        if pending.iter().any(|operation| {
+            matches!(operation, PendingNestedOperation::Release { token: candidate, .. } if *candidate == token)
+        }) {
+            return false;
+        }
+        let pending_create = pending.iter().any(|operation| {
+            matches!(operation, PendingNestedOperation::Create { token: candidate, .. } if *candidate == token)
+        });
+        drop(pending);
+        let resolved = self.nested_view_handles.borrow().get(&token).copied();
+        if resolved.is_some_and(|handle| self.entities().view(handle).is_none()) {
+            self.nested_view_handles.borrow_mut().remove(&token);
+            return false;
+        }
+        if resolved.is_none()
+            && !pending_create
+            && !self.in_flight_nested.borrow().contains(&token)
+        {
+            return false;
+        }
+        self.pending_nested
+            .borrow_mut()
+            .push_back(PendingNestedOperation::Release {
+                runtime: Rc::downgrade(self),
+                token,
+            });
+        true
+    }
+
     /// Applies native nested-view requests only at an unlocked QuickJS
     /// boundary. Construction therefore goes through Task 2's exact
     /// `instantiate_nested_view` seam and its three bounded causal drains.
-    pub(super) fn flush_pending_nested_views(&self) -> Result<()> {
+    pub(super) fn flush_pending_nested_views(
+        &self,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Result<()> {
+        if self.flushing_nested.replace(true) {
+            return Ok(());
+        }
+        let _flush_guard = NestedFlushGuard(&self.flushing_nested);
         loop {
             let operation = { self.pending_nested.borrow_mut().pop_front() };
             let Some(operation) = operation else {
@@ -816,6 +892,7 @@ impl ShellRuntime {
                     PendingNestedOperation::Create {
                         runtime,
                         token,
+                        owner,
                         view_type,
                         policy,
                         props,
@@ -823,18 +900,25 @@ impl ShellRuntime {
                         let runtime = runtime.upgrade().ok_or_else(|| {
                             anyhow!("the shell runtime shut down during child creation")
                         })?;
-                        let handle = scope::with_current(|window, cx| {
-                            runtime.instantiate_nested_view(
-                                &view_type,
-                                policy,
-                                Some(props),
-                                window,
-                                cx,
-                            )
-                        })
-                        .ok_or_else(|| {
-                            anyhow!("a nested view operation lost its live host call")
-                        })??;
+                        runtime.in_flight_nested.borrow_mut().insert(token);
+                        let (_owner_scope, _) = scope::enter_with_application(
+                            &runtime,
+                            window,
+                            cx,
+                            ScopePhase::Event,
+                            Some(owner),
+                            policy.clone(),
+                            view_type.application.clone(),
+                        );
+                        let handle = runtime.instantiate_nested_view(
+                            &view_type,
+                            policy,
+                            Some(props),
+                            window,
+                            cx,
+                        );
+                        runtime.in_flight_nested.borrow_mut().remove(&token);
+                        let handle = handle?;
                         runtime
                             .nested_view_handles
                             .borrow_mut()
@@ -857,12 +941,24 @@ impl ShellRuntime {
                             .ok_or_else(|| {
                                 anyhow!("this ViewHandle was released before its update")
                             })?;
-                        scope::with_current(|window, cx| {
-                            runtime.update_nested_view(handle, props, window, cx)
-                        })
-                        .ok_or_else(|| {
-                            anyhow!("a nested view operation lost its live host call")
-                        })??;
+                        runtime.update_nested_view(handle, props, window, cx)?;
+                        Ok(())
+                    }
+                    PendingNestedOperation::Release { runtime, token } => {
+                        let runtime = runtime.upgrade().ok_or_else(|| {
+                            anyhow!("the shell runtime shut down during child release")
+                        })?;
+                        let handle = runtime
+                            .nested_view_handles
+                            .borrow_mut()
+                            .remove(&token)
+                            .ok_or_else(|| {
+                                anyhow!("this ViewHandle was released before its release operation")
+                            })?;
+                        let released = runtime.entities().release_view(handle, cx);
+                        if !released {
+                            anyhow::bail!("this ViewHandle was released before its release operation");
+                        }
                         Ok(())
                     }
                 }
@@ -884,7 +980,7 @@ impl ShellRuntime {
         window: &mut Window,
         cx: &mut App,
     ) -> Result<()> {
-        scheduler::drain_jobs_transactionally(self)?;
+        scheduler::drain_jobs_transactionally(self, window, cx)?;
         // End the store borrow before update or any continuation can re-enter
         // JavaScript.
         let view = { self.entities().view(handle) }
@@ -906,7 +1002,7 @@ impl ShellRuntime {
             let props = props.restore(ctx)?;
             self.update_in_context(ctx, &object, props)
         });
-        let update_jobs = scheduler::drain_jobs_transactionally(self);
+        let update_jobs = scheduler::drain_jobs_transactionally(self, window, cx);
         drop(event_scope);
         update_jobs?;
         updated?;
@@ -941,7 +1037,9 @@ impl ShellRuntime {
                 return Err(error);
             }
         };
-        if let Err(error) = self.initialize(&object, None) {
+        let initialized = self.initialize(&object, None);
+        let nested = self.flush_pending_nested_views(window, cx);
+        if let Err(error) = initialized.and(nested) {
             if let Some(application) = application {
                 cancel_application_tasks(&application);
             }
@@ -968,7 +1066,8 @@ impl ShellRuntime {
         object: &ViewObject,
         initial_props: Option<Persistent<Value<'static>>>,
     ) -> Result<()> {
-        self.with_js(|ctx| {
+        self.initializing_views.borrow_mut().push(object.clone());
+        let initialized = self.with_js(|ctx| {
             let instance = object.value.clone().restore(ctx)?;
             let initialize: Function = ctx.globals().get("__initialize")?;
             let props = match initial_props {
@@ -976,7 +1075,10 @@ impl ShellRuntime {
                 None => Value::new_undefined(ctx.clone()),
             };
             initialize.call::<_, ()>((instance, props))
-        })
+        });
+        let initializing = self.initializing_views.borrow_mut().pop();
+        debug_assert!(initializing.is_some());
+        initialized
     }
 
     fn update_in_context<'js>(
@@ -1269,7 +1371,7 @@ impl ShellRuntime {
         if let Err(error) = result {
             tracing::error!("error in item click handler: {error}");
         }
-        scheduler::drain_runtime_jobs(self);
+        scheduler::drain_runtime_jobs(self, window, cx);
     }
 
     /// Delivers a one-time-code event to a long-lived script subscription.
@@ -1309,7 +1411,7 @@ impl ShellRuntime {
         if let Err(error) = result {
             tracing::error!("error in OTP handler: {error}");
         }
-        scheduler::drain_runtime_jobs(self);
+        scheduler::drain_runtime_jobs(self, window, cx);
     }
 
     pub(crate) fn dispatch_click(
@@ -1371,7 +1473,7 @@ impl ShellRuntime {
         if let Err(error) = result {
             tracing::error!("error in click handler: {error}");
         }
-        scheduler::drain_runtime_jobs(self);
+        scheduler::drain_runtime_jobs(self, window, cx);
     }
 
     /// Delivers an input event to a long-lived script subscription.
@@ -1427,7 +1529,7 @@ impl ShellRuntime {
         if let Err(error) = result {
             tracing::error!("error in input handler: {error}");
         }
-        scheduler::drain_runtime_jobs(self);
+        scheduler::drain_runtime_jobs(self, window, cx);
     }
 
     /// Delivers a slider event to a long-lived script subscription.
@@ -1482,7 +1584,7 @@ impl ShellRuntime {
         if let Err(error) = result {
             tracing::error!("error in slider handler: {error}");
         }
-        scheduler::drain_runtime_jobs(self);
+        scheduler::drain_runtime_jobs(self, window, cx);
     }
 
     /// Reports the panel sizes of a resizable group after a drag, in pixels and
@@ -1543,7 +1645,7 @@ impl ShellRuntime {
         if let Err(error) = result {
             tracing::error!("error in resize handler: {error}");
         }
-        scheduler::drain_runtime_jobs(self);
+        scheduler::drain_runtime_jobs(self, window, cx);
     }
 
     pub(crate) fn dispatch_mouse_move(
@@ -1612,7 +1714,7 @@ impl ShellRuntime {
         if let Err(error) = result {
             tracing::error!("error in mouse move handler: {error}");
         }
-        scheduler::drain_runtime_jobs(self);
+        scheduler::drain_runtime_jobs(self, window, cx);
     }
 
     /// Controlled-value handlers report intent; the script stores the value and
@@ -1664,7 +1766,7 @@ impl ShellRuntime {
         if let Err(error) = result {
             tracing::error!("error in change handler: {error}");
         }
-        scheduler::drain_runtime_jobs(self);
+        scheduler::drain_runtime_jobs(self, window, cx);
     }
 
     /// Reports which way a `NumberInput` stepped, by the two names base's
@@ -1721,7 +1823,7 @@ impl ShellRuntime {
         if let Err(error) = result {
             tracing::error!("error in step handler: {error}");
         }
-        scheduler::drain_runtime_jobs(self);
+        scheduler::drain_runtime_jobs(self, window, cx);
     }
 
     /// Delivers a handler that reports only that something happened.
@@ -1777,7 +1879,7 @@ impl ShellRuntime {
         if let Err(error) = result {
             tracing::error!("error in signal handler: {error}");
         }
-        scheduler::drain_runtime_jobs(self);
+        scheduler::drain_runtime_jobs(self, window, cx);
     }
 
     /// Renders once, and on a "not a function" failure renders again with the
@@ -1833,15 +1935,7 @@ impl ShellRuntime {
             Err(error) => Err(anyhow!("{}", describe(&ctx, error))),
         });
         match result {
-            Ok(value) => {
-                if let Err(error) = self.flush_pending_nested_views() {
-                    self.pending_nested
-                        .borrow_mut()
-                        .truncate(pending_checkpoint);
-                    return Err(error);
-                }
-                Ok(value)
-            }
+            Ok(value) => Ok(value),
             Err(error) => {
                 self.pending_nested
                     .borrow_mut()
@@ -3382,25 +3476,7 @@ impl ShellRuntime {
                 Func::from(move |ctx: Ctx<'_>, token: u32| -> JsResult<bool> {
                     refuse_nested_view_mutation(&ctx, "ViewHandle.release()", "release")?;
                     let runtime = upgrade(&release_view, &ctx)?;
-                    let mut pending = runtime.pending_nested.borrow_mut();
-                    let before = pending.len();
-                    pending.retain(|operation| match operation {
-                        PendingNestedOperation::Create {
-                            token: candidate, ..
-                        }
-                        | PendingNestedOperation::Update {
-                            token: candidate, ..
-                        } => *candidate != token,
-                    });
-                    let cancelled_pending = pending.len() != before;
-                    drop(pending);
-                    if let Some(handle) = runtime.nested_view_handles.borrow_mut().remove(&token) {
-                        return scope::with_current_app(|cx| {
-                            runtime.entities().release_view(handle, cx)
-                        })
-                        .ok_or_else(|| nested_view_needs_call(&ctx, "ViewHandle.release()"));
-                    }
-                    Ok(cancelled_pending)
+                    Ok(runtime.queue_nested_view_release(token))
                 }),
             )?;
 
@@ -3409,6 +3485,14 @@ impl ShellRuntime {
                 "__child_view",
                 Func::from(move |ctx: Ctx<'_>, token: u32| -> JsResult<SpecId> {
                     let runtime = upgrade(&mount_view, &ctx)?;
+                    if runtime.pending_nested.borrow().iter().any(|operation| {
+                        matches!(operation, PendingNestedOperation::Release { token: candidate, .. } if *candidate == token)
+                    }) {
+                        return Err(Exception::throw_type(
+                            &ctx,
+                            "this ViewHandle has been released and can no longer be mounted",
+                        ));
+                    }
                     let handle = runtime
                         .nested_view_handles
                         .borrow()
@@ -5431,7 +5515,7 @@ export default class BrokenChild extends View {
             "init promise jobs must drain while the candidate child still owns the scope"
         );
 
-        scheduler::drain_runtime_jobs(&runtime);
+        context.update(|window, cx| scheduler::drain_runtime_jobs(&runtime, window, cx));
         assert_eq!(runtime.entities().len(), records_before);
 
         assert!(runtime.entities().release(application_focus));

@@ -137,9 +137,17 @@ pub fn drain_jobs(runtime: &JsRuntime) {
 
 /// Drains the ordinary event-loop batch unless this shell runtime has entered
 /// terminal job-queue quarantine.
-pub(super) fn drain_runtime_jobs(runtime: &Rc<ShellRuntime>) {
+pub(super) fn drain_runtime_jobs(
+    runtime: &Rc<ShellRuntime>,
+    window: &mut gpui::Window,
+    cx: &mut gpui::App,
+) {
     if runtime.job_queue_error().is_none() {
-        if drain_runtime_job_batch(runtime) {
+        if let Err(error) = runtime.flush_pending_nested_views(window, cx) {
+            tracing::error!("error applying a nested view operation: {error}");
+            return;
+        }
+        if drain_runtime_job_batch(runtime, window, cx) {
             return;
         }
         tracing::error!(
@@ -152,12 +160,16 @@ pub(super) fn drain_runtime_jobs(runtime: &Rc<ShellRuntime>) {
 /// The production batch pairs every completed QuickJS job with any nested-view
 /// operation it requested. Applying that operation here keeps all JavaScript
 /// execution outside `Context::with` while the job's owner scope is still live.
-fn drain_runtime_job_batch(runtime: &Rc<ShellRuntime>) -> bool {
+fn drain_runtime_job_batch(
+    runtime: &Rc<ShellRuntime>,
+    window: &mut gpui::Window,
+    cx: &mut gpui::App,
+) -> bool {
     for _ in 0..MAX_JOBS_PER_DRAIN {
         let pending_checkpoint = runtime.pending_nested.borrow().len();
         match runtime.js_runtime.execute_pending_job() {
             Ok(true) => {
-                if let Err(error) = runtime.flush_pending_nested_views() {
+                if let Err(error) = runtime.flush_pending_nested_views(window, cx) {
                     tracing::error!("error applying a nested view operation: {error}");
                     if runtime.job_queue_error().is_some() {
                         return true;
@@ -209,7 +221,11 @@ fn drain_job_batch(runtime: &JsRuntime) -> bool {
 /// cannot loop until quiescence: an interrupted job can leave a successor in
 /// QuickJS's opaque queue forever. Stop at a hard total-job limit and quarantine
 /// the whole runtime because QuickJS offers no selective pending-job removal.
-pub(crate) fn drain_jobs_transactionally(runtime: &Rc<ShellRuntime>) -> anyhow::Result<()> {
+pub(crate) fn drain_jobs_transactionally(
+    runtime: &Rc<ShellRuntime>,
+    window: &mut gpui::Window,
+    cx: &mut gpui::App,
+) -> anyhow::Result<()> {
     if let Some(error) = runtime.job_queue_error() {
         return Err(error);
     }
@@ -217,7 +233,7 @@ pub(crate) fn drain_jobs_transactionally(runtime: &Rc<ShellRuntime>) -> anyhow::
         let pending_checkpoint = runtime.pending_nested.borrow().len();
         match runtime.js_runtime.execute_pending_job() {
             Ok(true) => {
-                if let Err(error) = runtime.flush_pending_nested_views() {
+                if let Err(error) = runtime.flush_pending_nested_views(window, cx) {
                     if let Some(terminal) = runtime.job_queue_error() {
                         return Err(terminal);
                     }
@@ -307,7 +323,7 @@ pub fn drain_after_render(
                     Some(view),
                     task.policy(),
                 );
-                drain_runtime_jobs(&runtime);
+                drain_runtime_jobs(&runtime, window, cx);
                 drop(guard);
             });
 
@@ -787,7 +803,7 @@ fn resume(
         if let Err(error) = runtime.with_js(|ctx| body(ctx, generation)) {
             tracing::error!("error in script task: {error}");
         }
-        drain_runtime_jobs(&runtime);
+        drain_runtime_jobs(&runtime, window, cx);
         drop(guard);
     });
 

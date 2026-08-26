@@ -742,7 +742,7 @@ fn nested_view_operations_from_one_job_are_fifo_and_keep_descendant_ownership(
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, ViewHandle, child_view, v_flex, text } from "gpui";
+import { View, ViewHandle, child_view, v_flex, Checkbox, text } from "gpui";
 
 class Grandchild extends View {
   render() { return text("grandchild"); }
@@ -766,7 +766,10 @@ export default class Parent extends View {
     this.second = ViewHandle.new(Child, { label: "second" });
   }
   render() {
-    return v_flex().child(child_view(this.first)).child(child_view(this.second));
+    return v_flex()
+      .child(Checkbox.new("release-first").on_change(() => this.first.release()))
+      .child(child_view(this.first))
+      .child(child_view(this.second));
   }
 }
 "#;
@@ -810,6 +813,74 @@ export default class Parent extends View {
         4,
         "two children and their two owned grandchildren must be retained"
     );
+
+    let release = context.update(|_, cx| {
+        let snapshot = parent.read(cx).snapshot().expect("parent snapshot");
+        (0..snapshot.len() as u32)
+            .filter_map(|id| snapshot.arena().node(id))
+            .find(|node| {
+                matches!(
+                    node.component(),
+                    Some(crate::spec::Component::Checkbox(id)) if id == "release-first"
+                )
+            })
+            .and_then(|node| {
+                node.ops().iter().find_map(|op| match op {
+                    crate::spec::SpecOp::Callback("on_change", id) => Some(*id),
+                    _ => None,
+                })
+            })
+            .expect("release callback")
+    });
+    context.update(|window, cx| runtime.dispatch_change(release, true, window, cx));
+    assert_eq!(
+        runtime.entities().len(),
+        2,
+        "releasing the first child must release its grandchild, not its sibling subtree"
+    );
+    assert!(context.update(|_, cx| children[0].read(cx).snapshot().is_none()));
+    assert!(context.update(|_, cx| children[1].read(cx).snapshot().is_some()));
+}
+
+/// A release requested by the caller's promise wave while its queued create is
+/// becoming a real entity must be ordered after that create, not report a
+/// spurious miss and leave the child live.
+#[gpui::test]
+fn a_release_during_nested_view_creation_retires_the_candidate(cx: &mut TestAppContext) {
+    cx.update(crate::init);
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View, ViewHandle, text } from "gpui";
+class Child extends View { render() { return text("child"); } }
+export default class Parent extends View {
+  init() {
+    this.released = false;
+    this.child = ViewHandle.new(Child);
+    Promise.resolve().then(() => { this.released = this.child.release(); });
+  }
+  render() { return text(`released:${this.released}`); }
+}
+"#;
+    let view_type = runtime
+        .load_source("nested-view-in-flight-release.js", source)
+        .expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let parent = context
+        .update(|window, cx| runtime.instantiate_view(&view_type, window, cx))
+        .expect("instantiate parent");
+
+    draw(&mut context, &parent);
+    let tree = context.update(|_, cx| {
+        parent
+            .read(cx)
+            .snapshot()
+            .map(crate::RenderSnapshot::debug_tree)
+            .unwrap_or_default()
+    });
+    assert!(tree.contains("released:true"), "{tree}");
+    assert!(runtime.entities().is_empty(), "the candidate remained live");
 }
 
 #[gpui::test]

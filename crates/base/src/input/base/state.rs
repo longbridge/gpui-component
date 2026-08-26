@@ -339,7 +339,16 @@ pub struct InputBaseState<M: InputModeKind> {
     pub(crate) scroll_size: gpui::Size<Pixels>,
     pub(super) editor_scrollbar_snapshot: Cell<Option<EditorScrollbarSnapshot>>,
     pub(super) editor_paddings: Edges<Pixels>,
+    /// The style this state paints with: what was projected onto it, with
+    /// every colour left unset resolved from the palette that is current. It
+    /// is rebuilt at the top of every render, which is what keeps it current
+    /// when the palette changes after the state was built.
     pub(super) editor_style: InputEditorStyle,
+    /// What a consumer projected, kept verbatim so that resolution never
+    /// consumes its own output: resolving in place would fill the unset
+    /// colours once and then never see them as unset again, which is the same
+    /// freeze in a different place.
+    projected_editor_style: InputEditorStyle,
 
     /// The mask pattern for formatting the input text
     pub(crate) mask_pattern: MaskPattern,
@@ -650,6 +659,7 @@ impl<M: InputModeKind> InputBaseState<M> {
             mask_pattern: MaskPattern::default(),
             mask_pattern_set: false,
             editor_style: InputEditorStyle::default(),
+            projected_editor_style: InputEditorStyle::default(),
             diagnostic_popover: None,
             context_menu_handler: None,
             pending_context_menu: None,
@@ -738,7 +748,8 @@ impl<M: InputModeKind> InputBaseState<M> {
     }
 
     pub fn set_editor_style(&mut self, style: InputEditorStyle) {
-        self.editor_style = style;
+        self.editor_style = style.clone();
+        self.projected_editor_style = style;
     }
 
     /// Set presentation padding for multi-line text and its scrollbar layout.
@@ -3019,6 +3030,11 @@ impl<M: InputModeKind> Focusable for InputBaseState<M> {
 
 impl<M: InputModeKind> Render for InputBaseState<M> {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // Before anything reads it: the element resolves this style during
+        // layout and paint, and both happen after this call in the same frame.
+        self.editor_style = self
+            .projected_editor_style
+            .resolved(&crate::Theme::global(cx).tokens);
         let entity = cx.entity();
         if self._pending_update {
             self.mode.update_highlighter::<M>(
