@@ -68,6 +68,7 @@ use rquickjs::{
 
 use crate::{
     policy::Policy,
+    runtime::ApplicationGeneration,
     scope::{self, ScopePhase},
     view::ScriptView,
 };
@@ -266,19 +267,14 @@ pub(crate) fn cancel_policy(policy: &Rc<Policy>) {
     });
 }
 
-/// Marks the task-id boundary before a reload starts creating work.
-pub(crate) fn checkpoint() -> u64 {
-    NEXT_TASK_ID.with(Cell::get)
-}
-
-/// Cancels work created by one application's reload that did not commit.
-pub(crate) fn cancel_policy_since(policy: &Rc<Policy>, checkpoint: u64) {
-    cancel_where(|task| task.id >= checkpoint && task.has_policy(policy));
-}
-
-/// Retires one application's previous work after a replacement commits.
-pub(crate) fn cancel_policy_before(policy: &Rc<Policy>, checkpoint: u64) {
-    cancel_where(|task| task.id < checkpoint && task.has_policy(policy));
+/// Cancels work owned by exactly one evaluated application incarnation.
+pub(crate) fn cancel_application_generation(generation: &Rc<ApplicationGeneration>) {
+    generation.retire();
+    cancel_where(|task| {
+        task.application
+            .as_ref()
+            .is_some_and(|candidate| Rc::ptr_eq(candidate, generation))
+    });
 }
 
 fn cancel_where(mut predicate: impl FnMut(&TaskState) -> bool) {
@@ -350,9 +346,13 @@ fn js_sleep<'js>(ctx: Ctx<'js>, ms: Opt<f64>) -> JsResult<Promise<'js>> {
             if let Readiness::Ready(owner) = sleeping.readiness()
                 && let Some(resolve) = sleeping.take_callback()
             {
-                resume(&host, &sleeping.policy(), owner, move |ctx, _| {
-                    resolve.restore(ctx)?.call::<_, ()>(())
-                });
+                resume(
+                    &host,
+                    &sleeping.policy(),
+                    sleeping.application.clone(),
+                    owner,
+                    move |ctx, _| resolve.restore(ctx)?.call::<_, ()>(()),
+                );
             }
             finish(&sleeping);
         })
@@ -506,11 +506,17 @@ fn schedule<'js>(
                 };
                 let Some(callback) = callback else { break };
 
-                resume(&host, &ticking.policy(), owner, move |ctx, generation| {
-                    callback
-                        .restore(ctx)?
-                        .call::<_, ()>((context_object(ctx, generation)?,))
-                });
+                resume(
+                    &host,
+                    &ticking.policy(),
+                    ticking.application.clone(),
+                    owner,
+                    move |ctx, generation| {
+                        callback
+                            .restore(ctx)?
+                            .call::<_, ()>((context_object(ctx, generation)?,))
+                    },
+                );
 
                 if repeat == Repeat::Once {
                     break;
@@ -630,6 +636,7 @@ fn host(ctx: &Ctx<'_>, api: &str) -> JsResult<Host> {
 fn resume(
     host: &Host,
     policy: &Rc<Policy>,
+    application: Option<Rc<ApplicationGeneration>>,
     owner: Option<Entity<ScriptView>>,
     body: impl FnOnce(&Ctx<'_>, u64) -> JsResult<()>,
 ) {
@@ -643,8 +650,15 @@ fn resume(
 
         // `enter_with` and not `enter`: there is no enclosing frame to inherit
         // from out here, so `enter` would reach for the default policy.
-        let (guard, generation) =
-            scope::enter_with_runtime(&runtime, window, cx, ScopePhase::Task, owner, policy);
+        let (guard, generation) = scope::enter_with_application(
+            &runtime,
+            window,
+            cx,
+            ScopePhase::Task,
+            owner,
+            policy,
+            application,
+        );
         if let Err(error) = runtime.with_js(|ctx| body(ctx, generation)) {
             tracing::error!("error in script task: {error}");
         }
@@ -688,6 +702,8 @@ struct TaskState {
     /// and its `init` both create tasks before its view exists, so this is the
     /// ordinary case rather than an edge one.
     policy: RefCell<Option<Rc<Policy>>>,
+    /// The evaluated application incarnation that created this work.
+    application: Option<Rc<ApplicationGeneration>>,
     runtime: std::rc::Weak<ShellRuntime>,
     cancelled: Cell<bool>,
     done: Cell<bool>,
@@ -709,13 +725,6 @@ enum Readiness {
 }
 
 impl TaskState {
-    fn has_policy(&self, policy: &Rc<Policy>) -> bool {
-        self.policy
-            .borrow()
-            .as_ref()
-            .is_some_and(|candidate| Rc::ptr_eq(candidate, policy))
-    }
-
     fn new(
         api: &'static str,
         owner: Option<WeakEntity<ScriptView>>,
@@ -730,6 +739,7 @@ impl TaskState {
             api,
             owner,
             policy: RefCell::new(Some(scope::policy())),
+            application: scope::current_application_generation(),
             runtime: scope::current_runtime()
                 .map_or_else(std::rc::Weak::new, |runtime| Rc::downgrade(&runtime)),
             cancelled: Cell::new(false),
@@ -741,7 +751,14 @@ impl TaskState {
     }
 
     fn readiness(&self) -> Readiness {
-        if self.cancelled.get() || self.done.get() || self.policy.borrow().is_none() {
+        if self.cancelled.get()
+            || self.done.get()
+            || self.policy.borrow().is_none()
+            || self
+                .application
+                .as_ref()
+                .is_some_and(|generation| !generation.is_active())
+        {
             return Readiness::Cancelled;
         }
         match &self.owner {
@@ -775,6 +792,12 @@ impl TaskState {
 
     fn with_cancellation(self, cancel: impl Fn() + 'static) -> Self {
         self.cancellation.replace(Some(Rc::new(cancel)));
+        self
+    }
+
+    #[cfg(test)]
+    fn with_application(mut self, generation: Rc<ApplicationGeneration>) -> Self {
+        self.application = Some(generation);
         self
     }
 
@@ -845,19 +868,25 @@ pub(super) fn deferred<'js>(
             let resolve = task.take_callback();
             let reject = task.take_rejection();
             let policy = task.policy();
-            resume(&host, &policy, owner, move |ctx, _| match outcome {
-                Ok(()) => match resolve {
-                    Some(resolve) => resolve.restore(ctx)?.call::<_, ()>(()),
-                    None => Ok(()),
+            resume(
+                &host,
+                &policy,
+                task.application.clone(),
+                owner,
+                move |ctx, _| match outcome {
+                    Ok(()) => match resolve {
+                        Some(resolve) => resolve.restore(ctx)?.call::<_, ()>(()),
+                        None => Ok(()),
+                    },
+                    Err(message) => match reject {
+                        Some(reject) => {
+                            let error = Exception::from_message(ctx.clone(), &message)?;
+                            reject.restore(ctx)?.call::<_, ()>((error,))
+                        }
+                        None => Ok(()),
+                    },
                 },
-                Err(message) => match reject {
-                    Some(reject) => {
-                        let error = Exception::from_message(ctx.clone(), &message)?;
-                        reject.restore(ctx)?.call::<_, ()>((error,))
-                    }
-                    None => Ok(()),
-                },
-            });
+            );
         }
         finish(&task);
     }))
@@ -907,19 +936,25 @@ fn settle_actor_task(task: &Rc<TaskState>, host: &Host, outcome: std::result::Re
     if let Readiness::Ready(owner) = task.readiness() {
         let resolve = task.take_callback();
         let reject = task.take_rejection();
-        resume(&host, &task.policy(), owner, move |ctx, _| match outcome {
-            Ok(()) => match resolve {
-                Some(resolve) => resolve.restore(ctx)?.call::<_, ()>(()),
-                None => Ok(()),
+        resume(
+            &host,
+            &task.policy(),
+            task.application.clone(),
+            owner,
+            move |ctx, _| match outcome {
+                Ok(()) => match resolve {
+                    Some(resolve) => resolve.restore(ctx)?.call::<_, ()>(()),
+                    None => Ok(()),
+                },
+                Err(message) => match reject {
+                    Some(reject) => {
+                        let error = Exception::from_message(ctx.clone(), &message)?;
+                        reject.restore(ctx)?.call::<_, ()>((error,))
+                    }
+                    None => Ok(()),
+                },
             },
-            Err(message) => match reject {
-                Some(reject) => {
-                    let error = Exception::from_message(ctx.clone(), &message)?;
-                    reject.restore(ctx)?.call::<_, ()>((error,))
-                }
-                None => Ok(()),
-            },
-        });
+        );
     }
     finish(&task);
 }
@@ -971,6 +1006,7 @@ where
                 resume(
                     &host,
                     &running.policy(),
+                    running.application.clone(),
                     owner,
                     move |ctx, _| match outcome {
                         Ok(value) => match resolve {
@@ -1039,6 +1075,7 @@ where
                 resume(
                     &host,
                     &running.policy(),
+                    running.application.clone(),
                     owner,
                     move |ctx, _| match outcome {
                         Ok(value) => match resolve {
@@ -1117,6 +1154,7 @@ where
                 resume(
                     &host,
                     &running.policy(),
+                    running.application.clone(),
                     owner,
                     move |ctx, _| match outcome {
                         Ok(value) => match resolve {
@@ -1601,29 +1639,36 @@ mod tests {
     }
 
     #[test]
-    fn reload_boundaries_only_cancel_the_selected_application() {
+    fn reload_ownership_follows_generation_not_task_creation_order() {
         let reloaded_policy = Rc::new(Policy::default());
         let other_policy = Rc::new(Policy::default());
+        let old_generation = ApplicationGeneration::new(1);
+        let replacement_generation = ApplicationGeneration::new(2);
 
-        let old = TaskState::new("old", None, None);
-        old.policy.replace(Some(reloaded_policy.clone()));
-        let old = register_unchecked(old);
-        let checkpoint = checkpoint();
-
-        let replacement = TaskState::new("replacement", None, None);
+        // The replacement can create work before an old event re-enters during
+        // reload. A task-id checkpoint would put these on the wrong sides.
+        let replacement = TaskState::new("replacement", None, None)
+            .with_application(replacement_generation.clone());
         replacement.policy.replace(Some(reloaded_policy.clone()));
         let replacement = register_unchecked(replacement);
-        let unrelated = TaskState::new("unrelated", None, None);
+
+        let old =
+            TaskState::new("reentrant old", None, None).with_application(old_generation.clone());
+        old.policy.replace(Some(reloaded_policy.clone()));
+        let old = register_unchecked(old);
+        let unrelated_generation = ApplicationGeneration::new(3);
+        let unrelated =
+            TaskState::new("unrelated", None, None).with_application(unrelated_generation);
         unrelated.policy.replace(Some(other_policy));
         let unrelated = register_unchecked(unrelated);
 
-        cancel_policy_since(&reloaded_policy, checkpoint);
-        assert!(matches!(old.readiness(), Readiness::Ready(None)));
-        assert!(matches!(replacement.readiness(), Readiness::Cancelled));
+        cancel_application_generation(&old_generation);
+        assert!(matches!(old.readiness(), Readiness::Cancelled));
+        assert!(matches!(replacement.readiness(), Readiness::Ready(None)));
         assert!(matches!(unrelated.readiness(), Readiness::Ready(None)));
 
-        cancel_policy_before(&reloaded_policy, checkpoint);
-        assert!(matches!(old.readiness(), Readiness::Cancelled));
+        cancel_application_generation(&replacement_generation);
+        assert!(matches!(replacement.readiness(), Readiness::Cancelled));
         assert!(matches!(unrelated.readiness(), Readiness::Ready(None)));
         finish(&unrelated);
     }

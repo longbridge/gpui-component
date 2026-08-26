@@ -498,7 +498,6 @@ pub(crate) fn reload(
     }
 
     let policy = view.read(cx).policy();
-    let checkpoint = crate::engine::quickjs::task_checkpoint();
 
     // Everything that can fail runs first. On QuickJS this re-evaluates the
     // module into the same context, which §21.2 notes is one grade coarser than
@@ -527,13 +526,8 @@ pub(crate) fn reload(
 
     let object = match loaded {
         Ok(object) => object,
-        Err(error) => {
-            crate::engine::quickjs::cancel_policy_tasks_since(&policy, checkpoint);
-            return Err(error);
-        }
+        Err(error) => return Err(error),
     };
-
-    crate::engine::quickjs::cancel_policy_tasks_before(&policy, checkpoint);
 
     view.update(cx, |view, cx| {
         view.replace_object(object);

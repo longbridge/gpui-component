@@ -127,6 +127,15 @@ impl ScriptView {
     /// description that the old instance built is now meaningless, so the view
     /// is invalidated with it.
     pub fn replace_object(&mut self, object: ViewObject) {
+        let previous = self.object.application_generation();
+        let replacement = object.application_generation();
+        if let Some(previous) = previous
+            && replacement
+                .as_ref()
+                .is_none_or(|replacement| !Rc::ptr_eq(&previous, replacement))
+        {
+            crate::engine::quickjs::cancel_application_tasks(&previous);
+        }
         self.object = object;
         self.dirty = true;
     }
@@ -149,6 +158,12 @@ impl ScriptView {
 
     pub(crate) fn runtime(&self) -> Rc<ShellRuntime> {
         self.runtime.clone()
+    }
+
+    pub(crate) fn application_generation(
+        &self,
+    ) -> Option<Rc<crate::runtime::ApplicationGeneration>> {
+        self.object.application_generation()
     }
 
     pub fn is_dirty(&self) -> bool {
@@ -182,6 +197,14 @@ impl ScriptView {
                 self.error = None;
             }
             Err(error) => self.error = Some(error.to_string()),
+        }
+    }
+}
+
+impl Drop for ScriptView {
+    fn drop(&mut self) {
+        if let Some(application) = self.object.application_generation() {
+            crate::engine::quickjs::cancel_application_tasks(&application);
         }
     }
 }

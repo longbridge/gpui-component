@@ -6,7 +6,7 @@
 //! handler differs, so it is a type parameter.
 
 use std::{
-    cell::RefCell,
+    cell::{Cell, RefCell},
     collections::HashMap,
     ops::Range,
     path::{Path, PathBuf},
@@ -189,6 +189,38 @@ Applications found below this directory:",
     message
 }
 
+/// One evaluated incarnation of an application.
+///
+/// Policy answers what code may do; this token answers which incarnation the
+/// code belongs to. Reload keeps the policy but replaces this identity. The
+/// explicit liveness bit lets every retained entry point reject work from a
+/// superseded or rolled-back incarnation without guessing from creation time.
+pub(crate) struct ApplicationGeneration {
+    id: u64,
+    active: Cell<bool>,
+}
+
+impl ApplicationGeneration {
+    pub(crate) fn new(id: u64) -> Rc<Self> {
+        Rc::new(Self {
+            id,
+            active: Cell::new(true),
+        })
+    }
+
+    pub(crate) fn is_active(&self) -> bool {
+        self.active.get()
+    }
+
+    pub(crate) fn retire(&self) {
+        tracing::trace!(
+            application_generation = self.id,
+            "retiring shell application generation"
+        );
+        self.active.set(false);
+    }
+}
+
 /// A script callback together with the view it was registered from. The view is
 /// what a later notify has to reach.
 ///
@@ -198,6 +230,7 @@ Applications found below this directory:",
 pub(crate) struct CallbackEntry<T> {
     pub(crate) value: T,
     pub(crate) view: Option<Entity<ScriptView>>,
+    pub(crate) application: Option<Rc<ApplicationGeneration>>,
 }
 
 impl<T: Clone> Clone for CallbackEntry<T> {
@@ -205,6 +238,7 @@ impl<T: Clone> Clone for CallbackEntry<T> {
         Self {
             value: self.value.clone(),
             view: self.view.clone(),
+            application: self.application.clone(),
         }
     }
 }
@@ -802,7 +836,11 @@ mod identity_tests {
     use super::*;
 
     fn callback(value: u32) -> CallbackEntry<u32> {
-        CallbackEntry { value, view: None }
+        CallbackEntry {
+            value,
+            view: None,
+            application: None,
+        }
     }
 
     #[test]

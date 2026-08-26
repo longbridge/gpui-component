@@ -1040,6 +1040,26 @@ fn reload_replaces_old_tasks_and_rolls_back_failed_new_tasks(cx: &mut TestAppCon
         "work created by a failed reload must be rolled back"
     );
 
+    std::fs::write(
+        directory.join("main.js"),
+        "import { View, timer, text } from \"gpui\";\n\
+         export default class Broken extends View {\n\
+           init() { timer.every(60_000, () => {}); throw new Error(\"init failed\"); }\n\
+           render() { return text(\"unreachable\"); }\n\
+         }",
+    )
+    .expect("initialization-failing source");
+    context
+        .update(|window, cx| {
+            crate::watch::reload(&runtime, &view, &directory, "main.js", window, cx)
+        })
+        .expect_err("initialization failure must roll back the candidate generation");
+    assert_eq!(
+        crate::engine::quickjs::task_count(),
+        baseline + 1,
+        "work created by a candidate init must be rolled back without touching the live app"
+    );
+
     let _ = std::fs::remove_dir_all(directory);
 }
 

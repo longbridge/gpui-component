@@ -129,6 +129,7 @@ pub struct ShellRoot {
     /// Retains a script application's policy and cancels its work when this
     /// window root is dropped. Ordinary Rust content leaves it empty.
     application_policy: Option<Rc<crate::policy::Policy>>,
+    application_generation: Option<Rc<crate::runtime::ApplicationGeneration>>,
     /// Open dialogs, oldest first. The last entry is the topmost and the only
     /// interactive one.
     dialogs: Vec<ActiveDialog>,
@@ -186,6 +187,7 @@ impl ShellRoot {
             content,
             application: None,
             application_policy: None,
+            application_generation: None,
             dialogs: Vec::new(),
             sheet: None,
             toasts: ToastManager::new(ToastMotion::sonner()),
@@ -204,6 +206,7 @@ impl ShellRoot {
         cx: &mut Context<Self>,
     ) -> Self {
         let mut shell_root = Self::new(view.clone().into(), window, cx);
+        shell_root.application_generation = view.read(cx).application_generation();
         shell_root.application = Some(MountedApplication { view, root, entry });
         shell_root.application_policy = Some(policy);
         shell_root
@@ -649,6 +652,9 @@ impl ShellRoot {
 
 impl Drop for ShellRoot {
     fn drop(&mut self) {
+        if let Some(application) = self.application_generation.take() {
+            crate::engine::quickjs::cancel_application_tasks(&application);
+        }
         if let Some(policy) = self.application_policy.take() {
             crate::engine::quickjs::cancel_policy_tasks(&policy);
         }

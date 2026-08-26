@@ -853,6 +853,7 @@ pub struct Plugin {
     /// manifest and then never swapped. Callbacks it registers capture it, so a
     /// timer firing inside plugin A cannot run with plugin B's grant.
     policy: Rc<Policy>,
+    application: Option<Rc<crate::runtime::ApplicationGeneration>>,
     view: Entity<ScriptView>,
 }
 
@@ -895,6 +896,9 @@ impl Plugin {
 
 impl Drop for Plugin {
     fn drop(&mut self) {
+        if let Some(application) = self.application.take() {
+            crate::engine::quickjs::cancel_application_tasks(&application);
+        }
         crate::engine::quickjs::cancel_policy_tasks(&self.policy);
     }
 }
@@ -925,12 +929,14 @@ fn load_plugin(
     let view = load_view_with_policy(runtime, &root, manifest.entry(), policy.clone(), window, cx)
         .with_context(|| format!("loading application `{id}`"))?;
 
+    let application = view.read(cx).application_generation();
     Ok(Plugin {
         manifest,
         root,
         data_dir,
         store_path,
         policy,
+        application,
         view,
     })
 }

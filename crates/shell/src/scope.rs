@@ -22,7 +22,9 @@ use std::{
 
 use gpui::{App, Entity, Window};
 
-use crate::{engine::ShellRuntime, policy::Policy, view::ScriptView};
+use crate::{
+    engine::ShellRuntime, policy::Policy, runtime::ApplicationGeneration, view::ScriptView,
+};
 
 /// What the current host call is allowed to do.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -67,6 +69,8 @@ struct Frame {
     /// it. See [`crate::policy`] for why the alternatives cannot be made
     /// correct.
     policy: Rc<Policy>,
+    /// Which evaluated incarnation of the application owns this call.
+    application: Option<Rc<ApplicationGeneration>>,
     /// The VM this call entered. Async work inherits this exact runtime.
     runtime: Weak<ShellRuntime>,
 }
@@ -112,10 +116,24 @@ pub fn enter(
         .or_else(current_runtime)
         .or_else(|| ShellRuntime::global(app));
 
-    enter_with_runtime_opt(window, app, phase, view, policy, runtime.as_ref())
+    let application = view
+        .as_ref()
+        .and_then(|view| with_current_app(|cx| view.read(cx).application_generation()))
+        .flatten()
+        .or_else(current_application_generation);
+    enter_with_runtime_opt(
+        window,
+        app,
+        phase,
+        view,
+        policy,
+        runtime.as_ref(),
+        application,
+    )
 }
 
 /// Opens a scope for a runtime that the caller already knows.
+#[allow(dead_code)] // Used by the optional overlay engine and its tests.
 pub fn enter_runtime(
     runtime: &Rc<ShellRuntime>,
     window: &mut Window,
@@ -143,7 +161,63 @@ pub fn enter_with_runtime(
     view: Option<Entity<ScriptView>>,
     policy: Rc<Policy>,
 ) -> (CallScopeGuard, u64) {
-    enter_with_runtime_opt(window, app, phase, view, policy, Some(runtime))
+    let application = view
+        .as_ref()
+        .and_then(|view| view.read(app).application_generation())
+        .or_else(current_application_generation);
+    enter_with_runtime_opt(window, app, phase, view, policy, Some(runtime), application)
+}
+
+/// Opens a scope owned by an explicitly selected application incarnation.
+pub(crate) fn enter_with_application(
+    runtime: &Rc<ShellRuntime>,
+    window: &mut Window,
+    app: &mut App,
+    phase: ScopePhase,
+    view: Option<Entity<ScriptView>>,
+    policy: Rc<Policy>,
+    application: Option<Rc<ApplicationGeneration>>,
+) -> (CallScopeGuard, u64) {
+    enter_with_runtime_opt(window, app, phase, view, policy, Some(runtime), application)
+}
+
+/// Rebinds the current host call to a newly evaluated application.
+///
+/// Module evaluation happens below an already-open host scope but before a
+/// view exists. Duplicating the frame with no view prevents new top-level work
+/// from inheriting the old view during reload.
+pub(crate) fn enter_application(
+    application: Rc<ApplicationGeneration>,
+) -> Option<(CallScopeGuard, u64)> {
+    let frame = STACK.with(|stack| {
+        let stack = stack.borrow();
+        let frame = stack.last()?;
+        Some((
+            frame.window,
+            frame.app,
+            frame.phase,
+            frame.policy.clone(),
+            frame.runtime.clone(),
+        ))
+    })?;
+    let generation = NEXT_GENERATION.with(|next| {
+        let value = next.get();
+        next.set(value + 1);
+        value
+    });
+    STACK.with(|stack| {
+        stack.borrow_mut().push(Frame {
+            window: frame.0,
+            app: frame.1,
+            phase: frame.2,
+            generation,
+            view: None,
+            policy: frame.3,
+            application: Some(application),
+            runtime: frame.4,
+        });
+    });
+    Some((CallScopeGuard { _private: () }, generation))
 }
 
 fn enter_with_runtime_opt(
@@ -153,6 +227,7 @@ fn enter_with_runtime_opt(
     view: Option<Entity<ScriptView>>,
     policy: Rc<Policy>,
     runtime: Option<&Rc<ShellRuntime>>,
+    application: Option<Rc<ApplicationGeneration>>,
 ) -> (CallScopeGuard, u64) {
     let generation = NEXT_GENERATION.with(|next| {
         let value = next.get();
@@ -168,6 +243,7 @@ fn enter_with_runtime_opt(
             generation,
             view,
             policy,
+            application,
             runtime: runtime.map_or_else(Weak::new, Rc::downgrade),
         })
     });
@@ -234,6 +310,16 @@ pub fn policy() -> Rc<Policy> {
 /// The view the innermost scope belongs to, if any.
 pub fn current_view() -> Option<Entity<ScriptView>> {
     STACK.with(|stack| stack.borrow().last().and_then(|frame| frame.view.clone()))
+}
+
+/// The evaluated application incarnation the innermost call belongs to.
+pub(crate) fn current_application_generation() -> Option<Rc<ApplicationGeneration>> {
+    STACK.with(|stack| {
+        stack
+            .borrow()
+            .last()
+            .and_then(|frame| frame.application.clone())
+    })
 }
 
 /// Runs `f` with the innermost scope's context, if `generation` is still current.

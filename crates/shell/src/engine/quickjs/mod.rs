@@ -36,7 +36,7 @@ use crate::{
     entities::EntityStore,
     metrics::Metrics,
     policy::Policy,
-    runtime::{CallbackArena, CallbackEntry},
+    runtime::{ApplicationGeneration, CallbackArena, CallbackEntry},
     scope::{self, ScopePhase},
     snapshot::RenderSnapshot,
     spec::{CallbackId, Component, SpecArena, SpecId, SpecOp},
@@ -52,6 +52,7 @@ const MAX_MODULE_BYTES: u64 = 8 * 1024 * 1024;
 pub struct ViewType {
     value: Persistent<Object<'static>>,
     module_lease: Option<ApplicationModuleLease>,
+    application: Option<Rc<ApplicationGeneration>>,
 }
 
 impl std::fmt::Debug for ViewType {
@@ -66,6 +67,7 @@ pub struct ViewObject {
     value: Persistent<Object<'static>>,
     #[allow(dead_code)] // Its drop owns the resolver registration lifetime.
     module_lease: Option<ApplicationModuleLease>,
+    application: Option<Rc<ApplicationGeneration>>,
 }
 
 impl std::fmt::Debug for ViewObject {
@@ -79,11 +81,16 @@ impl ViewObject {
         Self {
             value,
             module_lease: None,
+            application: None,
         }
     }
 
     fn restore<'js>(self, ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
         self.value.restore(ctx)
+    }
+
+    pub(crate) fn application_generation(&self) -> Option<Rc<ApplicationGeneration>> {
+        self.application.clone()
     }
 }
 
@@ -98,21 +105,19 @@ pub(crate) fn cancel_policy_tasks(policy: &Rc<Policy>) {
     scheduler::cancel_policy(policy);
 }
 
-pub(crate) fn task_checkpoint() -> u64 {
-    scheduler::checkpoint()
-}
-
-pub(crate) fn cancel_policy_tasks_since(policy: &Rc<Policy>, checkpoint: u64) {
-    scheduler::cancel_policy_since(policy, checkpoint);
-}
-
-pub(crate) fn cancel_policy_tasks_before(policy: &Rc<Policy>, checkpoint: u64) {
-    scheduler::cancel_policy_before(policy, checkpoint);
+pub(crate) fn cancel_application_tasks(generation: &Rc<ApplicationGeneration>) {
+    scheduler::cancel_application_generation(generation);
 }
 
 #[cfg(test)]
 pub(crate) fn task_count() -> usize {
     scheduler::task_count()
+}
+
+pub(super) struct InputCallbackOwner {
+    policy: Rc<Policy>,
+    application: Option<Rc<ApplicationGeneration>>,
+    view: Option<WeakEntity<ScriptView>>,
 }
 mod standard;
 mod theme_api;
@@ -175,6 +180,7 @@ pub struct ShellRuntime {
     /// Incremented per `load_app`, so a reload re-reads every module rather
     /// than serving the first version from QuickJS's module cache.
     app_modules: AppModules,
+    next_application_generation: Cell<u64>,
     /// Held so the context stays alive, and so the module loader can be scoped
     /// to an application directory when one is loaded.
     js_runtime: JsRuntime,
@@ -253,6 +259,7 @@ impl ShellRuntime {
             test_http_client: RefCell::new(None),
             context,
             app_modules,
+            next_application_generation: Cell::new(1),
             js_runtime,
         });
 
@@ -329,6 +336,13 @@ impl ShellRuntime {
         // a change in an imported module rather than only in the entry point.
         let module_lease = self.app_modules.register(root.clone());
         let generation = module_lease.generation();
+        let application = ApplicationGeneration::new(self.next_application_generation.get());
+        self.next_application_generation.set(
+            self.next_application_generation
+                .get()
+                .checked_add(1)
+                .expect("a shell runtime exhausted its application generations"),
+        );
 
         let entry = root.join(entry);
         let source = read_module_source(&entry)?;
@@ -336,17 +350,23 @@ impl ShellRuntime {
         // The entry carries the generation too: it is a cached module like any
         // other, and a reload that re-read every import but served a stale
         // `main.js` would be the same bug one level up.
-        self.load_source_with_lease(
+        let _application_scope = scope::enter_application(application.clone());
+        let loaded = self.load_source_with_lease(
             &format!("{}?v={}", entry.to_string_lossy(), generation),
             &source,
             Some(module_lease),
-        )
+            Some(application.clone()),
+        );
+        if loaded.is_err() {
+            cancel_application_tasks(&application);
+        }
+        loaded
     }
 
     /// Evaluates a module and returns its default export, which must be a view
     /// class.
     pub fn load_source(self: &Rc<Self>, name: &str, source: &str) -> Result<ViewType> {
-        self.load_source_with_lease(name, source, None)
+        self.load_source_with_lease(name, source, None, None)
     }
 
     fn load_source_with_lease(
@@ -354,6 +374,7 @@ impl ShellRuntime {
         name: &str,
         source: &str,
         module_lease: Option<ApplicationModuleLease>,
+        application: Option<Rc<ApplicationGeneration>>,
     ) -> Result<ViewType> {
         self.with_js(|ctx| {
             let (module, promise) = rquickjs::Module::declare(ctx.clone(), name, source)?.eval()?;
@@ -369,6 +390,7 @@ impl ShellRuntime {
             Ok(ViewType {
                 value: Persistent::save(ctx, class.clone()),
                 module_lease,
+                application,
             })
         })
     }
@@ -384,9 +406,31 @@ impl ShellRuntime {
         window: &mut Window,
         cx: &mut App,
     ) -> Result<ViewObject> {
-        let (_guard, _generation) = scope::enter_runtime(self, window, cx, ScopePhase::Event, None);
-        let instance = self.construct(view_type)?;
-        self.initialize(&instance)?;
+        let application = view_type.application.clone();
+        let (_guard, _generation) = scope::enter_with_application(
+            self,
+            window,
+            cx,
+            ScopePhase::Event,
+            None,
+            crate::policy::default(),
+            application.clone(),
+        );
+        let instance = match self.construct(view_type) {
+            Ok(instance) => instance,
+            Err(error) => {
+                if let Some(application) = application {
+                    cancel_application_tasks(&application);
+                }
+                return Err(error);
+            }
+        };
+        if let Err(error) = self.initialize(&instance) {
+            if let Some(application) = application {
+                cancel_application_tasks(&application);
+            }
+            return Err(error);
+        }
         Ok(instance)
     }
 
@@ -411,22 +455,44 @@ impl ShellRuntime {
         window: &mut Window,
         cx: &mut App,
     ) -> Result<Entity<ScriptView>> {
-        let (construct_scope, _) =
-            scope::enter_with_runtime(self, window, cx, ScopePhase::Event, None, policy.clone());
-        let object = self.construct(view_type)?;
+        let application = view_type.application.clone();
+        let (construct_scope, _) = scope::enter_with_application(
+            self,
+            window,
+            cx,
+            ScopePhase::Event,
+            None,
+            policy.clone(),
+            application.clone(),
+        );
+        let object = match self.construct(view_type) {
+            Ok(object) => object,
+            Err(error) => {
+                if let Some(application) = application {
+                    cancel_application_tasks(&application);
+                }
+                return Err(error);
+            }
+        };
         drop(construct_scope);
         let view = cx.new(|_| ScriptView::with_policy(self.clone(), object, policy.clone()));
         let object = view.read(cx).object().clone();
 
-        let (_initialize_scope, _) = scope::enter_with_runtime(
+        let (_initialize_scope, _) = scope::enter_with_application(
             self,
             window,
             cx,
             ScopePhase::Event,
             Some(view.clone()),
             policy,
+            application.clone(),
         );
-        self.initialize(&object)?;
+        if let Err(error) = self.initialize(&object) {
+            if let Some(application) = application {
+                cancel_application_tasks(&application);
+            }
+            return Err(error);
+        }
         Ok(view)
     }
 
@@ -438,10 +504,31 @@ impl ShellRuntime {
         cx: &mut App,
     ) -> Result<ViewObject> {
         let policy = view.read(cx).policy();
-        let (_guard, _) =
-            scope::enter_with_runtime(self, window, cx, ScopePhase::Event, Some(view), policy);
-        let object = self.construct(view_type)?;
-        self.initialize(&object)?;
+        let application = view_type.application.clone();
+        let (_guard, _) = scope::enter_with_application(
+            self,
+            window,
+            cx,
+            ScopePhase::Event,
+            Some(view),
+            policy,
+            application.clone(),
+        );
+        let object = match self.construct(view_type) {
+            Ok(object) => object,
+            Err(error) => {
+                if let Some(application) = application {
+                    cancel_application_tasks(&application);
+                }
+                return Err(error);
+            }
+        };
+        if let Err(error) = self.initialize(&object) {
+            if let Some(application) = application {
+                cancel_application_tasks(&application);
+            }
+            return Err(error);
+        }
         Ok(object)
     }
 
@@ -453,6 +540,7 @@ impl ShellRuntime {
             Ok(ViewObject {
                 value: Persistent::save(ctx, instance),
                 module_lease: view_type.module_lease.clone(),
+                application: view_type.application.clone(),
             })
         })
     }
@@ -489,13 +577,14 @@ impl ShellRuntime {
         let callbacks = self.callbacks.borrow_mut().begin();
 
         let (root, policy) = self.metrics.time_script_render(|| {
-            let (_guard, generation) = scope::enter_with_runtime(
+            let (_guard, generation) = scope::enter_with_application(
                 self,
                 window,
                 cx,
                 ScopePhase::Render,
                 view.clone(),
                 policy.clone(),
+                object.application_generation(),
             );
             (self.call_render(object, generation), policy)
         });
@@ -573,8 +662,29 @@ impl ShellRuntime {
             return;
         };
 
-        let (_guard, generation) =
-            scope::enter_runtime(self, window, cx, ScopePhase::Event, entry.view.clone());
+        if entry
+            .application
+            .as_ref()
+            .is_some_and(|application| !application.is_active())
+        {
+            tracing::debug!("click callback {id} belongs to a retired application");
+            return;
+        }
+
+        let policy = entry
+            .view
+            .as_ref()
+            .map(|view| view.read(cx).policy())
+            .unwrap_or_else(crate::policy::default);
+        let (_guard, generation) = scope::enter_with_application(
+            self,
+            window,
+            cx,
+            ScopePhase::Event,
+            entry.view.clone(),
+            policy,
+            entry.application.clone(),
+        );
         let click_count = event.click_count();
         let modifiers = event.modifiers();
 
@@ -606,8 +716,7 @@ impl ShellRuntime {
     pub(super) fn dispatch_input_event(
         self: &Rc<Self>,
         handler: &Persistent<Function<'static>>,
-        policy: &Rc<crate::policy::Policy>,
-        owner: Option<&WeakEntity<ScriptView>>,
+        owner: &InputCallbackOwner,
         event: &gpui_base::input::InputEvent,
         window: &mut Window,
         cx: &mut App,
@@ -618,9 +727,24 @@ impl ShellRuntime {
         // input entity may outlive a view, so only a weak owner is retained; if
         // that owner is gone the callback may still run, but notify has no dead
         // view to keep alive or invalidate.
-        let owner = owner.and_then(WeakEntity::upgrade);
-        let (_guard, generation) =
-            scope::enter_with_runtime(self, window, cx, ScopePhase::Event, owner, policy.clone());
+        if owner
+            .application
+            .as_ref()
+            .is_some_and(|application| !application.is_active())
+        {
+            tracing::debug!("input callback belongs to a retired application");
+            return;
+        }
+        let view = owner.view.as_ref().and_then(WeakEntity::upgrade);
+        let (_guard, generation) = scope::enter_with_application(
+            self,
+            window,
+            cx,
+            ScopePhase::Event,
+            view,
+            owner.policy.clone(),
+            owner.application.clone(),
+        );
 
         let result = self.with_js(|ctx| {
             let handler = handler.clone().restore(ctx)?;
@@ -655,8 +779,29 @@ impl ShellRuntime {
             return;
         };
 
-        let (_guard, generation) =
-            scope::enter_runtime(self, window, cx, ScopePhase::Event, entry.view.clone());
+        if entry
+            .application
+            .as_ref()
+            .is_some_and(|application| !application.is_active())
+        {
+            tracing::debug!("change callback {id} belongs to a retired application");
+            return;
+        }
+
+        let policy = entry
+            .view
+            .as_ref()
+            .map(|view| view.read(cx).policy())
+            .unwrap_or_else(crate::policy::default);
+        let (_guard, generation) = scope::enter_with_application(
+            self,
+            window,
+            cx,
+            ScopePhase::Event,
+            entry.view.clone(),
+            policy,
+            entry.application.clone(),
+        );
 
         let result = self.with_js(|ctx| {
             let handler = entry.value.clone().restore(ctx)?;
@@ -1334,6 +1479,7 @@ impl ShellRuntime {
                 let callback = self.callbacks.borrow_mut().push(CallbackEntry {
                     value: saved,
                     view: scope::current_view(),
+                    application: scope::current_application_generation(),
                 });
                 let name = if method == "on_click" {
                     "on_click"
