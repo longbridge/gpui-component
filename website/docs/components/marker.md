@@ -269,6 +269,9 @@ adapt a marker to a denser toolbar or a larger empty-state boundary.
 
 - Include the status, boundary, or unread count in text. Icons, border lines,
   opacity, and color are supporting cues only.
+- A marker is presentational by default. Set `.id(...)` and `.role(Role::Status)`
+  on a row that reports streaming or loading progress so assistive technology
+  announces its updates; the role needs the stable identity an id provides.
 - Keep interactive content in `Button` or `Link` so it receives keyboard focus,
   activation, and disabled state. For the current `Button` API, use a visible
   `.label(...)` when the action needs an accessible name; a tooltip is
@@ -305,6 +308,8 @@ adapt a marker to a denser toolbar or a larger empty-state boundary.
 | `with_loading_style(MarkerLoadingStyle)` | `Spinner` | Choose spinner or shimmer. |
 | `with_shimmer_style(ShimmerStyle)` | default style | Configure text shimmer. |
 | `separator_style(StyleRefinement)` | theme border line | Refine separator lines. |
+| `id(ElementId)` | none | Give the marker a stable identity for the accessibility tree. |
+| `role(Role)` | presentational | Announce the row to assistive technology, e.g. `Role::Status` for streaming updates; requires `id(...)`. |
 | `icon(MarkerIcon)` | none | Add a typed icon slot. |
 | `content(MarkerContent)` | none | Add a typed content slot. |
 | `.child(element)` | — | Add arbitrary children. |

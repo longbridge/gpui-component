@@ -197,6 +197,7 @@ impl Render for ShimmerStory {
                 section("Marker")
                     .description("Marker applies the same reusable style to its text content.")
                     .w(rems(42.5))
+                    .v_flex()
                     .child(
                         Marker::new()
                             .loading(true)

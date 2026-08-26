@@ -1,12 +1,12 @@
 use crate::{
-    ActiveTheme as _, Sizable as _, StyledExt as _, h_flex,
+    ActiveTheme as _, RoleOverride, Sizable as _, StyledExt as _, h_flex,
     shimmer::{ShimmerStyle, ShimmerText},
     spinner::Spinner,
 };
 use gpui::{
-    AnimationExt as _, AnyElement, App, IntoElement, ParentElement, RenderOnce, SharedString,
-    StyleRefinement, Styled, StyledText, Window, div, prelude::FluentBuilder as _, px, relative,
-    rems,
+    AnimationExt as _, AnyElement, App, ElementId, InteractiveElement as _, IntoElement,
+    ParentElement, RenderOnce, SharedString, StatefulInteractiveElement as _, StyleRefinement,
+    Styled, StyledText, Window, div, prelude::FluentBuilder as _, px, relative, rems,
 };
 
 /// The visual treatment used by a [`Marker`].
@@ -46,12 +46,14 @@ enum MarkerChild {
 /// configured content slots, so icons and separators retain their appearance.
 #[derive(IntoElement)]
 pub struct Marker {
+    id: Option<ElementId>,
     style: StyleRefinement,
     separator_style: StyleRefinement,
     variant: MarkerVariant,
     loading: bool,
     loading_style: MarkerLoadingStyle,
     shimmer_style: ShimmerStyle,
+    role: RoleOverride,
     children: Vec<MarkerChild>,
 }
 
@@ -59,14 +61,33 @@ impl Marker {
     /// Create a plain marker.
     pub fn new() -> Self {
         Self {
+            id: None,
             style: StyleRefinement::default(),
             separator_style: StyleRefinement::default(),
             variant: MarkerVariant::default(),
             loading: false,
             loading_style: MarkerLoadingStyle::default(),
             shimmer_style: ShimmerStyle::default(),
+            role: RoleOverride::default(),
             children: Vec::new(),
         }
+    }
+
+    /// Set a stable identity so the marker can appear in the accessibility tree.
+    pub fn id(mut self, id: impl Into<ElementId>) -> Self {
+        self.id = Some(id.into());
+        self
+    }
+
+    /// Set the accessibility role announced for this marker.
+    ///
+    /// A marker is presentational by default. Set [`gpui::Role::Status`] on a
+    /// row that reports streaming or loading progress so assistive technology
+    /// announces its updates. Accessibility nodes need a stable identity, so
+    /// the role takes effect only together with [`Self::id`].
+    pub fn role(mut self, role: impl Into<RoleOverride>) -> Self {
+        self.role = role.into();
+        self
     }
 
     /// Set the visual treatment of the marker.
@@ -142,6 +163,7 @@ impl RenderOnce for Marker {
             .children
             .iter()
             .any(|child| matches!(child, MarkerChild::Icon(_)));
+        let role = self.role;
         let separator_style = self.separator_style;
         let children = self.children.into_iter().map(move |child| match child {
             MarkerChild::Icon(icon) => icon.into_any_element(),
@@ -154,7 +176,7 @@ impl RenderOnce for Marker {
             MarkerChild::Element(element) => element,
         });
 
-        h_flex()
+        let row = h_flex()
             .w_full()
             .min_h(rems(1.))
             .gap_2()
@@ -195,7 +217,15 @@ impl RenderOnce for Marker {
                         .refine_style(&separator_style),
                 )
             })
-            .refine_style(&self.style)
+            .refine_style(&self.style);
+
+        // `role` lives on the stateful element: accessibility nodes need the
+        // stable identity that only an element id provides.
+        match (self.id, role) {
+            (Some(id), RoleOverride::Role(role)) => row.id(id).role(role).into_any_element(),
+            (Some(id), _) => row.id(id).into_any_element(),
+            (None, _) => row.into_any_element(),
+        }
     }
 }
 
@@ -385,6 +415,12 @@ mod tests {
             .content(MarkerContent::new().text("Loading"));
         assert_eq!(custom_icon.children.len(), 2);
         assert!(matches!(&custom_icon.children[0], MarkerChild::Icon(_)));
+
+        assert_eq!(Marker::default().role, RoleOverride::default());
+        assert!(Marker::default().id.is_none());
+        let status = Marker::new().id("sync-status").role(gpui::Role::Status);
+        assert_eq!(status.id, Some("sync-status".into()));
+        assert_eq!(status.role, RoleOverride::Role(gpui::Role::Status));
 
         let styled = Marker::new().opacity(0.37).child("Status").child("Details");
 

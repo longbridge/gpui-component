@@ -244,6 +244,7 @@ Marker::new()
 ## 可访问性与 reduced motion
 
 - 状态、进度、日期和未读边界必须有可读文本；颜色和装饰线只能提供辅助层次。
+- Marker 默认是纯展示元素。表示流式或加载进度的行可以设置 `.id(...)` 加 `.role(Role::Status)`，让辅助技术播报其更新；role 依赖 id 提供的稳定标识。
 - 只有图标的交互 child 使用 `Button` 并提供可见的 `.label(...)` 或其他可读名称；tooltip 只作为补充提示。
 - Separator 线是装饰性的，语义应来自 `MarkerContent` 中的文字。
 - `MarkerContent::text(...)` 的 Shimmer 在系统启用 reduced motion 时会显示静态文字，不请求动画帧。
@@ -272,6 +273,8 @@ Marker::new()
 | `with_loading_style(MarkerLoadingStyle)` | 选择 `Spinner` 或 `Shimmer`。 |
 | `with_shimmer_style(ShimmerStyle)` | 配置文字 shimmer。 |
 | `separator_style(StyleRefinement)` | 调整 Separator 的内部装饰线。 |
+| `id(ElementId)` | 设置稳定标识，让 marker 进入无障碍树。 |
+| `role(Role)` | 设置辅助技术播报的 role；流式更新用 `Role::Status`，需要配合 `id(...)`，默认纯展示。 |
 | `icon(MarkerIcon)` | 添加配置过的图标 slot。 |
 | `content(MarkerContent)` | 添加配置过的内容 slot。 |
 | `child(element)` | 添加任意 child。 |
