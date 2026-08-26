@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use gpui::{
     App, AppContext as _, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement as _,
-    Render, Styled as _, Window, rems,
+    Render, Styled as _, Window, px, rems,
 };
 use gpui_component::{
     ActiveTheme as _, StyledExt as _,
@@ -115,13 +115,14 @@ impl Render for ShimmerStory {
             )
             .child(
                 section("Spread")
-                    .description("Spread is a text-relative highlight half-width.")
+                    .description("Spread is a relative or absolute highlight half-width.")
                     .w(rems(42.5))
                     .v_flex()
                     .gap_2()
                     .child(ShimmerText::new("Narrow highlight · 0.12").spread(0.12))
                     .child(ShimmerText::new("Default highlight · 0.30").spread(0.30))
-                    .child(ShimmerText::new("Wide highlight · 0.60").spread(0.60)),
+                    .child(ShimmerText::new("Wide highlight · 0.60").spread(0.60))
+                    .child(ShimmerText::new("Fixed highlight · 48px").spread(px(48.))),
             )
             .child(
                 section("Direction")

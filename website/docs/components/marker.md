@@ -181,8 +181,9 @@ Marker::new()
 
 The `ShimmerStyle` defaults are a two-second repeating sweep, theme-aware
 highlight color, `0.3` normalized spread, left-to-right direction, and looping.
-`duration(...)` clamps values below one millisecond. `spread(...)` clamps finite
-values to `0.05..=1.0`; non-finite values leave the current spread unchanged.
+`duration(...)` clamps values below one millisecond. `spread(...)` accepts a
+relative `f32` (clamped to `0.05..=1.0`) or an absolute `Pixels` half-width;
+non-finite values leave the current spread unchanged.
 `reverse(true)` changes the direction, and `once(true)` stops after one sweep.
 
 For a marker-independent loading label, use `ShimmerText` directly:

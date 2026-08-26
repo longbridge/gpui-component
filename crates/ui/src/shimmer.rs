@@ -11,6 +11,37 @@ use crate::{ActiveTheme as _, Colorize as _, StyledExt as _};
 const SHIMMER_LAYER_COUNT: usize = 12;
 const DEFAULT_SHIMMER_SPREAD: f32 = 0.3;
 
+/// The shimmer highlight half-width.
+///
+/// A relative spread follows the text width, keeping short and long labels
+/// proportionally lit. An absolute spread keeps the band the same physical
+/// width across labels, the way a fixed gradient would.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum ShimmerSpread {
+    /// Half-width as a fraction of the text width.
+    Relative(f32),
+    /// Half-width as a fixed length.
+    Absolute(Pixels),
+}
+
+impl Default for ShimmerSpread {
+    fn default() -> Self {
+        Self::Relative(DEFAULT_SHIMMER_SPREAD)
+    }
+}
+
+impl From<f32> for ShimmerSpread {
+    fn from(fraction: f32) -> Self {
+        Self::Relative(fraction)
+    }
+}
+
+impl From<Pixels> for ShimmerSpread {
+    fn from(length: Pixels) -> Self {
+        Self::Absolute(length)
+    }
+}
+
 /// The appearance and timing of a reusable text shimmer.
 ///
 /// By default, the highlight's half-width spans 30% of the text width and
@@ -20,7 +51,7 @@ const DEFAULT_SHIMMER_SPREAD: f32 = 0.3;
 pub struct ShimmerStyle {
     duration: Duration,
     highlight_color: Option<Hsla>,
-    spread: f32,
+    spread: ShimmerSpread,
     reverse: bool,
     once: bool,
 }
@@ -45,13 +76,21 @@ impl ShimmerStyle {
         self
     }
 
-    /// Set the highlight half-width as a fraction of the text width.
+    /// Set the highlight half-width.
     ///
-    /// Finite values are clamped to the inclusive `0.05..=1.0` range. The
-    /// default is `0.3`; non-finite values leave the existing spread unchanged.
-    pub fn spread(mut self, spread: f32) -> Self {
-        if spread.is_finite() {
-            self.spread = spread.clamp(0.05, 1.);
+    /// An `f32` is a fraction of the text width; finite values are clamped to
+    /// the inclusive `0.05..=1.0` range and the default is `0.3`. A [`Pixels`]
+    /// value is an absolute half-width with a one-pixel minimum. Non-finite
+    /// values leave the existing spread unchanged.
+    pub fn spread(mut self, spread: impl Into<ShimmerSpread>) -> Self {
+        match spread.into() {
+            ShimmerSpread::Relative(fraction) if fraction.is_finite() => {
+                self.spread = ShimmerSpread::Relative(fraction.clamp(0.05, 1.));
+            }
+            ShimmerSpread::Absolute(length) if length.as_f32().is_finite() => {
+                self.spread = ShimmerSpread::Absolute(length.max(px(1.)));
+            }
+            _ => {}
         }
         self
     }
@@ -78,7 +117,7 @@ impl Default for ShimmerStyle {
         Self {
             duration: Duration::from_secs(2),
             highlight_color: None,
-            spread: DEFAULT_SHIMMER_SPREAD,
+            spread: ShimmerSpread::default(),
             reverse: false,
             once: false,
         }
@@ -139,8 +178,8 @@ impl ShimmerText {
         self
     }
 
-    /// Set the normalized highlight half-width; the default is `0.3`.
-    pub fn spread(mut self, spread: f32) -> Self {
+    /// Set the relative or absolute highlight half-width; the default is `0.3`.
+    pub fn spread(mut self, spread: impl Into<ShimmerSpread>) -> Self {
         self.shimmer_style = self.shimmer_style.spread(spread);
         self
     }
@@ -210,7 +249,7 @@ struct ShimmerGlyphs {
     background: Hsla,
     foreground: Hsla,
     dark: bool,
-    spread: f32,
+    spread: ShimmerSpread,
     phase: f32,
 }
 
@@ -414,7 +453,7 @@ fn shimmer_highlight_color(
 fn shimmer_band_bounds(
     bounds: Bounds<Pixels>,
     phase: f32,
-    spread: f32,
+    spread: ShimmerSpread,
     layer: usize,
 ) -> Option<Bounds<Pixels>> {
     let width = bounds.size.width.as_f32();
@@ -423,9 +462,13 @@ fn shimmer_band_bounds(
         return None;
     }
 
-    let padding = spread + 0.05;
+    let half_width = match spread {
+        ShimmerSpread::Relative(fraction) => width * fraction,
+        ShimmerSpread::Absolute(length) => length.as_f32(),
+    };
+    let padding = half_width / width + 0.05;
     let center = phase.mul_add(1. + padding * 2., -padding) * width;
-    let radius = width * spread * (1. - layer as f32 / SHIMMER_LAYER_COUNT as f32);
+    let radius = half_width * (1. - layer as f32 / SHIMMER_LAYER_COUNT as f32);
     let left = (center - radius).max(0.);
     let right = (center + radius).min(width);
 
@@ -473,7 +516,7 @@ mod tests {
 
         assert_eq!(style.duration, Duration::from_secs(3));
         assert_eq!(style.highlight_color, Some(color));
-        assert_eq!(style.spread, 0.45);
+        assert_eq!(style.spread, ShimmerSpread::Relative(0.45));
         assert!(style.reverse);
         assert!(style.once);
 
@@ -488,17 +531,35 @@ mod tests {
 
         assert_eq!(text.text.as_ref(), "Thinking");
         assert_eq!(text.shimmer_style.duration, Duration::from_secs(4));
-        assert_eq!(text.shimmer_style.spread, 0.5);
+        assert_eq!(text.shimmer_style.spread, ShimmerSpread::Relative(0.5));
         assert!(!text.shimmer_style.reverse);
         assert!(!text.shimmer_style.once);
         assert_eq!(text.style.opacity, Some(0.8));
         assert_eq!(text.id, Some("thinking".into()));
 
-        assert_eq!(ShimmerStyle::new().spread(0.).spread, 0.05);
-        assert_eq!(ShimmerStyle::new().spread(2.).spread, 1.);
+        assert_eq!(
+            ShimmerStyle::new().spread(0.).spread,
+            ShimmerSpread::Relative(0.05)
+        );
+        assert_eq!(
+            ShimmerStyle::new().spread(2.).spread,
+            ShimmerSpread::Relative(1.)
+        );
         assert_eq!(
             ShimmerStyle::new().spread(f32::NAN).spread,
-            DEFAULT_SHIMMER_SPREAD
+            ShimmerSpread::default()
+        );
+        assert_eq!(
+            ShimmerStyle::new().spread(px(0.)).spread,
+            ShimmerSpread::Absolute(px(1.))
+        );
+        assert_eq!(
+            ShimmerStyle::new().spread(px(48.)).spread,
+            ShimmerSpread::Absolute(px(48.))
+        );
+        assert_eq!(
+            ShimmerStyle::new().spread(px(f32::NAN)).spread,
+            ShimmerSpread::default()
         );
         assert_eq!(
             ShimmerStyle::new().duration(Duration::ZERO).duration,
@@ -509,36 +570,41 @@ mod tests {
     #[test]
     fn test_shimmer_band_moves_smoothly_across_text() {
         let bounds = Bounds::new(point(px(10.), px(20.)), size(px(100.), px(18.)));
+        let spread = ShimmerSpread::default();
 
-        assert!(shimmer_band_bounds(bounds, 0., DEFAULT_SHIMMER_SPREAD, 0).is_none());
-        assert!(shimmer_band_bounds(bounds, 1., DEFAULT_SHIMMER_SPREAD, 0).is_none());
+        assert!(shimmer_band_bounds(bounds, 0., spread, 0).is_none());
+        assert!(shimmer_band_bounds(bounds, 1., spread, 0).is_none());
 
-        let early = shimmer_band_bounds(bounds, 0.35, DEFAULT_SHIMMER_SPREAD, 0).unwrap();
-        let late = shimmer_band_bounds(bounds, 0.65, DEFAULT_SHIMMER_SPREAD, 0).unwrap();
+        let early = shimmer_band_bounds(bounds, 0.35, spread, 0).unwrap();
+        let late = shimmer_band_bounds(bounds, 0.65, spread, 0).unwrap();
         assert!(early.origin.x < late.origin.x);
 
-        let outer = shimmer_band_bounds(bounds, 0.5, DEFAULT_SHIMMER_SPREAD, 0).unwrap();
-        let inner =
-            shimmer_band_bounds(bounds, 0.5, DEFAULT_SHIMMER_SPREAD, SHIMMER_LAYER_COUNT - 1)
-                .unwrap();
+        let outer = shimmer_band_bounds(bounds, 0.5, spread, 0).unwrap();
+        let inner = shimmer_band_bounds(bounds, 0.5, spread, SHIMMER_LAYER_COUNT - 1).unwrap();
         assert!(inner.origin.x > outer.origin.x);
         assert!(inner.size.width < outer.size.width);
-        assert!(
-            shimmer_band_bounds(bounds, 0.5, DEFAULT_SHIMMER_SPREAD, SHIMMER_LAYER_COUNT).is_none()
-        );
+        assert!(shimmer_band_bounds(bounds, 0.5, spread, SHIMMER_LAYER_COUNT).is_none());
         assert!(
             shimmer_band_bounds(
                 Bounds::new(bounds.origin, size(px(0.), px(18.))),
                 0.5,
-                DEFAULT_SHIMMER_SPREAD,
+                spread,
                 0
             )
             .is_none()
         );
 
-        let narrow = shimmer_band_bounds(bounds, 0.5, 0.1, 0).unwrap();
-        let wide = shimmer_band_bounds(bounds, 0.5, 0.5, 0).unwrap();
+        let narrow = shimmer_band_bounds(bounds, 0.5, ShimmerSpread::Relative(0.1), 0).unwrap();
+        let wide = shimmer_band_bounds(bounds, 0.5, ShimmerSpread::Relative(0.5), 0).unwrap();
         assert!(narrow.size.width < wide.size.width);
+
+        // An absolute spread keeps the band width constant across text widths.
+        let absolute = ShimmerSpread::Absolute(px(20.));
+        let band = shimmer_band_bounds(bounds, 0.5, absolute, 0).unwrap();
+        assert_eq!(band.size.width, px(40.));
+        let wider_bounds = Bounds::new(bounds.origin, size(px(200.), px(18.)));
+        let wider_band = shimmer_band_bounds(wider_bounds, 0.5, absolute, 0).unwrap();
+        assert_eq!(wider_band.size.width, px(40.));
     }
 
     #[test]

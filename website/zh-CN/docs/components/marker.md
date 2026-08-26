@@ -154,7 +154,7 @@ ShimmerStyle::new().highlight_color(cx.theme().primary);
 ShimmerStyle::new().reverse(true).once(true)
 ```
 
-`duration(Duration::ZERO)` 会被限制为至少一毫秒；非有限的 `spread` 会保留当前值。显式 highlight color 适合产品有明确强调色的场景，默认值会根据文本色和当前主题计算。
+`duration(Duration::ZERO)` 会被限制为至少一毫秒；`spread` 可传相对比例 `f32`（限制在 `0.05..=1.0`）或绝对宽度 `Pixels`，非有限值会保留当前值。显式 highlight color 适合产品有明确强调色的场景，默认值会根据文本色和当前主题计算。
 
 ## 独立使用 ShimmerText
 

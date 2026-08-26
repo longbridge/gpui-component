@@ -51,7 +51,7 @@ The default configuration is:
 | --- | --- | --- |
 | Duration | 2 seconds | One complete sweep. |
 | Highlight color | theme-aware | Derived from the active text/background/theme. |
-| Spread | `0.3` | Highlight half-width as a fraction of text width. |
+| Spread | relative `0.3` | Highlight half-width as a fraction of text width; a fixed `Pixels` width is also accepted. |
 | Direction | left to right | `reverse(false)`. |
 | Repetition | looping | `once(false)`. |
 | Reduced motion | static text | Animation frames are skipped while text remains visible. |
@@ -118,17 +118,21 @@ both themes. Avoid raw palette values in component call sites; use
 
 ### Spread
 
-`spread(...)` controls the highlight half-width relative to the text width. It
-accepts finite values in the inclusive `0.05..=1.0` range and clamps values
-outside that range. Non-finite values leave the current spread unchanged:
+`spread(...)` controls the highlight half-width. A bare `f32` is relative to
+the text width: finite values are clamped to the inclusive `0.05..=1.0` range.
+A `Pixels` value is an absolute half-width with a one-pixel minimum, keeping
+the band the same physical width across labels of different lengths. Non-finite
+values leave the current spread unchanged:
 
 ```rust
 ShimmerText::new("Loading a narrow label…").spread(0.15);
 ShimmerText::new("Loading a broad label…").spread(0.7);
+ShimmerText::new("Fixed-width highlight…").spread(px(48.));
 ```
 
 Use a smaller spread for dense status rows and a broader spread for a short
-assistant label. The text's width, not a fixed pixel band, remains the scale.
+assistant label. Prefer the relative form so the text's width remains the
+scale; use an absolute spread when aligned labels should share one band width.
 
 ### Direction and play-once
 
@@ -280,7 +284,7 @@ for a completed or failed state.
 | `new()` | same as `Default` | Create a theme-aware two-second looping style. |
 | `duration(Duration)` | 2 seconds | Set one sweep duration; clamps below 1 ms. |
 | `highlight_color(Hsla)` | theme-aware | Override the highlight color. |
-| `spread(f32)` | `0.3` | Set normalized half-width; clamps finite values to `0.05..=1.0`. |
+| `spread(f32 \| Pixels)` | relative `0.3` | Set half-width: `f32` is relative and clamps to `0.05..=1.0`; `Pixels` is absolute with a 1px minimum. |
 | `reverse(bool)` | `false` | Reverse the sweep direction. |
 | `once(bool)` | `false` | Play one sweep instead of looping. |
 
@@ -293,7 +297,7 @@ for a completed or failed state.
 | `with_shimmer_style(ShimmerStyle)` | default style | Apply a reusable configuration. |
 | `duration(Duration)` | 2 seconds | Set duration directly. |
 | `highlight_color(Hsla)` | theme-aware | Set color directly. |
-| `spread(f32)` | `0.3` | Set spread directly. |
+| `spread(f32 \| Pixels)` | relative `0.3` | Set spread directly. |
 | `reverse(bool)` | `false` | Set direction directly. |
 | `once(bool)` | `false` | Set repetition directly. |
 | `Styled` methods | inherited text style | Refine typography, color, wrapping, and layout. |

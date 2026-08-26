@@ -45,7 +45,7 @@ ShimmerText::new("正在思考…")
 | --- | --- | --- |
 | `duration` | 两秒 | 完成一次从左到右的高光扫过。 |
 | `highlight_color` | 自动计算 | 根据文字颜色和当前主题生成明亮但可读的高光。 |
-| `spread` | `0.3` | 高光半宽占文字宽度的比例。 |
+| `spread` | 相对 `0.3` | 高光半宽占文字宽度的比例，也可以传 `Pixels` 设置固定宽度。 |
 | `reverse` | `false` | 从左向右移动。 |
 | `once` | `false` | 默认循环播放。 |
 
@@ -111,17 +111,20 @@ ShimmerText::new("正在连接…")
 
 ### Spread
 
-`spread(...)` 设置高光半宽相对于文字宽度的比例：
+`spread(...)` 设置高光半宽。传 `f32` 表示相对文字宽度的比例，有限值会被限制在 `0.05..=1.0`；传 `Pixels` 表示固定的绝对半宽（最小一像素），适合让长短不一的对齐 label 共享同一条高光宽度：
 
 ```rust
 ShimmerText::new("正在上传…")
     .spread(0.15); // 窄高光
 
 ShimmerText::new("正在上传…")
-    .spread(0.75) // 宽高光
+    .spread(0.75); // 宽高光
+
+ShimmerText::new("正在上传…")
+    .spread(px(48.)); // 固定宽度高光
 ```
 
-有限值会被限制在 `0.05..=1.0`；非有限值会保留原配置。较窄的 spread 更克制，较宽的 spread 更容易被注意到。
+非有限值会保留原配置。较窄的 spread 更克制，较宽的 spread 更容易被注意到。
 
 ### Reverse
 
@@ -251,7 +254,7 @@ ShimmerText::new("正在生成回复…")
 | `new()` | 创建使用默认主题高光、两秒周期、`0.3` spread、正向循环的配置。 |
 | `duration(Duration)` | 设置完整 sweep 时长；最小为一毫秒。 |
 | `highlight_color(color)` | 设置显式高光颜色，覆盖主题计算。 |
-| `spread(value)` | 设置高光半宽比例，并限制在 `0.05..=1.0`。 |
+| `spread(value)` | 设置高光半宽：`f32` 为相对比例（限制在 `0.05..=1.0`），`Pixels` 为绝对宽度（最小 1px）。 |
 | `reverse(bool)` | 设置是否从右向左移动。 |
 | `once(bool)` | 设置是否只完成一次 sweep。 |
 
