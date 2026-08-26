@@ -188,13 +188,6 @@ fn scan_with_limit(directory: &Path, max_files: usize) -> Result<TreeStamp> {
         };
 
         for entry in entries.flatten() {
-            if stamp.files >= max_files {
-                bail!(
-                    "source watch for `{}` exceeds the {max_files}-file limit",
-                    directory.display()
-                );
-            }
-
             let name = entry.file_name();
             let name = name.to_string_lossy();
             if name.starts_with('.') {
@@ -222,6 +215,13 @@ fn scan_with_limit(directory: &Path, max_files: usize) -> Result<TreeStamp> {
             let Ok(metadata) = entry.metadata() else {
                 continue;
             };
+
+            if stamp.files >= max_files {
+                bail!(
+                    "source watch for `{}` exceeds the {max_files}-file limit",
+                    directory.display()
+                );
+            }
 
             stamp.files += 1;
             stamp.bytes = stamp.bytes.saturating_add(metadata.len());
@@ -718,5 +718,26 @@ mod tests {
             error.to_string().contains("exceeds the 1-file limit"),
             "the refusal should tell the host why hot reload cannot start: {error:#}"
         );
+    }
+
+    #[test]
+    fn non_source_files_do_not_count_toward_the_source_limit() {
+        let tree = TempTree::new("source-limit-ignores-readme");
+        tree.write("main.js", "export default class {}\n");
+        tree.write("README.md", "application notes\n");
+
+        let stamp = scan_with_limit(tree.path(), 1)
+            .expect("one source plus a README should fit a one-source limit");
+        assert_eq!(stamp.files, 1);
+    }
+
+    #[test]
+    fn a_non_source_tree_fits_a_zero_source_limit() {
+        let tree = TempTree::new("zero-source-limit");
+        tree.write("README.md", "application notes\n");
+
+        let stamp = scan_with_limit(tree.path(), 0)
+            .expect("non-source files should not consume the source-file budget");
+        assert_eq!(stamp.files, 0);
     }
 }
