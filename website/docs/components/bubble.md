@@ -70,8 +70,8 @@ The default state is:
 | Variant | `Filled` | Primary semantic surface. |
 | Reactions | none | No reaction region is rendered. |
 | Maximum width | `0.8` of the parent | Applies to regular variants. |
-| Surface radius | `cx.theme().radius_3xl()` | Follows the active theme. |
-| Content padding | `px_3()` / `py_2p5()` | Applied by `BubbleContent` for regular variants. |
+| Surface radius | `cx.theme().radius_2xl()` | Follows the active theme. |
+| Content padding | `px_3()` / `py_2()` | Applied by `BubbleContent` for regular variants. |
 
 ## Alignment
 
@@ -220,13 +220,13 @@ Bubble::new()
             .action(
                 Button::new("bubble-like")
                     .ghost()
-                    .xsmall()
+                    .small()
                     .label("Like · 2"),
             )
             .action(
                 Button::new("bubble-copy")
                     .ghost()
-                    .xsmall()
+                    .small()
                     .label("Copy"),
             ),
     )
@@ -382,7 +382,7 @@ only to obtain padding makes the hierarchy harder to read.
 | `new()` | filled, no alignment, no reactions | Create a bubble. |
 | `alignment(MessageAlignment)` | unset | Place the bubble at the leading or trailing edge. |
 | `with_variant(BubbleVariant)` | `Filled` | Select the semantic surface treatment. |
-| `content(BubbleContent)` | empty typed content | Replace the visible content surface. |
+| `content(BubbleContent)` | empty typed content | Replace the visible content surface; direct children move into it. |
 | `reactions(BubbleReactions)` | none | Attach a reaction region. |
 
 `Bubble` also implements `ParentElement` for the direct `.child(...)` form and

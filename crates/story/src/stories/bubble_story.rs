@@ -134,7 +134,7 @@ impl Render for BubbleStory {
                                 BubbleReactions::new().action(
                                     Button::new("bubble-like")
                                         .ghost()
-                                        .xsmall()
+                                        .small()
                                         .label("👍 2")
                                         .tooltip("Like this message"),
                                 ),

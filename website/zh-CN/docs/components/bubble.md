@@ -404,7 +404,7 @@ Bubble::new()
 | `new()` | 创建默认的 filled bubble；默认不设置对齐。 |
 | `alignment(MessageAlignment)` | 设置起始侧或结束侧对齐。 |
 | `with_variant(BubbleVariant)` | 设置 bubble surface variant。 |
-| `content(BubbleContent)` | 替换可见内容 surface。 |
+| `content(BubbleContent)` | 替换可见内容 surface；已添加的直接 children 会并入其中。 |
 | `reactions(BubbleReactions)` | 添加可选 reaction 区域。 |
 | `child(element)` | 通过 `ParentElement` 将 child 添加到 `BubbleContent`。 |
 | `Styled` | 调整外层布局、宽度、间距和其他 GPUI 样式。 |
