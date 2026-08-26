@@ -5,9 +5,11 @@
 //! plain data. They run against whichever engine is enabled, which is what
 //! keeps the fallback engine honest.
 
-use crate::{ScriptView, ShellRuntime, capability::Capabilities, policy::Policy};
+use crate::{
+    NativeModules, NativeValue, ScriptView, ShellRuntime, capability::Capabilities, policy::Policy,
+};
 use gpui::{AppContext as _, TestAppContext, VisualTestContext};
-use std::{path::PathBuf, rc::Rc};
+use std::{cell::Cell, path::PathBuf, rc::Rc};
 
 const COUNTER: &str = r#"
 import { View, v_flex, text, Button } from "gpui";
@@ -916,14 +918,8 @@ fn an_embedded_runtime_reloads_when_a_source_changes(cx: &mut TestAppContext) {
             .expect("instantiate");
         let view = cx.new(|_| ScriptView::new(runtime.clone(), object));
         // Exercise the watcher itself in both debug and release test builds.
-        let watch = crate::watch::Watch::start(
-            &runtime,
-            &view,
-            directory.clone(),
-            "main.js",
-            window,
-            cx,
-        );
+        let watch =
+            crate::watch::Watch::start(&runtime, &view, directory.clone(), "main.js", window, cx);
         watch.forget();
         view
     });
@@ -971,6 +967,202 @@ fn an_embedded_runtime_reloads_when_a_source_changes(cx: &mut TestAppContext) {
     );
 
     let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[gpui::test]
+fn reload_replaces_old_tasks_and_rolls_back_failed_new_tasks(cx: &mut TestAppContext) {
+    cx.update(crate::init);
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    let directory =
+        std::env::temp_dir().join(format!("gpui-shell-reload-tasks-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&directory);
+    std::fs::create_dir_all(&directory).expect("application directory");
+
+    let source = |caption: &str| {
+        format!(
+            "import {{ View, timer, text }} from \"gpui\";\n\
+             export default class Panel extends View {{\n\
+               init() {{ timer.every(60_000, () => {{}}); }}\n\
+               render() {{ return text(\"{caption}\"); }}\n\
+             }}\n"
+        )
+    };
+    std::fs::write(directory.join("main.js"), source("first")).expect("initial source");
+
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let baseline = crate::engine::quickjs::task_count();
+    let view = context.update(|window, cx| {
+        let view_type = runtime.load_app(&directory, "main.js").expect("load");
+        runtime
+            .instantiate_view(&view_type, window, cx)
+            .expect("instantiate")
+    });
+    assert_eq!(crate::engine::quickjs::task_count(), baseline + 1);
+
+    std::fs::write(directory.join("main.js"), source("second")).expect("replacement source");
+    context
+        .update(|window, cx| {
+            crate::watch::reload(&runtime, &view, &directory, "main.js", window, cx)
+        })
+        .expect("successful reload");
+    assert_eq!(
+        crate::engine::quickjs::task_count(),
+        baseline + 1,
+        "the old instance's timer must be retired when the new one commits"
+    );
+
+    std::fs::write(
+        directory.join("main.js"),
+        "import { timer } from \"gpui\";\n\
+         timer.every(60_000, () => {});\n\
+         throw new Error(\"reload failed\");",
+    )
+    .expect("failing source");
+    context
+        .update(|window, cx| {
+            crate::watch::reload(&runtime, &view, &directory, "main.js", window, cx)
+        })
+        .expect_err("the replacement must fail");
+    assert_eq!(
+        crate::engine::quickjs::task_count(),
+        baseline + 1,
+        "work created by a failed reload must be rolled back"
+    );
+
+    let _ = std::fs::remove_dir_all(directory);
+}
+
+#[gpui::test]
+fn reload_evaluates_modules_under_the_views_frozen_capabilities(cx: &mut TestAppContext) {
+    cx.update(crate::init);
+    let observed = Rc::new(Cell::new(false));
+    let mut modules = NativeModules::new();
+    modules.register("audit", {
+        let observed = observed.clone();
+        move |module| {
+            module.function("observe", move |_| {
+                observed.set(crate::scope::policy().capabilities().has_read_access());
+                Ok(NativeValue::from(true))
+            });
+        }
+    });
+    crate::set_native_modules(modules);
+
+    let directory =
+        std::env::temp_dir().join(format!("gpui-shell-reload-policy-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&directory);
+    std::fs::create_dir_all(&directory).expect("application directory");
+    let source = |caption: &str| {
+        format!(
+            "import {{ View, native, text }} from \"gpui\";\n\
+             native('audit').observe();\n\
+             export default class Panel extends View {{\n\
+               render() {{ return text(\"{caption}\"); }}\n\
+             }}"
+        )
+    };
+    std::fs::write(directory.join("main.js"), source("first")).expect("initial source");
+
+    crate::set_capabilities(Capabilities::new().read_roots([directory.clone()]));
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let view = context.update(|window, cx| {
+        let view_type = runtime.load_app(&directory, "main.js").expect("load");
+        runtime
+            .instantiate_view(&view_type, window, cx)
+            .expect("instantiate")
+    });
+
+    crate::set_capabilities(Capabilities::new());
+    observed.set(false);
+    std::fs::write(directory.join("main.js"), source("second")).expect("replacement source");
+    context
+        .update(|window, cx| {
+            crate::watch::reload(&runtime, &view, &directory, "main.js", window, cx)
+        })
+        .expect("reload");
+    assert!(
+        observed.get(),
+        "module evaluation must keep the view's frozen capability grant"
+    );
+
+    crate::clear_native_modules();
+    let _ = std::fs::remove_dir_all(directory);
+}
+
+#[gpui::test]
+fn loading_a_second_application_keeps_the_first_dynamic_import_root(cx: &mut TestAppContext) {
+    cx.update(crate::init);
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    let base = std::env::temp_dir().join(format!("gpui-shell-multi-root-{}", std::process::id()));
+    let first = base.join("first");
+    let second = base.join("second");
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(&first).expect("first application");
+    std::fs::create_dir_all(&second).expect("second application");
+    std::fs::write(
+        first.join("feature.js"),
+        "export const label = 'first feature';",
+    )
+    .expect("first feature");
+    std::fs::write(
+        first.join("main.js"),
+        "import { View, sleep, spawn, text, with_cx } from \"gpui\";\n\
+         export default class First extends View {\n\
+           init() {\n\
+             this.label = 'waiting';\n\
+             spawn(async () => {\n\
+               await sleep(1);\n\
+               this.label = (await import('./feature.js')).label;\n\
+               with_cx((cx) => cx.notify());\n\
+             });\n\
+           }\n\
+           render() { return text(this.label); }\n\
+         }",
+    )
+    .expect("first entry");
+    std::fs::write(
+        second.join("main.js"),
+        "import { View, text } from \"gpui\";\n\
+         export default class Second extends View { render() { return text('second'); } }",
+    )
+    .expect("second entry");
+
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let first_view = context.update(|window, cx| {
+        let view_type = runtime.load_app(&first, "main.js").expect("load first");
+        runtime
+            .instantiate_view(&view_type, window, cx)
+            .expect("instantiate first")
+    });
+    context.update(|window, cx| {
+        let view_type = runtime.load_app(&second, "main.js").expect("load second");
+        runtime
+            .instantiate_view(&view_type, window, cx)
+            .expect("instantiate second")
+    });
+
+    context
+        .executor()
+        .advance_clock(std::time::Duration::from_millis(2));
+    context.run_until_parked();
+    draw(&mut context, &first_view);
+    let tree = context.update(|_, cx| {
+        first_view
+            .read(cx)
+            .snapshot()
+            .map(crate::RenderSnapshot::debug_tree)
+            .unwrap_or_default()
+    });
+    assert!(
+        tree.contains("first feature"),
+        "the first application's lazy import used the wrong root: {tree}"
+    );
+
+    let _ = std::fs::remove_dir_all(base);
 }
 
 fn draw(context: &mut VisualTestContext, view: &gpui::Entity<ScriptView>) {
@@ -1064,14 +1256,8 @@ fn a_watcher_releases_its_view(cx: &mut TestAppContext) {
             .instantiate(&view_type, window, cx)
             .expect("instantiate");
         let view = cx.new(|_| ScriptView::new(runtime.clone(), object));
-        let watch = crate::watch::Watch::start(
-            &runtime,
-            &view,
-            directory.clone(),
-            "main.js",
-            window,
-            cx,
-        );
+        let watch =
+            crate::watch::Watch::start(&runtime, &view, directory.clone(), "main.js", window, cx);
         watch.forget();
         view.downgrade()
     });

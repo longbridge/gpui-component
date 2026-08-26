@@ -202,7 +202,7 @@ pub fn set_native_modules(modules: NativeModules) {
 /// Removes every native module.
 ///
 /// A host that registered modules capturing GPUI entities should call this when
-/// it goes away; see [`native::clear_modules`] for why leaving them installed is
+/// it goes away; leaving them installed is
 /// a leak rather than merely untidy.
 pub fn clear_native_modules() {
     native::clear_modules();

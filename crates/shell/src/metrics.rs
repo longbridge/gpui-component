@@ -21,7 +21,8 @@ use std::{cell::Cell, time::Duration};
 
 /// A reading of the runtime's counters.
 ///
-/// Values are a snapshot taken at the moment [`Metrics::read`] was called;
+/// Values are a snapshot taken at the moment
+/// [`ShellRuntime::read_metrics`](crate::ShellRuntime::read_metrics) was called;
 /// nothing here keeps updating behind the caller's back.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct RuntimeMetrics {

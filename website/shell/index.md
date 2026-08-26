@@ -91,7 +91,7 @@ All figures here were taken on a MacBook Pro (M3, 8 cores, 24 GB): the frame and
 
 ### Security: nothing by default, and a language trimmed to match
 
-`Capabilities::default()` is the empty set — no file access, no storage, no clipboard, no process execution, no network. The host grants what it grants, every entry point re-reads the grant at call time so a revocation takes effect on the next call, and every path in the `fs` surface goes through **one** resolver that refuses anything landing outside a granted root.
+`Capabilities::default()` is the empty set — no file access, no storage, no clipboard, no process execution, no network. The host decides the grant before loading a view, which then keeps that grant for its lifetime; every path in the `fs` surface goes through **one** resolver that refuses anything landing outside a granted root.
 
 Below the grants, the sandbox trims the language itself, because one VM will eventually host several plugins: `eval` and all four function compilers are gone, the built-in prototypes are frozen so one plugin cannot change `Object.prototype` for another, module resolution is confined to the application directory, and the heap (256 MiB), interpreter stack (1 MiB) and time in a single call (50 ms in `render`) are capped. That time limit is an interrupt a `catch` block cannot swallow, which is measured by a test. See [Capabilities](./capabilities.md).
 

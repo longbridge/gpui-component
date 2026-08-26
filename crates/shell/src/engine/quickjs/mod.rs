@@ -62,6 +62,19 @@ mod scheduler;
 pub(crate) fn cancel_policy_tasks(policy: &Rc<Policy>) {
     scheduler::cancel_policy(policy);
 }
+
+pub(crate) fn task_checkpoint() -> u64 {
+    scheduler::checkpoint()
+}
+
+pub(crate) fn cancel_tasks_since(runtime: &ShellRuntime, checkpoint: u64) {
+    scheduler::cancel_since(runtime, checkpoint);
+}
+
+pub(crate) fn cancel_view_tasks_before(view: &Entity<ScriptView>, checkpoint: u64) {
+    scheduler::cancel_owner_before(view, checkpoint);
+}
+
 #[cfg(test)]
 pub(crate) fn task_count() -> usize {
     scheduler::task_count()
@@ -126,7 +139,7 @@ pub struct ShellRuntime {
     context: JsContext,
     /// Incremented per `load_app`, so a reload re-reads every module rather
     /// than serving the first version from QuickJS's module cache.
-    module_generation: Rc<Cell<u32>>,
+    app_modules: AppModules,
     /// Held so the context stays alive, and so the module loader can be scoped
     /// to an application directory when one is loaded.
     js_runtime: JsRuntime,
@@ -172,14 +185,17 @@ impl ShellRuntime {
         let js_runtime = JsRuntime::new().map_err(js_setup_error)?;
         let context = JsContext::full(&js_runtime).map_err(js_setup_error)?;
 
+        let app_modules = AppModules::default();
         js_runtime.set_loader(
             (
                 standard::resolver(),
                 BuiltinResolver::default().with_module("gpui"),
+                app_modules.clone(),
             ),
             (
                 standard::loader(),
                 ModuleLoader::default().with_module("gpui", GpuiModule),
+                app_modules.clone(),
             ),
         );
 
@@ -199,7 +215,7 @@ impl ShellRuntime {
             #[cfg(test)]
             test_http_client: RefCell::new(None),
             context,
-            module_generation: Rc::new(Cell::new(0)),
+            app_modules,
             js_runtime,
         });
 
@@ -274,21 +290,7 @@ impl ShellRuntime {
 
         // Every load is a new generation, which is what makes a reload pick up
         // a change in an imported module rather than only in the entry point.
-        self.module_generation
-            .set(self.module_generation.get().wrapping_add(1));
-
-        self.js_runtime.set_loader(
-            (
-                standard::resolver(),
-                BuiltinResolver::default().with_module("gpui"),
-                AppModules::new(root.clone(), self.module_generation.clone()),
-            ),
-            (
-                standard::loader(),
-                ModuleLoader::default().with_module("gpui", GpuiModule),
-                AppModules::new(root.clone(), self.module_generation.clone()),
-            ),
-        );
+        let generation = self.app_modules.register(root.clone());
 
         let entry = root.join(entry);
         let source = read_module_source(&entry)?;
@@ -297,11 +299,7 @@ impl ShellRuntime {
         // other, and a reload that re-read every import but served a stale
         // `main.js` would be the same bug one level up.
         self.load_source(
-            &format!(
-                "{}?v={}",
-                entry.to_string_lossy(),
-                self.module_generation.get()
-            ),
+            &format!("{}?v={}", entry.to_string_lossy(), generation),
             &source,
         )
     }
@@ -710,9 +708,9 @@ impl ShellRuntime {
 /// never matches. Owning the resolver also puts the sandbox's module policy in
 /// one place — a module must live inside the application root, which is what
 /// stops `import "../../../etc/passwd"` before it reaches the filesystem.
-#[derive(Clone)]
+#[derive(Clone, Default)]
 struct AppModules {
-    root: std::path::PathBuf,
+    applications: Rc<RefCell<Vec<ApplicationModules>>>,
     /// Bumped on every load so a reload re-reads every file.
     ///
     /// QuickJS caches an evaluated module by name, and an ES module cannot be
@@ -723,12 +721,26 @@ struct AppModules {
     /// a generation makes each reload a different module as far as the cache is
     /// concerned. The previous generation stays in the cache until the runtime
     /// shuts down; that is the cost, and it is a development-only one.
-    generation: Rc<Cell<u32>>,
+    next_generation: Rc<Cell<u32>>,
+}
+
+#[derive(Clone)]
+struct ApplicationModules {
+    root: std::path::PathBuf,
+    generation: u32,
 }
 
 impl AppModules {
-    fn new(root: std::path::PathBuf, generation: Rc<Cell<u32>>) -> Self {
-        Self { root, generation }
+    fn register(&self, root: std::path::PathBuf) -> u32 {
+        let generation = self.next_generation.get().wrapping_add(1);
+        self.next_generation.set(generation);
+        let mut applications = self.applications.borrow_mut();
+        if let Some(application) = applications.iter_mut().find(|app| app.root == root) {
+            application.generation = generation;
+        } else {
+            applications.push(ApplicationModules { root, generation });
+        }
+        generation
     }
 
     /// Strips the generation tag a resolved name carries.
@@ -736,11 +748,26 @@ impl AppModules {
         name.split_once("?v=").map(|(path, _)| path).unwrap_or(name)
     }
 
-    fn candidate(&self, base: &str, name: &str) -> Option<std::path::PathBuf> {
+    fn application_for_base(&self, base: &str) -> Option<ApplicationModules> {
+        let base = Path::new(Self::untag(base));
+        self.applications
+            .borrow()
+            .iter()
+            .filter(|application| base.starts_with(&application.root))
+            .max_by_key(|application| application.root.components().count())
+            .cloned()
+    }
+
+    fn candidate(
+        &self,
+        application: &ApplicationModules,
+        base: &str,
+        name: &str,
+    ) -> Option<std::path::PathBuf> {
         let start = if name.starts_with('.') {
             Path::new(Self::untag(base)).parent()?.to_path_buf()
         } else {
-            self.root.clone()
+            application.root.clone()
         };
 
         let joined = start.join(name);
@@ -761,19 +788,25 @@ impl Resolver for AppModules {
         name: &str,
         _attributes: Option<ImportAttributes<'js>>,
     ) -> JsResult<String> {
-        let Some(path) = self.candidate(base, name) else {
+        let Some(application) = self.application_for_base(base) else {
+            return Err(Exception::throw_message(
+                ctx,
+                &format!("cannot identify the application importing `{name}` from `{base}`"),
+            ));
+        };
+        let Some(path) = self.candidate(&application, base, name) else {
             return Err(Exception::throw_message(
                 ctx,
                 &format!("cannot resolve module `{name}` from `{base}`"),
             ));
         };
 
-        if !path.starts_with(&self.root) {
+        if !path.starts_with(&application.root) {
             return Err(Exception::throw_message(
                 ctx,
                 &format!(
                     "module `{name}` resolves outside the application directory `{}`",
-                    self.root.display()
+                    application.root.display()
                 ),
             ));
         }
@@ -781,7 +814,7 @@ impl Resolver for AppModules {
         Ok(format!(
             "{}?v={}",
             path.to_string_lossy(),
-            self.generation.get()
+            application.generation
         ))
     }
 }

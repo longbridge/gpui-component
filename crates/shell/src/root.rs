@@ -12,7 +12,7 @@
 //! `gpui-base` only (see `docs/gpui-shell.md` §4.2), so the equivalent
 //! host has to be written here rather than reused.
 
-use std::{rc::Rc, time::Duration};
+use std::{path::PathBuf, rc::Rc, time::Duration};
 
 use gpui::{
     Anchor, AnyView, App, ClickEvent, ClipboardItem, Context, FocusHandle, Global, Hsla,
@@ -26,7 +26,7 @@ use gpui_base::{
     ToastStack, ToastStackState, active_focus_trap, v_flex,
 };
 
-use crate::scope;
+use crate::{scope, view::ScriptView};
 
 actions!(shell_root, [Tab, TabPrev, Copy]);
 
@@ -76,7 +76,7 @@ const TOAST_WIDTH: gpui::Pixels = px(320.);
 /// 3. **Dialog stack** — in open order, oldest at the bottom. Each dialog is
 ///    deferred at `10 + index`, so a later dialog always paints over an earlier
 ///    one regardless of the order the elements were built in.
-/// 4. **Toasts** — above everything, at [`TOAST_PRIORITY`].
+/// 4. **Toasts** — above everything, at the root's toast priority.
 ///
 /// Only the topmost dialog draws a backdrop. A stack of three dialogs dims the
 /// window once, not three times, and the single backdrop is what separates the
@@ -125,6 +125,7 @@ const TOAST_WIDTH: gpui::Pixels = px(320.);
 /// of what goes *inside* an overlay belongs to the script.
 pub struct ShellRoot {
     content: AnyView,
+    application: Option<MountedApplication>,
     /// Retains a script application's policy and cancels its work when this
     /// window root is dropped. Ordinary Rust content leaves it empty.
     application_policy: Option<Rc<crate::policy::Policy>>,
@@ -138,6 +139,12 @@ pub struct ShellRoot {
     /// Source of ids for toasts pushed without one. Monotonic so that a
     /// replaced id can never collide with a live toast.
     next_toast_ordinal: u64,
+}
+
+pub(crate) struct MountedApplication {
+    pub(crate) view: gpui::Entity<ScriptView>,
+    pub(crate) root: PathBuf,
+    pub(crate) entry: String,
 }
 
 struct ActiveDialog {
@@ -177,6 +184,7 @@ impl ShellRoot {
 
         Self {
             content,
+            application: None,
             application_policy: None,
             dialogs: Vec::new(),
             sheet: None,
@@ -188,14 +196,17 @@ impl ShellRoot {
     }
 
     pub(crate) fn with_application(
-        content: AnyView,
+        view: gpui::Entity<ScriptView>,
+        root: PathBuf,
+        entry: String,
         policy: Rc<crate::policy::Policy>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let mut root = Self::new(content, window, cx);
-        root.application_policy = Some(policy);
-        root
+        let mut shell_root = Self::new(view.clone().into(), window, cx);
+        shell_root.application = Some(MountedApplication { view, root, entry });
+        shell_root.application_policy = Some(policy);
+        shell_root
     }
 
     /// Reaches the root of the window a call is happening in.
@@ -217,6 +228,10 @@ impl ShellRoot {
     /// The view this window was opened with, below every overlay.
     pub fn content(&self) -> &AnyView {
         &self.content
+    }
+
+    pub(crate) fn application(&self) -> Option<&MountedApplication> {
+        self.application.as_ref()
     }
 
     /// How many dialogs are open. The topmost is the only interactive one.

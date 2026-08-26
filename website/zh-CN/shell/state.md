@@ -259,12 +259,12 @@ handle.is_done();
 ### Timer 与标准宿主 API
 
 ```text
-`setTimeout` is not available in the shell: use gpui.timer(ms, callback)
+`setTimeout` is not available in the shell: use timer.after(ms, callback)
 ```
 
-`setTimeout`、`setInterval`、`clearTimeout` 与 `clearInterval` 是会抛错并指向 `gpui.timer` 的 stub。全局 `fetch` 与 `WebSocket`，以及 [Capabilities](./capabilities.md) 中记录的安全标准模块，都是真实的异步宿主 API。CommonJS `require` 仍不可用；请使用 ES module。
+`setTimeout`、`setInterval`、`clearTimeout` 与 `clearInterval` 是会抛错并指向 `timer.after` 或 `timer.every` 的 stub。全局 `fetch` 与 `WebSocket`，以及 [Capabilities](./capabilities.md) 中记录的安全标准模块，都是真实的异步宿主 API。CommonJS `require` 仍不可用；请使用 ES module。
 
-DOM 名字是刻意的例外：`window`、`document`、`localStorage` 是真正缺席而不是桩，因为做环境探测的 bundle 读的正是 `typeof window === "undefined"` 来走非浏览器分支，而一个抛异常的 getter 会把本来能工作的特性探测变成崩溃。
+浏览器 DOM 与存储并不存在：没有 `document` 或 `localStorage`。全局 `window` 是 gpui-shell 用来承载 dialog、sheet 与 toast 的 overlay host，并不是浏览器 `Window`，也不提供 DOM。
 
 ## 还没有的东西
 

@@ -2686,8 +2686,9 @@ is what stops `import "../../../etc/passwd"` before the filesystem is touched.
 `Capabilities::default()` is the empty set, every field is private, and
 construction goes through a builder — so "no capability by default" is a fact
 about the type rather than a promise in prose. The grant lives on the calling
-frame's `Policy` and is re-read at every call, so revoking a capability takes
-effect on the next call rather than on the next restart.
+frame's `Policy` and is checked at every call. A view freezes its grant when it
+is loaded; changing the default policy affects later views rather than silently
+changing the authority of code that is already running.
 
 The three-state `granted` / `denied` / `prompt` model, the authorization UI, and
 persisting a decision in host configuration are all part of §18 and not built.
@@ -2939,7 +2940,7 @@ a source file changes → debounce 200 ms → re-evaluate the module →
 construct a new view instance → swap the object in and notify
 ```
 
-`Watch::start` drives reloads whose implementation does **all** of its fallible
+`ShellRuntime::watch` drives reloads whose implementation does **all** of its fallible
 work before it touches the live
 entity: re-evaluating the module can throw, and constructing the view can throw,
 so both happen first and the swap is a single statement at the end. A save that
@@ -2984,7 +2985,7 @@ others miss, and what it cannot see is a change that preserves all three, such a
 swapping two files' names. A `notify`-based watcher would cut latency from one
 poll interval to milliseconds, stop scaling with file count, and see renames;
 an event-backed watcher could replace this internal detector without changing
-the public `Watch::start` lifecycle.
+the public `ShellRuntime::watch` lifecycle.
 
 ### 21.3 Checking, declarations, and DevTools
 

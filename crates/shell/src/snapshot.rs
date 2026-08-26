@@ -32,7 +32,7 @@ use crate::{
 
 /// One frozen description of a script view's interface.
 ///
-/// Built by the engine and read by [`crate::materialize`]; nothing mutates one
+/// Built by the engine and read by the native materializer; nothing mutates one
 /// after it is published. A replacement is built beside it and swapped in whole,
 /// so a script render that fails leaves the previous snapshot untouched.
 pub struct RenderSnapshot {

@@ -184,7 +184,7 @@ impl PluginManifest {
     ///
     /// It is the panel-name prefix (`script:<id>/<panel>`, §15.4), the storage
     /// key, the log field and the identity a capability approval is recorded
-    /// against — which is why [`validate_id`] is as strict as it is.
+    /// against — which is why the manifest parser validates ids strictly.
     pub fn id(&self) -> &str {
         &self.id
     }
@@ -887,15 +887,6 @@ impl Plugin {
         self.policy.capabilities()
     }
 
-    /// The authority this plugin runs under.
-    ///
-    /// A host that wants to run something on the plugin's behalf outside its
-    /// view — evaluating a command handler, say — opens a scope with this so
-    /// that code sees the plugin's grant rather than whatever was in force.
-    pub fn policy(&self) -> &Rc<Policy> {
-        &self.policy
-    }
-
     /// The view the entry module default-exported.
     pub fn view(&self) -> &Entity<ScriptView> {
         &self.view
@@ -997,33 +988,32 @@ impl ShellRuntime {
         window: &mut Window,
         cx: &mut App,
     ) -> Entity<ShellRoot> {
-        let root = root.as_ref().to_path_buf();
-        let manifest_path = root.join(MANIFEST_FILE);
-        if !manifest_path.is_file() {
-            let policy = Rc::new(crate::policy::default().duplicate());
-            let loaded = load_view_with_policy(self, &root, "main.js", policy.clone(), window, cx);
-            return match loaded {
-                Ok(view) => {
-                    cx.new(|cx| ShellRoot::with_application(view.into(), policy, window, cx))
-                }
-                Err(error) => load_failure_root(error.to_string(), window, cx),
-            };
-        }
-
-        let loaded: Result<(Entity<ScriptView>, Rc<Policy>)> = (|| {
-            let manifest = PluginManifest::read(&root)?;
-            let policy = Rc::new(crate::policy::default().duplicate());
-            let view =
-                load_view_with_policy(self, &root, manifest.entry(), policy.clone(), window, cx)?;
-            Ok((view, policy))
-        })();
-
-        match loaded {
-            Ok((view, policy)) => {
-                cx.new(|cx| ShellRoot::with_application(view.into(), policy, window, cx))
-            }
+        match self.try_load(root, window, cx) {
+            Ok(root) => root,
             Err(error) => load_failure_root(error.to_string(), window, cx),
         }
+    }
+
+    /// Loads one application and preserves a structured error for hosts that
+    /// do not want the convenience failure surface returned by [`Self::load`].
+    pub fn try_load(
+        self: &Rc<Self>,
+        root: impl AsRef<Path>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Result<Entity<ShellRoot>> {
+        let root = root.as_ref().to_path_buf();
+        let manifest_path = root.join(MANIFEST_FILE);
+        let entry = if manifest_path.is_file() {
+            let manifest = PluginManifest::read(&root)?;
+            manifest.entry().to_owned()
+        } else {
+            "main.js".to_owned()
+        };
+        let root = crate::runtime::resolve_app_root(&root, &entry)?;
+        let policy = Rc::new(crate::policy::default().duplicate());
+        let view = load_view_with_policy(self, &root, &entry, policy.clone(), window, cx)?;
+        Ok(cx.new(|cx| ShellRoot::with_application(view, root, entry, policy, window, cx)))
     }
 }
 
@@ -1150,6 +1140,8 @@ impl PluginManager {
     /// inert manifest before its requested capabilities become a policy; a
     /// denial executes nothing. The whole approved load then runs inside that
     /// policy, because the entry module may use capabilities while registering.
+    /// Call [`Self::discover`] first and handle every returned result; `load`
+    /// never hides a malformed manifest behind a generic missing-id error.
     pub fn load(
         &mut self,
         runtime: &Rc<ShellRuntime>,
@@ -1159,7 +1151,9 @@ impl PluginManager {
         cx: &mut App,
     ) -> Result<()> {
         if !self.discovered {
-            self.discover();
+            bail!(
+                "plugin discovery has not run; call PluginManager::discover() and handle every result before loading `{id}`"
+            );
         }
 
         if self.loaded.contains_key(id) {
@@ -1394,6 +1388,29 @@ mod tests {
                     .is_ok()
             );
         });
+        let watch = context
+            .update(|window, cx| runtime.watch(&root, window, cx))
+            .expect("loaded root retains its source metadata");
+        drop(watch);
+    }
+
+    #[gpui::test]
+    fn runtime_try_load_preserves_the_structured_script_error(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let application = TempTree::new("direct-try-load-error");
+        std::fs::write(application.path().join("main.js"), "this is not javascript")
+            .expect("broken source");
+
+        let runtime = ShellRuntime::new_isolated().expect("runtime");
+        let window = cx.add_window(|_, _| gpui::Empty);
+        let mut context = VisualTestContext::from_window(*window.deref(), cx);
+        let error = context
+            .update(|window, cx| runtime.try_load(application.path(), window, cx))
+            .expect_err("try_load must not replace a structured error with a view");
+        assert!(
+            error.to_string().contains("main.js"),
+            "the source path must survive: {error:#}"
+        );
     }
 
     #[gpui::test]
@@ -1542,6 +1559,20 @@ mod tests {
         let mut context = VisualTestContext::from_window(*window.deref(), cx);
         let mut manager = PluginManager::new(vec![plugins.path().to_path_buf()])
             .with_data_home(data.path().to_path_buf());
+        let undiscovered = context
+            .update(|window, cx| {
+                manager.load(&runtime, "com.example.async-init", |_| true, window, cx)
+            })
+            .expect_err("load must not hide discovery errors");
+        assert!(
+            undiscovered.to_string().contains("discover"),
+            "{undiscovered:#}"
+        );
+        let discovered = manager.discover();
+        assert!(
+            discovered.iter().all(Result::is_ok),
+            "test plugin must discover cleanly: {discovered:?}"
+        );
 
         let denied = context
             .update(|window, cx| {

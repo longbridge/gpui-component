@@ -30,7 +30,7 @@
 //! [`NativeValue`]: null, boolean, number, string, array, object. It never
 //! receives a script handle. That is not a convenience — a handle would let the
 //! host keep a reference to a script value past the call that produced it, and
-//! past the [`crate::scope`] frame that made the surrounding context valid. It
+//! past the internal call-scope frame that made the surrounding context valid. It
 //! is also what lets one registry serve both engines, since neither engine's
 //! value type appears in this file.
 //!
@@ -40,7 +40,7 @@
 //! call. Calling back into the VM from there would run script code with an
 //! engine frame already on the stack — re-entering QuickJS, and re-entering the
 //! render pass that is currently building an element tree. Holding no script
-//! handle makes that impossible to express, and [`dispatch`] refuses a nested
+//! handle makes that impossible to express, and the internal dispatcher refuses a nested
 //! call outright so a host that finds another route (pumping GPUI until a view
 //! re-renders, say) gets a diagnosable error instead of undefined behavior.
 //!
@@ -467,7 +467,7 @@ impl NativeModules {
     }
 
     /// Resolves and calls in one step, for a host driving the registry
-    /// directly. The engine goes through [`dispatch`] instead.
+    /// directly. The engine goes through its guarded dispatcher instead.
     pub fn call(&self, module: &str, function: &str, arguments: &NativeArguments) -> NativeResult {
         self.get(module)?.call(function, arguments)
     }

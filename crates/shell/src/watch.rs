@@ -12,23 +12,22 @@
 //!
 //! The first is that a script error must never take the host down (§21.1). A
 //! reload runs untrusted script: the module can throw while it is evaluated,
-//! and the view constructor can throw while it runs. [`reload`] therefore does
-//! all of its fallible work before it touches the live entity, so a broken save
+//! and the view constructor can throw while it runs. [`Watch::start`] therefore
+//! drives reloads that do all fallible work before touching the live entity, so a broken save
 //! leaves the previous working view on screen with the error reported to the
 //! caller — the same promise the render-time error overlay makes.
 //!
 //! The second is that this module stays engine independent. It names
-//! [`ShellRuntime`], [`ViewObject`] and [`Entity<ScriptView>`] and nothing
-//! below them, exactly like every other module above `engine::`. Reloading is
-//! the same three calls whatever the engine turns out to be.
+//! [`ShellRuntime`] and [`Entity<ScriptView>`] and nothing below them, exactly
+//! like every other module above `engine::`. Reloading uses the same engine seam
+//! whatever the engine turns out to be.
 //!
 //! # Why polling, and what a real watcher would buy
 //!
-//! [`SourceWatcher`] compares modification stamps instead of subscribing to
+//! The internal source watcher compares modification stamps instead of subscribing to
 //! filesystem events, because `gpui-shell` deliberately takes no dependency on
-//! `notify` (§21.2: the host injects the watcher). Polling is honest for the
-//! job it has: the host drives it from a GPUI timer at a low frequency — a
-//! second is plenty for a human editing a file — and the cost is one `stat` per
+//! `notify`. Polling is honest for the job it has: the host drives it from a
+//! 250 ms GPUI timer, and the cost is one `stat` per
 //! source file in a directory that holds a handful of them.
 //!
 //! A `notify`-based watcher would improve three things, none of which is fatal
@@ -36,9 +35,8 @@
 //! cost would stop scaling with the file count, which matters for an
 //! application that vendors a large dependency tree; and it would see the
 //! changes a stamp cannot — a rename or an atomic replace that preserves both
-//! size and timestamp. If the host already runs a `notify` watcher for theme
-//! files, feeding its events into [`SourceWatcher::notice`] is a smaller change
-//! than replacing this type.
+//! size and timestamp. An event-backed detector could replace this internal
+//! polling mechanism without changing the public [`Watch::start`] lifecycle.
 
 use std::{
     path::{Path, PathBuf},
@@ -372,6 +370,43 @@ impl Watch {
     }
 }
 
+impl ShellRuntime {
+    /// Starts watching an application previously mounted with [`Self::load`]
+    /// or [`Self::try_load`].
+    ///
+    /// The root retains the resolved directory, manifest entry, and typed
+    /// script view, so the host does not repeat metadata or downcast content.
+    pub fn watch(
+        self: &Rc<Self>,
+        root: &Entity<ShellRoot>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Result<Watch> {
+        let (view, application_root, entry) = {
+            let root = root.read(cx);
+            let application = root
+                .application()
+                .context("this ShellRoot does not contain a loaded script application")?;
+            (
+                application.view.clone(),
+                application.root.clone(),
+                application.entry.clone(),
+            )
+        };
+        if !Rc::ptr_eq(&view.read(cx).runtime(), self) {
+            bail!("this ShellRoot belongs to a different gpui-shell runtime");
+        }
+        Ok(Watch::start(
+            self,
+            &view,
+            application_root,
+            entry,
+            window,
+            cx,
+        ))
+    }
+}
+
 /// The toast id, fixed so a repeated failure replaces the standing message
 /// rather than stacking a column of them.
 const RELOAD_TOAST: &str = "shell-reload";
@@ -428,18 +463,43 @@ pub(crate) fn reload(
         );
     }
 
+    let policy = view.read(cx).policy();
+    let checkpoint = crate::engine::quickjs::task_checkpoint();
+
     // Everything that can fail runs first. On QuickJS this re-evaluates the
     // module into the same context, which §21.2 notes is one grade coarser than
     // a full teardown — an ES module cannot be unloaded, so old definitions stay
     // reachable from anything that captured them. Discarding and rebuilding the
     // whole context is the clean form, and belongs behind the engine seam
     // rather than here.
-    let view_type = runtime
-        .load_app(directory, entry)
-        .with_context(|| format!("reloading {}", directory.display()))?;
-    let object = runtime
-        .instantiate_for_view(&view_type, view.clone(), window, cx)
-        .with_context(|| format!("rebuilding the view from {}", directory.display()))?;
+    let loaded = {
+        let (_scope, _) = scope::enter_with_runtime(
+            runtime,
+            window,
+            cx,
+            scope::ScopePhase::Task,
+            Some(view.clone()),
+            policy,
+        );
+        runtime
+            .load_app(directory, entry)
+            .with_context(|| format!("reloading {}", directory.display()))
+            .and_then(|view_type| {
+                runtime
+                    .instantiate_for_view(&view_type, view.clone(), window, cx)
+                    .with_context(|| format!("rebuilding the view from {}", directory.display()))
+            })
+    };
+
+    let object = match loaded {
+        Ok(object) => object,
+        Err(error) => {
+            crate::engine::quickjs::cancel_tasks_since(runtime, checkpoint);
+            return Err(error);
+        }
+    };
+
+    crate::engine::quickjs::cancel_view_tasks_before(view, checkpoint);
 
     view.update(cx, |view, cx| {
         view.replace_object(object);

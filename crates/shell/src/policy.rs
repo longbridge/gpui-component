@@ -31,7 +31,7 @@
 //!
 //! # Where it lives instead
 //!
-//! On the call. [`crate::scope`] already pushes a frame for every entry into
+//! On the call. The internal call scope already pushes a frame for every entry into
 //! script and pops it on the way out — it exists to answer "am I inside a legal
 //! host call?" — so the policy is a field of that frame. Code executing under a
 //! frame reads its policy; a continuation resuming after an `await` brings its

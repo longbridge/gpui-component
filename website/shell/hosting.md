@@ -26,14 +26,23 @@ For the usual application window, loading is one operation and returns its
 `ShellRoot` directly:
 
 ```rust
-cx.open_window(options, move |window, cx| runtime.load(&root, window, cx))?;
+cx.open_window(options, move |window, cx| {
+    let root = runtime.load(&app_root, window, cx);
+    #[cfg(debug_assertions)]
+    runtime
+        .watch(&root, window, cx)
+        .expect("loaded application")
+        .forget();
+    root
+})?;
 ```
 
 If `gpui-shell.json` exists, `load` validates its identity metadata and applies
 its entry. Its capabilities are requests, not approval: both paths run
 under the host's current default policy, and without a manifest the entry is
 `main.js`. Either path refreshes `gpui.d.ts`; a load failure renders the
-selectable error surface instead of panicking the host.
+selectable error surface instead of panicking the host. A host that needs to
+handle the structured error itself uses `try_load`.
 
 The lower-level methods below are for a host that needs to assemble a script
 view into an existing Rust composition.
@@ -96,7 +105,7 @@ Getting it wrong in the other direction is visible immediately — the interface
 
 ## What a script may reach
 
-Three grants, each read at call time so a change takes effect on the next call rather than the next restart:
+The three host settings have different lifetimes. Capabilities are frozen into each newly loaded view. The store handle and native-module registry are live host configuration shared with that view, so replacing either affects its next call:
 
 ```rust
 gpui_shell::set_capabilities(
@@ -152,12 +161,10 @@ gpui_shell::on_exit_request(|request, window, cx| {
 One call starts it, and it is the same one the `--watch` flag uses:
 
 ```rust
-gpui_shell::watch::Watch::start(
-    &runtime, &view, app_root.clone(), "main.js", window, cx,
-).forget();
+runtime.watch(&root, window, cx)?.forget();
 ```
 
-`Watch::start` has no hidden build-mode policy: the CLI calls it after `--watch`, while an embedded host can put the call behind `#[cfg(debug_assertions)]`. The returned `Watch` is the watch: dropping it stops the loop, which is what a host unmounting a panel wants, while `.forget()` lets it run for as long as the view does. The loop also ends on its own when the view, the runtime or the window goes away, because it holds all three weakly — a strong handle here would keep a panel's runtime alive after the dock removed it.
+`runtime.watch` reads the resolved directory and manifest entry retained by the loaded root, so there is no second copy of that metadata to drift. It has no hidden build-mode policy: the CLI enables watching after `--watch`, while an embedded host can put the call behind `#[cfg(debug_assertions)]`. The returned `Watch` is the watch: dropping it stops the loop, which is what a host unmounting a panel wants, while `.forget()` lets it run for as long as the view does. The loop also ends on its own when the view, the runtime or the window goes away, because it holds all three weakly.
 
 A reload re-reads **every** module, entry point included — a hot-reload that quietly served a stale import would be worse than none, because it looks like it worked. It does all of its fallible work before touching the live view: if the new code fails to load, the previous view keeps running, the error goes to `tracing`, and a toast with a stable id reports it in the window. The next successful reload retracts that toast.
 

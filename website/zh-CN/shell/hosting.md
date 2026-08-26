@@ -25,10 +25,18 @@ let runtime = ShellRuntime::new(cx)?;     // 一个 VM，并注册为当前 App 
 普通应用窗口只需一次加载，并直接获得它的 `ShellRoot`：
 
 ```rust
-cx.open_window(options, move |window, cx| runtime.load(&root, window, cx))?;
+cx.open_window(options, move |window, cx| {
+    let root = runtime.load(&app_root, window, cx);
+    #[cfg(debug_assertions)]
+    runtime
+        .watch(&root, window, cx)
+        .expect("loaded application")
+        .forget();
+    root
+})?;
 ```
 
-存在 `gpui-shell.json` 时，`load` 会验证其中的身份信息，并采用其 entry。capabilities 是能力请求，不等于宿主已经批准；两条路径都按宿主当前的默认 policy 运行，没有 manifest 时入口为 `main.js`。两条路径都会刷新 `gpui.d.ts`；加载失败会渲染可选择文字的错误界面，而不是让宿主 panic。
+存在 `gpui-shell.json` 时，`load` 会验证其中的身份信息，并采用其 entry。capabilities 是能力请求，不等于宿主已经批准；两条路径都按宿主当前的默认 policy 运行，没有 manifest 时入口为 `main.js`。两条路径都会刷新 `gpui.d.ts`；加载失败会渲染可选择文字的错误界面，而不是让宿主 panic。需要自行处理结构化错误的宿主使用 `try_load`。
 
 下面的低层方法只供需要把脚本视图装进既有 Rust 组合的宿主使用。
 
@@ -90,7 +98,7 @@ script_view.update(cx, |view, cx| view.refresh(cx));
 
 ## 脚本能碰到什么
 
-三项授权，每一项都在调用时读取，所以改动在下一次调用生效，而不必等重启：
+三项宿主设置的生命周期不同。Capabilities 会在每个新视图加载时冻结；store handle 与 native-module registry 则是该视图共享的实时宿主配置，替换后会在下一次调用生效：
 
 ```rust
 gpui_shell::set_capabilities(
@@ -146,12 +154,10 @@ gpui_shell::on_exit_request(|request, window, cx| {
 一个调用就能开起来，`--watch` 用的也是这一个：
 
 ```rust
-gpui_shell::watch::Watch::start(
-    &runtime, &view, app_root.clone(), "main.js", window, cx,
-).forget();
+runtime.watch(&root, window, cx)?.forget();
 ```
 
-`Watch::start` 不暗藏构建模式策略：CLI 在解析到 `--watch` 后调用它，嵌入式宿主则可以把调用放进 `#[cfg(debug_assertions)]`。返回的 `Watch` 本身就是这次监听：把它 drop 掉，循环就停，这正是宿主卸下一块面板时想要的；而 `.forget()` 让它跟着视图一直活下去。视图、运行时或窗口任意一个消失时，循环也会自己结束——因为它对这三者都只持弱引用；这里若持强引用，dock 已经移除的面板，其运行时会一直不被释放。
+`runtime.watch` 从已加载的 root 读取解析后的目录与 manifest entry，不再让宿主维护第二份可能漂移的元数据。它不暗藏构建模式策略：CLI 在解析到 `--watch` 后启用监听，嵌入式宿主则可以把调用放进 `#[cfg(debug_assertions)]`。返回的 `Watch` 本身就是这次监听：把它 drop 掉，循环就停；`.forget()` 则让它跟随视图继续运行。视图、运行时或窗口任意一个消失时，循环也会自己结束。
 
 一次重载会重新读取**每一个**模块，入口也在内——一个悄悄用了旧 import 的 hot-reload 比没有更糟，因为它看起来是成功的。它会先把所有可能失败的活干完，再去碰活着的那个视图：新代码加载失败时，上一个视图继续运行，错误进 `tracing`，窗口里由一条固定 id 的 toast 报出来；下一次成功的重载会撤掉这条 toast。
 

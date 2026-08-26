@@ -266,6 +266,50 @@ pub(crate) fn cancel_policy(policy: &Rc<Policy>) {
     });
 }
 
+/// Marks the task-id boundary before a reload starts creating work.
+pub(crate) fn checkpoint() -> u64 {
+    NEXT_TASK_ID.with(Cell::get)
+}
+
+/// Cancels work created by a reload that did not commit.
+pub(crate) fn cancel_since(runtime: &ShellRuntime, checkpoint: u64) {
+    let runtime = runtime as *const ShellRuntime;
+    cancel_where(|task| task.id >= checkpoint && task.runtime.as_ptr() == runtime);
+}
+
+/// Retires the previous script instance's work after a replacement commits.
+///
+/// Reload constructs the new instance under the same view entity, so the task
+/// id checkpoint distinguishes old work from tasks created by the replacement.
+pub(crate) fn cancel_owner_before(view: &Entity<ScriptView>, checkpoint: u64) {
+    cancel_where(|task| {
+        task.id < checkpoint
+            && task
+                .owner
+                .as_ref()
+                .and_then(WeakEntity::upgrade)
+                .is_some_and(|owner| owner == *view)
+    });
+}
+
+fn cancel_where(mut predicate: impl FnMut(&TaskState) -> bool) {
+    TASKS.with_borrow_mut(|tasks| {
+        let cancelled: Vec<_> = tasks
+            .values()
+            .filter(|task| predicate(task))
+            .cloned()
+            .collect();
+        tasks.retain(|_, task| !cancelled.iter().any(|cancelled| cancelled.id == task.id));
+        for task in &cancelled {
+            task.cancelled.set(true);
+            task.cancel_work();
+            task.callback.replace(None);
+            task.rejection.replace(None);
+            task.policy.replace(None);
+        }
+    });
+}
+
 #[cfg(test)]
 pub(crate) fn task_count() -> usize {
     TASKS.with_borrow(|tasks| tasks.len())

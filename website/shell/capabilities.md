@@ -8,7 +8,7 @@ order: 8
 
 A script gets **nothing** by default. No file access, no storage, no clipboard, no process execution, no network. `Capabilities::default()` is the empty set, and an assertion holds it there.
 
-The host grants what it grants, because only the host knows how far it trusts the code it is about to run. What it hands *out* — its own Rust, exposed on purpose — is [Native Modules](./native.md). Every entry point re-reads the grant at call time, so revoking a capability takes effect on the next call rather than on the next restart.
+The host grants what it grants, because only the host knows how far it trusts the code it is about to run. What it hands *out* — its own Rust, exposed on purpose — is [Native Modules](./native.md). A view freezes its capabilities when it is loaded; changing the default affects applications loaded afterward, never code that is already running under an approved grant.
 
 ```rust
 gpui_shell::set_capabilities(
@@ -297,7 +297,7 @@ Beyond the capability grants, the runtime trims the language itself. All of it a
 
 The clock restarts on every host call, which is what lets the render path have a tighter budget than an event handler. **The interrupt cannot be swallowed by a `catch` block** — that is measured by a test, because if it could be, the interrupt would not be a defence at all. Each WebSocket also has an 8-command queue shared by `read`, `write`, and `close`; when full, a new operation rejects and tells the caller to wait for outstanding work.
 
-There is no `std` and no `os`: quickjs-libc is not compiled into the build in the first place.
+There is no quickjs-libc `std`: quickjs-libc is not compiled into the build. The runtime does provide the small audited `os` module listed below.
 
 ::: tip Development mode
 `--dev` enables source watching and calls `gpui_shell::set_development_mode(true)` before constructing the runtime. That restores dynamic-code constructors and leaves built-in prototypes writable.

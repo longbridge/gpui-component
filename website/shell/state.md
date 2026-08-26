@@ -259,12 +259,12 @@ Cancelling a `sleep` leaves its promise **pending for ever**. That is what cance
 ### Timers and standard host APIs
 
 ```text
-`setTimeout` is not available in the shell: use gpui.timer(ms, callback)
+`setTimeout` is not available in the shell: use timer.after(ms, callback)
 ```
 
-`setTimeout`, `setInterval`, `clearTimeout` and `clearInterval` are throwing stubs that name `gpui.timer` as the replacement. Global `fetch` and `WebSocket`, plus the safe standard modules documented under [Capabilities](./capabilities.md), are real asynchronous host APIs. CommonJS `require` remains unavailable; use ES modules.
+`setTimeout`, `setInterval`, `clearTimeout` and `clearInterval` are throwing stubs that name `timer.after` or `timer.every` as the replacement. Global `fetch` and `WebSocket`, plus the safe standard modules documented under [Capabilities](./capabilities.md), are real asynchronous host APIs. CommonJS `require` remains unavailable; use ES modules.
 
-The DOM names are the deliberate exception: `window`, `document` and `localStorage` are genuinely absent rather than stubbed, because `typeof window === "undefined"` is what an environment-detecting bundle reads to take its non-browser branch, and a throwing getter would turn a working feature test into a crash.
+Browser DOM and storage are absent: there is no `document` or `localStorage`. The global `window` is gpui-shell's overlay host for dialogs, sheets and toasts; it is not a browser `Window` and exposes no DOM.
 
 ## Not there yet
 

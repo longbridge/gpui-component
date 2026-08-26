@@ -419,9 +419,8 @@ Three host-side calls carry most of the weight:
 ```rust,ignore
 // Editing a script changes the window, with no rebuild and no button.
 // An embedded host normally places this call behind #[cfg(debug_assertions)].
-let watch = gpui_shell::watch::Watch::start(
-    runtime, &view, app_root, "main.js", window, cx,
-);
+let root = runtime.load(&app_root, window, cx);
+let watch = runtime.watch(&root, window, cx)?;
 // Keep the handle for as long as the view is mounted; dropping it stops the
 // watcher, so an unmounted panel does not leave one polling for it.
 
@@ -430,7 +429,7 @@ let watch = gpui_shell::watch::Watch::start(
 script_view.update(cx, |view, cx| view.refresh(cx));
 
 // What it is costing: script renders against frames, with the time each took.
-let reading = runtime.metrics().read();
+let reading = runtime.read_metrics();
 
 // Native module closures capture host entity handles, so a host that goes away
 // clears them. GPUI's leak check catches a host that forgets.
