@@ -51,6 +51,8 @@ native module `market` has no function `quote`; it provides: quotes, ticks, watc
 
 在这之上刻意没有再加一层“按模块授权”。名单是宿主自己定的，所以**名单就是授权**——要收回一个模块，就是注册另一份名单，下一次调用即生效，不必等重启。
 
+对于多应用宿主，每个公开的 `Policy` 都携带自己冻结的 capabilities 与自己的 native-module registry。这样同一个 runtime 里的两个插件可以得到不同 authority，而不必跨 `await` 边界交换 thread-local 状态。身份与请求的系统权限写在 `gpui-shell.json`；native module 不写进去，因为 contribution 是由宿主注册的可执行行为。
+
 ## 边界上只有纯数据
 
 一个 native 函数收到 `NativeArguments`，返回 `NativeValue`：null、布尔、数字、字符串、数组、对象。这六种是脚本引擎与 JSON 都能承载的交集，正因如此，同一份注册表可以服务[分界线](./engine.md)之下的任何引擎。
@@ -98,7 +100,7 @@ fn with_app<R>(read: impl FnOnce(&mut App) -> R) -> Result<R, NativeError> {
 
 ## 一个真实的例子
 
-gallery 的 Shell story 只注册了两个模块，它们就是它的脚本能碰到的全部扩展面。宿主这一侧：
+gallery 的 Shell story 只注册一个 market 模块，它就是脚本能碰到的全部扩展面；主题值改由 `cx.theme()` 提供。宿主这一侧：
 
 ```rust
 fn install_native_modules(market: &Entity<Market>) {
@@ -121,10 +123,6 @@ fn install_native_modules(market: &Entity<Market>) {
                 })
             })?
         });
-    });
-
-    modules.register("theme", |module| {
-        module.function("palette", |_| with_app(palette));
     });
 
     gpui_shell::set_native_modules(modules);
@@ -165,5 +163,5 @@ declare module "gpui" {
 ## 还没有的东西
 
 - **异步 native 函数。** 函数返回的是值而不是 promise；耗时的活会阻塞渲染所在的线程。
-- **按模块授权。** 一个宿主一份名单，这是刻意的设计。要让两个插件各拿一份不同的名单，那是 `Policy` 的职责，而分发它的插件模型还没有文档。
+- **同一 registry 内按函数授权。** Policy 授予的是宿主组装好的整份 registry，不会再给每个函数加一层 permission switch。
 - **流式返回，或回调进宿主。** 脚本不能把一个函数交给 native 模块，模块只能被调用。

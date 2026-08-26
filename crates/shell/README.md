@@ -130,7 +130,7 @@ camelCase one is script code.
 One import provides the whole namespace:
 
 ```js
-import { View, div, h_flex, v_flex, text, Button, Checkbox, Switch } from "gpui";
+import { View, div, h_flex, v_flex, text, Button, Link, Checkbox, Switch } from "gpui";
 ```
 
 | API | Form | Description |
@@ -139,7 +139,9 @@ import { View, div, h_flex, v_flex, text, Button, Checkbox, Switch } from "gpui"
 | `h_flex()` / `v_flex()` | function | A row / column flex element |
 | `text(value)` | function | A text element |
 | `Button.new(id)` | type | A base `Button`: activation, focus, disabled and selected state, no styling |
+| `Link.new(id)` | type | A base external link; pair it with `.href("https://…")` |
 | `Checkbox.new(id)` / `Switch.new(id)` | type | A base controlled toggle, no styling |
+| `InputState.new(options)` / `Input.new(state)` | types | Retained text state and its rendered input |
 | `View` | class | Base class of every view; subclass it and default-export the subclass |
 
 Functions are lowercase and types are capitalized and constructed through
@@ -152,6 +154,9 @@ Functions are lowercase and types are capitalized and constructed through
 | `.child(element)` | Adds one child. The child is consumed; using it again is an error |
 | `.children([a, b])` | Adds several children |
 | `.when(condition, el => el)` | Applies the function only when `condition` holds, keeping the chain in one piece |
+| `.href(url)` | Gives a `Link` an absolute HTTP(S) target opened by the host |
+| `.transition(property, policy)` | Animates a later target change in native Rust code |
+| `.spring(property, policy?)` | Springs a later target change in native Rust code |
 
 ### Styling
 
@@ -184,6 +189,18 @@ the theme.
 
 A style name that is neither reflected nor bound is an error at the call site,
 not a silently ignored no-op.
+
+Read semantic values once per render with `const tokens = cx.theme()`. The
+returned light/dark snapshot contains direct color roles plus `colors`,
+`spacing`, `radius`, `mode`, and `is_dark`; it and all nested token groups are
+frozen. `gpui.theme()` remains a compatibility accessor. Calling
+`set_theme("light" | "dark")` selects one of the shell palettes and refreshes
+the windows.
+
+Motion is target-based, not a JavaScript frame callback. `transition` and
+`spring` accept `opacity`, `width`, `height`, `left`, or `top`; length targets
+are currently pixels. JavaScript publishes the new target once, while retained
+state, sampling, interruption, reduced motion, and frame requests stay native.
 
 ### Components
 
@@ -221,6 +238,55 @@ Elements are single-use values. Build them in `render` and never store one on
 the instance — a stored element belongs to a render that has already ended, and
 reusing it throws rather than drawing something unexpected.
 
+## Capabilities and Asynchronous I/O
+
+System access is denied by default. A local application can declare the exact
+grant the CLI installs in `gpui-shell.json`:
+
+```json
+{
+  "id": "com.example.viewer",
+  "name": "Viewer",
+  "version": "1.0.0",
+  "entry": "main.js",
+  "capabilities": {
+    "fs": { "read": ["${pluginDir}"], "write": ["${dataDir}"] },
+    "network": {
+      "hosts": ["stream.example.com"],
+      "http": [{
+        "host": "api.example.com",
+        "methods": ["GET"],
+        "paths": ["/v1/profile"],
+        "path_prefixes": ["/v1/items/"]
+      }]
+    },
+    "store": true,
+    "clipboard": { "write": true }
+  }
+}
+```
+
+`network.hosts` grants the host to HTTP, raw TCP, and WebSocket clients;
+`network.http` narrows HTTP to listed methods and paths without granting TCP or
+WebSocket access. `fetch` supports GET/POST, safe headers, string or
+`Uint8Array` bodies, a 30-second request timeout, and 8 MiB request/response
+limits. Every redirect target must be granted; HTTPS downgrade is refused, as
+are cross-origin POST replays and cross-origin redirects carrying Authorization
+or any caller-supplied header.
+
+`WebSocket.connect(url, { headers })` resolves after the handshake and returns
+async `read`, `write`, and `close` methods for text and binary messages. Frames
+and messages are limited to 8 MiB. Connect/handshake and writes have 30-second
+transport deadlines. A pending `read()` has no public timeout and waits for a
+message, close, or error; only one read may be outstanding, while writes and
+close are still serviced as it waits. Credential and handshake-control headers
+are refused.
+
+Both `fs` and `fs/promises` expose the same promise-only subset: `readFile`,
+`writeFile`, `readdir`, `exists`, `unlink`, `rmdir`, and `mkdir`. Capability
+checks happen at the call site, then filesystem work runs off the UI/VM thread.
+There are no synchronous filesystem calls.
+
 ## The Engine Seam
 
 The scripting engine sits behind one internal interface,
@@ -252,7 +318,9 @@ Present today: the element and style surface, state styles (`hover` / `active` /
 `focus`), `Button`, `Checkbox`, `Switch`, retained `InputState` with input
 events, icons through `svg()`, dialogs, sheets and toasts on `cx`, promises and
 timers, `fs` / `store` / `clipboard` / `log` / `process` behind capabilities,
-hot reload, `check`, and generated TypeScript declarations.
+capability-gated HTTP and text/binary WebSocket clients, native target-value
+transitions and springs, hot reload, `check`, and generated TypeScript
+declarations.
 
 Deliberately absent:
 
@@ -261,9 +329,6 @@ Deliberately absent:
 - Charts, the code editor and its LSP surface, and WebView — these stay in Rust
   on purpose; binding a trait-and-generics interface across a language boundary
   costs more than it returns.
-- Asynchronous `fs`: the filesystem calls are synchronous, which is wrong for a
-  large file on the render thread. They are shaped so the move onto the
-  scheduler is mechanical.
 - Packaging and installing an application as a distributable archive.
 
 The design, what is implemented, and what is not are in

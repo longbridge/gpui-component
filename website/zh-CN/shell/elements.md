@@ -13,7 +13,7 @@ order: 4
 一次 import 就是整个命名空间：
 
 ```js
-import { div, h_flex, v_flex, text, svg, Button, Checkbox, Switch, Input, InputState } from "gpui";
+import { div, h_flex, v_flex, text, svg, Button, Link, Checkbox, Switch, Input, InputState } from "gpui";
 ```
 
 函数是小写的，组件类型首字母大写并通过 `.new` 构造。这与 Rust 侧一一对应：那边 `div()` 同样是自由函数，`Button::new(id)` 同样是类型上的关联函数。
@@ -26,6 +26,7 @@ import { div, h_flex, v_flex, text, svg, Button, Checkbox, Switch, Input, InputS
 | `text(value)` | 文本元素，参数会被转成字符串 |
 | `svg(path)` | 来自应用自身目录的图片 |
 | `Button.new(id)` | base 的 `Button`：激活、焦点、disabled 与 selected 状态，无样式 |
+| `Link.new(id)` | 可聚焦的外部 HTTP(S) 链接；用 `.href(url)` 设置目标 |
 | `Checkbox.new(id)` | base 的受控 checkbox，无样式也无勾选标记 |
 | `Switch.new(id)` | base 的受控 switch，无样式 |
 | `Input.new(state)` | 由 [`InputState`](./state.md#留存状态) 支撑的文本框 |
@@ -38,7 +39,7 @@ JavaScript 的习惯写法是 `new Button(id)`。运行时不提供它，理由�
 
 ### id
 
-`Button`、`Checkbox` 与 `Switch` 的 `id` 用于跨渲染标识元素，GPUI 据此保留焦点与元素状态。请保持它稳定，并在兄弟节点之间唯一——用 `` `item-${item.id}` ``，而不是一个会在列表被筛选时移位的数组下标。
+`Button`、`Link`、`Checkbox` 与 `Switch` 的 `id` 用于跨渲染标识元素，GPUI 据此保留焦点与元素状态。请保持它稳定，并在兄弟节点之间唯一——用 `` `item-${item.id}` ``，而不是一个会在列表被筛选时移位的数组下标。
 
 其余元素——`div`、`h_flex`——的身份是**它在这次渲染所构建的树里所处的位置**。只要树的形状不变，这就够用；而一旦上方多出一个条件子节点，它下面的每个元素都会移位，按下状态、焦点以及其他按身份记录的东西都跟着移位。
 
@@ -50,7 +51,7 @@ div()
   .active((el) => el.opacity(0.7))
 ```
 
-凡是身份必须扛得住邻居变化的元素，都给它取个名字。`Button`、`Checkbox` 与 `Switch` 已经从 `new(id)` 拿到了身份，会忽略这里的名字——并且是给出警告，而不是默不作声。
+凡是身份必须扛得住邻居变化的元素，都给它取个名字。`Button`、`Link`、`Checkbox` 与 `Switch` 已经从 `new(id)` 拿到了身份，会忽略这里的名字——并且是给出警告，而不是默不作声。
 
 ### 文本
 

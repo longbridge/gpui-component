@@ -77,7 +77,7 @@ Two things do run elsewhere, and neither touches the VM. Timers (`gpui.sleep`, `
 Three consequences matter when profiling:
 
 - **A builder call is a function call.** It crosses the FFI boundary and nothing else — no serialization, no IPC round trip, no copy beyond the conversion of the argument itself. The benchmark reports that cost per recorded operation, and across the four panel sizes it lands at **240–340 ns**.
-- **Blocking the VM blocks the frame.** The synchronous `fs` surface is the sharp edge here: a read from an event handler stalls the same thread that is about to paint.
+- **Script work still shares the UI thread.** Filesystem, process, fetch, TCP and WebSocket operations hand blocking work to background workers and settle on the foreground executor, but JavaScript computation and native-module calls run beside GPUI and must stay bounded.
 - **A runaway script cannot be preempted from another thread.** What cuts it off is the interpreter's own interrupt — 50 ms inside `render`, 500 ms inside an event handler — and a `catch` block cannot swallow it.
 
 Memory splits four ways, each with a different owner and a different moment of release:
@@ -144,7 +144,7 @@ The seam's contract does not yet cover asynchronous work.
 
 QuickJS requires the host to drain its job queue itself — nothing after an `await` runs until somebody asks — and that is not a shape every engine shares. So the scheduler cannot sit entirely above the seam. It needs two operations from an engine: turning a host task into something the script can await, and running the pending jobs.
 
-There is a second, sharper reason to finish this. Draining the job queue currently happens at the end of a snapshot build, which means arbitrary application code — anything after an `await` — runs on the path a render took. Snapshot caching makes that rare rather than per-frame, but the coupling is still there and belongs on the event loop instead.
+Promise jobs are drained at host-call boundaries, and a render that merely notices pending jobs queues a foreground drain instead of executing arbitrary continuations on the paint path. That preserves the central invariant: an async continuation may invalidate a view, but a frame never re-enters JavaScript just because it is a frame.
 
 Until both are addressed, the scheduler is QuickJS-specific. The rule it will be held to is the one that applies to any new capability: it goes above the seam unless it genuinely cannot be expressed there.
 

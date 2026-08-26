@@ -61,31 +61,52 @@ running `git` is not granted; add it to capabilities.fs.execute in the manifest
 process.exit() is not granted; set capabilities.process.exit to true in the manifest
 ```
 
-::: warning There is no manifest yet
-The messages name manifest keys because that is where grants will come from when the plugin model lands. Today the host calls `gpui_shell::set_capabilities` directly, and the key names are the vocabulary that API will keep.
-:::
+## The manifest
+
+A directory is recognized by **`gpui-shell.json`**. The legacy `plugin.json` name is deliberately ignored. The manifest is inert data — discovery reads identity and requested permissions without executing the entry module — and contains exactly `id`, `name`, `version`, `entry`, and `capabilities`:
+
+```json
+{
+  "id": "com.example.quotes",
+  "name": "Quotes",
+  "version": "1.0.0",
+  "entry": "main.js",
+  "capabilities": {
+    "fs": { "read": ["${pluginDir}"], "write": ["${dataDir}"] },
+    "network": {
+      "hosts": ["stream.example.com"],
+      "http": [{ "host": "api.example.com", "methods": ["GET"], "path_prefixes": ["/v1/"] }]
+    },
+    "store": true,
+    "clipboard": { "read": false, "write": true },
+    "process": { "exit": false }
+  }
+}
+```
+
+Unknown fields, invalid reverse-DNS ids, non-semver versions, escaping entries, and unknown `${...}` placeholders are rejected before code runs. API compatibility is declared by executable code with `require_api("1.0")`, not by adding a sixth manifest field.
 
 ## `fs`
 
 ```js
-import { fs } from "gpui";
+import * as fs from "fs/promises";
 ```
 
 Every call returns a promise. `await` them, or chain `.then` — and see the note below about `render`.
 
 | Call                            | Resolves to                          |
 | ------------------------------- | ------------------------------------ |
-| `fs.read_text(path)`            | The file's contents                  |
-| `fs.write_text(path, contents)` | —                                    |
-| `fs.read_dir(path)`             | `[{ name, is_dir }]`, sorted by name |
+| `fs.readFile(path)`             | The file's contents                  |
+| `fs.writeFile(path, contents)`  | —                                    |
+| `fs.readdir(path)`              | `[{ name, is_dir }]`, sorted by name |
 | `fs.exists(path)`               | `true` / `false`                     |
-| `fs.remove_file(path)`          | —                                    |
-| `fs.remove_dir(path)`           | —                                    |
+| `fs.unlink(path)`               | —                                    |
+| `fs.rmdir(path)`                | —                                    |
 | `fs.mkdir(path, options?)`      | —                                    |
 
 ```js
-const source = await fs.read_text("notes.md");
-await fs.write_text("notes.md", source + "\n");
+const source = await fs.readFile("notes.md");
+await fs.writeFile("notes.md", source + "\n");
 ```
 
 A relative path resolves against a granted root; an absolute one must already be inside one. Every path in the surface goes through **one resolver**, so there is no second place for a traversal bug to hide. It normalizes the path — `../../etc/passwd` is rejected before it reaches the filesystem — and then settles containment against the filesystem rather than against the string, because a grant is a promise about a _directory_: `data/escape/passwd` is lexically inside the root and reads `/etc/passwd` if `escape` is a symlink. The deepest part of the path that exists is resolved, links and all, and has to still be under the root; a symlink that resolves to nothing is refused rather than guessed at.
@@ -108,7 +129,7 @@ Three of these behave in a way worth stating, each for the same reason:
 
 A **denial still throws at the call site** rather than rejecting. The capability check costs nothing and stays on the calling thread, and a rejected promise nobody awaited is a denial nobody sees.
 
-`read_text` refuses a file over 64 MiB, naming it and the limit. The alternative to a ceiling is a string that has to fit in the JavaScript heap — which is itself capped — so the failure without one is an out-of-memory inside the VM rather than a sentence you can act on.
+`readFile` refuses a file over 64 MiB, naming it and the limit. The alternative to a ceiling is a string that has to fit in the JavaScript heap — which is itself capped — so the failure without one is an out-of-memory inside the VM rather than a sentence you can act on.
 
 ::: tip Still do not read a file from `render`
 `render` describes the interface; it cannot await. Read in `init` or an event handler, keep the result on the view, and `cx.notify()` when it arrives.
@@ -269,14 +290,20 @@ The clock restarts on every host call, which is what lets the render path have a
 
 There is no `std` and no `os`: quickjs-libc is not compiled into the build in the first place.
 
-::: warning Development mode is not wired up
-`--dev` currently enables source watching only. The relaxations it is meant to turn on — restoring `eval` and leaving the built-in prototypes writable, which a REPL needs — are not reachable from the binary yet; it prints a warning saying so. The library function exists (`gpui_shell::set_development_mode`) and must be called before the runtime is constructed, because the policy is read when the context is created.
+::: tip Development mode
+`--dev` enables source watching and calls `gpui_shell::set_development_mode(true)` before constructing the runtime. That restores dynamic-code constructors and leaves built-in prototypes writable.
 
 Development mode never relaxes capability gating. It makes the language easier to poke at; it does not hand out access nobody declared, because a grant the author never wrote down is a grant that will be missing in production.
 :::
 
+## Network and safe standard APIs
+
+Global `fetch(url, options?)` is promise-based and returns `{ status, ok, url, text(), json() }`. Its grant is narrower than raw networking: every request and redirect must match a declared HTTP host, method, and exact path or path prefix; HTTPS never downgrades to HTTP, and authorization or caller-supplied headers never cross origins.
+
+`net.connect(host, port)` and `WebSocket.connect(url, { headers? })` use `capabilities.network.hosts`. WebSockets support text and `Uint8Array` messages, serialize writes through one actor, and re-authorize redirects. Connect, handshake, and write operations have a 30-second timeout. A socket permits one outstanding `read()` at a time; a second is rejected immediately instead of competing for the next message. Credential and handshake-control headers are refused. Raw TCP and WebSocket access are intentionally broader than an HTTP request grant.
+
+The runtime also provides `buffer`, `path`, `url`, `crypto`, `zlib`, `console`, `process`, and `os`. These are the audited LLRT/host-backed subset declared in generated `gpui.d.ts`; `node:` aliases and arbitrary Node built-ins are not part of the shell contract.
+
 ## Not there yet
 
-- **`gpui.http`.** The capability model has `capabilities.network.hosts` and `fetch`'s refusal message names it, but there is no HTTP surface. When it lands it returns promises — a socket can take a minute, and the filesystem already demonstrated what shipping a blocking surface costs.
-- **The manifest, and the plugin model it belongs to.** Grants come from the host today.
 - **Prompting the user.** Grants are decided before the application loads; nothing asks at the moment of use.

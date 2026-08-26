@@ -13,7 +13,7 @@ An element in `gpui-shell` is a **description**, not an object. It exists for on
 One import provides the whole namespace:
 
 ```js
-import { div, h_flex, v_flex, text, svg, Button, Checkbox, Switch, Input, InputState } from "gpui";
+import { div, h_flex, v_flex, text, svg, Button, Link, Checkbox, Switch, Input, InputState } from "gpui";
 ```
 
 Functions are lowercase, and component types are capitalized and constructed through `.new`. That mirrors the Rust side one for one: `div()` is a free function there too, and `Button::new(id)` is an associated function on a type.
@@ -26,6 +26,7 @@ Functions are lowercase, and component types are capitalized and constructed thr
 | `text(value)` | A text element; the value is stringified |
 | `svg(path)` | An image from the application's own directory |
 | `Button.new(id)` | A base `Button`: activation, focus, disabled and selected state, no styling |
+| `Link.new(id)` | A focusable external HTTP(S) link; set its target with `.href(url)` |
 | `Checkbox.new(id)` | A base controlled checkbox, no styling and no indicator |
 | `Switch.new(id)` | A base controlled switch, no styling |
 | `Input.new(state)` | A text field backed by an [`InputState`](./state.md#retained-state) |
@@ -38,7 +39,7 @@ Views are the opposite case, and use the standard form: `class Counter extends V
 
 ### Ids
 
-The `id` given to `Button`, `Checkbox` and `Switch` identifies the element across renders, which is how GPUI preserves focus and element state. Keep it stable and unique among siblings — `` `item-${item.id}` `` rather than an array index that shifts when the list is filtered.
+The `id` given to `Button`, `Link`, `Checkbox` and `Switch` identifies the element across renders, which is how GPUI preserves focus and element state. Keep it stable and unique among siblings — `` `item-${item.id}` `` rather than an array index that shifts when the list is filtered.
 
 Anything else — a `div`, an `h_flex` — is identified by **where it sits in the tree your render built**. That is enough while the tree keeps its shape, and stops being enough the moment a conditional child appears above it: every element below shifts, and the pressed state, the focus and anything else keyed by identity shift with them.
 
@@ -50,7 +51,7 @@ div()
   .active((el) => el.opacity(0.7))
 ```
 
-Name anything whose identity has to survive its neighbours changing. `Button`, `Checkbox` and `Switch` already have an identity from `new(id)` and ignore this one (with a warning, rather than silently).
+Name anything whose identity has to survive its neighbours changing. `Button`, `Link`, `Checkbox` and `Switch` already have an identity from `new(id)` and ignore this one (with a warning, rather than silently).
 
 ### Text
 

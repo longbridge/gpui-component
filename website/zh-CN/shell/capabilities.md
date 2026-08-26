@@ -61,31 +61,52 @@ running `git` is not granted; add it to capabilities.fs.execute in the manifest
 process.exit() is not granted; set capabilities.process.exit to true in the manifest
 ```
 
-::: warning 目前还没有 manifest
-这些信息提到 manifest 的 key，是因为插件模型落地后授权将来自那里。今天由宿主直接调用 `gpui_shell::set_capabilities`，而这些 key 名就是那个 API 将来会沿用的词汇。
-:::
+## Manifest
+
+目录通过 **`gpui-shell.json`** 被识别；旧名字 `plugin.json` 会被刻意忽略。Manifest 是惰性数据——发现阶段只读取身份与请求的权限，不执行 entry module——并且严格只有 `id`、`name`、`version`、`entry` 与 `capabilities`：
+
+```json
+{
+  "id": "com.example.quotes",
+  "name": "Quotes",
+  "version": "1.0.0",
+  "entry": "main.js",
+  "capabilities": {
+    "fs": { "read": ["${pluginDir}"], "write": ["${dataDir}"] },
+    "network": {
+      "hosts": ["stream.example.com"],
+      "http": [{ "host": "api.example.com", "methods": ["GET"], "path_prefixes": ["/v1/"] }]
+    },
+    "store": true,
+    "clipboard": { "read": false, "write": true },
+    "process": { "exit": false }
+  }
+}
+```
+
+未知字段、非法 reverse-DNS id、非 semver 版本、逃出目录的 entry，以及未知 `${...}` placeholder 都会在代码执行前被拒绝。API 兼容性由可执行代码调用 `require_api("1.0")` 声明，而不是给 manifest 加第六个字段。
 
 ## `fs`
 
 ```js
-import { fs } from "gpui";
+import * as fs from "fs/promises";
 ```
 
 每个调用都返回 promise。`await` 它们，或者接 `.then`——另见下面关于 `render` 的提示。
 
 | 调用                            | resolve 结果                     |
 | ------------------------------- | -------------------------------- |
-| `fs.read_text(path)`            | 文件内容                         |
-| `fs.write_text(path, contents)` | —                                |
-| `fs.read_dir(path)`             | `[{ name, is_dir }]`，按名字排序 |
+| `fs.readFile(path)`             | 文件内容                         |
+| `fs.writeFile(path, contents)`  | —                                |
+| `fs.readdir(path)`              | `[{ name, is_dir }]`，按名字排序 |
 | `fs.exists(path)`               | `true` / `false`                 |
-| `fs.remove_file(path)`          | —                                |
-| `fs.remove_dir(path)`           | —                                |
+| `fs.unlink(path)`               | —                                |
+| `fs.rmdir(path)`                | —                                |
 | `fs.mkdir(path, options?)`      | —                                |
 
 ```js
-const source = await fs.read_text("notes.md");
-await fs.write_text("notes.md", source + "\n");
+const source = await fs.readFile("notes.md");
+await fs.writeFile("notes.md", source + "\n");
 ```
 
 相对路径相对某个已授权的根解析；绝对路径必须本来就在某个根之内。这套接口里的每一条路径都经过**同一个解析器**，所以不存在第二处让穿越漏洞藏身的地方。它先做归一化——`../../etc/passwd` 在到达文件系统之前就被拒绝——然后把「是否在根之内」这件事交给文件系统判定，而不是判定字符串：授权承诺的是一个**目录**，而 `data/escape/passwd` 在字面上位于根之内，一旦 `escape` 是符号链接就读到了 `/etc/passwd`。路径中已经存在的最深一段会被连同链接一起解析，其结果必须仍在根之下；解析不到任何目标的符号链接会被直接拒绝，而不是猜它指向哪里。
@@ -108,7 +129,7 @@ await fs.write_text("notes.md", source + "\n");
 
 **拒绝仍然在调用点抛出**，而不是变成 rejected promise。能力检查几乎不花时间，留在调用线程上；而没人 await 的 rejected promise，等于没人看得见的拒绝。
 
-`read_text` 会拒绝超过 64 MiB 的文件，并指出文件名和上限。没有这个上限的话，替代方案是一个必须塞进 JavaScript 堆的字符串——而那个堆本身也有上限——于是失败会表现为 VM 内部的内存耗尽，而不是一句你能据以行动的话。
+`readFile` 会拒绝超过 64 MiB 的文件，并指出文件名和上限。没有这个上限的话，替代方案是一个必须塞进 JavaScript 堆的字符串——而那个堆本身也有上限——于是失败会表现为 VM 内部的内存耗尽，而不是一句你能据以行动的话。
 
 ::: tip 仍然不要在 `render` 里读文件
 `render` 描述界面，它没法 await。在 `init` 或事件回调里读，把结果留在视图上，拿到后 `cx.notify()`。
@@ -269,14 +290,20 @@ process.exit(0);
 
 这里没有 `std` 也没有 `os`：quickjs-libc 从一开始就没有被编进这个构建。
 
-::: warning 开发模式还没有接完
-`--dev` 目前只启用源码监听。它本该打开的放宽项——恢复 `eval`、让内建原型保持可写，这是 REPL 需要的——还无法从二进制里触达，它会打印一条警告说明。库函数是存在的（`gpui_shell::set_development_mode`），并且必须在运行时构造之前调用，因为策略是在创建上下文时读取的。
+::: tip 开发模式
+`--dev` 会启用源码监听，并在构造运行时之前调用 `gpui_shell::set_development_mode(true)`。它会恢复动态代码构造器并让内建原型保持可写。
 
 开发模式从不放宽能力约束。它让语言更好摆弄，但不会发出任何人没有声明过的访问权限——因为一项作者从没写下来的授权，就是一项在生产环境里会缺失的授权。
 :::
 
+## 网络与安全标准 API
+
+全局 `fetch(url, options?)` 返回 promise，结果提供 `{ status, ok, url, text(), json() }`。它的授权比原始网络更窄：每次请求与 redirect 都必须匹配声明的 HTTP host、method，以及精确 path 或 path prefix；HTTPS 永不降级到 HTTP，authorization 与调用方 header 也不会跨 origin。
+
+`net.connect(host, port)` 与 `WebSocket.connect(url, { headers? })` 使用 `capabilities.network.hosts`。WebSocket 支持文本与 `Uint8Array` 消息，通过单一 actor 串行化写入，并在 redirect 时重新授权。Connect、handshake 与 write 操作都有 30 秒 timeout。每个 socket 同一时间只允许一个 outstanding `read()`；第二个会立即 reject，而不是与第一个争抢下一条消息。凭证 header 与握手控制 header 会被拒绝。Raw TCP 与 WebSocket 权限有意比 HTTP request grant 更宽。
+
+运行时还提供 `buffer`、`path`、`url`、`crypto`、`zlib`、`console`、`process` 与 `os`。它们是生成的 `gpui.d.ts` 所声明、经过审计的 LLRT/宿主子集；`node:` 别名和任意 Node 内建模块不属于 shell 契约。
+
 ## 还没有的东西
 
-- **`gpui.http`（落地时返回 promise —— 一个 socket 可以花上一分钟，而文件系统已经演示过发布一个阻塞接口的代价）。** 能力模型里有 `capabilities.network.hosts`，`fetch` 的拒绝信息也提到了它，但没有 HTTP 接口。
-- **Manifest，以及它所属的插件模型。** 今天授权来自宿主。
 - **向用户询问授权。** 授权在应用加载之前就已决定，不会在使用的那一刻弹出询问。

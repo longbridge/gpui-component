@@ -23,7 +23,7 @@ v_flex().size_full().bg(surface).p(px(12.)).gap(px(8.)).rounded(px(6.))
 
 **无参方法来自 GPUI 的反射表。** `flex_col`、`items_center`、`gap_2`、`rounded_md`、`text_sm`、`size_full`、`font_semibold`、`truncate`、`cursor_pointer`——整个家族都取自 `gpui_base::styled_ext_reflection_methods` 与 `gpui::styled_reflection::methods`，零维护成本。这些名字没有一个写在运行时的任何地方。上游 GPUI 新增一个样式方法，脚本接口就有了，生成的 `gpui.d.ts` 也有了。
 
-本文写作时的这次构建里有 **3,146** 个。这个数字就是 GPUI 当前有多少个 `fn(self) -> Self` 形态的样式方法，GPUI 变它就变。`gpui-shell types` 会打印你这次构建的准确数字。
+本文写作时的这次构建里有 **3,148** 个。这个数字就是 GPUI 当前有多少个 `fn(self) -> Self` 形态的样式方法，GPUI 变它就变。`gpui-shell types` 会打印你这次构建的准确数字。
 
 **有参方法无法被反射**，所以有 **57** 个是手工绑定的。这份列表是样式层里唯一手工维护的表，而且刻意保持很小。
 
@@ -143,6 +143,38 @@ Button.new("save")
 - **`active` 与 `focus` 需要稳定的元素身份。** 普通 `div` 会按需获得一个，由它在描述中的位置推出；只要树是稳定的，这个身份跨渲染就是稳定的。`Button`、`Checkbox` 与 `Input` 本来就有。
 - **`Switch` 会忽略状态样式。** switch 的根节点不是可交互元素——它的 track 才是——所以挂在根上的状态样式无处落地。运行时会记一条警告，提示改为给它外面那一行加样式，而不是不声不响地丢掉这条声明。
 
+## 主题值
+
+从正在 render 或处理事件的 context 读取语义值：
+
+```js
+render(cx) {
+  const { colors, spacing, radius, mode, is_dark } = cx.theme();
+  return v_flex()
+    .gap(spacing.md)
+    .rounded(radius.lg)
+    .bg(colors.surface)
+    .child(text(`${mode}: ${is_dark ? "dark" : "light"}`));
+}
+```
+
+这个 snapshot 是深度只读的。`theme()` 仍作为兼容入口保留，但优先使用 `cx.theme()`。`set_theme("light" | "dark")` 可以从 event 或 task 调用，并使脚本视图失效，从而重新构建使用 token 的样式。
+
+## 原生动画
+
+`.transition(property, policy)` 与 `.spring(property, policy?)` 会为 `opacity`、`width`、`height`、`left` 和 `top` 的后续目标变化制作动画。动画由 GPUI 原生保留并逐帧推进：脚本改变目标并调用 `cx.notify()` 后，动画帧**不会重新进入 JavaScript**。
+
+```js
+div()
+  .id("drawer")
+  .left(this.open ? 320 : 16)
+  .opacity(this.open ? 1 : 0.5)
+  .transition("left", { duration: 220, easing: "ease-out" })
+  .spring("opacity", { response: 260, damping: 0.85 });
+```
+
+参与动画的长度目标**只能是数值像素**。`"50%"`、`"1rem"` 与 `"auto"` 之类相对值无法采样成稳定的原生通道，因此会被拒绝。请给元素稳定的 `.id(...)`（控件已使用构造器 id），否则树位置变化会改变动画 identity。
+
 ## 这里没有 `class("...")`
 
 考虑到这些名字的写法，这是个合理的问题：为什么不接受一串样式名字符串，像 utility CSS 框架那样？
@@ -174,6 +206,5 @@ unknown style method `text_colour` (did you mean: text_color?)
 ## 还没有的东西
 
 - **语义状态样式。** `gpui-base` 有一层 `state_style`，为 checked、selected、disabled 定义了优先级顺序。它还没有被绑定；今天请用 `.when(condition, …)` 表达这些状态。
-- **动画。** 脚本接口上没有过渡也没有关键帧。
+- **Keyframe 动画。** 已有目标值 transition 与 spring；任意 keyframe 和逐帧 JavaScript callback 仍不存在。
 - **样式中的 spacing 与 radius token。** 调色板带有 spacing 与 radius 标尺，但样式方法接受的是长度而不是 token 名——只有颜色会去查 token。应用自己定义一份标尺常量即可，示例里的 `SPACE` 对象就是这么做的。
-- **从脚本切换主题。** 运行时自带浅色与深色两份调色板以及一个 Rust 侧的切换 API（`gpui_shell::theme::set_mode`）；脚本接口上还没有 `gpui.set_theme`。

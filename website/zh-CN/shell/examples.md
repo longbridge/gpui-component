@@ -1,17 +1,18 @@
 ---
 title: Examples
-description: 仓库自带的两个完整应用——一个独立运行的 todo list，一个嵌在组件 gallery 里、与 Rust 并排的脚本面板。
+description: 独立与嵌入式完整应用，包括留存状态、native module 与原生动画。
 order: 3
 ---
 
 # Examples
 
-仓库自带两个应用，它们合起来覆盖了脚本运行的两种方式：自己独立跑，以及跑在一个 Rust 宿主里。
+仓库自带三个示例，合起来覆盖独立应用、由宿主状态驱动的脚本，以及动画帧完全不进入 JavaScript 的原生 motion。
 
 | | 怎么跑 | 展示了什么 |
 | --- | --- | --- |
 | [Todo list](#todo-list) | 一个独立应用 | 脚本这一侧的全部：留存输入、dialog、toast、受授权约束的存储、资源、类型 |
 | [报价面板](#报价面板) | gallery 里的一块面板 | 宿主那一半：native 模块、一个实体被两种语言读取、实时的成本读数 |
+| [原生动画](#原生动画) | gallery 内独立的脚本视图 | 由 GPUI 保留并采样的像素目标 transition 与 spring |
 
 ## Todo list
 
@@ -72,16 +73,23 @@ cargo run -- shell
 
 gallery 的 Shell story 并排跑着两块面板：左边那块由 Rust 的 `shell_story.rs` 画，右边那块由 `crates/story/js/quotes/main.js` 画——122 行 JavaScript——两边读的是同一份数据。
 
-脚本自己不持有任何状态。这块行情板是一个 Rust 的 `Entity<Market>`，通过 story 在运行时启动前注册的两个 [native 模块](./native.md)访问：
+脚本自己不持有任何状态。这块行情板是一个 Rust 的 `Entity<Market>`，通过 story 在运行时启动前注册的 [native 模块](./native.md)访问：
 
 ```text
 native("market")   quotes() · ticks() · watch(symbol) · watch_all(on)
-native("theme")    palette()——gallery 自己的颜色与圆角，以数据形式给出
 ```
+
+主题值来自调用作用域内的 `cx.theme()` snapshot，而不是第二个 native module。
 
 因为两块面板读的是同一个实体，两边一旦对不上就会立刻看出来——这也是它算一个测试而不只是演示的原因。改 `main.js` 就能改变右边那块面板，中间不需要 `cargo build`；面板旁边有一个 “Reload script” 按钮。
 
 底下就是这套文档反复引用的那组计数读数：每秒的脚本次数对每秒的帧数，还有一个 feed 选择器，可以让其中一个动而另一个不动。这就是[那条性能主张](./index.md#性能脚本不在每一帧里)在一个运行着的窗口里的样子。
+
+## 原生动画
+
+`crates/story/js/motion/main.js` 刻意使用与 quote benchmark 分离的 `ScriptView`，避免动画活动污染 render-frequency 测量。它可以在 `.transition(...)` 与 `.spring(...)` 之间切换，再重新设定 opacity 以及像素值的 width、height、left 与 top。
+
+脚本只运行一次来发布新目标。后续每一个动画帧都由 GPUI 原生调度与采样，不会重新进入 JavaScript。示例只使用数值像素目标——没有 `rem`、百分比或 `auto`——并使用稳定 id，让留存通道能够跨 description 重建继续存在。
 
 ## 从哪儿开始
 

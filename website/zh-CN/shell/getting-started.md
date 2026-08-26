@@ -33,7 +33,7 @@ gpui_platform::application()
                 .store(true),
         );
 
-        let view_type = runtime.load_app(&root).expect("main.js");
+        let view_type = runtime.load_app(&root, "main.js").expect("main.js");
 
         cx.open_window(Default::default(), move |window, cx| {
             let object = runtime.instantiate(&view_type, window, cx).expect("view");
@@ -100,7 +100,7 @@ cargo run -p gpui-shell -- hello
 
 这个文件里有四件事值得现在就点明，因为后面所有内容都建立在它们之上。
 
-**`"gpui"` 是唯一的内建模块。** 其余 `import` 只能解析到应用目录之内。这里没有 npm，没有 `require`，也没有 `node:fs`。
+**`"gpui"` 是 UI 模块。** 运行时还提供一层刻意收窄的 JavaScript 标准能力：`buffer`、`path`、`url`、`crypto`、`zlib`、`console`、`process`、`os`、`fs` / `fs/promises`、`net`，以及全局 `fetch` 和 `WebSocket`。应用相对导入仍被限制在应用目录内。`node:fs` 这类 `node:` 别名、包查找和 CommonJS `require` 不属于契约。
 
 **`main.js` 必须 `export default` 一个继承 `View` 的类。** `init` 在视图创建时只执行一次；`render` 返回恰好一个元素，并且是在视图失效时执行，而不是每帧执行——见 [`render` 什么时候执行](./state.md#render-什么时候执行)。
 
@@ -118,7 +118,7 @@ cargo run -p gpui-shell -- examples/js_todolist
 
 窗口里会出现一个可用的 todo list：带留存状态的输入框、受控 checkbox、一个确认 dialog、一个 toast、从应用自身目录加载的图标，以及在未获授权时退化为内存存储的持久化。它的目的是把整个运行时都跑一遍，而不是做到最小——哪里坏了，通常先在这里露出来。
 
-参数是一个**目录**，不是文件。运行时解析该目录、读取其中的 `main.js`、取出该模块 default 导出的类、构造一个实例，并把它挂载为窗口的根视图。
+参数是一个**目录**，不是文件。运行时解析该目录、读取其中的 `main.js`、取出该模块 default 导出的类、构造一个实例，并把它挂载为窗口的根视图。如果目录中存在 `gpui-shell.json`，二进制会验证它并采用其中声明的 capabilities；旧名字 `plugin.json` 会被忽略。
 
 ## 不运行也能检查脚本
 
@@ -161,7 +161,7 @@ cargo run -p gpui-shell -- types hello
 - 每个有参方法的参数类型是**探测**出来的——生成器逐一询问运行时该方法接受哪些字面量，所以 length、definite length、absolute length、颜色与裸数字之间的区别，由真正做校验的那段代码决定；
 - 颜色的联合类型来自已安装调色板的 token 名。
 
-有三件事声明刻意不表达，因为没有类型能表达：能力是否被**授权**（被拒绝的 `fs.read_text` 一样能通过类型检查）；元素与 `cx` 的**生命周期**（TypeScript 没有仿射类型，重复使用元素照样能通过类型检查，也照样会抛异常）；以及**某个方法适用于哪个组件**（所有元素共用一个原型，所以 `.checked(true)` 声明在全部元素上，在 `div` 上只是不起作用）。
+有三件事声明刻意不表达，因为没有类型能表达：能力是否被**授权**（被拒绝的 `fs.readFile` 一样能通过类型检查）；元素与 `cx` 的**生命周期**（TypeScript 没有仿射类型，重复使用元素照样能通过类型检查，也照样会抛异常）；以及**某个方法适用于哪个组件**（所有元素共用一个原型，所以 `.checked(true)` 声明在全部元素上，在 `div` 上只是不起作用）。
 
 升级运行时之后重新生成即可；输出是确定性的，所以 diff 是可以审阅的。
 
@@ -176,9 +176,7 @@ cargo run -p gpui-shell -- hello --dev      # 隐含 --watch
 
 重载会在碰到实时视图之前，先把所有可能失败的工作做完。如果新代码加载失败，之前的视图继续运行，错误输出到 stderr，同时窗口里出现一个带固定 id 的 toast；下一次成功重载会把它撤回。存了一份坏代码，不会因此丢掉窗口。
 
-::: warning `--dev` 还没有接完
-`--dev` 目前只启用源码监听。它本该打开的沙箱放宽项——恢复 `eval`、让内建原型保持可写——还无法从二进制里触达，运行时会打印一条警告说明这一点。见 [Capabilities](./capabilities.md#沙箱)。
-:::
+`--dev` 隐含 `--watch`，并在构造运行时之前开启 development mode。它恢复动态代码构造器并让内建原型保持可写，但 capability 检查完全不变。见 [Capabilities](./capabilities.md#沙箱)。
 
 ## 命令一览
 

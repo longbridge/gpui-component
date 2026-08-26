@@ -51,6 +51,8 @@ native module `market` has no function `quote`; it provides: quotes, ticks, watc
 
 There is deliberately no per-module capability to grant on top of this. The host chose the list, so **the list is the grant** — and revoking one is a matter of registering a different set, which takes effect on the next call rather than the next restart.
 
+For a multi-application host, each public `Policy` carries its own frozen capabilities and its own native-module registry. That is how two plugins in one runtime receive different authority without swapping thread-local state across `await` boundaries. Identity and requested system permissions live in `gpui-shell.json`; native modules do not, because contributions are executable behavior registered by the host.
+
 ## The boundary is plain data
 
 A native function receives `NativeArguments` and returns a `NativeValue`: null, boolean, number, string, array, or object. Those six cases are the intersection of what a script engine and JSON can both carry, which is what lets one registry serve any engine behind the [seam](./engine.md).
@@ -98,7 +100,7 @@ fn with_app<R>(read: impl FnOnce(&mut App) -> R) -> Result<R, NativeError> {
 
 ## A real one
 
-The gallery's Shell story registers exactly two modules, and they are the entire extension surface its script has. This is the host side:
+The gallery's Shell story registers one market module, and it is the entire extension surface its script has. Theme values come from `cx.theme()` instead. This is the host side:
 
 ```rust
 fn install_native_modules(market: &Entity<Market>) {
@@ -121,10 +123,6 @@ fn install_native_modules(market: &Entity<Market>) {
                 })
             })?
         });
-    });
-
-    modules.register("theme", |module| {
-        module.function("palette", |_| with_app(palette));
     });
 
     gpui_shell::set_native_modules(modules);
@@ -165,5 +163,5 @@ Declaring that in a `.d.ts` beside the script is what turns `native("market")` i
 ## Not there yet
 
 - **Asynchronous native functions.** A function returns a value, not a promise; long work blocks the thread that renders.
-- **Per-module grants.** The registry is one set per host by design. Giving two plugins two different sets is what a `Policy` is for, and the plugin model that hands them out is not documented yet.
+- **Per-function grants inside one registry.** A policy grants the registry the host assembled; it does not add another permission switch for each function.
 - **Streaming or callbacks into the host.** A script cannot hand a function to a native module; the module can only be called.

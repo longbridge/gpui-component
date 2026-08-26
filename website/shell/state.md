@@ -96,6 +96,8 @@ Every call from Rust into the script opens a scope carrying a **phase**, and the
 
 `cx.phase()` reports the current one, and `"none"` outside any host call.
 
+`cx.theme()` returns a deeply read-only snapshot of the current semantic theme for this call: direct color roles as well as `colors`, `spacing`, `radius`, `mode`, and `is_dark`. Prefer it over the compatibility `theme()` export, because the context spelling makes the call lifetime and current host theme explicit.
+
 Each refusal is a specific message, not undefined behaviour:
 
 ```text
@@ -254,19 +256,18 @@ Cancelling a `sleep` leaves its promise **pending for ever**. That is what cance
 
 `timer.every` measures its interval from the end of one call, so a slow handler delays the next tick rather than stacking ticks behind it.
 
-### `setTimeout` is not here
+### Timers and standard host APIs
 
 ```text
 `setTimeout` is not available in the shell: use gpui.timer(ms, callback)
 ```
 
-`setTimeout`, `setInterval`, `clearTimeout`, `clearInterval`, `fetch` and `require` are all present as throwing stubs that name the replacement, rather than absent. A bare `ReferenceError` says only that a name is missing and nothing about what to write instead.
+`setTimeout`, `setInterval`, `clearTimeout` and `clearInterval` are throwing stubs that name `gpui.timer` as the replacement. Global `fetch` and `WebSocket`, plus the safe standard modules documented under [Capabilities](./capabilities.md), are real asynchronous host APIs. CommonJS `require` remains unavailable; use ES modules.
 
 The DOM names are the deliberate exception: `window`, `document` and `localStorage` are genuinely absent rather than stubbed, because `typeof window === "undefined"` is what an environment-detecting bundle reads to take its non-browser branch, and a throwing getter would turn a working feature test into a crash.
 
 ## Not there yet
 
-- **`gpui.http`.** Declared in the capability model, not implemented. `fetch` names it in its refusal message ahead of time.
 - **Global and cross-view state.** There is no store beyond the persistence layer in [Capabilities](./capabilities.md) and ordinary module scope.
 - **Actions and key bindings.** `gpui.action` and `gpui.keymap` are designed but not bound; the only key handling today is what `ShellRoot` installs (Tab, Shift-Tab, Escape).
 - **Multiple windows.** The host opens the window; there is no `gpui.open_window`.

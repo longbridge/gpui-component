@@ -23,7 +23,7 @@ The style surface has two halves, and they exist for different reasons.
 
 **No-argument methods come from GPUI's reflection table.** `flex_col`, `items_center`, `gap_2`, `rounded_md`, `text_sm`, `size_full`, `font_semibold`, `truncate`, `cursor_pointer` — the whole family, obtained from `gpui_base::styled_ext_reflection_methods` and `gpui::styled_reflection::methods` with no maintenance at all. Not one of these names is written down anywhere in the runtime. When upstream GPUI adds a style method, the script surface has it, and so does the generated `gpui.d.ts`.
 
-The build these pages were written against exposes **3,146** of them. It is however many `fn(self) -> Self` style methods GPUI currently has, and it moves when GPUI moves. `gpui-shell types` prints the exact figure for your build.
+The build these pages were written against exposes **3,148** of them. It is however many `fn(self) -> Self` style methods GPUI currently has, and it moves when GPUI moves. `gpui-shell types` prints the exact figure for your build.
 
 **Methods that take arguments cannot be reflected**, so there are **57** of them bound by hand. That list is the one hand-maintained table in the styling layer, and it is deliberately small.
 
@@ -143,6 +143,38 @@ Two implementation facts leak far enough to be worth knowing:
 - **`active` and `focus` need a stable element identity.** A plain `div` acquires one lazily, derived from its position in the description, which is stable across renders for a stable tree. `Button`, `Checkbox` and `Input` already have one.
 - **A `Switch` ignores state styles.** The switch root is not the interactive element — its track is — so a state style on it has nowhere to land. The runtime logs a warning saying to style the row around it instead, rather than dropping the declaration silently.
 
+## Theme values
+
+Read semantic values from the context that is rendering or handling the event:
+
+```js
+render(cx) {
+  const { colors, spacing, radius, mode, is_dark } = cx.theme();
+  return v_flex()
+    .gap(spacing.md)
+    .rounded(radius.lg)
+    .bg(colors.surface)
+    .child(text(`${mode}: ${is_dark ? "dark" : "light"}`));
+}
+```
+
+The snapshot is deeply read-only. `theme()` remains as a compatibility accessor, but `cx.theme()` is preferred. `set_theme("light" | "dark")` is callable from an event or task and invalidates script views so token-backed styles are rebuilt.
+
+## Native motion
+
+`.transition(property, policy)` and `.spring(property, policy?)` animate later target changes for `opacity`, `width`, `height`, `left`, and `top`. Motion is retained and advanced by native GPUI frames: after the script changes the target and calls `cx.notify()`, animation frames do **not** re-enter JavaScript.
+
+```js
+div()
+  .id("drawer")
+  .left(this.open ? 320 : 16)
+  .opacity(this.open ? 1 : 0.5)
+  .transition("left", { duration: 220, easing: "ease-out" })
+  .spring("opacity", { response: 260, damping: 0.85 });
+```
+
+Animated length targets are **numeric pixels only**. Relative values such as `"50%"`, `"1rem"`, and `"auto"` cannot be sampled into a stable native channel and are rejected. Give the element a stable `.id(...)` (controls already use their constructor id), otherwise a changing tree position changes the motion identity.
+
 ## There is no `class("...")`
 
 A reasonable question, given how the names read: why not accept a string of style names, the way a utility-CSS framework does?
@@ -174,6 +206,5 @@ So the runtime keeps a fast plain prototype as the default, and when a render fa
 ## Not there yet
 
 - **Semantic state styles.** `gpui-base` has a `state_style` layer with a defined priority order for checked, selected and disabled. It is not bound; use `.when(condition, …)` for those states today.
-- **Animation.** No transitions and no keyframes on the script surface.
+- **Keyframe animation.** Target-value transitions and springs exist; arbitrary keyframes and per-frame JavaScript callbacks do not.
 - **Spacing and radius tokens in styles.** The palette carries spacing and radius scales, but style methods take lengths, not token names — only colours resolve a token. Applications define their own scale as a constant, the way the example's `SPACE` object does.
-- **Theme switching from a script.** The runtime ships a light and a dark palette and a Rust API to switch between them (`gpui_shell::theme::set_mode`); there is no `gpui.set_theme` on the script surface yet.

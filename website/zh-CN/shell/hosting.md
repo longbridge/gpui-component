@@ -96,6 +96,8 @@ gpui_shell::set_native_modules(modules);
 
 三项的默认都是“什么都没有”：没有文件访问、没有存储位置、没有 native 模块。见 [Capabilities](./capabilities.md) 与 [Native Modules](./native.md)。
 
+独立二进制还会检查 `<root>/gpui-shell.json`。文件存在且有效时，它的五个字段提供应用身份、entry metadata 与 capability 请求；`plugin.json` 没有 authority。Embedder 若要让每个加载的应用拥有不同 grant 与 native-module registry，也可以直接构造 `Policy`。
+
 ## 观察它花了多少
 
 运行时把两件事分开计数，而这两个数之间的差就是重点：

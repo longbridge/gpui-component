@@ -1,17 +1,18 @@
 ---
 title: Examples
-description: Two complete applications in the repository — a standalone todo list, and a script panel embedded beside Rust in the component gallery.
+description: Complete standalone and embedded applications, including retained state, native modules, and native motion.
 order: 3
 ---
 
 # Examples
 
-Two applications ship with the repository, and between them they cover both ways a script runs: on its own, and inside a Rust host.
+Three examples ship with the repository, and together they cover a standalone application, a script backed by host state, and motion whose frames never enter JavaScript.
 
 | | Runs as | Shows |
 | --- | --- | --- |
 | [Todo list](#the-todo-list) | A standalone application | The whole script surface: retained input, a dialog, a toast, gated storage, assets, types |
 | [Quote board](#the-quote-board) | A panel inside the gallery | The host half: native modules, one entity read from two languages, live cost counters |
+| [Native motion](#native-motion) | A separate gallery script view | Pixel target transitions and springs retained and sampled by GPUI |
 
 ## The todo list
 
@@ -72,16 +73,23 @@ cargo run -- shell
 
 The gallery's Shell story runs two panels side by side: the left one drawn by `shell_story.rs` in Rust, the right one by `crates/story/js/quotes/main.js` — 122 lines of JavaScript — reading the same data.
 
-The script owns no state at all. The board is a Rust `Entity<Market>`, reached through two [native modules](./native.md) the story registered before the runtime started:
+The script owns no state at all. The board is a Rust `Entity<Market>`, reached through the [native module](./native.md) the story registered before the runtime started:
 
 ```text
 native("market")   quotes() · ticks() · watch(symbol) · watch_all(on)
-native("theme")    palette() — the gallery's own colors and radius, as data
 ```
+
+Theme values come from the call-scoped `cx.theme()` snapshot, not a second native module.
 
 Because both panels read one entity, any disagreement between them is visible immediately — which is what makes this a test rather than a demo. Editing `main.js` changes the right-hand panel with no `cargo build` in between; the story has a "Reload script" button next to the panel.
 
 Underneath sits the counter readout this documentation quotes throughout: script runs a second against frames a second, with a feed selector to move one without the other. That is [the performance claim](./index.md#performance-the-script-is-not-in-the-frame) made visible in a running window.
+
+## Native motion
+
+`crates/story/js/motion/main.js` is intentionally a separate `ScriptView` from the quote benchmark, so animation activity cannot contaminate the render-frequency measurement. It lets you switch between `.transition(...)` and `.spring(...)`, then retargets opacity and pixel-valued width, height, left, and top.
+
+The script runs once to publish the new target. GPUI schedules and samples every following animation frame natively, with no JavaScript re-entry. The example uses only numeric pixel targets — no `rem`, percentages, or `auto` — and stable ids so retained channels survive description rebuilds.
 
 ## Where to start
 

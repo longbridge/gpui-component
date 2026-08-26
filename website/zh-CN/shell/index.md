@@ -53,9 +53,9 @@ export default class Counter extends View {
 
 ### 能力：一整层应用层，而不是一套控件
 
-脚本拿到的，正是一个基于 `gpui-base` 的 Rust 应用能拿到的东西：元素与布局、建立在语义主题 token 之上的流式样式接口、通过 `init` / `render` / `cx.notify()` 管理的视图状态、由宿主留存的状态（例如文本输入的 rope 与选区）、dialog / sheet / toast、异步任务，以及需要授权才能用的系统接口——`fs`、`store`、`clipboard`、`log`、`process`。
+脚本拿到的，正是一个基于 `gpui-base` 的 Rust 应用能拿到的东西：元素与布局、链接与控件、建立在语义主题 token 之上的流式样式接口、通过 `init` / `render` / `cx.notify()` 管理的视图状态、由宿主留存的状态（例如文本输入的 rope 与选区）、dialog / sheet / toast、异步任务、原生 transition 与 spring，以及需要授权才能用的文件、存储、剪贴板、进程、HTTP、TCP 与 WebSocket 接口。
 
-围绕它的还有：`--watch` 保存文件即 hot-reload，无需重启应用，自动生成的 `gpui.d.ts` 把整套 API 描述给编辑器或模型，`check` 则在应用跑起来之前就报出问题。
+围绕它的还有：`--watch` 保存文件即 hot-reload，`gpui-shell.json` 在代码运行前声明身份与最小权限，自动生成的 `gpui.d.ts` 把整套 API 描述给编辑器或模型，`check` 则在应用跑起来之前就报出问题。
 
 ::: tip
 `gpui.d.ts` 可以加进 `.gitignore`，它是自动生成的。
@@ -63,7 +63,7 @@ export default class Counter extends View {
 
 ### 性能：脚本不在每一帧里
 
-`render` **不是**每帧跑一次。它把界面描述一次、存进一份 snapshot；在下一次 `cx.notify()` 之前，每一次重绘都由 Rust 重放这份 snapshot。指针划过按钮、光标闪烁、列表滚动、动画推进，这些重绘都不执行 JavaScript。
+`render` **不是**每帧跑一次。它把界面描述一次、存进一份 snapshot；在下一次 `cx.notify()` 之前，每一次重绘都由 Rust 重放这份 snapshot。指针划过按钮、光标闪烁、列表滚动、原生 transition 或 spring 推进，这些重绘都不执行 JavaScript。
 
 运行时把两件事分开计数，gallery 的 Shell story（`cargo run -- shell`）把这两个数摆在界面上：
 
@@ -126,10 +126,10 @@ GPUI 的元素是**被消费**的值：`RenderOnce::render` 按值取走 `self`�
 ## 适用场景
 
 - **为已有的 GPUI 应用增加插件能力。** 插件跑在宿主进程内，能力由宿主一项一项授予，起点是什么都没有。扩展产品不再意味着 fork 或者发一个新版本。
-- **基于 `gpui-shell` 编写纯 JavaScript 的应用。** 整个应用层——元素、样式、视图状态、浮层与系统接口——都在 JavaScript 一侧，而渲染、文本编辑、虚拟化与动画仍留在 Rust。
+- **基于 `gpui-shell` 编写纯 JavaScript 的应用。** 整个应用层——元素、样式、视图状态、浮层与系统接口——都在 JavaScript 一侧，而渲染、文本编辑、虚拟化与每一个动画帧仍留在 Rust。
 - **为应用提供动态扩展能力。** 界面与业务逻辑以脚本形式交付，改动不需要重新编译、也不需要重新分发二进制；脚本出错会呈现为一个可恢复的错误，而不是把宿主一起带走。
 
-文本编辑、语法高亮、LSP、虚拟化与动画都留在 Rust：脚本负责组合与呈现，宿主负责所有必须贴着 GPU 与系统运行的部分。
+文本编辑、语法高亮、LSP、虚拟化与动画采样都留在 Rust：脚本负责组合、呈现与修改目标，宿主负责所有必须贴着 GPU 与系统运行的部分。
 
 ## 它在架构中的位置
 
@@ -155,12 +155,12 @@ GPUI 的元素是**被消费**的值：`RenderOnce::render` 按值取走 `self`�
 | 页面 | 内容 |
 | --- | --- |
 | [Getting Started](./getting-started.md) | 运行示例、最小应用、`check` 与 `types` |
-| [Examples](./examples.md) | 仓库里的两个应用，以及可以从中照抄什么 |
+| [Examples](./examples.md) | 仓库里的独立应用、宿主状态与原生动画示例 |
 | [Elements](./elements.md) | 构造器、`child` / `children` / `when`，以及元素为什么是一次性的 |
 | [Styling](./styling.md) | 流式样式接口、长度与颜色、语义 token、状态样式 |
 | [State and Views](./state.md) | `init` / `render`、`cx.notify()`、留存状态、异步 |
 | [Overlays](./overlays.md) | dialog、sheet、toast，以及 phase 规则 |
-| [Capabilities](./capabilities.md) | 默认全部拒绝的模型，`fs` / `store` / `clipboard` / `log` / `process` |
+| [Capabilities](./capabilities.md) | `gpui-shell.json`、默认拒绝、文件、存储、进程与网络 API |
 | [Native Modules](./native.md) | 把宿主自己的 Rust 借给脚本，以及那条纯数据边界 |
 | [Hosting the Runtime](./hosting.md) | Rust 这一侧的全貌：挂载、刷新、指标、退出、hot-reload |
 | [Dock Panels](./dock.md) | 把脚本视图变成可停靠面板，以及重启后什么会留下 |

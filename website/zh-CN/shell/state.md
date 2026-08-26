@@ -96,6 +96,8 @@ snapshot 只在有东西让它失效时才重建：
 
 `cx.phase()` 返回当前 phase，不在任何宿主调用中时返回 `"none"`。
 
+`cx.theme()` 返回这次调用当前语义主题的深度只读 snapshot：既包含直接颜色角色，也包含 `colors`、`spacing`、`radius`、`mode` 与 `is_dark`。优先使用它，而不是兼容用的 `theme()` 导出，因为 context 写法明确表达了调用生命周期与当前宿主主题。
+
 每一条拒绝都是一条具体信息，而不是未定义行为：
 
 ```text
@@ -254,19 +256,18 @@ handle.is_done();
 
 `timer.every` 的间隔从上一次调用结束开始计时，所以慢的处理函数会推迟下一次 tick，而不是把 tick 堆起来。
 
-### 这里没有 `setTimeout`
+### Timer 与标准宿主 API
 
 ```text
 `setTimeout` is not available in the shell: use gpui.timer(ms, callback)
 ```
 
-`setTimeout`、`setInterval`、`clearTimeout`、`clearInterval`、`fetch` 与 `require` 都以抛异常的桩形式存在并指出替代品，而不是干脆缺席。一句裸的 `ReferenceError` 只说明某个名字不存在，完全不说该写什么。
+`setTimeout`、`setInterval`、`clearTimeout` 与 `clearInterval` 是会抛错并指向 `gpui.timer` 的 stub。全局 `fetch` 与 `WebSocket`，以及 [Capabilities](./capabilities.md) 中记录的安全标准模块，都是真实的异步宿主 API。CommonJS `require` 仍不可用；请使用 ES module。
 
 DOM 名字是刻意的例外：`window`、`document`、`localStorage` 是真正缺席而不是桩，因为做环境探测的 bundle 读的正是 `typeof window === "undefined"` 来走非浏览器分支，而一个抛异常的 getter 会把本来能工作的特性探测变成崩溃。
 
 ## 还没有的东西
 
-- **`gpui.http`。** 能力模型里声明了它，但没有实现。`fetch` 的拒绝信息提前提到了它。
 - **全局与跨视图状态。** 除了 [Capabilities](./capabilities.md) 里的持久化层和普通模块作用域，没有别的 store。
 - **Action 与快捷键。** `gpui.action` 与 `gpui.keymap` 设计了但没有绑定；今天唯一的按键处理是 `ShellRoot` 安装的那几个（Tab、Shift-Tab、Escape）。
 - **多窗口。** 窗口由宿主打开，没有 `gpui.open_window`。

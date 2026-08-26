@@ -53,9 +53,9 @@ The engine is a parameter of the design rather than a part of it. QuickJS is the
 
 ### Capability: a whole application layer, not a widget set
 
-A script gets what a Rust application built on `gpui-base` gets: elements and layout, a fluent style surface over semantic theme tokens, view state through `init` / `render` / `cx.notify()`, retained host state such as a text input's rope and selection, dialogs, a sheet and toasts, asynchronous tasks, and the gated system surfaces — `fs`, `store`, `clipboard`, `log`, `process`.
+A script gets what a Rust application built on `gpui-base` gets: elements and layout, links and controls, a fluent style surface over semantic theme tokens, view state through `init` / `render` / `cx.notify()`, retained host state such as a text input's rope and selection, dialogs, a sheet and toasts, asynchronous tasks, native transitions and springs, and gated filesystem, storage, clipboard, process, HTTP, TCP and WebSocket surfaces.
 
-Around that: `--watch` hot-reloads on save, with no restart, a generated `gpui.d.ts` describes the whole API to an editor or a model, and `check` reports mistakes before the application runs.
+Around that: `--watch` hot-reloads on save, `gpui-shell.json` declares identity and least-privilege capabilities before code runs, a generated `gpui.d.ts` describes the whole API to an editor or a model, and `check` reports mistakes before the application runs.
 
 ::: tip
 `gpui.d.ts` can go in `.gitignore` — it is generated.
@@ -63,7 +63,7 @@ Around that: `--watch` hot-reloads on save, with no restart, a generated `gpui.d
 
 ### Performance: the script is not in the frame
 
-`render` does **not** run once per frame. It describes the interface once into a snapshot, and until the next `cx.notify()` every repaint replays that snapshot in Rust. A pointer crossing a button, a blinking cursor, a scrolling list and an advancing animation do not run JavaScript.
+`render` does **not** run once per frame. It describes the interface once into a snapshot, and until the next `cx.notify()` every repaint replays that snapshot in Rust. A pointer crossing a button, a blinking cursor, a scrolling list and a native transition or spring advancing do not run JavaScript.
 
 The runtime counts the two events separately, and the gallery's Shell story (`cargo run -- shell`) puts both counters on screen:
 
@@ -126,10 +126,10 @@ What the script gains in exchange for the extra typing is the whole application 
 ## Where it fits
 
 - **Adding plugin support to an existing GPUI application.** Plugins run inside the host process under capabilities the host grants one at a time, starting from none. Extending the product stops meaning a fork or a new release.
-- **Writing a complete application in JavaScript on `gpui-shell`.** The whole application layer — elements, styling, view state, overlays and the system surfaces — while rendering, text editing, virtualization and animation stay in Rust.
+- **Writing a complete application in JavaScript on `gpui-shell`.** The whole application layer — elements, styling, view state, overlays and system APIs — while rendering, text editing, virtualization and every animation frame stay in Rust.
 - **Giving an application dynamic extension points.** Interface and business logic ship as script and change without recompiling or redistributing a binary, and a failing script surfaces as a recoverable error rather than taking the host down.
 
-Text editing, syntax highlighting, LSP, virtualization and animation stay in Rust: the script composes and presents, and the host owns everything that has to sit close to the GPU and the system.
+Text editing, syntax highlighting, LSP, virtualization and motion sampling stay in Rust: the script composes, presents and changes targets, and the host owns everything that has to sit close to the GPU and the system.
 
 ## Where it sits
 
@@ -160,7 +160,7 @@ Text editing, syntax highlighting, LSP, virtualization and animation stay in Rus
 | [Styling](./styling.md) | The fluent style surface, lengths, colour tokens and state styles |
 | [State and views](./state.md) | `init` / `render`, `cx.notify()`, retained state, async |
 | [Overlays](./overlays.md) | Dialogs, the sheet, toasts, and the phase rule |
-| [Capabilities](./capabilities.md) | The default-deny model, `fs` / `store` / `clipboard` / `log` / `process` |
+| [Capabilities](./capabilities.md) | `gpui-shell.json`, default deny, filesystem, storage, process and network APIs |
 | [Native Modules](./native.md) | Lending the host's own Rust to a script, and the plain-data boundary |
 | [Hosting the Runtime](./hosting.md) | The Rust side in full: mounting, refreshing, metrics, exit, hot-reload |
 | [Dock Panels](./dock.md) | A script view as a dockable panel, and what survives a restart |

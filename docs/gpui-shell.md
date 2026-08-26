@@ -48,7 +48,7 @@ Four things make up the runtime:
 2. bindings over the `gpui` element and style layer and the `gpui-base`
    behavior layer;
 3. a capability-gated system API (`fs`, `store`, `clipboard`, `log`,
-   `process`);
+   `process`, HTTP, TCP, and WebSocket);
 4. a command-line host that runs an application directory, checks it, and
    generates its type declarations (§23).
 
@@ -102,6 +102,7 @@ not installed.
 | `fs`, `fs/promises` | Shell adapter over capability directory handles; no ambient `std::fs` access |
 | global `fetch` | Capability-checked HTTP, including every redirect; 30-second timeout and 8 MiB buffered-body limit |
 | `net` | Capability-checked TCP connect; 30-second I/O timeout and 1 MiB per-call read/write limit |
+| global `WebSocket` | Capability-checked client handshake plus asynchronous text/binary `read`, `write`, and `close`; 8 MiB message/frame limit |
 
 The old `gpui.fs` and `gpui.process` exports have been removed. Existing scripts
 must migrate to `fs/promises` and `process`; `console` remains global and is
@@ -268,14 +269,15 @@ follows the showcase's visual language.
 Four costs follow from binding base rather than a styled component library.
 They are real, and all four are paid in `crates/shell`.
 
-**The default color tokens are transparent, so the shell ships a palette.**
+**The default color tokens are transparent, so the shell installs a fallback.**
 `gpui_base::Theme`'s `ColorTokens` derives `Default`, meaning every color starts
 as `Hsla { h: 0, s: 0, l: 0, a: 0 }` — fully transparent. `RadiusTokens` and
 `SpacingTokens` have real defaults; colors do not. A runtime that only called
-`gpui_base::init` would paint an invisible window. `theme.rs` embeds
-`theme/default-tokens.json` with `include_str!` and installs it, so a shell
-binary is self-contained and cannot start unstyled because a file is missing
-(§13.3).
+`gpui_base::init` would paint an invisible window. The library's `theme.rs`
+installs a neutral Rust fallback so embedders remain legible without imposing a
+product palette. The `gpui-shell` binary separately embeds
+`src/bin/default-tokens.json` and installs that CLI-owned light/dark palette
+after shell initialization (§13.3).
 
 **There is no `Root`, so the shell provides `ShellRoot`.** `Root` lives in
 `crates/ui` and belongs to `gpui-component`. Base ships the parts — `Dialog` and
@@ -490,8 +492,9 @@ export default class Counter extends View {
 }
 ```
 
-`"gpui"` is the only built-in module name; every other `import` resolves inside
-the application directory (§19.1). The entry point is `main.js`, and it must
+`"gpui"` is the UI module name. The Standard Runtime also provides the selected
+bare modules listed in §1.1; every other `import` resolves inside the
+application directory (§19.1). The entry point is `main.js`, and it must
 `export default` a class extending `View`. The host takes that class, constructs
 one instance, and mounts it as the window's root view.
 
@@ -908,10 +911,11 @@ A script-side element wraps a `SpecId` and nothing else — in JavaScript, an
 pushes one `SpecOp` and returns the same object, which is what makes the chain
 work.
 
-`Component` currently covers `Div`, `HFlex`, `VFlex`, `Text`, `Button`,
-`Checkbox`, `Switch`, `Svg`, and `Input`. `Input` is addressed by its entity
-handle rather than by an id, because the state is what identifies it and the
-state outlives the description.
+`Component` currently covers `Div`, `HFlex`, `VFlex`, `Text`, `Button`, `Link`,
+`Checkbox`, `Switch`, `Svg`, and `Input`. `Link` takes an absolute HTTP(S)
+target through `.href(url)` and delegates opening it to the host. `Input` is
+addressed by its entity handle rather than by an id, because the state is what
+identifies it and the state outlives the description.
 
 **Rust's move semantics survive the trip into a garbage-collected language as an
 explicit runtime error.** Attaching a node sets `parented`; touching it again —
@@ -1075,9 +1079,9 @@ the script builds the same tree in the same order — a conditional child appear
 above it shifts every address below.
 
 So a script can name an element instead: `div().id("toolbar")` makes the name the
-identity, and it survives the script reordering its own tree. `Button`,
-`Checkbox` and `Switch` already take an identity from `new(id)` and say so with a
-warning rather than ignoring a second one in silence.
+identity, and it survives the script reordering its own tree. `Button`, `Link`,
+`Checkbox` and `Switch` already take an identity from `new(id)` and say so with
+a warning rather than ignoring a second one in silence.
 
 `text(...)` materializes as a `div` carrying a string child rather than as a
 distinct element type, so every style method works on it unchanged. `Input`
@@ -1677,13 +1681,15 @@ zero — fully transparent. `RadiusTokens` and `SpacingTokens` have real default
 Calling `gpui_base::init(cx)` without supplying colors paints an invisible
 window.
 
-The shell therefore does two things. It ships `theme/default-tokens.json`,
-embedded with `include_str!` so a binary is self-contained, and deserializes it
-into `Theme::global_mut(cx).tokens` at `init`. There is no schema cost:
-`SemanticThemeTokens` and its sub-structures already derive `Serialize`,
-`Deserialize`, and `JsonSchema`, and the shipped file is the reference document
-for that format. Two palettes are defined, light and dark; the scales are omitted
-from the file and fall back to base's defaults, which is asserted by a test.
+The library therefore installs a neutral light/dark fallback from Rust in
+`theme.rs`. That is a legibility guarantee, not a product theme. An embedding
+host can parse and install its own `Palettes` afterwards. The standalone
+`gpui-shell` binary does exactly that with an embedded
+`src/bin/default-tokens.json`, keeping the palette a host/product decision while
+remaining self-contained. `SemanticThemeTokens` and its sub-structures already
+derive the serialization/schema traits needed by the palette format. The CLI
+file defines light and dark colors; omitted scales fall back to base defaults,
+which is asserted by a test.
 
 And it resolves token names for script. Seventeen colors — `background`,
 `foreground`, `surface`, `primary`, `muted`, `accent`, `destructive`, `border`,
@@ -1712,16 +1718,20 @@ Rules for script:
 - This matches `CLAUDE.md`: the theme API exposes semantic tokens, not a growing
   set of component-specific fields.
 
-A script reads the palette through `gpui.theme()`, which answers a snapshot of
-every color, spacing, and radius token plus `is_dark`, and switches with
-`gpui.set_theme("dark")`. Reading is offered and **writing is not**: a script
-that could repaint the host would make the host's own appearance something every
-application it loads gets a vote on. The snapshot is read fresh on each call
-rather than cached — a theme switch has to be visible to the next render, and a
-view reads a handful of tokens rather than thousands. `set_theme` needs a live
-host call and refuses an unknown name against the valid set;
-`theme::set_mode` underneath returns whether anything changed, so a caller
-mirroring an OS appearance change can skip the window refresh.
+The preferred read is call-scoped: `const tokens = cx.theme()` inside
+`render(cx)`. It returns every color both as a direct semantic role and under
+`colors`, the `spacing` and `radius` scales, and `mode` plus `is_dark`.
+`gpui.theme()` remains a compatibility accessor to the same snapshot. The
+snapshot and all three nested token groups are frozen, so scripts can select
+tokens but cannot mutate the palette object. The prelude caches that deeply
+read-only object only while the serialized palette is unchanged; a theme switch
+produces a fresh snapshot on the next read.
+
+`gpui.set_theme("light" | "dark")` is the explicit palette-selection operation,
+not mutation of individual tokens. It needs a live host call, refuses unknown
+names, refreshes windows when the mode changes, and returns whether anything
+changed. A host can install its own `Palettes` after shell initialization; the
+script still sees the same semantic, read-only projection.
 
 ### 13.4 The preset module
 
@@ -1743,9 +1753,22 @@ is keeping any preset thin.
 
 ### 13.5 Animation
 
-Not bound. Base's `motion` (`Transition`, `Spring`, `Interpolate`) and
-`animation` are the intended target, with the script describing target and
-timing while interpolation stays in Rust.
+Bound as target declarations on every element. A script applies the ordinary
+target style, then attaches a native policy:
+
+```js
+div()
+  .id("sidebar")
+  .w(this.expanded ? 320 : 64)
+  .transition("width", { duration: 180, easing: "ease-out" })
+```
+
+`transition` and `spring` support `opacity`, `width`, `height`, `left`, and
+`top`. Length motion currently requires pixel targets. The snapshot stores only
+the target and policy; `gpui-base::motion` owns keyed retained state, sampling,
+interruption, reduced-motion handling, and animation-frame requests. A target
+change therefore enters JavaScript once, while every intermediate frame stays
+in Rust. The Shell story's standalone Motion section is the runnable example.
 
 ---
 
@@ -1754,10 +1777,11 @@ timing while interpolation stays in Rust.
 ### 14.1 The surface, measured
 
 The bound surface today is small and deliberately so: `div`, `h_flex`, `v_flex`,
-`text`, `svg`, `Button`, `Checkbox`, `Switch`, `Input`, and `InputState`, plus
+`text`, `svg`, `Button`, `Link`, `Checkbox`, `Switch`, `Input`, and `InputState`,
+plus
 `child`, `children`, `when`, `on_click`, `on_change`, `disabled`, `selected`,
-`checked`, `accessibility_label`, and the three state styles — over 3,148
-no-argument and 57 parametric style methods.
+`checked`, `accessibility_label`, `href`, `id`, `transition`, `spring`, and the
+three state styles — over 3,148 no-argument and 57 parametric style methods.
 
 That is a small prefix of `gpui-base`. What makes completing it plausible is the
 size difference measured in §4.2: base's `Button` has 13 public functions to
@@ -1842,14 +1866,13 @@ no style method collides with an element method, that every parametric method is
 classified, that every color token is in the union, and that no internal name
 (`__id`, `__apply`, `__gpui`) leaks into the declarations.
 
-Those tests do not catch a _missing_ declaration, and there are several. `svg`,
-`Input`, `InputState`, and `accessibility_label` are bound at runtime and absent
-from the declarations; so is every overlay method on `cx` — the declared
-`Context` carries only `notify` and `phase` — and so are `native`, `theme`,
-`set_theme`, and `require_api`. Running `// @ts-check` against the generated
-declarations would flag the shipped example. The tests assert that what _is_
-declared matches the dispatcher; nothing asserts the converse, and a check that
-every `MODULE_EXPORTS` name appears in the output would close it.
+The generated declarations now include `Link`/`href`, `cx.theme()`, the deeply
+read-only semantic token shapes, motion policies, overlays, retained input,
+native modules, the Standard Runtime surfaces, `set_theme`, and `require_api`.
+The remaining limitation is structural: without the component binding table of
+§14.3 there is no general proof that every future hand-bound export was also
+added to the declarations. A check that every `MODULE_EXPORTS` name appears in
+the output would close that gap.
 
 ### 14.6 A `gpui-component` module, later
 
@@ -2159,23 +2182,41 @@ settles when the current value is durable.
 
 ### 17.2 Network
 
-Two experimental surfaces are implemented. Global `fetch(url)` performs an
-HTTP GET and resolves to `{ status, ok, url, text() }`. Bare module `net`
-provides `connect(host, port)`, whose socket has bounded async `read`, `write`
-and `close`. `net` deliberately has no listening/server API.
+Three experimental surfaces are implemented. Global `fetch(url, options?)`
+supports bounded GET and POST requests, string or `Uint8Array` bodies, safe
+request headers, and resolves to `{ status, ok, url, text(), json() }`. Global
+`WebSocket.connect(url, { headers }?)` returns a socket with asynchronous
+text/binary `read`, `write`, and `close`. Bare module `net` provides raw
+`connect(host, port)` with bounded async `read`, `write`, and `close`; neither
+socket API provides a listening/server surface.
 
-Both are **asynchronous and capability-gated**. The host allowlist is checked at
-the call site before background work starts. `fetch` follows redirects manually
-and rechecks every destination, preventing an allowed origin from redirecting
-into a denied network. Requests and socket operations time out after 30 seconds;
-HTTP response bodies are capped at 8 MiB and socket reads/writes at 1 MiB per
-call. Cancellation drops the scheduler ownership immediately, although an
-already-running blocking OS operation can continue only until its timeout.
+All three are **asynchronous and capability-gated**. The host allowlist is
+checked at the call site before background work starts. `fetch` handles
+redirects itself and authorizes every target against its method, host, and path
+grant. It refuses HTTPS downgrade. A non-GET request is never replayed across
+origins; neither Authorization nor any other caller-supplied header crosses an
+origin boundary. Same-origin redirects may retain method, body, and headers.
+HTTP requests time out after 30 seconds; request and response bodies are capped
+at 8 MiB.
 
-This is a deliberately small `fetch` subset: request options, headers, streaming
-bodies, `json()`, abort signals, cookies and proxies are not yet promised. The
-name follows the WinterCG ecosystem, while this subset and the absence of DOM or
-package resolution mean GPUI Shell does not claim browser compatibility.
+WebSocket connect resolves only after a successful handshake and does not
+follow a redirect. Optional ordinary/custom protocol headers are allowed, but
+Authorization, Proxy-Authorization, Cookie, Host, Connection, Upgrade, and all
+`Sec-WebSocket-*` handshake-control headers are rejected before connecting.
+Frames/messages are capped at 8 MiB. Connect, TLS/Upgrade handshake, and writes
+have a 30-second transport deadline. A pending `read()` has no public deadline
+and waits for the next text/binary message, peer close, local close, or
+transport error; each socket accepts only one outstanding read, rejecting a
+second immediately. The actor's short transport read slice is an internal
+scheduling mechanism, not a user-visible timeout; between slices it services
+writes and close, so a heartbeat write or close can complete while a read is
+pending. Raw socket reads/writes remain capped at 1 MiB per call.
+
+The fetch subset remains deliberately small: GET and POST are the only methods,
+client-managed framing headers are refused, and streaming bodies, abort signals,
+cookies, and browser proxy semantics are not promised. The name follows the
+WinterCG ecosystem, while this subset and the absence of DOM or package
+resolution mean GPUI Shell does not claim browser compatibility.
 
 ### 17.3 Storage
 
@@ -2343,9 +2384,11 @@ blown Rust stack into a message at the call site.
 
 ## 18. The Plugin Model
 
-A host that runs one application from a directory needs none of this: the
-command line names the directory, the grant is decided by the act of typing the
-command, and storage is keyed by the path (§23). A host that runs _several_
+A host that runs one application from a directory may omit the manifest and get
+the CLI's narrow local defaults, with storage keyed by the path (§23). When
+`gpui-shell.json` is present, the CLI parses it before loading code and installs
+its declared capabilities; an invalid manifest grants nothing and is reported.
+A host that runs _several_
 applications cannot do any of that, because identity, permission, and storage
 become per-plugin questions — and all three have to be answerable **before** the
 plugin's code runs. That is the whole reason a manifest exists.
@@ -2354,7 +2397,8 @@ plugin's code runs. That is the whole reason a manifest exists.
 discovery, load and unload, per-plugin policies, capabilities and data
 directories. `plugin_api.rs` implements the version check behind
 `gpui.require_api("1.0")`, which is reachable from script. **`PluginManager`
-has no production caller** — neither the binary nor the engine drives it yet.
+has no production caller** — the CLI consumes a single manifest directly but
+does not drive discovery or the multi-plugin manager.
 Its integration test does load and run a plugin, including asynchronous `init`
 under the manifest-derived policy. The rest of this section describes what it
 does, because the shape is what the design is about.
@@ -2362,9 +2406,9 @@ does, because the shape is what the design is about.
 ### 18.1 The manifest
 
 Five fields, no sixth: `id`, `name`, `version`, `entry`, `capabilities`. The
-file is `plugin.json` — the directory is the plugin, and `manifest.json` and
-`package.json` are both already spoken for by ecosystems whose schemas would be
-mistaken for this one.
+file is `gpui-shell.json` — the name makes the owning runtime explicit and
+avoids collision with the generic `manifest.json`, `plugin.json`, and
+`package.json` conventions used by other ecosystems.
 
 ```json
 {
@@ -2378,12 +2422,28 @@ mistaken for this one.
       "write": ["${dataDir}"],
       "execute": ["git"]
     },
-    "network": { "hosts": ["api.example.com"] },
+    "network": {
+      "hosts": ["quotes.example.com"],
+      "http": [{
+        "host": "api.example.com",
+        "methods": ["GET"],
+        "paths": ["/v1/account"],
+        "path_prefixes": ["/v1/quotes/"]
+      }]
+    },
     "store": true,
     "clipboard": { "write": true }
   }
 }
 ```
+
+`network.hosts` is the backwards-compatible broad grant: every supported
+network API may reach that host. Use `network.http` when a plugin only needs
+selected REST operations. An HTTP request must match the rule's host, method,
+and either an exact `paths` entry or a `path_prefixes` entry. Redirects are
+checked again with the same rule, so an allowed endpoint cannot redirect a
+credentialed request onto an unlisted path or host. An HTTP-only grant does not
+also grant TCP or WebSocket access to its host.
 
 **Capability is permission; contribution is behavior.** Commands, panels, key
 bindings, settings, and themes are registered from script, never declared a
@@ -2517,7 +2577,7 @@ prototypes.
 | **Withheld**         | `eval` and every function constructor                                            | `globalThis.eval` is deleted outright; the `Function`, `AsyncFunction`, `GeneratorFunction`, and `AsyncGeneratorFunction` constructors are replaced with throwing stubs                                                                                                                                                                                               |
 | **Replaced**         | The module resolver (static and dynamic `import` alike)                          | Resolves `gpui`, the listed Standard Runtime bare modules, and paths inside the application root. `node:` names and unknown packages are refused before reaching the filesystem. Dynamic `import()` stays callable — it is how §18 does lazy loading                                                                                                                    |
 | **Frozen**           | `Object`, `Array`, `Function`, `String`, and `Number` prototypes                 | One VM hosts several plugins, so the built-ins are shared mutable state                                                                                                                                                                                                                                                                                               |
-| **Capability-gated** | `fs`, `process.run`, `process.exit`, `fetch`, `net.connect`                      | §17; each async operation captures the caller's policy before leaving the VM                                                                                                                                                                                                                                                                                          |
+| **Capability-gated** | `fs`, `process.run`, `process.exit`, `fetch`, `net.connect`, `WebSocket.connect` | §17; each async operation captures the caller's policy before leaving the VM                                                                                                                                                                                                                                                                                          |
 | **Throwing stub**    | `setTimeout`, `setInterval`, `clearTimeout`, `clearInterval`, `require`          | Present, and throwing a message that names the replacement                                                                                                                                                                                                                                                                                                            |
 
 Three of these are worth more than a table row.
@@ -2990,8 +3050,9 @@ They cover:
   output-limit rejection; the cross-platform case also proves denial, filtered
   environment, absent signal/identity mutation, and `nextTick` execution;
 - local HTTP and TCP success, default denial for both surfaces, redirect
-  reauthorization, response and socket size ceilings, and two simultaneous
-  runtime policies, without depending on the public Internet;
+  reauthorization, response and socket size ceilings, WebSocket handshake,
+  header filtering, text/binary traffic, pending-read concurrency, and two
+  simultaneous runtime policies, without depending on the public Internet;
 - clipboard read/write, timer cancellation, and a host-registered native module;
 - `with_cx` returning a live context to the original view after `await`.
 
@@ -3167,17 +3228,23 @@ generation checks, and the crate's only `unsafe`. Retained state by handle, with
 store-owned subscriptions, for `InputState`. The full style surface — 3,148
 reflected no-argument methods, 57 hand-bound parametric ones, 9 hand-added font
 weights — with Levenshtein suggestions and a two-prototype diagnostic strategy.
-The default semantic palette in light and dark, readable through `gpui.theme()`
-and switchable with `gpui.set_theme()`. Callbacks with per-pass lifetime and
+The default semantic palette in light and dark, exposed as a deeply read-only
+snapshot through `cx.theme()` (with `gpui.theme()` retained for compatibility)
+and switchable with `gpui.set_theme()`. Native target-value transitions and
+springs for opacity and pixel geometry, without per-frame script callbacks.
+Callbacks with per-pass lifetime and
 generation-checked dispatch. State styles for hover, active, and focus.
 Asynchrony: promises bridged to GPUI tasks, job-queue draining, `spawn`,
 `sleep`, `timer.after`/`every`, `with_cx`, owner-bound cancellation, and
 unhandled-rejection reporting. Multiple runtimes may coexist; tasks retain their
 originating runtime and policy, and initialization runs only after the final
-`ScriptView` exists. `ShellRoot` with the dialog stack, one sheet, the
+`ScriptView` exists. `Link` with an absolute HTTP(S) `.href(...)` opened by the
+host. `ShellRoot` with the dialog stack, one sheet, the
 toast stack, focus restoration, and Tab navigation, reached through `cx`. System
-capabilities for `fs`, `store`, `clipboard`, `log`, and `process`, all
-default-denied through one path resolver. Host-registered native modules through
+capabilities for asynchronous `fs`, `store`, `clipboard`, `log`, `process`,
+scoped HTTP, TCP, and WebSocket, all default-denied. HTTP redirect
+reauthorization and the bounded text/binary WebSocket actor are part of that
+surface. Host-registered native modules through
 `native(name)`. `gpui.require_api` and the script API version. The sandbox:
 module confinement, compiler withholding, frozen prototypes, absent-global
 stubs, interrupt and memory limits. Hot reload with per-generation module
@@ -3193,20 +3260,20 @@ JSON projections of each renderer context (§15). A host can drive all of it; a
 script cannot reach any of it.
 
 The plugin model: manifest parsing and its generated schema, discovery, load and
-unload, per-plugin policies, capabilities and data directories (§18). It is
-crate-private and **no production host drives it yet**; an integration test does
-load a real plugin and exercises its asynchronous initialization under the
-manifest-derived policy.
+unload, per-plugin policies, capabilities and data directories (§18). The CLI
+uses one local application's manifest directly; the multi-plugin manager remains
+crate-private with no production caller. An integration test loads a real plugin
+and exercises its asynchronous initialization under the manifest-derived policy.
 
 ### Not built
 
 `gpui.memo` and every other memoization. Component bindings beyond `div`,
-`text`, `svg`, `Button`, `Checkbox`, `Switch`, and `Input` — no Select, Tabs,
+`text`, `svg`, `Button`, `Link`, `Checkbox`, `Switch`, and `Input` — no Select, Tabs,
 Tree, Table, VirtualList, Radio, Toggle, Popover, Tooltip, or Textarea, and
 therefore no virtualization, which is the largest unrealized performance win.
 Semantic state styles (checked, selected, disabled) with base's precedence rules.
-Actions and key bindings. Animation. `gpui.open_window` and multi-window
-applications. `gpui.http`. A contribution registry — no `gpui.command`,
+Actions and key bindings. `gpui.open_window` and multi-window
+applications. A contribution registry — no `gpui.command`,
 `gpui.keymap`, `gpui.register_panel`, or `gpui.register_theme`. The capability
 authorization model: prompting, persistence, host policy, and re-asking on
 upgrade. The binding table and the rustdoc-JSON drift check. Packaging and
@@ -3404,7 +3471,7 @@ crates/shell/                 # gpui-shell — depends on gpui-base + gpui only
     watch.rs                  # source watching and in-place reload
     typings.rs                # gpui.d.ts generation
     bin/gpui-shell.rs         # run / check / types
-  theme/default-tokens.json   # the default semantic palette, light and dark
+  bin/default-tokens.json     # the CLI host's semantic palette, light and dark
   tests/
     render.rs                 # end-to-end description tests
     snapshot.rs               # the render-frequency invariants (§22.3)

@@ -34,7 +34,7 @@ gpui_platform::application()
                 .store(true),
         );
 
-        let view_type = runtime.load_app(&root).expect("main.js");
+        let view_type = runtime.load_app(&root, "main.js").expect("main.js");
 
         cx.open_window(Default::default(), move |window, cx| {
             let object = runtime.instantiate(&view_type, window, cx).expect("view");
@@ -101,7 +101,7 @@ cargo run -p gpui-shell -- hello
 
 Four things in that file are worth naming now, because everything else builds on them.
 
-**`"gpui"` is the only built-in module.** Every other `import` resolves inside the application directory and nowhere else. There is no npm, no `require`, no `node:fs`.
+**`"gpui"` is the UI module.** The runtime also supplies a deliberately small JavaScript-standard layer: `buffer`, `path`, `url`, `crypto`, `zlib`, `console`, `process`, `os`, `fs` / `fs/promises`, `net`, global `fetch`, and global `WebSocket`. Application-relative imports remain confined to the application directory. Node-prefixed aliases such as `node:fs`, package lookup, and CommonJS `require` are not part of the contract.
 
 **`main.js` must `export default` a class extending `View`.** `init` runs once when the view is created; `render` returns exactly one element, and runs when the view is invalidated rather than on every frame — see [When `render` runs](./state.md#when-render-runs).
 
@@ -119,7 +119,7 @@ cargo run -p gpui-shell -- examples/js_todolist
 
 That opens a window with a working todo list: a text field with retained state, controlled checkboxes, a confirmation dialog, a toast, icons loaded from the application's own directory, and storage that falls back to memory when it has not been granted. It exists to exercise the runtime rather than to be minimal — if something is broken, it shows there first.
 
-The argument is a **directory**, not a file. The runtime resolves that directory, reads `main.js` from it, takes the class that module default-exports, constructs one instance, and mounts it as the window's root view.
+The argument is a **directory**, not a file. The runtime resolves that directory, reads `main.js` from it, takes the class that module default-exports, constructs one instance, and mounts it as the window's root view. If the directory contains `gpui-shell.json`, the binary validates that manifest and uses its declared capabilities; the legacy name `plugin.json` is ignored.
 
 ## Check a script without running it
 
@@ -162,7 +162,7 @@ The declarations can be trusted because they are **generated from the tables the
 - each parametric method's argument type is _probed_ — the generator asks the runtime which literals that method accepts, so the difference between a length, a definite length, an absolute length, a colour and a bare number is decided by the code that enforces it;
 - the colour union comes from the installed palette's token names.
 
-Three things the declarations deliberately do not express, because no type could: whether a capability is **granted** (a denied `fs.read_text` still type-checks), the **lifetime** of an element or a `cx` (TypeScript has no affine types, so reusing an element still type-checks and still throws), and **which component a method suits** (every element shares one prototype, so `.checked(true)` is declared on all of them and is simply inert on a `div`).
+Three things the declarations deliberately do not express, because no type could: whether a capability is **granted** (a denied `fs.readFile` still type-checks), the **lifetime** of an element or a `cx` (TypeScript has no affine types, so reusing an element still type-checks and still throws), and **which component a method suits** (every element shares one prototype, so `.checked(true)` is declared on all of them and is simply inert on a `div`).
 
 Regenerate the file after upgrading the runtime; the output is deterministic, so the diff is reviewable.
 
@@ -177,9 +177,7 @@ cargo run -p gpui-shell -- hello --dev      # implies --watch
 
 A reload does all of its fallible work before it touches the live view. If the new code fails to load, the previous view keeps running, the error goes to stderr, and a toast with a stable id reports it in the window; the next successful reload retracts that toast. A broken save never costs you the window.
 
-::: warning `--dev` is not fully wired up
-`--dev` currently enables source watching only. The sandbox relaxations it is meant to turn on — restoring `eval` and leaving the built-in prototypes writable — are not reachable from the binary yet, and the runtime prints a warning saying so. See [Capabilities](./capabilities.md#the-sandbox).
-:::
+`--dev` implies `--watch` and enables development mode before the runtime is constructed. It restores dynamic-code constructors and leaves built-in prototypes writable, while capability checks remain unchanged. See [Capabilities](./capabilities.md#the-sandbox).
 
 ## Command reference
 
