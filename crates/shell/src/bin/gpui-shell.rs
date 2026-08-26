@@ -17,12 +17,10 @@ use std::{
 };
 
 use gpui::{
-    AnyView, App, AppContext as _, Bounds, Context, Entity, IntoElement, Render, TitlebarOptions,
-    Window, WindowBounds, WindowHandle, WindowOptions, px, size,
+    App, AppContext as _, Bounds, Context, Entity, IntoElement, Render, TitlebarOptions, Window,
+    WindowBounds, WindowHandle, WindowOptions, px, size,
 };
-use gpui_shell::{
-    AppAssets, Capabilities, ScriptView, ShellRoot, ShellRuntime, theme::Palettes, watch,
-};
+use gpui_shell::{AppAssets, Capabilities, ShellRoot, ShellRuntime};
 use tracing::{
     Event, Level, Metadata, Subscriber,
     field::{Field, Visit},
@@ -299,18 +297,9 @@ fn run(arguments: Arguments) {
             let root = gpui_shell::resolve_app_root(&arguments.directory, ENTRY)
                 .unwrap_or_else(|_| arguments.directory.clone());
 
-            // Evaluating the module needs no window; constructing the view does.
-            // A view's `init` is where it creates the state it keeps across frames,
-            // and creating an entity needs a `Window`, so instantiation happens
-            // inside the window builder and hands the result back out here.
+            // A view's `init` can create GPUI entities, so the facade loads the
+            // application inside the window builder.
             let manifest = read_local_manifest(&root);
-            let entry = manifest
-                .as_ref()
-                .ok()
-                .and_then(Option::as_ref)
-                .map(|manifest| manifest.entry())
-                .unwrap_or(ENTRY)
-                .to_owned();
             if let Ok(manifest) = &manifest {
                 grant_local_access(&root, manifest.as_ref());
             }
@@ -324,41 +313,29 @@ fn run(arguments: Arguments) {
             // application from its source directory, which is where somebody is
             // editing. Nothing is written when the file already matches, and a
             // directory that refuses the write is logged rather than fatal.
-            let module = manifest
-                .map_err(|error| {
-                    eprintln!("{error}");
-                    error
-                })
-                .and_then(|_| {
-                    runtime.load_app(&root, &entry).map_err(|error| {
-                        eprintln!("{error}");
-                        error.to_string()
-                    })
-                });
-
-            let built: Rc<RefCell<Option<Entity<ScriptView>>>> = Rc::new(RefCell::new(None));
+            let manifest_error = manifest.err();
+            let built: Rc<RefCell<Option<Entity<ShellRoot>>>> = Rc::new(RefCell::new(None));
             let sink = built.clone();
             let builder_runtime = runtime.clone();
+            let application_root = root.clone();
 
             let window = cx
                 .open_window(window_options(&root, cx), move |window, cx| {
-                    let content: AnyView = match &module {
-                        Ok(view_type) => {
-                            match builder_runtime.instantiate_view(view_type, window, cx) {
-                                Ok(view) => {
-                                    *sink.borrow_mut() = Some(view.clone());
-                                    view.into()
-                                }
-                                Err(error) => {
-                                    eprintln!("{error}");
-                                    cx.new(|_| LoadFailure(error.to_string())).into()
-                                }
-                            }
-                        }
-                        Err(message) => cx.new(|_| LoadFailure(message.clone())).into(),
+                    let loaded = match &manifest_error {
+                        Some(message) => Err(anyhow::anyhow!(message.clone())),
+                        None => builder_runtime.try_load(&application_root, window, cx),
                     };
-
-                    cx.new(|cx| ShellRoot::new(content, window, cx))
+                    match loaded {
+                        Ok(root) => {
+                            *sink.borrow_mut() = Some(root.clone());
+                            root
+                        }
+                        Err(error) => {
+                            eprintln!("{error:#}");
+                            let content = cx.new(|_| LoadFailure(format!("{error:#}")));
+                            cx.new(|cx| ShellRoot::new(content.into(), window, cx))
+                        }
+                    }
                 })
                 .expect("failed to open window");
 
@@ -366,10 +343,10 @@ fn run(arguments: Arguments) {
 
             if arguments.is_watching() {
                 match loaded {
-                    Ok(view) => watch_sources(runtime, view, window, root, entry, cx),
-                    // A reload replaces the object inside a live `ScriptView`, and a
-                    // failed first load never produced one. Saying so is better than
-                    // a `--watch` that looks armed and never fires.
+                    Ok(root) => watch_sources(runtime, root, window, cx),
+                    // A failed first load never produced a mounted application.
+                    // Saying so is better than a `--watch` that looks armed and
+                    // never fires.
                     Err(()) => eprintln!(
                         "--watch is inactive: the application did not load, so there is \
                         no view to reload into. Fix the declared entry and start gpui-shell again."
@@ -433,25 +410,17 @@ fn check(arguments: CheckArguments) -> ! {
                     return;
                 }
             };
-            let entry = manifest
-                .as_ref()
-                .map(|manifest| manifest.entry())
-                .unwrap_or(ENTRY)
-                .to_owned();
             grant_local_access(&root, manifest.as_ref());
 
             // A check is the closest thing this runtime has to a compiler, so it
             // leaves the editor correct on its way past: whatever it reports, the
             // declarations beside the source are the ones it just checked
             // against.
-            let module = runtime.load_app(&root, &entry);
             let window_sink = sink.clone();
             let print_spec = arguments.print_spec;
 
             let opened = cx.open_window(hidden_window_options(cx), move |window, cx| {
-                let result = module
-                    .and_then(|view_type| runtime.instantiate(&view_type, window, cx))
-                    .and_then(|object| runtime.render_to_spec(&object, None, window, cx));
+                let result = runtime.check(&root, window, cx);
 
                 match result {
                     Ok(spec) => window_sink.borrow_mut().succeed(spec, print_spec),
@@ -576,9 +545,35 @@ fn grant_local_access(root: &Path, manifest: Option<&gpui_shell::plugin::PluginM
 /// built on it appears. An embedder installs its own the same way.
 const PALETTE: &str = include_str!("default-tokens.json");
 
+#[derive(serde::Deserialize)]
+struct CommandThemes {
+    light: CommandTheme,
+}
+
+#[derive(serde::Deserialize)]
+struct CommandTheme {
+    colors: gpui_base::ColorTokens,
+    #[serde(default)]
+    radius: gpui_base::RadiusTokens,
+    #[serde(default)]
+    spacing: gpui_base::SpacingTokens,
+    #[serde(default)]
+    typography: gpui_base::TypographyTokens,
+    #[serde(default)]
+    shadow: gpui_base::ShadowTokens,
+}
+
 fn install_palette(cx: &mut App) {
-    match Palettes::parse(PALETTE) {
-        Ok(palettes) => palettes.install(cx),
+    match serde_json::from_str::<CommandThemes>(PALETTE) {
+        Ok(themes) => {
+            gpui_base::Theme::global_mut(cx).tokens = gpui_base::SemanticThemeTokens {
+                colors: themes.light.colors,
+                radius: themes.light.radius,
+                spacing: themes.light.spacing,
+                typography: themes.light.typography,
+                shadow: themes.light.shadow,
+            };
+        }
         // The file is compiled in, so a parse error is a build-time mistake
         // that reached a user; the neutral fallback keeps the window legible.
         Err(error) => tracing::error!("shipped palette did not parse: {error}"),
@@ -650,22 +645,18 @@ fn window_options(root: &Path, cx: &App) -> WindowOptions {
 /// Polls the application directory and reloads the view when it changes.
 ///
 /// The loop, the failure toast and the exit conditions all live in
-/// [`gpui_shell::watch`] — the binary used to carry its own copy of them, which
+/// `ShellRuntime` — the binary used to carry its own copy of them, which
 /// meant an embedded host got a quieter hot-reload than the CLI for no reason
 /// anyone had decided. `--watch` is the one thing that is this binary's to
 /// answer, because the person running it is the person editing; an embedded
 /// host has no such flag and takes the debug build as the answer.
 fn watch_sources(
     runtime: Rc<ShellRuntime>,
-    view: Entity<ScriptView>,
+    root: Entity<ShellRoot>,
     window: WindowHandle<ShellRoot>,
-    directory: PathBuf,
-    entry: String,
     cx: &mut App,
 ) {
-    let started = window.update(cx, |_, window, cx| {
-        watch::Watch::start(&runtime, &view, directory, entry, window, cx)
-    });
+    let started = window.update(cx, |_, window, cx| runtime.watch(&root, window, cx));
 
     match started {
         // Detached on purpose: this watcher lasts as long as the window, and

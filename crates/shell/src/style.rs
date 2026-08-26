@@ -284,6 +284,35 @@ pub fn nullary_index(name: &str) -> Option<u16> {
     table().by_name.get(name).copied()
 }
 
+/// Every no-argument style name with the index that records it.
+///
+/// The prelude binds one prototype method per entry and closes over the index,
+/// so recording `items_center()` sends two integers across the boundary rather
+/// than a method name that would have to be resolved back to this table on
+/// arrival. Sorted, so the bound surface does not depend on the iteration order
+/// of a `HashMap`.
+pub fn nullary_styles() -> Vec<(&'static str, u16)> {
+    let mut named: Vec<_> = table()
+        .by_name
+        .iter()
+        .map(|(name, index)| (*name, *index))
+        .collect();
+    named.sort_unstable();
+    named
+}
+
+/// Every style name that takes an argument, in the order [`param_style_at`]
+/// addresses them.
+pub fn param_styles() -> impl Iterator<Item = &'static str> {
+    PARAM_STYLES.iter().map(|(name, _)| *name)
+}
+
+/// The interned name at a position previously handed to the prelude by
+/// [`param_styles`].
+pub fn param_style_at(index: usize) -> Option<&'static str> {
+    PARAM_STYLES.get(index).map(|(name, _)| *name)
+}
+
 /// Name for an index previously returned by [`nullary_index`].
 ///
 /// Never panics — spec debug dumps must stay printable even when handed a stale

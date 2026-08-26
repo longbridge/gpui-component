@@ -192,5 +192,5 @@ See [Getting started](./getting-started.md#add-the-runtime-to-a-rust-application
 ## Not there yet
 
 - **A result from a dialog.** `open_dialog` returns a depth, not a promise that settles when the dialog closes. Close over a callback, as the example above does, or have the dialog write back to state the opener reads.
-- **Popovers, tooltips and context menus.** Base has the parts; the script surface has none of them.
+- **Tooltips and context menus.** Popover and HoverCard are available as anchored surfaces; dedicated tooltip and context-menu APIs are not yet exposed.
 - **Positioning options.** A dialog is centred and a sheet is edge-anchored; neither can be placed.

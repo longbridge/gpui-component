@@ -99,16 +99,18 @@ Every call returns a promise. `await` them, or chain `.then` — and see the not
 
 | Call                            | Resolves to                          |
 | ------------------------------- | ------------------------------------ |
-| `fs.readFile(path)`             | The file's contents                  |
+| `fs.readFile(path)`             | `Uint8Array`                         |
+| `fs.readFile(path, "utf8")`     | UTF-8 text                           |
 | `fs.writeFile(path, contents)`  | —                                    |
-| `fs.readdir(path)`              | `[{ name, is_dir }]`, sorted by name |
+| `fs.readdir(path)`              | Names sorted by name                 |
+| `fs.readdir(path, { withFileTypes: true })` | `Dirent[]` with `isDirectory()` |
 | `fs.exists(path)`               | `true` / `false`                     |
 | `fs.unlink(path)`               | —                                    |
 | `fs.rmdir(path)`                | —                                    |
 | `fs.mkdir(path, options?)`      | —                                    |
 
 ```js
-const source = await fs.readFile("notes.md");
+const source = await fs.readFile("notes.md", "utf8");
 await fs.writeFile("notes.md", source + "\n");
 ```
 
@@ -309,7 +311,7 @@ Development mode never relaxes capability gating. It makes the language easier t
 
 Global `fetch(url, options?)` is promise-based and returns `{ status, ok, url, text(), json() }`. Its grant is narrower than raw networking: every request and redirect must match a declared HTTP host, method, and exact path or path prefix; HTTPS never downgrades to HTTP, and authorization or caller-supplied headers never cross origins.
 
-`net.connect(host, port)` and `WebSocket.connect(url, { headers? })` use `capabilities.network.hosts`. Raw TCP `read()` returns a `Uint8Array`, or `null` at EOF, so transport chunks never undergo lossy text decoding. WebSockets support text and `Uint8Array` messages and serialize writes through one actor. They do not follow redirects. Connect, handshake, and write operations have a 30-second timeout. A socket permits one outstanding `read()` at a time; a second is rejected immediately instead of competing for the next message. Credential and handshake-control headers are refused. Raw TCP and WebSocket access are intentionally broader than an HTTP request grant.
+`net.connect(host, port)` and the named `WebSocket.connect(url, { headers? })` export from `websocket` use `capabilities.network.hosts`. `WebSocket` is not installed as a browser global and is not a constructor. Raw TCP `read()` returns a `Uint8Array`, or `null` at EOF, so transport chunks never undergo lossy text decoding. WebSockets support text and `Uint8Array` messages and serialize writes through one actor. They do not follow redirects. Connect, handshake, and write operations have a 30-second timeout. A socket permits one outstanding `read()` at a time; a second is rejected immediately instead of competing for the next message. Credential and handshake-control headers are refused. Raw TCP and WebSocket access are intentionally broader than an HTTP request grant.
 
 DNS resolution is a bounded process-wide service: all applications share two resolver workers and a 64-request queue. Queueing observes each connection's existing deadline, so saturation fails as a timeout instead of growing memory or threads without limit. This is resource containment, not per-application quality-of-service; a host that runs mutually untrusted applications in one process does not get DNS fairness between them.
 

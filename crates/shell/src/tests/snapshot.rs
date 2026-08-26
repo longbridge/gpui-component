@@ -67,11 +67,50 @@ fn path_builder_freezes_commands_in_the_render_snapshot(cx: &mut TestAppContext)
 
     render_once(&mut context, &view);
 
-    let tree = context.update(|_, cx| view.read(cx).snapshot().unwrap().debug_tree());
+    // Not `unwrap()`: a missing snapshot means the render threw, and the
+    // panic that reports the absence says nothing about the cause. This one
+    // has been seen to fire rarely under load, so when it does it has to
+    // arrive with the script's own error attached.
+    let tree = context.update(|_, cx| {
+        let view = view.read(cx);
+        match view.snapshot() {
+            Some(snapshot) => snapshot.debug_tree(),
+            None => panic!(
+                "the render produced no snapshot; the build failed with: {}",
+                view.build_error().unwrap_or("no error was recorded either")
+            ),
+        }
+    });
     assert!(tree.contains("path fill"), "{tree}");
     assert!(tree.contains("move_to"), "{tree}");
     assert!(tree.contains("50%"), "{tree}");
     assert!(tree.contains("close"), "{tree}");
+}
+
+#[gpui::test]
+fn path_dash_rejects_values_that_round_to_zero_pixels(cx: &mut TestAppContext) {
+    let source = r##"
+import { View, PathBuilder, paint_path } from "gpui";
+export default class TinyDash extends View {
+  render() {
+    const path = PathBuilder.stroke(1)
+      .move_to(0, 0)
+      .line_to(100, 0)
+      .dash_array([Number.MIN_VALUE])
+      .build();
+    return paint_path(path, "#000");
+  }
+}
+"##;
+    let (_runtime, mut context, view) = script_view(cx, source);
+
+    render_once(&mut context, &view);
+
+    let error = context.update(|_, cx| view.read(cx).build_error().map(str::to_owned));
+    assert!(
+        error.is_some_and(|error| error.contains("positive finite pixel numbers")),
+        "the unsafe dash must be rejected before native path construction"
+    );
 }
 
 /// A script whose `render` throws every other call, so a failed build can be
@@ -515,7 +554,7 @@ fn a_palette_change_rebuilds_the_snapshot(cx: &mut TestAppContext) {
     // baked into the snapshot. Repainting cannot pick up a new palette; only a
     // rebuild can.
     context.update(|_, cx| {
-        crate::theme::set_mode(crate::theme::ThemeMode::Dark, cx);
+        gpui_base::Theme::global_mut(cx).tokens.colors.background = gpui::black();
     });
     render_once(&mut context, &view);
 

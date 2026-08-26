@@ -13,6 +13,8 @@
 //! frame that materializes the snapshot, which is what keeps repainting off the
 //! VM.
 
+use std::{collections::HashSet, rc::Rc};
+
 use smallvec::SmallVec;
 
 use crate::value::Bridged;
@@ -58,6 +60,10 @@ pub enum Component {
     Div,
     HFlex,
     VFlex,
+    /// A retained nested script view. The frozen description keeps the entity
+    /// itself alive, so releasing the numeric handle cannot invalidate a frame
+    /// that was already published.
+    ChildView(ChildViewSpec),
     Text(String),
     Button(String),
     Link(String),
@@ -85,6 +91,12 @@ pub enum Component {
     /// it identifies an input, and the element carries only what a step button
     /// looks like and what happens when one is pressed.
     NumberInput(crate::entities::EntityHandle),
+    /// A fixed-length one-time code, addressed by its entity handle exactly as
+    /// [`Component::Input`] is. Unlike every other bound component, its cells
+    /// are not described by the script: base draws none, and a described cell
+    /// would be frozen at the digit the last script render saw. See
+    /// `materialize::components::otp_input`.
+    OtpInput(crate::entities::EntityHandle),
     /// A vector image, loaded from the application's own directory.
     Svg(String),
     /// A full-color image, loaded from the application's own directory.
@@ -195,6 +207,116 @@ pub enum Component {
     /// `DatePicker::new` requires it: a picker without one has no trigger the
     /// keyboard can reach. It holds no date — the calendar does.
     DatePicker(String, crate::entities::EntityHandle),
+    /// A virtualized list: the one component whose description is not the whole
+    /// of what it draws. Its rows come from a callback GPUI runs during layout,
+    /// so this node carries only the list itself. See [`VirtualListSpec`] and
+    /// the exception recorded in [`crate::materialize`].
+    VirtualList(Rc<VirtualListSpec>),
+}
+
+/// The retained entity mounted by one `child_view(handle)` description.
+///
+/// Equality and diagnostics use the runtime-unique handle. The entity is the
+/// frame lease: materialization never looks the handle up again.
+#[derive(Clone)]
+pub struct ChildViewSpec {
+    handle: crate::entities::EntityHandle,
+    view: gpui::Entity<crate::view::ScriptView>,
+}
+
+impl ChildViewSpec {
+    pub(crate) fn new(
+        handle: crate::entities::EntityHandle,
+        view: gpui::Entity<crate::view::ScriptView>,
+    ) -> Self {
+        Self { handle, view }
+    }
+
+    pub(crate) fn handle(&self) -> crate::entities::EntityHandle {
+        self.handle
+    }
+
+    pub(crate) fn view(&self) -> &gpui::Entity<crate::view::ScriptView> {
+        &self.view
+    }
+}
+
+impl std::fmt::Debug for ChildViewSpec {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ChildViewSpec")
+            .field("handle", &self.handle)
+            .finish_non_exhaustive()
+    }
+}
+
+impl PartialEq for ChildViewSpec {
+    fn eq(&self, other: &Self) -> bool {
+        self.handle == other.handle
+    }
+}
+
+/// What a virtualized list is, beyond its styles.
+///
+/// Behind an [`Rc`] in [`Component::VirtualList`] because a component is cloned
+/// once per node per frame and this is the only variant carrying a vector.
+///
+/// That vector is the reason the script API is not a literal mirror of
+/// `v_virtual_list`. Base wants one `Size` per item, and the *length of that
+/// vector is the item count* — so a hundred-thousand-row list would mean a
+/// hundred thousand numbers crossing the language boundary on every script
+/// render. The script gives a count and either one size or one per item
+/// instead, and the vector base wants is built here, once, while the
+/// description is being recorded rather than once per frame.
+#[derive(Clone, Debug, PartialEq)]
+pub struct VirtualListSpec {
+    id: String,
+    axis: gpui::Axis,
+    sizes: Rc<Vec<gpui::Size<gpui::Pixels>>>,
+    get_key: CallbackId,
+    render_items: CallbackId,
+}
+
+impl VirtualListSpec {
+    pub fn new(
+        id: String,
+        axis: gpui::Axis,
+        sizes: Rc<Vec<gpui::Size<gpui::Pixels>>>,
+        get_key: CallbackId,
+        render_items: CallbackId,
+    ) -> Self {
+        Self {
+            id,
+            axis,
+            sizes,
+            get_key,
+            render_items,
+        }
+    }
+
+    /// The name that pairs the list with a `Scrollbar`, and its GPUI identity.
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+
+    pub fn axis(&self) -> gpui::Axis {
+        self.axis
+    }
+
+    /// One extent per item. Its length is the item count.
+    pub fn sizes(&self) -> &Rc<Vec<gpui::Size<gpui::Pixels>>> {
+        &self.sizes
+    }
+
+    /// Resolves the stable domain key for one current item index.
+    pub fn get_key(&self) -> CallbackId {
+        self.get_key
+    }
+
+    /// The handler that describes one window of items.
+    pub fn render_items(&self) -> CallbackId {
+        self.render_items
+    }
 }
 
 impl Component {
@@ -203,6 +325,7 @@ impl Component {
             Component::Div => "div",
             Component::HFlex => "h_flex",
             Component::VFlex => "v_flex",
+            Component::ChildView(_) => "child_view",
             Component::Text(_) => "text",
             Component::Button(_) => "Button",
             Component::Link(_) => "Link",
@@ -212,6 +335,7 @@ impl Component {
             Component::Input(_) => "Input",
             Component::Textarea(_) => "Textarea",
             Component::NumberInput(_) => "NumberInput",
+            Component::OtpInput(_) => "OtpInput",
             Component::Svg(_) => "svg",
             Component::Image(_) => "image",
             Component::Path { fill: true, .. } => "path fill",
@@ -249,6 +373,12 @@ impl Component {
             Component::Select(_) => "Select",
             Component::Combobox(_) => "Combobox",
             Component::DatePicker(..) => "DatePicker",
+            // Named after the constructor, as `Resizable` is: the axis is not
+            // a call a reader of the dump could otherwise see.
+            Component::VirtualList(spec) => match spec.axis() {
+                gpui::Axis::Vertical => "v_virtual_list",
+                gpui::Axis::Horizontal => "h_virtual_list",
+            },
         }
     }
 }
@@ -312,10 +442,46 @@ impl SpecNode {
     }
 }
 
+/// The descriptions one call to a virtualized list's item renderer produced.
+///
+/// A batch of rows is described into an arena of its own rather than into the
+/// runtime's scratch arena, which belongs to whichever script render is in
+/// progress and is reset by the next one. This one is materialized and dropped
+/// inside the layout pass that asked for it, so nothing a row described
+/// outlives the frame that drew it — and two batches cannot see each other's
+/// nodes.
+pub struct ItemSpecs {
+    arena: SpecArena,
+    roots: SmallVec<[SpecId; 16]>,
+    keys: Vec<String>,
+}
+
+impl ItemSpecs {
+    pub(crate) fn new(arena: SpecArena, roots: SmallVec<[SpecId; 16]>, keys: Vec<String>) -> Self {
+        Self { arena, roots, keys }
+    }
+
+    pub fn arena(&self) -> &SpecArena {
+        &self.arena
+    }
+
+    /// One root per item, in the order the script returned them.
+    pub fn roots(&self) -> &[SpecId] {
+        &self.roots
+    }
+
+    /// One stable domain key per item, in the same order as [`Self::roots`].
+    pub fn keys(&self) -> &[String] {
+        &self.keys
+    }
+}
+
 /// Element descriptions for one script render.
 #[derive(Default)]
 pub struct SpecArena {
     nodes: Vec<SpecNode>,
+    /// Total virtual rows whose native size records this render owns.
+    virtual_items: usize,
     /// Nodes already attached to a parent. Re-using one is an error, which is
     /// how Rust's move semantics survive the trip into a garbage-collected
     /// language.
@@ -324,6 +490,9 @@ pub struct SpecArena {
     /// declarations, or the element filling a named slot. They still take ops,
     /// but they can never enter the tree.
     claimed: Vec<bool>,
+    /// Retained view handles already described in this snapshot. GPUI cannot
+    /// mount one entity at two positions in the same tree.
+    mounted_views: HashSet<crate::entities::EntityHandle>,
 }
 
 impl SpecArena {
@@ -337,6 +506,19 @@ impl SpecArena {
         self.nodes.clear();
         self.parented.clear();
         self.claimed.clear();
+        self.mounted_views.clear();
+        self.virtual_items = 0;
+    }
+
+    pub(crate) fn claim_virtual_items(&mut self, count: usize, limit: usize) -> bool {
+        let Some(total) = self.virtual_items.checked_add(count) else {
+            return false;
+        };
+        if total > limit {
+            return false;
+        }
+        self.virtual_items = total;
+        true
     }
 
     pub fn len(&self) -> usize {
@@ -357,6 +539,15 @@ impl SpecArena {
         (self.nodes.len() - 1) as SpecId
     }
 
+    /// Records one retained child entity, rejecting a second mount in this
+    /// description before any part of the snapshot can be published.
+    pub(crate) fn push_child_view(&mut self, child: ChildViewSpec) -> Result<SpecId, SpecError> {
+        if !self.mounted_views.insert(child.handle()) {
+            return Err(SpecError::DuplicateChildView);
+        }
+        Ok(self.push(Component::ChildView(child)))
+    }
+
     pub fn node(&self, id: SpecId) -> Option<&SpecNode> {
         self.nodes.get(id as usize)
     }
@@ -372,6 +563,9 @@ impl SpecArena {
     /// also be added to the tree.
     pub fn claim(&mut self, id: SpecId) -> Result<(), SpecError> {
         self.check_live(id)?;
+        if self.claimed[id as usize] {
+            return Err(SpecError::Claimed);
+        }
         self.claimed[id as usize] = true;
         Ok(())
     }
@@ -461,13 +655,21 @@ impl SpecArena {
             | Component::TableHead(value, index)
             | Component::TableCell(value, index) => out.push_str(&format!(" {value:?} #{index}")),
             Component::Scrollbar(value) => out.push_str(&format!(" {value:?}")),
+            // The item count, not the item sizes: a dump of a hundred thousand
+            // extents is not something a test reads, and the count is the part
+            // that says what the list is.
+            Component::VirtualList(spec) => {
+                out.push_str(&format!(" {:?} \u{d7}{}", spec.id(), spec.sizes().len()))
+            }
+            Component::ChildView(spec) => out.push_str(&format!(" #{}", spec.handle())),
             Component::Slider(handle)
             | Component::SliderTrack(handle)
             | Component::SliderIndicator(handle)
             | Component::SliderThumb(handle) => out.push_str(&format!(" #{handle}")),
             Component::Input(handle)
             | Component::Textarea(handle)
-            | Component::NumberInput(handle) => out.push_str(&format!(" #{handle}")),
+            | Component::NumberInput(handle)
+            | Component::OtpInput(handle) => out.push_str(&format!(" #{handle}")),
             _ => {}
         }
         for op in node.ops() {
@@ -563,6 +765,8 @@ pub enum SpecError {
     AlreadyParented { component: &'static str },
     /// An element was added to itself.
     SelfParent,
+    /// One retained entity was described at two positions in one snapshot.
+    DuplicateChildView,
 }
 
 impl std::fmt::Display for SpecError {
@@ -582,6 +786,10 @@ impl std::fmt::Display for SpecError {
                  to the tree",
             ),
             SpecError::SelfParent => f.write_str("an element cannot be added to itself"),
+            SpecError::DuplicateChildView => f.write_str(
+                "a child view handle can be mounted only once in one snapshot; create a second \
+                 ViewHandle for a second position",
+            ),
         }
     }
 }
@@ -627,6 +835,16 @@ mod tests {
 
         assert!(arena.push_op(state, SpecOp::NullaryStyle(0)).is_ok());
         assert_eq!(arena.attach(parent, state).unwrap_err(), SpecError::Claimed);
+    }
+
+    #[test]
+    fn a_slot_node_can_only_be_claimed_once() {
+        let mut arena = SpecArena::new();
+        let content = arena.push(Component::Text("body".into()));
+
+        arena.claim(content).unwrap();
+
+        assert_eq!(arena.claim(content).unwrap_err(), SpecError::Claimed);
     }
 
     #[test]

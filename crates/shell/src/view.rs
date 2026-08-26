@@ -21,7 +21,7 @@
 
 use std::rc::Rc;
 
-use gpui::{Context, IntoElement, ParentElement as _, Render, Styled as _, Window, div};
+use gpui::{Context, EntityId, IntoElement, ParentElement as _, Render, Styled as _, Window, div};
 
 use crate::{
     engine::{ShellRuntime, ViewObject},
@@ -54,8 +54,11 @@ pub struct ScriptView {
     previous: Option<RenderSnapshot>,
     /// Set when script-visible state may have changed, cleared by the rebuild.
     dirty: bool,
+    /// Set when the script-visible handle has been released. GPUI may retain
+    /// the entity for an older frame, but it must never rebuild after release.
+    retired: bool,
     /// The palette the current snapshot resolved its colors against.
-    theme_generation: u64,
+    theme_tokens: Option<gpui_base::SemanticThemeTokens>,
     /// The failure of the most recent build, if it failed.
     ///
     /// Held rather than re-derived so a script that throws is not re-run on
@@ -68,24 +71,59 @@ pub struct ScriptView {
     /// a callback firing three seconds later must run under the grant its own
     /// script was loaded with, and no swap made in between can change that.
     policy: Rc<Policy>,
+    ownership: ViewOwnership,
     runtime: Rc<ShellRuntime>,
+}
+
+/// Which cleanup boundary this view owns.
+#[derive(Clone, Copy)]
+enum ViewOwnership {
+    /// The application root owns application-wide retained state and tasks.
+    Root,
+    /// A nested view owns only work keyed to its exact GPUI entity identity.
+    Nested(EntityId),
 }
 
 impl ScriptView {
     /// Under the policy in force where the view was constructed.
-    pub fn new(runtime: Rc<ShellRuntime>, object: ViewObject) -> Self {
+    #[cfg(test)]
+    pub(crate) fn new(runtime: Rc<ShellRuntime>, object: ViewObject) -> Self {
         Self::with_policy(runtime, object, crate::scope::policy())
     }
 
-    pub fn with_policy(runtime: Rc<ShellRuntime>, object: ViewObject, policy: Rc<Policy>) -> Self {
+    pub(crate) fn with_policy(
+        runtime: Rc<ShellRuntime>,
+        object: ViewObject,
+        policy: Rc<Policy>,
+    ) -> Self {
+        Self::with_ownership(runtime, object, policy, ViewOwnership::Root)
+    }
+
+    pub(crate) fn nested(
+        runtime: Rc<ShellRuntime>,
+        object: ViewObject,
+        policy: Rc<Policy>,
+        entity_id: EntityId,
+    ) -> Self {
+        Self::with_ownership(runtime, object, policy, ViewOwnership::Nested(entity_id))
+    }
+
+    fn with_ownership(
+        runtime: Rc<ShellRuntime>,
+        object: ViewObject,
+        policy: Rc<Policy>,
+        ownership: ViewOwnership,
+    ) -> Self {
         Self {
             object,
             current: None,
             previous: None,
             dirty: true,
+            retired: false,
             policy,
-            theme_generation: crate::theme::generation(),
+            theme_tokens: None,
             error: None,
+            ownership,
             runtime,
         }
     }
@@ -126,10 +164,11 @@ impl ScriptView {
     /// the element identities — and swaps only what the script produced. The
     /// description that the old instance built is now meaningless, so the view
     /// is invalidated with it.
-    pub fn replace_object(&mut self, object: ViewObject) {
+    pub(crate) fn replace_object(&mut self, object: ViewObject) {
         let previous = self.object.application_generation();
         let replacement = object.application_generation();
-        if let Some(previous) = previous
+        if matches!(self.ownership, ViewOwnership::Root)
+            && let Some(previous) = previous
             && replacement
                 .as_ref()
                 .is_none_or(|replacement| !Rc::ptr_eq(&previous, replacement))
@@ -147,6 +186,17 @@ impl ScriptView {
     }
 
     /// The published description, if one has been built.
+    /// Why the most recent build failed, if it did.
+    ///
+    /// A view with no snapshot is not the same as a view with nothing to draw:
+    /// it means the script threw and the failure was recorded here. A test that
+    /// finds `snapshot()` empty should report this rather than the absence,
+    /// because the absence is the symptom and this is the cause.
+    #[cfg(test)]
+    pub(crate) fn build_error(&self) -> Option<&str> {
+        self.error.as_deref()
+    }
+
     pub fn snapshot(&self) -> Option<&RenderSnapshot> {
         self.current.as_ref()
     }
@@ -168,7 +218,17 @@ impl ScriptView {
     }
 
     pub fn is_dirty(&self) -> bool {
-        self.dirty || self.theme_generation != crate::theme::generation()
+        !self.retired && self.dirty
+    }
+
+    /// Makes a retained entity inert before its store handle is removed.
+    /// A rendered GPUI frame may still retain the entity after script release.
+    pub(crate) fn retire(&mut self) {
+        self.retired = true;
+        self.dirty = false;
+        self.error = None;
+        self.previous = None;
+        self.current = None;
     }
 
     /// Runs the script and publishes what it produced.
@@ -183,7 +243,6 @@ impl ScriptView {
         // survive into the next frame rather than be wiped by the build that
         // was already in flight.
         self.dirty = false;
-        self.theme_generation = crate::theme::generation();
 
         let runtime = self.runtime.clone();
         let object = self.object.clone();
@@ -204,15 +263,33 @@ impl ScriptView {
 
 impl Drop for ScriptView {
     fn drop(&mut self) {
-        if let Some(application) = self.object.application_generation() {
-            self.runtime.entities().release_application(&application);
-            crate::engine::quickjs::cancel_application_tasks(&application);
+        match self.ownership {
+            ViewOwnership::Root => {
+                if let Some(application) = self.object.application_generation() {
+                    self.runtime.entities().release_application(&application);
+                    crate::engine::quickjs::cancel_application_tasks(&application);
+                }
+            }
+            ViewOwnership::Nested(entity_id) => {
+                // Child-owned retained records are removed by EntityStore in
+                // the same operation that removes the child handle. Reaching
+                // back into that RefCell here would re-enter its mutable borrow.
+                crate::engine::quickjs::cancel_view_tasks(&self.runtime, entity_id);
+            }
         }
     }
 }
 
 impl Render for ScriptView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if self.retired {
+            return div().into_any_element();
+        }
+        let tokens = crate::theme_tokens::sync(cx);
+        if self.theme_tokens.as_ref() != Some(&tokens) {
+            self.theme_tokens = Some(tokens);
+            self.dirty = true;
+        }
         if self.is_dirty() {
             self.rebuild(window, cx);
         }

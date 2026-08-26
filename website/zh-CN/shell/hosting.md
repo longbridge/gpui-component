@@ -136,6 +136,38 @@ reading.slowest_script_render();
 
 回归测试可以直接对 `script_renders` 做断言；[基准测试里的第三个数](./engine.md#那次实测)靠的正是这一点。
 
+## 开发构建的配置
+
+宿主的 debug 构建，**单次脚本渲染大约比 release 慢三倍**，而差距全部来自两个依赖。
+在一个实时应用上实测——一个每笔行情都重渲染的行情终端，用运行时自带的
+[`RuntimeMetrics`](#观察它花了多少)：
+
+| `[profile.dev.package]` | 平均脚本渲染 | 平均物化 |
+| --- | --- | --- |
+| 不配，或只写 `rquickjs` | 31.5 ms | 3.9 ms |
+| `rquickjs-sys` + `rquickjs-core` | **11.3 ms** | **1.2 ms** |
+| release（对照） | 11.0 ms | 1.2 ms |
+
+所以：
+
+```toml
+[profile.dev.package]
+rquickjs-sys = { opt-level = 3 }
+rquickjs-core = { opt-level = 3 }
+```
+
+**只写 `rquickjs` 没有任何作用**，这正是坑所在：它是一个薄门面，把 `rquickjs-core`
+重新导出而已，写它既没优化到解释器，也没优化到绑定。`rquickjs-sys` 编译的是 QuickJS
+本体——C 源码，经 `cc` 构建，而 `cc` 读的是**那个包**在 profile 里的优化级别；
+`rquickjs-core` 则是每一个跨界值的转换所在。没优化的解释器，正是让 debug 构建
+用起来像另一个产品的原因。
+
+`llrt_*` 那批**不需要**这么做。同一个应用上实测，它们带来的差异在噪声范围内：
+`fs`、`net`、`crypto` 之类根本不在渲染路径上，优化它们换不来脚本作者能感知的东西。
+
+这些设置只在**构建出二进制的那个 workspace 根**生效。库无法替依赖它的应用设定 profile，
+所以 `gpui-shell` 没办法替你配好——每个宿主都得自己写一遍。
+
 ## 退出请求
 
 脚本里的 `process.exit(code)` 是**一个请求，绝不是 `exit(2)`**。一个插件不能把宿主进程带走，而宿主可能还有未保存的状态。运行时把这个请求交给宿主，由宿主决定怎么办：
@@ -161,7 +193,7 @@ gpui_shell::on_exit_request(|request, window, cx| {
 runtime.watch(&root, window, cx)?.forget();
 ```
 
-`runtime.watch` 从已加载的 root 读取解析后的目录与 manifest entry，不再让宿主维护第二份可能漂移的元数据。它不暗藏构建模式策略：CLI 在解析到 `--watch` 后启用监听，嵌入式宿主则可以把调用放进 `#[cfg(debug_assertions)]`。返回的 `Watch` 本身就是这次监听：把它 drop 掉，循环就停；`.forget()` 则让它跟随视图继续运行。视图、运行时或窗口任意一个消失时，循环也会自己结束。
+`runtime.watch` 从已加载的 root 读取解析后的目录与 manifest entry，不再让宿主维护第二份可能漂移的元数据。它不暗藏构建模式策略：CLI 在解析到 `--watch` 后启用监听，嵌入式宿主则可以把调用放进 `#[cfg(debug_assertions)]`。返回的 `Watcher` 持有这次监听：把它 drop 掉，循环就停；`.forget()` 则让它跟随视图继续运行。视图、运行时或窗口任意一个消失时，循环也会自己结束。
 
 一次重载会重新读取**每一个**模块，入口也在内——一个悄悄用了旧 import 的 hot-reload 比没有更糟，因为它看起来是成功的。它会先把所有可能失败的活干完，再去碰活着的那个视图：新代码加载失败时，上一个视图继续运行，错误进 `tracing`，窗口里由一条固定 id 的 toast 报出来；下一次成功的重载会撤掉这条 toast。
 

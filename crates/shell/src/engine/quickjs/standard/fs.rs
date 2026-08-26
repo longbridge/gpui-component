@@ -27,8 +27,8 @@ impl ModuleDef for FsModule {
 
     fn evaluate<'js>(ctx: &Ctx<'js>, exports: &Exports<'js>) -> Result<()> {
         let fs = Object::new(ctx.clone())?;
-        fs.set("readFile", Func::from(super::super::host::read_text))?;
-        fs.set("writeFile", Func::from(super::super::host::write_text))?;
+        fs.set("readFile", Func::from(super::super::host::read_file))?;
+        fs.set("writeFile", Func::from(super::super::host::write_file))?;
         fs.set("readdir", Func::from(super::super::host::list_dir))?;
         fs.set("exists", Func::from(super::super::host::exists))?;
         fs.set("unlink", Func::from(super::super::host::remove_file))?;

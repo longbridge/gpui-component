@@ -32,6 +32,9 @@ use gpui::{AppContext as _, Entity, IntoElement as _, TestAppContext, VisualTest
 const ROWS: usize = 40;
 const COLUMNS: usize = 5;
 const ITERATIONS: usize = 50;
+/// How many batches of [`ITERATIONS`] a timing takes before believing the
+/// fastest one.
+const ROUNDS: usize = 7;
 
 /// Panel sizes the scaling test walks, from the typical panel above to one no
 /// single view should hold. The last two exist to show where the description
@@ -106,15 +109,22 @@ fn describing_a_panel_stays_inside_the_frame_budget(cx: &mut TestAppContext) {
             .len()
     });
 
-    let started = Instant::now();
+    // Best of several batches rather than one average. Every source of noise
+    // available to a benchmark on a shared machine adds time; none removes it,
+    // so the fastest batch is the closest reading of what the work costs — and
+    // averaging one batch made changes worth a few per cent unreadable.
+    let mut per_build = std::time::Duration::MAX;
     context.update(|window, cx| {
-        for _ in 0..ITERATIONS {
-            runtime
-                .build_snapshot(&object, None, crate::policy::default(), window, cx)
-                .expect("render");
+        for _ in 0..ROUNDS {
+            let started = Instant::now();
+            for _ in 0..ITERATIONS {
+                runtime
+                    .build_snapshot(&object, None, crate::policy::default(), window, cx)
+                    .expect("render");
+            }
+            per_build = per_build.min(started.elapsed() / ITERATIONS as u32);
         }
     });
-    let per_build = started.elapsed() / ITERATIONS as u32;
 
     let ops = nodes * 10; // roughly ten recorded calls per node
     println!(
@@ -275,17 +285,20 @@ fn time_materializations(
     // Elements are arena-allocated and only live inside a draw, so the timing
     // runs inside one — measuring materialization alone, with layout and paint
     // outside the clock.
-    let mut elapsed = std::time::Duration::ZERO;
+    let mut elapsed = std::time::Duration::MAX;
     context.draw(
         gpui::Point::default(),
         gpui::size(gpui::px(800.), gpui::px(600.)),
         |window, cx| {
-            let started = Instant::now();
-            for _ in 0..iterations {
-                let element = materialize(runtime, snapshot, window, cx);
-                std::hint::black_box(&element);
+            // Best of several batches, for the reason given in [A].
+            for _ in 0..ROUNDS {
+                let started = Instant::now();
+                for _ in 0..iterations {
+                    let element = materialize(runtime, snapshot, window, cx);
+                    std::hint::black_box(&element);
+                }
+                elapsed = elapsed.min(started.elapsed());
             }
-            elapsed = started.elapsed();
             gpui::div().into_any_element()
         },
     );
@@ -339,4 +352,195 @@ impl gpui::Render for Empty {
     ) -> impl gpui::IntoElement {
         gpui::div()
     }
+}
+
+// --- What one recorded call costs, and where the cost sits ------------------
+//
+// [A] prices a whole description. It does not say what to change to make one
+// cheaper, because a description is a loop in script around a call that crosses
+// into Rust, and those are two costs with two different remedies. [D] separates
+// them by walking one call through progressively more of the generic path, then
+// prints what the same call costs on the path the prelude actually binds.
+//
+// Each row is the whole path up to that point, so the difference between two
+// adjacent rows is the cost of exactly the piece that row adds. The last row is
+// not part of the walk: it is the shipped call, and the distance between it and
+// `recorded` is what the dedicated entry points removed.
+
+/// 20,000 recorded calls per round: a little over four times what the [A] panel
+/// describes, and long enough that a round is milliseconds rather than
+/// microseconds.
+const BENCH_ELEMENTS: usize = 2_000;
+const BENCH_PER_ELEMENT: usize = 10;
+
+/// One prototype per stage, built over the same `function (...args)` shape the
+/// prelude uses for behaviours — so what is timed is the real builder method
+/// and not a hand-written approximation of it.
+const BENCH_SETUP: &str = r#"
+globalThis.__bench = (() => {
+  const nothing = () => {};
+  const method = (body) => {
+    const methods = {};
+    methods.m = body;
+    return methods;
+  };
+  const generic = (target, name) =>
+    method(function (...args) {
+      target(this.__id, name, args);
+      return this;
+    });
+
+  const nullaryIndex = __nullaryStyleIndexes[__nullaryStyles.indexOf("items_center")];
+  const paramIndex = __paramStyles.indexOf("bg");
+
+  const stages = {
+    nullary: {
+      js: generic(nothing, "items_center"),
+      crossing: generic(__benchId, "items_center"),
+      name: generic(__benchName, "items_center"),
+      arguments: generic(__benchArgs, "items_center"),
+      recorded: generic(__apply, "items_center"),
+      shipped: method(function () {
+        __applyNullaryStyle(this.__id, nullaryIndex);
+        return this;
+      }),
+    },
+    parametric: {
+      js: generic(nothing, "bg"),
+      crossing: generic(__benchId, "bg"),
+      name: generic(__benchName, "bg"),
+      arguments: generic(__benchArgs, "bg"),
+      recorded: generic(__apply, "bg"),
+      shipped: method(function (value) {
+        __applyParamStyle(this.__id, paramIndex, value);
+        return this;
+      }),
+    },
+  };
+
+  // The floor: the loop and the element, with no method call in it at all.
+  const floor = (elements, per) => {
+    for (let e = 0; e < elements; e += 1) {
+      const object = Object.create(stages.nullary.js);
+      object.__id = __div();
+      for (let i = 0; i < per; i += 1) {
+      }
+    }
+  };
+  const bare = (methods, elements, per) => {
+    for (let e = 0; e < elements; e += 1) {
+      const object = Object.create(methods);
+      object.__id = __div();
+      for (let i = 0; i < per; i += 1) object.m();
+    }
+  };
+  const valued = (methods, elements, per, value) => {
+    for (let e = 0; e < elements; e += 1) {
+      const object = Object.create(methods);
+      object.__id = __div();
+      for (let i = 0; i < per; i += 1) object.m(value);
+    }
+  };
+
+  return { stages, floor, bare, valued };
+})();
+"#;
+
+#[gpui::test]
+fn one_recorded_call_is_priced_stage_by_stage(cx: &mut TestAppContext) {
+    cx.update(|cx| {
+        crate::init(cx);
+        // What a script render does on its way in. These stages run outside
+        // every call scope, so without it `bg("surface")` has no palette to
+        // resolve against and prices a thrown error instead of a style.
+        crate::theme_tokens::sync(cx);
+    });
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    runtime.eval_for_benchmark(BENCH_SETUP).expect("setup");
+
+    let calls = BENCH_ELEMENTS * BENCH_PER_ELEMENT;
+    let floor = time_stage(
+        &runtime,
+        &format!("__bench.floor({BENCH_ELEMENTS}, {BENCH_PER_ELEMENT})"),
+    );
+    let per_call = |elapsed: std::time::Duration| {
+        elapsed.saturating_sub(floor).as_nanos() as f64 / calls as f64
+    };
+
+    println!(
+        "\n[D] one recorded call, {calls} calls per round (best of {ROUNDS})\n\
+         {:>11} | {:>12} | {:>12} | {}",
+        "stage", "ns per call", "added", "what the step adds"
+    );
+
+    let mut shipped = Vec::new();
+    for (family, argument, label) in [
+        ("nullary", None, "items_center()"),
+        ("parametric", Some("\"surface\""), "bg(\"surface\")"),
+    ] {
+        println!("{label}:");
+        let mut previous = floor;
+        for (stage, adds) in [
+            ("js", "QuickJS interpreting the builder"),
+            ("crossing", "the bare crossing into Rust"),
+            ("name", "the method name as a Rust String"),
+            (
+                "arguments",
+                "the argument list, in a JS array, as `Bridged`",
+            ),
+            ("recorded", "dispatch and the arena write"),
+            ("shipped", "— what the prelude binds instead"),
+        ] {
+            let call = match argument {
+                None => format!(
+                    "__bench.bare(__bench.stages.{family}.{stage}, {BENCH_ELEMENTS}, \
+                     {BENCH_PER_ELEMENT})"
+                ),
+                Some(value) => format!(
+                    "__bench.valued(__bench.stages.{family}.{stage}, {BENCH_ELEMENTS}, \
+                     {BENCH_PER_ELEMENT}, {value})"
+                ),
+            };
+            let elapsed = time_stage(&runtime, &call);
+            println!(
+                "{stage:>11} | {:>9.0} ns | {:>9.0} ns | {adds}",
+                per_call(elapsed),
+                per_call(elapsed) - per_call(previous),
+            );
+            if stage == "shipped" {
+                shipped.push((label, per_call(previous), per_call(elapsed)));
+            }
+            previous = elapsed;
+        }
+    }
+    println!();
+
+    // Not a threshold on any of the numbers — those are hardware — but on the
+    // shape, which is the claim the table is making: the entry point the
+    // prelude binds is the reason a style call is worth what it is worth, and
+    // a change that undid it would leave the table saying so while every other
+    // test still passed.
+    for (label, generic, shipped) in shipped {
+        assert!(
+            shipped < generic,
+            "`{label}` cost {shipped:.0} ns through its own entry point and {generic:.0} ns \
+             through the generic one; the dedicated path has stopped paying for itself"
+        );
+    }
+}
+
+fn time_stage(runtime: &std::rc::Rc<ShellRuntime>, call: &str) -> std::time::Duration {
+    // The first round pays for the arena's first growth and for QuickJS's
+    // inline caches, neither of which a steady-state description pays.
+    runtime.eval_for_benchmark(call).expect("stage");
+    runtime.reset_arena_for_benchmark();
+
+    let mut best = std::time::Duration::MAX;
+    for _ in 0..ROUNDS {
+        let started = Instant::now();
+        runtime.eval_for_benchmark(call).expect("stage");
+        best = best.min(started.elapsed());
+        runtime.reset_arena_for_benchmark();
+    }
+    best
 }

@@ -18,15 +18,21 @@
 //! resolves to nothing and reports itself, instead of quietly resolving to
 //! whatever that index happens to hold here.
 
-use std::{cell::Cell, collections::HashMap, rc::Rc};
+use std::{
+    cell::{Cell, RefCell},
+    collections::{HashMap, HashSet},
+    rc::{Rc, Weak},
+};
 
-use gpui::{App, AppContext as _, Entity, FocusHandle, Subscription, Window};
+use gpui::{App, AppContext as _, Entity, EntityId, FocusHandle, Subscription, Window};
+use gpui_base::VirtualListScrollHandle;
 use gpui_base::input::{
     InputBaseState, InputEditorStyle, InputEvent, InputModeKind, InputState, TextareaState,
 };
 use gpui_base::slider::{SliderEvent, SliderScale, SliderState, SliderValue};
+use gpui_base::{OtpEvent, OtpState};
 
-use crate::runtime::ApplicationGeneration;
+use crate::{engine::ShellRuntime, runtime::ApplicationGeneration, view::ScriptView};
 
 /// A script-visible reference to retained state.
 ///
@@ -38,9 +44,17 @@ pub type EntityHandle = u64;
 const STORE_SHIFT: u32 = 32;
 const MAX_STORE_ID: u32 = (1 << 21) - 1;
 const ENTITY_ID_MASK: u64 = u32::MAX as u64;
+pub(crate) const MAX_LIVE_ENTITIES: usize = 10_000;
 
 /// What a handle points at. One variant per entity type the script can create.
 enum Record {
+    /// A retained script view. Its entity owns the child snapshot lifecycle;
+    /// this record owns the script-visible handle.
+    View {
+        view: Entity<ScriptView>,
+        application: Option<Rc<ApplicationGeneration>>,
+        runtime: Weak<ShellRuntime>,
+    },
     Input {
         state: Entity<InputState>,
         application: Option<Rc<ApplicationGeneration>>,
@@ -71,6 +85,17 @@ enum Record {
         application: Option<Rc<ApplicationGeneration>>,
         subscriptions: Vec<Subscription>,
     },
+    /// A one-time code's digits, focus and blink.
+    ///
+    /// Retained for the reason an input's text is, and for one more: the blink
+    /// runs on a timer that notifies this entity twice a second. Neither the
+    /// digits nor the blink ever reach the script, so neither can live in a
+    /// description that only the script can rebuild.
+    Otp {
+        state: Entity<OtpState>,
+        application: Option<Rc<ApplicationGeneration>>,
+        subscriptions: HashMap<OtpEventName, OtpSubscription>,
+    },
     /// A focus handle the script created and hands to elements.
     ///
     /// Retained for the same reason an input's state is: focus is a fact about
@@ -83,6 +108,38 @@ enum Record {
         handle: FocusHandle,
         application: Option<Rc<ApplicationGeneration>>,
     },
+    /// The scroll position of a virtualized list, and the item it has been
+    /// asked to scroll to.
+    ///
+    /// Retained for a reason the other variants do not share: a
+    /// `VirtualListScrollHandle` is *where a request is left*.
+    /// `scroll_to_item` records an index that the list consumes during its next
+    /// prepaint, so a handle rebuilt each frame would drop every request made
+    /// between two frames — which is every request a script can make.
+    VirtualScroll {
+        handle: VirtualListScrollHandle,
+        application: Option<Rc<ApplicationGeneration>>,
+    },
+}
+
+type OtpHandler = dyn Fn(&OtpEvent, &mut Window, &mut App);
+
+/// One native subscription per event name. Re-registering replaces only the
+/// script handler behind it, so the subscription count stays bounded and GPUI's
+/// deferred activation cannot race an old subscription's cancellation.
+struct OtpSubscription {
+    _subscription: Subscription,
+    handler: Rc<RefCell<Box<OtpHandler>>>,
+}
+
+/// One retained record together with the exact view that created it.
+///
+/// Application ownership answers unload. View ownership answers nested release:
+/// removing one child also removes handles created by that child without
+/// touching its siblings or application-owned records.
+struct StoredRecord {
+    record: Record,
+    owner: Option<EntityId>,
 }
 
 thread_local! {
@@ -99,7 +156,7 @@ thread_local! {
 pub struct EntityStore {
     id: u32,
     next_id: u32,
-    records: HashMap<u32, Record>,
+    records: HashMap<u32, StoredRecord>,
 }
 
 impl EntityStore {
@@ -118,6 +175,28 @@ impl EntityStore {
             next_id: 0,
             records: HashMap::new(),
         })
+    }
+
+    /// Retains a nested script view and returns its script-visible handle.
+    pub(crate) fn create_view(
+        &mut self,
+        view: Entity<ScriptView>,
+        application: Option<Rc<ApplicationGeneration>>,
+        runtime: &Rc<ShellRuntime>,
+    ) -> EntityHandle {
+        self.push(Record::View {
+            view,
+            application,
+            runtime: Rc::downgrade(runtime),
+        })
+    }
+
+    /// The nested script view behind a handle, if it is live and belongs here.
+    pub(crate) fn view(&self, handle: EntityHandle) -> Option<Entity<ScriptView>> {
+        match self.record(handle) {
+            Some(Record::View { view, .. }) => Some(view.clone()),
+            _ => None,
+        }
     }
 
     /// Creates an input state and returns its handle.
@@ -263,6 +342,48 @@ impl EntityStore {
         }
     }
 
+    /// Creates a one-time-code state and returns its handle.
+    ///
+    /// `length` is a constructor argument rather than a builder because it is
+    /// one in base: the number of cells is what an `OtpState` *is*, and there
+    /// is no setter for it.
+    ///
+    /// Unlike [`Self::create_slider`] this needs a window: the state observes
+    /// window activation so that coming back to the application restarts the
+    /// blink on a code that still holds the keyboard.
+    pub fn create_otp(
+        &mut self,
+        length: usize,
+        value: Option<String>,
+        masked: bool,
+        application: Option<Rc<ApplicationGeneration>>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> EntityHandle {
+        let state = cx.new(|cx| {
+            let state = OtpState::new(length, window, cx).masked(masked);
+            match value {
+                Some(value) => state.default_value(value),
+                None => state,
+            }
+        });
+
+        self.push(Record::Otp {
+            state,
+            application,
+            subscriptions: HashMap::new(),
+        })
+    }
+
+    /// The entity behind a one-time-code handle, if it is still live and
+    /// belongs here.
+    pub fn otp(&self, handle: EntityHandle) -> Option<Entity<OtpState>> {
+        match self.record(handle) {
+            Some(Record::Otp { state, .. }) => Some(state.clone()),
+            _ => None,
+        }
+    }
+
     /// Creates a focus handle and returns its handle.
     ///
     /// Only `&App` is needed — GPUI's own [`App::focus_handle`] takes no window
@@ -285,6 +406,31 @@ impl EntityStore {
     pub fn focus(&self, handle: EntityHandle) -> Option<FocusHandle> {
         match self.record(handle) {
             Some(Record::Focus { handle, .. }) => Some(handle.clone()),
+            _ => None,
+        }
+    }
+
+    /// Creates a virtualized list's scroll position and returns its handle.
+    ///
+    /// Refused during render for the same reason the rest are: a handle created
+    /// there would be a new one every frame, and the position the script
+    /// thought it was holding — along with any pending `scroll_to_item` — would
+    /// be dropped by the next repaint.
+    pub fn create_virtual_scroll(
+        &mut self,
+        application: Option<Rc<ApplicationGeneration>>,
+    ) -> EntityHandle {
+        self.push(Record::VirtualScroll {
+            handle: VirtualListScrollHandle::new(),
+            application,
+        })
+    }
+
+    /// The scroll position behind a handle, if it is still live and belongs
+    /// here.
+    pub fn virtual_scroll(&self, handle: EntityHandle) -> Option<VirtualListScrollHandle> {
+        match self.record(handle) {
+            Some(Record::VirtualScroll { handle, .. }) => Some(handle.clone()),
             _ => None,
         }
     }
@@ -361,13 +507,133 @@ impl EntityStore {
         }
     }
 
+    /// Subscribes to one one-time-code event for as long as the handle lives.
+    ///
+    /// Kept apart from [`Self::subscribe_input`] even though both carry an
+    /// [`InputEvent`]: that one is generic over the text engine's mode marker
+    /// and an `OtpState` is not built on it. What a script sees differs too —
+    /// there is no `submit`, and completion has its own event rather than
+    /// overloading `change`.
+    pub fn subscribe_otp(
+        &mut self,
+        handle: EntityHandle,
+        event: OtpEventName,
+        window: &mut Window,
+        cx: &mut App,
+        handler: impl Fn(&OtpEvent, &mut Window, &mut App) + 'static,
+    ) -> bool {
+        // Resolved and cloned inside the match so the immutable borrow ends
+        // before the subscription is stored through a mutable one.
+        let state = match self.record(handle) {
+            Some(Record::Otp { state, .. }) => state.clone(),
+            _ => return false,
+        };
+
+        if let Some(Record::Otp { subscriptions, .. }) = self.record_mut(handle) {
+            if let Some(subscription) = subscriptions.get_mut(&event) {
+                *subscription.handler.borrow_mut() = Box::new(handler);
+                return true;
+            }
+        }
+
+        let handler: Rc<RefCell<Box<OtpHandler>>> = Rc::new(RefCell::new(Box::new(handler)));
+        let dispatch = handler.clone();
+        let subscription =
+            window.subscribe(&state, cx, move |_, emitted: &OtpEvent, window, cx| {
+                if event.matches(emitted) {
+                    dispatch.borrow()(emitted, window, cx);
+                }
+            });
+
+        match self.record_mut(handle) {
+            Some(Record::Otp { subscriptions, .. }) => {
+                subscriptions.insert(
+                    event,
+                    OtpSubscription {
+                        _subscription: subscription,
+                        handler,
+                    },
+                );
+                true
+            }
+            _ => false,
+        }
+    }
+
     /// Drops a handle. The entity itself is released when GPUI has no other
     /// owner.
     pub fn release(&mut self, handle: EntityHandle) -> bool {
         let Some(id) = self.entity_id(handle) else {
             return false;
         };
+        let Some(record) = self.records.get(&id) else {
+            return false;
+        };
+        if matches!(record.record, Record::View { .. }) {
+            return false;
+        }
         self.records.remove(&id).is_some()
+    }
+
+    /// Releases a retained view and everything created under its ownership.
+    ///
+    /// This is deliberately typed: retiring a view must synchronously clear
+    /// its snapshots and callback generations even if GPUI still holds the
+    /// entity for a rendered frame.
+    pub(crate) fn release_view(&mut self, handle: EntityHandle, cx: &mut App) -> bool {
+        let Some(id) = self.entity_id(handle) else {
+            return false;
+        };
+        let Some(Record::View { view, .. }) = self.records.get(&id).map(|stored| &stored.record)
+        else {
+            return false;
+        };
+
+        // A child can create retained state, and eventually other child views,
+        // during init, events and tasks. Discover the complete ownership tree
+        // before removing anything so no drop can re-enter a half-mutated map.
+        let mut owners = HashSet::from([view.entity_id()]);
+        let mut removed = HashSet::from([id]);
+        loop {
+            let mut changed = false;
+            for (candidate_id, stored) in &self.records {
+                if removed.contains(candidate_id)
+                    || !stored.owner.is_some_and(|owner| owners.contains(&owner))
+                {
+                    continue;
+                }
+                removed.insert(*candidate_id);
+                if let Record::View { view, .. } = &stored.record {
+                    owners.insert(view.entity_id());
+                }
+                changed = true;
+            }
+            if !changed {
+                break;
+            }
+        }
+
+        let views = removed
+            .iter()
+            .filter_map(|id| match &self.records.get(id)?.record {
+                Record::View { view, runtime, .. } => Some((view.clone(), runtime.clone())),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+
+        // Do all entity updates before mutating the map. Dropping a snapshot
+        // releases script values but never re-enters this store's RefCell.
+        for (view, runtime) in views {
+            if let Some(runtime) = runtime.upgrade() {
+                runtime.retire_view_callbacks(view.entity_id());
+                crate::engine::quickjs::cancel_view_tasks(&runtime, view.entity_id());
+            }
+            view.update(cx, |view, _| view.retire());
+        }
+        for id in removed {
+            self.records.remove(&id);
+        }
+        true
     }
 
     /// Releases every handle. The runtime dropping the store does this anyway;
@@ -382,9 +648,33 @@ impl EntityStore {
     /// cannot leave a handler (and its persistent JavaScript function) behind
     /// in the runtime-wide store.
     pub(crate) fn release_application(&mut self, application: &Rc<ApplicationGeneration>) {
-        self.records.retain(|_, record| {
-            let owner = match record {
-                Record::Input {
+        let views = self
+            .records
+            .values()
+            .filter_map(|stored| match &stored.record {
+                Record::View {
+                    view,
+                    application: Some(owner),
+                    runtime,
+                } if Rc::ptr_eq(owner, application) => Some((view.entity_id(), runtime.clone())),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        for (entity_id, runtime) in views {
+            if let Some(runtime) = runtime.upgrade() {
+                runtime.retire_view_callbacks(entity_id);
+                crate::engine::quickjs::cancel_view_tasks(&runtime, entity_id);
+            }
+        }
+        self.records.retain(|_, stored| {
+            let owner = match &stored.record {
+                Record::View {
+                    application: owner, ..
+                }
+                | Record::Input {
+                    application: owner, ..
+                }
+                | Record::Otp {
                     application: owner, ..
                 }
                 | Record::Textarea {
@@ -394,6 +684,9 @@ impl EntityStore {
                     application: owner, ..
                 }
                 | Record::Focus {
+                    application: owner, ..
+                }
+                | Record::VirtualScroll {
                     application: owner, ..
                 } => owner,
             };
@@ -405,7 +698,6 @@ impl EntityStore {
 
     /// How many handles are live, for `gc_stats` and for tests that assert the
     /// store does not grow without bound.
-    #[cfg(test)]
     pub fn len(&self) -> usize {
         self.records.len()
     }
@@ -424,10 +716,12 @@ impl EntityStore {
         let mut ids: Vec<u32> = self.records.keys().copied().collect();
         ids.sort_unstable();
         ids.iter()
-            .filter_map(|id| match self.records.get(id) {
-                Some(Record::Focus { handle, .. }) => Some(handle.clone()),
-                _ => None,
-            })
+            .filter_map(
+                |id| match self.records.get(id).map(|stored| &stored.record) {
+                    Some(Record::Focus { handle, .. }) => Some(handle.clone()),
+                    _ => None,
+                },
+            )
             .collect()
     }
 
@@ -438,18 +732,37 @@ impl EntityStore {
     /// binding, and is not observable from the script side.
     #[cfg(test)]
     pub(crate) fn first_slider(&self) -> Option<Entity<SliderState>> {
-        self.records.values().find_map(|record| match record {
-            Record::Slider { state, .. } => Some(state.clone()),
-            _ => None,
-        })
+        self.records
+            .values()
+            .find_map(|stored| match &stored.record {
+                Record::Slider { state, .. } => Some(state.clone()),
+                _ => None,
+            })
+    }
+
+    /// The first one-time-code state this store holds.
+    ///
+    /// For the test that changes the code from Rust and asserts the frame that
+    /// follows never entered the VM — which is the whole claim of this
+    /// binding, and is not observable from the script side.
+    #[cfg(test)]
+    pub(crate) fn first_otp(&self) -> Option<Entity<OtpState>> {
+        self.records
+            .values()
+            .find_map(|stored| match &stored.record {
+                Record::Otp { state, .. } => Some(state.clone()),
+                _ => None,
+            })
     }
 
     #[cfg(test)]
     pub(crate) fn first_input(&self) -> Option<Entity<InputState>> {
-        self.records.values().find_map(|record| match record {
-            Record::Input { state, .. } => Some(state.clone()),
-            _ => None,
-        })
+        self.records
+            .values()
+            .find_map(|stored| match &stored.record {
+                Record::Input { state, .. } => Some(state.clone()),
+                _ => None,
+            })
     }
 
     /// Splits a handle into its entity id, refusing one that names another store.
@@ -470,21 +783,30 @@ impl EntityStore {
     }
 
     fn record(&self, handle: EntityHandle) -> Option<&Record> {
-        self.records.get(&self.entity_id(handle)?)
+        self.records
+            .get(&self.entity_id(handle)?)
+            .map(|stored| &stored.record)
     }
 
     fn record_mut(&mut self, handle: EntityHandle) -> Option<&mut Record> {
         let id = self.entity_id(handle)?;
-        self.records.get_mut(&id)
+        self.records.get_mut(&id).map(|stored| &mut stored.record)
     }
 
     fn push(&mut self, record: Record) -> EntityHandle {
+        debug_assert!(self.records.len() < MAX_LIVE_ENTITIES);
         let id = self.next_id;
         self.next_id = self
             .next_id
             .checked_add(1)
             .expect("a shell runtime cannot create more than 2^32 retained entities");
-        self.records.insert(id, record);
+        self.records.insert(
+            id,
+            StoredRecord {
+                record,
+                owner: crate::scope::current_view().map(|view| view.entity_id()),
+            },
+        );
         (u64::from(self.id) << STORE_SHIFT) | u64::from(id)
     }
 }
@@ -579,9 +901,47 @@ impl SliderEventName {
     }
 }
 
+/// The one-time-code events a script can subscribe to.
+///
+/// Four, not the text input's four. `OtpState` never emits
+/// `InputEvent::PressEnter`, so a `submit` here would be a name that could
+/// never fire. Completion is separate from ordinary editing so validation can
+/// observe `change` without starting verification early.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum OtpEventName {
+    Change,
+    Complete,
+    Focus,
+    Blur,
+}
+
+impl OtpEventName {
+    pub fn from_name(name: &str) -> Option<Self> {
+        match name {
+            "change" => Some(Self::Change),
+            "complete" => Some(Self::Complete),
+            "focus" => Some(Self::Focus),
+            "blur" => Some(Self::Blur),
+            _ => None,
+        }
+    }
+
+    pub const NAMES: &'static [&'static str] = &["change", "complete", "focus", "blur"];
+
+    fn matches(self, event: &OtpEvent) -> bool {
+        matches!(
+            (self, event),
+            (Self::Change, OtpEvent::Change)
+                | (Self::Complete, OtpEvent::Complete)
+                | (Self::Focus, OtpEvent::Focus)
+                | (Self::Blur, OtpEvent::Blur)
+        )
+    }
+}
+
 fn editor_style() -> InputEditorStyle {
     let color =
-        |name: &str, fallback: gpui::Hsla| crate::theme::token_color(name).unwrap_or(fallback);
+        |name: &str, fallback: gpui::Hsla| crate::theme_tokens::token_color(name).unwrap_or(fallback);
     let foreground = color("foreground", gpui::rgb(0x10151d).into());
     let mut selection = color("accent", gpui::rgb(0xdde7fb).into());
     // A selection must not hide the glyphs it selects.

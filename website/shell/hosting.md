@@ -146,6 +146,42 @@ reading.slowest_script_render();
 
 A regression test can assert on `script_renders` directly; that is what keeps [the benchmark's third figure](./engine.md#the-measurement) honest.
 
+## Building for development
+
+A debug build of a host is roughly **three times slower per script render** than a release
+build, and the whole difference is in two dependencies. Measured on a live application —
+a market terminal re-rendering on every quote tick — with the runtime's own
+[`RuntimeMetrics`](#watching-what-it-costs):
+
+| `[profile.dev.package]` | mean script render | mean materialize |
+| --- | --- | --- |
+| nothing, or `rquickjs` alone | 31.5 ms | 3.9 ms |
+| `rquickjs-sys` + `rquickjs-core` | **11.3 ms** | **1.2 ms** |
+| release, for comparison | 11.0 ms | 1.2 ms |
+
+So:
+
+```toml
+[profile.dev.package]
+rquickjs-sys = { opt-level = 3 }
+rquickjs-core = { opt-level = 3 }
+```
+
+**`rquickjs` on its own does nothing**, which is the trap: it is a thin facade that
+re-exports `rquickjs-core`, so naming it optimises neither the interpreter nor the
+bindings. `rquickjs-sys` compiles QuickJS itself — C source, built through `cc`, which
+reads the profile's optimisation level for *that* package — and `rquickjs-core` is where
+every value that crosses the boundary is converted. An unoptimised interpreter is what
+makes an unoptimised build feel like a different product.
+
+The `llrt_*` crates do **not** need this. They were measured with the same application and
+made no difference beyond the noise: `fs`, `net`, `crypto` and the rest are not on the
+render path, so optimising them buys nothing a script author would feel.
+
+These settings only take effect in the **workspace root that builds the binary**. A library
+cannot impose a profile on the application that depends on it, so `gpui-shell` cannot set
+this for you — every host has to write it down itself.
+
 ## Exit requests
 
 `process.exit(code)` from a script is **a request, never `exit(2)`**. One plugin must not be able to take the host process down, and the host may have unsaved state. The runtime hands the request to the host, and the host decides:
@@ -171,7 +207,7 @@ One call starts it, and it is the same one the `--watch` flag uses:
 runtime.watch(&root, window, cx)?.forget();
 ```
 
-`runtime.watch` reads the resolved directory and manifest entry retained by the loaded root, so there is no second copy of that metadata to drift. It has no hidden build-mode policy: the CLI enables watching after `--watch`, while an embedded host can put the call behind `#[cfg(debug_assertions)]`. The returned `Watch` is the watch: dropping it stops the loop, which is what a host unmounting a panel wants, while `.forget()` lets it run for as long as the view does. The loop also ends on its own when the view, the runtime or the window goes away, because it holds all three weakly.
+`runtime.watch` reads the resolved directory and manifest entry retained by the loaded root, so there is no second copy of that metadata to drift. It has no hidden build-mode policy: the CLI enables watching after `--watch`, while an embedded host can put the call behind `#[cfg(debug_assertions)]`. The returned `Watcher` owns the watch: dropping it stops the loop, which is what a host unmounting a panel wants, while `.forget()` lets it run for as long as the view does. The loop also ends on its own when the view, the runtime or the window goes away, because it holds all three weakly.
 
 A reload re-reads **every** module, entry point included — a hot-reload that quietly served a stale import would be worse than none, because it looks like it worked. It does all of its fallible work before touching the live view: if the new code fails to load, the previous view keeps running, the error goes to `tracing`, and a toast with a stable id reports it in the window. The next successful reload retracts that toast.
 

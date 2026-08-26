@@ -7,7 +7,7 @@
 use crate::error::{Result as ShellResult, ShellError};
 use gpui::{Hsla, Pixels, px, rgba};
 
-use crate::theme::{color_token_names, token_color};
+use crate::theme_tokens::{color_token_names, token_color};
 
 /// A script argument after bridging, stored in the spec arena.
 ///

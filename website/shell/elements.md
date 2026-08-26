@@ -150,6 +150,7 @@ These are not styles; they report state to the base layer, which handles the int
 | `.selected(value)` | `Button` | Reports the selected state |
 | `.checked(value)` | `Checkbox`, `Switch` | The controlled value |
 | `.accessibility_label(text)` | `Button`, `Checkbox` | What a screen reader announces |
+| `.tooltip(text)` | `div`, `h_flex`, `v_flex`, `Button` | A label shown after the pointer rests on the element |
 | `.id(name)` | `div`, `h_flex`, `v_flex` | A stable identity, instead of position in the tree |
 | `.overflow_scrollbar()` | `div`, `h_flex`, `v_flex` | Scrolls both axes and paints native scrollbars |
 | `.overflow_x_scrollbar()` | `div`, `h_flex`, `v_flex` | Scrolls horizontally and paints a native scrollbar |
@@ -348,9 +349,11 @@ This matters more than it looks. A mistyped style name changes nothing on screen
 
 ## Not there yet
 
-The element surface is the M0 set. Missing, deliberately, and each belonging to a later milestone:
+The element surface now includes Tabs, Table, Progress, form controls, anchored
+Popover/HoverCard surfaces, Textarea, Scrollbar, PathBuilder, and VirtualList.
+Still missing, deliberately:
 
-- Select, tabs, list, table, tree and the other `gpui-base` components;
+- the higher-level List and Tree systems and the remaining `gpui-base` components;
 - `gpui.memo`, which would let an unchanged subtree skip the script work that rebuilds its description;
 - dock panels, and the renderer traits that would let a script draw the dock's own chrome.
 

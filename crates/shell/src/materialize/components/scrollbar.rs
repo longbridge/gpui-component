@@ -116,10 +116,23 @@ pub(in crate::materialize) fn track_scroll_position<E: StatefulInteractiveElemen
 /// runtime's entity store, and window element state is the one place both sides
 /// of the pairing can reach with nothing but a name.
 fn scroll_position(identity: &ElementId, window: &mut Window, cx: &mut App) -> ScrollHandle {
-    window
-        .use_keyed_state(identity.clone(), cx, |_, _| ScrollHandle::default())
+    shared_scroll_position(identity, window, cx)
         .read(cx)
         .clone()
+}
+
+/// The slot itself, for the one caller that has to *write* it.
+///
+/// A `VirtualList` brings its own retained handle — base's own type, carrying
+/// the pending `scroll_to_item` alongside the offset — so the pairing works the
+/// other way round there: the list puts its position in the slot rather than
+/// taking one out of it. Everything else only ever reads.
+pub(in crate::materialize) fn shared_scroll_position(
+    identity: &ElementId,
+    window: &mut Window,
+    cx: &mut App,
+) -> gpui::Entity<ScrollHandle> {
+    window.use_keyed_state(identity.clone(), cx, |_, _| ScrollHandle::default())
 }
 
 /// Distinguishes the bars over one scroll area. They share a scroll position,

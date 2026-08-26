@@ -132,7 +132,14 @@ lsp-types = { opt-level = 3 }
 reqwest_client = { opt-level = 3 }
 markdown = { opt-level = 3 }
 xml5ever = { opt-level = 3 }
+# `rquickjs` is a facade that re-exports `rquickjs-core`, so naming it alone
+# optimises neither the interpreter nor the bindings. `rquickjs-sys` builds
+# QuickJS itself through `cc`, which reads this package's opt-level; without
+# these two a debug build spends roughly three times as long in every script
+# render. See `website/shell/hosting.md`.
 rquickjs = { opt-level = 3 }
+rquickjs-sys = { opt-level = 3 }
+rquickjs-core = { opt-level = 3 }
 cap-std = { opt-level = 3 }
 
 [workspace.metadata.typos]

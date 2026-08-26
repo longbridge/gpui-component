@@ -13,6 +13,7 @@ use std::{
 use rquickjs::{
     Ctx, Exception, FromJs, IntoJs, Object, Promise, Result, TypedArray, Value,
     function::{Func, Opt},
+    module::{Declarations, Exports, ModuleDef},
 };
 use tungstenite::{
     HandshakeError, Message, WebSocket,
@@ -36,10 +37,20 @@ const IO_TIMEOUT: Duration = Duration::from_secs(30);
 #[cfg(test)]
 const IO_TIMEOUT: Duration = Duration::from_millis(100);
 
-pub(super) fn install(ctx: &Ctx<'_>) -> Result<()> {
-    let websocket = Object::new(ctx.clone())?;
-    websocket.set("connect", Func::from(connect))?;
-    ctx.globals().set("WebSocket", websocket)
+pub(super) struct WebSocketModule;
+
+impl ModuleDef for WebSocketModule {
+    fn declare(declarations: &Declarations) -> Result<()> {
+        declarations.declare("WebSocket")?;
+        Ok(())
+    }
+
+    fn evaluate<'js>(ctx: &Ctx<'js>, exports: &Exports<'js>) -> Result<()> {
+        let websocket = Object::new(ctx.clone())?;
+        websocket.set("connect", Func::from(connect))?;
+        exports.export("WebSocket", websocket)?;
+        Ok(())
+    }
 }
 
 #[derive(Default)]

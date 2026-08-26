@@ -103,16 +103,18 @@ export default class Probe extends View {
 
 const WEBSOCKET_PROBE: &str = r#"
 import { View, v_flex, text, spawn, with_cx } from "gpui";
+import { WebSocket } from "websocket";
 
 export default class Probe extends View {
   init() {
     this.state = "pending";
     spawn(async () => {
+      const standardGlobal = typeof globalThis.WebSocket;
       try {
         await WebSocket.connect("wss://quotes.example.test/v2");
         this.state = "connected";
       } catch (error) {
-        this.state = `rejected:${error.message}`;
+        this.state = `${standardGlobal}|rejected:${error.message}`;
       }
       with_cx((cx) => cx.notify());
     });
@@ -123,6 +125,7 @@ export default class Probe extends View {
 
 const WEBSOCKET_HANDSHAKE_PROBE: &str = r#"
 import { View, v_flex, text, spawn, with_cx } from "gpui";
+import { WebSocket } from "websocket";
 
 export default class Probe extends View {
   init() {
@@ -143,6 +146,7 @@ export default class Probe extends View {
 
 const WEBSOCKET_HEADERS_PROBE: &str = r#"
 import { View, v_flex, text, spawn, with_cx } from "gpui";
+import { WebSocket } from "websocket";
 
 export default class Probe extends View {
   init() {
@@ -163,6 +167,7 @@ export default class Probe extends View {
 
 const WEBSOCKET_MESSAGES_PROBE: &str = r#"
 import { View, v_flex, text, spawn, with_cx } from "gpui";
+import { WebSocket } from "websocket";
 
 export default class Probe extends View {
   init() {
@@ -187,6 +192,7 @@ export default class Probe extends View {
 
 const WEBSOCKET_PENDING_READ_PROBE: &str = r#"
 import { View, v_flex, text, spawn, with_cx } from "gpui";
+import { WebSocket } from "websocket";
 
 export default class Probe extends View {
   init() {
@@ -211,6 +217,7 @@ export default class Probe extends View {
 
 const WEBSOCKET_IDLE_PROBE: &str = r#"
 import { View, v_flex, text, spawn, with_cx } from "gpui";
+import { WebSocket } from "websocket";
 
 export default class Probe extends View {
   init() {
@@ -227,6 +234,7 @@ export default class Probe extends View {
 
 const WEBSOCKET_CLOSED_WRITE_PROBE: &str = r#"
 import { View, v_flex, text, spawn, with_cx } from "gpui";
+import { WebSocket } from "websocket";
 
 export default class Probe extends View {
   init() {
@@ -249,6 +257,7 @@ export default class Probe extends View {
 
 const WEBSOCKET_CONCURRENT_READ_PROBE: &str = r#"
 import { View, v_flex, text, spawn, with_cx } from "gpui";
+import { WebSocket } from "websocket";
 
 export default class Probe extends View {
   init() {
@@ -273,6 +282,7 @@ export default class Probe extends View {
 
 const WEBSOCKET_STALLED_WRITE_PROBE: &str = r#"
 import { View, v_flex, text, spawn, with_cx } from "gpui";
+import { WebSocket } from "websocket";
 
 export default class Probe extends View {
   init() {
@@ -297,6 +307,7 @@ export default class Probe extends View {
 
 const WEBSOCKET_QUEUE_LIMIT_PROBE: &str = r#"
 import { View, v_flex, text, spawn, with_cx } from "gpui";
+import { WebSocket } from "websocket";
 
 export default class Probe extends View {
   init() {
@@ -482,7 +493,7 @@ fn websocket_is_denied_by_default(cx: &mut TestAppContext) {
     draw(&mut context, &view);
     let rendered = snapshot(&mut context, &view);
     assert!(
-        rendered.contains("rejected:") && rendered.contains("capabilities.network.hosts"),
+        rendered.contains("undefined|rejected:") && rendered.contains("capabilities.network.hosts"),
         "{rendered}"
     );
 }

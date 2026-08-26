@@ -12,7 +12,8 @@
 //!
 //! The first is that a script error must never take the host down (§21.1). A
 //! reload runs untrusted script: the module can throw while it is evaluated,
-//! and the view constructor can throw while it runs. [`Watch::start`] therefore
+//! and the view constructor can throw while it runs. [`ShellRuntime::watch`]
+//! therefore
 //! drives reloads that do all fallible work before touching the live entity, so a broken save
 //! leaves the previous working view on screen with the error reported to the
 //! caller — the same promise the render-time error overlay makes.
@@ -36,7 +37,8 @@
 //! application that vendors a large dependency tree; and it would see the
 //! changes a stamp cannot — a rename or an atomic replace that preserves both
 //! size and timestamp. An event-backed detector could replace this internal
-//! polling mechanism without changing the public [`Watch::start`] lifecycle.
+//! polling mechanism without changing the public [`ShellRuntime::watch`]
+//! lifecycle.
 
 use std::{
     path::{Path, PathBuf},
@@ -291,11 +293,11 @@ pub(crate) const POLL_INTERVAL: Duration = Duration::from_millis(250);
 /// the window goes away — the handle is for the case where none of those has
 /// happened and the host simply wants it to stop.
 #[must_use = "dropping the handle stops the watcher; use `.forget()` to keep it running"]
-pub struct Watch {
+pub struct Watcher {
     task: Option<Task<()>>,
 }
 
-impl Watch {
+impl Watcher {
     /// Starts reloading `view` whenever application sources change.
     ///
     /// This method has no hidden build-mode policy. A command-line host can
@@ -306,8 +308,7 @@ impl Watch {
     ///
     /// The watcher holds the runtime and view weakly, so it cannot keep an
     /// unmounted application alive.
-    #[doc(hidden)]
-    pub fn start(
+    pub(crate) fn start(
         runtime: &Rc<ShellRuntime>,
         view: &Entity<ScriptView>,
         directory: PathBuf,
@@ -406,7 +407,7 @@ impl ShellRuntime {
         root: &Entity<ShellRoot>,
         window: &mut Window,
         cx: &mut App,
-    ) -> Result<Watch> {
+    ) -> Result<Watcher> {
         let (view, application_root, entry) = {
             let root = root.read(cx);
             let application = root
@@ -421,7 +422,7 @@ impl ShellRuntime {
         if !Rc::ptr_eq(&view.read(cx).runtime(), self) {
             bail!("this ShellRoot belongs to a different gpui-shell runtime");
         }
-        Watch::start(self, &view, application_root, entry, window, cx)
+        Watcher::start(self, &view, application_root, entry, window, cx)
     }
 
     /// Rebuilds the snapshot for an application mounted by [`Self::load`] or

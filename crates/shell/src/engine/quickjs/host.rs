@@ -40,7 +40,7 @@ use std::{
 use gpui::{App, ClipboardItem};
 use rquickjs::{
     Array, Ctx, Error as JsError, Exception, FromJs, IntoJs, Object, Promise, Result as JsResult,
-    Value,
+    TypedArray, Value,
     function::{Func, Opt, Rest},
 };
 use serde_json::Value as Json;
@@ -102,7 +102,12 @@ pub fn install(_ctx: &Ctx<'_>, module: &Object<'_>) -> JsResult<()> {
 ///
 /// Named functions rather than closures because the returned promise borrows
 /// the context, and only a signature can say so.
-pub(super) fn read_text<'js>(ctx: Ctx<'js>, path: String) -> JsResult<Promise<'js>> {
+pub(super) fn read_file<'js>(
+    ctx: Ctx<'js>,
+    path: String,
+    encoding: Opt<Value<'js>>,
+) -> JsResult<Promise<'js>> {
+    let encoding = ReadEncoding::from_value(&ctx, encoding.0)?;
     let grant = grant(&ctx, &path, Access::Read)?;
     let name = grant.describe();
     let (dir, relative) = grant.into_parts();
@@ -128,23 +133,47 @@ pub(super) fn read_text<'js>(ctx: Ctx<'js>, path: String) -> JsResult<Promise<'j
         // Bounded by the ceiling rather than by the size just read, so a file
         // that grows between the two is truncated at the limit instead of being
         // allowed past it.
-        let mut text = String::with_capacity(size as usize);
+        let mut bytes = Vec::with_capacity(size as usize);
         file.by_ref()
             .take(MAX_READ_BYTES + 1)
-            .read_to_string(&mut text)
+            .read_to_end(&mut bytes)
             .map_err(|error| message("read", &name, &error))?;
-        if text.len() as u64 > MAX_READ_BYTES {
-            return Err(too_large(&name, text.len() as u64));
+        if bytes.len() as u64 > MAX_READ_BYTES {
+            return Err(too_large(&name, bytes.len() as u64));
         }
-        Ok(text)
+        match encoding {
+            ReadEncoding::Bytes => Ok(FileContents::Bytes(bytes)),
+            ReadEncoding::Utf8 => String::from_utf8(bytes)
+                .map(FileContents::Text)
+                .map_err(|error| format!("cannot decode `{name}` as UTF-8: {error}")),
+        }
     })
 }
 
-pub(super) fn write_text<'js>(
+pub(super) fn write_file<'js>(
     ctx: Ctx<'js>,
     path: String,
-    contents: String,
+    contents: Value<'js>,
 ) -> JsResult<Promise<'js>> {
+    let contents = if contents.is_string() {
+        String::from_js(&ctx, contents)?.into_bytes()
+    } else {
+        let bytes = TypedArray::<u8>::from_js(&ctx, contents).map_err(|_| {
+            Exception::throw_type(
+                &ctx,
+                "fs.writeFile(path, contents) expects a string or Uint8Array",
+            )
+        })?;
+        bytes
+            .as_bytes()
+            .ok_or_else(|| {
+                Exception::throw_type(
+                    &ctx,
+                    "fs.writeFile(path, contents) received a detached Uint8Array",
+                )
+            })?
+            .to_vec()
+    };
     let grant = grant(&ctx, &path, Access::Write)?;
     let name = grant.describe();
     if contents.len() > MAX_WRITE_BYTES {
@@ -164,14 +193,104 @@ pub(super) fn write_text<'js>(
     })
 }
 
-pub(super) fn list_dir<'js>(ctx: Ctx<'js>, path: String) -> JsResult<Promise<'js>> {
+pub(super) fn list_dir<'js>(
+    ctx: Ctx<'js>,
+    path: String,
+    options: Opt<Value<'js>>,
+) -> JsResult<Promise<'js>> {
+    let with_file_types = readdir_with_file_types(&ctx, options.0)?;
     let grant = grant(&ctx, &path, Access::Read)?;
     let name = grant.describe();
     let (dir, relative) = grant.into_parts();
 
     scheduler::blocking(&ctx, "fs.readdir(path)", move || {
-        read_dir(&dir, &relative).map_err(|error| message("list", &name, &error))
+        let entries = read_dir(&dir, &relative).map_err(|error| message("list", &name, &error))?;
+        if with_file_types {
+            Ok(DirectoryListing::Entries(entries))
+        } else {
+            Ok(DirectoryListing::Names(
+                entries.into_iter().map(|entry| entry.name).collect(),
+            ))
+        }
     })
+}
+
+#[derive(Clone, Copy)]
+enum ReadEncoding {
+    Bytes,
+    Utf8,
+}
+
+impl ReadEncoding {
+    fn from_value<'js>(ctx: &Ctx<'js>, value: Option<Value<'js>>) -> JsResult<Self> {
+        let Some(value) = value.filter(|value| !value.is_undefined() && !value.is_null()) else {
+            return Ok(Self::Bytes);
+        };
+        let encoding = if value.is_string() {
+            String::from_js(ctx, value)?
+        } else if let Some(options) = value.into_object() {
+            for key in options.keys::<String>() {
+                let key = key?;
+                if key != "encoding" {
+                    return Err(Exception::throw_type(
+                        ctx,
+                        &format!("unknown fs.readFile option `{key}`; expected encoding"),
+                    ));
+                }
+            }
+            options.get::<_, String>("encoding")?
+        } else {
+            return Err(Exception::throw_type(
+                ctx,
+                "fs.readFile encoding must be \"utf8\" or { encoding: \"utf8\" }",
+            ));
+        };
+        match encoding.to_ascii_lowercase().as_str() {
+            "utf8" | "utf-8" => Ok(Self::Utf8),
+            _ => Err(Exception::throw_type(
+                ctx,
+                "fs.readFile only supports UTF-8 text decoding",
+            )),
+        }
+    }
+}
+
+enum FileContents {
+    Bytes(Vec<u8>),
+    Text(String),
+}
+
+impl<'js> IntoJs<'js> for FileContents {
+    fn into_js(self, ctx: &Ctx<'js>) -> JsResult<Value<'js>> {
+        match self {
+            Self::Bytes(bytes) => TypedArray::<u8>::new(ctx.clone(), bytes)?.into_js(ctx),
+            Self::Text(text) => text.into_js(ctx),
+        }
+    }
+}
+
+fn readdir_with_file_types<'js>(ctx: &Ctx<'js>, value: Option<Value<'js>>) -> JsResult<bool> {
+    let Some(value) = value.filter(|value| !value.is_undefined() && !value.is_null()) else {
+        return Ok(false);
+    };
+    let Some(options) = value.into_object() else {
+        return Err(Exception::throw_type(
+            ctx,
+            "fs.readdir options must be { withFileTypes: boolean }",
+        ));
+    };
+    for key in options.keys::<String>() {
+        let key = key?;
+        if key != "withFileTypes" {
+            return Err(Exception::throw_type(
+                ctx,
+                &format!("unknown fs.readdir option `{key}`; expected withFileTypes"),
+            ));
+        }
+    }
+    Ok(options
+        .get::<_, Option<bool>>("withFileTypes")?
+        .unwrap_or(false))
 }
 
 /// A denied path throws rather than answering `false`: "you may not look" and
@@ -283,7 +402,7 @@ impl<'js> FromJs<'js> for MakeDirectory {
     }
 }
 
-/// The ceiling on one `read_text`.
+/// The ceiling on one `readFile`.
 ///
 /// A script that asks for a file this large has almost certainly asked for the
 /// wrong one, and the alternative to a limit is a string that has to fit in the
@@ -309,27 +428,42 @@ fn too_large(name: &str, size: u64) -> String {
     )
 }
 
-/// One entry of `fs.readdir`, as the plain object a script sees.
+/// One entry of `fs.readdir(..., { withFileTypes: true })`.
 ///
 /// `is_dir` rides along because there is no `stat` in this surface, and without
 /// it every caller would have to guess from the name.
-struct DirEntry {
+struct Dirent {
     name: String,
     is_dir: bool,
 }
 
-impl<'js> IntoJs<'js> for DirEntry {
+impl<'js> IntoJs<'js> for Dirent {
     fn into_js(self, ctx: &Ctx<'js>) -> JsResult<Value<'js>> {
         let object = Object::new(ctx.clone())?;
         object.set("name", self.name)?;
-        object.set("is_dir", self.is_dir)?;
+        let is_dir = self.is_dir;
+        object.set("isDirectory", Func::from(move || is_dir))?;
         Ok(object.into_value())
+    }
+}
+
+enum DirectoryListing {
+    Names(Vec<String>),
+    Entries(Vec<Dirent>),
+}
+
+impl<'js> IntoJs<'js> for DirectoryListing {
+    fn into_js(self, ctx: &Ctx<'js>) -> JsResult<Value<'js>> {
+        match self {
+            Self::Names(names) => names.into_js(ctx),
+            Self::Entries(entries) => entries.into_js(ctx),
+        }
     }
 }
 
 /// Sorted by name, so a script that renders a listing does not have to sort it
 /// and does not inherit the filesystem's arbitrary order.
-fn read_dir(dir: &cap_std::fs::Dir, path: &Path) -> std::io::Result<Vec<DirEntry>> {
+fn read_dir(dir: &cap_std::fs::Dir, path: &Path) -> std::io::Result<Vec<Dirent>> {
     let mut entries = Vec::new();
     let mut name_bytes = 0;
     for entry in dir.read_dir(path)? {
@@ -337,7 +471,7 @@ fn read_dir(dir: &cap_std::fs::Dir, path: &Path) -> std::io::Result<Vec<DirEntry
         let name = entry.file_name().to_string_lossy().into_owned();
         name_bytes += name.len();
         check_readdir_budget(entries.len(), name_bytes)?;
-        entries.push(DirEntry {
+        entries.push(Dirent {
             name,
             is_dir: entry.file_type().map(|kind| kind.is_dir()).unwrap_or(false),
         });
@@ -881,7 +1015,7 @@ mod tests {
             install(&ctx, &module).expect("installing the host surface");
             ctx.globals().set("gpui", module).expect("binding `gpui`");
             ctx.globals()
-                .set("readFile", Func::from(read_text))
+                .set("readFile", Func::from(read_file))
                 .expect("binding the FS test adapter");
             body(&ctx)
         })

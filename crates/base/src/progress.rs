@@ -1,8 +1,7 @@
 use gpui::{
     AnyElement, App, Div, ElementId, InteractiveElement, Interactivity, IntoElement, ParentElement,
     RenderOnce, Role, SharedString, StatefulInteractiveElement, StyleRefinement, Styled, Window,
-    div,
-    prelude::FluentBuilder as _,
+    div, prelude::FluentBuilder as _,
 };
 use smallvec::SmallVec;
 
@@ -72,7 +71,9 @@ impl RenderOnce for Progress {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         self.base
             .role(Role::ProgressIndicator)
-            .when_some(self.accessibility_label, |this, label| this.aria_label(label))
+            .when_some(self.accessibility_label, |this, label| {
+                this.aria_label(label)
+            })
             .aria_min_numeric_value(0.)
             .aria_max_numeric_value(100.)
             .when(!self.indeterminate, |this| {

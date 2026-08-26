@@ -65,6 +65,25 @@ cargo test -p gpui-shell --release --lib benchmark -- --ignored --nocapture
 - **元素是共用同一个原型的普通对象**，样式方法由一段 JavaScript prelude 遍历名字列表装到该原型上。不是每个元素一个 class，不是每次属性访问新建闭包，也不是 3000 个 Rust 闭包。
 - **带诊断的 `Proxy` 原型不是默认。** 用 `Proxy` 包住原型以便说出拼错的方法名，代价是整个描述过程的约 30%；所以运行时保留普通原型，只在一次渲染失败后用诊断原型重跑一遍，纯粹为了产出那条信息。见 [Styling](./styling.md#未知方法)。
 
+### 实时行情负载实测
+
+合成基准把各项成本拆开测；Longbridge 行情终端则让它们在同一个真实负载中同时发生。下面的样本来自 release 构建，窗口处于活动状态，显示器分辨率为 3,840 × 2,160、刷新率为 144 Hz。Watchlist 持续接收实时行情，同时显示选中标的的详情与五日价格图。目标是 120 FPS，即每帧预算 **8.33 ms**。
+
+通过可选的运行时计数器按一秒区间采样，并将脚本描述成本与 native materialize 分开：
+
+| 测量项 | 实测范围 |
+| --- | --- |
+| 完整 JavaScript `render` 加 Spec recording | 每次脏渲染 **12.0–13.5 ms** |
+| snapshot materialize | 每次 **0.93–1.08 ms** |
+| 行情更新触发的脚本渲染 | 每秒 **8–20 次** |
+| 窗口活动时的 materialize | 每秒 **59–78 次** |
+
+一次活动窗口下的 FPS HUD 样本为 **69 FPS**、帧时间 **10.9 ms**、掉帧率 **18.3%**。HUD 的测量包含 GPUI layout 与 paint，因此不能与前两项运行时计数直接互换，但它确认了端到端负载没有达到 8.33 ms 的目标。
+
+有效结论比“JavaScript 很慢”更具体：未变化的 snapshot 能在约 1 ms 内 materialize，明显低于一帧预算；但行情造成一次脏更新时，应用会重建并记录完整描述，完成 materialize 之前总计要花约 12–13.5 ms。因此，这个负载的主要成本是反复使根 Script View 失效；只优化 native materializer 无法恢复 120 FPS。
+
+这些数据有意排除了 debug 构建，也排除了窗口失去活动状态后的样本。两者都会显著改变调度与帧呈现，FPS 不适合用于架构比较。这组数据也是工作负载实测，不替代上面可复现的 crate 基准：行情频率、可见内容、硬件与显示时序都会改变绝对值。
+
 ## 线程与内存
 
 VM 与 GPUI 的 `App` 共用一个线程——主线程——在同一个进程里。`ShellRuntime` 是一个内部用 `RefCell` 的 `Rc`，既不是 `Send` 也不是 `Sync`。这里没有 worker，也没有第二个 VM。

@@ -26,10 +26,29 @@ export default class Probe extends View {
           },
           body: "grant_type=refresh_token&refresh_token=refresh-token",
         });
-        this.state = `${response.status}|${await response.text()}`;
+        const text = response.text();
+        this.state = `${response.status}|${text instanceof Promise}|${await text}`;
       } catch (error) {
         this.state = `rejected:${error.message}`;
       }
+      with_cx((cx) => cx.notify());
+    });
+  }
+  render() { return v_flex().child(text(this.state)); }
+}
+"#;
+
+const JSON_PROBE: &str = r#"
+import { View, v_flex, text, spawn, with_cx } from "gpui";
+
+export default class Probe extends View {
+  init() {
+    this.state = "pending";
+    spawn(async () => {
+      const response = await fetch("__URL__");
+      const json = response.json();
+      const value = await json;
+      this.state = `${json instanceof Promise}|${value.answer}`;
       with_cx((cx) => cx.notify());
     });
   }
@@ -73,8 +92,42 @@ fn fetch_posts_string_bodies_with_custom_headers(cx: &mut TestAppContext) {
     context.run_until_parked();
     draw(&mut context, &view);
     let rendered = snapshot(&mut context, &view);
-    assert!(rendered.contains("200|ok"), "{rendered}");
+    assert!(rendered.contains("200|true|ok"), "{rendered}");
     server.join().expect("HTTP server");
+}
+
+#[gpui::test]
+fn fetch_json_returns_a_promise(cx: &mut TestAppContext) {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("HTTP listener");
+    let address = listener.local_addr().expect("listener address");
+    let server = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("HTTP connection");
+        let _ = read_request_without_body(&mut stream);
+        stream
+            .write_all(
+                b"HTTP/1.1 200 OK\r\nContent-Length: 13\r\nConnection: close\r\n\r\n{\"answer\":42}",
+            )
+            .expect("HTTP response");
+    });
+
+    let source = JSON_PROBE.replace("__URL__", &format!("http://{address}/json"));
+    let (_runtime, view, mut context) = probe(cx, &source);
+    context.run_until_parked();
+    draw(&mut context, &view);
+    let rendered = snapshot(&mut context, &view);
+    assert!(rendered.contains("true|42"), "{rendered}");
+    server.join().expect("HTTP server");
+}
+
+fn read_request_without_body(stream: &mut std::net::TcpStream) -> Vec<u8> {
+    let mut request = Vec::new();
+    let mut buffer = [0; 1024];
+    while !request.windows(4).any(|window| window == b"\r\n\r\n") {
+        let read = stream.read(&mut buffer).expect("HTTP request");
+        assert_ne!(read, 0, "connection closed before HTTP headers");
+        request.extend_from_slice(&buffer[..read]);
+    }
+    request
 }
 
 fn read_request(stream: &mut std::net::TcpStream) -> String {

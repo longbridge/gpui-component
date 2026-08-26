@@ -59,12 +59,16 @@ use std::{
 };
 
 use async_channel;
-use gpui::{AnyWindowHandle, AsyncApp, BackgroundExecutor, Entity, ForegroundExecutor, WeakEntity};
+use gpui::{
+    AnyWindowHandle, AsyncApp, BackgroundExecutor, Entity, EntityId, ForegroundExecutor, WeakEntity,
+};
 use rquickjs::{
     Ctx, Exception, FromJs, Function, IntoJs, Object, Persistent, Promise, Result as JsResult,
-    Runtime as JsRuntime, Value,
+    Value,
     function::{Func, Opt, This},
 };
+#[cfg(test)]
+use rquickjs::Runtime as JsRuntime;
 
 use crate::{
     policy::Policy,
@@ -119,11 +123,71 @@ pub fn install(_ctx: &Ctx<'_>, module: &Object<'_>) -> JsResult<()> {
 ///
 /// A job that throws is reported and the drain continues: one broken
 /// continuation must not stop the others.
+#[cfg(test)]
 pub fn drain_jobs(runtime: &JsRuntime) {
+    if drain_job_batch(runtime) {
+        return;
+    }
+
+    tracing::error!(
+        "stopped draining promise jobs after {MAX_JOBS_PER_DRAIN}: a continuation is queueing \
+         work faster than it completes. The remaining jobs run at the next entry point."
+    );
+}
+
+/// Drains the ordinary event-loop batch unless this shell runtime has entered
+/// terminal job-queue quarantine.
+pub(super) fn drain_runtime_jobs(runtime: &Rc<ShellRuntime>) {
+    if runtime.job_queue_error().is_none() {
+        if drain_runtime_job_batch(runtime) {
+            return;
+        }
+        tracing::error!(
+            "stopped draining promise jobs after {MAX_JOBS_PER_DRAIN}: a continuation is queueing \
+             work faster than it completes. The remaining jobs run at the next entry point."
+        );
+    }
+}
+
+/// The production batch pairs every completed QuickJS job with any nested-view
+/// operation it requested. Applying that operation here keeps all JavaScript
+/// execution outside `Context::with` while the job's owner scope is still live.
+fn drain_runtime_job_batch(runtime: &Rc<ShellRuntime>) -> bool {
+    for _ in 0..MAX_JOBS_PER_DRAIN {
+        let pending_checkpoint = runtime.pending_nested.borrow().len();
+        match runtime.js_runtime.execute_pending_job() {
+            Ok(true) => {
+                if let Err(error) = runtime.flush_pending_nested_views() {
+                    tracing::error!("error applying a nested view operation: {error}");
+                    if runtime.job_queue_error().is_some() {
+                        return true;
+                    }
+                }
+            }
+            Ok(false) => return true,
+            Err(exception) => {
+                runtime
+                    .pending_nested
+                    .borrow_mut()
+                    .truncate(pending_checkpoint);
+                let message = exception.0.with(|ctx| {
+                    let thrown = ctx.catch();
+                    describe_value(&ctx, &thrown)
+                });
+                tracing::error!("error in a promise continuation: {message}");
+            }
+        }
+    }
+    !runtime.js_runtime.is_job_pending()
+}
+
+/// Executes at most one event-loop-sized batch and reports queue quiescence.
+#[cfg(test)]
+fn drain_job_batch(runtime: &JsRuntime) -> bool {
     for _ in 0..MAX_JOBS_PER_DRAIN {
         match runtime.execute_pending_job() {
             Ok(true) => {}
-            Ok(false) => return,
+            Ok(false) => return true,
             // `JobException` is not a nameable type outside rquickjs, but its
             // context — the one that threw — is a public field.
             Err(exception) => {
@@ -135,11 +199,50 @@ pub fn drain_jobs(runtime: &JsRuntime) {
             }
         }
     }
+    !runtime.is_job_pending()
+}
 
-    tracing::error!(
-        "stopped draining promise jobs after {MAX_JOBS_PER_DRAIN}: a continuation is queueing \
-         work faster than it completes. The remaining jobs run at the next entry point."
-    );
+/// Drains one causal job wave before an ownership boundary changes.
+///
+/// The ordinary event-loop drain is deliberately bounded so a busy application
+/// yields. Nested view construction cannot yield across owners, but it also
+/// cannot loop until quiescence: an interrupted job can leave a successor in
+/// QuickJS's opaque queue forever. Stop at a hard total-job limit and quarantine
+/// the whole runtime because QuickJS offers no selective pending-job removal.
+pub(crate) fn drain_jobs_transactionally(runtime: &Rc<ShellRuntime>) -> anyhow::Result<()> {
+    if let Some(error) = runtime.job_queue_error() {
+        return Err(error);
+    }
+    for _ in 0..MAX_TRANSACTIONAL_JOBS {
+        let pending_checkpoint = runtime.pending_nested.borrow().len();
+        match runtime.js_runtime.execute_pending_job() {
+            Ok(true) => {
+                if let Err(error) = runtime.flush_pending_nested_views() {
+                    if let Some(terminal) = runtime.job_queue_error() {
+                        return Err(terminal);
+                    }
+                    tracing::error!("error applying a nested view operation: {error}");
+                }
+            }
+            Ok(false) => return Ok(()),
+            Err(exception) => {
+                runtime
+                    .pending_nested
+                    .borrow_mut()
+                    .truncate(pending_checkpoint);
+                let message = exception.0.with(|ctx| {
+                    let thrown = ctx.catch();
+                    describe_value(&ctx, &thrown)
+                });
+                tracing::error!("error in a transactional promise continuation: {message}");
+            }
+        }
+    }
+    if runtime.js_runtime.is_job_pending() {
+        Err(runtime.fail_job_queue())
+    } else {
+        Ok(())
+    }
 }
 
 /// Queues a drain on GPUI's event loop instead of running one here.
@@ -166,7 +269,10 @@ pub fn drain_after_render(
     window: &mut gpui::Window,
     cx: &mut gpui::App,
 ) {
-    if !runtime.js_runtime.is_job_pending() {
+    // A quarantined runtime deliberately keeps its opaque unfinished queue
+    // untouched until drop. Do not register a fresh scheduler task merely
+    // because that terminal queue is still observably non-empty.
+    if runtime.job_queue_error().is_some() || !runtime.js_runtime.is_job_pending() {
         return;
     }
 
@@ -201,7 +307,7 @@ pub fn drain_after_render(
                     Some(view),
                     task.policy(),
                 );
-                drain_jobs(&runtime.js_runtime);
+                drain_runtime_jobs(&runtime);
                 drop(guard);
             });
 
@@ -277,6 +383,22 @@ pub(crate) fn cancel_application_generation(generation: &Rc<ApplicationGeneratio
     });
 }
 
+/// Cancels tasks owned by exactly one retained script view.
+///
+/// Entity identity is stored by the weak owner even after it can no longer be
+/// upgraded. The runtime pointer supplies the namespace because GPUI entity ids
+/// are only App-local while this registry is shared across the thread.
+pub(crate) fn cancel_view(runtime: &Rc<ShellRuntime>, entity_id: EntityId) {
+    let runtime = Rc::as_ptr(runtime);
+    cancel_where(|task| {
+        task.runtime.as_ptr() == runtime
+            && task
+                .owner
+                .as_ref()
+                .is_some_and(|owner| owner.entity_id() == entity_id)
+    });
+}
+
 fn cancel_where(mut predicate: impl FnMut(&TaskState) -> bool) {
     TASKS.with_borrow_mut(|tasks| {
         let cancelled: Vec<_> = tasks
@@ -303,6 +425,9 @@ pub(crate) fn task_count() -> usize {
 /// A drain that is bounded so a `for(;;) Promise.resolve().then(f)` cannot wedge
 /// the frame loop for ever. It is far above any legitimate burst.
 const MAX_JOBS_PER_DRAIN: usize = 100_000;
+/// Ownership transitions get a smaller hard wall. Legitimate init work is
+/// expected to be tiny; reaching this is a terminal script-runtime failure.
+const MAX_TRANSACTIONAL_JOBS: usize = 10_000;
 
 // ---------------------------------------------------------------------------
 // The JavaScript surface
@@ -662,7 +787,7 @@ fn resume(
         if let Err(error) = runtime.with_js(|ctx| body(ctx, generation)) {
             tracing::error!("error in script task: {error}");
         }
-        drain_jobs(&runtime.js_runtime);
+        drain_runtime_jobs(&runtime);
         drop(guard);
     });
 
@@ -1305,7 +1430,12 @@ fn duration(ctx: &Ctx<'_>, api: &str, ms: f64) -> JsResult<Duration> {
             &format!("{api} expects a non-negative number of milliseconds, got {ms}"),
         ));
     }
-    Ok(Duration::from_secs_f64(ms / 1000.0))
+    Duration::try_from_secs_f64(ms / 1000.0).map_err(|_| {
+        Exception::throw_range(
+            ctx,
+            &format!("{api} milliseconds are outside the supported duration range"),
+        )
+    })
 }
 
 fn outside_host_call(ctx: &Ctx<'_>, api: &str) -> rquickjs::Error {
@@ -1350,7 +1480,7 @@ mod tests {
 
     fn context() -> (JsRuntime, JsContext) {
         let runtime = JsRuntime::new().expect("runtime");
-        let context = JsContext::full(&runtime).expect("context");
+        let context = rquickjs::Context::full(&runtime).expect("context");
         (runtime, context)
     }
 
@@ -1799,5 +1929,15 @@ mod policy_capture_tests {
         crate::policy::set_default(crate::policy::Policy::new());
         assert!(task.policy().capabilities().has_read_access());
         assert!(!crate::policy::default().capabilities().has_read_access());
+    }
+
+    #[test]
+    fn an_unrepresentable_duration_is_a_js_error_not_a_host_panic() {
+        let runtime = JsRuntime::new().expect("runtime");
+        let context = rquickjs::Context::full(&runtime).expect("context");
+
+        context.with(|ctx| {
+            duration(&ctx, "timer", 1e308).expect_err("duration must be bounded");
+        });
     }
 }

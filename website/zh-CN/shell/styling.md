@@ -121,11 +121,12 @@ unknown color token `surfacee`; expected one of: background, foreground, surface
 or a #rrggbb literal
 ```
 
-### 运行时为什么要自带调色板
+### 当前 token 来自哪里
 
-`gpui_base::Theme::default()` 的颜色 token 是 `#[derive(Default)]` 出来的，也就是说每一个都从 `Hsla { h: 0, s: 0, l: 0, a: 0 }` 开始——完全透明。只调用 `gpui_base::init` 的运行时会画出一个看不见的窗口。
-
-所以 `gpui-shell` 自带一份浅色与深色调色板，从一个 JSON 文件加载，用的是插件主题将来会用的同一套 `Serialize`/`Deserialize`/`JsonSchema` 派生。它是**便利品而不是契约**：shell 的 Rust 侧不做任何其他视觉决定，这份调色板存在的唯一理由，是别让“呈现权在脚本”从一块黑色矩形开始。
+gpui-shell 不拥有调色板或主题文件格式，而是读取宿主提供的
+`gpui_base::Theme`。JavaScript 应用也可以通过
+`set_theme({ appearance, tokens })` 替换同一份 Base snapshot；主题名称和
+registry 始终属于应用状态。
 
 ## 状态样式
 
@@ -177,11 +178,11 @@ render(cx) {
     .gap(cx.theme().spacing.md)
     .rounded(cx.theme().radius.lg)
     .bg(cx.theme().colors.surface)
-    .child(text(`${cx.theme().mode}: ${cx.theme().is_dark ? "dark" : "light"}`));
+    .child(text(`${cx.theme().appearance}: ${cx.theme().is_dark ? "dark" : "light"}`));
 }
 ```
 
-这个 snapshot 是深度只读的。`theme()` 仍作为兼容入口保留，但优先使用 `cx.theme()`。`set_theme("light" | "dark")` 可以从 event 或 task 调用，并使脚本视图失效，从而重新构建使用 token 的样式。
+这个 snapshot 是深度只读的。`theme()` 仍作为兼容入口保留，但优先使用 `cx.theme()`。应用可以从 event 或 task 调用 `set_theme({ appearance, tokens })`，传入自己管理的完整颜色、间距与圆角 token snapshot。gpui-shell 只把它写入 gpui-base 并重建使用 token 的脚本视图，不拥有主题名称、palette 或文件格式。
 
 ## 原生动画
 

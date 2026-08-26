@@ -96,7 +96,7 @@ snapshot 只在有东西让它失效时才重建：
 
 `cx.phase()` 返回当前 phase，不在任何宿主调用中时返回 `"none"`。
 
-`cx.theme()` 返回这次调用当前语义主题的深度只读 snapshot：既包含直接颜色角色，也包含 `colors`、`spacing`、`radius`、`mode` 与 `is_dark`。优先使用它，而不是兼容用的 `theme()` 导出，因为 context 写法明确表达了调用生命周期与当前宿主主题。
+`cx.theme()` 返回这次调用中 gpui-base 当前语义主题的深度只读 snapshot：既包含直接颜色角色，也包含 `colors`、`spacing`、`radius`、`appearance` 与 `is_dark`。优先使用它，而不是兼容用的 `theme()` 导出，因为 context 写法明确表达了调用生命周期与当前宿主主题。
 
 每一条拒绝都是一条具体信息，而不是未定义行为：
 
@@ -264,7 +264,7 @@ setInterval -> gpui.timer.every(ms, callback)
 clearTimeout / clearInterval -> 对 after / every 返回的 Task 调用 cancel()
 ```
 
-`setTimeout`、`setInterval`、`clearTimeout` 与 `clearInterval` 都是会抛错的 stub。一次性工作使用 `gpui.timer.after`，重复工作使用 `gpui.timer.every`；要停止其中任意一种，都对返回的 `Task` 调用 `cancel()`。全局 `fetch` 与 `WebSocket`，以及 [Capabilities](./capabilities.md) 中记录的安全标准模块，都是真实的异步宿主 API。CommonJS `require` 仍不可用；请使用 ES module。
+`setTimeout`、`setInterval`、`clearTimeout` 与 `clearInterval` 都是会抛错的 stub。一次性工作使用 `gpui.timer.after`，重复工作使用 `gpui.timer.every`；要停止其中任意一种，都对返回的 `Task` 调用 `cancel()`。全局 `fetch`，以及 [Capabilities](./capabilities.md) 中记录的安全标准模块（包括 `websocket`），都是真实的异步宿主 API。CommonJS `require` 仍不可用；请使用 ES module。
 
 浏览器 DOM 与存储并不存在：没有 `document` 或 `localStorage`。全局 `window` 是 gpui-shell 用来承载 dialog、sheet 与 toast 的 overlay host，并不是浏览器 `Window`，也不提供 DOM。
 

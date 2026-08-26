@@ -14,6 +14,29 @@
 //! materializations  ── follows GPUI frames
 //! ```
 //!
+//! # What a `VirtualList` does to the two
+//!
+//! A virtualized list is the one component that enters the VM from inside a
+//! frame: GPUI decides which rows exist while it is laying the list out, so the
+//! item renderer is called from layout rather than from a script render. That
+//! changes how these counters read, and the change is deliberate rather than
+//! incidental:
+//!
+//! * **`script_renders` does not move.** It counts entries into the script's
+//!   `render` — snapshot builds — and an item renderer is not one. The claim it
+//!   backs, that script cost follows application activity rather than frame
+//!   rate, is still exactly what it measures.
+//! * **`materialize_time` does move, and now includes VM time.** Describing a
+//!   window of rows and turning it into elements are timed together and added
+//!   here, because both are spent on the frame's budget, which is the question
+//!   this total answers. `materializations` deliberately does not move with
+//!   them: a frame with a list in it materializes one snapshot and renders two
+//!   or more windows of rows.
+//!
+//! So on a view containing a virtual list, `mean_materialize` is no longer pure
+//! Rust, and `script_render_time` is no longer all of the script's cost. Both
+//! remain the right number for the question each asks.
+//!
 //! Timing uses `instant`, which is `std::time::Instant` everywhere except wasm,
 //! where `std::time::Instant::now` panics outright.
 
@@ -182,6 +205,24 @@ impl Metrics {
         let result = call();
         self.native_nanos
             .set(self.native_nanos.get() + elapsed_nanos(started));
+        result
+    }
+
+    /// Times one window of a virtualized list's items: the script call that
+    /// describes them and the walk that turns them into elements.
+    ///
+    /// Added to the materialize total without moving the materialize count.
+    /// The count is materializations *of a snapshot*, and this is not one — it
+    /// happens two or more times inside a single frame, from inside GPUI's
+    /// layout pass rather than from `materialize`. The time belongs there all
+    /// the same: it is spent on the frame's budget, which is the question that
+    /// total answers. See [`Self::time_materialize`] and the note in this
+    /// module's comment.
+    pub fn time_virtual_items<R>(&self, build: impl FnOnce() -> R) -> R {
+        let started = instant::Instant::now();
+        let result = build();
+        self.materialize_nanos
+            .set(self.materialize_nanos.get() + elapsed_nanos(started));
         result
     }
 

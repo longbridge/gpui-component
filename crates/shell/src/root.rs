@@ -15,15 +15,18 @@
 use std::{path::PathBuf, rc::Rc, time::Duration};
 
 use gpui::{
-    Anchor, AnyView, App, ClickEvent, ClipboardItem, Context, FocusHandle, Global, Hsla,
-    InteractiveElement as _, IntoElement, KeyBinding, ParentElement as _, Render, SharedString,
-    StatefulInteractiveElement as _, Styled as _, WeakFocusHandle, Window, actions, deferred, div,
-    hsla, prelude::FluentBuilder as _, px,
+    Anchor, AnyElement, AnyView, App, AppContext as _, ClickEvent, ClipboardItem, Context,
+    ElementId, Entity, FocusHandle, Global, Hsla, InteractiveElement as _, IntoElement, KeyBinding,
+    MouseButton, MouseDownEvent,
+    ParentElement as _, Render, SharedString, StatefulInteractiveElement as _, Styled as _,
+    WeakFocusHandle, Window, actions, deferred, div, hsla, prelude::FluentBuilder as _, px,
 };
 use gpui_base::{
     ColorTokens, Dialog, POPUP_PRIORITY, RadiusTokens, Sheet, SpacingTokens, StyledExt as _,
     TextSelection, TextSelectionLayer, Theme, Toast, ToastManager, ToastMotion, ToastOptions,
-    ToastStack, ToastStackState, active_focus_trap, v_flex,
+    ToastStack, ToastStackState, TooltipOverlay, TooltipTransition, active_focus_trap,
+    animation::{EffectTransition, ease_in_out_cubic, ease_out_cubic},
+    v_flex,
 };
 
 use crate::{scope, view::ScriptView};
@@ -76,7 +79,10 @@ const TOAST_WIDTH: gpui::Pixels = px(320.);
 /// 3. **Dialog stack** — in open order, oldest at the bottom. Each dialog is
 ///    deferred at `10 + index`, so a later dialog always paints over an earlier
 ///    one regardless of the order the elements were built in.
-/// 4. **Toasts** — above everything, at the root's toast priority.
+/// 4. **Toasts** — above the overlay stack, at the root's toast priority.
+/// 5. **Tooltip** — one layer, always topmost. Base defers it above every
+///    priority the root uses, so it is the one layer whose order is not the
+///    root's to choose.
 ///
 /// Only the topmost dialog draws a backdrop. A stack of three dialogs dims the
 /// window once, not three times, and the single backdrop is what separates the
@@ -140,6 +146,10 @@ pub struct ShellRoot {
     /// Source of ids for toasts pushed without one. Monotonic so that a
     /// replaced id can never collide with a live toast.
     next_toast_ordinal: u64,
+    /// The window's one tooltip layer. Base owns the delay, the grace period
+    /// between two triggers and the paint priority; the root owns only the
+    /// decision to have one, and what an appearing tooltip looks like.
+    tooltip_overlay: Entity<TooltipOverlay>,
 }
 
 pub(crate) struct MountedApplication {
@@ -194,6 +204,7 @@ impl ShellRoot {
             toast_state: ToastStackState::default(),
             toast_focus_handle: cx.focus_handle().tab_stop(true),
             next_toast_ordinal: 0,
+            tooltip_overlay: cx.new(|_| TooltipOverlay::new().render_with(render_tooltip)),
         }
     }
 
@@ -226,6 +237,18 @@ impl ShellRoot {
     ) -> Option<R> {
         let root = window.root::<Self>().flatten()?;
         Some(root.update(cx, |root, cx| f(root, window, cx)))
+    }
+
+    /// The tooltip layer of the window a call is happening in.
+    ///
+    /// The counterpart to [`ShellRoot::update`] for the one overlay a script
+    /// never opens by hand: a tooltip trigger is an element, so what reaches it
+    /// is a hover listener holding a `&mut Window`, not a call scope. `None`
+    /// when the window's first view is not a `ShellRoot` — the same host wiring
+    /// mistake `update` reports, and the same reason it is not a panic.
+    pub fn tooltip_overlay(window: &mut Window, cx: &mut App) -> Option<Entity<TooltipOverlay>> {
+        let root = window.root::<Self>().flatten()?;
+        Some(root.read(cx).tooltip_overlay.clone())
     }
 
     /// The view this window was opened with, below every overlay.
@@ -661,6 +684,48 @@ impl Drop for ShellRoot {
     }
 }
 
+impl ShellRoot {
+    /// Clears the keyboard when a press lands on nothing that wants it.
+    ///
+    /// Neither Base nor GPUI owns this: a text field takes focus when it is
+    /// pressed and keeps it until something else asks, so clicking the page
+    /// beside it leaves a caret blinking in a field the pointer has left. The
+    /// window is the only scope that can answer "nothing here wants the
+    /// keyboard", and in a shell application this element is the window.
+    ///
+    /// The test for *did this press land on something focusable* is not a new
+    /// one. GPUI transfers focus to a `track_focus` element from a bubble-phase
+    /// mouse-down listener and calls `prevent_default` when it does, precisely
+    /// so an outer focusable ancestor does not steal it back. The root is the
+    /// outermost element, so its own bubble listener runs after every
+    /// descendant's, and that flag is already the answer.
+    ///
+    /// Two things it deliberately does not do. It does not blur when a focus
+    /// trap is up: a modal owns the keyboard for as long as it is open, and a
+    /// press on its scrim is a dismissal for the modal to interpret, not a
+    /// reason to strand the trap with nothing focused. And it does nothing at
+    /// all when nothing is focused, because `Window::blur` refreshes the window
+    /// whether or not it changed anything, and every background click would
+    /// otherwise cost a frame.
+    fn blur_on_background_press(
+        _: &mut Self,
+        _: &MouseDownEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if window.default_prevented() {
+            return;
+        }
+        if window.focused(cx).is_none() {
+            return;
+        }
+        if active_focus_trap(window, cx).is_some() {
+            return;
+        }
+        window.blur();
+    }
+}
+
 impl Render for ShellRoot {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let tokens = Theme::global(cx).tokens;
@@ -679,6 +744,10 @@ impl Render for ShellRoot {
                     cx.write_to_clipboard(ClipboardItem::new_string(text));
                 }
             }))
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(Self::blur_on_background_press),
+            )
             .relative()
             .size_full()
             .bg(colors.background)
@@ -689,7 +758,63 @@ impl Render for ShellRoot {
             .children(self.sheet_layer(&colors, &spacing, cx))
             .children(self.dialog_layer(&colors, &radius, &spacing, cx))
             .child(self.toast_layer(&colors, &radius, &spacing, cx))
+            .child(self.tooltip_overlay.clone())
     }
+}
+
+/// How long a tooltip takes to slide and fade in.
+const TOOLTIP_ENTER: Duration = Duration::from_millis(150);
+
+/// How long the box takes to travel when the pointer moves straight from one
+/// trigger to the next one beside it.
+const TOOLTIP_SLIDE: Duration = Duration::from_millis(200);
+
+/// How far apart two triggers may sit vertically and still count as the same
+/// row. Past that the box is somewhere else entirely and sliding it there reads
+/// as a stray element rather than as one label following the pointer.
+const TOOLTIP_SAME_ROW: gpui::Pixels = px(10.);
+
+/// What an appearing tooltip does on its way in.
+///
+/// The whole of the root's presentation for the layer: base decides *when* a
+/// tooltip is up and where the box goes, and hands back the transition it is
+/// in. Enter slides up and fades; a switch between two triggers on one row
+/// slides across, because the box that was already up is the same box.
+fn render_tooltip(
+    content: AnyView,
+    transition: TooltipTransition,
+    _: &mut Window,
+    _: &mut App,
+) -> AnyElement {
+    div().child(content).map(|element| match transition {
+        TooltipTransition::Switch {
+            epoch,
+            previous,
+            current,
+        } => {
+            if (current.origin.y - previous.origin.y).abs() >= TOOLTIP_SAME_ROW {
+                return element.into_any_element();
+            }
+            let travelled = current.center().x - previous.center().x;
+            EffectTransition::new(TOOLTIP_SLIDE)
+                .ease(ease_in_out_cubic)
+                .slide_x(-travelled, px(0.))
+                .apply(
+                    element,
+                    ElementId::NamedInteger("shell-tooltip-slide".into(), epoch as u64),
+                )
+                .into_any_element()
+        }
+        TooltipTransition::Enter { epoch } => EffectTransition::new(TOOLTIP_ENTER)
+            .ease(ease_out_cubic)
+            .slide_y(px(4.), px(0.))
+            .fade(0.0, 1.0)
+            .apply(
+                element,
+                ElementId::NamedInteger("shell-tooltip-enter".into(), epoch as u64),
+            )
+            .into_any_element(),
+    })
 }
 
 /// Which viewport edge a sheet is anchored to.
@@ -997,7 +1122,7 @@ fn level_color(level: ToastLevel, colors: &ColorTokens) -> Hsla {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gpui::{AppContext as _, Entity, TestAppContext, VisualTestContext};
+    use gpui::{Entity, TestAppContext, VisualTestContext};
 
     struct Content;
 
@@ -1017,6 +1142,81 @@ mod tests {
 
     fn view(cx: &mut VisualTestContext) -> AnyView {
         cx.update(|_, cx| cx.new(|_| Content).into())
+    }
+
+    struct Field {
+        handle: FocusHandle,
+    }
+
+    impl Render for Field {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            // A focusable box in the top-left corner; everything else in the
+            // window is background that wants nothing.
+            div().size_full().child(
+                div()
+                    .id("field")
+                    .track_focus(&self.handle)
+                    .w(px(100.))
+                    .h(px(50.)),
+            )
+        }
+    }
+
+    fn shell_root_with_field(
+        cx: &mut TestAppContext,
+    ) -> (FocusHandle, &mut VisualTestContext) {
+        cx.update(crate::init);
+        let handle = std::rc::Rc::new(std::cell::RefCell::new(None));
+        let (_, cx) = cx.add_window_view({
+            let handle = handle.clone();
+            move |window, cx| {
+                let content = cx
+                    .new(|cx| {
+                        let focus = cx.focus_handle();
+                        *handle.borrow_mut() = Some(focus.clone());
+                        Field { handle: focus }
+                    })
+                    .into();
+                ShellRoot::new(content, window, cx)
+            }
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        let handle = handle.borrow().clone().expect("field focus handle");
+        (handle, cx)
+    }
+
+    #[gpui::test]
+    fn a_press_on_the_background_clears_the_keyboard(cx: &mut TestAppContext) {
+        let (field, cx) = shell_root_with_field(cx);
+
+        cx.update(|window, cx| window.focus(&field, cx));
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        assert!(cx.update(|window, _| field.is_focused(window)));
+
+        // Well clear of the field, on nothing that tracks focus.
+        cx.simulate_click(gpui::point(px(400.), px(400.)), gpui::Modifiers::default());
+
+        assert!(
+            !cx.update(|window, _| field.is_focused(window)),
+            "a press on the background must not leave a caret blinking in a field the pointer has left"
+        );
+    }
+
+    #[gpui::test]
+    fn a_press_on_a_focusable_element_does_not_clear_it(cx: &mut TestAppContext) {
+        let (field, cx) = shell_root_with_field(cx);
+
+        // Pressing the field focuses it, and pressing it again while it is
+        // already focused must not blur and refocus it: that churn is what
+        // would interrupt an IME composition and fire a spurious blur.
+        cx.simulate_click(gpui::point(px(10.), px(10.)), gpui::Modifiers::default());
+        assert!(cx.update(|window, _| field.is_focused(window)));
+
+        cx.simulate_click(gpui::point(px(20.), px(20.)), gpui::Modifiers::default());
+        assert!(
+            cx.update(|window, _| field.is_focused(window)),
+            "the root must leave focus alone when the press landed on something that took it"
+        );
     }
 
     #[gpui::test]

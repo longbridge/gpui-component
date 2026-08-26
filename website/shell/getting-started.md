@@ -95,7 +95,7 @@ cargo run -p gpui-shell -- hello
 
 Four things in that file are worth naming now, because everything else builds on them.
 
-**`"gpui"` is the UI module.** The runtime also supplies a deliberately small JavaScript-standard layer: `buffer`, `path`, `url`, `crypto`, `zlib`, `console`, `process`, `os`, `fs` / `fs/promises`, `net`, global `fetch`, and global `WebSocket`. Application-relative imports remain confined to the application directory. Node-prefixed aliases such as `node:fs`, package lookup, and CommonJS `require` are not part of the contract.
+**`"gpui"` is the UI module.** The runtime also supplies a deliberately small JavaScript-standard layer: `buffer`, `path`, `url`, `crypto`, `zlib`, `console`, `process`, `os`, `fs/promises`, `net`, `websocket`, and global `fetch`. Application-relative imports remain confined to the application directory. Node-prefixed aliases such as `node:fs`, package lookup, and CommonJS `require` are not part of the contract.
 
 **`main.js` must `export default` a class extending `View`.** `init` runs once when the view is created; `render` returns exactly one element, and runs when the view is invalidated rather than on every frame — see [When `render` runs](./state.md#when-render-runs).
 

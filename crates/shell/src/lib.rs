@@ -29,7 +29,8 @@
 // `on_exit_request`, `resolve_app_root`, `failure_surface`, and the types
 // re-exported below. The modules: `native` and `policy` to configure what a
 // script may reach, `root` and `theme` for the window it lives in, `view` and
-// `snapshot` for the view itself, `watch` for hot-reload, `metrics` to measure.
+// `snapshot` for the view itself, `metrics` to measure. Hot reload is exposed
+// through `ShellRuntime::watch`; its watcher implementation remains internal.
 // `write_type_declarations` is the explicit tooling hook for `gpui.d.ts`;
 // ordinary application loading updates it automatically.
 //
@@ -57,9 +58,9 @@ pub(crate) mod engine;
 pub(crate) mod entities;
 pub(crate) mod error;
 pub(crate) mod materialize;
-pub(crate) mod path;
 pub mod metrics;
 pub mod native;
+pub(crate) mod path;
 pub mod plugin;
 pub mod policy;
 pub(crate) mod process;
@@ -73,11 +74,11 @@ pub(crate) mod store;
 pub(crate) mod style;
 #[cfg(test)]
 mod tests;
-pub mod theme;
+pub(crate) mod theme_tokens;
 mod typings;
 pub(crate) mod value;
 pub mod view;
-pub mod watch;
+pub(crate) mod watch;
 
 pub use assets::AppAssets;
 pub use capability::{Capabilities, ExecuteGrant, HttpRequestGrant};
@@ -96,6 +97,7 @@ pub use runtime::{
 pub use scope::{ScopePhase, with_current_app};
 pub use snapshot::RenderSnapshot;
 pub use view::ScriptView;
+pub use watch::Watcher;
 
 use std::path::PathBuf;
 
@@ -191,13 +193,11 @@ pub fn set_development_mode(enabled: bool) {
     engine::set_development_mode(enabled);
 }
 
-/// Initializes the base layer, the shell's default semantic tokens, and the
-/// style reflection table.
+/// Initializes the base layer and style reflection table.
 ///
 /// Must be called once at application startup, before any script runs.
 pub fn init(cx: &mut App) {
     gpui_base::init(cx);
-    theme::init(cx);
     style::init();
 }
 

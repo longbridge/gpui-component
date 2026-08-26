@@ -28,7 +28,7 @@
 //!   between `Length`, `DefiniteLength`, `AbsoluteLength`, a color and a bare
 //!   number is decided by the code that enforces it rather than by a second
 //!   hand-written table that could disagree with the first.
-//! * The color union comes from [`theme::color_token_names`], so a mistyped
+//! * The color union comes from gpui-base's semantic token field names, so a mistyped
 //!   token is a type error, and the phase union comes from [`ScopePhase`]
 //!   itself.
 //!
@@ -64,7 +64,7 @@ use gpui::StyleRefinement;
 use crate::a11y;
 use crate::scope::ScopePhase;
 use crate::style;
-use crate::theme::color_token_names;
+use crate::theme_tokens::color_token_names;
 use crate::value::Bridged;
 
 /// The declaration filename. Fixed because an editor finds the declarations by
@@ -602,6 +602,16 @@ const CONTEXT_AND_VIEW: &str = r#"  /**
     modifiers: Modifiers;
   }
 
+  export interface Point { x: number; y: number; }
+  export interface ElementBounds extends Point { width: number; height: number; }
+  /** GPUI mouse coordinates. `position` is window-relative; `local_position` is element-relative. */
+  export interface MouseMoveEvent {
+    position: Point;
+    local_position: Point;
+    bounds: ElementBounds;
+    modifiers: Modifiers;
+  }
+
   /**
    * Properties handed to `init`.
    *
@@ -625,6 +635,29 @@ const CONTEXT_AND_VIEW: &str = r#"  /**
     init?(props?: Props): void;
     abstract render(cx: Context): Element;
   }
+
+  /** A concrete script view class that can be retained as a nested view. */
+  export type ViewClass = new (props?: Props) => View;
+
+  /**
+   * Retained ownership of one nested `View` entity.
+   *
+   * Create it once from `init`, an event handler or a task. Updating props
+   * invokes the child's optional `update(props)` and rebuilds only that child.
+   */
+  export interface ViewHandle {
+    set_props(props?: Props): void;
+    release(): boolean;
+  }
+
+  export interface ViewHandleType {
+    new: (Class: ViewClass, props?: Props) => ViewHandle;
+  }
+
+  export const ViewHandle: ViewHandleType;
+
+  /** Mounts one retained child. A handle may appear once per parent snapshot. */
+  export function child_view(handle: ViewHandle): Element;
 
 "#;
 
@@ -720,6 +753,30 @@ const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; 
      * pointer-only pending the compound keyboard behavior tracked in #2838.
      */
     on_click(handler: (event: ClickEvent, cx: Context) => void): Element;
+    /** GPUI `InteractiveElement::on_mouse_move`, delivered while this element is hovered. */
+    on_mouse_move(handler: (event: MouseMoveEvent, cx: Context) => void): Element;
+    /** GPUI `InteractiveElement::on_hover`; reports both pointer entry and exit. */
+    on_hover(handler: (hovered: boolean, cx: Context) => void): Element;
+    /**
+     * `handler(index, cx)` when a row of a virtual list is clicked, where
+     * `index` is the item's position in the whole collection.
+     *
+     * One handler for the list rather than one per row, and that is a limit
+     * rather than a shorthand: a handler registered inside the item renderer
+     * throws. Handlers belong to the render pass that registered them and are
+     * released with it; a row is rebuilt on every frame the list is scrolled,
+     * so a per-row handler would accumulate for as long as the view stood —
+     * twenty visible rows over a thousand frames is twenty thousand functions
+     * nothing can reach and nothing releases.
+     *
+     * The index is normally enough: the script already holds the data the row
+     * was built from. A row with several independently clickable parts needs a
+     * handler lifetime scoped to one batch of items, which this runtime does
+     * not have yet; when it does, this restriction lifts and `on_click` inside
+     * an item renderer starts working, with no change to anything written
+     * against `on_item_click`.
+     */
+    on_item_click(handler: (index: number, cx: Context) => void): Element;
     /**
      * `handler(value, cx)`, on a toggle. The script owns the new value.
      *
@@ -770,6 +827,29 @@ const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; 
      * value on the way out.
      */
     on_dismiss(handler: (event: {}, cx: Context) => void): Element;
+    /**
+     * The label a hover shows over this element, once the pointer has rested
+     * on it for half a second.
+     *
+     * It takes a string, not an element, and that is a real limit rather than
+     * a shorthand: the window's tooltip layer rebuilds its content on every
+     * frame the label is up, so a function here would be the one piece of a
+     * description re-entered once a frame. What is drawn is the shell's own
+     * label, in the theme's surface, border, radius and spacing.
+     *
+     * Wired on a plain `div`, `h_flex` or `v_flex`, and on a `Button` — which
+     * is the case it exists for, an icon-only control with no text of its own.
+     * Anything else needs a wrapper around it to carry the hover.
+     *
+     * Where the label goes is base's to decide: it is placed against this
+     * element and flipped and clamped to stay inside the window. There is no
+     * `align` and no `offset`, because base's tooltip has neither, and the
+     * side it prefers is not chooseable from a script yet.
+     *
+     * A tooltip is not a substitute for `accessibility_label`. A screen reader
+     * announces the label; the tooltip is for the pointer.
+     */
+    tooltip(text: string): Element;
     /** Blocks activation and reports the disabled state. Draw it yourself. */
     disabled(value: boolean): Element;
     /** Reports the selected state of a `Button`. */
@@ -848,6 +928,24 @@ const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; 
      * Enter reach nothing.
      */
     track_focus(handle: FocusHandleHandle): Element;
+    /**
+     * Gives a virtual list the scroll position held by a
+     * `VirtualListScrollHandle`, so the script can drive it with
+     * `scroll_to_item` and `scroll_to_bottom`.
+     *
+     * Optional. Without one the list keeps a position of its own, filed under
+     * the id it was built with — which is the same place a `Scrollbar` named
+     * after that id looks, so the bar works either way.
+     */
+    track_scroll(handle: VirtualListScrollHandleHandle): Element;
+    /**
+     * Which item a virtual list measures to infer its size across the axis it
+     * scrolls: a vertical list takes its width from this item, a horizontal
+     * one its height. Defaults to the first.
+     *
+     * The name is base's own builder, kept verbatim.
+     */
+    with_item_to_measure_index(index: number): Element;
     /**
      * The handle a `Select` or `Combobox` moves the keyboard to when it opens,
      * and away from when Escape closes it.
@@ -1025,6 +1123,30 @@ const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; 
      * groove and a knob.
      */
     range_style(declare: (el: Element) => Element | void): Element;
+    /**
+     * How every cell of an `OtpInput` looks. `declare` receives a detached
+     * element that collects the styles, exactly as `hover` does; its return
+     * value is ignored.
+     *
+     * Give it a size. The cells are drawn by the shell rather than described
+     * by the script, so an `OtpInput` without this one is a row of boxes with
+     * no size, no border and no background — nothing on screen at all.
+     */
+    cell_style(declare: (el: Element) => Element | void): Element;
+    /**
+     * Layered on top of `cell_style` for the one cell the next digit lands in,
+     * while the code holds the keyboard and is not disabled. A refinement
+     * rather than a replacement, the way `hover` is: declare only what differs.
+     */
+    cell_active_style(declare: (el: Element) => Element | void): Element;
+    /**
+     * The blinking mark drawn in that cell while it is still empty. Give it a
+     * width, a height and a background; with no `caret_style` there is no
+     * caret, and the only sign of where typing goes is `cell_active_style`.
+     *
+     * Not `cursor_style`: everywhere else in this API `cursor` is the pointer.
+     */
+    caret_style(declare: (el: Element) => Element | void): Element;
     /**
      * Styles applied while the pointer is over the element. `declare` receives
      * a detached element that collects the styles; its return value is
@@ -1445,6 +1567,93 @@ const CONSTRUCTORS: &str = r#"
 
   export const Scrollbar: ScrollbarType;
 
+  /** The visible items, as a half-open `[start, end)` interval. */
+  export interface ItemRange {
+    start: number;
+    end: number;
+  }
+
+  /**
+   * A list that describes only what is on screen.
+   *
+   * `render(range, cx)` is called with the visible interval and returns one
+   * element per item in it — so a ten-thousand-row list costs the script what a
+   * twenty-row one costs. It is the only callback in this API that is not an
+   * event handler, and the only one the host calls during a frame rather than
+   * between them: GPUI decides which rows exist while it is laying the list
+   * out, so the call happens from inside layout, twice per frame (once to
+   * measure a representative row, once to place the visible ones).
+   *
+   * Two consequences follow from that, and both are enforced rather than
+   * documented away:
+   *
+   * * **No handlers inside the renderer.** `on_click` and the rest throw if
+   *   called there. Use `on_item_click` on the list — see its note for why.
+   * * **No state inside the renderer.** `InputState.new()`, `FocusHandle.new()`
+   *   and the rest throw there as they do in `render()`, and `cx.notify()` is
+   *   refused: asking for a re-render from inside layout is a loop.
+   *
+   * The list paints no scrollbar of its own. Pair one with it by name, exactly
+   * as with a scroll area:
+   *
+   * ```js
+   * v_flex().relative().h(400)
+   *   .child(v_virtual_list("rows", this.rows.length, 28, (range) =>
+   *     this.rows.slice(range.start, range.end).map(row => text(row.name))))
+   *   .child(Scrollbar.vertical("rows").absolute().inset_0());
+   * ```
+   *
+   * @param id      Identity, and the name a `Scrollbar` pairs with.
+   * @param item_count How many items the collection has, visible or not.
+   * @param item_sizes One number for a uniform extent, or one per item —
+   *   heights for `v_virtual_list`, widths for `h_virtual_list`. Base takes a
+   *   single vector whose *length* is also the count; splitting the two is a
+   *   deliberate difference, because mirroring it would put one number per row
+   *   across the language boundary on every render, and a uniform hundred
+   *   thousand rows is the case worth making cheap. An array must be exactly
+   *   `item_count` long.
+   * @param render  Called with the visible range; returns one element per item
+   *   in it.
+   */
+  export function v_virtual_list(
+    id: string | number,
+    item_count: number,
+    item_sizes: number | number[],
+    render: (range: ItemRange, cx: Context) => Element[],
+  ): Element;
+
+  /** `v_virtual_list` along the other axis; `item_sizes` are widths. */
+  export function h_virtual_list(
+    id: string | number,
+    item_count: number,
+    item_sizes: number | number[],
+    render: (range: ItemRange, cx: Context) => Element[],
+  ): Element;
+
+  /**
+   * A virtual list's scroll position, kept across frames so the script can move
+   * it. Create it in `init()` and hand it to the list with `track_scroll`.
+   *
+   * A list without one still scrolls, and a `Scrollbar` named after the list
+   * still drives it; this is only needed to scroll it from code.
+   */
+  export interface VirtualListScrollHandleHandle {
+    /**
+     * Puts the item at `index` on screen before the next frame. `"top"` (the
+     * default) brings it to the near edge, `"center"` to the middle.
+     */
+    scroll_to_item(index: number, strategy?: "top" | "center"): void;
+    scroll_to_bottom(): void;
+    /** Releases the handle. Using it afterwards throws. */
+    release(): boolean;
+  }
+
+  export interface VirtualListScrollHandleType {
+    new: () => VirtualListScrollHandleHandle;
+  }
+
+  export const VirtualListScrollHandle: VirtualListScrollHandleType;
+
   /** A coordinate in pixels or relative to the painted element's bounds. */
   export type PathCoordinate = number | `${number}%`;
   /** Immutable native GPUI geometry produced by `PathBuilder.build()`. */
@@ -1687,6 +1896,83 @@ const CONSTRUCTORS: &str = r#"
   export const SliderThumb: SliderPartType;
 
   /**
+   * Retained one-time-code state, created once and kept on the view.
+   *
+   * Like `InputState.new(...)` this needs a live host call, so it belongs in
+   * `init` or in an event handler — never in `render`.
+   *
+   * The length is fixed when the state is created, because it is what the
+   * state is: the base layer has no setter for it.
+   */
+  export interface OtpStateHandle {
+    /** The digits entered so far — shorter than `len()` until the code is complete. */
+    value(): string;
+    /**
+     * Sets the code from the script. Deliberately unfiltered, as in the base
+     * layer: only keystrokes are digits-only. Anything past `len()` is stored
+     * but never drawn.
+     */
+    set_value(next: string): void;
+    /** How many cells there are. Fixed when the state was created. */
+    len(): number;
+    is_masked(): boolean;
+    /** Hides the digits behind a bullet, without changing `value()`. */
+    set_masked(masked: boolean): void;
+    /** Moves the keyboard onto the code. */
+    focus(): void;
+    /**
+     * `change` arrives **once**, when the last digit lands: it reports the
+     * completed code, not each keystroke. There is no `submit` — the base
+     * layer never emits one for a code — and there is no event for the blink.
+     */
+    on(event: "change" | "focus" | "blur", handler: (event: any, cx: Context) => void): boolean;
+    release(): boolean;
+  }
+
+  export interface OtpStateType {
+    /** `length` is the number of cells: a whole number between 1 and 64. */
+    new: (length: number, options?: { value?: string; masked?: boolean }) => OtpStateHandle;
+  }
+
+  export const OtpState: OtpStateType;
+
+  export interface OtpInputType {
+    new: (state: OtpStateHandle) => Element;
+  }
+
+  /**
+   * A fixed-length code, drawn cell by cell **by the shell**.
+   *
+   * ```js
+   * OtpInput.new(this.code)
+   *   .flex().gap(8)
+   *   .cell_style((cell) =>
+   *     cell.size(40).flex().items_center().justify_center()
+   *       .border_1().border_color("border").rounded("md"))
+   *   .cell_active_style((cell) => cell.border_color("ring"))
+   *   .caret_style((caret) => caret.w(2).h(18).bg("foreground"))
+   * ```
+   *
+   * Alone among the bound components, its cells are not the script's to
+   * describe — only to style. A described cell would be frozen into the
+   * snapshot the last render produced and nothing would ever thaw it: the
+   * state reports `change` only once the code is *complete*, so the first five
+   * digits of a six-digit code would leave the screen untouched, and the caret
+   * blinks on a timer that raises no script event at all.
+   *
+   * So the shell reads the state every frame and decides what each cell holds
+   * — a digit, a bullet while the state is masked, the caret, or nothing —
+   * and the three templates say what those look like. Lay the cells out by
+   * styling the element itself: `.flex().gap(8)`.
+   *
+   * Children are allowed and are drawn after the cells, not instead of them.
+   *
+   * Grouping ("123 456") is not offered: the groups would be boxes the shell
+   * invents, with no template to say what they look like.
+   */
+  export const OtpInput: OtpInputType;
+
+  /**
    * A focus target the script owns, created once and kept on the view.
    *
    * Focus is a fact about the window that outlives any one render, so an
@@ -1728,16 +2014,19 @@ const CONSTRUCTORS: &str = r#"
     readonly spacing: SpacingTokens;
     readonly radius: RadiusTokens;
   }
-  /** The Base-aligned semantic tokens plus shell appearance state. Read-only. */
+  /** The Base-aligned semantic tokens plus the current appearance. Read-only. */
   export interface Theme extends SemanticThemeTokens, ColorTokens {
-    readonly mode: "light" | "dark";
+    readonly appearance: "light" | "dark";
     readonly is_dark: boolean;
   }
 
   /** Compatibility accessor; prefer the call-scoped `cx.theme()`. */
   export function theme(): Theme;
-  /** Switches palette. Returns whether anything changed. */
-  export function set_theme(mode: "light" | "dark"): boolean;
+  /** Replaces gpui-base's active semantic tokens with an application-owned theme. */
+  export function set_theme(theme: {
+    readonly appearance: "light" | "dark";
+    readonly tokens: SemanticThemeTokens;
+  }): void;
   export interface Window {
     /**
      * Opens a dialog on the window's root, and answers the stack's new depth.
@@ -1888,32 +2177,29 @@ declare module "process" {
   export function nextTick(callback: (...args: unknown[]) => void, ...args: unknown[]): void;
   export const platform: string;
   export const arch: string;
-  export const env: Readonly<Record<string, string>>;
-  export function cwd(): string;
-  const process: { run: typeof run; exit: typeof exit; nextTick: typeof nextTick; platform: string; arch: string; env: typeof env; cwd: typeof cwd };
+  const process: { run: typeof run; exit: typeof exit; nextTick: typeof nextTick; platform: string; arch: string };
   export default process;
 }
 declare module "os" {
   export function platform(): string;
   export function arch(): string;
-  export function homedir(): string;
-  export function tmpdir(): string;
   export const EOL: string;
-  const os: { platform: typeof platform; arch: typeof arch; homedir: typeof homedir; tmpdir: typeof tmpdir; EOL: string };
+  const os: { platform: typeof platform; arch: typeof arch; EOL: string };
   export default os;
 }
 declare module "fs/promises" {
-  export interface DirEntry { name: string; is_dir: boolean; }
+  export interface Dirent { name: string; isDirectory(): boolean; }
   export interface MakeDirectoryOptions { recursive?: boolean; }
-  export function readFile(path: string): Promise<string>;
-  export function writeFile(path: string, contents: string): Promise<void>;
-  export function readdir(path: string): Promise<DirEntry[]>;
+  export function readFile(path: string): Promise<Uint8Array>;
+  export function readFile(path: string, encoding: "utf8" | { encoding: "utf8" }): Promise<string>;
+  export function writeFile(path: string, contents: string | Uint8Array): Promise<void>;
+  export function readdir(path: string): Promise<string[]>;
+  export function readdir(path: string, options: { withFileTypes: true }): Promise<Dirent[]>;
   export function exists(path: string): Promise<boolean>;
   export function unlink(path: string): Promise<void>;
   export function rmdir(path: string): Promise<void>;
   export function mkdir(path: string, options?: MakeDirectoryOptions): Promise<void>;
 }
-declare module "fs" { export * from "fs/promises"; }
 declare module "net" {
   export interface Socket {
     write(data: string): Promise<void>;
@@ -1925,27 +2211,31 @@ declare module "net" {
   const net: { connect: typeof connect };
   export default net;
 }
-interface WebSocketSocket {
-  /** Waits for the next text or binary message. */
-  read(): Promise<string | Uint8Array>;
-  /** Sends a text or binary message. */
-  write(data: string | Uint8Array): Promise<void>;
-  /** Sends and flushes a close frame. */
-  close(): Promise<void>;
+declare module "websocket" {
+  export interface WebSocketSocket {
+    /** Waits for the next text or binary message. */
+    read(): Promise<string | Uint8Array>;
+    /** Sends a text or binary message. */
+    write(data: string | Uint8Array): Promise<void>;
+    /** Sends and flushes a close frame. */
+    close(): Promise<void>;
+  }
+  export interface WebSocketConnectOptions {
+    /** Additional protocol headers. Credential and WebSocket control headers are refused. */
+    headers?: Readonly<Record<string, string>>;
+  }
+  export interface WebSocketType {
+    connect(url: string, options?: WebSocketConnectOptions): Promise<WebSocketSocket>;
+  }
+  /** Capability-gated client sockets; not the browser global constructor. */
+  export const WebSocket: WebSocketType;
 }
-interface WebSocketConnectOptions {
-  /** Additional protocol headers. Credential and WebSocket control headers are refused. */
-  headers?: Readonly<Record<string, string>>;
-}
-declare const WebSocket: {
-  connect(url: string, options?: WebSocketConnectOptions): Promise<WebSocketSocket>;
-};
 interface ShellFetchResponse {
   readonly status: number;
   readonly ok: boolean;
   readonly url: string;
-  text(): string;
-  json(): unknown;
+  text(): Promise<string>;
+  json(): Promise<unknown>;
 }
 interface ShellFetchOptions {
   /** GET by default; POST is available for OAuth-style form exchanges. */
@@ -2045,6 +2335,9 @@ mod tests {
         "controls_right",
         "when",
         "on_click",
+        "on_mouse_move",
+        "on_hover",
+        "on_item_click",
         "on_change",
         "on_step",
         "on_open_change",
@@ -2054,10 +2347,13 @@ mod tests {
         "selected",
         "checked",
         "accessibility_label",
+        "tooltip",
         "role",
         "aria_selected",
         "aria_active_descendant",
         "track_focus",
+        "track_scroll",
+        "with_item_to_measure_index",
         "content_focus_handle",
         "tab_index",
         "tab_stop",
@@ -2078,6 +2374,9 @@ mod tests {
         "pressed",
         "start",
         "range_style",
+        "cell_style",
+        "cell_active_style",
+        "caret_style",
         "value",
         "indeterminate",
         "axis",
@@ -2223,7 +2522,6 @@ mod tests {
             "console",
             "process",
             "os",
-            "fs",
             "fs/promises",
             "net",
         ] {
@@ -2239,13 +2537,54 @@ mod tests {
     }
 
     #[test]
+    fn standard_names_only_claim_standard_compatible_contracts() {
+        let declarations = declarations();
+
+        assert!(!declarations.contains("declare module \"fs\""));
+        assert!(declarations.contains("readFile(path: string): Promise<Uint8Array>;"));
+        assert!(declarations.contains(
+            "readFile(path: string, encoding: \"utf8\" | { encoding: \"utf8\" }): Promise<string>;"
+        ));
+        assert!(
+            declarations
+                .contains("writeFile(path: string, contents: string | Uint8Array): Promise<void>;")
+        );
+        assert!(declarations.contains("export interface Dirent"));
+        assert!(declarations.contains("isDirectory(): boolean;"));
+        assert!(declarations.contains("readdir(path: string): Promise<string[]>;"));
+        assert!(declarations.contains(
+            "readdir(path: string, options: { withFileTypes: true }): Promise<Dirent[]>;"
+        ));
+
+        assert!(declarations.contains("declare module \"websocket\""));
+        assert!(declarations.contains("export const WebSocket: WebSocketType;"));
+        assert!(!declarations.contains("declare module \"gpui/websocket\""));
+        assert!(!declarations.contains("declare const WebSocket:"));
+        assert!(declarations.contains("text(): Promise<string>;"));
+        assert!(declarations.contains("json(): Promise<unknown>;"));
+
+        for fake_system_member in [
+            "export const env:",
+            "export function cwd()",
+            "export function homedir()",
+            "export function tmpdir()",
+        ] {
+            assert!(
+                !declarations.contains(fake_system_member),
+                "fake system member remained declared: {fake_system_member}"
+            );
+        }
+        assert!(declarations.contains("declare const window:"));
+    }
+
+    #[test]
     fn websocket_binary_and_text_messages_are_declared() {
         let declarations = declarations();
-        assert!(declarations.contains("interface WebSocketSocket {"));
+        assert!(declarations.contains("export interface WebSocketSocket {"));
         assert!(declarations.contains("read(): Promise<string | Uint8Array>;"));
         assert!(declarations.contains("write(data: string | Uint8Array): Promise<void>;"));
         assert!(declarations.contains("close(): Promise<void>;"));
-        assert!(declarations.contains("interface WebSocketConnectOptions {"));
+        assert!(declarations.contains("export interface WebSocketConnectOptions {"));
         assert!(declarations.contains("headers?: Readonly<Record<string, string>>;"));
         assert!(declarations.contains(
             "connect(url: string, options?: WebSocketConnectOptions): Promise<WebSocketSocket>;"
@@ -2315,6 +2654,21 @@ mod tests {
             !declarations.contains(&format!("| \"{}\"", a11y::FILTERED_ROLE)),
             "a role GPUI filters out of the accessibility tree must not be offerable"
         );
+    }
+
+    #[test]
+    fn retained_nested_views_are_declared() {
+        let declarations = declarations();
+        for expected in [
+            "  export interface ViewHandle {",
+            "    set_props(props?: Props): void;",
+            "    release(): boolean;",
+            "  export interface ViewHandleType {",
+            "  export const ViewHandle: ViewHandleType;",
+            "  export function child_view(handle: ViewHandle): Element;",
+        ] {
+            assert!(declarations.contains(expected), "missing: {expected}");
+        }
     }
 
     /// The anchor union is generated from the table the runtime parses through,

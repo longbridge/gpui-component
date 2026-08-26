@@ -121,11 +121,12 @@ unknown color token `surfacee`; expected one of: background, foreground, surface
 or a #rrggbb literal
 ```
 
-### Why the runtime ships a palette at all
+### Where the active tokens come from
 
-`gpui_base::Theme::default()` derives its colour tokens with `#[derive(Default)]`, which means every one of them starts as `Hsla { h: 0, s: 0, l: 0, a: 0 }` — fully transparent. A runtime that only called `gpui_base::init` would paint an invisible window.
-
-So `gpui-shell` ships a default light and dark palette, loaded from a JSON file that uses the same `Serialize`/`Deserialize`/`JsonSchema` derives a plugin theme would. It is a **convenience, not a contract**: the shell's Rust side makes no other visual decision, and the palette exists only so that "the script owns presentation" does not start from a black rectangle.
+gpui-shell does not own a palette or theme file format. It reads the active
+`gpui_base::Theme` supplied by the host. A JavaScript application may replace
+that same Base snapshot with `set_theme({ appearance, tokens })`; theme names
+and any registry remain application state.
 
 ## State styles
 
@@ -184,11 +185,11 @@ render(cx) {
     .gap(cx.theme().spacing.md)
     .rounded(cx.theme().radius.lg)
     .bg(cx.theme().colors.surface)
-    .child(text(`${cx.theme().mode}: ${cx.theme().is_dark ? "dark" : "light"}`));
+    .child(text(`${cx.theme().appearance}: ${cx.theme().is_dark ? "dark" : "light"}`));
 }
 ```
 
-The snapshot is deeply read-only. `theme()` remains as a compatibility accessor, but `cx.theme()` is preferred. `set_theme("light" | "dark")` is callable from an event or task and invalidates script views so token-backed styles are rebuilt.
+The snapshot is deeply read-only. `theme()` remains as a compatibility accessor, but `cx.theme()` is preferred. An application may call `set_theme({ appearance, tokens })` from an event or task with its own complete color, spacing, and radius token snapshot. gpui-shell writes that snapshot into gpui-base and rebuilds token-backed script views; it does not own theme names, palettes, or a file format.
 
 ## Native motion
 

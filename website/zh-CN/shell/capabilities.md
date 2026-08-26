@@ -99,16 +99,18 @@ import * as fs from "fs/promises";
 
 | 调用                            | resolve 结果                     |
 | ------------------------------- | -------------------------------- |
-| `fs.readFile(path)`             | 文件内容                         |
+| `fs.readFile(path)`             | `Uint8Array`                     |
+| `fs.readFile(path, "utf8")`     | UTF-8 文本                       |
 | `fs.writeFile(path, contents)`  | —                                |
-| `fs.readdir(path)`              | `[{ name, is_dir }]`，按名字排序 |
+| `fs.readdir(path)`              | 按名字排序的名称数组             |
+| `fs.readdir(path, { withFileTypes: true })` | 带 `isDirectory()` 的 `Dirent[]` |
 | `fs.exists(path)`               | `true` / `false`                 |
 | `fs.unlink(path)`               | —                                |
 | `fs.rmdir(path)`                | —                                |
 | `fs.mkdir(path, options?)`      | —                                |
 
 ```js
-const source = await fs.readFile("notes.md");
+const source = await fs.readFile("notes.md", "utf8");
 await fs.writeFile("notes.md", source + "\n");
 ```
 
@@ -309,7 +311,7 @@ process.exit(0);
 
 全局 `fetch(url, options?)` 返回 promise，结果提供 `{ status, ok, url, text(), json() }`。它的授权比原始网络更窄：每次请求与 redirect 都必须匹配声明的 HTTP host、method，以及精确 path 或 path prefix；HTTPS 永不降级到 HTTP，authorization 与调用方 header 也不会跨 origin。
 
-`net.connect(host, port)` 与 `WebSocket.connect(url, { headers? })` 使用 `capabilities.network.hosts`。Raw TCP 的 `read()` 返回 `Uint8Array`，到达 EOF 时返回 `null`，因此传输分块不会经过有损文本解码。WebSocket 支持文本与 `Uint8Array` 消息，并通过单一 actor 串行化写入；它不会跟随 redirect。Connect、handshake 与 write 操作都有 30 秒 timeout。每个 socket 同一时间只允许一个 outstanding `read()`；第二个会立即 reject，而不是与第一个争抢下一条消息。凭证 header 与握手控制 header 会被拒绝。Raw TCP 与 WebSocket 权限有意比 HTTP request grant 更宽。
+`net.connect(host, port)` 与 `websocket` 模块具名导出的 `WebSocket.connect(url, { headers? })` 使用 `capabilities.network.hosts`。`WebSocket` 不会安装成浏览器全局，也不是构造器。Raw TCP 的 `read()` 返回 `Uint8Array`，到达 EOF 时返回 `null`，因此传输分块不会经过有损文本解码。WebSocket 支持文本与 `Uint8Array` 消息，并通过单一 actor 串行化写入；它不会跟随 redirect。Connect、handshake 与 write 操作都有 30 秒 timeout。每个 socket 同一时间只允许一个 outstanding `read()`；第二个会立即 reject，而不是与第一个争抢下一条消息。凭证 header 与握手控制 header 会被拒绝。Raw TCP 与 WebSocket 权限有意比 HTTP request grant 更宽。
 
 DNS 解析是有界的进程级共享服务：所有应用共用两个 resolver worker 和一个最多 64 个请求的队列。排队沿用每次连接已有的 deadline，所以饱和时会以 timeout 失败，不会无界增长内存或线程。这是资源收敛，不是每应用的服务质量保证；同一进程中运行互不信任应用的宿主，不会获得应用之间的 DNS 公平性。
 

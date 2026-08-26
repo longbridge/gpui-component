@@ -387,8 +387,6 @@ pub(super) fn install_process(ctx: &Ctx<'_>) -> JsResult<()> {
 
     process.set("platform", std::env::consts::OS)?;
     process.set("arch", std::env::consts::ARCH)?;
-    process.set("env", Object::new(ctx.clone())?)?;
-    process.set("cwd", Func::from(|| "."))?;
     ctx.globals().set("process", process)?;
     Ok(())
 }

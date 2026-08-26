@@ -9,8 +9,43 @@
 //! every frame until script state replaces it. The runtime is still needed here,
 //! but only to dispatch events: no path through this module calls into the
 //! script while an element is being built.
+//!
+//! # The one exception: `VirtualList`
+//!
+//! A virtualized list is the single component whose description is not the
+//! whole of what it draws. Its rows are produced by a script callback that
+//! GPUI runs from *inside* layout and prepaint — twice per frame, once to
+//! measure and once to place — so a frame that contains a virtual list does
+//! enter the VM, once per list, no matter what changed.
+//!
+//! That is not a leak in the design; it is the trade the design was for. The
+//! alternative is describing every row up front, which is exactly the cost
+//! virtualization exists to avoid: ten thousand rows described so that twenty
+//! can be seen. What the exception buys is that the VM is entered for the
+//! *visible window* rather than for the collection, so the script cost of a
+//! ten-thousand-row list is the script cost of a twenty-row one.
+//!
+//! Three things confine it, and they are worth naming because each is what
+//! stops the exception from spreading:
+//!
+//! * **It is scoped.** Item rendering runs under [`ScopePhase::Layout`], which
+//!   forbids `cx.notify()` (a re-render requested from inside layout is a loop),
+//!   forbids creating retained state, and runs on the render-time budget.
+//! * **It registers nothing.** Callbacks cannot be registered from an item
+//!   renderer — see [`components::virtual_list`] for why, and for what a script
+//!   uses instead.
+//! * **It owns no arena.** Each batch describes itself into a temporary
+//!   [`SpecArena`] that is materialized through [`materialize_subtree`] and
+//!   dropped before the call returns, so nothing a row described outlives the
+//!   frame that drew it.
+//!
+//! The cost lands in `materialize_time` rather than in `script_render_time`;
+//! [`crate::metrics`] says what that means for reading the two counters.
+//!
+//! [`ScopePhase::Layout`]: crate::scope::ScopePhase::Layout
 
 use std::{
+    cell::Cell,
     rc::{Rc, Weak},
     time::Duration,
 };
@@ -18,12 +53,12 @@ use std::{
 use smallvec::SmallVec;
 
 use gpui::{
-    AbsoluteLength, AnyElement, App, DefiniteLength, InteractiveElement, IntoElement, Length,
-    MouseButton, ParentElement, Pixels, Refineable as _, SharedString, StatefulInteractiveElement,
-    StyleRefinement, Styled, Window, div,
+    AbsoluteLength, AnyElement, App, Bounds, DefiniteLength, InteractiveElement, IntoElement,
+    Length, MouseButton, ParentElement, Pixels, Refineable as _, SharedString,
+    StatefulInteractiveElement, StyleRefinement, Styled, Window, div,
 };
 use gpui_base::{
-    Button, Checkbox, CheckboxState, Link, ScrollbarAxis, Switch,
+    Button, Checkbox, CheckboxState, ElementExt as _, Link, ScrollbarAxis, Switch,
     animation::{ease_in_cubic, ease_in_out_cubic, ease_out_cubic},
     h_flex,
     input::{Input, InputBase},
@@ -207,6 +242,8 @@ struct Behavior {
     href: Option<SharedString>,
     on_click: Option<CallbackId>,
     on_change: Option<CallbackId>,
+    on_mouse_move: Option<CallbackId>,
+    on_hover: Option<CallbackId>,
 
     /// Reports which way a `NumberInput` was asked to step.
     ///
@@ -255,6 +292,17 @@ struct Behavior {
     visible: Option<bool>,
     /// Reports the panel sizes of a resizable group once a drag has ended.
     on_resize: Option<CallbackId>,
+    /// Reports which item of a `VirtualList` was clicked.
+    ///
+    /// One handler for the whole list rather than one per row, and that is a
+    /// deliberate limit rather than a convenience: see
+    /// [`components::virtual_list`].
+    on_item_click: Option<CallbackId>,
+    /// Which item a `VirtualList` measures to infer its cross-axis size.
+    /// `None` keeps base's own default, which is the first.
+    item_to_measure_index: Option<usize>,
+    /// The retained scroll position a `VirtualList` was told to drive.
+    virtual_scroll: Option<crate::entities::EntityHandle>,
     /// This item's one-based position in its collection, and the collection's
     /// size — "tab 2 of 5". Announced, never drawn.
     position_in_set: Option<(usize, usize)>,
@@ -282,6 +330,18 @@ struct Behavior {
     /// script positioned would be frozen at the value the render that
     /// positioned it saw.
     range_style: Option<StyleRefinement>,
+    /// How every cell of an `OtpInput` looks, how the cell taking the next
+    /// digit differs, and what the caret in it looks like.
+    ///
+    /// Three templates rather than three described elements, for the reason
+    /// [`Self::range_style`] is one: the cells are rebuilt from the state on
+    /// every frame, and a cell the script described would still be showing the
+    /// digit the render that described it saw. `cell_active_style` is layered
+    /// on top of `cell_style` the way a hover is layered on a base style, so a
+    /// script declares only what differs.
+    cell_style: Option<StyleRefinement>,
+    cell_active_style: Option<StyleRefinement>,
+    caret_style: Option<StyleRefinement>,
     /// Whether a `Collapsible` renders the element in its `content` slot, or
     /// whether a `Popover` is showing.
     ///
@@ -301,6 +361,11 @@ struct Behavior {
     anchor: Option<gpui::Anchor>,
     /// The pointer button that opens a `Popover`.
     mouse_button: Option<MouseButton>,
+    /// The label a hover shows over this element. A string rather than an
+    /// element: the overlay rebuilds the content once a frame while it is up,
+    /// which is the one place a retained script closure would put the VM back
+    /// on the frame path.
+    tooltip: Option<SharedString>,
     /// How long the pointer rests on a `HoverCard`'s trigger before it appears,
     /// and how long it may leave before it goes away.
     open_delay: Option<Duration>,
@@ -343,11 +408,14 @@ impl Behavior {
     /// node only for an element that has an id — so both halves need one.
     fn needs_identity(&self) -> bool {
         self.focus_handle.is_some()
+            || self.tooltip.is_some()
             || self.tab_index.is_some()
             || self.tab_stop.is_some()
             || self.role.is_some()
             || self.aria_selected.is_some()
             || self.aria_active_descendant
+            || self.on_mouse_move.is_some()
+            || self.on_hover.is_some()
     }
 }
 
@@ -437,6 +505,27 @@ pub fn materialize(
     })
 }
 
+/// Materializes one described subtree from an arena that is not a snapshot's.
+///
+/// The public entry above takes a [`RenderSnapshot`] because that is what a
+/// view has. A virtualized list has something else: a batch of rows the script
+/// described a moment ago into a temporary arena that will be dropped as soon
+/// as the elements exist. It is the same walk, over descriptions with a shorter
+/// life — which is the whole of what separates the two entry points.
+///
+/// Not timed. The caller times the script call and this walk together, because
+/// from a frame's point of view they are one cost.
+pub(crate) fn materialize_subtree(
+    runtime: &Rc<ShellRuntime>,
+    arena: &SpecArena,
+    root: SpecId,
+    window: &mut Window,
+    cx: &mut App,
+) -> AnyElement {
+    let ambient = window.text_style().color;
+    materialize_node(runtime, arena, root, ambient, window, cx)
+}
+
 /// Materializes one node, carrying the text color down the description.
 ///
 /// GPUI resolves inherited text color while painting, but an svg needs the
@@ -488,6 +577,11 @@ fn materialize_node(
     let slots: Slots = if materializes_slots(&component, &behavior) {
         slot_specs
             .iter()
+            .filter(|(name, _)| {
+                !matches!(component, Component::Popover(_))
+                    || *name != "content"
+                    || behavior.open != Some(false)
+            })
             .map(|(name, slot)| {
                 (
                     *name,
@@ -517,6 +611,8 @@ fn materialize_node(
     if let Component::Slider(handle) = &component {
         components::slider::warn_without_indicator(arena, id, *handle);
     }
+
+    components::tooltip::warn_unhonoured_tooltip(&component, &behavior);
 
     materialize_component(
         runtime, arena, node, id, component, inherited, refinement, behavior, states, children,
@@ -549,6 +645,7 @@ fn materialize_component(
     cx: &mut App,
 ) -> AnyElement {
     match component {
+        Component::ChildView(child) => child.view().clone().into_any_element(),
         Component::Div => flex_element(
             runtime,
             div(),
@@ -634,6 +731,7 @@ fn materialize_component(
 
             let button = with_hover(button, &states);
             let button = with_active_and_focus(button, &states);
+            let button = components::tooltip::with_tooltip(button, &behavior);
             finish(button, refinement, children)
         }
         Component::Link(id) => {
@@ -900,6 +998,9 @@ fn materialize_component(
         Component::Scrollbar(id) => {
             components::scrollbar::scrollbar(id, refinement, behavior, states, children, window, cx)
         }
+        Component::VirtualList(spec) => components::virtual_list::virtual_list(
+            runtime, &spec, refinement, behavior, states, children, window, cx,
+        ),
         Component::Input(handle) => {
             // An input's focus belongs to its `InputState`, which is what
             // `on_mouse_down` below hands it. A second handle on the frame
@@ -941,6 +1042,9 @@ fn materialize_component(
             let frame = with_active_and_focus(frame, &states);
             frame.child(Input::new(&state)).into_any_element()
         }
+        Component::OtpInput(handle) => components::otp_input::otp_input(
+            runtime, handle, refinement, behavior, states, children, window, cx,
+        ),
         Component::Textarea(handle) => {
             components::textarea::textarea(runtime, handle, refinement, behavior, states, children)
         }
@@ -1170,6 +1274,8 @@ fn flex_element(
         && !states.needs_identity()
         && !behavior.needs_identity()
         && behavior.on_click.is_none()
+        && behavior.on_mouse_move.is_none()
+        && behavior.on_hover.is_none()
         && !behavior.scroll_x
         && !behavior.scroll_y
     {
@@ -1196,6 +1302,33 @@ fn flex_element(
             dispatch_click(&runtime, callback, event, window, cx);
         });
     }
+    let bounds = Rc::new(Cell::new(None::<Bounds<Pixels>>));
+    let bounds_writer = Rc::clone(&bounds);
+    let mut stateful = stateful.on_prepaint(move |value, _, _| bounds_writer.set(Some(value)));
+    if let Some(callback) = behavior.on_mouse_move {
+        let runtime = Rc::downgrade(runtime);
+        let bounds = Rc::clone(&bounds);
+        stateful = stateful.on_mouse_move(move |event, window, cx| {
+            let Some(bounds) = bounds.get() else { return };
+            let local = event.position - bounds.origin;
+            if let Some(runtime) = runtime.upgrade() {
+                runtime.dispatch_mouse_move(callback, event, local, bounds, window, cx);
+            }
+        });
+    }
+    if let Some(callback) = behavior.on_hover {
+        let runtime = Rc::downgrade(runtime);
+        let bounds = Rc::clone(&bounds);
+        stateful = stateful.on_hover(move |hovered, window, cx| {
+            if !should_dispatch_hover(*hovered, bounds.get(), window.mouse_position()) {
+                return;
+            }
+            if let Some(runtime) = runtime.upgrade() {
+                runtime.dispatch_change(callback, *hovered, window, cx);
+            }
+        });
+    }
+    let stateful = components::tooltip::with_tooltip(stateful, &behavior);
     if behavior.scrollbar {
         let mut stateful = stateful;
         stateful.style().refine(&refinement);
@@ -1234,6 +1367,20 @@ fn flex_element(
         (false, false) => stateful,
     };
     finish(stateful, refinement, children)
+}
+
+/// Whether a hover transition from this snapshot still describes the pointer.
+///
+/// GPUI can deliver an outgoing snapshot's `false` after a callback rebuilt
+/// the element under a stationary pointer. The outgoing bounds still describe
+/// that pointer, so only that exit is stale; entries and exits outside the box
+/// remain real transitions.
+fn should_dispatch_hover(
+    hovered: bool,
+    bounds: Option<Bounds<Pixels>>,
+    mouse_position: gpui::Point<Pixels>,
+) -> bool {
+    hovered || !bounds.is_some_and(|bounds| bounds.contains(&mouse_position))
 }
 
 /// Takes the element filling `name`, leaving any other slot for its own reader.
@@ -1320,6 +1467,10 @@ fn motion_element_id(
         | Component::TableHead(id, _)
         | Component::TableCell(id, _) => gpui::ElementId::Name(id.clone().into()),
         Component::Scrollbar(id) => gpui::ElementId::Name(id.clone().into()),
+        // The list's name is also the name a `Scrollbar` pairs with and the
+        // key its scroll position is filed under, so motion has to follow the
+        // same name rather than a tree position.
+        Component::VirtualList(spec) => gpui::ElementId::Name(spec.id().to_owned().into()),
         // The group's id is also where base files the panel sizes, so motion
         // has to key off the same name rather than a tree position.
         Component::Resizable(id, _) => gpui::ElementId::Name(id.clone().into()),
@@ -1344,6 +1495,9 @@ fn motion_element_id(
         }
         Component::NumberInput(handle) => {
             gpui::ElementId::NamedInteger("gpui-shell-number-input".into(), *handle)
+        }
+        Component::OtpInput(handle) => {
+            gpui::ElementId::NamedInteger("gpui-shell-otp-input".into(), *handle)
         }
         _ => element_id(id, key),
     }
@@ -1395,8 +1549,10 @@ fn resolve_ops(
                         Motion {
                             property,
                             policy: MotionPolicy::Transition {
-                                duration: Duration::from_secs_f64((*duration).max(0.0) / 1000.0),
-                                delay: Duration::from_secs_f64((*delay).max(0.0) / 1000.0),
+                                duration: checked_milliseconds(f64::from(*duration))
+                                    .unwrap_or(Duration::ZERO),
+                                delay: checked_milliseconds(f64::from(*delay))
+                                    .unwrap_or(Duration::ZERO),
                                 easing: easing.clone(),
                             },
                         },
@@ -1417,7 +1573,8 @@ fn resolve_ops(
                         Motion {
                             property,
                             policy: MotionPolicy::Spring {
-                                response: Duration::from_secs_f64((*response).max(0.0) / 1000.0),
+                                response: checked_milliseconds(f64::from(*response))
+                                    .unwrap_or(Duration::ZERO),
                                 damping: *damping as f32,
                                 epsilon: *epsilon as f32,
                             },
@@ -1450,17 +1607,26 @@ fn resolve_ops(
                     // because what it collects is a refinement built from the
                     // ordinary style methods, which is what a state style is.
                     "range_style" => behavior.range_style = Some(resolved),
+                    // The three an `OtpInput` draws its own boxes from. Same
+                    // op, same reason: what they collect is a refinement built
+                    // from the ordinary style methods.
+                    "cell_style" => behavior.cell_style = Some(resolved),
+                    "cell_active_style" => behavior.cell_active_style = Some(resolved),
+                    "caret_style" => behavior.caret_style = Some(resolved),
                     other => tracing::error!("unhandled state style `{other}`"),
                 }
             }
             SpecOp::Callback(name, id) => match *name {
                 "on_click" => behavior.on_click = Some(*id),
+                "on_mouse_move" => behavior.on_mouse_move = Some(*id),
+                "on_hover" => behavior.on_hover = Some(*id),
                 "on_resize" => behavior.on_resize = Some(*id),
                 "on_change" => behavior.on_change = Some(*id),
                 "on_step" => behavior.on_step = Some(*id),
                 "on_open_change" => behavior.on_open_change = Some(*id),
                 "on_confirm" => behavior.on_confirm = Some(*id),
                 "on_dismiss" => behavior.on_dismiss = Some(*id),
+                "on_item_click" => behavior.on_item_click = Some(*id),
                 other => tracing::error!("unhandled callback `{other}` reached materialize"),
             },
             // Filling the same slot twice replaces it, the way a second
@@ -1685,7 +1851,13 @@ fn whole_count(args: &[Bridged]) -> Option<usize> {
 fn milliseconds(args: &[Bridged]) -> Option<Duration> {
     args.first()
         .and_then(|value| value.as_f32().ok())
-        .map(|ms| Duration::from_secs_f64(f64::from(ms.max(0.0)) / 1000.0))
+        .and_then(|ms| checked_milliseconds(f64::from(ms)))
+}
+
+fn checked_milliseconds(ms: f64) -> Option<Duration> {
+    ms.is_finite()
+        .then(|| Duration::try_from_secs_f64(ms.max(0.0) / 1000.0).ok())
+        .flatten()
 }
 
 /// Every anchor name a script may pass to `anchor(...)`, in the order
@@ -1885,6 +2057,26 @@ fn apply_behavior(behavior: &mut Behavior, name: &str, args: &[Bridged]) {
         // reaching here is a host bug, and dropping it is what makes the
         // element fall back to base's own keyed focus rather than track a
         // handle nobody named.
+        // Same shape as `track_focus` below, and same reasoning: a handle
+        // crosses as a JavaScript number, and anything else reaching here is a
+        // host bug. Dropping it leaves the list on the scroll position keyed by
+        // its own name, which still scrolls — it just cannot be driven from the
+        // script.
+        "track_scroll" => {
+            behavior.virtual_scroll = match args.first() {
+                Some(Bridged::Number(handle)) if *handle >= 0.0 && handle.fract() == 0.0 => {
+                    Some(*handle as crate::entities::EntityHandle)
+                }
+                _ => None,
+            };
+        }
+        "with_item_to_measure_index" => {
+            behavior.item_to_measure_index = args
+                .first()
+                .and_then(|value| value.as_f32().ok())
+                .filter(|index| *index >= 0.0 && index.fract() == 0.0)
+                .map(|index| index as usize);
+        }
         "track_focus" => {
             behavior.focus_handle = match args.first() {
                 Some(Bridged::Number(handle)) if *handle >= 0.0 && handle.fract() == 0.0 => {
@@ -1941,6 +2133,12 @@ fn apply_behavior(behavior: &mut Behavior, name: &str, args: &[Bridged]) {
                         _ => None,
                     });
         }
+        "tooltip" => {
+            behavior.tooltip = args
+                .first()
+                .and_then(|value| value.as_str().ok())
+                .map(SharedString::from);
+        }
         "open_delay" => behavior.open_delay = milliseconds(args),
         "close_delay" => behavior.close_delay = milliseconds(args),
         _ => tracing::error!("unhandled component method `{name}` reached materialize"),
@@ -1950,6 +2148,26 @@ fn apply_behavior(behavior: &mut Behavior, name: &str, args: &[Bridged]) {
 #[cfg(test)]
 mod motion_identity_tests {
     use super::*;
+
+    #[test]
+    fn a_stale_hover_exit_is_suppressed_but_a_real_exit_is_dispatched() {
+        use gpui::{point, px};
+
+        let bounds = Bounds::from_corners(point(px(10.), px(20.)), point(px(110.), px(100.)));
+
+        assert!(
+            !should_dispatch_hover(false, Some(bounds), point(px(50.), px(60.))),
+            "an outgoing snapshot must not clear hover while the pointer remains in its box"
+        );
+        assert!(
+            should_dispatch_hover(false, Some(bounds), point(px(120.), px(60.))),
+            "moving outside the box is a real hover exit"
+        );
+        assert!(
+            should_dispatch_hover(true, Some(bounds), point(px(50.), px(60.))),
+            "hover entries remain dispatchable"
+        );
+    }
 
     #[test]
     fn a_closed_collapsible_does_not_materialize_its_content_slot() {

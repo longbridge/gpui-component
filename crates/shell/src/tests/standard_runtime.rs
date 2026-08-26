@@ -80,6 +80,18 @@ fn node_prefixed_modules_are_not_part_of_the_shell_contract() {
     assert!(error.to_string().contains("node:buffer"), "{error:#}");
 }
 
+#[test]
+fn callback_style_fs_module_is_not_part_of_the_shell_contract() {
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    let error = runtime
+        .load_source(
+            "callback-fs.js",
+            r#"import fs from "fs"; export default fs;"#,
+        )
+        .expect_err("Promise-only filesystem calls belong to fs/promises");
+    assert!(error.to_string().contains("fs"), "{error:#}");
+}
+
 #[gpui::test]
 fn safe_host_standard_modules_replace_the_old_gpui_exports(cx: &mut TestAppContext) {
     let source = r#"
@@ -93,10 +105,10 @@ export default class Probe extends View {
     console.log("standard runtime", os.platform());
     return v_flex().child(text([
       typeof process.run,
-      process.cwd(),
-      Object.keys(process.env).length,
-      os.homedir(),
-      os.tmpdir(),
+      typeof process.cwd,
+      typeof process.env,
+      typeof os.homedir,
+      typeof os.tmpdir,
     ].join("|")));
   }
 }
@@ -125,7 +137,10 @@ export default class Probe extends View {
             .map(crate::RenderSnapshot::debug_tree)
             .unwrap_or_default()
     });
-    assert!(rendered.contains("function|.|0|.|."), "{rendered}");
+    assert!(
+        rendered.contains("function|undefined|undefined|undefined|undefined"),
+        "{rendered}"
+    );
 
     let error = runtime
         .load_source(

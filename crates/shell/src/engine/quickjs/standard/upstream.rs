@@ -15,9 +15,7 @@ pub(super) fn assert_compatible() {
     module::<llrt_fs::FsPromisesModule>();
     module::<llrt_net::NetModule>();
     module::<llrt_os::OsModule>();
-    module::<llrt_process::ProcessModule>();
 
     let _: for<'js> fn(&Ctx<'js>) -> Result<()> = llrt_console::init;
     let _: for<'js> fn(&Ctx<'js>) -> Result<()> = llrt_fetch::init;
-    let _: for<'js> fn(&Ctx<'js>) -> Result<()> = llrt_process::init;
 }

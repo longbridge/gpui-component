@@ -22,6 +22,31 @@
 //! is dropped its callbacks are retired with it, which is what lets several
 //! views share one runtime without one view's render invalidating another's
 //! buttons.
+//!
+//! # Where the diagram is not the whole truth
+//!
+//! One component breaks the right-hand column: a virtualized list. Its rows
+//! depend on where it has been scrolled, which GPUI only knows during layout,
+//! so its item renderer is called from there — twice a frame, per list — and
+//! those calls do enter the VM:
+//!
+//! ```text
+//!                                             ┌───────────┐
+//!                                             │ snapshot  │
+//!                                             └───────────┘
+//!                                                  │
+//!                          many GPUI frames ◀──────┤
+//!                                       materialize │
+//!                                                  └──▶ VirtualList rows ──▶ VM
+//! ```
+//!
+//! What it does not break is the claim the arrangement was built for. The VM is
+//! entered for the *visible window* rather than for the collection, so a
+//! ten-thousand-row list costs what a twenty-row one costs — and the
+//! alternative, describing every row into the snapshot up front, is precisely
+//! the cost virtualization exists to remove. Nothing else in an interface
+//! repaints through script. [`crate::materialize`] states the exception in
+//! full, along with the three things that confine it.
 
 use std::rc::{Rc, Weak};
 

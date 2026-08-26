@@ -1,12 +1,20 @@
-use crate::{
-    StyledExt as _,
-    input::{InputEvent, blink_cursor::BlinkCursor},
-};
+use crate::{StyledExt as _, input::blink_cursor::BlinkCursor};
 use gpui::{
     AnyElement, App, AppContext as _, Context, Empty, Entity, EventEmitter, FocusHandle, Focusable,
     InteractiveElement as _, IntoElement, KeyDownEvent, ParentElement, Render, RenderOnce,
     SharedString, StyleRefinement, Styled, Subscription, Window, div, prelude::FluentBuilder as _,
 };
+
+/// A semantic notification from a one-time-code state.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum OtpEvent {
+    /// The value changed through keyboard editing.
+    Change,
+    /// Keyboard editing filled the final cell.
+    Complete,
+    Focus,
+    Blur,
+}
 
 /// Stateful input and focus behavior for a fixed-length numeric one-time code.
 pub struct OtpState {
@@ -123,19 +131,20 @@ impl OtpState {
         cx.stop_propagation();
         self.blink_cursor.update(cx, |cursor, cx| cursor.pause(cx));
         self.value = value.into();
+        cx.emit(OtpEvent::Change);
         if self.value.chars().count() == self.length {
-            cx.emit(InputEvent::Change);
+            cx.emit(OtpEvent::Complete);
         }
         cx.notify();
     }
 
     fn on_focus(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         self.blink_cursor.update(cx, |cursor, cx| cursor.start(cx));
-        cx.emit(InputEvent::Focus);
+        cx.emit(OtpEvent::Focus);
     }
     fn on_blur(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         self.blink_cursor.update(cx, |cursor, cx| cursor.stop(cx));
-        cx.emit(InputEvent::Blur);
+        cx.emit(OtpEvent::Blur);
     }
 }
 
@@ -144,7 +153,7 @@ impl Focusable for OtpState {
         self.focus_handle.clone()
     }
 }
-impl EventEmitter<InputEvent> for OtpState {}
+impl EventEmitter<OtpEvent> for OtpState {}
 impl Render for OtpState {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         Empty

@@ -3704,7 +3704,6 @@ dependencies = [
  "llrt_net",
  "llrt_os",
  "llrt_path",
- "llrt_process",
  "llrt_url",
  "llrt_zlib",
  "rquickjs",
@@ -5494,16 +5493,6 @@ source = "git+https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a6
 dependencies = [
  "llrt_utils",
  "memchr",
- "rquickjs",
-]
-
-[[package]]
-name = "llrt_process"
-version = "0.9.0-beta"
-source = "git+https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a9b15e7ddfb2778eca4b5a63111e74f51"
-dependencies = [
- "libc",
- "llrt_utils",
  "rquickjs",
 ]
 

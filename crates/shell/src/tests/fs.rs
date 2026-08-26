@@ -27,8 +27,14 @@ export default class Probe extends View {
     spawn(async (cx) => {
       try {
         await fs.writeFile("notes.txt", "hello");
-        const back = await fs.readFile("notes.txt");
-        const names = (await fs.readdir(".")).map((entry) => entry.name);
+        await fs.writeFile("bytes.bin", new Uint8Array([0, 255, 42]));
+        const back = await fs.readFile("notes.txt", "utf8");
+        const bytes = await fs.readFile("bytes.bin");
+        const names = await fs.readdir(".");
+        const entries = await fs.readdir(".", { withFileTypes: true });
+        const entryShape = entries.every((entry) =>
+          typeof entry.name === "string" && typeof entry.isDirectory() === "boolean"
+        );
         const there = await fs.exists("notes.txt");
 
         await fs.mkdir("nested/deeper", { recursive: true });
@@ -37,7 +43,7 @@ export default class Probe extends View {
         await fs.unlink("notes.txt");
         const gone = !(await fs.exists("notes.txt"));
 
-        this.state = `${back}|${names.join(",")}|${there}|${nested}|${gone}`;
+        this.state = `${back}|${bytes instanceof Uint8Array}:${[...bytes].join(",")}|${names.join(",")}|${entryShape}|${there}|${nested}|${gone}`;
       } catch (error) {
         this.state = `failed: ${error.message}`;
       }
@@ -104,7 +110,7 @@ fn every_fs_call_settles_through_a_promise(cx: &mut TestAppContext) {
 
     let after = snapshot_text(&mut context, &view);
     assert!(
-        after.contains("hello|notes.txt|true|true|true"),
+        after.contains("hello|true:0,255,42|bytes.bin,notes.txt|true|true|true|true"),
         "the round trip did not settle as expected: {after}"
     );
 

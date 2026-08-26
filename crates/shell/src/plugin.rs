@@ -893,10 +893,8 @@ impl Plugin {
     pub fn view(&self) -> &Entity<ScriptView> {
         &self.view
     }
-}
 
-impl Drop for Plugin {
-    fn drop(&mut self) {
+    fn shutdown(mut self) {
         if let Some(application) = self.application.take() {
             self.runtime.entities().release_application(&application);
             crate::engine::quickjs::cancel_application_tasks(&application);
@@ -1023,6 +1021,28 @@ impl ShellRuntime {
         let policy = Rc::new(crate::policy::default().duplicate());
         let view = load_view_with_policy(self, &root, &entry, policy.clone(), window, cx)?;
         Ok(cx.new(|cx| ShellRoot::with_application(view, root, entry, policy, window, cx)))
+    }
+
+    /// Loads and renders an application once, returning its description.
+    ///
+    /// This is the headless host path used by source checks. It keeps engine
+    /// handles and the `ScriptView` construction protocol inside the shell
+    /// facade while preserving structured load and render errors.
+    pub fn check(
+        self: &Rc<Self>,
+        root: impl AsRef<Path>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Result<String> {
+        let root = self.try_load(root, window, cx)?;
+        let view = root
+            .read(cx)
+            .application()
+            .expect("try_load always mounts an application")
+            .view
+            .clone();
+        let object = view.read(cx).object().clone();
+        self.render_to_spec(&object, Some(view), window, cx)
     }
 }
 
@@ -1191,7 +1211,11 @@ impl PluginManager {
     /// deterministic and prevents owner-less work from retaining the unloaded
     /// plugin's authority.
     pub fn unload(&mut self, id: &str) -> bool {
-        self.loaded.remove(id).is_some()
+        let Some(plugin) = self.loaded.remove(id) else {
+            return false;
+        };
+        plugin.shutdown();
+        true
     }
 
     pub fn loaded(&self) -> impl Iterator<Item = &Plugin> {
@@ -1229,6 +1253,14 @@ impl PluginManager {
             )
         } else {
             format!("; found {}", ids.join(", "))
+        }
+    }
+}
+
+impl Drop for PluginManager {
+    fn drop(&mut self) {
+        for (_, plugin) in std::mem::take(&mut self.loaded) {
+            plugin.shutdown();
         }
     }
 }
@@ -1355,6 +1387,29 @@ mod tests {
     }
 
     #[gpui::test]
+    fn default_runtime_global_does_not_retain_the_runtime(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let runtime = cx
+            .update(ShellRuntime::new)
+            .expect("default application runtime");
+        let weak = Rc::downgrade(&runtime);
+
+        drop(runtime);
+
+        assert!(
+            weak.upgrade().is_none(),
+            "the App global must not keep an otherwise unowned runtime alive"
+        );
+        assert!(cx.update(|cx| ShellRuntime::global(cx)).is_none());
+
+        let replacement = cx
+            .update(ShellRuntime::new)
+            .expect("a dead default runtime can be replaced");
+        let installed = cx.update(|cx| ShellRuntime::global(cx).expect("replacement runtime"));
+        assert!(Rc::ptr_eq(&replacement, &installed));
+    }
+
+    #[gpui::test]
     fn runtime_load_builds_the_window_root_without_plugin_manager_ceremony(
         cx: &mut TestAppContext,
     ) {
@@ -1429,6 +1484,31 @@ mod tests {
             error.to_string().contains("main.js"),
             "the source path must survive: {error:#}"
         );
+    }
+
+    #[gpui::test]
+    fn runtime_check_returns_the_rendered_description(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let application = TempTree::new("direct-check");
+        std::fs::write(
+            application.path().join("main.js"),
+            r#"
+                import { View, text } from "gpui";
+                export default class App extends View {
+                  render() { return text("checked through the facade"); }
+                }
+            "#,
+        )
+        .expect("application source");
+
+        let runtime = ShellRuntime::new_isolated().expect("runtime");
+        let window = cx.add_window(|_, _| gpui::Empty);
+        let mut context = VisualTestContext::from_window(*window.deref(), cx);
+        let description = context
+            .update(|window, cx| runtime.check(application.path(), window, cx))
+            .expect("check application through the high-level facade");
+
+        assert!(description.contains("checked through the facade"));
     }
 
     #[gpui::test]
@@ -1560,7 +1640,7 @@ mod tests {
                   init() {
                     this.message = "pending";
                     spawn(async (cx) => {
-                      this.message = await fs.readFile("message.txt");
+                      this.message = await fs.readFile("message.txt", "utf8");
                       with_cx((cx) => cx.notify());
                     });
                   }
@@ -1669,6 +1749,68 @@ mod tests {
             runtime.entities().is_empty(),
             "unload must drop the input record and its GPUI subscriptions"
         );
+    }
+
+    #[gpui::test]
+    fn dropping_plugin_manager_shuts_down_loaded_plugins(cx: &mut TestAppContext) {
+        let plugins = TempTree::new("drop-manager");
+        let data = TempTree::new("drop-manager-data");
+        let manifest = r#"{
+            "id": "com.example.drop-manager",
+            "name": "Drop manager",
+            "entry": "main.js"
+        }"#;
+        let root = plugins.plugin("drop-manager", manifest);
+        std::fs::write(
+            root.join("main.js"),
+            r#"
+                import { View, Input, InputState, timer } from "gpui";
+                export default class Panel extends View {
+                  init() {
+                    this.field = InputState.new({ value: "owned by plugin" });
+                    timer.every(60_000, () => {});
+                  }
+                  render() { return Input.new(this.field); }
+                }
+            "#,
+        )
+        .expect("write script");
+
+        cx.update(crate::init);
+        let runtime = ShellRuntime::new_isolated().expect("runtime");
+        cx.update(|cx| runtime.set_global(cx));
+        let tasks_before = crate::engine::quickjs::task_count();
+        let window = cx.add_window(|_, _| Empty);
+        let mut context = VisualTestContext::from_window(*window.deref(), cx);
+        let mut manager = PluginManager::new(vec![plugins.path().to_path_buf()])
+            .with_data_home(data.path().to_path_buf());
+        assert!(manager.discover().iter().all(Result::is_ok));
+
+        context
+            .update(|window, cx| {
+                manager.load(&runtime, "com.example.drop-manager", |_| true, window, cx)
+            })
+            .expect("load plugin");
+        let retained_view = manager
+            .plugin("com.example.drop-manager")
+            .expect("loaded plugin")
+            .view()
+            .clone();
+        assert_eq!(runtime.entities().len(), 1);
+        assert_eq!(crate::engine::quickjs::task_count(), tasks_before + 1);
+
+        drop(manager);
+
+        assert!(
+            runtime.entities().is_empty(),
+            "dropping the manager must release application-owned entities even while GPUI retains the view"
+        );
+        assert_eq!(
+            crate::engine::quickjs::task_count(),
+            tasks_before,
+            "dropping the manager must cancel application-owned tasks"
+        );
+        drop(retained_view);
     }
 
     fn draw(context: &mut VisualTestContext, view: &Entity<ScriptView>) {

@@ -150,6 +150,7 @@ when(...) must return the element
 | `.selected(value)` | `Button` | 报告 selected 状态 |
 | `.checked(value)` | `Checkbox`、`Switch` | 受控值 |
 | `.accessibility_label(text)` | `Button`、`Checkbox` | 屏幕阅读器读出的内容 |
+| `.tooltip(text)` | `div`、`h_flex`、`v_flex`、`Button` | 指针停留后显示的说明文字 |
 | `.id(name)` | `div`、`h_flex`、`v_flex` | 一个稳定的身份，取代“在树中的位置” |
 | `.overflow_scrollbar()` | `div`、`h_flex`、`v_flex` | 双轴滚动并绘制原生 scrollbar |
 | `.overflow_x_scrollbar()` | `div`、`h_flex`、`v_flex` | 水平滚动并绘制原生 scrollbar |
@@ -348,9 +349,10 @@ child, children, when, on_click, on_change, disabled, selected, checked, id
 
 ## 还没有的东西
 
-元素接口是 M0 的集合。以下是刻意缺失的部分，各属于后续里程碑：
+元素接口现在已经包含 Tabs、Table、Progress、表单控件、Popover/HoverCard
+锚定浮层、Textarea、Scrollbar、PathBuilder 与 VirtualList。仍刻意缺少：
 
-- Select、tabs、list、table、tree 以及 `gpui-base` 的其他组件；
+- 更高层的 List、Tree 系统，以及尚未接入的其他 `gpui-base` 组件；
 - `gpui.memo`——它能让未变化的子树跳过重建描述的那部分脚本工作；
 - dock 面板，以及让脚本绘制 dock 自身 chrome 的 renderer trait。
 

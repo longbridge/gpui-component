@@ -619,13 +619,28 @@ impl<'js> IntoJs<'js> for FetchResponse {
         response.set("url", self.url)?;
         let text = self.body;
         let text_method = text.clone();
-        response.set("text", Func::from(move || text_method.clone()))?;
+        response.set(
+            "text",
+            Func::from(move |ctx: Ctx<'js>| -> Result<Promise<'js>> {
+                let (promise, resolve, _) = Promise::new(&ctx)?;
+                resolve.call::<_, ()>((text_method.clone(),))?;
+                Ok(promise)
+            }),
+        )?;
         response.set(
             "json",
-            Func::from(move |ctx: Ctx<'js>| -> Result<Value<'js>> {
+            Func::from(move |ctx: Ctx<'js>| -> Result<Promise<'js>> {
+                let (promise, resolve, reject) = Promise::new(&ctx)?;
                 let json: Object = ctx.globals().get("JSON")?;
                 let parse: Function = json.get("parse")?;
-                parse.call((text.clone(),))
+                match parse.call::<_, Value>((text.clone(),)) {
+                    Ok(value) => resolve.call::<_, ()>((value,))?,
+                    Err(rquickjs::Error::Exception) => {
+                        reject.call::<_, ()>((ctx.catch(),))?;
+                    }
+                    Err(error) => return Err(error),
+                }
+                Ok(promise)
             }),
         )?;
         Ok(response.into_value())

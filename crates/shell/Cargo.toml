@@ -32,7 +32,6 @@ quickjs = [
     "dep:llrt_net",
     "dep:llrt_os",
     "dep:llrt_path",
-    "dep:llrt_process",
     "dep:llrt_url",
     "dep:llrt_zlib",
     "dep:reqwest",
@@ -61,7 +60,6 @@ llrt_fetch = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddf
 llrt_net = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb2778eca4b5a63111e74f51", optional = true }
 llrt_os = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb2778eca4b5a63111e74f51", default-features = false, optional = true }
 llrt_path = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb2778eca4b5a63111e74f51", optional = true }
-llrt_process = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb2778eca4b5a63111e74f51", optional = true }
 llrt_url = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb2778eca4b5a63111e74f51", optional = true }
 llrt_zlib = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb2778eca4b5a63111e74f51", default-features = false, features = ["compression-rust"], optional = true }
 cap-std = "4.0.3"

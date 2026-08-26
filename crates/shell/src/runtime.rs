@@ -18,10 +18,11 @@ use gpui::{
     AnyElement, App, BorderStyle, Bounds, ClipboardItem, Corners, Edges, Element, ElementId,
     Entity, GlobalElementId, Hitbox, Hsla, InspectorElementId, InteractiveElement, IntoElement,
     LayoutId, PaintQuad, ParentElement, Pixels, Point, SharedString, StatefulInteractiveElement,
-    Styled, StyledText, Window, div, px, relative, rems, rgb, transparent_black,
+    Styled, StyledText, WeakEntity, Window, div, px, relative, rems, rgb, transparent_black,
 };
 use gpui_base::{Button, TextSelectionHandle, TextSelectionRegistration, TextSelectionRun};
 
+use crate::theme_tokens::token_color;
 use crate::{spec::CallbackId, view::ScriptView};
 
 /// Where an application's data lives, given who it is.
@@ -230,8 +231,21 @@ impl ApplicationGeneration {
 /// what keeps a later field from being a breaking change to somebody else.
 pub(crate) struct CallbackEntry<T> {
     pub(crate) value: T,
-    pub(crate) view: Option<Entity<ScriptView>>,
+    pub(crate) view: Option<WeakEntity<ScriptView>>,
     pub(crate) application: Option<Rc<ApplicationGeneration>>,
+}
+
+impl<T> CallbackEntry<T> {
+    /// Resolves the callback's owner without letting the callback retain it.
+    ///
+    /// The outer option distinguishes an owner that has gone away from a
+    /// callback deliberately registered without a view.
+    pub(crate) fn live_view(&self) -> Option<Option<Entity<ScriptView>>> {
+        match &self.view {
+            Some(view) => view.upgrade().map(Some),
+            None => Some(None),
+        }
+    }
 }
 
 impl<T: Clone> Clone for CallbackEntry<T> {
@@ -327,6 +341,16 @@ impl<T: Clone> CallbackArena<T> {
             .retain(|_, (live_generation, _)| *live_generation != generation);
     }
 
+    /// Retains only callbacks accepted by `keep`, including a generation still
+    /// being staged. Release uses this to retire an owner's current and
+    /// previous generations even when a GPUI frame still retains the entity.
+    pub(crate) fn retain(&mut self, mut keep: impl FnMut(&CallbackEntry<T>) -> bool) {
+        if let Some((_, entries)) = self.building.as_mut() {
+            entries.retain(|(_, entry)| keep(entry));
+        }
+        self.live.retain(|_, (_, entry)| keep(entry));
+    }
+
     pub(crate) fn push(&mut self, entry: CallbackEntry<T>) -> CallbackId {
         let Some((_, entries)) = self.building.as_mut() else {
             // Reached only if a handler is registered outside a script render,
@@ -342,6 +366,22 @@ impl<T: Clone> CallbackArena<T> {
             .expect("a shell runtime exhausted its callback ids");
         entries.push((id, entry));
         id
+    }
+
+    /// How many committed handlers the arena holds.
+    ///
+    /// For the regression that says a virtual list does not accumulate them:
+    /// its rows are rebuilt every frame, and "the arena is the same size after
+    /// a thousand frames of scrolling" is the only way to state that as a fact
+    /// rather than as a comment.
+    #[cfg(test)]
+    pub(crate) fn len(&self) -> usize {
+        self.live.len()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn ids(&self) -> Vec<CallbackId> {
+        self.live.keys().copied().collect()
     }
 
     pub(crate) fn get(&self, id: CallbackId) -> Option<CallbackEntry<T>> {
@@ -564,6 +604,24 @@ pub fn failure_surface(
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
+    // Only when the palette can actually tell ink from paper. This surface is
+    // shown when an application did not load, and an application is now where
+    // the palette comes from -- so the usual case for this screen is a `Theme`
+    // global that exists and is entirely `SemanticThemeTokens::default()`,
+    // whose colours are all zero. `token` answers `Some` for that, because a
+    // theme *is* installed, which left the literals below unreachable exactly
+    // when they were the only thing that could be read: a load failure painted
+    // black on black is a blank window, and the message it was trying to show
+    // is the one that says why.
+    let usable = token_color("background") != token_color("foreground");
+    let token = |name: &str, fallback: Hsla| {
+        if usable {
+            token_color(name).unwrap_or(fallback)
+        } else {
+            fallback
+        }
+    };
+
     let background = token("background", rgb(0x11161d).into());
     let surface = token("surface", rgb(0x171d26).into());
     let foreground = token("foreground", rgb(0xe6ebf2).into());
@@ -829,7 +887,7 @@ fn copy_button(
 /// Semantic token with a fallback, because a failure surface must render even
 /// when the failure is that the theme never got installed.
 fn token(name: &str, fallback: Hsla) -> Hsla {
-    crate::theme::token_color(name).unwrap_or(fallback)
+    crate::theme_tokens::token_color(name).unwrap_or(fallback)
 }
 
 #[cfg(test)]

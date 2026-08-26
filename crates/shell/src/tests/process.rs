@@ -106,7 +106,7 @@ export default class Probe extends View {
         typeof process.kill,
         typeof process.setuid,
         typeof process.setgid,
-        Object.keys(process.env).length,
+        typeof process.env,
       ].join("|");
       process.nextTick((suffix) => {
         this.state += suffix;
@@ -191,7 +191,7 @@ fn process_is_denied_and_ambient_authority_is_absent_on_every_platform(cx: &mut 
     let rendered = snapshot_text(&mut context, &view);
     assert!(
         rendered.contains("capabilities.fs.execute")
-            && rendered.contains("|undefined|undefined|undefined|0")
+            && rendered.contains("|undefined|undefined|undefined|undefined")
             && rendered.contains("|tick"),
         "{rendered}"
     );

@@ -33,7 +33,10 @@
 //!
 //! ShellRuntime::dispatch_click(&Rc<Self>, CallbackId, &ClickEvent, &mut Window, &mut App)
 //! ShellRuntime::dispatch_change(&Rc<Self>, CallbackId, bool, &mut Window, &mut App)
+//! ShellRuntime::dispatch_index(&Rc<Self>, CallbackId, usize, &mut Window, &mut App)
 //! ShellRuntime::dispatch_signal(&Rc<Self>, CallbackId, &mut Window, &mut App)
+//! ShellRuntime::render_virtual_items(&Rc<Self>, CallbackId, Range<usize>,
+//!     &mut Window, &mut App) -> Option<ItemSpecs>
 //!
 //! set_store_path(PathBuf)
 //! set_development_mode(bool)
@@ -68,6 +71,15 @@
 //! coupling the whole design exists to prevent. `metrics().script_renders()` is
 //! the counter, and benchmark C is the test that fails rather than merely
 //! getting slower.
+//!
+//! `render_virtual_items` is the one deliberate exception, and it is narrow
+//! enough to state in a sentence: a virtualized list cannot know which rows
+//! exist until GPUI has laid it out, so its item renderer runs from inside
+//! layout and costs a frame. It describes a *window* rather than a collection,
+//! which is the trade virtualization is; it never enters the script's
+//! `render`, so the counter above still means what it says; and it runs under
+//! `ScopePhase::Layout`, which forbids `notify`, forbids creating retained
+//! state, and refuses to register a handler. See `crate::materialize`.
 //!
 //! # What this seam is, and what it is not
 //!

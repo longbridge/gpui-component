@@ -25,13 +25,13 @@ const NAMES: &[&str] = &[
     "buffer",
     "console",
     "crypto",
-    "fs",
     "fs/promises",
     "net",
     "os",
     "path",
     "process",
     "url",
+    "websocket",
     "zlib",
 ];
 
@@ -48,13 +48,13 @@ pub(super) fn loader() -> ModuleLoader {
         .with_module("buffer", llrt_buffer::BufferModule)
         .with_module("console", console::ConsoleModule)
         .with_module("crypto", llrt_crypto::CryptoModule)
-        .with_module("fs", fs::FsModule)
         .with_module("fs/promises", fs::FsModule)
         .with_module("net", net::NetModule)
         .with_module("os", os::OsModule)
         .with_module("path", llrt_path::PathModule)
         .with_module("process", process::ProcessModule)
         .with_module("url", llrt_url::UrlModule)
+        .with_module("websocket", websocket::WebSocketModule)
         .with_module("zlib", llrt_zlib::ZlibModule)
 }
 
@@ -68,6 +68,5 @@ pub(super) fn install(ctx: &Ctx<'_>) -> Result<()> {
     console::install(ctx)?;
     super::sandbox::install_process(ctx)?;
     fetch::install(ctx)?;
-    websocket::install(ctx)?;
     Ok(())
 }

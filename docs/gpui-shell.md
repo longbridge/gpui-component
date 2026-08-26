@@ -84,6 +84,7 @@ Scripts import bare GPUI Shell module names:
 
 ```js
 import { Buffer } from "buffer";
+import { WebSocket } from "websocket";
 import * as fs from "fs/promises";
 import process from "process";
 import { connect } from "net";
@@ -98,11 +99,11 @@ not installed.
 | `buffer`, `path`, `url`, `crypto`, `zlib` | LLRT implementation in the existing QuickJS context |
 | `console` | LLRT-compatible surface routed to `gpui_shell::script` tracing |
 | `process` | Shell adapter: filtered metadata plus async bounded `run` and host-mediated `exit` |
-| `os` | Safe read-only subset; virtual home/temp locations do not reveal ambient host paths |
-| `fs`, `fs/promises` | Shell adapter over capability directory handles; no ambient `std::fs` access |
+| `os` | Honest read-only subset: platform, architecture, and line ending; no invented home/temp paths |
+| `fs/promises` | Shell adapter over capability directory handles; no callback-style `fs` module or ambient `std::fs` access |
 | global `fetch` | Capability-checked HTTP, including every redirect; 30-second timeout and 8 MiB buffered-body limit |
 | `net` | Capability-checked TCP connect; 30-second I/O timeout and 1 MiB per-call read/write limit |
-| global `WebSocket` | Capability-checked client handshake plus asynchronous text/binary `read`, `write`, and `close`; 8 MiB message/frame limit |
+| `websocket.WebSocket` | Capability-checked `connect` plus asynchronous text/binary `read`, `write`, and `close`; not a browser global or constructor; 8 MiB message/frame limit |
 
 The old `gpui.fs` and `gpui.process` exports have been removed. Existing scripts
 must migrate to `fs/promises` and `process`; `console` remains global and is
@@ -1139,8 +1140,8 @@ enclosing one — a dock area nested in a script view already has an outer scope
 so each callback starts on a fresh render-time budget and a `cx` captured during
 an earlier call is still rejected. The scope inherits the enclosing view, because
 chrome is drawn on behalf of whatever view is rendering and owns no view of its
-own. The item renderers of `VirtualList`, `Tree`, `Calendar`, and `Table` will
-take the same shape when they are bound.
+own. `VirtualList`'s item renderer already takes exactly this shape, and
+`Tree`'s and `Calendar`'s will when they are bound.
 
 ### 8.6 Memoization
 
@@ -1691,15 +1692,11 @@ zero — fully transparent. `RadiusTokens` and `SpacingTokens` have real default
 Calling `gpui_base::init(cx)` without supplying colors paints an invisible
 window.
 
-The library therefore installs a neutral light/dark fallback from Rust in
-`theme.rs`. That is a legibility guarantee, not a product theme. An embedding
-host can parse and install its own `Palettes` afterwards. The standalone
-`gpui-shell` binary does exactly that with an embedded
-`src/bin/default-tokens.json`, keeping the palette a host/product decision while
-remaining self-contained. `SemanticThemeTokens` and its sub-structures already
-derive the serialization/schema traits needed by the palette format. The CLI
-file defines light and dark colors; omitted scales fall back to base defaults,
-which is asserted by a test.
+The shell library does not own a palette registry or a JSON theme format. The
+embedding application supplies the active `gpui_base::Theme`. The standalone
+`gpui-shell` binary embeds `src/bin/default-tokens.json` as its own product
+default so it remains self-contained without turning that file into a library
+contract.
 
 And it resolves token names for script. Seventeen colors — `background`,
 `foreground`, `surface`, `primary`, `muted`, `accent`, `destructive`, `border`,
@@ -1735,18 +1732,17 @@ The preferred read is call-scoped and explicit at each use site, for example
 `cx.theme().radius.lg` inside `render(cx)`. Do not destructure or alias the
 theme snapshot: keeping the complete access path makes later API refactors
 mechanical. It returns every color both as a direct semantic role and under
-`colors`, the `spacing` and `radius` scales, and `mode` plus `is_dark`.
+`colors`, the `spacing` and `radius` scales, and `appearance` plus `is_dark`.
 `gpui.theme()` remains a compatibility accessor to the same snapshot. The
 snapshot and all three nested token groups are frozen, so scripts can select
 tokens but cannot mutate the palette object. The prelude caches that deeply
 read-only object only while the serialized palette is unchanged; a theme switch
 produces a fresh snapshot on the next read.
 
-`gpui.set_theme("light" | "dark")` is the explicit palette-selection operation,
-not mutation of individual tokens. It needs a live host call, refuses unknown
-names, refreshes windows when the mode changes, and returns whether anything
-changed. A host can install its own `Palettes` after shell initialization; the
-script still sees the same semantic, read-only projection.
+`gpui.set_theme({ appearance, tokens })` replaces the active semantic snapshot.
+It needs a live host call, validates the complete token object, refreshes windows,
+and returns whether anything changed. Applications own named theme registries;
+they can keep those objects in JavaScript or load and parse a JSON file.
 
 ### 13.4 The preset module
 
@@ -2143,7 +2139,7 @@ import process from "process";
 
 Two rules keep this honest. **There is one path resolver:** every filesystem
 path goes through `Capabilities::resolve`, never through `std::fs` directly, so
-`fs` and every later path-taking entry point share one policy and there is
+`fs/promises` and every later path-taking entry point share one policy and there is
 no second place for a traversal bug to hide. **A denial names its manifest
 key:** the error a script sees is the instruction for fixing it.
 
@@ -2158,11 +2154,13 @@ running `curl` is not granted; add it to capabilities.fs.execute in the manifest
 
 ### 17.1 Filesystem
 
-The public modules are `fs` and `fs/promises`; both currently expose the same
-promise-only subset: `readFile`, `writeFile`, `readdir`, `exists`, `unlink`,
-`rmdir`, and `mkdir`. The camelCase names replace the removed handwritten
-`gpui.fs` surface. Binary buffers, streams, file descriptors, watches and sync
-operations are intentionally not part of the experimental contract yet.
+The public module is `fs/promises`; the callback-style `fs` name is deliberately
+not registered. `readFile(path)` resolves to `Uint8Array`, while an explicit
+`"utf8"` or `{ encoding: "utf8" }` resolves to text. `writeFile` accepts a string
+or `Uint8Array`. `readdir(path)` resolves to sorted names; pass
+`{ withFileTypes: true }` for `Dirent` objects with `isDirectory()`. The remaining
+subset is `exists`, `unlink`, `rmdir`, and `mkdir`. Streams, file descriptors,
+watches, and sync operations are not part of the experimental contract.
 
 Paths resolve against the granted roots; traversal is rejected by lexical
 normalization and each operation executes through a `cap-std` directory handle,
@@ -2202,8 +2200,9 @@ flush barriers may wait for durability at once.
 
 Three experimental surfaces are implemented. Global `fetch(url, options?)`
 supports bounded GET and POST requests, string or `Uint8Array` bodies, safe
-request headers, and resolves to `{ status, ok, url, text(), json() }`. Global
-`WebSocket.connect(url, { headers }?)` returns a socket with asynchronous
+request headers, and resolves to `{ status, ok, url, text(), json() }`; both
+body readers return promises. The `gpui` module exports
+`WebSocket.connect(url, { headers }?)`, returning a socket with asynchronous
 text/binary `read`, `write`, and `close`. Bare module `net` provides raw
 `connect(host, port)` with bounded async `read` and `write`; its synchronous
 `close(): void` immediately shuts down the cloned transport handles. Neither
@@ -2620,7 +2619,7 @@ prototypes.
 | **Withheld**         | `eval` and every function constructor                                            | `globalThis.eval` is deleted outright; the `Function`, `AsyncFunction`, `GeneratorFunction`, and `AsyncGeneratorFunction` constructors are replaced with throwing stubs                                                                                                                                                                                               |
 | **Replaced**         | The module resolver (static and dynamic `import` alike)                          | Resolves `gpui`, the listed Standard Runtime bare modules, and paths inside the application root. `node:` names and unknown packages are refused before reaching the filesystem. Dynamic `import()` stays callable — it is how §18 does lazy loading                                                                                                                    |
 | **Frozen**           | `Object`, `Array`, `Function`, `String`, and `Number` prototypes                 | One VM hosts several plugins, so the built-ins are shared mutable state                                                                                                                                                                                                                                                                                               |
-| **Capability-gated** | `fs`, `process.run`, `process.exit`, `fetch`, `net.connect`, `WebSocket.connect` | §17; each async operation captures the caller's policy before leaving the VM                                                                                                                                                                                                                                                                                          |
+| **Capability-gated** | `fs/promises`, `process.run`, `process.exit`, `fetch`, `net.connect`, `websocket.WebSocket.connect` | §17; each async operation captures the caller's policy before leaving the VM                                                                                                                                                                                                                                                                                          |
 | **Throwing stub**    | `setTimeout`, `setInterval`, `clearTimeout`, `clearInterval`, `require`          | Present, and throwing a message that names the replacement                                                                                                                                                                                                                                                                                                            |
 
 Three of these are worth more than a table row.
@@ -2805,7 +2804,8 @@ leaves three levers: reduce `C_op` itself, memoize, and virtualize.
 ### 20.3 Measured
 
 `tests/benchmark.rs` reports three numbers, because they are three different
-costs and reporting one was what hid the coupling:
+costs and reporting one was what hid the coupling — and a fourth, D, which takes
+one recorded call apart so that A can be acted on rather than only watched:
 
 ```bash
 cargo test -p gpui-shell --release --test benchmark -- --nocapture
@@ -2816,6 +2816,7 @@ cargo test -p gpui-shell --release --test benchmark -- --nocapture
 | **A** | script → snapshot       | **1.4 ms**                       | per application invalidation |
 | **B** | snapshot → `AnyElement` | **0.7 ms**                       | per frame                    |
 | **C** | a full cached repaint   | **1.8 ms**, **0 script renders** | per frame                    |
+| **D** | one recorded call       | stage by stage, in nanoseconds   | inside A                     |
 
 | Metric                              | Target       | Measured                                               |
 | ----------------------------------- | ------------ | ------------------------------------------------------ |
@@ -2858,17 +2859,31 @@ and linker specific; CI correctness gates do not assert these absolute values.
 
 ### 20.4 What is left
 
-**Virtualization stays in Rust.** `VirtualList`, `Tree`, and `Table` call back
-only for visible items, so a ten-thousand-row list costs the same in script as a
-hundred-row one. None of them is bound yet, which makes this the largest
-unrealized win on the list.
+**Virtualization stays in Rust.** `VirtualList` and `Tree` call back only for
+visible items, so a ten-thousand-row list costs the same in script as a
+hundred-row one. `VirtualList` is bound; `Tree` is not. (`Table` is not on this
+list: base's `Table` is a plain composition of `Stateful<Div>`s and renders
+every row it is given. The virtualized one is `crates/ui`'s `DataTable`.)
 
-**Reduce `C_op` itself.** On the Rust side a no-argument style pushes a `u16`
-into a `SmallVec`; the cost is on the JavaScript side, in the call shape and the
-conversion. Specializing zero- and one-argument forwarders to avoid the rest
-array, and making the `__apply` entry allocation-free, are the most valuable
-changes available. **QuickJS has no JIT, so all of this is manual** — there is no
-trace to hope will remove part of the dispatch.
+**Reduce `C_op` itself — done for styles and for `child`.** The specialized
+forwarders this section used to propose are now what the prelude binds.
+`__applyNullaryStyle`, `__applyParamStyle` and `__attach` take the table index
+the prelude already knows instead of a method name, and take their one argument
+positionally instead of in a rest array — so a style call no longer allocates a
+JavaScript array, no longer copies a method name into a Rust `String`, and no
+longer arrives at a dispatcher that has to look that name back up. Benchmark D
+prices the difference stage by stage. On one Linux x86-64 machine a recorded
+`items_center()` went from 196 ns to 94 ns and `bg("surface")` from 360 ns to
+208 ns, and benchmark A for the 443-node panel went from 0.96 ms to 0.62 ms.
+Lending the semantic palette instead of copying it per token lookup
+(`theme_tokens::with_tokens`) is part of the same total.
+
+What is left is the floor: about 60 ns of QuickJS interpreting the builder
+method and about 30 ns for the crossing itself, per recorded call. Both are
+inherent to one builder call being one crossing, and batching them would trade
+the crossings for JavaScript array allocations that cost nearly as much.
+**QuickJS has no JIT, so all of this is manual** — there is no trace to hope will
+remove part of the dispatch.
 
 **`gpui.memo`** would skip script construction for a _subtree_ whose data has not
 changed, within a rebuild the rest of the view still needs. Whole-view caching is

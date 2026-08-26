@@ -94,7 +94,7 @@ cargo run -p gpui-shell -- hello
 
 这个文件里有四件事值得现在就点明，因为后面所有内容都建立在它们之上。
 
-**`"gpui"` 是 UI 模块。** 运行时还提供一层刻意收窄的 JavaScript 标准能力：`buffer`、`path`、`url`、`crypto`、`zlib`、`console`、`process`、`os`、`fs` / `fs/promises`、`net`，以及全局 `fetch` 和 `WebSocket`。应用相对导入仍被限制在应用目录内。`node:fs` 这类 `node:` 别名、包查找和 CommonJS `require` 不属于契约。
+**`"gpui"` 是 UI 模块。** 运行时还提供一层刻意收窄的 JavaScript 标准能力：`buffer`、`path`、`url`、`crypto`、`zlib`、`console`、`process`、`os`、`fs/promises`、`net`、`websocket`，以及全局 `fetch`。应用相对导入仍被限制在应用目录内。`node:fs` 这类 `node:` 别名、包查找和 CommonJS `require` 不属于契约。
 
 **`main.js` 必须 `export default` 一个继承 `View` 的类。** `init` 在视图创建时只执行一次；`render` 返回恰好一个元素，并且是在视图失效时执行，而不是每帧执行——见 [`render` 什么时候执行](./state.md#render-什么时候执行)。
 

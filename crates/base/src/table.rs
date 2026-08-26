@@ -1,8 +1,7 @@
 use gpui::{
     AnyElement, App, Div, ElementId, InteractiveElement, Interactivity, IntoElement, ParentElement,
     RenderOnce, Role, SharedString, Stateful, StatefulInteractiveElement, StyleRefinement, Styled,
-    Window, div,
-    prelude::FluentBuilder as _,
+    Window, div, prelude::FluentBuilder as _,
 };
 
 use crate::StyledExt as _;
@@ -129,7 +128,9 @@ impl RenderOnce for Table {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         self.base
             .role(Role::Table)
-            .when_some(self.accessibility_label, |this, label| this.aria_label(label))
+            .when_some(self.accessibility_label, |this, label| {
+                this.aria_label(label)
+            })
             .when_some(self.row_count, |this, count| this.aria_row_count(count))
             .when_some(self.column_count, |this, count| {
                 this.aria_column_count(count)

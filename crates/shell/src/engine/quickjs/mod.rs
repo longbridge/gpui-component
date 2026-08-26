@@ -16,6 +16,7 @@
 
 use std::{
     cell::{Cell, RefCell, RefMut},
+    collections::{HashMap, HashSet, VecDeque},
     path::Path,
     rc::{Rc, Weak},
 };
@@ -23,9 +24,9 @@ use std::{
 use anyhow::{Context as _, Result, anyhow};
 use gpui::{App, AppContext as _, ClickEvent, Entity, Global, WeakEntity, Window};
 use rquickjs::{
-    Context as JsContext, Ctx, Error as JsError, Exception, FromJs, Function, Object, Persistent,
-    Result as JsResult, Runtime as JsRuntime, Value,
-    function::{Func, This},
+    Array, Context as JsContext, Ctx, Error as JsError, Exception, FromJs, Function, Object,
+    Persistent, Result as JsResult, Runtime as JsRuntime, Value,
+    function::{Func, Opt, This},
     loader::{BuiltinResolver, ImportAttributes, Loader, ModuleLoader, Resolver},
     module::Declared,
     module::{Declarations, Exports, Module, ModuleDef},
@@ -33,13 +34,13 @@ use rquickjs::{
 use smallvec::SmallVec;
 
 use crate::{
-    entities::EntityStore,
+    entities::{EntityHandle, EntityStore},
     metrics::Metrics,
     policy::Policy,
     runtime::{ApplicationGeneration, CallbackArena, CallbackEntry},
     scope::{self, ScopePhase},
     snapshot::RenderSnapshot,
-    spec::{CallbackId, Component, SpecArena, SpecId, SpecOp},
+    spec::{CallbackId, ChildViewSpec, Component, SpecArena, SpecId, SpecOp},
     style,
     value::Bridged,
     view::ScriptView,
@@ -94,6 +95,45 @@ impl ViewObject {
     }
 }
 
+/// A class or props value captured by a host function without leaking the
+/// active QuickJS lifetime into the Rust callback type.
+struct NestedViewClass(Persistent<Object<'static>>);
+
+impl<'js> FromJs<'js> for NestedViewClass {
+    fn from_js(ctx: &Ctx<'js>, value: Value<'js>) -> JsResult<Self> {
+        let class = value.as_object().ok_or_else(|| {
+            Exception::throw_type(ctx, "ViewHandle.new(Class, props) expects a View subclass")
+        })?;
+        Ok(Self(Persistent::save(ctx, class.clone())))
+    }
+}
+
+struct NestedViewProps(Persistent<Value<'static>>);
+
+impl<'js> FromJs<'js> for NestedViewProps {
+    fn from_js(ctx: &Ctx<'js>, value: Value<'js>) -> JsResult<Self> {
+        Ok(Self(Persistent::save(ctx, value)))
+    }
+}
+
+/// A synchronous-looking script operation deferred until the active
+/// `Context::with` entry has returned. This is what lets the implementation
+/// reuse the ordinary, non-reentrant transactional job drains.
+enum PendingNestedOperation {
+    Create {
+        runtime: Weak<ShellRuntime>,
+        token: u32,
+        view_type: ViewType,
+        policy: Rc<crate::policy::Policy>,
+        props: Persistent<Value<'static>>,
+    },
+    Update {
+        runtime: Weak<ShellRuntime>,
+        token: u32,
+        props: Persistent<Value<'static>>,
+    },
+}
+
 mod entity_api;
 pub(crate) mod host;
 mod native;
@@ -107,6 +147,10 @@ pub(crate) fn cancel_policy_tasks(policy: &Rc<Policy>) {
 
 pub(crate) fn cancel_application_tasks(generation: &Rc<ApplicationGeneration>) {
     scheduler::cancel_application_generation(generation);
+}
+
+pub(crate) fn cancel_view_tasks(runtime: &Rc<ShellRuntime>, entity_id: gpui::EntityId) {
+    scheduler::cancel_view(runtime, entity_id);
 }
 
 #[cfg(test)]
@@ -129,6 +173,8 @@ mod theme_api;
 const MODULE_EXPORTS: &[&str] = &[
     // Elements and views.
     "View",
+    "ViewHandle",
+    "child_view",
     "div",
     "h_flex",
     "v_flex",
@@ -170,6 +216,9 @@ const MODULE_EXPORTS: &[&str] = &[
     "Combobox",
     "DatePicker",
     "Scrollbar",
+    "v_virtual_list",
+    "h_virtual_list",
+    "VirtualListScrollHandle",
     "Input",
     "InputState",
     "NumberInput",
@@ -180,6 +229,8 @@ const MODULE_EXPORTS: &[&str] = &[
     "SliderTrack",
     "SliderIndicator",
     "SliderThumb",
+    "OtpState",
+    "OtpInput",
     "FocusHandle",
     // System capabilities (`host`, `sandbox`).
     "store",
@@ -207,6 +258,17 @@ pub struct ShellRuntime {
     /// Declared before `context` for the same reason `callbacks` is: releasing
     /// an entity can run script destructors.
     entities: RefCell<EntityStore>,
+    /// Operations requested by a native function are applied immediately
+    /// after the enclosing QuickJS entry unlocks the context. The queue is
+    /// declared before `context` because it owns persistent JS values.
+    pending_nested: RefCell<VecDeque<PendingNestedOperation>>,
+    nested_view_handles: RefCell<HashMap<u32, EntityHandle>>,
+    next_nested_view_token: Cell<u32>,
+    /// A runtime whose opaque QuickJS job queue could not reach an ownership
+    /// boundary safely is never entered again. QuickJS exposes no selective
+    /// pending-job removal, so terminal quarantine is the only way to prevent
+    /// the unfinished wave from later running under another view.
+    terminal_job_error: RefCell<Option<String>>,
     /// What the runtime is spending. See [`Self::metrics`].
     metrics: Metrics,
     /// An HTTP client supplied by tests that exercise a loopback server.
@@ -240,7 +302,11 @@ impl Drop for ShellRuntime {
     }
 }
 
-struct RuntimeGlobal(Rc<ShellRuntime>);
+/// The App can find its default runtime without becoming its owner.
+///
+/// Shell views and host state own runtime lifetime. Once they are gone,
+/// `ShellRuntime::new` can replace this expired registration naturally.
+struct RuntimeGlobal(Weak<ShellRuntime>);
 
 impl Global for RuntimeGlobal {}
 
@@ -295,6 +361,10 @@ impl ShellRuntime {
             callbacks: RefCell::new(CallbackArena::default()),
             arena: RefCell::new(SpecArena::new()),
             entities: RefCell::new(entities),
+            pending_nested: RefCell::new(VecDeque::new()),
+            nested_view_handles: RefCell::new(HashMap::new()),
+            next_nested_view_token: Cell::new(0),
+            terminal_job_error: RefCell::new(None),
             metrics: Metrics::default(),
             #[cfg(test)]
             test_http_client: RefCell::new(None),
@@ -309,12 +379,12 @@ impl ShellRuntime {
     }
 
     pub(crate) fn set_global(self: &Rc<Self>, cx: &mut App) {
-        cx.set_global(RuntimeGlobal(self.clone()));
+        cx.set_global(RuntimeGlobal(Rc::downgrade(self)));
     }
 
     pub(crate) fn global(cx: &App) -> Option<Rc<Self>> {
         cx.try_global::<RuntimeGlobal>()
-            .map(|global| global.0.clone())
+            .and_then(|global| global.0.upgrade())
     }
 
     /// What the runtime is spending: script renders and materializations, with
@@ -340,6 +410,28 @@ impl ShellRuntime {
         self.test_http_client.borrow().clone()
     }
 
+    /// Evaluates a fragment of script in this runtime's context.
+    ///
+    /// Test-only, and used by one caller: `tests::benchmark` has to time a loop
+    /// of bare `__apply` calls to separate the cost of crossing the language
+    /// boundary from the cost of what happens on the far side, and a view's
+    /// `render()` cannot express that loop without the surrounding element
+    /// construction being part of the measurement.
+    #[cfg(test)]
+    pub(crate) fn eval_for_benchmark(&self, source: &str) -> Result<()> {
+        self.with_js(|ctx| ctx.eval::<(), _>(source))
+    }
+
+    /// Empties the scratch arena between benchmark rounds.
+    ///
+    /// A script render resets it on the way in; a benchmark that never renders
+    /// would otherwise accumulate every round's nodes and measure the growth of
+    /// the arena rather than the cost of writing to it.
+    #[cfg(test)]
+    pub(crate) fn reset_arena_for_benchmark(&self) {
+        self.arena.borrow_mut().reset();
+    }
+
     /// A reading of the two counters, taken now.
     ///
     /// The host gets the reading rather than the instrument: `Metrics` is the
@@ -359,12 +451,31 @@ impl ShellRuntime {
         self.entities.borrow_mut()
     }
 
+    fn job_queue_error(&self) -> Option<anyhow::Error> {
+        self.terminal_job_error
+            .borrow()
+            .as_ref()
+            .map(|message| anyhow!(message.clone()))
+    }
+
+    /// Permanently quarantines a runtime with an opaque unfinished job wave.
+    fn fail_job_queue(&self) -> anyhow::Error {
+        let message = "the QuickJS job queue exceeded gpui-shell's transactional limit; the \
+                       script runtime was disabled so pending work cannot cross view authority"
+            .to_owned();
+        if self.terminal_job_error.borrow().is_none() {
+            *self.terminal_job_error.borrow_mut() = Some(message.clone());
+            scheduler::shutdown(self);
+        }
+        anyhow!(message)
+    }
+
     /// Loads `main.js` from an application directory.
     ///
     /// Module resolution is scoped to that directory: an application can import
     /// its own files and the built-in `gpui` module, and nothing else. That is
     /// the first half of the sandbox's module policy (design doc §19.1).
-    pub fn load_app(self: &Rc<Self>, dir: &Path, entry: &str) -> Result<ViewType> {
+    pub(crate) fn load_app(self: &Rc<Self>, dir: &Path, entry: &str) -> Result<ViewType> {
         let root = crate::runtime::resolve_app_root(dir, entry)?;
         if let Err(error) = crate::write_type_declarations(&root) {
             tracing::debug!(
@@ -406,7 +517,8 @@ impl ShellRuntime {
 
     /// Evaluates a module and returns its default export, which must be a view
     /// class.
-    pub fn load_source(self: &Rc<Self>, name: &str, source: &str) -> Result<ViewType> {
+    #[cfg(test)]
+    pub(crate) fn load_source(self: &Rc<Self>, name: &str, source: &str) -> Result<ViewType> {
         self.load_source_with_lease(name, source, None, None)
     }
 
@@ -441,7 +553,8 @@ impl ShellRuntime {
     /// `init` is where a view creates the state it keeps across frames, and
     /// creating an entity needs a `Window` and an `App`. So construction opens
     /// a scope of its own rather than running in the gap between host calls.
-    pub fn instantiate(
+    #[cfg(test)]
+    pub(crate) fn instantiate(
         self: &Rc<Self>,
         view_type: &ViewType,
         window: &mut Window,
@@ -466,7 +579,7 @@ impl ShellRuntime {
                 return Err(error);
             }
         };
-        if let Err(error) = self.initialize(&instance) {
+        if let Err(error) = self.initialize(&instance, None) {
             if let Some(application) = application {
                 cancel_application_tasks(&application);
             }
@@ -480,7 +593,8 @@ impl ShellRuntime {
     /// `init()` may start asynchronous work. Creating the GPUI entity first is
     /// what gives those tasks an owner, so a later `cx.notify()` can invalidate
     /// this view and dropping the view can cancel its work.
-    pub fn instantiate_view(
+    #[cfg(test)]
+    pub(crate) fn instantiate_view(
         self: &Rc<Self>,
         view_type: &ViewType,
         window: &mut Window,
@@ -489,7 +603,7 @@ impl ShellRuntime {
         self.instantiate_view_with_policy(view_type, crate::policy::default(), window, cx)
     }
 
-    pub fn instantiate_view_with_policy(
+    pub(crate) fn instantiate_view_with_policy(
         self: &Rc<Self>,
         view_type: &ViewType,
         policy: Rc<crate::policy::Policy>,
@@ -528,7 +642,7 @@ impl ShellRuntime {
             policy,
             application.clone(),
         );
-        if let Err(error) = self.initialize(&object) {
+        if let Err(error) = self.initialize(&object, None) {
             if let Some(application) = application {
                 cancel_application_tasks(&application);
             }
@@ -537,7 +651,270 @@ impl ShellRuntime {
         Ok(view)
     }
 
-    pub fn instantiate_for_view(
+    /// Constructs, retains and initializes a nested view under its final GPUI
+    /// entity owner.
+    ///
+    /// The handle enters the entity store before `init(props)` runs so anything
+    /// init creates is tagged with the exact child owner. A failed init removes
+    /// that handle and all records/tasks owned by the candidate child without
+    /// touching application-wide state.
+    pub(crate) fn instantiate_nested_view(
+        self: &Rc<Self>,
+        view_type: &ViewType,
+        policy: Rc<crate::policy::Policy>,
+        initial_props: Option<Persistent<Value<'static>>>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Result<EntityHandle> {
+        // Establish an empty queue boundary while the caller's scope is still
+        // installed. Otherwise an older parent reaction would be executed by
+        // the child-init drain and acquire the child's ownership/authority.
+        scheduler::drain_jobs_transactionally(self)?;
+
+        let application = view_type.application.clone();
+        let (construct_scope, _) = scope::enter_with_application(
+            self,
+            window,
+            cx,
+            ScopePhase::Event,
+            None,
+            policy.clone(),
+            application.clone(),
+        );
+        let constructed = self.construct(view_type);
+        let construction_jobs = scheduler::drain_jobs_transactionally(self);
+        drop(construct_scope);
+        construction_jobs?;
+        let object = constructed?;
+
+        if self.entities().len() >= crate::entities::MAX_LIVE_ENTITIES {
+            anyhow::bail!(
+                "the application reached gpui-shell's retained entity limit; release unused handles"
+            );
+        }
+        let view =
+            cx.new(|cx| ScriptView::nested(self.clone(), object, policy.clone(), cx.entity_id()));
+        let handle = self
+            .entities()
+            .create_view(view.clone(), application.clone(), self);
+        let object = view.read(cx).object().clone();
+
+        let (_initialize_scope, _) = scope::enter_with_application(
+            self,
+            window,
+            cx,
+            ScopePhase::Event,
+            Some(view.clone()),
+            policy,
+            application,
+        );
+        let initialized = self.initialize(&object, initial_props);
+        // The queue was empty before init entered. Draining its whole causal
+        // wave here therefore assigns only init continuations to the child and
+        // prevents a throwing init from leaving work beyond local rollback.
+        let init_jobs = scheduler::drain_jobs_transactionally(self);
+        if let Err(error) = init_jobs {
+            let released = self.entities().release_view(handle, cx);
+            debug_assert!(released, "the failed child handle must still be live");
+            return Err(error);
+        }
+        if let Err(error) = initialized {
+            let released = self.entities().release_view(handle, cx);
+            debug_assert!(released, "the candidate child handle must still be live");
+            return Err(error);
+        }
+        Ok(handle)
+    }
+
+    /// Defers creation until the native host call has returned to Rust and the
+    /// active `Context::with` lock has been released. The opaque token is all
+    /// JavaScript keeps; it is resolved to the typed entity handle before the
+    /// enclosing engine entry returns.
+    fn queue_nested_view_creation(
+        self: &Rc<Self>,
+        ctx: &Ctx<'_>,
+        class: Persistent<Object<'static>>,
+        props: Persistent<Value<'static>>,
+    ) -> JsResult<u32> {
+        let parent = scope::current_view().ok_or_else(|| {
+            Exception::throw_type(
+                ctx,
+                "ViewHandle.new(Class, props) needs a current script view; call it from a \
+                 view's init(), event handler or task",
+            )
+        })?;
+        let (parent_object, policy) = scope::with_current_app(|cx| {
+            let parent = parent.read(cx);
+            (parent.object().clone(), parent.policy())
+        })
+        .ok_or_else(|| nested_view_needs_call(ctx, "ViewHandle.new(Class, props)"))?;
+        let token = self.next_nested_view_token.get();
+        let next = token.checked_add(1).ok_or_else(|| {
+            Exception::throw_range(ctx, "the nested ViewHandle token space is exhausted")
+        })?;
+        self.next_nested_view_token.set(next);
+        self.pending_nested
+            .borrow_mut()
+            .push_back(PendingNestedOperation::Create {
+                runtime: Rc::downgrade(self),
+                token,
+                view_type: ViewType {
+                    value: class,
+                    module_lease: parent_object.module_lease.clone(),
+                    application: parent_object.application.clone(),
+                },
+                policy,
+                props,
+            });
+        Ok(token)
+    }
+
+    fn queue_nested_view_update(
+        self: &Rc<Self>,
+        ctx: &Ctx<'_>,
+        token: u32,
+        props: Persistent<Value<'static>>,
+    ) -> JsResult<()> {
+        let resolved = self.nested_view_handles.borrow().get(&token).copied();
+        let pending = self.pending_nested.borrow().iter().any(|operation| {
+            matches!(operation, PendingNestedOperation::Create { token: candidate, .. } if *candidate == token)
+        });
+        if resolved.is_none() && !pending {
+            return Err(Exception::throw_type(
+                ctx,
+                "this ViewHandle has been released and can no longer be updated",
+            ));
+        }
+        if resolved.is_some_and(|handle| self.entities().view(handle).is_none()) {
+            self.nested_view_handles.borrow_mut().remove(&token);
+            return Err(Exception::throw_type(
+                ctx,
+                "this ViewHandle has been released and can no longer be updated",
+            ));
+        }
+        self.pending_nested
+            .borrow_mut()
+            .push_back(PendingNestedOperation::Update {
+                runtime: Rc::downgrade(self),
+                token,
+                props,
+            });
+        Ok(())
+    }
+
+    /// Applies native nested-view requests only at an unlocked QuickJS
+    /// boundary. Construction therefore goes through Task 2's exact
+    /// `instantiate_nested_view` seam and its three bounded causal drains.
+    pub(super) fn flush_pending_nested_views(&self) -> Result<()> {
+        loop {
+            let operation = { self.pending_nested.borrow_mut().pop_front() };
+            let Some(operation) = operation else {
+                break;
+            };
+            let result = (|| -> Result<()> {
+                match operation {
+                    PendingNestedOperation::Create {
+                        runtime,
+                        token,
+                        view_type,
+                        policy,
+                        props,
+                    } => {
+                        let runtime = runtime.upgrade().ok_or_else(|| {
+                            anyhow!("the shell runtime shut down during child creation")
+                        })?;
+                        let handle = scope::with_current(|window, cx| {
+                            runtime.instantiate_nested_view(
+                                &view_type,
+                                policy,
+                                Some(props),
+                                window,
+                                cx,
+                            )
+                        })
+                        .ok_or_else(|| {
+                            anyhow!("a nested view operation lost its live host call")
+                        })??;
+                        runtime
+                            .nested_view_handles
+                            .borrow_mut()
+                            .insert(token, handle);
+                        Ok(())
+                    }
+                    PendingNestedOperation::Update {
+                        runtime,
+                        token,
+                        props,
+                    } => {
+                        let runtime = runtime.upgrade().ok_or_else(|| {
+                            anyhow!("the shell runtime shut down during child update")
+                        })?;
+                        let handle = runtime
+                            .nested_view_handles
+                            .borrow()
+                            .get(&token)
+                            .copied()
+                            .ok_or_else(|| {
+                                anyhow!("this ViewHandle was released before its update")
+                            })?;
+                        scope::with_current(|window, cx| {
+                            runtime.update_nested_view(handle, props, window, cx)
+                        })
+                        .ok_or_else(|| {
+                            anyhow!("a nested view operation lost its live host call")
+                        })??;
+                        Ok(())
+                    }
+                }
+            })();
+            if let Err(error) = result {
+                self.pending_nested.borrow_mut().clear();
+                return Err(error);
+            }
+        }
+        Ok(())
+    }
+
+    /// Delivers props under the child event scope, drains the whole child
+    /// causal wave, and refreshes only after the update succeeds.
+    fn update_nested_view(
+        self: &Rc<Self>,
+        handle: EntityHandle,
+        props: Persistent<Value<'static>>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Result<()> {
+        scheduler::drain_jobs_transactionally(self)?;
+        // End the store borrow before update or any continuation can re-enter
+        // JavaScript.
+        let view = { self.entities().view(handle) }
+            .ok_or_else(|| anyhow!("this ViewHandle has been released and cannot be updated"))?;
+        let child = view.read(cx);
+        let object = child.object().clone();
+        let policy = child.policy();
+        let application = child.application_generation();
+        let (event_scope, _) = scope::enter_with_application(
+            self,
+            window,
+            cx,
+            ScopePhase::Event,
+            Some(view.clone()),
+            policy,
+            application,
+        );
+        let updated = self.with_js(|ctx| {
+            let props = props.restore(ctx)?;
+            self.update_in_context(ctx, &object, props)
+        });
+        let update_jobs = scheduler::drain_jobs_transactionally(self);
+        drop(event_scope);
+        update_jobs?;
+        updated?;
+        view.update(cx, |view, cx| view.refresh(cx));
+        Ok(())
+    }
+
+    pub(crate) fn instantiate_for_view(
         self: &Rc<Self>,
         view_type: &ViewType,
         view: Entity<ScriptView>,
@@ -564,7 +941,7 @@ impl ShellRuntime {
                 return Err(error);
             }
         };
-        if let Err(error) = self.initialize(&object) {
+        if let Err(error) = self.initialize(&object, None) {
             if let Some(application) = application {
                 cancel_application_tasks(&application);
             }
@@ -586,12 +963,37 @@ impl ShellRuntime {
         })
     }
 
-    fn initialize(&self, object: &ViewObject) -> Result<()> {
+    fn initialize(
+        &self,
+        object: &ViewObject,
+        initial_props: Option<Persistent<Value<'static>>>,
+    ) -> Result<()> {
         self.with_js(|ctx| {
             let instance = object.value.clone().restore(ctx)?;
             let initialize: Function = ctx.globals().get("__initialize")?;
-            initialize.call::<_, ()>((instance,))
+            let props = match initial_props {
+                Some(props) => props.restore(ctx)?,
+                None => Value::new_undefined(ctx.clone()),
+            };
+            initialize.call::<_, ()>((instance, props))
         })
+    }
+
+    fn update_in_context<'js>(
+        &self,
+        ctx: &Ctx<'js>,
+        object: &ViewObject,
+        props: Value<'js>,
+    ) -> JsResult<()> {
+        let instance = object.value.clone().restore(ctx)?;
+        let update: Value = instance.get("update")?;
+        if update.is_undefined() || update.is_null() {
+            return Ok(());
+        }
+        let update = update.as_function().ok_or_else(|| {
+            Exception::throw_type(ctx, "a nested view's update property must be a function")
+        })?;
+        update.call::<_, ()>((This(instance), props))
     }
 
     /// Runs the script's `render` and freezes what it described.
@@ -667,7 +1069,7 @@ impl ShellRuntime {
     /// tests that never paint a frame. This runs the script; to read a
     /// description that has already been built, use
     /// [`RenderSnapshot::debug_tree`] instead — that path never enters the VM.
-    pub fn render_to_spec(
+    pub(crate) fn render_to_spec(
         self: &Rc<Self>,
         object: &ViewObject,
         view: Option<Entity<ScriptView>>,
@@ -691,6 +1093,225 @@ impl ShellRuntime {
         self.callbacks.borrow_mut().retire(generation);
     }
 
+    /// Retires every callback registered by one retained view, including
+    /// generations still held by a rendered frame.
+    pub(crate) fn retire_view_callbacks(&self, entity_id: gpui::EntityId) {
+        self.callbacks.borrow_mut().retain(|entry| {
+            entry
+                .view
+                .as_ref()
+                .is_none_or(|owner| owner.entity_id() != entity_id)
+        });
+    }
+
+    /// How many handlers are callable right now. See [`CallbackArena::len`].
+    #[cfg(test)]
+    pub(crate) fn live_callbacks(&self) -> usize {
+        self.callbacks.borrow().len()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn live_callback_ids(&self) -> Vec<CallbackId> {
+        self.callbacks.borrow().ids()
+    }
+
+    /// Describes one window of a virtualized list's items.
+    ///
+    /// The one call into script that is *not* a snapshot build and *not* an
+    /// event: GPUI runs it from inside layout and prepaint, so it happens on a
+    /// frame's budget rather than on an application's. See the exception
+    /// recorded in [`crate::materialize`] for why that trade is the right one
+    /// here and nowhere else.
+    ///
+    /// Three things make it safe to enter the VM from there:
+    ///
+    /// * The scope is [`ScopePhase::Layout`], which forbids `cx.notify()` —
+    ///   a re-render requested from inside layout is a loop — along with
+    ///   creating retained state, and runs on the render-time budget.
+    /// * The batch describes itself into an arena of its own, swapped in for
+    ///   the duration. The runtime's scratch arena belongs to whichever script
+    ///   render is in progress; a batch writing into it would survive into that
+    ///   render's snapshot. Swapping is strictly nested, so a list inside a
+    ///   list is no different from one on its own.
+    /// * Nothing is drained afterwards. `dispatch_click` runs QuickJS's job
+    ///   queue on the way out because an event handler may have resolved a
+    ///   promise; a continuation is application code of unbounded length, and
+    ///   running one part-way through GPUI's layout pass is the last place it
+    ///   belongs. Queued jobs wait for the event loop, as they would have
+    ///   anyway.
+    pub(crate) fn render_virtual_items(
+        self: &Rc<Self>,
+        id: CallbackId,
+        get_key: CallbackId,
+        range: std::ops::Range<usize>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Option<crate::spec::ItemSpecs> {
+        let entry = self.callbacks.borrow().get(id)?;
+        let key_entry = self.callbacks.borrow().get(get_key)?;
+
+        if entry
+            .application
+            .as_ref()
+            .is_some_and(|application| !application.is_active())
+        {
+            tracing::debug!("item renderer {id} belongs to a retired application");
+            return None;
+        }
+
+        let view = entry.live_view()?;
+        let policy = view
+            .as_ref()
+            .map(|view| view.read(cx).policy())
+            .unwrap_or_else(crate::policy::default);
+        let (_guard, generation) = scope::enter_with_application(
+            self,
+            window,
+            cx,
+            ScopePhase::Layout,
+            view,
+            policy,
+            entry.application.clone(),
+        );
+
+        let outer = std::mem::take(&mut *self.arena.borrow_mut());
+        let described = self.with_js(|ctx| {
+            let handler = entry.value.clone().restore(ctx)?;
+            let key_handler = key_entry.value.clone().restore(ctx)?;
+            let payload = Object::new(ctx.clone())?;
+            payload.set("start", range.start)?;
+            payload.set("end", range.end)?;
+            let produced: Value =
+                handler.call((payload, context_object(ctx, generation)?))?;
+            let items = produced.into_array().ok_or_else(|| {
+                Exception::throw_type(
+                    ctx,
+                    "a virtual list's item renderer must return an array of elements, one per                      item in the range it was given",
+                )
+            })?;
+            let mut roots = SmallVec::new();
+            for item in items.iter::<Value>() {
+                roots.push(element_id(ctx, &item?)?);
+            }
+            let mut keys = Vec::new();
+            keys.try_reserve_exact(range.len()).map_err(|_| {
+                Exception::throw_range(ctx, "the virtual list item-key table could not be allocated")
+            })?;
+            let mut unique = HashSet::new();
+            for index in range.clone() {
+                let key: String = key_handler.call((index,))?;
+                if !unique.insert(key.clone()) {
+                    return Err(Exception::throw_type(
+                        ctx,
+                        &format!("virtual list get_key returned duplicate key `{key}` in one visible range"),
+                    ));
+                }
+                keys.push(key);
+            }
+            Ok((roots, keys))
+        });
+        let arena = std::mem::replace(&mut *self.arena.borrow_mut(), outer);
+
+        match described {
+            Ok((roots, keys)) => Some(crate::spec::ItemSpecs::new(arena, roots, keys)),
+            Err(error) => {
+                tracing::error!("error in virtual list item renderer: {error}");
+                None
+            }
+        }
+    }
+
+    /// Reports which stable item of a collection something happened to.
+    pub(crate) fn dispatch_item_key(
+        self: &Rc<Self>,
+        id: CallbackId,
+        key: &str,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        let Some(entry) = self.callbacks.borrow().get(id) else {
+            tracing::debug!("item callback {id} belongs to a superseded render pass");
+            return;
+        };
+
+        if entry
+            .application
+            .as_ref()
+            .is_some_and(|application| !application.is_active())
+        {
+            tracing::debug!("item callback {id} belongs to a retired application");
+            return;
+        }
+
+        let Some(view) = entry.live_view() else {
+            tracing::debug!("item callback {id} owner has been released");
+            return;
+        };
+        let policy = view
+            .as_ref()
+            .map(|view| view.read(cx).policy())
+            .unwrap_or_else(crate::policy::default);
+        let (_guard, generation) = scope::enter_with_application(
+            self,
+            window,
+            cx,
+            ScopePhase::Event,
+            view,
+            policy,
+            entry.application.clone(),
+        );
+
+        let result = self.with_js(|ctx| {
+            let handler = entry.value.clone().restore(ctx)?;
+            handler.call::<_, ()>((key, context_object(ctx, generation)?))
+        });
+
+        if let Err(error) = result {
+            tracing::error!("error in item click handler: {error}");
+        }
+        scheduler::drain_runtime_jobs(self);
+    }
+
+    /// Delivers a one-time-code event to a long-lived script subscription.
+    pub(super) fn dispatch_otp_event(
+        self: &Rc<Self>,
+        handler: &Persistent<Function<'static>>,
+        owner: &InputCallbackOwner,
+        _event: &gpui_base::OtpEvent,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        if owner
+            .application
+            .as_ref()
+            .is_some_and(|application| !application.is_active())
+        {
+            tracing::debug!("OTP callback belongs to a retired application");
+            return;
+        }
+        let view = owner.view.as_ref().and_then(WeakEntity::upgrade);
+        let (_guard, generation) = scope::enter_with_application(
+            self,
+            window,
+            cx,
+            ScopePhase::Event,
+            view,
+            owner.policy.clone(),
+            owner.application.clone(),
+        );
+
+        let result = self.with_js(|ctx| {
+            let handler = handler.clone().restore(ctx)?;
+            let payload = Object::new(ctx.clone())?;
+            handler.call::<_, ()>((payload, context_object(ctx, generation)?))
+        });
+
+        if let Err(error) = result {
+            tracing::error!("error in OTP handler: {error}");
+        }
+        scheduler::drain_runtime_jobs(self);
+    }
+
     pub(crate) fn dispatch_click(
         self: &Rc<Self>,
         id: CallbackId,
@@ -712,8 +1333,11 @@ impl ShellRuntime {
             return;
         }
 
-        let policy = entry
-            .view
+        let Some(view) = entry.live_view() else {
+            tracing::debug!("click callback {id} owner has been released");
+            return;
+        };
+        let policy = view
             .as_ref()
             .map(|view| view.read(cx).policy())
             .unwrap_or_else(crate::policy::default);
@@ -722,7 +1346,7 @@ impl ShellRuntime {
             window,
             cx,
             ScopePhase::Event,
-            entry.view.clone(),
+            view,
             policy,
             entry.application.clone(),
         );
@@ -747,7 +1371,7 @@ impl ShellRuntime {
         if let Err(error) = result {
             tracing::error!("error in click handler: {error}");
         }
-        scheduler::drain_jobs(&self.js_runtime);
+        scheduler::drain_runtime_jobs(self);
     }
 
     /// Delivers an input event to a long-lived script subscription.
@@ -803,7 +1427,7 @@ impl ShellRuntime {
         if let Err(error) = result {
             tracing::error!("error in input handler: {error}");
         }
-        scheduler::drain_jobs(&self.js_runtime);
+        scheduler::drain_runtime_jobs(self);
     }
 
     /// Delivers a slider event to a long-lived script subscription.
@@ -858,7 +1482,7 @@ impl ShellRuntime {
         if let Err(error) = result {
             tracing::error!("error in slider handler: {error}");
         }
-        scheduler::drain_jobs(&self.js_runtime);
+        scheduler::drain_runtime_jobs(self);
     }
 
     /// Reports the panel sizes of a resizable group after a drag, in pixels and
@@ -889,8 +1513,11 @@ impl ShellRuntime {
             return;
         }
 
-        let policy = entry
-            .view
+        let Some(view) = entry.live_view() else {
+            tracing::debug!("resize callback {id} owner has been released");
+            return;
+        };
+        let policy = view
             .as_ref()
             .map(|view| view.read(cx).policy())
             .unwrap_or_else(crate::policy::default);
@@ -899,7 +1526,7 @@ impl ShellRuntime {
             window,
             cx,
             ScopePhase::Event,
-            entry.view.clone(),
+            view,
             policy,
             entry.application.clone(),
         );
@@ -916,7 +1543,76 @@ impl ShellRuntime {
         if let Err(error) = result {
             tracing::error!("error in resize handler: {error}");
         }
-        scheduler::drain_jobs(&self.js_runtime);
+        scheduler::drain_runtime_jobs(self);
+    }
+
+    pub(crate) fn dispatch_mouse_move(
+        self: &Rc<Self>,
+        id: CallbackId,
+        event: &gpui::MouseMoveEvent,
+        local: gpui::Point<gpui::Pixels>,
+        bounds: gpui::Bounds<gpui::Pixels>,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        let Some(entry) = self.callbacks.borrow().get(id) else {
+            tracing::debug!("mouse move callback {id} belongs to a superseded render pass");
+            return;
+        };
+        if entry
+            .application
+            .as_ref()
+            .is_some_and(|application| !application.is_active())
+        {
+            tracing::debug!("mouse move callback {id} belongs to a retired application");
+            return;
+        }
+        let Some(view) = entry.live_view() else {
+            tracing::debug!("mouse move callback {id} owner has been released");
+            return;
+        };
+        let policy = view
+            .as_ref()
+            .map(|view| view.read(cx).policy())
+            .unwrap_or_else(crate::policy::default);
+        let (_guard, generation) = scope::enter_with_application(
+            self,
+            window,
+            cx,
+            ScopePhase::Event,
+            view,
+            policy,
+            entry.application.clone(),
+        );
+        let result = self.with_js(|ctx| {
+            let handler = entry.value.clone().restore(ctx)?;
+            let payload = Object::new(ctx.clone())?;
+            let position = Object::new(ctx.clone())?;
+            position.set("x", f32::from(event.position.x))?;
+            position.set("y", f32::from(event.position.y))?;
+            payload.set("position", position)?;
+            let local_position = Object::new(ctx.clone())?;
+            local_position.set("x", f32::from(local.x))?;
+            local_position.set("y", f32::from(local.y))?;
+            payload.set("local_position", local_position)?;
+            let event_bounds = Object::new(ctx.clone())?;
+            event_bounds.set("x", f32::from(bounds.origin.x))?;
+            event_bounds.set("y", f32::from(bounds.origin.y))?;
+            event_bounds.set("width", f32::from(bounds.size.width))?;
+            event_bounds.set("height", f32::from(bounds.size.height))?;
+            payload.set("bounds", event_bounds)?;
+            let modifiers = Object::new(ctx.clone())?;
+            modifiers.set("shift", event.modifiers.shift)?;
+            modifiers.set("control", event.modifiers.control)?;
+            modifiers.set("alt", event.modifiers.alt)?;
+            modifiers.set("platform", event.modifiers.platform)?;
+            payload.set("modifiers", modifiers)?;
+            handler.call::<_, ()>((payload, context_object(ctx, generation)?))
+        });
+        if let Err(error) = result {
+            tracing::error!("error in mouse move handler: {error}");
+        }
+        scheduler::drain_runtime_jobs(self);
     }
 
     /// Controlled-value handlers report intent; the script stores the value and
@@ -942,8 +1638,11 @@ impl ShellRuntime {
             return;
         }
 
-        let policy = entry
-            .view
+        let Some(view) = entry.live_view() else {
+            tracing::debug!("change callback {id} owner has been released");
+            return;
+        };
+        let policy = view
             .as_ref()
             .map(|view| view.read(cx).policy())
             .unwrap_or_else(crate::policy::default);
@@ -952,7 +1651,7 @@ impl ShellRuntime {
             window,
             cx,
             ScopePhase::Event,
-            entry.view.clone(),
+            view,
             policy,
             entry.application.clone(),
         );
@@ -965,7 +1664,7 @@ impl ShellRuntime {
         if let Err(error) = result {
             tracing::error!("error in change handler: {error}");
         }
-        scheduler::drain_jobs(&self.js_runtime);
+        scheduler::drain_runtime_jobs(self);
     }
 
     /// Reports which way a `NumberInput` stepped, by the two names base's
@@ -996,8 +1695,11 @@ impl ShellRuntime {
             return;
         }
 
-        let policy = entry
-            .view
+        let Some(view) = entry.live_view() else {
+            tracing::debug!("step callback {id} owner has been released");
+            return;
+        };
+        let policy = view
             .as_ref()
             .map(|view| view.read(cx).policy())
             .unwrap_or_else(crate::policy::default);
@@ -1006,7 +1708,7 @@ impl ShellRuntime {
             window,
             cx,
             ScopePhase::Event,
-            entry.view.clone(),
+            view,
             policy,
             entry.application.clone(),
         );
@@ -1019,7 +1721,7 @@ impl ShellRuntime {
         if let Err(error) = result {
             tracing::error!("error in step handler: {error}");
         }
-        scheduler::drain_jobs(&self.js_runtime);
+        scheduler::drain_runtime_jobs(self);
     }
 
     /// Delivers a handler that reports only that something happened.
@@ -1049,8 +1751,11 @@ impl ShellRuntime {
             return;
         }
 
-        let policy = entry
-            .view
+        let Some(view) = entry.live_view() else {
+            tracing::debug!("signal callback {id} owner has been released");
+            return;
+        };
+        let policy = view
             .as_ref()
             .map(|view| view.read(cx).policy())
             .unwrap_or_else(crate::policy::default);
@@ -1059,7 +1764,7 @@ impl ShellRuntime {
             window,
             cx,
             ScopePhase::Event,
-            entry.view.clone(),
+            view,
             policy,
             entry.application.clone(),
         );
@@ -1072,7 +1777,7 @@ impl ShellRuntime {
         if let Err(error) = result {
             tracing::error!("error in signal handler: {error}");
         }
-        scheduler::drain_jobs(&self.js_runtime);
+        scheduler::drain_runtime_jobs(self);
     }
 
     /// Renders once, and on a "not a function" failure renders again with the
@@ -1118,11 +1823,32 @@ impl ShellRuntime {
     /// Runs `body` inside the JS context, flattening any exception into an
     /// ordinary error carrying the script's message and stack.
     fn with_js<T>(&self, body: impl FnOnce(&Ctx<'_>) -> JsResult<T>) -> Result<T> {
+        if let Some(error) = self.job_queue_error() {
+            return Err(error);
+        }
+        let pending_checkpoint = self.pending_nested.borrow().len();
         sandbox::begin_host_execution();
-        self.context.with(|ctx| match body(&ctx) {
+        let result = self.context.with(|ctx| match body(&ctx) {
             Ok(value) => Ok(value),
             Err(error) => Err(anyhow!("{}", describe(&ctx, error))),
-        })
+        });
+        match result {
+            Ok(value) => {
+                if let Err(error) = self.flush_pending_nested_views() {
+                    self.pending_nested
+                        .borrow_mut()
+                        .truncate(pending_checkpoint);
+                    return Err(error);
+                }
+                Ok(value)
+            }
+            Err(error) => {
+                self.pending_nested
+                    .borrow_mut()
+                    .truncate(pending_checkpoint);
+                Err(error)
+            }
+        }
     }
 
     /// Opens a detached node that collects the declarations of one state style.
@@ -1135,12 +1861,17 @@ impl ShellRuntime {
             // collecting ordinary style methods. A `SliderIndicator` draws its
             // filled part from this one.
             "range_style" => "range_style",
+            // An `OtpInput`'s three: one template for every cell, one layered
+            // on the cell taking the next digit, and one for the caret in it.
+            "cell_style" => "cell_style",
+            "cell_active_style" => "cell_active_style",
+            "caret_style" => "caret_style",
             other => {
                 return Err(Exception::throw_type(
                     ctx,
                     &format!(
-                        "unknown state style `{other}`; expected hover, active, focus or \
-                         range_style"
+                        "unknown state style `{other}`; expected hover, active, focus, \
+                         range_style, cell_style, cell_active_style or caret_style"
                     ),
                 ));
             }
@@ -1461,15 +2192,46 @@ globalThis.__gpui = (() => {
     };
   };
 
-  for (const name of __styleNames) define(name);
+  // Styles do not go through `__apply`, and the reason is arithmetic. They are
+  // most of what a description records, and the generic form above pays three
+  // times over for information the prelude already has: it allocates a rest
+  // array to hold arguments a style never has more than one of, it sends a
+  // method name that has to be copied into a Rust string, and it arrives at a
+  // dispatcher that has to look that string back up in a table. Closing over
+  // the table index instead removes all three, and measured at roughly half
+  // the cost of a recorded style call. `define` stays for the behaviours,
+  // where the argument shapes vary and a second form would not repay itself.
+  const defineNullaryStyle = (name, index) => {
+    methods[name] = function () {
+      __applyNullaryStyle(this.__id, index);
+      return this;
+    };
+  };
+  const defineParamStyle = (name, index) => {
+    methods[name] = function (value) {
+      __applyParamStyle(this.__id, index, value);
+      return this;
+    };
+  };
+
+  for (let i = 0; i < __nullaryStyles.length; i += 1) {
+    defineNullaryStyle(__nullaryStyles[i], __nullaryStyleIndexes[i]);
+  }
+  for (let i = 0; i < __paramStyles.length; i += 1) {
+    defineParamStyle(__paramStyles[i], i);
+  }
   for (const name of __behaviorNames) define(name);
 
+  // Attaching is the other call a description makes once per element, and it
+  // carries no argument a `Bridged` could describe — two element ids, both
+  // already numbers. It gets an entry point of its own for the same reason the
+  // styles do.
   methods.child = function (child) {
-    __apply(this.__id, "child", [child.__id]);
+    __attach(this.__id, child.__id);
     return this;
   };
   methods.children = function (list) {
-    for (const child of list) __apply(this.__id, "child", [child.__id]);
+    for (const child of list) __attach(this.__id, child.__id);
     return this;
   };
   // A named slot. The element is consumed exactly as `child` consumes one, so
@@ -1501,6 +2263,19 @@ globalThis.__gpui = (() => {
     __apply(this.__id, "track_focus", [handle.__handle]);
     return this;
   };
+  // A virtualized list's scroll position, unwrapped exactly as `track_focus`
+  // unwraps a focus handle, and checked here for the same reason: a name or an
+  // element would be dropped on the Rust side and the list would simply never
+  // respond to `scroll_to_item`.
+  methods.track_scroll = function (handle) {
+    if (typeof handle?.__handle !== "number") {
+      throw new TypeError(
+        "track_scroll(handle) expects a VirtualListScrollHandle from VirtualListScrollHandle.new()",
+      );
+    }
+    __apply(this.__id, "track_scroll", [handle.__handle]);
+    return this;
+  };
   // The second handle a combobox root needs: the one the keyboard moves to when
   // the surface opens. Checked here for the same reason `track_focus` is — a
   // name or an element would otherwise be dropped on the Rust side and the
@@ -1530,6 +2305,39 @@ globalThis.__gpui = (() => {
   // it is the same thing — a detached element collecting styles. The shell
   // positions the box; this says what it looks like.
   methods.range_style = state("range_style");
+  // An OtpInput's cells. Not states either: the shell decides which template
+  // a cell gets, from the state, on every frame — but they are declared the
+  // same way, because what they collect is the same thing.
+  methods.cell_style = state("cell_style");
+  methods.cell_active_style = state("cell_active_style");
+  methods.caret_style = state("caret_style");
+
+  // The argument checks are here rather than only on the Rust side because a
+  // list built with the pieces in the wrong order — a render function where the
+  // sizes go — would otherwise fail as a type error naming neither.
+  const virtualList = (build, name) => (id, item_count, item_sizes, get_key, render) => {
+    const shape = name + "(id, item_count, item_sizes, get_key, render)";
+    if (!Number.isInteger(item_count) || item_count < 0) {
+      throw new TypeError(shape + " needs a whole, non-negative item_count");
+    }
+    if (typeof render !== "function") {
+      throw new TypeError(
+        shape + " needs a render function; it is called once per visible range, not once per item",
+      );
+    }
+    if (typeof get_key !== "function") {
+      throw new TypeError(
+        shape + " needs get_key(index) to return each item's stable string key",
+      );
+    }
+    if (Array.isArray(item_sizes) && item_sizes.length !== item_count) {
+      throw new TypeError(
+        shape + " was given " + item_sizes.length + " item sizes for " + item_count +
+          " items; pass one number for a uniform extent, or one per item",
+      );
+    }
+    return element(build(String(id), item_count, item_sizes, get_key, render));
+  };
 
   const finiteNonNegative = (value, name) => {
     if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
@@ -1564,8 +2372,8 @@ globalThis.__gpui = (() => {
       );
     }
     const policy = typeof options === "number" ? { duration: options } : (options ?? {});
-    const duration = finiteNonNegative(policy.duration ?? 0, "transition duration");
-    const delay = finiteNonNegative(policy.delay ?? 0, "transition delay");
+    const duration = finiteDuration(policy.duration ?? 0, "transition duration");
+    const delay = finiteDuration(policy.delay ?? 0, "transition delay");
     const easing = policy.easing ?? "ease-out";
     if (!["linear", "ease-in", "ease-out", "ease-in-out"].includes(easing)) {
       throw new TypeError(
@@ -1591,7 +2399,7 @@ globalThis.__gpui = (() => {
       );
     }
     const policy = options ?? {};
-    const response = finiteNonNegative(policy.response ?? 250, "spring response");
+    const response = finiteDuration(policy.response ?? 250, "spring response");
     const damping = finiteNonNegative(policy.damping ?? 1, "spring damping");
     const epsilon = finitePositive(policy.epsilon ?? 0.001, "spring epsilon");
     __apply(this.__id, "spring", [
@@ -1676,9 +2484,14 @@ globalThis.__gpui = (() => {
   };
 
   // Milliseconds, as everywhere else a script names a duration.
+  const finiteDuration = (value, name) => {
+    value = finiteNonNegative(value, name);
+    if (value > 86400000) throw new RangeError(name + " must not exceed 86400000 milliseconds");
+    return value;
+  };
   const delay = (name) =>
     function (ms) {
-      __apply(this.__id, name, [finiteNonNegative(ms, name)]);
+      __apply(this.__id, name, [finiteDuration(ms, name)]);
       return this;
     };
 
@@ -1769,7 +2582,7 @@ globalThis.__gpui = (() => {
     builder.close = () => { commands.push(Object.freeze(["close"])); return builder; };
     builder.dash_array = (values) => {
       if (fill) throw new TypeError("dash_array is only available on stroke paths");
-      if (!Array.isArray(values) || values.some((value) => typeof value !== "number" || !Number.isFinite(value) || value <= 0)) {
+      if (!Array.isArray(values) || values.some((value) => typeof value !== "number" || !Number.isFinite(value) || Math.fround(value) <= 0)) {
         throw new TypeError("dash_array(values) expects positive finite pixel numbers");
       }
       commands.push(Object.freeze(["dash_array", ...values]));
@@ -1799,7 +2612,7 @@ globalThis.__gpui = (() => {
     const object = element(__path(
       pathValue.fill,
       paint.kind,
-      paint.values.map(String).join("\u001f"),
+      paint.values.map(String),
       paint.opacityFactor,
       paint.colorSpace,
       pathValue.width,
@@ -1881,11 +2694,54 @@ globalThis.__gpui = (() => {
     release: () => __slider_release(handle),
   });
 
+  // A one-time code. `len` is read rather than set: base fixes it when the
+  // state is created and offers no setter, because it is what the state is.
+  const otpState = (handle) => ({
+    __handle: handle,
+    value: () => __otp_value(handle),
+    set_value: (next) => __otp_set_value(handle, String(next ?? "")),
+    len: () => __otp_len(handle),
+    is_masked: () => __otp_is_masked(handle),
+    set_masked: (masked) => __otp_set_masked(handle, Boolean(masked)),
+    focus: () => __otp_focus(handle),
+    on: (event, handler) => __otp_on(handle, String(event), handler),
+    release: () => __otp_release(handle),
+  });
+
   const focusHandle = (handle) => ({
     __handle: handle,
     focus: () => __focus_focus(handle),
     is_focused: () => __focus_is_focused(handle),
     release: () => __focus_release(handle),
+  });
+
+  const retainedViewHandle = (handle) => ({
+    __handle: handle,
+    set_props: (props) => __view_set_props(handle, props),
+    release: () => __view_release(handle),
+  });
+
+  const childView = (handle) => {
+    if (typeof handle?.__handle !== "number") {
+      throw new TypeError(
+        "child_view(handle) expects a ViewHandle from ViewHandle.new(Class, props)",
+      );
+    }
+    return element(__child_view(handle.__handle));
+  };
+
+  const virtualScrollHandle = (handle) => ({
+    __handle: handle,
+    // The strategy is base's own word for where the item lands. `top` puts it
+    // at the near edge, `center` in the middle; base's default is `top`.
+    scroll_to_item: (index, strategy) => {
+      if (!Number.isInteger(index) || index < 0) {
+        throw new TypeError("scroll_to_item(index) needs a whole, non-negative index");
+      }
+      __virtual_scroll_to_item(handle, index, String(strategy ?? "top"));
+    },
+    scroll_to_bottom: () => __virtual_scroll_to_bottom(handle),
+    release: () => __virtual_scroll_release(handle),
   });
 
   let deferInit = false;
@@ -1897,8 +2753,8 @@ globalThis.__gpui = (() => {
       deferInit = false;
     }
   };
-  globalThis.__initialize = (instance) => {
-    if (typeof instance.init === "function") instance.init();
+  globalThis.__initialize = (instance, props) => {
+    if (typeof instance.init === "function") instance.init(props);
   };
 
   class View {
@@ -1970,6 +2826,15 @@ globalThis.__gpui = (() => {
 
   return {
     View,
+    ViewHandle: {
+      new: (Class, props) => {
+        if (typeof Class !== "function") {
+          throw new TypeError("ViewHandle.new(Class, props) expects a View subclass");
+        }
+        return retainedViewHandle(__view_new(Class, props));
+      },
+    },
+    child_view: childView,
     div: () => element(__div()),
     h_flex: () => element(__h_flex()),
     v_flex: () => element(__v_flex()),
@@ -2074,6 +2939,16 @@ globalThis.__gpui = (() => {
         return element(__date_picker(String(id), focus_handle.__handle));
       },
     },
+    // Free functions, not `VirtualList.new(...)`, because that is what base
+    // exports: `v_virtual_list` and `h_virtual_list` are the whole of its
+    // public surface, and the list has no type a script ever names.
+    //
+    // The count is a separate argument from the sizes, which base does not
+    // separate — its one vector is both. See the `.d.ts` for why: mirroring it
+    // would put one number per row across the boundary on every render.
+    v_virtual_list: virtualList(__v_virtual_list, "v_virtual_list"),
+    h_virtual_list: virtualList(__h_virtual_list, "h_virtual_list"),
+    VirtualListScrollHandle: { new: () => virtualScrollHandle(__virtual_scroll_new()) },
     Scrollbar: {
       new: (id) => element(__scrollbar(String(id))),
       // `horizontal` and `vertical` are `new` plus the orientation the group
@@ -2142,6 +3017,21 @@ globalThis.__gpui = (() => {
     SliderTrack: { new: (state) => element(__slider_track_element(state.__handle)) },
     SliderIndicator: { new: (state) => element(__slider_indicator_element(state.__handle)) },
     SliderThumb: { new: (state) => element(__slider_thumb_element(state.__handle)) },
+    OtpState: {
+      new: (length, options) => {
+        // A code of no cells accepts no keystroke and shows nothing, and a
+        // typed-in length of six hundred thousand is a frozen window. Neither
+        // is something base refuses, so it is refused here.
+        if (!Number.isInteger(length) || length < 1 || length > 64) {
+          throw new TypeError("OtpState.new(length) expects a whole number between 1 and 64");
+        }
+        const settings = options ?? {};
+        return otpState(
+          __otp_state_new(length, settings.value ?? null, Boolean(settings.masked)),
+        );
+      },
+    },
+    OtpInput: { new: (state) => element(__otp_element(state.__handle)) },
     FocusHandle: { new: () => focusHandle(__focus_handle_new()) },
   };
 })();
@@ -2153,15 +3043,31 @@ impl ShellRuntime {
         self.with_js(move |ctx| {
             let globals = ctx.globals();
 
-            let names = rquickjs::Array::new(ctx.clone())?;
-            for (index, name) in style::known_names().into_iter().enumerate() {
-                names.set(index, name)?;
+            // Two tables rather than one list of names: the prelude binds a
+            // different prototype method over each, and both close over the
+            // index that identifies the style, so that recording one never
+            // puts its name on the wire.
+            let nullary = rquickjs::Array::new(ctx.clone())?;
+            let nullary_indexes = rquickjs::Array::new(ctx.clone())?;
+            for (position, (name, index)) in style::nullary_styles().into_iter().enumerate() {
+                nullary.set(position, name)?;
+                nullary_indexes.set(position, index)?;
             }
-            globals.set("__styleNames", names)?;
+            globals.set("__nullaryStyles", nullary)?;
+            globals.set("__nullaryStyleIndexes", nullary_indexes)?;
+
+            let parametric = rquickjs::Array::new(ctx.clone())?;
+            for (index, name) in style::param_styles().enumerate() {
+                parametric.set(index, name)?;
+            }
+            globals.set("__paramStyles", parametric)?;
 
             let behaviors = rquickjs::Array::new(ctx.clone())?;
             for (index, name) in [
                 "on_click",
+                "on_mouse_move",
+                "on_hover",
+                "on_item_click",
                 "on_change",
                 "on_open_change",
                 "on_confirm",
@@ -2171,6 +3077,7 @@ impl ShellRuntime {
                 "selected",
                 "checked",
                 "accessibility_label",
+                "tooltip",
                 "role",
                 "aria_selected",
                 "aria_active_descendant",
@@ -2197,6 +3104,7 @@ impl ShellRuntime {
                 "open",
                 "default_open",
                 "overlay_closable",
+                "with_item_to_measure_index",
             ]
             .into_iter()
             .enumerate()
@@ -2227,7 +3135,7 @@ impl ShellRuntime {
                     move |ctx: Ctx<'_>,
                           fill: bool,
                           kind: String,
-                          values: String,
+                          values: Array<'_>,
                           opacity: f64,
                           color_space: String,
                           width: f64|
@@ -2244,18 +3152,26 @@ impl ShellRuntime {
                                 "path background opacity must be finite and non-negative",
                             ));
                         }
-                        let values = values.split('\u{1f}').collect::<Vec<_>>();
+                        let value_count =
+                            crate::engine::quickjs::native::bridge_array_len(&ctx, &values)?;
+                        let mut value_strings = Vec::new();
+                        value_strings.try_reserve_exact(value_count).map_err(|_| {
+                            Exception::throw_range(&ctx, "path background values are too large")
+                        })?;
+                        for index in 0..value_count {
+                            value_strings.push(values.get::<String>(index)?);
+                        }
                         let number = |index: usize, name: &str| -> JsResult<f32> {
-                            values
+                            value_strings
                                 .get(index)
                                 .and_then(|value| value.parse::<f32>().ok())
                                 .filter(|value| value.is_finite())
                                 .ok_or_else(|| Exception::throw_type(&ctx, name))
                         };
                         let text = |index: usize, name: &str| -> JsResult<String> {
-                            values
+                            value_strings
                                 .get(index)
-                                .map(|value| (*value).to_owned())
+                                .cloned()
                                 .ok_or_else(|| Exception::throw_type(&ctx, name))
                         };
                         let kind = match kind.as_str() {
@@ -2392,6 +3308,18 @@ impl ShellRuntime {
                 runtime.clone(),
                 Component::HoverCard,
             )?;
+            virtual_list_constructor(
+                &globals,
+                "__v_virtual_list",
+                runtime.clone(),
+                gpui::Axis::Vertical,
+            )?;
+            virtual_list_constructor(
+                &globals,
+                "__h_virtual_list",
+                runtime.clone(),
+                gpui::Axis::Horizontal,
+            )?;
             text_constructor(&globals, "__popup", runtime.clone(), Component::Popup)?;
             text_constructor(&globals, "__select", runtime.clone(), Component::Select)?;
             text_constructor(&globals, "__combobox", runtime.clone(), Component::Combobox)?;
@@ -2422,6 +3350,92 @@ impl ShellRuntime {
                 ),
             )?;
 
+            let create_view = runtime.clone();
+            globals.set(
+                "__view_new",
+                Func::from(
+                    move |ctx: Ctx<'_>, class: NestedViewClass, props: NestedViewProps| {
+                        refuse_nested_view_mutation(
+                            &ctx,
+                            "ViewHandle.new(Class, props)",
+                            "create",
+                        )?;
+                        let runtime = upgrade(&create_view, &ctx)?;
+                        runtime.queue_nested_view_creation(&ctx, class.0, props.0)
+                    },
+                ),
+            )?;
+
+            let update_view = runtime.clone();
+            globals.set(
+                "__view_set_props",
+                Func::from(move |ctx: Ctx<'_>, token: u32, props: NestedViewProps| {
+                    refuse_nested_view_mutation(&ctx, "ViewHandle.set_props(props)", "update")?;
+                    let runtime = upgrade(&update_view, &ctx)?;
+                    runtime.queue_nested_view_update(&ctx, token, props.0)
+                }),
+            )?;
+
+            let release_view = runtime.clone();
+            globals.set(
+                "__view_release",
+                Func::from(move |ctx: Ctx<'_>, token: u32| -> JsResult<bool> {
+                    refuse_nested_view_mutation(&ctx, "ViewHandle.release()", "release")?;
+                    let runtime = upgrade(&release_view, &ctx)?;
+                    let mut pending = runtime.pending_nested.borrow_mut();
+                    let before = pending.len();
+                    pending.retain(|operation| match operation {
+                        PendingNestedOperation::Create {
+                            token: candidate, ..
+                        }
+                        | PendingNestedOperation::Update {
+                            token: candidate, ..
+                        } => *candidate != token,
+                    });
+                    let cancelled_pending = pending.len() != before;
+                    drop(pending);
+                    if let Some(handle) = runtime.nested_view_handles.borrow_mut().remove(&token) {
+                        return scope::with_current_app(|cx| {
+                            runtime.entities().release_view(handle, cx)
+                        })
+                        .ok_or_else(|| nested_view_needs_call(&ctx, "ViewHandle.release()"));
+                    }
+                    Ok(cancelled_pending)
+                }),
+            )?;
+
+            let mount_view = runtime.clone();
+            globals.set(
+                "__child_view",
+                Func::from(move |ctx: Ctx<'_>, token: u32| -> JsResult<SpecId> {
+                    let runtime = upgrade(&mount_view, &ctx)?;
+                    let handle = runtime
+                        .nested_view_handles
+                        .borrow()
+                        .get(&token)
+                        .copied()
+                        .ok_or_else(|| {
+                            Exception::throw_type(
+                                &ctx,
+                                "this ViewHandle has been released and can no longer be mounted",
+                            )
+                        })?;
+                    // Resolve and clone before borrowing the arena. The
+                    // snapshot keeps this entity alive after handle release.
+                    let view = { runtime.entities().view(handle) }.ok_or_else(|| {
+                        Exception::throw_type(
+                            &ctx,
+                            "this ViewHandle has been released and can no longer be mounted",
+                        )
+                    })?;
+                    runtime
+                        .arena
+                        .borrow_mut()
+                        .push_child_view(ChildViewSpec::new(handle, view))
+                        .map_err(|error| Exception::throw_type(&ctx, &error.to_string()))
+                }),
+            )?;
+
             let state_runtime = runtime.clone();
             globals.set(
                 "__state",
@@ -2439,6 +3453,34 @@ impl ShellRuntime {
                 }),
             )?;
 
+            let attach_runtime = runtime.clone();
+            globals.set(
+                "__attach",
+                Func::from(move |ctx: Ctx<'_>, id: u32, child: u32| -> JsResult<()> {
+                    upgrade(&attach_runtime, &ctx)?.attach(&ctx, id, child)
+                }),
+            )?;
+
+            let nullary_style_runtime = runtime.clone();
+            globals.set(
+                "__applyNullaryStyle",
+                Func::from(move |ctx: Ctx<'_>, id: u32, index: u16| -> JsResult<()> {
+                    let runtime = upgrade(&nullary_style_runtime, &ctx)?;
+                    runtime.push_op_checked(&ctx, runtime.push_op(id, SpecOp::NullaryStyle(index)))
+                }),
+            )?;
+
+            let param_style_runtime = runtime.clone();
+            globals.set(
+                "__applyParamStyle",
+                Func::from(
+                    move |ctx: Ctx<'_>, id: u32, index: usize, value: Opt<StyleArgument>| {
+                        let runtime = upgrade(&param_style_runtime, &ctx)?;
+                        runtime.apply_param_style(&ctx, id, index, value.0)
+                    },
+                ),
+            )?;
+
             let apply_runtime = runtime.clone();
             globals.set(
                 "__apply",
@@ -2449,6 +3491,23 @@ impl ShellRuntime {
                     },
                 ),
             )?;
+
+            // Test-only probes for `tests::benchmark`. Each one accepts a
+            // prefix of `__apply`'s signature and does nothing with it, so the
+            // difference between two of them is the cost of converting the one
+            // argument that was added — and the difference between the last one
+            // and `__apply` is everything `apply` itself does. There is no way
+            // to measure that split from script alone: a crossing that does
+            // nothing has to exist for the crossing to be priced.
+            #[cfg(test)]
+            {
+                globals.set("__benchId", Func::from(|_id: u32| {}))?;
+                globals.set("__benchName", Func::from(|_id: u32, _name: String| {}))?;
+                globals.set(
+                    "__benchArgs",
+                    Func::from(|_id: u32, _name: String, _args: Arguments| {}),
+                )?;
+            }
 
             // Before the prelude, which builds the `window` object over these.
             overlay::install(ctx, &ctx.globals())?;
@@ -2471,6 +3530,69 @@ impl ShellRuntime {
         })
     }
 
+    /// Adds an element to another element's children.
+    fn attach(&self, ctx: &Ctx<'_>, id: SpecId, child: SpecId) -> JsResult<()> {
+        // A `resizable_panel()` is not an element anywhere else: base's panel
+        // reads its size out of the group's state and panics outright without
+        // one. Refused here, where the script can be pointed at the line that
+        // did it, rather than at paint time.
+        let orphan = {
+            let arena = self.arena.borrow();
+            let component = |node| arena.node(node).and_then(crate::spec::SpecNode::component);
+            matches!(component(child), Some(Component::ResizablePanel))
+                && !matches!(component(id), Some(Component::Resizable(..)))
+        };
+        if orphan {
+            return Err(Exception::throw_type(
+                ctx,
+                "resizable_panel() belongs to an h_resizable() or v_resizable(): its size \
+                 and its drag handle are the group's. Use a div() here instead",
+            ));
+        }
+        let attached = self.arena.borrow_mut().attach(id, child);
+        self.push_op_checked(ctx, attached)
+    }
+
+    /// Records a style method that takes an argument, addressed by index.
+    ///
+    /// The dispatch `apply` would do for the same call has already happened:
+    /// the prelude closed over the position in the parametric table when it
+    /// bound the method, so this resolves a name by indexing rather than by
+    /// looking a string up.
+    fn apply_param_style(
+        &self,
+        ctx: &Ctx<'_>,
+        id: SpecId,
+        index: usize,
+        value: Option<StyleArgument>,
+    ) -> JsResult<()> {
+        let name = style::param_style_at(index)
+            .ok_or_else(|| Exception::throw_type(ctx, "unknown element method"))?;
+        let value = match value {
+            Some(StyleArgument::Value(value)) => value,
+            Some(StyleArgument::Handler) => {
+                return Err(Exception::throw_type(
+                    ctx,
+                    &format!("`{name}` does not take a function"),
+                ));
+            }
+            // Said by the same code that says it for every other bound method,
+            // so a missing argument reads the same wherever it is missed.
+            None => {
+                let error = crate::value::arg(&[], 0, name)
+                    .expect_err("argument 0 of an empty list is always missing");
+                return Err(Exception::throw_type(ctx, error.message()));
+            }
+        };
+
+        let args: SmallVec<[Bridged; 2]> = smallvec::smallvec![value];
+        // Validate eagerly so a bad argument reports at the call site instead
+        // of surfacing during materialize.
+        style::apply_param(name, &args, Default::default())
+            .map_err(|error| Exception::throw_type(ctx, error.message()))?;
+        self.push_op_checked(ctx, self.push_op(id, SpecOp::ParamStyle(name, args)))
+    }
+
     fn apply(&self, ctx: &Ctx<'_>, id: SpecId, method: &str, args: Arguments) -> JsResult<()> {
         match method {
             "child" => {
@@ -2480,31 +3602,7 @@ impl ShellRuntime {
                     .ok_or_else(|| {
                         Exception::throw_type(ctx, "child(element) expects an element")
                     })? as SpecId;
-                // A `resizable_panel()` is not an element anywhere else:
-                // base's panel reads its size out of the group's state and
-                // panics outright without one. Refused here, where the script
-                // can be pointed at the line that did it, rather than at paint
-                // time.
-                let orphan = {
-                    let arena = self.arena.borrow();
-                    let component = |node| {
-                        arena
-                            .node(node)
-                            .and_then(crate::spec::SpecNode::component)
-                            .cloned()
-                    };
-                    matches!(component(child), Some(Component::ResizablePanel))
-                        && !matches!(component(id), Some(Component::Resizable(..)))
-                };
-                if orphan {
-                    return Err(Exception::throw_type(
-                        ctx,
-                        "resizable_panel() belongs to an h_resizable() or v_resizable(): its size \
-                         and its drag handle are the group's. Use a div() here instead",
-                    ));
-                }
-                let attached = self.arena.borrow_mut().attach(id, child);
-                self.push_op_checked(ctx, attached)
+                self.attach(ctx, id, child)
             }
             "content" | "trigger" | "input" | "decrement_button" | "increment_button" => {
                 let element = args
@@ -2516,17 +3614,42 @@ impl ShellRuntime {
                 self.fill_slot(ctx, id, method, element)
             }
             "on_click" | "on_resize" | "on_change" | "on_open_change" | "on_confirm"
-            | "on_dismiss" | "on_step" => {
+            | "on_dismiss" | "on_step" | "on_item_click" | "on_mouse_move" | "on_hover" => {
+                // A handler registered from inside a virtual list's item
+                // renderer has nowhere to live. Callbacks belong to the
+                // snapshot that registered them and are retired with it; the
+                // snapshot outlives thousands of frames, while the rows are
+                // rebuilt on every one — so twenty handlers a frame would
+                // accumulate, unreachable and unreleased, for as long as the
+                // description stood. Refused where it was written rather than
+                // leaked quietly. `on_item_click` on the list is the one
+                // handler that covers the rows, and it is registered from
+                // `render()` like every other.
+                if scope::current_phase() == Some(ScopePhase::Layout) {
+                    return Err(Exception::throw_type(
+                        ctx,
+                        &format!(
+                            "`{method}` cannot be registered from a virtual list's item \
+                             renderer: the rows are rebuilt every frame, so a handler \
+                             registered there would pile up for as long as the view stood. \
+                             Use `on_item_click((key, cx) => ...)` on the list itself, and \
+                             read the row out of your own data with the stable key it gives you"
+                        ),
+                    ));
+                }
                 let saved = args.first_handler().ok_or_else(|| {
                     Exception::throw_type(ctx, &format!("{method}(handler) expects a function"))
                 })?;
                 let callback = self.callbacks.borrow_mut().push(CallbackEntry {
                     value: saved,
-                    view: scope::current_view(),
+                    view: scope::current_view().map(|view| view.downgrade()),
                     application: scope::current_application_generation(),
                 });
                 let name = match method {
                     "on_click" => "on_click",
+                    "on_mouse_move" => "on_mouse_move",
+                    "on_hover" => "on_hover",
+                    "on_item_click" => "on_item_click",
                     "on_resize" => "on_resize",
                     "on_change" => "on_change",
                     "on_confirm" => "on_confirm",
@@ -2540,10 +3663,13 @@ impl ShellRuntime {
             | "selected"
             | "checked"
             | "accessibility_label"
+            | "tooltip"
             | "role"
             | "aria_selected"
             | "aria_active_descendant"
             | "track_focus"
+            | "track_scroll"
+            | "with_item_to_measure_index"
             | "content_focus_handle"
             | "tab_index"
             | "tab_stop"
@@ -2584,10 +3710,13 @@ impl ShellRuntime {
                     "disabled" => "disabled",
                     "selected" => "selected",
                     "checked" => "checked",
+                    "tooltip" => "tooltip",
                     "role" => "role",
                     "aria_selected" => "aria_selected",
                     "aria_active_descendant" => "aria_active_descendant",
                     "track_focus" => "track_focus",
+                    "track_scroll" => "track_scroll",
+                    "with_item_to_measure_index" => "with_item_to_measure_index",
                     "content_focus_handle" => "content_focus_handle",
                     "tab_index" => "tab_index",
                     "tab_stop" => "tab_stop",
@@ -2637,6 +3766,21 @@ impl ShellRuntime {
                          must not change between renders",
                     ));
                 }
+                // Dropping a non-string here would leave an element that
+                // looks tooltipped and shows nothing on hover. It is also the
+                // one place to say that the element form is not bound yet.
+                if name == "tooltip"
+                    && bridged
+                        .first()
+                        .and_then(|value| value.as_str().ok())
+                        .is_none()
+                {
+                    return Err(Exception::throw_type(
+                        ctx,
+                        "tooltip(text) expects a string; a tooltip built from an element is not \
+                         bound yet",
+                    ));
+                }
                 // A bar that silently sits at zero because the percentage
                 // arrived as a string is the kind of bug that gets blamed on
                 // the layout. Say it at the call site instead.
@@ -2654,6 +3798,29 @@ impl ShellRuntime {
                         return Err(Exception::throw_type(
                             ctx,
                             "set_position(position, size) expects whole finite numbers with 1 <= position <= size",
+                        ));
+                    }
+                }
+                if name == "size_range" {
+                    let Some(min) = bridged.first().and_then(finite_number) else {
+                        return Err(Exception::throw_range(
+                            ctx,
+                            "size_range minimum does not fit the native pixel range",
+                        ));
+                    };
+                    let max = match bridged.get(1) {
+                        Some(value) => Some(finite_number(value).ok_or_else(|| {
+                            Exception::throw_range(
+                                ctx,
+                                "size_range maximum does not fit the native pixel range",
+                            )
+                        })?),
+                        None => None,
+                    };
+                    if max.is_some_and(|max| max < min) {
+                        return Err(Exception::throw_range(
+                            ctx,
+                            "size_range maximum must be greater than or equal to its minimum",
                         ));
                     }
                 }
@@ -2829,6 +3996,207 @@ fn indexed_constructor(
     )
 }
 
+/// How far apart a virtualized list's items are: `number | number[]`.
+///
+/// Two forms rather than base's one vector, because the length of that vector
+/// is also the item count — so mirroring it literally would put one number per
+/// row across the language boundary on every script render. A hundred thousand
+/// rows of a fixed height is one number here.
+enum ItemExtents {
+    Uniform(f64),
+    PerItem(Vec<f64>),
+}
+
+impl<'js> FromJs<'js> for ItemExtents {
+    fn from_js(ctx: &Ctx<'js>, value: Value<'js>) -> JsResult<Self> {
+        if let Some(uniform) = value.as_number() {
+            return Ok(Self::Uniform(uniform));
+        }
+        let items = value.as_array().ok_or_else(|| {
+            Exception::throw_type(ctx, "item_sizes must be a number or an array of numbers")
+        })?;
+        let length = native::bridge_array_len(ctx, &items).map_err(|_| {
+            Exception::throw_range(
+                ctx,
+                &format!(
+                    "item_sizes may contain at most {} entries",
+                    native::MAX_BRIDGE_ARRAY_ITEMS
+                ),
+            )
+        })?;
+        let mut extents = Vec::new();
+        extents.try_reserve_exact(length).map_err(|_| {
+            Exception::throw_range(ctx, "the item_sizes array could not be allocated")
+        })?;
+        for extent in items.iter::<f64>() {
+            extents.push(extent?);
+        }
+        Ok(Self::PerItem(extents))
+    }
+}
+
+/// A script function taken as a constructor argument, saved on the way in.
+///
+/// Persisted inside `FromJs` for the reason [`Arguments`] gives: a closure
+/// cannot unify the `Ctx<'js>` it takes with a borrowed value of the same
+/// lifetime, so the crossing happens where both are still one lifetime.
+struct ItemRenderer(Persistent<Function<'static>>);
+
+impl<'js> FromJs<'js> for ItemRenderer {
+    fn from_js(ctx: &Ctx<'js>, value: Value<'js>) -> JsResult<Self> {
+        let function = value.as_function().ok_or_else(|| {
+            Exception::throw_type(
+                ctx,
+                "a virtual list needs a render function; it is called with the visible range,                  not once per item",
+            )
+        })?;
+        Ok(Self(Persistent::save(ctx, function.clone())))
+    }
+}
+
+/// A script function resolving one stable string key from a current index.
+struct ItemKeyResolver(Persistent<Function<'static>>);
+
+impl<'js> FromJs<'js> for ItemKeyResolver {
+    fn from_js(ctx: &Ctx<'js>, value: Value<'js>) -> JsResult<Self> {
+        let function = value.as_function().ok_or_else(|| {
+            Exception::throw_type(
+                ctx,
+                "a virtual list needs get_key(index) to return each item's stable string key",
+            )
+        })?;
+        Ok(Self(Persistent::save(ctx, function.clone())))
+    }
+}
+
+/// The aggregate item count whose native extent vectors one render may own.
+///
+/// Base wants one `Size` per item and the vector is built here, so a count the
+/// script fat-fingered — a byte offset, a timestamp — would be an allocation
+/// measured in gigabytes before anything else had a chance to notice. This is
+/// shared across every list in the description so several individually valid
+/// lists cannot bypass it.
+const MAX_VIRTUAL_ITEMS_PER_RENDER: usize = 1_000_000;
+
+/// `v_virtual_list` and `h_virtual_list`.
+///
+/// The item renderer is registered as an ordinary callback, so it belongs to
+/// the snapshot being built and is retired with it. That is also why it cannot
+/// be registered from inside another item renderer: by then the generation that
+/// would own it has been committed, and a callback pushed with no open
+/// generation is one no lookup can ever match.
+fn virtual_list_constructor(
+    globals: &Object<'_>,
+    name: &str,
+    runtime: Weak<ShellRuntime>,
+    axis: gpui::Axis,
+) -> JsResult<()> {
+    globals.set(
+        name,
+        Func::from(
+            move |ctx: Ctx<'_>,
+                  id: String,
+                  count: usize,
+                  extents: ItemExtents,
+                  get_key: ItemKeyResolver,
+                  render: ItemRenderer|
+                  -> JsResult<SpecId> {
+                if scope::current_phase() == Some(ScopePhase::Layout) {
+                    return Err(Exception::throw_type(
+                        &ctx,
+                        "a virtual list cannot be built from inside another list's item                          renderer: its own renderer would belong to no render pass and would                          never be called. Describe the nested list from the view's render()                          instead",
+                    ));
+                }
+                if !upgrade(&runtime, &ctx)?
+                    .arena
+                    .borrow_mut()
+                    .claim_virtual_items(count, MAX_VIRTUAL_ITEMS_PER_RENDER)
+                {
+                    return Err(Exception::throw_type(
+                        &ctx,
+                        &format!(
+                            "the virtual lists in one render may describe at most                              {MAX_VIRTUAL_ITEMS_PER_RENDER} items in total"
+                        ),
+                    ));
+                }
+
+                let extent = |value: f64| -> JsResult<gpui::Size<gpui::Pixels>> {
+                    if !value.is_finite() || value < 0.0 {
+                        return Err(Exception::throw_type(
+                            &ctx,
+                            "every item size must be a finite, non-negative number of pixels",
+                        ));
+                    }
+                    // Only the extent along the list's own axis is read; the
+                    // other is inferred by measuring one item. Writing zero
+                    // there says so, rather than inventing a number base would
+                    // ignore.
+                    Ok(match axis {
+                        gpui::Axis::Vertical => gpui::size(gpui::px(0.), gpui::px(value as f32)),
+                        gpui::Axis::Horizontal => gpui::size(gpui::px(value as f32), gpui::px(0.)),
+                    })
+                };
+
+                let reserve = |values: &mut Vec<gpui::Size<gpui::Pixels>>| {
+                    values.try_reserve_exact(count).map_err(|_| {
+                        Exception::throw_range(
+                            &ctx,
+                            "the virtual list's native size table could not be allocated",
+                        )
+                    })
+                };
+                let sizes = match extents {
+                    ItemExtents::Uniform(value) => {
+                        let value = extent(value)?;
+                        let mut values = Vec::new();
+                        reserve(&mut values)?;
+                        values.resize(count, value);
+                        values
+                    }
+                    ItemExtents::PerItem(values) => {
+                        if values.len() != count {
+                            return Err(Exception::throw_type(
+                                &ctx,
+                                &format!(
+                                    "this list was given {} item sizes for {count} items; pass                                      one number for a uniform extent, or one per item",
+                                    values.len()
+                                ),
+                            ));
+                        }
+                        let mut extents = Vec::new();
+                        reserve(&mut extents)?;
+                        for value in values {
+                            extents.push(extent(value)?);
+                        }
+                        extents
+                    }
+                };
+
+                let store = upgrade(&runtime, &ctx)?;
+                let get_key = store.callbacks.borrow_mut().push(CallbackEntry {
+                    value: get_key.0,
+                    view: scope::current_view().map(|view| view.downgrade()),
+                    application: scope::current_application_generation(),
+                });
+                let callback = store.callbacks.borrow_mut().push(CallbackEntry {
+                    value: render.0,
+                    view: scope::current_view().map(|view| view.downgrade()),
+                    application: scope::current_application_generation(),
+                });
+                Ok(store.push_node(Component::VirtualList(Rc::new(
+                    crate::spec::VirtualListSpec::new(
+                        id,
+                        axis,
+                        Rc::new(sizes),
+                        get_key,
+                        callback,
+                    ),
+                ))))
+            },
+        ),
+    )
+}
+
 fn element_id(ctx: &Ctx<'_>, value: &Value<'_>) -> JsResult<SpecId> {
     value
         .as_object()
@@ -2912,6 +4280,48 @@ enum Argument {
 
 struct Arguments(SmallVec<[Argument; 2]>);
 
+/// The single argument of a parametric style method.
+///
+/// Separate from [`Argument`] only because it arrives without an array around
+/// it: a style takes one value, and building a JavaScript array to carry it was
+/// measurable in the description pass. A function is carried as a marker rather
+/// than saved, because no style takes one and the only thing left to do with it
+/// is name the method that was handed one.
+enum StyleArgument {
+    Value(Bridged),
+    Handler,
+}
+
+impl<'js> FromJs<'js> for StyleArgument {
+    fn from_js(ctx: &Ctx<'js>, value: Value<'js>) -> JsResult<Self> {
+        if value.as_function().is_some() {
+            return Ok(Self::Handler);
+        }
+        Ok(Self::Value(bridge(ctx, &value)?))
+    }
+}
+
+/// Converts one non-function script value.
+///
+/// The one place the four bridged cases are named, so that [`Arguments`] and
+/// [`StyleArgument`] cannot come to disagree about what a script value is.
+fn bridge(ctx: &Ctx<'_>, value: &Value<'_>) -> JsResult<Bridged> {
+    Ok(if value.is_null() || value.is_undefined() {
+        Bridged::Nil
+    } else if let Some(flag) = value.as_bool() {
+        Bridged::Bool(flag)
+    } else if let Some(number) = value.as_number() {
+        Bridged::Number(number)
+    } else if let Some(text) = value.as_string() {
+        Bridged::Str(text.to_string()?)
+    } else {
+        return Err(Exception::throw_type(
+            ctx,
+            "unsupported argument type; expected null, boolean, number, string or function",
+        ));
+    })
+}
+
 impl Arguments {
     fn values(&self, method: &str) -> JsResult<SmallVec<[Bridged; 2]>> {
         self.0
@@ -2951,21 +4361,9 @@ impl<'js> FromJs<'js> for Arguments {
         let mut converted = SmallVec::new();
         for entry in array.iter::<Value>() {
             let entry = entry?;
-            converted.push(if let Some(handler) = entry.as_function() {
-                Argument::Handler(Persistent::save(ctx, handler.clone()))
-            } else if entry.is_null() || entry.is_undefined() {
-                Argument::Value(Bridged::Nil)
-            } else if let Some(flag) = entry.as_bool() {
-                Argument::Value(Bridged::Bool(flag))
-            } else if let Some(number) = entry.as_number() {
-                Argument::Value(Bridged::Number(number))
-            } else if let Some(text) = entry.as_string() {
-                Argument::Value(Bridged::Str(text.to_string()?))
-            } else {
-                return Err(Exception::throw_type(
-                    ctx,
-                    "unsupported argument type; expected null, boolean, number, string or function",
-                ));
+            converted.push(match entry.as_function() {
+                Some(handler) => Argument::Handler(Persistent::save(ctx, handler.clone())),
+                None => Argument::Value(bridge(ctx, &entry)?),
             });
         }
 
@@ -2983,6 +4381,27 @@ fn unknown_method(name: &str) -> String {
              overflow_x_scrollbar, overflow_y_scrollbar"
         ),
     }
+}
+
+fn refuse_nested_view_mutation(ctx: &Ctx<'_>, api: &str, action: &str) -> JsResult<()> {
+    let Some(phase @ (ScopePhase::Render | ScopePhase::Layout)) = scope::current_phase() else {
+        return Ok(());
+    };
+    Err(Exception::throw_type(
+        ctx,
+        &format!(
+            "{api} cannot run during {}; {action} retained views from init(), an event handler \
+             or a task",
+            phase.as_str()
+        ),
+    ))
+}
+
+fn nested_view_needs_call(ctx: &Ctx<'_>, api: &str) -> JsError {
+    Exception::throw_type(
+        ctx,
+        &format!("{api} needs a live host call; use it from init(), an event handler or a task"),
+    )
 }
 
 fn upgrade(runtime: &Weak<ShellRuntime>, ctx: &Ctx<'_>) -> JsResult<Rc<ShellRuntime>> {
@@ -3128,5 +4547,893 @@ mod module_lifecycle_tests {
             .expect_err("missing import must reject the load");
         assert_eq!(runtime.app_modules.registration_count(), 0);
         let _ = std::fs::remove_dir_all(root);
+    }
+}
+
+#[cfg(test)]
+mod nested_view_lifecycle_tests {
+    use super::*;
+    use gpui::{ClickEvent, TestAppContext, VisualTestContext};
+    use rquickjs::{Object, Persistent};
+
+    struct ChildMount(Entity<ScriptView>);
+
+    impl gpui::Render for ChildMount {
+        fn render(
+            &mut self,
+            _: &mut Window,
+            _: &mut gpui::Context<Self>,
+        ) -> impl gpui::IntoElement {
+            self.0.clone()
+        }
+    }
+
+    fn child_type(runtime: &Rc<ShellRuntime>, source: &str) -> ViewType {
+        let mut view_type = runtime
+            .load_source("nested-child.js", source)
+            .expect("load child view");
+        view_type.application = Some(ApplicationGeneration::new(7));
+        view_type
+    }
+
+    #[gpui::test]
+    fn releasing_a_rendered_child_retires_callbacks_while_a_frame_retains_it(
+        cx: &mut TestAppContext,
+    ) {
+        let runtime = ShellRuntime::new_isolated().expect("runtime");
+        let view_type = child_type(
+            &runtime,
+            r#"
+import { View, div, text } from "gpui";
+globalThis.child_hits = 0;
+
+export default class Child extends View {
+  render() {
+    return div()
+      .on_click(() => { globalThis.child_hits += 1; })
+      .child(text("child"));
+  }
+}
+"#,
+        );
+        let runtime_for_window = runtime.clone();
+        let handle_slot = Rc::new(Cell::new(None));
+        let handle_for_window = handle_slot.clone();
+        let window = cx.add_window(move |window, cx| {
+            let handle = runtime_for_window
+                .instantiate_nested_view(&view_type, crate::policy::default(), None, window, cx)
+                .expect("child");
+            handle_for_window.set(Some(handle));
+            ChildMount(
+                runtime_for_window
+                    .entities()
+                    .view(handle)
+                    .expect("retained child"),
+            )
+        });
+        let mut context = VisualTestContext::from_window(*window, cx);
+        context.update(|window, cx| window.draw(cx).clear(cx));
+
+        let handle = handle_slot.get().expect("child handle");
+        let retained_frame = runtime.entities().view(handle).expect("frame entity clone");
+        let callback = runtime
+            .live_callback_ids()
+            .into_iter()
+            .next()
+            .expect("rendered click callback");
+        assert_eq!(runtime.live_callbacks(), 1);
+
+        assert!(context.update(|_, cx| runtime.entities().release_view(handle, cx)));
+        assert_eq!(
+            runtime.live_callbacks(),
+            0,
+            "release must retire current and previous callback generations immediately"
+        );
+        context.update(|window, cx| {
+            runtime.dispatch_click(callback, &ClickEvent::default(), window, cx)
+        });
+        let hits = runtime
+            .with_js(|ctx| ctx.globals().get::<_, usize>("child_hits"))
+            .expect("child hit count");
+        assert_eq!(hits, 0, "a released callback must be inert");
+        assert!(runtime.entities().view(handle).is_none());
+        assert!(
+            !context.update(|_, cx| runtime.entities().release_view(handle, cx)),
+            "typed release must reject a stale view handle"
+        );
+
+        drop(retained_frame);
+        context.update(|window, _| window.remove_window());
+        context.run_until_parked();
+        drop(context);
+        let weak_runtime = Rc::downgrade(&runtime);
+        drop(runtime);
+        assert!(
+            weak_runtime.upgrade().is_none(),
+            "retired callbacks must not keep the child and runtime in a cycle"
+        );
+    }
+
+    #[gpui::test]
+    fn nested_init_receives_props_after_the_final_entity_exists(cx: &mut TestAppContext) {
+        let runtime = ShellRuntime::new_isolated().expect("runtime");
+        let view_type = child_type(
+            &runtime,
+            r#"
+import { View, InputState, timer, text } from "gpui";
+
+export default class Child extends View {
+  init(props) {
+    this.label = props.label;
+    this.tick = timer.every(60_000, () => {});
+    Promise.resolve().then(() => {
+      this.continuation_input = InputState.new({ value: "continued" });
+      this.continued = true;
+    });
+  }
+  render() { return text(this.label); }
+}
+"#,
+        );
+        let props = runtime
+            .with_js(|ctx| {
+                let props = Object::new(ctx.clone())?;
+                props.set("label", "from props")?;
+                Ok(Persistent::save(ctx, props.into_value()))
+            })
+            .expect("props");
+        let window = cx.add_window(|_, _| gpui::Empty);
+        let mut context = VisualTestContext::from_window(*window, cx);
+        let tasks_before = task_count();
+        let records_before = runtime.entities().len();
+
+        let handle = context
+            .update(|window, cx| {
+                runtime.instantiate_nested_view(
+                    &view_type,
+                    crate::policy::default(),
+                    Some(props),
+                    window,
+                    cx,
+                )
+            })
+            .expect("instantiate nested child");
+
+        let view = runtime
+            .entities()
+            .view(handle)
+            .expect("the returned handle retains the child entity");
+        assert!(
+            runtime.entities().focus(handle).is_none(),
+            "a view handle must never resolve as another retained type"
+        );
+        let object = context.update(|_, cx| view.read(cx).object().clone());
+        let label = runtime
+            .with_js(|ctx| object.clone().restore(ctx)?.get::<_, String>("label"))
+            .expect("read initialized label");
+        assert_eq!(label, "from props");
+        let continued = runtime
+            .with_js(|ctx| object.clone().restore(ctx)?.get::<_, bool>("continued"))
+            .expect("read init continuation marker");
+        assert!(
+            continued,
+            "successful init promise jobs must drain before the child scope exits"
+        );
+        assert_eq!(
+            runtime.entities().len(),
+            records_before + 2,
+            "the continuation's retained state must be owned beside its child view"
+        );
+        assert_eq!(
+            task_count(),
+            tasks_before + 1,
+            "init work must be registered under the final child owner"
+        );
+
+        assert!(context.update(|_, cx| runtime.entities().release_view(handle, cx)));
+        assert_eq!(
+            task_count(),
+            tasks_before,
+            "releasing the handle must cancel its exact-owner task even while a frame retains the entity"
+        );
+        assert_eq!(runtime.entities().len(), records_before);
+        drop(view);
+        context.update(|_, _| {});
+    }
+
+    #[gpui::test]
+    fn successful_child_init_does_not_claim_a_preexisting_parent_job(cx: &mut TestAppContext) {
+        let runtime = ShellRuntime::new_isolated().expect("runtime");
+        let parent_type = child_type(
+            &runtime,
+            r#"
+import { View, InputState, timer, text } from "gpui";
+globalThis.parent_continuations = 0;
+globalThis.queue_parent_job = () => Promise.resolve().then(() => {
+  globalThis.parent_continuations += 1;
+  globalThis.parent_input = InputState.new({ value: "parent" });
+  globalThis.parent_tick = timer.every(60_000, () => {});
+});
+export default class Parent extends View {
+  render() { return text("parent"); }
+}
+"#,
+        );
+        let child_type = child_type(
+            &runtime,
+            r#"
+import { View, InputState, timer, text } from "gpui";
+globalThis.child_continuations = 0;
+export default class Child extends View {
+  init() {
+    Promise.resolve().then(() => {
+      globalThis.child_continuations += 1;
+      this.input = InputState.new({ value: "child" });
+      this.tick = timer.every(60_000, () => {});
+    });
+  }
+  render() { return text("child"); }
+}
+"#,
+        );
+        let application = parent_type.application.clone();
+        let window = cx.add_window(|_, _| gpui::Empty);
+        let mut context = VisualTestContext::from_window(*window, cx);
+        let records_before = runtime.entities().len();
+        let tasks_before = task_count();
+        let parent = context
+            .update(|window, cx| {
+                runtime.instantiate_nested_view(
+                    &parent_type,
+                    crate::policy::default(),
+                    None,
+                    window,
+                    cx,
+                )
+            })
+            .expect("parent");
+        let parent_entity = runtime.entities().view(parent).expect("parent entity");
+        let child = context
+            .update(|window, cx| {
+                let (_scope, _) = scope::enter_with_application(
+                    &runtime,
+                    window,
+                    cx,
+                    ScopePhase::Event,
+                    Some(parent_entity.clone()),
+                    crate::policy::default(),
+                    application.clone(),
+                );
+                runtime
+                    .with_js(|ctx| {
+                        ctx.globals()
+                            .get::<_, Function>("queue_parent_job")?
+                            .call::<_, ()>(())
+                    })
+                    .expect("queue parent continuation");
+                runtime.instantiate_nested_view(
+                    &child_type,
+                    crate::policy::default(),
+                    None,
+                    window,
+                    cx,
+                )
+            })
+            .expect("child");
+
+        assert_eq!(
+            runtime
+                .with_js(|ctx| ctx.globals().get::<_, usize>("parent_continuations"))
+                .expect("parent count"),
+            1
+        );
+        assert_eq!(
+            runtime
+                .with_js(|ctx| ctx.globals().get::<_, usize>("child_continuations"))
+                .expect("child count"),
+            1
+        );
+        assert_eq!(runtime.entities().len(), records_before + 4);
+        assert_eq!(task_count(), tasks_before + 2);
+
+        assert!(context.update(|_, cx| runtime.entities().release_view(child, cx)));
+        assert_eq!(
+            runtime.entities().len(),
+            records_before + 2,
+            "child release must preserve the parent view and its continuation-owned input"
+        );
+        assert_eq!(
+            task_count(),
+            tasks_before + 1,
+            "child release must preserve the parent continuation-owned timer"
+        );
+
+        assert!(context.update(|_, cx| runtime.entities().release_view(parent, cx)));
+        assert_eq!(runtime.entities().len(), records_before);
+        assert_eq!(task_count(), tasks_before);
+        drop(parent_entity);
+        context.update(|_, _| {});
+    }
+
+    #[gpui::test]
+    fn throwing_child_init_rolls_back_its_job_but_not_a_preexisting_parent_job(
+        cx: &mut TestAppContext,
+    ) {
+        let runtime = ShellRuntime::new_isolated().expect("runtime");
+        let parent_type = child_type(
+            &runtime,
+            r#"
+import { View, InputState, timer, text } from "gpui";
+globalThis.parent_continuations = 0;
+globalThis.queue_parent_job = () => Promise.resolve().then(() => {
+  globalThis.parent_continuations += 1;
+  globalThis.parent_input = InputState.new({ value: "parent" });
+  globalThis.parent_tick = timer.every(60_000, () => {});
+});
+export default class Parent extends View {
+  render() { return text("parent"); }
+}
+"#,
+        );
+        let child_type = child_type(
+            &runtime,
+            r#"
+import { View, InputState, timer, text } from "gpui";
+globalThis.child_continuations = 0;
+export default class BrokenChild extends View {
+  init() {
+    Promise.resolve().then(() => {
+      globalThis.child_continuations += 1;
+      this.input = InputState.new({ value: "child" });
+      this.tick = timer.every(60_000, () => {});
+    });
+    throw new Error("mixed init failed");
+  }
+  render() { return text("unreachable"); }
+}
+"#,
+        );
+        let application = parent_type.application.clone();
+        let window = cx.add_window(|_, _| gpui::Empty);
+        let mut context = VisualTestContext::from_window(*window, cx);
+        let records_before = runtime.entities().len();
+        let tasks_before = task_count();
+        let parent = context
+            .update(|window, cx| {
+                runtime.instantiate_nested_view(
+                    &parent_type,
+                    crate::policy::default(),
+                    None,
+                    window,
+                    cx,
+                )
+            })
+            .expect("parent");
+        let parent_entity = runtime.entities().view(parent).expect("parent entity");
+        let error = context
+            .update(|window, cx| {
+                let (_scope, _) = scope::enter_with_application(
+                    &runtime,
+                    window,
+                    cx,
+                    ScopePhase::Event,
+                    Some(parent_entity.clone()),
+                    crate::policy::default(),
+                    application.clone(),
+                );
+                runtime
+                    .with_js(|ctx| {
+                        ctx.globals()
+                            .get::<_, Function>("queue_parent_job")?
+                            .call::<_, ()>(())
+                    })
+                    .expect("queue parent continuation");
+                runtime.instantiate_nested_view(
+                    &child_type,
+                    crate::policy::default(),
+                    None,
+                    window,
+                    cx,
+                )
+            })
+            .expect_err("child init must fail");
+
+        assert!(error.to_string().contains("mixed init failed"), "{error}");
+        assert_eq!(
+            runtime
+                .with_js(|ctx| ctx.globals().get::<_, usize>("parent_continuations"))
+                .expect("parent count"),
+            1
+        );
+        assert_eq!(
+            runtime
+                .with_js(|ctx| ctx.globals().get::<_, usize>("child_continuations"))
+                .expect("child count"),
+            1
+        );
+        assert_eq!(
+            runtime.entities().len(),
+            records_before + 2,
+            "failed child rollback must preserve the parent view and continuation-owned input"
+        );
+        assert_eq!(
+            task_count(),
+            tasks_before + 1,
+            "failed child rollback must preserve the parent continuation-owned timer"
+        );
+
+        assert!(context.update(|_, cx| runtime.entities().release_view(parent, cx)));
+        assert_eq!(runtime.entities().len(), records_before);
+        assert_eq!(task_count(), tasks_before);
+        drop(parent_entity);
+        context.update(|_, _| {});
+    }
+
+    #[gpui::test]
+    fn successor_first_init_chain_fails_the_runtime_and_rolls_back_the_child(
+        cx: &mut TestAppContext,
+    ) {
+        let runtime = ShellRuntime::new_isolated().expect("runtime");
+        let parent_type = child_type(
+            &runtime,
+            r#"
+import { View, text } from "gpui";
+export default class Parent extends View {
+  render() { return text("parent"); }
+}
+"#,
+        );
+        let child_type = child_type(
+            &runtime,
+            r#"
+import { View, InputState, timer, text } from "gpui";
+globalThis.successor_runs = 0;
+export default class BrokenChild extends View {
+  init() {
+    this.input = InputState.new({ value: "candidate" });
+    this.tick = timer.every(60_000, () => {});
+    const again = () => {
+      Promise.resolve().then(again);
+      Promise.resolve().then(again);
+      globalThis.successor_runs += 1;
+    };
+    Promise.resolve().then(again);
+  }
+  render() { return text("unreachable"); }
+}
+"#,
+        );
+        let window = cx.add_window(|_, _| gpui::Empty);
+        let mut context = VisualTestContext::from_window(*window, cx);
+        let parent = context
+            .update(|window, cx| {
+                runtime.instantiate_nested_view(
+                    &parent_type,
+                    crate::policy::default(),
+                    None,
+                    window,
+                    cx,
+                )
+            })
+            .expect("parent");
+        let parent_entity = runtime.entities().view(parent).expect("parent entity");
+        let records_before = runtime.entities().len();
+        let tasks_before = task_count();
+
+        let error = context
+            .update(|window, cx| {
+                runtime.instantiate_nested_view(
+                    &child_type,
+                    crate::policy::default(),
+                    None,
+                    window,
+                    cx,
+                )
+            })
+            .expect_err("a non-quiescing init wave must fail within the host job bound");
+
+        assert!(error.to_string().contains("job queue"), "{error}");
+        assert_eq!(
+            runtime.entities().len(),
+            records_before,
+            "terminal job failure must roll back the candidate child locally"
+        );
+        assert_eq!(task_count(), tasks_before);
+        context.update(|window, cx| {
+            scheduler::drain_after_render(
+                &runtime,
+                parent_entity.clone(),
+                crate::policy::default(),
+                window,
+                cx,
+            )
+        });
+        assert_eq!(
+            task_count(),
+            tasks_before,
+            "terminal pending jobs must not register a later deferred drain"
+        );
+        let disabled = context.update(|window, cx| {
+            runtime.instantiate_nested_view(&child_type, crate::policy::default(), None, window, cx)
+        });
+        assert!(
+            disabled
+                .expect_err("the failed runtime must refuse later script execution")
+                .to_string()
+                .contains("job queue")
+        );
+        assert!(context.update(|_, cx| runtime.entities().release_view(parent, cx)));
+        drop(parent_entity);
+    }
+
+    #[gpui::test]
+    fn nested_view_retains_the_real_loaded_application_lease(cx: &mut TestAppContext) {
+        let runtime = ShellRuntime::new_isolated().expect("runtime");
+        let root = std::env::temp_dir().join(format!(
+            "gpui-shell-nested-view-lease-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).expect("application directory");
+        std::fs::write(
+            root.join("main.js"),
+            r#"
+import { View, text } from "gpui";
+export default class Child extends View {
+  render() { return text("loaded child"); }
+}
+"#,
+        )
+        .expect("application source");
+        let view_type = runtime.load_app(&root, "main.js").expect("loaded app");
+        let application = view_type
+            .application
+            .clone()
+            .expect("real application lease");
+        assert_eq!(runtime.app_modules.registration_count(), 1);
+        let window = cx.add_window(|_, _| gpui::Empty);
+        let mut context = VisualTestContext::from_window(*window, cx);
+        let handle = context
+            .update(|window, cx| {
+                runtime.instantiate_nested_view(
+                    &view_type,
+                    crate::policy::default(),
+                    None,
+                    window,
+                    cx,
+                )
+            })
+            .expect("nested loaded child");
+        let view = runtime.entities().view(handle).expect("retained child");
+        let child_application = context.update(|_, cx| {
+            view.read(cx)
+                .application_generation()
+                .expect("child application")
+        });
+        assert!(Rc::ptr_eq(&child_application, &application));
+
+        drop(view_type);
+        assert_eq!(
+            runtime.app_modules.registration_count(),
+            1,
+            "the retained child object must keep its evaluated module lease"
+        );
+        runtime.entities().release_application(&application);
+        cancel_application_tasks(&application);
+        assert!(
+            runtime.entities().view(handle).is_none(),
+            "application unload must remove the child's retained handle"
+        );
+        drop(view);
+        drop(child_application);
+        drop(application);
+        context.update(|_, _| {});
+        assert_eq!(runtime.app_modules.registration_count(), 0);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[gpui::test]
+    fn releasing_one_child_preserves_its_sibling_and_application_state(cx: &mut TestAppContext) {
+        let runtime = ShellRuntime::new_isolated().expect("runtime");
+        let view_type = child_type(
+            &runtime,
+            r#"
+import { View, InputState, timer, text } from "gpui";
+
+export default class Child extends View {
+  init() {
+    this.input = InputState.new();
+    this.tick = timer.every(60_000, () => {});
+  }
+  render() { return text("child"); }
+}
+"#,
+        );
+        let application = view_type.application.clone().expect("application");
+        let window = cx.add_window(|_, _| gpui::Empty);
+        let mut context = VisualTestContext::from_window(*window, cx);
+        let tasks_before = task_count();
+        let application_focus =
+            context.update(|_, cx| runtime.entities().create_focus(Some(application), cx));
+        assert!(
+            !context.update(|_, cx| runtime.entities().release_view(application_focus, cx)),
+            "typed view release must reject a live handle of another retained type"
+        );
+        let first = context
+            .update(|window, cx| {
+                runtime.instantiate_nested_view(
+                    &view_type,
+                    crate::policy::default(),
+                    None,
+                    window,
+                    cx,
+                )
+            })
+            .expect("first child");
+        let second = context
+            .update(|window, cx| {
+                runtime.instantiate_nested_view(
+                    &view_type,
+                    crate::policy::default(),
+                    None,
+                    window,
+                    cx,
+                )
+            })
+            .expect("second child");
+
+        assert_eq!(task_count(), tasks_before + 2);
+        assert!(context.update(|_, cx| runtime.entities().release_view(first, cx)));
+        context.update(|_, _| {});
+
+        assert!(runtime.entities().view(first).is_none());
+        assert!(
+            runtime.entities().view(second).is_some(),
+            "releasing one child must preserve its sibling"
+        );
+        assert!(
+            runtime.entities().focus(application_focus).is_some(),
+            "nested cleanup must not release application-owned retained state"
+        );
+        assert_eq!(
+            task_count(),
+            tasks_before + 1,
+            "nested cleanup must cancel only the released child's task"
+        );
+
+        assert!(context.update(|_, cx| runtime.entities().release_view(second, cx)));
+        assert!(runtime.entities().release(application_focus));
+        context.update(|_, _| {});
+        assert_eq!(task_count(), tasks_before);
+    }
+
+    #[gpui::test]
+    fn releasing_a_child_recursively_cancels_retained_descendant_tasks(cx: &mut TestAppContext) {
+        let runtime = ShellRuntime::new_isolated().expect("runtime");
+        let view_type = child_type(
+            &runtime,
+            r#"
+import { View, timer, text } from "gpui";
+
+export default class Child extends View {
+  init() { this.tick = timer.every(60_000, () => {}); }
+  render() { return text("child"); }
+}
+"#,
+        );
+        let application = view_type.application.clone();
+        let window = cx.add_window(|_, _| gpui::Empty);
+        let mut context = VisualTestContext::from_window(*window, cx);
+        let tasks_before = task_count();
+        let parent = context
+            .update(|window, cx| {
+                runtime.instantiate_nested_view(
+                    &view_type,
+                    crate::policy::default(),
+                    None,
+                    window,
+                    cx,
+                )
+            })
+            .expect("parent child");
+        let parent_entity = runtime.entities().view(parent).expect("parent entity");
+        let descendant = context
+            .update(|window, cx| {
+                let (_scope, _) = scope::enter_with_application(
+                    &runtime,
+                    window,
+                    cx,
+                    ScopePhase::Event,
+                    Some(parent_entity.clone()),
+                    crate::policy::default(),
+                    application.clone(),
+                );
+                runtime.instantiate_nested_view(
+                    &view_type,
+                    crate::policy::default(),
+                    None,
+                    window,
+                    cx,
+                )
+            })
+            .expect("descendant child");
+        let retained_descendant = runtime
+            .entities()
+            .view(descendant)
+            .expect("descendant entity clone");
+
+        assert_eq!(task_count(), tasks_before + 2);
+        assert!(context.update(|_, cx| runtime.entities().release_view(parent, cx)));
+        assert!(runtime.entities().view(parent).is_none());
+        assert!(runtime.entities().view(descendant).is_none());
+        assert_eq!(
+            task_count(),
+            tasks_before,
+            "subtree cleanup must cancel descendant tasks even while GPUI retains their entities"
+        );
+
+        drop(retained_descendant);
+        drop(parent_entity);
+        context.update(|_, _| {});
+    }
+
+    #[gpui::test]
+    fn exact_view_cancellation_is_qualified_by_runtime_across_apps(cx: &mut TestAppContext) {
+        let runtime_a = ShellRuntime::new_isolated().expect("first runtime");
+        let runtime_b = ShellRuntime::new_isolated().expect("second runtime");
+        let view_type_a = child_type(
+            &runtime_a,
+            r#"
+import { View, timer, text } from "gpui";
+export default class Child extends View {
+  init() { this.tick = timer.every(60_000, () => {}); }
+  render() { return text("a"); }
+}
+"#,
+        );
+        let view_type_b = child_type(
+            &runtime_b,
+            r#"
+import { View, timer, text } from "gpui";
+export default class Child extends View {
+  init() { this.tick = timer.every(60_000, () => {}); }
+  render() { return text("b"); }
+}
+"#,
+        );
+        let mut other = cx.new_app();
+        let window_a = cx.add_window(|_, _| gpui::Empty);
+        let window_b = other.add_window(|_, _| gpui::Empty);
+        let mut context_a = VisualTestContext::from_window(*window_a, cx);
+        let mut context_b = VisualTestContext::from_window(*window_b, &mut other);
+        let tasks_before = task_count();
+        let handle_a = context_a
+            .update(|window, cx| {
+                runtime_a.instantiate_nested_view(
+                    &view_type_a,
+                    crate::policy::default(),
+                    None,
+                    window,
+                    cx,
+                )
+            })
+            .expect("first child");
+        let handle_b = context_b
+            .update(|window, cx| {
+                runtime_b.instantiate_nested_view(
+                    &view_type_b,
+                    crate::policy::default(),
+                    None,
+                    window,
+                    cx,
+                )
+            })
+            .expect("second child");
+        let entity_a = runtime_a.entities().view(handle_a).expect("first entity");
+        let entity_b = runtime_b.entities().view(handle_b).expect("second entity");
+
+        assert_eq!(
+            entity_a.entity_id(),
+            entity_b.entity_id(),
+            "fresh Apps must reproduce the local EntityId collision exercised by this test"
+        );
+        assert!(
+            !context_b.update(|_, cx| runtime_b.entities().release_view(handle_a, cx)),
+            "typed release must reject a handle from another runtime's store"
+        );
+        assert!(runtime_b.entities().view(handle_b).is_some());
+        assert_eq!(task_count(), tasks_before + 2);
+        assert!(context_a.update(|_, cx| runtime_a.entities().release_view(handle_a, cx)));
+        assert_eq!(
+            task_count(),
+            tasks_before + 1,
+            "releasing one App's colliding EntityId must preserve the other runtime's task"
+        );
+        assert!(runtime_b.entities().view(handle_b).is_some());
+
+        assert!(context_b.update(|_, cx| runtime_b.entities().release_view(handle_b, cx)));
+        assert_eq!(task_count(), tasks_before);
+        drop(entity_a);
+        drop(entity_b);
+    }
+
+    #[gpui::test]
+    fn failed_child_init_rolls_back_only_the_candidate_child(cx: &mut TestAppContext) {
+        let runtime = ShellRuntime::new_isolated().expect("runtime");
+        let view_type = child_type(
+            &runtime,
+            r#"
+import { View, InputState, timer, text } from "gpui";
+globalThis.failed_child_continuations = 0;
+
+export default class BrokenChild extends View {
+  init(props) {
+    this.input = InputState.new({ value: props.value });
+    this.tick = timer.every(60_000, () => {});
+    Promise.resolve().then(() => {
+      globalThis.failed_child_continuations += 1;
+      globalThis.continuation_input = InputState.new({ value: "continued" });
+    });
+    throw new Error("child init failed");
+  }
+  render() { return text("unreachable"); }
+}
+"#,
+        );
+        let application = view_type.application.clone().expect("application");
+        let props = runtime
+            .with_js(|ctx| {
+                let props = Object::new(ctx.clone())?;
+                props.set("value", "candidate")?;
+                Ok(Persistent::save(ctx, props.into_value()))
+            })
+            .expect("props");
+        let window = cx.add_window(|_, _| gpui::Empty);
+        let mut context = VisualTestContext::from_window(*window, cx);
+        let application_focus =
+            context.update(|_, cx| runtime.entities().create_focus(Some(application), cx));
+        let records_before = runtime.entities().len();
+        let tasks_before = task_count();
+
+        let error = context
+            .update(|window, cx| {
+                runtime.instantiate_nested_view(
+                    &view_type,
+                    crate::policy::default(),
+                    Some(props),
+                    window,
+                    cx,
+                )
+            })
+            .expect_err("child init must fail");
+
+        assert!(error.to_string().contains("child init failed"), "{error}");
+        assert_eq!(
+            runtime.entities().len(),
+            records_before,
+            "the child handle and retained state created by init must roll back"
+        );
+        assert!(
+            runtime.entities().focus(application_focus).is_some(),
+            "rollback must preserve application-owned state"
+        );
+        assert_eq!(
+            task_count(),
+            tasks_before,
+            "rollback must cancel the candidate child's exact-owner task"
+        );
+        let continuations = runtime
+            .with_js(|ctx| ctx.globals().get::<_, usize>("failed_child_continuations"))
+            .expect("continuation count");
+        assert_eq!(
+            continuations, 1,
+            "init promise jobs must drain while the candidate child still owns the scope"
+        );
+
+        scheduler::drain_runtime_jobs(&runtime);
+        assert_eq!(runtime.entities().len(), records_before);
+
+        assert!(runtime.entities().release(application_focus));
     }
 }

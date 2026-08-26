@@ -69,9 +69,9 @@ use gpui_component::{
     tab::{Tab, TabBar},
     v_flex,
 };
-use gpui_shell::watch::Watch;
+use gpui_shell::Watcher;
 use gpui_shell::{
-    RuntimeMetrics, ScriptView, ShellRuntime,
+    RuntimeMetrics, ScriptView, ShellRoot, ShellRuntime,
     native::{NativeError, NativeModules, NativeObject, NativeValue},
 };
 
@@ -407,8 +407,8 @@ const FEEDS: [(&str, Feed); 4] = [
 const SAMPLE_INTERVAL: Duration = Duration::from_secs(1);
 
 /// The entry file the script application directory must contain.
+#[cfg(test)]
 const ENTRY: &str = "main.js";
-const MOTION_ENTRY: &str = "main.js";
 
 /// Where the script lives.
 ///
@@ -503,17 +503,21 @@ pub struct ShellStory {
     /// Held for as long as the script view is mounted: the view renders through
     /// it, and dropping it would tear the JavaScript context down underneath.
     runtime: Option<Rc<ShellRuntime>>,
+    /// Owns the quote application's policy and generation for as long as its
+    /// extracted script view is mounted in this story.
+    script_root: Option<Entity<ShellRoot>>,
     script: Option<Entity<ScriptView>>,
     /// A separate ScriptView, so native-motion activity cannot become quote
     /// board work or pollute the performance counters readers compare.
+    motion_root: Option<Entity<ShellRoot>>,
     motion: Option<Entity<ScriptView>>,
     /// The hot-reload watcher for the script above.
     ///
     /// Held rather than detached, so the assignment below drops the previous
     /// one: Reload script mounts a new view, and a detached watcher would go on
     /// polling for the view it was started for.
-    script_watch: Option<Watch>,
-    motion_watch: Option<Watch>,
+    script_watch: Option<Watcher>,
+    motion_watch: Option<Watcher>,
     /// The last load failure, kept visible instead of thrown away — a story
     /// that silently shows the previous script after a syntax error is worse
     /// than one that says what broke.
@@ -584,7 +588,9 @@ impl ShellStory {
             focus_handle: cx.focus_handle(),
             market,
             runtime: None,
+            script_root: None,
             script: None,
+            motion_root: None,
             motion: None,
             script_watch: None,
             motion_watch: None,
@@ -735,42 +741,28 @@ impl ShellStory {
         };
 
         let loaded = runtime
-            .load_app(&script_directory(), ENTRY)
-            .and_then(|view_type| {
-                if let Some(view) = self.script.clone() {
-                    let object =
-                        runtime.instantiate_for_view(&view_type, view.clone(), window, cx)?;
-                    view.update(cx, |view, cx| {
-                        view.replace_object(object);
-                        cx.notify();
-                    });
-                    Ok(view)
-                } else {
-                    runtime.instantiate_view(&view_type, window, cx)
+            .try_load(script_directory(), window, cx)
+            .and_then(|root| {
+                let view = root
+                    .read(cx)
+                    .content()
+                    .clone()
+                    .downcast::<ScriptView>()
+                    .map_err(|_| {
+                        anyhow::anyhow!("the quote application did not mount a script view")
+                    })?;
+
+                #[cfg(debug_assertions)]
+                {
+                    self.script_watch = runtime.watch(&root, window, cx).ok();
                 }
+                Ok((root, view))
             });
 
         match loaded {
-            Ok(view) => {
-                if self.script.is_none() {
-                    // A debug build is the development build, so editing
-                    // main.js changes the panel without anyone pressing
-                    // anything. The Reload button stays for the case where
-                    // you want it now rather than in a quarter second.
-                    // Compiled out of a release build entirely.
-                    #[cfg(debug_assertions)]
-                    {
-                        self.script_watch = Some(Watch::start(
-                            &runtime,
-                            &view,
-                            script_directory(),
-                            ENTRY,
-                            window,
-                            cx,
-                        ));
-                    }
-                    self.script = Some(view);
-                }
+            Ok((root, view)) => {
+                self.script_root = Some(root);
+                self.script = Some(view);
                 self.script_error = None;
             }
             Err(error) => self.script_error = Some(error.to_string().into()),
@@ -787,37 +779,28 @@ impl ShellStory {
         };
 
         let loaded = runtime
-            .load_app(&motion_script_directory(), MOTION_ENTRY)
-            .and_then(|view_type| {
-                if let Some(view) = self.motion.clone() {
-                    let object =
-                        runtime.instantiate_for_view(&view_type, view.clone(), window, cx)?;
-                    view.update(cx, |view, cx| {
-                        view.replace_object(object);
-                        cx.notify();
-                    });
-                    Ok(view)
-                } else {
-                    runtime.instantiate_view(&view_type, window, cx)
+            .try_load(motion_script_directory(), window, cx)
+            .and_then(|root| {
+                let view = root
+                    .read(cx)
+                    .content()
+                    .clone()
+                    .downcast::<ScriptView>()
+                    .map_err(|_| {
+                        anyhow::anyhow!("the motion application did not mount a script view")
+                    })?;
+
+                #[cfg(debug_assertions)]
+                {
+                    self.motion_watch = runtime.watch(&root, window, cx).ok();
                 }
+                Ok((root, view))
             });
 
         match loaded {
-            Ok(view) => {
-                if self.motion.is_none() {
-                    #[cfg(debug_assertions)]
-                    {
-                        self.motion_watch = Some(Watch::start(
-                            &runtime,
-                            &view,
-                            motion_script_directory(),
-                            MOTION_ENTRY,
-                            window,
-                            cx,
-                        ));
-                    }
-                    self.motion = Some(view);
-                }
+            Ok((root, view)) => {
+                self.motion_root = Some(root);
+                self.motion = Some(view);
                 self.motion_error = None;
             }
             Err(error) => self.motion_error = Some(error.to_string().into()),

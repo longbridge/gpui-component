@@ -96,7 +96,7 @@ Every call from Rust into the script opens a scope carrying a **phase**, and the
 
 `cx.phase()` reports the current one, and `"none"` outside any host call.
 
-`cx.theme()` returns a deeply read-only snapshot of the current semantic theme for this call: direct color roles as well as `colors`, `spacing`, `radius`, `mode`, and `is_dark`. Prefer it over the compatibility `theme()` export, because the context spelling makes the call lifetime and current host theme explicit.
+`cx.theme()` returns a deeply read-only snapshot of gpui-base's current semantic theme for this call: direct color roles as well as `colors`, `spacing`, `radius`, `appearance`, and `is_dark`. Prefer it over the compatibility `theme()` export, because the context spelling makes the call lifetime and current host theme explicit.
 
 Each refusal is a specific message, not undefined behaviour:
 
@@ -264,7 +264,7 @@ setInterval -> gpui.timer.every(ms, callback)
 clearTimeout / clearInterval -> cancel() the Task returned by after / every
 ```
 
-`setTimeout`, `setInterval`, `clearTimeout` and `clearInterval` are throwing stubs. Use `gpui.timer.after` for one-shot work, `gpui.timer.every` for repeated work, and call `cancel()` on the returned `Task` to stop either one. Global `fetch` and `WebSocket`, plus the safe standard modules documented under [Capabilities](./capabilities.md), are real asynchronous host APIs. CommonJS `require` remains unavailable; use ES modules.
+`setTimeout`, `setInterval`, `clearTimeout` and `clearInterval` are throwing stubs. Use `gpui.timer.after` for one-shot work, `gpui.timer.every` for repeated work, and call `cancel()` on the returned `Task` to stop either one. Global `fetch` and the safe standard modules documented under [Capabilities](./capabilities.md), including `websocket`, are real asynchronous host APIs. CommonJS `require` remains unavailable; use ES modules.
 
 Browser DOM and storage are absent: there is no `document` or `localStorage`. The global `window` is gpui-shell's overlay host for dialogs, sheets and toasts; it is not a browser `Window` and exposes no DOM.
 

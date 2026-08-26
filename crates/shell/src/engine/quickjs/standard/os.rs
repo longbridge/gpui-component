@@ -4,7 +4,7 @@ use rquickjs::{
     module::{Declarations, Exports, ModuleDef},
 };
 
-const EXPORTS: &[&str] = &["platform", "arch", "homedir", "tmpdir", "EOL"];
+const EXPORTS: &[&str] = &["platform", "arch", "EOL"];
 
 pub(super) struct OsModule;
 
@@ -21,8 +21,6 @@ impl ModuleDef for OsModule {
         let os = Object::new(ctx.clone())?;
         os.set("platform", Func::from(|| std::env::consts::OS))?;
         os.set("arch", Func::from(|| std::env::consts::ARCH))?;
-        os.set("homedir", Func::from(|| "."))?;
-        os.set("tmpdir", Func::from(|| "."))?;
         os.set("EOL", if cfg!(windows) { "\r\n" } else { "\n" })?;
         exports.export("default", Value::from_object(os.clone()))?;
         for name in EXPORTS {

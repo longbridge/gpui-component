@@ -12,7 +12,9 @@
 
 use std::rc::Weak;
 
+use gpui::ScrollStrategy;
 use gpui_base::NumberStep;
+use gpui_base::VirtualListScrollHandle;
 use gpui_base::input::{InputBaseState, InputModeKind};
 use gpui_base::slider::{SliderScale, SliderValue};
 use rquickjs::{
@@ -20,7 +22,7 @@ use rquickjs::{
 };
 
 use crate::{
-    entities::{EntityHandle, InputEventName, SliderEventName},
+    entities::{EntityHandle, InputEventName, OtpEventName, SliderEventName},
     scope::{self, ScopePhase},
     spec::{Component, SpecId},
 };
@@ -66,6 +68,7 @@ pub fn install(ctx: &Ctx<'_>, module: &Object<'_>, runtime: Weak<ShellRuntime>) 
                 refuse_creation_in_render(&ctx, "InputState.new(...)")?;
 
                 let store = alive(&ctx, &create)?;
+                ensure_entity_capacity(&ctx, &store)?;
                 scope::with_current(|window, cx| {
                     store.entities().create_input(
                         placeholder,
@@ -212,6 +215,7 @@ pub fn install(ctx: &Ctx<'_>, module: &Object<'_>, runtime: Weak<ShellRuntime>) 
                 refuse_creation_in_render(&ctx, "TextareaState.new(...)")?;
 
                 let store = alive(&ctx, &create_textarea)?;
+                ensure_entity_capacity(&ctx, &store)?;
                 scope::with_current(|window, cx| {
                     store.entities().create_textarea(
                         placeholder,
@@ -375,16 +379,20 @@ pub fn install(ctx: &Ctx<'_>, module: &Object<'_>, runtime: Weak<ShellRuntime>) 
                         ));
                     }
                 };
-                let value = slider_value(&value).ok_or_else(|| {
-                    Exception::throw_type(
-                        &ctx,
-                        "SliderState.new value must be a number, or a pair [start, end]",
-                    )
-                })?;
+                let value =
+                    slider_value(&ctx, &value, "SliderState.new value")?.ok_or_else(|| {
+                        Exception::throw_type(
+                            &ctx,
+                            "SliderState.new value must be a number, or a pair [start, end]",
+                        )
+                    })?;
                 // `SliderState` asserts on these rather than reporting them,
                 // and an assertion here takes the whole application with it.
                 // The prelude checks the same three at the call site; this is
                 // the backstop that keeps a host bug from aborting.
+                let min = native_slider_number(&ctx, min, "SliderState.new min")?;
+                let max = native_slider_number(&ctx, max, "SliderState.new max")?;
+                let step = native_slider_number(&ctx, step, "SliderState.new step")?;
                 let sane = min.is_finite()
                     && max.is_finite()
                     && step.is_finite()
@@ -400,11 +408,12 @@ pub fn install(ctx: &Ctx<'_>, module: &Object<'_>, runtime: Weak<ShellRuntime>) 
                 }
 
                 let store = alive(&ctx, &create_slider)?;
+                ensure_entity_capacity(&ctx, &store)?;
                 scope::with_current_app(|cx| {
                     store.entities().create_slider(
-                        min as f32,
-                        max as f32,
-                        step as f32,
+                        min,
+                        max,
+                        step,
                         scale,
                         value,
                         scope::current_application_generation(),
@@ -443,7 +452,7 @@ pub fn install(ctx: &Ctx<'_>, module: &Object<'_>, runtime: Weak<ShellRuntime>) 
         Func::from(
             move |ctx: Ctx<'_>, handle: EntityHandle, value: Vec<f64>| -> JsResult<()> {
                 let state = live_slider(&ctx, &write_slider, handle)?;
-                let value = slider_value(&value).ok_or_else(|| {
+                let value = slider_value(&ctx, &value, "set_value(value)")?.ok_or_else(|| {
                     Exception::throw_type(
                         &ctx,
                         "set_value(value) expects a number, or a pair [start, end]",
@@ -529,6 +538,175 @@ pub fn install(ctx: &Ctx<'_>, module: &Object<'_>, runtime: Weak<ShellRuntime>) 
         Component::SliderThumb,
     )?;
 
+    // One-time codes. The digits are retained for the reason an input's text
+    // is, and the blink for one more: it runs on a timer, and a description
+    // only the script can rebuild has nowhere to put a timer's output.
+    let create_otp = runtime.clone();
+    globals.set(
+        "__otp_state_new",
+        Func::from(
+            move |ctx: Ctx<'_>,
+                  length: f64,
+                  value: Option<String>,
+                  masked: bool|
+                  -> JsResult<EntityHandle> {
+                refuse_creation_in_render(&ctx, "OtpState.new(...)")?;
+
+                // The prelude refuses the same range at the call site; this is
+                // the backstop that keeps a host bug from laying out a hundred
+                // thousand cells.
+                if !(length.is_finite() && length.fract() == 0.0 && (1.0..=64.0).contains(&length))
+                {
+                    return Err(Exception::throw_type(
+                        &ctx,
+                        "OtpState.new(length) expects a whole number between 1 and 64",
+                    ));
+                }
+
+                let store = alive(&ctx, &create_otp)?;
+                ensure_entity_capacity(&ctx, &store)?;
+                scope::with_current(|window, cx| {
+                    store.entities().create_otp(
+                        length as usize,
+                        value,
+                        masked,
+                        scope::current_application_generation(),
+                        window,
+                        cx,
+                    )
+                })
+                .ok_or_else(|| {
+                    Exception::throw_type(
+                        &ctx,
+                        "OtpState.new(...) needs a live host call; call it from init() \
+                         or an event handler",
+                    )
+                })
+            },
+        ),
+    )?;
+
+    let read_otp = runtime.clone();
+    globals.set(
+        "__otp_value",
+        Func::from(
+            move |ctx: Ctx<'_>, handle: EntityHandle| -> JsResult<String> {
+                let state = live_otp(&ctx, &read_otp, handle)?;
+                scope::with_current_app(|cx| state.read(cx).value().to_string())
+                    .ok_or_else(|| needs_call(&ctx, "value()"))
+            },
+        ),
+    )?;
+
+    let write_otp = runtime.clone();
+    globals.set(
+        "__otp_set_value",
+        Func::from(
+            move |ctx: Ctx<'_>, handle: EntityHandle, value: String| -> JsResult<()> {
+                let state = live_otp(&ctx, &write_otp, handle)?;
+                // Deliberately unvalidated, as base is: only keystrokes are
+                // digits-only, and base's legacy contract lets a caller display
+                // an arbitrary value. Anything past the length is stored and
+                // never drawn.
+                scope::with_current(|window, cx| {
+                    state.update(cx, |state, cx| state.set_value(value, window, cx));
+                    refresh_current_view(cx);
+                })
+                .ok_or_else(|| needs_call(&ctx, "set_value()"))
+            },
+        ),
+    )?;
+
+    let length_otp = runtime.clone();
+    globals.set(
+        "__otp_len",
+        Func::from(move |ctx: Ctx<'_>, handle: EntityHandle| -> JsResult<f64> {
+            let state = live_otp(&ctx, &length_otp, handle)?;
+            scope::with_current_app(|cx| state.read(cx).len() as f64)
+                .ok_or_else(|| needs_call(&ctx, "len()"))
+        }),
+    )?;
+
+    let masked_otp = runtime.clone();
+    globals.set(
+        "__otp_is_masked",
+        Func::from(
+            move |ctx: Ctx<'_>, handle: EntityHandle| -> JsResult<bool> {
+                let state = live_otp(&ctx, &masked_otp, handle)?;
+                scope::with_current_app(|cx| state.read(cx).is_masked())
+                    .ok_or_else(|| needs_call(&ctx, "is_masked()"))
+            },
+        ),
+    )?;
+
+    let mask_otp = runtime.clone();
+    globals.set(
+        "__otp_set_masked",
+        Func::from(
+            move |ctx: Ctx<'_>, handle: EntityHandle, masked: bool| -> JsResult<()> {
+                let state = live_otp(&ctx, &mask_otp, handle)?;
+                scope::with_current(|window, cx| {
+                    state.update(cx, |state, cx| state.set_masked(masked, window, cx));
+                    refresh_current_view(cx);
+                })
+                .ok_or_else(|| needs_call(&ctx, "set_masked()"))
+            },
+        ),
+    )?;
+
+    let focus_otp = runtime.clone();
+    globals.set(
+        "__otp_focus",
+        Func::from(move |ctx: Ctx<'_>, handle: EntityHandle| -> JsResult<()> {
+            let state = live_otp(&ctx, &focus_otp, handle)?;
+            scope::with_current(|window, cx| {
+                state.update(cx, |state, cx| state.focus(window, cx));
+            })
+            .ok_or_else(|| needs_call(&ctx, "focus()"))
+        }),
+    )?;
+
+    let subscribe_otp_runtime = runtime.clone();
+    globals.set(
+        "__otp_on",
+        Func::from(
+            move |ctx: Ctx<'_>,
+                  handle: EntityHandle,
+                  name: String,
+                  handler: Handler|
+                  -> JsResult<bool> {
+                subscribe_otp(&ctx, &subscribe_otp_runtime, handle, &name, handler)
+            },
+        ),
+    )?;
+
+    let discard_otp = runtime.clone();
+    globals.set(
+        "__otp_release",
+        Func::from(move |handle: EntityHandle| {
+            discard_otp
+                .upgrade()
+                .is_some_and(|runtime| runtime.entities().release(handle))
+        }),
+    )?;
+
+    let otp_element = runtime.clone();
+    globals.set(
+        "__otp_element",
+        Func::from(
+            move |ctx: Ctx<'_>, handle: EntityHandle| -> JsResult<SpecId> {
+                let store = alive(&ctx, &otp_element)?;
+                if store.entities().otp(handle).is_none() {
+                    return Err(Exception::throw_type(
+                        &ctx,
+                        "this OTP state has been released and can no longer be rendered",
+                    ));
+                }
+                Ok(store.push_component(Component::OtpInput(handle)))
+            },
+        ),
+    )?;
+
     // Focus handles. A focus handle is not an input, but it is retained state
     // held by handle for the same reason, so it lives in the same store and
     // reaches the script the same way.
@@ -548,6 +726,7 @@ pub fn install(ctx: &Ctx<'_>, module: &Object<'_>, runtime: Weak<ShellRuntime>) 
             }
 
             let store = alive(&ctx, &create_focus)?;
+            ensure_entity_capacity(&ctx, &store)?;
             scope::with_current_app(|cx| {
                 store
                     .entities()
@@ -567,6 +746,7 @@ pub fn install(ctx: &Ctx<'_>, module: &Object<'_>, runtime: Weak<ShellRuntime>) 
     globals.set(
         "__focus_focus",
         Func::from(move |ctx: Ctx<'_>, handle: EntityHandle| -> JsResult<()> {
+            refuse_mutation_in_render(&ctx, "FocusHandle.focus()")?;
             let focus = live_focus(&ctx, &take_focus, handle)?;
             scope::with_current(|window, cx| window.focus(&focus, cx))
                 .ok_or_else(|| needs_call(&ctx, "focus()"))
@@ -592,6 +772,70 @@ pub fn install(ctx: &Ctx<'_>, module: &Object<'_>, runtime: Weak<ShellRuntime>) 
         "__focus_release",
         Func::from(move |handle: EntityHandle| {
             discard_focus
+                .upgrade()
+                .is_some_and(|runtime| runtime.entities().release(handle))
+        }),
+    )?;
+
+    // A virtualized list's scroll position, held for the same reason a focus
+    // handle is: what the script holds is *where a request is left*.
+    // `scroll_to_item` records an index the list consumes during its next
+    // prepaint, so a handle rebuilt each frame would drop every request made
+    // between two frames — which is every request a script can make.
+    let create_virtual_scroll = runtime.clone();
+    globals.set(
+        "__virtual_scroll_new",
+        Func::from(move |ctx: Ctx<'_>| -> JsResult<EntityHandle> {
+            refuse_creation_in_render(&ctx, "VirtualListScrollHandle.new()")?;
+            let store = alive(&ctx, &create_virtual_scroll)?;
+            ensure_entity_capacity(&ctx, &store)?;
+            let handle = store
+                .entities()
+                .create_virtual_scroll(scope::current_application_generation());
+            Ok(handle)
+        }),
+    )?;
+
+    let scroll_to_item = runtime.clone();
+    globals.set(
+        "__virtual_scroll_to_item",
+        Func::from(
+            move |ctx: Ctx<'_>, handle: EntityHandle, index: usize, strategy: String| {
+                let scroll = live_virtual_scroll(&ctx, &scroll_to_item, handle)?;
+                let strategy = match strategy.as_str() {
+                    "center" => ScrollStrategy::Center,
+                    "top" => ScrollStrategy::Top,
+                    other => {
+                        return Err(Exception::throw_type(
+                            &ctx,
+                            &format!("unknown scroll strategy `{other}`; expected top or center"),
+                        ));
+                    }
+                };
+                // Recorded, not performed: the list is the only thing that
+                // knows where item `index` is, and it finds out during its next
+                // prepaint. Nothing here needs a live host call for that
+                // reason — the request outlives this one.
+                scroll.scroll_to_item(index, strategy);
+                Ok(())
+            },
+        ),
+    )?;
+
+    let scroll_to_bottom = runtime.clone();
+    globals.set(
+        "__virtual_scroll_to_bottom",
+        Func::from(move |ctx: Ctx<'_>, handle: EntityHandle| -> JsResult<()> {
+            live_virtual_scroll(&ctx, &scroll_to_bottom, handle)?.scroll_to_bottom();
+            Ok(())
+        }),
+    )?;
+
+    let discard_virtual_scroll = runtime.clone();
+    globals.set(
+        "__virtual_scroll_release",
+        Func::from(move |handle: EntityHandle| {
+            discard_virtual_scroll
                 .upgrade()
                 .is_some_and(|runtime| runtime.entities().release(handle))
         }),
@@ -767,12 +1011,28 @@ fn live_slider(
 /// The pair crosses as an array in both directions because a bare number
 /// cannot say which of the two the script meant, and a range slider told to
 /// take a single value would silently become a single-value one.
-fn slider_value(values: &[f64]) -> Option<SliderValue> {
+fn slider_value(ctx: &Ctx<'_>, values: &[f64], api: &str) -> JsResult<Option<SliderValue>> {
     match values {
-        [single] => Some(SliderValue::Single(*single as f32)),
-        [start, end] => Some(SliderValue::Range(*start as f32, *end as f32)),
-        _ => None,
+        [single] => Ok(Some(SliderValue::Single(native_slider_number(
+            ctx, *single, api,
+        )?))),
+        [start, end] => Ok(Some(SliderValue::Range(
+            native_slider_number(ctx, *start, api)?,
+            native_slider_number(ctx, *end, api)?,
+        ))),
+        _ => Ok(None),
     }
+}
+
+fn native_slider_number(ctx: &Ctx<'_>, value: f64, name: &str) -> JsResult<f32> {
+    let narrowed = value as f32;
+    if !narrowed.is_finite() {
+        return Err(Exception::throw_range(
+            ctx,
+            &format!("{name} does not fit the native slider number range"),
+        ));
+    }
+    Ok(narrowed)
 }
 
 /// Subscribes a script handler to one named event on a slider state.
@@ -863,6 +1123,86 @@ fn slider_constructor(
     )
 }
 
+fn live_otp(
+    ctx: &Ctx<'_>,
+    runtime: &Weak<ShellRuntime>,
+    handle: EntityHandle,
+) -> JsResult<gpui::Entity<gpui_base::OtpState>> {
+    alive(ctx, runtime)?
+        .entities()
+        .otp(handle)
+        .ok_or_else(|| Exception::throw_type(ctx, "this OTP state has been released"))
+}
+
+/// Refreshes script-derived presentation after a controlled retained-state
+/// mutation. During render/layout mutation is outside the notify contract, and
+/// trying to re-enter the view being rendered would panic.
+fn refresh_current_view(cx: &mut gpui::App) {
+    if !scope::current_phase().is_some_and(ScopePhase::allows_notify) {
+        return;
+    }
+    if let Some(view) = scope::current_view() {
+        view.update(cx, |view, cx| view.refresh(cx));
+    }
+}
+
+/// Subscribes a script handler to one named event on a one-time-code state.
+///
+/// The shape is [`subscribe`]'s, and so are its reasons. What differs is the
+/// set of names: an `OtpState` has no `submit` to offer, so asking for one is
+/// reported rather than accepted and then never delivered.
+fn subscribe_otp(
+    ctx: &Ctx<'_>,
+    runtime: &Weak<ShellRuntime>,
+    handle: EntityHandle,
+    name: &str,
+    handler: Handler,
+) -> JsResult<bool> {
+    let event = OtpEventName::from_name(name).ok_or_else(|| {
+        Exception::throw_type(
+            ctx,
+            &format!(
+                "unknown OTP event `{name}`; expected one of: {}",
+                OtpEventName::NAMES.join(", ")
+            ),
+        )
+    })?;
+
+    let saved = handler.0;
+    let dispatch = runtime.clone();
+    let store = alive(ctx, runtime)?;
+    let owner = InputCallbackOwner {
+        policy: scope::policy(),
+        application: scope::current_application_generation(),
+        view: scope::current_view().map(|view| view.downgrade()),
+    };
+
+    let subscribed = scope::with_current(|window, cx| {
+        store
+            .entities()
+            .subscribe_otp(handle, event, window, cx, move |emitted, window, cx| {
+                let Some(runtime) = dispatch.upgrade() else {
+                    return;
+                };
+                runtime.dispatch_otp_event(&saved, &owner, emitted, window, cx);
+            })
+    })
+    .ok_or_else(|| {
+        Exception::throw_type(
+            ctx,
+            "on(...) needs a live host call; subscribe from init() or an event handler",
+        )
+    })?;
+
+    if !subscribed {
+        return Err(Exception::throw_type(
+            ctx,
+            "this OTP state has been released",
+        ));
+    }
+    Ok(true)
+}
+
 /// Refuses to create retained state during a render pass.
 ///
 /// State created there would be new on every frame, so what the script thought
@@ -882,6 +1222,42 @@ fn refuse_creation_in_render(ctx: &Ctx<'_>, constructor: &str) -> JsResult<()> {
         ));
     }
     Ok(())
+}
+
+fn ensure_entity_capacity(ctx: &Ctx<'_>, runtime: &ShellRuntime) -> JsResult<()> {
+    if runtime.entities().len() >= crate::entities::MAX_LIVE_ENTITIES {
+        return Err(Exception::throw_range(
+            ctx,
+            "the application reached gpui-shell's retained entity limit; release unused handles",
+        ));
+    }
+    Ok(())
+}
+
+fn refuse_mutation_in_render(ctx: &Ctx<'_>, api: &str) -> JsResult<()> {
+    if matches!(
+        scope::current_phase(),
+        Some(ScopePhase::Render) | Some(ScopePhase::Layout)
+    ) {
+        return Err(Exception::throw_type(
+            ctx,
+            &format!(
+                "{api} cannot run during render or layout; mutate state from an event handler or task"
+            ),
+        ));
+    }
+    Ok(())
+}
+
+fn live_virtual_scroll(
+    ctx: &Ctx<'_>,
+    runtime: &Weak<ShellRuntime>,
+    handle: EntityHandle,
+) -> JsResult<VirtualListScrollHandle> {
+    alive(ctx, runtime)?
+        .entities()
+        .virtual_scroll(handle)
+        .ok_or_else(|| Exception::throw_type(ctx, "this scroll handle has been released"))
 }
 
 fn live_focus(

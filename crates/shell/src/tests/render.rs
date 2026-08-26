@@ -78,6 +78,138 @@ fn a_script_view_produces_an_element_description(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
+fn flex_elements_record_pointer_handlers(cx: &mut TestAppContext) {
+    cx.update(crate::init);
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r##"
+import { View, div, text } from "gpui";
+
+export default class PointerHandlers extends View {
+  render() {
+    return div()
+      .id("plot")
+      .on_mouse_move((_event, _cx) => {})
+      .on_hover((_hovered, _cx) => {})
+      .child(text("Plot"));
+  }
+}
+"##;
+    let view_type = runtime
+        .load_source("pointer-handlers.js", source)
+        .expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .expect("instantiate");
+    let tree = context.update(|window, cx| {
+        runtime
+            .render_to_spec(&object, None, window, cx)
+            .expect("render")
+    });
+
+    assert!(
+        tree.contains(":on_mouse_move(fn)"),
+        "missing move handler: {tree}"
+    );
+    assert!(
+        tree.contains(":on_hover(fn)"),
+        "missing hover handler: {tree}"
+    );
+}
+
+#[gpui::test]
+fn a_mouse_move_rebuild_keeps_later_callbacks_live(cx: &mut TestAppContext) {
+    cx.update(crate::init);
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View, v_flex, div, text, Button } from "gpui";
+
+export default class PointerRebuild extends View {
+  init() { this.moves = 0; this.clicks = 0; this.hovered = false; this.hoverEvents = 0; }
+  render() {
+    return v_flex()
+      .w(300)
+      .h(160)
+      .child(
+        div()
+          .id("plot")
+          .w(300)
+          .h(80)
+          .on_mouse_move((_event, cx) => {
+            this.moves += 1;
+            cx.notify();
+          })
+          .on_hover((hovered, cx) => {
+            this.hoverEvents += 1;
+            if (this.hovered === hovered) return;
+            this.hovered = hovered;
+            cx.notify();
+          })
+          .child(text(`Moves: ${this.moves}; Hovered: ${this.hovered}; Hover events: ${this.hoverEvents}`)),
+      )
+      .child(
+        Button.new("after-hover")
+          .w(300)
+          .h(80)
+          .on_click((_event, cx) => {
+            this.clicks += 1;
+            cx.notify();
+          })
+          .child(text(`Clicks: ${this.clicks}`)),
+      );
+  }
+}
+"#;
+    let view_type = runtime
+        .load_source("pointer-rebuild.js", source)
+        .expect("load");
+    let runtime_for_view = Rc::clone(&runtime);
+    let window = cx.add_window(move |window, cx| {
+        let object = runtime_for_view
+            .instantiate(&view_type, window, cx)
+            .expect("instantiate");
+        ScriptView::new(runtime_for_view, object)
+    });
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let tree = |context: &mut VisualTestContext| {
+        let view = window.root(context).expect("view");
+        context.update(|_, cx| {
+            view.read(cx)
+                .snapshot()
+                .map(crate::RenderSnapshot::debug_tree)
+                .unwrap_or_default()
+        })
+    };
+
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    context.simulate_mouse_move(point(px(20.), px(20.)), None, Modifiers::default());
+    context.run_until_parked();
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    assert!(tree(&mut context).contains("Moves: 1"));
+    assert!(tree(&mut context).contains("Hovered: true"));
+    assert!(
+        tree(&mut context).contains("Hover events: 1"),
+        "replacing a snapshot under a stationary pointer must not dispatch a stale exit"
+    );
+
+    context.simulate_mouse_move(point(px(20.), px(120.)), None, Modifiers::default());
+    context.run_until_parked();
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    assert!(tree(&mut context).contains("Hovered: false"));
+    assert!(
+        tree(&mut context).contains("Hover events: 2"),
+        "leaving the element must still dispatch a real exit"
+    );
+
+    context.simulate_click(point(px(20.), px(120.)), Modifiers::default());
+    context.run_until_parked();
+    assert!(tree(&mut context).contains("Clicks: 1"));
+}
+
+#[gpui::test]
 fn flex_elements_dispatch_their_click_handlers(cx: &mut TestAppContext) {
     cx.update(crate::init);
     let runtime = ShellRuntime::new_isolated().expect("runtime");
@@ -448,7 +580,422 @@ fn a_view_renders_through_gpui(cx: &mut TestAppContext) {
     context.run_until_parked();
 }
 
+/// A nested view is a retained invalidation boundary, not an inline rendering
+/// helper. Initial props, parent-driven updates and child callbacks all reach
+/// the child instance, while the parent's published description stays put.
+#[gpui::test]
+fn nested_view_updates_and_callbacks_rebuild_only_the_child(cx: &mut TestAppContext) {
+    cx.update(crate::init);
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View, ViewHandle, child_view, v_flex, Checkbox, InputState, text } from "gpui";
+
+class Child extends View {
+  init(props) {
+    this.label = "pending";
+    this.clicks = 0;
+    Promise.resolve().then(() => {
+      this.label = props.label;
+      this.input = InputState.new({ value: "owned by child" });
+    });
+  }
+
+  update(props) {
+    Promise.resolve().then(() => { this.label = props.label; });
+  }
+
+  render() {
+    return Checkbox.new("child")
+      .w(300)
+      .h(40)
+      .on_change((_checked, cx) => {
+        const expected = this.clicks === 0 ? "before" : "after";
+        if (this.label !== expected) return;
+        this.clicks += 1;
+        cx.notify();
+      })
+      .child(text(`${this.label}:${this.clicks}`));
+  }
+}
+
+export default class Parent extends View {
+  init() {
+    this.renders = 0;
+    this.child = ViewHandle.new(Child, { label: "before" });
+  }
+
+  render() {
+    this.renders += 1;
+    return v_flex()
+      .w(300)
+      .h(80)
+      .child(
+        Checkbox.new("update-child")
+          .w(300)
+          .h(40)
+          .on_change(() => this.child.set_props({ label: "after" }))
+          .child(text(`parent renders:${this.renders}`)),
+      )
+      .child(
+        Checkbox.new("refresh-parent")
+          .on_change((_checked, cx) => cx.notify()),
+      )
+      .child(child_view(this.child));
+  }
+}
+"#;
+    let view_type = runtime
+        .load_source("nested-view-isolation.js", source)
+        .expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let parent = context
+        .update(|window, cx| runtime.instantiate_view(&view_type, window, cx))
+        .expect("instantiate parent");
+
+    draw(&mut context, &parent);
+    assert_eq!(runtime.metrics().read().script_renders(), 2);
+    let parent_tree = |context: &mut VisualTestContext| {
+        context.update(|_, cx| {
+            parent
+                .read(cx)
+                .snapshot()
+                .map(crate::RenderSnapshot::debug_tree)
+                .unwrap_or_default()
+        })
+    };
+    assert!(parent_tree(&mut context).contains("parent renders:1"));
+    let child = context.update(|_, cx| {
+        let snapshot = parent.read(cx).snapshot().expect("parent snapshot");
+        (0..snapshot.len() as u32)
+            .filter_map(|id| snapshot.arena().node(id))
+            .find_map(|node| match node.component() {
+                Some(crate::spec::Component::ChildView(child)) => Some(child.view().clone()),
+                _ => None,
+            })
+            .expect("retained child entity")
+    });
+    let change_callback =
+        |context: &mut VisualTestContext, view: &gpui::Entity<ScriptView>, target: &str| {
+            context.update(|_, cx| {
+                let snapshot = view.read(cx).snapshot().expect("view snapshot");
+                (0..snapshot.len() as u32)
+                    .filter_map(|id| snapshot.arena().node(id))
+                    .find(|node| {
+                        matches!(
+                            node.component(),
+                            Some(crate::spec::Component::Checkbox(id)) if id == target
+                        )
+                    })
+                    .and_then(|node| {
+                        node.ops().iter().find_map(|op| match op {
+                            crate::spec::SpecOp::Callback("on_change", id) => Some(*id),
+                            _ => None,
+                        })
+                    })
+                    .expect("on_change callback")
+            })
+        };
+
+    // Initial props reached `init`: the child only notifies when its label is
+    // the expected initial value.
+    let callback = change_callback(&mut context, &child, "child");
+    context.update(|window, cx| runtime.dispatch_change(callback, true, window, cx));
+    draw(&mut context, &parent);
+    assert_eq!(runtime.metrics().read().script_renders(), 3);
+    assert!(parent_tree(&mut context).contains("parent renders:1"));
+
+    // `set_props` refreshes the child once and does not rebuild the parent.
+    let callback = change_callback(&mut context, &parent, "update-child");
+    context.update(|window, cx| runtime.dispatch_change(callback, true, window, cx));
+    draw(&mut context, &parent);
+    assert_eq!(runtime.metrics().read().script_renders(), 4);
+    assert!(parent_tree(&mut context).contains("parent renders:1"));
+
+    // Replacing the parent snapshot does not retire the child's current
+    // callback generation: the callback belongs to the child entity.
+    let child_callback = change_callback(&mut context, &child, "child");
+    let callback = change_callback(&mut context, &parent, "refresh-parent");
+    context.update(|window, cx| runtime.dispatch_change(callback, true, window, cx));
+    draw(&mut context, &parent);
+    assert_eq!(runtime.metrics().read().script_renders(), 5);
+    assert!(parent_tree(&mut context).contains("parent renders:2"));
+
+    // The child callback only notifies after observing the updated props and
+    // remains live across that parent snapshot replacement.
+    context.update(|window, cx| runtime.dispatch_change(child_callback, true, window, cx));
+    draw(&mut context, &parent);
+    assert_eq!(runtime.metrics().read().script_renders(), 6);
+    assert!(parent_tree(&mut context).contains("parent renders:2"));
+}
+
+/// A generic `with_js` nested inside child construction must not recursively
+/// consume the operations that follow that construction. The first update is
+/// ordered after its create, and each grandchild remains owned by the child
+/// whose init requested it.
+#[gpui::test]
+fn nested_view_operations_from_one_job_are_fifo_and_keep_descendant_ownership(
+    cx: &mut TestAppContext,
+) {
+    cx.update(crate::init);
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View, ViewHandle, child_view, v_flex, text } from "gpui";
+
+class Grandchild extends View {
+  render() { return text("grandchild"); }
+}
+
+class Child extends View {
+  init(props) {
+    this.label = props.label;
+    this.grandchild = ViewHandle.new(Grandchild);
+  }
+  update(props) { this.label = props.label; }
+  render() {
+    return v_flex().child(text(this.label)).child(child_view(this.grandchild));
+  }
+}
+
+export default class Parent extends View {
+  init() {
+    this.first = ViewHandle.new(Child, { label: "first" });
+    this.first.set_props({ label: "updated" });
+    this.second = ViewHandle.new(Child, { label: "second" });
+  }
+  render() {
+    return v_flex().child(child_view(this.first)).child(child_view(this.second));
+  }
+}
+"#;
+    let view_type = runtime
+        .load_source("nested-view-fifo.js", source)
+        .expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let parent = context
+        .update(|window, cx| runtime.instantiate_view(&view_type, window, cx))
+        .expect("the queued creates and update must apply in source order");
+
+    draw(&mut context, &parent);
+    let children = context.update(|_, cx| {
+        let snapshot = parent.read(cx).snapshot().expect("parent snapshot");
+        (0..snapshot.len() as u32)
+            .filter_map(|id| snapshot.arena().node(id))
+            .filter_map(|node| match node.component() {
+                Some(crate::spec::Component::ChildView(child)) => Some(child.view().clone()),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    });
+    assert_eq!(children.len(), 2);
+    let trees = context.update(|_, cx| {
+        children
+            .iter()
+            .map(|child| {
+                child
+                    .read(cx)
+                    .snapshot()
+                    .map(crate::RenderSnapshot::debug_tree)
+                    .unwrap_or_default()
+            })
+            .collect::<Vec<_>>()
+    });
+    assert!(trees[0].contains("updated"), "first child: {}", trees[0]);
+    assert!(trees[1].contains("second"), "second child: {}", trees[1]);
+    assert_eq!(
+        runtime.entities().len(),
+        4,
+        "two children and their two owned grandchildren must be retained"
+    );
+}
+
+#[gpui::test]
+fn a_released_nested_view_cannot_be_mounted_again(cx: &mut TestAppContext) {
+    let message = nested_view_build_error(
+        cx,
+        "released-nested-view.js",
+        r#"
+import { View, ViewHandle, child_view, text } from "gpui";
+class Child extends View { render() { return text("child"); } }
+export default class Parent extends View {
+  init() {
+    this.child = ViewHandle.new(Child);
+    if (!this.child.release()) throw new Error("the live child was not released");
+  }
+  render() { return child_view(this.child); }
+}
+"#,
+    );
+    assert!(message.contains("released"), "unexpected error: {message}");
+}
+
+#[gpui::test]
+fn a_nested_view_handle_can_only_be_mounted_once_per_snapshot(cx: &mut TestAppContext) {
+    let message = nested_view_build_error(
+        cx,
+        "duplicate-nested-view.js",
+        r#"
+import { View, ViewHandle, child_view, v_flex, text } from "gpui";
+class Child extends View { render() { return text("child"); } }
+export default class Parent extends View {
+  init() { this.child = ViewHandle.new(Child); }
+  render() {
+    return v_flex().child(child_view(this.child)).child(child_view(this.child));
+  }
+}
+"#,
+    );
+    assert!(
+        message.contains("once") && message.contains("snapshot"),
+        "unexpected error: {message}"
+    );
+}
+
+#[gpui::test]
+fn nested_view_creation_and_updates_are_rejected_during_render(cx: &mut TestAppContext) {
+    let creation = nested_view_build_error(
+        cx,
+        "nested-view-created-in-render.js",
+        r#"
+import { View, ViewHandle, text } from "gpui";
+class Child extends View { render() { return text("child"); } }
+export default class Parent extends View {
+  render() {
+    ViewHandle.new(Child);
+    return text("parent");
+  }
+}
+"#,
+    );
+    assert!(
+        creation.contains("ViewHandle.new") && creation.contains("during render"),
+        "unexpected creation error: {creation}"
+    );
+
+    let update = nested_view_build_error(
+        cx,
+        "nested-view-updated-in-render.js",
+        r#"
+import { View, ViewHandle, text } from "gpui";
+class Child extends View { render() { return text("child"); } }
+export default class Parent extends View {
+  init() { this.child = ViewHandle.new(Child); }
+  render() {
+    this.child.set_props({ value: 2 });
+    return text("parent");
+  }
+}
+"#,
+    );
+    assert!(
+        update.contains("set_props") && update.contains("during render"),
+        "unexpected update error: {update}"
+    );
+}
+
+/// Layout callbacks can catch their own API errors. Publishing the messages in
+/// the next parent snapshot proves the call failed at the JavaScript call site
+/// and that the diagnostic names layout rather than the broader render path.
+#[gpui::test]
+fn nested_view_creation_and_updates_name_the_layout_phase(cx: &mut TestAppContext) {
+    cx.update(crate::init);
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View, ViewHandle, v_flex, v_virtual_list, Button, text } from "gpui";
+class Child extends View { render() { return text("child"); } }
+export default class Parent extends View {
+  init() {
+    this.child = ViewHandle.new(Child);
+    this.errors = [];
+  }
+  render() {
+    return v_flex()
+      .w(300)
+      .h(80)
+      .child(Button.new("publish").h(40).on_click((_event, cx) => cx.notify()).child(text(this.errors.join(" | "))))
+      .child(v_virtual_list("rows", 1, 40, (index) => String(index), () => {
+        this.errors = [];
+        try { ViewHandle.new(Child); } catch (error) { this.errors.push(String(error)); }
+        try { this.child.set_props({ value: 2 }); } catch (error) { this.errors.push(String(error)); }
+        return [text("row")];
+      }));
+  }
+}
+"#;
+    let view_type = runtime
+        .load_source("nested-view-layout-phase.js", source)
+        .expect("load");
+    let runtime_for_view = Rc::clone(&runtime);
+    let window = cx.add_window(move |window, cx| {
+        let parent = runtime_for_view
+            .instantiate_view(&view_type, window, cx)
+            .expect("instantiate parent");
+        RootedScriptView(parent)
+    });
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    let parent = window
+        .root(&mut context)
+        .expect("parent view")
+        .read_with(&context, |root, _| root.0.clone());
+    context.simulate_click(point(px(20.), px(20.)), Modifiers::default());
+    context.run_until_parked();
+    context.update(|window, cx| window.draw(cx).clear(cx));
+
+    let tree = context.update(|_, cx| {
+        parent
+            .read(cx)
+            .snapshot()
+            .map(crate::RenderSnapshot::debug_tree)
+            .unwrap_or_default()
+    });
+    assert!(
+        tree.contains("ViewHandle.new"),
+        "creation error missing: {tree}"
+    );
+    assert!(tree.contains("set_props"), "update error missing: {tree}");
+    assert!(tree.matches("during layout").count() >= 2, "{tree}");
+}
+
+fn nested_view_build_error(cx: &mut TestAppContext, name: &str, source: &str) -> String {
+    cx.update(crate::init);
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let view_type = runtime.load_source(name, source).expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let parent = context
+        .update(|window, cx| runtime.instantiate_view(&view_type, window, cx))
+        .expect("instantiate parent");
+    draw(&mut context, &parent);
+    context.update(|_, cx| {
+        parent
+            .read(cx)
+            .build_error()
+            .expect("the nested-view call must fail where it was written")
+            .to_owned()
+    })
+}
+
 struct Empty;
+
+/// Test-only window root that lets an already-created script-view entity take
+/// part in real window layout without wrapping its retained state.
+struct RootedScriptView(gpui::Entity<ScriptView>);
+
+impl gpui::Render for RootedScriptView {
+    fn render(
+        &mut self,
+        _: &mut gpui::Window,
+        _: &mut gpui::Context<Self>,
+    ) -> impl gpui::IntoElement {
+        self.0.clone()
+    }
+}
 
 impl gpui::Render for Empty {
     fn render(
@@ -791,6 +1338,38 @@ export default class Gain extends View {
     );
 }
 
+/// JavaScript numbers are f64, while Base stores slider numbers as f32. A
+/// finite f64 above f32::MAX must be rejected before narrowing; otherwise two
+/// distinct logarithmic bounds both become infinity and Base asserts.
+#[gpui::test]
+fn a_slider_rejects_numbers_that_do_not_fit_its_native_representation(cx: &mut TestAppContext) {
+    cx.update(|cx| crate::init(cx));
+
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View, SliderState, text } from "gpui";
+
+export default class Gain extends View {
+  init() { this.gain = SliderState.new({ min: 1e100, max: 2e100, scale: "logarithmic" }); }
+  render() { return text("unreachable"); }
+}
+"#;
+    let view_type = runtime.load_source("huge-gain", source).expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        context.update(|window, cx| runtime.instantiate(&view_type, window, cx))
+    }));
+    let result = result.expect("a script number must not reach Base as infinity and panic");
+    let error = result.expect_err("a number outside f32 must be a script error");
+    assert!(
+        error.to_string().contains("native slider"),
+        "the error must explain the representable boundary: {error}"
+    );
+}
+
 /// A slider is four parts the script composes, and one thing the script does
 /// not do: compute where the value is.
 ///
@@ -957,6 +1536,340 @@ export default class Quantity extends View {
     // their own, so a mistake in that replay fails here rather than in a story.
     let view = context.update(|_, cx| cx.new(|_| ScriptView::new(runtime, object)));
     draw(&mut context, &view);
+}
+
+/// A code of no cells accepts no keystroke and shows nothing, and a mistyped
+/// length is a window laying out a hundred thousand boxes. Base refuses
+/// neither, so the binding has to.
+#[gpui::test]
+fn an_otp_length_outside_the_usable_range_is_refused(cx: &mut TestAppContext) {
+    cx.update(|cx| crate::init(cx));
+
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View, OtpState, text } from "gpui";
+
+export default class Code extends View {
+  init() { this.code = OtpState.new(0); }
+  render() { return text("unreachable"); }
+}
+"#;
+    let view_type = runtime.load_source("code", source).expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+
+    let Err(error) = context.update(|window, cx| runtime.instantiate(&view_type, window, cx))
+    else {
+        panic!("a code with no cells is not a code");
+    };
+    assert!(
+        error.to_string().contains("between 1 and 64"),
+        "the error has to name the range: {error}"
+    );
+}
+
+/// The one component whose contents the script does not describe.
+///
+/// The description carries the templates and no digits — that is the first
+/// assertion — because a digit described here would be the digit the last
+/// script render saw. The second is the consequence: the code changes, the
+/// frame after it draws the new cells, and the VM is never entered.
+#[gpui::test]
+fn an_otp_input_is_styled_by_the_script_and_filled_by_the_shell(cx: &mut TestAppContext) {
+    cx.update(|cx| crate::init(cx));
+
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View, OtpState, OtpInput, text, v_flex } from "gpui";
+
+export default class Code extends View {
+  init() {
+    this.code = OtpState.new(6);
+    this.code.on("change", (event, cx) => { this.done = true; cx.notify(); });
+  }
+  render() {
+    return v_flex()
+      .child(text(`${this.code.len()} digits`))
+      .child(
+        OtpInput.new(this.code)
+          .flex()
+          .gap(8)
+          .cell_style((cell) => cell.size(40).border_1().rounded(6))
+          .cell_active_style((cell) => cell.border_color("ring"))
+          .caret_style((caret) => caret.w(2).h(18).bg("foreground")),
+      );
+  }
+}
+"#;
+    let view_type = runtime.load_source("otp", source).expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .expect("instantiate");
+    let tree = context
+        .update(|window, cx| runtime.render_to_spec(&object, None, window, cx))
+        .expect("OtpInput must be a supported component");
+
+    assert!(tree.contains("OtpInput #"), "missing OtpInput: {tree}");
+    for template in [":cell_style(", ":cell_active_style(", ":caret_style("] {
+        assert!(
+            tree.contains(template),
+            "the cells are declared as styles, not described as elements: \
+             missing {template}: {tree}"
+        );
+    }
+    // The length reached the script, which is what makes a label beside the
+    // code possible at all.
+    assert!(
+        tree.contains("6 digits"),
+        "the state must be readable: {tree}"
+    );
+
+    let view = context.update(|_, cx| cx.new(|_| ScriptView::new(runtime.clone(), object)));
+    draw(&mut context, &view);
+    let renders = runtime.metrics().read().script_renders();
+
+    // The claim, end to end. `OtpState` emits `Change` only when the code is
+    // complete, so a partial code reaching the screen is exactly the case a
+    // script-described cell could not serve.
+    let state = runtime
+        .entities()
+        .first_otp()
+        .expect("the script's OTP state");
+    context.update(|window, cx| {
+        state.update(cx, |state, cx| state.set_value("12", window, cx));
+    });
+    draw(&mut context, &view);
+
+    assert_eq!(
+        runtime.metrics().read().script_renders(),
+        renders,
+        "a digit landing must repaint without re-entering the script"
+    );
+}
+
+/// The same claim from the other end: a real keystroke.
+///
+/// Base owns the key handling and the shell owns the cells, so this is the one
+/// test that exercises both halves at once — and it is the case the binding
+/// exists for. `OtpState` emits `change` only when the code is complete, so a
+/// script asked to describe the cells would have nothing to redraw the first
+/// two digits from.
+#[gpui::test]
+fn typing_into_an_otp_input_reaches_the_state_without_the_script(cx: &mut TestAppContext) {
+    cx.update(|cx| crate::init(cx));
+
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View, OtpState, OtpInput } from "gpui";
+
+export default class Code extends View {
+  init() { this.code = OtpState.new(4); }
+  render() {
+    return OtpInput.new(this.code)
+      .flex()
+      .gap(8)
+      .cell_style((cell) => cell.size(40).border_1());
+  }
+}
+"#;
+    let view_type = runtime.load_source("otp-keys", source).expect("load");
+    let runtime_for_view = Rc::clone(&runtime);
+    let (_root, context) = cx.add_window_view(move |window, cx| {
+        let object = runtime_for_view
+            .instantiate(&view_type, window, cx)
+            .expect("instantiate");
+        let view = cx.new(|_| ScriptView::new(runtime_for_view, object));
+        crate::root::ShellRoot::new(view.into(), window, cx)
+    });
+    context.update(|window, cx| window.draw(cx).clear(cx));
+
+    let state = runtime
+        .entities()
+        .first_otp()
+        .expect("the script's OTP state");
+    context.update(|window, cx| {
+        state.update(cx, |state, cx| state.focus(window, cx));
+    });
+    context.update(|window, cx| window.draw(cx).clear(cx));
+
+    let renders = runtime.metrics().read().script_renders();
+    context.simulate_keystrokes("1 2");
+    context.update(|window, cx| window.draw(cx).clear(cx));
+
+    assert_eq!(
+        context.update(|_, cx| state.read(cx).value().to_string()),
+        "12",
+        "keys typed into the code have to reach the state base owns"
+    );
+    assert_eq!(
+        runtime.metrics().read().script_renders(),
+        renders,
+        "and drawing them must not need the script"
+    );
+}
+
+/// `change` reports every edit; `complete` reports the transition to a full
+/// code. They are separate because validation and submit affordances need the
+/// former while verification requests need the latter.
+#[gpui::test]
+fn otp_change_and_complete_are_distinct_events(cx: &mut TestAppContext) {
+    cx.update(crate::init);
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View, OtpState, OtpInput, text, v_flex } from "gpui";
+
+export default class Code extends View {
+  init() {
+    this.code = OtpState.new(2);
+    this.changes = 0;
+    this.completes = 0;
+    this.code.on("change", (_event, cx) => { this.changes += 1; cx.notify(); });
+    this.code.on("complete", (_event, cx) => { this.completes += 1; cx.notify(); });
+  }
+  render() {
+    return v_flex()
+      .child(OtpInput.new(this.code).cell_style((cell) => cell.size(40)))
+      .child(text(`changes ${this.changes} completes ${this.completes}`));
+  }
+}
+"#;
+    let view_type = runtime.load_source("otp-events.js", source).expect("load");
+    let runtime_for_view = Rc::clone(&runtime);
+    let window = cx.add_window(move |window, cx| {
+        let view = runtime_for_view
+            .instantiate_view(&view_type, window, cx)
+            .expect("instantiate");
+        RootedScriptView(view)
+    });
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    let view = window
+        .root(&mut context)
+        .expect("view")
+        .read_with(&context, |root, _| root.0.clone());
+    let state = runtime.entities().first_otp().expect("OTP state");
+    context.update(|window, cx| state.update(cx, |state, cx| state.focus(window, cx)));
+    context.update(|window, cx| window.draw(cx).clear(cx));
+
+    context.simulate_keystrokes("1");
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    assert_eq!(
+        context.update(|_, cx| state.read(cx).value().to_string()),
+        "1",
+        "the real key event must reach the focused OTP state"
+    );
+    let partial = context.update(|_, cx| {
+        view.read(cx)
+            .snapshot()
+            .map(crate::RenderSnapshot::debug_tree)
+            .unwrap_or_default()
+    });
+    assert!(
+        partial.contains("changes 1 completes 0"),
+        "a partial edit is a change, not a completion: {partial}"
+    );
+
+    context.simulate_keystrokes("2");
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    let complete = context.update(|_, cx| {
+        view.read(cx)
+            .snapshot()
+            .map(crate::RenderSnapshot::debug_tree)
+            .unwrap_or_default()
+    });
+    assert!(
+        complete.contains("changes 2 completes 1"),
+        "the final edit reports both semantic events once: {complete}"
+    );
+}
+
+/// Retained-state setters are controlled shell mutations: native cells repaint
+/// and script-derived presentation is invalidated without an extra
+/// `cx.notify()`. Registering the same event again replaces the old listener,
+/// bounding subscription lifetime even when initialization code is retried.
+#[gpui::test]
+fn otp_setters_refresh_script_ui_and_same_event_subscription_is_replaced(cx: &mut TestAppContext) {
+    cx.update(crate::init);
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View, Button, OtpState, OtpInput, text, v_flex } from "gpui";
+
+export default class Code extends View {
+  init() {
+    this.code = OtpState.new(2);
+    this.old_calls = 0;
+    this.new_calls = 0;
+    this.code.on("change", (_event, cx) => { this.old_calls += 1; cx.notify(); });
+    this.code.on("change", (_event, cx) => { this.new_calls += 1; cx.notify(); });
+  }
+  render() {
+    return v_flex()
+      .child(Button.new("set-code").w(100).h(40).on_click(() => {
+        this.code.set_value("42");
+        this.code.set_masked(true);
+      }))
+      .child(OtpInput.new(this.code).cell_style((cell) => cell.size(40)))
+      .child(text(`value ${this.code.value()} masked ${this.code.is_masked()} old ${this.old_calls} new ${this.new_calls}`));
+  }
+}
+"#;
+    let view_type = runtime
+        .load_source("otp-controlled.js", source)
+        .expect("load");
+    let runtime_for_view = Rc::clone(&runtime);
+    let window = cx.add_window(move |window, cx| {
+        let view = runtime_for_view
+            .instantiate_view(&view_type, window, cx)
+            .expect("instantiate");
+        RootedScriptView(view)
+    });
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    let view = window
+        .root(&mut context)
+        .expect("view")
+        .read_with(&context, |root, _| root.0.clone());
+    let state = runtime.entities().first_otp().expect("OTP state");
+    context.update(|window, cx| state.update(cx, |state, cx| state.focus(window, cx)));
+    context.update(|window, cx| window.draw(cx).clear(cx));
+
+    context.simulate_keystrokes("1");
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    assert_eq!(
+        context.update(|_, cx| state.read(cx).value().to_string()),
+        "1",
+        "the real key event must reach the focused OTP state"
+    );
+    let after_change = context.update(|_, cx| {
+        view.read(cx)
+            .snapshot()
+            .map(crate::RenderSnapshot::debug_tree)
+            .unwrap_or_default()
+    });
+    assert!(
+        after_change.contains("value 1 masked false old 0 new 1"),
+        "registering the same event replaces the old listener: {after_change}"
+    );
+
+    context.simulate_click(point(px(50.), px(20.)), Modifiers::default());
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    let after_set = context.update(|_, cx| {
+        view.read(cx)
+            .snapshot()
+            .map(crate::RenderSnapshot::debug_tree)
+            .unwrap_or_default()
+    });
+    assert!(
+        after_set.contains("value 42 masked true old 0 new 1"),
+        "rendered-event setters invalidate script-derived UI themselves: {after_set}"
+    );
 }
 
 /// A progress bar is three parts, and the script draws all of it: the root
@@ -1269,12 +2182,36 @@ fn accessibility_counts_and_positions_reject_invalid_numbers(cx: &mut TestAppCon
     cx.update(|cx| crate::init(cx));
 
     for (name, expression, expected) in [
-        ("position-zero", "Tab.new('tab').set_position(0, 2)", "set_position"),
-        ("position-after-size", "Tab.new('tab').set_position(3, 2)", "set_position"),
-        ("position-fraction", "Tab.new('tab').set_position(1.5, 2)", "set_position"),
-        ("row-negative", "Table.new('table').row_count(-1)", "row_count"),
-        ("column-fraction", "Table.new('table').column_count(2.5)", "column_count"),
-        ("progress-nan", "Progress.new('progress').value(NaN)", "value"),
+        (
+            "position-zero",
+            "Tab.new('tab').set_position(0, 2)",
+            "set_position",
+        ),
+        (
+            "position-after-size",
+            "Tab.new('tab').set_position(3, 2)",
+            "set_position",
+        ),
+        (
+            "position-fraction",
+            "Tab.new('tab').set_position(1.5, 2)",
+            "set_position",
+        ),
+        (
+            "row-negative",
+            "Table.new('table').row_count(-1)",
+            "row_count",
+        ),
+        (
+            "column-fraction",
+            "Table.new('table').column_count(2.5)",
+            "column_count",
+        ),
+        (
+            "progress-nan",
+            "Progress.new('progress').value(NaN)",
+            "value",
+        ),
     ] {
         let runtime = ShellRuntime::new_isolated().expect("runtime");
         let source = format!(
@@ -1452,17 +2389,63 @@ export default class BadMotion extends View {{
 
 #[gpui::test]
 fn theme_tokens_resolve_outside_a_call_scope(cx: &mut TestAppContext) {
-    cx.update(|cx| crate::init(cx));
+    cx.update(|cx| {
+        crate::init(cx);
+        gpui_base::Theme::global_mut(cx).tokens.colors.background = gpui::white();
+        gpui_base::Theme::global_mut(cx).tokens.colors.primary = gpui::white();
+        crate::theme_tokens::sync(cx);
+    });
 
     // Materialization happens after the call scope closes, so a palette that
     // could only be read through the scope resolved every color to `None` and
     // painted an unstyled black window. This is that regression.
     assert!(
-        crate::theme::token_color("background").is_some(),
+        crate::theme_tokens::token_color("background").is_some(),
         "semantic tokens must resolve without an open call scope"
     );
-    assert!(crate::theme::token_color("primary").is_some());
-    assert!(crate::theme::token_color("not_a_token").is_none());
+    assert!(crate::theme_tokens::token_color("primary").is_some());
+    assert!(crate::theme_tokens::token_color("not_a_token").is_none());
+}
+
+#[gpui::test]
+fn javascript_can_replace_the_active_gpui_base_theme(cx: &mut TestAppContext) {
+    cx.update(|cx| crate::init(cx));
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r##"
+import { View, div, set_theme } from "gpui";
+export default class ThemeSwitch extends View {
+  init() {
+    const color = "#111111";
+    set_theme({ appearance: "dark", tokens: {
+      colors: {
+        background: color, foreground: color, surface: color, surface_foreground: color,
+        primary: color, primary_foreground: color, secondary: color, secondary_foreground: color,
+        muted: color, muted_foreground: color, accent: color, accent_foreground: color,
+        destructive: color, destructive_foreground: color, border: color, input: color, ring: color,
+      },
+      spacing: { xxs: 2, xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 },
+      radius: { none: 0, sm: 3, md: 6, lg: 8, xl: 12, full: 9999 },
+    }});
+  }
+  render() { return div(); }
+}
+"##;
+    let view_type = runtime.load_source("theme-switch", source).expect("load");
+    let loaded = runtime.clone();
+    let window = cx.add_window(move |window, cx| {
+        let object = loaded.instantiate(&view_type, window, cx).unwrap();
+        ScriptView::new(loaded, object)
+    });
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    context.update(|window, cx| window.draw(cx).clear(cx));
+
+    context.update(|_, cx| {
+        assert_eq!(
+            gpui_base::Theme::global(cx).appearance,
+            gpui_base::ThemeAppearance::Dark
+        );
+    });
 }
 
 /// The todo list exists to exercise the whole runtime at once: retained input
@@ -1739,7 +2722,7 @@ fn an_embedded_runtime_reloads_when_a_source_changes(cx: &mut TestAppContext) {
         let view = cx.new(|_| ScriptView::new(runtime.clone(), object));
         // Exercise the watcher itself in both debug and release test builds.
         let watch =
-            crate::watch::Watch::start(&runtime, &view, directory.clone(), "main.js", window, cx)
+            crate::watch::Watcher::start(&runtime, &view, directory.clone(), "main.js", window, cx)
                 .expect("watch");
         watch.forget();
         view
@@ -2372,7 +3355,7 @@ fn a_watcher_releases_its_view(cx: &mut TestAppContext) {
             .expect("instantiate");
         let view = cx.new(|_| ScriptView::new(runtime.clone(), object));
         let watch =
-            crate::watch::Watch::start(&runtime, &view, directory.clone(), "main.js", window, cx)
+            crate::watch::Watcher::start(&runtime, &view, directory.clone(), "main.js", window, cx)
                 .expect("watch");
         watch.forget();
         view.downgrade()
@@ -2517,6 +3500,40 @@ export default class Late extends View {
     assert!(
         message.contains("init()"),
         "and where the handle belongs instead: {message}"
+    );
+}
+
+#[gpui::test]
+fn an_existing_focus_handle_cannot_focus_during_render(cx: &mut TestAppContext) {
+    cx.update(|cx| crate::init(cx));
+
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View, div, FocusHandle } from "gpui";
+
+export default class LateFocus extends View {
+  init() { this.focus = FocusHandle.new(); }
+  render() {
+    this.focus.focus();
+    return div();
+  }
+}
+"#;
+    let view_type = runtime.load_source("late-focus-mutation", source).expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .expect("instantiate");
+
+    let error = context
+        .update(|window, cx| runtime.render_to_spec(&object, None, window, cx))
+        .expect_err("focus mutation during render must be refused");
+
+    assert!(
+        error.to_string().contains("cannot run during render or layout"),
+        "the error must explain the phase boundary: {error}"
     );
 }
 
@@ -3505,6 +4522,162 @@ export default class Due extends View {
     );
 }
 
+/// A tooltip is the one bound thing whose content outlives the render that
+/// described it, so this walks the path rather than the description: a real
+/// window with a `ShellRoot`, a real pointer resting on a real button, base's
+/// own half-second delay, and the window's overlay reporting that something is
+/// now up.
+///
+/// Base's `TooltipOverlay` exposes no reader for what it is showing, so what is
+/// asserted is its notification — which it emits when the delayed show lands
+/// and again when the grace period after the pointer leaves runs out, and at no
+/// other time. A trigger that never reached the overlay produces neither.
+#[gpui::test]
+fn a_tooltip_reaches_the_window_overlay_after_the_pointer_rests(cx: &mut TestAppContext) {
+    cx.update(|cx| crate::init(cx));
+
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View, v_flex, Button, text } from "gpui";
+
+export default class Toolbar extends View {
+  render() {
+    return v_flex()
+      .w(400)
+      .h(400)
+      .child(
+        Button.new("save")
+          .w(300)
+          .h(40)
+          .tooltip("Save the document")
+          .child(text("Save")));
+  }
+}
+"#;
+    let view_type = runtime.load_source("toolbar.js", source).expect("load");
+    let runtime_for_view = Rc::clone(&runtime);
+    let (root, context) = cx.add_window_view(move |window, cx| {
+        let object = runtime_for_view
+            .instantiate(&view_type, window, cx)
+            .expect("instantiate");
+        let view = cx.new(|_| ScriptView::new(runtime_for_view, object));
+        crate::root::ShellRoot::new(view.into(), window, cx)
+    });
+    context.update(|window, cx| window.draw(cx).clear(cx));
+
+    let tree = context.update(|_, cx| {
+        root.read(cx)
+            .content()
+            .clone()
+            .downcast::<ScriptView>()
+            .ok()
+            .expect("the root was given a script view")
+            .read(cx)
+            .snapshot()
+            .map(crate::RenderSnapshot::debug_tree)
+            .unwrap_or_default()
+    });
+    assert!(
+        tree.contains(r#":tooltip[Str("Save the document")]"#),
+        "the label has to survive into the description: {tree}"
+    );
+
+    let overlay = context
+        .update(|window, cx| crate::root::ShellRoot::tooltip_overlay(window, cx))
+        .expect("a ShellRoot owns its window's tooltip layer");
+    let shows = Rc::new(Cell::new(0usize));
+    let counter = Rc::clone(&shows);
+    let _subscription =
+        context.update(|_, cx| cx.observe(&overlay, move |_, _| counter.set(counter.get() + 1)));
+
+    // On the button, and still nothing: the delay is what stops a tooltip
+    // appearing under a pointer that was only passing over the toolbar.
+    context.simulate_mouse_move(point(px(20.), px(20.)), None, Modifiers::default());
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    assert_eq!(
+        shows.get(),
+        0,
+        "a tooltip must not appear the instant it is hovered"
+    );
+
+    context
+        .executor()
+        .advance_clock(std::time::Duration::from_millis(600));
+    context.run_until_parked();
+    assert_eq!(
+        shows.get(),
+        1,
+        "resting on the trigger must put the label up"
+    );
+
+    // And the layer actually renders what it was handed: the label view, the
+    // positioner around it and the enter animation all run here.
+    context.update(|window, cx| window.draw(cx).clear(cx));
+
+    context.simulate_mouse_move(point(px(20.), px(300.)), None, Modifiers::default());
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    context
+        .executor()
+        .advance_clock(std::time::Duration::from_millis(400));
+    context.run_until_parked();
+    assert_eq!(
+        shows.get(),
+        2,
+        "leaving the trigger must take the label away again"
+    );
+}
+
+/// A tooltip that is not a string is refused where it was written.
+///
+/// Coercing it, or dropping it, would leave an element that looks tooltipped
+/// and shows nothing when the pointer rests on it. The second half of the
+/// message is the only place a script is told that the element form of a
+/// tooltip is not bound yet — a function argument is caught one layer earlier,
+/// by the same conversion that refuses one to `id`, and says only that.
+#[gpui::test]
+fn a_tooltip_that_is_not_a_string_is_refused_at_the_call_site(cx: &mut TestAppContext) {
+    let message = render_error(
+        cx,
+        "label.js",
+        r#"
+import { View, Button, text } from "gpui";
+
+export default class Toolbar extends View {
+  render() {
+    return Button.new("save").tooltip(42).child(text("Save"));
+  }
+}
+"#,
+    );
+    assert!(
+        message.contains("tooltip(text) expects a string"),
+        "the message has to name the method and the type it wanted: {message}"
+    );
+    assert!(
+        message.contains("not bound yet"),
+        "and has to say that the element form is the thing that is missing: {message}"
+    );
+
+    let message = render_error(
+        cx,
+        "label.js",
+        r#"
+import { View, Button, text } from "gpui";
+
+export default class Toolbar extends View {
+  render() {
+    return Button.new("save").tooltip(() => text("Save")).child(text("Save"));
+  }
+}
+"#,
+    );
+    assert!(
+        message.contains("`tooltip` does not take a function"),
+        "a function is the mistake a script is most likely to make here: {message}"
+    );
+}
+
 /// Renders `source` once and returns the message it failed with.
 fn render_error(cx: &mut TestAppContext, name: &str, source: &str) -> String {
     cx.update(|cx| crate::init(cx));
@@ -3669,5 +4842,496 @@ export default class Loose extends View {
     assert!(
         error.to_string().contains("h_resizable"),
         "the error must name where a panel belongs: {error}"
+    );
+}
+
+#[gpui::test]
+fn a_resizable_panel_rejects_a_reversed_size_range(cx: &mut TestAppContext) {
+    let message = render_error(
+        cx,
+        "reversed-panel-range.js",
+        r#"
+import { View, h_resizable, resizable_panel } from "gpui";
+
+export default class Workspace extends View {
+  render() {
+    return h_resizable("workspace")
+      .child(resizable_panel().size_range(300, 100))
+      .child(resizable_panel());
+  }
+}
+"#,
+    );
+    assert!(
+        message.contains("maximum") && message.contains("minimum"),
+        "the range must be refused before a drag reaches Rust clamp: {message}"
+    );
+}
+
+/// The script every virtual list test below renders, parameterized by what the
+/// item renderer does beyond describing a row.
+///
+/// The list is nested in a box of a known height so the visible range is a
+/// number the test can predict, and the range the last prepaint asked for is
+/// written back onto the view — which is how a pass that happens inside GPUI's
+/// layout is observable from outside it at all.
+fn virtual_list_source(extra: &str) -> String {
+    format!(
+        r#"
+import {{ View, v_flex, text, v_virtual_list }} from "gpui";
+
+export default class Rows extends View {{
+  init() {{
+    this.range = [0, 0];
+    this.clicked = -1;
+    this.refused = "";
+  }}
+
+  render() {{
+    return v_flex()
+      .w(300)
+      .h(400)
+      .child(
+        v_flex()
+          .h(200)
+          .child(
+            v_virtual_list("rows", 500, 20, (index) => String(index), (range) => {{
+              this.range = [range.start, range.end];
+              const items = [];
+              for (let index = range.start; index < range.end; index++) {{
+                const row = text(`row ${{index}}`).h(20);
+                {extra}
+                items.push(row);
+              }}
+              return items;
+            }}).on_item_click((key, cx) => {{
+              this.clicked = key;
+              cx.notify();
+            }}),
+          ),
+      )
+      .child(text(`range ${{this.range[0]}}..${{this.range[1]}} clicked ${{this.clicked}} refused ${{this.refused}}`));
+  }}
+}}
+"#
+    )
+}
+
+/// Rebuilds the description so that what the item renderer recorded during the
+/// last layout shows up in the tree.
+///
+/// A virtual list writes its state during GPUI's layout pass, which is *after*
+/// the render that produced the description being laid out. Nothing about that
+/// is a re-render, and it must not be — so the test asks for one.
+fn redraw_and_read(context: &mut VisualTestContext, view: &gpui::Entity<ScriptView>) -> String {
+    context.update(|_, cx| {
+        view.update(cx, |view, cx| {
+            view.invalidate();
+            cx.notify();
+        })
+    });
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    context.update(|_, cx| {
+        view.read(cx)
+            .snapshot()
+            .map(crate::RenderSnapshot::debug_tree)
+            .unwrap_or_default()
+    })
+}
+
+/// The `start..end` the item renderer was last asked for, read out of the tree.
+fn reported_range(tree: &str) -> (usize, usize) {
+    let text = tree
+        .split("range ")
+        .nth(1)
+        .unwrap_or_else(|| panic!("no reported range in: {tree}"));
+    let (start, rest) = text.split_once("..").expect("a start and an end");
+    let end = rest
+        .split(|character: char| !character.is_ascii_digit())
+        .next()
+        .expect("an end");
+    (
+        start.parse().expect("a start index"),
+        end.parse().expect("an end index"),
+    )
+}
+
+fn mount_virtual_list(
+    cx: &mut TestAppContext,
+    extra: &str,
+) -> (
+    Rc<ShellRuntime>,
+    gpui::WindowHandle<RootedScriptView>,
+    gpui::Entity<ScriptView>,
+    VisualTestContext,
+) {
+    cx.update(crate::init);
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let view_type = runtime
+        .load_source("rows.js", &virtual_list_source(extra))
+        .expect("load");
+
+    // The view has to be the window's own root. A helper that draws it once
+    // into a throwaway element would leave every later frame going to the real
+    // root instead, and a virtual list only says anything once it has been laid
+    // out more than once.
+    let runtime_for_view = Rc::clone(&runtime);
+    let window = cx.add_window(move |window, cx| {
+        let view = runtime_for_view
+            .instantiate_view(&view_type, window, cx)
+            .expect("instantiate");
+        RootedScriptView(view)
+    });
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    let view = window
+        .root(&mut context)
+        .expect("view")
+        .read_with(&context, |root, _| root.0.clone());
+    (runtime, window, view, context)
+}
+
+fn scroll_by(context: &mut VisualTestContext, dy: f32) {
+    context.simulate_event(gpui::ScrollWheelEvent {
+        position: point(px(150.), px(100.)),
+        delta: gpui::ScrollDelta::Pixels(point(px(0.), px(dy))),
+        ..Default::default()
+    });
+    context.update(|window, cx| window.draw(cx).clear(cx));
+}
+
+#[gpui::test]
+fn a_virtual_list_describes_only_the_visible_window_and_follows_the_scroll(
+    cx: &mut TestAppContext,
+) {
+    let (_runtime, _window, view, mut context) = mount_virtual_list(cx, "");
+
+    let (start, end) = reported_range(&redraw_and_read(&mut context, &view));
+    assert_eq!(start, 0, "an unscrolled list starts at its first item");
+    assert!(
+        (10..=13).contains(&end),
+        "a 200px box of 20px rows shows about ten of five hundred, not {end}"
+    );
+
+    // Ten rows down. The script has to be asked again, with a different range:
+    // that it is asked at all is the whole of what separates this component
+    // from every other one, and that the range moves is what makes it a list
+    // rather than a window onto the first screenful.
+    scroll_by(&mut context, -200.);
+
+    let (scrolled_start, scrolled_end) = reported_range(&redraw_and_read(&mut context, &view));
+    assert_eq!(
+        scrolled_start, 10,
+        "200px of 20px rows is ten items; the window must start there"
+    );
+    assert!(
+        scrolled_end > end,
+        "the window must have moved down the collection: {scrolled_start}..{scrolled_end}"
+    );
+}
+
+#[gpui::test]
+fn a_virtual_lists_handlers_do_not_accumulate_while_it_is_scrolled(cx: &mut TestAppContext) {
+    let (runtime, _window, view, mut context) = mount_virtual_list(cx, "");
+
+    let settled = runtime.live_callbacks();
+    assert!(
+        settled > 0,
+        "the list registers its renderer, key resolver and click handler"
+    );
+
+    // Forty passes over the item renderer — two per frame, one to measure and
+    // one to place. Each describes twenty rows. If a row could register a
+    // handler, or if a batch's descriptions outlived the frame that drew them,
+    // this is where it would show.
+    for step in 0..20 {
+        scroll_by(&mut context, if step % 2 == 0 { -60. } else { 40. });
+    }
+
+    assert_eq!(
+        runtime.live_callbacks(),
+        settled,
+        "scrolling must not register a single handler; rows are rebuilt every frame, so \
+         anything registered from one would never be released"
+    );
+
+    // And a real script render does not accumulate either. The count settles at
+    // two generations rather than one because the view deliberately keeps the
+    // previous snapshot alive — a build that throws still has an interface to
+    // show — and that is a fixed two however many renders follow.
+    for _ in 0..5 {
+        redraw_and_read(&mut context, &view);
+    }
+    assert_eq!(
+        runtime.live_callbacks(),
+        settled * 2,
+        "a rendered generation and the one it replaced, and nothing older"
+    );
+}
+
+#[gpui::test]
+fn a_row_cannot_register_a_handler_of_its_own(cx: &mut TestAppContext) {
+    let (_runtime, _window, view, mut context) = mount_virtual_list(
+        cx,
+        "try { row.on_click(() => {}); } catch (error) { this.refused = String(error.message); }",
+    );
+
+    let tree = redraw_and_read(&mut context, &view);
+    assert!(
+        tree.contains("refused"),
+        "the view reports what the row was told: {tree}"
+    );
+    let refused = tree
+        .split("refused ")
+        .nth(1)
+        .unwrap_or_else(|| panic!("no refusal in: {tree}"));
+    assert!(
+        refused.contains("on_item_click"),
+        "the refusal must name what to use instead: {refused}"
+    );
+}
+
+#[gpui::test]
+fn a_virtual_list_reports_which_row_was_clicked(cx: &mut TestAppContext) {
+    let (_runtime, _window, view, mut context) = mount_virtual_list(cx, "");
+
+    // Rows are twenty pixels tall and the list starts at the top of the window,
+    // so the third one covers 40..60.
+    context.simulate_click(point(px(150.), px(50.)), Modifiers::default());
+    context.update(|window, cx| window.draw(cx).clear(cx));
+
+    let tree = context.update(|_, cx| {
+        view.read(cx)
+            .snapshot()
+            .map(crate::RenderSnapshot::debug_tree)
+            .unwrap_or_default()
+    });
+    assert!(
+        tree.contains("clicked 2"),
+        "the click must arrive with the item's stable key: {tree}"
+    );
+}
+
+/// The hit box belongs to the item it was painted for, not to the position the
+/// item happened to occupy. A queued event from the previous snapshot
+/// deliberately arrives after the first handler has reordered the collection.
+#[gpui::test]
+fn a_virtual_list_click_keeps_the_stable_item_key_across_reordering(cx: &mut TestAppContext) {
+    cx.update(crate::init);
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View, v_flex, text, v_virtual_list } from "gpui";
+
+export default class Rows extends View {
+  init() {
+    this.items = [{ key: "alpha" }, { key: "beta" }];
+    this.clicked = [];
+  }
+  render() {
+    return v_flex()
+      .w(300)
+      .h(100)
+      .child(
+        v_virtual_list(
+          "rows",
+          this.items.length,
+          40,
+          (index) => this.items[index].key,
+          (range) => {
+            const rows = [];
+            for (let index = range.start; index < range.end; index++) {
+              rows.push(text(this.items[index].key).h(40));
+            }
+            return rows;
+          },
+        ).on_item_click((key, cx) => {
+          this.clicked.push(key);
+          this.items.reverse();
+          cx.notify();
+        }),
+      )
+      .child(text(`clicked ${this.clicked.join(",")}`));
+  }
+}
+"#;
+    let view_type = runtime.load_source("stable-list.js", source).expect("load");
+    let runtime_for_view = Rc::clone(&runtime);
+    let window = cx.add_window(move |window, cx| {
+        let object = runtime_for_view
+            .instantiate(&view_type, window, cx)
+            .expect("instantiate");
+        ScriptView::new(runtime_for_view, object)
+    });
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    let view = window.root(&mut context).expect("view");
+
+    let old_callback = context.update(|_, cx| {
+        let snapshot = view.read(cx).snapshot().expect("initial snapshot");
+        snapshot
+            .arena()
+            .node(snapshot.root())
+            .expect("root")
+            .children()
+            .iter()
+            .find_map(|child| {
+                snapshot
+                    .arena()
+                    .node(*child)?
+                    .ops()
+                    .iter()
+                    .find_map(|op| match op {
+                        crate::spec::SpecOp::Callback("on_item_click", callback) => Some(*callback),
+                        _ => None,
+                    })
+            })
+            .expect("item click callback")
+    });
+
+    context.simulate_click(point(px(150.), px(20.)), Modifiers::default());
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    // Emulate a queued event from the hit box painted by the previous
+    // snapshot. Its payload is the key captured before the reorder.
+    context.update(|window, cx| runtime.dispatch_item_key(old_callback, "alpha", window, cx));
+    context.update(|window, cx| window.draw(cx).clear(cx));
+
+    let tree = context.update(|_, cx| {
+        view.read(cx)
+            .snapshot()
+            .map(crate::RenderSnapshot::debug_tree)
+            .unwrap_or_default()
+    });
+    assert!(
+        tree.contains("clicked alpha,alpha"),
+        "an old event must keep addressing the item that owned its hit box: {tree}"
+    );
+}
+
+#[gpui::test]
+fn item_sizes_are_taken_as_one_extent_or_one_per_item(cx: &mut TestAppContext) {
+    cx.update(|cx| crate::init(cx));
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View, v_flex, v_virtual_list, h_virtual_list } from "gpui";
+
+export default class Both extends View {
+  render() {
+    return v_flex()
+      .child(v_virtual_list("uniform", 3, 20, (index) => String(index), () => []))
+      .child(h_virtual_list("explicit", 3, [10, 20, 30], (index) => String(index), () => []));
+  }
+}
+"#;
+    let view_type = runtime.load_source("both.js", source).expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .expect("instantiate");
+    let tree = context.update(|window, cx| {
+        runtime
+            .render_to_spec(&object, None, window, cx)
+            .expect("render")
+    });
+
+    // One number and three numbers describe the same three items: the count is
+    // the list's own argument either way, which is what keeps a hundred
+    // thousand uniform rows from crossing the boundary a hundred thousand
+    // times.
+    assert!(
+        tree.contains("v_virtual_list \"uniform\" \u{d7}3"),
+        "a uniform extent must still size every item: {tree}"
+    );
+    assert!(
+        tree.contains("h_virtual_list \"explicit\" \u{d7}3"),
+        "an explicit list of extents must survive: {tree}"
+    );
+}
+
+#[gpui::test]
+fn item_sizes_that_disagree_with_the_item_count_are_refused(cx: &mut TestAppContext) {
+    cx.update(|cx| crate::init(cx));
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View, v_virtual_list } from "gpui";
+
+export default class Mismatched extends View {
+  render() {
+    return v_virtual_list("rows", 3, [10, 20], (index) => String(index), () => []);
+  }
+}
+"#;
+    let view_type = runtime.load_source("mismatched.js", source).expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .expect("instantiate");
+
+    let error = context
+        .update(|window, cx| runtime.render_to_spec(&object, None, window, cx))
+        .expect_err("two extents for three items must fail where it was written");
+    assert!(
+        error.to_string().contains("item sizes"),
+        "the error must say which argument disagrees: {error}"
+    );
+}
+
+#[gpui::test]
+fn virtual_lists_share_one_bounded_host_allocation_budget_per_render(cx: &mut TestAppContext) {
+    let message = render_error(
+        cx,
+        "oversized-lists.js",
+        r#"
+import { View, v_flex, v_virtual_list } from "gpui";
+
+export default class LargeLists extends View {
+  render() {
+    return v_flex()
+      .child(v_virtual_list("first", 600000, 20, (index) => String(index), () => []))
+      .child(v_virtual_list("second", 600000, 20, (index) => String(index), () => []));
+  }
+}
+"#,
+    );
+    assert!(
+        message.contains("virtual list") && message.contains("render"),
+        "the error must identify the aggregate host allocation boundary: {message}"
+    );
+}
+
+#[gpui::test]
+fn a_virtual_list_rejects_a_sparse_item_size_array_without_allocating_it(cx: &mut TestAppContext) {
+    cx.update(|cx| crate::init(cx));
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View, v_virtual_list } from "gpui";
+
+export default class SparseSizes extends View {
+  render() {
+    return v_virtual_list("rows", 2147483647, new Array(2147483647), (index) => String(index), () => []);
+  }
+}
+"#;
+    let view_type = runtime.load_source("sparse-sizes.js", source).expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .expect("instantiate");
+
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        context.update(|window, cx| runtime.render_to_spec(&object, None, window, cx))
+    }));
+    let result = result.expect("a sparse array must not panic or abort the host");
+    let error = result.expect_err("the sparse size array must be rejected");
+    assert!(
+        error.to_string().contains("item_sizes"),
+        "the error must identify the oversized argument: {error}"
     );
 }

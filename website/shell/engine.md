@@ -65,6 +65,25 @@ Two implementation choices came out of the same measurement and are visible in t
 - **Elements are plain objects sharing one prototype**, with the style methods installed on that prototype by a JavaScript prelude that loops over the name list. Not one class per element, not a fresh closure per property access, and not 3,000 Rust closures.
 - **The diagnostic `Proxy` prototype is not the default.** Wrapping the prototype in a `Proxy` so a mistyped method can be named costs about 30% of the whole description pass, so the runtime keeps a plain prototype and re-runs a failed render once against the diagnostic one purely to produce the message. See [Styling](./styling.md#unknown-methods).
 
+### A live market-data workload
+
+The synthetic benchmark isolates costs; a Longbridge market terminal exercises them together. The following sample used a release build in the active window on a 3,840 × 2,160 display running at 144 Hz. Its watchlist received live quote updates while the selected instrument's details and five-day price chart were visible. The target was 120 FPS, which gives each frame **8.33 ms**.
+
+Opt-in runtime counters sampled one-second intervals and separated script description work from native materialization:
+
+| Measurement | Observed range |
+| --- | --- |
+| Full JavaScript `render` plus Spec recording | **12.0–13.5 ms** per dirty render |
+| Snapshot materialization | **0.93–1.08 ms** per materialization |
+| Script renders caused by quote updates | **8–20 per second** |
+| Materializations while the window was active | **59–78 per second** |
+
+One active-window FPS HUD sample reported **69 FPS**, **10.9 ms** frame time and **18.3%** dropped frames. That HUD measurement includes GPUI layout and paint and therefore is not directly interchangeable with either runtime counter, but it confirms the end-to-end workload was missing the 8.33 ms target.
+
+The useful conclusion is narrower than “JavaScript is slow.” A clean snapshot can be materialized in about 1 ms, comfortably inside the frame budget. A quote-driven dirty update, however, spends roughly 12–13.5 ms before that materialization is complete because the application rebuilds and records its full description. Repeatedly invalidating the root script view therefore dominates this workload; optimizing only the native materializer would not recover 120 FPS.
+
+These figures deliberately exclude debug builds and samples taken after the window lost active status. Both change scheduling and frame presentation enough to make their FPS readings unsuitable for an architectural comparison. They are also a workload measurement, not a replacement for the reproducible crate benchmark above: quote frequency, visible content, hardware and display timing all affect the absolute result.
+
 ## Threads and memory
 
 The VM and GPUI's `App` share one thread — the main one — inside one process. `ShellRuntime` is an `Rc` with `RefCell` interiors, so it is neither `Send` nor `Sync`. There is no worker and no second VM.

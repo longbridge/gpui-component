@@ -190,5 +190,5 @@ this window was opened with another view
 ## 还没有的东西
 
 - **Dialog 的返回值。** `open_dialog` 返回的是深度，不是一个在 dialog 关闭时 settle 的 promise。请像上面的例子那样闭包捕获一个回调，或者让 dialog 写回打开方会读取的状态。
-- **Popover、tooltip 与右键菜单。** Base 有这些构件，脚本接口上一个都没有。
+- **Tooltip 与右键菜单。** Popover 和 HoverCard 已可作为锚定浮层使用；专用的 tooltip 与右键菜单 API 尚未公开。
 - **定位选项。** Dialog 居中，sheet 贴边，两者都不能指定位置。

@@ -201,10 +201,11 @@ not a silently ignored no-op.
 Read semantic values directly at the use site, such as
 `cx.theme().colors.surface` or `cx.theme().spacing.md`; do not destructure or
 alias the theme snapshot. The returned light/dark snapshot contains direct color roles plus `colors`,
-`spacing`, `radius`, `mode`, and `is_dark`; it and all nested token groups are
+`spacing`, `radius`, `appearance`, and `is_dark`; it and all nested token groups are
 frozen. `gpui.theme()` remains a compatibility accessor. Calling
-`set_theme("light" | "dark")` selects one of the shell palettes and refreshes
-the windows.
+`set_theme({ appearance, tokens })` replaces the active `gpui-base` theme
+snapshot and refreshes the windows. Applications own theme names and may load
+their token objects from JSON.
 
 Motion is target-based, not a JavaScript frame callback. `transition` and
 `spring` accept `opacity`, `width`, `height`, `left`, or `top`; length targets
@@ -287,7 +288,7 @@ limits. Every redirect target must be granted; HTTPS downgrade is refused, as
 are cross-origin POST replays and cross-origin redirects carrying Authorization
 or any caller-supplied header.
 
-`WebSocket.connect(url, { headers })` resolves after the handshake and returns
+Import `WebSocket` from `websocket`; `WebSocket.connect(url, { headers })` resolves after the handshake and returns
 async `read`, `write`, and `close` methods for text and binary messages. Frames
 and messages are limited to 8 MiB. Connect/handshake and writes have 30-second
 transport deadlines. A pending `read()` has no public timeout and waits for a
@@ -296,8 +297,12 @@ close are still serviced as it waits. Credential and handshake-control headers
 are refused. Each socket has an 8-command queue shared by reads, writes, and
 close; a new operation rejects when that queue is full.
 
-Both `fs` and `fs/promises` expose the same promise-only subset: `readFile`,
-`writeFile`, `readdir`, `exists`, `unlink`, `rmdir`, and `mkdir`. Capability
+`fs/promises` exposes the promise-only filesystem subset; there is deliberately
+no callback-style `fs` module. `readFile(path)` resolves to `Uint8Array`, while
+`readFile(path, "utf8")` resolves to text. `writeFile` accepts text or bytes.
+`readdir(path)` resolves to sorted names; pass `{ withFileTypes: true }` for
+standard-shaped `Dirent` values with `isDirectory()`. The remaining calls are
+`exists`, `unlink`, `rmdir`, and `mkdir`. Capability
 checks happen at the call site, then filesystem work runs off the UI/VM thread.
 There are no synchronous filesystem calls. `writeFile` is capped at 8 MiB;
 `readdir` at 10,000 entries or 1 MiB of UTF-8 name bytes.

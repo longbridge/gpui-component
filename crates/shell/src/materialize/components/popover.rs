@@ -255,17 +255,17 @@ pub(in crate::materialize) fn hover_card(
         .when_some(behavior.on_open_change, |card, callback| {
             let runtime = Rc::downgrade(runtime);
             card.on_open_change(move |open, window, cx| {
-                // Base compares the open state inside its own `render` and
-                // calls this from there, so dispatching straight through would
-                // run event-phase script — `cx.notify()`, `window.open_dialog()`
-                // — from inside a GPUI render pass. The shell's phase guard
-                // would wave it through, because it only knows what the
-                // dispatcher told it.
+                // Base announces the change from `HoverCardState::set_open`,
+                // which the delay timers reach through `update_in` — so this
+                // runs inside a mutable borrow of that entity. Dispatching
+                // straight through would run script under that borrow, and a
+                // handler that touched the same card (a `cx.notify()` reaching
+                // back into it) would panic on the re-entrant update rather
+                // than report anything a script author could act on.
                 //
-                // Deferring puts the call on the next effect flush, which is
-                // where every other shell callback already runs. The script
-                // then sees one phase rather than two, and the `.d.ts` does not
-                // have to carry a rule nothing enforces.
+                // Deferring puts the call on the next effect flush, after the
+                // borrow has been released, which is where every other shell
+                // callback already runs.
                 let runtime = runtime.clone();
                 let open = *open;
                 window.defer(cx, move |window, cx| {

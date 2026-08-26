@@ -258,6 +258,11 @@ impl Theme {
     /// resize handles and reads the semantic tokens.
     fn base_theme(&self) -> gpui_base::Theme {
         gpui_base::Theme {
+            appearance: if self.mode.is_dark() {
+                gpui_base::ThemeAppearance::Dark
+            } else {
+                gpui_base::ThemeAppearance::Light
+            },
             tokens: self.semantic_tokens(),
             scrollbar: gpui_base::ScrollbarTheme::new()
                 .with_mode(self.scrollbar_mode)
@@ -280,8 +285,8 @@ impl Theme {
                         }),
                 ),
             resizable: gpui_base::ResizableTheme {
-                handle: self.border,
-                active_handle: self.drag_border,
+                handle: Some(self.border),
+                active_handle: Some(self.drag_border),
             },
         }
     }
@@ -699,7 +704,7 @@ mod base_theme_projection_tests {
             base.scrollbar.motion(),
             scrollbar_motion(theme.scrollbar_mode)
         );
-        assert_eq!(base.resizable.handle, theme.border);
-        assert_eq!(base.resizable.active_handle, theme.drag_border);
+        assert_eq!(base.resizable.handle, Some(theme.border));
+        assert_eq!(base.resizable.active_handle, Some(theme.drag_border));
     }
 }
