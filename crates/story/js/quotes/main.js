@@ -7,10 +7,9 @@
 // which is the entire argument for a script layer.
 //
 // It owns no state. The board lives in a Rust `Entity<Market>`, reached through
-// two native modules the story registered before the runtime started:
+// the native module the story registered before the runtime started:
 //
 //   native("market")   quotes() · ticks() · watch(symbol) · watch_all(on)
-//   native("theme")    palette()
 //
 // Twenty rows of six cells, rebuilt from scratch every time a price moves —
 // twenty times a second with the default feed. The counters under the panels
@@ -33,8 +32,8 @@ import {
 } from "./ui.js";
 
 export default class QuoteBoard extends View {
-  render() {
-    refreshPalette();
+  render(cx) {
+    refreshPalette(cx.theme());
 
     const market = native("market");
     const quotes = market.quotes();

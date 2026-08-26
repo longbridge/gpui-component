@@ -37,26 +37,6 @@ interface Quote {
  * mismatch these declarations exist to surface at the boundary rather than
  * twenty lines later.
  */
-interface Palette {
-  background: Hex;
-  foreground: Hex;
-  muted: Hex;
-  muted_foreground: Hex;
-  border: Hex;
-  primary: Hex;
-  primary_hover: Hex;
-  primary_foreground: Hex;
-  secondary: Hex;
-  accent: Hex;
-  success: Hex;
-  danger: Hex;
-  radius: number;
-  font_size: number;
-}
-
-/** What `to_hex` produces on the Rust side. */
-type Hex = `#${string}`;
-
 declare module "gpui" {
   interface NativeModules {
     market: {
@@ -68,9 +48,6 @@ declare module "gpui" {
       watch(symbol: string): boolean;
       /** Sets every row, and answers how many actually moved. */
       watch_all(watched: boolean): number;
-    };
-    theme: {
-      palette(): Palette;
     };
   }
 }

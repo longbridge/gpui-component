@@ -3,11 +3,11 @@
 // `gpui-shell` binds `gpui-base`, which ships behavior and no visual style: a
 // Button here has hit testing, focus and hover state, and not one pixel of
 // appearance. Every colour, size and radius below is this file's decision —
-// read from the host through `native("theme")`, so changing the gallery's theme
+// read from the render's call-scoped `cx.theme()`, so changing the shell theme
 // moves this half too.
 
-import { div, h_flex, v_flex, text, Button, native } from "gpui";
-/** @import { AbsoluteLength, ClickEvent, Context, Element } from "gpui" */
+import { div, h_flex, v_flex, text, Button } from "gpui";
+/** @import { AbsoluteLength, ClickEvent, Context, Element, Theme } from "gpui" */
 
 /// Every measurement here is in **rems**, so the panel scales with the window's
 /// text size instead of pinning itself to a pixel grid that only exists at the
@@ -47,25 +47,29 @@ export const ROW = {
 /** @type {{ title: AbsoluteLength, body: AbsoluteLength, lineHeight: number }} */
 export const TYPE = { title: "0.8125rem", body: "0.6875rem", lineHeight: 1.4 };
 
-/** @type {Palette | null} */
+/** @type {Theme | null} */
 let current = null;
 
-/// Re-reads the host palette, once at the top of a render. Not cached across
-/// renders: the gallery can switch theme while this view is mounted.
-export const refreshPalette = () => {
-  current = native("theme").palette();
+/// Captures the call-scoped theme once at the top of a render. It is not kept
+/// across renders: the host can switch theme while this view is mounted.
+/** @param {Theme} theme */
+export const refreshPalette = (theme) => {
+  current = theme;
   return current;
 };
 
-export const palette = () => current ?? refreshPalette();
+export const palette = () => {
+  if (current === null) throw new Error("theme must be captured during render");
+  return current;
+};
 
-/// Up is `success`, down is `danger`, flat is ordinary text — the same question
+/// Up is `accent`, down is `destructive`, flat is ordinary text — the same question
 /// the Rust panel asks of the same theme.
 /** @param {number} direction */
 export const directionColor = (direction) => {
   const colors = palette();
-  if (direction > 0) return colors.success;
-  if (direction < 0) return colors.danger;
+  if (direction > 0) return colors.accent;
+  if (direction < 0) return colors.destructive;
   return colors.foreground;
 };
 
@@ -139,7 +143,7 @@ export const quoteRow = (quote, onClick) =>
     .gap(ROW.inset)
     .px(ROW.inset)
     .py(ROW.padding)
-    .rounded(palette().radius)
+    .rounded(palette().radius.md)
     .hover((style) => style.bg(palette().muted))
     .on_click(onClick)
     .child(cell(COLUMN.symbol).child(label(quote.symbol).font_medium()))
@@ -184,14 +188,14 @@ export const action = (id, caption, onClick, options = {}) => {
     .justify_center()
     .h("1.25rem")
     .px(SPACE.sm)
-    .rounded(colors.radius)
+    .rounded(colors.radius.md)
     .border(1)
     .border_color(primary ? colors.primary : colors.border)
     .bg(primary ? colors.primary : colors.background)
     .when(disabled, (el) => el.opacity(0.5))
     .when(!disabled, (el) =>
       el
-        .hover((style) => style.bg(primary ? colors.primary_hover : colors.muted))
+        .hover((style) => style.bg(primary ? colors.accent : colors.muted))
         .on_click(onClick),
     )
     .child(

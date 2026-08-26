@@ -2,9 +2,11 @@
 //!
 //! The left panel is ordinary Rust built from `gpui-component`. The right panel
 //! is a `gpui-shell` script view whose JavaScript lives in
-//! `crates/story/js/quotes/` and is read from disk when the story opens.
+//! `crates/story/js/quotes/` and is read from disk when the story opens. A
+//! separate `crates/story/js/motion/` view demonstrates native motion without
+//! becoming part of the quote-board performance comparison.
 //! Neither half owns the data: a single `Entity<Market>` does, and the script
-//! reaches it through a **native module** this story registers before the
+//! reaches it through the **market native module** this story registers before the
 //! script runtime starts.
 //!
 //! ```text
@@ -47,11 +49,9 @@
 //! Nothing but plain data crosses. `quotes()` returns an array of records;
 //! `watch(symbol)` takes a string and answers a boolean, or fails with a
 //! sentence the script sees as an exception. The script cannot hand Rust a
-//! callback and Rust cannot hand the script a handle — which is also why the
-//! script's colors arrive as hex strings from a second module, `theme`: the host
-//! answers "what is `success` in the current theme?", and the script decides
-//! what to paint with the answer. Switch the gallery's theme or radius and the
-//! script half follows.
+//! callback and Rust cannot hand the script a handle. Theme tokens need no
+//! story-specific bridge: every render receives a live shell context and reads
+//! them through `cx.theme()`.
 
 use std::{path::PathBuf, rc::Rc, time::Duration};
 
@@ -62,7 +62,7 @@ use gpui::{
 };
 use gpui_base::Button as BaseButton;
 use gpui_component::{
-    ActiveTheme as _, Colorize as _, Disableable as _, Sizable as _, StyledExt as _,
+    ActiveTheme as _, Disableable as _, Sizable as _, StyledExt as _,
     button::Button,
     h_flex,
     label::Label,
@@ -408,6 +408,7 @@ const SAMPLE_INTERVAL: Duration = Duration::from_secs(1);
 
 /// The entry file the script application directory must contain.
 const ENTRY: &str = "main.js";
+const MOTION_ENTRY: &str = "main.js";
 
 /// Where the script lives.
 ///
@@ -418,13 +419,23 @@ fn script_directory() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("js/quotes")
 }
 
-/// Grants the script the two modules it may reach, and nothing else.
+/// The independent native-motion laboratory. Keeping this separate from the
+/// quote app protects the side-by-side Rust-versus-JavaScript list benchmark.
+fn motion_script_directory() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("js/motion")
+}
+
+/// Grants the script the market module it may reach, and nothing else.
 ///
 /// This is the whole extension surface: a script cannot load native code, so
 /// what the host registers here is exactly what it can call (design doc §17.6).
 /// Registering an empty set — the default — would leave `native("market")`
 /// failing with a message saying this host granted none.
 fn install_native_modules(market: &Entity<Market>) {
+    gpui_shell::set_native_modules(native_modules(market));
+}
+
+fn native_modules(market: &Entity<Market>) -> NativeModules {
     let mut modules = NativeModules::new();
 
     modules.register("market", |module| {
@@ -471,11 +482,7 @@ fn install_native_modules(market: &Entity<Market>) {
         });
     });
 
-    modules.register("theme", |module| {
-        module.function("palette", |_| with_app(palette));
-    });
-
-    gpui_shell::set_native_modules(modules);
+    modules
 }
 
 /// Reaches the ambient `App` from inside a native call.
@@ -490,33 +497,6 @@ fn with_app<R>(read: impl FnOnce(&mut App) -> R) -> Result<R, NativeError> {
     })
 }
 
-/// The host's theme, as the script can consume it.
-///
-/// Colors leave as `#rrggbb` literals and lengths as numbers, because those are
-/// the two things the script's style methods accept. The script never learns
-/// which theme is installed — it asks for a role and paints what comes back.
-fn palette(cx: &mut App) -> NativeValue {
-    let theme = cx.theme();
-
-    NativeValue::from(
-        NativeObject::new()
-            .field("background", theme.background.to_hex())
-            .field("foreground", theme.foreground.to_hex())
-            .field("muted", theme.muted.to_hex())
-            .field("muted_foreground", theme.muted_foreground.to_hex())
-            .field("border", theme.border.to_hex())
-            .field("primary", theme.primary.to_hex())
-            .field("primary_hover", theme.primary_hover.to_hex())
-            .field("primary_foreground", theme.primary_foreground.to_hex())
-            .field("secondary", theme.secondary.to_hex())
-            .field("accent", theme.accent.to_hex())
-            .field("success", theme.success.to_hex())
-            .field("danger", theme.danger.to_hex())
-            .field("radius", f32::from(theme.radius))
-            .field("font_size", f32::from(theme.font_size)),
-    )
-}
-
 pub struct ShellStory {
     focus_handle: FocusHandle,
     market: Entity<Market>,
@@ -524,16 +504,21 @@ pub struct ShellStory {
     /// it, and dropping it would tear the JavaScript context down underneath.
     runtime: Option<Rc<ShellRuntime>>,
     script: Option<Entity<ScriptView>>,
+    /// A separate ScriptView, so native-motion activity cannot become quote
+    /// board work or pollute the performance counters readers compare.
+    motion: Option<Entity<ScriptView>>,
     /// The hot-reload watcher for the script above.
     ///
     /// Held rather than detached, so the assignment below drops the previous
     /// one: Reload script mounts a new view, and a detached watcher would go on
     /// polling for the view it was started for.
     script_watch: Option<Watch>,
+    motion_watch: Option<Watch>,
     /// The last load failure, kept visible instead of thrown away — a story
     /// that silently shows the previous script after a syntax error is worse
     /// than one that says what broke.
     script_error: Option<SharedString>,
+    motion_error: Option<SharedString>,
     feed: Feed,
     /// Bumped whenever the feed changes, so a loop started for an older feed
     /// stops on its next tick instead of racing the new one.
@@ -574,7 +559,7 @@ impl ShellStory {
         // `gpui_shell::init` is deliberately not called: it would install the
         // shell's own palette over the Base tokens this gallery projects from
         // its `gpui-component` theme, and the script has no need of them — it
-        // reads colors from the host through `native("theme")`. Nothing else in
+        // reads colors from the render's call-scoped `cx.theme()`. Nothing else in
         // the runtime needs priming; the style reflection table builds itself on
         // first use.
         let market = cx.new(|_| Market::open());
@@ -600,8 +585,11 @@ impl ShellStory {
             market,
             runtime: None,
             script: None,
+            motion: None,
             script_watch: None,
+            motion_watch: None,
             script_error: None,
+            motion_error: None,
             feed: Feed::Idle,
             feed_generation: 0,
             sampled: RuntimeMetrics::default(),
@@ -615,6 +603,7 @@ impl ShellStory {
                 runtime.set_global(cx);
                 story.runtime = Some(runtime);
                 story.reload(window, cx);
+                story.reload_motion(window, cx);
             }
             Err(error) => story.script_error = Some(error.to_string().into()),
         }
@@ -783,6 +772,50 @@ impl ShellStory {
                 self.script_error = None;
             }
             Err(error) => self.script_error = Some(error.to_string().into()),
+        }
+
+        cx.notify();
+    }
+
+    /// Loads the standalone motion ScriptView. It shares only the shell
+    /// runtime with the quote view; it does not read Market.
+    fn reload_motion(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(runtime) = self.runtime.clone() else {
+            return;
+        };
+
+        let loaded = runtime
+            .load_app(&motion_script_directory(), MOTION_ENTRY)
+            .and_then(|view_type| {
+                if let Some(view) = self.motion.clone() {
+                    let object =
+                        runtime.instantiate_for_view(&view_type, view.clone(), window, cx)?;
+                    view.update(cx, |view, cx| {
+                        view.replace_object(object);
+                        cx.notify();
+                    });
+                    Ok(view)
+                } else {
+                    runtime.instantiate_view(&view_type, window, cx)
+                }
+            });
+
+        match loaded {
+            Ok(view) => {
+                if self.motion.is_none() {
+                    self.motion_watch = Some(gpui_shell::watch::reload_in_debug(
+                        &runtime,
+                        &view,
+                        motion_script_directory(),
+                        MOTION_ENTRY,
+                        window,
+                        cx,
+                    ));
+                    self.motion = Some(view);
+                }
+                self.motion_error = None;
+            }
+            Err(error) => self.motion_error = Some(error.to_string().into()),
         }
 
         cx.notify();
@@ -1155,6 +1188,30 @@ impl ShellStory {
             })
             .children(self.script.clone())
     }
+
+    fn motion_panel(&self, cx: &Context<Self>) -> impl IntoElement {
+        v_flex()
+            .w_full()
+            .gap_2()
+            .when_some(self.motion_error.clone(), |this, message| {
+                this.child(
+                    v_flex()
+                        .w_full()
+                        .gap_1()
+                        .p_2()
+                        .rounded(cx.theme().radius)
+                        .border_1()
+                        .border_color(cx.theme().danger)
+                        .child(Label::new("The motion script did not load").text_xs())
+                        .child(
+                            Label::new(message)
+                                .text_xs()
+                                .text_color(cx.theme().muted_foreground),
+                        ),
+                )
+            })
+            .children(self.motion.clone())
+    }
 }
 
 /// Pause or resume one half.
@@ -1321,11 +1378,29 @@ impl Render for ShellStory {
                     .child(self.readout(cx)),
             )
             .child(
+                section("Native motion · gpui-shell")
+                    .description(
+                        "A separate ScriptView with pixel targets. Clicking a control retargets \
+                         transition or spring tracks; GPUI owns every in-between frame.",
+                    )
+                    .sub_title(
+                        Button::new("reload-motion-script")
+                            .xsmall()
+                            .outline()
+                            .label("Reload motion")
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.reload_motion(window, cx);
+                            })),
+                    )
+                    .v_flex()
+                    .child(self.motion_panel(cx)),
+            )
+            .child(
                 section("Where the boundary is")
                     .description(
-                        "The script holds no state and no host object. It calls two native \
-                         modules this story registered before the runtime started, and every \
-                         argument and result is plain data.",
+                        "The script holds no host object. Market data crosses the one native \
+                         module this story registered; appearance comes from gpui-shell's \
+                         call-scoped context.",
                     )
                     .v_flex()
                     .child(
@@ -1338,8 +1413,8 @@ impl Render for ShellStory {
                                 cx,
                             ))
                             .child(boundary_line(
-                                "native(\"theme\")",
-                                "palette() — the gallery's own colors and radius, as data",
+                                "cx.theme()",
+                                "read-only semantic colors, spacing, radius and mode",
                                 cx,
                             ))
                             .child(boundary_line(
@@ -1406,9 +1481,30 @@ fn boundary_line(
 mod tests {
     use std::ops::Deref as _;
 
-    use gpui::{TestAppContext, VisualTestContext};
+    use gpui::{Modifiers, TestAppContext, VisualTestContext, point};
 
     use super::*;
+
+    struct ScriptRoot {
+        view: Entity<ScriptView>,
+    }
+
+    impl Render for ScriptRoot {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            self.view.clone().into_any_element()
+        }
+    }
+
+    /// Story-specific native access is only for market data. Theme tokens are
+    /// supplied by gpui-shell's live call context, so the host must not keep a
+    /// second theme projection registered beside it.
+    #[gpui::test]
+    fn story_native_registry_only_grants_market(cx: &mut TestAppContext) {
+        let market = cx.new(|_| Market::open());
+        let modules = native_modules(&market);
+
+        assert_eq!(modules.module_names(), vec!["market"]);
+    }
 
     /// The claim the counters under the panels make, checked without a person
     /// having to watch two numbers.
@@ -1418,7 +1514,7 @@ mod tests {
     /// `ticks()` call, and the difference between `refresh` and `notify`.
     #[gpui::test]
     fn a_quote_tick_re_runs_the_script_and_a_repaint_does_not(cx: &mut TestAppContext) {
-        // The story reads the gallery's theme through `native("theme")`, so
+        // The story reads shell theme tokens through `cx.theme()`, so
         // the theme has to exist before the script's first render.
         cx.update(gpui_component::init);
         let window = cx.add_window(|window, cx| ShellStory::new(window, cx));
@@ -1560,6 +1656,180 @@ mod tests {
         assert!(
             prices(&first) != prices(&Market::open()),
             "sixty-four ticks should have moved something"
+        );
+    }
+
+    /// The performance board must stay a pure quote-list workload, while motion
+    /// is its own runnable script resource. Numeric targets are essential:
+    /// shell materialization only samples pixel lengths for native motion.
+    #[test]
+    fn quote_and_motion_scripts_keep_their_contracts_separate() {
+        let quote_source = std::fs::read_to_string(script_directory().join(ENTRY))
+            .expect("the checked-in shell story script");
+        let motion_source = std::fs::read_to_string(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("js/motion/main.js"),
+        )
+        .expect("the checked-in motion story script");
+
+        for forbidden in ["motionLab", "motion-transition", ".transition(", ".spring("] {
+            assert!(
+                !quote_source.contains(forbidden),
+                "the performance quote script must not contain `{forbidden}`"
+            );
+        }
+
+        for required in [
+            "motion-transition",
+            "motion-spring",
+            "motion-trigger",
+            "motion-policy-segment",
+            "Run motion",
+            "AAPL",
+            "$228.26",
+            "+1.84%",
+            "Live",
+            "✓",
+            ".selected(active)",
+            ".transition(\"left\"",
+            ".transition(\"opacity\"",
+            ".spring(\"left\"",
+            ".spring(\"opacity\"",
+        ] {
+            assert!(
+                motion_source.contains(required),
+                "the independent motion script must demonstrate `{required}`"
+            );
+        }
+
+        for rem_target in [
+            ".left(active ? \"",
+            ".w(active ? \"",
+            ".top(active ? \"",
+            ".left(\"",
+            ".w(\"",
+            ".top(\"",
+        ] {
+            assert!(
+                !motion_source.contains(rem_target),
+                "motion target `{rem_target}` must be numeric pixels"
+            );
+        }
+        assert!(
+            !motion_source.contains("rem"),
+            "the motion script must not reintroduce relative-length targets"
+        );
+        assert!(
+            motion_source.contains(".left(active ? 960 : 20)"),
+            "the motion card must travel far enough to expose spatial continuity"
+        );
+        assert!(
+            motion_source.contains(".w(1116).h(1)"),
+            "the track spine must reach the long-distance target"
+        );
+        for forbidden in ["colors.primary", "colors.primary_foreground"] {
+            assert!(
+                !motion_source.contains(forbidden),
+                "the motion demo must use quiet semantic surfaces, not `{forbidden}`"
+            );
+        }
+        assert!(
+            !motion_source.contains(".disabled(active)"),
+            "the selected motion policy must remain focusable and clickable"
+        );
+    }
+
+    /// The motion lab has its own loaded object, rather than being extra work
+    /// inside the quote board. A pointer event retargets it, then GPUI samples
+    /// native animation frames without returning to QuickJS.
+    #[gpui::test]
+    fn standalone_motion_view_retargets_native_frames(cx: &mut TestAppContext) {
+        cx.update(gpui_component::init);
+        let window = cx.add_window(|window, cx| ShellStory::new(window, cx));
+        let story = cx.update(|cx| window.entity(cx)).expect("the story");
+
+        let (runtime, motion) = cx.update(|cx| {
+            let story = story.read(cx);
+            assert!(
+                story.motion_error.is_none(),
+                "the independent motion script did not load: {:?}",
+                story.motion_error
+            );
+            assert!(story.script.is_some(), "the separate quote view");
+            (
+                story.runtime.clone().expect("a runtime"),
+                story.motion.clone().expect("the independent motion view"),
+            )
+        });
+
+        // Mount this view as a real window root. `VisualTestContext::draw` is
+        // sufficient for snapshots, but intentionally does not install mouse
+        // hitboxes; this path proves the actual GPUI event dispatch instead.
+        let motion_root = motion.clone();
+        let (_, context) = cx.add_window_view(move |_, _| ScriptRoot { view: motion_root });
+        context.update(|window, cx| window.draw(cx).clear(cx));
+
+        assert!(description(context, &motion).contains("Native motion"));
+        assert!(description(context, &motion).contains("AAPL"));
+        assert!(description(context, &motion).contains("$228.26"));
+        assert!(description(context, &motion).contains("Live"));
+
+        let baseline = runtime.read_metrics().script_renders();
+        // This lands on the independent 32px Run action after the segmented
+        // policy choice, through GPUI hit testing rather than callback access.
+        context.simulate_click(point(px(270.), px(64.)), Modifiers::default());
+        context.update(|window, cx| window.draw(cx).clear(cx));
+        assert!(description(context, &motion).contains("Send back"));
+        assert_eq!(
+            runtime.read_metrics().script_renders(),
+            baseline + 1,
+            "a motion retarget rebuilds only the independent motion script"
+        );
+
+        let pending = context.update(|window, cx| window.simulate_next_frame(cx));
+        assert!(
+            pending >= 1,
+            "pixel motion targets must schedule native frames"
+        );
+        assert_eq!(
+            runtime.read_metrics().script_renders(),
+            baseline + 1,
+            "sampling native frames must not re-enter QuickJS"
+        );
+    }
+
+    /// Choosing the interpolation policy is not itself an animation command.
+    /// The selected segment remains an ordinary interactive control, while the
+    /// independent Run action is the only thing that changes the card target.
+    #[gpui::test]
+    fn selecting_a_motion_policy_does_not_run_the_motion(cx: &mut TestAppContext) {
+        cx.update(gpui_component::init);
+        let window = cx.add_window(|window, cx| ShellStory::new(window, cx));
+        let story = cx.update(|cx| window.entity(cx)).expect("the story");
+        let (runtime, motion) = cx.update(|cx| {
+            let story = story.read(cx);
+            (
+                story.runtime.clone().expect("a runtime"),
+                story.motion.clone().expect("the independent motion view"),
+            )
+        });
+
+        let motion_root = motion.clone();
+        let (_, context) = cx.add_window_view(move |_, _| ScriptRoot { view: motion_root });
+        context.update(|window, cx| window.draw(cx).clear(cx));
+        assert!(description(context, &motion).contains("Transition ✓"));
+        assert!(description(context, &motion).contains("Run motion"));
+
+        let baseline = runtime.read_metrics().script_renders();
+        context.simulate_click(point(px(145.), px(64.)), Modifiers::default());
+        context.update(|window, cx| window.draw(cx).clear(cx));
+
+        assert!(description(context, &motion).contains("Spring ✓"));
+        assert!(description(context, &motion).contains("Run motion"));
+        assert_eq!(runtime.read_metrics().script_renders(), baseline + 1);
+        assert_eq!(
+            context.update(|window, cx| window.simulate_next_frame(cx)),
+            0,
+            "selecting a policy must not retarget the card"
         );
     }
 
