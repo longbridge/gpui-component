@@ -207,6 +207,22 @@ export default class Probe extends View {
 }
 "#;
 
+const WEBSOCKET_IDLE_PROBE: &str = r#"
+import { View, v_flex, text, spawn, with_cx } from "gpui";
+
+export default class Probe extends View {
+  init() {
+    this.state = "pending";
+    spawn(async () => {
+      this.socket = await WebSocket.connect("__URL__");
+      this.state = "connected";
+      with_cx((cx) => cx.notify());
+    });
+  }
+  render() { return v_flex().child(text(this.state)); }
+}
+"#;
+
 const WEBSOCKET_CLOSED_WRITE_PROBE: &str = r#"
 import { View, v_flex, text, spawn, with_cx } from "gpui";
 
@@ -746,6 +762,37 @@ fn websocket_pending_read_does_not_block_write_or_close(cx: &mut TestAppContext)
     let rendered = snapshot(&mut context, &view);
     assert_eq!(server_events, (true, true, true));
     assert!(rendered.contains("write-and-close-finished"), "{rendered}");
+}
+
+#[gpui::test]
+fn websocket_answers_ping_while_javascript_has_no_pending_read(cx: &mut TestAppContext) {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("WebSocket listener");
+    let address = listener.local_addr().expect("listener address");
+    let (connected, connected_receiver) = mpsc::channel();
+    let server = thread::spawn(move || {
+        let (stream, _) = listener.accept().expect("WebSocket connection");
+        stream
+            .set_read_timeout(Some(Duration::from_millis(500)))
+            .expect("server read timeout");
+        let mut socket = tungstenite::accept(stream).expect("WebSocket handshake");
+        let _ = connected.send(());
+        socket
+            .send(Message::Ping(vec![9].into()))
+            .expect("server ping");
+        match socket.read() {
+            Ok(Message::Pong(bytes)) => assert_eq!(bytes.as_ref(), [9]),
+            other => panic!("idle client did not answer ping: {other:?}"),
+        }
+    });
+
+    let source = WEBSOCKET_IDLE_PROBE.replace("__URL__", &format!("ws://{address}/idle"));
+    let (_runtime, _view, context) = probe(cx, &source);
+    context.run_until_parked();
+    connected_receiver
+        .recv_timeout(Duration::from_millis(500))
+        .expect("client connected");
+
+    server.join().expect("WebSocket server");
 }
 
 #[gpui::test]

@@ -386,14 +386,45 @@ pub fn persist(path: &Path, body: Vec<u8>) -> Result<(), String> {
             .map_err(|error| format!("cannot create `{}`: {error}", parent.display()))?;
     }
 
-    let mut temporary = path.to_path_buf().into_os_string();
-    temporary.push(".tmp");
-    let temporary = PathBuf::from(temporary);
+    let temporary = temporary_path(path);
 
-    write_private(&temporary, &body)
-        .map_err(|error| format!("cannot write `{}`: {error}", temporary.display()))?;
-    replace_file(&temporary, path)
-        .map_err(|error| format!("cannot write `{}`: {error}", path.display()))
+    let result = write_private(&temporary, &body)
+        .map_err(|error| format!("cannot write `{}`: {error}", temporary.display()))
+        .and_then(|()| {
+            replace_file(&temporary, path)
+                .map_err(|error| format!("cannot write `{}`: {error}", path.display()))
+        })
+        .and_then(|()| sync_parent(path));
+    if result.is_err() {
+        let _ = std::fs::remove_file(&temporary);
+    }
+    result
+}
+
+fn temporary_path(path: &Path) -> PathBuf {
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    let mut temporary = path.as_os_str().to_os_string();
+    temporary.push(format!(
+        ".tmp.{}.{}",
+        std::process::id(),
+        NEXT.fetch_add(1, Ordering::Relaxed)
+    ));
+    PathBuf::from(temporary)
+}
+
+#[cfg(unix)]
+fn sync_parent(path: &Path) -> Result<(), String> {
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    std::fs::File::open(parent)
+        .and_then(|directory| directory.sync_all())
+        .map_err(|error| format!("cannot sync `{}`: {error}", parent.display()))
+}
+
+#[cfg(not(unix))]
+fn sync_parent(_: &Path) -> Result<(), String> {
+    Ok(())
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -442,17 +473,21 @@ fn write_private(path: &Path, body: &[u8]) -> std::io::Result<()> {
 
     let mut file = OpenOptions::new()
         .write(true)
-        .create(true)
-        .truncate(true)
+        .create_new(true)
         .mode(0o600)
         .open(path)?;
     file.set_permissions(std::fs::Permissions::from_mode(0o600))?;
-    file.write_all(body)
+    file.write_all(body)?;
+    file.sync_all()
 }
 
 #[cfg(not(unix))]
 fn write_private(path: &Path, body: &[u8]) -> std::io::Result<()> {
-    std::fs::write(path, body)
+    use std::{fs::OpenOptions, io::Write as _};
+
+    let mut file = OpenOptions::new().write(true).create_new(true).open(path)?;
+    file.write_all(body)?;
+    file.sync_all()
 }
 
 #[cfg(test)]
@@ -505,6 +540,17 @@ mod tests {
             br#"{"revision":2}"#
         );
         let _ = std::fs::remove_dir_all(directory);
+    }
+
+    #[test]
+    fn concurrent_persists_use_distinct_temporary_paths() {
+        let path = Path::new("settings.json");
+        let first = temporary_path(path);
+        let second = temporary_path(path);
+
+        assert_ne!(first, second);
+        assert_eq!(first.parent(), path.parent());
+        assert_eq!(second.parent(), path.parent());
     }
 
     /// The bug a `dirty` flag could not see: a change made *while* a write is on

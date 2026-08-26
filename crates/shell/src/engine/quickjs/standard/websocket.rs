@@ -4,7 +4,7 @@ use std::{
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
-        mpsc::{self, Receiver, SyncSender, TryRecvError, TrySendError},
+        mpsc::{self, Receiver, RecvTimeoutError, SyncSender, TryRecvError, TrySendError},
     },
     thread,
     time::Duration,
@@ -29,6 +29,7 @@ use super::{
 
 const MESSAGE_LIMIT: usize = 8 * 1024 * 1024;
 const COMMAND_QUEUE_LIMIT: usize = 8;
+const INCOMING_QUEUE_LIMIT: usize = 8;
 const READ_SLICE: Duration = Duration::from_millis(50);
 #[cfg(not(test))]
 const IO_TIMEOUT: Duration = Duration::from_secs(30);
@@ -332,10 +333,15 @@ fn handle_command(
     command: Command,
     socket: &mut WebSocket<MaybeTlsStream<TcpStream>>,
     reads: &mut VecDeque<PendingRead>,
+    messages: &mut VecDeque<IncomingMessage>,
 ) -> bool {
     match command {
         Command::Read(reply) => {
-            reads.push_back(reply);
+            if let Some(message) = messages.pop_front() {
+                reply.settle(Ok(message));
+            } else {
+                reads.push_back(reply);
+            }
             true
         }
         Command::Write(message, reply) => {
@@ -367,23 +373,24 @@ fn handle_command(
 
 fn run_actor(mut socket: WebSocket<MaybeTlsStream<TcpStream>>, receiver: Receiver<Command>) {
     let mut reads = VecDeque::new();
+    let mut messages = VecDeque::new();
     loop {
         if reads.is_empty() {
-            match receiver.recv() {
+            match receiver.recv_timeout(READ_SLICE) {
                 Ok(command) => {
-                    if !handle_command(command, &mut socket, &mut reads) {
+                    if !handle_command(command, &mut socket, &mut reads, &mut messages) {
                         break;
                     }
-                    continue;
                 }
-                Err(_) => break,
+                Err(RecvTimeoutError::Timeout) => {}
+                Err(RecvTimeoutError::Disconnected) => break,
             }
         }
 
         loop {
             match receiver.try_recv() {
                 Ok(command) => {
-                    if !handle_command(command, &mut socket, &mut reads) {
+                    if !handle_command(command, &mut socket, &mut reads, &mut messages) {
                         return;
                     }
                 }
@@ -396,6 +403,11 @@ fn run_actor(mut socket: WebSocket<MaybeTlsStream<TcpStream>>, receiver: Receive
             Ok(ReadOutcome::Message(message)) => {
                 if let Some(reply) = reads.pop_front() {
                     reply.settle(Ok(message));
+                } else if messages.len() < INCOMING_QUEUE_LIMIT {
+                    messages.push_back(message);
+                } else {
+                    let _ = socket.close(None);
+                    return;
                 }
             }
             Ok(ReadOutcome::TimedOut) => {}

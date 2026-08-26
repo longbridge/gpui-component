@@ -1,7 +1,9 @@
 //! Bounded child-process execution for the standard runtime adapter.
 
 use std::{
+    ffi::OsStr,
     io::Read,
+    path::{Path, PathBuf},
     process::{Command, Stdio},
     sync::{
         Arc,
@@ -73,7 +75,8 @@ pub(crate) fn run_bounded(
     limits: Limits,
     cancellation: Cancellation,
 ) -> Result<Output, String> {
-    let mut command_builder = Command::new(command);
+    let executable = resolve_executable(command, std::env::var_os("PATH").as_deref())?;
+    let mut command_builder = Command::new(&executable);
     command_builder
         // A process grant authorizes one executable, not the host's ambient
         // credentials. Keep the child environment empty until the public API
@@ -159,6 +162,46 @@ pub(crate) fn run_bounded(
         stdout: String::from_utf8_lossy(&stdout).into_owned(),
         stderr: String::from_utf8_lossy(&stderr).into_owned(),
     })
+}
+
+fn resolve_executable(command: &str, path: Option<&OsStr>) -> Result<PathBuf, String> {
+    let command_path = Path::new(command);
+    if command_path.components().count() > 1 {
+        return Ok(command_path.to_path_buf());
+    }
+    let path = path.ok_or_else(|| {
+        format!("running `{command}` failed: the host PATH environment variable is not set")
+    })?;
+    for directory in std::env::split_paths(path) {
+        let candidate = directory.join(command);
+        if executable_file(&candidate) {
+            return Ok(candidate);
+        }
+        #[cfg(windows)]
+        if candidate.extension().is_none() {
+            for extension in ["exe", "com", "bat", "cmd"] {
+                let candidate = candidate.with_extension(extension);
+                if executable_file(&candidate) {
+                    return Ok(candidate);
+                }
+            }
+        }
+    }
+    Err(format!(
+        "running `{command}` failed: executable was not found on the host PATH"
+    ))
+}
+
+#[cfg(unix)]
+fn executable_file(path: &Path) -> bool {
+    use std::os::unix::fs::PermissionsExt as _;
+    path.metadata()
+        .is_ok_and(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
+}
+
+#[cfg(not(unix))]
+fn executable_file(path: &Path) -> bool {
+    path.is_file()
 }
 
 fn read_stream(
@@ -394,7 +437,29 @@ fn kill_process_tree(tree: &mut ProcessTree, child: &mut std::process::Child) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::Duration;
+    use std::{ffi::OsStr, time::Duration};
+
+    #[cfg(unix)]
+    #[test]
+    fn resolves_a_bare_command_from_the_host_path_before_clearing_the_environment() {
+        let directory =
+            std::env::temp_dir().join(format!("gpui-shell-command-path-{}", std::process::id()));
+        std::fs::create_dir_all(&directory).expect("test directory");
+        let executable = directory.join("outside-default-path");
+        std::fs::write(&executable, "#!/bin/sh\nprintf resolved").expect("test executable");
+        use std::os::unix::fs::PermissionsExt as _;
+        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700))
+            .expect("executable permissions");
+
+        assert_eq!(
+            resolve_executable("outside-default-path", Some(directory.as_os_str()))
+                .expect("command on PATH"),
+            executable
+        );
+        assert!(resolve_executable("missing", Some(OsStr::new("/not/here"))).is_err());
+
+        let _ = std::fs::remove_dir_all(directory);
+    }
 
     #[cfg(unix)]
     #[test]

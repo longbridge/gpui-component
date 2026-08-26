@@ -236,7 +236,7 @@ fn request(
             .body(body.clone())
             .send()
             .map_err(|error| format!("fetching {url} failed: {error}"))?;
-        if response.status().is_redirection() {
+        if follows_location(response.status()) {
             let location = response
                 .headers()
                 .get(reqwest::header::LOCATION)
@@ -271,6 +271,17 @@ fn request(
         });
     }
     Err(format!("fetch exceeded the {MAX_REDIRECTS} redirect limit"))
+}
+
+fn follows_location(status: reqwest::StatusCode) -> bool {
+    matches!(
+        status,
+        reqwest::StatusCode::MOVED_PERMANENTLY
+            | reqwest::StatusCode::FOUND
+            | reqwest::StatusCode::SEE_OTHER
+            | reqwest::StatusCode::TEMPORARY_REDIRECT
+            | reqwest::StatusCode::PERMANENT_REDIRECT
+    )
 }
 
 fn rewrite_redirect_request(
@@ -351,6 +362,26 @@ fn same_origin(left: &reqwest::Url, right: &reqwest::Url) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_location_redirect_statuses_are_followed() {
+        for status in [
+            reqwest::StatusCode::MOVED_PERMANENTLY,
+            reqwest::StatusCode::FOUND,
+            reqwest::StatusCode::SEE_OTHER,
+            reqwest::StatusCode::TEMPORARY_REDIRECT,
+            reqwest::StatusCode::PERMANENT_REDIRECT,
+        ] {
+            assert!(follows_location(status), "status {status}");
+        }
+        for status in [
+            reqwest::StatusCode::MULTIPLE_CHOICES,
+            reqwest::StatusCode::NOT_MODIFIED,
+            reqwest::StatusCode::USE_PROXY,
+        ] {
+            assert!(!follows_location(status), "status {status}");
+        }
+    }
 
     #[test]
     fn redirect_statuses_apply_fetch_method_and_body_rewrites() {
