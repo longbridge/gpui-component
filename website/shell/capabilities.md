@@ -311,6 +311,8 @@ Global `fetch(url, options?)` is promise-based and returns `{ status, ok, url, t
 
 `net.connect(host, port)` and `WebSocket.connect(url, { headers? })` use `capabilities.network.hosts`. Raw TCP `read()` returns a `Uint8Array`, or `null` at EOF, so transport chunks never undergo lossy text decoding. WebSockets support text and `Uint8Array` messages and serialize writes through one actor. They do not follow redirects. Connect, handshake, and write operations have a 30-second timeout. A socket permits one outstanding `read()` at a time; a second is rejected immediately instead of competing for the next message. Credential and handshake-control headers are refused. Raw TCP and WebSocket access are intentionally broader than an HTTP request grant.
 
+DNS resolution is a bounded process-wide service: all applications share two resolver workers and a 64-request queue. Queueing observes each connection's existing deadline, so saturation fails as a timeout instead of growing memory or threads without limit. This is resource containment, not per-application quality-of-service; a host that runs mutually untrusted applications in one process does not get DNS fairness between them.
+
 The runtime also provides `buffer`, `path`, `url`, `crypto`, `zlib`, `console`, `process`, and `os`. These are the audited LLRT/host-backed subset declared in generated `gpui.d.ts`; `node:` aliases and arbitrary Node built-ins are not part of the shell contract.
 
 ## Not there yet
