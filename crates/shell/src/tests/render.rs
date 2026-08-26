@@ -919,7 +919,8 @@ fn an_embedded_runtime_reloads_when_a_source_changes(cx: &mut TestAppContext) {
         let view = cx.new(|_| ScriptView::new(runtime.clone(), object));
         // Exercise the watcher itself in both debug and release test builds.
         let watch =
-            crate::watch::Watch::start(&runtime, &view, directory.clone(), "main.js", window, cx);
+            crate::watch::Watch::start(&runtime, &view, directory.clone(), "main.js", window, cx)
+                .expect("watch");
         watch.forget();
         view
     });
@@ -981,8 +982,8 @@ fn reload_replaces_old_tasks_and_rolls_back_failed_new_tasks(cx: &mut TestAppCon
     let source = |caption: &str| {
         format!(
             "import {{ View, timer, text }} from \"gpui\";\n\
+             timer.every(60_000, () => {{}});\n\
              export default class Panel extends View {{\n\
-               init() {{ timer.every(60_000, () => {{}}); }}\n\
                render() {{ return text(\"{caption}\"); }}\n\
              }}\n"
         )
@@ -993,9 +994,18 @@ fn reload_replaces_old_tasks_and_rolls_back_failed_new_tasks(cx: &mut TestAppCon
     let mut context = VisualTestContext::from_window(*window.deref(), cx);
     let baseline = crate::engine::quickjs::task_count();
     let view = context.update(|window, cx| {
+        let policy = Rc::new(Policy::default());
+        let (_scope, _) = crate::scope::enter_with_runtime(
+            &runtime,
+            window,
+            cx,
+            crate::scope::ScopePhase::Task,
+            None,
+            policy.clone(),
+        );
         let view_type = runtime.load_app(&directory, "main.js").expect("load");
         runtime
-            .instantiate_view(&view_type, window, cx)
+            .instantiate_view_with_policy(&view_type, policy, window, cx)
             .expect("instantiate")
     });
     assert_eq!(crate::engine::quickjs::task_count(), baseline + 1);
@@ -1257,7 +1267,8 @@ fn a_watcher_releases_its_view(cx: &mut TestAppContext) {
             .expect("instantiate");
         let view = cx.new(|_| ScriptView::new(runtime.clone(), object));
         let watch =
-            crate::watch::Watch::start(&runtime, &view, directory.clone(), "main.js", window, cx);
+            crate::watch::Watch::start(&runtime, &view, directory.clone(), "main.js", window, cx)
+                .expect("watch");
         watch.forget();
         view.downgrade()
     });

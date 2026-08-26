@@ -1,10 +1,10 @@
 //! System capability APIs on the `gpui` module: `fs`, `store`, `clipboard` and
 //! `log` (design doc §17).
 //!
-//! Nothing here is available by default (§19.2). The grant lives in a
-//! thread-local [`Capabilities`], the host installs one before it loads an
-//! application, and every entry point re-reads it at call time — so revoking a
-//! capability takes effect on the next call rather than on the next restart.
+//! Nothing here is available by default (§19.2). Each loaded application keeps
+//! a frozen policy, and every entry point restores that policy in its call
+//! scope. Changing the host default therefore affects applications loaded
+//! afterwards, not an application that is already running.
 //!
 //! Two rules keep this file honest:
 //!

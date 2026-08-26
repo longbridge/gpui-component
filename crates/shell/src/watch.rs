@@ -297,6 +297,7 @@ impl Watch {
     ///
     /// The watcher holds the runtime and view weakly, so it cannot keep an
     /// unmounted application alive.
+    #[doc(hidden)]
     pub fn start(
         runtime: &Rc<ShellRuntime>,
         view: &Entity<ScriptView>,
@@ -304,7 +305,10 @@ impl Watch {
         entry: impl Into<String>,
         window: &mut Window,
         cx: &mut App,
-    ) -> Self {
+    ) -> Result<Self> {
+        if !Rc::ptr_eq(&view.read(cx).runtime(), runtime) {
+            bail!("this ScriptView belongs to a different gpui-shell runtime");
+        }
         let entry = entry.into();
         let handle = window.window_handle();
         let mut watcher = SourceWatcher::new(directory.clone());
@@ -359,7 +363,7 @@ impl Watch {
             }
         });
 
-        Self { task: Some(task) }
+        Ok(Self { task: Some(task) })
     }
 
     /// Lets the watcher run for as long as the view does.
@@ -396,14 +400,23 @@ impl ShellRuntime {
         if !Rc::ptr_eq(&view.read(cx).runtime(), self) {
             bail!("this ShellRoot belongs to a different gpui-shell runtime");
         }
-        Ok(Watch::start(
-            self,
-            &view,
-            application_root,
-            entry,
-            window,
-            cx,
-        ))
+        Watch::start(self, &view, application_root, entry, window, cx)
+    }
+
+    /// Rebuilds the snapshot for an application mounted by [`Self::load`] or
+    /// [`Self::try_load`] after host-owned state changes.
+    pub fn refresh(&self, root: &Entity<ShellRoot>, cx: &mut App) -> Result<()> {
+        let view = root
+            .read(cx)
+            .application()
+            .context("this ShellRoot does not contain a loaded script application")?
+            .view
+            .clone();
+        if !std::ptr::eq(view.read(cx).runtime().as_ref(), self) {
+            bail!("this ShellRoot belongs to a different gpui-shell runtime");
+        }
+        view.update(cx, |view, cx| view.refresh(cx));
+        Ok(())
     }
 }
 
@@ -479,7 +492,7 @@ pub(crate) fn reload(
             cx,
             scope::ScopePhase::Task,
             Some(view.clone()),
-            policy,
+            policy.clone(),
         );
         runtime
             .load_app(directory, entry)
@@ -494,12 +507,12 @@ pub(crate) fn reload(
     let object = match loaded {
         Ok(object) => object,
         Err(error) => {
-            crate::engine::quickjs::cancel_tasks_since(runtime, checkpoint);
+            crate::engine::quickjs::cancel_policy_tasks_since(&policy, checkpoint);
             return Err(error);
         }
     };
 
-    crate::engine::quickjs::cancel_view_tasks_before(view, checkpoint);
+    crate::engine::quickjs::cancel_policy_tasks_before(&policy, checkpoint);
 
     view.update(cx, |view, cx| {
         view.replace_object(object);

@@ -44,12 +44,12 @@
 //!
 //! # Ownership and cancellation
 //!
-//! Every task belongs to a view: `opts.owner`, or [`scope::current_view`] at
-//! creation. The task holds a [`WeakEntity`], so when the panel that started the
-//! work is closed the callback is skipped instead of writing into state that
-//! nothing will ever render again. Explicit `cancel()` does the same thing on
-//! demand. For a promise this means the promise is simply never settled: a
-//! cancelled task stops, it does not report an error nobody asked for.
+//! Every task retains the application policy active at creation. Tasks may also
+//! belong to a view through `opts.owner` or [`scope::current_view`]; that weak
+//! owner prevents callbacks from writing into a view that has gone away. The
+//! policy is the stable application identity used by load, reload, and unload,
+//! including for module-top-level work created before a view exists. Explicit
+//! `cancel()` stops work on demand. A cancelled promise is simply never settled.
 
 use std::{
     cell::{Cell, RefCell},
@@ -271,25 +271,14 @@ pub(crate) fn checkpoint() -> u64 {
     NEXT_TASK_ID.with(Cell::get)
 }
 
-/// Cancels work created by a reload that did not commit.
-pub(crate) fn cancel_since(runtime: &ShellRuntime, checkpoint: u64) {
-    let runtime = runtime as *const ShellRuntime;
-    cancel_where(|task| task.id >= checkpoint && task.runtime.as_ptr() == runtime);
+/// Cancels work created by one application's reload that did not commit.
+pub(crate) fn cancel_policy_since(policy: &Rc<Policy>, checkpoint: u64) {
+    cancel_where(|task| task.id >= checkpoint && task.has_policy(policy));
 }
 
-/// Retires the previous script instance's work after a replacement commits.
-///
-/// Reload constructs the new instance under the same view entity, so the task
-/// id checkpoint distinguishes old work from tasks created by the replacement.
-pub(crate) fn cancel_owner_before(view: &Entity<ScriptView>, checkpoint: u64) {
-    cancel_where(|task| {
-        task.id < checkpoint
-            && task
-                .owner
-                .as_ref()
-                .and_then(WeakEntity::upgrade)
-                .is_some_and(|owner| owner == *view)
-    });
+/// Retires one application's previous work after a replacement commits.
+pub(crate) fn cancel_policy_before(policy: &Rc<Policy>, checkpoint: u64) {
+    cancel_where(|task| task.id < checkpoint && task.has_policy(policy));
 }
 
 fn cancel_where(mut predicate: impl FnMut(&TaskState) -> bool) {
@@ -720,6 +709,13 @@ enum Readiness {
 }
 
 impl TaskState {
+    fn has_policy(&self, policy: &Rc<Policy>) -> bool {
+        self.policy
+            .borrow()
+            .as_ref()
+            .is_some_and(|candidate| Rc::ptr_eq(candidate, policy))
+    }
+
     fn new(
         api: &'static str,
         owner: Option<WeakEntity<ScriptView>>,
@@ -1601,6 +1597,34 @@ mod tests {
         assert!(matches!(first.readiness(), Readiness::Cancelled));
         assert!(matches!(second.readiness(), Readiness::Ready(None)));
         finish(&second);
+    }
+
+    #[test]
+    fn reload_boundaries_only_cancel_the_selected_application() {
+        let reloaded_policy = Rc::new(Policy::default());
+        let other_policy = Rc::new(Policy::default());
+
+        let old = TaskState::new("old", None, None);
+        old.policy.replace(Some(reloaded_policy.clone()));
+        let old = register_unchecked(old);
+        let checkpoint = checkpoint();
+
+        let replacement = TaskState::new("replacement", None, None);
+        replacement.policy.replace(Some(reloaded_policy.clone()));
+        let replacement = register_unchecked(replacement);
+        let unrelated = TaskState::new("unrelated", None, None);
+        unrelated.policy.replace(Some(other_policy));
+        let unrelated = register_unchecked(unrelated);
+
+        cancel_policy_since(&reloaded_policy, checkpoint);
+        assert!(matches!(old.readiness(), Readiness::Ready(None)));
+        assert!(matches!(replacement.readiness(), Readiness::Cancelled));
+        assert!(matches!(unrelated.readiness(), Readiness::Ready(None)));
+
+        cancel_policy_before(&reloaded_policy, checkpoint);
+        assert!(matches!(old.readiness(), Readiness::Cancelled));
+        assert!(matches!(unrelated.readiness(), Readiness::Ready(None)));
+        finish(&unrelated);
     }
 
     #[gpui::test]

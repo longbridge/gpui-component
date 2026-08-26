@@ -97,10 +97,10 @@ view.refresh(cx)   ── and its description is stale  (the script runs)
 Because a script `render` is [not a frame render](./state.md#when-render-runs), a plain `cx.notify()` repaints the snapshot that already exists. If the host changed something the script *reads* — an entity behind a native module, a setting, a document — the view must be told the description itself is out of date:
 
 ```rust
-script_view.update(cx, |view, cx| view.refresh(cx));
+runtime.refresh(&root, cx)?;
 ```
 
-`refresh` is `invalidate` plus `notify`. `invalidate` alone marks the view without scheduling a frame, which is what you want when several changes land together and one repaint should cover them.
+The runtime checks that `root` contains one of its applications, then invalidates that script view and schedules a repaint. Keeping the typed `ScriptView` private prevents host code from downcasting the root content or refreshing a view from another runtime by mistake.
 
 Getting it wrong in the other direction is visible immediately — the interface simply does not update — which is the same failure mode as a forgotten `cx.notify()` in GPUI itself.
 

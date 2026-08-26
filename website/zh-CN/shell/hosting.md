@@ -88,10 +88,10 @@ view.refresh(cx)   ── 而且它的描述已经过期了   （脚本会跑）
 因为脚本的一次 `render` [不等于一帧渲染](./state.md#render-什么时候执行)，光调 `cx.notify()` 重绘的是已经存在的那份 snapshot。如果宿主改动的是脚本**会读到**的东西——某个 native 模块背后的实体、一项设置、一份文档——就必须告诉视图：描述本身已经过期了。
 
 ```rust
-script_view.update(cx, |view, cx| view.refresh(cx));
+runtime.refresh(&root, cx)?;
 ```
 
-`refresh` 等于 `invalidate` 加 `notify`。单独用 `invalidate` 只标记视图、不安排帧，适合多处改动一起落地、由一次重绘覆盖它们的场景。
+runtime 会先确认 `root` 装载的是它自己的应用，再让脚本视图失效并安排重绘。宿主不需要拿到具体的 `ScriptView`，也不会因为手工 downcast 或混用另一个 runtime 的视图而刷新错误对象。
 
 反过来调错则立刻看得见——界面就是不更新——这与 GPUI 里忘了调 `cx.notify()` 是同一种失败方式。
 

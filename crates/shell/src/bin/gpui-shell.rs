@@ -670,7 +670,8 @@ fn watch_sources(
     match started {
         // Detached on purpose: this watcher lasts as long as the window, and
         // the window is the whole application.
-        Ok(watch) => watch.forget(),
+        Ok(Ok(watch)) => watch.forget(),
+        Ok(Err(error)) => tracing::error!("cannot watch for changes: {error}"),
         Err(error) => tracing::error!("cannot watch for changes: {error}"),
     }
 }

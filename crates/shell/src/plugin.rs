@@ -1392,6 +1392,15 @@ mod tests {
             .update(|window, cx| runtime.watch(&root, window, cx))
             .expect("loaded root retains its source metadata");
         drop(watch);
+        context
+            .update(|_, cx| runtime.refresh(&root, cx))
+            .expect("loaded root can be refreshed without exposing ScriptView");
+
+        let other_runtime = ShellRuntime::new_isolated().expect("other runtime");
+        let error = context
+            .update(|_, cx| other_runtime.refresh(&root, cx))
+            .expect_err("a runtime must not refresh another runtime's application");
+        assert!(error.to_string().contains("different gpui-shell runtime"));
     }
 
     #[gpui::test]

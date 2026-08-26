@@ -67,12 +67,12 @@ pub(crate) fn task_checkpoint() -> u64 {
     scheduler::checkpoint()
 }
 
-pub(crate) fn cancel_tasks_since(runtime: &ShellRuntime, checkpoint: u64) {
-    scheduler::cancel_since(runtime, checkpoint);
+pub(crate) fn cancel_policy_tasks_since(policy: &Rc<Policy>, checkpoint: u64) {
+    scheduler::cancel_policy_since(policy, checkpoint);
 }
 
-pub(crate) fn cancel_view_tasks_before(view: &Entity<ScriptView>, checkpoint: u64) {
-    scheduler::cancel_owner_before(view, checkpoint);
+pub(crate) fn cancel_policy_tasks_before(policy: &Rc<Policy>, checkpoint: u64) {
+    scheduler::cancel_policy_before(policy, checkpoint);
 }
 
 #[cfg(test)]
@@ -290,7 +290,7 @@ impl ShellRuntime {
 
         // Every load is a new generation, which is what makes a reload pick up
         // a change in an imported module rather than only in the entry point.
-        let generation = self.app_modules.register(root.clone());
+        let (generation, previous_generation) = self.app_modules.register(root.clone());
 
         let entry = root.join(entry);
         let source = read_module_source(&entry)?;
@@ -298,10 +298,15 @@ impl ShellRuntime {
         // The entry carries the generation too: it is a cached module like any
         // other, and a reload that re-read every import but served a stale
         // `main.js` would be the same bug one level up.
-        self.load_source(
+        let loaded = self.load_source(
             &format!("{}?v={}", entry.to_string_lossy(), generation),
             &source,
-        )
+        );
+        if loaded.is_err() {
+            self.app_modules
+                .rollback(&root, generation, previous_generation);
+        }
+        loaded
     }
 
     /// Evaluates a module and returns its default export, which must be a view
@@ -731,16 +736,34 @@ struct ApplicationModules {
 }
 
 impl AppModules {
-    fn register(&self, root: std::path::PathBuf) -> u32 {
+    fn register(&self, root: std::path::PathBuf) -> (u32, Option<u32>) {
         let generation = self.next_generation.get().wrapping_add(1);
         self.next_generation.set(generation);
         let mut applications = self.applications.borrow_mut();
-        if let Some(application) = applications.iter_mut().find(|app| app.root == root) {
-            application.generation = generation;
+        let previous =
+            if let Some(application) = applications.iter_mut().find(|app| app.root == root) {
+                let previous = application.generation;
+                application.generation = generation;
+                Some(previous)
+            } else {
+                applications.push(ApplicationModules { root, generation });
+                None
+            };
+        (generation, previous)
+    }
+
+    fn rollback(&self, root: &Path, generation: u32, previous: Option<u32>) {
+        let mut applications = self.applications.borrow_mut();
+        let Some(index) = applications.iter().position(|application| {
+            application.root == root && application.generation == generation
+        }) else {
+            return;
+        };
+        if let Some(previous) = previous {
+            applications[index].generation = previous;
         } else {
-            applications.push(ApplicationModules { root, generation });
+            applications.remove(index);
         }
-        generation
     }
 
     /// Strips the generation tag a resolved name carries.
