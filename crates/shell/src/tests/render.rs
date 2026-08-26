@@ -8,7 +8,7 @@
 use crate::{
     NativeModules, NativeValue, ScriptView, ShellRuntime, capability::Capabilities, policy::Policy,
 };
-use gpui::{AppContext as _, TestAppContext, VisualTestContext};
+use gpui::{AppContext as _, Modifiers, TestAppContext, VisualTestContext, point, px};
 use std::{cell::Cell, path::PathBuf, rc::Rc};
 
 const COUNTER: &str = r#"
@@ -75,6 +75,67 @@ fn a_script_view_produces_an_element_description(cx: &mut TestAppContext) {
         "missing button: {tree}"
     );
     assert!(tree.contains(":on_click(fn)"), "missing handler: {tree}");
+}
+
+#[gpui::test]
+fn flex_elements_dispatch_their_click_handlers(cx: &mut TestAppContext) {
+    cx.update(crate::init);
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View, div, h_flex, v_flex, text } from "gpui";
+
+export default class ClickableFlexes extends View {
+  init() { this.clicks = [0, 0, 0]; }
+
+  row(element, index, name) {
+    return element
+      .w_full()
+      .h(40)
+      .on_click((_event, cx) => {
+        this.clicks[index] += 1;
+        cx.notify();
+      })
+      .child(text(`${name}: ${this.clicks[index]}`));
+  }
+
+  render() {
+    return v_flex()
+      .w(300)
+      .h(120)
+      .child(this.row(div(), 0, "div"))
+      .child(this.row(h_flex(), 1, "h_flex"))
+      .child(this.row(v_flex(), 2, "v_flex"));
+  }
+}
+"#;
+    let view_type = runtime
+        .load_source("clickable-flexes.js", source)
+        .expect("load");
+    let runtime_for_view = Rc::clone(&runtime);
+    let window = cx.add_window(move |window, cx| {
+        let object = runtime_for_view
+            .instantiate(&view_type, window, cx)
+            .expect("instantiate");
+        ScriptView::new(runtime_for_view, object)
+    });
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    for y in [20., 60., 100.] {
+        context.simulate_click(point(px(10.), px(y)), Modifiers::default());
+    }
+    context.update(|window, cx| window.draw(cx).clear(cx));
+
+    let view = window.root(&mut context).expect("view");
+    let tree = context.update(|_, cx| {
+        view.read(cx)
+            .snapshot()
+            .map(crate::RenderSnapshot::debug_tree)
+            .unwrap_or_default()
+    });
+    for label in ["div: 1", "h_flex: 1", "v_flex: 1"] {
+        assert!(tree.contains(&format!("text {label:?}")), "{tree}");
+    }
 }
 
 #[gpui::test]

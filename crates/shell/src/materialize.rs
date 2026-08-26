@@ -212,9 +212,25 @@ fn materialize_node(
         .collect();
 
     match component {
-        Component::Div => flex_element(div(), id, refinement, behavior, states, children),
-        Component::HFlex => flex_element(h_flex(), id, refinement, behavior, states, children),
-        Component::VFlex => flex_element(v_flex(), id, refinement, behavior, states, children),
+        Component::Div => flex_element(runtime, div(), id, refinement, behavior, states, children),
+        Component::HFlex => flex_element(
+            runtime,
+            h_flex(),
+            id,
+            refinement,
+            behavior,
+            states,
+            children,
+        ),
+        Component::VFlex => flex_element(
+            runtime,
+            v_flex(),
+            id,
+            refinement,
+            behavior,
+            states,
+            children,
+        ),
         Component::Text(value) => {
             let mut element = div();
             element.style().refine(&refinement);
@@ -415,6 +431,7 @@ fn with_active_and_focus<E: StatefulInteractiveElement>(element: E, states: &Sta
 /// address in the description, which is stable for as long as the snapshot lives
 /// and across rebuilds only while the tree keeps its shape.
 fn flex_element(
+    runtime: &Rc<ShellRuntime>,
     element: gpui::Div,
     id: SpecId,
     refinement: StyleRefinement,
@@ -425,6 +442,7 @@ fn flex_element(
     let element = with_hover(element, &states);
     if behavior.key.is_none()
         && !states.needs_identity()
+        && behavior.on_click.is_none()
         && !behavior.scroll_x
         && !behavior.scroll_y
     {
@@ -434,7 +452,15 @@ fn flex_element(
     let scroll_x = behavior.scroll_x;
     let scroll_y = behavior.scroll_y;
     let stateful = element.id(element_id(id, behavior.key));
-    let stateful = with_active_and_focus(stateful, &states);
+    let mut stateful = with_active_and_focus(stateful, &states);
+    if !behavior.disabled
+        && let Some(callback) = behavior.on_click
+    {
+        let runtime = Rc::downgrade(runtime);
+        stateful = stateful.on_click(move |event, window, cx| {
+            dispatch_click(&runtime, callback, event, window, cx);
+        });
+    }
     let stateful = match (scroll_x, scroll_y) {
         (true, true) => stateful.overflow_scroll(),
         (true, false) => stateful.overflow_x_scroll(),
