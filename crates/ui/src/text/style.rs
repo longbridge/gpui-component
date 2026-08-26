@@ -29,6 +29,9 @@ pub struct TextViewStyle {
     /// scrolls horizontally instead of squeezing further, e.g.
     /// `TextViewStyle::default().table({ let mut s = StyleRefinement::default(); s.overflow.x = Some(Overflow::Scroll); s })`.
     pub table: StyleRefinement,
+    /// Style refinement applied to the header row (the first row) of a table,
+    /// on top of the `table_head` background and foreground from the theme.
+    pub table_head: StyleRefinement,
     /// Style refinement applied to each table cell.
     ///
     /// With the scroll layout, set `white_space: nowrap` here to keep cells
@@ -58,6 +61,7 @@ impl PartialEq for TextViewStyle {
             && self.highlight_theme == other.highlight_theme
             && self.code_block == other.code_block
             && self.table == other.table
+            && self.table_head == other.table_head
             && self.table_cell == other.table_cell
             && self.inline_code == other.inline_code
             && self.is_dark == other.is_dark
@@ -73,6 +77,7 @@ impl Default for TextViewStyle {
             highlight_theme: HighlightTheme::default_light().clone(),
             code_block: StyleRefinement::default(),
             table: StyleRefinement::default(),
+            table_head: StyleRefinement::default(),
             table_cell: StyleRefinement::default(),
             inline_code: HighlightStyle::default(),
             is_dark: false,
@@ -114,6 +119,12 @@ impl TextViewStyle {
     /// the table scrolls horizontally instead of shrinking further.
     pub fn table(mut self, style: StyleRefinement) -> Self {
         self.table = style;
+        self
+    }
+
+    /// Set extra style for the table header row.
+    pub fn table_head(mut self, style: StyleRefinement) -> Self {
+        self.table_head = style;
         self
     }
 
