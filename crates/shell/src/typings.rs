@@ -935,7 +935,12 @@ declare module "fs/promises" {
 }
 declare module "fs" { export * from "fs/promises"; }
 declare module "net" {
-  export interface Socket { write(data: string): Promise<void>; read(maxBytes?: number): Promise<string>; close(): void; }
+  export interface Socket {
+    write(data: string): Promise<void>;
+    /** Reads raw bytes. Resolves to null after the peer reaches EOF. */
+    read(maxBytes?: number): Promise<Uint8Array | null>;
+    close(): void;
+  }
   export function connect(host: string, port: number): Promise<Socket>;
   const net: { connect: typeof connect };
   export default net;
@@ -1222,6 +1227,14 @@ mod tests {
         assert!(declarations.contains("headers?: Readonly<Record<string, string>>;"));
         assert!(declarations.contains(
             "connect(url: string, options?: WebSocketConnectOptions): Promise<WebSocketSocket>;"
+        ));
+    }
+
+    #[test]
+    fn raw_tcp_reads_preserve_bytes_and_expose_eof() {
+        let declarations = declarations();
+        assert!(declarations.contains(
+            "read(maxBytes?: number): Promise<Uint8Array | null>;"
         ));
     }
 

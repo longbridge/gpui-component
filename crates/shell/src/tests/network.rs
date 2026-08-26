@@ -43,7 +43,9 @@ export default class Probe extends View {
       try {
         const socket = await connect("127.0.0.1", __PORT__);
         await socket.write("ping");
-        this.state = await socket.read(4);
+        const bytes = await socket.read(4);
+        const eof = await socket.read(4);
+        this.state = `${bytes instanceof Uint8Array}|${[...bytes].join(",")}|${eof === null}`;
         socket.close();
       } catch (error) {
         this.state = `rejected:${error.message}`;
@@ -380,7 +382,10 @@ fn net_connect_is_bounded_and_capability_gated(cx: &mut TestAppContext) {
     let (_runtime, view, mut context) = probe(cx, &source);
     context.run_until_parked();
     draw(&mut context, &view);
-    assert!(snapshot(&mut context, &view).contains("pong"));
+    assert!(
+        snapshot(&mut context, &view).contains("true|112,111,110,103|true"),
+        "raw TCP reads should preserve bytes and report EOF"
+    );
     server.join().expect("TCP server");
 }
 

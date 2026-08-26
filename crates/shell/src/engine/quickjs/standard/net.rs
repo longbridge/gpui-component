@@ -6,7 +6,7 @@ use std::{
 };
 
 use rquickjs::{
-    Ctx, Exception, IntoJs, Object, Promise, Result, Value,
+    Ctx, Exception, IntoJs, Object, Promise, Result, TypedArray, Value,
     function::{Func, Opt},
     module::{Declarations, Exports, ModuleDef},
 };
@@ -72,6 +72,17 @@ struct Socket {
     closer: TcpStream,
 }
 
+struct ReadChunk(Option<Vec<u8>>);
+
+impl<'js> IntoJs<'js> for ReadChunk {
+    fn into_js(self, ctx: &Ctx<'js>) -> Result<Value<'js>> {
+        match self.0 {
+            Some(bytes) => TypedArray::<u8>::new(ctx.clone(), bytes)?.into_js(ctx),
+            None => Ok(Value::new_null(ctx.clone())),
+        }
+    }
+}
+
 impl<'js> IntoJs<'js> for Socket {
     fn into_js(self, ctx: &Ctx<'js>) -> Result<Value<'js>> {
         let socket = Object::new(ctx.clone())?;
@@ -115,8 +126,11 @@ impl<'js> IntoJs<'js> for Socket {
                             .map_err(|_| "socket lock was poisoned".to_owned())?
                             .read(&mut bytes)
                             .map_err(|error| format!("socket read failed: {error}"))?;
+                        if count == 0 {
+                            return Ok(ReadChunk(None));
+                        }
                         bytes.truncate(count);
-                        Ok(String::from_utf8_lossy(&bytes).into_owned())
+                        Ok(ReadChunk(Some(bytes)))
                     })
                 },
             ),

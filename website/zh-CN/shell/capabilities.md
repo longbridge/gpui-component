@@ -309,7 +309,7 @@ process.exit(0);
 
 全局 `fetch(url, options?)` 返回 promise，结果提供 `{ status, ok, url, text(), json() }`。它的授权比原始网络更窄：每次请求与 redirect 都必须匹配声明的 HTTP host、method，以及精确 path 或 path prefix；HTTPS 永不降级到 HTTP，authorization 与调用方 header 也不会跨 origin。
 
-`net.connect(host, port)` 与 `WebSocket.connect(url, { headers? })` 使用 `capabilities.network.hosts`。WebSocket 支持文本与 `Uint8Array` 消息，并通过单一 actor 串行化写入；它不会跟随 redirect。Connect、handshake 与 write 操作都有 30 秒 timeout。每个 socket 同一时间只允许一个 outstanding `read()`；第二个会立即 reject，而不是与第一个争抢下一条消息。凭证 header 与握手控制 header 会被拒绝。Raw TCP 与 WebSocket 权限有意比 HTTP request grant 更宽。
+`net.connect(host, port)` 与 `WebSocket.connect(url, { headers? })` 使用 `capabilities.network.hosts`。Raw TCP 的 `read()` 返回 `Uint8Array`，到达 EOF 时返回 `null`，因此传输分块不会经过有损文本解码。WebSocket 支持文本与 `Uint8Array` 消息，并通过单一 actor 串行化写入；它不会跟随 redirect。Connect、handshake 与 write 操作都有 30 秒 timeout。每个 socket 同一时间只允许一个 outstanding `read()`；第二个会立即 reject，而不是与第一个争抢下一条消息。凭证 header 与握手控制 header 会被拒绝。Raw TCP 与 WebSocket 权限有意比 HTTP request grant 更宽。
 
 运行时还提供 `buffer`、`path`、`url`、`crypto`、`zlib`、`console`、`process` 与 `os`。它们是生成的 `gpui.d.ts` 所声明、经过审计的 LLRT/宿主子集；`node:` 别名和任意 Node 内建模块不属于 shell 契约。
 
