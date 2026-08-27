@@ -1546,8 +1546,6 @@ impl Element for Scrollbar {
 
                                         scroll_handle.start_drag();
                                         state.set(state.get().with_drag_pos(axis, pos));
-
-                                        cx.notify(view_id);
                                     } else {
                                         // click on the scrollbar, jump to the position
                                         // Set the thumb bar center to the click position
@@ -1575,6 +1573,8 @@ impl Element for Scrollbar {
                                             ));
                                         }
                                     }
+
+                                    cx.notify(view_id);
                                 }
                             }
                         });
