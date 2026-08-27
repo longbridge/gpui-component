@@ -280,6 +280,19 @@ impl DisplayMap {
         self.wrap_map.wrapper().offset_to_display_point(offset)
     }
 
+    /// Like [`Self::offset_to_wrap_display_point`], but honours the caret's line-end affinity so
+    /// an offset on a soft wrap boundary resolves to the row the caret is drawn on.
+    #[inline]
+    pub(crate) fn offset_to_wrap_display_point_with_affinity(
+        &self,
+        offset: usize,
+        line_end_affinity: bool,
+    ) -> WrapDisplayPoint {
+        self.wrap_map
+            .wrapper()
+            .offset_to_display_point_with_affinity(offset, line_end_affinity)
+    }
+
     /// Convert wrap display point to byte offset.
     #[inline]
     pub(crate) fn wrap_display_point_to_offset(&self, point: WrapDisplayPoint) -> usize {

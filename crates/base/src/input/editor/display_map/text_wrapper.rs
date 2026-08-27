@@ -408,6 +408,20 @@ impl TextWrapper {
     ///
     /// Panics if the `offset` is out of bounds.
     pub(crate) fn offset_to_display_point(&self, offset: usize) -> WrapDisplayPoint {
+        self.offset_to_display_point_with_affinity(offset, false)
+    }
+
+    /// Like [`Self::offset_to_display_point`], but honours the caret's line-end affinity.
+    ///
+    /// A soft wrap boundary is one offset shared by two visual rows. Without affinity it always
+    /// resolves to the start of the second row, which is wrong for a caret that is being drawn at
+    /// the end of the first one -- vertical movement would then step from the row below the one
+    /// the user can see.
+    pub(crate) fn offset_to_display_point_with_affinity(
+        &self,
+        offset: usize,
+        line_end_affinity: bool,
+    ) -> WrapDisplayPoint {
         let row = self.text.offset_to_point(offset).row;
         let start = self.text.line_start_offset(row);
 
@@ -421,7 +435,11 @@ impl TextWrapper {
 
         let local_offset = offset.saturating_sub(start);
         for (ix, range) in line.wrapped_lines.iter().enumerate() {
-            if range.contains(&local_offset) {
+            // With affinity the boundary offset closes the current row instead of opening the
+            // next one, so the range is matched inclusively.
+            let matches =
+                range.contains(&local_offset) || (line_end_affinity && local_offset == range.end);
+            if matches {
                 return WrapDisplayPoint::new(
                     wrapped_row + ix,
                     ix,
@@ -638,60 +656,73 @@ impl LineLayout {
     }
 
     /// Get the closest index for the given x in this line layout.
+    ///
+    /// This ignores y, so it only makes sense for a layout that is known to occupy a single
+    /// visual line. Wrapped layouts must use [`Self::closest_index_for_position`], which also
+    /// reports the caret affinity that a wrap boundary needs.
     pub(crate) fn closest_index_for_x(&self, x: Pixels, last_layout: &LastLayout) -> usize {
         let mut acc_len = 0;
         let x_offset = last_layout.alignment_offset(self.longest_width);
         let x = x - x_offset;
 
         for (i, line) in self.wrapped_lines.iter().enumerate() {
-            let is_last = i + 1 == self.wrapped_lines.len();
             let line_indent = self.line_indent(i);
             if x <= line_indent + line.width {
-                let mut ix = line.closest_index_for_x(x - line_indent);
-                if !is_last && ix == line.text.len() {
-                    // For soft wrap line, we can't put the cursor at the end of the line.
-                    let c_len = line.text.chars().last().map(|c| c.len_utf8()).unwrap_or(0);
-                    ix = ix.saturating_sub(c_len);
-                }
-
-                return acc_len + ix;
+                return acc_len + line.closest_index_for_x(x - line_indent);
             }
-            acc_len += line.text.len();
+            acc_len += line.len;
         }
 
         acc_len
     }
 
-    /// Get the index for the given position (x, y) in this line layout.
+    /// Resolve `pos` to the wrapped sub-line under it.
     ///
-    /// The `pos` is relative to the top-left corner of this line layout, start from (0, 0)
-    /// The return value is a local byte index in this line layout, start from 0.
-    pub(crate) fn closest_index_for_position(
+    /// Returns the sub-line index, the byte offset that sub-line starts at within this line
+    /// layout, and `pos.x` translated into that sub-line's own coordinate space.
+    fn wrapped_line_at(
         &self,
         pos: Point<Pixels>,
         last_layout: &LastLayout,
-    ) -> Option<usize> {
+    ) -> Option<(usize, usize, Pixels)> {
         let mut offset = 0;
         let mut line_top = px(0.);
         let x_offset = last_layout.alignment_offset(self.longest_width);
+
         for (i, line) in self.wrapped_lines.iter().enumerate() {
-            let is_last = i + 1 == self.wrapped_lines.len();
             let line_bottom = line_top + last_layout.line_height;
             if pos.y >= line_top && pos.y < line_bottom {
-                let mut ix = line.closest_index_for_x(pos.x - x_offset - self.line_indent(i));
-                if !is_last && ix == line.text.len() {
-                    // For soft wrap line, we can't put the cursor at the end of the line.
-                    let c_len = line.text.chars().last().map(|c| c.len_utf8()).unwrap_or(0);
-                    ix = ix.saturating_sub(c_len);
-                }
-                return Some(offset + ix);
+                return Some((i, offset, pos.x - x_offset - self.line_indent(i)));
             }
 
-            offset += line.text.len();
+            offset += line.len;
             line_top = line_bottom;
         }
 
         None
+    }
+
+    /// Get the index for the given position (x, y) in this line layout.
+    ///
+    /// The `pos` is relative to the top-left corner of this line layout, start from (0, 0).
+    ///
+    /// Returns a local byte index in this line layout (start from 0) together with the caret
+    /// affinity to use for it: `true` when the index landed on the wrap boundary of a non-final
+    /// sub-line. That boundary offset is shared by the end of one visual line and the start of
+    /// the next, so the affinity is what tells [`Self::position_for_index`] which of the two the
+    /// caret belongs to. Without it a click past the last glyph of a wrapped line would put a
+    /// visible caret on the following line.
+    pub(crate) fn closest_index_for_position(
+        &self,
+        pos: Point<Pixels>,
+        last_layout: &LastLayout,
+    ) -> Option<(usize, bool)> {
+        let (i, offset, x) = self.wrapped_line_at(pos, last_layout)?;
+        let line = &self.wrapped_lines[i];
+        let ix = line.closest_index_for_x(x);
+        let line_end_affinity = i + 1 < self.wrapped_lines.len() && ix == line.len;
+
+        Some((offset + ix, line_end_affinity))
     }
 
     pub(crate) fn index_for_position(
@@ -699,21 +730,9 @@ impl LineLayout {
         pos: Point<Pixels>,
         last_layout: &LastLayout,
     ) -> Option<usize> {
-        let mut offset = 0;
-        let mut line_top = px(0.);
-        let x_offset = last_layout.alignment_offset(self.longest_width);
-        for (i, line) in self.wrapped_lines.iter().enumerate() {
-            let line_bottom = line_top + last_layout.line_height;
-            if pos.y >= line_top && pos.y < line_bottom {
-                let ix = line.index_for_x(pos.x - x_offset - self.line_indent(i))?;
-                return Some(offset + ix);
-            }
+        let (i, offset, x) = self.wrapped_line_at(pos, last_layout)?;
 
-            offset += line.text.len();
-            line_top = line_bottom;
-        }
-
-        None
+        Some(offset + self.wrapped_lines[i].index_for_x(x)?)
     }
 
     pub(crate) fn size(&self, line_height: Pixels) -> Size<Pixels> {
@@ -1121,6 +1140,25 @@ mod tests {
         assert_eq!(line_layout.wrapped_lines.len(), 2);
     }
 
+    /// A layout context whose only load-bearing field is the line height.
+    fn test_last_layout(line_height: Pixels) -> LastLayout {
+        LastLayout {
+            visible_range: 0..1,
+            visible_buffer_lines: vec![0],
+            visible_line_byte_offsets: vec![0],
+            visible_top: px(0.),
+            visible_range_offset: 0..0,
+            lines: Rc::new(vec![]),
+            line_height,
+            wrap_width: None,
+            wrapping_indent: WrappingIndent::default(),
+            line_number_width: px(0.),
+            cursor_bounds: None,
+            text_align: TextAlign::Left,
+            content_width: px(0.),
+        }
+    }
+
     #[test]
     fn test_position_for_index_prefers_first_leading_empty_visual_line() {
         let mut line_layout = LineLayout::new();
@@ -1130,26 +1168,96 @@ mod tests {
             ShapedLine::default().with_len(3),
         ]);
 
-        let last_layout = LastLayout {
-            visible_range: 0..1,
-            visible_buffer_lines: vec![0],
-            visible_line_byte_offsets: vec![0],
-            visible_top: px(0.),
-            visible_range_offset: 0..0,
-            lines: Rc::new(vec![]),
-            line_height: px(20.),
-            wrap_width: None,
-            wrapping_indent: WrappingIndent::default(),
-            line_number_width: px(0.),
-            cursor_bounds: None,
-            text_align: TextAlign::Left,
-            content_width: px(0.),
-        };
-
         assert_eq!(
-            line_layout.position_for_index(0, &last_layout, false),
+            line_layout.position_for_index(0, &test_last_layout(px(20.)), false),
             Some(point(px(0.), px(0.)))
         );
+    }
+
+    #[test]
+    fn clicking_past_a_wrapped_row_keeps_the_caret_on_that_row() {
+        // One buffer line wrapped into two visual rows, splitting at byte 10.
+        let mut line_layout = LineLayout::new();
+        line_layout.set_wrapped_lines(smallvec::smallvec![
+            ShapedLine::default().with_len(10),
+            ShapedLine::default().with_len(5),
+        ]);
+        let last_layout = test_last_layout(px(20.));
+
+        // Clicking past the last glyph of the first row resolves to the wrap boundary, which is
+        // also the first offset of the second row -- hence the affinity.
+        let (ix, line_end_affinity) = line_layout
+            .closest_index_for_position(point(px(999.), px(5.)), &last_layout)
+            .unwrap();
+        assert_eq!(ix, 10);
+        assert!(line_end_affinity);
+
+        // Carrying that affinity is what keeps the caret on the row that was clicked; dropping it
+        // is the bug -- the caret shows up one row below the pointer.
+        assert_eq!(
+            line_layout
+                .position_for_index(ix, &last_layout, line_end_affinity)
+                .map(|pos| pos.y),
+            Some(px(0.))
+        );
+        assert_eq!(
+            line_layout
+                .position_for_index(ix, &last_layout, false)
+                .map(|pos| pos.y),
+            Some(px(20.))
+        );
+
+        // The final row owns the end of the line outright, so there is nothing to disambiguate.
+        let (ix, line_end_affinity) = line_layout
+            .closest_index_for_position(point(px(999.), px(25.)), &last_layout)
+            .unwrap();
+        assert_eq!(ix, 15);
+        assert!(!line_end_affinity);
+    }
+
+    #[test]
+    fn a_wrap_boundary_offset_resolves_to_the_row_the_caret_is_drawn_on() {
+        let mut wrapper = TextWrapper::new(test_font(), px(14.), None);
+        wrapper.text = Rope::from("first line\nthis one wraps");
+        wrapper.lines = SumTree::from_iter(
+            vec![
+                LineItem {
+                    len: Rope::from("first line").len(),
+                    indent: 0,
+                    wrapped_lines: smallvec::smallvec![0..10],
+                },
+                LineItem {
+                    len: Rope::from("this one wraps").len(),
+                    indent: 0,
+                    wrapped_lines: smallvec::smallvec![0..9, 9..14],
+                },
+            ],
+            &(),
+        );
+
+        // Offset 20 is the wrap boundary of the second buffer line: 11 (line start) + 9.
+        // It is the last offset of wrap row 1 and the first of wrap row 2 at the same time, so
+        // only the affinity can say which row a vertical move should step away from.
+        assert_eq!(
+            wrapper.offset_to_display_point_with_affinity(20, true),
+            WrapDisplayPoint::new(1, 0, 9)
+        );
+        assert_eq!(
+            wrapper.offset_to_display_point_with_affinity(20, false),
+            WrapDisplayPoint::new(2, 1, 0)
+        );
+        assert_eq!(
+            wrapper.offset_to_display_point(20),
+            wrapper.offset_to_display_point_with_affinity(20, false)
+        );
+
+        // An offset that is not on a boundary is unaffected either way.
+        for line_end_affinity in [false, true] {
+            assert_eq!(
+                wrapper.offset_to_display_point_with_affinity(23, line_end_affinity),
+                WrapDisplayPoint::new(2, 1, 3)
+            );
+        }
     }
 
     #[test]

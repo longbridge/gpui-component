@@ -1283,7 +1283,8 @@ impl<M: InputModeKind> InputBaseState<M> {
     ) {
         self.undo_manager.break_transaction_coalescing();
         let offset = self.end_of_line();
-        self.select_to(offset, cx);
+        // Mirrors MoveEnd: the caret belongs at the end of the visual row it is on.
+        self.select_to_with_affinity(offset, true, cx);
     }
 
     pub(super) fn select_to_previous_word(
@@ -1358,7 +1359,10 @@ impl<M: InputModeKind> InputBaseState<M> {
         let logical_start = self.text.line_start_offset(row);
 
         if self.soft_wrap && self.is_code_editor() {
-            let wrap_point = self.display_map.offset_to_wrap_display_point(self.cursor());
+            let wrap_point = self.display_map.offset_to_wrap_display_point_with_affinity(
+                self.cursor(),
+                self.cursor_line_end_affinity,
+            );
             if let Some(line) = self.display_map.line(row)
                 && let Some(range) = line.wrapped_lines.get(wrap_point.local_row)
             {
@@ -1386,7 +1390,13 @@ impl<M: InputModeKind> InputBaseState<M> {
         let logical_end = self.text.line_end_offset(row);
 
         if self.soft_wrap && self.is_code_editor() {
-            let wrap_point = self.display_map.offset_to_wrap_display_point(self.cursor());
+            // Use the row the caret is drawn on: at a wrap boundary the raw offset would name
+            // the next row, and a second End press would keep walking down instead of falling
+            // through to the logical line end.
+            let wrap_point = self.display_map.offset_to_wrap_display_point_with_affinity(
+                self.cursor(),
+                self.cursor_line_end_affinity,
+            );
             if let Some(line) = self.display_map.line(row)
                 && let Some(range) = line.wrapped_lines.get(wrap_point.local_row)
             {
@@ -1707,7 +1717,7 @@ impl<M: InputModeKind> InputBaseState<M> {
         }
 
         self.selecting = true;
-        let offset = self.index_for_mouse_position(event.position);
+        let (offset, line_end_affinity) = self.index_for_mouse_position(event.position);
 
         if M::on_click(self, event, offset, window, cx) {
             return;
@@ -1737,9 +1747,9 @@ impl<M: InputModeKind> InputBaseState<M> {
         }
 
         if event.modifiers.shift {
-            self.select_to(offset, cx);
+            self.select_to_with_affinity(offset, line_end_affinity, cx);
         } else {
-            self.move_to(offset, None, cx)
+            self.move_to_with_affinity(offset, None, line_end_affinity, cx)
         }
     }
 
@@ -1782,7 +1792,7 @@ impl<M: InputModeKind> InputBaseState<M> {
         }
 
         // Show diagnostic popover on mouse move
-        let offset = self.index_for_mouse_position(event.position);
+        let (offset, _) = self.index_for_mouse_position(event.position);
         M::on_mouse_move(self, offset, event, window, cx);
 
         if self.is_code_editor() {
@@ -2130,16 +2140,23 @@ impl<M: InputModeKind> InputBaseState<M> {
         self.select_to(end, cx);
     }
 
-    pub(crate) fn index_for_mouse_position(&self, position: Point<Pixels>) -> usize {
+    /// Resolve a mouse position to a byte offset in the text.
+    ///
+    /// Also reports the caret's line-end affinity for that offset: `true` when the position
+    /// landed on the wrap boundary of a non-final visual row, meaning the caret belongs at the
+    /// end of that row rather than at the start of the next one. Callers that place or extend a
+    /// selection must pass it on, or clicking past the last glyph of a wrapped row leaves a
+    /// caret one row below the pointer.
+    pub(crate) fn index_for_mouse_position(&self, position: Point<Pixels>) -> (usize, bool) {
         // If the text is empty, always return 0
         if self.text.len() == 0 {
-            return 0;
+            return (0, false);
         }
 
         let (Some(bounds), Some(last_layout)) =
             (self.last_bounds.as_ref(), self.last_layout.as_ref())
         else {
-            return 0;
+            return (0, false);
         };
 
         let line_height = last_layout.line_height;
@@ -2175,37 +2192,38 @@ impl<M: InputModeKind> InputBaseState<M> {
             // Return offset by use closest_index_for_x if is single line mode.
             if self.is_single_line() {
                 let local_index = line_layout.closest_index_for_x(pos.x, last_layout);
-                let index = line_start_offset + local_index;
-                return if self.masked {
-                    self.text.char_index_to_offset(index / MASK_CHAR.len_utf8())
-                } else {
-                    index.min(self.text.len())
-                };
+                // A single line never wraps, so there is no boundary to disambiguate.
+                return (self.resolve_index(line_start_offset + local_index), false);
             }
 
             // Check if mouse is in this line's bounds
-            if let Some(local_index) = line_layout.closest_index_for_position(pos, last_layout) {
-                let index = line_start_offset + local_index;
-                return if self.masked {
-                    self.text.char_index_to_offset(index / MASK_CHAR.len_utf8())
-                } else {
-                    index.min(self.text.len())
-                };
+            if let Some((local_index, line_end_affinity)) =
+                line_layout.closest_index_for_position(pos, last_layout)
+            {
+                return (
+                    self.resolve_index(line_start_offset + local_index),
+                    line_end_affinity,
+                );
             } else if pos.y < px(0.) {
                 // Mouse is above this line, return start of this line
-                return if self.masked {
-                    self.text
-                        .char_index_to_offset(line_start_offset / MASK_CHAR.len_utf8())
-                } else {
-                    line_start_offset
-                };
+                return (self.resolve_index(line_start_offset), false);
             }
 
             y_offset += line_layout.size(line_height).height;
         }
 
         // Mouse is below all visible lines, return end of text
-        self.text.len()
+        (self.text.len(), false)
+    }
+
+    /// Map a display byte index back to a text offset, undoing the mask expansion when the input
+    /// is masked.
+    fn resolve_index(&self, index: usize) -> usize {
+        if self.masked {
+            self.text.char_index_to_offset(index / MASK_CHAR.len_utf8())
+        } else {
+            index.min(self.text.len())
+        }
     }
 
     /// Returns a y offsetted point for the line origin.
@@ -2215,8 +2233,24 @@ impl<M: InputModeKind> InputBaseState<M> {
     ///
     /// Ensure the offset use self.next_boundary or self.previous_boundary to get the correct offset.
     pub(crate) fn select_to(&mut self, offset: usize, cx: &mut Context<Self>) {
+        self.select_to_with_affinity(offset, false, cx);
+    }
+
+    /// Like [`Self::select_to`], but also carries the caret's line-end affinity.
+    ///
+    /// See [`Self::move_to_with_affinity`] for why the affinity travels with the offset. Note
+    /// that plain [`Self::select_to`] clears the affinity: every offset it is given came from
+    /// the text rather than from a visual position, so the caret has no reason to keep sticking
+    /// to the end of a wrapped row.
+    pub(crate) fn select_to_with_affinity(
+        &mut self,
+        offset: usize,
+        line_end_affinity: bool,
+        cx: &mut Context<Self>,
+    ) {
         M::clear_inline_completion(self, cx);
 
+        self.cursor_line_end_affinity = line_end_affinity;
         let offset = offset.clamp(0, self.text.len());
         if self.selection_reversed {
             self.selected_range.start = offset
@@ -2427,8 +2461,8 @@ impl<M: InputModeKind> InputBaseState<M> {
         }
 
         self.auto_scroll.last_drag_position = Some(event.position);
-        let offset = self.index_for_mouse_position(event.position);
-        self.select_to(offset, cx);
+        let (offset, line_end_affinity) = self.index_for_mouse_position(event.position);
+        self.select_to_with_affinity(offset, line_end_affinity, cx);
 
         if !self.is_single_line() {
             let delta = AutoScroll::compute_delta(event.position.y, self.input_bounds);
@@ -2438,8 +2472,8 @@ impl<M: InputModeKind> InputBaseState<M> {
                 let current = state.scroll_handle.offset();
                 state.update_scroll_offset(Some(point(current.x, current.y + delta)), cx);
                 if let Some(pos) = state.auto_scroll.last_drag_position {
-                    let offset = state.index_for_mouse_position(pos);
-                    state.select_to(offset, cx);
+                    let (offset, line_end_affinity) = state.index_for_mouse_position(pos);
+                    state.select_to_with_affinity(offset, line_end_affinity, cx);
                 }
             });
         }
