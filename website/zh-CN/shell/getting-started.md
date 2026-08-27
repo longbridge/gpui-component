@@ -1,16 +1,16 @@
 ---
-title: Getting Started
+title: 开始使用
 description: 把运行时接进一个 Rust 应用、写它要加载的脚本，并在不开窗口的情况下检查这个脚本。
 order: 2
 ---
 
 # Getting Started
 
-`gpui-shell` 首先是给一个 Rust GPUI 应用加上 JavaScript 扩展点的办法：由宿主构建运行时、决定脚本能碰到什么，并把脚本视图挂在它想挂的位置。直接运行一个脚本目录——也就是下面那个 `gpui-shell` 二进制——是随之而来的开发便利，而不是它的定位。
+`gpui-shell` 首先是给一个 Rust GPUI 应用加上 JavaScript 扩展点的办法：由 Host 构建运行时、决定脚本能碰到什么，并把脚本视图挂在它想挂的位置。直接运行一个脚本目录——也就是下面那个 `gpui-shell` 二进制——是随之而来的开发便利，而不是它的定位。
 
 ## 把运行时接进 Rust 应用
 
-`gpui-shell` 二进制本身是一个很薄的宿主：解析命令行、装上日志 sink、建一个运行时、开一个窗口。任何嵌入这个库的宿主做的也是同样四件事。
+`gpui-shell` 二进制本身是一个很薄的 Host：解析命令行、装上日志 sink、建一个运行时、开一个窗口。任何嵌入这个库的 Host 做的也是同样四件事。
 
 ```rust
 use gpui_shell::{Capabilities, ShellRuntime};
@@ -23,7 +23,7 @@ gpui_platform::application()
 
         let runtime = ShellRuntime::new(cx).expect("script runtime");
 
-        // 在宿主开口之前，什么都不允许。
+        // 在 Host 开口之前，什么都不允许。
         gpui_shell::set_store_path(store_directory.join("store.json"));
         gpui_shell::set_capabilities(
             Capabilities::new()
@@ -41,9 +41,9 @@ gpui_platform::application()
 
 其中两行承载的是规则而不是机制。
 
-**`runtime.load(...)` 返回窗口的 `ShellRoot`**，作用与 `gpui-component` 窗口中的 `Root` 相同。它持有 dialog 栈、sheet、toast 栈、焦点恢复与 Tab 导航。manifest 负责选择应用入口并记录能力请求，但不会自行批准这些请求。带 manifest 与不带 manifest 的目录都使用宿主当前的默认 policy；后者采用 `main.js`。
+**`runtime.load(...)` 返回窗口的 `ShellRoot`**，作用与 `gpui-component` 窗口中的 `Root` 相同。它持有 dialog 栈、sheet、toast 栈、焦点恢复与 Tab 导航。manifest 负责选择应用入口并记录能力请求，但不会自行批准这些请求。带 manifest 与不带 manifest 的目录都使用 Host 当前的默认 policy；后者采用 `main.js`。
 
-**能力默认为空。** `Capabilities::default()` 什么都不授予——没有文件、没有存储、没有剪贴板、没有进程。由宿主决定，因为只有宿主知道它对即将运行的这段代码信任到什么程度。见 [Capabilities](./capabilities.md)。
+**能力默认为空。** `Capabilities::default()` 什么都不授予——没有文件、没有存储、没有剪贴板、没有进程。由 Host 决定，因为只有 Host 知道它对即将运行的这段代码信任到什么程度。见 [Capabilities](./capabilities.md)。
 
 同时也要装上 `tracing` subscriber。运行时通过 `tracing` 报告脚本错误、未处理的 promise rejection 以及 phase 非法的调用；没有 subscriber 时，这些全部被丢弃，症状是一个安静地不再响应的界面。
 
@@ -53,7 +53,8 @@ gpui_platform::application()
 
 ```js
 // hello/main.js
-import { View, v_flex, text, Button } from "gpui";
+import { View } from "gpui";
+import { v_flex, Button } from "gpui-base";
 
 export default class Hello extends View {
   init() {
@@ -67,7 +68,7 @@ export default class Hello extends View {
       .justify_center()
       .gap(12)
       .bg(cx.theme().colors.background)
-      .child(text(`Clicked ${this.clicks} times`).text_color(cx.theme().colors.foreground))
+      .child(div().text_color(cx.theme().colors.foreground).child(`Clicked ${this.clicks} times`))
       .child(
         Button.new("click")
           .h(28)
@@ -82,7 +83,7 @@ export default class Hello extends View {
             this.clicks += 1;
             cx.notify();
           })
-          .child(text("Click me")),
+          .child("Click me"),
       );
   }
 }
@@ -94,17 +95,17 @@ cargo run -p gpui-shell -- hello
 
 这个文件里有四件事值得现在就点明，因为后面所有内容都建立在它们之上。
 
-**`"gpui"` 是 UI 模块。** 运行时还提供一层刻意收窄的 JavaScript 标准能力：`buffer`、`path`、`url`、`crypto`、`zlib`、`console`、`process`、`os`、`fs/promises`、`net`、`websocket`，以及全局 `fetch`。应用相对导入仍被限制在应用目录内。`node:fs` 这类 `node:` 别名、包查找和 CommonJS `require` 不属于契约。
+**能力由哪个包提供，就从哪个模块导入。** `"gpui"` 是 GPUI 自身的元素和运行时补上的部分——`View`、`div`、`text`、存储、调度。`"gpui-base"` 是 gpui-base 的布局辅助、组件和主题——`v_flex`、`Button`、`InputState`。`"gpui-fps"` 是它的性能浮层。一个名字只属于其中一个模块，所以一行 import 就说清了脚本依赖的是哪一层。运行时还提供一层刻意收窄的 JavaScript 标准能力：`buffer`、`path`、`url`、`crypto`、`zlib`、`console`、`process`、`os`、`fs/promises`、`net`、`websocket`，以及全局 `fetch`。应用相对导入仍被限制在应用目录内。`node:fs` 这类 `node:` 别名、包查找和 CommonJS `require` 不属于契约。
 
-**`main.js` 必须 `export default` 一个继承 `View` 的类。** `init` 在视图创建时只执行一次；`render` 返回恰好一个元素，并且是在视图失效时执行，而不是每帧执行——见 [`render` 什么时候执行](./state.md#render-什么时候执行)。
+**`main.js` 必须 `export default` 一个继承 `View` 的类。** `init` 在视图创建时只执行一次；`render` 返回一个元素、留存的 `Entity` 或字符串，并且是在视图失效时执行，而不是每帧执行——见 [`render` 什么时候执行](./state.md#render-什么时候执行)。
 
-**样式方法是 snake_case，你自己写的代码是 camelCase。** `items_center`、`on_click`、`text_color`、`gap_2` 保留了 Rust 的拼写，因为无参样式接口是从 GPUI 的反射表生成的，而不是手写的。应用自己声明的一切——变量、方法、对象的键——都是普通的 JavaScript camelCase。这个对比是刻意的：snake_case 的调用是宿主接口，camelCase 的是你的代码。
+**样式方法是 snake_case，你自己写的代码是 camelCase。** `items_center`、`on_click`、`text_color`、`gap_2` 保留了 Rust 的拼写，因为无参样式接口是从 GPUI 的反射表生成的，而不是手写的。应用自己声明的一切——变量、方法、对象的键——都是普通的 JavaScript camelCase。这个对比是刻意的：snake_case 的调用是 Host 接口，camelCase 的是你的代码。
 
 **没有任何东西会自动重绘。** 没有 signal，没有 `useState`，也没有依赖数组。改完状态，自己调用 `cx.notify()`。
 
 ## 单独运行一个脚本
 
-一个脚本目录也可以直接跑起来，不必先写宿主。自带的示例就是这么运行的；一段脚本在被它将来所属的那个应用加载之前，通常也是这样开发的。`gpui-shell` 没有发布到 crates.io，所以先克隆仓库，再在仓库根目录运行：
+一个脚本目录也可以直接跑起来，不必先写 Host 。自带的示例就是这么运行的；一段脚本在被它将来所属的那个应用加载之前，通常也是这样开发的。`gpui-shell` 没有发布到 crates.io，所以先克隆仓库，再在仓库根目录运行：
 
 ```bash
 cargo run -p gpui-shell -- examples/js_todolist

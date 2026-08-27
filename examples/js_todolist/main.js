@@ -7,8 +7,9 @@
 //
 //   cargo run -p gpui-shell -- examples/js_todolist
 
-import { View, v_flex, h_flex, InputState } from "gpui";
-/** @import { Context, InputStateHandle } from "gpui" */
+import { View } from "gpui";
+import { v_flex, h_flex, InputState } from "gpui-base";
+/** @import { AsyncContext, Context } from "gpui" */
 import { load, save } from "./storage.js";
 import confirmClear from "./confirm.js";
 import {
@@ -35,12 +36,13 @@ const FILTERS = [
 ];
 
 export default class TodoList extends View {
-  init() {
+  /** @param {unknown} _props @param {AsyncContext} cx */
+  init(_props, cx) {
     // Annotated where they are assigned rather than declared as class fields.
     // `View`'s constructor calls `init` from inside `super()`, so a field
     // declaration — even one with no initializer — would run afterwards and
     // write `undefined` over everything set here.
-    /** @type {InputStateHandle} */
+    /** @type {InputState} */
     this.draft = InputState.new({ placeholder: "What needs doing?" });
     // Enter is how a list like this is actually used; the Add button is for
     // the pointer, not the primary path.

@@ -1,7 +1,7 @@
 ---
 title: The Engine Seam
 description: QuickJS behind one internal interface, why the seam exists, and the three measurements that tell script cost apart from frame cost.
-order: 12
+order: 13
 ---
 
 # The Engine Seam
@@ -91,12 +91,12 @@ The VM and GPUI's `App` share one thread — the main one — inside one process
 <img class="architecture-light" src="/shell-threads-memory-light.svg" alt="The host process. On the main thread, GPUI's App and the QuickJS VM exchange plain function calls across the FFI boundary. Background workers handle timers and blocking I/O, then settle work on the foreground executor without touching the VM. Memory splits four ways: the JavaScript heap capped at 256 MiB, the description arena owned by the snapshot, the callback arena keyed by snapshot generation, and GPUI's frame arena which lasts one draw.">
 <img class="architecture-dark" src="/shell-threads-memory-dark.svg" alt="The host process. On the main thread, GPUI's App and the QuickJS VM exchange plain function calls across the FFI boundary. Background workers handle timers and blocking I/O, then settle work on the foreground executor without touching the VM. Memory splits four ways: the JavaScript heap capped at 256 MiB, the description arena owned by the snapshot, the callback arena keyed by snapshot generation, and GPUI's frame arena which lasts one draw.">
 
-Background work never touches the VM. Timers (`gpui.sleep`, `gpui.timer`) count down there, and filesystem, process, fetch, TCP and WebSocket operations hand off their blocking work there. Results settle on the foreground executor, so JavaScript continuations still run on the main thread in a `Task` scope. GPUI also does its own work on its own threads once the elements exist.
+Background work never touches the VM. Timers (`cx.sleep`, `cx.timer`) count down there, and filesystem, process, fetch, TCP and WebSocket operations hand off their blocking work there. Results settle on the foreground executor, so JavaScript continuations still run on the main thread in a `Task` scope. GPUI also does its own work on its own threads once the elements exist.
 
 Three consequences matter when profiling:
 
 - **A builder call is a function call.** It crosses the FFI boundary and nothing else — no serialization, no IPC round trip, no copy beyond the conversion of the argument itself. The benchmark reports that cost per recorded operation, and across the four panel sizes it lands at **240–340 ns**.
-- **Script work still shares the UI thread.** Filesystem, process, fetch, TCP and WebSocket operations hand blocking work to background workers and settle on the foreground executor, but JavaScript computation and native-module calls run beside GPUI and must stay bounded.
+- **Script work still shares the UI thread.** Filesystem, process, fetch, TCP and WebSocket operations hand blocking work to background workers and settle on the foreground executor, but JavaScript computation and HostModule calls run beside GPUI and must stay bounded.
 - **A runaway script cannot be preempted from another thread.** What cuts it off is the interpreter's own interrupt — 50 ms inside `render`, 500 ms inside an event handler — and a `catch` block cannot swallow it.
 
 Memory splits four ways, each with a different owner and a different moment of release:
@@ -114,19 +114,40 @@ Nothing that crosses the boundary is an object. An element handle is an integer 
 
 ## What linking it costs
 
-Two numbers a host has to know before it takes the dependency: how much bigger the binary gets, and how much more memory it holds. Both were measured on the component gallery — a real GPUI application — by building it twice, once with `gpui-shell` in its dependencies and once with that dependency and its story removed.
+Two numbers a host has to know before it takes the dependency: how much bigger the binary gets, and how much more memory it holds.
 
-| | Without `gpui-shell` | With it | Added |
+Measured on the two smallest real programs in this repository, so the figures are the cost of this crate rather than the cost of whatever else an application happens to contain:
+
+| | `hello_world` | `gpui-shell` running `js_todolist` | Added |
 | --- | --- | --- | --- |
-| Binary, stripped | 69.4 MiB | 74.0 MiB | **+4.7 MiB** (+6.7%) |
-| Binary, unstripped | 80.8 MiB | 86.7 MiB | +5.8 MiB |
-| Resident memory | 133.8 MiB | 138.1 MiB | **+4.3 MiB** |
+| Binary, stripped | 12.6 MiB | 26.1 MiB | **+13.5 MiB** |
+| Binary, unstripped | 16.5 MiB | 33.8 MiB | +17.3 MiB |
+| Resident memory | 67 MiB | 81 MiB | **+14 MiB** |
 
-Most of the binary growth is the engine itself: QuickJS is a C interpreter compiled in, plus the bindings and the style table around it.
+`hello_world` is 41 lines of Rust over `gpui` and `gpui-component` — a window and a counter. The `gpui-shell` CLI is the smallest host that can run a script application; here it is running `examples/js_todolist`, 519 lines of JavaScript across four modules, with a live QuickJS runtime behind it. Memory is the median of four runs, discarding a first run that reads high while caches are cold; the binaries are `--release` with the workspace's default profile, stripped with `strip(1)`.
 
-Two caveats on the memory figure. It is a median of three runs, because the first run of either build reads about 15 MiB higher while caches are cold. And it is measured with the gallery's Shell story loaded — a live QuickJS runtime, its prelude, a script, and a quote board of twenty rows — so it covers a runtime doing work, not the floor for one sitting idle.
+**The +13.5 MiB is a constant, and that is the most useful thing here.** The same pair measured on the component gallery — a program five times the size — adds the same 13.5 MiB stripped, where it is +19.8% rather than +107%. Two independent measurements agreeing to three significant figures is what makes this a fact about `gpui-shell` rather than a reading of one application.
 
-The 256 MiB heap cap from [Capabilities](./capabilities.md#the-sandbox) is a ceiling, not a reservation; nothing is committed until a script allocates it.
+The memory rows look like they disagree and do not. On the gallery the difference is *within measurement noise*: that build reads 194–208 MiB across runs, and 14 MiB is simply below its own spread. The minimal program can resolve it because 67 MiB has less to hide it in.
+
+### Where the binary goes
+
+Not mostly QuickJS. The interpreter is one to two megabytes; the rest is the Standard Runtime it arrives with. `fetch`, `websocket` and `crypto` bring `hyper`, `rustls`, `ring`, `h2`, a `webpki` root store and the compression crates, and `gpui-component` alone brings none of them — `hello_world` links no HTTP, no TLS and no `tokio`. The whole stack enters through this crate.
+
+That also explains why an older measurement of this table read +4.7 MiB: it predates the Standard Runtime. `fs`, `net`, `crypto`, `fetch`, `websocket` and `zlib` all arrived after it.
+
+There is no configuration that takes the element surface without them. `quickjs` is the only engine feature and it is `default`; building with `--no-default-features` is a `compile_error!`, and the Standard Runtime is inside that same feature. Splitting the two would be new work rather than exposing a switch that already exists.
+
+Two savings that look available and are not, both measured rather than reasoned about:
+
+- **Dropping the five upstream crates Shell does not register** — `llrt_fetch`, `llrt_fs`, `llrt_net`, `llrt_os` and `llrt_console`, which were dependencies only for a compile-time assertion — changes the binary by **zero bytes**. Their heavy features resolve to crates other dependencies already pull. They are gone anyway, because 14 crates that cost nothing in bytes still cost compile time and supply-chain surface, and depending on an upstream `fetch` that Shell deliberately does not use reads as though it does.
+- **Narrowing `reqwest` to what `fetch.rs` actually uses** — dropping `charset`, `multipart`, `socks`, `stream` and `macos-system-configuration`, none of which that file can reach — saves **0.1 MiB**.
+
+So the 13.5 MiB is not slack. It is `hyper`, `rustls`, `ring` and the interpreter, and a host that wants any of `fetch`, `websocket` or `crypto` links all of it.
+
+### Per runtime
+
+The figures above are for one runtime. A host that mounts several — a plugin host with one per plugin — pays the engine's construction each time: a QuickJS runtime and context, the module registry, the globals, the host installers, and a 43 KB prelude that is parsed on every construction. The 256 MiB heap cap from [Capabilities](./capabilities.md#the-sandbox) is a ceiling, not a reservation; nothing is committed until a script allocates it.
 
 ## What is on each side
 

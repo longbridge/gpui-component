@@ -6,27 +6,24 @@
 //! runtime does not have — a clock, an owner for pending work, and somebody to
 //! pump the job queue.
 //!
-//! # A `cx` may not be held across an `await`
-//!
-//! This is the one rule an application author has to internalize:
-//!
-//! ```js
-//! async run(cx) {
-//!   const data = await load();
-//!   cx.notify();              // WRONG: this `cx` belongs to a call that returned
-//!   gpui.with_cx((cx) => cx.notify());  // right
-//! }
-//! ```
+//! # Which `cx` may be held across an `await`
 //!
 //! GPUI hands the host `&mut Window` and `&mut App` as borrows that live exactly
-//! as long as one call. The script-side `cx` is only a generation token for that
-//! call ([`crate::scope`]). An `await` returns to the host, the call frame goes
-//! away, and the borrows with it — so the token is stale by the time the
-//! continuation runs. Every resumption this module drives therefore opens a
-//! *fresh* [`ScopePhase::Task`] scope, and [`js_with_cx`] is how resumed code
-//! obtains a `cx` that belongs to it. Using the old one is not undefined
-//! behaviour; it is a clear [`crate::scope::StaleContext`] error, which is the
-//! whole point of the generation.
+//! as long as one call, and offers `AsyncApp` for the code that has to outlive
+//! one. The two script flavours mirror that. A call-scoped `cx` is a generation
+//! token for one call ([`crate::scope`]); an `await` returns to the host, the
+//! frame goes away, and the token is stale when the continuation runs — a clear
+//! [`crate::scope::StaleContext`] error rather than undefined behaviour.
+//!
+//! ```js
+//! cx.spawn(async (cx) => {
+//!   const data = await load();
+//!   cx.notify();              // the async cx: it names no frame to go stale
+//! });
+//! ```
+//!
+//! Every resumption this module drives opens a *fresh* [`ScopePhase::Task`]
+//! scope, which is what the async flavour resolves against.
 //!
 //! # The job queue
 //!
@@ -54,6 +51,7 @@
 use std::{
     cell::{Cell, RefCell},
     collections::{HashMap, HashSet},
+    future::Future,
     rc::Rc,
     time::Duration,
 };
@@ -77,19 +75,27 @@ use crate::{
     view::ScriptView,
 };
 
-use super::{ShellRuntime, context_object, describe};
+use super::{ContextBinding, ShellRuntime, context_object, describe};
 
-/// Installs `sleep`, `timer`, `spawn` and `with_cx` onto the `gpui` module.
+/// Installs the scheduling surface.
+///
+/// `spawn`, `sleep` and `timer` reach a script through `cx`, because that is
+/// where GPUI keeps them — `App::spawn`, and a timer from the executor the
+/// context hands out. These globals are the implementation the prelude composes
+/// onto `cx`; nothing names them from script. `with_cx` stays a module member:
+/// it is the one call for code holding no context at all, so there is no `cx`
+/// to reach it through.
 ///
 /// The context argument is the engine's; everything here is built from the
 /// module's own [`Object::ctx`], because `Ctx` and `Object` are invariant in
 /// `'js` and a value built from one cannot be set on the other.
 pub fn install(_ctx: &Ctx<'_>, module: &Object<'_>) -> JsResult<()> {
-    let ctx = module.ctx();
-    module.set("sleep", Func::from(js_sleep))?;
-    module.set("with_cx", Func::from(js_with_cx))?;
-    module.set("spawn", Func::from(js_spawn))?;
-    module.set("timer", timer_object(ctx)?)?;
+    let globals = module.ctx().globals();
+    globals.set("__sleep", Func::from(js_sleep))?;
+    globals.set("__spawn", Func::from(js_spawn))?;
+    globals.set("__timer_after", Func::from(js_timer_after))?;
+    globals.set("__timer_every", Func::from(js_timer_every))?;
+    let _ = module;
     Ok(())
 }
 
@@ -486,7 +492,7 @@ const MAX_TRANSACTIONAL_JOBS: usize = 10_000;
 /// borrows the context lifetime; a closure cannot be inferred as polymorphic
 /// over a lifetime that appears in both its parameter and its return type.
 fn js_sleep<'js>(ctx: Ctx<'js>, ms: Opt<f64>) -> JsResult<Promise<'js>> {
-    const API: &str = "gpui.sleep(ms)";
+    const API: &str = "cx.sleep(ms)";
 
     let delay = duration(&ctx, API, ms.0.unwrap_or_default())?;
     let host = host(&ctx, API)?;
@@ -528,20 +534,6 @@ fn js_sleep<'js>(ctx: Ctx<'js>, ms: Opt<f64>) -> JsResult<Promise<'js>> {
     Ok(promise)
 }
 
-/// `gpui.with_cx(fn)` — runs `fn(cx)` with a context that belongs to the call in
-/// progress.
-///
-/// This is how code that has `await`ed gets a usable `cx`: the one it was handed
-/// before the `await` belongs to a call that has already returned. Outside any
-/// host call there is no context to hand out, and saying so is far better than
-/// producing one that points at a dead stack frame.
-fn js_with_cx<'js>(ctx: Ctx<'js>, body: Function<'js>) -> JsResult<Value<'js>> {
-    let Some(generation) = scope::current_generation() else {
-        return Err(outside_host_call(&ctx, "gpui.with_cx(fn)"));
-    };
-    body.call((context_object(&ctx, generation)?,))
-}
-
 /// `gpui.spawn(asyncFn, opts?)` — calls `asyncFn(cx)` and adopts its promise.
 ///
 /// Adoption is the point. A rejected promise nobody handles is JavaScript's most
@@ -560,16 +552,16 @@ fn js_spawn<'js>(
     let task = register(
         &ctx,
         TaskState::new(
-            "gpui.spawn(fn)",
+            "cx.spawn(fn)",
             owner_from_options(&ctx, opts.0.as_ref())?,
             None,
         ),
     )?;
 
-    let started = match scope::current_generation() {
-        Some(generation) => body.call::<_, Value>((context_object(&ctx, generation)?,)),
-        None => body.call::<_, Value>(()),
-    };
+    // An async `cx`, always — including at module top level, where the old
+    // call-scoped one had to be omitted and the body was handed `undefined`.
+    // It names no frame, so there is nothing to be absent.
+    let started = body.call::<_, Value>((context_object(&ctx, ContextBinding::Ambient)?,));
 
     match started {
         Ok(value) => match value.into_promise() {
@@ -595,7 +587,7 @@ fn js_timer_after<'js>(
 ) -> JsResult<Object<'js>> {
     schedule(
         ctx,
-        "gpui.timer.after(ms, fn)",
+        "cx.timer.after(ms, fn)",
         ms,
         handler,
         opts,
@@ -617,19 +609,12 @@ fn js_timer_every<'js>(
 ) -> JsResult<Object<'js>> {
     schedule(
         ctx,
-        "gpui.timer.every(ms, fn)",
+        "cx.timer.every(ms, fn)",
         ms,
         handler,
         opts,
         Repeat::Forever,
     )
-}
-
-fn timer_object<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
-    let timer = Object::new(ctx.clone())?;
-    timer.set("after", Func::from(js_timer_after))?;
-    timer.set("every", Func::from(js_timer_every))?;
-    Ok(timer)
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -678,10 +663,13 @@ fn schedule<'js>(
                     &ticking.policy(),
                     ticking.application.clone(),
                     owner,
-                    move |ctx, generation| {
+                    // A timer handler is resumed script code like any other, so
+                    // its `cx` is the async flavor: a handler that awaits keeps
+                    // a usable context instead of having to reach for `with_cx`.
+                    move |ctx, _generation| {
                         callback
                             .restore(ctx)?
-                            .call::<_, ()>((context_object(ctx, generation)?,))
+                            .call::<_, ()>((context_object(ctx, ContextBinding::Ambient)?,))
                     },
                 );
 
@@ -1019,7 +1007,7 @@ pub(super) fn deferred<'js>(
     api: &'static str,
     resolve: Function<'js>,
     reject: Function<'js>,
-) -> JsResult<crate::store::Settle> {
+) -> JsResult<crate::storage::Settle> {
     let host = host(ctx, api)?;
     let task = register(
         ctx,
@@ -1194,6 +1182,70 @@ where
         })
         .detach();
     Ok((promise, ActorCompletion(completion)))
+}
+
+/// A promise driven by a future on the background executor.
+///
+/// [`blocking`] is this with a synchronous closure in front; this one takes the
+/// future directly, which is what an asynchronous HostModule function hands
+/// over. Ownership, cancellation and scope restoration are identical — a call
+/// whose view has gone away leaves its promise pending rather than inventing an
+/// error for code that was asked to stop.
+pub(super) fn awaiting<'js, T>(
+    ctx: &Ctx<'js>,
+    api: &'static str,
+    work: impl Future<Output = Result<T, String>> + Send + 'static,
+) -> JsResult<Promise<'js>>
+where
+    T: for<'a> IntoJs<'a> + Send + 'static,
+{
+    let host = host(ctx, api)?;
+    let (promise, resolve, reject) = ctx.promise()?;
+
+    let task = register(
+        ctx,
+        TaskState::new(
+            api,
+            scope::current_view().map(|view| view.downgrade()),
+            Some(Persistent::save(ctx, resolve)),
+        )
+        .with_rejection(Persistent::save(ctx, reject)),
+    )?;
+
+    let running = task.clone();
+    host.foreground
+        .clone()
+        .spawn(async move {
+            let outcome = host.background.spawn(work).await;
+
+            if let Readiness::Ready(owner) = running.readiness() {
+                let resolve = running.take_callback();
+                let reject = running.take_rejection();
+                resume(
+                    &host,
+                    &running.policy(),
+                    running.application.clone(),
+                    owner,
+                    move |ctx, _| match outcome {
+                        Ok(value) => match resolve {
+                            Some(resolve) => resolve.restore(ctx)?.call::<_, ()>((value,)),
+                            None => Ok(()),
+                        },
+                        Err(message) => match reject {
+                            Some(reject) => {
+                                let error = Exception::from_message(ctx.clone(), &message)?;
+                                reject.restore(ctx)?.call::<_, ()>((error,))
+                            }
+                            None => Ok(()),
+                        },
+                    },
+                );
+            }
+            finish(&running);
+        })
+        .detach();
+
+    Ok(promise)
 }
 
 /// A promise settled by work that must not run on this thread.
@@ -1531,6 +1583,15 @@ mod tests {
         let module = Object::new(ctx.clone()).expect("module");
         install(ctx, &module).expect("install");
         ctx.globals().set("gpui", module).expect("globals");
+
+        // `cx` composes its members in the prelude, which these tests do not
+        // load. The factory is the one piece of it `context_object` reaches
+        // for, so stand in for it rather than teaching the runtime to cope
+        // with a half-built module.
+        ctx.eval::<Value, _>(
+            "globalThis.__gpui = { __context_members: (check) => ({ theme: () => (check(), null) }) };",
+        )
+        .expect("context members");
     }
 
     /// The failure this module exists to prevent: without a drain, a resolved
@@ -1583,23 +1644,6 @@ mod tests {
         assert_send::<ActorCompletion>();
     }
 
-    #[test]
-    fn with_cx_outside_a_host_call_reports_clearly() {
-        let (_runtime, context) = context();
-
-        let message = context.with(|ctx| {
-            install_module(&ctx);
-
-            let error = ctx
-                .eval::<Value, _>("gpui.with_cx((cx) => cx)")
-                .expect_err("with_cx must refuse to invent a context");
-            describe(&ctx, error)
-        });
-
-        assert!(message.contains("gpui.with_cx(fn)"), "{message}");
-        assert!(message.contains("no host call in progress"), "{message}");
-    }
-
     /// Scheduling needs a window and an executor, both of which only exist
     /// during a host call. Saying so beats scheduling against a dead frame.
     #[test]
@@ -1610,12 +1654,12 @@ mod tests {
             install_module(&ctx);
 
             let error = ctx
-                .eval::<Value, _>("gpui.sleep(10)")
+                .eval::<Value, _>("__sleep(10)")
                 .expect_err("sleep must refuse to schedule");
             describe(&ctx, error)
         });
 
-        assert!(message.contains("gpui.sleep(ms)"), "{message}");
+        assert!(message.contains("cx.sleep(ms)"), "{message}");
     }
 
     #[test]
@@ -1626,7 +1670,7 @@ mod tests {
             install_module(&ctx);
 
             let error = ctx
-                .eval::<Value, _>("gpui.sleep(-1)")
+                .eval::<Value, _>("__sleep(-1)")
                 .expect_err("a negative delay must be refused");
             describe(&ctx, error)
         });
@@ -1644,7 +1688,7 @@ mod tests {
         context.with(|ctx| {
             install_module(&ctx);
             ctx.eval::<Value, _>(
-                "globalThis.handle = gpui.spawn(async () => { throw new Error(\"boom\"); });",
+                "globalThis.handle = __spawn(async () => { throw new Error(\"boom\"); });",
             )
             .expect("spawn");
 
@@ -1673,7 +1717,7 @@ mod tests {
             ctx.eval::<Value, _>(
                 r#"
                 globalThis.ran = false;
-                globalThis.handle = gpui.spawn(async () => { globalThis.ran = true; });
+                globalThis.handle = __spawn(async () => { globalThis.ran = true; });
                 "#,
             )
             .expect("spawn");
@@ -1701,7 +1745,7 @@ mod tests {
         context.with(|ctx| {
             install_module(&ctx);
             ctx.eval::<Value, _>(
-                "globalThis.handle = gpui.spawn(() => { throw new Error(\"boom\"); });",
+                "globalThis.handle = __spawn(() => { throw new Error(\"boom\"); });",
             )
             .expect("spawn must absorb the throw");
 
@@ -1716,7 +1760,7 @@ mod tests {
         context.with(|ctx| {
             install_module(&ctx);
             ctx.eval::<Value, _>(
-                "globalThis.handle = gpui.spawn(async () => { await Promise.resolve(); });",
+                "globalThis.handle = __spawn(async () => { await Promise.resolve(); });",
             )
             .expect("spawn");
 
@@ -1735,7 +1779,7 @@ mod tests {
         let message = context.with(|ctx| {
             install_module(&ctx);
             let error = ctx
-                .eval::<Value, _>("gpui.spawn(async () => {}, { owner: {} })")
+                .eval::<Value, _>("__spawn(async () => {}, { owner: {} })")
                 .expect_err("an unrelated owner must be refused");
             describe(&ctx, error)
         });

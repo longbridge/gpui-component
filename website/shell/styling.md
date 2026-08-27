@@ -141,7 +141,7 @@ renderSave(cx) {
     .hover((style) => style.bg(cx.theme().colors.muted).border_color(cx.theme().colors.foreground))
     .active((style) => style.bg(cx.theme().colors.border))
     .focus((style) => style.border_color(cx.theme().colors.ring))
-    .child(text("Save"));
+    .child("Save");
 }
 ```
 
@@ -162,7 +162,7 @@ v_flex()
   .id("activity")
   .h(240)
   .overflow_y_scroll()
-  .children(this.rows.map((row) => text(row)));
+  .children(this.rows.map((row) => row));
 ```
 
 Use `.overflow_scroll()` for both axes, `.overflow_x_scroll()` for horizontal
@@ -185,7 +185,7 @@ render(cx) {
     .gap(cx.theme().spacing.md)
     .rounded(cx.theme().radius.lg)
     .bg(cx.theme().colors.surface)
-    .child(text(`${cx.theme().appearance}: ${cx.theme().is_dark ? "dark" : "light"}`));
+    .child(`${cx.theme().appearance}: ${cx.theme().is_dark ? "dark" : "light"}`);
 }
 ```
 

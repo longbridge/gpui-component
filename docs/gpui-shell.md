@@ -47,7 +47,7 @@ Four things make up the runtime:
    with the VM behind an explicit seam (§6.5);
 2. bindings over the `gpui` element and style layer and the `gpui-base`
    behavior layer;
-3. a capability-gated system API (`fs`, `store`, `clipboard`, `log`,
+3. a capability-gated system API (`fs`, `localStorage`, clipboard,
    `process`, HTTP, TCP, and WebSocket);
 4. a command-line host that runs an application directory, checks it, and
    generates its type declarations (§23).
@@ -212,7 +212,7 @@ Seven things are deliberately absent, and will stay absent:
 
 ```text
      JS application            main.js · views · styles · business logic
-              │  import ... from "gpui"
+              │  import ... from "gpui" · "gpui-base" · "gpui-fps"
               ▼
      crates/shell ── gpui-shell
      ┌──────────────────────────────────────────────┐
@@ -264,6 +264,15 @@ application: it implements the dock renderer traits itself, supplies its own
 WebAssembly. `examples/js_todolist` is that same posture with the composition
 and styling written in JavaScript instead of Rust, and `ui.js` deliberately
 follows the showcase's visual language.
+
+**The layering is visible in the script's import lines.** Each crate that
+provides script API gets a module named after it: `"gpui"` for GPUI's own
+elements and what this runtime adds, `"gpui-base"` for base's layout helpers,
+components and theme, `"gpui-fps"` for its overlay. A name belongs to exactly one
+of them, which makes the boundary argued for above checkable rather than merely
+intended — a script that reaches for a component says so at the top of the file,
+and the day `gpui-component` becomes bindable it arrives as `"gpui-component"`
+without a single existing name changing meaning.
 
 ### 4.3 What base-first makes the shell carry
 
@@ -469,7 +478,8 @@ the same application activity must produce the same number of script renders.
 One import, one module. Components are type tables with a single `.new`:
 
 ```js
-import { View, v_flex, text, Button } from "gpui";
+import { View, text } from "gpui";
+import { v_flex, Button } from "gpui-base";
 
 export default class Counter extends View {
   init(props = {}) {
@@ -479,35 +489,56 @@ export default class Counter extends View {
   render() {
     return v_flex()
       .gap(12)
-      .child(text(`${this.count}`))
+      .child(`${this.count}`)
       .child(
         Button.new("increment")
           .on_click((_event, cx) => {
             this.count += 1;
             cx.notify();
           })
-          .child(text("Increment")),
+          .child("Increment"),
       );
   }
 }
 ```
 
-`"gpui"` is the UI module name. The Standard Runtime also provides the selected
-bare modules listed in §1.1; every other `import` resolves inside the
-application directory (§19.1). The entry point is `main.js`, and it must
+The built-in modules are named after the crate that provides the capability:
+`"gpui"` for GPUI's own elements and what the runtime adds, `"gpui-base"` for
+gpui-base's layout helpers, components and theme, and `"gpui-fps"` for its
+performance overlay. A name belongs to exactly one of them, so an import says
+which layer a script depends on, and a layer added later — `gpui-component` —
+arrives as its own module rather than as more names on `"gpui"`. The Standard
+Runtime also provides the selected bare modules listed in §1.1; every other
+`import` resolves inside the application directory (§19.1). The entry point is `main.js`, and it must
 `export default` a class extending `View`. The host takes that class, constructs
 one instance, and mounts it as the window's root view.
 
-Naming follows the Rust side directly:
+Naming follows the Rust side directly. **Where a binding lives in Rust decides
+where it lives in JavaScript** — the rule is provenance, not category, so a
+binding added later lands in one place and there is nothing to argue about:
 
-| Rust              | JavaScript                              | Example                                          |
-| ----------------- | --------------------------------------- | ------------------------------------------------ |
-| Type plus `::new` | Capitalized type table with only `.new` | `Button::new(id)` → `Button.new(id)`             |
-| Free function     | Lowercase function                      | `div()`, `h_flex()`, `v_flex()`, `text(s)`       |
-| State entity      | Capitalized type table                  | `InputState::new(...)` → `InputState.new({...})` |
-| System capability | Lowercase module member                 | `fs`, `store`, `clipboard`, `log`, `process`     |
-| Scheduling        | Lowercase module member                 | `spawn`, `timer`, `sleep`, `with_cx`             |
-| View base class   | `class X extends View`                  | `export default class Counter extends View`      |
+| Rust                          | JavaScript                              | Example                                                    |
+| ----------------------------- | --------------------------------------- | ---------------------------------------------------------- |
+| Method on `App`               | Method on `cx`                          | `App::open_url` → `cx.open_url(url)`                        |
+| Method on `Window`            | Method on the `window` global           | `Window::paint_path` → `window.paint_path(path, bg)`        |
+| Type plus `::new`             | Capitalized type table with only `.new` | `Button::new(id)` → `Button.new(id)`                        |
+| Free function                 | Lowercase function                      | `div()`, `h_flex()`, `v_flex()`, `s`                  |
+| State entity                  | Capitalized type table                  | `InputState::new(...)` → `InputState.new({...})`            |
+| No GPUI or base original      | Where the web already keeps it          | `localStorage`, `console`                                   |
+| A standard-runtime module     | Lowercase module import                 | `fs/promises`, `process`, `path`                            |
+| View base class               | `class X extends View`                  | `export default class Counter extends View`                 |
+
+An earlier version of this table mapped by category — "system capability" and
+"scheduling" both became module members — and that is what let the script
+surface drift away from GPUI's. `open_url`, `spawn`, `read_from_clipboard`,
+`write_to_clipboard` and `focus_handle` are `App` methods in Rust, so they are
+`cx` methods here; `paint_path` is a `Window` method, so it is on `window`. Note
+what the rule also settles: `FocusHandle.new()` was a constructor GPUI does not
+have, because `App::focus_handle` is the only way to make one.
+
+An entity is a child wherever a child is taken, exactly as an `Entity<V>` is
+renderable in GPUI: `.child(handle)` mounts a retained nested view, and a
+`render` may return a handle directly.
 
 #### Style and behavior methods keep their Rust snake_case spelling
 
@@ -686,7 +717,7 @@ weaker rather than stronger — which is exactly why it is written down. The
 QuickJS engine has grown `host.rs`, `scheduler.rs`, `sandbox.rs`, `overlay.rs`,
 and `entity_api.rs`. Some of that is legitimately engine-specific: promise
 pumping and intrinsic trimming have no meaning above the seam. The parts that are
-not — the `fs` and `store` surfaces, whose bodies are a capability check plus one
+not — the `fs` and storage surfaces, whose bodies are a capability check plus one
 `std::fs` call — should have landed above the seam with only argument shuffling
 left in the engine. §25 treats this as the standing risk it is.
 
@@ -1083,7 +1114,7 @@ identity, and it survives the script reordering its own tree. `Button`, `Link`,
 `Checkbox` and `Switch` already take an identity from `new(id)` and say so with
 a warning rather than ignoring a second one in silence.
 
-`text(...)` materializes as a `div` carrying a string child rather than as a
+`...` materializes as a `div` carrying a string child rather than as a
 distinct element type, so every style method works on it unchanged. `Input`
 materializes as an `InputBase` frame — not a bare `div`, because `InputBase`
 carries the input semantics, the focused state style, and the accessibility role
@@ -1192,8 +1223,36 @@ the stack, and a mismatch throws:
 
 ```text
 cx is no longer valid: it was captured during an earlier call and used later.
-Use gpui.spawn or take cx from the callback arguments instead.
+Use cx.spawn or take cx from the callback arguments instead.
 ```
+
+#### Two flavors, the way GPUI has two
+
+GPUI draws the same line with the borrow checker: `App` and `Context<T>` are
+borrows that cannot outlive their call, and `AsyncApp` is the one flavor you may
+hold across an `await` — `Context::spawn` says so in as many words. A script has
+no borrow checker, so the line is drawn at run time by `ContextBinding`:
+
+- **`Context`** names one call by generation, and is what `render` and every
+  event handler receive. A `cx` stashed in a closure still reports clearly.
+- **`AsyncContext`** names no call. It resolves whichever frame is live when a
+  member is used, and refuses only when none is. It is what `init` receives and
+  what `cx.spawn` and `cx.timer` hand their callbacks.
+
+That is the *whole* difference: every member gates on the binding's check and
+then does ordinary ambient work, so the two cannot drift apart. Nor is ambient
+resolution a new mechanism here — it is the majority one. `scope::with_context`
+has two call sites outside `scope.rs`; `with_current` and `with_current_app`
+back entity creation, the overlays, storage, the clipboard, the theme and every
+native module. The overlays were themselves *moved off* `cx` onto the ambient
+`window` global for exactly this reason, and `overlay.rs` records the argument.
+
+Nothing is lost by it. `notify` already reads its view from the ambient
+`current_view()`, and every re-homed member was ambient underneath to begin
+with, so an `AsyncContext` used from a later call is not working by luck — it is
+working the way the operation always worked. What the generation refuses is a
+`cx` used in a frame that is merely *different*; what an `AsyncContext` still
+refuses is one used with no frame at all.
 
 The `unsafe` is confined to this one module and its preconditions are written
 into the module header: the VM and `App` are both main-thread only, so no other
@@ -1218,7 +1277,7 @@ what to reach.
 | `Render` | Reading state and the theme, building elements, registering callbacks | `notify`, creating entities, opening overlays      |
 | `Event`  | Everything: mutating state, `notify`, `spawn`, overlays               | Blocking                                           |
 | `Task`   | Same as `Event`                                                       | Blocking                                           |
-| `Layout` | Reading and building elements (§8.5)                                  | `notify`, creating or destroying entities, `spawn` |
+| `Layout` | Reading and building elements (§8.5)                                  | `notify`, creating or destroying entities          |
 
 Every refusal is a specific message, not undefined behavior:
 
@@ -1244,7 +1303,7 @@ generation is what tells the handler a new call has begun.
 
 ```js
 Button.new("save")
-  .child(text("Save"))
+  .child("Save")
   .on_click((event, cx) => {
     this.saved = true;
     cx.notify();
@@ -1379,7 +1438,7 @@ misspelling reports all of them.
 | ---------------- | ------------------------------------------ | ------------------------------------------ | ----------------------------- |
 | View-local       | Fields on the view instance (`this.count`) | Expansion, filters, drafts                 | `cx.notify()`                 |
 | Host entity      | `Entity<T>` behind a handle (`InputState`) | Text, and later trees, tables, dock layout | The entity notifies itself    |
-| Application-wide | `gpui.store` (§17.3) or module scope       | Settings, caches                           | Subscribers notify explicitly |
+| Application-wide | `localStorage` (§17.3) or module scope       | Settings, caches                           | Subscribers notify explicitly |
 
 ### 11.2 There is no automatic dependency tracking
 
@@ -1411,7 +1470,7 @@ export default class Counter extends View {
     // phase = Render; returns exactly one element
     return v_flex()
       .gap(12)
-      .child(text(`${this.count}`));
+      .child(`${this.count}`);
   }
 }
 ```
@@ -1444,13 +1503,12 @@ Script code is asynchronous in the ordinary JavaScript way. What
 not have: a clock, an owner for pending work, and somebody to pump the queue.
 
 ```js
-gpui.spawn(async (cx) => {
-  await gpui.sleep(200);
-  gpui.with_cx((cx) => {
-    // obtain a context that belongs to this call
-    this.ready = true;
-    cx.notify();
-  });
+cx.spawn(async (cx) => {
+  await cx.sleep(200);
+  // The same `cx` the body was handed. It names no call, so the `await` does
+  // not take it away.
+  this.ready = true;
+  cx.notify();
 });
 ```
 
@@ -1470,26 +1528,32 @@ must not stop the others. The drain is bounded at 100,000 jobs so that
 `for(;;) Promise.resolve().then(f)` cannot wedge the frame loop, and hitting the
 bound is itself an error log.
 
-**A `cx` must not be held across an `await`.** After an `await` the generation
-has moved and the old token produces the §9.2 error. The correct form is
-`gpui.with_cx(...)`, or taking `cx` from the callback arguments. This is easier
-to get wrong in JavaScript, because the code before and after an `await` shares
-one lexical scope and the old `cx` is simply in reach.
+**A call-scoped `cx` must not be held across an `await`.** After an `await` the
+generation has moved and the old token produces the §9.2 error. This is easy to
+get wrong in JavaScript, because the code before and after an `await` shares one
+lexical scope and the old `cx` is simply in reach — which is why the contexts
+whose job is to survive that are a different flavor. The `cx` a `cx.spawn` or
+`cx.timer` callback receives is an `AsyncContext` and stays usable; `render`'s
+and a handler's do not, and should not be captured. There is no third way to
+obtain one: a module's top level and a bare `constructor` are handed no context
+and cannot ask for one, which is deliberate — GPUI has no module top level, and
+work started there would belong to no view. `init` is where a view is handed
+its context, and where its work starts.
 
 **An unhandled rejection must be visible.** A failed promise with no `catch` is
-silent by default in JavaScript. `gpui.spawn` adopts the promise it is given and
+silent by default in JavaScript. `cx.spawn` adopts the promise it is given and
 attaches reporting handlers, so a rejection reaches `tracing::error!` with the
 script's own stack rather than vanishing. A body that throws synchronously is
 absorbed the same way.
 
 **Top-level `await` is not supported.** Module evaluation must complete
 synchronously; anything needing asynchronous start-up does it from `init` with
-`gpui.spawn`.
+`cx.spawn`.
 
 ### 12.3 Ownership and cancellation
 
 ```js
-const task = gpui.timer.every(1000, (cx) => {
+const task = cx.timer.every(1000, (cx) => {
   /* ... */
 });
 task.cancel();
@@ -1537,7 +1601,7 @@ results must be plain, thread-transferable data. There is no `Worker`.
 
 ### 12.5 Timers
 
-`gpui.timer.after(ms, fn, opts?)` and `gpui.timer.every(ms, fn, opts?)`, both
+`cx.timer.after(ms, fn, opts?)` and `cx.timer.every(ms, fn, opts?)`, both
 owner-bound. The interval on `every` is measured from the end of one callback to
 the start of the next wait, so a slow callback delays the next tick rather than
 piling ticks up behind it.
@@ -1833,6 +1897,14 @@ table, it is generated, and nothing about it is written by hand.
 output is deterministic — no timestamps, no reflection order — so regenerating
 after a runtime upgrade produces a reviewable diff.
 
+One file, one ambient module per crate that provides the capability: `"gpui"`,
+`"gpui-base"`, `"gpui-fps"`. A name belongs to exactly one of them. The
+dependency runs upward only — `"gpui-base"` imports the element and
+component-factory types it is built out of from `"gpui"`, and `"gpui"` refers
+down only where one shared element prototype forces it: `track_scroll`, `mode`,
+`axis` and `cx.theme()` name their argument types with an inline
+`import("gpui-base").X`.
+
 What makes the declarations trustworthy is that they are generated from **the
 tables the runtime dispatches through**, not transcribed from documentation:
 
@@ -1852,7 +1924,7 @@ style method added without a matching probe literal fails loudly at the first
 call site rather than silently accepting anything.
 
 Four things the declarations deliberately do not express, each stated in the
-generated file's own preamble. Capability grants: every `fs`, `store`,
+generated file's own preamble. Capability grants: every `fs`, storage,
 `clipboard`, and `process` call type-checks, and whether it is _granted_ is a
 runtime question types cannot carry. Element and `cx` lifetimes: TypeScript has
 no affine types, so reusing an element still type-checks and still throws.
@@ -1891,7 +1963,8 @@ The natural second step is a `gpui-component` binding as a _second registry_
 sharing the same render protocol, call scope, event model, and arena:
 
 ```js
-import { v_flex, text } from "gpui"; // base: the script owns presentation
+import { text } from "gpui";
+import { v_flex } from "gpui-base"; // base: the script owns presentation
 import { Button } from "gpui-component"; // product visuals, ready-made
 ```
 
@@ -2132,9 +2205,10 @@ Everything here is denied by default and gated on the capability set in force
 `capability.rs`; the engine holds only the argument shuffling.
 
 ```js
-import { store, clipboard, log, native } from "gpui";
 import * as fs from "fs/promises";
 import process from "process";
+// `localStorage`, `sessionStorage` and `console` are globals; the clipboard is
+// `cx.read_from_clipboard` / `cx.write_to_clipboard`.
 ```
 
 Two rules keep this honest. **There is one path resolver:** every filesystem
@@ -2190,8 +2264,8 @@ failure without one is an out-of-memory inside the VM instead of a sentence
 naming the file. `writeFile` is capped at 8 MiB per call. `readdir` stops at
 10,000 entries or 1 MiB of UTF-8 name bytes, whichever comes first.
 
-`store` is deliberately not like this: it is a cache with a write-through, so
-`get` and `set` answer from memory. `store.flush()` returns a promise that
+Storage is deliberately not like this: it is a cache with a write-through, so
+`getItem` and `setItem` answer from memory. `localStorage.flush()` returns a promise that
 settles when the current value is durable. Its serialized file is capped at
 8 MiB, with at most 4,096 keys and 1 MiB per JSON value. At most 1,024 pending
 flush barriers may wait for durability at once.
@@ -2200,7 +2274,7 @@ flush barriers may wait for durability at once.
 
 Three experimental surfaces are implemented. Global `fetch(url, options?)`
 supports bounded GET and POST requests, string or `Uint8Array` bodies, safe
-request headers, and resolves to `{ status, ok, url, text(), json() }`; both
+request headers, and resolves to `{ status, ok, url, , json() }`; both
 body readers return promises. The `gpui` module exports
 `WebSocket.connect(url, { headers }?)`, returning a socket with asynchronous
 text/binary `read`, `write`, and `close`. Bare module `net` provides raw
@@ -2241,31 +2315,52 @@ resolution mean GPUI Shell does not claim browser compatibility.
 
 ### 17.3 Storage
 
-`store.get`, `set`, `remove`, `keys`, `flush`. One flat JSON object per
-application, cached in memory because `get` is called from `render` and a file
+The [Web Storage API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Storage_API):
+`localStorage` and `sessionStorage`, each with `length`, `key`, `getItem`,
+`setItem`, `removeItem` and `clear`. Globals, and also on `window`, because that
+is where the web has them and this surface is the web's rather than GPUI's — the
+naming rule in §17.1 sends a binding to wherever its original lives, and here the
+original is a browser.
+
+**The two differ only in lifetime.** `localStorage` is one flat JSON object per
+application, in a file the host placed; `sessionStorage` is the same structure
+with no file behind it. That difference is also why only `localStorage` is a
+capability: nothing `sessionStorage` holds ever leaves the process, so there is
+nothing to grant, and it works on a host that granted nothing. `localStorage` is
+granted by default at the manifest layer — a browser gives every origin one
+without being asked, storage here is keyed by bundle id and cannot name its own
+file, and defaulting it to denied had a trap: an application that added a
+manifest to declare a network host silently lost its settings. The Rust
+`Capabilities` still deny it until a host says otherwise.
+
+Values are strings. That is the Web Storage definition rather than a limitation
+we chose, and it is the better contract for this store: it makes the encoding
+the script's own visible act, so what lands in the file is what the script wrote
+rather than whatever our JSON bridge decided about `undefined`, `NaN` or a
+reference cycle. A script with structure calls `JSON.stringify`, exactly as it
+would in a browser.
+
+Reads are cached in memory because `getItem` is called from `render` and a file
 read per frame would be absurd.
 
 Every mutation writes through immediately, to a temporary file that is renamed
 over the target, so a crash mid-write leaves the previous settings intact rather
 than a truncated file. The store holds small configuration data, and losing a
 setting because a script forgot to call `flush` is a worse failure than one extra
-rename; `flush` stays in the API as the durability barrier for when the write
-becomes an awaitable promise.
+rename; `flush` is the one member the web does not have, and it exists only as
+the durability barrier — a browser never needs it because its storage is
+synchronous all the way down.
 
 A missing file is an empty store — a first run is not an error. A _malformed_
 file is an error, because silently discarding a user's settings is worse than
 refusing to start.
 
-Values cross as JSON, depth-capped at 64 so a reference cycle cannot recurse
-forever. Functions and `undefined` properties are dropped exactly as
-`JSON.stringify` drops them, so a script author's mental model transfers, and
-`NaN` and `Infinity` are refused by name because they have no JSON form.
-
 ### 17.4 Clipboard and logging
 
-`clipboard.read_text` and `write_text`, with read and write as separate grants so
-a denial names the half that was missing. Both need a live host call, and a
-clipboard call from, say, a module's top level reports that rather than panicking.
+`cx.read_from_clipboard` and `cx.write_to_clipboard`, named after the `App`
+methods they call, with read and write as separate grants so a denial names the
+half that was missing. Both need a live host call, and a clipboard call from a
+context that has none reports that rather than panicking.
 
 `log.debug/info/warn/error` need no capability: a script that can run can already
 say something, and denying it would only cost the author their diagnostics.
@@ -2321,9 +2416,9 @@ reach for.
 
 There is no streaming subprocess: pipe semantics conflict with the asynchronous
 model, and a case that needs streaming output belongs behind a host-registered
-native module that can return a structured result and a timeout.
+module that can return a structured result and a timeout.
 
-### 17.6 Native modules
+### 17.6 Host modules
 
 A script cannot load a native extension. `dlopen`ed Rust has no stable ABI and,
 once inside the process, holds every permission the process holds — a sandbox
@@ -2333,29 +2428,54 @@ reaches exactly that and nothing else. The cost — a third party who needs nati
 capability must fork the host or send a patch — is deliberately retained.
 
 ```rust,ignore
-let mut modules = NativeModules::new();
-modules.register("workspace", |module| {
-    module.function("project_name", |_| Ok(NativeValue::from("gpui-component")));
-});
-gpui_shell::set_native_modules(modules);
+gpui_shell::export_module(
+    HostModule::new("workspace")
+        .function("project_name", |_| Ok(HostValue::from("gpui-component")))
+        .function("version", |_| Ok(HostValue::from("0.1.0"))),
+)?;
 ```
 
 ```js
-import { native } from "gpui";
+import { project_name } from "workspace";
 
-const workspace = native("workspace");
-workspace.project_name();
+project_name();
 ```
 
-**The boundary is plain data.** A native function receives `NativeArguments` and
-returns a `NativeValue` — null, boolean, number, string, array, or
+**A registered module is an ES module, not a lookup.** The alternative
+considered was a `native("workspace")` call answering with a frozen bag of
+functions. It loses twice, both times on when a mistake surfaces. A lookup puts
+every misspelled export on the run-time path, where an import fails while the
+module graph is linked. And a lookup leaves the generated declarations with
+nothing to say — only the host knows what it registered, so the best `gpui.d.ts`
+can offer for `native(name)` is `Record<string, (...args) => any>`, with any real
+types hand-written in a `.d.ts` that nothing checks against the registry. A
+module specifier is a name declarations can be written against, so §21 emits
+them from the registry itself.
+
+The import fixes the set of *names*, not the functions behind them: each export
+is a stub that resolves through `dispatch` on every call, so withdrawing a module
+still refuses the next call through an already-imported name. The consequence for
+a host is one ordering rule — `export_module` before `load_app`.
+
+**The runtime's own specifiers are refused at registration.** A host module
+shares one namespace with the built-ins and the Standard Runtime, and the
+resolver chain reaches those first, so a host registering `path` would register a
+module nothing can import and never find out. `RESERVED_SPECIFIERS` names them
+and `validate` reports every bad name at once; an engine test asserts the list
+against the resolvers themselves, so a module added to one and not the other is a
+failing test rather than a name a host can silently lose.
+
+**The boundary is plain data.** A host function receives `HostArguments` and
+returns a `HostValue` — null, boolean, number, string, array, or
 insertion-ordered object — and never receives a script handle. That is not a
 convenience. A handle would let the host keep a reference to a script value past
 the call that produced it and past the scope frame that made the surrounding
 context valid. It is also what lets one registry serve any engine, since
-neither engine's value type appears in `native.rs`.
+neither engine's value type appears in `host_modules.rs`. It is also what rules
+out exporting a *class*: a constructor hands the script a live host object, and
+object identity across the seam is the thing this boundary exists to prevent.
 
-**A native function may not re-enter the engine.** A native call happens inside
+**A host function may not re-enter the engine.** A host call happens inside
 a script call, which is itself inside a host call; calling back into the VM from
 there would run script with an engine frame already on the stack, re-entering
 the render pass currently building an element tree. Holding no script handle
@@ -2365,43 +2485,65 @@ than undefined behavior. Reading and writing host state is fine and is the point
 a function may reach the ambient `App` and request a re-render, which is delivered
 after the call unwinds.
 
-**Reaching native modules is itself the grant.** The default registry is empty
+**Reaching host modules is itself the grant.** The default registry is empty
 and every entry point fails while it stays that way — the same shape as
 `Capabilities::default()`. There is deliberately no per-module capability: the
 host chose the module list, so the list _is_ the grant. The two failures get
 different sentences, because they are different facts: a host that registered
-nothing has not wired native access up, and telling that author "unknown module"
-would send them hunting for a typo that is not there.
+nothing has not wired its extension surface up, and telling that author "unknown
+module" would send them hunting for a typo that is not there.
 
 ```text
-native module `workspace` is not available: this host registered none. Native
-modules are granted by the embedding application, with gpui_shell::set_native_modules(...).
+host module `workspace` is not available: this host registered none. Host
+modules are granted by the embedding application, with gpui_shell::export_module(...).
 ```
 
 ```text
-unknown native module `workspaces`; this host registered: editor, workspace
+unknown host module `workspaces`; this host registered: editor, workspace
 ```
 
 ```text
-native module `editor` has no function `line_cont`; it provides: line_count
+host module `editor` has no function `line_cont`; it provides: line_count
 ```
 
 Argument readers (`string`, `number`, `integer`, `boolean`) report which
 position was wrong and what arrived there, so a host writing a function does not
-write that sentence itself. A `NativeError` carries only a sentence; the engine
+write that sentence itself. A `HostError` carries only a sentence; the engine
 adds the module and function names when it turns one into a script exception.
 
-The QuickJS side is exactly the two conversions the seam forbids the registry
-from knowing about. The module object is built per call and frozen, with the
-registered functions as own properties over a `Proxy` prototype that reports an
-unknown name — so the trap is on the miss path only, the same trade the element
-prototype makes without needing its two-pass dance, because a native call is not
-on the per-element path. Freezing means a script cannot stash state on a module
-or shadow a function with its own. `then` is withheld along with the `__` names,
-because a module object answering `then` with a function would be mistaken for a
-thenable by any `await` and awaiting one would hang. Argument conversion is
-depth-limited at 16, which turns "the host was handed a 100,000-deep list" from a
-blown Rust stack into a message at the call site.
+**A function may be asynchronous, in two halves.** `HostModule::async_function`
+takes a closure that runs on the main thread and returns a `Send + 'static`
+future that does not; the script gets a promise, driven on GPUI's background
+executor through the same `scheduler` machinery `fs.readFile` uses, and slow
+work stops holding the thread that renders. The split is not a concession to
+`Send`: the synchronous half may read host state because it runs inside the
+caller's scope, and the future cannot re-enter the engine because on another
+thread there is no `Ctx` to re-enter it with — the rule above, made physical
+rather than guarded. Cancellation follows `cx.sleep`: a call whose view has gone
+away leaves its promise pending rather than inventing an error for code that was
+asked to stop. On the QuickJS side an asynchronous export is an arrow calling a
+free function rather than a bound stub, because `Promise<'js>` borrows the
+context lifetime and a closure cannot be polymorphic over a lifetime appearing
+in both its parameter and its return type.
+
+**A module describes its own TypeScript face.** `HostModule::declarations` takes
+the body of a `declare module`, and `validate` compares the exports it declares
+with the functions actually registered. Putting it beside the registration is
+what makes the check possible at all: a `.d.ts` next to the script is a second
+file, in a second language, with nothing holding it to the registry, and the
+drift would surface as an editor completing a function the host had deleted.
+
+The QuickJS side is a resolver, a loader, and exactly the two conversions the
+seam forbids the registry from knowing about. Resolving a registered name yields
+generated source — one `export const name = __host_function(module, name)` per
+function — tagged with the registry's generation, because QuickJS caches a linked
+module by name for the life of the runtime and two plugins importing `workspace`
+would otherwise share whichever linked first. A miss is a plain resolving error
+rather than a thrown exception: this resolver is not last in the chain, and a
+thrown one leaves the exception pending so the file resolver behind it never
+answers. Argument conversion is depth-limited at 16, which turns "the host was
+handed a 100,000-deep list" from a blown Rust stack into a message at the call
+site.
 
 ---
 
@@ -2461,7 +2603,7 @@ current runtime; omitted `capabilities` grants nothing. The file is
         "path_prefixes": ["/v1/quotes/"]
       }]
     },
-    "store": true,
+    "storage": true,
     "clipboard": { "write": true }
   }
 }
@@ -2549,9 +2691,9 @@ cannot do for a directory run from the command line.
 
 ### 18.3 Authority travels with the code, not with the moment
 
-Each loaded plugin holds a `Policy` — its grant, its store, its native modules —
+Each loaded plugin holds a `Policy` — its grant, its storage, its native modules —
 built once from its manifest at load. The policy rides on the **call frame**
-(`scope::Frame`), so every call to `fs` or `gpui.store` answers with the
+(`scope::Frame`), so every call to `fs` or `localStorage` answers with the
 grant of whichever plugin owns the code that is running. Two plugins loaded at
 once hold two different grants at the same time, and neither can see the other's
 files.
@@ -2617,7 +2759,7 @@ prototypes.
 | -------------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Never added**      | quickjs-libc's `std` and `os`                                                    | These provide `open`, `exec`, `getenv`, and `popen`; registering either is full access. `rquickjs` does not inject them and the shell never registers them. This is "never added" rather than "removed", which is an order of magnitude more reliable — and `rquickjs-sys` does not compile that file at all, so a test asserts their absence as a guard on the build |
 | **Withheld**         | `eval` and every function constructor                                            | `globalThis.eval` is deleted outright; the `Function`, `AsyncFunction`, `GeneratorFunction`, and `AsyncGeneratorFunction` constructors are replaced with throwing stubs                                                                                                                                                                                               |
-| **Replaced**         | The module resolver (static and dynamic `import` alike)                          | Resolves `gpui`, the listed Standard Runtime bare modules, and paths inside the application root. `node:` names and unknown packages are refused before reaching the filesystem. Dynamic `import()` stays callable — it is how §18 does lazy loading                                                                                                                    |
+| **Replaced**         | The module resolver (static and dynamic `import` alike)                          | Resolves `gpui`, `gpui-base`, `gpui-fps`, the listed Standard Runtime bare modules, and paths inside the application root. `node:` names and unknown packages are refused before reaching the filesystem. Dynamic `import()` stays callable — it is how §18 does lazy loading                                                                                                                    |
 | **Frozen**           | `Object`, `Array`, `Function`, `String`, and `Number` prototypes                 | One VM hosts several plugins, so the built-ins are shared mutable state                                                                                                                                                                                                                                                                                               |
 | **Capability-gated** | `fs/promises`, `process.run`, `process.exit`, `fetch`, `net.connect`, `websocket.WebSocket.connect` | §17; each async operation captures the caller's policy before leaving the VM                                                                                                                                                                                                                                                                                          |
 | **Throwing stub**    | `setTimeout`, `setInterval`, `clearTimeout`, `clearInterval`, `require`          | Present, and throwing a message that names the replacement                                                                                                                                                                                                                                                                                                            |
@@ -3051,7 +3193,7 @@ the main regression defence for the script layer.
 compiler (seven of them, including each function-prototype constructor), writing
 to a frozen prototype, `process.run` without a grant, `process.exit` without a
 grant, and the interrupt-swallowing case of §19.3. `host.rs` covers the path
-resolver: a read outside the granted root, a read with no grant at all, a store
+resolver: a read outside the granted root, a read with no grant at all, a storage
 call without the capability, and a clipboard denial naming the half that was
 missing. Every one of these asserts on the _message_, because the message is the
 instruction for fixing it.
@@ -3120,7 +3262,7 @@ They cover:
   header filtering, text/binary traffic, pending-read concurrency, and two
   simultaneous runtime policies, without depending on the public Internet;
 - clipboard read/write, timer cancellation, and a host-registered native module;
-- `with_cx` returning a live context to the original view after `await`.
+- an async context still reaching its own view after `await`.
 
 The plugin integration test adds the boundary above them: manifest declaration
 to `Policy`, async work started from `init`, filesystem access under that policy,
@@ -3298,13 +3440,13 @@ springs for opacity and pixel geometry, without per-frame script callbacks.
 Callbacks with per-pass lifetime and
 generation-checked dispatch. State styles for hover, active, and focus.
 Asynchrony: promises bridged to GPUI tasks, job-queue draining, `spawn`,
-`sleep`, `timer.after`/`every`, `with_cx`, owner-bound cancellation, and
+`cx.sleep`, `cx.timer.after`/`every`, owner-bound cancellation, and
 unhandled-rejection reporting. Multiple runtimes may coexist; tasks retain their
 originating runtime and policy, and initialization runs only after the final
 `ScriptView` exists. `Link` with an absolute HTTP(S) `.href(...)` opened by the
 host. `ShellRoot` with the dialog stack, one sheet, the
 toast stack, focus restoration, and Tab navigation, reached through `cx`. System
-capabilities for asynchronous `fs`, `store`, `clipboard`, `log`, `process`,
+capabilities for asynchronous `fs`, storage, clipboard, `process`,
 scoped HTTP, TCP, and WebSocket, all default-denied. HTTP redirect
 reauthorization and the bounded text/binary WebSocket actor are part of that
 surface. Host-registered native modules through
@@ -3380,7 +3522,7 @@ shipped preset module. The `gpui-component` binding registry.
    former, with `gpui.register_settings(schema)`, is the working preference.
 
 7. **Where is the compatibility-stub boundary?** `setTimeout` errors and points
-   at `gpui.timer`; `fetch` errors and points at a capability. What about
+   at `cx.timer`; `fetch` errors and points at a capability. What about
    `structuredClone`, `TextEncoder`, `URL`, `crypto.randomUUID`? The draft
    criterion is that anything mapping exactly may be provided and anything
    mapping approximately may not — the same rule that refuses to name the HTTP
@@ -3417,8 +3559,8 @@ dialog body — and a test loads and renders it, because if it stops rendering t
 quickstart is wrong.
 
 ```js
-import { View, h_flex, v_flex, text, InputState } from "gpui";
-import { store, log } from "gpui";
+import { View } from "gpui";
+import { h_flex, v_flex, InputState } from "gpui-base";
 
 export default class TodoList extends View {
   init() {
@@ -3472,16 +3614,16 @@ label(item.caption, cx).when(item.done, (el) =>
 `.on_change()`. That contrast is §6.4's trade in real code.
 
 **A capability that was not granted is absorbed where it is used, not checked
-at every call site.** `storage.js` wraps `store` in try/catch and the interface
-says "Not saved" rather than failing:
+at every call site.** `storage.js` wraps `localStorage` in try/catch and the
+interface says "Not saved" rather than failing:
 
 ```js
 export function save(items) {
   try {
-    store.set(KEY, items);
+    localStorage.setItem(KEY, JSON.stringify(items));
     return true;
   } catch (error) {
-    log.warn(`todolist: could not save (${error.message})`);
+    console.warn(`todolist: could not save (${error.message})`);
     return false;
   }
 }
@@ -3506,7 +3648,7 @@ crates/shell/                 # gpui-shell — depends on gpui-base + gpui only
       mod.rs                  #   contract, compile_error! guard, cfg forwarding
       quickjs/
         mod.rs                #   prelude, dispatch, module resolver, callbacks
-        host.rs               #   fs · store · clipboard · log
+        host.rs               #   fs · storage · clipboard · console
         scheduler.rs          #   promises · timers · task ownership · job draining
         sandbox.rs            #   language trimming · process · limits
         overlay.rs            #   dialog · sheet · toast on the script-side cx
@@ -3539,7 +3681,7 @@ crates/shell/                 # gpui-shell — depends on gpui-base + gpui only
     render.rs                 # end-to-end description tests
     snapshot.rs               # the render-frequency invariants (§22.3)
     benchmark.rs              # script build · materialization · cached render
-    fs.rs                     # JS → async filesystem/store → ScriptView
+    fs.rs                     # JS → async filesystem/storage → ScriptView
     process.rs                # JS → bounded process Promise → ScriptView
     host_api.rs               # JS clipboard · timer cancellation · native bridge
 examples/js_todolist/         # the reference application
@@ -3557,7 +3699,7 @@ Following `CLAUDE.md`:
   the field and reads with `is_`/`has_` (`DialogOptions::escape_dismissable` and
   `is_escape_dismissable`); a type with non-boolean fields prefixes setters with
   `with_` (`ToastRequest::with_description`). `Capabilities` is inconsistent
-  here — `read_roots` and `with_execute` beside a bare `store(bool)` and
+  here — `read_roots` and `with_execute` beside a bare `storage(bool)` and
   `clipboard_read(bool)` — and should be brought in line.
 - `Context` is spelled out: `PanelBuildContext`, `TabGroupContext`, never
   `…Ctx`. `cx` is reserved for GPUI's `App`, `Context<T>`, and `AsyncApp`, and

@@ -1,5 +1,5 @@
 ---
-title: State and Views
+title: 状态与视图
 description: 视图、init 与 render、cx.notify()、留存的输入状态，以及异步工作。
 order: 6
 ---
@@ -19,20 +19,20 @@ export default class Counter extends View {
   }
 
   render(cx) {
-    return v_flex().child(text(`${this.count}`));
+    return v_flex().child(`${this.count}`);
   }
 }
 ```
 
 `init` 在视图创建时执行一次。跨帧存活的状态在这里建立——普通字段，以及视图需要的任何[留存实体](#留存状态)。
 
-`render` **返回恰好一个元素**，并且是在视图被置为失效时执行，而不是每帧执行——见 [`render` 什么时候执行](#render-什么时候执行)。返回不是由 `gpui` 构建的东西会立刻失败：
+`render` **返回一个元素、留存的 `Entity` 或字符串**，并且是在视图被置为失效时执行，而不是每帧执行——见 [`render` 什么时候执行](#render-什么时候执行)。返回其它东西会立刻失败：
 
 ```text
-render(cx) must return an element built with gpui
+render(cx) must return an element, an Entity, or a string
 ```
 
-`main.js` 必须 `export default` 一个视图类。宿主构造一个实例并把它挂载为窗口的根视图；default 导出不是类的模块会被拒绝，并说明原因。
+`main.js` 必须 `export default` 一个视图类。 Host 构造一个实例并把它挂载为窗口的根视图；default 导出不是类的模块会被拒绝，并说明原因。
 
 永远不要把元素存在实例上。见 [Elements](./elements.md#元素是一次性的)。
 
@@ -71,7 +71,7 @@ snapshot 只在有东西让它失效时才重建：
 - 事件回调或异步任务里的 `cx.notify()`
 - [hot-reload](./getting-started.md) 替换了脚本
 - 主题切换——因为 `bg(cx.theme().colors.surface)` 在 `render` 执行时记录真实颜色，已经烘进了 snapshot
-- 宿主调用 `ScriptView::refresh`——Rust 用它表示“我改了脚本会读到的状态”（通过[原生模块](./capabilities.md)）。宿主侧单纯的 `cx.notify()` 只是重绘，不会跑脚本：这是两个不同的请求
+- Host 调用 `ScriptView::refresh`——Rust 用它表示“我改了脚本会读到的状态”（通过 [HostModule](./host-module.md)）。Host 侧单纯的 `cx.notify()` 只是重绘，不会跑脚本：这是两个不同的请求
 
 其余情况都在 Rust 里复用你已经产出的那份描述，不执行任何 JavaScript。
 
@@ -83,20 +83,20 @@ snapshot 只在有东西让它失效时才重建：
 
 **一次失败的 `render` 不会毁掉界面。** snapshot 只在 `render` 成功返回后才发布，所以抛异常的脚本会让上一份描述——以及随它注册的那些回调——原封不动地留着。失败以横幅的形式**盖在**仍然可用的界面之上，说明当前画面比最新版本旧了一版，并把详情交出去供粘贴；你的滚动位置和焦点都还在。首次渲染就失败的视图没有可保留的东西，会拿到整屏的错误界面。两种情况下，在有东西再次让视图失效之前，运行时都不会重跑那次失败的 `render`。
 
-## Phase
+## ScopePhase
 
 每一次从 Rust 进入脚本的调用都会开启一个带 **phase** 的作用域，phase 决定这次调用的 `cx` 能做什么。
 
-| Phase | 时机 | 允许 | 不允许 |
+| `ScopePhase` | 时机 | 允许 | 不允许 |
 | --- | --- | --- | --- |
 | `render` | 构建元素树 | 读状态、构建元素、注册回调 | `notify`、打开浮层、创建留存状态 |
 | `event` | 处理点击或变更 | 全部 | 阻塞 |
 | `task` | 恢复异步工作 | 全部 | 阻塞 |
 | `layout` | 在 GPUI 布局过程中渲染一个虚拟化项 | 读状态、构建元素 | `notify`、打开浮层、创建留存状态 |
 
-`cx.phase()` 返回当前 phase，不在任何宿主调用中时返回 `"none"`。
+`cx.phase()` 返回当前 phase，不在任何 Host 调用中时返回 `"none"`。
 
-`cx.theme()` 返回这次调用中 gpui-base 当前语义主题的深度只读 snapshot：既包含直接颜色角色，也包含 `colors`、`spacing`、`radius`、`appearance` 与 `is_dark`。优先使用它，而不是兼容用的 `theme()` 导出，因为 context 写法明确表达了调用生命周期与当前宿主主题。
+`cx.theme()` 返回这次调用中 gpui-base 当前语义主题的深度只读 snapshot：既包含直接颜色角色，也包含 `colors`、`spacing`、`radius`、`appearance` 与 `is_dark`。优先使用它，而不是兼容用的 `theme()` 导出，因为 context 写法明确表达了调用生命周期与当前 Host 主题。
 
 每一条拒绝都是一条具体信息，而不是未定义行为：
 
@@ -107,37 +107,38 @@ request a re-render from an event handler instead
 
 渲染中通知自己是一个死循环，所以它被拒绝而不是被延后。
 
-## `cx` 属于它所在的调用
+## 两种 `cx`
 
-在 GPUI 里 `&mut Window` 与 `&mut App` 是借用：它们的存活期恰好是一次调用。脚本对象比任何借用都活得久，所以脚本侧的 `cx` 不能持有它们。它持有的是一个 **generation 编号**，每次使用都与实时的作用域栈比对。
+在 GPUI 里 `&mut Window` 与 `&mut App` 是借用：它们的存活期恰好是一次调用。脚本对象比任何借用都活得久，所以脚本侧的 `cx` 不能持有它们。GPUI 为确实需要跨调用持有的代码准备了第二种——`AsyncApp`，由 `cx.spawn` 交给它的闭包——这里也一样。
 
-把 `cx` 留到调用之外，得到的是一条错误，而不是一帧被破坏的画面：
+**`Context`** 是 `render` 和每个事件处理器收到的那种。它持有一个 **generation 编号**，每次使用都与实时的作用域栈比对，所以把它留到调用之外得到的是一条错误，而不是一帧被破坏的画面：
 
 ```text
 cx is no longer valid: it was captured during an earlier call and used later.
-Use gpui.spawn or take cx from the callback arguments instead.
+Use cx.spawn or take cx from the callback arguments instead.
 ```
 
-`cx` 上除了函数什么都没有——`Object.keys(cx)` 只看得到方法，看不到 generation——所以脚本无法伪造一个。
-
-最常撞上这条的是 `await`：
+**`AsyncContext`** 是 `init` 收到的那种，也是 `cx.spawn` 与 `cx.timer` 交给回调的那种。它不指名任何一次调用——用到它时才解析当时正在执行的那一次——所以 `await` 不会把它带走：
 
 ```js
 async save(cx) {
-  await sleep(100);
-  cx.notify();                              // 错：这个 cx 属于已经返回的那次调用
-  with_cx((cx) => cx.notify());             // 对
+  await cx.sleep(100);
+  cx.notify();          // 同一个 cx，仍然是对的那个
 }
 ```
 
-`await` 会把控制权交回宿主，调用帧随之消失，借用也一起消失。`with_cx(fn)` 用来取一个属于“当前正在运行的这次调用”的新 `cx`。
+这三处正是职责为「安排或延续比启动它的那次调用活得更久的工作」的地方。其余场合要的就是严格的那种，被告知「你留得太久了」正是它的价值所在。
+
+`cx` 上除了函数什么都没有——`Object.keys(cx)` 只看得到方法，看不到 generation——所以脚本无法伪造一个。
+
+没有第三种拿到它的办法。模块顶层和裸 `constructor` 不会被交给 context，也无从索取——这是设计而非缺口：GPUI 根本没有模块顶层，在那里启动的工作不属于任何视图，没有东西拥有它，也没有东西取消它。把它放进 `init`，那正是视图被交给 context 的地方。
 
 ## 留存状态
 
 视图自己的字段放普通数据。带有跨帧机制的东西——文本框的内容、光标位置与撤销历史——存放在 GPUI 实体里，脚本持有一个**句柄**。
 
 ```js
-import { InputState, Input } from "gpui";
+import { InputState, Input } from "gpui-base";
 
 init() {
   this.draft = InputState.new({ placeholder: "What needs doing?" });
@@ -207,45 +208,38 @@ unknown input event `changed`; expected one of: change, submit, focus, blur
 
 | 导出 | 作用 |
 | --- | --- |
-| `sleep(ms)` | 在 GPUI 的 foreground executor 上，`ms` 之后 resolve 的 promise |
-| `spawn(body, opts?)` | 调用 `body(cx)` 并接管它返回的 promise |
-| `timer.after(ms, handler, opts?)` | 调用一次 `handler(cx)` |
-| `timer.every(ms, handler, opts?)` | 反复调用 `handler(cx)` |
-| `with_cx(body)` | 用属于当前调用的上下文执行 `body(cx)` |
+| `cx.sleep(ms)` | 在 GPUI 的 foreground executor 上，`ms` 之后 resolve 的 promise |
+| `cx.spawn(body, opts?)` | 调用 `body(cx)` 并接管它返回的 promise |
+| `cx.timer.after(ms, handler, opts?)` | 调用一次 `handler(cx)` |
+| `cx.timer.every(ms, handler, opts?)` | 反复调用 `handler(cx)` |
+
+调度挂在 `cx` 上，因为 GPUI 就是这么放的——`App::spawn`，以及由 context 交出的 executor 上的 timer。不需要 import 任何东西。
 
 它们产生的工作全部在主线程上运行。脚本可见的东西从不离开主线程：这里没有 `Worker`，VM 与 GPUI 的 `App` 都是主线程独占的。
 
 ```js
-import { spawn, sleep, with_cx } from "gpui";
-
 flash(cx) {
   this.saved = true;
   cx.notify();
 
-  spawn(async () => {
-    await sleep(1500);
-    with_cx((cx) => {
-      this.saved = false;
-      cx.notify();
-    });
+  cx.spawn(async (cx) => {
+    await cx.sleep(1500);
+    this.saved = false;
+    cx.notify();
   });
 }
 ```
 
-::: tip 两种 import 写法
-`import { spawn, sleep } from "gpui"` 按名字取用，示例应用就是这么写的。`import * as gpui from "gpui"` 把 UI 与调度接口放在一个名字下，例如 `gpui.spawn` 与 `gpui.timer.after`；文件系统和进程 API 仍是独立的标准模块。这里没有 default 导出。
-:::
+这段不需要任何 import：`cx` 就是处理器的第二个参数，而它的 body 收到的 `cx` 是能挺过 `await` 的异步那种。
 
-**`spawn` 会接管 promise，这正是它的意义。** 未处理的 rejection 是 JavaScript 最常见的静默失败：工作停了，界面保持原状，什么都没写到任何地方。在这里它会带着脚本自己的调用栈进入 `tracing::error!`。
+**`cx.spawn` 会接管 promise，这正是它的意义。** 未处理的 rejection 是 JavaScript 最常见的静默失败：工作停了，界面保持原状，什么都没写到任何地方。在这里它会带着脚本自己的调用栈进入 `tracing::error!`。
 
 ### 归属与取消
 
 每个任务都属于某个视图——`opts.owner`，或者创建它时正在运行的那个视图。任务持有弱引用，所以当发起这项工作的面板消失时，回调会被跳过，而不是写进一份再也不会被渲染的状态。
 
 ```js
-import { timer } from "gpui";
-
-const handle = timer.every(1000, (cx) => this.tick(cx));
+const handle = cx.timer.every(1000, (cx) => this.tick(cx));
 handle.cancel();
 handle.is_done();
 ```
@@ -256,15 +250,15 @@ handle.is_done();
 
 `timer.every` 的间隔从上一次调用结束开始计时，所以慢的处理函数会推迟下一次 tick，而不是把 tick 堆起来。
 
-### Timer 与标准宿主 API
+### Timer 与标准 Host API
 
 ```text
-setTimeout  -> gpui.timer.after(ms, callback)
-setInterval -> gpui.timer.every(ms, callback)
+setTimeout  -> cx.timer.after(ms, callback)
+setInterval -> cx.timer.every(ms, callback)
 clearTimeout / clearInterval -> 对 after / every 返回的 Task 调用 cancel()
 ```
 
-`setTimeout`、`setInterval`、`clearTimeout` 与 `clearInterval` 都是会抛错的 stub。一次性工作使用 `gpui.timer.after`，重复工作使用 `gpui.timer.every`；要停止其中任意一种，都对返回的 `Task` 调用 `cancel()`。全局 `fetch`，以及 [Capabilities](./capabilities.md) 中记录的安全标准模块（包括 `websocket`），都是真实的异步宿主 API。CommonJS `require` 仍不可用；请使用 ES module。
+`setTimeout`、`setInterval`、`clearTimeout` 与 `clearInterval` 都是会抛错的 stub。一次性工作使用 `cx.timer.after`，重复工作使用 `cx.timer.every`；要停止其中任意一种，都对返回的 `Task` 调用 `cancel()`。全局 `fetch`，以及 [Capabilities](./capabilities.md) 中记录的安全标准模块（包括 `websocket`），都是真实的异步 Host API。CommonJS `require` 仍不可用；请使用 ES module。
 
 浏览器 DOM 与存储并不存在：没有 `document` 或 `localStorage`。全局 `window` 是 gpui-shell 用来承载 dialog、sheet 与 toast 的 overlay host，并不是浏览器 `Window`，也不提供 DOM。
 
@@ -272,5 +266,5 @@ clearTimeout / clearInterval -> 对 after / every 返回的 Task 调用 cancel()
 
 - **全局与跨视图状态。** 除了 [Capabilities](./capabilities.md) 里的持久化层和普通模块作用域，没有别的 store。
 - **Action 与快捷键。** `gpui.action` 与 `gpui.keymap` 设计了但没有绑定；今天唯一的按键处理是 `ShellRoot` 安装的那几个（Tab、Shift-Tab、Escape）。
-- **多窗口。** 窗口由宿主打开，没有 `gpui.open_window`。
+- **多窗口。** 窗口由 Host 打开，没有 `gpui.open_window`。
 - **`gpui.gc_stats()`**，以及会读取它的调试面板。

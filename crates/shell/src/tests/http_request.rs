@@ -10,12 +10,13 @@ use gpui::{Entity, IntoElement as _, TestAppContext, VisualTestContext};
 use crate::{Capabilities, ScriptView, ShellRuntime};
 
 const POST_PROBE: &str = r#"
-import { View, v_flex, text, spawn, with_cx } from "gpui";
+import { div, View } from "gpui";
+import { v_flex } from "gpui-base";
 
 export default class Probe extends View {
-  init() {
+  init(_props, cx) {
     this.state = "pending";
-    spawn(async () => {
+    cx.spawn(async (cx) => {
       try {
         const response = await fetch("__URL__", {
           method: "POST",
@@ -31,28 +32,29 @@ export default class Probe extends View {
       } catch (error) {
         this.state = `rejected:${error.message}`;
       }
-      with_cx((cx) => cx.notify());
+      cx.notify();
     });
   }
-  render() { return v_flex().child(text(this.state)); }
+  render() { return v_flex().child(this.state); }
 }
 "#;
 
 const JSON_PROBE: &str = r#"
-import { View, v_flex, text, spawn, with_cx } from "gpui";
+import { div, View } from "gpui";
+import { v_flex } from "gpui-base";
 
 export default class Probe extends View {
-  init() {
+  init(_props, cx) {
     this.state = "pending";
-    spawn(async () => {
+    cx.spawn(async (cx) => {
       const response = await fetch("__URL__");
       const json = response.json();
       const value = await json;
       this.state = `${json instanceof Promise}|${value.answer}`;
-      with_cx((cx) => cx.notify());
+      cx.notify();
     });
   }
-  render() { return v_flex().child(text(this.state)); }
+  render(cx) { return v_flex().child(this.state); }
 }
 "#;
 

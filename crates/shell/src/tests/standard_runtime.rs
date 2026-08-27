@@ -5,7 +5,8 @@ use gpui::{IntoElement as _, TestAppContext, VisualTestContext};
 use crate::ShellRuntime;
 
 const PURE_MODULES: &str = r#"
-import { View, v_flex, text } from "gpui";
+import { div, View } from "gpui";
+import { v_flex } from "gpui-base";
 import { Buffer } from "buffer";
 import path from "path";
 import { URL } from "url";
@@ -13,19 +14,19 @@ import { deflateSync, inflateSync } from "zlib";
 import { createHash } from "crypto";
 
 export default class Probe extends View {
-  render() {
+  render(cx) {
     const input = Buffer.from("shell", "utf8");
     const compressed = deflateSync(input);
     const inflated = inflateSync(compressed).toString("utf8");
     const digest = createHash("sha256").update(input).digest("hex");
     const url = new URL("https://example.com/a?b=1");
-    return v_flex().child(text([
+    return v_flex().child([
       input.toString("hex"),
       path.join("a", "b"),
       url.hostname,
       inflated,
       digest,
-    ].join("|")));
+    ].join("|"));
   }
 }
 "#;
@@ -95,21 +96,22 @@ fn callback_style_fs_module_is_not_part_of_the_shell_contract() {
 #[gpui::test]
 fn safe_host_standard_modules_replace_the_old_gpui_exports(cx: &mut TestAppContext) {
     let source = r#"
-import { View, v_flex, text } from "gpui";
+import { div, View } from "gpui";
+import { v_flex } from "gpui-base";
 import console from "console";
 import os from "os";
 import process from "process";
 
 export default class Probe extends View {
-  render() {
+  render(cx) {
     console.log("standard runtime", os.platform());
-    return v_flex().child(text([
+    return v_flex().child([
       typeof process.run,
       typeof process.cwd,
       typeof process.env,
       typeof os.homedir,
       typeof os.tmpdir,
-    ].join("|")));
+    ].join("|"));
   }
 }
 
@@ -145,7 +147,7 @@ export default class Probe extends View {
     let error = runtime
         .load_source(
             "old-host-exports.js",
-            r#"import { fs, process } from "gpui"; export default fs || process;"#,
+            r#"import { div, fs, process } from "gpui"; export default fs || process;"#,
         )
         .expect_err("the old gpui.fs/process exports must be removed");
     assert!(
@@ -157,21 +159,22 @@ export default class Probe extends View {
 #[gpui::test]
 fn synchronous_unawaited_host_calls_hit_the_runtime_task_limit(cx: &mut TestAppContext) {
     let source = r#"
-import { View, v_flex, text, sleep } from "gpui";
+import { div, View } from "gpui";
+import { v_flex } from "gpui-base";
 
 export default class Probe extends View {
-  init() {
+  init(_props, cx) {
     this.state = "unlimited";
     for (let index = 0; index < 2000; index += 1) {
       try {
-        sleep(60000);
+        cx.sleep(60000);
       } catch (error) {
         this.state = `limited:${error.message}`;
         break;
       }
     }
   }
-  render() { return v_flex().child(text(this.state)); }
+  render(cx) { return v_flex().child(this.state); }
 }
 "#;
     cx.update(crate::init);

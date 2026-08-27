@@ -1,21 +1,23 @@
 ---
 title: Capabilities
-description: The default-deny model, the fs / store / clipboard / log / process surface, where storage lives, and what the sandbox withholds.
+description: The default-deny model, the fs / storage / clipboard / process surface, where storage lives, and what the sandbox withholds.
 order: 8
 ---
 
 # Capabilities
 
-A script gets **nothing** by default. No file access, no storage, no clipboard, no process execution, no network. `Capabilities::default()` is the empty set, and an assertion holds it there.
+A script gets **nothing** by default. No file access, no clipboard, no process execution, no network. `Capabilities::default()` is the empty set, and an assertion holds it there.
 
-The host grants what it grants, because only the host knows how far it trusts the code it is about to run. What it hands *out* — its own Rust, exposed on purpose — is [Native Modules](./native.md). A view freezes its capabilities when it is loaded; changing the default affects applications loaded afterward, never code that is already running under an approved grant.
+The one exception is storage, and only at the manifest layer: an application that does not mention `storage` gets its own `localStorage`, the way a browser hands one to every origin without being asked. That is a convention about what an author has to *write*, not a hole in the model — the Rust `Capabilities` still deny it until a host says otherwise, and a manifest may still say `"storage": false`. See [Storage](#storage).
+
+The host grants what it grants, because only the host knows how far it trusts the code it is about to run. What it hands *out* — its own Rust, exposed on purpose — is [HostModule](./host-module.md). A view freezes its capabilities when it is loaded; changing the default affects applications loaded afterward, never code that is already running under an approved grant.
 
 ```rust
 gpui_shell::set_capabilities(
     Capabilities::new()
         .read_roots([application_root.clone()])
         .write_roots([data_directory.clone()])
-        .store(true)
+        .storage(true)
         .exit(true),
 );
 ```
@@ -50,7 +52,7 @@ add its directory to capabilities.fs.read in the manifest
 ```
 
 ```text
-storage is not granted; set capabilities.store to true
+storage is not granted; set capabilities.storage to true
 ```
 
 ```text
@@ -78,12 +80,14 @@ A directory is recognized by **`gpui-shell.json`**. The manifest is inert data �
       "hosts": ["stream.example.com"],
       "http": [{ "scheme": "https", "host": "api.example.com", "methods": ["GET"], "path_prefixes": ["/v1/"] }]
     },
-    "store": true,
+    "storage": true,
     "clipboard": { "read": false, "write": true },
     "process": { "exit": false }
   }
 }
 ```
+
+Every grant in that block defaults to *denied* when omitted, except `storage`, which defaults to granted — write `"storage": false` to refuse it.
 
 Unknown fields, invalid reverse-DNS ids, invalid explicitly declared SemVer values, incompatible `shell-version` values, escaping entries, and unknown `${...}` placeholders invalidate the manifest before code runs. Omitted `version` is reported as `unknown`. Omitted `shell-version` accepts the current runtime; when present, it names the oldest compatible gpui-shell release the application requires. Compatibility follows SemVer: `0.x` applications stay on the same minor line; stable releases stay on the same major line. The standalone CLI refuses an invalid manifest instead of executing its entry with silently different assumptions.
 
@@ -142,29 +146,45 @@ A **denial still throws at the call site** rather than rejecting. The capability
 `render` describes the interface; it cannot await. Read in `init` or an event handler, keep the result on the view, and `cx.notify()` when it arrives.
 :::
 
-## `store`
+## Storage
 
-Key–value storage that survives a restart.
+The [Web Storage API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Storage_API), as a browser has it. There is nothing to import: `localStorage` and `sessionStorage` are globals, and also live on `window`.
 
 ```js
-import { store } from "gpui";
-
-store.set("todolist.items", items);
-const saved = store.get("todolist.items"); // null when the key is unset
-store.remove("todolist.items");
-store.keys();
-await store.flush();
+localStorage.setItem("todolist.items", JSON.stringify(items));
+const saved = localStorage.getItem("todolist.items"); // null when the key is unset
+localStorage.removeItem("todolist.items");
+localStorage.length;
+localStorage.key(0);
+localStorage.clear();
 ```
 
-Values are JSON: `null`, booleans, numbers, strings, arrays and plain objects. Functions and `undefined` properties are dropped exactly as `JSON.stringify` drops them, so the mental model transfers. `NaN` and `Infinity` have no JSON form and are refused rather than silently becoming `null`. Nesting is capped at 64 levels, which no real configuration reaches and a reference cycle exceeds immediately.
+| Member              | Description                                     |
+| ------------------- | ----------------------------------------------- |
+| `length`            | How many keys are stored                        |
+| `key(index)`        | The key at that position, or `null`             |
+| `getItem(key)`      | The value, or `null` when the key is unset      |
+| `setItem(key, val)` | Stores it, converting the value to a string     |
+| `removeItem(key)`   | Forgets one key                                 |
+| `clear()`           | Forgets all of them                             |
+| `flush()`           | Resolves once the writes have reached the disk  |
 
-`get`, `set`, `remove` and `keys` are synchronous, and deliberately: `get` is reachable from `render`, so the values are cached in memory and a read answers from there. A file read per render would be absurd.
+**The two differ only in how long they last.** `localStorage` is a file the host placed, and it survives a restart. `sessionStorage` is memory that goes with the process. That is also why only one of them is a capability: nothing `sessionStorage` holds ever leaves the process, so there is nothing to grant, and it works on a host that granted nothing.
 
-**A mutation schedules the write rather than performing it.** The file is written on a background thread — to a temporary file, renamed over the target, so a crash mid-write leaves the previous settings intact rather than a truncated one — and one write is in flight at a time, so a burst of `set` calls becomes one file rather than one file each. Whatever changed while a write was on its way is written by the next one.
+**Values are strings**, exactly as on the web — `setItem` converts whatever it is handed. Anything with structure goes through `JSON.stringify` on the way in and `JSON.parse` on the way out, which is the same code you would write in a browser:
 
-`await store.flush()` when you need to know it landed. It is a **barrier, not a second writer**: it waits for everything written so far to reach the disk and rejects with the write's own error if it does not. Starting its own write instead would race the automatic one through the same temporary file, with nothing ordering them — and the older revision could land last and undo the newer.
+```js
+localStorage.setItem("window", JSON.stringify({ title: "Notes", size: [640, 480] }));
+const window = JSON.parse(localStorage.getItem("window") ?? "{}");
+```
 
-The cache and its wait queue are bounded: one store file may serialize to at most 8 MiB, contain at most 4,096 keys, and hold at most 1 MiB in any one JSON value. At most 1,024 unresolved `flush()` barriers may wait at once; another is rejected instead of growing an unbounded waiter list.
+Every member is synchronous, and deliberately: `getItem` is reachable from `render`, so the values are cached in memory and a read answers from there. A file read per render would be absurd.
+
+**A mutation schedules the write rather than performing it.** The file is written on a background thread — to a temporary file, renamed over the target, so a crash mid-write leaves the previous settings intact rather than a truncated one — and one write is in flight at a time, so a burst of `setItem` calls becomes one file rather than one file each. Whatever changed while a write was on its way is written by the next one.
+
+`await localStorage.flush()` when you need to know it landed. This is the one addition to the browser's interface, and it exists because a browser never has to answer the question — its storage is synchronous all the way down. It is a **barrier, not a second writer**: it waits for everything written so far to reach the disk and rejects with the write's own error if it does not. Starting its own write instead would race the automatic one through the same temporary file, with nothing ordering them — and the older revision could land last and undo the newer.
+
+The cache and its wait queue are bounded: one storage file may serialize to at most 8 MiB, contain at most 4,096 keys, and hold at most 1 MiB in any one value. At most 1,024 unresolved `flush()` barriers may wait at once; another is rejected instead of growing an unbounded waiter list.
 
 ### Where storage lives
 
@@ -193,18 +213,18 @@ The id may hold `a-z`, `0-9`, `.`, `-` and `_`, and no `..`. That is not tidines
 
 ### Degrading when it is not granted
 
-Storage that has not been granted throws, and a well-written application treats that as a fact about its host rather than an error:
+`localStorage` that has not been granted throws, and a well-written application treats that as a fact about its host rather than an error:
 
 ```js
 // storage.js — from the bundled example
-import { store, log } from "gpui";
-
 export function load() {
   try {
-    const saved = store.get(KEY);
-    return Array.isArray(saved) ? saved : [];
+    const saved = localStorage.getItem(KEY);
+    if (saved === null) return [];
+    const items = JSON.parse(saved);
+    return Array.isArray(items) ? items : [];
   } catch (error) {
-    log.warn(
+    console.warn(
       `todolist: storage unavailable, starting empty (${error.message})`,
     );
     return [];
@@ -214,14 +234,14 @@ export function load() {
 
 The example's footer then says so on screen — "Not saved — this host did not grant storage, so the list lasts for this run only" — which is the right shape: absorb the refusal at the boundary, and tell the user the truth.
 
-## `clipboard`
+## The clipboard
 
 ```js
-import { clipboard } from "gpui";
-
-clipboard.write_text("copied");
-const text = clipboard.read_text(); // undefined when the clipboard holds no text
+cx.write_to_clipboard("copied");
+const text = cx.read_from_clipboard(); // undefined when the clipboard holds no text
 ```
+
+Named after `App::write_to_clipboard` and `App::read_from_clipboard`, and on `cx` because that is where GPUI keeps them. Nothing to import.
 
 Read and write are **separate grants**, and a denial names the half that is missing:
 
@@ -229,22 +249,22 @@ Read and write are **separate grants**, and a denial names the half that is miss
 writing the clipboard is not granted; declare capabilities.clipboard.write in the manifest
 ```
 
-The clipboard needs a live host call — GPUI's `App` only exists for the duration of one — so calling it from a module's top level reports that plainly instead of panicking:
+The clipboard needs a live host call — GPUI's `App` only exists for the duration of one — so a `cx` with none reports that plainly instead of panicking:
 
 ```text
-clipboard.read_text() needs a live host call; call it from render, an event handler or a task
+cx.read_from_clipboard() needs a live host call; call it from render, an event handler or a task
 ```
 
-## `log`
+## `console`
 
 ```js
-import { log } from "gpui";
-
-log.info("loaded", count, { source: "disk" });
-log.warn("could not save");
+console.info("loaded", count, { source: "disk" });
+console.warn("could not save");
 ```
 
-`debug`, `info`, `warn` and `error`. **No capability is required**: a script that can run can already say something, and denying it would cost the author their diagnostics and nothing else.
+`debug`, `log`, `info`, `warn` and `error`. A global, as it is in every other JavaScript runtime, and nothing to import — the shell used to export the same object a second time as `gpui.log`, which bought a name and nothing else.
+
+**No capability is required**: a script that can run can already say something, and denying it would cost the author their diagnostics and nothing else.
 
 Extra arguments are appended space-separated, the way `console.log` behaves. Structured values print as JSON, because that is what an author reading a log wants to see.
 
@@ -309,7 +329,7 @@ Development mode never relaxes capability gating. It makes the language easier t
 
 ## Network and safe standard APIs
 
-Global `fetch(url, options?)` is promise-based and returns `{ status, ok, url, text(), json() }`. Its grant is narrower than raw networking: every request and redirect must match a declared HTTP host, method, and exact path or path prefix; HTTPS never downgrades to HTTP, and authorization or caller-supplied headers never cross origins.
+Global `fetch(url, options?)` is promise-based and returns `{ status, ok, url, , json() }`. Its grant is narrower than raw networking: every request and redirect must match a declared HTTP host, method, and exact path or path prefix; HTTPS never downgrades to HTTP, and authorization or caller-supplied headers never cross origins.
 
 `net.connect(host, port)` and the named `WebSocket.connect(url, { headers? })` export from `websocket` use `capabilities.network.hosts`. `WebSocket` is not installed as a browser global and is not a constructor. Raw TCP `read()` returns a `Uint8Array`, or `null` at EOF, so transport chunks never undergo lossy text decoding. WebSockets support text and `Uint8Array` messages and serialize writes through one actor. They do not follow redirects. Connect, handshake, and write operations have a 30-second timeout. A socket permits one outstanding `read()` at a time; a second is rejected immediately instead of competing for the next message. Credential and handshake-control headers are refused. Raw TCP and WebSocket access are intentionally broader than an HTTP request grant.
 

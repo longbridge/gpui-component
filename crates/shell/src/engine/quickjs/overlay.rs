@@ -44,12 +44,14 @@
 //!
 //! # The script surface
 //!
-//! `window` is a global, like `cx`. There is nothing to import.
+//! `window` is a global. There is nothing to import, and unlike `cx`, nothing
+//! hands it to you either.
 //!
 //! ```js
-//! import { v_flex, text } from "gpui";
 //!
-//! const depth = window.open_dialog(() => v_flex().child(text("Delete?")), {
+//! import { v_flex } from "gpui-base";
+//!
+//! const depth = window.open_dialog(() => v_flex().child("Delete?"), {
 //!   escape_dismissable: false,
 //!   backdrop_dismissable: false,
 //! });
@@ -57,7 +59,7 @@
 //! window.close_all_dialogs();  // -> how many closed
 //! window.has_active_dialog();
 //!
-//! window.open_sheet(() => filters());          // right, the default side
+//! window.open_sheet(() => filters());          // right, the default placement
 //! window.open_sheet_at("left", () => nav());
 //! window.close_sheet();        // -> did anything close?
 //! window.has_active_sheet();
@@ -80,13 +82,14 @@
 use std::time::Duration;
 
 use gpui::{AnyView, App, AppContext as _, Context, Window};
+use gpui_base::Placement;
 use rquickjs::{
     Ctx, Exception, FromJs, Object, Persistent, Result as JsResult, Value,
     function::{Func, Opt},
 };
 
 use crate::{
-    root::{DialogOptions, SheetSide, ShellRoot, ToastLevel, ToastRequest},
+    root::{DialogOptions, ShellRoot, ToastLevel, ToastRequest},
     scope::{self, ScopePhase},
     view::ScriptView,
 };
@@ -99,7 +102,7 @@ const OPEN_DIALOG: &str = "window.open_dialog(content, options)";
 const CLOSE_DIALOG: &str = "window.close_dialog()";
 const CLOSE_ALL_DIALOGS: &str = "window.close_all_dialogs()";
 const OPEN_SHEET: &str = "window.open_sheet(content)";
-const OPEN_SHEET_AT: &str = "window.open_sheet_at(side, content)";
+const OPEN_SHEET_AT: &str = "window.open_sheet_at(placement, content)";
 const CLOSE_SHEET: &str = "window.close_sheet()";
 const PUSH_TOAST: &str = "window.push_toast(options)";
 const REMOVE_TOAST: &str = "window.remove_toast(id)";
@@ -178,21 +181,21 @@ pub fn install(_ctx: &Ctx<'_>, globals: &Object<'_>) -> JsResult<()> {
     globals.set(
         "__open_sheet",
         Func::from(
-            |ctx: Ctx<'_>, side: Opt<String>, content: ViewInstance| -> JsResult<()> {
-                let api = if side.0.is_some() {
+            |ctx: Ctx<'_>, placement: Opt<String>, content: ViewInstance| -> JsResult<()> {
+                let api = if placement.0.is_some() {
                     OPEN_SHEET_AT
                 } else {
                     OPEN_SHEET
                 };
                 guard(&ctx, api)?;
-                let side = match side.0 {
-                    Some(name) => parse_side(&ctx, &name)?,
-                    None => SheetSide::default(),
+                let placement = match placement.0 {
+                    Some(name) => parse_placement(&ctx, &name)?,
+                    None => Placement::Right,
                 };
 
                 with_root(&ctx, api, |root, window, cx| {
                     let view = mount(&ctx, content.0, cx)?;
-                    root.open_sheet(side, view, window, cx);
+                    root.open_sheet(placement, view, window, cx);
                     Ok(())
                 })
             },
@@ -450,13 +453,13 @@ fn options_object<'a, 'js>(
     }
 }
 
-/// Every side a script may name. Also what an unknown one is told to use, so
+/// Every placement a script may name. Also what an unknown one is told to use, so
 /// the message cannot drift from the set.
-const SHEET_SIDES: [SheetSide; 4] = [
-    SheetSide::Left,
-    SheetSide::Right,
-    SheetSide::Top,
-    SheetSide::Bottom,
+const SHEET_PLACEMENTS: [Placement; 4] = [
+    Placement::Left,
+    Placement::Right,
+    Placement::Top,
+    Placement::Bottom,
 ];
 
 const TOAST_LEVELS: [ToastLevel; 4] = [
@@ -466,16 +469,32 @@ const TOAST_LEVELS: [ToastLevel; 4] = [
     ToastLevel::Error,
 ];
 
-fn parse_side(ctx: &Ctx<'_>, name: &str) -> JsResult<SheetSide> {
-    SheetSide::from_name(name).ok_or_else(|| {
+fn parse_placement(ctx: &Ctx<'_>, name: &str) -> JsResult<Placement> {
+    let placement = match name {
+        "left" => Some(Placement::Left),
+        "right" => Some(Placement::Right),
+        "top" => Some(Placement::Top),
+        "bottom" => Some(Placement::Bottom),
+        _ => None,
+    };
+    placement.ok_or_else(|| {
         Exception::throw_type(
             ctx,
             &format!(
-                "unknown sheet side `{name}`; expected {}",
-                listed_by(&SHEET_SIDES, SheetSide::as_str)
+                "unknown sheet placement `{name}`; expected {}",
+                listed_by(&SHEET_PLACEMENTS, placement_name)
             ),
         )
     })
+}
+
+fn placement_name(placement: Placement) -> &'static str {
+    match placement {
+        Placement::Left => "left",
+        Placement::Right => "right",
+        Placement::Top => "top",
+        Placement::Bottom => "bottom",
+    }
 }
 
 fn parse_level(ctx: &Ctx<'_>, name: &str) -> JsResult<ToastLevel> {
@@ -596,7 +615,13 @@ mod tests {
         cx.update(|window, app| {
             let (_guard, generation) = scope::enter_runtime(runtime, window, app, phase, None);
             runtime.with_js(|ctx| {
-                ctx.globals().set("cx", context_object(ctx, generation)?)?;
+                ctx.globals().set(
+                    "cx",
+                    context_object(
+                        ctx,
+                        crate::engine::quickjs::ContextBinding::Call(generation),
+                    )?,
+                )?;
                 ctx.eval::<T, _>(source)
             })
         })
@@ -704,7 +729,7 @@ mod tests {
     }
 
     #[gpui::test]
-    fn an_unknown_sheet_side_names_the_valid_ones(cx: &mut TestAppContext) {
+    fn an_unknown_sheet_placement_names_the_valid_ones(cx: &mut TestAppContext) {
         let (runtime, root, cx) = shell(cx);
 
         let error = eval::<()>(
@@ -713,7 +738,7 @@ mod tests {
             ScopePhase::Event,
             r#"window.open_sheet_at("middle", () => __gpui.text("filters"))"#,
         )
-        .expect_err("an unknown side must be refused");
+        .expect_err("an unknown placement must be refused");
 
         let message = error.to_string();
         assert!(message.contains("middle"), "{message}");

@@ -611,7 +611,7 @@ fn local_capabilities(
         // Preserve the original local-app experience for source directories
         // that are not plugin bundles. Their private store is the only ambient
         // state they receive; network and clipboard stay denied.
-        Capabilities::new().store(true)
+        Capabilities::new().storage(true)
     };
 
     capabilities
@@ -900,7 +900,7 @@ mod tests {
               "entry": "main.js",
               "capabilities": {
                 "network": { "hosts": ["quotes.example.com"] },
-                "store": true,
+                "storage": true,
                 "clipboard": { "write": true }
               }
             }"#,
@@ -912,7 +912,7 @@ mod tests {
             .expect("present manifest");
         let capabilities = local_capabilities(&root, &data, Some(&manifest));
         assert!(capabilities.may_reach("quotes.example.com"));
-        assert!(capabilities.has_store());
+        assert!(capabilities.has_storage());
         assert!(capabilities.is_clipboard_writable());
         assert!(!capabilities.is_clipboard_readable());
         assert!(!capabilities.may_reach("trade.example.com"));

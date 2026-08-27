@@ -6,14 +6,14 @@
 //! separate `crates/story/js/motion/` view demonstrates native motion without
 //! becoming part of the quote-board performance comparison.
 //! Neither half owns the data: a single `Entity<Market>` does, and the script
-//! reaches it through the **market native module** this story registers before the
+//! reaches it through the **`market` host module** this story registers before the
 //! script runtime starts.
 //!
 //! ```text
 //!   Rust panel ──┐                                  ┌── main.js
 //!   (rows drawn  │                                  │   (rows drawn
 //!    with        ▼                                  ▼    with div/text)
-//!    Label)   Entity<Market>  ◀── native("market") ──┐
+//!    Label)   Entity<Market>  ◀── import "market" ───┐
 //!                    │            quotes / ticks / watch
 //!                    │ cx.notify()
 //!                    ▼
@@ -37,8 +37,8 @@
 //!
 //! `js/quotes/` carries a generated `gpui.d.ts` and a hand-written
 //! `market.d.ts`, so an editor knows what `import ... from "gpui"` holds and
-//! what `native("market")` answers. A misspelled style method, a colour token
-//! that does not exist, or a native module nobody registered is an error in the
+//! what the `market` module answers. A misspelled style method, a colour token
+//! that does not exist, or a host module nobody registered is an error in the
 //! editor rather than an exception on the next tick. Regenerate the first after
 //! a runtime change:
 //!
@@ -72,7 +72,7 @@ use gpui_component::{
 use gpui_shell::Watcher;
 use gpui_shell::{
     RuntimeMetrics, ScriptView, ShellRoot, ShellRuntime,
-    native::{NativeError, NativeModules, NativeObject, NativeValue},
+    host_modules::{HostError, HostModule, HostObject, HostValue},
 };
 
 use crate::section;
@@ -117,8 +117,8 @@ impl Quote {
 
 /// The shared state, owned by GPUI and reachable from both languages.
 ///
-/// It is an `Entity` rather than a field on the story so the native module can
-/// hold it: a native function is a plain closure with no access to the story's
+/// It is an `Entity` rather than a field on the story so the host module can
+/// hold it: a host function is a plain closure with no access to the story's
 /// `&mut self`, and an entity handle is the one way to reach host state from
 /// inside a script call and still notify observers afterwards.
 pub struct Market {
@@ -144,7 +144,7 @@ pub struct Market {
 /// fastest. The mix is there at all so the symbol column has two shapes in it —
 /// a ticker and a numeric code — which is where a fixed-width column earns its
 /// keep.
-const BOARD: [(&str, &str, f32); 20] = [
+const BOARD: [(&str, &str, f32); 10] = [
     ("AAPL.US", "Apple", 214.29),
     ("NVDA.US", "NVIDIA", 118.11),
     ("MSFT.US", "Microsoft", 421.53),
@@ -152,18 +152,8 @@ const BOARD: [(&str, &str, f32); 20] = [
     ("AMZN.US", "Amazon", 186.34),
     ("GOOGL.US", "Alphabet", 165.27),
     ("META.US", "Meta", 502.18),
-    ("AVGO.US", "Broadcom", 168.44),
-    ("AMD.US", "AMD", 152.61),
-    ("NFLX.US", "Netflix", 678.90),
-    ("PLTR.US", "Palantir", 34.16),
-    ("MU.US", "Micron", 96.52),
-    ("COIN.US", "Coinbase", 214.75),
-    ("ARM.US", "Arm", 138.02),
     ("700.HK", "Tencent", 372.40),
     ("9988.HK", "Alibaba", 78.15),
-    ("3690.HK", "Meituan", 112.60),
-    ("1810.HK", "Xiaomi", 17.86),
-    ("0388.HK", "HKEX", 268.80),
     ("0005.HK", "HSBC", 62.05),
 ];
 
@@ -235,7 +225,7 @@ impl Market {
     ///
     /// An unknown symbol is the script's mistake, so it gets a sentence naming
     /// what does exist rather than a silent no-op.
-    fn watch(&mut self, symbol: &str) -> Result<bool, NativeError> {
+    fn watch(&mut self, symbol: &str) -> Result<bool, HostError> {
         match self
             .quotes
             .iter_mut()
@@ -252,7 +242,7 @@ impl Market {
                     .map(|quote| quote.symbol.to_string())
                     .collect::<Vec<_>>()
                     .join(", ");
-                Err(NativeError::new(format!(
+                Err(HostError::new(format!(
                     "no quote for `{symbol}`; the board holds {known}"
                 )))
             }
@@ -278,13 +268,26 @@ impl Market {
     /// round the same way. A price that reads 372.40 on the left and 372.4 on
     /// the right would make the comparison about formatting instead of about
     /// rendering.
-    fn to_native(&self) -> NativeValue {
-        NativeValue::Array(
+    /// The board as plain owned data, for work that runs off the main thread.
+    ///
+    /// An asynchronous host function's future cannot reach the `App`, so
+    /// whatever it needs is copied out while the synchronous half still can.
+    /// This is that copy, and it is deliberately the smallest one that answers
+    /// the question rather than the whole board.
+    fn movers(&self) -> Vec<(String, f32)> {
+        self.quotes
+            .iter()
+            .map(|quote| (quote.symbol.to_string(), quote.change_percent()))
+            .collect()
+    }
+
+    fn to_host_value(&self) -> HostValue {
+        HostValue::Array(
             self.quotes
                 .iter()
                 .map(|quote| {
-                    NativeValue::from(
-                        NativeObject::new()
+                    HostValue::from(
+                        HostObject::new()
                             .field("symbol", quote.symbol.to_string())
                             .field("name", quote.name.to_string())
                             .field("last", format!("{:.2}", quote.last))
@@ -429,30 +432,33 @@ fn motion_script_directory() -> PathBuf {
 ///
 /// This is the whole extension surface: a script cannot load native code, so
 /// what the host registers here is exactly what it can call (design doc §17.6).
-/// Registering an empty set — the default — would leave `native("market")`
-/// failing with a message saying this host granted none.
-fn install_native_modules(market: &Entity<Market>) {
-    gpui_shell::set_native_modules(native_modules(market));
+/// Registering an empty set — the default — would leave `import … from
+/// "market"` failing with a message saying this host granted none.
+fn install_host_modules(market: &Entity<Market>) {
+    gpui_shell::export_module(market_module(market))
+        .expect("`market` is free, and MARKET_TYPES describes what is registered");
 }
 
-fn native_modules(market: &Entity<Market>) -> NativeModules {
-    let mut modules = NativeModules::new();
+fn market_module(market: &Entity<Market>) -> HostModule {
+    let read = market.clone();
+    let ticks = market.clone();
+    let flip = market.clone();
+    let bulk = market.clone();
+    let summary = market.clone();
 
-    modules.register("market", |module| {
-        let read = market.clone();
-        module.function("quotes", move |_| with_app(|cx| read.read(cx).to_native()));
-
+    HostModule::new("market")
+        .declarations(MARKET_TYPES)
+        .function("quotes", move |_| {
+            with_app(|cx| read.read(cx).to_host_value())
+        })
         // Read separately from `quotes()` so the script can paint how many ticks
         // it has actually seen. When the feed is only asking for repaints this
         // number stops moving on screen, which is the counters' claim made
         // visible in the panel itself.
-        let ticks = market.clone();
-        module.function("ticks", move |_| {
-            with_app(|cx| NativeValue::from(ticks.read(cx).ticks as f64))
-        });
-
-        let flip = market.clone();
-        module.function("watch", move |arguments| {
+        .function("ticks", move |_| {
+            with_app(|cx| HostValue::from(ticks.read(cx).ticks as f64))
+        })
+        .function("watch", move |arguments| {
             let symbol = arguments.string(0)?;
             with_app(|cx| {
                 flip.update(cx, |market, cx| {
@@ -462,13 +468,29 @@ fn native_modules(market: &Entity<Market>) -> NativeModules {
                     // the script view together. It is delivered after this call
                     // unwinds, so it cannot re-enter the script engine.
                     cx.notify();
-                    Ok(NativeValue::from(watched))
+                    Ok(HostValue::from(watched))
                 })
             })?
-        });
+        })
+        // The one asynchronous function on this module, and the reason it is
+        // here: a synchronous `function` would hold the thread that renders for
+        // as long as it ran. The feed keeps moving while this is in flight,
+        // which is the claim made visible rather than asserted.
+        .async_function("summary", move |_| {
+            // Synchronous half — on the main thread, so it may read the entity
+            // and take the executor the future will need.
+            let (movers, executor) =
+                with_app(|cx| (summary.read(cx).movers(), cx.background_executor().clone()))?;
 
-        let bulk = market.clone();
-        module.function("watch_all", move |arguments| {
+            // Asynchronous half — on the background executor, with no `App` in
+            // reach. The delay stands in for the slow thing a real one would
+            // do; the work after it is ordinary Rust on owned data.
+            Ok(async move {
+                executor.timer(Duration::from_millis(900)).await;
+                Ok(summarise(movers))
+            })
+        })
+        .function("watch_all", move |arguments| {
             let watched = arguments.boolean(0)?;
             with_app(|cx| {
                 bulk.update(cx, |market, cx| {
@@ -476,24 +498,100 @@ fn native_modules(market: &Entity<Market>) -> NativeModules {
                     if changed > 0 {
                         cx.notify();
                     }
-                    NativeValue::from(changed as f64)
+                    HostValue::from(changed as f64)
                 })
             })
-        });
-    });
-
-    modules
+        })
 }
 
-/// Reaches the ambient `App` from inside a native call.
+/// The TypeScript face of the `market` module.
 ///
-/// A native function receives arguments and nothing else; the host context it
+/// Beside the registration rather than in a `.d.ts` next to the script: a
+/// `.d.ts` would be a second file, in a second language, with nothing holding
+/// it to what this function registers. `export_module` checks this against the
+/// registry, so renaming a function on one side fails at start-up rather than
+/// completing in an editor and throwing at the call site.
+const MARKET_TYPES: &str = r#"
+/** One row of the board, as it crosses the boundary. */
+export interface Quote {
+  symbol: string;
+  name: string;
+  /** Already formatted by Rust, so both halves round the same way. */
+  last: string;
+  change: string;
+  percent: string;
+  volume: string;
+  /** 1 up, -1 down, 0 unchanged. */
+  direction: number;
+  watched: boolean;
+}
+
+/** Every row on the board. */
+export function quotes(): Quote[];
+/** How many feed ticks have landed. */
+export function ticks(): number;
+/** Flips one row's watched flag and answers the new value. */
+export function watch(symbol: string): boolean;
+/** Sets every row, and answers how many actually moved. */
+export function watch_all(watched: boolean): number;
+
+/** A slow read of the board, computed off the main thread. */
+export interface Summary {
+  leader: string;
+  leader_percent: string;
+  laggard: string;
+  laggard_percent: string;
+  average_percent: string;
+}
+
+/**
+ * The session's movers.
+ *
+ * Deliberately slow, and deliberately a promise: the board keeps ticking while
+ * this is in flight, which is what a synchronous host function could not do.
+ */
+export function summary(): Promise<Summary>;
+"#;
+
+/// Turns the copied movers into the record the script paints.
+///
+/// A free function on owned data: it runs on the background executor, where
+/// there is no `App`, no window and no script engine.
+fn summarise(movers: Vec<(String, f32)>) -> HostValue {
+    let best = movers
+        .iter()
+        .max_by(|a, b| a.1.total_cmp(&b.1))
+        .cloned()
+        .unwrap_or_default();
+    let worst = movers
+        .iter()
+        .min_by(|a, b| a.1.total_cmp(&b.1))
+        .cloned()
+        .unwrap_or_default();
+    let average = if movers.is_empty() {
+        0.
+    } else {
+        movers.iter().map(|(_, percent)| percent).sum::<f32>() / movers.len() as f32
+    };
+
+    HostObject::new()
+        .field("leader", best.0)
+        .field("leader_percent", format!("{:+.2}%", best.1))
+        .field("laggard", worst.0)
+        .field("laggard_percent", format!("{:+.2}%", worst.1))
+        .field("average_percent", format!("{average:+.2}%"))
+        .into()
+}
+
+/// Reaches the ambient `App` from inside a host call.
+///
+/// A host function receives arguments and nothing else; the host context it
 /// runs in comes from the shell's call scope, which is live for exactly as long
 /// as the script call that is on the stack. Outside one there is no honest
 /// answer, so this says so rather than reaching for a stale pointer.
-fn with_app<R>(read: impl FnOnce(&mut App) -> R) -> Result<R, NativeError> {
+fn with_app<R>(read: impl FnOnce(&mut App) -> R) -> Result<R, HostError> {
     gpui_shell::with_current_app(read).ok_or_else(|| {
-        NativeError::new("the board is only reachable while a script call is in progress")
+        HostError::new("the board is only reachable while a script call is in progress")
     })
 }
 
@@ -567,7 +665,7 @@ impl ShellStory {
         // the runtime needs priming; the style reflection table builds itself on
         // first use.
         let market = cx.new(|_| Market::open());
-        install_native_modules(&market);
+        install_host_modules(&market);
 
         // The single place a change becomes two re-renders. Whoever moved the
         // board — the feed, a Rust button or a script button — both halves are
@@ -922,11 +1020,14 @@ impl ShellStory {
             .items_center()
             .justify_between()
             .gap(rems(ROW_INSET))
+            // The heading already carries "N / M watched"; repeating the count
+            // here spent a line on a fact the reader had. The empty case is
+            // worth keeping — it is the one state the heading does not explain.
             .child(muted(
                 if watched == 0 {
-                    "Nothing on the watchlist".to_owned()
+                    "Nothing on the watchlist"
                 } else {
-                    format!("{watched} watched")
+                    ""
                 },
                 cx,
             ))
@@ -1125,9 +1226,7 @@ impl ShellStory {
             })
             .child(muted(
                 format!(
-                    "Slowest single script render this run: {:.2} ms. A mean that drifts with \
-                     load is the render being interrupted rather than getting slower; a mean near \
-                     the floor under a much larger maximum is a collection.",
+                    "Slowest single script render this run: {:.2} ms",
                     millis(self.sampled.slowest_script_render()),
                 ),
                 cx,
@@ -1135,17 +1234,15 @@ impl ShellStory {
             .child(
                 Label::new(match self.feed {
                     Feed::Idle => {
-                        "Counters are cleared when the feed changes. With no feed running, \
-                         hovering the script panel still draws frames — and still runs no script."
+                        "No feed: hovering the script panel draws frames and runs no script."
                     }
                     Feed::Quotes(_) => {
-                        "Prices are state the script reads, so every tick invalidates its \
-                         snapshot: script renders track the feed, whatever the frame rate is."
+                        "The script reads the prices, so every tick invalidates its snapshot: \
+                         script renders track the feed, not the frame rate."
                     }
                     Feed::Repaint(_) => {
-                        "Nothing the script reads has changed, so every tick is a repaint of the \
-                         snapshot it already published: frames climb, script renders stay at zero, \
-                         and the tick count in the panel stops moving."
+                        "Nothing the script reads changed, so every tick repaints the snapshot it \
+                         already published: frames climb, script renders stay at zero."
                     }
                 })
                 .text_xs()
@@ -1263,7 +1360,7 @@ fn direction_color(direction: i32, cx: &Context<ShellStory>) -> Hsla {
 /// and which is exactly the shape of leak a plugin host would hit on unload.
 impl Drop for ShellStory {
     fn drop(&mut self) {
-        gpui_shell::clear_native_modules();
+        gpui_shell::clear_exported_modules();
     }
 }
 
@@ -1295,7 +1392,6 @@ impl Render for ShellStory {
                     .child(
                         div().flex_1().child(
                             section("Rust")
-                                .description("Rust implementation.")
                                 .sub_title(pause_button(
                                     "pause-rust",
                                     self.frozen.is_some(),
@@ -1308,7 +1404,6 @@ impl Render for ShellStory {
                     .child(
                         div().flex_1().child(
                             section("JavaScript · gpui-shell")
-                                .description("JavaScript implementation.")
                                 .sub_title(
                                     h_flex()
                                         .gap(rems(0.25))
@@ -1483,22 +1578,82 @@ mod tests {
         }
     }
 
-    /// Story-specific native access is only for market data. Theme tokens are
+    /// The work an asynchronous host function does after it leaves the main
+    /// thread.
+    ///
+    /// A plain function on owned data, and tested as one — which is the point
+    /// of the split: everything the future needs was copied out while the
+    /// synchronous half still had the `App`, so what remains has no context to
+    /// stand up and can be checked directly.
+    #[test]
+    fn the_summary_names_the_session_extremes() {
+        let value = summarise(vec![
+            ("AAPL.US".into(), 1.5),
+            ("MSFT.US".into(), -2.25),
+            ("NVDA.US".into(), 0.75),
+        ]);
+
+        let field = |name: &str| {
+            value
+                .get(name)
+                .and_then(HostValue::as_str)
+                .unwrap_or_default()
+                .to_owned()
+        };
+        assert_eq!(field("leader"), "AAPL.US");
+        assert_eq!(field("leader_percent"), "+1.50%");
+        assert_eq!(field("laggard"), "MSFT.US");
+        assert_eq!(field("laggard_percent"), "-2.25%");
+        assert_eq!(field("average_percent"), "+0.00%");
+    }
+
+    /// An empty board is answered, not divided by zero.
+    #[test]
+    fn the_summary_of_an_empty_board_is_still_a_record() {
+        let value = summarise(Vec::new());
+        assert_eq!(
+            value.get("average_percent").and_then(HostValue::as_str),
+            Some("+0.00%")
+        );
+    }
+
+    /// Story-specific host access is only for market data. Theme tokens are
     /// supplied by gpui-shell's live call context, so the host must not keep a
     /// second theme projection registered beside it.
+    ///
+    /// `validate` is part of the assertion: it is what checks `MARKET_TYPES`
+    /// against the functions actually registered, so a rename on either side
+    /// fails here rather than in an editor.
     #[gpui::test]
-    fn story_native_registry_only_grants_market(cx: &mut TestAppContext) {
+    fn story_host_registry_only_grants_market(cx: &mut TestAppContext) {
         let market = cx.new(|_| Market::open());
-        let modules = native_modules(&market);
+        let module = market_module(&market);
 
-        assert_eq!(modules.module_names(), vec!["market"]);
+        assert_eq!(module.name(), "market");
+        assert_eq!(
+            module.function_names(),
+            vec!["quotes", "summary", "ticks", "watch", "watch_all"]
+        );
+        // Only the slow one answers with a promise. Asserted rather than
+        // assumed, because the script `await`s exactly this one and the
+        // generated binding differs by it.
+        assert!(
+            module.is_async("summary"),
+            "main.js awaits summary(), and the generated binding differs by this"
+        );
+        for synchronous in ["quotes", "ticks", "watch", "watch_all"] {
+            assert!(!module.is_async(synchronous), "{synchronous}");
+        }
+        module
+            .validate()
+            .expect("the declared types match the registered functions");
     }
 
     /// The claim the counters under the panels make, checked without a person
     /// having to watch two numbers.
     ///
     /// It is worth an end-to-end test rather than a unit one because it spans
-    /// every part that has to agree: the entity, the native module, the script's
+    /// every part that has to agree: the entity, the host module, the script's
     /// `ticks()` call, and the difference between `refresh` and `notify`.
     #[gpui::test]
     fn a_quote_tick_re_runs_the_script_and_a_repaint_does_not(cx: &mut TestAppContext) {
@@ -1731,12 +1886,12 @@ mod tests {
             "the quote helpers must read semantic colors from the current context"
         );
         assert!(
-            motion_source.contains(".left(active ? 960 : 20)"),
-            "the motion card must travel far enough to expose spatial continuity"
+            motion_source.contains(".left(active ? REST_LEFT + TRAVEL : REST_LEFT)"),
+            "the motion card must travel between the two stations the track marks"
         );
         assert!(
-            motion_source.contains(".w(1116).h(1)"),
-            "the track spine must reach the long-distance target"
+            motion_source.contains(".overflow_hidden()"),
+            "the stage must clip: its children are absolute, and the panel's width is not ours"
         );
         for forbidden in ["colors.primary", "colors.primary_foreground"] {
             assert!(

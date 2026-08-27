@@ -22,9 +22,10 @@ use gpui::{
     hsla, prelude::FluentBuilder as _, px,
 };
 use gpui_base::{
-    ColorTokens, Dialog, POPUP_PRIORITY, RadiusTokens, Sheet, SpacingTokens, StyledExt as _,
-    TextSelection, TextSelectionLayer, Theme, Toast, ToastManager, ToastMotion, ToastOptions,
-    ToastStack, ToastStackState, TooltipOverlay, TooltipTransition, active_focus_trap,
+    ColorTokens, Dialog, POPUP_PRIORITY, Placement, RadiusTokens, Sheet, SpacingTokens,
+    StyledExt as _, TextSelection, TextSelectionLayer, Theme, Toast, ToastManager, ToastMotion,
+    ToastOptions, ToastStack, ToastStackState, TooltipOverlay, TooltipTransition,
+    active_focus_trap,
     animation::{EffectTransition, ease_in_out_cubic, ease_out_cubic},
     v_flex,
 };
@@ -169,7 +170,7 @@ struct ActiveDialog {
 
 struct ActiveSheet {
     content: AnyView,
-    side: SheetSide,
+    placement: Placement,
     focus_handle: FocusHandle,
     restore_focus: Option<WeakFocusHandle>,
 }
@@ -370,7 +371,7 @@ impl ShellRoot {
     /// exists.
     pub fn open_sheet(
         &mut self,
-        side: SheetSide,
+        placement: Placement,
         content: AnyView,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -389,7 +390,7 @@ impl ShellRoot {
 
         self.sheet = Some(ActiveSheet {
             content,
-            side,
+            placement,
             focus_handle,
             restore_focus,
         });
@@ -580,7 +581,7 @@ impl ShellRoot {
     ) -> Option<Sheet> {
         let sheet = self.sheet.as_ref()?;
         let root = cx.entity();
-        let side = sheet.side;
+        let placement = sheet.placement;
 
         Some(
             Sheet::new(cx)
@@ -595,15 +596,15 @@ impl ShellRoot {
                     v_flex()
                         .occlude()
                         .absolute()
-                        .map(|this| match side {
-                            SheetSide::Left => {
+                        .map(|this| match placement {
+                            Placement::Left => {
                                 this.top_0().bottom_0().left_0().w_1_3().border_r_1()
                             }
-                            SheetSide::Right => {
+                            Placement::Right => {
                                 this.top_0().bottom_0().right_0().w_1_3().border_l_1()
                             }
-                            SheetSide::Top => this.left_0().right_0().top_0().h_1_3().border_b_1(),
-                            SheetSide::Bottom => {
+                            Placement::Top => this.left_0().right_0().top_0().h_1_3().border_b_1(),
+                            Placement::Bottom => {
                                 this.left_0().right_0().bottom_0().h_1_3().border_t_1()
                             }
                         })
@@ -815,41 +816,6 @@ fn render_tooltip(
             )
             .into_any_element(),
     })
-}
-
-/// Which viewport edge a sheet is anchored to.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
-pub enum SheetSide {
-    Left,
-    #[default]
-    Right,
-    Top,
-    Bottom,
-}
-
-impl SheetSide {
-    /// The name a script uses, in `cx.open_sheet("right", ...)`.
-    pub fn as_str(self) -> &'static str {
-        match self {
-            SheetSide::Left => "left",
-            SheetSide::Right => "right",
-            SheetSide::Top => "top",
-            SheetSide::Bottom => "bottom",
-        }
-    }
-
-    /// Parses a script-supplied name. `None` is a caller error, not a host bug,
-    /// so the binding layer can report the offending string rather than
-    /// silently opening a sheet on the wrong edge.
-    pub fn from_name(name: &str) -> Option<Self> {
-        match name {
-            "left" => Some(SheetSide::Left),
-            "right" => Some(SheetSide::Right),
-            "top" => Some(SheetSide::Top),
-            "bottom" => Some(SheetSide::Bottom),
-            _ => None,
-        }
-    }
 }
 
 /// How a dialog may be dismissed.
@@ -1346,10 +1312,10 @@ mod tests {
         });
 
         root.update_in(cx, |root, window, cx| {
-            root.open_sheet(SheetSide::Right, first, window, cx)
+            root.open_sheet(Placement::Right, first, window, cx)
         });
         root.update_in(cx, |root, window, cx| {
-            root.open_sheet(SheetSide::Left, second.clone(), window, cx)
+            root.open_sheet(Placement::Left, second.clone(), window, cx)
         });
         assert_eq!(
             root.read_with(cx, |root, _| root.sheet().map(|v| v.entity_id())),
@@ -1371,7 +1337,7 @@ mod tests {
         let (sheet, first, second) = (view(cx), view(cx), view(cx));
 
         root.update_in(cx, |root, window, cx| {
-            root.open_sheet(SheetSide::Right, sheet, window, cx);
+            root.open_sheet(Placement::Right, sheet, window, cx);
             root.open_dialog(first, window, cx);
             root.open_dialog(second, window, cx);
             root.push_toast(ToastRequest::new("Saved"), window, cx);
@@ -1465,16 +1431,6 @@ mod tests {
 
     #[test]
     fn script_facing_names_round_trip() {
-        for side in [
-            SheetSide::Left,
-            SheetSide::Right,
-            SheetSide::Top,
-            SheetSide::Bottom,
-        ] {
-            assert_eq!(SheetSide::from_name(side.as_str()), Some(side));
-        }
-        assert!(SheetSide::from_name("trailing").is_none());
-
         for level in [
             ToastLevel::Info,
             ToastLevel::Success,

@@ -9,7 +9,8 @@ order: 1
 `gpui-shell` gives a Rust [GPUI](https://gpui.rs) application **JavaScript extension points**: the host builds the runtime and grants what a script may reach, and the script draws real interface inside the same process. It is built directly on [`gpui-base`](/base/), with [QuickJS](https://github.com/quickjs-ng/quickjs) running on the host's own thread. Rust keeps rendering, layout, text editing, virtualization, focus, overlays and every system capability; the script owns composition, presentation and business logic. A script can also be run on its own, which is how one is usually developed.
 
 ```js
-import { View, v_flex, text, Button } from "gpui";
+import { View } from "gpui";
+import { v_flex, Button } from "gpui-base";
 
 export default class Counter extends View {
   init() {
@@ -23,7 +24,7 @@ export default class Counter extends View {
       .justify_center()
       .gap(20)
       .bg(cx.theme().colors.background)
-      .child(text(`${this.count}`).text_3xl().text_color(cx.theme().colors.foreground))
+      .child(div().text_3xl().text_color(cx.theme().colors.foreground).child(`${this.count}`))
       .child(
         Button.new("increment")
           .h(32)
@@ -37,7 +38,7 @@ export default class Counter extends View {
             this.count += 1;
             cx.notify();
           })
-          .child(text("Increment")),
+          .child("Increment"),
       );
   }
 }
@@ -87,7 +88,13 @@ Cost is therefore paid per user action rather than per frame. On a 443-node pane
 
 Growing the panel does not change that. The [benchmark](./engine.md#the-measurement) covers sizes up to 8,403 nodes, no frame at any of them runs JavaScript, and the smallest size is asserted on every CI build.
 
-All figures here were taken on a MacBook Pro (M3, 8 cores, 24 GB): the frame and run counts from the Shell story, the milliseconds from a release build of the benchmark.
+### Size: a script runtime for +13.5 MiB
+
+A host that runs a real script application ships a **26.1 MiB** binary and holds **81 MiB** resident, QuickJS and the whole Standard Runtime included. Taking the dependency costs **+13.5 MiB of binary and +14 MiB of memory** over the same application without it.
+
+That figure is a constant, not a proportion: the component gallery — five times the size — adds the same 13.5 MiB. [What linking it costs](./engine.md#what-linking-it-costs) gives the pair it was measured on, and where the megabytes go.
+
+All figures here were taken on a MacBook Pro (M3, 8 cores, 24 GB): the frame and run counts from the Shell story, the milliseconds from a release build of the benchmark, the binary and memory figures from release builds of `examples/hello_world` and the `gpui-shell` CLI.
 
 ### Security: nothing by default, and a language trimmed to match
 
@@ -161,8 +168,8 @@ Text editing, syntax highlighting, LSP, virtualization and motion sampling stay 
 | [State and views](./state.md) | `init` / `render`, `cx.notify()`, retained state, async |
 | [Overlays](./overlays.md) | Dialogs, the sheet, toasts, and the phase rule |
 | [Capabilities](./capabilities.md) | `gpui-shell.json`, default deny, filesystem, storage, process and network APIs |
-| [Native Modules](./native.md) | Lending the host's own Rust to a script, and the plain-data boundary |
-| [Hosting the Runtime](./hosting.md) | The Rust side in full: mounting, refreshing, metrics, exit, hot-reload |
+| [Hosting](./hosting.md) | The Rust side in full: mounting, refreshing, metrics, exit, hot-reload |
+| [HostModule](./host-module.md) | Lending the host's own Rust to a script, and the plain-data boundary |
 | [Dock Panels](./dock.md) | A script view as a dockable panel, and what survives a restart |
 | [The engine seam](./engine.md) | QuickJS, why the seam exists, and the measurements that tell script cost from frame cost |
 

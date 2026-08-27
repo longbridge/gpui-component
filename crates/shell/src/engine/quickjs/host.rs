@@ -39,7 +39,7 @@ use std::{
 
 use gpui::{App, ClipboardItem};
 use rquickjs::{
-    Array, Ctx, Error as JsError, Exception, FromJs, IntoJs, Object, Promise, Result as JsResult,
+    Ctx, Error as JsError, Exception, FromJs, IntoJs, Object, Promise, Result as JsResult,
     TypedArray, Value,
     function::{Func, Opt, Rest},
 };
@@ -49,11 +49,11 @@ use crate::{
     capability::{Access, Capabilities, CapabilityError, Grant},
     policy::Policy,
     scope,
-    store::{Store, persist},
+    storage::{Storage, persist},
 };
 
 use super::{
-    native::{MAX_BRIDGE_ARRAY_ITEMS, bridge_array_len},
+    host_modules::{MAX_BRIDGE_ARRAY_ITEMS, bridge_array_len},
     scheduler,
 };
 
@@ -72,8 +72,8 @@ pub fn capabilities() -> Capabilities {
 /// Each application gets its own file so one cannot read another's settings
 /// (§17.3). A plugin host builds a policy per plugin instead; this is the
 /// single-application path.
-pub fn set_store_path(path: PathBuf) {
-    crate::policy::update_default(|policy| policy.with_store_path(path));
+pub fn set_storage_path(path: PathBuf) {
+    crate::policy::update_default(|policy| policy.with_storage_path(path));
 }
 
 /// The context argument is the engine's; the sub-objects are built from the
@@ -84,10 +84,18 @@ pub fn set_store_path(path: PathBuf) {
 /// engine. They are the same context at run time.
 pub fn install(_ctx: &Ctx<'_>, module: &Object<'_>) -> JsResult<()> {
     let ctx = module.ctx();
-    module.set("store", store_object(ctx)?)?;
-    module.set("clipboard", clipboard_object(ctx)?)?;
-    module.set("log", log_object(ctx)?)?;
-    module.set("open_url", Func::from(open_url))?;
+
+    // The clipboard and the browser are `App` methods in GPUI, so the script
+    // reaches them through `cx`. These globals are the implementation the
+    // prelude composes onto it; nothing names them from script.
+    let globals = ctx.globals();
+    globals.set("__clipboard_read_text", Func::from(read_from_clipboard))?;
+    globals.set("__clipboard_write_text", Func::from(write_to_clipboard))?;
+    globals.set("__open_url", Func::from(open_url))?;
+
+    // `localStorage` and `sessionStorage` go on `window`, where a browser puts
+    // them. The prelude assembles them from these.
+    install_storage(ctx)?;
     Ok(())
 }
 
@@ -110,10 +118,10 @@ fn open_url(ctx: Ctx<'_>, url: String) -> JsResult<()> {
     if !valid {
         return Err(Exception::throw_type(
             &ctx,
-            "open_url(url) expects an absolute HTTP(S) URL with a host",
+            "cx.open_url(url) expects an absolute HTTP(S) URL with a host",
         ));
     }
-    with_app(&ctx, "open_url(url)", move |app| app.open_url(&url))
+    with_app(&ctx, "cx.open_url(url)", move |app| app.open_url(&url))
 }
 
 // -- Filesystem ------------------------------------------------------------
@@ -552,14 +560,16 @@ fn access_key(access: Access) -> &'static str {
 /// `dirty` flag and no follow-up, a mutation during a write was lost for good
 /// unless another mutation happened to follow it.
 fn drive_store(host: &scheduler::Host, policy: &Rc<Policy>) {
-    // Settling is done outside `with_store`, always: a `flush` resolving from
-    // here re-enters script, which may call `gpui.store.set`.
-    let stalled = policy.with_store(Store::take_stalled).unwrap_or_default();
+    // Settling is done outside `with_local_storage`, always: a `flush` resolving from
+    // here re-enters script, which may call `localStorage.setItem`.
+    let stalled = policy
+        .with_local_storage(Storage::take_stalled)
+        .unwrap_or_default();
     for wake in stalled {
         wake();
     }
 
-    let Some(pending) = policy.with_store(Store::begin_write).flatten() else {
+    let Some(pending) = policy.with_local_storage(Storage::begin_write).flatten() else {
         return;
     };
 
@@ -581,7 +591,7 @@ fn drive_store(host: &scheduler::Host, policy: &Rc<Policy>) {
             // lookup would find the *default* store and leave this one wedged
             // with a write in flight that never completes.
             let woken = policy
-                .with_store(|store| store.finish_write(revision, result))
+                .with_local_storage(|store| store.finish_write(revision, result))
                 .unwrap_or_default();
             for wake in woken {
                 wake();
@@ -593,13 +603,13 @@ fn drive_store(host: &scheduler::Host, policy: &Rc<Policy>) {
     if !started {
         // The executor is gone. Leaving the revision in flight would stop every
         // later write, so it is released rather than trusted.
-        abandoned.with_store(|store| store.abort_write(revision));
+        abandoned.with_local_storage(|store| store.abort_write(revision));
     }
 }
 
 /// Kicks the queue from inside a host call.
 fn schedule_persist(ctx: &Ctx<'_>) {
-    let Ok(host) = scheduler::host_for(ctx, "gpui.store") else {
+    let Ok(host) = scheduler::host_for(ctx, "localStorage") else {
         return;
     };
     drive_store(&host, &scope::policy());
@@ -611,17 +621,17 @@ fn schedule_persist(ctx: &Ctx<'_>) {
 /// raced the automatic one through the same temporary file with nothing ordering
 /// them — so the older revision could land last and undo the newer.
 fn flush<'js>(ctx: Ctx<'js>) -> JsResult<Promise<'js>> {
-    with_store(&ctx, |store| {
+    with_local_storage(&ctx, |store| {
         store
             .ensure_waiter_capacity()
             .map_err(|error| fail(&ctx, &error))
     })?;
     let (promise, resolve, reject) = ctx.promise()?;
-    let settle = scheduler::deferred(&ctx, "gpui.store.flush()", resolve, reject)?;
+    let settle = scheduler::deferred(&ctx, "localStorage.flush()", resolve, reject)?;
 
-    // `with_store` also enforces the capability, so a denied flush throws here
+    // `with_local_storage` also enforces the capability, so a denied flush throws here
     // rather than resolving quietly.
-    if let Some(settle) = with_store(&ctx, |store| {
+    if let Some(settle) = with_local_storage(&ctx, |store| {
         store.wait(settle).map_err(|error| fail(&ctx, &error))
     })? {
         settle(Ok(()));
@@ -632,29 +642,43 @@ fn flush<'js>(ctx: Ctx<'js>) -> JsResult<Promise<'js>> {
     Ok(promise)
 }
 
-fn store_object<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
-    let store = Object::new(ctx.clone())?;
+/// The Web Storage natives the prelude assembles into `localStorage` and
+/// `sessionStorage`.
+///
+/// Globals rather than a module object: the two storages live on `window`, the
+/// way a browser puts them there, so there is no specifier to import and
+/// nothing for the module resolver to own.
+///
+/// Values are strings. `setItem` converting its argument is the browser's
+/// behaviour, not a shortcut — an application that wants structure reaches for
+/// `JSON.stringify`, exactly as it would on the web.
+fn install_storage(ctx: &Ctx<'_>) -> JsResult<()> {
+    let globals = ctx.globals();
 
-    store.set(
-        "get",
-        Func::from(|ctx: Ctx<'_>, key: String| -> JsResult<JsonValue> {
-            with_store(&ctx, |store| {
-                let values = store.values().map_err(|error| fail(&ctx, &error))?;
-                Ok(JsonValue(values.get(&key).cloned().unwrap_or(Json::Null)))
-            })
-        }),
+    globals.set(
+        "__storage_get",
+        Func::from(
+            |ctx: Ctx<'_>, session: bool, key: String| -> JsResult<Option<String>> {
+                with_storage(&ctx, session, |store| {
+                    let values = store.values().map_err(|error| fail(&ctx, &error))?;
+                    Ok(values.get(&key).map(text_of))
+                })
+            },
+        ),
     )?;
 
-    // `set` and `remove` answer from the cache and mark it dirty; the write
-    // they make necessary happens on a background thread. They stay
-    // synchronous because that is the whole point of a cache — a setting a
-    // script can read during `render` without awaiting.
-    store.set(
-        "set",
+    // `setItem` and `removeItem` answer from the cache and mark it dirty; the
+    // write they make necessary happens on a background thread. They stay
+    // synchronous because that is the whole point of a cache — and because the
+    // API they mirror is synchronous.
+    globals.set(
+        "__storage_set",
         Func::from(
-            |ctx: Ctx<'_>, key: String, value: JsonValue| -> JsResult<()> {
-                with_store(&ctx, |store| {
-                    store.set(key, value.0).map_err(|error| fail(&ctx, &error))
+            |ctx: Ctx<'_>, session: bool, key: String, value: String| -> JsResult<()> {
+                with_storage(&ctx, session, |store| {
+                    store
+                        .set(key, Json::String(value))
+                        .map_err(|error| fail(&ctx, &error))
                 })?;
                 schedule_persist(&ctx);
                 Ok(())
@@ -662,10 +686,10 @@ fn store_object<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
         ),
     )?;
 
-    store.set(
-        "remove",
-        Func::from(|ctx: Ctx<'_>, key: String| -> JsResult<()> {
-            with_store(&ctx, |store| {
+    globals.set(
+        "__storage_remove",
+        Func::from(|ctx: Ctx<'_>, session: bool, key: String| -> JsResult<()> {
+            with_storage(&ctx, session, |store| {
                 store
                     .values()
                     .map_err(|error| fail(&ctx, &error))?
@@ -678,70 +702,114 @@ fn store_object<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
         }),
     )?;
 
-    store.set(
-        "keys",
-        Func::from(|ctx: Ctx<'_>| -> JsResult<Vec<String>> {
-            with_store(&ctx, |store| {
+    globals.set(
+        "__storage_clear",
+        Func::from(|ctx: Ctx<'_>, session: bool| -> JsResult<()> {
+            with_storage(&ctx, session, |store| {
                 let values = store.values().map_err(|error| fail(&ctx, &error))?;
-                Ok(values.keys().cloned().collect())
+                if values.is_empty() {
+                    return Ok(());
+                }
+                values.clear();
+                store.touch();
+                Ok(())
+            })?;
+            schedule_persist(&ctx);
+            Ok(())
+        }),
+    )?;
+
+    globals.set(
+        "__storage_length",
+        Func::from(|ctx: Ctx<'_>, session: bool| -> JsResult<usize> {
+            with_storage(&ctx, session, |store| {
+                Ok(store.values().map_err(|error| fail(&ctx, &error))?.len())
             })
         }),
     )?;
 
-    // The durability barrier the API always promised. It does its own write
-    // rather than waiting on a scheduled one, so what it resolves for is the
-    // state at the moment it was called — and a rewrite of identical bytes is
-    // harmless, the rename being atomic.
-    store.set("flush", Func::from(flush))?;
+    // The order is whatever the map iterates in, which is insertion order
+    // here. The specification asks only that it be consistent between calls
+    // and that it change when the set of keys changes, which this is: the same
+    // order a browser gives you, for the same reason — nobody promised sorted.
+    globals.set(
+        "__storage_key",
+        Func::from(
+            |ctx: Ctx<'_>, session: bool, index: usize| -> JsResult<Option<String>> {
+                with_storage(&ctx, session, |store| {
+                    let values = store.values().map_err(|error| fail(&ctx, &error))?;
+                    Ok(values.keys().nth(index).cloned())
+                })
+            },
+        ),
+    )?;
 
-    Ok(store)
+    // The one addition to the Web Storage surface. A browser's `setItem` is
+    // durable by the time it returns; this one hands the write to a background
+    // thread, so a script that must know the bytes landed has something to
+    // await. On `sessionStorage` there is no disk, and it resolves at once.
+    globals.set("__storage_flush", Func::from(flush))?;
+
+    Ok(())
 }
 
-/// Gates every store entry point on the capability and on the host having said
-/// where the file lives.
-fn with_store<R>(ctx: &Ctx<'_>, body: impl FnOnce(&mut Store) -> JsResult<R>) -> JsResult<R> {
-    if !capabilities().has_store() {
+/// A stored value as the Web Storage API sees it: a string.
+///
+/// A file written before this API stored JSON, so a value that is not a string
+/// comes back as its JSON text rather than as an error — the alternative is
+/// refusing to start over data the script itself wrote.
+fn text_of(value: &Json) -> String {
+    match value {
+        Json::String(text) => text.clone(),
+        other => other.to_string(),
+    }
+}
+
+/// Routes to one of the two storages, gating only the one that has a file.
+///
+/// `sessionStorage` needs no capability: it never leaves memory, and a script
+/// that runs already holds its own memory. `localStorage` writes a file the
+/// host placed, so it needs both the grant and the placement.
+fn with_storage<R>(
+    ctx: &Ctx<'_>,
+    session: bool,
+    body: impl FnOnce(&mut Storage) -> JsResult<R>,
+) -> JsResult<R> {
+    if session {
+        return scope::policy()
+            .with_session_storage(body)
+            .expect("a policy always has its session storage");
+    }
+    with_local_storage(ctx, body)
+}
+
+/// Gates every `localStorage` entry point on the capability and on the host
+/// having said where the file lives.
+fn with_local_storage<R>(
+    ctx: &Ctx<'_>,
+    body: impl FnOnce(&mut Storage) -> JsResult<R>,
+) -> JsResult<R> {
+    if !capabilities().has_storage() {
         return Err(Exception::throw_type(
             ctx,
-            &CapabilityError::StoreDenied.to_string(),
+            &CapabilityError::StorageDenied.to_string(),
         ));
     }
 
-    match scope::policy().with_store(body) {
+    match scope::policy().with_local_storage(body) {
         Some(result) => result,
         // Not a manifest problem, so it does not name a capability key: the
-        // embedder skipped `set_store_path`.
+        // embedder skipped `set_storage_path`.
         None => Err(Exception::throw_message(
             ctx,
-            "gpui.store has no backing file; the host must call set_store_path \
-             before the application runs",
+            "localStorage has no backing file; the host must call \
+             set_storage_path before the application runs",
         )),
     }
 }
 
 fn fail(ctx: &Ctx<'_>, message: &str) -> JsError {
     Exception::throw_message(ctx, message)
-}
-
-/// A JS value carried as JSON.
-///
-/// `rquickjs` ships serde integration behind a feature this crate does not
-/// enable, so both directions are written out by hand below. The wrapper exists
-/// for a second reason as well: a JS closure cannot unify the `'js` of a `Ctx`
-/// parameter with the `'js` of a `Value` parameter or return, so the conversion
-/// has to happen inside `FromJs`/`IntoJs`, where there is only one lifetime.
-struct JsonValue(Json);
-
-impl<'js> FromJs<'js> for JsonValue {
-    fn from_js(ctx: &Ctx<'js>, value: Value<'js>) -> JsResult<Self> {
-        to_json(ctx, &value, 0).map(JsonValue)
-    }
-}
-
-impl<'js> IntoJs<'js> for JsonValue {
-    fn into_js(self, ctx: &Ctx<'js>) -> JsResult<Value<'js>> {
-        from_json(ctx, &self.0)
-    }
 }
 
 /// A cycle in a JS object graph would recurse forever, so depth is capped.
@@ -823,64 +891,24 @@ fn to_json(ctx: &Ctx<'_>, value: &Value<'_>, depth: usize) -> JsResult<Json> {
     ))
 }
 
-fn from_json<'js>(ctx: &Ctx<'js>, value: &Json) -> JsResult<Value<'js>> {
-    Ok(match value {
-        Json::Null => Value::new_null(ctx.clone()),
-        Json::Bool(flag) => Value::new_bool(ctx.clone(), *flag),
-        // Every JS number is a double, so the integer/float split on the JSON
-        // side does not survive the trip and does not need to.
-        Json::Number(number) => match number.as_f64() {
-            Some(number) => Value::new_float(ctx.clone(), number),
-            None => Value::new_null(ctx.clone()),
-        },
-        Json::String(text) => rquickjs::String::from_str(ctx.clone(), text)?.into_value(),
-        Json::Array(items) => {
-            let array = Array::new(ctx.clone())?;
-            for (index, item) in items.iter().enumerate() {
-                array.set(index, from_json(ctx, item)?)?;
-            }
-            array.into_value()
-        }
-        Json::Object(map) => {
-            let object = Object::new(ctx.clone())?;
-            for (key, item) in map {
-                object.set(key.as_str(), from_json(ctx, item)?)?;
-            }
-            object.into_value()
-        }
+// -- Clipboard -------------------------------------------------------------
+
+fn read_from_clipboard(ctx: Ctx<'_>) -> JsResult<Option<String>> {
+    if !capabilities().is_clipboard_readable() {
+        return Err(Exception::throw_type(&ctx, CLIPBOARD_READ_DENIED));
+    }
+    with_app(&ctx, "cx.read_from_clipboard()", |app| {
+        app.read_from_clipboard().and_then(|item| item.text())
     })
 }
 
-// -- Clipboard -------------------------------------------------------------
-
-fn clipboard_object<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
-    let clipboard = Object::new(ctx.clone())?;
-
-    clipboard.set(
-        "read_text",
-        Func::from(|ctx: Ctx<'_>| -> JsResult<Option<String>> {
-            if !capabilities().is_clipboard_readable() {
-                return Err(Exception::throw_type(&ctx, CLIPBOARD_READ_DENIED));
-            }
-            with_app(&ctx, "clipboard.read_text()", |app| {
-                app.read_from_clipboard().and_then(|item| item.text())
-            })
-        }),
-    )?;
-
-    clipboard.set(
-        "write_text",
-        Func::from(|ctx: Ctx<'_>, text: String| -> JsResult<()> {
-            if !capabilities().is_clipboard_writable() {
-                return Err(Exception::throw_type(&ctx, CLIPBOARD_WRITE_DENIED));
-            }
-            with_app(&ctx, "clipboard.write_text(text)", move |app| {
-                app.write_to_clipboard(ClipboardItem::new_string(text))
-            })
-        }),
-    )?;
-
-    Ok(clipboard)
+fn write_to_clipboard(ctx: Ctx<'_>, text: String) -> JsResult<()> {
+    if !capabilities().is_clipboard_writable() {
+        return Err(Exception::throw_type(&ctx, CLIPBOARD_WRITE_DENIED));
+    }
+    with_app(&ctx, "cx.write_to_clipboard(text)", move |app| {
+        app.write_to_clipboard(ClipboardItem::new_string(text))
+    })
 }
 
 /// Read and write are separate grants, so the denial names the half that was
@@ -952,7 +980,7 @@ pub(super) fn log_object<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
 const SCRIPT_TARGET: &str = "gpui_shell::script";
 
 /// Extra arguments are appended space-separated after the message, the way
-/// `console.log` behaves — JS authors write `log.info("loaded", count)` without
+/// `console.log` behaves — JS authors write `console.info("loaded", count)` without
 /// thinking about it.
 fn line(message: Printable, rest: Rest<Printable>) -> String {
     let mut line = message.0;
@@ -1043,6 +1071,11 @@ mod tests {
             ctx.globals()
                 .set("readFile", Func::from(read_file))
                 .expect("binding the FS test adapter");
+            // `console` is a global installed by the standard runtime, which
+            // these tests do not load. It is this same object.
+            ctx.globals()
+                .set("console", log_object(&ctx).expect("log object"))
+                .expect("binding `console`");
             body(&ctx)
         })
     }
@@ -1091,68 +1124,116 @@ mod tests {
     }
 
     #[test]
-    fn the_store_is_denied_without_the_capability() {
+    fn local_storage_is_denied_without_the_capability() {
         let directory = TempDir::new();
-        set_store_path(directory.path().join("store.json"));
+        set_storage_path(directory.path().join("storage.json"));
 
-        let message = with_host(|ctx| error_of(ctx, "gpui.store.get('theme')"));
+        let message = with_host(|ctx| error_of(ctx, "__storage_get(false, 'theme')"));
         assert!(
-            message.contains("capabilities.store"),
+            message.contains("capabilities.storage"),
             "unexpected message: {message}"
         );
     }
 
+    /// `sessionStorage` never leaves memory, so there is nothing to grant.
     #[test]
-    fn the_store_round_trips_a_nested_object() {
+    fn session_storage_needs_no_capability() {
+        with_host(|ctx| {
+            ctx.eval::<(), _>("__storage_set(true, 'theme', 'dark')")
+                .expect("session storage is ungated");
+            let value: String = ctx
+                .eval("__storage_get(true, 'theme')")
+                .expect("reading it back");
+            assert_eq!(value, "dark");
+        });
+    }
+
+    #[test]
+    fn local_storage_round_trips_a_string() {
         let directory = TempDir::new();
-        let file = directory.path().join("store.json");
-        crate::capability::install(Capabilities::new().store(true));
-        set_store_path(file.clone());
+        let file = directory.path().join("storage.json");
+        crate::capability::install(Capabilities::new().storage(true));
+        set_storage_path(file.clone());
 
         with_host(|ctx| {
+            // Values are strings, exactly as they are in a browser, so anything
+            // with structure goes through `JSON.stringify` on the way in — and
+            // `setItem` converting what it is handed is the API's behaviour
+            // rather than a shortcut taken here.
             ctx.eval::<(), _>(
-                "gpui.store.set('window', { title: 'Notes', size: [640, 480], \
-                 open: true, nested: { depth: 2 } })",
+                "__storage_set(false, 'window', JSON.stringify({ title: 'Notes', size: [640, 480] }))",
             )
-            .expect("storing a nested object");
+            .expect("storing a serialized object");
 
             let title: String = ctx
-                .eval("gpui.store.get('window').title")
+                .eval("JSON.parse(__storage_get(false, 'window')).title")
                 .expect("reading it back");
             assert_eq!(title, "Notes");
 
-            let width: f64 = ctx
-                .eval("gpui.store.get('window').size[0]")
-                .expect("reading a nested array element");
-            assert_eq!(width, 640.0);
+            assert!(
+                ctx.eval::<Option<String>, _>("__storage_get(false, 'missing')")
+                    .expect("an unset key")
+                    .is_none(),
+                "an unset key is null, which is what getItem promises"
+            );
 
-            let depth: f64 = ctx
-                .eval("gpui.store.get('window').nested.depth")
-                .expect("reading a nested object field");
-            assert_eq!(depth, 2.0);
-
-            let keys: Vec<String> = ctx.eval("gpui.store.keys()").expect("listing the keys");
-            assert_eq!(keys, vec!["window".to_string()]);
+            let length: usize = ctx
+                .eval("__storage_length(false)")
+                .expect("reading the length");
+            assert_eq!(length, 1);
         });
 
-        // Reaching the disk is asynchronous now, and needs an executor this
-        // harness does not have — `tests/fs.rs` covers it. What matters here is
-        // that the cache answers, which is why `set` and `get` stayed
+        // Reaching the disk is asynchronous, and needs an executor this harness
+        // does not have — `tests/fs.rs` covers it. What matters here is that the
+        // cache answers, which is why `setItem` and `getItem` stayed
         // synchronous.
         let _ = file;
     }
 
     #[test]
-    fn the_store_forgets_a_removed_key() {
+    fn local_storage_forgets_a_removed_key() {
         let directory = TempDir::new();
-        crate::capability::install(Capabilities::new().store(true));
-        set_store_path(directory.path().join("store.json"));
+        crate::capability::install(Capabilities::new().storage(true));
+        set_storage_path(directory.path().join("storage.json"));
 
         with_host(|ctx| {
-            ctx.eval::<(), _>("gpui.store.set('theme', 'dark'); gpui.store.remove('theme')")
-                .expect("setting then removing");
-            let keys: Vec<String> = ctx.eval("gpui.store.keys()").expect("listing the keys");
-            assert!(keys.is_empty(), "unexpected keys: {keys:?}");
+            ctx.eval::<(), _>(
+                "__storage_set(false, 'theme', 'dark'); __storage_remove(false, 'theme')",
+            )
+            .expect("setting then removing");
+            let length: usize = ctx
+                .eval("__storage_length(false)")
+                .expect("reading the length");
+            assert_eq!(length, 0);
+        });
+    }
+
+    /// `clear` empties it, and `key(index)` walks what is left in a consistent
+    /// order — the two members a script cannot reach any other way.
+    #[test]
+    fn local_storage_clears_and_walks_its_keys() {
+        let directory = TempDir::new();
+        crate::capability::install(Capabilities::new().storage(true));
+        set_storage_path(directory.path().join("storage.json"));
+
+        with_host(|ctx| {
+            ctx.eval::<(), _>("__storage_set(false, 'b', '2'); __storage_set(false, 'a', '1')")
+                .expect("two keys");
+            // Insertion order, and the point of the assertion is that it is
+            // *an* order that holds, not which one.
+            let first: String = ctx.eval("__storage_key(false, 0)").expect("first key");
+            let second: String = ctx.eval("__storage_key(false, 1)").expect("second key");
+            assert_eq!((first.as_str(), second.as_str()), ("b", "a"));
+            assert!(
+                ctx.eval::<Option<String>, _>("__storage_key(false, 2)")
+                    .expect("past the end")
+                    .is_none(),
+                "an index past the end is null, not an error"
+            );
+
+            ctx.eval::<(), _>("__storage_clear(false)").expect("clear");
+            let length: usize = ctx.eval("__storage_length(false)").expect("length");
+            assert_eq!(length, 0);
         });
     }
 
@@ -1164,7 +1245,7 @@ mod tests {
                 .clipboard_write(true),
         );
 
-        let message = with_host(|ctx| error_of(ctx, "gpui.clipboard.read_text()"));
+        let message = with_host(|ctx| error_of(ctx, "__clipboard_read_text()"));
         assert!(
             message.contains("needs a live host call"),
             "unexpected message: {message}"
@@ -1173,42 +1254,42 @@ mod tests {
 
     #[test]
     fn the_clipboard_denial_names_the_half_that_is_missing() {
-        let message = with_host(|ctx| error_of(ctx, "gpui.clipboard.write_text('x')"));
+        let message = with_host(|ctx| error_of(ctx, "__clipboard_write_text('x')"));
         assert!(
             message.contains("capabilities.clipboard.write"),
             "unexpected message: {message}"
         );
     }
 
+    /// Nothing this module installs is reachable by importing it.
+    ///
+    /// It used to be: `store` and `log` were module members, and the guard here
+    /// was that a member added to the module object without a matching export
+    /// is a binding that works through `gpui.x` and fails at the import — which
+    /// is how `open_url` first shipped, the call site there and the import not,
+    /// with a browser that never opened as the only symptom.
+    ///
+    /// Every one of them has since moved to where GPUI keeps it: the clipboard
+    /// and the browser onto `cx`, storage onto `window`, diagnostics onto the
+    /// `console` every JavaScript runtime already has. So the guard inverts —
+    /// what would be wrong now is a *leftover* export, resolving to a binding
+    /// nothing installs.
     #[test]
-    fn every_installed_host_member_is_also_a_named_export() {
-        // `install` puts these on the module object; `MODULE_EXPORTS` is what
-        // makes `import { open_url } from "gpui"` resolve. The two are separate
-        // lists, and a member added to one and not the other is a binding that
-        // works through `gpui.x` and fails at the import — which is how
-        // `open_url` first shipped: the call site was there, the import was
-        // not, and the only symptom was a browser that never opened.
-        for name in ["store", "clipboard", "log", "open_url"] {
-            assert!(
-                super::super::MODULE_EXPORTS.contains(&name),
-                "`{name}` is installed on the gpui module but is not a named export"
-            );
-        }
-    }
-
-    #[test]
-    fn open_url_refuses_anything_that_is_not_an_http_page() {
-        for target in [
-            "file:///etc/passwd",
-            "mailto:someone@example.com",
-            "/relative/path",
-            "https://",
-            "not a url",
+    fn nothing_this_module_installs_is_a_named_export() {
+        for name in [
+            "store",
+            "log",
+            "clipboard",
+            "open_url",
+            "read_from_clipboard",
+            "write_to_clipboard",
+            "localStorage",
+            "sessionStorage",
         ] {
-            let message = with_host(|ctx| error_of(ctx, &format!("gpui.open_url('{target}')")));
-            assert!(
-                message.contains("absolute HTTP(S) URL with a host"),
-                "{target} was not refused: {message}"
+            assert_eq!(
+                super::super::module_exporting(name),
+                None,
+                "`{name}` no longer lives on a module; an export of it resolves to nothing"
             );
         }
     }
@@ -1220,7 +1301,7 @@ mod tests {
         // read as protection without being any.
         crate::capability::install(Capabilities::new());
 
-        let message = with_host(|ctx| error_of(ctx, "gpui.open_url('https://example.com/x')"));
+        let message = with_host(|ctx| error_of(ctx, "__open_url('https://example.com/x')"));
         assert!(
             message.contains("needs a live host call"),
             "unexpected message: {message}"
@@ -1234,7 +1315,7 @@ mod tests {
     #[test]
     fn logging_needs_no_capability_and_takes_extra_arguments() {
         with_host(|ctx| {
-            ctx.eval::<(), _>("gpui.log.info('loaded', 3, { ok: true })")
+            ctx.eval::<(), _>("console.info('loaded', 3, { ok: true })")
                 .expect("logging is always available");
         });
     }
@@ -1243,7 +1324,7 @@ mod tests {
     fn logging_a_sparse_huge_array_is_safely_unprintable() {
         with_host(|ctx| {
             ctx.eval::<(), _>(
-                "const values = []; values.length = 0xffffffff; gpui.log.info(values)",
+                "const values = []; values.length = 0xffffffff; console.info(values)",
             )
             .expect("logging an oversized value must not panic or require a capability");
         });

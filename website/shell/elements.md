@@ -10,28 +10,39 @@ An element in `gpui-shell` is a **description**, not an object. It exists for on
 
 ## Constructors
 
-One import provides the whole namespace:
+Each module carries what its own crate provides:
 
 ```js
-import { div, h_flex, v_flex, text, svg, image, fps_monitor, Button, Link, Checkbox, Switch, Input, InputState, FocusHandle } from "gpui";
+import { div, svg, image } from "gpui";
+import {
+  h_flex,
+  v_flex,
+  Button,
+  Link,
+  Checkbox,
+  Switch,
+  Input,
+  InputState,
+} from "gpui-base";
+import { fps_monitor } from "gpui-fps";
 ```
 
 Functions are lowercase, and component types are capitalized and constructed through `.new`. That mirrors the Rust side one for one: `div()` is a free function there too, and `Button::new(id)` is an associated function on a type.
 
-| Constructor | Produces |
-| --- | --- |
-| `div()` | An element with no layout of its own |
-| `h_flex()` | A row |
-| `v_flex()` | A column |
-| `text(value)` | A text element; the value is stringified |
-| `svg(path)` | A theme-tinted vector icon from the application's own directory |
-| `image(path)` | A full-colour image from the application's own directory |
-| `fps_monitor()` | The native `gpui-fps` performance HUD, shared once per window |
-| `Button.new(id)` | A base `Button`: activation, focus, disabled and selected state, no styling |
-| `Link.new(id)` | A focusable external HTTP(S) link; set its target with `.href(url)` |
-| `Checkbox.new(id)` | A base controlled checkbox, no styling and no indicator |
-| `Switch.new(id)` | A base controlled switch, no styling |
-| `Input.new(state)` | A text field backed by an [`InputState`](./state.md#retained-state) |
+| Constructor | From | Produces |
+| --- | --- | --- |
+| `div()` | `gpui` | An element with no layout of its own |
+| `"a string"` | `gpui` | Text. A string is an element, so it goes straight into `.child(...)` |
+| `svg(path)` | `gpui` | A theme-tinted vector icon from the application's own directory |
+| `image(path)` | `gpui` | A full-colour image from the application's own directory |
+| `h_flex()` | `gpui-base` | A row |
+| `v_flex()` | `gpui-base` | A column |
+| `Button.new(id)` | `gpui-base` | A base `Button`: activation, focus, disabled and selected state, no styling |
+| `Link.new(id)` | `gpui-base` | A focusable external HTTP(S) link; set its target with `.href(url)` |
+| `Checkbox.new(id)` | `gpui-base` | A base controlled checkbox, no styling and no indicator |
+| `Switch.new(id)` | `gpui-base` | A base controlled switch, no styling |
+| `Input.new(state)` | `gpui-base` | A text field backed by an [`InputState`](./state.md#retained-state) |
+| `fps_monitor()` | `gpui-fps` | The native `gpui-fps` performance HUD, shared once per window |
 
 ### Performance monitor
 
@@ -71,14 +82,21 @@ Name anything whose identity has to survive its neighbours changing. `Button`, `
 
 ### Text
 
-`text(value)` stringifies whatever it is handed, so template literals and numbers work directly:
+**A string is an element.** GPUI implements `IntoElement` for `&str`, `String` and `SharedString`, so text is written by handing the string to whatever holds it, and there is no `text()` to call:
 
 ```js
-text(`${this.remaining} of ${this.items.length} remaining`);
-text(42);
+v_flex()
+  .child(`${this.remaining} of ${this.items.length} remaining`)
+  .child(42);
 ```
 
-A text element is materialized as a `div` containing the string, so it takes styles like any other element and can also take children.
+The style comes from the element holding it, exactly as it does in Rust:
+
+```js
+div().text_size(12).font_semibold().child("AAPL");
+```
+
+A string child is materialized as a `div` containing it, which is what `div().child(s)` already says.
 
 ### Images
 
@@ -117,7 +135,7 @@ v_flex()
   .gap(8)
   .child(this.header())
   .children(this.visible().map((item) => this.row(item)))
-  .when(this.items.length === 0, (el) => el.child(text("Nothing yet")));
+  .when(this.items.length === 0, (el) => el.child("Nothing yet"));
 ```
 
 `.when` exists so a conditional does not break the chain in two. `branch` **must return the element** — a branch that returns nothing throws immediately, rather than quietly dropping everything it built:
@@ -162,7 +180,7 @@ Disabled, selected and checked **appearance** is yours to draw. The base layer o
 Button.new("clear")
   .disabled(this.completed === 0)
   .when(this.completed === 0, (el) => el.opacity(0.4))
-  .child(text("Clear completed"));
+  .child("Clear completed");
 ```
 
 `.accessibility_label` matters most on an icon-only control, which announces nothing without it:
@@ -208,22 +226,22 @@ An arrow function does not bind its own `this`, so `this` inside the handler is 
 
 ## Focus and accessibility
 
-A script owns its own focus targets. `FocusHandle.new()` creates one, it lives on the view the way an [`InputState`](./state.md#retained-state) does, and `.track_focus(handle)` gives it to an element:
+A script owns its own focus targets. `cx.focus_handle()` creates one — `App::focus_handle` in GPUI, which has no `FocusHandle::new` for this to mirror — it lives on the view the way an [`InputState`](./state.md#retained-state) does, and `.track_focus(handle)` gives it to an element:
 
 ```js
-init() {
-  this.search = FocusHandle.new();
+init(props, cx) {
+  this.search = cx.focus_handle();
 }
 
 render() {
   return Button.new("search")
     .tab_index(1)
     .track_focus(this.search)
-    .child(text("Search"));
+    .child("Search");
 }
 ```
 
-`FocusHandle.new()` needs a live host call, and a handle created inside `render` would be a new one on every frame — so the focus it tracked would be dropped by the next repaint. It belongs in `init` or in an event handler; calling it in `render` throws.
+`cx.focus_handle()` needs a live host call, and a handle created inside `render` would be a new one on every frame — so the focus it tracked would be dropped by the next repaint. It belongs in `init` or in an event handler; calling it in `render` throws.
 
 | On the handle | Answers |
 | --- | --- |
@@ -257,7 +275,7 @@ div()
   .role("list_box_option")
   .aria_selected(index === this.chosen)
   .when(index === this.chosen, (el) => el.aria_active_descendant())
-  .child(text(name))
+  .child(name)
 ```
 
 Role names mirror `gpui::Role` in snake_case — `list_box`, `list_box_option`, `combo_box`, `menu_item` — and the whole set is in `gpui.d.ts` as the `Role` union, so an editor completes them and a name that is not one fails at the call site:
@@ -272,7 +290,7 @@ unknown accessibility role `listbox`; the names mirror gpui::Role in snake_case
 This is the rule that most often surprises a new reader, so here is what it looks like and why it holds.
 
 ```js
-const row = h_flex().child(text("hello"));
+const row = h_flex().child("hello");
 
 v_flex()
   .child(row)
@@ -287,11 +305,11 @@ Storing one across frames fails the same way:
 
 ```js
 init() {
-  this.header = h_flex().child(text("Todo"));   // wrong
+  this.header = h_flex().child("Todo");   // wrong
 }
 
 render() {
-  return v_flex().child(text("Todo list")).child(this.header);
+  return v_flex().child("Todo list").child(this.header);
 }
 ```
 
@@ -313,7 +331,7 @@ The alternative would be to copy the description on reuse. That was rejected: it
 Build in `render`, and factor repetition into **functions that return a new element each time**:
 
 ```js
-const label = (value, cx) => text(value).text_size(12).text_color(cx.theme().colors.foreground);
+const label = (value, cx) => div().text_size(12).text_color(cx.theme().colors.foreground).child(value);
 
 render(cx) {
   return v_flex()

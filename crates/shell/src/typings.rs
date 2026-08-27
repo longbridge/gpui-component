@@ -8,6 +8,27 @@
 //! It is also the form in which the API can be handed to a model, which is an
 //! explicit audience here.
 //!
+//! # One module per crate
+//!
+//! The declarations are three ambient modules, not one: `"gpui"` for GPUI's own
+//! elements and what this runtime adds, `"gpui-base"` for gpui-base's layout
+//! helpers, components and theme, and `"gpui-fps"` for its performance overlay.
+//! A name belongs to exactly one of them.
+//!
+//! That is a contract about provenance rather than a filing convenience. An
+//! import line says which layer a script depends on, so a script that never
+//! reaches for a component says so, and the next layer to arrive —
+//! `gpui-component`, whose components are the reason the seam exists — needs a
+//! list and a `declare module`, not a renaming of everything already here.
+//! Nothing is re-exported for convenience: a name reachable from two specifiers
+//! stops saying where it came from, which is the property being bought.
+//!
+//! The dependency runs upward only. `"gpui-base"` names what it borrows from
+//! `"gpui"` in an import at the top of its block; `"gpui"` refers down to a
+//! component type only where one shared element prototype forces it — three
+//! builder methods and `cx.theme()` — and does it with an inline
+//! `import("gpui-base").X` rather than a top-level import.
+//!
 //! # Why these declarations can be trusted
 //!
 //! They are *generated from the tables the runtime dispatches through*, not
@@ -34,7 +55,7 @@
 //!
 //! # What they deliberately do not cover
 //!
-//! * **Capabilities.** Every `fs`, `store`, `clipboard` and `process` call
+//! * **Capabilities.** Every `fs`, storage, `clipboard` and `process` call
 //!   type-checks; whether it is *granted* is a manifest question answered at
 //!   run time (§19.2). Types cannot express a grant.
 //! * **Element lifetime.** An element is consumed when it is used and belongs
@@ -44,17 +65,23 @@
 //!   prototype, so `.checked(true)` is declared on all of them and is simply
 //!   inert on a `div`. Narrowing that would mean inventing a type hierarchy the
 //!   runtime does not have.
-//! * **Retained entities** ([`crate::entities`]) and anything else not exported
-//!   by the `gpui` module today.
+//! * **Retained entities** ([`crate::entities`]) and anything else no built-in
+//!   module exports today.
 //!
-//! # What an application adds
+//! # What the host adds
 //!
-//! Host-registered native modules cannot be generated here, because only the
-//! host knows what it registered. The declarations leave a `NativeModules`
-//! interface for an application to augment, which is what turns `native("...")`
-//! from `Record<string, (...args: any[]) => any>` into a checked name with
-//! completing functions. `crates/story/js/quotes/market.d.ts` is the worked
-//! example.
+//! Every module the host registered is emitted here too, one `declare module`
+//! per name, so `import { quotes } from "market"` is checked the same way
+//! `import { div } from "gpui"` is. A module that described itself in
+//! TypeScript through [`crate::HostModule::declarations`] is emitted verbatim;
+//! one that did not gets `(...args: any[]) => any` signatures, which still
+//! check the module name and every export name.
+//!
+//! That is why the declarations live in Rust beside the registration rather
+//! than in a `.d.ts` beside the script: two files describing one boundary
+//! drift, and this one is checked against the registry before it is written.
+//! `install_host_modules` in `crates/story/src/stories/shell_story.rs` is the
+//! worked example.
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
@@ -87,7 +114,6 @@ pub fn declarations() -> String {
     out.push_str(&role_type());
     out.push_str(&anchor_type());
     out.push_str(&view_types());
-    out.push_str(MOTION_TYPES);
     out.push_str("  /**\n");
     out.push_str("   * A description of one element, built by chaining.\n");
     out.push_str("   *\n");
@@ -101,17 +127,104 @@ pub fn declarations() -> String {
     out.push_str(&parametric_styles(&parametric));
     out.push_str(&nullary_styles(&nullary));
     out.push_str("  }\n");
-    out.push_str(CONSTRUCTORS);
+    out.push_str(ELEMENTS);
+    out.push_str(WINDOW);
     out.push_str(CAPABILITIES);
     out.push_str(SCHEDULING);
+    out.push_str("}\n\n");
+    out.push_str("declare module \"gpui-base\" {\n");
+    out.push_str(BASE_IMPORTS);
+    out.push_str(&base_color_token_type());
+    out.push_str(BASE_SHARED_TYPES);
+    out.push_str(BASE);
+    out.push_str("}\n\n");
+    out.push_str("declare module \"gpui-shell\" {\n");
+    out.push_str(&shell_types());
+    out.push_str("}\n\n");
+    out.push_str("declare module \"gpui-fps\" {\n");
+    out.push_str(FPS_IMPORTS);
+    out.push_str(FPS);
     out.push_str("}\n");
     out.push_str(STANDARD_RUNTIME);
+    out.push_str(&host_modules());
     out.push_str(WINDOW_GLOBAL);
     out
 }
 
+/// The modules this host registered, as `declare module` blocks.
+///
+/// Generated from the registry rather than hand-written beside the script,
+/// which is the whole reason HostModule registrations became imports. A module that gave
+/// itself a TypeScript face through [`crate::HostModule::declarations`] is
+/// emitted verbatim — and [`crate::HostModule::validate`] has already checked
+/// that face against what was registered, so it cannot describe a function that
+/// is not there. One that did not is emitted with permissive signatures, which
+/// still check the module name and every export name.
+/// Re-indents a module's declarations to sit one level inside `declare module`.
+///
+/// A host writes them in a Rust raw string, so they arrive carrying whatever
+/// indentation that literal had. Stripping each line entirely would flatten a
+/// multi-line `interface` into something TypeScript still parses but nobody
+/// wants to read, so the common prefix goes and the shape inside it stays.
+fn reindented(declarations: &str) -> String {
+    let common = declarations
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| line.len() - line.trim_start().len())
+        .min()
+        .unwrap_or(0);
+
+    let mut out = String::new();
+    for line in declarations.lines() {
+        let line = line.trim_end();
+        if line.is_empty() {
+            out.push('\n');
+        } else {
+            let _ = writeln!(out, "  {}", &line[common..]);
+        }
+    }
+    out
+}
+
+fn host_modules() -> String {
+    let registry = crate::host_modules::modules();
+    let mut out = String::new();
+    for name in registry.module_names() {
+        let Ok(module) = registry.get(name) else {
+            continue;
+        };
+        let _ = writeln!(out, "\ndeclare module \"{name}\" {{");
+        match module.declared() {
+            Some(declarations) => out.push_str(&reindented(declarations)),
+            None => {
+                // `HostValue`, not `any`. The boundary carries exactly what the
+                // Rust type of that name carries, so `any` would be wider than
+                // the runtime: a script passing a function or a Symbol would
+                // type-check and then be refused at the call.
+                out.push_str("  import { HostValue } from \"gpui\";\n\n");
+                for function in module.function_names() {
+                    // Permissive about shape, but not wrong about the one thing
+                    // the caller has to get right: an asynchronous export is
+                    // awaited.
+                    let returns = if module.is_async(function) {
+                        "Promise<HostValue>"
+                    } else {
+                        "HostValue"
+                    };
+                    let _ = writeln!(
+                        out,
+                        "  export function {function}(...args: HostValue[]): {returns};"
+                    );
+                }
+            }
+        }
+        out.push_str("}\n");
+    }
+    out
+}
+
 /// Refreshes the declarations in every directory of an application that imports
-/// the `gpui` module.
+/// one of the built-in modules.
 ///
 /// One file at the root is enough for an editor that has the whole application
 /// open, and not enough for anything else: a subdirectory opened on its own, a
@@ -126,7 +239,7 @@ pub(crate) fn write_application(root: &Path) -> std::io::Result<Vec<PathBuf>> {
     std::fs::create_dir_all(root)?;
     let mut directories = vec![root.to_path_buf()];
     directories.extend(
-        directories_importing_gpui(root)
+        directories_importing_builtins(root)
             .into_iter()
             .filter(|directory| directory != root),
     );
@@ -148,13 +261,13 @@ pub(crate) fn write_application(root: &Path) -> std::io::Result<Vec<PathBuf>> {
     }
 }
 
-/// Directories holding at least one script that imports `gpui`.
+/// Directories holding at least one script that imports a built-in module.
 ///
 /// Bounded the way the source watcher is bounded, and for the same reason: an
 /// application directory is whatever someone pointed the runtime at, and a
 /// symlink farm or a vendored tree must not turn a startup step into an
 /// unbounded walk.
-fn directories_importing_gpui(root: &Path) -> Vec<PathBuf> {
+fn directories_importing_builtins(root: &Path) -> Vec<PathBuf> {
     const MAX_DEPTH: usize = 8;
     const MAX_FILES: usize = 4_096;
     const SKIPPED: [&str; 2] = ["node_modules", "target"];
@@ -203,7 +316,7 @@ fn directories_importing_gpui(root: &Path) -> Vec<PathBuf> {
                     path.extension().and_then(|extension| extension.to_str()),
                     Some("js" | "mjs")
                 )
-                && std::fs::read_to_string(&path).is_ok_and(|source| imports_gpui(&source))
+                && std::fs::read_to_string(&path).is_ok_and(|source| imports_builtin(&source))
             {
                 imports = true;
             }
@@ -217,15 +330,19 @@ fn directories_importing_gpui(root: &Path) -> Vec<PathBuf> {
     found
 }
 
-/// Whether a script imports the built-in module.
+/// The specifiers one `gpui.d.ts` declares. A script importing any of them
+/// wants the file beside it.
+const BUILTIN_SPECIFIERS: [&str; 4] = ["gpui", "gpui-base", "gpui-shell", "gpui-fps"];
+
+/// Whether a script imports one of the built-in modules.
 ///
 /// Matching the quoted specifier rather than the bare word, so a file that only
 /// mentions gpui in a comment or a string does not collect a copy it has no use
 /// for.
-fn imports_gpui(source: &str) -> bool {
-    ["\"gpui\"", "'gpui'"]
-        .iter()
-        .any(|specifier| source.contains(specifier))
+fn imports_builtin(source: &str) -> bool {
+    BUILTIN_SPECIFIERS.iter().any(|specifier| {
+        source.contains(&format!("\"{specifier}\"")) || source.contains(&format!("'{specifier}'"))
+    })
 }
 
 /// Rewrites the declarations beside an application when they are not current.
@@ -336,12 +453,6 @@ fn argument_of(name: &str) -> Argument {
 
 fn color_types() -> String {
     let mut out = String::new();
-    out.push_str("  /** Every semantic color token the installed palette defines. */\n");
-    out.push_str("  export type ColorToken =\n");
-    for name in color_token_names() {
-        let _ = writeln!(out, "    | \"{name}\"");
-    }
-    out.push_str("    ;\n\n");
     out.push_str("  /**\n");
     out.push_str("   * A color: a semantic token name, or a `#rgb`, `#rrggbb` or `#rrggbbaa`\n");
     out.push_str("   * literal. Prefer a token; a literal bypasses the theme, and a theme\n");
@@ -354,7 +465,18 @@ fn color_types() -> String {
     out.push_str("   *     /** @type {{ bg: import(\"gpui\").Color }} *\\/\n");
     out.push_str("   *     const palette = tone === \"blocking\" ? ... : ...;\n");
     out.push_str("   */\n");
-    out.push_str("  export type Color = ColorToken | `#${string}`;\n\n");
+    out.push_str("  export type Color = import(\"gpui-base\").ColorToken | `#${string}`;\n\n");
+    out
+}
+
+fn base_color_token_type() -> String {
+    let mut out = String::new();
+    out.push_str("  /** Every semantic color token the installed Base palette defines. */\n");
+    out.push_str("  export type ColorToken =\n");
+    for name in color_token_names() {
+        let _ = writeln!(out, "    | \"{name}\"");
+    }
+    out.push_str("    ;\n\n");
     out
 }
 
@@ -397,20 +519,6 @@ fn anchor_type() -> String {
 
 fn view_types() -> String {
     let mut out = String::new();
-    out.push_str("  /** The phase a host call is in, as `cx.phase()` reports it. */\n");
-    out.push_str("  export type Phase =\n");
-    for phase in [
-        ScopePhase::Render,
-        ScopePhase::Event,
-        ScopePhase::Task,
-        ScopePhase::Layout,
-    ] {
-        let _ = writeln!(out, "    | \"{}\"", phase.as_str());
-    }
-    // Not a `ScopePhase`: `phase()` answers this outside any host call, where
-    // there is no frame to report.
-    out.push_str("    | \"none\"\n");
-    out.push_str("    ;\n\n");
     out.push_str(CONTEXT_AND_VIEW);
     out
 }
@@ -492,10 +600,22 @@ fn doc_comment(documentation: Option<&str>, indent: usize) -> String {
 const PREAMBLE: &str = "\
 // Auto-generated — add `gpui.d.ts` to your .gitignore.
 //
-// The built-in `gpui` module, as TypeScript declarations, for gpui-shell
-// {version}. Do not edit: gpui-shell rewrites this on every run, in every
-// directory that imports the module, from the runtime that is about to execute
-// the script. A committed copy could only ever be the stale one.
+// The built-in modules, as TypeScript declarations, for gpui-shell {version}.
+// Do not edit: gpui-shell rewrites this on every run, in every directory that
+// imports one of them, from the runtime that is about to execute the script. A
+// committed copy could only ever be the stale one.
+//
+// Each built-in module names the public Rust layer it exposes, so an import
+// says which layer a script depends on. \"gpui\" also carries the shell bridge:
+//
+//   \"gpui\"       GPUI's own elements, plus what this runtime adds: views,
+//                the style surface, the window, storage, scheduling.
+//   \"gpui-base\"  gpui-base's layout helpers, components and theme.
+//   \"gpui-fps\"   gpui-fps's performance overlay.
+//
+// A name belongs to exactly one of them. Nothing is re-exported for
+// convenience: a name reachable from two specifiers stops saying where it came
+// from.
 //
 // The style surface here is generated from the same tables the runtime
 // dispatches through, so a style method that type-checks exists at run time,
@@ -514,25 +634,32 @@ const VALUE_TYPES: &str = r#"  /**
    * `"auto"` is only accepted where the Rust signature takes `Length` — the
    * padding, gap, border and radius families take the narrower types below.
    */
-  export type Length = number | LengthString | "auto";
+  export type Length = number | import("gpui-shell").LengthString | "auto";
 
   /** A length that must resolve to a size: pixels, rems or a percentage. */
-  export type DefiniteLength = number | LengthString;
+  export type DefiniteLength = number | import("gpui-shell").LengthString;
 
   /** A length with no percentage and no `"auto"`: pixels or rems. */
   export type AbsoluteLength = number | `${number}px` | `${number}rem`;
 
-  /** The string forms of a length: `"12px"`, `"1.5rem"`, `"50%"`. */
-  export type LengthString = `${number}px` | `${number}rem` | `${number}%`;
+  /** A layout axis, mirroring `gpui::Axis`. */
+  export type Axis = "horizontal" | "vertical";
 
-  /** A JSON value — everything the store can persist, and nothing else. */
-  export type Json =
+  /**
+   * What a HostModule function takes and answers.
+   *
+   * Named after the Rust type it mirrors, `HostValue`, rather than after the
+   * shape it happens to have: `Json` would sit one capital letter away from the
+   * built-in `JSON` object and mean something entirely different — a value,
+   * not a parser.
+   */
+  export type HostValue =
     | null
     | boolean
     | number
     | string
-    | Json[]
-    | { [key: string]: Json };
+    | HostValue[]
+    | { [key: string]: HostValue };
 
 "#;
 
@@ -541,7 +668,8 @@ const CONTEXT_AND_VIEW: &str = r#"  /**
    *
    * It is valid only for the call that produced it: an `await` returns to the
    * host and the frame it names goes away, so a `cx` kept across one reports a
-   * stale-context error. Ask for a fresh one with `with_cx` instead.
+   * stale-context error. Work that outlives the call takes an [`AsyncContext`]
+   * instead — `cx.spawn`, `cx.timer`, `init`.
    */
   export interface Context {
     /**
@@ -550,42 +678,89 @@ const CONTEXT_AND_VIEW: &str = r#"  /**
      * loop.
      */
     notify(): void;
-    phase(): Phase;
+    phase(): import("gpui-shell").ScopePhase;
     /** Reads the current `gpui_base::Theme` semantic token projection. */
-    theme(): Theme;
+    theme(): import("gpui-base").Theme;
 
-  }
-
-
-
-  /** Which edge the sheet is anchored to. */
-  export type SheetSide = "left" | "right" | "top" | "bottom";
-
-  export interface DialogOptions {
-    /** Whether Escape closes it. Default `true`. */
-    escape_dismissable?: boolean;
-    /** Whether pressing the backdrop closes it. Default `true`. */
-    backdrop_dismissable?: boolean;
-  }
-
-  export interface ToastOptions {
-    /** The sentence the user reads. */
-    title: string;
-    /** A second line. */
-    description?: string;
-    /** Default `info`. */
-    level?: "info" | "success" | "warning" | "error";
     /**
-     * Milliseconds, or `null` to stay until dismissed. Omitting it keeps the
-     * five-second default, which is why `null` and absent are not the same.
+     * Hands a URL to whatever the system opens URLs with. `App::open_url`.
+     *
+     * `Link`'s `href` without the element, for the case where the address is
+     * not known until something has already happened — the end of a device
+     * authorization, say, where waiting for a second click to open the page the
+     * first click just asked for is a step nobody wanted.
+     *
+     * It takes an absolute `http`/`https` URL with a host and refuses
+     * everything else. That guard is not about the address bar: without it this
+     * is a way to hand an arbitrary URI to whichever handler the desktop
+     * registered for its scheme.
      */
-    timeout?: number | null;
+    open_url(url: string): void;
+
+    /** `App::read_from_clipboard`. `undefined` when it holds no text. */
+    read_from_clipboard(): string | undefined;
+    /** `App::write_to_clipboard`. */
+    write_to_clipboard(text: string): void;
+
     /**
-     * Identity, for replacing and dismissing. A repeated failure posted under
-     * one id is a standing message rather than a pile.
+     * A focus target the script owns, created once and kept on the view.
+     * `App::focus_handle` — GPUI has no `FocusHandle::new`, and neither does
+     * this.
+     *
+     * Focus is a fact about the window that outlives any one render, so an
+     * element rebuilt every frame cannot own it. Hand the handle to an element
+     * with `track_focus(...)`, and it is that element the keyboard means.
+     *
+     * It would produce a fresh handle on every frame, so it belongs in `init`
+     * or in an event handler — never in `render`.
      */
-    id?: string;
+    focus_handle(): FocusHandle;
+
+    /**
+     * Creates a retained nested view and hands back the entity that owns it.
+     * `AppContext::new` — the only way GPUI makes one, and so the only way here.
+     *
+     * The entity is a child wherever a child is taken: `.child(entity)`, or
+     * returned from `render`. Updating its props runs the child's optional
+     * `update(props)` and rebuilds only that child.
+     *
+     * Legal from `init`, an event handler or a task; creating one during
+     * `render` or layout throws.
+     */
+    new(Class: ViewClass, props?: import("gpui-shell").Props): Entity;
+
+    /**
+     * Calls `body(cx)` and adopts the promise it returns, so a rejection is
+     * reported rather than swallowed. `App::spawn`.
+     *
+     * The `cx` the body receives is an [`AsyncContext`] — valid across `await`,
+     * the way GPUI's `AsyncApp` is — so the whole body can keep using it.
+     */
+    spawn(body: (cx: AsyncContext) => unknown, opts?: import("gpui-shell").TaskOptions): Task;
+
+    /** Resolves after `ms` on GPUI's foreground executor. */
+    sleep(ms?: number): Promise<void>;
+
+    /** One-shot and repeating callbacks on the foreground executor. */
+    readonly timer: Timer;
   }
+
+  /**
+   * A context that may be held across an `await`.
+   *
+   * The mirror of GPUI's `AsyncApp`. An ordinary [`Context`] speaks for one
+   * host call and reports clearly once that call has returned — which is what
+   * catches a `cx` stashed in a closure. This one names no call at all: it
+   * resolves whichever is running when a member is used, and refuses only when
+   * none is.
+   *
+   * It is what `init` receives, and what `cx.spawn` and `cx.timer` hand their
+   * callbacks — the three places whose whole job is to set up or continue work
+   * that outlives the call they were started from.
+   */
+  export interface AsyncContext extends Context {}
+
+
 
   /** The modifier keys held when a click was delivered. */
   export interface Modifiers {
@@ -603,41 +778,39 @@ const CONTEXT_AND_VIEW: &str = r#"  /**
   }
 
   export interface Point { x: number; y: number; }
-  export interface ElementBounds extends Point { width: number; height: number; }
   /** GPUI mouse coordinates. `position` is window-relative; `local_position` is element-relative. */
   export interface MouseMoveEvent {
     position: Point;
     local_position: Point;
-    bounds: ElementBounds;
+    bounds: import("gpui-shell").ElementBounds;
     modifiers: Modifiers;
   }
 
   /**
-   * Properties handed to `init`.
-   *
-   * `any` rather than `unknown` because the values come from outside the type
-   * system and every use would otherwise need a cast. The host currently
-   * constructs a root view with no properties at all, so `init` should treat
-   * its argument as absent.
-   */
-  export type Props = Record<string, any>;
-
-  /**
    * The base class of every view: subclass it and default-export the subclass.
    *
-   * `init` runs once when the view is created. `render` returns exactly one
-   * element, and runs when the view is invalidated — by `cx.notify()`, a
-   * reload, or a theme change — not on every frame. Never store an element on
-   * the instance: it belongs to the render that built it.
+   * `init` runs once when the view is created. `render` returns one element,
+   * retained entity or string, and runs when the view is invalidated — by
+   * `cx.notify()`, a reload, or a theme change — not on every frame. Never
+   * store an element on the instance: it belongs to the render that built it.
    */
   export abstract class View {
-    constructor(props?: Props);
-    init?(props?: Props): void;
-    abstract render(cx: Context): Element;
+    constructor(props?: import("gpui-shell").Props);
+    /**
+     * Runs once when the view is created.
+     *
+     * `cx` is an [`AsyncContext`], because this is where retained things are
+     * made — tasks, timers, focus handles — and the context that starts a task
+     * is the one its body will still be using after an `await`.
+     */
+    init?(props: import("gpui-shell").Props | undefined, cx: AsyncContext): void;
+    /** Runs when a parent changes this retained nested view's properties. */
+    update?(props: import("gpui-shell").Props | undefined): void;
+    abstract render(cx: Context): Element | Entity | string;
   }
 
   /** A concrete script view class that can be retained as a nested view. */
-  export type ViewClass = new (props?: Props) => View;
+  export type ViewClass = new (props?: import("gpui-shell").Props) => View;
 
   /**
    * Retained ownership of one nested `View` entity.
@@ -656,19 +829,11 @@ const CONTEXT_AND_VIEW: &str = r#"  /**
    * newly added non-configurable properties; making an existing configurable property non-configurable;
    * and pre-existing native handles explicitly released by update.
    */
-  export interface ViewHandle {
-    set_props(props?: Props): void;
+  export interface Entity {
+    set_props(props?: import("gpui-shell").Props): void;
     release(): boolean;
   }
 
-  export interface ViewHandleType {
-    new: (Class: ViewClass, props?: Props) => ViewHandle;
-  }
-
-  export const ViewHandle: ViewHandleType;
-
-  /** Mounts one retained child. A handle may appear once per parent snapshot. */
-  export function child_view(handle: ViewHandle): Element;
 
 "#;
 
@@ -677,10 +842,28 @@ const CONTEXT_AND_VIEW: &str = r#"  /**
 /// Hand-written because each has a signature of its own; the names match the
 /// behavior list the engine installs on the prototype, and
 /// [`tests::every_element_method_is_accounted_for`] fails if the two drift.
-const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; using it again throws. */
-    child(child: Element): Element;
+const ELEMENT_METHODS: &str = r#"    /**
+     * Passes this element to `transform` and returns exactly what it returns.
+     *
+     * This mirrors GPUI's `FluentBuilder.map`: it is useful for keeping an
+     * imperative or conditional transformation inside a fluent expression.
+     */
+    map<T>(transform: (element: Element) => T): T;
+    /**
+     * Adds one child. The child is consumed; using it again throws.
+     *
+     * A **string is an element**, exactly as `&str`, `String` and
+     * `SharedString` implement `IntoElement` in GPUI: `.child("hello")` is how
+     * text is written, and the style comes from the element holding it.
+     *
+     * An `Entity` from `cx.new(...)` is a child too, the way an `Entity<V>` is
+     * renderable in GPUI — that is how a retained nested view is mounted. One
+     * entity may appear once per parent snapshot; a second mount in the same
+     * description is refused before any of it is published.
+     */
+    child(child: Element | Entity | string | number | boolean): Element;
     /** Adds several children, in order. */
-    children(children: Iterable<Element>): Element;
+    children(children: Iterable<Element | Entity | string | number | boolean>): Element;
     /**
      * Fills the `content` slot of a `Collapsible`, a `Popover`, a `HoverCard`
      * or a `Popup`.
@@ -769,8 +952,14 @@ const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; 
     /** GPUI `InteractiveElement::on_hover`; reports both pointer entry and exit. */
     on_hover(handler: (hovered: boolean, cx: Context) => void): Element;
     /**
-     * `handler(index, cx)` when a row of a virtual list is clicked, where
-     * `index` is the item's position in the whole collection.
+     * `handler(key, cx)` when a row of a virtual list is clicked, where `key`
+     * is what the list's `get_key(index)` returned for that row.
+     *
+     * A key rather than an index, because the two stop agreeing exactly when it
+     * matters: the box was captured on the frame the row was drawn, and a
+     * filter or a sort can reorder the list before the click is delivered. The
+     * key names the item that was pressed; the index would name whatever slid
+     * into its place.
      *
      * One handler for the list rather than one per row, and that is a limit
      * rather than a shorthand: a handler registered inside the item renderer
@@ -780,14 +969,14 @@ const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; 
      * twenty visible rows over a thousand frames is twenty thousand functions
      * nothing can reach and nothing releases.
      *
-     * The index is normally enough: the script already holds the data the row
-     * was built from. A row with several independently clickable parts needs a
+     * The key is normally enough: the script already holds the data the row was
+     * built from. A row with several independently clickable parts needs a
      * handler lifetime scoped to one batch of items, which this runtime does
      * not have yet; when it does, this restriction lifts and `on_click` inside
      * an item renderer starts working, with no change to anything written
      * against `on_item_click`.
      */
-    on_item_click(handler: (index: number, cx: Context) => void): Element;
+    on_item_click(handler: (key: string, cx: Context) => void): Element;
     /**
      * `handler(value, cx)`, on a toggle. The script owns the new value.
      *
@@ -814,7 +1003,7 @@ const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; 
     /**
      * `handler(open, cx)`, when something other than the script changed a
      * `Popover`'s open state: a press on the trigger, a press outside it, or
-     * Escape. Store the value and call `cx.notify()`, the way `on_change`
+     * Escape. Storage the value and call `cx.notify()`, the way `on_change`
      * stores a checkbox's.
      *
      * A `HoverCard` accepts this too, and today never calls it: the base layer
@@ -938,7 +1127,7 @@ const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; 
      * you drew as the trigger, or nothing focusable is on screen and Escape and
      * Enter reach nothing.
      */
-    track_focus(handle: FocusHandleHandle): Element;
+    track_focus(handle: FocusHandle): Element;
     /**
      * Gives a virtual list the scroll position held by a
      * `VirtualListScrollHandle`, so the script can drive it with
@@ -948,7 +1137,7 @@ const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; 
      * the id it was built with — which is the same place a `Scrollbar` named
      * after that id looks, so the bar works either way.
      */
-    track_scroll(handle: VirtualListScrollHandleHandle): Element;
+    track_scroll(handle: import("gpui-base").VirtualListScrollHandle): Element;
     /**
      * Which item a virtual list measures to infer its size across the axis it
      * scrolls: a vertical list takes its width from this item, a horizontal
@@ -965,7 +1154,7 @@ const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; 
      * then style itself from `handle.is_focused()`. It does **not** give you
      * arrow-key navigation — see `Select` for what is and is not there.
      */
-    content_focus_handle(handle: FocusHandleHandle): Element;
+    content_focus_handle(handle: FocusHandle): Element;
     /**
      * Where this element sits in the window's Tab order. A whole number;
      * setting it also makes the element a tab stop.
@@ -1011,7 +1200,7 @@ const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; 
      * A `Scrollbar`'s visibility policy. Omitted, it follows the theme, which
      * is what every bar painted by `overflow_*_scrollbar` does.
      */
-    mode(value: ScrollbarMode): Element;
+    mode(value: import("gpui-base").ScrollbarMode): Element;
     /**
      * The content size a `Scrollbar` measures its thumb against, in pixels,
      * for when the script knows it and the scroll area does not — a list that
@@ -1053,7 +1242,7 @@ const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; 
      * drawn. Omitted, each container keeps its own default: `RadioGroup` is
      * vertical, `ToggleGroup` horizontal.
      */
-    axis(value: GroupAxis): Element;
+    axis(value: Axis): Element;
     /**
      * A `Table`'s total number of rows, including rows outside the range the
      * script rendered, so a screen reader can announce "row 5 of 200". A table
@@ -1111,9 +1300,9 @@ const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; 
      */
     close_delay(ms: number): Element;
     /** Animates later target changes entirely in native GPUI code. */
-    transition(property: MotionProperty, policy: number | TransitionPolicy): Element;
+    transition(property: import("gpui-shell").MotionProperty, policy: number | import("gpui-shell").TransitionPolicy): Element;
     /** Springs later target changes entirely in native GPUI code. */
-    spring(property: MotionProperty, policy?: SpringPolicy): Element;
+    spring(property: import("gpui-shell").MotionProperty, policy?: import("gpui-shell").SpringPolicy): Element;
 
     /**
      * Which thumb of a range slider a `SliderThumb` is: the one at the start
@@ -1170,7 +1359,56 @@ const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; 
     focus(declare: (el: Element) => Element | void): Element;
 "#;
 
-const MOTION_TYPES: &str = r#"  export type MotionProperty = "opacity" | "width" | "height" | "left" | "top";
+fn shell_types() -> String {
+    let mut out = String::new();
+    out.push_str("  /** The string forms accepted by gpui-shell's length bridge. */\n");
+    out.push_str("  export type LengthString = `${number}px` | `${number}rem` | `${number}%`;\n\n");
+    out.push_str("  /** The gpui-shell call scope reported by `cx.phase()`; unrelated to gpui::DispatchPhase. */\n");
+    out.push_str("  export type ScopePhase =\n");
+    for phase in [
+        ScopePhase::Render,
+        ScopePhase::Event,
+        ScopePhase::Task,
+        ScopePhase::Layout,
+    ] {
+        let _ = writeln!(out, "    | \"{}\"", phase.as_str());
+    }
+    out.push_str("    | \"none\"\n    ;\n\n");
+    out.push_str(SHELL_TYPES);
+    out
+}
+
+const SHELL_TYPES: &str = r#"  /** A path coordinate in pixels or as a percentage of the painted bounds. */
+  export type PathCoordinate = number | `${number}%`;
+
+  /** The property bag carried across the JavaScript view bridge. */
+  export type Props = Record<string, any>;
+
+  /** Element-local event bounds assembled by the shell. */
+  export interface ElementBounds extends import("gpui").Point {
+    width: number;
+    height: number;
+  }
+
+  export interface DialogOptions {
+    escape_dismissable?: boolean;
+    backdrop_dismissable?: boolean;
+  }
+
+  export interface ToastOptions {
+    title: string;
+    description?: string;
+    level?: "info" | "success" | "warning" | "error";
+    timeout?: number | null;
+    id?: string;
+  }
+
+  export interface TaskOptions {
+    /** Defaults to the running view; `null` outlives every view. */
+    owner?: import("gpui").View | null;
+  }
+
+  export type MotionProperty = "opacity" | "width" | "height" | "left" | "top";
   export type MotionEasing = "linear" | "ease-in" | "ease-out" | "ease-in-out";
   export interface TransitionPolicy {
     /** Duration in milliseconds. */
@@ -1190,28 +1428,170 @@ const MOTION_TYPES: &str = r#"  export type MotionProperty = "opacity" | "width"
 
 "#;
 
-const CONSTRUCTORS: &str = r#"
+/// The elements GPUI itself draws, and the state handles this runtime keeps for
+/// them. `gpui-base`'s components are declared separately, in [`BASE`].
+const ELEMENTS: &str = r#"
   /** An element with no layout of its own. */
   export function div(): Element;
-  /** A row. */
-  export function h_flex(): Element;
-  /** A column. */
-  export function v_flex(): Element;
-  /** A text element. The value is stringified. */
-  export function text(value: string | number | boolean): Element;
-  /**
-   * The native `gpui-fps` performance HUD, shared once per window and pinned
-   * to the top-right by default. Its parent must be `relative()`.
-   */
-  export function fps_monitor(): Element;
 
   /**
-   * A component type: a table with one factory, mirroring `Button::new(id)` on
-   * the Rust side. The id identifies the element across renders.
+   * A vector image from the application's own directory.
+   *
+   * The path resolves against the application root — the directory passed to
+   * gpui-shell — not against the file that asked for it, the way a web
+   * application's public directory works. It inherits the surrounding text
+   * color unless it sets its own.
    */
+  export function svg(path: string): Element;
+
+  /**
+   * A full-color image from the application's own directory.
+   *
+   * Unlike `svg`, this preserves the source image's colors instead of using it
+   * as a theme-tinted icon mask. SVG, PNG, JPEG and other GPUI image formats
+   * are supported by the host image loader.
+   */
+  export function image(path: string): Element;
+
+  /** Immutable native GPUI geometry produced by `PathBuilder.build()`. */
+  export interface Path {}
+  export interface PathBuilder {
+    move_to(x: import("gpui-shell").PathCoordinate, y: import("gpui-shell").PathCoordinate): PathBuilder;
+    line_to(x: import("gpui-shell").PathCoordinate, y: import("gpui-shell").PathCoordinate): PathBuilder;
+    curve_to(to_x: import("gpui-shell").PathCoordinate, to_y: import("gpui-shell").PathCoordinate, control_x: import("gpui-shell").PathCoordinate, control_y: import("gpui-shell").PathCoordinate): PathBuilder;
+    cubic_bezier_to(to_x: import("gpui-shell").PathCoordinate, to_y: import("gpui-shell").PathCoordinate, control_a_x: import("gpui-shell").PathCoordinate, control_a_y: import("gpui-shell").PathCoordinate, control_b_x: import("gpui-shell").PathCoordinate, control_b_y: import("gpui-shell").PathCoordinate): PathBuilder;
+    arc_to(radius_x: import("gpui-shell").PathCoordinate, radius_y: import("gpui-shell").PathCoordinate, rotation: number, large_arc: boolean, sweep: boolean, to_x: import("gpui-shell").PathCoordinate, to_y: import("gpui-shell").PathCoordinate): PathBuilder;
+    add_polygon(points: ReadonlyArray<readonly [import("gpui-shell").PathCoordinate, import("gpui-shell").PathCoordinate]>, closed?: boolean): PathBuilder;
+    close(): PathBuilder;
+    dash_array(values: readonly number[]): PathBuilder;
+    build(): Path;
+  }
+  export const PathBuilder: {
+    fill(): PathBuilder;
+    stroke(width: number): PathBuilder;
+  };
+  export interface BackgroundStop {}
+  export interface Background {
+    opacity(factor: number): Background;
+    color_space(space: "srgb" | "oklab"): Background;
+  }
+  export const Background: {
+    solid(color: Color): Background;
+    stop(color: Color, percentage: number): BackgroundStop;
+    linear_gradient(angle: number, from: Color | BackgroundStop, to: Color | BackgroundStop): Background;
+    pattern_slash(color: Color, width: number, interval: number): Background;
+    checkerboard(color: Color, size: number): Background;
+  };
+
+  /**
+   * A focus target the script owns, created once and kept on the view.
+   *
+   * Focus is a fact about the window that outlives any one render, so an
+   * element rebuilt every frame cannot own it. Hand the handle to an element
+   * with `track_focus(...)`, and it is that element the keyboard means.
+   *
+   * Built with `cx.focus_handle()`, mirroring `App::focus_handle`.
+   */
+  export interface FocusHandle {
+    /** Moves the keyboard onto the element tracking this handle. */
+    focus(): void;
+    /** Whether the element tracking this handle currently has the keyboard. */
+    is_focused(): boolean;
+    release(): boolean;
+  }
+
+"#;
+
+/// Shared gpui-base types used by its component constructors and Window extensions.
+const BASE_SHARED_TYPES: &str = r#"
+  /** One of the four edges used to place an element. Mirrors `gpui_base::Placement`. */
+  export type Placement = "top" | "bottom" | "left" | "right";
+
+  /** A component identified across renders by `new(id)`. */
   export interface ComponentType {
     new: (id: string | number) => Element;
   }
+
+  /** A sub-part with no identity of its own, constructed with `new()`. */
+  export interface PartType {
+    new: () => Element;
+  }
+
+"#;
+
+/// The window the script draws into.
+const WINDOW: &str = r#"
+  export interface Window {
+    /**
+     * Opens a dialog on the window's root, and answers the stack's new depth.
+     *
+     * Takes a **function returning an element**, not an element: an element
+     * belongs to the render pass that built it, and a dialog outlives the call
+     * that opened it. The function runs when the dialog draws, and again
+     * whenever it redraws. Whatever it closes over is the dialog's state.
+     *
+     * Legal from an event handler or a task, not from `render`.
+     */
+    open_dialog(content: () => Element, options?: import("gpui-shell").DialogOptions): number;
+    /** Closes the topmost dialog, and answers whether it found one. */
+    close_dialog(): boolean;
+    /** Closes every dialog, and answers how many it closed. */
+    close_all_dialogs(): number;
+    /** Whether any dialog is open. Legal from `render`, unlike the rest. */
+    has_active_dialog(): boolean;
+
+    /**
+     * Opens the sheet on the right, replacing whatever was there. At most one is
+     * ever open.
+     */
+    open_sheet(content: () => Element): void;
+    /** The same, anchored at the `gpui-base` placement you name. */
+    open_sheet_at(placement: import("gpui-base").Placement, content: () => Element): void;
+    /** Closes the sheet, and answers whether one was open. */
+    close_sheet(): boolean;
+    /** Whether the sheet is open. Legal from `render`, unlike the rest. */
+    has_active_sheet(): boolean;
+
+    /** Posts a toast, and answers its id — the generated one when none was given. */
+    push_toast(options: import("gpui-shell").ToastOptions): string;
+    /** Retracts one toast by id, and answers whether it was still showing. */
+    remove_toast(id: string): boolean;
+    /** Retracts every toast, and answers how many it retracted. */
+    clear_toasts(): number;
+
+    /**
+     * Key-value storage that survives a restart, backed by a file the host
+     * placed. Needs the `storage` capability.
+     */
+    readonly localStorage: Storage;
+    /**
+     * Key-value storage for this run of the application, held in memory and
+     * gone when the process exits. Needs no capability: a script that runs may
+     * already hold its own memory.
+     */
+    readonly sessionStorage: Storage;
+
+    /**
+     * Paints immutable GPUI geometry with a reusable native `Background`.
+     * `Window::paint_path`.
+     *
+     * The one element constructor reached through an object rather than as a
+     * free function, and it is one because the thing it mirrors is a method on
+     * the window rather than on the app. Legal from `render`, unlike the
+     * overlays above — it builds a description like any other element.
+     */
+    paint_path(path: Path, background: Background | Color): Element;
+  }
+
+"#;
+
+/// Everything `gpui-base` provides: its layout helpers, its components and its
+/// theme. Emitted into `declare module "gpui-base"`, so an import says which
+/// layer a script is reaching for.
+const BASE: &str = r#"  /** A row. */
+  export function h_flex(): Element;
+  /** A column. */
+  export function v_flex(): Element;
 
   /** Activation, focus, disabled and selected state. No styling. */
   export const Button: ComponentType;
@@ -1229,14 +1609,6 @@ const CONSTRUCTORS: &str = r#"
   export const Tabs: ComponentType;
   /** One tab. Controlled: `selected(...)` in, `on_click(...)` out. */
   export const Tab: ComponentType;
-  /**
-   * A sub-part with no identity of its own, mirroring `ProgressTrack::new()`
-   * on the Rust side.
-   */
-  export interface PartType {
-    new: () => Element;
-  }
-
   /**
    * The progress root: the announcement, not the bar.
    *
@@ -1276,9 +1648,6 @@ const CONSTRUCTORS: &str = r#"
    */
   export const Toggle: ComponentType;
 
-  /** The semantic orientation of a grouping container. Announced, not drawn. */
-  export type GroupAxis = "horizontal" | "vertical";
-
   /**
    * A set of radios, announced as one group. It holds no selection — each
    * radio is told whether it is checked and reports the change back, so the
@@ -1293,17 +1662,6 @@ const CONSTRUCTORS: &str = r#"
    * state of its own, and its `axis` is announced rather than drawn.
    */
   export const ToggleGroup: ComponentType;
-
-  /**
-   * A component type whose factory also takes a one-based accessibility index.
-   *
-   * The index is a constructor argument rather than a builder method because a
-   * row or cell that does not know where it sits announces itself in the wrong
-   * place. It must be a whole number of at least 1.
-   */
-  export interface IndexedComponentType {
-    new: (id: string | number, index: number) => Element;
-  }
 
   /**
    * A semantic table root, composed the way HTML composes one: no data source
@@ -1321,11 +1679,11 @@ const CONSTRUCTORS: &str = r#"
   /** The body row group of a `Table`. */
   export const TableBody: ComponentType;
   /** One row. `TableRow.new(id, row_index)`, one-based. */
-  export const TableRow: IndexedComponentType;
+  export const TableRow: { new: (id: string | number, row_index: number) => Element };
   /** One column header. `TableHead.new(id, column_index)`, one-based. */
-  export const TableHead: IndexedComponentType;
+  export const TableHead: { new: (id: string | number, column_index: number) => Element };
   /** One data cell. `TableCell.new(id, column_index)`, one-based. */
-  export const TableCell: IndexedComponentType;
+  export const TableCell: { new: (id: string | number, column_index: number) => Element };
   /**
    * The visual slot a caption belongs in. It is an identified container and
    * nothing more: it carries no caption role, so assistive technology does not
@@ -1441,11 +1799,9 @@ const CONSTRUCTORS: &str = r#"
    * A popup is a real element, unlike `Popover`: styles, state styles, `role`
    * and `track_focus` all land on it.
    */
-  export interface PopupType {
+  export const Popup: {
     new: (id: string | number, trigger: Element) => Element;
-  }
-
-  export const Popup: PopupType;
+  };
 
   /**
    * A combobox root: the semantics and the keyboard, none of the picture.
@@ -1513,30 +1869,9 @@ const CONSTRUCTORS: &str = r#"
    * have this problem; if you need the keyboard today, build the picker's
    * trigger and calendar inside one.
    */
-  export interface DatePickerType {
-    new: (id: string | number, focus_handle: FocusHandleHandle) => Element;
-  }
-
-  export const DatePicker: DatePickerType;
-
-  /**
-   * A vector image from the application's own directory.
-   *
-   * The path resolves against the application root — the directory passed to
-   * gpui-shell — not against the file that asked for it, the way a web
-   * application's public directory works. It inherits the surrounding text
-   * color unless it sets its own.
-   */
-  export function svg(path: string): Element;
-
-  /**
-   * A full-color image from the application's own directory.
-   *
-   * Unlike `svg`, this preserves the source image's colors instead of using it
-   * as a theme-tinted icon mask. SVG, PNG, JPEG and other GPUI image formats
-   * are supported by the host image loader.
-   */
-  export function image(path: string): Element;
+  export const DatePicker: {
+    new: (id: string | number, focus_handle: FocusHandle) => Element;
+  };
 
   /** When a `Scrollbar` shows itself. */
   export type ScrollbarMode = "scrolling" | "hover" | "always";
@@ -1567,16 +1902,14 @@ const CONSTRUCTORS: &str = r#"
    * put in, so that element is the one you place — and its colors come from
    * the theme.
    */
-  export interface ScrollbarType {
+  export const Scrollbar: {
     /** Both axes. */
     new: (id: string | number) => Element;
     /** The horizontal bar alone. */
     horizontal: (id: string | number) => Element;
     /** The vertical bar alone. */
     vertical: (id: string | number) => Element;
-  }
-
-  export const Scrollbar: ScrollbarType;
+  };
 
   /** The visible items, as a half-open `[start, end)` interval. */
   export interface ItemRange {
@@ -1600,7 +1933,7 @@ const CONSTRUCTORS: &str = r#"
    *
    * * **No handlers inside the renderer.** `on_click` and the rest throw if
    *   called there. Use `on_item_click` on the list — see its note for why.
-   * * **No state inside the renderer.** `InputState.new()`, `FocusHandle.new()`
+   * * **No state inside the renderer.** `InputState.new()`, `cx.focus_handle()`
    *   and the rest throw there as they do in `render()`, and `cx.notify()` is
    *   refused: asking for a re-render from inside layout is a loop.
    *
@@ -1609,8 +1942,9 @@ const CONSTRUCTORS: &str = r#"
    *
    * ```js
    * v_flex().relative().h(400)
-   *   .child(v_virtual_list("rows", this.rows.length, 28, (range) =>
-   *     this.rows.slice(range.start, range.end).map(row => text(row.name))))
+   *   .child(v_virtual_list("rows", this.rows.length, 28,
+   *     (index) => this.rows[index].id,
+   *     (range) => this.rows.slice(range.start, range.end).map(row => text(row.name))))
    *   .child(Scrollbar.vertical("rows").absolute().inset_0());
    * ```
    *
@@ -1623,6 +1957,11 @@ const CONSTRUCTORS: &str = r#"
    *   across the language boundary on every render, and a uniform hundred
    *   thousand rows is the case worth making cheap. An array must be exactly
    *   `item_count` long.
+   * @param get_key An item's stable domain key, from its current index. It is
+   *   the row's element identity, and it is what `on_item_click` reports — so a
+   *   click queued before a filter or a sort reordered the list still names the
+   *   item whose box was pressed rather than whatever slid into that index.
+   *   Required.
    * @param render  Called with the visible range; returns one element per item
    *   in it.
    */
@@ -1630,6 +1969,7 @@ const CONSTRUCTORS: &str = r#"
     id: string | number,
     item_count: number,
     item_sizes: number | number[],
+    get_key: (index: number) => string,
     render: (range: ItemRange, cx: Context) => Element[],
   ): Element;
 
@@ -1638,6 +1978,7 @@ const CONSTRUCTORS: &str = r#"
     id: string | number,
     item_count: number,
     item_sizes: number | number[],
+    get_key: (index: number) => string,
     render: (range: ItemRange, cx: Context) => Element[],
   ): Element;
 
@@ -1648,7 +1989,7 @@ const CONSTRUCTORS: &str = r#"
    * A list without one still scrolls, and a `Scrollbar` named after the list
    * still drives it; this is only needed to scroll it from code.
    */
-  export interface VirtualListScrollHandleHandle {
+  export interface VirtualListScrollHandle {
     /**
      * Puts the item at `index` on screen before the next frame. `"top"` (the
      * default) brings it to the near edge, `"center"` to the middle.
@@ -1659,45 +2000,18 @@ const CONSTRUCTORS: &str = r#"
     release(): boolean;
   }
 
-  export interface VirtualListScrollHandleType {
-    new: () => VirtualListScrollHandleHandle;
+  export const VirtualListScrollHandle: {
+    new: () => VirtualListScrollHandle;
+  };
+
+  /** Payload emitted by retained text state. Submit events carry key modifiers. */
+  export interface InputEvent {
+    readonly secondary?: boolean;
+    readonly shift?: boolean;
   }
 
-  export const VirtualListScrollHandle: VirtualListScrollHandleType;
-
-  /** A coordinate in pixels or relative to the painted element's bounds. */
-  export type PathCoordinate = number | `${number}%`;
-  /** Immutable native GPUI geometry produced by `PathBuilder.build()`. */
-  export interface Path {}
-  export interface PathBuilderHandle {
-    move_to(x: PathCoordinate, y: PathCoordinate): PathBuilderHandle;
-    line_to(x: PathCoordinate, y: PathCoordinate): PathBuilderHandle;
-    curve_to(to_x: PathCoordinate, to_y: PathCoordinate, control_x: PathCoordinate, control_y: PathCoordinate): PathBuilderHandle;
-    cubic_bezier_to(to_x: PathCoordinate, to_y: PathCoordinate, control_a_x: PathCoordinate, control_a_y: PathCoordinate, control_b_x: PathCoordinate, control_b_y: PathCoordinate): PathBuilderHandle;
-    arc_to(radius_x: PathCoordinate, radius_y: PathCoordinate, rotation: number, large_arc: boolean, sweep: boolean, to_x: PathCoordinate, to_y: PathCoordinate): PathBuilderHandle;
-    add_polygon(points: ReadonlyArray<readonly [PathCoordinate, PathCoordinate]>, closed?: boolean): PathBuilderHandle;
-    close(): PathBuilderHandle;
-    dash_array(values: readonly number[]): PathBuilderHandle;
-    build(): Path;
-  }
-  export const PathBuilder: {
-    fill(): PathBuilderHandle;
-    stroke(width: number): PathBuilderHandle;
-  };
-  export interface BackgroundStop {}
-  export interface BackgroundValue {
-    opacity(factor: number): BackgroundValue;
-    color_space(space: "srgb" | "oklab"): BackgroundValue;
-  }
-  export const Background: {
-    solid(color: Color): BackgroundValue;
-    stop(color: Color, percentage: number): BackgroundStop;
-    linear_gradient(angle: number, from: Color | BackgroundStop, to: Color | BackgroundStop): BackgroundValue;
-    pattern_slash(color: Color, width: number, interval: number): BackgroundValue;
-    checkerboard(color: Color, size: number): BackgroundValue;
-  };
-  /** Paints immutable GPUI geometry with a reusable native Background. */
-  export function paint_path(path: Path, background: BackgroundValue | Color): Element;
+  /** The OTP event payload is currently empty; read the value from the state. */
+  export interface OtpEvent {}
 
   /**
    * Retained text state, created once and kept on the view.
@@ -1705,11 +2019,11 @@ const CONSTRUCTORS: &str = r#"
    * `InputState.new(...)` needs a live host call, so it belongs in `init` or in
    * an event handler — never in `render`.
    */
-  export interface InputStateHandle {
+  export interface InputState {
     value(): string;
     set_value(next: string): void;
     /** `change`, `submit`, `focus` or `blur`. */
-    on(event: "change" | "submit" | "focus" | "blur", handler: (event: any, cx: Context) => void): boolean;
+    on(event: "change" | "submit" | "focus" | "blur", handler: (event: InputEvent, cx: Context) => void): boolean;
     /**
      * How much one step moves the value in a `NumberInput`. Default is 1;
      * `null` gives up stepping entirely.
@@ -1730,22 +2044,12 @@ const CONSTRUCTORS: &str = r#"
     release(): boolean;
   }
 
-  export interface InputStateType {
-    new: (options?: { placeholder?: string; value?: string }) => InputStateHandle;
-  }
-
-  export const InputState: InputStateType;
-
-  export interface InputType {
-    new: (state: InputStateHandle) => Element;
-  }
+  export const InputState: {
+    new: (options?: { placeholder?: string; value?: string }) => InputState;
+  };
 
   /** The frame around retained text state. */
-  export const Input: InputType;
-
-  export interface NumberInputType {
-    new: (state: InputStateHandle) => Element;
-  }
+  export const Input: { new: (state: InputState) => Element };
 
   /**
    * A spinbutton over the same `InputState` an `Input` holds.
@@ -1762,7 +2066,7 @@ const CONSTRUCTORS: &str = r#"
    * declares its own key context, which the two bindings are registered
    * against.
    */
-  export const NumberInput: NumberInputType;
+  export const NumberInput: { new: (state: InputState) => Element };
 
   /**
    * Retained multi-line text state, created once and kept on the view.
@@ -1775,11 +2079,11 @@ const CONSTRUCTORS: &str = r#"
    * textarea that says nothing else is the height of an input. Pass `rows`,
    * call `set_auto_grow(...)`, or size the element with `.h(...)`.
    */
-  export interface TextareaStateHandle {
+  export interface TextareaState {
     value(): string;
     set_value(next: string): void;
     /** `change`, `submit`, `focus` or `blur`. */
-    on(event: "change" | "submit" | "focus" | "blur", handler: (event: any, cx: Context) => void): boolean;
+    on(event: "change" | "submit" | "focus" | "blur", handler: (event: InputEvent, cx: Context) => void): boolean;
     /** Shows this many rows. */
     set_rows(rows: number): void;
     /** Grows with the content, between the two row counts. */
@@ -1789,18 +2093,12 @@ const CONSTRUCTORS: &str = r#"
     release(): boolean;
   }
 
-  export interface TextareaStateType {
-    new: (options?: { placeholder?: string; value?: string; rows?: number }) => TextareaStateHandle;
-  }
-
-  export const TextareaState: TextareaStateType;
-
-  export interface TextareaType {
-    new: (state: TextareaStateHandle) => Element;
-  }
+  export const TextareaState: {
+    new: (options?: { placeholder?: string; value?: string; rows?: number }) => TextareaState;
+  };
 
   /** The frame around retained multi-line text state. */
-  export const Textarea: TextareaType;
+  export const Textarea: { new: (state: TextareaState) => Element };
 
   /** One thumb, or the two ends of a range. */
   export type SliderValue = number | [number, number];
@@ -1817,7 +2115,7 @@ const CONSTRUCTORS: &str = r#"
    * rather than held beside it: a copy in the view would be a copy the drag
    * never updated.
    */
-  export interface SliderStateHandle {
+  export interface SliderState {
     /** The current value: a number, or `[start, end]` for a range slider. */
     value(): SliderValue;
     set_value(next: SliderValue): void;
@@ -1833,7 +2131,7 @@ const CONSTRUCTORS: &str = r#"
     release(): boolean;
   }
 
-  export interface SliderStateType {
+  export const SliderState: {
     /**
      * Defaults are `0..100` in steps of 1, starting at `min`.
      *
@@ -1846,15 +2144,8 @@ const CONSTRUCTORS: &str = r#"
       step?: number;
       scale?: "linear" | "logarithmic";
       value?: SliderValue;
-    }) => SliderStateHandle;
-  }
-
-  export const SliderState: SliderStateType;
-
-  /** A component built from a slider's state rather than from an id. */
-  export interface SliderPartType {
-    new: (state: SliderStateHandle) => Element;
-  }
+    }) => SliderState;
+  };
 
   /**
    * A slider, in four parts, none of which draws anything on its own.
@@ -1886,16 +2177,16 @@ const CONSTRUCTORS: &str = r#"
    * `axis("vertical")` is announced *and* used to place both, and each part is
    * told separately, as in Rust. A vertical slider grows from the bottom.
    */
-  export const Slider: SliderPartType;
+  export const Slider: { new: (state: SliderState) => Element };
   /** The press and drag surface. Give it the height a pointer can hit. */
-  export const SliderTrack: SliderPartType;
+  export const SliderTrack: { new: (state: SliderState) => Element };
   /**
    * The groove, and the part that records the geometry. It must span the whole
    * travel of the slider: the box it records is what every pointer position is
    * divided by, so an indicator sized to the value would make the value its own
    * scale.
    */
-  export const SliderIndicator: SliderPartType;
+  export const SliderIndicator: { new: (state: SliderState) => Element };
   /**
    * The knob. `start(true)` is the lower thumb of a range slider; the default
    * is the upper one, which is the only thumb a single-value slider has.
@@ -1904,7 +2195,7 @@ const CONSTRUCTORS: &str = r#"
    * state and a `transition("left", ...)` needs to know which of them it is
    * following.
    */
-  export const SliderThumb: SliderPartType;
+  export const SliderThumb: { new: (state: SliderState) => Element };
 
   /**
    * Retained one-time-code state, created once and kept on the view.
@@ -1915,7 +2206,7 @@ const CONSTRUCTORS: &str = r#"
    * The length is fixed when the state is created, because it is what the
    * state is: the base layer has no setter for it.
    */
-  export interface OtpStateHandle {
+  export interface OtpState {
     /** The digits entered so far — shorter than `len()` until the code is complete. */
     value(): string;
     /**
@@ -1932,24 +2223,18 @@ const CONSTRUCTORS: &str = r#"
     /** Moves the keyboard onto the code. */
     focus(): void;
     /**
-     * `change` arrives **once**, when the last digit lands: it reports the
-     * completed code, not each keystroke. There is no `submit` — the base
-     * layer never emits one for a code — and there is no event for the blink.
+     * `change` arrives after each edit; `complete` arrives when the last digit
+     * lands. There is no `submit` — the base layer never emits one for a code
+     * — and there is no event for the blink.
      */
-    on(event: "change" | "focus" | "blur", handler: (event: any, cx: Context) => void): boolean;
+    on(event: "change" | "complete" | "focus" | "blur", handler: (event: OtpEvent, cx: Context) => void): boolean;
     release(): boolean;
   }
 
-  export interface OtpStateType {
+  export const OtpState: {
     /** `length` is the number of cells: a whole number between 1 and 64. */
-    new: (length: number, options?: { value?: string; masked?: boolean }) => OtpStateHandle;
-  }
-
-  export const OtpState: OtpStateType;
-
-  export interface OtpInputType {
-    new: (state: OtpStateHandle) => Element;
-  }
+    new: (length: number, options?: { value?: string; masked?: boolean }) => OtpState;
+  };
 
   /**
    * A fixed-length code, drawn cell by cell **by the shell**.
@@ -1966,10 +2251,9 @@ const CONSTRUCTORS: &str = r#"
    *
    * Alone among the bound components, its cells are not the script's to
    * describe — only to style. A described cell would be frozen into the
-   * snapshot the last render produced and nothing would ever thaw it: the
-   * state reports `change` only once the code is *complete*, so the first five
-   * digits of a six-digit code would leave the screen untouched, and the caret
-   * blinks on a timer that raises no script event at all.
+   * snapshot the last render produced and nothing would ever thaw it: even
+   * though edits emit `change`, the caret blinks on a native timer that raises
+   * no script event at all.
    *
    * So the shell reads the state every frame and decides what each cell holds
    * — a digit, a bullet while the state is masked, the caret, or nothing —
@@ -1981,32 +2265,7 @@ const CONSTRUCTORS: &str = r#"
    * Grouping ("123 456") is not offered: the groups would be boxes the shell
    * invents, with no template to say what they look like.
    */
-  export const OtpInput: OtpInputType;
-
-  /**
-   * A focus target the script owns, created once and kept on the view.
-   *
-   * Focus is a fact about the window that outlives any one render, so an
-   * element rebuilt every frame cannot own it. Hand the handle to an element
-   * with `track_focus(...)`, and it is that element the keyboard means.
-   *
-   * `FocusHandle.new()` needs a live host call and would produce a fresh
-   * handle on every frame, so it belongs in `init` or in an event handler —
-   * never in `render`.
-   */
-  export interface FocusHandleHandle {
-    /** Moves the keyboard onto the element tracking this handle. */
-    focus(): void;
-    /** Whether the element tracking this handle currently has the keyboard. */
-    is_focused(): boolean;
-    release(): boolean;
-  }
-
-  export interface FocusHandleType {
-    new: () => FocusHandleHandle;
-  }
-
-  export const FocusHandle: FocusHandleType;
+  export const OtpInput: { new: (state: OtpState) => Element };
 
   /** Semantic color roles, aligned with `gpui_base::ColorTokens`. */
   export type ColorTokens = { readonly [Role in ColorToken]: Color };
@@ -2025,140 +2284,93 @@ const CONSTRUCTORS: &str = r#"
     readonly spacing: SpacingTokens;
     readonly radius: RadiusTokens;
   }
+
+  /**
+   * Replaces gpui-base's active semantic tokens for the current application.
+   * Legal only from an event handler or task backed by a live host call.
+   */
+  export function set_theme(theme: {
+    readonly appearance: "light" | "dark";
+    readonly tokens: SemanticThemeTokens;
+  }): void;
   /** The Base-aligned semantic tokens plus the current appearance. Read-only. */
   export interface Theme extends SemanticThemeTokens, ColorTokens {
     readonly appearance: "light" | "dark";
     readonly is_dark: boolean;
   }
 
-  /** Compatibility accessor; prefer the call-scoped `cx.theme()`. */
-  export function theme(): Theme;
-  /** Replaces gpui-base's active semantic tokens with an application-owned theme. */
-  export function set_theme(theme: {
-    readonly appearance: "light" | "dark";
-    readonly tokens: SemanticThemeTokens;
-  }): void;
-  export interface Window {
-    /**
-     * Opens a dialog on the window's root, and answers the stack's new depth.
-     *
-     * Takes a **function returning an element**, not an element: an element
-     * belongs to the render pass that built it, and a dialog outlives the call
-     * that opened it. The function runs when the dialog draws, and again
-     * whenever it redraws. Whatever it closes over is the dialog's state.
-     *
-     * Legal from an event handler or a task, not from `render`.
-     */
-    open_dialog(content: () => Element, options?: DialogOptions): number;
-    /** Closes the topmost dialog, and answers whether it found one. */
-    close_dialog(): boolean;
-    /** Closes every dialog, and answers how many it closed. */
-    close_all_dialogs(): number;
-    /** Whether any dialog is open. Legal from `render`, unlike the rest. */
-    has_active_dialog(): boolean;
+"#;
 
-    /**
-     * Opens the sheet on the right, replacing whatever was there. At most one is
-     * ever open.
-     */
-    open_sheet(content: () => Element): void;
-    /** The same, anchored to the side you name. */
-    open_sheet_at(side: SheetSide, content: () => Element): void;
-    /** Closes the sheet, and answers whether one was open. */
-    close_sheet(): boolean;
-    /** Whether the sheet is open. Legal from `render`, unlike the rest. */
-    has_active_sheet(): boolean;
+/// What `gpui-base`'s declarations borrow from `"gpui"`.
+///
+/// A component is built out of this runtime's vocabulary and returns an
+/// `Element`, so the dependency runs upward only.
+const BASE_IMPORTS: &str = r#"  import {
+    Color,
+    Context,
+    Element,
+    FocusHandle,
+  } from "gpui";
 
-    /** Posts a toast, and answers its id — the generated one when none was given. */
-    push_toast(options: ToastOptions): string;
-    /** Retracts one toast by id, and answers whether it was still showing. */
-    remove_toast(id: string): boolean;
-    /** Retracts every toast, and answers how many it retracted. */
-    clear_toasts(): number;
-  }
+"#;
 
-  /**
-   * The native modules this host registered, declared by the application.
-   *
-   * Empty here, because only the host knows what it granted. An application
-   * describes its own in a `.d.ts` beside its source, and from then on
-   * `native("...")` is typed — the module name is checked, and its functions
-   * complete:
-   *
-   * ```ts
-   * declare module "gpui" {
-   *   interface NativeModules {
-   *     market: {
-   *       quotes(): { symbol: string; last: string }[];
-   *       watch(symbol: string): boolean;
-   *     };
-   *   }
-   * }
-   * ```
-   *
-   * Declaring nothing costs nothing: with no entries the untyped overload
-   * below still applies, so an application that never writes one keeps working
-   * exactly as before.
+/// The `gpui-fps` performance overlay: one element, from the crate that draws it.
+const FPS: &str = r#"  /**
+   * The native `gpui-fps` performance HUD, shared once per window and pinned
+   * to the top-right by default. Its parent must be `relative()`.
    */
-  export interface NativeModules {}
+  export function fps_monitor(): Element;
+"#;
 
-  /**
-   * A module the host registered in Rust. Throws when no such module exists,
-   * naming the ones that do.
-   */
-  export function native<Name extends keyof NativeModules & string>(
-    module: Name,
-  ): NativeModules[Name];
-  export function native(module: string): Record<string, (...args: any[]) => any>;
+/// What `gpui-fps`'s one declaration borrows from `"gpui"`.
+const FPS_IMPORTS: &str = r#"  import { Element } from "gpui";
+
 "#;
 
 const CAPABILITIES: &str = r#"
   /** Key-value storage that survives a restart. Persisted on every write. */
-  export interface Store {
-    /** `null` when the key is unset. */
-    get(key: string): Json;
-    set(key: string, value: Json): void;
-    remove(key: string): void;
-    keys(): string[];
-    /** Completes after the current value has been durably written. */
+  /**
+   * The Web Storage API, as a browser implements it.
+   *
+   * Two instances exist and differ only in how long they last, which is the
+   * same split Deno and Node arrived at when they needed persistent key-value
+   * storage without a browser: `window.localStorage` is a file and survives a
+   * restart, `window.sessionStorage` is memory and is gone when the process
+   * exits.
+   *
+   * **Values are strings.** `setItem` converts whatever it is handed, exactly
+   * as the browser does, so an object is stored as `"[object Object]"` unless
+   * you `JSON.stringify` it — and reading it back is `JSON.parse`. That is not
+   * an omission; it is the API this mirrors.
+   *
+   * Storage is per application. The host places the file, because an
+   * application that could name its own storage location could name another
+   * application's.
+   */
+  export interface Storage {
+    /** How many keys are set. */
+    readonly length: number;
+    /** The key at `index` in a consistent order, or `null` past the end. */
+    key(index: number): string | null;
+    /** The value, or `null` when the key is unset. */
+    getItem(key: string): string | null;
+    /** Sets it, converting `value` to a string. */
+    setItem(key: string, value: string): void;
+    /** Removes it. Removing a key that is not set does nothing. */
+    removeItem(key: string): void;
+    /** Removes every key. */
+    clear(): void;
+    /**
+     * Resolves once the pending write has reached disk.
+     *
+     * The one addition to the Web Storage surface, and only on
+     * `localStorage`. A browser's `setItem` is durable by the time it returns;
+     * this one hands the write to a background thread, so a script that must
+     * know the bytes landed — before asking the host to exit, say — has
+     * something to await. Ordinary code does not need it.
+     */
     flush(): Promise<void>;
   }
-
-  export interface Clipboard {
-    /** `undefined` when the clipboard holds no text. */
-    read_text(): string | undefined;
-    write_text(text: string): void;
-  }
-
-  /** Diagnostics. Needs no capability: a script that runs may say something. */
-  export interface Log {
-    debug(message: unknown, ...rest: unknown[]): void;
-    info(message: unknown, ...rest: unknown[]): void;
-    warn(message: unknown, ...rest: unknown[]): void;
-    error(message: unknown, ...rest: unknown[]): void;
-  }
-
-  export const store: Store;
-  export const clipboard: Clipboard;
-
-  /**
-   * Hands a URL to whatever the system opens URLs with.
-   *
-   * `Link`'s `href` without the element, for the case where the address is not
-   * known until something has already happened — the end of a device
-   * authorization, say, where waiting for a second click to open the page the
-   * first click just asked for is a step nobody wanted.
-   *
-   * It takes an absolute `http`/`https` URL with a host and refuses everything
-   * else. That guard is not about the address bar: without it this is a way to
-   * hand an arbitrary URI to whichever handler the desktop registered for its
-   * scheme.
-   *
-   * Needs a live host call, so it belongs in an event handler or a task —
-   * never in `render`.
-   */
-  export function open_url(url: string): void;
-  export const log: Log;
 "#;
 
 const STANDARD_RUNTIME: &str = r#"
@@ -2194,8 +2406,23 @@ declare module "zlib" {
   export function gzipSync(data: string | Uint8Array): import("buffer").Buffer;
   export function gunzipSync(data: Uint8Array): import("buffer").Buffer;
 }
+interface Console {
+  debug(...values: unknown[]): void;
+  log(...values: unknown[]): void;
+  info(...values: unknown[]): void;
+  warn(...values: unknown[]): void;
+  error(...values: unknown[]): void;
+}
+/**
+ * Diagnostics. A global, as it is in every other JavaScript runtime, and the
+ * only one: the shell used to export the same object a second time as
+ * `gpui.log`, which bought a name and nothing else.
+ *
+ * Needs no capability — a script that runs may say something — and output goes
+ * to `tracing` under the `gpui_shell::script` target.
+ */
+declare const console: Console;
 declare module "console" {
-  interface Console { debug(...values: unknown[]): void; log(...values: unknown[]): void; info(...values: unknown[]): void; warn(...values: unknown[]): void; error(...values: unknown[]): void; }
   const console: Console;
   export default console;
 }
@@ -2277,13 +2504,14 @@ declare function fetch(url: string, options?: ShellFetchOptions): Promise<ShellF
 declare const process: typeof import("process").default;
 "#;
 
-/// `window` is a global, like `cx` — see the runtime's `overlay` module.
+/// `window` is a real global — see the runtime's `overlay` module.
 ///
 /// Outside the `declare module` block, which is what makes it global: this file
 /// has no top-level import or export, so TypeScript reads it in script mode.
 const WINDOW_GLOBAL: &str = r#"
 /**
- * The window the script is drawing into. A global, like `cx`; nothing to import.
+ * The window the script is drawing into. A global: nothing to import, and
+ * unlike `cx`, nothing hands it to you.
  *
  * Ambient: every call reads the host call that is running now, and throws
  * outside one. There is no handle to hold, so there is nothing to hold past the
@@ -2293,7 +2521,18 @@ const WINDOW_GLOBAL: &str = r#"
  * `cx.notify()` re-renders this view, `window.open_dialog()` changes what the
  * user is looking at — which is why these are here and not on `Context`.
  */
-declare const window: import("gpui").Window;
+type GpuiShellWindow = import("gpui").Window;
+interface Window extends GpuiShellWindow {}
+declare var window: Window & typeof globalThis;
+
+/**
+ * `window.localStorage`, reachable bare as it is in a browser, where `window`
+ * *is* the global object. Here `window` is an ordinary object, so both
+ * spellings are installed rather than one falling out of the other.
+ */
+declare const localStorage: import("gpui").Storage;
+/** `window.sessionStorage`, bare, for the same reason. */
+declare const sessionStorage: import("gpui").Storage;
 "#;
 
 const SCHEDULING: &str = r#"
@@ -2303,47 +2542,15 @@ const SCHEDULING: &str = r#"
     is_done(): boolean;
   }
 
-  export interface TaskOptions {
-    /**
-     * The view the task belongs to: it is cancelled when that view goes away.
-     * Defaults to the view that is running. `null` outlives every view — and
-     * is the only value other than the current view the runtime accepts today.
-     */
-    owner?: View | null;
-  }
-
-  /** Resolves after `ms` on GPUI's foreground executor. */
-  export function sleep(ms?: number): Promise<void>;
-
-  /**
-   * Runs `body` with a context that belongs to the current host call.
-   *
-   * This is how code resumed after an `await` obtains a usable `cx`: the one
-   * its function was called with names a frame that has already returned.
-   */
-  export function with_cx<T>(body: (cx: Context) => T): T;
-
-  /**
-   * Calls `body(cx)` and adopts the promise it returns, so a rejection is
-   * reported rather than swallowed.
-   *
-   * `cx` is valid until the first `await`, and is absent when there is no host
-   * call in progress — at module top level, for instance, where it is
-   * `undefined` despite what this signature can say.
-   */
-  export function spawn(body: (cx: Context) => unknown, opts?: TaskOptions): Task;
-
   export interface Timer {
     /** Calls `handler(cx)` once, after `ms`. */
-    after(ms: number, handler: (cx: Context) => void, opts?: TaskOptions): Task;
+    after(ms: number, handler: (cx: AsyncContext) => void, opts?: import("gpui-shell").TaskOptions): Task;
     /**
      * Calls `handler(cx)` every `ms`. The interval is measured from the end of
      * one call, so a slow handler delays the next tick instead of stacking.
      */
-    every(ms: number, handler: (cx: Context) => void, opts?: TaskOptions): Task;
+    every(ms: number, handler: (cx: AsyncContext) => void, opts?: import("gpui-shell").TaskOptions): Task;
   }
-
-  export const timer: Timer;
 "#;
 
 #[cfg(test)]
@@ -2354,6 +2561,7 @@ mod tests {
     /// them from the interface and compare what is left against the style
     /// table. Mirrors the names bound in the engine's `apply` and prelude.
     const NON_STYLE_METHODS: &[&str] = &[
+        "map",
         "child",
         "children",
         "content",
@@ -2434,7 +2642,7 @@ mod tests {
             .take_while(|line| !line.starts_with("  }"))
             .filter_map(|line| {
                 let line = line.trim_start();
-                let name = line.split('(').next()?;
+                let name = line.split(['(', '<']).next()?;
                 (!name.is_empty()
                     && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
                     && line.len() > name.len())
@@ -2495,7 +2703,70 @@ mod tests {
                 "`{name}` is missing from ColorToken"
             );
         }
-        assert!(declarations.contains("export type Color = ColorToken | `#${string}`;"));
+        assert!(
+            declarations
+                .contains("export type Color = import(\"gpui-base\").ColorToken | `#${string}`;")
+        );
+    }
+
+    #[test]
+    fn shared_types_are_declared_by_the_layer_that_owns_them() {
+        let declarations = declarations();
+        let module = |specifier: &str| {
+            let start = declarations
+                .find(&format!("declare module \"{specifier}\" {{"))
+                .unwrap_or_else(|| panic!("missing module {specifier}"));
+            let end = start
+                + declarations[start..]
+                    .find("\n}\n")
+                    .expect("unterminated module");
+            &declarations[start..end]
+        };
+        let gpui = module("gpui");
+        let base = module("gpui-base");
+        let shell = module("gpui-shell");
+
+        assert!(base.contains("export type ColorToken"));
+        assert!(!gpui.contains("export type ColorToken"));
+        for name in [
+            "LengthString",
+            "PathCoordinate",
+            "Props",
+            "ElementBounds",
+            "ScopePhase",
+            "MotionProperty",
+            "DialogOptions",
+            "ToastOptions",
+            "TaskOptions",
+        ] {
+            assert!(
+                shell.contains(&format!("export type {name}"))
+                    || shell.contains(&format!("export interface {name}")),
+                "{name} is not owned by gpui-shell"
+            );
+            assert!(
+                !gpui.contains(&format!("export type {name}"))
+                    && !gpui.contains(&format!("export interface {name}")),
+                "{name} leaked into gpui"
+            );
+        }
+        for name in ["View", "Entity", "Context", "AsyncContext", "Task"] {
+            assert!(
+                gpui.contains(&format!("export abstract class {name}"))
+                    || gpui.contains(&format!("export interface {name}")),
+                "{name} must stay in gpui"
+            );
+        }
+        assert!(base.contains("export interface PartType"));
+        assert!(!gpui.contains("export interface PartType"));
+        assert!(base.contains("export interface ComponentType"));
+        assert!(!gpui.contains("export interface ComponentType"));
+        assert!(base.contains("export type Placement"));
+        assert!(!declarations.contains("SheetSide"));
+        assert!(gpui.contains("export type Axis"));
+        assert!(!declarations.contains("GroupAxis"));
+        assert!(gpui.contains("export interface PathBuilder"));
+        assert!(!shell.contains("export interface PathBuilder"));
     }
 
     #[test]
@@ -2514,10 +2785,9 @@ mod tests {
     fn compatibility_is_manifest_metadata_not_a_script_api() {
         let declarations = declarations();
         assert!(!declarations.contains("require_api"));
-        assert!(declarations.contains(&format!(
-            "for gpui-shell\n// {}",
-            crate::plugin::SHELL_VERSION
-        )));
+        assert!(
+            declarations.contains(&format!("for gpui-shell {}.", crate::plugin::SHELL_VERSION))
+        );
     }
 
     #[test]
@@ -2531,12 +2801,199 @@ mod tests {
             assert!(!method.is_empty(), "a method line has no name");
         }
         assert!(declarations.contains("declare module \"gpui\" {"));
-        // The global declaration follows the module block, and has to stay
+        // The global declaration follows the module blocks, and has to stay
         // outside it: a `declare module` body cannot introduce a global, and
         // this file is only in script mode because it has no top-level import
         // or export of its own.
-        assert!(declarations.contains("\ndeclare const window:"));
+        assert!(declarations.contains("\ninterface Window extends GpuiShellWindow {}"));
+        assert!(declarations.contains("\ndeclare var window: Window & typeof globalThis;"));
         assert!(declarations.ends_with(";\n"));
+    }
+
+    /// The reason HostModule registrations became imports: the declarations can now be
+    /// generated from the registry instead of hand-written beside the script.
+    #[test]
+    fn a_registered_host_module_is_declared_from_the_registry() {
+        crate::export_module(
+            crate::HostModule::new("market")
+                .function("quotes", |_| Ok(crate::HostValue::Null))
+                .declarations(
+                    "
+                    export interface Quote {
+                      symbol: string;
+                    }
+
+                    export function quotes(): Quote[];
+                    ",
+                ),
+        )
+        .expect("`market` is not reserved");
+        // No TypeScript face, so it gets permissive signatures — which still
+        // check the module name and the export name, and still say which
+        // exports have to be awaited.
+        crate::export_module(
+            crate::HostModule::new("audit")
+                .function("observe", |_| Ok(crate::HostValue::Null))
+                .async_function("drain", |_| Ok(async { Ok(crate::HostValue::Null) })),
+        )
+        .expect("`audit` is not reserved");
+
+        let declarations = declarations();
+        // The point of the whole change: these names come from the registry,
+        // not from a file someone maintains beside the script.
+        assert!(
+            declarations.contains("declare module \"market\" {"),
+            "a registered module must be declared, or its import is untyped"
+        );
+        assert!(
+            declarations.contains("  export function quotes(): Quote[];"),
+            "a declared face must be emitted verbatim, not summarised"
+        );
+        // The indentation the host wrote inside a multi-line type survives; only
+        // the raw string's own leading margin is removed.
+        assert!(
+            declarations.contains("  export interface Quote {\n    symbol: string;\n  }"),
+            "a multi-line declaration was flattened:\n{}",
+            &declarations[declarations.find("declare module \"market\"").unwrap()..]
+        );
+        assert!(
+            declarations.contains("declare module \"audit\" {"),
+            "a module without a face is still declared, or its name goes unchecked"
+        );
+        // `HostValue` rather than `any`: the boundary is not wider than the
+        // Rust type of that name, and the declarations should not claim it is.
+        assert!(
+            declarations.contains("  import { HostValue } from \"gpui\";"),
+            "the permissive signatures below need this import to resolve"
+        );
+        assert!(
+            declarations.contains("  export function observe(...args: HostValue[]): HostValue;")
+        );
+        assert!(
+            declarations
+                .contains("  export function drain(...args: HostValue[]): Promise<HostValue>;")
+        );
+
+        crate::clear_exported_modules();
+        assert!(
+            !super::declarations().contains("declare module \"market\""),
+            "declarations are read from the registry at write time, so a \
+             withdrawn module must stop being declared"
+        );
+    }
+
+    #[test]
+    fn each_built_in_module_declares_only_what_its_crate_provides() {
+        let declarations = declarations();
+        let module = |specifier: &str| {
+            let start = declarations
+                .find(&format!("declare module \"{specifier}\" {{"))
+                .unwrap_or_else(|| panic!("missing module {specifier}"));
+            let end = declarations[start..]
+                .find("\n}\n")
+                .expect("unterminated module");
+            &declarations[start..start + end]
+        };
+
+        // A component is declared where it is implemented. Reading a name out
+        // of the wrong module is the failure this guards: `Button` under
+        // `"gpui"` would say the runtime draws it, and the whole point of the
+        // split is that `gpui-base` does.
+        let gpui = module("gpui");
+        let base = module("gpui-base");
+        for name in [
+            "export const Button",
+            "export function v_flex",
+            "export function set_theme",
+        ] {
+            assert!(base.contains(name), "`{name}` is not declared in gpui-base");
+            assert!(!gpui.contains(name), "`{name}` is also declared in gpui");
+        }
+        for name in ["export function div", "export interface AsyncContext"] {
+            assert!(gpui.contains(name), "`{name}` is not declared in gpui");
+            assert!(
+                !base.contains(name),
+                "`{name}` is also declared in gpui-base"
+            );
+        }
+        assert!(module("gpui-fps").contains("export function fps_monitor(): Element;"));
+
+        // The dependency runs upward only: a layer names what it borrows from
+        // `"gpui"`, and `"gpui"` imports nothing back.
+        assert!(base.contains("} from \"gpui\";"));
+        assert!(!gpui.contains("} from \"gpui-base\";"));
+    }
+
+    /// Every name a built-in module exports is declared, in that same module.
+    ///
+    /// The two lists are written in different places for different reasons —
+    /// one wires up the JS module, the other describes it — and a name added to
+    /// one and not the other is invisible until an application reaches for it:
+    /// either an import that resolves to nothing the editor knows about, or a
+    /// declaration promising a binding that is not there.
+    #[cfg(feature = "quickjs")]
+    #[test]
+    fn the_declarations_name_exactly_what_the_runtime_exports() {
+        use crate::engine::quickjs::exports;
+
+        let declarations = declarations();
+        for (specifier, names) in [
+            ("gpui", exports::GPUI),
+            ("gpui-base", exports::GPUI_BASE),
+            ("gpui-shell", exports::GPUI_SHELL),
+            ("gpui-fps", exports::GPUI_FPS),
+        ] {
+            let start = declarations
+                .find(&format!("declare module \"{specifier}\" {{"))
+                .unwrap_or_else(|| panic!("missing module {specifier}"));
+            let end = start
+                + declarations[start..]
+                    .find("\n}\n")
+                    .expect("unterminated module");
+            let body = &declarations[start..end];
+
+            for name in names {
+                // `View` is a class and the rest are functions, constants or
+                // interfaces, so match the name as a declared word rather than
+                // guessing which keyword introduces it.
+                assert!(
+                    body.contains(&format!("export function {name}"))
+                        || body.contains(&format!("export const {name}"))
+                        || body.contains(&format!("export class {name}"))
+                        || body.contains(&format!("export abstract class {name}")),
+                    "`{name}` is exported from \"{specifier}\" but declared nowhere in it"
+                );
+            }
+
+            let declared_values = body
+                .lines()
+                .filter_map(|line| {
+                    let line = line.trim_start();
+                    [
+                        "export function ",
+                        "export const ",
+                        "export class ",
+                        "export abstract class ",
+                    ]
+                    .into_iter()
+                    .find_map(|prefix| {
+                        line.strip_prefix(prefix).map(|rest| {
+                            rest.split(['(', ':', ' ', '{'])
+                                .next()
+                                .expect("an exported value has a name")
+                        })
+                    })
+                })
+                .collect::<std::collections::BTreeSet<_>>();
+            let runtime_values = names
+                .iter()
+                .copied()
+                .collect::<std::collections::BTreeSet<_>>();
+            assert_eq!(
+                declared_values, runtime_values,
+                "the values declared by \"{specifier}\" differ from its run-time exports"
+            );
+        }
     }
 
     #[test]
@@ -2603,7 +3060,12 @@ mod tests {
                 "fake system member remained declared: {fake_system_member}"
             );
         }
-        assert!(declarations.contains("declare const window:"));
+        // Outside every `declare module` block, which is what makes it global.
+        // `var` rather than `const` so it merges with the ambient `Window`.
+        assert!(
+            declarations.contains("declare var window:"),
+            "`window` must stay a top-level declaration, or it is not a global"
+        );
     }
 
     #[test]
@@ -2665,13 +3127,18 @@ mod tests {
             "    role(name: Role): Element;",
             "    aria_selected(value: boolean): Element;",
             "    aria_active_descendant(): Element;",
-            "    track_focus(handle: FocusHandleHandle): Element;",
+            "    track_focus(handle: FocusHandle): Element;",
             "    tab_index(index: number): Element;",
             "    tab_stop(value: boolean): Element;",
-            "  export const FocusHandle: FocusHandleType;",
+            // `App::focus_handle` in GPUI, so `cx` here — there is no
+            // `FocusHandle::new` to mirror.
+            "    focus_handle(): FocusHandle;",
         ] {
             assert!(declarations.contains(expected), "missing: {expected}");
         }
+
+        assert!(!declarations.contains("FocusHandleHandle"));
+        assert!(!declarations.contains("VirtualListScrollHandleHandle"));
 
         for name in a11y::role_names() {
             assert!(
@@ -2686,15 +3153,122 @@ mod tests {
     }
 
     #[test]
+    fn render_accepts_every_runtime_renderable_shape() {
+        let declarations = declarations();
+        assert!(declarations.contains("abstract render(cx: Context): Element | Entity | string;"));
+    }
+
+    #[test]
+    fn view_lifecycle_declaration_matches_runtime_calls() {
+        let declarations = declarations();
+        assert!(declarations.contains(
+            "init?(props: import(\"gpui-shell\").Props | undefined, cx: AsyncContext): void;"
+        ));
+        assert!(
+            declarations
+                .contains("update?(props: import(\"gpui-shell\").Props | undefined): void;")
+        );
+        assert!(!declarations.contains("cx?: AsyncContext"));
+    }
+
+    #[test]
+    fn retained_state_event_names_and_payloads_match_the_runtime() {
+        let declarations = declarations();
+        let union = |names: &[&str]| {
+            names
+                .iter()
+                .map(|name| format!("\"{name}\""))
+                .collect::<Vec<_>>()
+                .join(" | ")
+        };
+        assert!(declarations.contains(&format!(
+            "on(event: {}, handler: (event: InputEvent, cx: Context)",
+            union(crate::entities::InputEventName::NAMES)
+        )));
+        assert!(declarations.contains(&format!(
+            "on(event: {}, handler: (event: OtpEvent, cx: Context)",
+            union(crate::entities::OtpEventName::NAMES)
+        )));
+        assert!(declarations.contains("export interface InputEvent"));
+        assert!(declarations.contains("export interface OtpEvent"));
+        assert!(!declarations.contains("handler: (event: any, cx: Context)"));
+    }
+
+    #[test]
+    fn component_constructor_shapes_name_only_reusable_public_concepts() {
+        let declarations = declarations();
+        let base = declarations
+            .split_once("declare module \"gpui-base\" {")
+            .expect("gpui-base declarations")
+            .1
+            .split_once("\n}\n")
+            .expect("end of gpui-base declarations")
+            .0;
+        assert!(base.contains("export interface ComponentType"));
+        assert!(base.contains("export interface PartType"));
+        assert!(!declarations.contains("IndexedComponentType"));
+        assert!(declarations.contains(
+            "export const TableRow: { new: (id: string | number, row_index: number) => Element };"
+        ));
+        assert!(declarations.contains(
+            "export const TableCell: { new: (id: string | number, column_index: number) => Element };"
+        ));
+    }
+
+    #[test]
+    fn public_types_name_script_concepts_not_declaration_scaffolding() {
+        let declarations = declarations();
+
+        for name in [
+            "PathBuilderHandle",
+            "BackgroundValue",
+            "VirtualListScrollHandleType",
+            "InputStateHandle",
+            "InputStateType",
+            "InputType",
+            "NumberInputType",
+            "TextareaStateHandle",
+            "TextareaStateType",
+            "TextareaType",
+            "SliderStateHandle",
+            "SliderStateType",
+            "SliderPartType",
+            "OtpStateHandle",
+            "OtpStateType",
+            "OtpInputType",
+            "PopupType",
+            "DatePickerType",
+            "ScrollbarType",
+        ] {
+            assert!(
+                !declarations.contains(&format!("export interface {name}")),
+                "declaration-only carrier `{name}` leaked into the public interface"
+            );
+        }
+
+        for name in [
+            "PathBuilder",
+            "Background",
+            "VirtualListScrollHandle",
+            "InputState",
+            "TextareaState",
+            "SliderState",
+            "OtpState",
+        ] {
+            assert!(
+                declarations.contains(&format!("export interface {name}")),
+                "the instance type `{name}` is not directly nameable"
+            );
+        }
+    }
+
+    #[test]
     fn retained_nested_views_are_declared() {
         let declarations = declarations();
         for expected in [
-            "  export interface ViewHandle {",
-            "    set_props(props?: Props): void;",
+            "  export interface Entity {",
+            "    set_props(props?: import(\"gpui-shell\").Props): void;",
             "    release(): boolean;",
-            "  export interface ViewHandleType {",
-            "  export const ViewHandle: ViewHandleType;",
-            "  export function child_view(handle: ViewHandle): Element;",
         ] {
             assert!(declarations.contains(expected), "missing: {expected}");
         }
@@ -2749,11 +3323,12 @@ mod tests {
     fn motion_policies_are_declared_without_per_frame_callbacks() {
         let declarations = declarations();
         assert!(declarations.contains(
-            "transition(property: MotionProperty, policy: number | TransitionPolicy): Element;"
+            "transition(property: import(\"gpui-shell\").MotionProperty, policy: number | import(\"gpui-shell\").TransitionPolicy): Element;"
         ));
         assert!(
-            declarations
-                .contains("spring(property: MotionProperty, policy?: SpringPolicy): Element;")
+            declarations.contains(
+                "spring(property: import(\"gpui-shell\").MotionProperty, policy?: import(\"gpui-shell\").SpringPolicy): Element;"
+            )
         );
         assert!(declarations.contains(
             "type MotionProperty = \"opacity\" | \"width\" | \"height\" | \"left\" | \"top\";"

@@ -718,7 +718,7 @@ pub fn install(ctx: &Ctx<'_>, module: &Object<'_>, runtime: Weak<ShellRuntime>) 
             if matches!(phase, Some(ScopePhase::Render) | Some(ScopePhase::Layout)) {
                 return Err(Exception::throw_type(
                     &ctx,
-                    "FocusHandle.new() cannot run during render; a handle created there would \
+                    "cx.focus_handle() cannot run during render; a handle created there would \
                      be a new one every frame, so the focus it tracks would be dropped by the \
                      next repaint. Create it in init() or in an event handler and keep it on \
                      the view",
@@ -735,7 +735,7 @@ pub fn install(ctx: &Ctx<'_>, module: &Object<'_>, runtime: Weak<ShellRuntime>) 
             .ok_or_else(|| {
                 Exception::throw_type(
                     &ctx,
-                    "FocusHandle.new() needs a live host call; call it from init() or an \
+                    "cx.focus_handle() needs a live host call; call it from init() or an \
                      event handler",
                 )
             })

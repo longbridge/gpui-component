@@ -5,7 +5,7 @@
 // blocks in the source keeps the type in one place and the annotations at the
 // call sites down to a name.
 
-/** One item on the list, and the only shape `store` round-trips. */
+/** One item on the list, and the only shape storage round-trips. */
 interface Todo {
   id: number;
   caption: string;

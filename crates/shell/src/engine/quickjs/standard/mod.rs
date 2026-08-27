@@ -2,6 +2,12 @@
 //!
 //! Privileged modules live behind Shell adapters; this module only registers
 //! implementations that cannot bypass the active [`crate::Policy`].
+//!
+//! So the upstream crates behind `fs`, `net`, `os`, `console` and `fetch` are
+//! not dependencies at all. Registering one directly would grant ambient
+//! filesystem, process or network authority — the thing [`crate::Capabilities`]
+//! exists to prevent — so Shell writes those five itself and depends only on
+//! the ones it actually serves: `buffer`, `crypto`, `path`, `url` and `zlib`.
 
 use rquickjs::{Ctx, Result, loader::BuiltinResolver, loader::ModuleLoader};
 
@@ -12,7 +18,6 @@ mod fs;
 mod net;
 mod os;
 mod process;
-mod upstream;
 mod websocket;
 
 #[cfg(test)]
@@ -21,7 +26,7 @@ pub(super) fn direct_test_http_client()
     fetch::direct_test_client()
 }
 
-const NAMES: &[&str] = &[
+pub(super) const NAMES: &[&str] = &[
     "buffer",
     "console",
     "crypto",
@@ -59,7 +64,6 @@ pub(super) fn loader() -> ModuleLoader {
 }
 
 pub(super) fn install(ctx: &Ctx<'_>) -> Result<()> {
-    upstream::assert_compatible();
     // Order is significant: URL and Crypto consume Buffer-compatible byte
     // classes installed by the first initializer.
     llrt_buffer::init(ctx)?;

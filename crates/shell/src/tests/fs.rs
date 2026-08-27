@@ -17,14 +17,15 @@ use gpui::{Entity, IntoElement as _, TestAppContext, VisualTestContext};
 /// the assertion can be made on what the script saw rather than on what the host
 /// did.
 const PROBE: &str = r#"
-import { View, v_flex, text, spawn, with_cx } from "gpui";
+import { div, View } from "gpui";
+import { v_flex } from "gpui-base";
 import * as fs from "fs/promises";
 
 export default class Probe extends View {
-  init() {
+  init(_props, cx) {
     this.state = "pending";
 
-    spawn(async (cx) => {
+    cx.spawn(async (cx) => {
       try {
         await fs.writeFile("notes.txt", "hello");
         await fs.writeFile("bytes.bin", new Uint8Array([0, 255, 42]));
@@ -47,29 +48,30 @@ export default class Probe extends View {
       } catch (error) {
         this.state = `failed: ${error.message}`;
       }
-      with_cx((cx) => cx.notify());
+      cx.notify();
     });
   }
 
   render() {
-    return v_flex().child(text(this.state));
+    return v_flex().child(this.state);
   }
 }
 "#;
 
 const DENIAL_PROBE: &str = r#"
-import { View, v_flex, text, spawn, with_cx } from "gpui";
+import { div, View } from "gpui";
+import { v_flex } from "gpui-base";
 import * as fs from "fs/promises";
 export default class Probe extends View {
-  init() {
+  init(_props, cx) {
     this.state = "pending";
-    spawn(async () => {
+    cx.spawn(async (cx) => {
       try { await fs.readFile("__PATH__"); this.state = "unexpectedly allowed"; }
       catch (error) { this.state = `rejected:${error.message}`; }
-      with_cx((cx) => cx.notify());
+      cx.notify();
     });
   }
-  render() { return v_flex().child(text(this.state)); }
+  render(cx) { return v_flex().child(this.state); }
 }
 "#;
 
@@ -262,28 +264,37 @@ impl gpui::Render for Empty {
 /// happens on a background thread. `flush` is for a script that has to know the
 /// write landed.
 const STORE_PROBE: &str = r#"
-import { View, v_flex, text, store, spawn, with_cx } from "gpui";
+import { div, View } from "gpui";
+import { v_flex } from "gpui-base";
 
 export default class Probe extends View {
-  init() {
+  init(_props, cx) {
     // Synchronous, against the cache. A burst of these is one file, not four.
-    store.set("window", { title: "Notes", size: [640, 480] });
-    store.set("theme", "dark");
-    store.set("scratch", 1);
-    store.remove("scratch");
+    // Values are strings, so anything with structure goes through JSON — the
+    // browser's bargain, and the reason `setItem` takes what it is given.
+    localStorage.setItem("window", JSON.stringify({ title: "Notes", size: [640, 480] }));
+    localStorage.setItem("theme", "dark");
+    localStorage.setItem("scratch", "1");
+    localStorage.removeItem("scratch");
 
     // Readable immediately, with nothing awaited.
-    this.state = `${store.get("window").title}|${store.keys().join(",")}`;
+    const keys = [];
+    for (let i = 0; i < localStorage.length; i += 1) keys.push(localStorage.key(i));
+    this.state = `${JSON.parse(localStorage.getItem("window")).title}|${keys.join(",")}`;
 
-    spawn(async (cx) => {
-      await store.flush();
+    // Memory only, and gone with the process: it never reaches the file this
+    // test is about, which is the whole distinction between the two.
+    sessionStorage.setItem("scratch", "kept for this run");
+
+    cx.spawn(async (cx) => {
+      await localStorage.flush();
       this.state += "|flushed";
-      with_cx((cx) => cx.notify());
+      cx.notify();
     });
   }
 
-  render() {
-    return v_flex().child(text(this.state));
+  render(cx) {
+    return v_flex().child(this.state);
   }
 }
 "#;
@@ -296,8 +307,8 @@ fn the_store_answers_from_memory_and_persists_off_thread(cx: &mut TestAppContext
     let file = directory.join("store.json");
 
     cx.update(|cx| crate::init(cx));
-    crate::set_capabilities(Capabilities::new().store(true));
-    crate::set_store_path(file.clone());
+    crate::set_capabilities(Capabilities::new().storage(true));
+    crate::set_storage_path(file.clone());
 
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
@@ -326,10 +337,17 @@ fn the_store_answers_from_memory_and_persists_off_thread(cx: &mut TestAppContext
         "flush never resolved: {settled}"
     );
 
-    // It reached the disk, atomically, and the removed key did not.
-    let written = std::fs::read_to_string(&file).expect("the store file exists");
-    assert!(written.contains("\"title\": \"Notes\""), "{written}");
-    assert!(!written.contains("scratch"), "{written}");
+    // It reached the disk, atomically, and the removed key did not. The value
+    // is the JSON the script serialized, stored as the string it is — a
+    // `localStorage` file holds strings, so the braces here are the script's
+    // own text rather than structure the store understood.
+    let written = std::fs::read_to_string(&file).expect("the storage file exists");
+    assert!(written.contains("Notes"), "{written}");
+    assert!(written.contains("\"theme\": \"dark\""), "{written}");
+    assert!(
+        !written.contains("scratch"),
+        "the removed key must not land, and neither must the session one: {written}"
+    );
     assert!(
         !directory.join("store.json.tmp").exists(),
         "the temporary file should have been renamed away"
@@ -339,26 +357,27 @@ fn the_store_answers_from_memory_and_persists_off_thread(cx: &mut TestAppContext
 }
 
 const STORE_RETRY_PROBE: &str = r#"
-import { View, v_flex, text, store, spawn, with_cx, Checkbox } from "gpui";
+import { div, View } from "gpui";
+import { v_flex, Checkbox } from "gpui-base";
 
 export default class Probe extends View {
   init() {
     this.state = "failed write pending";
-    store.set("attempt", 1);
+    localStorage.setItem("attempt", "1");
   }
 
-  render() {
+  render(cx) {
     return v_flex()
-      .child(text(this.state))
+      .child(this.state)
       .child(Checkbox.new("retry").on_change((_checked, cx) => {
-        spawn(async () => {
+        cx.spawn(async (cx) => {
           try {
-            await store.flush();
+            await localStorage.flush();
             this.state = "flushed";
           } catch (error) {
             this.state = `rejected:${error.message}`;
           }
-          with_cx((cx) => cx.notify());
+          cx.notify();
         });
       }));
   }
@@ -376,8 +395,8 @@ fn a_failed_store_write_parks_until_flush_explicitly_retries_it(cx: &mut TestApp
     let file = directory.join("store.json");
 
     cx.update(crate::init);
-    crate::set_capabilities(Capabilities::new().store(true));
-    crate::set_store_path(file.clone());
+    crate::set_capabilities(Capabilities::new().storage(true));
+    crate::set_storage_path(file.clone());
     // The store's startup read has already observed a normal first run. Change
     // the target afterwards so only the asynchronous persistence step fails.
     std::fs::create_dir(&file).expect("a directory that makes the first rename fail");
@@ -411,8 +430,8 @@ fn a_failed_store_write_parks_until_flush_explicitly_retries_it(cx: &mut TestApp
         rendered.contains("flushed"),
         "flush did not retry: {rendered}"
     );
-    let written = std::fs::read_to_string(&file).expect("the retried store write landed");
-    assert!(written.contains("\"attempt\": 1"), "{written}");
+    let written = std::fs::read_to_string(&file).expect("the retried storage write landed");
+    assert!(written.contains("\"attempt\": \"1\""), "{written}");
 
     let _ = std::fs::remove_dir_all(&directory);
 }

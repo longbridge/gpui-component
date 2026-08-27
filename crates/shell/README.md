@@ -19,7 +19,7 @@ no styling draws nothing but its children.
 function saveButton(cx) {
 
   // Unstyled: activation, focus and disabled state work, but nothing is drawn.
-  Button.new("plain-save").on_click(save).child(text("Save"));
+  Button.new("plain-save").on_click(save).child("Save");
 
   // Styled: every visual decision is written out, in the script.
   return Button.new("save")
@@ -32,7 +32,7 @@ function saveButton(cx) {
     .text_color(cx.theme().colors.primary_foreground)
     .rounded(6)
     .on_click(save)
-    .child(text("Save"));
+    .child("Save");
 }
 ```
 
@@ -55,7 +55,8 @@ default-exports, and mounts one instance of it as the window's root view:
 
 ```js
 // main.js
-import { View, v_flex, text, Button, InputState } from "gpui";
+import { View } from "gpui";
+import { v_flex, Button, InputState } from "gpui-base";
 
 export default class Notes extends View {
   init() {
@@ -78,7 +79,7 @@ export default class Notes extends View {
       .p(24)
       .gap(12)
       .bg(cx.theme().colors.background)
-      .children(this.items.map((item) => text(item).text_color(cx.theme().colors.foreground)));
+      .children(this.items.map((item) => div().text_color(cx.theme().colors.foreground).child(item)));
   }
 }
 ```
@@ -86,6 +87,11 @@ export default class Notes extends View {
 See [`examples/js_todolist`](../../examples/js_todolist) for the complete
 version: retained input state, controlled checkboxes, a confirmation dialog, a
 toast, icons, and storage that degrades to memory when it is not granted.
+
+For a whole product rather than a demonstration — OAuth, a live WebSocket quote
+feed, a virtualized watchlist, retained nested views, and its own Rust host —
+see [longbridge/gpui-shell-longbridge](https://github.com/longbridge/gpui-shell-longbridge),
+the largest application written against this runtime.
 
 ### Checking an application without running it
 
@@ -129,17 +135,19 @@ camelCase one is script code.
 
 ## API Surface
 
-One import provides the whole namespace:
+Each module carries what its own crate provides:
 
 ```js
-import { View, div, h_flex, v_flex, text, svg, image, fps_monitor, Button, Link, Checkbox, Switch } from "gpui";
+import { View, div, svg, image } from "gpui";
+import { h_flex, v_flex, Button, Link, Checkbox, Switch } from "gpui-base";
+import { fps_monitor } from "gpui-fps";
 ```
 
 | API | Form | Description |
 | --- | --- | --- |
 | `div()` | function | An element with no layout of its own |
 | `h_flex()` / `v_flex()` | function | A row / column flex element |
-| `text(value)` | function | A text element |
+| `value` | function | A text element |
 | `svg(path)` / `image(path)` | functions | A theme-tinted vector icon / full-colour application asset |
 | `fps_monitor()` | function | The native `gpui-fps` performance HUD; place it in a `relative()` parent |
 | `Button.new(id)` | type | A base `Button`: activation, focus, disabled and selected state, no styling |
@@ -147,15 +155,26 @@ import { View, div, h_flex, v_flex, text, svg, image, fps_monitor, Button, Link,
 | `Checkbox.new(id)` / `Switch.new(id)` | type | A base controlled toggle, no styling |
 | `InputState.new(options)` / `Input.new(state)` | types | Retained text state and its rendered input |
 | `View` | class | Base class of every view; subclass it and default-export the subclass |
+| `cx.open_url(url)` | `cx` method | `App::open_url` — hands a URL to the system browser |
+| `cx.read_from_clipboard()` / `cx.write_to_clipboard(s)` | `cx` methods | `App::read_from_clipboard` / `write_to_clipboard` |
+| `cx.focus_handle()` | `cx` method | `App::focus_handle` — a focus target the script keeps |
+| `cx.spawn(body, opts?)` | `cx` method | `App::spawn` — the body's `cx` survives an `await` |
+| `cx.sleep(ms)` / `cx.timer.after` / `cx.timer.every` | `cx` methods | Work on the foreground executor |
+| `window.paint_path(path, bg)` | `window` method | `Window::paint_path` |
+| `localStorage` / `sessionStorage` | globals, also on `window` | The Web Storage API, where the web keeps it |
 
-Functions are lowercase and types are capitalized and constructed through
-`.new`, mirroring the Rust side one for one.
+Where a binding lives in Rust decides where it lives here: an `App` method is a
+`cx` method, a `Window` method is on the `window` global, a type's `::new` is
+`Type.new(...)`, and a free function stays a free function. What has no GPUI or
+base original goes where the web already keeps it: storage is `localStorage`
+and `sessionStorage`, and diagnostics are JavaScript's own global `console`.
 
 ### Elements
 
 | Method | Description |
 | --- | --- |
 | `.child(element)` | Adds one child. The child is consumed; using it again is an error |
+| `.child(viewHandle)` | Mounts a retained nested view, the way an `Entity<V>` is a child in GPUI |
 | `.children([a, b])` | Adds several children |
 | `.when(condition, el => el)` | Applies the function only when `condition` holds, keeping the chain in one piece |
 | `.href(url)` | Gives a `Link` an absolute HTTP(S) target opened by the host |
@@ -230,7 +249,7 @@ layer only reports the state.
 ```js
 export default class Counter extends View {
   init(props) {}   // called once, when the view is created
-  render(cx) {}    // returns exactly one element
+  render(cx) {}    // returns one element, retained Entity, or string
 }
 ```
 
@@ -272,7 +291,7 @@ grant the CLI installs in `gpui-shell.json`:
         "path_prefixes": ["/v1/items/"]
       }]
     },
-    "store": true,
+    "storage": true,
     "clipboard": { "write": true }
   }
 }
@@ -309,8 +328,8 @@ There are no synchronous filesystem calls. `writeFile` is capped at 8 MiB;
 
 Resource ceilings are per boundary: a JavaScript module is at most 8 MiB; an
 asset is at most 16 MiB, and asset listing stops at 10,000 entries or 1 MiB of
-names. A runtime may have 1,024 outstanding host tasks. Store data is capped at
-8 MiB total, 4,096 keys, 1 MiB per JSON value, and 1,024 pending `flush()`
+names. A runtime may have 1,024 outstanding host tasks. `localStorage` is capped at
+8 MiB total, 4,096 keys, 1 MiB per value, and 1,024 pending `flush()`
 waiters. Plugin unload cancels every task carrying that plugin's `Policy`, even
 owner-less work. `process.run` starts its child with a cleared environment, so
 host environment variables are not inherited.
@@ -345,7 +364,7 @@ that.
 Present today: the element and style surface, state styles (`hover` / `active` /
 `focus`), `Button`, `Checkbox`, `Switch`, retained `InputState` with input
 events, icons through `svg()`, dialogs, sheets and toasts on `window`, promises and
-timers, `fs` / `store` / `clipboard` / `log` / `process` behind capabilities,
+timers, `fs` / `localStorage` / clipboard / `process` behind capabilities,
 capability-gated HTTP and text/binary WebSocket clients, native target-value
 transitions and springs, hot reload, `check`, and generated TypeScript
 declarations.
@@ -367,7 +386,8 @@ The design, what is implemented, and what is not are in
 `import ... from "gpui"` is opaque without declarations, and the style surface
 is far too large to memorize. **There is nothing to run.** Every `gpui-shell`
 invocation — running an application, `check`, `types` — writes `gpui.d.ts` into
-each directory that imports the module, from the runtime it is about to use:
+each directory that imports a built-in module, from the runtime it is about to
+use:
 
 ```bash
 cargo run -p gpui-shell -- path/to/app           # runs it, and writes them
@@ -375,26 +395,37 @@ cargo run -p gpui-shell -- check path/to/app     # checks it, and writes them
 cargo run -p gpui-shell -- types path/to/app     # writes them and nothing else
 ```
 
+One file, three modules: `"gpui"` for GPUI's own elements and what the runtime
+adds, `"gpui-base"` for gpui-base's layout helpers, components and theme, and
+`"gpui-fps"` for its performance overlay. A name belongs to exactly one of them,
+so an import says which layer a script depends on.
+
 Add `gpui.d.ts` to `.gitignore`; the file's own first line says so.
 
 The style methods, their argument types and the colour-token union are generated
 from the tables the runtime dispatches through, so a name that type-checks is a
 name the dispatcher accepts.
 
-Host-registered native modules cannot be generated — only the host knows what it
-granted — so an application declares its own and gets a checked module name with
-completing functions:
+HostModule registrations are generated too, one `declare module` per registered name, so
+`import { quotes } from "market"` is checked the way a built-in import is. A
+module describes its own TypeScript face in Rust, beside the registration:
 
-```ts
-declare module "gpui" {
-  interface NativeModules {
-    market: { quotes(): Quote[]; watch(symbol: string): boolean };
-  }
-}
+```rust
+module.declarations(r#"
+    export interface Quote { symbol: string; watched: boolean }
+    export function quotes(): Quote[];
+    export function watch(symbol: string): boolean;
+"#);
 ```
 
-`crates/story/js/quotes/` has both files plus a `jsconfig.json` that turns on
-checking, and is the shape to copy.
+`export_module` compares that against what was actually registered and refuses
+a mismatch, so renaming a function on one side is a sentence at start-up rather
+than an editor completing something that is gone. Declaring nothing is allowed
+and yields `(...args: any[]) => any` signatures, which still check the module
+name and every export name.
+
+`crates/story/js/quotes/` has a `jsconfig.json` that turns on checking, and is
+the shape to copy.
 
 ### Keeping it current
 
@@ -416,7 +447,7 @@ A directory that refuses the write is logged, never fatal.
 Do not commit it. This repository ignores `gpui.d.ts` everywhere, including
 beside its own example and story scripts — a committed copy could only ever be
 the stale one. What *is* committed is the hand-written part: a `jsconfig.json`
-that turns checking on, and the application's own native-module declarations.
+that turns checking on.
 
 The header names the gpui-shell version that generated it. Application/runtime
 compatibility is declared separately by `shell-version` in `gpui-shell.json`
@@ -441,9 +472,9 @@ runtime.refresh(&root, cx)?;
 // What it is costing: script renders against frames, with the time each took.
 let reading = runtime.read_metrics();
 
-// Native module closures capture host entity handles, so a host that goes away
+// HostModule closures capture host entity handles, so a host that goes away
 // clears them. GPUI's leak check catches a host that forgets.
-gpui_shell::clear_native_modules();
+gpui_shell::clear_exported_modules();
 ```
 
 ## How It Works

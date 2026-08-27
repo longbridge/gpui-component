@@ -29,7 +29,7 @@
 //!   races the automatic one — same temporary file, no ordering — so the older
 //!   revision could land last and undo the newer.
 //!
-//! So every mutation bumps [`Store::revision`], one write is in flight at a
+//! So every mutation bumps [`Storage::revision`], one write is in flight at a
 //! time, and a completed write records the revision it landed. `flush` is a
 //! barrier that waits for its revision to reach the disk rather than a second
 //! writer racing the first.
@@ -52,12 +52,21 @@ pub type Settle = Box<dyn FnOnce(Result<(), String>)>;
 /// A waiter with its outcome already decided, ready to be called.
 ///
 /// The store hands these back instead of calling them, because settling a
-/// `flush` re-enters script — which may call `gpui.store.set` — and the store is
+/// `flush` re-enters script — which may call `localStorage.setItem` — and the store is
 /// borrowed for as long as the method that decided the outcome is running.
 pub type Wake = Box<dyn FnOnce()>;
 
-pub struct Store {
+pub struct Storage {
     pub(crate) path: PathBuf,
+    /// Whether anything here reaches a disk.
+    ///
+    /// `sessionStorage` is the same store with this off: the Web Storage API
+    /// gives the two the same surface and distinguishes them only by how long
+    /// they last, which is exactly the difference between having a file and
+    /// not having one. Deno draws the same line — one SQLite database on disk,
+    /// one in memory — and so does Node, whose `sessionStorage` is process-only
+    /// while `localStorage` needs `--localstorage-file`.
+    persisted: bool,
     values: Option<serde_json::Map<String, Json>>,
     /// The outcome of the read done when the path was set, so the first script
     /// call gets the answer rather than the syscall.
@@ -102,10 +111,11 @@ impl PendingWrite {
     }
 }
 
-impl Store {
+impl Storage {
     pub fn new(path: PathBuf) -> Self {
         Self {
             path,
+            persisted: true,
             values: None,
             warm: None,
             revision: 0,
@@ -117,12 +127,22 @@ impl Store {
         }
     }
 
+    /// The store behind `sessionStorage`: it starts empty, never reads a file
+    /// and never writes one, so it is gone with the process.
+    pub fn in_memory() -> Self {
+        Self {
+            values: Some(serde_json::Map::new()),
+            persisted: false,
+            ..Self::new(PathBuf::new())
+        }
+    }
+
     /// Loads on first use. A missing file is an empty store — a first run is
     /// not an error. A malformed file is an error, because silently discarding
     /// a user's settings is worse than refusing to start.
     pub fn values(&mut self) -> Result<&mut serde_json::Map<String, Json>, String> {
         if self.values.is_none() {
-            // Whatever [`set_store_path`] read at start-up. The fallback covers
+            // Whatever [`set_storage_path`] read at start-up. The fallback covers
             // a host that never called it, which is already an error the store
             // reports elsewhere — it must not also become a panic.
             let loaded = match self.warm.take() {
@@ -135,7 +155,7 @@ impl Store {
     }
 
     /// Records that the values changed. What makes the change reach the disk is
-    /// the host driving [`Store::begin_write`] afterwards.
+    /// the host driving [`Storage::begin_write`] afterwards.
     pub fn touch(&mut self) {
         self.revision += 1;
     }
@@ -161,7 +181,9 @@ impl Store {
 
     /// Whether memory is ahead of the disk.
     pub fn is_dirty(&self) -> bool {
-        self.revision > self.written
+        // A store with no file is never behind one: `flush` on `sessionStorage`
+        // resolves at once rather than waiting for a write that will not happen.
+        self.persisted && self.revision > self.written
     }
 
     /// Reads the file. A missing one is an empty store — a first run is not an
@@ -239,7 +261,7 @@ impl Store {
         }
     }
 
-    /// Waiters an encode failure inside [`Store::begin_write`] left to settle.
+    /// Waiters an encode failure inside [`Storage::begin_write`] left to settle.
     ///
     /// That method has no room to return them — its return value is the write —
     /// so they are parked here and collected by the same driver, one step later.
@@ -248,11 +270,11 @@ impl Store {
         std::mem::take(&mut self.stalled)
     }
 
-    /// Records the outcome of the write [`Store::begin_write`] handed out.
+    /// Records the outcome of the write [`Storage::begin_write`] handed out.
     ///
     /// Returns the `flush` calls this write settles. They are returned rather
     /// than called because settling one re-enters script, which may call
-    /// `gpui.store.set` — and the store is borrowed for the length of this
+    /// `localStorage.setItem` — and the store is borrowed for the length of this
     /// method.
     #[must_use = "the waiters have to be settled once the store is no longer borrowed"]
     pub fn finish_write(&mut self, revision: u64, result: Result<(), String>) -> Vec<Wake> {
@@ -287,7 +309,7 @@ impl Store {
     ///
     /// Settles `settle` immediately when it already has. Returns it unused in
     /// that case so the caller settles it outside the borrow, for the same
-    /// reason [`Store::finish_write`] returns rather than calls.
+    /// reason [`Storage::finish_write`] returns rather than calls.
     #[must_use = "an already-satisfied waiter still has to be settled"]
     pub fn wait(&mut self, settle: Settle) -> Result<Option<Settle>, String> {
         if !self.is_dirty() && self.in_flight.is_none() {
@@ -295,7 +317,7 @@ impl Store {
         }
         if self.waiting.len() == MAX_FLUSH_WAITERS {
             return Err(format!(
-                "gpui.store.flush() exceeded the {MAX_FLUSH_WAITERS} pending-waiter limit"
+                "localStorage.flush() exceeded the {MAX_FLUSH_WAITERS} pending-waiter limit"
             ));
         }
         if self.in_flight.is_none() && self.failed == Some(self.revision) {
@@ -308,7 +330,7 @@ impl Store {
     pub fn ensure_waiter_capacity(&self) -> Result<(), String> {
         if self.is_dirty() && self.waiting.len() == MAX_FLUSH_WAITERS {
             return Err(format!(
-                "gpui.store.flush() exceeded the {MAX_FLUSH_WAITERS} pending-waiter limit"
+                "localStorage.flush() exceeded the {MAX_FLUSH_WAITERS} pending-waiter limit"
             ));
         }
         Ok(())
@@ -496,8 +518,8 @@ mod tests {
 
     use super::*;
 
-    fn store() -> Store {
-        let mut store = Store::new(std::env::temp_dir().join("gpui-shell-store-test.json"));
+    fn store() -> Storage {
+        let mut store = Storage::new(std::env::temp_dir().join("gpui-shell-store-test.json"));
         store.warm = Some(Ok(serde_json::Map::new()));
         // Populates the cache, so `encode` has something to hand out.
         store.values().expect("the warm read succeeds");
@@ -686,7 +708,7 @@ mod tests {
         let file = std::fs::File::create(&path).expect("store");
         file.set_len(MAX_STORE_BYTES + 1).expect("sparse store");
 
-        let error = Store::new(path)
+        let error = Storage::new(path)
             .load()
             .expect_err("oversized store must fail");
         assert!(
@@ -714,7 +736,7 @@ mod tests {
             serde_json::to_vec(&too_many).expect("encode fixture"),
         )
         .expect("write fixture");
-        let error = Store::new(path.clone()).load().expect_err("key limit");
+        let error = Storage::new(path.clone()).load().expect_err("key limit");
         assert!(error.contains("key limit"), "{error}");
 
         let oversized = serde_json::json!({
@@ -725,7 +747,7 @@ mod tests {
             serde_json::to_vec(&oversized).expect("encode fixture"),
         )
         .expect("write fixture");
-        let error = Store::new(path).load().expect_err("value limit");
+        let error = Storage::new(path).load().expect_err("value limit");
         assert!(error.contains("per-value limit"), "{error}");
         let _ = std::fs::remove_dir_all(directory);
     }

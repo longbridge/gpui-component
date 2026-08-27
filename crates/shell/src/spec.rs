@@ -788,7 +788,7 @@ impl std::fmt::Display for SpecError {
             SpecError::SelfParent => f.write_str("an element cannot be added to itself"),
             SpecError::DuplicateChildView => f.write_str(
                 "a child view handle can be mounted only once in one snapshot; create a second \
-                 ViewHandle for a second position",
+                 Entity for a second position",
             ),
         }
     }

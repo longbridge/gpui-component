@@ -16,7 +16,7 @@ They are on `window` rather than on `cx` because a dialog belongs to the window,
 
 ## The surface
 
-`window` is a **global**, like `cx`. There is nothing to import.
+`window` is a **global**. There is nothing to import — and unlike `cx`, which every host call hands you as an argument, nothing hands you `window` either. It is simply in scope.
 
 A callback parameter named `window` shadows it, which is ordinary scoping and not an error — and if a future callback ever hands one in, it would be this same object, because `window` is ambient: it reads the call that is running. That is also why it is not a parameter today. In Rust it has to be one, since Rust has no ambient state to read; here the read is available, which is the same reason `fs` and `store` are not parameters either.
 
@@ -59,15 +59,15 @@ The reason is lifetime, not taste. An element belongs to the arena of the render
 
 ```js
 // confirm.js
-import { v_flex, h_flex, text } from "gpui";
+import { v_flex, h_flex } from "gpui-base";
 
 export default (count, onConfirm) => () =>
   v_flex()
     .w(360)
     .p(24)
     .gap(12)
-    .child(text(`Delete ${count} completed items?`))
-    .child(text("This cannot be undone."))
+    .child(`Delete ${count} completed items?`)
+    .child("This cannot be undone.")
     .child(
       h_flex()
         .justify_end()
@@ -116,7 +116,7 @@ window.open_sheet_at("left", () => navigation());
 At most one sheet is open at a time. `window.open_sheet` anchors it to the right; `window.open_sheet_at` takes `"left"`, `"right"`, `"top"` or `"bottom"`. It has no options at all, because there is only ever one and it is dismissed by Escape or by its overlay whenever no dialog is above it.
 
 ```text
-unknown sheet side `middle`; expected left, right, top or bottom
+unknown sheet placement `middle`; expected left, right, top or bottom
 ```
 
 ## Toasts
@@ -163,7 +163,7 @@ Dismissal is always **one layer, never a cascade**:
 
 **Focus** is restored through the stack's own history. Opening an overlay records what was focused and focuses the overlay; closing it restores that handle. Closing the second dialog returns focus to the first, and closing the first returns it to whatever the window was on before either opened. Tab and Shift-Tab honour the focus trap, so tabbing inside an overlay cycles within it rather than walking into the content behind it.
 
-## The phase rule
+## The `ScopePhase` rule
 
 **An overlay may only be opened or closed from an event handler or a task.**
 
@@ -172,7 +172,7 @@ window.open_dialog(content, options) is not allowed during the `render` phase;
 overlays may only be opened or closed while handling an event or a task
 ```
 
-Opening or closing an overlay mutates the window, and the render pass is reading it. GPUI's borrow model has no way to express "the script may notify from here but not from there", so the runtime carries the [phase](./state.md#phases) explicitly and every overlay entry point refuses `render`, `layout`, and being called from outside any host call at all — in the last case there is no window to reach either.
+Opening or closing an overlay mutates the window, and the render pass is reading it. GPUI's borrow model has no way to express "the script may notify from here but not from there", so the runtime carries the [`ScopePhase`](./state.md#scope-phases) explicitly and every overlay entry point refuses `render`, `layout`, and being called from outside any host call at all — in the last case there is no window to reach either.
 
 The refusal names the phase it came from, because that is the only clue the author has.
 

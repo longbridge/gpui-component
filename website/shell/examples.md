@@ -1,7 +1,8 @@
 ---
 title: Examples
-description: Complete standalone and embedded applications, including retained state, native modules, and native motion.
+description: Complete standalone and embedded applications, including retained state, HostModule registrations, and native motion.
 order: 3
+pageClass: shell-examples-page
 ---
 
 # Examples
@@ -11,8 +12,17 @@ Three examples ship with the repository, and together they cover a standalone ap
 | | Runs as | Shows |
 | --- | --- | --- |
 | [Todo list](#the-todo-list) | A standalone application | The whole script surface: retained input, a dialog, a toast, gated storage, assets, types |
-| [Quote board](#the-quote-board) | A panel inside the gallery | The host half: native modules, one entity read from two languages, live cost counters |
+| [Quote board](#the-quote-board) | A panel inside the gallery | The host half: HostModule registrations, one entity read from two languages, live cost counters |
 | [Native motion](#native-motion) | A separate gallery script view | Pixel target transitions and springs retained and sampled by GPUI |
+
+## A complete application
+
+The examples here are each built to show one thing. For a whole product in one
+repository — OAuth, a live WebSocket quote feed, a virtualized watchlist,
+retained nested views for the price chart, and its own Rust host binary —
+see [**longbridge/gpui-shell-longbridge**](https://github.com/longbridge/gpui-shell-longbridge).
+It is a read-only Longbridge desktop client of a few thousand lines of
+JavaScript, and it is the largest thing written against this runtime.
 
 ## The todo list
 
@@ -37,7 +47,7 @@ Four things in it are worth copying.
 
 ```js
 export const label = (value, cx) =>
-  text(value).text_size(12).line_height(1).text_color(cx.theme().colors.foreground);
+  div().text_size(12).line_height(1).text_color(cx.theme().colors.foreground).child(value);
 
 export const surface = (cx) =>
   v_flex().flex_1().bg(cx.theme().colors.surface).border(1).border_color(cx.theme().colors.border).overflow_hidden();
@@ -57,7 +67,7 @@ export function load() {
     const saved = store.get(KEY);
     return Array.isArray(saved) ? saved : [];
   } catch (error) {
-    log.warn(`todolist: storage unavailable, starting empty (${error.message})`);
+    console.warn(`todolist: storage unavailable, starting empty (${error.message})`);
     return [];
   }
 }
@@ -77,13 +87,13 @@ cargo run -- shell
 
 The gallery's Shell story runs two panels side by side: the left one drawn by `shell_story.rs` in Rust, the right one by `crates/story/js/quotes/main.js` in JavaScript, reading the same data.
 
-The script owns no state at all. The board is a Rust `Entity<Market>`, reached through the [native module](./native.md) the story registered before the runtime started:
+The script owns no state at all. The board is a Rust `Entity<Market>`, imported from the [HostModule](./host-module.md) the story registered before the runtime started:
 
 ```text
-native("market")   quotes() · ticks() · watch(symbol) · watch_all(on)
+import { quotes, ticks, watch, watch_all } from "market";
 ```
 
-Theme values come from the call-scoped `cx.theme()` snapshot, not a second native module.
+Theme values come from the call-scoped `cx.theme()` snapshot, not a second HostModule.
 
 Because both panels read one entity, any disagreement between them is visible immediately — which is what makes this a test rather than a demo. Editing `main.js` changes the right-hand panel with no `cargo build` in between; the story has a "Reload script" button next to the panel.
 
@@ -99,4 +109,4 @@ The script runs once to publish the new target. GPUI schedules and samples every
 
 Copy `examples/js_todolist` into a directory of your own and run it — it is a complete application with types already wired. Strip `main.js` back to a `View` with an `init` and a `render`, keep `ui.js`, and build up from there.
 
-For a host, `crates/story/src/stories/shell_story.rs` is a working reference for the other side: it builds a runtime, registers native modules, mounts a `ScriptView`, and reloads it on demand. [Hosting the Runtime](./hosting.md) walks through the same calls.
+For a host, `crates/story/src/stories/shell_story.rs` is a working reference for the other side: it builds a runtime, exports HostModule registrations, mounts a `ScriptView`, and reloads it on demand. [Hosting](./hosting.md) walks through the same calls.
