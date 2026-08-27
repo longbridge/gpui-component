@@ -1,12 +1,34 @@
 # gpui-shell
 
-`gpui-shell` is a scriptable application runtime for [GPUI](https://gpui.rs),
-built on [`gpui-base`](../base/README.md). The host owns rendering, layout,
-input and system capabilities; the script owns composition, presentation and
-business logic. JavaScript is the default scripting language.
+`gpui-shell` exists to make a Rust [GPUI](https://gpui.rs) application
+**extensible in JavaScript**.
+
+**The primary goal is plugin extension.** A host application compiles and ships
+once. After that, a new panel, a side tool or a piece of business logic arrives
+as a script loaded into the same process — no rebuild, no binary to
+redistribute, and no fork for a contributor who only wants to add a panel.
+
+**The secondary goal is writing a whole application in JavaScript**, which is
+also how a plugin is developed: get the script running standalone, then mount
+it in a host.
+
+**It is not an Electron or a Tauri.** There is no WebView, no DOM, no HTML or
+CSS, no browser engine, and no Node.js. A script never renders. It describes an
+interface once, and Rust replays that description into real GPUI elements on
+every frame after it — the same element model a Rust application on `gpui-base`
+builds, through the same GPU renderer. JavaScript is the application layer here,
+not the rendering layer.
+
+Both goals rest on the same split. Built on
+[`gpui-base`](../base/README.md), the host owns rendering, layout, input and
+system capabilities; the script owns composition, presentation and business
+logic. JavaScript is the default scripting language.
 
 Its design is specified in [`docs/gpui-shell.md`](../../docs/gpui-shell.md).
 This crate is at milestone M0: a feasibility baseline, not a stable interface.
+The machinery below a plugin is built and tested, but not yet reachable from a
+script: `gpui_shell::dock` is crate-private and the CLI does not use
+`PluginManager`, so the standalone path is what runs end to end today.
 
 ## Base-First: The Script Owns Presentation
 

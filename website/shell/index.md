@@ -1,12 +1,20 @@
 ---
 title: GPUI Shell
-description: JavaScript extension points for a Rust GPUI application — the host grants what a script may reach, and rendering and system capabilities stay in Rust.
+description: Makes a Rust GPUI application extensible in JavaScript, rendered by GPUI itself — no WebView, no DOM. Plugins first, standalone script applications second.
 order: 1
 ---
 
 # GPUI Shell
 
-`gpui-shell` gives a Rust [GPUI](https://gpui.rs) application **JavaScript extension points**: the host builds the runtime and grants what a script may reach, and the script draws real interface inside the same process. It is built directly on [`gpui-base`](/base/), with [QuickJS](https://github.com/quickjs-ng/quickjs) running on the host's own thread. Rust keeps rendering, layout, text editing, virtualization, focus, overlays and every system capability; the script owns composition, presentation and business logic. A script can also be run on its own, which is how one is usually developed.
+`gpui-shell` exists to make a Rust [GPUI](https://gpui.rs) application **extensible in JavaScript**.
+
+**The primary goal is plugin extension.** A host application compiles and ships once. After that, a new panel, a side tool or a piece of business logic arrives as a script loaded into the same process — no rebuild, no binary to redistribute, and no fork for a contributor who only wants to add a panel.
+
+**The secondary goal is writing a whole application in JavaScript.** The CLI runs an application directory on its own, which is a usable path in itself and also how a plugin is developed: get the script running standalone, then mount it in a host.
+
+**It is not an Electron or a Tauri.** There is no WebView, no DOM, no HTML or CSS, no browser engine, and no Node.js. A script never renders. It describes an interface once, and Rust replays that description into real GPUI elements on every frame after it — the same element model a Rust application on `gpui-base` builds, through the same GPU renderer. JavaScript is the application layer here, not the rendering layer, which is why a repaint costs no JavaScript at all and taking the whole runtime costs [+13.5 MiB of binary](./engine.md#what-linking-it-costs).
+
+Both goals rest on the same split. `gpui-shell` is built directly on [`gpui-base`](/base/), with [QuickJS](https://github.com/quickjs-ng/quickjs) running on the host's own thread. The host builds the runtime and grants what a script may reach; the script draws real interface inside the same process. Rust keeps rendering, layout, text editing, virtualization, focus, overlays and every system capability; the script owns composition, presentation and business logic.
 
 ```js
 import { View } from "gpui";
@@ -43,6 +51,30 @@ export default class Counter extends View {
   }
 }
 ```
+
+## Why plugins come first
+
+`crates/base/src/dock` already holds half of what a plugin system needs: a layout that is pure data, a `PanelRegistry` that rebuilds a panel from a name in a persisted file, and a per-panel `serde_json::Value` that rides along with it. The missing half is that a panel's implementation has to be compiled into the host binary — nobody can contribute one without forking it. `gpui-shell` supplies that half.
+
+Plugins-first is not a positioning statement. It is the reason behind decisions that would each have gone another way for a runtime aimed only at standalone scripts:
+
+| Decision | Why it follows from plugins |
+| --- | --- |
+| `Capabilities::default()` is the empty set, and the host grants | A plugin is code someone else wrote; the grant has to be the host's, not a self-declaration in the plugin's own manifest |
+| A separate `Policy` per plugin, and unload cancels every task carrying it | Several plugins share one runtime, so grants must not bleed between them |
+| A script fault is a recoverable exception, and the host process survives | One broken plugin should not take the application with it |
+| A repaint replays a snapshot and never enters the VM | The host answers for the frame budget, so a plugin's JavaScript cannot sit on it |
+| `HostModule` lends the host's own Rust to a script | Only meaningful when the script runs inside a host — a standalone application has no host to borrow from |
+| Dock panels keep their place and state across an uninstall | Plugins get installed and removed; a panel comes back where it was, with what it had |
+| The foundation ships no presentation, so the script owns all of it | A plugin has to look like part of its host, which takes control of every pixel |
+
+A standalone script application uses few of these. What it gains is the iteration speed — hot reload, `check`, and a generated `gpui.d.ts` — which is why it sits second: it is where a plugin is developed and proven, rather than the point of the runtime.
+
+Text editing, syntax highlighting, LSP, virtualization and motion sampling stay in Rust. That line is a division of responsibility rather than a limit on the script: the host owns everything that has to sit close to the GPU and the system, so a plugin never becomes a variable in the application's performance or stability.
+
+::: warning Plugins are the goal, not yet the interface
+The machinery below a plugin is built and tested — manifest parsing and discovery, load and unload, a per-plugin policy and data directory, `ScriptPanel`, `ScriptDockSkin`, panel-name interning and registry round-trip. But `gpui_shell::dock` is crate-private, so a script cannot contribute a panel, and the CLI does not use `PluginManager`. A contribution registry (`gpui.command`, `gpui.register_panel`, `gpui.keymap`) and the authorization UI are not built. **What runs end to end today is the standalone path.** See [Dock Panels](./dock.md).
+:::
 
 ## What defines it
 
@@ -132,11 +164,8 @@ What the script gains in exchange for the extra typing is the whole application 
 
 ## Where it fits
 
-- **Adding plugin support to an existing GPUI application.** Plugins run inside the host process under capabilities the host grants one at a time, starting from none. Extending the product stops meaning a fork or a new release.
-- **Writing a complete application in JavaScript on `gpui-shell`.** The whole application layer — elements, styling, view state, overlays and system APIs — while rendering, text editing, virtualization and every animation frame stay in Rust.
-- **Giving an application dynamic extension points.** Interface and business logic ship as script and change without recompiling or redistributing a binary, and a failing script surfaces as a recoverable error rather than taking the host down.
-
-Text editing, syntax highlighting, LSP, virtualization and motion sampling stay in Rust: the script composes, presents and changes targets, and the host owns everything that has to sit close to the GPU and the system.
+- **Adding plugin support to an existing GPUI application — the primary case.** Plugins run inside the host process under capabilities the host grants one at a time, starting from none. Extending the product stops meaning a fork or a new release: interface and business logic ship as script and change without recompiling or redistributing a binary, and a failing plugin surfaces as a recoverable error rather than taking the host down.
+- **Writing a complete application in JavaScript on `gpui-shell` — the secondary case.** The whole application layer — elements, styling, view state, overlays and system APIs — while rendering, text editing, virtualization and every animation frame stay in Rust. It is also where a plugin is written and proven before it is mounted in a host.
 
 ## Where it sits
 
