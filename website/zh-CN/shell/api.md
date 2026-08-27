@@ -20,9 +20,9 @@ order: 13
 | `"gpui-base"` | `gpui-base` 的布局辅助函数、组件与主题 |
 | `"gpui-fps"` | `gpui-fps` 的性能 HUD |
 
-有两个名字是 ambient 的，完全不需要 import：每次宿主调用都会交给你的 `cx`，以及 `window`。标准运行时模块——`fs/promises`、`path`、`crypto`、`process`、`net`、`websocket` 等等——受宿主授权门控，记录在 [Capabilities](./capabilities.md)。
+有两个名字从不需要 import，但原因不同。`window` 是真正的全局：没有谁把它交给你，它本来就在作用域里。`cx` 恰恰相反——它从来不是全局的，只会作为参数到达：`render(cx)`、`init(props, cx)`、每个处理器的第二个参数、`cx.spawn` body 的形参。标准运行时模块——`fs/promises`、`path`、`crypto`、`process`、`net`、`websocket` 等等——受宿主授权门控，记录在 [Capabilities](./capabilities.md)。
 
-下面每张表里的名字，就是你实际写下的那个。小写函数在 Rust 侧同样是自由函数——`div()` 就是 `gpui::div()`。首字母大写的名字是一个只有工厂方法的对象，镜像它同名的关联函数：`Button.new(id)` 就是 `Button::new(id)`，而 `TableRow.new(id, index)` 带的是屏幕阅读器要念出的、从 1 开始的位置。
+小写名字在 Rust 侧同样是自由函数——`div()` 就是 `gpui::div()`。首字母大写的名字是一个只有工厂方法的对象，所以你写 `Button.new(id)`，对应 `Button::new(id)`；表格里只列名字，因为 `.new` 每次都一样。有两种形态不同，会在出现的地方注明：表格的行与单元格用 `.new(id, index)`，带的是从 1 开始的位置；由状态驱动的组件收的是状态而不是 id。
 
 ## `gpui` 模块
 
@@ -144,7 +144,7 @@ order: 13
 
 ## `window` 全局对象
 
-和 `cx` 一样是全局的，不需要 import。每次调用都读取当前正在跑的那次宿主调用，不在任何调用中时抛异常，所以没有句柄要持有，也没有东西会过期。浮层属于窗口，而不属于打开它的那个视图——这就是这些方法在这里、而不在 `Context` 上的原因。
+真正的全局：不需要 import，也没有谁把它交给你。每次调用都读取当前正在跑的那次宿主调用，不在任何调用中时抛异常，所以没有句柄要持有，也没有东西会过期。浮层属于窗口，而不属于打开它的那个视图——这就是这些方法在这里、而不在 `Context` 上的原因。
 
 | 成员 | 说明 |
 | --- | --- |
@@ -165,7 +165,7 @@ order: 13
 
 ## `gpui-base` 模块
 
-这里的组件拥有行为、焦点，以及屏幕阅读器听到的内容，而自身几乎什么都不画。画面归脚本所有，用[样式接口](./styling.md)写出来。
+这里的组件拥有行为、焦点，以及屏幕阅读器听到的内容，而自身几乎什么都不画。画面归脚本所有，用[样式接口](./styling.md)写出来。每个名字都链接到它在 [gpui-base 文档](../../base/index.md)里的页面，那里描述了它完整的 Rust 接口与行为。
 
 ### 布局
 
@@ -173,32 +173,32 @@ order: 13
 | --- | --- |
 | `h_flex()` | 一行 |
 | `v_flex()` | 一列 |
-| `h_resizable(id)` | 一行带可拖拽分隔条的窗格；尺寸按这个 id 存在窗口里 |
-| `v_resizable(id)` | 同上，纵向堆叠 |
-| `resizable_panel()` | 可调整组里的一个窗格，用在别处都不合法 |
+| [`h_resizable(id)`](../../base/primitives/resizable.md) | 一行带可拖拽分隔条的窗格；尺寸按这个 id 存在窗口里 |
+| [`v_resizable(id)`](../../base/primitives/resizable.md) | 同上，纵向堆叠 |
+| [`resizable_panel()`](../../base/primitives/resizable.md) | 可调整组里的一个窗格，用在别处都不合法 |
 
 ### 控件
 
 | 名称 | 说明 |
 | --- | --- |
-| `Button.new(id)` | 激活、焦点、disabled 与 selected 状态 |
-| `Link.new(id)` | 通过系统浏览器打开的外部 HTTP(S) 资源 |
-| `Checkbox.new(id)` | 受控的勾选；勾选标记自己画 |
-| `Switch.new(id)` | 受控的 switch |
-| `Radio.new(id)` | 一组中的一个选项；只报告 `true`，从不报告取消选中 |
-| `Toggle.new(id)` | 一个会保持按下的按钮 |
-| `RadioGroup.new(id)` | 被报读为一组的一批 radio；自身不持有选中项 |
-| `ToggleGroup.new(id)` | 被报读为 toolbar 的一批 toggle |
-| `Tabs.new(id)` | 自身不持有选中项的 tab 列表 |
-| `Tab.new(id)` | 一个 tab：`selected(...)` 进，`on_click(...)` 出 |
-| `Progress.new(id)` | 只有报读，没有进度条；单独的 `Progress.new(...)` 什么都不画 |
-| `ProgressTrack.new()` | 凹槽：一个由你设定尺寸与颜色的普通元素 |
-| `ProgressIndicator.new()` | 已填充的部分；按你报读的百分比设置它的宽度 |
-| `SliderState.new(options?)` | 留存的 slider 状态，也是一次拖拽写入的地方 |
-| `Slider.new(state)` | 根：报读数值，并拥有 release |
-| `SliderTrack.new(state)` | 按下与拖拽的表面 |
-| `SliderIndicator.new(state)` | 凹槽，也是每个指针位置据以测量的那个盒子 |
-| `SliderThumb.new(state)` | 滑块；shell 给它位置，你给它外观 |
+| [`Button`](../../base/primitives/button.md) | 激活、焦点、disabled 与 selected 状态 |
+| [`Link`](../../base/primitives/link.md) | 通过系统浏览器打开的外部 HTTP(S) 资源 |
+| [`Checkbox`](../../base/primitives/checkbox.md) | 受控的勾选；勾选标记自己画 |
+| [`Switch`](../../base/primitives/switch.md) | 受控的 switch |
+| [`Radio`](../../base/primitives/radio.md) | 一组中的一个选项；只报告 `true`，从不报告取消选中 |
+| [`Toggle`](../../base/primitives/toggle.md) | 一个会保持按下的按钮 |
+| [`RadioGroup`](../../base/primitives/radio-group.md) | 被报读为一组的一批 radio；自身不持有选中项 |
+| [`ToggleGroup`](../../base/primitives/toggle-group.md) | 被报读为 toolbar 的一批 toggle |
+| [`Tabs`](../../base/primitives/tabs.md) | 自身不持有选中项的 tab 列表 |
+| [`Tab`](../../base/primitives/tabs.md) | 一个 tab：`selected(...)` 进，`on_click(...)` 出 |
+| [`Progress`](../../base/primitives/progress.md) | 只有报读，没有进度条；单独的 `Progress.new(...)` 什么都不画 |
+| [`ProgressTrack`](../../base/primitives/progress.md) | 凹槽：一个由你设定尺寸与颜色的普通元素 |
+| [`ProgressIndicator`](../../base/primitives/progress.md) | 已填充的部分；按你报读的百分比设置它的宽度 |
+| [`SliderState`](../../base/primitives/slider.md) | 留存的 slider 状态，也是一次拖拽写入的地方 |
+| [`Slider`](../../base/primitives/slider.md) | 根：报读数值，并拥有 release |
+| [`SliderTrack`](../../base/primitives/slider.md) | 按下与拖拽的表面 |
+| [`SliderIndicator`](../../base/primitives/slider.md) | 凹槽，也是每个指针位置据以测量的那个盒子 |
+| [`SliderThumb`](../../base/primitives/slider.md) | 滑块；shell 给它位置，你给它外观 |
 
 slider 的四个部件接受同一个 `SliderStateHandle`，而且四个都不能少——没有 `SliderIndicator` 的 slider 根本拖不动。
 
@@ -206,13 +206,13 @@ slider 的四个部件接受同一个 `SliderStateHandle`，而且四个都不�
 
 | 名称 | 说明 |
 | --- | --- |
-| `InputState.new(options?)` | 留存的文本状态：`InputState.new({ placeholder, value })` |
-| `Input.new(state)` | 包住留存文本状态的框 |
-| `NumberInput.new(state)` | 建立在同一个 `InputState` 上的 spinbutton，三个插槽都有分量 |
-| `TextareaState.new(options?)` | 留存的多行文本状态；`rows` 是一个选项 |
-| `Textarea.new(state)` | 包住留存多行状态的框 |
-| `OtpState.new(length, options?)` | 留存的一次性验证码状态；长度在创建时固定 |
-| `OtpInput.new(state)` | 定长验证码，格子由 shell 画、由脚本设定样式 |
+| [`InputState`](../../base/primitives/input.md) | 留存的文本状态：`InputState.new({ placeholder, value })` |
+| [`Input`](../../base/primitives/input.md) | 包住留存文本状态的框 |
+| [`NumberInput`](../../base/primitives/number-input.md) | 建立在同一个 `InputState` 上的 spinbutton，三个插槽都有分量 |
+| [`TextareaState`](../../base/primitives/textarea.md) | 留存的多行文本状态；`rows` 是一个选项 |
+| [`Textarea`](../../base/primitives/textarea.md) | 包住留存多行状态的框 |
+| [`OtpState`](../../base/primitives/otp-input.md) | 留存的一次性验证码状态；长度在创建时固定 |
+| [`OtpInput`](../../base/primitives/otp-input.md) | 定长验证码，格子由 shell 画、由脚本设定样式 |
 
 没有专门的数字状态类型：给 `InputState` 设上 `set_step`、`set_min` 与 `set_max`，它就成了数字状态。
 
@@ -220,13 +220,13 @@ slider 的四个部件接受同一个 `SliderStateHandle`，而且四个都不�
 
 | 名称 | 说明 |
 | --- | --- |
-| `Collapsible.new()` | 仅在 `open` 时渲染它的 `content` 插槽；不带 role、箭头或触发器 |
-| `Popover.new(id)` | 锚定在触发元素上、由按下打开的浮层 |
-| `HoverCard.new(id)` | 同上，但由指针停留打开，并有自己的打开状态 |
-| `Popup.new(id, trigger)` | 光秃秃的锚定浮层：`Popup.new(id, trigger)`，填入 `content` 即打开 |
-| `Select.new(id)` | combobox 的根：role、报读的打开状态、键盘——但不含任何画面 |
-| `Combobox.new(id)` | 同一个根，被报读为一个触发器是可编辑输入框的 combobox |
-| `DatePicker.new(id, focus_handle)` | 日期选择器的根：`DatePicker.new(id, focus_handle)`；它不持有日期 |
+| [`Collapsible`](../../base/primitives/collapsible.md) | 仅在 `open` 时渲染它的 `content` 插槽；不带 role、箭头或触发器 |
+| [`Popover`](../../base/primitives/popover.md) | 锚定在触发元素上、由按下打开的浮层 |
+| [`HoverCard`](../../base/primitives/hover-card.md) | 同上，但由指针停留打开，并有自己的打开状态 |
+| [`Popup`](../../base/primitives/popup.md) | 光秃秃的锚定浮层：`Popup.new(id, trigger)`，填入 `content` 即打开 |
+| [`Select`](../../base/primitives/select.md) | combobox 的根：role、报读的打开状态、键盘——但不含任何画面 |
+| [`Combobox`](../../base/primitives/combobox.md) | 同一个根，被报读为一个触发器是可编辑输入框的 combobox |
+| [`DatePicker`](../../base/primitives/date-picker.md) | 日期选择器的根：`DatePicker.new(id, focus_handle)`；它不持有日期 |
 
 在这些之上动手之前，有两处缺口值得先知道：打开的 `Select` 或 `Combobox` 列表还没有方向键导航，而 Enter 与 Escape 到不了 `DatePicker`。两者都写在各自类型的声明里，也就是它们真正咬人的地方。
 
@@ -234,17 +234,17 @@ slider 的四个部件接受同一个 `SliderStateHandle`，而且四个都不�
 
 | 名称 | 说明 |
 | --- | --- |
-| `Table.new(id)` | 语义表格的根，组合方式与 HTML 组合表格一致 |
-| `TableHeader.new(id)` | 表头行组 |
-| `TableBody.new(id)` | 表体行组 |
-| `TableRow.new(id, index)` | 一行：`TableRow.new(id, row_index)`，从 1 开始 |
-| `TableHead.new(id, index)` | 一个列头，从 1 开始 |
-| `TableCell.new(id, index)` | 一个数据单元格，从 1 开始 |
-| `TableCaption.new(id)` | caption 该在的视觉位置；它不带 caption role |
-| `v_virtual_list(…)` | 只描述屏幕内内容的纵向列表 |
-| `h_virtual_list(…)` | 另一个轴上的同一件事；`item_sizes` 是宽度 |
-| `VirtualListScrollHandle.new()` | 虚拟列表的滚动位置，跨帧保留 |
-| `Scrollbar.new(id)` | `new(id)`、`horizontal(id)`、`vertical(id)`——一条由你自己摆放的滚动条 |
+| [`Table`](../../base/primitives/table.md) | 语义表格的根，组合方式与 HTML 组合表格一致 |
+| [`TableHeader`](../../base/primitives/table.md) | 表头行组 |
+| [`TableBody`](../../base/primitives/table.md) | 表体行组 |
+| [`TableRow`](../../base/primitives/table.md) | 一行：`.new(id, row_index)`，从 1 开始 |
+| [`TableHead`](../../base/primitives/table.md) | 一个列头：`.new(id, column_index)`，从 1 开始 |
+| [`TableCell`](../../base/primitives/table.md) | 一个数据单元格：`.new(id, column_index)`，从 1 开始 |
+| [`TableCaption`](../../base/primitives/table.md) | caption 该在的视觉位置；它不带 caption role |
+| [`v_virtual_list(…)`](../../base/virtual-list.md) | 只描述屏幕内内容的纵向列表 |
+| [`h_virtual_list(…)`](../../base/virtual-list.md) | 另一个轴上的同一件事；`item_sizes` 是宽度 |
+| [`VirtualListScrollHandle`](../../base/virtual-list.md) | 虚拟列表的滚动位置，跨帧保留 |
+| [`Scrollbar`](../../base/primitives/scrollbar.md) | `new(id)`、`horizontal(id)`、`vertical(id)`——一条由你自己摆放的滚动条 |
 
 两种虚拟列表都接受 `(id, item_count, item_sizes, get_key, render)`。`render(range, cx)` 是这套接口里唯一由宿主在一帧*进行中*调用的回调，所以在它内部注册处理器、创建留存状态与调用 `cx.notify()` 都会被拒绝。
 

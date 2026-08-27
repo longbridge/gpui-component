@@ -20,9 +20,9 @@ There is one module per crate that provides the capability, so an import says wh
 | `"gpui-base"` | `gpui-base`'s layout helpers, components and theme |
 | `"gpui-fps"` | `gpui-fps`'s performance overlay |
 
-Two names are ambient and are not imported at all: `cx`, which every host call hands you, and `window`. The standard-runtime modules — `fs/promises`, `path`, `crypto`, `process`, `net`, `websocket` and the rest — are gated by the host's grant and are documented in [Capabilities](./capabilities.md).
+Two names are never imported, for two different reasons. `window` is a real global: nothing hands it to you, it is simply in scope. `cx` is the opposite — it is never a global, and only ever arrives as an argument: `render(cx)`, `init(props, cx)`, the second argument of every handler, the parameter of a `cx.spawn` body. The standard-runtime modules — `fs/promises`, `path`, `crypto`, `process`, `net`, `websocket` and the rest — are gated by the host's grant and are documented in [Capabilities](./capabilities.md).
 
-Each table below names a thing exactly as you write it. A lowercase function is a free function on the Rust side too — `div()` is `gpui::div()`. A capitalized name is an object whose only member is a factory, mirroring the associated function it is named after: `Button.new(id)` is `Button::new(id)`, and `TableRow.new(id, index)` carries the one-based position a screen reader announces.
+A lowercase name is a free function on the Rust side too — `div()` is `gpui::div()`. A capitalized name is an object whose only member is a factory, so you write `Button.new(id)` for `Button::new(id)`; the tables list the name, because the `.new` is the same every time. Two shapes differ and say so where they appear: a table row or cell takes `.new(id, index)` with a one-based position, and the state-backed components take the state rather than an id.
 
 ## The `gpui` module
 
@@ -144,7 +144,7 @@ Three places hand one out: `init`, the body of `cx.spawn`, and the callbacks of 
 
 ## The `window` global
 
-A global, like `cx`; nothing to import. Every call reads the host call that is running now and throws outside one, so there is no handle to hold and nothing that can go stale. An overlay belongs to the window rather than to the view that opened it, which is why these are here and not on `Context`.
+A real global: nothing to import, and nothing hands it to you. Every call reads the host call that is running now and throws outside one, so there is no handle to hold and nothing that can go stale. An overlay belongs to the window rather than to the view that opened it, which is why these are here and not on `Context`.
 
 | Member | What it is |
 | --- | --- |
@@ -165,7 +165,7 @@ A global, like `cx`; nothing to import. Every call reads the host call that is r
 
 ## The `gpui-base` module
 
-The components here own behavior, focus and what a screen reader hears, and draw next to nothing themselves. The picture is the script's, written with the [style surface](./styling.md).
+The components here own behavior, focus and what a screen reader hears, and draw next to nothing themselves. The picture is the script's, written with the [style surface](./styling.md). Each name links to the component's own page in the [gpui-base documentation](../base/index.md), which is where its full Rust surface and its behavior are described.
 
 ### Layout
 
@@ -173,32 +173,32 @@ The components here own behavior, focus and what a screen reader hears, and draw
 | --- | --- |
 | `h_flex()` | A row |
 | `v_flex()` | A column |
-| `h_resizable(id)` | A row of panes with draggable dividers; sizes live in the window under the id |
-| `v_resizable(id)` | The same, stacked |
-| `resizable_panel()` | One pane of a resizable group, and legal nowhere else |
+| [`h_resizable(id)`](../base/primitives/resizable.md) | A row of panes with draggable dividers; sizes live in the window under the id |
+| [`v_resizable(id)`](../base/primitives/resizable.md) | The same, stacked |
+| [`resizable_panel()`](../base/primitives/resizable.md) | One pane of a resizable group, and legal nowhere else |
 
 ### Controls
 
 | Name | What it is |
 | --- | --- |
-| `Button.new(id)` | Activation, focus, disabled and selected state |
-| `Link.new(id)` | An external HTTP(S) resource opened through the system browser |
-| `Checkbox.new(id)` | A controlled toggle; draw the indicator yourself |
-| `Switch.new(id)` | A controlled switch |
-| `Radio.new(id)` | One option in a group; reports `true` only, never a deselection |
-| `Toggle.new(id)` | A button that stays down |
-| `RadioGroup.new(id)` | A set of radios announced as one group; holds no selection |
-| `ToggleGroup.new(id)` | A set of toggles announced as a toolbar |
-| `Tabs.new(id)` | A tab list that holds no selection of its own |
-| `Tab.new(id)` | One tab: `selected(...)` in, `on_click(...)` out |
-| `Progress.new(id)` | The announcement, not the bar; `Progress.new(...)` alone draws nothing |
-| `ProgressTrack.new()` | The groove: a plain element you size and color |
-| `ProgressIndicator.new()` | The filled part; set its width from the percentage you announced |
-| `SliderState.new(options?)` | Retained slider state, and where a drag writes |
-| `Slider.new(state)` | The root: announces the value and owns the release |
-| `SliderTrack.new(state)` | The press and drag surface |
-| `SliderIndicator.new(state)` | The groove, and the box every pointer position is measured against |
-| `SliderThumb.new(state)` | The knob; the shell gives it a place, you give it a look |
+| [`Button`](../base/primitives/button.md) | Activation, focus, disabled and selected state |
+| [`Link`](../base/primitives/link.md) | An external HTTP(S) resource opened through the system browser |
+| [`Checkbox`](../base/primitives/checkbox.md) | A controlled toggle; draw the indicator yourself |
+| [`Switch`](../base/primitives/switch.md) | A controlled switch |
+| [`Radio`](../base/primitives/radio.md) | One option in a group; reports `true` only, never a deselection |
+| [`Toggle`](../base/primitives/toggle.md) | A button that stays down |
+| [`RadioGroup`](../base/primitives/radio-group.md) | A set of radios announced as one group; holds no selection |
+| [`ToggleGroup`](../base/primitives/toggle-group.md) | A set of toggles announced as a toolbar |
+| [`Tabs`](../base/primitives/tabs.md) | A tab list that holds no selection of its own |
+| [`Tab`](../base/primitives/tabs.md) | One tab: `selected(...)` in, `on_click(...)` out |
+| [`Progress`](../base/primitives/progress.md) | The announcement, not the bar; `Progress.new(...)` alone draws nothing |
+| [`ProgressTrack`](../base/primitives/progress.md) | The groove: a plain element you size and color |
+| [`ProgressIndicator`](../base/primitives/progress.md) | The filled part; set its width from the percentage you announced |
+| [`SliderState`](../base/primitives/slider.md) | Retained slider state, and where a drag writes |
+| [`Slider`](../base/primitives/slider.md) | The root: announces the value and owns the release |
+| [`SliderTrack`](../base/primitives/slider.md) | The press and drag surface |
+| [`SliderIndicator`](../base/primitives/slider.md) | The groove, and the box every pointer position is measured against |
+| [`SliderThumb`](../base/primitives/slider.md) | The knob; the shell gives it a place, you give it a look |
 
 All four slider parts take the same `SliderStateHandle`, and all four are needed — a slider with no `SliderIndicator` cannot be moved at all.
 
@@ -206,13 +206,13 @@ All four slider parts take the same `SliderStateHandle`, and all four are needed
 
 | Name | What it is |
 | --- | --- |
-| `InputState.new(options?)` | Retained text state: `InputState.new({ placeholder, value })` |
-| `Input.new(state)` | The frame around retained text state |
-| `NumberInput.new(state)` | A spinbutton over the same `InputState`, with three slots that all carry weight |
-| `TextareaState.new(options?)` | Retained multi-line text state; `rows` is an option |
-| `Textarea.new(state)` | The frame around retained multi-line state |
-| `OtpState.new(length, options?)` | Retained one-time-code state; the length is fixed when it is created |
-| `OtpInput.new(state)` | A fixed-length code whose cells the shell draws and the script styles |
+| [`InputState`](../base/primitives/input.md) | Retained text state: `InputState.new({ placeholder, value })` |
+| [`Input`](../base/primitives/input.md) | The frame around retained text state |
+| [`NumberInput`](../base/primitives/number-input.md) | A spinbutton over the same `InputState`, with three slots that all carry weight |
+| [`TextareaState`](../base/primitives/textarea.md) | Retained multi-line text state; `rows` is an option |
+| [`Textarea`](../base/primitives/textarea.md) | The frame around retained multi-line state |
+| [`OtpState`](../base/primitives/otp-input.md) | Retained one-time-code state; the length is fixed when it is created |
+| [`OtpInput`](../base/primitives/otp-input.md) | A fixed-length code whose cells the shell draws and the script styles |
 
 There is no numeric state type: an `InputState` becomes a number state by being given `set_step`, `set_min` and `set_max`.
 
@@ -220,13 +220,13 @@ There is no numeric state type: an `InputState` becomes a number state by being 
 
 | Name | What it is |
 | --- | --- |
-| `Collapsible.new()` | Renders its `content` slot only while `open`; no role, chevron or trigger |
-| `Popover.new(id)` | A surface anchored to a trigger and opened by a press |
-| `HoverCard.new(id)` | The same, opened by resting the pointer, with its own open state |
-| `Popup.new(id, trigger)` | The bare anchored surface: `Popup.new(id, trigger)`, opened by filling `content` |
-| `Select.new(id)` | A combobox root: the role, the announced open state, the keyboard — none of the picture |
-| `Combobox.new(id)` | The same root, announced as a combobox whose trigger is an editable field |
-| `DatePicker.new(id, focus_handle)` | A date-picker root: `DatePicker.new(id, focus_handle)`; it holds no date |
+| [`Collapsible`](../base/primitives/collapsible.md) | Renders its `content` slot only while `open`; no role, chevron or trigger |
+| [`Popover`](../base/primitives/popover.md) | A surface anchored to a trigger and opened by a press |
+| [`HoverCard`](../base/primitives/hover-card.md) | The same, opened by resting the pointer, with its own open state |
+| [`Popup`](../base/primitives/popup.md) | The bare anchored surface: `Popup.new(id, trigger)`, opened by filling `content` |
+| [`Select`](../base/primitives/select.md) | A combobox root: the role, the announced open state, the keyboard — none of the picture |
+| [`Combobox`](../base/primitives/combobox.md) | The same root, announced as a combobox whose trigger is an editable field |
+| [`DatePicker`](../base/primitives/date-picker.md) | A date-picker root: `DatePicker.new(id, focus_handle)`; it holds no date |
 
 Two gaps are worth knowing before you build on these: arrow-key navigation of an open `Select` or `Combobox` list is not there, and Enter and Escape do not reach a `DatePicker`. Both are described where they bite, in the declarations for each type.
 
@@ -234,17 +234,17 @@ Two gaps are worth knowing before you build on these: arrow-key navigation of an
 
 | Name | What it is |
 | --- | --- |
-| `Table.new(id)` | A semantic table root, composed the way HTML composes one |
-| `TableHeader.new(id)` | The header row group |
-| `TableBody.new(id)` | The body row group |
-| `TableRow.new(id, index)` | One row: `TableRow.new(id, row_index)`, one-based |
-| `TableHead.new(id, index)` | One column header, one-based |
-| `TableCell.new(id, index)` | One data cell, one-based |
-| `TableCaption.new(id)` | The visual slot a caption belongs in; it carries no caption role |
-| `v_virtual_list(…)` | A vertical list that describes only what is on screen |
-| `h_virtual_list(…)` | The same along the other axis; `item_sizes` are widths |
-| `VirtualListScrollHandle.new()` | A virtual list's scroll position, kept across frames |
-| `Scrollbar.new(id)` | `new(id)`, `horizontal(id)`, `vertical(id)` — a bar you place yourself |
+| [`Table`](../base/primitives/table.md) | A semantic table root, composed the way HTML composes one |
+| [`TableHeader`](../base/primitives/table.md) | The header row group |
+| [`TableBody`](../base/primitives/table.md) | The body row group |
+| [`TableRow`](../base/primitives/table.md) | One row: `.new(id, row_index)`, one-based |
+| [`TableHead`](../base/primitives/table.md) | One column header: `.new(id, column_index)`, one-based |
+| [`TableCell`](../base/primitives/table.md) | One data cell: `.new(id, column_index)`, one-based |
+| [`TableCaption`](../base/primitives/table.md) | The visual slot a caption belongs in; it carries no caption role |
+| [`v_virtual_list(…)`](../base/virtual-list.md) | A vertical list that describes only what is on screen |
+| [`h_virtual_list(…)`](../base/virtual-list.md) | The same along the other axis; `item_sizes` are widths |
+| [`VirtualListScrollHandle`](../base/virtual-list.md) | A virtual list's scroll position, kept across frames |
+| [`Scrollbar`](../base/primitives/scrollbar.md) | `new(id)`, `horizontal(id)`, `vertical(id)` — a bar you place yourself |
 
 Both virtual lists take `(id, item_count, item_sizes, get_key, render)`. `render(range, cx)` is the only callback in this API that the host calls *during* a frame, which is why handlers, retained state and `cx.notify()` are all refused inside it.
 

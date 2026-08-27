@@ -39,6 +39,22 @@ export default class Probe extends View {
 }
 "#;
 
+const WITHDRAWN_MODULE_PROBE: &str = r#"
+import { View } from "gpui";
+import { v_flex } from "gpui-base";
+import { increment } from "calculator";
+
+export default class Probe extends View {
+  render(cx) {
+    try {
+      return v_flex().child(`answer:${increment(41)}`);
+    } catch (error) {
+      return v_flex().child(`refused:${error.message}`);
+    }
+  }
+}
+"#;
+
 const HOST_MODULE_PROBE: &str = r#"
 import { View } from "gpui";
 import { v_flex } from "gpui-base";
@@ -114,7 +130,60 @@ fn javascript_imports_a_host_registered_module(cx: &mut TestAppContext) {
     let rendered = snapshot_text(&mut context, &view);
     assert!(
         rendered.contains("answer:42"),
-        "the native argument/result bridge did not round-trip: {rendered}"
+        "the host argument/result bridge did not round-trip: {rendered}"
+    );
+
+    crate::clear_exported_modules();
+}
+
+/// An import fixes the *names* a module exports, not the functions behind them.
+///
+/// This is the one semantic an import could plausibly have cost, so it is the
+/// one worth pinning: a script holding a function it imported before the host
+/// withdrew the module gets a refusal on the next call, not the withdrawn
+/// closure. Every export is a stub that resolves through the registry.
+#[gpui::test]
+fn withdrawing_a_module_refuses_a_call_through_an_already_imported_name(
+    cx: &mut TestAppContext,
+) {
+    cx.update(crate::init);
+    let mut modules = HostModules::new();
+    modules.register("calculator", |module| {
+        module.function("increment", |arguments| {
+            Ok(HostValue::from(arguments.number(0)? + 1.))
+        });
+    });
+    crate::export_modules(modules).expect("the module names are free");
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let view_type = runtime
+        .load_source("withdrawn.js", WITHDRAWN_MODULE_PROBE)
+        .expect("load script");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let view = context
+        .update(|window, cx| runtime.instantiate_view(&view_type, window, cx))
+        .expect("instantiate script view");
+
+    draw(&mut context, &view);
+    assert!(
+        snapshot_text(&mut context, &view).contains("answer:42"),
+        "the module did not answer while it was registered"
+    );
+
+    crate::clear_exported_modules();
+    // The view redraws from its cached snapshot unless something asks it to
+    // describe itself again; withdrawing a module is a host act it cannot see.
+    context.update(|_, cx| view.update(cx, |view, cx| view.refresh(cx)));
+    draw(&mut context, &view);
+    let rendered = snapshot_text(&mut context, &view);
+    assert!(
+        rendered.contains("refused:"),
+        "the withdrawn module still answered through the imported name: {rendered}"
+    );
+    assert!(
+        rendered.contains("registered none"),
+        "the refusal should say the host has no modules: {rendered}"
     );
 }
 

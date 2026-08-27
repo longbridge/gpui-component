@@ -16,7 +16,7 @@ They are on `window` rather than on `cx` because a dialog belongs to the window,
 
 ## The surface
 
-`window` is a **global**, like `cx`. There is nothing to import.
+`window` is a **global**. There is nothing to import — and unlike `cx`, which every host call hands you as an argument, nothing hands you `window` either. It is simply in scope.
 
 A callback parameter named `window` shadows it, which is ordinary scoping and not an error — and if a future callback ever hands one in, it would be this same object, because `window` is ambient: it reads the call that is running. That is also why it is not a parameter today. In Rust it has to be one, since Rust has no ambient state to read; here the read is available, which is the same reason `fs` and `store` are not parameters either.
 

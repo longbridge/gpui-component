@@ -44,7 +44,8 @@
 //!
 //! # The script surface
 //!
-//! `window` is a global, like `cx`. There is nothing to import.
+//! `window` is a global. There is nothing to import, and unlike `cx`, nothing
+//! hands it to you either.
 //!
 //! ```js
 //!

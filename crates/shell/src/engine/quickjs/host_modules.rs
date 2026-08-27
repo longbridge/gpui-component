@@ -50,7 +50,8 @@
 use std::fmt::Write as _;
 
 use rquickjs::{
-    Array, Ctx, Exception, FromJs, IntoJs, Module, Object, Result as JsResult, Value,
+    Array, Ctx, Error as JsError, Exception, FromJs, IntoJs, Module, Object, Result as JsResult,
+    Value,
     function::{Func, Rest},
     loader::{ImportAttributes, Loader, Resolver},
     module::Declared,
@@ -124,6 +125,12 @@ pub fn install(ctx: &Ctx<'_>) -> JsResult<()> {
 ///
 /// Stateless: the registry is read through the calling frame on every resolve,
 /// which is what lets two plugins in one runtime see two different module sets.
+///
+/// A miss is a plain [`JsError::new_resolving`], never a thrown exception. This
+/// resolver is not the last in the chain — the application's own files are —
+/// and a resolver that throws leaves the exception pending on the context, so
+/// the file resolver behind it never gets to answer. `import "./ui.js"` failing
+/// with "not a host module" is what that mistake looks like.
 #[derive(Clone, Copy, Default)]
 pub(super) struct HostModuleLoader;
 
@@ -139,32 +146,21 @@ impl HostModuleLoader {
 impl Resolver for HostModuleLoader {
     fn resolve<'js>(
         &mut self,
-        ctx: &Ctx<'js>,
-        _base: &str,
+        _ctx: &Ctx<'js>,
+        base: &str,
         name: &str,
         _attributes: Option<ImportAttributes<'js>>,
     ) -> JsResult<String> {
         // Only a bare specifier: a relative or rooted path is the application's
         // own file, and answering for one here would let a registered module
         // stand in for a file the author is looking straight at.
-        //
-        // A miss is deliberately not reported in detail. This resolver is not
-        // the last in the chain — the application's own files are — so "not
-        // mine" is all it has to say, and the sentence a script author needs is
-        // the one the file resolver writes once it has looked everywhere.
         if name.starts_with('.') || name.starts_with('/') {
-            return Err(Exception::throw_message(
-                ctx,
-                &format!("`{name}` is not a host module"),
-            ));
+            return Err(JsError::new_resolving(base, name));
         }
 
         let registry = host_modules::modules();
         if registry.get(name).is_err() {
-            return Err(Exception::throw_message(
-                ctx,
-                &format!("`{name}` is not a host module"),
-            ));
+            return Err(JsError::new_resolving(base, name));
         }
 
         Ok(format!("{name}{GENERATION_TAG}{}", registry.generation()))
@@ -179,10 +175,9 @@ impl Loader for HostModuleLoader {
         _attributes: Option<ImportAttributes<'js>>,
     ) -> JsResult<Module<'js, Declared>> {
         let Some((module, generation)) = Self::untag(name) else {
-            return Err(Exception::throw_message(
-                ctx,
-                &format!("`{name}` is not a resolved host module"),
-            ));
+            // Not a name this resolver produced, so it belongs to a loader
+            // further along the chain.
+            return Err(JsError::new_loading(name));
         };
 
         let registry = host_modules::modules();

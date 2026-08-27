@@ -3300,7 +3300,7 @@ globalThis.__gpui = (() => {
   // somewhere to grow: `Window` in Rust also answers focus, size and
   // appearance.
   //
-  // A global rather than a module export, like `cx`. It names the window the
+  // A global rather than a module export. It names the window the
   // script is already inside, which is not something a file opts into by
   // importing it, and `window` is the one identifier every JavaScript author
   // already reaches for. Nothing collides: this runtime has no DOM.

@@ -2465,13 +2465,14 @@ declare function fetch(url: string, options?: ShellFetchOptions): Promise<ShellF
 declare const process: typeof import("process").default;
 "#;
 
-/// `window` is a global, like `cx` — see the runtime's `overlay` module.
+/// `window` is a real global — see the runtime's `overlay` module.
 ///
 /// Outside the `declare module` block, which is what makes it global: this file
 /// has no top-level import or export, so TypeScript reads it in script mode.
 const WINDOW_GLOBAL: &str = r#"
 /**
- * The window the script is drawing into. A global, like `cx`; nothing to import.
+ * The window the script is drawing into. A global: nothing to import, and
+ * unlike `cx`, nothing hands it to you.
  *
  * Ambient: every call reads the host call that is running now, and throws
  * outside one. There is no handle to hold, so there is nothing to hold past the
@@ -2704,6 +2705,36 @@ mod tests {
         assert!(declarations.ends_with(";\n"));
     }
 
+    /// The reason host modules became imports: the declarations can now be
+    /// generated from the registry instead of hand-written beside the script.
+    #[test]
+    fn a_registered_host_module_is_declared_from_the_registry() {
+        let mut modules = crate::HostModules::new();
+        modules.register("market", |module| {
+            module.function("quotes", |_| Ok(crate::HostValue::Null));
+            module.declarations(
+                "export interface Quote { symbol: string }\n\
+                 export function quotes(): Quote[];\n",
+            );
+        });
+        // No TypeScript face, so it gets permissive signatures — which still
+        // check the module name and the export name.
+        modules.register("audit", |module| {
+            module.function("observe", |_| Ok(crate::HostValue::Null));
+        });
+        crate::export_modules(modules).expect("neither name is reserved");
+
+        let declarations = declarations();
+        assert!(declarations.contains("declare module \"market\" {"));
+        assert!(declarations.contains("  export interface Quote { symbol: string }"));
+        assert!(declarations.contains("  export function quotes(): Quote[];"));
+        assert!(declarations.contains("declare module \"audit\" {"));
+        assert!(declarations.contains("  export function observe(...args: any[]): any;"));
+
+        crate::clear_exported_modules();
+        assert!(!super::declarations().contains("declare module \"market\""));
+    }
+
     #[test]
     fn each_built_in_module_declares_only_what_its_crate_provides() {
         let declarations = declarations();
@@ -2731,11 +2762,7 @@ mod tests {
             assert!(base.contains(name), "`{name}` is not declared in gpui-base");
             assert!(!gpui.contains(name), "`{name}` is also declared in gpui");
         }
-        for name in [
-            "export function div",
-            "export interface AsyncContext",
-            "export function native",
-        ] {
+        for name in ["export function div", "export interface AsyncContext"] {
             assert!(gpui.contains(name), "`{name}` is not declared in gpui");
             assert!(
                 !base.contains(name),
