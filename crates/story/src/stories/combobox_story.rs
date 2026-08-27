@@ -1,6 +1,6 @@
 use gpui::{prelude::FluentBuilder as _, *};
 use gpui_component::{
-    ActiveTheme, Icon, IconName, IndexPath, Sizable as _,
+    ActiveTheme, Icon, IconName, IndexPath, Sizable as _, ThemeStyled as _,
     button::Button,
     button::ButtonVariants as _,
     combobox::*,
@@ -260,7 +260,7 @@ impl SearchableListDelegate for FeaturedDelegate {
                 })
                 .child(
                     div()
-                        .rounded_sm()
+                        .rounded(cx.theme().radius.half())
                         .bg(cx.theme().primary)
                         .text_color(cx.theme().primary_foreground)
                         .px_1()
@@ -288,7 +288,7 @@ pub struct ComboboxStory {
     // 05 custom check icon (single)
     custom_check: Entity<ComboboxState<SearchableVec<&'static str>>>,
     // 06 footer button (single)
-    with_footer: Entity<ComboboxState<SearchableVec<&'static str>>>,
+    with_footer: Entity<ComboboxState<SearchableVec<String>>>,
     // 07 custom trigger (single)
     custom_trigger: Entity<ComboboxState<SearchableVec<&'static str>>>,
     // 08 multi badges
@@ -365,7 +365,7 @@ impl ComboboxStory {
     fn new(window: &mut Window, cx: &mut App) -> Entity<Self> {
         let basic = cx.new(|cx| {
             ComboboxState::new(SearchableVec::new(FRAMEWORKS.to_vec()), vec![], window, cx)
-                                .searchable(true)
+                .searchable(true)
         });
 
         let basic_multi = cx.new(|cx| {
@@ -376,7 +376,7 @@ impl ComboboxStory {
 
         let grouped = cx.new(|cx| {
             ComboboxState::new(food_groups(), vec![IndexPath::default()], window, cx)
-                                .searchable(true)
+                .searchable(true)
         });
 
         let disabled_items = cx.new(|cx| {
@@ -387,30 +387,30 @@ impl ComboboxStory {
                 FoodItem::new("Carrots"),
                 FoodItem::new("Broccoli").disabled(),
             ]);
-            ComboboxState::new(items, vec![], window, cx)
-                                .searchable(true)
+            ComboboxState::new(items, vec![], window, cx).searchable(true)
         });
 
-        let with_icon = cx.new(|cx| {
-            ComboboxState::new(industries(), vec![], window, cx)
-                                .searchable(true)
-        });
+        let with_icon =
+            cx.new(|cx| ComboboxState::new(industries(), vec![], window, cx).searchable(true));
 
         let custom_check = cx.new(|cx| {
             ComboboxState::new(SearchableVec::new(FRAMEWORKS.to_vec()), vec![], window, cx)
-                                .searchable(true)
+                .searchable(true)
         });
 
         let with_footer = cx.new(|cx| {
-            let items =
-                SearchableVec::new(vec!["Harvard University", "MIT", "Stanford", "Cambridge"]);
-            ComboboxState::new(items, vec![IndexPath::default()], window, cx)
-                                .searchable(true)
+            let items = SearchableVec::new(vec![
+                "Harvard University".to_string(),
+                "MIT".to_string(),
+                "Stanford".to_string(),
+                "Cambridge".to_string(),
+            ]);
+            ComboboxState::new(items, vec![IndexPath::default()], window, cx).searchable(true)
         });
 
         let custom_trigger = cx.new(|cx| {
             ComboboxState::new(SearchableVec::new(FRAMEWORKS.to_vec()), vec![], window, cx)
-                                .searchable(true)
+                .searchable(true)
         });
 
         let multi_badges = cx.new(|cx| {
@@ -442,7 +442,7 @@ impl ComboboxStory {
                 window,
                 cx,
             )
-                        .searchable(true)
+            .searchable(true)
         });
 
         let featured = cx.new(|cx| {
@@ -452,7 +452,7 @@ impl ComboboxStory {
                 window,
                 cx,
             )
-                        .searchable(true)
+            .searchable(true)
         });
 
         let multi_expand = cx.new(|cx| {
@@ -519,375 +519,471 @@ impl Render for ComboboxStory {
 
         v_flex()
             .size_full()
+            .items_center()
             .gap_4()
             .child(
-                section("Basic Single-Select").max_w_md().child(
-                    Combobox::new(&self.basic)
-                        .placeholder("Select framework...")
-                        .search_placeholder("Search framework...")
-                        .w_full(),
-                ),
+                section("Default")
+                    .w(px(280.))
+                    .description("Search and choose one option.")
+                    .child(
+                        Combobox::new(&self.basic)
+                            .placeholder("Select framework...")
+                            .search_placeholder("Search…")
+                            .w(px(280.)),
+                    ),
             )
             .child(
-                section("Basic Multi-Select").max_w_md().child(
-                    Combobox::new(&self.basic_multi)
-                        .placeholder("Select frameworks...")
-                        .search_placeholder("Search framework...")
-                        .w_full(),
-                ),
+                section("Multiple")
+                    .w(px(280.))
+                    .description("Select more than one option.")
+                    .child(
+                        Combobox::new(&self.basic_multi)
+                            .placeholder("Select frameworks...")
+                            .search_placeholder("Search…")
+                            .w(px(280.)),
+                    ),
             )
             .child(
-                section("Grouped Items").max_w_md().child(
-                    Combobox::new(&self.grouped)
-                        .placeholder("Select item...")
-                        .search_placeholder("Search item...")
-                        .w_full(),
-                ),
+                section("Groups")
+                    .w(px(280.))
+                    .description("Organize results into groups.")
+                    .child(
+                        Combobox::new(&self.grouped)
+                            .placeholder("Select item...")
+                            .search_placeholder("Search…")
+                            .w(px(280.)),
+                    ),
             )
             .child(
-                section("Disabled Items").max_w_md().child(
-                    Combobox::new(&self.disabled_items)
-                        .placeholder("Select item...")
-                        .search_placeholder("Search item...")
-                        .w_full(),
-                ),
+                section("Disabled items")
+                    .w(px(280.))
+                    .description("Keep unavailable options visible.")
+                    .child(
+                        Combobox::new(&self.disabled_items)
+                            .placeholder("Select item...")
+                            .search_placeholder("Search…")
+                            .w(px(280.)),
+                    ),
             )
             .child(
-                section("Item with Icon").max_w_md().child(
-                    Combobox::new(&self.with_icon)
-                        .placeholder("Select industry category")
-                        .search_placeholder("Search industries...")
-                        .render_trigger(|ctx, _, cx| {
-                            let (icon, title) = match &ctx.selection {
-                                [] => (None, None),
-                                [(_index, item)] => {
-                                    (Some(item.icon.clone()), Some(item.title().clone()))
-                                }
-                                items => (
-                                    None,
-                                    Some(SharedString::new(format!("{} selected", items.len()))),
-                                ),
-                            };
+                section("Icons")
+                    .w(px(280.))
+                    .description("Show icons in options and the trigger.")
+                    .child(
+                        Combobox::new(&self.with_icon)
+                            .placeholder("Select industry category")
+                            .search_placeholder("Search…")
+                            .render_trigger(|trigger, _, cx| {
+                                let (icon, title) = match trigger.selection() {
+                                    [] => (None, None),
+                                    [(_index, item)] => {
+                                        (Some(item.icon.clone()), Some(item.title().clone()))
+                                    }
+                                    items => (
+                                        None,
+                                        Some(SharedString::new(format!(
+                                            "{} selected",
+                                            items.len()
+                                        ))),
+                                    ),
+                                };
 
-                            h_flex()
-                                .w_full()
-                                .gap_2()
-                                .items_center()
-                                .when_some(icon, |this, icon| {
-                                    this.child(
-                                        Icon::new(icon)
-                                            .small()
+                                h_flex()
+                                    .w_full()
+                                    .gap_2()
+                                    .items_center()
+                                    .when_some(icon, |this, icon| {
+                                        this.child(
+                                            Icon::new(icon)
+                                                .small()
+                                                .text_color(cx.theme().muted_foreground),
+                                        )
+                                    })
+                                    .child(
+                                        div()
+                                            .w_full()
+                                            .overflow_hidden()
+                                            .truncate()
+                                            .when_some(title, |this, title| this.child(title))
+                                            .when(trigger.selection().is_empty(), |this| {
+                                                this.text_color(cx.theme().muted_foreground)
+                                                    .child("Select industry category")
+                                            }),
+                                    )
+                                    .child(
+                                        Caret::new(trigger.size())
                                             .text_color(cx.theme().muted_foreground),
                                     )
-                                })
-                                .child(
-                                    div()
-                                        .w_full()
-                                        .overflow_hidden()
-                                        .truncate()
-                                        .when_some(title, |this, title| this.child(title))
-                                        .when(ctx.selection.is_empty(), |this| {
-                                            this.text_color(cx.theme().muted_foreground)
-                                                .child("Select industry category")
-                                        }),
-                                )
-                                .child(
-                                    Caret::new(ctx.size)
-                                        .text_color(cx.theme().muted_foreground),
-                                )
-                                .into_any_element()
-                        })
-                        .w_full(),
-                ),
+                                    .into_any_element()
+                            })
+                            .w(px(280.)),
+                    ),
             )
             .child(
-                section("Custom Check Icon").max_w_md().child(
-                    Combobox::new(&self.custom_check)
-                        .placeholder("Select framework...")
-                        .search_placeholder("Search framework...")
-                        .check_icon(Icon::new(IconName::CircleCheck))
-                        .w_full(),
-                ),
+                section("Check icon")
+                    .w(px(280.))
+                    .description("Replace the default selection mark.")
+                    .child(
+                        Combobox::new(&self.custom_check)
+                            .placeholder("Select framework...")
+                            .search_placeholder("Search…")
+                            .check_icon(Icon::new(IconName::CircleCheck))
+                            .w(px(280.)),
+                    ),
             )
             .child(
-                section("Footer Action Button").max_w_md().child(
-                    Combobox::new(&self.with_footer)
-                        .placeholder("Select university")
-                        .search_placeholder("Find university")
-                        .footer(|_, cx| {
-                            Button::new("add-new")
-                                .ghost()
-                                .label("New university")
-                                .icon(Icon::new(IconName::Plus))
-                                .text_color(cx.theme().foreground)
-                                .w_full()
-                                .justify_start()
-                                .into_any_element()
-                        })
-                        .w_full(),
-                ),
-            )
-            .child(
-                section("Custom Trigger").max_w_md().child(
-                    Combobox::new(&self.custom_trigger)
-                        .placeholder("Select framework")
-                        .search_placeholder("Search framework...")
-                        .render_trigger(|ctx, _, cx| {
-                            let title = match &ctx.selection {
-                                [] => None,
-                                [(_index, item)] => Some(item.title().clone()),
-                                items => {
-                                    Some(SharedString::new(format!("{} selected", items.len())))
-                                }
-                            };
+                section("Footer")
+                    .w(px(280.))
+                    .description("Add an action below the option list.")
+                    .child({
+                        let state = self.with_footer.clone();
+                        Combobox::new(&self.with_footer)
+                            .placeholder("Select university")
+                            .search_placeholder("Search…")
+                            .footer(move |_, cx| {
+                                let state = state.clone();
+                                Button::new("add-new")
+                                    .ghost()
+                                    .label("New university")
+                                    .icon(Icon::new(IconName::Plus))
+                                    .text_color(cx.theme().foreground)
+                                    .w_full()
+                                    .justify_start()
+                                    .on_click(move |_, window, cx| {
+                                        let search_query = state.read(cx).query(cx);
+                                        let mut items = SearchableVec::new(vec![
+                                            "Harvard University".to_string(),
+                                            "MIT".to_string(),
+                                            "Stanford".to_string(),
+                                            "Cambridge".to_string(),
+                                            search_query.to_string(),
+                                        ]);
 
-                            h_flex()
-                                .w_full()
-                                .items_center()
-                                .justify_between()
-                                .gap_2()
-                                .child(
-                                    h_flex()
-                                        .items_center()
-                                        .gap_2()
-                                        .child(
-                                            Icon::new(IconName::Palette)
-                                                .small()
-                                                .text_color(cx.theme().primary),
-                                        )
-                                        .when_some(title, |this, title| {
-                                            this.child(
-                                                div()
-                                                    .bg(cx.theme().primary)
-                                                    .text_color(cx.theme().primary_foreground)
-                                                    .rounded_full()
-                                                    .px_2()
-                                                    .py_0p5()
-                                                    .text_xs()
-                                                    .child(title),
+                                        drop(items.perform_search(&search_query, window, cx));
+
+                                        state.update(cx, |state, cx| {
+                                            state.set_items(items, window, cx);
+                                        });
+                                    })
+                                    .into_any_element()
+                            })
+                            .w(px(280.))
+                    }),
+            )
+            .child(
+                section("Custom trigger")
+                    .w(px(280.))
+                    .description("Render custom trigger content.")
+                    .child(
+                        Combobox::new(&self.custom_trigger)
+                            .placeholder("Select framework")
+                            .search_placeholder("Search…")
+                            .render_trigger(|trigger, _, cx| {
+                                let title = match trigger.selection() {
+                                    [] => None,
+                                    [(_index, item)] => Some(item.title().clone()),
+                                    items => {
+                                        Some(SharedString::new(format!("{} selected", items.len())))
+                                    }
+                                };
+
+                                h_flex()
+                                    .w_full()
+                                    .items_center()
+                                    .justify_between()
+                                    .gap_2()
+                                    .child(
+                                        h_flex()
+                                            .items_center()
+                                            .gap_2()
+                                            .child(
+                                                Icon::new(IconName::Palette)
+                                                    .small()
+                                                    .text_color(cx.theme().primary),
                                             )
-                                        })
-                                        .when(ctx.selection.is_empty(), |this| {
-                                            this.text_color(cx.theme().muted_foreground).child(
-                                                ctx.placeholder
-                                                    .cloned()
-                                                    .unwrap_or_else(|| "Select...".into()),
-                                            )
-                                        }),
-                                )
-                                .child(
-                                    Caret::new(ctx.size)
-                                        .text_color(cx.theme().muted_foreground),
-                                )
-                                .into_any_element()
-                        })
-                        .w_full(),
-                ),
-            )
-            .child(
-                section("Multi-Select with Badges").max_w_md().child(
-                    Combobox::new(&self.multi_badges)
-                        .placeholder("Select frameworks")
-                        .search_placeholder("Search framework...")
-                        .render_trigger(move |ctx, _, cx| {
-                            let items = ctx.selection;
-
-                            if items.is_empty() {
-                                return div()
-                                    .text_color(cx.theme().muted_foreground)
-                                    .child("Select frameworks")
-                                    .into_any_element();
-                            }
-
-                            h_flex()
-                                .w_full()
-                                .flex_wrap()
-                                .gap_1()
-                                .children(items.iter().cloned().map(|(index, item)| {
-                                    let state = multi_badges_state.clone();
-                                    h_flex()
-                                        .gap_0p5()
-                                        .items_center()
-                                        .rounded_sm()
-                                        .border_1()
-                                        .border_color(cx.theme().border)
-                                        .px_1()
-                                        .text_xs()
-                                        .child(item)
-                                        .child(
-                                            Button::new(SharedString::from(format!(
-                                                "remove-{item}"
-                                            )))
-                                            .ghost()
-                                            .xsmall()
-                                            .icon(Icon::new(IconName::Close).xsmall())
-                                            .tab_stop(false)
-                                            .on_click(move |_ev, _window, cx| {
-                                                // Otherwise the click bubbles up to the
-                                                // trigger and opens the dropdown.
-                                                cx.stop_propagation();
-                                                state.update(cx, |s, cx| {
-                                                    s.remove_selected_index(index, cx);
-                                                });
+                                            .when_some(title, |this, title| {
+                                                this.child(
+                                                    div()
+                                                        .bg(cx.theme().primary)
+                                                        .text_color(cx.theme().primary_foreground)
+                                                        .rounded_full_style(cx)
+                                                        .px_2()
+                                                        .py_0p5()
+                                                        .text_xs()
+                                                        .child(title),
+                                                )
+                                            })
+                                            .when(trigger.selection().is_empty(), |this| {
+                                                this.text_color(cx.theme().muted_foreground).child(
+                                                    trigger
+                                                        .placeholder()
+                                                        .cloned()
+                                                        .unwrap_or_else(|| "Select...".into()),
+                                                )
                                             }),
-                                        )
-                                }))
-                                .into_any_element()
-                        })
-                        .w_full(),
-                ),
-            )
-            .child(
-                section("Max 2 Selections").max_w_md().child(
-                    Combobox::new(&self.custom_max2)
-                        .placeholder("Select up to 2 frameworks")
-                        .search_placeholder("Search framework...")
-                        .w_full(),
-                ),
-            )
-            .child(
-                section("Pinned Items").max_w_md().child(
-                    Combobox::new(&self.pinned)
-                        .placeholder("Select framework...")
-                        .search_placeholder("Search framework...")
-                        .w_full(),
-                ),
-            )
-            .child(
-                section("Custom Row Renderer").max_w_md().child(
-                    Combobox::new(&self.featured)
-                        .placeholder("Select framework...")
-                        .search_placeholder("Search framework...")
-                        .w_full(),
-                ),
-            )
-            .child(
-                section("Multi-Select Expandable").max_w_md().child(
-                    Combobox::new(&self.multi_expand)
-                        .placeholder("Select frameworks")
-                        .search_placeholder("Search framework...")
-                        .render_trigger(|ctx, _, cx| {
-                            const MAX_SHOWN: usize = 2;
-
-                            if ctx.selection.is_empty() {
-                                return div()
-                                    .text_color(cx.theme().muted_foreground)
-                                    .child("Select frameworks")
-                                    .into_any_element();
-                            }
-
-                            h_flex()
-                                .w_full()
-                                .flex_wrap()
-                                .gap_1()
-                                .children(ctx.selection.iter().take(MAX_SHOWN).map(
-                                    |(_index, item)| {
-                                        div()
-                                            .rounded_sm()
-                                            .border_1()
-                                            .border_color(cx.theme().border)
-                                            .px_1()
-                                            .text_xs()
-                                            .child(*item)
-                                    },
-                                ))
-                                .when(ctx.selection.len() > MAX_SHOWN, |this| {
-                                    let hidden = ctx.selection.len() - MAX_SHOWN;
-                                    this.child(
-                                        div()
-                                            .rounded_sm()
-                                            .border_1()
-                                            .border_color(cx.theme().border)
-                                            .px_1()
-                                            .text_xs()
-                                            .text_color(cx.theme().muted_foreground)
-                                            .child(format!("+{} more", hidden)),
                                     )
-                                })
-                                .into_any_element()
-                        })
-                        .w_full(),
-                ),
+                                    .child(
+                                        Caret::new(trigger.size())
+                                            .text_color(cx.theme().muted_foreground),
+                                    )
+                                    .into_any_element()
+                            })
+                            .w(px(280.)),
+                    ),
             )
             .child(
-                section("Multi-Select with Count Badge").max_w_md().child(
-                    Combobox::new(&self.multi_count)
-                        .placeholder("Select frameworks")
-                        .search_placeholder("Search framework...")
-                        .render_trigger(|ctx, _, cx| {
-                            let count = ctx.selection.len();
+                section("Badges")
+                    .w(px(280.))
+                    .description("Show removable selected badges.")
+                    .child(
+                        Combobox::new(&self.multi_badges)
+                            .placeholder("Select frameworks")
+                            .search_placeholder("Search…")
+                            .render_trigger(move |trigger, _, cx| {
+                                let items = trigger.selection();
 
-                            if count == 0 {
-                                return div()
-                                    .text_color(cx.theme().muted_foreground)
-                                    .child("Select frameworks")
-                                    .into_any_element();
-                            }
+                                if items.is_empty() {
+                                    return div()
+                                        .text_color(cx.theme().muted_foreground)
+                                        .child("Select frameworks")
+                                        .into_any_element();
+                                }
 
-                            let display = if count > 99 {
-                                "99+".to_string()
-                            } else {
-                                count.to_string()
-                            };
-
-                            h_flex()
-                                .gap_1p5()
-                                .items_center()
-                                .child(
-                                    h_flex()
-                                        .justify_center()
-                                        .items_center()
-                                        .min_w(px(16.))
-                                        .h(px(16.))
-                                        .px_1()
-                                        .rounded_full()
-                                        .bg(cx.theme().red)
-                                        .text_color(white())
-                                        .text_size(px(10.))
-                                        .line_height(relative(1.))
-                                        .child(display),
-                                )
-                                .child(
-                                    div()
-                                        .text_color(cx.theme().foreground)
-                                        .child("frameworks selected"),
-                                )
-                                .into_any_element()
-                        })
-                        .w_full(),
-                ),
+                                let hidden = items.len().saturating_sub(1);
+                                h_flex()
+                                    .w_full()
+                                    .items_center()
+                                    .justify_between()
+                                    .gap_2()
+                                    .child(
+                                        h_flex()
+                                            .min_w_0()
+                                            .items_center()
+                                            .gap_1()
+                                            .children(items.iter().take(1).cloned().map(
+                                                |(index, item)| {
+                                                    let state = multi_badges_state.clone();
+                                                    h_flex()
+                                                        .min_w_0()
+                                                        .gap_0p5()
+                                                        .items_center()
+                                                        .rounded(cx.theme().radius.half())
+                                                        .border_1()
+                                                        .border_color(cx.theme().border)
+                                                        .px_1()
+                                                        .text_xs()
+                                                        .child(div().truncate().child(item))
+                                                        .child(
+                                                            Button::new(SharedString::from(
+                                                                format!("remove-{item}"),
+                                                            ))
+                                                            .ghost()
+                                                            .xsmall()
+                                                            .icon(
+                                                                Icon::new(IconName::Close).xsmall(),
+                                                            )
+                                                            .tab_stop(false)
+                                                            .on_click(move |_ev, _window, cx| {
+                                                                cx.stop_propagation();
+                                                                state.update(cx, |s, cx| {
+                                                                    s.remove_selected_index(
+                                                                        index, cx,
+                                                                    );
+                                                                });
+                                                            }),
+                                                        )
+                                                },
+                                            ))
+                                            .when(hidden > 0, |this| {
+                                                this.child(
+                                                    div()
+                                                        .flex_shrink_0()
+                                                        .text_xs()
+                                                        .text_color(cx.theme().muted_foreground)
+                                                        .child(format!("+{hidden}")),
+                                                )
+                                            }),
+                                    )
+                                    .child(
+                                        div().flex_shrink_0().child(
+                                            Caret::new(trigger.size())
+                                                .text_color(cx.theme().muted_foreground),
+                                        ),
+                                    )
+                                    .into_any_element()
+                            })
+                            .w(px(280.)),
+                    ),
             )
             .child(
-                section("Selected Values").max_w_lg().child(
-                    v_flex()
-                        .gap_2()
-                        .child(format!(
-                            "basic: {:?}",
-                            self.basic.read(cx).selected_values()
-                        ))
-                        .child(format!(
-                            "grouped: {:?}",
-                            self.grouped.read(cx).selected_values()
-                        ))
-                        .child(format!(
-                            "multi_badges: {:?}",
-                            self.multi_badges
-                                .read(cx)
-                                .selected_values()
-                                .iter()
-                                .map(|v| v.to_string())
-                                .collect::<Vec<_>>()
-                        ))
-                        .child(format!(
-                            "multi_count: {:?}",
-                            self.multi_count
-                                .read(cx)
-                                .selected_values()
-                                .iter()
-                                .map(|v| v.to_string())
-                                .collect::<Vec<_>>()
-                        )),
-                ),
+                section("Maximum selections")
+                    .w(px(280.))
+                    .description("Limit how many items can be selected.")
+                    .child(
+                        Combobox::new(&self.custom_max2)
+                            .placeholder("Select up to 2 frameworks")
+                            .search_placeholder("Search…")
+                            .w(px(280.)),
+                    ),
+            )
+            .child(
+                section("Pinned items")
+                    .w(px(280.))
+                    .description("Keep required items selected.")
+                    .child(
+                        Combobox::new(&self.pinned)
+                            .placeholder("Select framework...")
+                            .search_placeholder("Search…")
+                            .w(px(280.)),
+                    ),
+            )
+            .child(
+                section("Rich items")
+                    .w(px(280.))
+                    .description("Render supporting content in option rows.")
+                    .child(
+                        Combobox::new(&self.featured)
+                            .placeholder("Select framework...")
+                            .search_placeholder("Search…")
+                            .w(px(280.)),
+                    ),
+            )
+            .child(
+                section("Overflow")
+                    .w(px(280.))
+                    .description("Collapse selections after a visible limit.")
+                    .child(
+                        Combobox::new(&self.multi_expand)
+                            .placeholder("Select frameworks")
+                            .search_placeholder("Search…")
+                            .render_trigger(|trigger, _, cx| {
+                                const MAX_SHOWN: usize = 2;
+
+                                if trigger.selection().is_empty() {
+                                    return div()
+                                        .text_color(cx.theme().muted_foreground)
+                                        .child("Select frameworks")
+                                        .into_any_element();
+                                }
+
+                                h_flex()
+                                    .w_full()
+                                    .flex_wrap()
+                                    .gap_1()
+                                    .children(trigger.selection().iter().take(MAX_SHOWN).map(
+                                        |(_index, item)| {
+                                            div()
+                                                .rounded(cx.theme().radius.half())
+                                                .border_1()
+                                                .border_color(cx.theme().border)
+                                                .px_1()
+                                                .text_xs()
+                                                .child(*item)
+                                        },
+                                    ))
+                                    .when(trigger.selection().len() > MAX_SHOWN, |this| {
+                                        let hidden = trigger.selection().len() - MAX_SHOWN;
+                                        this.child(
+                                            div()
+                                                .rounded(cx.theme().radius.half())
+                                                .border_1()
+                                                .border_color(cx.theme().border)
+                                                .px_1()
+                                                .text_xs()
+                                                .text_color(cx.theme().muted_foreground)
+                                                .child(format!("+{} more", hidden)),
+                                        )
+                                    })
+                                    .into_any_element()
+                            })
+                            .w(px(280.)),
+                    ),
+            )
+            .child(
+                section("Count")
+                    .w(px(280.))
+                    .description("Summarize selections as a count.")
+                    .child(
+                        Combobox::new(&self.multi_count)
+                            .placeholder("Select frameworks")
+                            .search_placeholder("Search…")
+                            .render_trigger(|trigger, _, cx| {
+                                let count = trigger.selection().len();
+
+                                if count == 0 {
+                                    return div()
+                                        .text_color(cx.theme().muted_foreground)
+                                        .child("Select frameworks")
+                                        .into_any_element();
+                                }
+
+                                let display = if count > 99 {
+                                    "99+".to_string()
+                                } else {
+                                    count.to_string()
+                                };
+
+                                h_flex()
+                                    .gap_1p5()
+                                    .items_center()
+                                    .child(
+                                        h_flex()
+                                            .justify_center()
+                                            .items_center()
+                                            .min_w(px(16.))
+                                            .h(px(16.))
+                                            .px_1()
+                                            .rounded_full_style(cx)
+                                            .bg(cx.theme().red)
+                                            .text_color(white())
+                                            .text_size(px(10.))
+                                            .line_height(relative(1.))
+                                            .child(display),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_color(cx.theme().foreground)
+                                            .child("frameworks selected"),
+                                    )
+                                    .into_any_element()
+                            })
+                            .w(px(280.)),
+                    ),
+            )
+            .child(
+                section("Values")
+                    .description("Read selected values from each delegate.")
+                    .w_full()
+                    .child(
+                        v_flex()
+                            .gap_2()
+                            .child(format!(
+                                "basic: {:?}",
+                                self.basic.read(cx).selected_values()
+                            ))
+                            .child(format!(
+                                "grouped: {:?}",
+                                self.grouped.read(cx).selected_values()
+                            ))
+                            .child(format!(
+                                "multi_badges: {:?}",
+                                self.multi_badges
+                                    .read(cx)
+                                    .selected_values()
+                                    .iter()
+                                    .map(|v| v.to_string())
+                                    .collect::<Vec<_>>()
+                            ))
+                            .child(format!(
+                                "multi_count: {:?}",
+                                self.multi_count
+                                    .read(cx)
+                                    .selected_values()
+                                    .iter()
+                                    .map(|v| v.to_string())
+                                    .collect::<Vec<_>>()
+                            )),
+                    ),
             )
     }
 }

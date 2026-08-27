@@ -16,7 +16,8 @@ use gpui_component::{
     highlighter::{Diagnostic, DiagnosticSeverity, Language, LanguageConfig, LanguageRegistry},
     input::{
         self, CodeActionProvider, CompletionProvider, DefinitionProvider, DocumentColorProvider,
-        HoverProvider, Input, InputEvent, InputState, Position, Rope, RopeExt, TabSize,
+        Editor, EditorState, HoverProvider, Input, InputEvent, InputState, Position, Rope, RopeExt,
+        TabSize,
     },
     list::ListItem,
     resizable::{h_resizable, resizable_panel},
@@ -68,7 +69,7 @@ fn init() {
 }
 
 pub struct Example {
-    editor: Entity<InputState>,
+    editor: Entity<EditorState>,
     tree_state: Entity<TreeState>,
     go_to_line_state: Entity<InputState>,
     language: Lang,
@@ -77,7 +78,7 @@ pub struct Example {
     soft_wrap: bool,
     show_whitespaces: bool,
     folding: bool,
-    disabled: bool,
+    readonly: bool,
     scroll_beyond_last_line: Option<usize>,
     cursor_surrounding_lines: Option<usize>,
     lsp_store: ExampleLspStore,
@@ -163,7 +164,7 @@ impl CompletionProvider for ExampleLspStore {
         offset: usize,
         trigger: CompletionContext,
         _: &mut Window,
-        cx: &mut Context<InputState>,
+        cx: &mut App,
     ) -> Task<Result<CompletionResponse>> {
         let trigger_character = trigger.trigger_character.unwrap_or_default();
         if trigger_character.is_empty() {
@@ -221,7 +222,7 @@ impl CompletionProvider for ExampleLspStore {
         offset: usize,
         _trigger: InlineCompletionContext,
         _window: &mut Window,
-        cx: &mut Context<InputState>,
+        cx: &mut App,
     ) -> Task<Result<InlineCompletionResponse>> {
         let rope = rope.clone();
         cx.background_spawn(async move {
@@ -254,12 +255,7 @@ impl CompletionProvider for ExampleLspStore {
         })
     }
 
-    fn is_completion_trigger(
-        &self,
-        _offset: usize,
-        _new_text: &str,
-        _cx: &mut Context<InputState>,
-    ) -> bool {
+    fn is_completion_trigger(&self, _offset: usize, _new_text: &str, _cx: &mut App) -> bool {
         true
     }
 }
@@ -271,7 +267,7 @@ impl CodeActionProvider for ExampleLspStore {
 
     fn code_actions(
         &self,
-        _state: Entity<InputState>,
+        _state: Entity<EditorState>,
         range: Range<usize>,
         _window: &mut Window,
         _cx: &mut App,
@@ -290,7 +286,7 @@ impl CodeActionProvider for ExampleLspStore {
 
     fn perform_code_action(
         &self,
-        state: Entity<InputState>,
+        state: Entity<EditorState>,
         action: CodeAction,
         _push_to_history: bool,
         window: &mut Window,
@@ -440,7 +436,7 @@ impl CodeActionProvider for TextConvertor {
 
     fn code_actions(
         &self,
-        state: Entity<InputState>,
+        state: Entity<EditorState>,
         range: Range<usize>,
         _window: &mut Window,
         cx: &mut App,
@@ -453,9 +449,10 @@ impl CodeActionProvider for TextConvertor {
         let state = state.read(cx);
         let document_uri = lsp_types::Uri::from_str("file://example").unwrap();
 
-        let old_text = state.text().slice(range.clone()).to_string();
-        let start = state.text().offset_to_position(range.start);
-        let end = state.text().offset_to_position(range.end);
+        let text = state.text();
+        let old_text = text.slice(range.clone()).to_string();
+        let start = text.offset_to_position(range.start);
+        let end = text.offset_to_position(range.end);
         let range = lsp_types::Range { start, end };
 
         actions.push(CodeAction {
@@ -594,7 +591,7 @@ impl CodeActionProvider for TextConvertor {
 
     fn perform_code_action(
         &self,
-        state: Entity<InputState>,
+        state: Entity<EditorState>,
         action: CodeAction,
         _push_to_history: bool,
         window: &mut Window,
@@ -696,8 +693,8 @@ impl Example {
         let lsp_store = ExampleLspStore::new();
 
         let editor = cx.new(|cx| {
-            let mut editor = InputState::new(window, cx)
-                .code_editor(default_language.name().to_string())
+            EditorState::new(window, cx)
+                .language(default_language.name().to_string())
                 .line_number(true)
                 .indent_guides(true)
                 .tab_size(TabSize {
@@ -706,16 +703,17 @@ impl Example {
                 })
                 .soft_wrap(false)
                 .default_value(include_str!("./fixtures/test.rs"))
-                .placeholder("Enter your code here...");
+                .placeholder("Enter your code here...")
+        });
 
+        editor.update(cx, |state, cx| {
             let lsp_store = Rc::new(lsp_store.clone());
-            editor.lsp.completion_provider = Some(lsp_store.clone());
-            editor.lsp.code_action_providers = vec![lsp_store.clone(), Rc::new(TextConvertor)];
-            editor.lsp.hover_provider = Some(lsp_store.clone());
-            editor.lsp.definition_provider = Some(lsp_store.clone());
-            editor.lsp.document_color_provider = Some(lsp_store.clone());
-
-            editor
+            state.lsp_mut().completion_provider = Some(lsp_store.clone());
+            state.lsp_mut().code_action_providers = vec![lsp_store.clone(), Rc::new(TextConvertor)];
+            state.lsp_mut().hover_provider = Some(lsp_store.clone());
+            state.lsp_mut().definition_provider = Some(lsp_store.clone());
+            state.lsp_mut().document_color_provider = Some(lsp_store);
+            cx.notify();
         });
 
         // Focus the editor on startup so that actions (e.g. Open) can bubble
@@ -744,7 +742,7 @@ impl Example {
             soft_wrap: false,
             show_whitespaces: false,
             folding: true,
-            disabled: false,
+            readonly: false,
             scroll_beyond_last_line: None,
             cursor_surrounding_lines: None,
             lsp_store,
@@ -1046,14 +1044,14 @@ impl Example {
             }))
     }
 
-    fn render_disabled_button(&self, _: &mut Window, cx: &mut Context<Self>) -> Button {
-        Button::new("disabled")
+    fn render_readonly_button(&self, _: &mut Window, cx: &mut Context<Self>) -> Button {
+        Button::new("readonly")
             .ghost()
             .xsmall()
-            .when(self.disabled, |this| this.icon(IconName::Check))
-            .label("Disabled")
+            .when(self.readonly, |this| this.icon(IconName::Check))
+            .label("Read only")
             .on_click(cx.listener(|this, _, _window, cx| {
-                this.disabled = !this.disabled;
+                this.readonly = !this.readonly;
                 cx.notify();
             }))
     }
@@ -1141,10 +1139,10 @@ impl Render for Example {
         if self.lsp_store.is_dirty() {
             let diagnostics = self.lsp_store.diagnostics();
             self.editor.update(cx, |state, cx| {
-                _ = state.diagnostics_mut().map(|set| {
+                if let Some(set) = state.diagnostics_mut() {
                     set.clear();
                     set.extend(diagnostics);
-                });
+                }
                 cx.notify();
             });
         }
@@ -1166,14 +1164,13 @@ impl Render for Example {
                                     .child(self.render_file_tree(window, cx)),
                             )
                             .child(
-                                Input::new(&self.editor)
-                                    .disabled(self.disabled)
+                                Editor::new(&self.editor)
+                                    .readonly(self.readonly)
                                     .bordered(false)
                                     .p_0()
-                                    .h_full()
+                                    .h(relative(1.))
                                     .font_family(cx.theme().mono_font_family.clone())
                                     .text_size(cx.theme().mono_font_size)
-                                    .focus_bordered(false)
                                     .into_any_element(),
                             ),
                     )
@@ -1184,7 +1181,7 @@ impl Render for Example {
                             .left(self.render_show_whitespaces_button(window, cx))
                             .left(self.render_indent_guides_button(window, cx))
                             .left(self.render_folding_button(window, cx))
-                            .left(self.render_disabled_button(window, cx))
+                            .left(self.render_readonly_button(window, cx))
                             .left(self.render_scroll_beyond_last_line_button(window, cx))
                             .left(self.render_cursor_surrounding_lines_button(window, cx))
                             .right(self.render_go_to_line_button(window, cx)),

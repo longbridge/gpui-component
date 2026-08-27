@@ -4,9 +4,9 @@ use crate::animation::{Lerp, ease_in_out_cubic};
 use crate::{ActiveTheme, Icon, IconName, Selectable, Sizable, Size, StyledExt, h_flex};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    Animation, AnimationExt as _, AnyElement, App, Background, ClickEvent, Div, Edges, ElementId,
-    Hsla, InteractiveElement, IntoElement, MouseButton, ParentElement, Pixels, RenderOnce, Role,
-    SharedString, StatefulInteractiveElement, Styled, Window, div, px, relative,
+    Animation, AnimationExt as _, AnyElement, App, Background, ClickEvent, Edges, ElementId, Hsla,
+    InteractiveElement, IntoElement, ParentElement, Pixels, RenderOnce, SharedString,
+    StatefulInteractiveElement, Styled, Window, div, px, relative,
 };
 
 /// Tab variants.
@@ -68,7 +68,7 @@ impl TabVariant {
         }
     }
 
-    /// Default px(12) to match panel px_3, See [`crate::dock::TabPanel`]
+    /// Default px(12) to match a dock tab bar's px_3
     fn inner_paddings(&self, size: Size) -> Edges<Pixels> {
         let mut padding_x = match size {
             Size::XSmall => px(8.),
@@ -345,7 +345,7 @@ impl TabVariant {
 
     fn radius(&self, size: Size, cx: &App) -> Pixels {
         match self {
-            TabVariant::Outline | TabVariant::Pill => px(99.),
+            TabVariant::Outline | TabVariant::Pill => cx.theme().radius_full(),
             TabVariant::Segmented => match size {
                 Size::XSmall | Size::Small => cx.theme().radius,
                 Size::Large => cx.theme().radius_lg,
@@ -357,9 +357,12 @@ impl TabVariant {
 
     pub(super) fn inner_radius(&self, size: Size, cx: &App) -> Pixels {
         match self {
+            // The inset the active pill sits at, taken off the bar's own radius
+            // so the two curves stay concentric. Floored at zero: a square bar
+            // has nothing to inset from.
             TabVariant::Segmented => match size {
-                Size::Large => self.tab_bar_radius(size, cx) - px(3.),
-                _ => self.tab_bar_radius(size, cx) - px(2.),
+                Size::Large => (self.tab_bar_radius(size, cx) - px(3.)).max(px(0.)),
+                _ => (self.tab_bar_radius(size, cx) - px(2.)).max(px(0.)),
             },
             _ => px(0.),
         }
@@ -393,7 +396,7 @@ impl Default for TabStyle {
 #[derive(IntoElement)]
 pub struct Tab {
     ix: usize,
-    base: Div,
+    base: gpui_base::Tab,
     pub(super) label: Option<SharedString>,
     aria_label: Option<SharedString>,
     pub(super) icon: Option<Icon>,
@@ -411,6 +414,7 @@ pub struct Tab {
     /// tab switch. Used to key the selected tab's text color fade so it
     /// restarts in sync with the indicator slide.
     pub(super) indicator_epoch: u64,
+    pub(super) max_width: Option<Pixels>,
     on_click: Option<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>>,
 }
 
@@ -448,7 +452,7 @@ impl Default for Tab {
     fn default() -> Self {
         Self {
             ix: 0,
-            base: div(),
+            base: gpui_base::Tab::new(0usize),
             label: None,
             aria_label: None,
             icon: None,
@@ -463,6 +467,7 @@ impl Default for Tab {
             suffix: None,
             variant: TabVariant::default(),
             size: Size::default(),
+            max_width: None,
             on_click: None,
         }
     }
@@ -556,12 +561,19 @@ impl Tab {
     /// Set index to the tab.
     pub(crate) fn ix(mut self, ix: usize) -> Self {
         self.ix = ix;
+        self.base = self.base.id(ix);
         self
     }
 
     /// Set if the tab bar has a prefix.
     pub(crate) fn tab_bar_prefix(mut self, tab_bar_prefix: bool) -> Self {
         self.tab_bar_prefix = Some(tab_bar_prefix);
+        self
+    }
+
+    /// Set the maximum width of the tab, see [`super::TabBar::max_width`].
+    pub(super) fn max_width(mut self, max_width: Option<Pixels>) -> Self {
+        self.max_width = max_width;
         self
     }
 }
@@ -606,23 +618,29 @@ impl Sizable for Tab {
 
 impl RenderOnce for Tab {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        let mut tab_style = if self.selected {
-            self.variant.selected(cx)
-        } else {
-            self.variant.normal(cx)
-        };
+        let mut normal_style = self.variant.normal(cx);
+        let mut selected_style = self.variant.selected(cx);
+        let mut disabled_style = self.variant.disabled(self.selected, cx);
         let mut hover_style = self.variant.hovered(self.selected, cx);
         if self.disabled {
-            tab_style = self.variant.disabled(self.selected, cx);
             hover_style = self.variant.disabled(self.selected, cx);
         }
         let tab_bar_prefix = self.tab_bar_prefix.unwrap_or_default();
         if !tab_bar_prefix {
             if self.ix == 0 && self.variant == TabVariant::Tab {
-                tab_style.borders.left = px(0.);
+                normal_style.borders.left = px(0.);
+                selected_style.borders.left = px(0.);
+                disabled_style.borders.left = px(0.);
                 hover_style.borders.left = px(0.);
             }
         }
+        let tab_style = if self.disabled {
+            &disabled_style
+        } else if self.selected {
+            &selected_style
+        } else {
+            &normal_style
+        };
         let radius = self.variant.radius(self.size, cx);
         let inner_radius = self.variant.inner_radius(self.size, cx);
         let inner_paddings = self.variant.inner_paddings(self.size);
@@ -654,18 +672,18 @@ impl RenderOnce for Tab {
         let suppress_active_visual =
             self.selected && !self.disabled && self.indicator_active && self.indicator_ready;
         // Pill paints its active state via the outer `bg`.
-        let outer_bg = if suppress_active_visual && self.variant == TabVariant::Pill {
+        let selected_outer_bg = if suppress_active_visual && self.variant == TabVariant::Pill {
             cx.theme().transparent.into()
         } else {
-            tab_style.bg
+            selected_style.bg
         };
         // Underline paints its active state via the bottom `border_color`.
-        let outer_border_color = if suppress_active_visual && self.variant == TabVariant::Underline
-        {
-            cx.theme().transparent
-        } else {
-            tab_style.border_color
-        };
+        let selected_outer_border_color =
+            if suppress_active_visual && self.variant == TabVariant::Underline {
+                cx.theme().transparent
+            } else {
+                selected_style.border_color
+            };
 
         // For Pill, the newly selected tab's text color (`primary_foreground`)
         // would otherwise snap to white instantly while the indicator is still
@@ -680,6 +698,8 @@ impl RenderOnce for Tab {
             && self.indicator_epoch > 0;
         let fg_from = self.variant.normal(cx).fg;
         let fg_to = tab_style.fg;
+        // Icon-only tabs are fixed-size and exempt from `max_width`.
+        let max_width = self.max_width.filter(|_| self.icon.is_none());
 
         let inner_content = h_flex()
             .flex_1()
@@ -690,7 +710,12 @@ impl RenderOnce for Tab {
             .justify_center()
             .overflow_hidden()
             .margins(inner_margins)
-            .flex_shrink_0()
+            // Normally the label decides the tab width, so it never shrinks. With
+            // `max_width` it is the one part that gives way.
+            .map(|this| match max_width {
+                Some(_) => this.flex_auto(),
+                None => this.flex_shrink_0(),
+            })
             .map(|this| match self.icon {
                 Some(icon) => this
                     .w(inner_height * 1.25)
@@ -702,9 +727,12 @@ impl RenderOnce for Tab {
                     })),
                 None => this
                     .paddings(inner_paddings)
-                    .map(|this| match self.label {
-                        Some(label) => this.child(label),
-                        None => this,
+                    .map(|this| match (self.label, max_width) {
+                        // Text always takes its natural width, so it needs a box
+                        // that is allowed to shrink to ellipsize inside of.
+                        (Some(label), Some(_)) => this.child(div().truncate().child(label)),
+                        (Some(label), None) => this.child(label),
+                        (None, _) => this,
                     })
                     .children(self.children),
             })
@@ -727,30 +755,60 @@ impl RenderOnce for Tab {
 
         self.base
             .id(self.ix)
-            .role(Role::Tab)
-            .when_some(aria_label, |this, label| this.aria_label(label))
-            .aria_selected(self.selected)
+            .selected(self.selected)
+            .disabled(self.disabled)
+            .when_some(aria_label, |this, label| this.accessibility_label(label))
+            .styles(|styles| {
+                styles
+                    .selected(|style| {
+                        style
+                            .text_color(selected_style.fg)
+                            .bg(selected_outer_bg)
+                            .border_l(selected_style.borders.left)
+                            .border_r(selected_style.borders.right)
+                            .border_t(selected_style.borders.top)
+                            .border_b(selected_style.borders.bottom)
+                            .border_color(selected_outer_border_color)
+                    })
+                    .disabled(|style| {
+                        style
+                            .text_color(disabled_style.fg)
+                            .bg(disabled_style.bg)
+                            .border_l(disabled_style.borders.left)
+                            .border_r(disabled_style.borders.right)
+                            .border_t(disabled_style.borders.top)
+                            .border_b(disabled_style.borders.bottom)
+                            .border_color(disabled_style.border_color)
+                    })
+            })
             .relative()
             .flex()
-            .flex_wrap()
+            // Wrapping would move the overflow onto a clipped second line instead
+            // of letting the label shrink, so a capped tab lays out on one line.
+            .map(|this| match max_width {
+                Some(max_width) => this.flex_nowrap().max_w(max_width),
+                None => this.flex_wrap(),
+            })
             .gap_1()
             .items_center()
             .flex_shrink_0()
             .h(height)
             .overflow_hidden()
-            .text_color(tab_style.fg)
             .map(|this| match self.size {
                 Size::XSmall => this.text_xs(),
                 Size::Large => this.text_base(),
                 _ => this.text_sm(),
             })
-            .bg(outer_bg)
-            .border_l(tab_style.borders.left)
-            .border_r(tab_style.borders.right)
-            .border_t(tab_style.borders.top)
-            .border_b(tab_style.borders.bottom)
-            .border_color(outer_border_color)
             .rounded(radius)
+            .when(!self.selected && !self.disabled, |this| {
+                this.text_color(normal_style.fg)
+                    .bg(normal_style.bg)
+                    .border_l(normal_style.borders.left)
+                    .border_r(normal_style.borders.right)
+                    .border_t(normal_style.borders.top)
+                    .border_b(normal_style.borders.bottom)
+                    .border_color(normal_style.border_color)
+            })
             .hover(|this| {
                 // Always register the hover style: GPUI only refreshes the cached
                 // hover state while one is present. If the selected tab skipped it,
@@ -787,18 +845,25 @@ impl RenderOnce for Tab {
                         ),
                 )
             })
-            .when_some(self.prefix, |this, prefix| this.child(prefix))
-            .child(inner_element)
-            .when_some(self.suffix, |this, suffix| this.child(suffix))
-            .on_mouse_down(MouseButton::Left, |_, _, cx| {
-                // Stop propagation behavior, for works on TitleBar.
-                // https://github.com/longbridge/gpui-component/issues/1836
-                cx.stop_propagation();
+            // Under `max_width` the label is the only part that gives way, so
+            // hold the prefix and suffix (e.g. a close button) at their full size.
+            .when_some(self.prefix, |this, prefix| {
+                this.child(
+                    div()
+                        .when_some(max_width, |this, _| this.flex_shrink_0())
+                        .child(prefix),
+                )
             })
-            .when(!self.disabled, |this| {
-                this.when_some(self.on_click.clone(), |this, on_click| {
-                    this.on_click(move |event, window, cx| on_click(event, window, cx))
-                })
+            .child(inner_element)
+            .when_some(self.suffix, |this, suffix| {
+                this.child(
+                    div()
+                        .when_some(max_width, |this, _| this.flex_shrink_0())
+                        .child(suffix),
+                )
+            })
+            .when_some(self.on_click.clone(), |this, on_click| {
+                this.on_click(move |event, window, cx| on_click(event, window, cx))
             })
     }
 }
@@ -806,18 +871,171 @@ impl RenderOnce for Tab {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tab::TabBar;
+    use gpui::{Context, Render, TestAppContext, VisualTestContext};
+
+    const VARIANTS: [TabVariant; 5] = [
+        TabVariant::Tab,
+        TabVariant::Outline,
+        TabVariant::Pill,
+        TabVariant::Segmented,
+        TabVariant::Underline,
+    ];
+
+    const LONG_LABEL: &str = "Account Settings & Preferences";
+
+    /// One [`TabBar`], optionally capped, holding the tab `build` returns.
+    struct TabBarTest {
+        variant: TabVariant,
+        max_width: Option<Pixels>,
+        build: fn(Tab) -> Tab,
+    }
+
+    impl Render for TabBarTest {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            TabBar::new("tabs")
+                .with_variant(self.variant)
+                .selected_index(0)
+                .when_some(self.max_width, |this, width| this.max_width(width))
+                .child((self.build)(
+                    Tab::new().debug_selector(|| "tab".to_string()),
+                ))
+        }
+    }
+
+    fn show(
+        cx: &mut TestAppContext,
+        variant: TabVariant,
+        max_width: Option<Pixels>,
+        build: fn(Tab) -> Tab,
+    ) -> &mut VisualTestContext {
+        cx.update(crate::init);
+        let (_, cx) = cx.add_window_view(|_, _| TabBarTest {
+            variant,
+            max_width,
+            build,
+        });
+        cx.run_until_parked();
+        cx
+    }
+
+    /// Outer width of a labelled tab in every variant, capped or not.
+    fn variant_widths(
+        cx: &mut TestAppContext,
+        build: fn(Tab) -> Tab,
+        max_width: Option<Pixels>,
+    ) -> Vec<Pixels> {
+        VARIANTS
+            .into_iter()
+            .map(|variant| {
+                show(cx, variant, max_width, build)
+                    .debug_bounds("tab")
+                    .expect("tab not rendered")
+                    .size
+                    .width
+            })
+            .collect()
+    }
 
     #[gpui::test]
-    fn a11y_label_defaults_to_visible_label(_cx: &mut gpui::TestAppContext) {
+    fn a11y_label_defaults_to_visible_label(_cx: &mut TestAppContext) {
         let tab = Tab::new().label("Account");
 
         assert_eq!(tab.a11y_label(), Some("Account".into()));
     }
 
     #[gpui::test]
-    fn explicit_a11y_label_overrides_visible_label(_cx: &mut gpui::TestAppContext) {
+    fn explicit_a11y_label_overrides_visible_label(_cx: &mut TestAppContext) {
         let tab = Tab::new().label("Acct").aria_label("Account settings");
 
         assert_eq!(tab.a11y_label(), Some("Account settings".into()));
+    }
+
+    #[gpui::test]
+    fn max_width_leaves_short_tabs_untouched(cx: &mut TestAppContext) {
+        // The box the cap wraps the label in must not report a different
+        // intrinsic width than the bare label it replaces.
+        let build: fn(Tab) -> Tab = |tab| tab.label("Go");
+
+        let uncapped = variant_widths(cx, build, None);
+        let capped = variant_widths(cx, build, Some(px(200.)));
+
+        assert_eq!(uncapped, capped, "a tab under the cap must not be resized");
+    }
+
+    #[gpui::test]
+    fn max_width_caps_long_tabs(cx: &mut TestAppContext) {
+        let build: fn(Tab) -> Tab = |tab| tab.label(LONG_LABEL);
+
+        let uncapped = variant_widths(cx, build, None);
+        let capped = variant_widths(cx, build, Some(px(120.)));
+
+        for (variant, (uncapped, capped)) in
+            VARIANTS.into_iter().zip(uncapped.into_iter().zip(capped))
+        {
+            assert!(
+                uncapped > px(120.),
+                "{variant:?} is not long enough to exercise the cap ({uncapped:?})"
+            );
+            assert!(
+                capped <= px(120.),
+                "{variant:?} width {capped:?} exceeds max_width"
+            );
+        }
+    }
+
+    #[gpui::test]
+    fn max_width_keeps_prefix_and_suffix_intact(cx: &mut TestAppContext) {
+        let cx = show(cx, TabVariant::Segmented, Some(px(140.)), |tab| {
+            tab.prefix(Icon::new(IconName::BookOpen))
+                .label(LONG_LABEL)
+                .suffix(div().size(px(16.)).debug_selector(|| "suffix".to_string()))
+        });
+
+        let tab = cx.debug_bounds("tab").expect("tab not rendered");
+        let suffix = cx.debug_bounds("suffix").expect("suffix not rendered");
+
+        assert!(tab.size.width <= px(140.));
+        assert_eq!(
+            suffix.size.width,
+            px(16.),
+            "the label should absorb the truncation, not the suffix"
+        );
+        assert!(
+            suffix.right() <= tab.right(),
+            "suffix must stay within the tab"
+        );
+        // A wrapping tab pushes the suffix onto a second line, which the fixed
+        // tab height then clips: it keeps its size and stays inside the tab,
+        // but lands back at the left edge instead of after the label.
+        assert!(
+            suffix.left() > tab.center().x,
+            "suffix must follow the label, not wrap below it"
+        );
+    }
+
+    /// Icon-only tabs are sized to a square by construction, so the cap has to
+    /// leave them alone however narrow it is.
+    #[gpui::test]
+    fn max_width_exempts_icon_only_tabs(cx: &mut TestAppContext) {
+        let build: fn(Tab) -> Tab = |tab| tab.icon(Icon::new(IconName::BookOpen));
+        let width = |cx: &mut TestAppContext, max_width| {
+            show(cx, TabVariant::Tab, max_width, build)
+                .debug_bounds("tab")
+                .expect("tab not rendered")
+                .size
+                .width
+        };
+
+        let uncapped = width(cx, None);
+        assert!(
+            uncapped > px(16.),
+            "the cap has to be narrower than the icon tab to be meaningful"
+        );
+        assert_eq!(
+            width(cx, Some(px(16.))),
+            uncapped,
+            "an icon-only tab must ignore max_width"
+        );
     }
 }

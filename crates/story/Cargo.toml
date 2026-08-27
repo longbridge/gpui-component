@@ -7,15 +7,19 @@ edition.workspace = true
 [features]
 inspector = ["gpui-component/inspector"]
 tree-sitter = ["gpui-component/tree-sitter-languages"]
+test-support = ["gpui/test-support"]
 default = ["tree-sitter"]
 
 [dependencies]
 anyhow.workspace = true
 gpui.workspace = true
+gpui-base.workspace = true
 gpui_platform.workspace = true
 gpui-component = { workspace = true }
 gpui-component-assets.workspace = true
+gpui-fps.workspace = true
 
+async-channel = "2.3.1"
 autocorrect = "2.14.2"
 chrono = "0.4"
 csv = "1.4"
@@ -27,13 +31,18 @@ regex = "1"
 serde = "1"
 serde_json = "1"
 tracing.workspace = true
-tracing-subscriber = { version = "0.3.22", features = ["env-filter", "fmt", "registry"], default-features = false }
+tracing-subscriber = { version = "0.3.22", features = [
+  "env-filter",
+  "fmt",
+  "registry",
+], default-features = false }
 unindent = "0.2.3"
 rust-i18n.workspace = true
 dirs = "6.0.0"
 
 # Native-only dependencies (not available on WASM)
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
+gpui-shell.workspace = true
 reqwest_client.workspace = true
 smol.workspace = true
 tree-sitter-navi = "0.2.3"
@@ -41,12 +50,18 @@ color-lsp = "0.2.0"
 
 [target.'cfg(target_family = "wasm")'.dependencies]
 gpui_web.workspace = true
+# WASM has no tree-sitter grammars, so the Editor story highlights with
+# `syntect` there. Native uses the built-in tree-sitter highlighter.
+syntect.workspace = true
 # `rand 0.8` (via `fake`) does not enable the `js` feature of getrandom,
 # which is required to build for wasm32-unknown-unknown.
 getrandom = { version = "0.2", features = ["js"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = { version = "0.18" }
+
+[dev-dependencies]
+gpui = { workspace = true, features = ["test-support"] }
 
 [lints]
 workspace = true

@@ -1,7 +1,7 @@
 use crate::{
     Placement, Root,
     dialog::{AlertDialog, Dialog},
-    input::InputState,
+    input::AnyInputState,
     notification::Notification,
     sheet::Sheet,
 };
@@ -77,26 +77,32 @@ pub trait WindowExt: Sized {
     /// Returns number of notifications.
     fn notifications(&mut self, cx: &mut App) -> Rc<Vec<Entity<Notification>>>;
 
-    /// Return current focused Input entity.
-    fn focused_input(&mut self, cx: &mut App) -> Option<Entity<InputState>>;
+    /// Return the currently focused input state.
+    ///
+    /// Covers `Input`, `Textarea`, `Editor` and `OtpInput`, use
+    /// [`AnyInputState::as_input`] and friends to get the concrete state.
+    /// A registration whose focus handle is no longer focused (e.g. the input
+    /// was removed from the tree while focused) is treated as `None`.
+    fn focused_input(&mut self, cx: &mut App) -> Option<AnyInputState>;
     /// Returns true if there is a focused Input entity.
     fn has_focused_input(&mut self, cx: &mut App) -> bool;
 
-    /// Returns the merged selected text across all selectable TextViews in
-    /// this window, ordered top to bottom and joined with `\n`.
-    ///
-    /// Returns an empty string if the window root is not a [`Root`].
+    /// Returns the merged selected text across registered selectable regions
+    /// in this window, in logical document order and joined with `\n`.
+    #[deprecated(note = "use gpui_base::TextSelection::selected_text instead")]
     fn selected_text(&mut self, cx: &mut App) -> String;
 
-    /// Returns true if there is an active text selection in this window
-    /// (either a window-level drag selection or a view-local selection such
-    /// as select-all or a double-click word selection).
+    /// Returns true if any registered region has an active text selection in
+    /// this window, including renderer-local selections such as select-all.
+    #[deprecated(note = "use gpui_base::TextSelection::has_selection instead")]
     fn has_text_selection(&mut self, cx: &mut App) -> bool;
 
-    /// Clears the window-level text selection and all view-local selections.
+    /// Clears the window text selection and all registered renderer-local selections.
+    #[deprecated(note = "use gpui_base::TextSelection::clear instead")]
     fn clear_text_selection(&mut self, cx: &mut App);
 
     /// Ends the in-progress window-level text selection drag (if any).
+    #[deprecated(note = "use gpui_base::TextSelection::end instead")]
     fn end_text_selection(&mut self, cx: &mut App);
 }
 
@@ -147,7 +153,7 @@ impl WindowExt for Window {
         F: Fn(AlertDialog, &mut Window, &mut App) -> AlertDialog + 'static,
     {
         self.open_dialog(cx, move |_, window, cx| {
-            build(AlertDialog::new(cx), window, cx).into_dialog(window, cx)
+            build(AlertDialog::new(cx), window, cx).build_surface(window, cx)
         })
     }
 
@@ -211,43 +217,43 @@ impl WindowExt for Window {
 
     #[inline]
     fn has_focused_input(&mut self, cx: &mut App) -> bool {
-        Root::read(self, cx).focused_input.is_some()
+        self.focused_input(cx).is_some()
     }
 
-    #[inline]
-    fn focused_input(&mut self, cx: &mut App) -> Option<Entity<InputState>> {
-        Root::read(self, cx).focused_input.clone()
+    fn focused_input(&mut self, cx: &mut App) -> Option<AnyInputState> {
+        let state = Root::read(self, cx).focused_input.clone()?;
+        if state.focus_handle(cx).is_focused(self) {
+            return Some(state);
+        }
+
+        // An input removed from the tree while focused never re-renders to
+        // unregister itself; drop the stale registration lazily.
+        Root::try_update(self, cx, |root, _, cx| {
+            if root.focused_input.as_ref() == Some(&state) {
+                root.focused_input = None;
+                cx.notify();
+            }
+        });
+        None
     }
 
     #[inline]
     fn selected_text(&mut self, cx: &mut App) -> String {
-        let Some(root) = self.root::<Root>().flatten() else {
-            return String::new();
-        };
-        root.read(cx).window_selected_text(cx)
+        gpui_base::TextSelection::selected_text(self, cx)
     }
 
     #[inline]
     fn has_text_selection(&mut self, cx: &mut App) -> bool {
-        let Some(root) = self.root::<Root>().flatten() else {
-            return false;
-        };
-        root.read(cx).has_text_selection(cx)
+        gpui_base::TextSelection::has_selection(self, cx)
     }
 
     #[inline]
     fn clear_text_selection(&mut self, cx: &mut App) {
-        let Some(root) = self.root::<Root>().flatten() else {
-            return;
-        };
-        root.update(cx, |root, cx| root.clear_text_selection(cx));
+        gpui_base::TextSelection::clear(self, cx);
     }
 
     #[inline]
     fn end_text_selection(&mut self, cx: &mut App) {
-        let Some(root) = self.root::<Root>().flatten() else {
-            return;
-        };
-        root.update(cx, |root, cx| root.end_text_selection(cx));
+        gpui_base::TextSelection::end(self, cx);
     }
 }

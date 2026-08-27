@@ -1,28 +1,37 @@
 use gpui::{
-    App, AppContext, Axis, Context, Entity, FocusHandle, Focusable, InteractiveElement,
+    Action, App, AppContext, Axis, Context, Entity, FocusHandle, Focusable, InteractiveElement,
     IntoElement, ParentElement as _, Render, Styled, Window, div, prelude::FluentBuilder as _, px,
 };
 use gpui_component::{
-    ActiveTheme, AxisExt, IndexPath, Selectable, Sizable, Size,
-    button::{Button, ButtonGroup},
+    AxisExt, IndexPath, Sizable, Size,
+    button::Button,
     checkbox::Checkbox,
     color_picker::{ColorPicker, ColorPickerState},
     date_picker::{DatePicker, DatePickerState},
     form::{field, v_form},
-    h_flex,
-    input::{Input, InputState},
+    input::{Input, InputState, Textarea, TextareaState},
     select::{Select, SelectState},
     separator::Separator,
     switch::Switch,
     v_flex,
 };
+use serde::Deserialize;
+
+use crate::{ChangeStorySize, story_toolbar};
+
+#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
+#[action(namespace = form_story, no_json)]
+enum ToggleOption {
+    Horizontal,
+    MultipleColumns,
+}
 
 pub struct FormStory {
     focus_handle: FocusHandle,
     name_prefix_state: Entity<SelectState<Vec<String>>>,
     name_input: Entity<InputState>,
     email_input: Entity<InputState>,
-    bio_input: Entity<InputState>,
+    bio_input: Entity<TextareaState>,
     color_state: Entity<ColorPickerState>,
     subscribe_email: bool,
     date: Entity<DatePickerState>,
@@ -75,7 +84,7 @@ impl FormStory {
         let email_input =
             cx.new(|cx| InputState::new(window, cx).placeholder("Enter text here..."));
         let bio_input = cx.new(|cx| {
-            InputState::new(window, cx)
+            TextareaState::new(window, cx)
                 .auto_grow(5, 20)
                 .placeholder("Enter text here...")
                 .default_value("Hello 世界，this is GPUI component.")
@@ -115,72 +124,44 @@ impl Render for FormStory {
             .p_4()
             .justify_start()
             .gap_3()
-            .child(
-                h_flex()
-                    .gap_3()
-                    .flex_wrap()
-                    .justify_between()
-                    .child(
-                        h_flex()
-                            .gap_x_3()
-                            .child(
-                                Switch::new("layout")
-                                    .checked(self.layout.is_horizontal())
-                                    .label("Horizontal")
-                                    .on_click(cx.listener(|this, checked: &bool, _, cx| {
-                                        if *checked {
-                                            this.layout = Axis::Horizontal;
-                                        } else {
-                                            this.layout = Axis::Vertical;
-                                        }
-                                        cx.notify();
-                                    })),
-                            )
-                            .child(
-                                Switch::new("column")
-                                    .checked(self.columns > 1)
-                                    .label("Multi Columns")
-                                    .on_click(cx.listener(|this, checked: &bool, _, cx| {
-                                        if *checked {
-                                            this.columns = 2;
-                                        } else {
-                                            this.columns = 1;
-                                        }
-                                        cx.notify();
-                                    })),
-                            ),
-                    )
-                    .child(
-                        ButtonGroup::new("size")
-                            .outline()
-                            .small()
-                            .child(
-                                Button::new("large")
-                                    .selected(self.size == Size::Large)
-                                    .child("Large"),
-                            )
-                            .child(
-                                Button::new("medium")
-                                    .child("Medium")
-                                    .selected(self.size == Size::Medium),
-                            )
-                            .child(
-                                Button::new("small")
-                                    .child("Small")
-                                    .selected(self.size == Size::Small),
-                            )
-                            .on_click(cx.listener(|this, selecteds: &Vec<usize>, _, cx| {
-                                if selecteds.contains(&0) {
-                                    this.size = Size::Large;
-                                } else if selecteds.contains(&1) {
-                                    this.size = Size::Medium;
-                                } else if selecteds.contains(&2) {
-                                    this.size = Size::Small;
-                                }
-                                cx.notify();
-                            })),
-                    ),
-            )
+            .on_action(cx.listener(|this, action: &ChangeStorySize, _, cx| {
+                this.size = action.0;
+                cx.notify();
+            }))
+            .on_action(cx.listener(|this, action: &ToggleOption, _, cx| {
+                match action {
+                    ToggleOption::Horizontal => {
+                        this.layout = if this.layout.is_horizontal() {
+                            Axis::Vertical
+                        } else {
+                            Axis::Horizontal
+                        };
+                    }
+                    ToggleOption::MultipleColumns => {
+                        this.columns = if this.columns > 1 { 1 } else { 2 };
+                    }
+                }
+                cx.notify();
+            }))
+            .child(story_toolbar(self.size).flex_wrap().dropdown_child(
+                Button::new("form-options").label("Options"),
+                {
+                    let horizontal = self.layout.is_horizontal();
+                    let multiple_columns = self.columns > 1;
+                    move |menu, _, _| {
+                        menu.menu_with_check(
+                            "Horizontal",
+                            horizontal,
+                            Box::new(ToggleOption::Horizontal),
+                        )
+                        .menu_with_check(
+                            "Multiple columns",
+                            multiple_columns,
+                            Box::new(ToggleOption::MultipleColumns),
+                        )
+                    }
+                },
+            ))
             .child(Separator::horizontal())
             .child(
                 v_form()
@@ -190,24 +171,13 @@ impl Render for FormStory {
                     .label_width(px(if is_multi_column { 100. } else { 140. }))
                     .child(
                         field().label_fn(|_, _| "Name").child(
-                            h_flex()
-                                .gap_2()
-                                .border_1()
-                                .border_color(cx.theme().input)
-                                .bg(cx.theme().input_background())
-                                .rounded(cx.theme().radius)
-                                .child(
-                                    div().w(px(90.)).child(
-                                        Select::new(&self.name_prefix_state)
-                                            .pr_0()
-                                            .appearance(false),
-                                    ),
-                                )
-                                .child(
-                                    div().flex_1().child(
-                                        Input::new(&self.name_input).pl_0().appearance(false),
-                                    ),
+                            Input::new(&self.name_input).pl_0().prefix(
+                                div().w(px(90.)).child(
+                                    Select::new(&self.name_prefix_state)
+                                        .pr_0()
+                                        .appearance(false),
                                 ),
+                            ),
                         ),
                     )
                     .child(
@@ -220,7 +190,7 @@ impl Render for FormStory {
                         field()
                             .label("Bio")
                             .when(self.layout.is_vertical(), |this| this.items_start())
-                            .child(Input::new(&self.bio_input))
+                            .child(Textarea::new(&self.bio_input))
                             .description_fn(|_, _| {
                                 div().child("Use at most 100 words to describe yourself.")
                             }),
@@ -271,14 +241,10 @@ impl Render for FormStory {
                             })
                             .child(
                                 Checkbox::new("use-vertical-layout")
-                                    .label("Vertical layout")
-                                    .checked(self.layout.is_vertical())
+                                    .label("Use this color for future events")
+                                    .checked(self.subscribe_email)
                                     .on_click(cx.listener(|this, checked: &bool, _, cx| {
-                                        this.layout = if *checked {
-                                            Axis::Vertical
-                                        } else {
-                                            Axis::Horizontal
-                                        };
+                                        this.subscribe_email = *checked;
                                         cx.notify();
                                     })),
                             ),

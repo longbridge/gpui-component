@@ -1,24 +1,30 @@
-use std::{
-    any::TypeId,
-    borrow::Cow,
-    collections::{HashMap, VecDeque},
-    rc::Rc,
-    time::Duration,
-};
+use std::{any::TypeId, borrow::Cow, collections::HashMap, rc::Rc, time::Duration};
 
 use gpui::{
-    Anchor, Animation, AnimationExt, AnyElement, App, AppContext, ClickEvent, Context,
-    DismissEvent, ElementId, Entity, EventEmitter, InteractiveElement as _, IntoElement,
-    ParentElement as _, Pixels, Render, SharedString, StatefulInteractiveElement, StyleRefinement,
-    Styled, Subscription, Window, div, prelude::FluentBuilder, px,
+    Anchor, Animation, AnimationExt, AnyElement, AnyWindowHandle, App, AppContext, ClickEvent,
+    Context, DismissEvent, ElementId, Entity, EventEmitter, FocusHandle, Global,
+    InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Render, SharedString,
+    StatefulInteractiveElement, StyleRefinement, Styled, Subscription, SystemNotification,
+    SystemNotificationResponse, WeakEntity, Window, WindowId, div, prelude::FluentBuilder, px,
+};
+use gpui_base::{
+    Toast as BaseToast, ToastManager, ToastMotion, ToastOptions, ToastStack, ToastStackState,
+    ToastTransitionStatus,
 };
 
 use crate::{
     ActiveTheme as _, Edges, Icon, IconName, Sizable as _, StyledExt, TITLE_BAR_HEIGHT,
     animation::cubic_bezier,
     button::{Button, ButtonVariants as _},
-    h_flex, v_flex,
+    styled::toast_shadow,
+    v_flex,
 };
+
+const NOTIFICATION_TRANSITION_DURATION: Duration = Duration::from_millis(400);
+const NOTIFICATION_EXIT_DURATION: Duration = Duration::from_millis(200);
+const NOTIFICATION_TRANSITION_OFFSET: Pixels = px(96.);
+const DEFAULT_NOTIFICATION_WIDTH: Pixels = px(382.);
+struct DismissRequest;
 
 #[derive(Debug, Clone, Copy, Default)]
 pub enum NotificationType {
@@ -40,10 +46,48 @@ impl NotificationType {
     }
 }
 
+/// Where a notification is presented: as an in-app toast, in the operating
+/// system's notification center, or both.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum NotificationDelivery {
+    /// Show only the in-app toast.
+    #[default]
+    InApp,
+    /// Post only to the OS notification center; no in-app toast is shown.
+    System,
+    /// Show the in-app toast and post to the OS notification center.
+    InAppAndSystem,
+}
+
+impl NotificationDelivery {
+    /// Whether this delivery shows an in-app toast.
+    pub fn includes_in_app(&self) -> bool {
+        matches!(self, Self::InApp | Self::InAppAndSystem)
+    }
+
+    /// Whether this delivery posts to the OS notification center.
+    pub fn includes_system(&self) -> bool {
+        matches!(self, Self::System | Self::InAppAndSystem)
+    }
+}
+
+/// Namespaces the library's system-notification tags away from tags the
+/// application posts itself, so the response handler can tell them apart.
+const SYSTEM_TAG_PREFIX: &str = "gpui-component/notification/";
+
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
 pub(crate) enum NotificationId {
     Id(TypeId),
     IdAndElementId(TypeId, ElementId),
+}
+
+impl NotificationId {
+    /// Stable OS-notification tag for this id within a running binary, so a
+    /// repeat push with the same id replaces the previous system
+    /// notification, mirroring the in-app replace semantics.
+    fn system_tag(&self) -> SharedString {
+        format!("{SYSTEM_TAG_PREFIX}{self:?}").into()
+    }
 }
 
 impl From<TypeId> for NotificationId {
@@ -70,12 +114,14 @@ pub struct Notification {
     title: Option<SharedString>,
     message: Option<SharedString>,
     icon: Option<Icon>,
+    placement: Option<Anchor>,
+    delivery: Option<NotificationDelivery>,
     autohide: bool,
     action_builder: Option<Rc<dyn Fn(&mut Self, &mut Window, &mut Context<Self>) -> Button>>,
     content_builder: Option<Rc<dyn Fn(&mut Self, &mut Window, &mut Context<Self>) -> AnyElement>>,
     on_click: Option<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>>,
     on_close: Option<Rc<dyn Fn(&mut Window, &mut App)>>,
-    closing: bool,
+    transition_status: ToastTransitionStatus,
 }
 
 impl From<String> for Notification {
@@ -128,12 +174,14 @@ impl Notification {
             message: None,
             type_: None,
             icon: None,
+            placement: None,
+            delivery: None,
             autohide: true,
             action_builder: None,
             content_builder: None,
             on_click: None,
             on_close: None,
-            closing: false,
+            transition_status: ToastTransitionStatus::Starting,
         }
     }
 
@@ -210,6 +258,57 @@ impl Notification {
         self
     }
 
+    /// Set the placement of the notification, overriding the global
+    /// [`NotificationSettings::placement`].
+    ///
+    /// Notifications are stacked separately for each placement.
+    pub fn placement(mut self, placement: Anchor) -> Self {
+        self.placement = Some(placement);
+        self
+    }
+
+    /// Set where this notification is delivered, overriding the global
+    /// [`NotificationSettings::delivery`].
+    ///
+    /// System delivery uses the OS notification center: the title and message
+    /// become the system notification's title and body (a notification with
+    /// neither is not posted). Pushing again with the same [`Notification::id`]
+    /// replaces the previous system notification. Clicking the system
+    /// notification activates the window, closes the in-app toast (if any),
+    /// and fires [`Notification::on_click`]; with
+    /// [`NotificationDelivery::System`] the toast never exists, so
+    /// [`Notification::on_close`] is never called.
+    ///
+    /// Platform requirements: on macOS the application must run from a bundled
+    /// `.app` in a location the system trusts, such as `/Applications` (posts
+    /// are silently dropped under plain `cargo run`, and the first post
+    /// triggers the authorization prompt); on Windows the application must
+    /// call [`gpui::App::set_app_identity`] early in startup; on Linux a
+    /// notification daemon must be present and retraction is unsupported
+    /// (dismissed notifications age out).
+    pub fn delivery(mut self, delivery: NotificationDelivery) -> Self {
+        self.delivery = Some(delivery);
+        self
+    }
+
+    /// Deliver this notification only to the OS notification center.
+    ///
+    /// Shorthand for [`Notification::delivery`] with
+    /// [`NotificationDelivery::System`]; see there for platform requirements.
+    pub fn system(self) -> Self {
+        self.delivery(NotificationDelivery::System)
+    }
+
+    /// Deliver this notification as an in-app toast and to the OS
+    /// notification center.
+    ///
+    /// Shorthand for [`Notification::delivery`] with
+    /// [`NotificationDelivery::InAppAndSystem`]; see there for platform
+    /// requirements.
+    pub fn in_app_and_system(self) -> Self {
+        self.delivery(NotificationDelivery::InAppAndSystem)
+    }
+
     /// Set the auto hide of the notification, default is true.
     pub fn autohide(mut self, autohide: bool) -> Self {
         self.autohide = autohide;
@@ -248,28 +347,29 @@ impl Notification {
 
     /// Dismiss the notification.
     pub fn dismiss(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.closing {
-            return;
-        }
-        self.closing = true;
-        cx.notify();
+        let _ = window;
+        cx.emit(DismissRequest);
+    }
 
-        let on_close = self.on_close.clone();
-        // Dismiss the notification after 0.15s to show the animation.
-        cx.spawn_in(window, async move |view, cx| {
-            cx.background_executor()
-                .timer(Duration::from_secs_f32(0.15))
-                .await;
-            _ = view.update_in(cx, |view, _, cx| {
-                view.closing = false;
-                cx.emit(DismissEvent);
-                cx.notify();
-            });
-            if let Some(on_close) = on_close {
-                _ = cx.update(|window, cx| on_close(window, cx));
-            }
-        })
-        .detach();
+    fn begin_close(&mut self, cx: &mut Context<Self>) {
+        if self.transition_status != ToastTransitionStatus::Ending {
+            self.transition_status = ToastTransitionStatus::Ending;
+            cx.notify();
+        }
+    }
+
+    fn complete_enter(&mut self, cx: &mut Context<Self>) {
+        if self.transition_status == ToastTransitionStatus::Starting {
+            self.transition_status = ToastTransitionStatus::Present;
+            cx.notify();
+        }
+    }
+
+    fn complete_close(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        cx.emit(DismissEvent);
+        if let Some(on_close) = self.on_close.clone() {
+            on_close(window, cx);
+        }
     }
 
     /// Set the content of the notification.
@@ -283,6 +383,7 @@ impl Notification {
 }
 
 impl EventEmitter<DismissEvent> for Notification {}
+impl EventEmitter<DismissRequest> for Notification {}
 impl FluentBuilder for Notification {}
 impl Styled for Notification {
     fn style(&mut self) -> &mut StyleRefinement {
@@ -301,25 +402,27 @@ impl Render for Notification {
             .clone()
             .map(|builder| builder(self, window, cx).small().mr_3p5());
 
-        let closing = self.closing;
+        let transition_status = self.transition_status;
+        let closing = transition_status == ToastTransitionStatus::Ending;
         let icon = match self.type_ {
             None => self.icon.clone(),
             Some(type_) => Some(type_.icon(cx)),
         };
         let has_icon = icon.is_some();
-        let placement = cx.theme().notification.placement;
+        let placement = self.placement.unwrap_or(cx.theme().notification.placement);
 
-        h_flex()
-            .id("notification")
+        BaseToast::new("notification")
+            .transition_status(transition_status)
+            .h_flex()
             .group("")
             .occlude()
             .relative()
-            .w_112()
+            .w_full()
             .border_1()
             .border_color(cx.theme().border)
             .bg(cx.theme().tokens.popover)
             .rounded(cx.theme().radius_lg)
-            .shadow_md()
+            .shadow(toast_shadow(1.))
             .py_3p5()
             .px_4()
             .gap_3()
@@ -372,48 +475,49 @@ impl Render for Notification {
             }))
             .with_animation(
                 ElementId::NamedInteger("slide-down".into(), closing as u64),
-                Animation::new(Duration::from_secs_f64(0.25))
-                    .with_easing(cubic_bezier(0.4, 0., 0.2, 1.)),
+                Animation::new(if closing {
+                    NOTIFICATION_EXIT_DURATION
+                } else {
+                    NOTIFICATION_TRANSITION_DURATION
+                })
+                .with_easing(cubic_bezier(0.25, 0.1, 0.25, 1.)),
                 move |this, delta| {
                     if closing {
                         let opacity = 1. - delta;
-                        let that = this
-                            .shadow_none()
-                            .opacity(opacity)
-                            .when(opacity < 0.85, |this| this.shadow_none());
-                        match placement {
-                            Anchor::TopRight | Anchor::BottomRight => {
-                                let x_offset = px(0.) + delta * px(45.);
-                                that.left(px(0.) + x_offset)
+                        let that = this.opacity(opacity).shadow(toast_shadow(opacity.powi(3)));
+                        let y_offset = match placement {
+                            Anchor::TopLeft | Anchor::TopRight | Anchor::TopCenter => {
+                                -delta * NOTIFICATION_TRANSITION_OFFSET
                             }
-                            Anchor::TopLeft | Anchor::BottomLeft => {
-                                let x_offset = px(0.) - delta * px(45.);
-                                that.left(px(0.) + x_offset)
+                            Anchor::BottomLeft | Anchor::BottomRight | Anchor::BottomCenter => {
+                                delta * NOTIFICATION_TRANSITION_OFFSET
                             }
-                            Anchor::TopCenter => {
-                                let y_offset = px(0.) - delta * px(45.);
-                                that.top(px(0.) + y_offset)
-                            }
-                            Anchor::BottomCenter => {
-                                let y_offset = px(0.) + delta * px(45.);
-                                that.top(px(0.) + y_offset)
-                            }
-                            _ => that,
-                        }
+                            _ => px(0.),
+                        };
+                        that.top(y_offset)
                     } else {
                         let y_offset = match placement {
                             Anchor::TopLeft | Anchor::TopRight | Anchor::TopCenter => {
-                                px(-45.) + delta * px(45.)
+                                -NOTIFICATION_TRANSITION_OFFSET
+                                    + delta * NOTIFICATION_TRANSITION_OFFSET
                             }
                             Anchor::BottomLeft | Anchor::BottomRight | Anchor::BottomCenter => {
-                                px(45.) - delta * px(45.)
+                                NOTIFICATION_TRANSITION_OFFSET
+                                    - delta * NOTIFICATION_TRANSITION_OFFSET
                             }
                             _ => px(0.),
                         };
                         let opacity = delta;
+                        // GPUI paints a drop shadow *under* the card and has no
+                        // group compositing, so a card that is still translucent
+                        // does not hide its own shadow and it shows through as a
+                        // dark slab. Ramping the ink by the cube of the fade
+                        // keeps it out of sight until the card can cover it —
+                        // where this used to drop the shadow outright past a
+                        // threshold, which popped.
                         this.top(px(0.) + y_offset)
                             .opacity(opacity)
-                            .when(opacity < 0.85, |this| this.shadow_none())
+                            .shadow(toast_shadow(opacity.powi(3)))
                     }
                 },
             )
@@ -423,12 +527,20 @@ impl Render for Notification {
 /// The settings for notifications.
 #[derive(Debug, Clone)]
 pub struct NotificationSettings {
-    /// The placement of the notification, default: [`Anchor::TopRight`]
+    /// The placement of the notifications, default: [`Anchor::TopRight`]
+    ///
+    /// A single notification can override this with [`Notification::placement`].
     pub placement: Anchor,
     /// The margins of the notification with respect to the window edges.
     pub margins: Edges<Pixels>,
     /// The maximum number of notifications to show at once, default: 10
     pub max_items: usize,
+    /// The width of the notifications, default: 382px
+    pub width: Pixels,
+    /// Where notifications are delivered, default: [`NotificationDelivery::InApp`]
+    ///
+    /// A single notification can override this with [`Notification::delivery`].
+    pub delivery: NotificationDelivery,
 }
 
 impl Default for NotificationSettings {
@@ -443,25 +555,224 @@ impl Default for NotificationSettings {
                 left: offset,
             },
             max_items: 10,
+            width: DEFAULT_NOTIFICATION_WIDTH,
+            delivery: NotificationDelivery::default(),
         }
     }
+}
+
+/// Registers the app-global system-notification response handler.
+///
+/// gpui keeps a single such handler (later registrations replace earlier
+/// ones), so gpui-component owns it: applications must not call
+/// [`gpui::App::on_system_notification_response`] after `gpui_component::init`.
+/// Responses to notifications the application posts itself are ignored here.
+pub(crate) fn init(cx: &mut App) {
+    cx.on_system_notification_response(SystemNotificationRegistry::handle_response);
+}
+
+struct SystemNotificationEntry {
+    window: AnyWindowHandle,
+    list: WeakEntity<NotificationList>,
+    id: NotificationId,
+    on_click: Option<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>>,
+}
+
+const MAX_SYSTEM_NOTIFICATION_ENTRIES: usize = 100;
+
+/// App-global map from system-notification tag to the state needed to
+/// dispatch the user's response, ordered oldest-first so overflow prunes the
+/// stalest entries.
+#[derive(Default)]
+struct SystemNotificationRegistry {
+    entries: Vec<(SharedString, SystemNotificationEntry)>,
+}
+
+impl Global for SystemNotificationRegistry {}
+
+impl SystemNotificationRegistry {
+    fn insert(cx: &mut App, tag: SharedString, entry: SystemNotificationEntry) {
+        let entries = &mut cx.default_global::<Self>().entries;
+        entries.retain(|(existing, _)| *existing != tag);
+        entries.push((tag, entry));
+        if entries.len() > MAX_SYSTEM_NOTIFICATION_ENTRIES {
+            let overflow = entries.len() - MAX_SYSTEM_NOTIFICATION_ENTRIES;
+            entries.drain(..overflow);
+        }
+    }
+
+    /// Retract the system notification for `id`, but only if it was posted
+    /// from the given window: another window pushing the same id owns the tag
+    /// now, and this window's local dismiss must not clobber it.
+    fn dismiss(cx: &mut App, id: &NotificationId, window_id: WindowId) {
+        let tag = id.system_tag();
+        let entries = &mut cx.default_global::<Self>().entries;
+        let Some(ix) = entries.iter().position(|(existing, entry)| {
+            *existing == tag && entry.window.window_id() == window_id
+        }) else {
+            return;
+        };
+        entries.remove(ix);
+        cx.dismiss_system_notification(&tag);
+    }
+
+    /// Retract all of the window's system notifications whose id matches the
+    /// given [`TypeId`], regardless of the [`NotificationId`] variant.
+    fn dismiss_by_type(cx: &mut App, type_id: TypeId, window_id: WindowId) {
+        Self::dismiss_matching(cx, window_id, |id| match id {
+            NotificationId::Id(t) | NotificationId::IdAndElementId(t, _) => *t == type_id,
+        });
+    }
+
+    /// Retract all system notifications posted from the given window.
+    fn dismiss_all(cx: &mut App, window_id: WindowId) {
+        Self::dismiss_matching(cx, window_id, |_| true);
+    }
+
+    fn dismiss_matching(
+        cx: &mut App,
+        window_id: WindowId,
+        matches: impl Fn(&NotificationId) -> bool,
+    ) {
+        let entries = &mut cx.default_global::<Self>().entries;
+        let mut tags = Vec::new();
+        entries.retain(|(tag, entry)| {
+            if entry.window.window_id() == window_id && matches(&entry.id) {
+                tags.push(tag.clone());
+                false
+            } else {
+                true
+            }
+        });
+        for tag in tags {
+            cx.dismiss_system_notification(&tag);
+        }
+    }
+
+    fn handle_response(response: SystemNotificationResponse, cx: &mut App) {
+        if !response.tag.starts_with(SYSTEM_TAG_PREFIX) {
+            return;
+        }
+        // Platforms usually remove a clicked notification themselves; retract
+        // explicitly for the ones that keep it in the notification center.
+        cx.dismiss_system_notification(&response.tag);
+        // The prefix already proves the notification is ours, so activate even
+        // when nothing is left to dispatch to: the platform can deliver a
+        // response for a notification posted before the process restarted, and
+        // entries are pruned past `MAX_SYSTEM_NOTIFICATION_ENTRIES`.
+        cx.activate(true);
+        let entries = &mut cx.default_global::<Self>().entries;
+        let Some(ix) = entries.iter().position(|(tag, _)| *tag == response.tag) else {
+            return;
+        };
+        let (_, entry) = entries.remove(ix);
+        // Errs when the window is already closed: the entry is removed and the
+        // application is still brought to the foreground.
+        let _ = entry.window.update(cx, |_, window, cx| {
+            window.activate_window();
+            if let Some(list) = entry.list.upgrade() {
+                // No-op when the toast already closed or was never created
+                // (system-only delivery).
+                list.update(cx, |list, cx| list.close(entry.id.clone(), window, cx));
+            }
+            if let Some(on_click) = entry.on_click {
+                on_click(&ClickEvent::default(), window, cx);
+            }
+        });
+    }
+}
+
+/// Per-placement stack state, created lazily for placements in use.
+struct AnchorStack {
+    state: ToastStackState,
+    focus_handle: FocusHandle,
 }
 
 /// A list of notifications.
 pub struct NotificationList {
     /// Notifications that will be auto hidden.
-    pub(crate) notifications: VecDeque<Entity<Notification>>,
-    expanded: bool,
+    pub(crate) notifications: ToastManager<NotificationId, Entity<Notification>>,
+    stacks: Vec<(Anchor, AnchorStack)>,
+    focus_handle: FocusHandle,
     _subscriptions: HashMap<NotificationId, Subscription>,
 }
 
 impl NotificationList {
-    pub fn new(_window: &mut Window, _cx: &mut Context<Self>) -> Self {
+    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let view = cx.entity().downgrade();
+        cx.spawn_in(window, async move |_, cx| {
+            loop {
+                cx.background_executor()
+                    .timer(Duration::from_millis(50))
+                    .await;
+                if view
+                    .update_in(cx, |view, window, cx| view.advance(window, cx))
+                    .is_err()
+                {
+                    break;
+                }
+            }
+        })
+        .detach();
         Self {
-            notifications: VecDeque::new(),
-            expanded: false,
+            notifications: ToastManager::new(ToastMotion::sonner()),
+            stacks: Vec::new(),
+            focus_handle: cx.focus_handle().tab_stop(true),
             _subscriptions: HashMap::new(),
         }
+    }
+
+    fn is_expanded(&self) -> bool {
+        self.stacks
+            .iter()
+            .any(|(_, stack)| stack.state.is_expanded())
+    }
+
+    /// Group the visible notifications by their effective placement, pairing
+    /// each group with the element id its stack renders under and preserving
+    /// the display order within each group.
+    fn grouped(
+        &self,
+        cx: &App,
+    ) -> Vec<(
+        Anchor,
+        ElementId,
+        Vec<(NotificationId, Entity<Notification>)>,
+    )> {
+        let settings = &cx.theme().notification;
+        let (max_items, placement) = (settings.max_items, settings.placement);
+
+        let mut groups: Vec<(Anchor, Vec<(NotificationId, Entity<Notification>)>)> = Vec::new();
+        for (id, item, _) in self.notifications.visible(max_items) {
+            let anchor = item.read(cx).placement.unwrap_or(placement);
+            match groups.iter_mut().find(|(a, _)| *a == anchor) {
+                Some((_, items)) => items.push((id.clone(), item.clone())),
+                None => groups.push((anchor, vec![(id.clone(), item.clone())])),
+            }
+        }
+        groups
+            .into_iter()
+            .map(|(anchor, items)| (anchor, Self::stack_id(anchor), items))
+            .collect()
+    }
+
+    /// The element id a placement's stack renders under.
+    ///
+    /// Keyed by the placement itself rather than by position among the mounted
+    /// stacks: a stack whose id changes loses the element state of its whole
+    /// subtree, which replays the enter animation of every notification in it.
+    fn stack_id(anchor: Anchor) -> ElementId {
+        let ix = match anchor {
+            Anchor::TopLeft => 0,
+            Anchor::TopCenter => 1,
+            Anchor::TopRight => 2,
+            Anchor::BottomLeft => 3,
+            Anchor::BottomCenter => 4,
+            Anchor::BottomRight => 5,
+            Anchor::LeftCenter => 6,
+            Anchor::RightCenter => 7,
+        };
+        ("notification-list", ix as usize).into()
     }
 
     pub fn push(
@@ -471,37 +782,96 @@ impl NotificationList {
         cx: &mut Context<Self>,
     ) {
         let notification = notification.into();
+        let delivery = notification
+            .delivery
+            .unwrap_or(cx.theme().notification.delivery);
+        if delivery.includes_system() {
+            Self::push_system(&notification, window, cx);
+        }
+        if !delivery.includes_in_app() {
+            return;
+        }
+
         let id = notification.id.clone();
         let autohide = notification.autohide;
-
-        // Remove the notification by id, for keep unique.
-        self.notifications.retain(|note| note.read(cx).id != id);
+        let window_id = window.window_handle().window_id();
 
         let notification = cx.new(|_| notification);
 
+        let dismiss_id = id.clone();
         self._subscriptions.insert(
             id.clone(),
-            cx.subscribe(&notification, move |view, _, _: &DismissEvent, cx| {
-                view.notifications.retain(|note| id != note.read(cx).id);
-                view._subscriptions.remove(&id);
+            cx.subscribe(&notification, move |view, _, _: &DismissRequest, cx| {
+                if view
+                    .notifications
+                    .dismiss(&dismiss_id, cx.background_executor().now())
+                {
+                    if let Some(note) = view.notifications.get(&dismiss_id) {
+                        note.update(cx, |note, cx| note.begin_close(cx));
+                    }
+                    SystemNotificationRegistry::dismiss(cx, &dismiss_id, window_id);
+                }
             }),
         );
 
-        self.notifications.push_back(notification.clone());
-        if autohide {
-            // Sleep for 5 seconds to autohide the notification
-            cx.spawn_in(window, async move |_, cx| {
-                cx.background_executor().timer(Duration::from_secs(5)).await;
-
-                if let Err(err) =
-                    notification.update_in(cx, |note, window, cx| note.dismiss(window, cx))
-                {
-                    tracing::error!("failed to auto hide notification: {:?}", err);
-                }
-            })
-            .detach();
-        }
+        self.notifications.push(
+            id,
+            notification,
+            ToastOptions {
+                timeout: autohide.then_some(Duration::from_secs(5)),
+            },
+            cx.background_executor().now(),
+        );
         cx.notify();
+    }
+
+    /// Post the notification to the OS notification center and register the
+    /// state needed to dispatch the user's response back to this window.
+    fn push_system(notification: &Notification, window: &Window, cx: &mut Context<Self>) {
+        let (title, body) = match (&notification.title, &notification.message) {
+            (Some(title), message) => (title.clone(), message.clone().unwrap_or_default()),
+            (None, Some(message)) => (message.clone(), SharedString::default()),
+            // A content-only notification has nothing textual to show.
+            (None, None) => return,
+        };
+        let tag = notification.id.system_tag();
+        let entry = SystemNotificationEntry {
+            window: window.window_handle(),
+            list: cx.entity().downgrade(),
+            id: notification.id.clone(),
+            on_click: notification.on_click.clone(),
+        };
+        SystemNotificationRegistry::insert(cx, tag.clone(), entry);
+        cx.show_system_notification(SystemNotification {
+            tag,
+            title,
+            body,
+            actions: Vec::new(),
+        });
+    }
+
+    fn advance(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let changes = self.notifications.advance(
+            cx.background_executor().now(),
+            self.is_expanded() || !window.is_window_active(),
+        );
+        for id in changes.presented {
+            if let Some(note) = self.notifications.get(&id) {
+                note.update(cx, |note, cx| note.complete_enter(cx));
+            }
+        }
+        for id in changes.ending {
+            if let Some(note) = self.notifications.get(&id) {
+                note.update(cx, |note, cx| note.begin_close(cx));
+            }
+        }
+        for (id, note) in changes.removed {
+            self._subscriptions.remove(&id);
+            note.update(cx, |note, cx| note.complete_close(window, cx));
+        }
+        if changes.changed {
+            cx.notify();
+        }
     }
 
     pub(crate) fn close(
@@ -511,8 +881,16 @@ impl NotificationList {
         cx: &mut Context<Self>,
     ) {
         let id: NotificationId = id.into();
-        if let Some(n) = self.notifications.iter().find(|n| n.read(cx).id == id) {
-            n.update(cx, |note, cx| note.dismiss(window, cx))
+        // Unconditional: a system-only notification has no toast to dismiss,
+        // but its system counterpart must still be retracted.
+        SystemNotificationRegistry::dismiss(cx, &id, window.window_handle().window_id());
+        if self
+            .notifications
+            .dismiss(&id, cx.background_executor().now())
+        {
+            if let Some(n) = self.notifications.get(&id) {
+                n.update(cx, |note, cx| note.begin_close(cx))
+            }
         }
         cx.notify();
     }
@@ -525,27 +903,50 @@ impl NotificationList {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        SystemNotificationRegistry::dismiss_by_type(
+            cx,
+            type_id,
+            window.window_handle().window_id(),
+        );
         let matched: Vec<_> = self
             .notifications
             .iter()
-            .filter(|n| match &n.read(cx).id {
+            .filter(|(id, _, _)| match id {
                 NotificationId::Id(t) | NotificationId::IdAndElementId(t, _) => *t == type_id,
             })
+            .map(|(_, notification, _)| notification)
             .cloned()
             .collect();
         for n in matched {
-            n.update(cx, |note, cx| note.dismiss(window, cx));
+            let id = n.read(cx).id.clone();
+            if self
+                .notifications
+                .dismiss(&id, cx.background_executor().now())
+            {
+                n.update(cx, |note, cx| note.begin_close(cx));
+            }
         }
         cx.notify();
     }
 
-    pub fn clear(&mut self, _: &mut Window, cx: &mut Context<Self>) {
-        self.notifications.clear();
+    pub fn clear(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        SystemNotificationRegistry::dismiss_all(cx, window.window_handle().window_id());
+        for id in self
+            .notifications
+            .dismiss_all(cx.background_executor().now())
+        {
+            if let Some(note) = self.notifications.get(&id) {
+                note.update(cx, |note, cx| note.begin_close(cx));
+            }
+        }
         cx.notify();
     }
 
     pub fn notifications(&self) -> Vec<Entity<Notification>> {
-        self.notifications.iter().cloned().collect()
+        self.notifications
+            .iter()
+            .map(|(_, value, _)| value.clone())
+            .collect()
     }
 }
 
@@ -556,48 +957,63 @@ impl Render for NotificationList {
         cx: &mut gpui::Context<Self>,
     ) -> impl IntoElement {
         let size = window.viewport_size();
-        let max_items = cx.theme().notification.max_items;
-        let items = self
-            .notifications
-            .iter()
-            .rev()
-            .take(max_items)
-            .rev()
-            .cloned();
+        let settings = &cx.theme().notification;
+        let (placement, margins, width) =
+            (settings.placement, settings.margins.clone(), settings.width);
 
-        let placement = cx.theme().notification.placement;
-        let margins = &cx.theme().notification.margins;
+        let groups = self.grouped(cx);
+        self.stacks
+            .retain(|(anchor, _)| groups.iter().any(|(a, _, _)| a == anchor));
 
-        v_flex()
-            .id("notification-list")
-            .max_h(size.height)
-            .pt(margins.top)
-            .pb(margins.bottom)
-            .gap_3()
-            .when(
-                matches!(placement, Anchor::TopRight),
-                |this| this.pr(margins.right), // ignore left
-            )
-            .when(
-                matches!(placement, Anchor::TopLeft),
-                |this| this.pl(margins.left), // ignore right
-            )
-            .when(
-                matches!(placement, Anchor::BottomLeft),
-                |this| this.flex_col_reverse().pl(margins.left), // ignore right
-            )
-            .when(
-                matches!(placement, Anchor::BottomRight),
-                |this| this.flex_col_reverse().pr(margins.right), // ignore left
-            )
-            .when(matches!(placement, Anchor::BottomCenter), |this| {
-                this.flex_col_reverse()
-            })
-            .on_hover(cx.listener(|view, hovered, _, cx| {
-                view.expanded = *hovered;
-                cx.notify()
-            }))
-            .children(items)
+        let default_focus_handle = self.focus_handle.clone();
+        let stacks = groups.into_iter().map(|(anchor, stack_id, items)| {
+            let stack_ix = self
+                .stacks
+                .iter()
+                .position(|(a, _)| *a == anchor)
+                .unwrap_or_else(|| {
+                    self.stacks.push((
+                        anchor,
+                        AnchorStack {
+                            state: ToastStackState::default(),
+                            focus_handle: if anchor == placement {
+                                default_focus_handle.clone()
+                            } else {
+                                cx.focus_handle().tab_stop(true)
+                            },
+                        },
+                    ));
+                    self.stacks.len() - 1
+                });
+            let stack = &self.stacks[stack_ix].1;
+
+            items
+                .into_iter()
+                .fold(
+                    ToastStack::new(stack_id, stack.state.clone()),
+                    |stack, (id, item)| stack.item(format!("{id:?}"), item),
+                )
+                .placement(anchor)
+                .focus_handle(stack.focus_handle.clone())
+                .v_flex()
+                .w(width)
+                .max_h(size.height)
+                .absolute()
+                .map(|this| match anchor {
+                    Anchor::TopLeft => this.top(margins.top).left(margins.left),
+                    Anchor::TopRight => this.top(margins.top).right(margins.right),
+                    Anchor::TopCenter => this.top(margins.top).left_0().right_0().mx_auto(),
+                    Anchor::BottomLeft => this.bottom(margins.bottom).left(margins.left),
+                    Anchor::BottomRight => this.bottom(margins.bottom).right(margins.right),
+                    Anchor::BottomCenter => {
+                        this.bottom(margins.bottom).left_0().right_0().mx_auto()
+                    }
+                    Anchor::LeftCenter => this.left(margins.left).top_0().bottom_0().my_auto(),
+                    Anchor::RightCenter => this.right(margins.right).top_0().bottom_0().my_auto(),
+                })
+        });
+
+        div().size_full().children(stacks)
     }
 }
 
@@ -612,11 +1028,14 @@ mod tests {
 
     struct TestRoot {
         list: Entity<NotificationList>,
+        other_focus: FocusHandle,
     }
 
     impl Render for TestRoot {
         fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-            self.list.clone()
+            div()
+                .child(self.list.clone())
+                .child(div().track_focus(&self.other_focus))
         }
     }
 
@@ -624,7 +1043,7 @@ mod tests {
         list.read_with(cx, |l, cx| {
             l.notifications
                 .iter()
-                .map(|n| n.read(cx).id.clone())
+                .map(|(_, n, _)| n.read(cx).id.clone())
                 .collect()
         })
     }
@@ -633,8 +1052,255 @@ mod tests {
     /// so that closed notifications are removed from the list.
     fn flush_dismiss(cx: &mut VisualTestContext) {
         cx.background_executor
-            .advance_clock(Duration::from_millis(200));
+            .advance_clock(NOTIFICATION_EXIT_DURATION + Duration::from_millis(50));
         cx.run_until_parked();
+    }
+
+    #[test]
+    fn test_notification_builder() {
+        let note = Notification::new()
+            .title("title")
+            .message("message")
+            .with_type(NotificationType::Success)
+            .placement(Anchor::BottomLeft)
+            .delivery(NotificationDelivery::System)
+            .autohide(false);
+        assert_eq!(note.title, Some("title".into()));
+        assert_eq!(note.message, Some("message".into()));
+        assert!(matches!(note.type_, Some(NotificationType::Success)));
+        assert_eq!(note.placement, Some(Anchor::BottomLeft));
+        assert_eq!(note.delivery, Some(NotificationDelivery::System));
+        assert!(!note.autohide);
+
+        assert_eq!(Notification::new().delivery, None);
+        assert_eq!(
+            Notification::new().system().delivery,
+            Some(NotificationDelivery::System)
+        );
+        assert_eq!(
+            Notification::new().in_app_and_system().delivery,
+            Some(NotificationDelivery::InAppAndSystem)
+        );
+    }
+
+    #[test]
+    fn notification_delivery_includes() {
+        assert!(NotificationDelivery::InApp.includes_in_app());
+        assert!(!NotificationDelivery::InApp.includes_system());
+        assert!(!NotificationDelivery::System.includes_in_app());
+        assert!(NotificationDelivery::System.includes_system());
+        assert!(NotificationDelivery::InAppAndSystem.includes_in_app());
+        assert!(NotificationDelivery::InAppAndSystem.includes_system());
+    }
+
+    #[test]
+    fn system_tag_is_stable_and_namespaced() {
+        let by_type = NotificationId::from(TypeId::of::<FooKind>());
+        assert_eq!(by_type.system_tag(), by_type.clone().system_tag());
+        assert!(by_type.system_tag().starts_with(SYSTEM_TAG_PREFIX));
+
+        let key1 = NotificationId::from((TypeId::of::<FooKind>(), ElementId::from(1usize)));
+        let key2 = NotificationId::from((TypeId::of::<FooKind>(), ElementId::from(2usize)));
+        assert_ne!(key1.system_tag(), key2.system_tag());
+        assert_ne!(by_type.system_tag(), key1.system_tag());
+
+        // Default (uuid) ids never collide, so they never replace each other.
+        assert_ne!(
+            Notification::new().id.system_tag(),
+            Notification::new().id.system_tag()
+        );
+    }
+
+    /// A stack's element id must not depend on how many other placements are
+    /// mounted: a changing id drops the element state of the whole subtree,
+    /// which replays each notification's enter animation.
+    #[gpui::test]
+    fn stack_element_id_survives_other_placements_disappearing(cx: &mut TestAppContext) {
+        cx.update(|cx| cx.set_global(Theme::default()));
+        let (root, cx) = cx.add_window_view(|window, cx| TestRoot {
+            list: cx.new(|cx| NotificationList::new(window, cx)),
+            other_focus: cx.focus_handle(),
+        });
+        cx.update(|window, _| window.activate_window());
+        let list = root.read_with(cx, |root, _| root.list.clone());
+
+        // The left stack is pushed first, so it owns the lower group index.
+        list.update_in(cx, |list, window, cx| {
+            list.push(
+                Notification::info("left")
+                    .id::<FooKind>()
+                    .placement(Anchor::BottomLeft)
+                    .autohide(false),
+                window,
+                cx,
+            );
+            list.push(
+                Notification::info("right").id::<BarKind>().autohide(false),
+                window,
+                cx,
+            );
+        });
+
+        let right_id = |cx: &mut VisualTestContext| {
+            list.read_with(cx, |list, cx| {
+                list.grouped(cx)
+                    .into_iter()
+                    .find(|(anchor, _, _)| *anchor == Anchor::TopRight)
+                    .map(|(_, id, _)| id)
+                    .expect("the right stack is mounted")
+            })
+        };
+        let before = right_id(cx);
+
+        list.update_in(cx, |list, window, cx| {
+            list.close(TypeId::of::<FooKind>(), window, cx);
+        });
+        flush_dismiss(cx);
+
+        assert_eq!(right_id(cx), before);
+    }
+
+    #[gpui::test]
+    fn per_notification_placement_stacks_by_anchor(cx: &mut TestAppContext) {
+        cx.update(|cx| cx.set_global(Theme::default()));
+        let (root, cx) = cx.add_window_view(|window, cx| TestRoot {
+            list: cx.new(|cx| NotificationList::new(window, cx)),
+            other_focus: cx.focus_handle(),
+        });
+        cx.update(|window, _| window.activate_window());
+        let list = root.read_with(cx, |root, _| root.list.clone());
+
+        list.update_in(cx, |list, window, cx| {
+            list.push(
+                Notification::info("default")
+                    .id::<FooKind>()
+                    .autohide(false),
+                window,
+                cx,
+            );
+            list.push(
+                Notification::info("bottom")
+                    .id::<BarKind>()
+                    .placement(Anchor::BottomLeft)
+                    .autohide(false),
+                window,
+                cx,
+            );
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        let anchors =
+            |list: &NotificationList| list.stacks.iter().map(|(a, _)| *a).collect::<Vec<_>>();
+        assert_eq!(
+            list.read_with(cx, |list, _| anchors(list)),
+            [Anchor::TopRight, Anchor::BottomLeft]
+        );
+
+        // Dismissing the overridden notification prunes its stack.
+        list.update_in(cx, |list, window, cx| {
+            list.close(TypeId::of::<BarKind>(), window, cx);
+        });
+        flush_dismiss(cx);
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        assert_eq!(
+            list.read_with(cx, |list, _| anchors(list)),
+            [Anchor::TopRight]
+        );
+    }
+
+    #[gpui::test]
+    fn closing_toast_stays_mounted_until_its_transition_finishes(cx: &mut TestAppContext) {
+        cx.update(|cx| cx.set_global(Theme::default()));
+        let (root, cx) = cx.add_window_view(|window, cx| TestRoot {
+            list: cx.new(|cx| NotificationList::new(window, cx)),
+            other_focus: cx.focus_handle(),
+        });
+        cx.update(|window, _| window.activate_window());
+        let list = root.read_with(cx, |root, _| root.list.clone());
+
+        list.update_in(cx, |list, window, cx| {
+            list.push(
+                Notification::info("closing")
+                    .id::<FooKind>()
+                    .autohide(false),
+                window,
+                cx,
+            );
+            list.close(TypeId::of::<FooKind>(), window, cx);
+        });
+
+        cx.background_executor
+            .advance_clock(NOTIFICATION_EXIT_DURATION - Duration::from_millis(1));
+        cx.run_until_parked();
+        assert_eq!(ids(&list, cx).len(), 1);
+
+        cx.background_executor
+            .advance_clock(Duration::from_millis(1));
+        cx.run_until_parked();
+        assert!(ids(&list, cx).is_empty());
+    }
+
+    #[gpui::test]
+    fn focus_and_inactive_window_pause_autohide_and_present_phase_is_projected(
+        cx: &mut TestAppContext,
+    ) {
+        cx.update(|cx| cx.set_global(Theme::default()));
+        let (root, cx) = cx.add_window_view(|window, cx| TestRoot {
+            list: cx.new(|cx| NotificationList::new(window, cx)),
+            other_focus: cx.focus_handle(),
+        });
+        let list = root.read_with(cx, |root, _| root.list.clone());
+        list.update_in(cx, |list, window, cx| {
+            list.push(Notification::info("paused").id::<FooKind>(), window, cx);
+        });
+
+        cx.background_executor
+            .advance_clock(NOTIFICATION_TRANSITION_DURATION);
+        cx.run_until_parked();
+        let note = list.read_with(cx, |list, _| {
+            list.notifications
+                .get(&NotificationId::from(TypeId::of::<FooKind>()))
+                .unwrap()
+                .clone()
+        });
+        assert_eq!(
+            note.read_with(cx, |note, _| note.transition_status),
+            ToastTransitionStatus::Present
+        );
+
+        cx.background_executor.advance_clock(Duration::from_secs(5));
+        cx.run_until_parked();
+        assert_eq!(
+            note.read_with(cx, |note, _| note.transition_status),
+            ToastTransitionStatus::Present
+        );
+
+        let list_focus = list.read_with(cx, |list, _| list.focus_handle.clone());
+        cx.update(|window, cx| {
+            window.activate_window();
+            list_focus.focus(window, cx);
+            window.draw(cx).clear(cx);
+        });
+        cx.background_executor.advance_clock(Duration::from_secs(5));
+        cx.run_until_parked();
+        assert_eq!(
+            note.read_with(cx, |note, _| note.transition_status),
+            ToastTransitionStatus::Present
+        );
+
+        let other_focus = root.read_with(cx, |root, _| root.other_focus.clone());
+        cx.update(|window, cx| {
+            other_focus.focus(window, cx);
+            window.draw(cx).clear(cx);
+        });
+        assert!(!list.read_with(cx, |list, _| list.is_expanded()));
+        cx.background_executor
+            .advance_clock(Duration::from_secs(5) + Duration::from_millis(50));
+        cx.run_until_parked();
+        assert_eq!(
+            note.read_with(cx, |note, _| note.transition_status),
+            ToastTransitionStatus::Ending
+        );
     }
 
     #[gpui::test]
@@ -642,6 +1308,7 @@ mod tests {
         cx.update(|cx| cx.set_global(Theme::default()));
         let (root, cx) = cx.add_window_view(|window, cx| TestRoot {
             list: cx.new(|cx| NotificationList::new(window, cx)),
+            other_focus: cx.focus_handle(),
         });
         let list = root.read_with(cx, |r, _| r.list.clone());
 
@@ -688,6 +1355,7 @@ mod tests {
         cx.update(|cx| cx.set_global(Theme::default()));
         let (root, cx) = cx.add_window_view(|window, cx| TestRoot {
             list: cx.new(|cx| NotificationList::new(window, cx)),
+            other_focus: cx.focus_handle(),
         });
         let list = root.read_with(cx, |r, _| r.list.clone());
 
@@ -735,6 +1403,7 @@ mod tests {
         cx.update(|cx| cx.set_global(Theme::default()));
         let (root, cx) = cx.add_window_view(|window, cx| TestRoot {
             list: cx.new(|cx| NotificationList::new(window, cx)),
+            other_focus: cx.focus_handle(),
         });
         let list = root.read_with(cx, |r, _| r.list.clone());
 
@@ -759,6 +1428,7 @@ mod tests {
         cx.update(|cx| cx.set_global(Theme::default()));
         let (root, cx) = cx.add_window_view(|window, cx| TestRoot {
             list: cx.new(|cx| NotificationList::new(window, cx)),
+            other_focus: cx.focus_handle(),
         });
         let list = root.read_with(cx, |r, _| r.list.clone());
 
@@ -776,5 +1446,183 @@ mod tests {
         flush_dismiss(cx);
 
         assert_eq!(ids(&list, cx).len(), 1);
+    }
+
+    /// Applications may post their own system notifications; a response for
+    /// one of those must not be retracted or dispatched by the library.
+    #[gpui::test]
+    fn response_for_a_foreign_tag_is_ignored(cx: &mut TestAppContext) {
+        cx.update(|cx| {
+            init(cx);
+            cx.set_app_identity("com.example.test", "Test");
+        });
+        cx.simulate_system_notification_response(SystemNotificationResponse {
+            tag: "com.example.app/own-tag".into(),
+            action_id: None,
+        });
+        cx.run_until_parked();
+        assert!(cx.dismissed_system_notifications().is_empty());
+    }
+
+    #[gpui::test]
+    fn system_delivery_posts_to_center_without_in_app_toast(cx: &mut TestAppContext) {
+        cx.update(|cx| {
+            cx.set_global(Theme::default());
+            init(cx);
+            // The test platform drops posts until an identity is set,
+            // mirroring Windows.
+            cx.set_app_identity("com.example.test", "Test");
+        });
+        let (root, cx) = cx.add_window_view(|window, cx| TestRoot {
+            list: cx.new(|cx| NotificationList::new(window, cx)),
+            other_focus: cx.focus_handle(),
+        });
+        let list = root.read_with(cx, |r, _| r.list.clone());
+
+        list.update_in(cx, |list, window, cx| {
+            list.push(
+                Notification::info("body text")
+                    .title("Title")
+                    .id::<FooKind>()
+                    .delivery(NotificationDelivery::System),
+                window,
+                cx,
+            );
+            // Message-only: the message becomes the system title.
+            list.push(
+                Notification::info("message only")
+                    .id::<BarKind>()
+                    .delivery(NotificationDelivery::System),
+                window,
+                cx,
+            );
+        });
+        cx.run_until_parked();
+
+        let shown = cx.shown_system_notifications();
+        assert_eq!(shown.len(), 2);
+        assert_eq!(
+            shown[0].tag,
+            NotificationId::Id(TypeId::of::<FooKind>()).system_tag()
+        );
+        assert_eq!(shown[0].title, "Title");
+        assert_eq!(shown[0].body, "body text");
+        assert_eq!(shown[1].title, "message only");
+        assert_eq!(shown[1].body, "");
+        assert!(ids(&list, cx).is_empty(), "no in-app toast should exist");
+
+        // System-only notifications are still retractable through the
+        // regular close path even though no toast entity exists.
+        list.update_in(cx, |list, window, cx| {
+            list.close(TypeId::of::<FooKind>(), window, cx);
+        });
+        assert_eq!(
+            cx.dismissed_system_notifications(),
+            vec![NotificationId::Id(TypeId::of::<FooKind>()).system_tag()]
+        );
+    }
+
+    #[gpui::test]
+    fn system_click_activates_window_closes_toast_and_fires_on_click(cx: &mut TestAppContext) {
+        cx.update(|cx| {
+            cx.set_global(Theme::default());
+            init(cx);
+            cx.set_app_identity("com.example.test", "Test");
+        });
+        let (root, cx) = cx.add_window_view(|window, cx| TestRoot {
+            list: cx.new(|cx| NotificationList::new(window, cx)),
+            other_focus: cx.focus_handle(),
+        });
+        let list = root.read_with(cx, |r, _| r.list.clone());
+
+        let clicked = Rc::new(std::cell::Cell::new(false));
+        let on_click_flag = clicked.clone();
+        list.update_in(cx, |list, window, cx| {
+            list.push(
+                Notification::info("message")
+                    .title("Title")
+                    .id::<FooKind>()
+                    .delivery(NotificationDelivery::InAppAndSystem)
+                    .autohide(false)
+                    .on_click(move |_, _, _| on_click_flag.set(true)),
+                window,
+                cx,
+            );
+        });
+        cx.run_until_parked();
+        assert_eq!(ids(&list, cx).len(), 1);
+        assert_eq!(cx.shown_system_notifications().len(), 1);
+
+        cx.simulate_system_notification_response(SystemNotificationResponse {
+            tag: NotificationId::Id(TypeId::of::<FooKind>()).system_tag(),
+            action_id: None,
+        });
+        cx.run_until_parked();
+
+        assert!(clicked.get(), "on_click should fire on system response");
+        flush_dismiss(cx);
+        assert!(
+            ids(&list, cx).is_empty(),
+            "the in-app counterpart should be closed"
+        );
+    }
+
+    #[gpui::test]
+    fn explicit_close_retracts_system_notification_but_autohide_does_not(cx: &mut TestAppContext) {
+        cx.update(|cx| {
+            cx.set_global(Theme::default());
+            init(cx);
+            cx.set_app_identity("com.example.test", "Test");
+        });
+        let (root, cx) = cx.add_window_view(|window, cx| TestRoot {
+            list: cx.new(|cx| NotificationList::new(window, cx)),
+            other_focus: cx.focus_handle(),
+        });
+        cx.update(|window, _| window.activate_window());
+        let list = root.read_with(cx, |r, _| r.list.clone());
+
+        // Autohide expiry leaves the system notification in the center.
+        list.update_in(cx, |list, window, cx| {
+            list.push(
+                Notification::info("auto")
+                    .id::<FooKind>()
+                    .delivery(NotificationDelivery::InAppAndSystem),
+                window,
+                cx,
+            );
+        });
+        cx.run_until_parked();
+        cx.background_executor.advance_clock(Duration::from_secs(6));
+        cx.run_until_parked();
+        flush_dismiss(cx);
+        assert!(
+            ids(&list, cx).is_empty(),
+            "the toast should have autohidden"
+        );
+        assert!(
+            cx.dismissed_system_notifications().is_empty(),
+            "autohide must not retract the system notification"
+        );
+
+        // An explicit close retracts it.
+        list.update_in(cx, |list, window, cx| {
+            list.push(
+                Notification::info("manual")
+                    .id::<BarKind>()
+                    .delivery(NotificationDelivery::InAppAndSystem)
+                    .autohide(false),
+                window,
+                cx,
+            );
+        });
+        cx.run_until_parked();
+        list.update_in(cx, |list, window, cx| {
+            list.close(TypeId::of::<BarKind>(), window, cx);
+        });
+        flush_dismiss(cx);
+        assert_eq!(
+            cx.dismissed_system_notifications(),
+            vec![NotificationId::Id(TypeId::of::<BarKind>()).system_tag()]
+        );
     }
 }

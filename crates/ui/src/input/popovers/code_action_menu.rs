@@ -3,26 +3,19 @@ use std::rc::Rc;
 use gpui::{
     Action, AnyElement, App, AppContext, Context, DismissEvent, Empty, Entity, EventEmitter,
     Half as _, InteractiveElement as _, IntoElement, ParentElement, Pixels, Point, Render,
-    RenderOnce, SharedString, Styled, StyledText, Subscription, Window, deferred, div,
+    RenderOnce, Styled, StyledText, Subscription, WeakEntity, Window, deferred, div,
     prelude::FluentBuilder, px, relative,
 };
-use lsp_types::CodeAction;
+pub(crate) use gpui_base::input::CodeActionItem;
 
 const MAX_MENU_WIDTH: Pixels = px(320.);
 const MAX_MENU_HEIGHT: Pixels = px(480.);
 
 use crate::{
     ActiveTheme, IndexPath, Selectable, actions, h_flex,
-    input::{self, InputState, popovers::editor_popover},
+    input::{self, EditorState, popovers::editor_popover},
     list::{List, ListDelegate, ListEvent, ListState},
 };
-
-#[derive(Debug, Clone)]
-pub(crate) struct CodeActionItem {
-    /// The `id` of the `CodeActionProvider` that provided this item.
-    pub(crate) provider_id: SharedString,
-    pub(crate) action: CodeAction,
-}
 
 struct MenuDelegate {
     menu: Entity<CodeActionMenu>,
@@ -143,7 +136,7 @@ impl ListDelegate for MenuDelegate {
 /// A context menu for code completions and code actions.
 pub struct CodeActionMenu {
     offset: usize,
-    state: Entity<InputState>,
+    state: WeakEntity<EditorState>,
     list: Entity<ListState<MenuDelegate>>,
     open: bool,
 
@@ -153,9 +146,9 @@ pub struct CodeActionMenu {
 impl CodeActionMenu {
     /// Creates a new `CompletionMenu` with the given offset and completion items.
     ///
-    /// NOTE: This element should not call from InputState::new, unless that will stack overflow.
+    /// NOTE: This element should not call from EditorState::new, unless that will stack overflow.
     pub(crate) fn new(
-        state: Entity<InputState>,
+        state: Entity<EditorState>,
         window: &mut Window,
         cx: &mut App,
     ) -> Entity<Self> {
@@ -184,7 +177,7 @@ impl CodeActionMenu {
 
             Self {
                 offset: 0,
-                state,
+                state: state.downgrade(),
                 list,
                 open: false,
                 _subscriptions,
@@ -257,13 +250,14 @@ impl CodeActionMenu {
         });
     }
 
-    pub(crate) fn is_open(&self) -> bool {
-        self.open
-    }
-
     /// Hide the completion menu and reset the trigger start offset.
     pub(crate) fn hide(&mut self, cx: &mut Context<Self>) {
         self.open = false;
+        let state = self.state.clone();
+        cx.spawn(async move |_, cx| {
+            let _ = state.update(cx, |state, cx| state.dismiss_code_action_overlay(cx));
+        })
+        .detach();
         cx.notify();
     }
 
@@ -286,19 +280,18 @@ impl CodeActionMenu {
     }
 
     fn origin(&self, cx: &App) -> Option<Point<Pixels>> {
-        let state = self.state.read(cx);
-        let Some(last_layout) = state.last_layout.as_ref() else {
+        let state = self.state.upgrade()?;
+        let state = state.read(cx);
+        let Some((cursor_bounds, line_height)) = state.cursor_layout() else {
             return None;
         };
-        let Some(cursor_origin) = last_layout.cursor_bounds.map(|b| b.origin) else {
-            return None;
-        };
+        let cursor_origin = cursor_bounds.origin;
 
-        let scroll_origin = self.state.read(cx).scroll_handle.offset();
+        let scroll_origin = state.scroll_offset();
 
         Some(
-            scroll_origin + cursor_origin - state.input_bounds.origin
-                + Point::new(-px(4.), last_layout.line_height + px(4.)),
+            scroll_origin + cursor_origin - state.input_bounds().origin
+                + Point::new(-px(4.), line_height + px(4.)),
         )
     }
 }

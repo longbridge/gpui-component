@@ -1,18 +1,104 @@
 use gpui::{
-    Anchor, AnyElement, App, Bounds, Context, Deferred, DismissEvent, Div, ElementId,
-    EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyBinding,
-    MouseButton, ParentElement, Pixels, Point, Render, RenderOnce, Stateful, StyleRefinement,
-    Styled, Subscription, Window, anchored, deferred, div, prelude::FluentBuilder as _, px,
+    Anchor, Animation, AnimationExt as _, AnyElement, App, Bounds, Context, Div, ElementId,
+    FocusHandle, InteractiveElement as _, IntoElement, MouseButton, ParentElement, Pixels,
+    RenderOnce, Stateful, StyleRefinement, Styled, Window, prelude::FluentBuilder as _, px,
 };
-use std::{cell::Cell, rc::Rc};
+use std::{rc::Rc, time::Duration};
 
+use crate::ThemeStyled as _;
 use crate::{
-    ElementExt, Selectable, StyledExt as _, actions::Cancel, global_state::GlobalState, v_flex,
+    Selectable, StyledExt as _,
+    animation::ease_out_cubic,
+    styled::{popover_ring, popover_shadow},
+    v_flex,
 };
+use gpui_base::Popover as BasePopover;
+pub use gpui_base::PopoverState;
 
-const CONTEXT: &str = "Popover";
-pub(crate) fn init(cx: &mut App) {
-    cx.bind_keys([KeyBinding::new("escape", Cancel, Some(CONTEXT))])
+pub(crate) fn init(_: &mut App) {}
+
+/// How long a dropdown takes to settle into place after it opens.
+///
+/// This is shadcn/ui's figure: its popup surfaces carry `animate-in`, whose
+/// duration is 150ms.
+const DROPDOWN_ENTER_DURATION: Duration = Duration::from_millis(150);
+
+/// Where a dropdown starts out, relative to where it comes to rest.
+///
+/// Negative is above, so the surface slides *down* out of the trigger's edge —
+/// what shadcn/ui expresses as `data-[side=bottom]:slide-in-from-top-2`. Its
+/// `2` is `0.5rem`, which is 8px at the default root size.
+const DROPDOWN_ENTER_OFFSET: Pixels = px(-8.);
+
+fn dropdown_positioner(bounds: Bounds<Pixels>) -> gpui_base::Positioner {
+    gpui_base::Positioner::side(bounds)
+        .placement(gpui_base::Placement::Bottom)
+        .align(gpui_base::Align::Start)
+        .offset(px(6.))
+        .margin(px(8.))
+}
+
+/// Positions a dropdown surface under its trigger and animates it in.
+///
+/// This is the shared open motion for Select, Combobox and DatePicker, modelled
+/// on shadcn/ui: over 150ms the surface fades up from nothing while sliding the
+/// last 8px out of the trigger's edge, on an ease-out curve so it decelerates
+/// into place.
+///
+/// `surface` must be the panel itself — the element carrying
+/// [`ThemeStyled::popover_style`] — and not a wrapper around it. GPUI takes a
+/// shadow's shape from the element it is set on, so a wrapper of a different
+/// size would throw the shadow out of register with the panel.
+///
+/// # Why the shadow is animated too
+///
+/// GPUI has no group compositing: `opacity` multiplies into each primitive's
+/// alpha separately rather than fading a composited subtree. A drop shadow is
+/// painted as a full blurred rect *under* the element — the shader only cuts the
+/// element out of `inset` shadows — so a translucent panel does not hide its own
+/// shadow, and mid-fade the shadow shows straight through the panel as a dark
+/// slab. Ramping the ink by the cube of the fade keeps it out of sight until the
+/// panel is opaque enough to cover it, and still lands on the resting shadow
+/// [`popover_shadow`] gives every other popup.
+///
+/// # Departures from shadcn
+///
+/// - shadcn also scales the surface up from 95% (`zoom-in-95`). GPUI has no
+///   element transform — only images and SVGs take a `TransformationMatrix` —
+///   so there is nothing to scale a subtree with, and the fade and slide carry
+///   the motion on their own.
+/// - There is no exit motion. A closing dropdown stops being rendered in the
+///   same frame its state flips, so playing one would mean keeping the surface
+///   mounted past the close, which is a change to how each of these components
+///   tracks `open`.
+/// - The slide always comes from above. [`gpui_base::Positioner`] resolves the
+///   side the surface actually lands on during layout and does not report it
+///   back, so a dropdown that flips above its trigger for want of room below
+///   slides the opposite way — 8px over 150ms, in the rare case where it
+///   happens.
+///
+/// Reduced motion needs no handling here: GPUI's animation element adopts the
+/// final value on the first frame when the system asks for it.
+pub(crate) fn dropdown_popup(
+    id: impl Into<ElementId>,
+    bounds: Bounds<Pixels>,
+    surface: impl IntoElement + Styled + 'static,
+    cx: &App,
+) -> gpui_base::Positioner {
+    let travel: f32 = DROPDOWN_ENTER_OFFSET.into();
+    // Read out here: the animation runs long after `cx` is gone.
+    let ring = popover_ring(cx);
+
+    dropdown_positioner(bounds).child(surface.with_animation(
+        id,
+        Animation::new(DROPDOWN_ENTER_DURATION).with_easing(ease_out_cubic),
+        move |surface, delta| {
+            surface
+                .top(px(travel * (1. - delta)))
+                .opacity(delta)
+                .shadow(popover_shadow(ring, delta * delta * delta))
+        },
+    ))
 }
 
 /// A popover element that can be triggered by a button or any other element.
@@ -170,28 +256,6 @@ impl Popover {
         self.tracked_focus_handle = Some(handle.clone());
         self
     }
-
-    pub(crate) fn resolved_corner(anchor: Anchor, trigger_bounds: Bounds<Pixels>) -> Point<Pixels> {
-        match anchor {
-            Anchor::TopLeft => trigger_bounds.origin,
-            Anchor::TopCenter => trigger_bounds.top_center(),
-            Anchor::TopRight => trigger_bounds.top_right(),
-            Anchor::BottomLeft => Point {
-                x: trigger_bounds.origin.x,
-                y: trigger_bounds.origin.y - trigger_bounds.size.height,
-            },
-            Anchor::BottomCenter => Point {
-                x: trigger_bounds.top_center().x,
-                y: trigger_bounds.origin.y - trigger_bounds.size.height,
-            },
-            Anchor::BottomRight => Point {
-                x: trigger_bounds.top_right().x,
-                y: trigger_bounds.origin.y - trigger_bounds.size.height,
-            },
-            // Fallback for LeftCenter/RightCenter – adjust as needed.
-            _ => trigger_bounds.origin,
-        }
-    }
 }
 
 impl ParentElement for Popover {
@@ -206,142 +270,7 @@ impl Styled for Popover {
     }
 }
 
-pub struct PopoverState {
-    focus_handle: FocusHandle,
-    pub(crate) tracked_focus_handle: Option<FocusHandle>,
-    previous_focus_handle: Option<FocusHandle>,
-    trigger_bounds: Bounds<Pixels>,
-    trigger_bounds_captured: bool,
-    open: bool,
-    on_open_change: Option<Rc<dyn Fn(&bool, &mut Window, &mut App)>>,
-
-    _dismiss_subscription: Option<Subscription>,
-}
-
-impl PopoverState {
-    pub fn new(default_open: bool, cx: &mut App) -> Self {
-        Self {
-            focus_handle: cx.focus_handle(),
-            tracked_focus_handle: None,
-            previous_focus_handle: None,
-            trigger_bounds: Bounds::default(),
-            trigger_bounds_captured: false,
-            open: default_open,
-            on_open_change: None,
-            _dismiss_subscription: None,
-        }
-    }
-
-    /// Check if the popover is open.
-    pub fn is_open(&self) -> bool {
-        self.open
-    }
-
-    /// Dismiss the popover if it is open.
-    pub fn dismiss(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.open {
-            self.toggle_open(window, cx);
-        }
-    }
-
-    /// Open the popover if it is closed.
-    pub fn show(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if !self.open {
-            self.toggle_open(window, cx);
-        }
-    }
-
-    fn set_open(&mut self, open: bool, cx: &mut Context<Self>) {
-        self.open = open;
-        if self.open {
-            GlobalState::global_mut(cx).register_deferred_popover(&self.focus_handle);
-        } else {
-            GlobalState::global_mut(cx).unregister_deferred_popover(&self.focus_handle);
-        }
-    }
-
-    fn toggle_open(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let opening = !self.open;
-        if opening {
-            // Save the focused element before opening, so we can restore it on close.
-            self.previous_focus_handle = window.focused(cx);
-        }
-        self.set_open(opening, cx);
-        if self.open {
-            let state = cx.entity();
-            let focus_handle = if let Some(tracked_focus_handle) = self.tracked_focus_handle.clone()
-            {
-                tracked_focus_handle
-            } else {
-                self.focus_handle.clone()
-            };
-            focus_handle.focus(window, cx);
-
-            self._dismiss_subscription =
-                Some(
-                    window.subscribe(&cx.entity(), cx, move |_, _: &DismissEvent, window, cx| {
-                        state.update(cx, |state, cx| {
-                            state.dismiss(window, cx);
-                        });
-                        window.refresh();
-                    }),
-                );
-        } else {
-            self._dismiss_subscription = None;
-            // Restore focus to the element that was focused before the popover opened.
-            if let Some(prev) = self.previous_focus_handle.take() {
-                if self.focus_handle.contains_focused(window, cx) {
-                    prev.focus(window, cx);
-                }
-            }
-        }
-
-        if let Some(callback) = self.on_open_change.as_ref() {
-            callback(&self.open, window, cx);
-        }
-        cx.notify();
-    }
-
-    fn on_action_cancel(&mut self, _: &Cancel, window: &mut Window, cx: &mut Context<Self>) {
-        self.dismiss(window, cx);
-    }
-}
-
-impl Focusable for PopoverState {
-    fn focus_handle(&self, _: &App) -> FocusHandle {
-        self.focus_handle.clone()
-    }
-}
-
-impl Render for PopoverState {
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        div()
-    }
-}
-
-impl EventEmitter<DismissEvent> for PopoverState {}
-
 impl Popover {
-    pub(crate) fn render_popover<E>(
-        anchor: Anchor,
-        position: Rc<Cell<Point<Pixels>>>,
-        content: E,
-        _: &mut Window,
-        _: &mut App,
-    ) -> Deferred
-    where
-        E: IntoElement + 'static,
-    {
-        deferred(
-            anchored()
-                .snap_to_window_with_margin(px(8.))
-                .anchor(anchor)
-                .position(position.get())
-                .child(div().relative().child(content)),
-        )
-        .with_priority(1)
-    }
-
     pub(crate) fn render_popover_content(
         anchor: Anchor,
         appearance: bool,
@@ -362,118 +291,45 @@ impl Popover {
 }
 
 impl RenderOnce for Popover {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let force_open = self.open;
-        let default_open = self.default_open;
-        let tracked_focus_handle = self.tracked_focus_handle.clone();
-        let state = window.use_keyed_state(self.id.clone(), cx, |_, cx| {
-            PopoverState::new(default_open, cx)
-        });
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+        let anchor = self.anchor;
+        let appearance = self.appearance;
+        let style = self.style;
+        let children = self.children;
+        let content = self.content;
 
-        state.update(cx, |state, cx| {
-            if let Some(tracked_focus_handle) = tracked_focus_handle {
-                state.tracked_focus_handle = Some(tracked_focus_handle);
-            }
-            state.on_open_change = self.on_open_change.clone();
-            if let Some(force_open) = force_open {
-                state.set_open(force_open, cx);
-            }
-        });
-
-        let open = state.read(cx).open;
-        let focus_handle = state.read(cx).focus_handle.clone();
-        let trigger_bounds = state.read(cx).trigger_bounds;
-        let trigger_bounds_captured = state.read(cx).trigger_bounds_captured;
-
-        let Some(trigger) = self.trigger else {
-            return div().id("empty");
-        };
-
-        let parent_view_id = window.current_view();
-
-        // Shared cell so the deferred Anchored element can read the real trigger bounds at
-        // prepaint time (after trigger's on_prepaint has already fired with the correct bounds).
-        let position = Rc::new(Cell::new(Self::resolved_corner(
-            self.anchor,
-            trigger_bounds,
-        )));
-
-        let el = div()
-            .id(self.id)
-            .child((trigger)(open, window, cx))
-            .on_mouse_down(self.mouse_button, {
-                let state = state.clone();
-                move |_, window, cx| {
-                    cx.stop_propagation();
-                    state.update(cx, |state, cx| {
-                        // We force set open to false to toggle it correctly.
-                        // Because if the mouse down out will toggle open first.
-                        state.set_open(open, cx);
-                        state.toggle_open(window, cx);
-                    });
-                    cx.notify(parent_view_id);
-                }
-            })
-            .on_prepaint({
-                let state = state.clone();
-                let position = position.clone();
-                let anchor = self.anchor;
-                move |bounds, window, cx| {
-                    position.set(Self::resolved_corner(anchor, bounds));
-                    let first_capture = state.update(cx, |state, _| {
-                        let first = !state.trigger_bounds_captured;
-                        state.trigger_bounds = bounds;
-                        state.trigger_bounds_captured = true;
-                        first
-                    });
-                    // On the very first bounds capture, request a new frame so the popover
-                    // renders at the correct position (outside the current paint cycle).
-                    if first_capture {
-                        window.request_animation_frame();
-                    }
-                }
-            });
-
-        if !open || !trigger_bounds_captured {
-            return el;
-        }
-
-        let popover_content =
-            Self::render_popover_content(self.anchor, self.appearance, window, cx)
-                .track_focus(&focus_handle)
-                .key_context(CONTEXT)
-                .on_action(window.listener_for(&state, PopoverState::on_action_cancel))
-                .when_some(self.content, |this, content| {
-                    this.child(state.update(cx, |state, cx| (content)(state, window, cx)))
-                })
-                .children(self.children)
-                .when(self.overlay_closable, |this| {
-                    this.on_mouse_down_out({
-                        let state = state.clone();
-                        move |_, window, cx| {
-                            state.update(cx, |state, cx| {
-                                state.dismiss(window, cx);
-                            });
-                            cx.notify(parent_view_id);
-                        }
+        BasePopover::new(self.id)
+            .anchor(self.anchor)
+            .mouse_button(self.mouse_button)
+            .default_open(self.default_open)
+            .overlay_closable(self.overlay_closable)
+            .content(move |state, window, cx| {
+                Self::render_popover_content(anchor, appearance, window, cx)
+                    .when_some(content, |this, content| {
+                        this.child((content)(state, window, cx))
                     })
-                })
-                .refine_style(&self.style);
-
-        el.child(Self::render_popover(
-            self.anchor,
-            position,
-            popover_content,
-            window,
-            cx,
-        ))
+                    .children(children)
+                    .refine_style(&style)
+            })
+            .when_some(self.trigger, |this, trigger| this.trigger_with(trigger))
+            .when_some(self.open, |this, open| this.open(open))
+            .when_some(self.tracked_focus_handle, |this, handle| {
+                this.track_focus(&handle)
+            })
+            .when_some(self.on_open_change, |this, callback| {
+                this.on_open_change(move |open, window, cx| callback(open, window, cx))
+            })
+            .into_any_element()
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gpui::MouseButton;
+    use crate::{button::Button, theme::Theme};
+    use gpui::{Bounds, Context, MouseButton, Point, Render, div, point, px, size};
+    use gpui_base::Popup as BasePopup;
+    use std::{cell::RefCell, rc::Rc};
 
     #[test]
     fn test_popover_builder_chaining() {
@@ -506,28 +362,160 @@ mod tests {
             },
         };
 
-        let pos = Popover::resolved_corner(Anchor::TopLeft, bounds);
+        let pos = BasePopup::resolved_corner(Anchor::TopLeft, bounds);
         assert_eq!(pos.x, px(100.));
         assert_eq!(pos.y, px(100.));
 
-        let pos = Popover::resolved_corner(Anchor::TopCenter, bounds);
+        let pos = BasePopup::resolved_corner(Anchor::TopCenter, bounds);
         assert_eq!(pos.x, px(200.));
         assert_eq!(pos.y, px(100.));
 
-        let pos = Popover::resolved_corner(Anchor::TopRight, bounds);
+        let pos = BasePopup::resolved_corner(Anchor::TopRight, bounds);
         assert_eq!(pos.x, px(300.));
         assert_eq!(pos.y, px(100.));
 
-        let pos = Popover::resolved_corner(Anchor::BottomLeft, bounds);
+        let pos = BasePopup::resolved_corner(Anchor::BottomLeft, bounds);
         assert_eq!(pos.x, px(100.));
         assert_eq!(pos.y, px(50.));
 
-        let pos = Popover::resolved_corner(Anchor::BottomCenter, bounds);
+        let pos = BasePopup::resolved_corner(Anchor::BottomCenter, bounds);
         assert_eq!(pos.x, px(200.));
         assert_eq!(pos.y, px(50.));
 
-        let pos = Popover::resolved_corner(Anchor::BottomRight, bounds);
+        let pos = BasePopup::resolved_corner(Anchor::BottomRight, bounds);
         assert_eq!(pos.x, px(300.));
         assert_eq!(pos.y, px(50.));
+    }
+
+    struct PopoverHarness {
+        changes: Rc<RefCell<Vec<bool>>>,
+    }
+
+    impl Render for PopoverHarness {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            let changes = self.changes.clone();
+            Popover::new("runtime-popover")
+                .trigger(Button::new("runtime-trigger").label("Open").size(px(100.)))
+                .content(|_, _, _| {
+                    div()
+                        .debug_selector(|| "runtime-popover-content".into())
+                        .size(px(40.))
+                })
+                .on_open_change(move |open, _, _| changes.borrow_mut().push(*open))
+        }
+    }
+
+    #[gpui::test]
+    fn pointer_open_and_outside_dismiss_use_the_base_popup_host(cx: &mut gpui::TestAppContext) {
+        cx.update(|cx| {
+            gpui_base::GlobalState::init(cx);
+            cx.set_global(Theme::default());
+            init(cx);
+        });
+
+        let changes = Rc::new(RefCell::new(Vec::new()));
+        let (_, cx) = cx.add_window_view({
+            let changes = changes.clone();
+            move |_, _| PopoverHarness { changes }
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        cx.simulate_click(point(px(20.), px(20.)), Default::default());
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        assert!(cx.debug_bounds("runtime-popover-content").is_some());
+
+        cx.simulate_click(point(px(300.), px(300.)), Default::default());
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        assert!(cx.debug_bounds("runtime-popover-content").is_none());
+        // A change callback reports state transitions, not redundant dismissal
+        // requests. The base host may see both paths, but only the first closes.
+        assert_eq!(&*changes.borrow(), &[true, false]);
+    }
+
+    struct DefaultOpenHarness;
+
+    impl Render for DefaultOpenHarness {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            Popover::new("default-open-popover")
+                .default_open(true)
+                .trigger(Button::new("default-open-trigger").label("Open"))
+                .child(
+                    div()
+                        .debug_selector(|| "default-open-content".into())
+                        .size(px(40.)),
+                )
+        }
+    }
+
+    #[gpui::test]
+    fn default_open_is_forwarded_to_the_base_popover(cx: &mut gpui::TestAppContext) {
+        cx.update(|cx| {
+            gpui_base::GlobalState::init(cx);
+            cx.set_global(Theme::default());
+            init(cx);
+        });
+        let (_, cx) = cx.add_window_view(|_, _| DefaultOpenHarness);
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        assert!(cx.debug_bounds("default-open-content").is_some());
+    }
+
+    struct Harness {
+        open: bool,
+    }
+
+    impl Render for Harness {
+        fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+            div().size_full().when(self.open, |this| {
+                this.child(dropdown_popup(
+                    "dropdown",
+                    Bounds::new(point(px(0.), px(100.)), size(px(120.), px(30.))),
+                    div().debug_selector(|| "surface".into()).size(px(50.)),
+                    cx,
+                ))
+            })
+        }
+    }
+
+    /// A dropdown that reused one animation key across opens would play its
+    /// enter motion the first time and then appear already settled on every
+    /// open after that. That is invisible in any single frame and easy to
+    /// reintroduce by giving the animation a constant id, so it is pinned here.
+    #[gpui::test]
+    fn the_enter_motion_starts_over_every_time_the_dropdown_opens(cx: &mut gpui::TestAppContext) {
+        cx.update(crate::init);
+        let (view, window) = cx.add_window_view(|_, _| Harness { open: true });
+
+        window.update(|window, cx| window.draw(cx).clear(cx));
+        let opening = window.debug_bounds("surface").unwrap().origin;
+
+        // The animation runs off the wall clock, so settling is waited out
+        // rather than stepped. Several times the duration leaves room for a
+        // loaded machine.
+        std::thread::sleep(DROPDOWN_ENTER_DURATION * 4);
+        window.update(|window, cx| window.draw(cx).clear(cx));
+        let settled = window.debug_bounds("surface").unwrap().origin;
+
+        assert!(
+            opening.y < settled.y,
+            "the surface should slide down into place, from {opening:?} to {settled:?}",
+        );
+
+        for open in [false, true] {
+            window.update(|window, cx| {
+                view.update(cx, |this, cx| {
+                    this.open = open;
+                    cx.notify();
+                });
+                window.draw(cx).clear(cx);
+            });
+        }
+
+        let reopening = window.debug_bounds("surface").unwrap().origin;
+        assert!(
+            reopening.y < settled.y,
+            "reopening should start the motion over at {opening:?} rather than showing a \
+             settled surface, but the first frame was already at {reopening:?}",
+        );
     }
 }

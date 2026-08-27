@@ -37,7 +37,7 @@ impl ChatExample {
             div()
                 .max_w(px(420.))
                 .p_3()
-                .rounded_lg()
+                .rounded(cx.theme().radius_lg)
                 .bg(if mine {
                     cx.theme().primary.opacity(0.1)
                 } else {

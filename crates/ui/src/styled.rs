@@ -1,561 +1,190 @@
-use crate::ActiveTheme;
+pub use crate::component_traits::{Collapsible, Disableable, Selectable};
+pub use crate::sizing::{Sizable, Size, StyleSized};
 use gpui::{
-    App, BoxShadow, Corners, DefiniteLength, Div, Edges, FocusHandle, Hsla, ParentElement, Pixels,
-    Refineable, StyleRefinement, Styled, Window, div, point, px,
+    App, BoxShadow, Corners, Edges, Hsla, ParentElement, Pixels, StyleRefinement, Styled, Window,
+    div, hsla, px,
 };
-use serde::{Deserialize, Serialize};
+pub use gpui_base::{FocusableExt, RoleOverride, StyledExt, box_shadow, h_flex, v_flex};
 
-/// Returns a `Div` as horizontal flex layout.
-#[inline(always)]
-pub fn h_flex() -> Div {
-    div().h_flex()
-}
+use crate::ActiveTheme as _;
 
-/// Returns a `Div` as vertical flex layout.
-#[inline(always)]
-pub fn v_flex() -> Div {
-    div().v_flex()
-}
+const FOCUS_RING_WIDTH: Pixels = px(3.);
+const FOCUS_RING_OPACITY: f32 = 0.5;
 
-/// Create a [`BoxShadow`] like CSS.
+/// Ink every layer of a surface's shadow carries — the `rgb(0 0 0 / 0.1)`
+/// shadcn/ui spends at each elevation.
+const SURFACE_SHADOW_INK: f32 = 0.1;
+
+/// Ink of the hairline ring standing in for a popover's border.
 ///
-/// e.g:
+/// shadcn/ui draws no border on a popup surface at all: its edge is a 1px
+/// `rgb(0 0 0 / 0.1)` ring spent as a shadow layer. Because the ring is
+/// translucent the shadow shows *through* it, which is what makes the edge read
+/// as part of one grounded surface rather than as an outline with a separate
+/// shadow below it. An opaque border cannot reproduce that — a border composites
+/// over the element's own background, not over the shadow.
+const POPOVER_RING_INK: f32 = 0.1;
+
+/// The colour of a popup surface's hairline ring in this theme.
 ///
-/// If CSS is `box-shadow: 0 0 10px 0 rgba(0, 0, 0, 0.1);`
+/// shadcn spends black on it in light mode and white in dark
+/// (`oklch(1 0 0 / 10%)`), so it follows the foreground rather than the border
+/// token: a fixed black ring would all but vanish on a dark surface.
 ///
-/// Then the equivalent in Rust is `box_shadow(0., 0., 10., 0., hsla(0., 0., 0., 0.1))`
-#[inline(always)]
-pub fn box_shadow(
-    x: impl Into<Pixels>,
-    y: impl Into<Pixels>,
-    blur: impl Into<Pixels>,
-    spread: impl Into<Pixels>,
-    color: Hsla,
-) -> BoxShadow {
-    BoxShadow {
-        offset: point(x.into(), y.into()),
-        blur_radius: blur.into(),
-        spread_radius: spread.into(),
-        inset: false,
-        color,
-    }
+pub(crate) fn popover_ring(cx: &App) -> Hsla {
+    cx.theme().foreground.alpha(POPOVER_RING_INK)
 }
 
-macro_rules! font_weight {
-    ($fn:ident, $const:ident) => {
-        /// [docs](https://tailwindcss.com/docs/font-weight)
-        #[inline]
-        fn $fn(self) -> Self {
-            self.font_weight(gpui::FontWeight::$const)
-        }
-    };
+/// shadcn/ui's popup surface shadow — a hairline `ring` plus `shadow-md` — at
+/// `strength` of its full ink.
+///
+/// Callers animating a surface in pass a rising `strength`; a resting surface
+/// passes `1.0`.
+///
+/// The two blurred layers use Tailwind's radii **halved**, which is the
+/// conversion CSS requires and not a taste adjustment. CSS defines a box
+/// shadow's blur radius as twice the gaussian's standard deviation, while GPUI's
+/// shader takes the field as the deviation itself (`gaussian(y, sigma)`).
+/// Copying Tailwind's `6px` and `4px` across therefore spreads the shadow over
+/// twice the distance, which is why [`Styled::shadow_md`] reads as a wide grey
+/// haze next to a browser's compact one.
+///
+/// Measured against shadcn's own render, this lands within a luminance step of
+/// it the whole way down the falloff.
+///
+/// The ring is taken as a colour rather than read from the theme here so that an
+/// animation can hold it across frames, where no `App` is in hand.
+pub(crate) fn popover_shadow(ring: Hsla, strength: f32) -> Vec<BoxShadow> {
+    let strength = strength.clamp(0., 1.);
+    let ink = hsla(0., 0., 0., SURFACE_SHADOW_INK * strength);
+    vec![
+        // The ring, sitting in the 1px band outside the surface. No blur, so it
+        // takes the shader's crisp path rather than the gaussian one.
+        BoxShadow::new(px(0.), px(0.), ring.alpha(ring.a * strength))
+            .blur_radius(px(0.))
+            .spread_radius(px(1.)),
+        BoxShadow::new(px(0.), px(4.), ink)
+            .blur_radius(px(3.))
+            .spread_radius(px(-1.)),
+        BoxShadow::new(px(0.), px(2.), ink)
+            .blur_radius(px(2.))
+            .spread_radius(px(-2.)),
+    ]
 }
 
-/// Extends [`gpui::Styled`] with specific styling methods.
-#[cfg_attr(
-    any(feature = "inspector", debug_assertions),
-    gpui_macros::derive_inspector_reflection
-)]
-pub trait StyledExt: Styled + Sized {
-    /// Refine the style of this element, applying the given style refinement.
-    fn refine_style(mut self, style: &StyleRefinement) -> Self {
-        self.style().refine(style);
-        self
-    }
+/// shadcn/ui's `shadow-lg`, the elevation it lifts a toast to, at `strength` of
+/// its full ink.
+///
+/// A toast sits higher than a popover and is built differently: shadcn gives it
+/// a real 1px border rather than the translucent ring it puts on a popup, so
+/// there is no ring layer here. Its corner radius is left to the caller.
+///
+/// The radii are Tailwind's halved, for the reason [`popover_shadow`] explains.
+pub(crate) fn toast_shadow(strength: f32) -> Vec<BoxShadow> {
+    let ink = hsla(0., 0., 0., SURFACE_SHADOW_INK * strength.clamp(0., 1.));
+    vec![
+        BoxShadow::new(px(0.), px(10.), ink)
+            .blur_radius(px(7.5))
+            .spread_radius(px(-3.)),
+        BoxShadow::new(px(0.), px(4.), ink)
+            .blur_radius(px(3.))
+            .spread_radius(px(-4.)),
+    ]
+}
 
-    /// Apply self into a horizontal flex layout.
-    #[inline(always)]
-    fn h_flex(self) -> Self {
-        self.flex().flex_row().items_center()
-    }
+/// shadcn/ui's `shadow-sm`, the elevation it spends on a control raised out of
+/// the container it sits in — the active pill of a segmented tab bar — at full
+/// ink.
+///
+/// Unlike a popover or a toast this surface is not floating over the page: it
+/// sits *inside* a trough only a few pixels wider than itself, and that trough
+/// clips. Both are reasons to keep the falloff tight — there is no room for a
+/// wide one, and a wide one would read as grime against the trough wall rather
+/// than as lift.
+///
+/// The radii are Tailwind's halved, for the reason [`popover_shadow`] explains:
+/// CSS defines a box shadow's blur radius as twice the gaussian's standard
+/// deviation, while GPUI's shader takes the field as the deviation itself
+/// (`gaussian(y, sigma)`). Copying Tailwind's `3px` and `2px` across therefore
+/// spreads the shadow over twice the distance, which is why
+/// [`Styled::shadow_sm`] leaves a haze around a 24px pill where shadcn draws a
+/// compact line.
+pub(crate) fn raised_shadow() -> Vec<BoxShadow> {
+    let ink = hsla(0., 0., 0., SURFACE_SHADOW_INK);
+    vec![
+        BoxShadow::new(px(0.), px(1.), ink).blur_radius(px(1.5)),
+        BoxShadow::new(px(0.), px(1.), ink)
+            .blur_radius(px(1.))
+            .spread_radius(px(-1.)),
+    ]
+}
 
-    /// Apply self into a vertical flex layout.
-    #[inline(always)]
-    fn v_flex(self) -> Self {
-        self.flex().flex_col()
-    }
-
-    /// Apply paddings to the element.
-    fn paddings<L>(self, paddings: impl Into<Edges<L>>) -> Self
+/// Finished styles that read the theme.
+///
+/// Separate from [`StyledExt`], which holds neutral helpers that make no
+/// visual decisions. Everything here does: it reaches into the theme and
+/// produces a specific look, which is why it belongs above the base layer.
+pub trait ThemeStyled: Styled + Sized {
+    /// Give this element the focus appearance the framework's own controls
+    /// use: its border tinted with the focus colour, and the ring outside it.
+    ///
+    /// The ring is dropped when [`crate::Theme::focus_ring`] is off, leaving
+    /// the tinted border — an application whose layout clips its containers can
+    /// turn it off rather than finding room for the ring in each of them.
+    ///
+    /// Calling this turns the ring on; gate it with `when` for the conditions
+    /// that decide whether the control shows one at all — its focus state,
+    /// [`FocusableExt::focus_ring`], appearance, and so on.
+    ///
+    /// The ring sits outside the element's border, so an ancestor that clips
+    /// its content will cut it off — leave it a few pixels of room, or don't
+    /// clip.
+    fn focus_ring_style(self, window: &Window, cx: &App) -> Self
     where
-        L: Into<DefiniteLength> + Clone + Default + std::fmt::Debug + PartialEq,
-    {
-        let paddings = paddings.into();
-        self.pt(paddings.top.into())
-            .pb(paddings.bottom.into())
-            .pl(paddings.left.into())
-            .pr(paddings.right.into())
-    }
+        Self: ParentElement;
 
-    /// Apply margins to the element.
-    fn margins<L>(self, margins: impl Into<Edges<L>>) -> Self
+    /// Give this element the surface, edge, shadow and radius of a popover.
+    ///
+    /// This is the one surface every popup shares — Popover, PopupMenu, Select,
+    /// Combobox, DatePicker and the editor's hover popovers — so they cannot
+    /// drift apart. See [`popover_shadow`] for what the shadow is modelled on.
+    fn popover_style(self, cx: &App) -> Self;
+
+    /// Round this element as far as its size allows — a circle if it is square,
+    /// a pill if it is not — unless the theme squares its corners.
+    ///
+    /// Use this instead of [`gpui::Styled::rounded_full`] on anything the theme
+    /// owns. A hardcoded `rounded_full` survives [`crate::Theme::radius`] being
+    /// set to zero, which leaves avatars, badge dots and slider thumbs round in
+    /// a UI that is square everywhere else. See [`crate::Theme::radius_full`].
+    fn rounded_full_style(self, cx: &App) -> Self {
+        self.rounded(cx.theme().radius_full())
+    }
+}
+
+impl<T: Styled + Sized> ThemeStyled for T {
+    /// Draw the focus ring the framework's own controls use.
+    ///
+    /// Calling this turns the ring on; gate it with `when` for the conditions
+    /// that decide whether the control shows one at all — its focus state,
+    /// [`crate::FocusableExt::focus_ring`], appearance, and so on.
+    ///
+    /// The ring sits outside the element's border, so an ancestor that clips
+    /// its content will cut it off — leave it a few pixels of room, or don't
+    /// clip.
+    fn focus_ring_style(mut self, window: &Window, cx: &App) -> Self
     where
-        L: Into<DefiniteLength> + Clone + Default + std::fmt::Debug + PartialEq,
+        Self: ParentElement,
     {
-        let margins = margins.into();
-        self.mt(margins.top.into())
-            .mb(margins.bottom.into())
-            .ml(margins.left.into())
-            .mr(margins.right.into())
-    }
-
-    /// Render a border with a width of 1px, color red
-    fn debug_red(self) -> Self {
-        if cfg!(debug_assertions) {
-            self.border_1().border_color(crate::red_500())
-        } else {
-            self
-        }
-    }
-
-    /// Render a border with a width of 1px, color blue
-    fn debug_blue(self) -> Self {
-        if cfg!(debug_assertions) {
-            self.border_1().border_color(crate::blue_500())
-        } else {
-            self
-        }
-    }
-
-    /// Render a border with a width of 1px, color yellow
-    fn debug_yellow(self) -> Self {
-        if cfg!(debug_assertions) {
-            self.border_1().border_color(crate::yellow_500())
-        } else {
-            self
-        }
-    }
-
-    /// Render a border with a width of 1px, color green
-    fn debug_green(self) -> Self {
-        if cfg!(debug_assertions) {
-            self.border_1().border_color(crate::green_500())
-        } else {
-            self
-        }
-    }
-
-    /// Render a border with a width of 1px, color pink
-    fn debug_pink(self) -> Self {
-        if cfg!(debug_assertions) {
-            self.border_1().border_color(crate::pink_500())
-        } else {
-            self
-        }
-    }
-
-    /// Render a 1px blue border, when if the element is focused
-    fn debug_focused(self, focus_handle: &FocusHandle, window: &Window, cx: &App) -> Self {
-        if cfg!(debug_assertions) {
-            if focus_handle.contains_focused(window, cx) {
-                self.debug_blue()
-            } else {
-                self
-            }
-        } else {
-            self
-        }
-    }
-
-    /// Render a border with a width of 1px, color ring color
-    #[inline]
-    fn focused_border(self, cx: &App) -> Self {
-        self.border_1().border_color(cx.theme().ring)
-    }
-
-    font_weight!(font_thin, THIN);
-    font_weight!(font_extralight, EXTRA_LIGHT);
-    font_weight!(font_light, LIGHT);
-    font_weight!(font_normal, NORMAL);
-    font_weight!(font_medium, MEDIUM);
-    font_weight!(font_semibold, SEMIBOLD);
-    font_weight!(font_bold, BOLD);
-    font_weight!(font_extrabold, EXTRA_BOLD);
-    font_weight!(font_black, BLACK);
-
-    /// Set as Popover style
-    #[inline]
-    fn popover_style(self, cx: &App) -> Self {
-        self.bg(cx.theme().tokens.popover)
-            .text_color(cx.theme().popover_foreground)
-            .border_1()
-            .border_color(cx.theme().border)
-            .shadow_lg()
-            .rounded(cx.theme().radius)
-    }
-
-    /// Set corner radii for the element.
-    fn corner_radii(self, radius: Corners<Pixels>) -> Self {
-        self.rounded_tl(radius.top_left)
-            .rounded_tr(radius.top_right)
-            .rounded_bl(radius.bottom_left)
-            .rounded_br(radius.bottom_right)
-    }
-}
-
-impl<E: Styled> StyledExt for E {}
-
-/// A size for elements.
-#[derive(Clone, Default, Copy, PartialEq, Eq, Debug, Deserialize, Serialize)]
-pub enum Size {
-    Size(Pixels),
-    XSmall,
-    Small,
-    #[default]
-    Medium,
-    Large,
-}
-
-impl Size {
-    fn as_f32(&self) -> f32 {
-        match self {
-            Size::Size(val) => val.as_f32(),
-            Size::XSmall => 0.,
-            Size::Small => 1.,
-            Size::Medium => 2.,
-            Size::Large => 3.,
-        }
-    }
-
-    /// Returns the size as a static string.
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Size::XSmall => "xs",
-            Size::Small => "sm",
-            Size::Medium => "md",
-            Size::Large => "lg",
-            Size::Size(_) => "custom",
-        }
-    }
-
-    /// Create a Size from a static string.
-    ///
-    /// - "xs" or "xsmall"
-    /// - "sm" or "small"
-    /// - "md" or "medium"
-    /// - "lg" or "large"
-    ///
-    /// Any other value will return Size::Medium.
-    pub fn from_str(size: &str) -> Self {
-        match size.to_lowercase().as_str() {
-            "xs" | "xsmall" => Size::XSmall,
-            "sm" | "small" => Size::Small,
-            "md" | "medium" => Size::Medium,
-            "lg" | "large" => Size::Large,
-            _ => Size::Medium,
-        }
-    }
-
-    /// Returns the height for table row.
-    #[inline]
-    pub fn table_row_height(&self) -> Pixels {
-        match self {
-            Size::Size(size) => *size,
-            Size::XSmall => px(26.),
-            Size::Small => px(30.),
-            Size::Large => px(40.),
-            _ => px(32.),
-        }
-    }
-
-    /// Returns the padding for a table cell.
-    #[inline]
-    pub fn table_cell_padding(&self) -> Edges<Pixels> {
-        match self {
-            Size::XSmall => Edges {
-                top: px(2.),
-                bottom: px(2.),
-                left: px(4.),
-                right: px(4.),
-            },
-            Size::Small => Edges {
-                top: px(3.),
-                bottom: px(3.),
-                left: px(6.),
-                right: px(6.),
-            },
-            Size::Large => Edges {
-                top: px(8.),
-                bottom: px(8.),
-                left: px(12.),
-                right: px(12.),
-            },
-            _ => Edges {
-                top: px(4.),
-                bottom: px(4.),
-                left: px(8.),
-                right: px(8.),
-            },
-        }
-    }
-
-    /// Returns a smaller size.
-    pub fn smaller(&self) -> Self {
-        match self {
-            Size::XSmall => Size::XSmall,
-            Size::Small => Size::XSmall,
-            Size::Medium => Size::Small,
-            Size::Large => Size::Medium,
-            Size::Size(val) => Size::Size(*val * 0.2),
-        }
-    }
-
-    /// Returns a larger size.
-    pub fn larger(&self) -> Self {
-        match self {
-            Size::XSmall => Size::Small,
-            Size::Small => Size::Medium,
-            Size::Medium => Size::Large,
-            Size::Large => Size::Large,
-            Size::Size(val) => Size::Size(*val * 1.2),
-        }
-    }
-
-    /// Return the max size between two sizes.
-    ///
-    /// e.g. `Size::XSmall.max(Size::Small)` will return `Size::XSmall`.
-    pub fn max(&self, other: Self) -> Self {
-        match (self, other) {
-            (Size::Size(a), Size::Size(b)) => Size::Size(px(a.as_f32().min(b.as_f32()))),
-            (Size::Size(a), _) => Size::Size(*a),
-            (_, Size::Size(b)) => Size::Size(b),
-            (a, b) if a.as_f32() < b.as_f32() => *a,
-            _ => other,
-        }
-    }
-
-    /// Return the min size between two sizes.
-    ///
-    /// e.g. `Size::XSmall.min(Size::Small)` will return `Size::Small`.
-    pub fn min(&self, other: Self) -> Self {
-        match (self, other) {
-            (Size::Size(a), Size::Size(b)) => Size::Size(px(a.as_f32().max(b.as_f32()))),
-            (Size::Size(a), _) => Size::Size(*a),
-            (_, Size::Size(b)) => Size::Size(b),
-            (a, b) if a.as_f32() > b.as_f32() => *a,
-            _ => other,
-        }
-    }
-
-    /// Returns the horizontal input padding.
-    pub fn input_px(&self) -> Pixels {
-        match self {
-            Self::Large => px(12.),
-            Self::Medium => px(10.),
-            Self::Small => px(8.),
-            Self::XSmall => px(4.),
-            _ => px(8.),
-        }
-    }
-
-    /// Returns the vertical input padding.
-    pub fn input_py(&self) -> Pixels {
-        match self {
-            Size::Large => px(10.),
-            Size::Medium => px(8.),
-            Size::Small => px(2.),
-            Size::XSmall => px(0.),
-            _ => px(2.),
-        }
-    }
-}
-
-impl From<Pixels> for Size {
-    fn from(size: Pixels) -> Self {
-        Size::Size(size)
-    }
-}
-
-/// A trait for defining element that can be selected.
-#[allow(patterns_in_fns_without_body)]
-pub trait Selectable: Sized {
-    /// Set the selected state of the element.
-    fn selected(mut self, selected: bool) -> Self;
-
-    /// Returns true if the element is selected.
-    fn is_selected(&self) -> bool;
-
-    /// Set is the element mouse right clicked, default do nothing.
-    fn secondary_selected(self, _: bool) -> Self {
-        self
-    }
-}
-
-/// A trait for defining element that can be disabled.
-#[allow(patterns_in_fns_without_body)]
-pub trait Disableable {
-    /// Set the disabled state of the element.
-    fn disabled(mut self, disabled: bool) -> Self;
-}
-
-/// A trait for setting the size of an element.
-/// Size::Medium is use by default.
-#[allow(patterns_in_fns_without_body)]
-pub trait Sizable: Sized {
-    /// Set the ui::Size of this element.
-    ///
-    /// Also can receive a `ButtonSize` to convert to `IconSize`,
-    /// Or a `Pixels` to set a custom size: `px(30.)`
-    fn with_size(mut self, size: impl Into<Size>) -> Self;
-
-    /// Set to Size::XSmall
-    #[inline(always)]
-    fn xsmall(self) -> Self {
-        self.with_size(Size::XSmall)
-    }
-
-    /// Set to Size::Small
-    #[inline(always)]
-    fn small(self) -> Self {
-        self.with_size(Size::Small)
-    }
-
-    /// Set to Size::Large
-    #[inline(always)]
-    fn large(self) -> Self {
-        self.with_size(Size::Large)
-    }
-}
-
-#[allow(unused)]
-pub trait StyleSized<T: Styled> {
-    fn input_text_size(self, size: Size) -> Self;
-    fn input_size(self, size: Size) -> Self;
-    fn input_pl(self, size: Size) -> Self;
-    fn input_pr(self, size: Size) -> Self;
-    fn input_px(self, size: Size) -> Self;
-    fn input_py(self, size: Size) -> Self;
-    fn input_h(self, size: Size) -> Self;
-    fn list_size(self, size: Size) -> Self;
-    fn list_px(self, size: Size) -> Self;
-    fn list_py(self, size: Size) -> Self;
-    /// Apply size with the given `Size`.
-    fn size_with(self, size: Size) -> Self;
-    /// Apply the table cell size (Font size, padding) with the given `Size`.
-    fn table_cell_size(self, size: Size) -> Self;
-    fn button_text_size(self, size: Size) -> Self;
-}
-
-impl<T: Styled> StyleSized<T> for T {
-    #[inline]
-    fn input_text_size(self, size: Size) -> Self {
-        match size {
-            Size::XSmall => self.text_xs(),
-            Size::Small => self.text_sm(),
-            Size::Medium => self.text_sm(),
-            Size::Large => self.text_base(),
-            Size::Size(size) => self.text_size(size * 0.875),
-        }
-    }
-
-    #[inline]
-    fn input_size(self, size: Size) -> Self {
-        self.input_px(size).input_py(size).input_h(size)
-    }
-
-    #[inline]
-    fn input_pl(self, size: Size) -> Self {
-        self.pl(size.input_px())
-    }
-
-    #[inline]
-    fn input_pr(self, size: Size) -> Self {
-        self.pr(size.input_px())
-    }
-
-    #[inline]
-    fn input_px(self, size: Size) -> Self {
-        self.px(size.input_px())
-    }
-
-    #[inline]
-    fn input_py(self, size: Size) -> Self {
-        self.py(size.input_py())
-    }
-
-    #[inline]
-    fn input_h(self, size: Size) -> Self {
-        match size {
-            Size::Large => self.h_11(),
-            Size::Medium => self.h_8(),
-            Size::Small => self.h_6(),
-            Size::XSmall => self.h_5(),
-            _ => self.h_6(),
-        }
-    }
-
-    #[inline]
-    fn list_size(self, size: Size) -> Self {
-        self.list_px(size).list_py(size).input_text_size(size)
-    }
-
-    #[inline]
-    fn list_px(self, size: Size) -> Self {
-        match size {
-            Size::Small => self.px_2(),
-            _ => self.px_3(),
-        }
-    }
-
-    #[inline]
-    fn list_py(self, size: Size) -> Self {
-        match size {
-            Size::Large => self.py_2(),
-            Size::Medium => self.py_1(),
-            Size::Small => self.py_0p5(),
-            _ => self.py_1(),
-        }
-    }
-
-    #[inline]
-    fn size_with(self, size: Size) -> Self {
-        match size {
-            Size::Large => self.size_11(),
-            Size::Medium => self.size_8(),
-            Size::Small => self.size_5(),
-            Size::XSmall => self.size_4(),
-            Size::Size(size) => self.size(size),
-        }
-    }
-
-    #[inline]
-    fn table_cell_size(self, size: Size) -> Self {
-        let padding = size.table_cell_padding();
-        match size {
-            Size::XSmall => self.text_sm(),
-            Size::Small => self.text_sm(),
-            _ => self,
-        }
-        .pl(padding.left)
-        .pr(padding.right)
-        .pt(padding.top)
-        .pb(padding.bottom)
-    }
-
-    fn button_text_size(self, size: Size) -> Self {
-        match size {
-            Size::XSmall => self.text_xs(),
-            Size::Small => self.text_sm(),
-            _ => self.text_base(),
-        }
-    }
-}
-
-pub(crate) trait FocusableExt<T: ParentElement + Styled + Sized> {
-    /// Add focus ring to the element.
-    fn focus_ring(self, is_focused: bool, margins: Pixels, window: &Window, cx: &App) -> Self;
-}
-
-impl<T: ParentElement + Styled + Sized> FocusableExt<T> for T {
-    fn focus_ring(mut self, is_focused: bool, margins: Pixels, window: &Window, cx: &App) -> Self {
-        if !is_focused {
-            return self;
+        // The ring is painted outside the border, so a clipping ancestor cuts
+        // it off. An application whose layout clips heavily turns it off in the
+        // theme and keeps the tinted border, which takes no space.
+        if !cx.theme().focus_ring {
+            return self.border_color(cx.theme().ring);
         }
 
-        const RING_BORDER_WIDTH: Pixels = px(1.5);
         let rem_size = window.rem_size();
         let style = self.style();
-
         let border_widths = Edges::<Pixels> {
             top: style
                 .border_widths
@@ -578,8 +207,6 @@ impl<T: ParentElement + Styled + Sized> FocusableExt<T> for T {
                 .map(|v| v.to_pixels(rem_size))
                 .unwrap_or_default(),
         };
-
-        // Update the radius based on element's corner radii and the ring border width.
         let radius = Corners::<Pixels> {
             top_left: style
                 .corner_radii
@@ -602,17 +229,15 @@ impl<T: ParentElement + Styled + Sized> FocusableExt<T> for T {
                 .map(|v| v.to_pixels(rem_size))
                 .unwrap_or_default(),
         }
-        .map(|v| *v + RING_BORDER_WIDTH);
+        .map(|value| *value + FOCUS_RING_WIDTH);
+        let mut ring_style = StyleRefinement::default();
+        ring_style.corner_radii.top_left = Some(radius.top_left.into());
+        ring_style.corner_radii.top_right = Some(radius.top_right.into());
+        ring_style.corner_radii.bottom_left = Some(radius.bottom_left.into());
+        ring_style.corner_radii.bottom_right = Some(radius.bottom_right.into());
+        let inset = FOCUS_RING_WIDTH;
 
-        let mut inner_style = StyleRefinement::default();
-        inner_style.corner_radii.top_left = Some(radius.top_left.into());
-        inner_style.corner_radii.top_right = Some(radius.top_right.into());
-        inner_style.corner_radii.bottom_left = Some(radius.bottom_left.into());
-        inner_style.corner_radii.bottom_right = Some(radius.bottom_right.into());
-
-        let inset = RING_BORDER_WIDTH + margins;
-
-        self.child(
+        self.border_color(cx.theme().ring).child(
             div()
                 .flex_none()
                 .absolute()
@@ -620,84 +245,19 @@ impl<T: ParentElement + Styled + Sized> FocusableExt<T> for T {
                 .left(-(inset + border_widths.left))
                 .right(-(inset + border_widths.right))
                 .bottom(-(inset + border_widths.bottom))
-                .border(RING_BORDER_WIDTH)
-                .border_color(cx.theme().ring.alpha(0.2))
-                .refine_style(&inner_style),
+                .border(FOCUS_RING_WIDTH)
+                .border_color(cx.theme().ring.alpha(FOCUS_RING_OPACITY))
+                .refine_style(&ring_style),
         )
     }
-}
 
-/// A trait for defining element that can be collapsed.
-pub trait Collapsible {
-    fn collapsed(self, collapsed: bool) -> Self;
-    fn is_collapsed(&self) -> bool;
-}
-
-#[cfg(test)]
-mod tests {
-    use gpui::px;
-
-    use crate::Size;
-
-    #[test]
-    fn test_size_max_min() {
-        assert_eq!(Size::Small.min(Size::XSmall), Size::Small);
-        assert_eq!(Size::XSmall.min(Size::Small), Size::Small);
-        assert_eq!(Size::Small.min(Size::Medium), Size::Medium);
-        assert_eq!(Size::Medium.min(Size::Large), Size::Large);
-        assert_eq!(Size::Large.min(Size::Small), Size::Large);
-
-        assert_eq!(
-            Size::Size(px(10.)).min(Size::Size(px(20.))),
-            Size::Size(px(20.))
-        );
-
-        // Min
-        assert_eq!(Size::Small.max(Size::XSmall), Size::XSmall);
-        assert_eq!(Size::XSmall.max(Size::Small), Size::XSmall);
-        assert_eq!(Size::Small.max(Size::Medium), Size::Small);
-        assert_eq!(Size::Medium.max(Size::Large), Size::Medium);
-        assert_eq!(Size::Large.max(Size::Small), Size::Small);
-
-        assert_eq!(
-            Size::Size(px(10.)).max(Size::Size(px(20.))),
-            Size::Size(px(10.))
-        );
-    }
-
-    #[test]
-    fn test_size_as_str() {
-        assert_eq!(Size::XSmall.as_str(), "xs");
-        assert_eq!(Size::Small.as_str(), "sm");
-        assert_eq!(Size::Medium.as_str(), "md");
-        assert_eq!(Size::Large.as_str(), "lg");
-        assert_eq!(Size::Size(px(15.)).as_str(), "custom");
-    }
-
-    #[test]
-    fn test_table_row_height() {
-        assert_eq!(Size::XSmall.table_row_height(), px(26.));
-        assert_eq!(Size::Small.table_row_height(), px(30.));
-        assert_eq!(Size::Medium.table_row_height(), px(32.));
-        assert_eq!(Size::Large.table_row_height(), px(40.));
-        assert_eq!(Size::Size(px(48.)).table_row_height(), px(48.));
-    }
-
-    #[test]
-    fn test_size_from_str() {
-        assert_eq!(Size::from_str("xs"), Size::XSmall);
-        assert_eq!(Size::from_str("xsmall"), Size::XSmall);
-        assert_eq!(Size::from_str("sm"), Size::Small);
-        assert_eq!(Size::from_str("small"), Size::Small);
-        assert_eq!(Size::from_str("md"), Size::Medium);
-        assert_eq!(Size::from_str("medium"), Size::Medium);
-        assert_eq!(Size::from_str("lg"), Size::Large);
-        assert_eq!(Size::from_str("large"), Size::Large);
-        assert_eq!(Size::from_str("unknown"), Size::Medium);
-
-        // Case insensitive
-        assert_eq!(Size::from_str("XS"), Size::XSmall);
-        assert_eq!(Size::from_str("SMALL"), Size::Small);
-        assert_eq!(Size::from_str("Md"), Size::Medium);
+    fn popover_style(self, cx: &App) -> Self {
+        let theme = cx.theme();
+        // No border: the edge is the ring inside `popover_shadow`, which is how
+        // shadcn draws it and the only way the shadow can show through it.
+        self.bg(theme.popover)
+            .text_color(theme.popover_foreground)
+            .shadow(popover_shadow(popover_ring(cx), 1.))
+            .rounded(theme.radius)
     }
 }

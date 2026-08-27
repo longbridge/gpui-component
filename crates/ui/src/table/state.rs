@@ -515,11 +515,11 @@ where
         &self.visible_range
     }
 
-    /// Dump table data.
+    /// Dump the header row of the table.
     ///
-    /// Returns a tuple of (headers, rows) where each row is a vector of cell values.
-    pub fn dump(&self, cx: &App) -> (Vec<String>, Vec<Vec<String>>) {
-        // Get header row
+    /// Batched exporters can read the headers once with this, then stream the
+    /// rows with [`Self::dump_range`].
+    pub fn headers(&self, cx: &App) -> Vec<String> {
         let columns_count = self.delegate.columns_count(cx);
         let mut headers = Vec::with_capacity(columns_count);
         for col_ix in 0..columns_count {
@@ -527,10 +527,34 @@ where
             headers.push(column.name.to_string());
         }
 
-        // Get data rows
+        headers
+    }
+
+    /// Dump table data.
+    ///
+    /// Returns a tuple of (headers, rows) where each row is a vector of cell values.
+    ///
+    /// This materializes the complete table in memory. For large tables, prefer
+    /// [`Self::dump_range`] and process rows in batches.
+    pub fn dump(&self, cx: &App) -> (Vec<String>, Vec<Vec<String>>) {
+        self.dump_range(0..self.delegate.rows_count(cx), cx)
+    }
+
+    /// Dump table data for the specified row range.
+    ///
+    /// Returns the same `(headers, rows)` shape as [`Self::dump`], with only
+    /// the rows inside the clamped range.
+    ///
+    /// The requested range is clamped to the table's current row count. For
+    /// large tables, callers can invoke this repeatedly with bounded ranges.
+    pub fn dump_range(&self, range: Range<usize>, cx: &App) -> (Vec<String>, Vec<Vec<String>>) {
+        let columns_count = self.delegate.columns_count(cx);
         let rows_count = self.delegate.rows_count(cx);
-        let mut rows = Vec::with_capacity(rows_count);
-        for row_ix in 0..rows_count {
+        let start = range.start.min(rows_count);
+        let end = range.end.min(rows_count).max(start);
+
+        let mut rows = Vec::with_capacity(end - start);
+        for row_ix in start..end {
             let mut row = Vec::with_capacity(columns_count);
             for col_ix in 0..columns_count {
                 row.push(self.delegate.cell_text(row_ix, col_ix, cx));
@@ -538,7 +562,7 @@ where
             rows.push(row);
         }
 
-        (headers, rows)
+        (self.headers(cx), rows)
     }
 
     /// Re-compute the header layout from the current delegate.
@@ -2174,19 +2198,21 @@ where
 
     fn render_vertical_scrollbar(
         &mut self,
-
         _: &mut Window,
         _: &mut Context<Self>,
     ) -> Option<impl IntoElement> {
-        let header_rows = self.header_layout.len().max(1);
         Some(
             div()
                 .absolute()
-                .top(self.options.size.table_row_height() * header_rows as f32)
+                .top(self.options.size.table_row_height() * self.header_layout.len().max(1) as f32)
                 .right_0()
                 .bottom_0()
                 .w(Scrollbar::width())
-                .child(Scrollbar::vertical(&self.vertical_scroll_handle).max_fps(60)),
+                .child(
+                    Scrollbar::vertical(&self.vertical_scroll_handle)
+                        .viewport_from_layout()
+                        .max_fps(60),
+                ),
         )
     }
 
@@ -2201,7 +2227,7 @@ where
             .right_0()
             .bottom_0()
             .h(Scrollbar::width())
-            .child(Scrollbar::horizontal(&self.horizontal_scroll_handle))
+            .child(Scrollbar::horizontal(&self.horizontal_scroll_handle).viewport_from_layout())
     }
 }
 

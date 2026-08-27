@@ -1,6 +1,6 @@
 use std::{rc::Rc, sync::Arc};
 
-use gpui::{Background, Hsla, SharedString, px};
+use gpui::{Background, BoxShadow, FontWeight, Hsla, SharedString, px};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -9,7 +9,7 @@ use crate::highlighter::{HighlightTheme, HighlightThemeStyle};
 use super::color::{
     try_parse_background, try_parse_background_clamped, try_parse_color, try_parse_theme_color,
 };
-use super::{Colorize, Theme, ThemeColor, ThemeMode, ThemeToken, ThemeTokens};
+use super::{Colorize, SemanticThemeTokens, Theme, ThemeColor, ThemeMode, ThemeToken, ThemeTokens};
 
 fn try_parse_theme_token(value: &str) -> anyhow::Result<ThemeToken> {
     Ok(ThemeToken::new(
@@ -77,6 +77,174 @@ pub struct ThemeConfig {
     pub highlight: Option<HighlightThemeStyle>,
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct SemanticThemeConfig {
+    pub colors: SemanticColorConfig,
+    pub radius: SemanticRadiusConfig,
+    pub spacing: SemanticSpacingConfig,
+    pub typography: SemanticTypographyConfig,
+    pub shadow: SemanticShadowConfig,
+}
+
+/// Standalone semantic theme configuration file.
+///
+/// This wrapper is intentionally separate from [`ThemeConfig`] so adding
+/// semantic tokens does not change the legacy public struct shape.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct SemanticThemeConfigFile {
+    pub tokens: SemanticThemeConfig,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct SemanticColorConfig {
+    pub background: Option<SharedString>,
+    pub foreground: Option<SharedString>,
+    pub surface: Option<SharedString>,
+    pub surface_foreground: Option<SharedString>,
+    pub primary: Option<SharedString>,
+    pub primary_foreground: Option<SharedString>,
+    pub secondary: Option<SharedString>,
+    pub secondary_foreground: Option<SharedString>,
+    pub muted: Option<SharedString>,
+    pub muted_foreground: Option<SharedString>,
+    pub accent: Option<SharedString>,
+    pub accent_foreground: Option<SharedString>,
+    pub destructive: Option<SharedString>,
+    pub destructive_foreground: Option<SharedString>,
+    pub border: Option<SharedString>,
+    pub input: Option<SharedString>,
+    pub ring: Option<SharedString>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct SemanticRadiusConfig {
+    pub none: Option<f32>,
+    pub sm: Option<f32>,
+    pub md: Option<f32>,
+    pub lg: Option<f32>,
+    pub xl: Option<f32>,
+    pub full: Option<f32>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct SemanticSpacingConfig {
+    pub xxs: Option<f32>,
+    pub xs: Option<f32>,
+    pub sm: Option<f32>,
+    pub md: Option<f32>,
+    pub lg: Option<f32>,
+    pub xl: Option<f32>,
+    pub xxl: Option<f32>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct SemanticTextStyleConfig {
+    pub size: Option<f32>,
+    pub line_height: Option<f32>,
+    pub weight: Option<FontWeight>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct SemanticTypographyConfig {
+    pub sans: Option<SharedString>,
+    pub mono: Option<SharedString>,
+    pub xs: SemanticTextStyleConfig,
+    pub sm: SemanticTextStyleConfig,
+    pub md: SemanticTextStyleConfig,
+    pub lg: SemanticTextStyleConfig,
+    pub xl: SemanticTextStyleConfig,
+    pub mono_md: SemanticTextStyleConfig,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct SemanticShadowConfig {
+    pub sm: Option<Vec<BoxShadow>>,
+    pub md: Option<Vec<BoxShadow>>,
+    pub lg: Option<Vec<BoxShadow>>,
+}
+
+impl SemanticThemeConfig {
+    pub(crate) fn apply_to(&self, tokens: &mut SemanticThemeTokens) {
+        macro_rules! apply_color {
+            ($field:ident) => {
+                if let Some(value) = &self.colors.$field
+                    && let Ok(value) = try_parse_color(value)
+                {
+                    tokens.colors.$field = value;
+                }
+            };
+        }
+        apply_color!(background);
+        apply_color!(foreground);
+        apply_color!(surface);
+        apply_color!(surface_foreground);
+        apply_color!(primary);
+        apply_color!(primary_foreground);
+        apply_color!(secondary);
+        apply_color!(secondary_foreground);
+        apply_color!(muted);
+        apply_color!(muted_foreground);
+        apply_color!(accent);
+        apply_color!(accent_foreground);
+        apply_color!(destructive);
+        apply_color!(destructive_foreground);
+        apply_color!(border);
+        apply_color!(input);
+        apply_color!(ring);
+
+        macro_rules! apply_pixels {
+            ($config:expr, $tokens:expr, $($field:ident),+ $(,)?) => {
+                $(if let Some(value) = $config.$field { $tokens.$field = px(value); })+
+            };
+        }
+        apply_pixels!(self.radius, tokens.radius, none, sm, md, lg, xl, full);
+        apply_pixels!(self.spacing, tokens.spacing, xxs, xs, sm, md, lg, xl, xxl);
+
+        if let Some(value) = &self.typography.sans {
+            tokens.typography.sans = value.clone();
+        }
+        if let Some(value) = &self.typography.mono {
+            tokens.typography.mono = value.clone();
+        }
+        apply_text_style(&self.typography.xs, &mut tokens.typography.xs);
+        apply_text_style(&self.typography.sm, &mut tokens.typography.sm);
+        apply_text_style(&self.typography.md, &mut tokens.typography.md);
+        apply_text_style(&self.typography.lg, &mut tokens.typography.lg);
+        apply_text_style(&self.typography.xl, &mut tokens.typography.xl);
+        apply_text_style(&self.typography.mono_md, &mut tokens.typography.mono_md);
+
+        if let Some(value) = &self.shadow.sm {
+            tokens.shadow.sm = value.clone();
+        }
+        if let Some(value) = &self.shadow.md {
+            tokens.shadow.md = value.clone();
+        }
+        if let Some(value) = &self.shadow.lg {
+            tokens.shadow.lg = value.clone();
+        }
+    }
+}
+
+fn apply_text_style(config: &SemanticTextStyleConfig, token: &mut gpui_base::TextStyleToken) {
+    if let Some(value) = config.size {
+        token.size = px(value);
+    }
+    if let Some(value) = config.line_height {
+        token.line_height = px(value);
+    }
+    if let Some(value) = config.weight {
+        token.weight = value;
+    }
+}
+
 #[derive(Debug, Default, Clone, JsonSchema, Serialize, Deserialize)]
 pub struct ThemeConfigColors {
     /// Used for accents such as hover background on MenuItem, ListItem, etc.
@@ -88,9 +256,6 @@ pub struct ThemeConfigColors {
     /// Accordion background color.
     #[serde(rename = "accordion.background")]
     pub accordion: Option<SharedString>,
-    /// Accordion hover background color.
-    #[serde(rename = "accordion.hover.background")]
-    pub accordion_hover: Option<SharedString>,
     /// Default background color.
     #[serde(rename = "background")]
     pub background: Option<SharedString>,
@@ -738,7 +903,6 @@ impl ThemeColor {
         apply_background_color!(accent, fallback = tokens.secondary);
         apply_color!(accent_foreground, fallback = self.foreground);
         apply_background_color!(accordion, fallback = tokens.background);
-        apply_background_color!(accordion_hover, fallback = self.accent.opacity(0.8));
         apply_background_color!(
             group_box,
             fallback = self
@@ -943,9 +1107,85 @@ impl Theme {
 
 #[cfg(test)]
 mod tests {
-    use gpui::{linear_color_stop, linear_gradient};
+    use gpui::{linear_color_stop, linear_gradient, px};
 
     use crate::{Theme, ThemeConfig, ThemeMode, ThemeSet, try_parse_color};
+
+    #[test]
+    fn test_semantic_theme_config_parses_and_roundtrips() {
+        let value = serde_json::json!({
+            "name": "Semantic",
+            "mode": "dark",
+            "tokens": {
+                "colors": {
+                    "surface": "#111827",
+                    "surface_foreground": "#f9fafb",
+                    "primary": "#2563eb",
+                    "destructive": "#dc2626"
+                },
+                "radius": { "sm": 2.0, "md": 6.0, "lg": 10.0 },
+                "spacing": { "xs": 4.0, "md": 12.0, "xl": 24.0 },
+                "typography": {
+                    "sans": "Inter",
+                    "md": { "size": 15.0, "line_height": 22.0 }
+                }
+            }
+        });
+        let config: super::SemanticThemeConfigFile = serde_json::from_value(value).unwrap();
+        let serialized = serde_json::to_string(&config).unwrap();
+        let reparsed: super::SemanticThemeConfigFile = serde_json::from_str(&serialized).unwrap();
+        let semantic = reparsed.tokens;
+
+        assert_eq!(semantic.colors.surface.as_deref(), Some("#111827"));
+        assert_eq!(semantic.colors.destructive.as_deref(), Some("#dc2626"));
+        assert_eq!(semantic.radius.lg, Some(10.0));
+        assert_eq!(semantic.spacing.xl, Some(24.0));
+        assert_eq!(semantic.typography.sans.as_deref(), Some("Inter"));
+        assert_eq!(semantic.typography.md.line_height, Some(22.0));
+
+        let mut theme = Theme::default();
+        let resolved = theme.apply_semantic_config_str(&serialized).unwrap();
+        assert_eq!(theme.primary, try_parse_color("#2563eb").unwrap());
+        assert_eq!(resolved.spacing.xl, px(24.));
+        assert_eq!(resolved.typography.md.line_height, px(22.));
+    }
+
+    #[test]
+    fn test_semantic_tokens_override_legacy_generic_fields_only() {
+        let config = serde_json::from_value::<super::SemanticThemeConfigFile>(serde_json::json!({
+            "tokens": {
+                "colors": { "primary": "#2563eb", "destructive": "#b91c1c" },
+                "spacing": { "md": 14.0 },
+                "typography": { "md": { "size": 15.0 } }
+            }
+        }))
+        .unwrap();
+        let mut theme = Theme::default();
+        let component_color = theme.button_primary;
+        let resolved = theme.apply_semantic_config(&config.tokens);
+
+        assert_eq!(theme.primary, try_parse_color("#2563eb").unwrap());
+        assert_eq!(theme.danger, try_parse_color("#b91c1c").unwrap());
+        assert_eq!(theme.button_primary, component_color);
+        assert_eq!(resolved.spacing.md, px(14.));
+        assert_eq!(resolved.typography.md.size, px(15.));
+    }
+
+    #[test]
+    fn test_legacy_config_without_semantic_tokens_is_unchanged() {
+        let config = serde_json::from_value::<ThemeConfig>(serde_json::json!({
+            "name": "Legacy",
+            "mode": "light",
+            "radius": 7,
+            "colors": { "primary.background": "#7c3aed" }
+        }))
+        .unwrap();
+        let mut theme = Theme::default();
+        theme.apply_config(&std::rc::Rc::new(config));
+        assert_eq!(theme.primary, try_parse_color("#7c3aed").unwrap());
+        assert_eq!(theme.radius, px(7.));
+        assert_eq!(theme.semantic_tokens().spacing, Default::default());
+    }
 
     #[test]
     fn test_apply_config_preserves_gradient_background_and_solid_color_fallback() {

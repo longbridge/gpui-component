@@ -88,7 +88,7 @@ impl SettingFieldElement for OpenURLSettingField {
         Button::new("open-url")
             .outline()
             .label(self.label.clone())
-            .with_size(options.size)
+            .with_size(options.size())
             .on_click(move |_, _window, cx| {
                 cx.open_url(url.as_str());
             })
@@ -345,15 +345,15 @@ impl SettingsStory {
                                 .justify_between()
                                 .flex_wrap()
                                 .gap_3()
-                                .child("This is a custom element item by use SettingItem::element.")
-                                .when(options.disabled, |this| this.opacity(0.5))
+                                .child("View source, report issues, and follow project updates.")
+                                .when(options.is_disabled(), |this| this.opacity(0.5))
                                 .child(
                                     Button::new("action")
                                         .icon(IconName::Globe)
                                         .label("Repository...")
                                         .outline()
-                                        .with_size(options.size)
-                                        .disabled(options.disabled)
+                                        .with_size(options.size())
+                                        .disabled(options.is_disabled())
                                         .on_click(|_, _, cx| {
                                             cx.open_url(
                                                 "https://github.com/longbridge/gpui-component",
@@ -372,7 +372,7 @@ impl SettingsStory {
                                     .children(["Comfortable", "Compact"].map(|value| {
                                         Button::new(value)
                                             .label(value)
-                                            .with_size(options.size)
+                                            .with_size(options.size())
                                             .map(|this| {
                                                 if current == value {
                                                     this.primary()
@@ -502,7 +502,7 @@ impl SettingsStory {
                                 Button::new("open-url")
                                     .outline()
                                     .label("Website...")
-                                    .with_size(options.size)
+                                    .with_size(options.size())
                                     .on_click(|_, _window, cx| {
                                         cx.open_url("https://longbridge.github.io/gpui-component/");
                                     })

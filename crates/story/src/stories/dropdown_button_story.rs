@@ -1,14 +1,14 @@
-use gpui::{ Anchor,
-    Action, App, AppContext as _, Context, Entity, Focusable, IntoElement,
-    ParentElement as _, Render, Styled as _, Window, prelude::FluentBuilder as _,
+use gpui::{
+    Action, Anchor, App, AppContext as _, Context, Entity, Focusable, InteractiveElement,
+    IntoElement, ParentElement as _, Render, SharedString, Styled as _, Window,
+    prelude::FluentBuilder as _,
 };
 use serde::Deserialize;
 
-use crate::section;
+use crate::{ChangeStorySize, section, story_toolbar};
 use gpui_component::{
-    ActiveTheme, Disableable, Selectable as _, Sizable as _, Theme,
+    ActiveTheme, Disableable, Selectable as _, Sizable as _, Size, Theme,
     button::{Button, ButtonVariants as _, DropdownButton},
-    checkbox::Checkbox,
     h_flex, v_flex,
 };
 
@@ -19,6 +19,13 @@ enum ButtonAction {
     Loading,
     Selected,
     Compact,
+    Shadow,
+    ExportCsv,
+    ExportPdf,
+    SaveCopy,
+    SaveTemplate,
+    OpenQuarterlyReport,
+    OpenWatchlistLayout,
 }
 
 pub struct DropdownButtonStory {
@@ -27,6 +34,8 @@ pub struct DropdownButtonStory {
     loading: bool,
     selected: bool,
     compact: bool,
+    size: Size,
+    last_action: SharedString,
 }
 
 impl DropdownButtonStory {
@@ -37,6 +46,8 @@ impl DropdownButtonStory {
             loading: false,
             selected: false,
             compact: false,
+            size: Size::Medium,
+            last_action: "Nothing yet".into(),
         })
     }
 }
@@ -71,157 +82,143 @@ impl Render for DropdownButtonStory {
         let loading = self.loading;
         let selected = self.selected;
         let compact = self.compact;
+        let view = cx.entity();
 
         v_flex()
             .gap_6()
+            .on_action(cx.listener(|this, action: &ChangeStorySize, _, cx| {
+                this.size = action.0;
+                cx.notify();
+            }))
+            .on_action(cx.listener(|this, action: &ButtonAction, window, cx| {
+                match action {
+                    ButtonAction::Disabled => this.disabled = !this.disabled,
+                    ButtonAction::Loading => this.loading = !this.loading,
+                    ButtonAction::Selected => this.selected = !this.selected,
+                    ButtonAction::Compact => this.compact = !this.compact,
+                    ButtonAction::Shadow => {
+                        let mut theme = cx.theme().clone();
+                        theme.shadow = !theme.shadow;
+                        cx.set_global::<Theme>(theme);
+                        window.refresh();
+                    }
+                    ButtonAction::ExportCsv => this.last_action = "Exported as CSV".into(),
+                    ButtonAction::ExportPdf => this.last_action = "Exported as PDF".into(),
+                    ButtonAction::SaveCopy => this.last_action = "Saved as a new file".into(),
+                    ButtonAction::SaveTemplate => this.last_action = "Saved as a template".into(),
+                    ButtonAction::OpenQuarterlyReport => {
+                        this.last_action = "Opened Quarterly Report.gpui".into()
+                    }
+                    ButtonAction::OpenWatchlistLayout => {
+                        this.last_action = "Opened Watchlist Layout.gpui".into()
+                    }
+                }
+                cx.notify();
+            }))
+            .child(story_toolbar(self.size).dropdown_child(
+                Button::new("dropdown-button-options").label("Options"),
+                {
+                    let shadow = cx.theme().shadow;
+                    move |menu, _, _| {
+                        menu.menu_with_check("Disabled", disabled, Box::new(ButtonAction::Disabled))
+                            .menu_with_check("Loading", loading, Box::new(ButtonAction::Loading))
+                            .menu_with_check("Selected", selected, Box::new(ButtonAction::Selected))
+                            .menu_with_check("Compact", compact, Box::new(ButtonAction::Compact))
+                            .menu_with_check("Shadow", shadow, Box::new(ButtonAction::Shadow))
+                    }
+                },
+            ))
             .child(
                 h_flex()
-                    .gap_3()
-                    .child(
-                        Checkbox::new("disabled-button")
-                            .label("Disabled")
-                            .checked(self.disabled)
-                            .on_click(cx.listener(|view, _, _, cx| {
-                                view.disabled = !view.disabled;
-                                cx.notify();
-                            })),
-                    )
-                    .child(
-                        Checkbox::new("loading-button")
-                            .label("Loading")
-                            .checked(self.loading)
-                            .on_click(cx.listener(|view, _, _, cx| {
-                                view.loading = !view.loading;
-                                cx.notify();
-                            })),
-                    )
-                    .child(
-                        Checkbox::new("selected-button")
-                            .label("Selected")
-                            .checked(self.selected)
-                            .on_click(cx.listener(|view, _, _, cx| {
-                                view.selected = !view.selected;
-                                cx.notify();
-                            })),
-                    )
-                    .child(
-                        Checkbox::new("compact-button")
-                            .label("Compact")
-                            .checked(self.compact)
-                            .on_click(cx.listener(|view, _, _, cx| {
-                                view.compact = !view.compact;
-                                cx.notify();
-                            })),
-                    )
-                    .child(
-                        Checkbox::new("shadow-button")
-                            .label("Shadow")
-                            .checked(cx.theme().shadow)
-                            .on_click(cx.listener(|_, _, window, cx| {
-                                let mut theme = cx.theme().clone();
-                                theme.shadow = !theme.shadow;
-                                cx.set_global::<Theme>(theme);
-                                window.refresh();
-                            })),
-                    ),
+                    .gap_1()
+                    .text_sm()
+                    .text_color(cx.theme().muted_foreground)
+                    .child("Last action:")
+                    .child(self.last_action.clone()),
             )
             .child(
-                section("Dropdown Button").child(
-                    DropdownButton::new("btn0")
+                section("Basic split").child(
+                    DropdownButton::new("export")
+                        .with_size(self.size)
                         .primary()
-                        .button(Button::new("btn").label("Primary Dropdown"))
-                        .when(self.compact, |this| this.compact())
-                        .loading(self.loading)
+                        .button(
+                            Button::new("export-default")
+                                .label("Export")
+                                .when(self.compact, |this| this.compact())
+                                .on_click({
+                                    let view = view.clone();
+                                    move |_, _, cx| {
+                                        view.update(cx, |this, cx| {
+                                            this.last_action = "Exported current view".into();
+                                            cx.notify();
+                                        });
+                                    }
+                                }),
+                        )
                         .disabled(self.disabled)
                         .selected(selected)
-                        .dropdown_menu_with_anchor(Anchor::BottomRight, move |this, _, _| {
-                            this.menu_with_check(
-                                "Disabled",
-                                disabled,
-                                Box::new(ButtonAction::Disabled),
-                            )
-                            .menu_with_check("Loading", loading, Box::new(ButtonAction::Loading))
-                            .menu_with_check("Selected", selected, Box::new(ButtonAction::Selected))
-                            .menu_with_check(
-                                "Compact",
-                                compact,
-                                Box::new(ButtonAction::Compact),
-                            )
+                        .dropdown_menu_with_anchor(Anchor::TopRight, move |this, _, _| {
+                            this.menu("Export all rows (.csv)", Box::new(ButtonAction::ExportCsv))
+                                .menu("Download report (.pdf)", Box::new(ButtonAction::ExportPdf))
                         }),
                 ),
             )
             .child(
-                section("Small Size").child(
-                    DropdownButton::new("btn-sm")
-                        .small()
-                        .button(Button::new("btn").label("Small Dropdown"))
-                        .when(self.compact, |this| this.compact())
-                        .loading(self.loading)
-                        .disabled(self.disabled)
-                        .selected(selected)
-                        .dropdown_menu(move |this, _, _| {
-                            this.menu_with_check(
-                                "Disabled",
-                                disabled,
-                                Box::new(ButtonAction::Disabled),
-                            )
-                            .menu_with_check("Loading", loading, Box::new(ButtonAction::Loading))
-                            .menu_with_check("Selected", selected, Box::new(ButtonAction::Selected))
-                            .menu_with_check(
-                                "Compact",
-                                compact,
-                                Box::new(ButtonAction::Compact),
-                            )
-                        }),
-                ),
-            )
-            .child(
-                section("Outline").child(
-                    DropdownButton::new("btn-outline")
+                section("Inner button options").child(
+                    DropdownButton::new("save")
+                        .with_size(self.size)
                         .outline()
-                        .danger()
-                        .button(Button::new("btn").label("Outline Dropdown"))
-                        .when(self.compact, |this| this.compact())
-                        .loading(self.loading)
-                        .disabled(self.disabled)
-                        .selected(selected)
+                        .button(
+                            Button::new("save-default")
+                                .label("Save")
+                                .tooltip("Save the current document")
+                                .when(compact, |this| this.compact())
+                                .loading(loading)
+                                .on_click({
+                                    let view = view.clone();
+                                    move |_, _, cx| {
+                                        view.update(cx, |this, cx| {
+                                            this.last_action = "Saved document".into();
+                                            cx.notify();
+                                        });
+                                    }
+                                }),
+                        )
+                        .disabled(disabled)
                         .dropdown_menu(move |this, _, _| {
-                            this.menu_with_check(
-                                "Disabled",
-                                disabled,
-                                Box::new(ButtonAction::Disabled),
-                            )
-                            .menu_with_check("Loading", loading, Box::new(ButtonAction::Loading))
-                            .menu_with_check("Selected", selected, Box::new(ButtonAction::Selected))
-                            .menu_with_check(
-                                "Compact",
-                                compact,
-                                Box::new(ButtonAction::Compact),
-                            )
+                            this.menu("Save as new file…", Box::new(ButtonAction::SaveCopy))
+                                .menu("Save as template…", Box::new(ButtonAction::SaveTemplate))
                         }),
                 ),
             )
             .child(
-                section("Ghost").child(
-                    DropdownButton::new("btn-ghost")
-                        .ghost()
-                        .button(Button::new("btn").label("Ghost Dropdown"))
-                        .when(self.compact, |this| this.compact())
-                        .loading(self.loading)
-                        .disabled(self.disabled)
+                section("Inherited styling").child(
+                    DropdownButton::new("recent")
+                        .button(
+                            Button::new("recent-default")
+                                .label("Open latest")
+                                .ghost()
+                                .small()
+                                .on_click({
+                                    let view = view.clone();
+                                    move |_, _, cx| {
+                                        view.update(cx, |this, cx| {
+                                            this.last_action = "Opened latest file".into();
+                                            cx.notify();
+                                        });
+                                    }
+                                }),
+                        )
                         .selected(selected)
+                        .disabled(disabled)
                         .dropdown_menu(move |this, _, _| {
-                            this.menu_with_check(
-                                "Disabled",
-                                disabled,
-                                Box::new(ButtonAction::Disabled),
+                            this.menu(
+                                "Quarterly Report.gpui",
+                                Box::new(ButtonAction::OpenQuarterlyReport),
                             )
-                            .menu_with_check("Loading", loading, Box::new(ButtonAction::Loading))
-                            .menu_with_check("Selected", selected, Box::new(ButtonAction::Selected))
-                            .menu_with_check(
-                                "Compact",
-                                compact,
-                                Box::new(ButtonAction::Compact),
+                            .menu(
+                                "Watchlist Layout.gpui",
+                                Box::new(ButtonAction::OpenWatchlistLayout),
                             )
                         }),
                 ),

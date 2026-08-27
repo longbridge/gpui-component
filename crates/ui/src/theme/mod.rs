@@ -1,14 +1,19 @@
 use crate::{
     highlighter::HighlightTheme, list::ListSettings, notification::NotificationSettings,
-    scroll::ScrollbarShow, sheet::SheetSettings,
+    scroll::ScrollbarMode, sheet::SheetSettings,
 };
-use gpui::{App, Global, Hsla, Pixels, SharedString, Window, WindowAppearance, px};
+use gpui::{App, Global, Hsla, IsZero as _, Pixels, SharedString, Window, WindowAppearance, px};
+pub use gpui_base::{
+    ColorTokens, RadiusTokens, SemanticThemeTokens, ShadowTokens, SpacingTokens, TextStyleToken,
+    TypographyTokens,
+};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{
     ops::{Deref, DerefMut},
     rc::Rc,
     sync::Arc,
+    time::Duration,
 };
 
 mod color;
@@ -40,10 +45,49 @@ impl ActiveTheme for App {
     }
 }
 
+fn default_true() -> bool {
+    true
+}
+
+/// The radius that rounds a shape as far as its own size allows, giving a
+/// circle or a pill. Any value past half the shorter side is clamped by the
+/// renderer, so this is simply "as round as it goes".
+const RADIUS_FULL: Pixels = px(9999.);
+
+/// How long the scrollbar stays visible after the last scroll, drag, or hover.
+const SCROLLBAR_IDLE: Duration = Duration::from_secs(2);
+/// How long the scrollbar takes to appear.
+const SCROLLBAR_ENTER: Duration = Duration::from_millis(300);
+/// How long the scrollbar takes to fade away once the idle hold expires.
+const SCROLLBAR_EXIT: Duration = Duration::from_millis(500);
+/// How long the thumb takes to reach its hovered or resting width.
+const SCROLLBAR_EXPAND: Duration = Duration::from_millis(300);
+
+/// The scrollbar motion this design system projects onto Base.
+///
+/// Scrolling and track hover reveal a scrollbar by fading it in place. In hover
+/// mode, pointing at the thumb slides it in from the nearest edge as it fades.
+fn scrollbar_motion(mode: ScrollbarMode) -> gpui_base::ScrollbarMotion {
+    gpui_base::ScrollbarMotion::default()
+        .with_idle(SCROLLBAR_IDLE)
+        .with_enter(SCROLLBAR_ENTER)
+        .with_exit(SCROLLBAR_EXIT)
+        .with_expand(SCROLLBAR_EXPAND)
+        .with_entrance(gpui_base::ScrollbarEntrance::Fade)
+        .with_thumb_hover_entrance(match mode {
+            ScrollbarMode::Scrolling | ScrollbarMode::Always => gpui_base::ScrollbarEntrance::Fade,
+            ScrollbarMode::Hover => gpui_base::ScrollbarEntrance::SlideAndFade,
+        })
+}
+
 /// The global theme configuration.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct Theme {
     pub colors: ThemeColor,
+    /// Component-specific resolved tokens retained for legacy compatibility.
+    ///
+    /// New application-owned presentation should use [`Self::semantic_tokens`]
+    /// rather than extending this legacy surface.
     #[serde(default)]
     pub tokens: ThemeTokens,
     pub highlight_theme: Arc<HighlightTheme>,
@@ -70,9 +114,18 @@ pub struct Theme {
     /// Radius for the large elements, e.g.: Dialog, Notification border radius.
     pub radius_lg: Pixels,
     pub shadow: bool,
+    /// Whether focused controls draw a ring outside their border, default true.
+    ///
+    /// The ring is painted outside the element, so any ancestor that clips its
+    /// content will cut it off. An application whose layout clips heavily can
+    /// turn it off here: focused controls then show only their tinted border,
+    /// which costs no space and cannot be clipped.
+    #[serde(default = "default_true")]
+    pub focus_ring: bool,
     pub transparent: Hsla,
     /// Show the scrollbar mode, default: Scrolling
-    pub scrollbar_show: ScrollbarShow,
+    #[serde(alias = "scrollbar_show")]
+    pub scrollbar_mode: ScrollbarMode,
     /// The notification setting.
     #[serde(skip)]
     pub notification: NotificationSettings,
@@ -118,6 +171,10 @@ impl Theme {
     }
 
     /// Returns the global theme mutable reference
+    ///
+    /// Changes to fields the Base layer mirrors — the radius, the colors, the
+    /// fonts — reach the scrollbar and resize handles only once
+    /// [`Theme::sync_base`] runs.
     #[inline(always)]
     pub fn global_mut(cx: &mut App) -> &mut Theme {
         cx.global_mut::<Theme>()
@@ -152,11 +209,23 @@ impl Theme {
 
     /// Sync the Scrollbar showing behavior with the system
     pub fn sync_scrollbar_appearance(cx: &mut App) {
-        Theme::global_mut(cx).scrollbar_show = if cx.should_auto_hide_scrollbars() {
-            ScrollbarShow::Scrolling
+        let mode = if cx.should_auto_hide_scrollbars() {
+            ScrollbarMode::Scrolling
         } else {
-            ScrollbarShow::Hover
+            ScrollbarMode::Hover
         };
+        Self::set_scrollbar_mode(mode, cx);
+    }
+
+    /// Changes the scrollbar display mode and synchronizes the Base projection.
+    pub fn set_scrollbar_mode(mode: ScrollbarMode, cx: &mut App) {
+        Theme::global_mut(cx).scrollbar_mode = mode;
+        let base_theme = gpui_base::Theme::global_mut(cx);
+        base_theme.scrollbar = base_theme
+            .scrollbar
+            .clone()
+            .with_mode(mode)
+            .with_motion(scrollbar_motion(mode));
     }
 
     /// Change the theme mode.
@@ -177,9 +246,72 @@ impl Theme {
             theme.apply_config(&theme.light_theme.clone());
         }
 
+        let base_theme = theme.base_theme();
+        cx.set_global(base_theme);
+
         if let Some(window) = window {
             window.refresh();
         }
+    }
+
+    /// This theme projected onto the Base layer, which owns the scrollbar and
+    /// resize handles and reads the semantic tokens.
+    fn base_theme(&self) -> gpui_base::Theme {
+        gpui_base::Theme {
+            appearance: if self.mode.is_dark() {
+                gpui_base::ThemeAppearance::Dark
+            } else {
+                gpui_base::ThemeAppearance::Light
+            },
+            tokens: self.semantic_tokens(),
+            scrollbar: gpui_base::ScrollbarTheme::new()
+                .with_mode(self.scrollbar_mode)
+                .with_motion(scrollbar_motion(self.scrollbar_mode))
+                .with_styles(
+                    gpui_base::ScrollbarStyles::default()
+                        .track(|style| style.bg(self.scrollbar))
+                        .track_hover(|style| style.bg(self.scrollbar))
+                        .track_active(|style| style.bg(self.scrollbar).border_color(self.border))
+                        .thumb(|style| style.bg(self.tokens.scrollbar_thumb).radius(self.radius))
+                        .thumb_hover(|style| {
+                            style
+                                .bg(self.tokens.scrollbar_thumb_hover)
+                                .radius(self.radius)
+                        })
+                        .thumb_active(|style| {
+                            style
+                                .bg(self.tokens.scrollbar_thumb_hover)
+                                .radius(self.radius)
+                        }),
+                ),
+            resizable: gpui_base::ResizableTheme {
+                handle: Some(self.border),
+                active_handle: Some(self.drag_border),
+            },
+        }
+    }
+
+    /// Push the current theme down to the Base layer.
+    ///
+    /// The Base layer holds its own copy of the theme — the semantic tokens
+    /// plus the scrollbar and resize-handle styles — because it paints those
+    /// without going through `gpui-component`. [`Theme::change`] refreshes that
+    /// copy, but writing to the theme's public fields directly does not, so a
+    /// scrollbar keeps painting with the radius and colors it was last given.
+    ///
+    /// Call this after mutating the theme through [`Theme::global_mut`]:
+    ///
+    /// ```ignore
+    /// Theme::global_mut(cx).radius = px(0.);
+    /// Theme::sync_base(cx);
+    /// ```
+    ///
+    /// It rebuilds the Base theme from scratch, so any style written straight
+    /// onto the Base global is replaced — the same thing [`Theme::change`]
+    /// does.
+    pub fn sync_base(cx: &mut App) {
+        let base_theme = Theme::global(cx).base_theme();
+        cx.set_global(base_theme);
     }
 
     /// Get the input background color.
@@ -203,6 +335,225 @@ impl Theme {
             .editor_background
             .unwrap_or_else(|| self.input_background())
     }
+
+    /// Returns a snapshot of the semantic design tokens represented by this
+    /// theme. The snapshot is computed from the legacy public fields so direct
+    /// mutations of those fields are reflected immediately.
+    pub fn semantic_tokens(&self) -> SemanticThemeTokens {
+        SemanticThemeTokens {
+            colors: self.color_tokens(),
+            radius: self.radius_tokens(),
+            spacing: self.spacing_tokens(),
+            typography: self.typography_tokens(),
+            shadow: self.shadow_tokens(),
+        }
+    }
+
+    pub fn color_tokens(&self) -> ColorTokens {
+        ColorTokens {
+            background: self.background,
+            foreground: self.foreground,
+            surface: self.popover,
+            surface_foreground: self.popover_foreground,
+            primary: self.primary,
+            primary_foreground: self.primary_foreground,
+            secondary: self.secondary,
+            secondary_foreground: self.secondary_foreground,
+            muted: self.muted,
+            muted_foreground: self.muted_foreground,
+            accent: self.accent,
+            accent_foreground: self.accent_foreground,
+            destructive: self.danger,
+            destructive_foreground: self.danger_foreground,
+            border: self.border,
+            input: self.input,
+            ring: self.ring,
+        }
+    }
+
+    /// The radius of a shape that reads as a circle or a pill — an avatar, a
+    /// slider thumb, a badge dot, a pill tab.
+    ///
+    /// A theme whose [`Theme::radius`] is zero squares these off too, so one
+    /// setting governs the whole UI instead of leaving a handful of
+    /// permanently round elements behind. Use it in place of
+    /// [`gpui::Styled::rounded_full`], or reach for
+    /// [`crate::ThemeStyled::rounded_full_style`] when styling an element.
+    pub fn radius_full(&self) -> Pixels {
+        if self.radius.is_zero() {
+            px(0.)
+        } else {
+            RADIUS_FULL
+        }
+    }
+
+    pub fn radius_tokens(&self) -> RadiusTokens {
+        RadiusTokens {
+            none: px(0.),
+            sm: self.radius / 2.,
+            md: self.radius,
+            lg: self.radius_lg,
+            xl: self.radius * 2.,
+            full: RADIUS_FULL,
+        }
+    }
+
+    pub fn spacing_tokens(&self) -> SpacingTokens {
+        SpacingTokens::default()
+    }
+
+    pub fn typography_tokens(&self) -> TypographyTokens {
+        let mut tokens = TypographyTokens::default();
+        tokens.sans = self.font_family.clone();
+        tokens.mono = self.mono_font_family.clone();
+        tokens.md.size = self.font_size;
+        tokens.mono_md.size = self.mono_font_size;
+        tokens
+    }
+
+    pub fn shadow_tokens(&self) -> ShadowTokens {
+        if self.shadow {
+            ShadowTokens::elevations(self.transparent.alpha(0.18))
+        } else {
+            ShadowTokens::default()
+        }
+    }
+
+    /// Applies the subset of semantic tokens representable by the legacy
+    /// theme. Scale-only spacing and elevation details have no legacy storage;
+    /// legacy components therefore keep their existing behavior.
+    pub fn apply_semantic_tokens(&mut self, tokens: &SemanticThemeTokens) {
+        let colors = tokens.colors;
+        self.background = colors.background;
+        self.foreground = colors.foreground;
+        self.popover = colors.surface;
+        self.popover_foreground = colors.surface_foreground;
+        self.primary = colors.primary;
+        self.primary_foreground = colors.primary_foreground;
+        self.secondary = colors.secondary;
+        self.secondary_foreground = colors.secondary_foreground;
+        self.muted = colors.muted;
+        self.muted_foreground = colors.muted_foreground;
+        self.accent = colors.accent;
+        self.accent_foreground = colors.accent_foreground;
+        self.danger = colors.destructive;
+        self.danger_foreground = colors.destructive_foreground;
+        self.border = colors.border;
+        self.input = colors.input;
+        self.ring = colors.ring;
+
+        self.tokens.background = colors.background.into();
+        self.tokens.popover = colors.surface.into();
+        self.tokens.primary = colors.primary.into();
+        self.tokens.secondary = colors.secondary.into();
+        self.tokens.muted = colors.muted.into();
+        self.tokens.accent = colors.accent.into();
+        self.tokens.danger = colors.destructive.into();
+
+        self.radius = tokens.radius.md;
+        self.radius_lg = tokens.radius.lg;
+        self.font_family = tokens.typography.sans.clone();
+        self.mono_font_family = tokens.typography.mono.clone();
+        self.font_size = tokens.typography.md.size;
+        self.mono_font_size = tokens.typography.mono_md.size;
+        self.shadow = !tokens.shadow.sm.is_empty()
+            || !tokens.shadow.md.is_empty()
+            || !tokens.shadow.lg.is_empty();
+    }
+
+    /// Resolves a standalone semantic configuration over the current legacy
+    /// theme without mutating either value.
+    pub fn resolve_semantic_config(&self, config: &SemanticThemeConfig) -> SemanticThemeTokens {
+        let mut tokens = self.semantic_tokens();
+        config.apply_to(&mut tokens);
+        tokens
+    }
+
+    /// Applies the legacy-representable part of a standalone semantic config
+    /// and returns the complete resolved snapshot for application-owned UI.
+    pub fn apply_semantic_config(&mut self, config: &SemanticThemeConfig) -> SemanticThemeTokens {
+        let tokens = self.resolve_semantic_config(config);
+        self.apply_semantic_tokens(&tokens);
+        tokens
+    }
+
+    /// Parses and applies a standalone `{ "tokens": ... }` semantic theme file.
+    pub fn apply_semantic_config_str(
+        &mut self,
+        content: &str,
+    ) -> anyhow::Result<SemanticThemeTokens> {
+        let config = serde_json::from_str::<SemanticThemeConfigFile>(content)?;
+        Ok(self.apply_semantic_config(&config.tokens))
+    }
+}
+
+#[cfg(test)]
+mod semantic_token_tests {
+    use gpui::{Hsla, IsZero as _, px};
+
+    use super::{RADIUS_FULL, Theme};
+
+    #[test]
+    fn semantic_colors_are_a_live_projection_of_legacy_fields() {
+        let mut theme = Theme::default();
+        let primary = Hsla::default().alpha(0.42);
+        theme.primary = primary;
+
+        assert_eq!(theme.color_tokens().primary, primary);
+        assert_eq!(theme.semantic_tokens().colors.primary, primary);
+    }
+
+    #[test]
+    fn applying_semantic_tokens_only_updates_generic_legacy_colors() {
+        let mut theme = Theme::default();
+        let component_color = theme.button_primary;
+        let mut tokens = theme.semantic_tokens();
+        tokens.colors.primary = Hsla::default().alpha(0.25);
+        tokens.colors.destructive = Hsla::default().alpha(0.75);
+        tokens.radius.md = px(10.);
+
+        theme.apply_semantic_tokens(&tokens);
+
+        assert_eq!(theme.primary, tokens.colors.primary);
+        assert_eq!(theme.tokens.primary.color, tokens.colors.primary);
+        assert_eq!(theme.danger, tokens.colors.destructive);
+        assert_eq!(theme.radius, px(10.));
+        assert_eq!(theme.button_primary, component_color);
+    }
+
+    #[test]
+    fn square_themes_square_off_pills_and_circles() {
+        let mut theme = Theme::default();
+        assert_eq!(theme.radius_full(), RADIUS_FULL);
+        assert_eq!(theme.radius_tokens().full, RADIUS_FULL);
+
+        // An application asking for square corners gets them everywhere, not
+        // just on the elements whose radius happens to come from `radius`.
+        theme.radius = px(0.);
+        assert_eq!(theme.radius_full(), px(0.));
+    }
+
+    #[test]
+    fn base_projection_carries_a_square_radius_to_the_scrollbar() {
+        let mut theme = Theme::default();
+        assert!(!theme.base_theme().tokens.radius.md.is_zero());
+
+        // The scrollbar paints from the Base layer's copy of the theme, so a
+        // square theme has to reach it or the thumb stays a pill.
+        theme.radius = px(0.);
+        assert!(theme.base_theme().tokens.radius.md.is_zero());
+    }
+
+    #[test]
+    fn disabled_legacy_shadows_project_to_empty_elevations() {
+        let mut theme = Theme::default();
+        theme.shadow = false;
+
+        let shadows = theme.shadow_tokens();
+        assert!(shadows.sm.is_empty());
+        assert!(shadows.md.is_empty());
+        assert!(shadows.lg.is_empty());
+    }
 }
 
 impl From<&ThemeColor> for Theme {
@@ -224,7 +575,8 @@ impl From<&ThemeColor> for Theme {
             radius: px(6.),
             radius_lg: px(8.),
             shadow: true,
-            scrollbar_show: ScrollbarShow::default(),
+            focus_ring: true,
+            scrollbar_mode: ScrollbarMode::default(),
             notification: NotificationSettings::default(),
             tile_grid_size: px(8.),
             tile_shadow: true,
@@ -282,5 +634,77 @@ impl From<WindowAppearance> for ThemeMode {
             WindowAppearance::Dark | WindowAppearance::VibrantDark => Self::Dark,
             WindowAppearance::Light | WindowAppearance::VibrantLight => Self::Light,
         }
+    }
+}
+
+#[cfg(test)]
+mod base_theme_projection_tests {
+    use super::*;
+    use gpui::TestAppContext;
+
+    #[gpui::test]
+    fn base_theme_tracks_initialization_and_mode_changes(cx: &mut TestAppContext) {
+        cx.update(|cx| {
+            init(cx);
+            assert_styled_projection(cx);
+
+            Theme::change(ThemeMode::Dark, None, cx);
+            assert_styled_projection(cx);
+
+            Theme::set_scrollbar_mode(ScrollbarMode::Always, cx);
+            assert_eq!(Theme::global(cx).scrollbar_mode, ScrollbarMode::Always);
+            assert_eq!(
+                gpui_base::Theme::global(cx).scrollbar.mode(),
+                gpui_base::ScrollbarMode::Always
+            );
+            assert_styled_projection(cx);
+        });
+    }
+
+    #[gpui::test]
+    fn scrollbar_motion_is_owned_here_and_projected_onto_base(cx: &mut TestAppContext) {
+        cx.update(|cx| {
+            init(cx);
+
+            // Base itself ships none of this timing.
+            let bare = gpui_base::ScrollbarMotion::default();
+            assert_eq!(bare.enter(), Duration::ZERO);
+            assert_eq!(bare.exit(), Duration::ZERO);
+            assert_eq!(bare.expand(), Duration::ZERO);
+
+            Theme::set_scrollbar_mode(ScrollbarMode::Scrolling, cx);
+            let motion = gpui_base::Theme::global(cx).scrollbar.motion();
+            assert_eq!(motion.idle(), SCROLLBAR_IDLE);
+            assert_eq!(motion.enter(), SCROLLBAR_ENTER);
+            assert_eq!(motion.exit(), SCROLLBAR_EXIT);
+            assert_eq!(motion.expand(), SCROLLBAR_EXPAND);
+            assert_eq!(
+                motion.entrance(),
+                gpui_base::ScrollbarEntrance::Fade,
+                "scroll-revealed scrollbars fade in without sliding"
+            );
+
+            Theme::set_scrollbar_mode(ScrollbarMode::Hover, cx);
+            let motion = gpui_base::Theme::global(cx).scrollbar.motion();
+            assert_eq!(motion.entrance(), gpui_base::ScrollbarEntrance::Fade);
+            assert_eq!(
+                motion.thumb_hover_entrance(),
+                gpui_base::ScrollbarEntrance::SlideAndFade
+            );
+        });
+    }
+
+    fn assert_styled_projection(cx: &App) {
+        let theme = Theme::global(cx);
+        let base = gpui_base::Theme::global(cx);
+
+        assert_eq!(base.tokens, theme.semantic_tokens());
+        assert_eq!(base.scrollbar.mode(), theme.scrollbar_mode);
+        assert_eq!(
+            base.scrollbar.motion(),
+            scrollbar_motion(theme.scrollbar_mode)
+        );
+        assert_eq!(base.resizable.handle, Some(theme.border));
+        assert_eq!(base.resizable.active_handle, Some(theme.drag_border));
     }
 }

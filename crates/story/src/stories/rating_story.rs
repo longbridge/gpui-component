@@ -1,15 +1,10 @@
 use gpui::{
-    App, AppContext, Context, Entity, Focusable, IntoElement, ParentElement, Render, Styled, Window,
+    App, AppContext, Context, Entity, Focusable, InteractiveElement, IntoElement, ParentElement,
+    Render, Styled, Window, px,
 };
-use gpui_component::{
-    ActiveTheme, IconName, Selectable as _, Sizable as _, Size,
-    button::{Button, ButtonGroup},
-    h_flex,
-    rating::Rating,
-    v_flex,
-};
+use gpui_component::{ActiveTheme, Size, rating::Rating, v_flex};
 
-use crate::section;
+use crate::{ChangeStorySize, section, story_toolbar};
 
 pub struct RatingStory {
     focus_handle: gpui::FocusHandle,
@@ -60,91 +55,35 @@ impl Render for RatingStory {
         v_flex()
             .w_full()
             .gap_3()
+            .on_action(cx.listener(|this, action: &ChangeStorySize, _, cx| {
+                this.size = action.0;
+                cx.notify();
+            }))
+            .child(story_toolbar(self.size))
             .child(
-                h_flex().w_full().gap_3().child(
-                    ButtonGroup::new("toggle-size")
-                        .outline()
-                        .compact()
-                        .child(
-                            Button::new("xsmall")
-                                .label("XSmall")
-                                .selected(self.size == Size::XSmall),
-                        )
-                        .child(
-                            Button::new("small")
-                                .label("Small")
-                                .selected(self.size == Size::Small),
-                        )
-                        .child(
-                            Button::new("medium")
-                                .label("Medium")
-                                .selected(self.size == Size::Medium),
-                        )
-                        .child(
-                            Button::new("large")
-                                .label("Large")
-                                .selected(self.size == Size::Large),
-                        )
-                        .on_click(cx.listener(|this, selecteds: &Vec<usize>, _, cx| {
-                            let size = match selecteds[0] {
-                                0 => Size::XSmall,
-                                1 => Size::Small,
-                                2 => Size::Medium,
-                                3 => Size::Large,
-                                _ => unreachable!(),
-                            };
-                            this.size = size;
-                            cx.notify();
-                        })),
-                ),
+                section("Default")
+                    .description("Select a value directly from the rating.")
+                    .w_128()
+                    .child(
+                        v_flex()
+                            .w_full()
+                            .gap_3()
+                            .justify_center()
+                            .items_center()
+                            .child(
+                                Rating::new("rating-1")
+                                    .with_size(self.size)
+                                    .value(self.value)
+                                    .max(5)
+                                    .on_click(cx.listener(|this, value: &usize, _, cx| {
+                                        this.value = *value;
+                                        cx.notify();
+                                    })),
+                            ),
+                    ),
             )
             .child(
-                section("Basic Rating").max_w_md().child(
-                    v_flex()
-                        .w_full()
-                        .gap_3()
-                        .justify_center()
-                        .items_center()
-                        .child(
-                            Rating::new("rating-1")
-                                .with_size(self.size)
-                                .value(self.value)
-                                .max(5)
-                                .on_click(cx.listener(|this, value: &usize, _, cx| {
-                                    this.value = *value;
-                                    cx.notify();
-                                })),
-                        )
-                        .child(
-                            h_flex()
-                                .gap_x_2()
-                                .child(
-                                    Button::new("r-dec")
-                                        .small()
-                                        .outline()
-                                        .icon(IconName::Minus)
-                                        .on_click(cx.listener(|this, _, _, cx| {
-                                            let v = this.value.saturating_sub(1);
-                                            this.value = v;
-                                            cx.notify();
-                                        })),
-                                )
-                                .child(
-                                    Button::new("r-inc")
-                                        .small()
-                                        .outline()
-                                        .icon(IconName::Plus)
-                                        .on_click(cx.listener(|this, _, _, cx| {
-                                            let v = (this.value + 1).min(5);
-                                            this.value = v;
-                                            cx.notify();
-                                        })),
-                                ),
-                        ),
-                ),
-            )
-            .child(
-                section("Disabled").max_w_md().child(
+                section("Disabled").w(px(480.)).child(
                     Rating::new("rating-2")
                         .with_size(self.size)
                         .value(2)
@@ -154,9 +93,9 @@ impl Render for RatingStory {
                 ),
             )
             .child(
-                section("Custom Color").max_w_md().child(
+                section("Color").w(px(480.)).child(
                     Rating::new("rating-3")
-                        .large()
+                        .with_size(self.size)
                         .value(self.value)
                         .color(cx.theme().green)
                         .max(5),

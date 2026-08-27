@@ -49,7 +49,7 @@ impl Story for TooltipStory {
     }
 
     fn description() -> &'static str {
-        "A popup that displays information related to an element when the element receives keyboard focus or the mouse hovers over it."
+        "Describe a control on hover or keyboard focus."
     }
 
     fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
@@ -77,7 +77,8 @@ impl Render for TooltipStory {
             .w_full()
             .gap_3()
             .child(
-                section("Tooltip for Button")
+                section("Button")
+                    .description("Add plain text or a keyboard shortcut hint.")
                     .child(
                         Button::new("btn0")
                             .label("Search")
@@ -96,83 +97,100 @@ impl Render for TooltipStory {
                     ),
             )
             .child(
-                section("Checkbox Tooltip").child(
-                    Checkbox::new("check")
-                        .label("Remember me")
-                        .checked(true)
-                        .tooltip("This is a tooltip"),
-                ),
+                section("Checkbox")
+                    .description("Tooltips work on selection controls.")
+                    .child(
+                        Checkbox::new("check")
+                            .label("Remember me")
+                            .checked(true)
+                            .tooltip("This is a tooltip"),
+                    ),
             )
             .child(
-                section("Radio Tooltip").child(
-                    Radio::new("radio")
-                        .label("Radio with tooltip")
-                        .checked(true)
-                        .tooltip("This is a radio button"),
-                ),
+                section("Radio")
+                    .description("Explain an individual radio option.")
+                    .child(
+                        Radio::new("radio")
+                            .label("Radio with tooltip")
+                            .checked(true)
+                            .tooltip("This is a radio button"),
+                    ),
             )
             .child(
-                section("Switch Tooltip").child(
-                    Switch::new("switch")
-                        .checked(true)
-                        .tooltip("This is a switch"),
-                ),
+                section("Switch")
+                    .description("Add context without extending the visible label.")
+                    .child(
+                        Switch::new("switch")
+                            .checked(true)
+                            .tooltip("This is a switch"),
+                    ),
             )
             .child(
-                section("Toggle Tooltip").child(
-                    h_flex()
-                        .gap_2()
-                        .child(Toggle::new("toggle1").label("Bold").tooltip("Toggle bold"))
-                        .child(
-                            Toggle::new("toggle2")
-                                .icon(IconName::Heart)
-                                .tooltip("Toggle favorite"),
-                        ),
-                ),
+                section("Toggle")
+                    .description("Describe text and icon-only toggles.")
+                    .child(
+                        h_flex()
+                            .gap_2()
+                            .child(Toggle::new("toggle1").label("Bold").tooltip("Toggle bold"))
+                            .child(
+                                Toggle::new("toggle2")
+                                    .icon(IconName::Heart)
+                                    .tooltip("Toggle favorite"),
+                            ),
+                    ),
             )
             .child(
-                section("Clipboard Tooltip").child(
-                    Clipboard::new("clip1")
-                        .value("Hello, World!")
-                        .tooltip("Copy to clipboard"),
-                ),
+                section("Clipboard")
+                    .description("Clarify the copy action.")
+                    .child(
+                        Clipboard::new("clip1")
+                            .value("Hello, World!")
+                            .tooltip("Copy to clipboard"),
+                    ),
             )
             .child(
-                section("Default Tooltip").child(div().child("Hover me").id("tooltip-2").tooltip(
-                    |window, cx| {
-                        Tooltip::new("This is a default tooltip style by GPUI.")
-                            .action(&Info, Some("Tooltip"))
-                            .build(window, cx)
-                    },
-                )),
+                section("Custom content")
+                    .description("Build tooltip content with an action hint.")
+                    .child(
+                        div()
+                            .child("Hover me")
+                            .id("tooltip-2")
+                            .tooltip(|window, cx| {
+                                Tooltip::new("This is a default tooltip style by GPUI.")
+                                    .action(&Info, Some("Tooltip"))
+                                    .build(window, cx)
+                            }),
+                    ),
             )
             .child(
-                section("Tooltip trigger removed on click").child(
-                    h_flex()
-                        .gap_2()
-                        .when(self.removable_button_visible, |this| {
-                            this.child(
-                                Button::new("remove-tooltip-trigger")
-                                    .danger()
-                                    .label("Remove me")
-                                    .tooltip("Clicking this button removes the trigger.")
-                                    .on_click(cx.listener(|story, _, _, cx| {
-                                        story.removable_button_visible = false;
-                                        cx.notify();
-                                    })),
-                            )
-                        })
-                        .when(!self.removable_button_visible, |this| {
-                            this.child(
-                                Button::new("restore-tooltip-trigger")
-                                    .label("Restore button")
-                                    .on_click(cx.listener(|story, _, _, cx| {
-                                        story.removable_button_visible = true;
-                                        cx.notify();
-                                    })),
-                            )
-                        }),
-                ),
+                section("Removed trigger")
+                    .description("Dismiss cleanly when the trigger leaves the view.")
+                    .child(
+                        h_flex()
+                            .gap_2()
+                            .when(self.removable_button_visible, |this| {
+                                this.child(
+                                    Button::new("remove-tooltip-trigger")
+                                        .danger()
+                                        .label("Remove me")
+                                        .tooltip("Clicking this button removes the trigger.")
+                                        .on_click(cx.listener(|story, _, _, cx| {
+                                            story.removable_button_visible = false;
+                                            cx.notify();
+                                        })),
+                                )
+                            })
+                            .when(!self.removable_button_visible, |this| {
+                                this.child(
+                                    Button::new("restore-tooltip-trigger")
+                                        .label("Restore button")
+                                        .on_click(cx.listener(|story, _, _, cx| {
+                                            story.removable_button_visible = true;
+                                            cx.notify();
+                                        })),
+                                )
+                            }),
+                    ),
             )
     }
 }

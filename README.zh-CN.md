@@ -4,27 +4,79 @@
 
 [![Build Status](https://github.com/longbridge/gpui-component/actions/workflows/ci.yml/badge.svg)](https://github.com/longbridge/gpui-component/actions/workflows/ci.yml) [![Docs](https://docs.rs/gpui-component/badge.svg)](https://docs.rs/gpui-component/) [![Crates.io](https://img.shields.io/crates/v/gpui-component.svg)](https://crates.io/crates/gpui-component)
 
-基于 [GPUI](https://gpui.rs) 构建出色桌面应用程序的 UI 组件库。
+使用 Rust 和 [GPUI](https://gpui.rs) 构建出色、高性能的桌面应用。
+
+GPUI Component 是一个综合性的 Rust 桌面应用开发框架。它将生产级 UI
+系统、应用级数据与布局能力、编辑能力，以及可复用的行为、状态和基础设施整合在一起。
 
 ## 特性
 
-- **丰富性**：60+ 个跨平台桌面 UI 组件。
-- **原生体验**：遵循 macOS 和 Windows 的组件交互设计，结合 shadcn/ui 设计，带来现代化体验。
-- **易于使用**：无状态 `RenderOnce` 组件，简单易用。
-- **可定制**：内置 `Theme` 和 `ThemeColor`，支持多主题和基于变量的配置。
-- **多尺寸支持**：支持 `xs`、`sm`、`md` 和 `lg` 等尺寸。
-- **灵活布局**：支持面板排列、调整大小和自由布局（Tiles）的 Dock 布局系统。
-- **高性能**：虚拟化的 Table 和 List 组件，支撑海量数据的流畅渲染。
-- **内容渲染**：完全 Native 的高性能 Markdown 和 HTML 渲染。
-- **图表**：丰富的图表组件，用于可视化数据。
-- **编辑器**：高性能代码编辑器（支持最多 200K 行稳定性能），集成 LSP（诊断、补全、悬停提示等）。
-- **语法高亮**：基于 Tree Sitter 的 Editor 和 Markdown 组件的语法高亮。
+- **60+ 组件**：覆盖表单、导航、浮层、反馈和布局等场景，提供成熟交互与高效默认值。
+- **生产就绪**：从第一天起用于构建 Longbridge Pro，并在公开发布的商业桌面应用中持续打磨。
+- **原生体验**：现代控件设计灵感来自 macOS 与 Windows，并提供语义化主题和多种尺寸。
+- **120 FPS**：GPU 加速界面，在高负载下依然保持流畅。
+- **数据表格**：虚拟滚动、固定列、列宽调整、排序与单元格选择，可承载数十万行数据。
+- **虚拟列表**：只渲染可见区域，并支持不同尺寸的列表项。
+- **代码编辑器**：20 万行规模下仍保持稳定，集成 Tree-sitter 高亮与 LSP 诊断、补全和悬浮提示。
+- **Dock 布局**：可调整面板、可拖拽标签、嵌套分割、边缘停靠，以及可序列化的 Tiles 自由布局。
+- **丰富内容**：原生 Markdown 与 HTML 渲染、语法高亮和内置图表。
+- **设计自由**：使用完整视觉系统，或基于 `gpui-base` 的行为与基础设施构建自己的系统。
+- **跨平台**：通过一份 Rust 代码交付 macOS、Windows 和 Linux。
+
+## 框架架构
+
+### 两层架构，一个生态
+
+使用 `gpui-component`，让整个应用保持统一、完整的视觉与交互风格；当产品需要创建并拥有自己的设计系统时，使用 `gpui-base`。
+
+| **`gpui-component`**     | **`gpui-base`**            |
+| ------------------------ | -------------------------- |
+| 完整且带样式的组件       | 无预设样式的行为与基础设施 |
+| 开箱即用，并支持主题定制 | 完全掌控结构与视觉设计     |
+| 适合直接构建应用         | 适合构建设计系统           |
+
+```text
+                             APPLICATION
+                                  │
+                ┌─────────────────┴─────────────────┐
+                │                                   │
+                ▼                                   ▼
+       ┌──────────────────┐               ┌──────────────────┐
+       │  gpui-component  │               │ Your Design      │
+       │    Styled UI     │               │ System           │
+       └────────┬─────────┘               └────────┬─────────┘
+                │                                  │
+                └────────────────┬─────────────────┘
+                                 ▼
+                       ┌──────────────────┐
+                       │    gpui-base     │
+                       │ Behavior · State │
+                       │ Infrastructure   │
+                       └────────┬─────────┘
+                                ▼
+                              GPUI
+```
+
+> **行为属于基础层，呈现属于应用。**
+
+如果希望使用精致、开箱即用且风格统一的控件，请选择 **`gpui-component`**。如果应用需要拥有组件源码、布局、样式和动效，同时复用复杂且可靠的交互行为，请直接构建于 **`gpui-base`**。
+
+这种分层方式与 [shadcn](https://ui.shadcn.com) 生态的灵活性来源一致：
+
+| GPUI Component 生态                  | Web 生态                       |
+| ------------------------------------ | ------------------------------ |
+| [GPUI](https://gpui.rs)              | HTML + Tailwind CSS            |
+| [`gpui-base`](crates/base/README.md) | [Base UI](https://base-ui.com) |
+| `gpui-component`                     | shadcn 的完整样式组件层        |
+
+[深入了解架构 →](docs/ARCHITECTURE.md)
 
 ## Showcase
 
-https://longbridge.github.io/gpui-component/gallery/
+GPUI Component 从第一天起就用于构建 [Longbridge Pro](https://longbridge.com/desktop)。
+这个框架不是脱离应用场景凭空设计出来的，而是从一款公开发布的商业桌面应用中持续提炼而成。
 
-我们基于 GPUI Component 构建的商业应用：[Longbridge Pro](https://longbridge.com/desktop)。
+> **GPUI 为渲染打下基础，Longbridge 为生产实践打下基础。**
 
 <img width="1763" alt="Image" src="https://github.com/user-attachments/assets/e1ecb9c3-2dd3-431e-bd97-5a819c30e551" />
 
@@ -36,7 +88,7 @@ gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["fo
 gpui-component = { git = "https://github.com/longbridge/gpui-component" }
 ```
 
-### Examples
+### 基础示例
 
 ```rs
 use gpui::*;
@@ -79,15 +131,28 @@ fn main() {
 }
 ```
 
-### Assets
+### 图标
 
 GPUI Component 提供了 `Icon` 元素，但默认不包含 SVG 文件。
 
 示例使用 [Lucide](https://lucide.dev) 图标，但你可以使用任意喜欢的图标。只需按照 [IconName](https://github.com/longbridge/gpui-component/blob/main/crates/ui/src/icon.rs#L86) 中的定义命名 SVG 文件，然后将所需图标添加到项目中即可。
 
+## AI 编码 Agent 技能 (Skills)
+
+为你的 AI 编码助手（Cursor, Claude Code, Gemini CLI, Codex 等）安装 GPUI Component 技能库：
+
+```bash
+npx skills add longbridge/gpui-component
+```
+
+| 技能 | 描述 |
+| --- | --- |
+| `gpui-component` | 完整组件目录、常用使用模式与组件编写规范。 |
+| `gpui` | GPUI 底层框架机制（Element 渲染、Entity 状态、异步、焦点、Actions、测试）。 |
+
 ## Development
 
-### Story
+### 桌面 Gallery（Story）
 
 `story` crate 是一个展示所有可用组件的画廊应用程序，通过以下命令运行：
 
@@ -125,24 +190,6 @@ cargo run -p system_monitor
 # 窗口标题自定义
 cargo run -p window_title
 ```
-
-### Web with WASM
-
-你也可以通过 WASM 在浏览器中运行 Gallery：
-
-```bash
-cd crates/story-web
-
-# 安装依赖（仅首次）
-make install
-
-# 构建并运行开发服务器
-make dev
-```
-
-画廊将在 http://localhost:3000 上可用。
-
-更多详情请参阅 [crates/story-web/README.md](crates/story-web/README.md)。
 
 查看 [CONTRIBUTING.md](CONTRIBUTING.md) 了解更多详情。
 

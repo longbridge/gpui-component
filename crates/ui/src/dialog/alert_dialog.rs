@@ -1,6 +1,6 @@
 use gpui::{
-    AnyElement, App, ClickEvent, InteractiveElement as _, IntoElement, MouseButton, ParentElement,
-    Pixels, RenderOnce, StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _,
+    AnyElement, App, ClickEvent, IntoElement, ParentElement, Pixels, RenderOnce, StyleRefinement,
+    Styled, Window, prelude::FluentBuilder as _,
 };
 
 use crate::{
@@ -76,10 +76,11 @@ impl AlertDialog {
     ///
     /// By default, the dialog is not overlay closable with a OK button.
     ///
-    /// You can change this with `.overlay_closable(true)`.
     pub fn new(cx: &mut App) -> Self {
         Self {
-            base: Dialog::new(cx).overlay_closable(false).close_button(false),
+            base: Dialog::new(cx)
+                .with_base_alert_dialog(gpui_base::AlertDialog::new(cx))
+                .close_button(false),
             trigger: None,
             icon: None,
             title: None,
@@ -213,11 +214,9 @@ impl AlertDialog {
         self
     }
 
-    /// Set the overlay closable of the alert dialog, defaults to `false`.
-    ///
-    /// When the overlay is clicked, the dialog will be closed.
-    pub fn overlay_closable(mut self, overlay_closable: bool) -> Self {
-        self.base = self.base.overlay_closable(overlay_closable);
+    /// Alert dialogs never close from a backdrop press.
+    #[deprecated(note = "AlertDialog backdrop dismissal is disabled by design")]
+    pub fn overlay_closable(self, _: bool) -> Self {
         self
     }
 
@@ -266,8 +265,8 @@ impl AlertDialog {
         self
     }
 
-    /// Convert AlertDialog into a configured Dialog.
-    pub(crate) fn into_dialog(self, window: &mut Window, cx: &mut App) -> Dialog {
+    /// Build the styled dialog surface around the Base alert-dialog host.
+    pub(crate) fn build_surface(self, window: &mut Window, cx: &mut App) -> Dialog {
         let button_props = self.button_props.clone();
         let has_title = self.icon.is_some() || self.title.is_some();
         let has_header = has_title || self.description.is_some();
@@ -275,7 +274,6 @@ impl AlertDialog {
 
         self.base
             .button_props(button_props.clone())
-            .alert_dialog_role()
             .when(has_header, |this| {
                 this.header(
                     DialogHeader::new().child(
@@ -329,16 +327,18 @@ impl AlertDialog {
         let content_builder = self.base.content_builder.clone();
         let style = self.base.style.clone();
         let props = self.base.props.clone();
-        let button_props = self.button_props.clone();
+        let mut button_props = self.button_props.clone();
+        button_props.on_close = self.base.button_props.on_close.clone();
 
-        div()
-            .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+        gpui_base::AlertDialogTrigger::new(trigger)
+            .on_open(move |window, cx| {
                 let content_builder = content_builder.clone();
                 let style = style.clone();
                 let props = props.clone();
                 let button_props = button_props.clone();
-                window.open_dialog(cx, move |dialog, _, _| {
+                window.open_dialog(cx, move |dialog, _, cx| {
                     dialog
+                        .with_base_alert_dialog(gpui_base::AlertDialog::new(cx))
                         .refine_style(&style)
                         .button_props(button_props.clone())
                         .with_props(props.clone())
@@ -348,9 +348,7 @@ impl AlertDialog {
                             })
                         })
                 });
-                cx.stop_propagation();
             })
-            .child(trigger)
             .into_any_element()
     }
 }
@@ -362,7 +360,7 @@ impl RenderOnce for AlertDialog {
             self.render_trigger(trigger, window, cx)
         } else {
             // Otherwise, render the dialog content directly
-            self.into_dialog(window, cx).into_any_element()
+            self.build_surface(window, cx).into_any_element()
         }
     }
 }

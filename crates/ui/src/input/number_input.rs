@@ -1,32 +1,20 @@
-use std::rc::Rc;
-
 use crate::theme::ActiveTheme;
-use gpui::Corners;
-use gpui::Window;
-use gpui::{AnyElement, App, Context, Edges, Entity, EventEmitter, FocusHandle, Focusable};
 use gpui::{
-    InteractiveElement, IntoElement, KeyBinding, ParentElement, RenderOnce, Role, SharedString,
-    StatefulInteractiveElement as _, StyleRefinement, Styled, TextAlign, actions,
+    AnyElement, App, Entity, FocusHandle, Focusable, InteractiveElement as _,
+    StatefulInteractiveElement as _, Window, div, px,
+};
+use gpui::{
+    IntoElement, ParentElement, RenderOnce, SharedString, StyleRefinement, Styled, TextAlign,
     prelude::FluentBuilder as _,
 };
 
-use crate::{
-    Disableable, IconName, Sizable, Size, StyledExt as _,
-    button::{Button, ButtonVariants as _},
-    h_flex,
-};
+use crate::{Disableable, Icon, IconName, Sizable, Size, StyleSized as _, StyledExt as _};
 
-use super::{Input, InputState, MaskPattern};
-
-actions!(number_input, [Increment, Decrement]);
-
-const CONTEXT: &str = "NumberInput";
-pub fn init(cx: &mut App) {
-    cx.bind_keys(vec![
-        KeyBinding::new("up", Increment, Some(CONTEXT)),
-        KeyBinding::new("down", Decrement, Some(CONTEXT)),
-    ]);
-}
+use super::{Input, InputState, input::input_style};
+use crate::ThemeStyled as _;
+use gpui_base::NumberInput as BaseNumberInput;
+pub use gpui_base::{NumberInputEvent, NumberStep, StepAction};
+use rust_i18n::t;
 
 /// A number input element with increment and decrement buttons.
 #[derive(IntoElement)]
@@ -37,6 +25,7 @@ pub struct NumberInput {
     prefix: Option<AnyElement>,
     suffix: Option<AnyElement>,
     appearance: bool,
+    focus_ring_enabled: bool,
     disabled: bool,
     style: StyleRefinement,
 }
@@ -51,6 +40,7 @@ impl NumberInput {
             prefix: None,
             suffix: None,
             appearance: true,
+            focus_ring_enabled: true,
             disabled: false,
             style: StyleRefinement::default(),
         }
@@ -79,20 +69,6 @@ impl NumberInput {
         self.appearance = appearance;
         self
     }
-
-    fn on_increment(state: &Entity<InputState>, window: &mut Window, cx: &mut App) {
-        state.update(cx, |state, cx| {
-            state.focus(window, cx);
-            state.on_action_increment(&Increment, window, cx);
-        })
-    }
-
-    fn on_decrement(state: &Entity<InputState>, window: &mut Window, cx: &mut App) {
-        state.update(cx, |state, cx| {
-            state.focus(window, cx);
-            state.on_action_decrement(&Decrement, window, cx);
-        })
-    }
 }
 
 impl Disableable for NumberInput {
@@ -102,164 +78,16 @@ impl Disableable for NumberInput {
     }
 }
 
-impl InputState {
-    fn on_action_increment(&mut self, _: &Increment, window: &mut Window, cx: &mut Context<Self>) {
-        self.on_number_input_step(StepAction::Increment, window, cx);
+impl crate::FocusableExt for NumberInput {
+    fn focus_ring(mut self, enabled: bool) -> Self {
+        self.focus_ring_enabled = enabled;
+        self
     }
 
-    fn on_action_decrement(&mut self, _: &Decrement, window: &mut Window, cx: &mut Context<Self>) {
-        self.on_number_input_step(StepAction::Decrement, window, cx);
-    }
-
-    fn on_number_input_step(
-        &mut self,
-        action: StepAction,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        if self.disabled {
-            return;
-        }
-
-        // By default NumberInput steps the value internally with step 1.
-        // To opt out and emit `NumberInputEvent::Step` instead (the caller
-        // updates the value), call `state.set_step(None, window, cx)`.
-        if let Some(step) = self.number_step.clone() {
-            let value = self.unmask_value();
-            let current = value.trim().parse::<f64>().unwrap_or(0.);
-            let step = step.value(current, action, cx);
-            if let Some(new_value) =
-                step_value(&value, action, step, self.number_min, self.number_max)
-            {
-                // The stepped value must pass the `pattern`/`validate` check,
-                // otherwise fall back to emit the event to let the caller handle it.
-                if self.is_valid_input(&new_value, cx) {
-                    let range = self.range_to_utf16(&(0..self.text.len()));
-                    self.replace_text_in_range_silent(Some(range), &new_value, window, cx);
-                    return;
-                }
-            } else {
-                // Stepping cannot move the value in this direction (e.g.
-                // Decrement on a below-min value), do nothing.
-                return;
-            }
-        }
-
-        cx.emit(NumberInputEvent::Step(action));
+    fn is_focus_ring_enabled(&self) -> bool {
+        self.focus_ring_enabled
     }
 }
-
-/// The step strategy of the [`NumberInput`] for increment/decrement.
-///
-/// See also [`InputState::step`] and [`InputState::step_by`].
-#[derive(Clone)]
-pub enum NumberStep {
-    /// A fixed step value.
-    Fixed(f64),
-    /// Calculate the step value from the current value and direction.
-    ByValue(Rc<dyn Fn(f64, StepAction, &mut Context<InputState>) -> f64>),
-}
-
-impl NumberStep {
-    /// Create a step that calculates the step value from the current value
-    /// and direction on stepping.
-    ///
-    /// The current value is the value before stepping; an empty or invalid
-    /// value is treated as 0. The [`StepAction`] tells whether the value is
-    /// being incremented or decremented, useful when the step differs by
-    /// direction at a range boundary.
-    ///
-    /// The closure receives a [`Context<InputState>`] to read or update other
-    /// entities while computing the step, but must not re-enter the owning
-    /// [`InputState`] (it is mutably borrowed during stepping).
-    pub fn by_value(
-        f: impl Fn(f64, StepAction, &mut Context<InputState>) -> f64 + 'static,
-    ) -> Self {
-        Self::ByValue(Rc::new(f))
-    }
-
-    /// Return the step value for the given current value and direction.
-    pub(super) fn value(
-        &self,
-        current: f64,
-        action: StepAction,
-        cx: &mut Context<InputState>,
-    ) -> f64 {
-        match self {
-            Self::Fixed(step) => *step,
-            Self::ByValue(f) => f(current, action, cx),
-        }
-    }
-}
-
-impl From<f64> for NumberStep {
-    fn from(step: f64) -> Self {
-        Self::Fixed(step)
-    }
-}
-
-/// Step the `value` by `step` and clamp the result to the `min`/`max` range.
-///
-/// Returns `None` if stepping cannot move the value in the given direction
-/// (e.g. the value is already at the boundary).
-///
-/// The result keeps the max fraction digits of the current value and the step,
-/// to avoid float precision issue, e.g. `0.1 + 0.2 -> 0.3`.
-fn step_value(
-    value: &str,
-    action: StepAction,
-    step: f64,
-    min: Option<f64>,
-    max: Option<f64>,
-) -> Option<String> {
-    fn fraction_digits(value: &str) -> usize {
-        value.split('.').nth(1).map_or(0, |frac| frac.len())
-    }
-
-    let current = value.trim().parse::<f64>().ok();
-    let mut new_value = match action {
-        StepAction::Increment => current.unwrap_or(0.) + step,
-        StepAction::Decrement => current.unwrap_or(0.) - step,
-    };
-    let mut digits = fraction_digits(value).max(fraction_digits(&step.to_string()));
-    if let Some(min) = min {
-        if new_value < min {
-            new_value = min;
-            digits = digits.max(fraction_digits(&min.to_string()));
-        }
-    }
-    if let Some(max) = max {
-        if new_value > max {
-            new_value = max;
-            digits = digits.max(fraction_digits(&max.to_string()));
-        }
-    }
-
-    // Web behavior: stepping must move the value in the pressed direction, so
-    // a Decrement below min does nothing rather than clamping up. An empty or
-    // invalid value always steps into the range.
-    if let Some(current) = current {
-        let moved = match action {
-            StepAction::Increment => new_value > current,
-            StepAction::Decrement => new_value < current,
-        };
-        if !moved {
-            return None;
-        }
-    }
-
-    Some(format!("{:.*}", digits, new_value))
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum StepAction {
-    Decrement,
-    Increment,
-}
-pub enum NumberInputEvent {
-    Step(StepAction),
-}
-impl EventEmitter<NumberInputEvent> for InputState {}
 
 impl Focusable for NumberInput {
     fn focus_handle(&self, cx: &App) -> FocusHandle {
@@ -282,72 +110,55 @@ impl Styled for NumberInput {
 
 impl RenderOnce for NumberInput {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        // Default to use `MaskPattern::Number` to limit the input to a valid
-        // number (optional leading sign, digits and a single dot), and to
-        // normalize full-width number characters, e.g. `12。5` -> `12.5`.
-        //
-        // Only when the user has not set a `mask_pattern` explicitly, so that
-        // `set_mask_pattern(MaskPattern::None)` can be used to opt out.
-        if !self.state.read(cx).mask_pattern_set {
-            self.state.update(cx, |state, _| {
-                state.mask_pattern = MaskPattern::Number {
-                    separator: None,
-                    fraction: None,
-                };
-            });
-        }
-
-        let numeric_value = self.state.read(cx).value().parse::<f64>().ok();
-
-        h_flex()
-            .id(("number-input", self.state.entity_id()))
-            .role(Role::SpinButton)
-            .when_some(numeric_value, |this, v| this.aria_numeric_value(v))
-            .key_context(CONTEXT)
-            .on_action(window.listener_for(&self.state, InputState::on_action_increment))
-            .on_action(window.listener_for(&self.state, InputState::on_action_decrement))
-            .flex_1()
-            .rounded(cx.theme().radius)
-            .refine_style(&self.style)
-            .when(self.disabled, |this| this.opacity(0.5))
-            .child(
-                Button::new("minus")
-                    .map(|this| {
-                        if self.appearance {
-                            this.outline()
-                        } else {
-                            this.ghost()
-                        }
+        let focused = self.state.read(cx).focus_handle(cx).is_focused(window) && !self.disabled;
+        let (bg, _) = input_style(self.disabled, cx);
+        let border_color = if self.disabled {
+            cx.theme().input.opacity(0.5)
+        } else {
+            cx.theme().input
+        };
+        // Transparent like a ghost button, but tinted to the frame on hover.
+        let button_foreground = cx.theme().secondary_foreground;
+        let button_hover = cx.theme().input.opacity(0.4);
+        let button_active = cx.theme().input.opacity(0.6);
+        let button_size = self.size;
+        // The buttons sit inside the 1px frame, so their corners are a pixel
+        // tighter than the frame's, or they paint over its inner curve.
+        let button_radius = if self.appearance {
+            (cx.theme().radius - px(1.)).max(px(0.))
+        } else {
+            cx.theme().radius
+        };
+        let base_state = self.state.clone();
+        let content = BaseNumberInput::new(&base_state)
+            .disabled(self.disabled)
+            .size_full()
+            .decrement_button(move |this| {
+                this.accessibility_label(t!("Input.Decrement"))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .text_color(button_foreground)
+                    .hover(move |this| this.bg(button_hover))
+                    .active(move |this| this.bg(button_active))
+                    // The frame owns the control height, so the buttons fill it
+                    // rather than setting their own and outgrowing the border.
+                    .h_full()
+                    .map(|this| match button_size {
+                        Size::XSmall | Size::Small => this.min_w_6(),
+                        Size::Medium | Size::Large => this.min_w_8(),
+                        Size::Size(size) => this.min_w(size),
                     })
-                    .with_size(self.size)
-                    .icon(IconName::Minus)
-                    .compact()
-                    .tab_stop(false)
-                    .disabled(self.disabled)
-                    .border_color(cx.theme().input)
-                    .border_corners(Corners {
-                        top_left: true,
-                        top_right: false,
-                        bottom_right: false,
-                        bottom_left: true,
-                    })
-                    .border_edges(Edges {
-                        top: self.appearance,
-                        right: false,
-                        bottom: self.appearance,
-                        left: self.appearance,
-                    })
-                    .on_click({
-                        let state = self.state.clone();
-                        move |_, window, cx| {
-                            Self::on_decrement(&state, window, cx);
-                        }
-                    }),
-            )
-            .child(
+                    // Only the outer corners are rounded, to follow the frame.
+                    .rounded_tl(button_radius)
+                    .rounded_bl(button_radius)
+                    .child(Icon::new(IconName::Minus).with_size(button_size))
+            })
+            .input(
                 Input::new(&self.state)
-                    .appearance(self.appearance)
-                    .with_size(self.size)
+                    .appearance(false)
+                    .with_size(button_size)
+                    .h_full()
                     .disabled(self.disabled)
                     .gap_0()
                     .rounded_none()
@@ -355,46 +166,54 @@ impl RenderOnce for NumberInput {
                     .when_some(self.prefix, |this, prefix| this.prefix(prefix))
                     .when_some(self.suffix, |this, suffix| this.suffix(suffix)),
             )
-            .child(
-                Button::new("plus")
-                    .map(|this| {
-                        if self.appearance {
-                            this.outline()
-                        } else {
-                            this.ghost()
-                        }
+            .increment_button(move |this| {
+                this.accessibility_label(t!("Input.Increment"))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .text_color(button_foreground)
+                    .hover(move |this| this.bg(button_hover))
+                    .active(move |this| this.bg(button_active))
+                    .h_full()
+                    .map(|this| match button_size {
+                        Size::XSmall | Size::Small => this.min_w_6(),
+                        Size::Medium | Size::Large => this.min_w_8(),
+                        Size::Size(size) => this.min_w(size),
                     })
-                    .with_size(self.size)
-                    .icon(IconName::Plus)
-                    .compact()
-                    .tab_stop(false)
-                    .disabled(self.disabled)
-                    .border_color(cx.theme().input)
-                    .border_corners(Corners {
-                        top_left: false,
-                        top_right: true,
-                        bottom_right: true,
-                        bottom_left: false,
+                    .rounded_tr(button_radius)
+                    .rounded_br(button_radius)
+                    .child(Icon::new(IconName::Plus).with_size(button_size))
+            });
+
+        // The visual frame wraps the complete spinbutton. BaseNumberInput routes
+        // application children into its text slot, so putting the ring on that
+        // element would incorrectly surround only the editable middle region.
+        div()
+            .flex_1()
+            .input_h(self.size)
+            .rounded(cx.theme().radius)
+            .when(self.appearance, |this| {
+                this.bg(bg)
+                    .border_1()
+                    .border_color(border_color)
+                    .when(focused, |this| {
+                        this.border_1().border_color(cx.theme().ring)
                     })
-                    .border_edges(Edges {
-                        top: self.appearance,
-                        right: self.appearance,
-                        bottom: self.appearance,
-                        left: false,
-                    })
-                    .on_click({
-                        let state = self.state.clone();
-                        move |_, window, cx| {
-                            Self::on_increment(&state, window, cx);
-                        }
-                    }),
+            })
+            .refine_style(&self.style)
+            .when(self.disabled, |this| this.opacity(0.5))
+            .child(content)
+            .when(
+                focused && self.appearance && self.focus_ring_enabled,
+                |this| this.focus_ring_style(window, cx),
             )
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{StepAction, step_value};
+    use super::StepAction;
+    use gpui_base::step_value;
 
     // `test_number_step` lives in `state::tests` because `NumberStep::value`
     // now needs a `Context<InputState>` to invoke the `by_value` closure.

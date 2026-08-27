@@ -1,0 +1,430 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 300" width="100%" role="img" aria-labelledby="t d">
+  <title id="t">One second of a live panel: frames against JavaScript runs</title>
+  <desc id="d">Two scenarios, each one second of wall clock drawn as sixty frame slots. Frames are blue and JavaScript runs are orange. In the first scenario the window repaints at 60 Hz while nothing JavaScript reads has changed: every frame slot fires and the JavaScript track stays empty, because each frame replays the snapshot in Rust. In the second, prices move every 50 milliseconds: the frame track still fires sixty times and the JavaScript track fires about twenty, once per data change. The frame rate belongs to the display; the JavaScript rate belongs to the data.</desc>
+  <defs>
+    <style>
+      text{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+      .h1{fill:#18181b;font-size:15px;font-weight:650}
+      .scene{fill:#18181b;font-size:13px;font-weight:600}
+      .row{font-size:12px;font-weight:600}
+      .row-frame,.count-frame{fill:#2563eb}
+      .row-js,.count-js{fill:#ea580c}
+      .count-frame,.count-js{font-size:13px;font-weight:650;text-anchor:end}
+      .note{fill:#6b7078;font-size:11.5px}
+      .slot{fill:rgba(20,20,22,.10)}
+      .pulse{opacity:.42;animation:pulse 1s linear infinite}
+      .is-frame{fill:#2563eb}
+      .is-js{fill:#ea580c}
+      @keyframes pulse{0%{opacity:.42}4%{opacity:1}20%{opacity:.42}100%{opacity:.42}}
+      @media (prefers-reduced-motion: reduce){.pulse{animation:none;opacity:.7}}
+    </style>
+  </defs>
+
+  <text class="h1" x="24" y="28">One second of a live panel</text>
+  <text class="note" x="24" y="48">Each slot is one 16 ms frame. Read left to right.</text>
+
+  <text class="scene" x="24" y="82">Nothing JavaScript reads changes</text>
+  <text class="row row-frame" x="24" y="108">frames</text>
+  <text class="count-frame" x="870" y="108">60 / s</text>
+  <g>
+      <rect class="slot" x="130.0" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="141.2" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="152.3" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="163.5" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="174.7" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="185.8" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="197.0" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="208.2" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="219.3" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="230.5" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="241.7" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="252.8" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="264.0" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="275.2" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="286.3" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="297.5" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="308.7" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="319.8" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="331.0" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="342.2" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="353.3" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="364.5" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="375.7" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="386.8" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="398.0" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="409.2" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="420.3" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="431.5" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="442.7" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="453.8" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="465.0" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="476.2" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="487.3" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="498.5" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="509.7" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="520.8" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="532.0" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="543.2" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="554.3" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="565.5" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="576.7" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="587.8" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="599.0" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="610.2" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="621.3" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="632.5" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="643.7" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="654.8" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="666.0" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="677.2" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="688.3" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="699.5" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="710.7" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="721.8" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="733.0" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="744.2" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="755.3" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="766.5" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="777.7" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="788.8" y="96" width="8.4" height="18" rx="2"/>
+      <rect class="pulse is-frame" x="130.0" y="96" width="8.4" height="18" rx="2" style="animation-delay:-1.000s"/>
+      <rect class="pulse is-frame" x="141.2" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.983s"/>
+      <rect class="pulse is-frame" x="152.3" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.967s"/>
+      <rect class="pulse is-frame" x="163.5" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.950s"/>
+      <rect class="pulse is-frame" x="174.7" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.933s"/>
+      <rect class="pulse is-frame" x="185.8" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.917s"/>
+      <rect class="pulse is-frame" x="197.0" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.900s"/>
+      <rect class="pulse is-frame" x="208.2" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.883s"/>
+      <rect class="pulse is-frame" x="219.3" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.867s"/>
+      <rect class="pulse is-frame" x="230.5" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.850s"/>
+      <rect class="pulse is-frame" x="241.7" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.833s"/>
+      <rect class="pulse is-frame" x="252.8" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.817s"/>
+      <rect class="pulse is-frame" x="264.0" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.800s"/>
+      <rect class="pulse is-frame" x="275.2" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.783s"/>
+      <rect class="pulse is-frame" x="286.3" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.767s"/>
+      <rect class="pulse is-frame" x="297.5" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.750s"/>
+      <rect class="pulse is-frame" x="308.7" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.733s"/>
+      <rect class="pulse is-frame" x="319.8" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.717s"/>
+      <rect class="pulse is-frame" x="331.0" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.700s"/>
+      <rect class="pulse is-frame" x="342.2" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.683s"/>
+      <rect class="pulse is-frame" x="353.3" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.667s"/>
+      <rect class="pulse is-frame" x="364.5" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.650s"/>
+      <rect class="pulse is-frame" x="375.7" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.633s"/>
+      <rect class="pulse is-frame" x="386.8" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.617s"/>
+      <rect class="pulse is-frame" x="398.0" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.600s"/>
+      <rect class="pulse is-frame" x="409.2" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.583s"/>
+      <rect class="pulse is-frame" x="420.3" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.567s"/>
+      <rect class="pulse is-frame" x="431.5" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.550s"/>
+      <rect class="pulse is-frame" x="442.7" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.533s"/>
+      <rect class="pulse is-frame" x="453.8" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.517s"/>
+      <rect class="pulse is-frame" x="465.0" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.500s"/>
+      <rect class="pulse is-frame" x="476.2" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.483s"/>
+      <rect class="pulse is-frame" x="487.3" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.467s"/>
+      <rect class="pulse is-frame" x="498.5" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.450s"/>
+      <rect class="pulse is-frame" x="509.7" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.433s"/>
+      <rect class="pulse is-frame" x="520.8" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.417s"/>
+      <rect class="pulse is-frame" x="532.0" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.400s"/>
+      <rect class="pulse is-frame" x="543.2" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.383s"/>
+      <rect class="pulse is-frame" x="554.3" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.367s"/>
+      <rect class="pulse is-frame" x="565.5" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.350s"/>
+      <rect class="pulse is-frame" x="576.7" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.333s"/>
+      <rect class="pulse is-frame" x="587.8" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.317s"/>
+      <rect class="pulse is-frame" x="599.0" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.300s"/>
+      <rect class="pulse is-frame" x="610.2" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.283s"/>
+      <rect class="pulse is-frame" x="621.3" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.267s"/>
+      <rect class="pulse is-frame" x="632.5" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.250s"/>
+      <rect class="pulse is-frame" x="643.7" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.233s"/>
+      <rect class="pulse is-frame" x="654.8" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.217s"/>
+      <rect class="pulse is-frame" x="666.0" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.200s"/>
+      <rect class="pulse is-frame" x="677.2" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.183s"/>
+      <rect class="pulse is-frame" x="688.3" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.167s"/>
+      <rect class="pulse is-frame" x="699.5" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.150s"/>
+      <rect class="pulse is-frame" x="710.7" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.133s"/>
+      <rect class="pulse is-frame" x="721.8" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.117s"/>
+      <rect class="pulse is-frame" x="733.0" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.100s"/>
+      <rect class="pulse is-frame" x="744.2" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.083s"/>
+      <rect class="pulse is-frame" x="755.3" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.067s"/>
+      <rect class="pulse is-frame" x="766.5" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.050s"/>
+      <rect class="pulse is-frame" x="777.7" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.033s"/>
+      <rect class="pulse is-frame" x="788.8" y="96" width="8.4" height="18" rx="2" style="animation-delay:-0.017s"/>
+  </g>
+  <text class="row row-js" x="24" y="140">JavaScript</text>
+  <text class="count-js" x="870" y="140">0 / s</text>
+  <g>
+      <rect class="slot" x="130.0" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="141.2" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="152.3" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="163.5" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="174.7" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="185.8" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="197.0" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="208.2" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="219.3" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="230.5" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="241.7" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="252.8" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="264.0" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="275.2" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="286.3" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="297.5" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="308.7" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="319.8" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="331.0" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="342.2" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="353.3" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="364.5" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="375.7" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="386.8" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="398.0" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="409.2" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="420.3" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="431.5" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="442.7" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="453.8" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="465.0" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="476.2" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="487.3" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="498.5" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="509.7" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="520.8" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="532.0" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="543.2" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="554.3" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="565.5" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="576.7" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="587.8" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="599.0" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="610.2" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="621.3" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="632.5" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="643.7" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="654.8" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="666.0" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="677.2" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="688.3" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="699.5" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="710.7" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="721.8" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="733.0" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="744.2" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="755.3" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="766.5" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="777.7" y="128" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="788.8" y="128" width="8.4" height="18" rx="2"/>
+  </g>
+
+  <line x1="24" y1="168" x2="856" y2="168" stroke="rgba(20,20,22,.14)" stroke-width="1"/>
+
+  <text class="scene" x="24" y="196">Prices move every 50 ms</text>
+  <text class="row row-frame" x="24" y="222">frames</text>
+  <text class="count-frame" x="870" y="222">60 / s</text>
+  <g>
+      <rect class="slot" x="130.0" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="141.2" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="152.3" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="163.5" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="174.7" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="185.8" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="197.0" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="208.2" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="219.3" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="230.5" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="241.7" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="252.8" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="264.0" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="275.2" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="286.3" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="297.5" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="308.7" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="319.8" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="331.0" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="342.2" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="353.3" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="364.5" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="375.7" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="386.8" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="398.0" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="409.2" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="420.3" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="431.5" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="442.7" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="453.8" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="465.0" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="476.2" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="487.3" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="498.5" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="509.7" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="520.8" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="532.0" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="543.2" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="554.3" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="565.5" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="576.7" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="587.8" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="599.0" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="610.2" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="621.3" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="632.5" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="643.7" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="654.8" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="666.0" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="677.2" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="688.3" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="699.5" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="710.7" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="721.8" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="733.0" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="744.2" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="755.3" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="766.5" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="777.7" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="788.8" y="210" width="8.4" height="18" rx="2"/>
+      <rect class="pulse is-frame" x="130.0" y="210" width="8.4" height="18" rx="2" style="animation-delay:-1.000s"/>
+      <rect class="pulse is-frame" x="141.2" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.983s"/>
+      <rect class="pulse is-frame" x="152.3" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.967s"/>
+      <rect class="pulse is-frame" x="163.5" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.950s"/>
+      <rect class="pulse is-frame" x="174.7" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.933s"/>
+      <rect class="pulse is-frame" x="185.8" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.917s"/>
+      <rect class="pulse is-frame" x="197.0" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.900s"/>
+      <rect class="pulse is-frame" x="208.2" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.883s"/>
+      <rect class="pulse is-frame" x="219.3" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.867s"/>
+      <rect class="pulse is-frame" x="230.5" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.850s"/>
+      <rect class="pulse is-frame" x="241.7" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.833s"/>
+      <rect class="pulse is-frame" x="252.8" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.817s"/>
+      <rect class="pulse is-frame" x="264.0" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.800s"/>
+      <rect class="pulse is-frame" x="275.2" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.783s"/>
+      <rect class="pulse is-frame" x="286.3" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.767s"/>
+      <rect class="pulse is-frame" x="297.5" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.750s"/>
+      <rect class="pulse is-frame" x="308.7" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.733s"/>
+      <rect class="pulse is-frame" x="319.8" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.717s"/>
+      <rect class="pulse is-frame" x="331.0" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.700s"/>
+      <rect class="pulse is-frame" x="342.2" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.683s"/>
+      <rect class="pulse is-frame" x="353.3" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.667s"/>
+      <rect class="pulse is-frame" x="364.5" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.650s"/>
+      <rect class="pulse is-frame" x="375.7" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.633s"/>
+      <rect class="pulse is-frame" x="386.8" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.617s"/>
+      <rect class="pulse is-frame" x="398.0" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.600s"/>
+      <rect class="pulse is-frame" x="409.2" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.583s"/>
+      <rect class="pulse is-frame" x="420.3" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.567s"/>
+      <rect class="pulse is-frame" x="431.5" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.550s"/>
+      <rect class="pulse is-frame" x="442.7" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.533s"/>
+      <rect class="pulse is-frame" x="453.8" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.517s"/>
+      <rect class="pulse is-frame" x="465.0" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.500s"/>
+      <rect class="pulse is-frame" x="476.2" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.483s"/>
+      <rect class="pulse is-frame" x="487.3" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.467s"/>
+      <rect class="pulse is-frame" x="498.5" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.450s"/>
+      <rect class="pulse is-frame" x="509.7" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.433s"/>
+      <rect class="pulse is-frame" x="520.8" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.417s"/>
+      <rect class="pulse is-frame" x="532.0" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.400s"/>
+      <rect class="pulse is-frame" x="543.2" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.383s"/>
+      <rect class="pulse is-frame" x="554.3" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.367s"/>
+      <rect class="pulse is-frame" x="565.5" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.350s"/>
+      <rect class="pulse is-frame" x="576.7" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.333s"/>
+      <rect class="pulse is-frame" x="587.8" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.317s"/>
+      <rect class="pulse is-frame" x="599.0" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.300s"/>
+      <rect class="pulse is-frame" x="610.2" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.283s"/>
+      <rect class="pulse is-frame" x="621.3" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.267s"/>
+      <rect class="pulse is-frame" x="632.5" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.250s"/>
+      <rect class="pulse is-frame" x="643.7" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.233s"/>
+      <rect class="pulse is-frame" x="654.8" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.217s"/>
+      <rect class="pulse is-frame" x="666.0" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.200s"/>
+      <rect class="pulse is-frame" x="677.2" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.183s"/>
+      <rect class="pulse is-frame" x="688.3" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.167s"/>
+      <rect class="pulse is-frame" x="699.5" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.150s"/>
+      <rect class="pulse is-frame" x="710.7" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.133s"/>
+      <rect class="pulse is-frame" x="721.8" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.117s"/>
+      <rect class="pulse is-frame" x="733.0" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.100s"/>
+      <rect class="pulse is-frame" x="744.2" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.083s"/>
+      <rect class="pulse is-frame" x="755.3" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.067s"/>
+      <rect class="pulse is-frame" x="766.5" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.050s"/>
+      <rect class="pulse is-frame" x="777.7" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.033s"/>
+      <rect class="pulse is-frame" x="788.8" y="210" width="8.4" height="18" rx="2" style="animation-delay:-0.017s"/>
+  </g>
+  <text class="row row-js" x="24" y="254">JavaScript</text>
+  <text class="count-js" x="870" y="254">~20 / s</text>
+  <g>
+      <rect class="slot" x="130.0" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="141.2" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="152.3" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="163.5" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="174.7" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="185.8" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="197.0" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="208.2" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="219.3" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="230.5" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="241.7" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="252.8" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="264.0" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="275.2" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="286.3" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="297.5" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="308.7" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="319.8" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="331.0" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="342.2" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="353.3" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="364.5" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="375.7" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="386.8" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="398.0" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="409.2" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="420.3" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="431.5" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="442.7" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="453.8" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="465.0" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="476.2" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="487.3" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="498.5" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="509.7" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="520.8" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="532.0" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="543.2" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="554.3" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="565.5" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="576.7" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="587.8" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="599.0" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="610.2" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="621.3" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="632.5" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="643.7" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="654.8" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="666.0" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="677.2" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="688.3" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="699.5" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="710.7" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="721.8" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="733.0" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="744.2" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="755.3" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="766.5" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="777.7" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="slot" x="788.8" y="242" width="8.4" height="18" rx="2"/>
+      <rect class="pulse is-js" x="130.0" y="242" width="8.4" height="18" rx="2" style="animation-delay:-1.000s"/>
+      <rect class="pulse is-js" x="163.5" y="242" width="8.4" height="18" rx="2" style="animation-delay:-0.950s"/>
+      <rect class="pulse is-js" x="197.0" y="242" width="8.4" height="18" rx="2" style="animation-delay:-0.900s"/>
+      <rect class="pulse is-js" x="230.5" y="242" width="8.4" height="18" rx="2" style="animation-delay:-0.850s"/>
+      <rect class="pulse is-js" x="264.0" y="242" width="8.4" height="18" rx="2" style="animation-delay:-0.800s"/>
+      <rect class="pulse is-js" x="297.5" y="242" width="8.4" height="18" rx="2" style="animation-delay:-0.750s"/>
+      <rect class="pulse is-js" x="331.0" y="242" width="8.4" height="18" rx="2" style="animation-delay:-0.700s"/>
+      <rect class="pulse is-js" x="364.5" y="242" width="8.4" height="18" rx="2" style="animation-delay:-0.650s"/>
+      <rect class="pulse is-js" x="398.0" y="242" width="8.4" height="18" rx="2" style="animation-delay:-0.600s"/>
+      <rect class="pulse is-js" x="431.5" y="242" width="8.4" height="18" rx="2" style="animation-delay:-0.550s"/>
+      <rect class="pulse is-js" x="465.0" y="242" width="8.4" height="18" rx="2" style="animation-delay:-0.500s"/>
+      <rect class="pulse is-js" x="498.5" y="242" width="8.4" height="18" rx="2" style="animation-delay:-0.450s"/>
+      <rect class="pulse is-js" x="532.0" y="242" width="8.4" height="18" rx="2" style="animation-delay:-0.400s"/>
+      <rect class="pulse is-js" x="565.5" y="242" width="8.4" height="18" rx="2" style="animation-delay:-0.350s"/>
+      <rect class="pulse is-js" x="599.0" y="242" width="8.4" height="18" rx="2" style="animation-delay:-0.300s"/>
+      <rect class="pulse is-js" x="632.5" y="242" width="8.4" height="18" rx="2" style="animation-delay:-0.250s"/>
+      <rect class="pulse is-js" x="666.0" y="242" width="8.4" height="18" rx="2" style="animation-delay:-0.200s"/>
+      <rect class="pulse is-js" x="699.5" y="242" width="8.4" height="18" rx="2" style="animation-delay:-0.150s"/>
+      <rect class="pulse is-js" x="733.0" y="242" width="8.4" height="18" rx="2" style="animation-delay:-0.100s"/>
+      <rect class="pulse is-js" x="766.5" y="242" width="8.4" height="18" rx="2" style="animation-delay:-0.050s"/>
+  </g>
+
+  <text class="note" x="24" y="288">The frame rate belongs to the display; the JavaScript rate belongs to the data.</text>
+</svg>

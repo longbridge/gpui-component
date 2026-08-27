@@ -49,12 +49,22 @@ jobs:
       - name: Typo check
         if: ${{ matrix.run_on == 'macos-latest' }}
         run: |
-          cargo install typos-cli || echo "typos-cli already installed"
+          command -v typos >/dev/null || cargo install typos-cli
           typos
+      - name: Skill guides are in sync
+        if: ${{ matrix.run_on == 'macos-latest' }}
+        run: |
+          for guide in coding-guides design-guides; do
+            if ! diff -u "website/docs/$guide.md" "skills/gpui-component/references/$guide.md"; then
+              echo "::error::skills/gpui-component/references/$guide.md is stale."
+              echo "Run: cp website/docs/$guide.md skills/gpui-component/references/$guide.md"
+              exit 1
+            fi
+          done
       - name: Lint
         if: ${{ matrix.run_on == 'macos-latest' }}
         run: |
-          cargo clippy -- --deny warnings
+          cargo clippy -p gpui-component -p gpui-component-story -p gpui-component-assets -- --deny warnings
       - name: Check without default features (tree-sitter disabled)
         if: ${{ matrix.run_on == 'ubuntu-latest' }}
         run: |
@@ -62,13 +72,86 @@ jobs:
       - name: Test Linux
         if: ${{ matrix.run_on == 'ubuntu-latest' }}
         run: |
-          cargo test --all
+          cargo test --workspace --exclude gpui-shell --features gpui-component-story/test-support
       - name: Test Windows
         if: ${{ matrix.run_on == 'windows-latest' }}
         run: |
-          cargo test --all
+          cargo test --workspace --exclude gpui-shell --features gpui-component-story/test-support
       - name: Test MacOS
         if: ${{ matrix.run_on == 'macos-latest' }}
         run: |
-          cargo test --all
+          cargo test --workspace --exclude gpui-shell --features gpui-component-story/test-support
           cargo test -p gpui-component --doc
+
+  gpui-shell-core:
+    name: GPUI Shell Core
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          components: clippy
+      - name: Install system dependencies
+        run: script/bootstrap
+      - name: Setup | Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: shell-core-cargo-x86_64-linux-gnu-${{ hashFiles('**/Cargo.lock') }}
+      - name: Test runtime core without standard-library integration cases
+        run: |
+          cargo test -p gpui-shell --release --lib -- \
+            --skip tests::standard_runtime \
+            --skip tests::network \
+            --skip tests::fs \
+            --skip tests::process \
+            --skip tests::benchmark
+          cargo test -p gpui-shell --release tests::benchmark
+          cargo test -p gpui-shell --doc
+      - name: Lint GPUI Shell
+        run: cargo clippy -p gpui-shell --all-targets -- -D warnings
+
+  gpui-shell-standard-runtime:
+    name: GPUI Shell Standard Runtime (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            run_on: macos-latest
+          - target: x86_64-linux-gnu
+            run_on: ubuntu-latest
+          - target: x86_64-windows-msvc
+            run_on: windows-latest
+    runs-on: ${{ matrix.run_on }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: Install system dependencies
+        if: ${{ matrix.run_on != 'windows-latest' }}
+        run: script/bootstrap
+      - name: Setup | Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: shell-standard-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+      - name: Test LLRT module integration
+        run: |
+          cargo test -p gpui-shell --release tests::standard_runtime
+          cargo test -p gpui-shell --release tests::fs
+          cargo test -p gpui-shell --release tests::process
+          cargo test -p gpui-shell --release tests::network
+          cargo test -p gpui-shell --release tests::render
+          cargo test -p gpui-shell --release tests::snapshot
+          cargo test -p gpui-shell --release tests::host_api
+          cargo test -p gpui-shell --release tests::http_request

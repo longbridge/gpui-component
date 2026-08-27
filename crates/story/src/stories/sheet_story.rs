@@ -2,24 +2,31 @@ use std::{sync::Arc, time::Duration};
 
 use fake::Fake;
 use gpui::{
-    App, AppContext, Context, Entity, FocusHandle, Focusable, InteractiveElement as _, IntoElement,
-    ParentElement, Render, SharedString, Styled, Task, WeakEntity, Window, div,
+    Action, App, AppContext, Context, Entity, FocusHandle, Focusable, InteractiveElement as _,
+    IntoElement, ParentElement, Render, SharedString, Styled, Task, WeakEntity, Window, div,
     prelude::FluentBuilder as _, px,
 };
 
 use gpui_component::{
     ActiveTheme as _, Icon, IconName, IndexPath, Placement, WindowExt,
     button::{Button, ButtonVariant, ButtonVariants as _},
-    checkbox::Checkbox,
     date_picker::{DatePicker, DatePickerState},
     h_flex,
     input::{Input, InputState},
     list::{List, ListDelegate, ListItem, ListState},
     v_flex,
 };
+use serde::Deserialize;
 
 use crate::TestAction;
-use crate::{Story, section};
+use crate::{Story, section, story_toolbar_group};
+
+#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
+#[action(namespace = sheet_story, no_json)]
+enum ToggleSheetOption {
+    Overlay,
+    OverlayClosable,
+}
 
 pub struct ListItemDeletegate {
     story: WeakEntity<SheetStory>,
@@ -46,7 +53,9 @@ impl ListDelegate for ListItemDeletegate {
         cx.spawn(async move |this, cx| {
             // Simulate a slow search.
             let sleep = (0.05..0.1).fake();
-            cx.background_executor().timer(Duration::from_secs_f64(sleep)).await;
+            cx.background_executor()
+                .timer(Duration::from_secs_f64(sleep))
+                .await;
 
             this.update(cx, |this, cx| {
                 this.delegate_mut().matches = this
@@ -74,7 +83,12 @@ impl ListDelegate for ListItemDeletegate {
             let list_item = ListItem::new(("item", ix.row))
                 .check_icon(IconName::Check)
                 .confirmed(confirmed)
-                .child(h_flex().items_center().justify_between().child(item.to_string()))
+                .child(
+                    h_flex()
+                        .items_center()
+                        .justify_between()
+                        .child(item.to_string()),
+                )
                 .suffix(|_, _| {
                     Button::new("like")
                         .tab_stop(false)
@@ -101,7 +115,11 @@ impl ListDelegate for ListItemDeletegate {
     ) -> impl IntoElement {
         v_flex()
             .size_full()
-            .child(Icon::new(IconName::Inbox).size(px(50.)).text_color(cx.theme().muted_foreground))
+            .child(
+                Icon::new(IconName::Inbox)
+                    .size(px(50.))
+                    .text_color(cx.theme().muted_foreground),
+            )
             .child("No matches found")
             .items_center()
             .justify_center()
@@ -280,12 +298,12 @@ impl SheetStory {
                         .child(Input::new(&input1))
                         .child(DatePicker::new(&date).placeholder("Date of Birth"))
                         .child(
-                            Button::new("send-notification").child("Test Notification").on_click(
-                                |_, window, cx| {
+                            Button::new("send-notification")
+                                .child("Test Notification")
+                                .on_click(|_, window, cx| {
                                     window
                                         .push_notification("Hello this is message from Sheet.", cx)
-                                },
-                            ),
+                                }),
                         )
                         .child(
                             Button::new("confirm-dialog-from-sheet")
@@ -325,9 +343,13 @@ impl SheetStory {
                                 window.close_sheet(cx);
                             },
                         ))
-                        .child(Button::new("cancel").label("Cancel").on_click(|_, window, cx| {
-                            window.close_sheet(cx);
-                        })),
+                        .child(
+                            Button::new("cancel")
+                                .label("Cancel")
+                                .on_click(|_, window, cx| {
+                                    window.close_sheet(cx);
+                                }),
+                        ),
                 )
         });
     }
@@ -359,36 +381,41 @@ impl Render for SheetStory {
             .id("sheet-story")
             .track_focus(&self.focus_handle)
             .on_action(cx.listener(Self::on_action_test_action))
+            .on_action(cx.listener(|this, action: &ToggleSheetOption, _, cx| {
+                match action {
+                    ToggleSheetOption::Overlay => this.overlay = !this.overlay,
+                    ToggleSheetOption::OverlayClosable => {
+                        this.overlay_closable = !this.overlay_closable
+                    }
+                }
+                cx.notify();
+            }))
             .size_full()
             .child(
                 v_flex()
                     .gap_6()
+                    .child(story_toolbar_group().dropdown_child(
+                        Button::new("sheet-options").label("Options"),
+                        {
+                            let overlay = self.overlay;
+                            let overlay_closable = self.overlay_closable;
+                            move |menu, _, _| {
+                                menu.menu_with_check(
+                                    "Overlay",
+                                    overlay,
+                                    Box::new(ToggleSheetOption::Overlay),
+                                )
+                                .menu_with_check(
+                                    "Close on overlay click",
+                                    overlay_closable,
+                                    Box::new(ToggleSheetOption::OverlayClosable),
+                                )
+                            }
+                        },
+                    ))
                     .child(
-                        h_flex()
-                            .id("state")
-                            .items_center()
-                            .gap_3()
-                            .child(
-                                Checkbox::new("overlay")
-                                    .label("Overlay")
-                                    .checked(self.overlay)
-                                    .on_click(cx.listener(|view, _, _, cx| {
-                                        view.overlay = !view.overlay;
-                                        cx.notify();
-                                    })),
-                            )
-                            .child(
-                                Checkbox::new("closable")
-                                    .label("Overlay Closable")
-                                    .checked(self.overlay_closable)
-                                    .on_click(cx.listener(|view, _, _, cx| {
-                                        view.overlay_closable = !view.overlay_closable;
-                                        cx.notify();
-                                    })),
-                            ),
-                    )
-                    .child(
-                        section("Normal Sheet")
+                        section("Placement")
+                            .description("Open a sheet from any edge of the window.")
                             .child(
                                 Button::new("show-sheet-left")
                                     .outline()
@@ -423,7 +450,7 @@ impl Render for SheetStory {
                             ),
                     )
                     .child(
-                        section("Scrollable Sheet").max_w_md().child(
+                        section("Scrollable Sheet").w(px(480.)).child(
                             Button::new("show-scrollable-sheet")
                                 .outline()
                                 .label("Scrollable Sheet...")
@@ -441,7 +468,7 @@ impl Render for SheetStory {
                     )
                     .child(
                         section("Focus back test")
-                            .max_w_md()
+                            .w_128()
                             .child(Input::new(&self.input2))
                             .child(
                                 Button::new("test-action")
@@ -461,7 +488,9 @@ impl Render for SheetStory {
                     .when_some(self.selected_value.clone(), |this, selected_value| {
                         this.child(
                             h_flex().gap_1().child("You have selected:").child(
-                                div().child(selected_value.to_string()).text_color(gpui::red()),
+                                div()
+                                    .child(selected_value.to_string())
+                                    .text_color(gpui::red()),
                             ),
                         )
                     }),

@@ -1,4 +1,4 @@
-use chrono::{Datelike, Duration, NaiveDate};
+use chrono::{Datelike, Duration, NaiveDate, Weekday};
 
 trait NaiveDateExt {
     fn days_in_month(&self) -> i32;
@@ -28,7 +28,7 @@ impl NaiveDateExt for chrono::NaiveDate {
     }
 }
 
-pub(crate) fn days_in_month(year: i32, month: u32) -> Vec<Vec<NaiveDate>> {
+pub(crate) fn days_in_month(year: i32, month: u32, first_day: Weekday) -> Vec<Vec<NaiveDate>> {
     let mut year = year;
     let mut month = month;
     if month > 12 {
@@ -42,7 +42,8 @@ pub(crate) fn days_in_month(year: i32, month: u32) -> Vec<Vec<NaiveDate>> {
 
     let date = NaiveDate::from_ymd_opt(year, month, 1).unwrap();
     let num_days = date.days_in_month();
-    let start_weekday = date.weekday().num_days_from_sunday();
+    let start_weekday =
+        (date.weekday().num_days_from_sunday() + 7 - first_day.num_days_from_sunday()) % 7;
 
     // Get the days in the month, 2023-02 will returns
     // "29|30|31| 1| 2| 3| 4",
@@ -87,9 +88,9 @@ pub(crate) fn days_in_month(year: i32, month: u32) -> Vec<Vec<NaiveDate>> {
 
 #[cfg(test)]
 mod tests {
-    use chrono::{Datelike, NaiveDate};
+    use chrono::{Datelike, NaiveDate, Weekday};
 
-    use super::{days_in_month, NaiveDateExt};
+    use super::{NaiveDateExt, days_in_month};
 
     #[test]
     fn test_days_in_month() {
@@ -114,8 +115,8 @@ mod tests {
     #[test]
     fn test_days() {
         #[track_caller]
-        fn assert_case(date: NaiveDate, expected: Vec<&str>) {
-            let out = days_in_month(date.year(), date.month())
+        fn assert_case(date: NaiveDate, first_day: Weekday, expected: Vec<&str>) {
+            let out = days_in_month(date.year(), date.month(), first_day)
                 .iter()
                 .map(|week| {
                     week.iter()
@@ -138,6 +139,7 @@ mod tests {
 
         assert_case(
             NaiveDate::from_ymd_opt(2024, 8, 1).unwrap(),
+            Weekday::Sun,
             vec![
                 "7-28|7-29|7-30|7-31| 1| 2| 3",
                 " 4| 5| 6| 7| 8| 9|10",
@@ -148,6 +150,7 @@ mod tests {
         );
         assert_case(
             NaiveDate::from_ymd_opt(2025, 1, 1).unwrap(),
+            Weekday::Sun,
             vec![
                 "2024-12-29|2024-12-30|2024-12-31| 1| 2| 3| 4",
                 " 5| 6| 7| 8| 9|10|11",
@@ -159,6 +162,7 @@ mod tests {
 
         assert_case(
             NaiveDate::from_ymd_opt(2024, 2, 1).unwrap(),
+            Weekday::Sun,
             vec![
                 "1-28|1-29|1-30|1-31| 1| 2| 3",
                 " 4| 5| 6| 7| 8| 9|10",
@@ -169,12 +173,27 @@ mod tests {
         );
         assert_case(
             NaiveDate::from_ymd_opt(2023, 2, 20).unwrap(),
+            Weekday::Sun,
             vec![
                 "1-29|1-30|1-31| 1| 2| 3| 4",
                 " 5| 6| 7| 8| 9|10|11",
                 "12|13|14|15|16|17|18",
                 "19|20|21|22|23|24|25",
                 "26|27|28|3-1|3-2|3-3|3-4",
+            ],
+        );
+
+        // Monday-first week: Feb 2023 starts on a Wednesday, so the grid
+        // shifts to start on Monday (column 0 = Mon 30 Jan).
+        assert_case(
+            NaiveDate::from_ymd_opt(2023, 2, 1).unwrap(),
+            Weekday::Mon,
+            vec![
+                "1-30|1-31| 1| 2| 3| 4| 5",
+                " 6| 7| 8| 9|10|11|12",
+                "13|14|15|16|17|18|19",
+                "20|21|22|23|24|25|26",
+                "27|28|3-1|3-2|3-3|3-4|3-5",
             ],
         );
     }

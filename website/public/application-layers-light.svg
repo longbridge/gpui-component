@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720" role="img" aria-labelledby="title description">
+  <title id="title">GPUI application architecture</title>
+  <description id="description">Six compact nodes form a downward dependency path from the App Shell through capability-oriented Feature Crates and GPUI Component to GPUI.</description>
+  <defs>
+    <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M24 0H0V24" fill="none" stroke="#e5e5e5" opacity=".52"/></pattern>
+    <filter id="shadow" x="-18%" y="-24%" width="136%" height="168%"><feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#171717" flood-opacity=".10"/></filter>
+    <filter id="signal-glow" x="-300%" y="-300%" width="700%" height="700%"><feGaussianBlur stdDeviation="3" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <style>
+    .signal { animation: travel 7s cubic-bezier(.45,0,.55,1) infinite; transform-box: view-box; }
+    .port { animation: respond 7s ease-out infinite; }
+    .p1 { animation-delay: 0s } .p2 { animation-delay: 1.03s } .p3 { animation-delay: 2.06s }
+    .p4 { animation-delay: 3.30s } .p5 { animation-delay: 4.45s }
+    .hub { animation: couple 7s ease-out 3.45s infinite; }
+    @keyframes travel { 0%,5% { transform:translateY(0);opacity:0 } 10% { opacity:1 } 78% { transform:translateY(392px);opacity:1 } 86%,100% { transform:translateY(408px);opacity:0 } }
+    @keyframes respond { 0%,7%,100% { r:5;stroke-width:1.5 } 10% { r:8;stroke-width:2 } 16% { r:5;stroke-width:1.5 } }
+    @keyframes couple { 0%,8%,100% { stroke-width:1.5 } 13% { stroke-width:2.5 } 22% { stroke-width:1.5 } }
+    @media (prefers-reduced-motion: reduce) { .signal,.port,.hub { animation:none } .signal { display:none } }
+  </style>
+
+  <rect width="1200" height="720" rx="20" fill="#fafafa"/>
+  <rect x="32" y="32" width="1136" height="656" rx="14" fill="url(#grid)" stroke="#e5e5e5"/>
+  <g font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+    <text x="88" y="82" font-size="13" font-weight="700" letter-spacing="1.8" fill="#737373">APPLICATION ARCHITECTURE</text>
+    <path d="M88 98H1112" stroke="#d4d4d4"/>
+
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="10" font-weight="700" letter-spacing="1.2" fill="#737373">
+      <text x="122" y="174">APPLICATION</text><path d="M122 186H206" stroke="#a3a3a3"/>
+      <text x="122" y="434">INTERFACE</text><path d="M122 446H206" stroke="#a3a3a3"/>
+      <text x="122" y="560">FOUNDATION</text><path d="M122 572H206" stroke="#a3a3a3"/>
+    </g>
+    <path d="M224 142V372M224 410V484M224 496V644" fill="none" stroke="#d4d4d4" stroke-width="1.25"/>
+    <path d="M216 142H232M216 372H232M216 410H232M216 484H232M216 496H232M216 644H232" stroke="#a3a3a3"/>
+
+    <path d="M600 202V610" stroke="#a3a3a3" stroke-width="1.5"/>
+    <circle class="signal" cx="600" cy="202" r="4" fill="#171717" filter="url(#signal-glow)"/>
+
+    <g filter="url(#shadow)">
+      <rect x="396" y="126" width="408" height="76" rx="6" fill="#ffffff" stroke="#737373" stroke-width="1.25"/>
+      <text x="600" y="172" text-anchor="middle" font-size="20" font-weight="650" fill="#171717">App Shell</text>
+      <circle class="port p1" cx="600" cy="202" r="5" fill="#fafafa" stroke="#525252" stroke-width="1.5"/>
+    </g>
+
+    <g filter="url(#shadow)">
+      <rect x="396" y="214" width="408" height="76" rx="6" fill="#ffffff" stroke="#737373" stroke-width="1.25"/>
+      <text x="600" y="260" text-anchor="middle" font-size="20" font-weight="650" fill="#171717">Feature Crates</text>
+      <circle class="port p2" cx="600" cy="290" r="5" fill="#fafafa" stroke="#525252" stroke-width="1.5"/>
+    </g>
+
+    <g filter="url(#shadow)">
+      <rect x="396" y="302" width="408" height="76" rx="6" fill="#ffffff" stroke="#525252" stroke-width="1.35"/>
+      <text x="600" y="348" text-anchor="middle" font-size="20" font-weight="650" fill="#171717">App Components</text>
+      <circle class="port p3" cx="600" cy="378" r="5" fill="#fafafa" stroke="#525252" stroke-width="1.5"/>
+    </g>
+
+    <path d="M88 394H1112" stroke="#a3a3a3" stroke-dasharray="4 6"/>
+    <g filter="url(#shadow)">
+      <rect class="hub" x="372" y="410" width="456" height="74" rx="6" fill="#f5f5f5" stroke="#525252" stroke-width="1.5"/>
+      <text x="600" y="454" text-anchor="middle" font-size="21" font-weight="700" fill="#171717">GPUI Component</text>
+      <circle class="port p4" cx="600" cy="484" r="5" fill="#fafafa" stroke="#525252" stroke-width="1.5"/>
+    </g>
+
+    <g filter="url(#shadow)">
+      <rect x="408" y="496" width="384" height="86" rx="6" fill="#ffffff" stroke="#737373" stroke-width="1.35"/>
+      <text x="600" y="546" text-anchor="middle" font-size="20" font-weight="650" fill="#171717">GPUI Base</text>
+      <circle class="port p5" cx="600" cy="582" r="5" fill="#fafafa" stroke="#525252" stroke-width="1.5"/>
+    </g>
+
+    <g filter="url(#shadow)">
+      <rect x="408" y="594" width="384" height="50" rx="6" fill="#ffffff" stroke="#737373" stroke-width="1.5"/>
+      <text x="600" y="626" text-anchor="middle" font-size="20" font-weight="700" fill="#171717">GPUI</text>
+    </g>
+
+  </g>
+</svg>

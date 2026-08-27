@@ -1,0 +1,435 @@
+use crate::input::InputModeKind;
+use crate::input::{
+    Indent, IndentInline, InputBaseState, Outdent, OutdentInline, RopeExt, element::TextElement,
+    layout::LastLayout, mode::LayoutMode,
+};
+use gpui::{
+    Bounds, Context, EntityInputHandler as _, Hsla, Path, PathBuilder, Pixels, SharedString,
+    TextRun, TextStyle, Window, point, px,
+};
+use ropey::RopeSlice;
+
+#[derive(Debug, Copy, Clone)]
+pub struct TabSize {
+    /// Default is 2
+    pub tab_size: usize,
+    /// Set true to use `\t` as tab indent, default is false
+    pub hard_tabs: bool,
+}
+
+impl Default for TabSize {
+    fn default() -> Self {
+        Self {
+            tab_size: 2,
+            hard_tabs: false,
+        }
+    }
+}
+
+impl TabSize {
+    pub(super) fn to_string(&self) -> SharedString {
+        if self.hard_tabs {
+            "\t".into()
+        } else {
+            " ".repeat(self.tab_size).into()
+        }
+    }
+
+    /// Count the indent size of the line in spaces.
+    pub fn indent_count(&self, line: &RopeSlice) -> usize {
+        let mut count = 0;
+        for ch in line.chars() {
+            match ch {
+                '\t' => count += self.tab_size,
+                ' ' => count += 1,
+                _ => break,
+            }
+        }
+        count
+    }
+}
+
+impl LayoutMode {
+    /// Whether this layout indents blocks.
+    ///
+    /// Callers gate this on the input being multi-line: indenting a one-line
+    /// text field has nothing to indent.
+    #[inline]
+    pub(super) fn is_indentable(&self) -> bool {
+        matches!(
+            self,
+            LayoutMode::PlainText { .. } | LayoutMode::CodeEditor { .. }
+        )
+    }
+
+    #[inline]
+    pub(super) fn has_indent_guides(&self) -> bool {
+        match self {
+            LayoutMode::CodeEditor { indent_guides, .. } => *indent_guides,
+            _ => false,
+        }
+    }
+
+    #[inline]
+    pub(super) fn tab_size(&self) -> TabSize {
+        match self {
+            LayoutMode::PlainText { tab, .. } => *tab,
+            LayoutMode::CodeEditor { tab, .. } => *tab,
+            _ => TabSize::default(),
+        }
+    }
+}
+
+impl<M: InputModeKind> TextElement<M> {
+    /// Measure the indent width in pixels for given column count.
+    fn measure_indent_width(&self, style: &TextStyle, column: usize, window: &Window) -> Pixels {
+        let font_size = style.font_size.to_pixels(window.rem_size());
+        let layout = window.text_system().shape_line(
+            SharedString::from(" ".repeat(column)),
+            font_size,
+            &[TextRun {
+                len: column,
+                font: style.font(),
+                color: Hsla::default(),
+                background_color: None,
+                strikethrough: None,
+                underline: None,
+            }],
+            None,
+        );
+
+        layout.width
+    }
+
+    pub(super) fn layout_indent_guides(
+        &self,
+        state: &InputBaseState<M>,
+        bounds: &Bounds<Pixels>,
+        last_layout: &LastLayout,
+        text_style: &TextStyle,
+        window: &mut Window,
+    ) -> Option<Path<Pixels>> {
+        if !state.is_multi_line() || !state.mode.has_indent_guides() {
+            return None;
+        }
+
+        let indent_width =
+            self.measure_indent_width(text_style, state.mode.tab_size().tab_size, window);
+
+        let tab_size = state.mode.tab_size();
+        let line_height = last_layout.line_height;
+        let mut builder = PathBuilder::stroke(px(1.));
+        let mut offset_y = last_layout.visible_top;
+        let mut last_indents = vec![];
+
+        for (&buffer_line, line_layout) in last_layout
+            .visible_buffer_lines
+            .iter()
+            .zip(last_layout.lines.iter())
+        {
+            let line = state.text.slice_line(buffer_line);
+            let mut current_indents = vec![];
+            if line.len() > 0 {
+                let indent_count = tab_size.indent_count(&line);
+                for offset in (0..indent_count).step_by(tab_size.tab_size) {
+                    let x = if indent_count > 0 {
+                        indent_width * offset as f32 / tab_size.tab_size as f32
+                    } else {
+                        px(0.)
+                    };
+
+                    let pos = point(x + last_layout.line_number_width, offset_y);
+
+                    builder.move_to(pos);
+                    builder.line_to(point(pos.x, pos.y + line_height));
+                    current_indents.push(pos.x);
+                }
+            } else if last_indents.len() > 0 {
+                for x in &last_indents {
+                    let pos = point(*x, offset_y);
+                    builder.move_to(pos);
+                    builder.line_to(point(pos.x, pos.y + line_height));
+                }
+                current_indents = last_indents.clone();
+            }
+
+            offset_y += line_layout.wrapped_lines.len() * line_height;
+            last_indents = current_indents;
+        }
+
+        builder.translate(bounds.origin);
+        let path = builder.build().unwrap();
+        Some(path)
+    }
+}
+
+/// Indent guides are a code-editor affordance.
+impl InputBaseState<crate::input::EditorMode> {
+    /// Set whether to show indent guides, default is true.
+    #[doc(hidden)]
+    pub fn indent_guides(mut self, indent_guides: bool) -> Self {
+        if let LayoutMode::CodeEditor {
+            indent_guides: l, ..
+        } = &mut self.mode
+        {
+            *l = indent_guides;
+        }
+        self
+    }
+
+    /// Set indent guides at runtime.
+    pub fn set_indent_guides(
+        &mut self,
+        indent_guides: bool,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if let LayoutMode::CodeEditor {
+            indent_guides: l, ..
+        } = &mut self.mode
+        {
+            *l = indent_guides;
+        }
+        cx.notify();
+    }
+}
+
+impl<M: InputModeKind> InputBaseState<M> {
+    pub(super) fn indent_inline(
+        &mut self,
+        _: &IndentInline,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        // First, try to accept inline completion if present
+        if M::accept_inline_completion(self, window, cx) {
+            return;
+        }
+        self.indent(false, window, cx);
+    }
+
+    pub(super) fn indent_block(&mut self, _: &Indent, window: &mut Window, cx: &mut Context<Self>) {
+        self.indent(true, window, cx);
+    }
+
+    pub(super) fn outdent_inline(
+        &mut self,
+        _: &OutdentInline,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.outdent(false, window, cx);
+    }
+
+    pub(super) fn outdent_block(
+        &mut self,
+        _: &Outdent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.outdent(true, window, cx);
+    }
+
+    pub(super) fn indent(&mut self, block: bool, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.is_multi_line() || !self.mode.is_indentable() {
+            cx.propagate();
+            return;
+        };
+
+        let tab_indent = self.mode.tab_size().to_string();
+        let selected_range = self.selected_range;
+        let mut added_len = 0;
+        let is_selected = !self.selected_range.is_empty();
+
+        if is_selected || block {
+            let start_offset = self.start_of_line_of_selection(window, cx);
+            let mut offset = start_offset;
+
+            let selected_text = self
+                .text_for_range(
+                    self.range_to_utf16(&(offset..selected_range.end)),
+                    &mut None,
+                    window,
+                    cx,
+                )
+                .unwrap_or("".into());
+
+            for line in selected_text.split('\n') {
+                self.replace_text_in_range_silent(
+                    Some(self.range_to_utf16(&(offset..offset))),
+                    &tab_indent,
+                    window,
+                    cx,
+                );
+                added_len += tab_indent.len();
+                // +1 for "\n", the `\r` is included in the `line`.
+                offset += line.len() + tab_indent.len() + 1;
+            }
+
+            if is_selected {
+                self.selected_range = (start_offset..selected_range.end + added_len).into();
+            } else {
+                self.selected_range =
+                    (selected_range.start + added_len..selected_range.end + added_len).into();
+            }
+        } else {
+            // Selected none
+            let offset = self.selected_range.start;
+            self.replace_text_in_range_silent(
+                Some(self.range_to_utf16(&(offset..offset))),
+                &tab_indent,
+                window,
+                cx,
+            );
+            added_len = tab_indent.len();
+
+            self.selected_range =
+                (selected_range.start + added_len..selected_range.end + added_len).into();
+        }
+    }
+
+    pub(super) fn outdent(&mut self, block: bool, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.is_multi_line() || !self.mode.is_indentable() {
+            cx.propagate();
+            return;
+        };
+
+        let tab_indent = self.mode.tab_size().to_string();
+        let selected_range = self.selected_range;
+        let mut removed_len = 0;
+        let is_selected = !self.selected_range.is_empty();
+
+        if is_selected || block {
+            let start_offset = self.start_of_line_of_selection(window, cx);
+            let mut offset = start_offset;
+
+            let selected_text = self
+                .text_for_range(
+                    self.range_to_utf16(&(offset..selected_range.end)),
+                    &mut None,
+                    window,
+                    cx,
+                )
+                .unwrap_or("".into());
+
+            for line in selected_text.split('\n') {
+                if line.starts_with(tab_indent.as_ref()) {
+                    self.replace_text_in_range_silent(
+                        Some(self.range_to_utf16(&(offset..offset + tab_indent.len()))),
+                        "",
+                        window,
+                        cx,
+                    );
+                    removed_len += tab_indent.len();
+
+                    // +1 for "\n"
+                    offset += line.len().saturating_sub(tab_indent.len()) + 1;
+                } else {
+                    offset += line.len() + 1;
+                }
+            }
+
+            if is_selected {
+                self.selected_range =
+                    (start_offset..selected_range.end.saturating_sub(removed_len)).into();
+            } else {
+                self.selected_range = (selected_range.start.saturating_sub(removed_len)
+                    ..selected_range.end.saturating_sub(removed_len))
+                    .into();
+            }
+        } else {
+            // Selected none
+            let start_offset = self.selected_range.start;
+            let offset = self.start_of_line_of_selection(window, cx);
+            let offset = self.offset_from_utf16(self.offset_to_utf16(offset));
+
+            if self
+                .text
+                .slice(offset..self.text.len())
+                .chars()
+                .take(tab_indent.chars().count())
+                .eq(tab_indent.chars())
+            {
+                self.replace_text_in_range_silent(
+                    Some(self.range_to_utf16(&(offset..offset + tab_indent.len()))),
+                    "",
+                    window,
+                    cx,
+                );
+                removed_len = tab_indent.len();
+                let new_offset = start_offset.saturating_sub(removed_len);
+                self.selected_range = (new_offset..new_offset).into();
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use ropey::RopeSlice;
+
+    use super::TabSize;
+
+    #[test]
+    fn test_tab_size() {
+        let tab = TabSize {
+            tab_size: 2,
+            hard_tabs: false,
+        };
+        assert_eq!(tab.to_string(), "  ");
+        let tab = TabSize {
+            tab_size: 4,
+            hard_tabs: false,
+        };
+        assert_eq!(tab.to_string(), "    ");
+
+        let tab = TabSize {
+            tab_size: 2,
+            hard_tabs: true,
+        };
+        assert_eq!(tab.to_string(), "\t");
+        let tab = TabSize {
+            tab_size: 4,
+            hard_tabs: true,
+        };
+        assert_eq!(tab.to_string(), "\t");
+    }
+
+    #[test]
+    fn test_tab_size_indent_count() {
+        let tab = TabSize {
+            tab_size: 4,
+            hard_tabs: false,
+        };
+        assert_eq!(tab.indent_count(&RopeSlice::from("abc")), 0);
+        assert_eq!(tab.indent_count(&RopeSlice::from("  abc")), 2);
+        assert_eq!(tab.indent_count(&RopeSlice::from("    abc")), 4);
+        assert_eq!(tab.indent_count(&RopeSlice::from("\tabc")), 4);
+        assert_eq!(tab.indent_count(&RopeSlice::from("  \tabc")), 6);
+        assert_eq!(tab.indent_count(&RopeSlice::from(" \t abc  ")), 6);
+        assert_eq!(tab.indent_count(&RopeSlice::from("abc")), 0);
+    }
+}
+
+/// Tab size only means something where there is more than one line to indent.
+impl<M: crate::input::MultiLineMode> InputBaseState<M> {
+    /// Set the tab size for the input.
+    #[doc(hidden)]
+    pub fn tab_size(mut self, tab: TabSize) -> Self {
+        match &mut self.mode {
+            LayoutMode::PlainText { tab: t, .. } => *t = tab,
+            LayoutMode::CodeEditor { tab: t, .. } => *t = tab,
+            _ => {}
+        }
+        self
+    }
+
+    pub fn set_tab_size(&mut self, tab: TabSize, cx: &mut Context<Self>) {
+        match &mut self.mode {
+            LayoutMode::PlainText { tab: value, .. }
+            | LayoutMode::CodeEditor { tab: value, .. } => *value = tab,
+            _ => {}
+        }
+        cx.notify();
+    }
+}

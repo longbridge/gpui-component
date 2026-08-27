@@ -16,12 +16,15 @@ use gpui_component::{
     h_flex,
     highlighter::Language,
     input::{
-        DocumentRangeSemanticTokensProvider, Input, InputEvent, InputState, Rope, RopeExt, TabSize,
+        DocumentRangeSemanticTokensProvider, Editor, EditorState, InputEvent, Rope, RopeExt,
+        TabSize,
     },
+    menu::{DropdownMenu as _, PopupMenuItem},
     resizable::{h_resizable, resizable_panel},
     status_bar::StatusBar,
     text::{
-        MarkdownNode, MarkdownParseContext, MarkdownPlugin, TextViewStyle, markdown, markdown_ast,
+        MarkdownNode, MarkdownParseContext, MarkdownPlugin, SelectionFormat, TextViewStyle,
+        markdown, markdown_ast,
     },
     v_flex,
 };
@@ -1027,6 +1030,46 @@ fn svg_color(color: Hsla) -> (String, f32) {
     )
 }
 
+/// Serialize a table to CSV: `,` separated, quoting only cells that contain
+/// `"`, `,` or a newline, with `"` doubled inside quotes.
+fn table_to_csv(headers: &[String], rows: &[Vec<String>]) -> String {
+    let field = |cell: &str| {
+        if cell.contains(['"', ',', '\n']) {
+            format!("\"{}\"", cell.replace('"', "\"\""))
+        } else {
+            cell.to_string()
+        }
+    };
+    let line = |cells: &[String]| cells.iter().map(|c| field(c)).collect::<Vec<_>>().join(",");
+
+    std::iter::once(line(headers))
+        .chain(rows.iter().map(|row| line(row)))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Serialize a table to TSV: tab separated, never quoted; tabs and newlines
+/// inside a cell become literal `\t` / `\n` so rows stay intact.
+fn table_to_tsv(headers: &[String], rows: &[Vec<String>]) -> String {
+    let field = |cell: &str| {
+        cell.replace('\t', "\\t")
+            .replace('\n', "\\n")
+            .replace('\r', "\\r")
+    };
+    let line = |cells: &[String]| {
+        cells
+            .iter()
+            .map(|c| field(c))
+            .collect::<Vec<_>>()
+            .join("\t")
+    };
+
+    std::iter::once(line(headers))
+        .chain(rows.iter().map(|row| line(row)))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 /// Example [`DocumentRangeSemanticTokensProvider`]: tags `TODO` / `FIXME` /
 /// `XXX` / `HACK` / `NOTE` markers anywhere in the document, each with its
 /// own semantic token type so they render in distinct theme colors.
@@ -1109,10 +1152,13 @@ impl DocumentRangeSemanticTokensProvider for MarkerHighlighter {
 }
 
 pub struct Example {
-    input_state: Entity<InputState>,
+    input_state: Entity<EditorState>,
     /// When `true`, tables wrap cell content to fit the width; when `false`
     /// (the default), tables keep cells on one line and scroll horizontally.
     table_wrap: bool,
+    /// Whether copying a selection yields the rendered text or its Markdown
+    /// source.
+    selection_format: SelectionFormat,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -1121,8 +1167,8 @@ const EXAMPLE: &str = include_str!("./fixtures/test.md");
 impl Example {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let input_state = cx.new(|cx| {
-            let mut input_state = InputState::new(window, cx)
-                .code_editor(Language::Markdown)
+            EditorState::new(window, cx)
+                .language(Language::Markdown)
                 .line_number(true)
                 .tab_size(TabSize {
                     tab_size: 2,
@@ -1130,13 +1176,14 @@ impl Example {
                 })
                 .searchable(true)
                 .placeholder("Enter your Markdown here...")
-                .default_value(EXAMPLE);
+                .default_value(EXAMPLE)
+        });
 
-            // Install the example range semantic tokens provider, alongside
-            // the other LSP providers. It highlights TODO/FIXME/… markers.
-            input_state.lsp.semantic_tokens_provider = Some(Rc::new(MarkerHighlighter));
-
-            input_state
+        // Install the example range semantic tokens provider, alongside the
+        // other LSP providers. It highlights TODO/FIXME/… markers.
+        input_state.update(cx, |state, cx| {
+            state.lsp_mut().semantic_tokens_provider = Some(Rc::new(MarkerHighlighter));
+            cx.notify();
         });
 
         // Focus the input on startup so that actions (e.g. Open) can bubble
@@ -1152,6 +1199,7 @@ impl Example {
             input_state,
             // Default to horizontal scrolling for tables.
             table_wrap: false,
+            selection_format: SelectionFormat::Plain,
             _subscriptions,
         }
     }
@@ -1219,17 +1267,16 @@ impl Render for Example {
                                             .font_family(cx.theme().mono_font_family.clone())
                                             .text_size(cx.theme().mono_font_size)
                                             .child(
-                                                Input::new(&self.input_state)
-                                                    .h_full()
+                                                Editor::new(&self.input_state)
+                                                    .h(relative(1.))
                                                     .p_0()
-                                                    .border_0()
-                                                    .focus_bordered(false),
+                                                    .border_0(),
                                             ),
                                     ),
                                 )
                                 .child(
                                     resizable_panel().child(
-                                        markdown(self.input_state.read(cx).value().clone())
+                                        markdown(self.input_state.read(cx).value())
                                             .code_block_actions(|code_block, _window, _cx| {
                                                 let code = code_block.code();
                                                 let lang = code_block.lang();
@@ -1261,6 +1308,83 @@ impl Render for Example {
                                                         }
                                                     })
                                             })
+                                            .table_actions(|table, _window, cx| {
+                                                // The hook hands over the table as plain data:
+                                                // header cells, body rows, and the table
+                                                // re-serialized to GFM Markdown.
+                                                //
+                                                // This runs on every render, so only cheap
+                                                // clones belong here — CSV / TSV are built
+                                                // inside the click handlers instead.
+                                                let markdown = table.markdown.clone();
+                                                let headers = table.headers.clone();
+                                                let rows = table.rows.clone();
+                                                // Plain ids are fine: the actions row is scoped
+                                                // per table by the component.
+                                                let shape = format!(
+                                                    "{} × {}",
+                                                    table.rows.len(),
+                                                    table.headers.len()
+                                                );
+
+                                                h_flex()
+                                                    .w_full()
+                                                    .justify_end()
+                                                    .items_center()
+                                                    .gap_1()
+                                                    .child(
+                                                        div()
+                                                            .text_xs()
+                                                            .text_color(cx.theme().muted_foreground)
+                                                            .child(shape),
+                                                    )
+                                                    .child(
+                                                        Clipboard::new("copy-table")
+                                                            .value(markdown.clone())
+                                                            .tooltip("Copy as Markdown"),
+                                                    )
+                                                    .child(
+                                                        Button::new("export-table")
+                                                            .icon(IconName::Ellipsis)
+                                                            .ghost()
+                                                            .xsmall()
+                                                            .dropdown_menu_with_anchor(
+                                                                Anchor::TopRight,
+                                                                move |menu, _window, _cx| {
+                                                                    // The builder is a `Fn`, so
+                                                                    // captured values are cloned
+                                                                    // on every rebuild.
+                                                                    let (csv_headers, csv_rows) =
+                                                                        (headers.clone(), rows.clone());
+                                                                    let (tsv_headers, tsv_rows) =
+                                                                        (headers.clone(), rows.clone());
+
+                                                                    menu.item(
+                                                                        PopupMenuItem::new(
+                                                                            "Copy as CSV",
+                                                                        )
+                                                                        .on_click(
+                                                                            move |_, _, cx| {
+                                                                                let csv = table_to_csv(&csv_headers, &csv_rows);
+                                                                                cx.write_to_clipboard(ClipboardItem::new_string(csv));
+                                                                            },
+                                                                        ),
+                                                                    )
+                                                                    .item(
+                                                                        PopupMenuItem::new(
+                                                                            "Copy as TSV",
+                                                                        )
+                                                                        .on_click(
+                                                                            move |_, _, cx| {
+                                                                                let tsv = table_to_tsv(&tsv_headers, &tsv_rows);
+                                                                                cx.write_to_clipboard(ClipboardItem::new_string(tsv));
+                                                                            },
+                                                                        ),
+                                                                    )
+                                                                },
+                                                            ),
+                                                    )
+                                            })
                                             .plugin(TickerPlugin::new(
                                                 TickerQuote {
                                                     name: "Apple Inc.",
@@ -1275,32 +1399,58 @@ impl Render for Example {
                                             ))
                                             .plugin(UserCardPlugin::new())
                                             .plugin(MathPlugin::new())
+                                            .on_link_click(|url, event, _window, cx| {
+                                                println!(
+                                                    "Markdown link clicked: {url} ({event:?})"
+                                                );
+                                                if !event.is_right_click() {
+                                                    cx.open_url(url);
+                                                }
+                                            })
                                             // Tables scroll horizontally by default; the
                                             // status bar toggle switches to wrapping.
                                             .style(self.text_view_style())
                                             .flex_none()
                                             .p_5()
                                             .scrollable(true)
-                                            .selectable(true),
+                                            .selectable(true)
+                                            .selection_format(self.selection_format),
                                     ),
                                 ),
                         ),
                     )
                     .child(
-                        StatusBar::new().right(
-                            Button::new("table-wrap")
-                                .ghost()
-                                .xsmall()
-                                .label(if self.table_wrap {
-                                    "Table: Wrap"
-                                } else {
-                                    "Table: Scroll"
-                                })
-                                .on_click(cx.listener(|this, _, _, cx| {
-                                    this.table_wrap = !this.table_wrap;
-                                    cx.notify();
-                                })),
-                        ),
+                        StatusBar::new()
+                            .right(
+                                Button::new("selection-format")
+                                    .ghost()
+                                    .xsmall()
+                                    .label(match self.selection_format {
+                                        SelectionFormat::Plain => "Selection: Plain",
+                                        SelectionFormat::Source => "Selection: Source",
+                                    })
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.selection_format = match this.selection_format {
+                                            SelectionFormat::Plain => SelectionFormat::Source,
+                                            SelectionFormat::Source => SelectionFormat::Plain,
+                                        };
+                                        cx.notify();
+                                    })),
+                            )
+                            .right(
+                                Button::new("table-wrap")
+                                    .ghost()
+                                    .xsmall()
+                                    .label(if self.table_wrap {
+                                        "Table: Wrap"
+                                    } else {
+                                        "Table: Scroll"
+                                    })
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.table_wrap = !this.table_wrap;
+                                        cx.notify();
+                                    })),
+                            ),
                     ),
             )
     }

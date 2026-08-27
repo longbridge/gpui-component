@@ -1,6 +1,6 @@
 use gpui::{
-    div, AnyElement, ClickEvent, ElementId, InteractiveElement, IntoElement, MouseButton,
-    ParentElement, RenderOnce, SharedString, StatefulInteractiveElement, StyleRefinement, Styled,
+    AnyElement, ClickEvent, ElementId, InteractiveElement, IntoElement, MouseButton, ParentElement,
+    RenderOnce, SharedString, StatefulInteractiveElement, StyleRefinement, Styled, div,
 };
 
 use crate::{ActiveTheme as _, StyledExt};
@@ -75,14 +75,16 @@ impl RenderOnce for Link {
             .id(self.id)
             .text_color(cx.theme().link)
             .text_decoration_1()
-            .text_decoration_color(cx.theme().link)
+            .text_decoration_color(cx.theme().link.opacity(0.5))
             .hover(|this| {
                 this.text_color(cx.theme().link.opacity(0.8))
                     .text_decoration_1()
+                    .text_decoration_color(cx.theme().link)
             })
             .active(|this| {
                 this.text_color(cx.theme().link.opacity(0.6))
                     .text_decoration_1()
+                    .text_decoration_color(cx.theme().link)
             })
             .cursor_pointer()
             .refine_style(&self.style)
@@ -100,5 +102,88 @@ impl RenderOnce for Link {
                 }
             })
             .children(self.children)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{cell::Cell, rc::Rc};
+
+    use gpui::{Context, Modifiers, Render, TestAppContext, div, point, px};
+
+    use super::*;
+
+    struct LinkHarness {
+        disabled: bool,
+        clicks: Rc<Cell<usize>>,
+    }
+
+    impl Render for LinkHarness {
+        fn render(&mut self, _: &mut gpui::Window, _: &mut Context<Self>) -> impl IntoElement {
+            let clicks = self.clicks.clone();
+            Link::new("legacy-link")
+                .href("https://example.com")
+                .disabled(self.disabled)
+                .size(px(100.))
+                .child(
+                    div()
+                        .debug_selector(|| "legacy-link-child".into())
+                        .child("Visible link"),
+                )
+                .on_click(move |_, _, _| clicks.set(clicks.get() + 1))
+        }
+    }
+
+    #[gpui::test]
+    fn legacy_link_prepaints_children(cx: &mut TestAppContext) {
+        let (cx, _) = harness(cx, false);
+        let bounds = cx
+            .debug_bounds("legacy-link-child")
+            .expect("legacy Link child must participate in layout and prepaint");
+
+        assert!(bounds.size.width > px(0.));
+        assert!(bounds.size.height > px(0.));
+    }
+
+    fn harness(
+        cx: &mut TestAppContext,
+        disabled: bool,
+    ) -> (&mut gpui::VisualTestContext, Rc<Cell<usize>>) {
+        cx.update(crate::init);
+        let clicks = Rc::new(Cell::new(0));
+        let (_, cx) = cx.add_window_view({
+            let clicks = clicks.clone();
+            move |_, _| LinkHarness { disabled, clicks }
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        (cx, clicks)
+    }
+
+    #[gpui::test]
+    fn legacy_link_preserves_pointer_open_and_callback(cx: &mut TestAppContext) {
+        let (cx, clicks) = harness(cx, false);
+        cx.simulate_click(point(px(10.), px(10.)), Modifiers::default());
+
+        assert_eq!(cx.opened_url().as_deref(), Some("https://example.com"));
+        assert_eq!(clicks.get(), 1);
+    }
+
+    #[gpui::test]
+    fn legacy_link_preserves_disabled_behavior(cx: &mut TestAppContext) {
+        let (cx, clicks) = harness(cx, true);
+        cx.simulate_click(point(px(10.), px(10.)), Modifiers::default());
+
+        // `disabled` was historically a stored but behaviorally inert field.
+        assert_eq!(cx.opened_url().as_deref(), Some("https://example.com"));
+        assert_eq!(clicks.get(), 1);
+    }
+
+    #[gpui::test]
+    fn legacy_link_remains_pointer_only(cx: &mut TestAppContext) {
+        let (cx, clicks) = harness(cx, false);
+        cx.simulate_keystrokes("enter space");
+
+        assert_eq!(cx.opened_url(), None);
+        assert_eq!(clicks.get(), 0);
     }
 }

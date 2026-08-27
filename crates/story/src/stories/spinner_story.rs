@@ -1,14 +1,15 @@
 use gpui::{
-    App, AppContext, Context, Entity, Focusable, IntoElement, ParentElement, Render, Styled,
-    Window, bounce, ease_in_out, ease_out_quint, linear, px,
+    App, AppContext, Context, Entity, Focusable, InteractiveElement, IntoElement, ParentElement,
+    Render, Styled, Window, bounce, ease_in_out, ease_out_quint, linear, px,
 };
-use gpui_component::{ActiveTheme as _, IconName, Sizable, spinner::Spinner, v_flex};
+use gpui_component::{ActiveTheme as _, IconName, Sizable, Size, spinner::Spinner, v_flex};
 
-use crate::section;
+use crate::{ChangeStorySize, section, story_toolbar};
 
 pub struct SpinnerStory {
     focus_handle: gpui::FocusHandle,
     value: f32,
+    size: Size,
 }
 
 impl super::Story for SpinnerStory {
@@ -34,6 +35,7 @@ impl SpinnerStory {
         Self {
             focus_handle: cx.focus_handle(),
             value: 50.,
+            size: Size::Medium,
         }
     }
 
@@ -53,43 +55,68 @@ impl Render for SpinnerStory {
         v_flex()
             .w_full()
             .gap_3()
-            .child(section("Spinner").gap_x_2().child(Spinner::new()))
+            .on_action(cx.listener(|this, action: &ChangeStorySize, _, cx| {
+                this.size = action.0;
+                cx.notify();
+            }))
+            .child(story_toolbar(self.size))
             .child(
-                section("Spinner with color")
+                section("Default")
+                    .description("An indeterminate loading indicator.")
                     .gap_x_2()
-                    .child(Spinner::new().color(cx.theme().blue))
-                    .child(Spinner::new().color(cx.theme().green)),
+                    .child(Spinner::new().with_size(self.size)),
             )
             .child(
-                section("Spinner with size")
+                section("Color")
+                    .description("Use a color that suits the surrounding status.")
                     .gap_x_2()
-                    .child(Spinner::new().with_size(px(64.)))
-                    .child(Spinner::new().large())
-                    .child(Spinner::new())
-                    .child(Spinner::new().small())
-                    .child(Spinner::new().xsmall()),
+                    .child(Spinner::new().with_size(self.size).color(cx.theme().blue))
+                    .child(Spinner::new().with_size(self.size).color(cx.theme().green)),
             )
             .child(
-                section("Spinner with Icon")
+                section("Custom size")
+                    .description("A fixed pixel size is also supported.")
                     .gap_x_2()
-                    .child(Spinner::new().icon(IconName::LoaderCircle))
+                    .child(Spinner::new().with_size(px(64.))),
+            )
+            .child(
+                section("Icon")
+                    .description("Replace the default spinner glyph.")
+                    .gap_x_2()
                     .child(
                         Spinner::new()
+                            .with_size(self.size)
+                            .icon(IconName::LoaderCircle),
+                    )
+                    .child(
+                        Spinner::new()
+                            .with_size(self.size)
                             .icon(IconName::LoaderCircle)
-                            .large()
                             .color(cx.theme().cyan),
                     ),
             )
             .child(
-                section("Spinners with custom Easing Function")
+                section("Easing")
+                    .description("Customize the rotation timing curve.")
                     .gap_x_2()
-                    .child(Spinner::new().icon(IconName::Loader).ease(linear))
                     .child(
                         Spinner::new()
+                            .with_size(self.size)
+                            .icon(IconName::Loader)
+                            .ease(linear),
+                    )
+                    .child(
+                        Spinner::new()
+                            .with_size(self.size)
                             .icon(IconName::Loader)
                             .ease(bounce(ease_in_out)),
                     )
-                    .child(Spinner::new().icon(IconName::Loader).ease(ease_out_quint())),
+                    .child(
+                        Spinner::new()
+                            .with_size(self.size)
+                            .icon(IconName::Loader)
+                            .ease(ease_out_quint()),
+                    ),
             )
     }
 }

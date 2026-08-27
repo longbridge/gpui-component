@@ -2,30 +2,25 @@ use std::{rc::Rc, time::Duration};
 
 use gpui::{
     Animation, AnimationExt as _, AnyElement, App, ClickEvent, DefiniteLength, DismissEvent, Edges,
-    EventEmitter, FocusHandle, InteractiveElement as _, IntoElement, KeyBinding, MouseButton,
-    ParentElement, Pixels, RenderOnce, StyleRefinement, Styled, Window, WindowControlArea,
-    anchored, div, point, prelude::FluentBuilder as _, px,
+    EventEmitter, FocusHandle, InteractiveElement as _, IntoElement, ParentElement, Pixels,
+    RenderOnce, StyleRefinement, Styled, Window, anchored, div, point, prelude::FluentBuilder as _,
+    px,
 };
+use gpui_base::{ElementExt as _, Sheet as BaseSheet, TextSelectionScopeId, actions::Cancel};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ActiveTheme, FocusTrapElement as _, IconName, Placement, Sizable, StyledExt as _,
-    WindowExt as _,
-    actions::Cancel,
+    ActiveTheme, IconName, Placement, Sizable, StyledExt as _, WindowExt as _,
     button::{Button, ButtonVariants as _},
     dialog::overlay_color,
     h_flex,
     scroll::ScrollableElement as _,
-    text::{SelectionScope, SelectionScopeElement as _},
     title_bar::TITLE_BAR_HEIGHT,
     v_flex,
 };
 
-const CONTEXT: &str = "Sheet";
-pub(crate) fn init(cx: &mut App) {
-    cx.bind_keys([KeyBinding::new("escape", Cancel, Some(CONTEXT))])
-}
+pub(crate) fn init(_: &mut App) {}
 
 /// The settings for sheets.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -48,6 +43,7 @@ pub struct Sheet {
     pub(crate) focus_handle: FocusHandle,
     pub(crate) placement: Placement,
     pub(crate) size: DefiniteLength,
+    pub(crate) selection_scope: TextSelectionScopeId,
     resizable: bool,
     on_close: Rc<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>,
     title: Option<AnyElement>,
@@ -65,6 +61,7 @@ impl Sheet {
             focus_handle: cx.focus_handle(),
             placement: Placement::Right,
             size: DefiniteLength::Absolute(px(350.).into()),
+            selection_scope: TextSelectionScopeId::default(),
             resizable: true,
             title: None,
             footer: None,
@@ -137,6 +134,7 @@ impl Styled for Sheet {
 impl RenderOnce for Sheet {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let placement = self.placement;
+        let selection_scope = self.selection_scope;
         let window_paddings = crate::window_border::window_paddings(window);
         let size = window.viewport_size()
             - gpui::size(
@@ -144,8 +142,6 @@ impl RenderOnce for Sheet {
                 window_paddings.top + window_paddings.bottom,
             );
         let top = cx.theme().sheet.margin_top;
-        let on_close = self.on_close.clone();
-
         let base_size = window.text_style().font_size;
         let rem_size = window.rem_size();
         let mut paddings = Edges::all(px(16.));
@@ -162,127 +158,105 @@ impl RenderOnce for Sheet {
             paddings.bottom = pb.to_pixels(base_size, rem_size);
         }
 
+        let overlay = div()
+            .occlude()
+            .w(size.width)
+            .h(size.height)
+            .bg(overlay_color(self.overlay, cx));
+
+        let surface = v_flex()
+            .id("sheet")
+            .absolute()
+            .occlude()
+            .bg(cx.theme().tokens.background)
+            .border_color(cx.theme().border)
+            .shadow_xl()
+            .refine_style(&self.style)
+            .map(|this| {
+                // Set the size of the sheet.
+                if placement.is_horizontal() {
+                    this.w(self.size)
+                } else {
+                    this.h(self.size)
+                }
+            })
+            .map(|this| match self.placement {
+                Placement::Top => this.top(top).left_0().right_0().border_b_1(),
+                Placement::Right => this.top(top).right_0().bottom_0().border_l_1(),
+                Placement::Bottom => this.bottom_0().left_0().right_0().border_t_1(),
+                Placement::Left => this.top(top).left_0().bottom_0().border_r_1(),
+            })
+            .child(
+                // TitleBar
+                h_flex()
+                    .justify_between()
+                    .pl_4()
+                    .pr_3()
+                    .py_2()
+                    .w_full()
+                    .font_semibold()
+                    .child(self.title.unwrap_or(div().into_any_element()))
+                    .child(
+                        Button::new("close")
+                            .small()
+                            .ghost()
+                            .icon(IconName::Close)
+                            .on_click(|_, window, cx| {
+                                window.dispatch_action(Box::new(Cancel), cx);
+                            }),
+                    ),
+            )
+            .child(
+                div().flex_1().overflow_hidden().child(
+                    // Body
+                    v_flex()
+                        .size_full()
+                        .overflow_y_scrollbar()
+                        .pl(paddings.left)
+                        .pr(paddings.right)
+                        .children(self.children),
+                ),
+            )
+            .when_some(self.footer, |this, footer| {
+                // Footer
+                this.child(
+                    h_flex()
+                        .justify_between()
+                        .px_4()
+                        .py_3()
+                        .w_full()
+                        .child(footer),
+                )
+            })
+            .with_animation(
+                "slide",
+                Animation::new(Duration::from_secs_f64(0.15)),
+                move |this, delta| {
+                    let y = px(-100.) + delta * px(100.);
+                    this.map(|this| match placement {
+                        Placement::Top => this.top(top + y),
+                        Placement::Right => this.right(y),
+                        Placement::Bottom => this.bottom(y),
+                        Placement::Left => this.left(y),
+                    })
+                },
+            );
+        let surface = surface.text_selection_scope(selection_scope);
+
         anchored()
             .position(point(window_paddings.left, window_paddings.top))
             .snap_to_window()
             .child(
-                div()
-                    .occlude()
+                BaseSheet::new(cx)
                     .w(size.width)
                     .h(size.height)
-                    .bg(overlay_color(self.overlay, cx))
-                    .when(self.overlay, |this| {
-                        this.window_control_area(WindowControlArea::Drag)
-                            .on_any_mouse_down({
-                                let on_close = self.on_close.clone();
-                                move |event, window, cx| {
-                                    if event.position.y < top {
-                                        return;
-                                    }
-
-                                    cx.stop_propagation();
-                                    if self.overlay_closable && event.button == MouseButton::Left {
-                                        window.close_sheet(cx);
-                                        on_close(&ClickEvent::default(), window, cx);
-                                    }
-                                }
-                            })
-                    })
-                    .child(
-                        v_flex()
-                            .id("sheet")
-                            .key_context(CONTEXT)
-                            .track_focus(&self.focus_handle)
-                            .focus_trap("sheet", &self.focus_handle)
-                            .on_action({
-                                let on_close = self.on_close.clone();
-                                move |_: &Cancel, window, cx| {
-                                    cx.propagate();
-
-                                    window.close_sheet(cx);
-                                    on_close(&ClickEvent::default(), window, cx);
-                                }
-                            })
-                            .absolute()
-                            .occlude()
-                            .bg(cx.theme().tokens.background)
-                            .border_color(cx.theme().border)
-                            .shadow_xl()
-                            .refine_style(&self.style)
-                            .map(|this| {
-                                // Set the size of the sheet.
-                                if placement.is_horizontal() {
-                                    this.w(self.size)
-                                } else {
-                                    this.h(self.size)
-                                }
-                            })
-                            .map(|this| match self.placement {
-                                Placement::Top => this.top(top).left_0().right_0().border_b_1(),
-                                Placement::Right => this.top(top).right_0().bottom_0().border_l_1(),
-                                Placement::Bottom => {
-                                    this.bottom_0().left_0().right_0().border_t_1()
-                                }
-                                Placement::Left => this.top(top).left_0().bottom_0().border_r_1(),
-                            })
-                            .child(
-                                // TitleBar
-                                h_flex()
-                                    .justify_between()
-                                    .pl_4()
-                                    .pr_3()
-                                    .py_2()
-                                    .w_full()
-                                    .font_semibold()
-                                    .child(self.title.unwrap_or(div().into_any_element()))
-                                    .child(
-                                        Button::new("close")
-                                            .small()
-                                            .ghost()
-                                            .icon(IconName::Close)
-                                            .on_click(move |_, window, cx| {
-                                                window.close_sheet(cx);
-                                                on_close(&ClickEvent::default(), window, cx);
-                                            }),
-                                    ),
-                            )
-                            .child(
-                                div().flex_1().overflow_hidden().child(
-                                    // Body
-                                    v_flex()
-                                        .size_full()
-                                        .overflow_y_scrollbar()
-                                        .pl(paddings.left)
-                                        .pr(paddings.right)
-                                        .children(self.children),
-                                ),
-                            )
-                            .when_some(self.footer, |this, footer| {
-                                // Footer
-                                this.child(
-                                    h_flex()
-                                        .justify_between()
-                                        .px_4()
-                                        .py_3()
-                                        .w_full()
-                                        .child(footer),
-                                )
-                            })
-                            .with_animation(
-                                "slide",
-                                Animation::new(Duration::from_secs_f64(0.15)),
-                                move |this, delta| {
-                                    let y = px(-100.) + delta * px(100.);
-                                    this.map(|this| match placement {
-                                        Placement::Top => this.top(top + y),
-                                        Placement::Right => this.right(y),
-                                        Placement::Bottom => this.bottom(y),
-                                        Placement::Left => this.left(y),
-                                    })
-                                },
-                            )
-                            .selection_scope(SelectionScope::Sheet),
-                    ),
+                    .focus_handle(self.focus_handle)
+                    .overlay_interactive(self.overlay)
+                    .overlay_closable(self.overlay && self.overlay_closable)
+                    .request_close(|window, cx| window.close_sheet(cx))
+                    .on_close(move |event, window, cx| (self.on_close)(event, window, cx))
+                    .overlay(overlay)
+                    .surface(surface),
             )
     }
 }

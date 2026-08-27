@@ -3,13 +3,13 @@ use gpui_component::{
     ActiveTheme, Selectable, Sizable, WindowExt,
     button::{Button, ButtonVariants as _},
     h_flex,
-    input::{self, Input, InputEvent, InputState, TabSize},
+    input::{self, Input, InputEvent, InputState, TabSize, Textarea, TextareaState},
     v_flex,
 };
 use gpui_component_assets::Assets;
 
 pub struct Example {
-    editor: Entity<InputState>,
+    editor: Entity<TextareaState>,
     go_to_line_state: Entity<InputState>,
     soft_wrap: bool,
     _subscribes: Vec<Subscription>,
@@ -21,9 +21,11 @@ impl Example {
         let text = "这是一个中文演示段落，用于展示更多的 [Markdown GFM] 内容。您可以在此尝试使用使用**粗体**、*斜体*和`代码`等样式。これは日本語のデモ段落です。Markdown の多言語サポートを示すためのテキストが含まれています。例えば、、**ボールド**、_イタリック_、および`コード`のスタイルなどを試すことができます。\n".repeat(10000);
 
         let editor = cx.new(|cx| {
-            InputState::new(window, cx)
-                .multi_line(true)
-                .tab_size(TabSize { tab_size: 4, hard_tabs: false })
+            TextareaState::new(window, cx)
+                .tab_size(TabSize {
+                    tab_size: 4,
+                    hard_tabs: false,
+                })
                 .soft_wrap(true)
                 .placeholder("Enter your code here...")
                 .default_value(text)
@@ -34,7 +36,12 @@ impl Example {
             cx.notify();
         })];
 
-        Self { editor, go_to_line_state, soft_wrap: false, _subscribes }
+        Self {
+            editor,
+            go_to_line_state,
+            soft_wrap: false,
+            _subscribes,
+        }
     }
 
     fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
@@ -56,33 +63,36 @@ impl Example {
                 state.focus(window, cx);
             });
 
-            dialog.title("Go to line").child(Input::new(&input_state)).on_ok({
-                let editor = editor.clone();
-                let input_state = input_state.clone();
-                move |_, window, cx| {
-                    let query = input_state.read(cx).value();
-                    let mut parts = query
-                        .split(':')
-                        .map(|s| s.trim().parse::<usize>().ok())
-                        .collect::<Vec<_>>()
-                        .into_iter();
-                    let Some(line) = parts.next().and_then(|l| l) else {
-                        return false;
-                    };
-                    let line = line.saturating_sub(1);
-                    let column = parts.next().and_then(|c| c).unwrap_or(1).saturating_sub(1);
+            dialog
+                .title("Go to line")
+                .child(Input::new(&input_state))
+                .on_ok({
+                    let editor = editor.clone();
+                    let input_state = input_state.clone();
+                    move |_, window, cx| {
+                        let query = input_state.read(cx).value();
+                        let mut parts = query
+                            .split(':')
+                            .map(|s| s.trim().parse::<usize>().ok())
+                            .collect::<Vec<_>>()
+                            .into_iter();
+                        let Some(line) = parts.next().and_then(|l| l) else {
+                            return false;
+                        };
+                        let line = line.saturating_sub(1);
+                        let column = parts.next().and_then(|c| c).unwrap_or(1).saturating_sub(1);
 
-                    editor.update(cx, |state, cx| {
-                        state.set_cursor_position(
-                            input::Position::new(line as u32, column as u32),
-                            window,
-                            cx,
-                        );
-                    });
+                        editor.update(cx, |state, cx| {
+                            state.set_cursor_position(
+                                input::Position::new(line as u32, column as u32),
+                                window,
+                                cx,
+                            );
+                        });
 
-                    true
-                }
-            })
+                        true
+                    }
+                })
         });
     }
 
@@ -102,7 +112,7 @@ impl Render for Example {
                 .id("source")
                 .w_full()
                 .flex_1()
-                .child(Input::new(&self.editor).bordered(false).h_full().focus_bordered(false))
+                .child(Textarea::new(&self.editor).bordered(false).h(relative(1.)))
                 .child(
                     h_flex()
                         .justify_between()

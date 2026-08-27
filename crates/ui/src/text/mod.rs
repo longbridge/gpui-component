@@ -5,20 +5,20 @@ mod inline_flow;
 mod markdown_ext;
 mod node;
 pub(crate) mod selection;
+mod selection_adapter;
 mod state;
 mod style;
 mod text_view;
 mod utils;
+#[cfg(test)]
 mod window_selection;
 
 use gpui::{App, ElementId, IntoElement, RenderOnce, SharedString, Window};
 pub use markdown_ext::*;
+pub use node::TableData;
 pub use state::*;
 pub use style::*;
 pub use text_view::*;
-pub(crate) use window_selection::TextSelectionController;
-pub(crate) use window_selection::WindowTextSelection;
-pub(crate) use window_selection::{SelectionScope, SelectionScopeElement};
 
 pub(crate) fn init(cx: &mut App) {
     state::init(cx);

@@ -1,11 +1,11 @@
 use gpui::{
-    App, Div, Hsla, ImageSource, InteractiveElement, Interactivity, IntoElement,
-    ParentElement as _, RenderOnce, SharedString, StyleRefinement, Styled, Window, div, img,
-    prelude::FluentBuilder,
+    App, Hsla, ImageSource, InteractiveElement, Interactivity, IntoElement, ParentElement as _,
+    RenderOnce, SharedString, StyleRefinement, Styled, Window, div, prelude::FluentBuilder,
 };
+use gpui_base::{Avatar as BaseAvatar, AvatarFallback, AvatarImage};
 
 use crate::{
-    ActiveTheme, Colorize, Icon, IconName, Sizable, Size, StyledExt,
+    ActiveTheme, Colorize, Icon, IconName, Sizable, Size, StyledExt, ThemeStyled as _,
     avatar::{AvatarSized as _, avatar_size},
 };
 
@@ -14,7 +14,7 @@ use crate::{
 /// We can use [`Sizable`] trait to set the size of the avatar (see also: [`avatar_size`] about the size in pixels).
 #[derive(IntoElement)]
 pub struct Avatar {
-    base: Div,
+    base: BaseAvatar,
     style: StyleRefinement,
     src: Option<ImageSource>,
     name: Option<SharedString>,
@@ -26,7 +26,7 @@ pub struct Avatar {
 impl Avatar {
     pub fn new() -> Self {
         Self {
-            base: div(),
+            base: BaseAvatar::new(),
             style: StyleRefinement::default(),
             src: None,
             name: None,
@@ -92,37 +92,43 @@ impl RenderOnce for Avatar {
 
         const BG_OPACITY: f32 = 0.2;
 
-        self.base
-            .avatar_size(self.size)
+        let fallback = AvatarFallback::new()
+            .size_full()
             .flex()
             .items_center()
             .justify_center()
+            .rounded_full_style(cx)
+            .overflow_hidden()
+            .when(self.name.is_none(), |this| {
+                this.text_size(avatar_size(self.size) * 0.6)
+                    .child(self.placeholder)
+            })
+            .when(self.name.is_some(), |this| {
+                let color_ix = gpui::hash(&self.short_name) % COLOR_COUNT;
+                let color = default_color(color_ix, cx);
+                this.bg(color.opacity(BG_OPACITY))
+                    .text_color(color)
+                    .child(div().avatar_text_size(self.size).child(self.short_name))
+            })
+            .refine_style(&inner_style);
+
+        self.base
+            .size(avatar_size(self.size))
             .flex_shrink_0()
-            .rounded_full()
+            .rounded_full_style(cx)
             .overflow_hidden()
             .bg(cx.theme().tokens.secondary)
             .text_color(cx.theme().background)
             .border_1()
             .border_color(cx.theme().border)
-            .when(self.name.is_none() && self.src.is_none(), |this| {
-                this.text_size(avatar_size(self.size) * 0.6)
-                    .child(self.placeholder)
-            })
-            .map(|this| match self.src {
-                None => this.when(self.name.is_some(), |this| {
-                    let color_ix = gpui::hash(&self.short_name) % COLOR_COUNT;
-                    let color = default_color(color_ix, cx);
-
-                    this.bg(color.opacity(BG_OPACITY))
-                        .text_color(color)
-                        .child(div().avatar_text_size(self.size).child(self.short_name))
-                }),
-                Some(src) => this.child(
-                    img(src)
-                        .avatar_size(self.size)
-                        .rounded_full()
+            .fallback(fallback)
+            .when_some(self.src, |this, src| {
+                this.image(
+                    AvatarImage::new(src)
+                        .size_full()
+                        .rounded_full_style(cx)
                         .refine_style(&inner_style),
-                ),
+                )
             })
             .refine_style(&self.style)
     }

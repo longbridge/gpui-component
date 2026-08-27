@@ -61,18 +61,21 @@ impl Render for CalendarStory {
         v_flex()
             .gap_3()
             .child(
-                section("Normal")
-                    .max_w_md()
+                section("Single month")
+                    .description("Single-date selection.")
+                    .w_128()
                     .child(Calendar::new(&self.calendar)),
             )
             .child(
-                section("With 3 Months")
-                    .max_w_md()
+                section("Multiple months")
+                    .description("Three months shown together.")
+                    .w_128()
                     .child(Calendar::new(&self.calendar_wide).number_of_months(3)),
             )
             .child(
-                section("With Disabled matcher (Sundays, Wednesdays, Saturdays)")
-                    .max_w_md()
+                section("Disabled dates")
+                    .description("Recurring unavailable weekdays.")
+                    .w_128()
                     .child(Calendar::new(&self.calendar_with_disabled_matcher)),
             )
     }

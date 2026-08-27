@@ -8,12 +8,12 @@ use gpui::{
 };
 
 use crate::{
-    StyledExt,
-    input::{InputState, popovers::render_markdown},
+    StyledExt, ThemeStyled as _,
+    input::{EditorState, popovers::render_markdown},
 };
 
 pub struct HoverPopover {
-    editor: Entity<InputState>,
+    editor: Entity<EditorState>,
     /// The symbol range byte of the hover trigger.
     pub(crate) symbol_range: Range<usize>,
     pub(crate) hover: Rc<lsp_types::Hover>,
@@ -21,7 +21,7 @@ pub struct HoverPopover {
 
 impl HoverPopover {
     pub fn new(
-        editor: Entity<InputState>,
+        editor: Entity<EditorState>,
         symbol_range: Range<usize>,
         hover: &lsp_types::Hover,
         cx: &mut App,
@@ -33,10 +33,6 @@ impl HoverPopover {
             symbol_range,
             hover,
         })
-    }
-
-    pub(crate) fn is_same(&self, offset: usize) -> bool {
-        self.symbol_range.contains(&offset)
     }
 }
 
@@ -71,7 +67,7 @@ impl Render for HoverPopover {
 pub(crate) struct Popover {
     id: ElementId,
     style: StyleRefinement,
-    editor: Entity<InputState>,
+    editor: Entity<EditorState>,
     range: Range<usize>,
     width_limit: Range<Pixels>,
     content_builder: Box<dyn Fn(&mut Window, &mut App) -> AnyElement>,
@@ -86,7 +82,7 @@ impl Styled for Popover {
 impl Popover {
     pub fn new<F, E>(
         id: impl Into<ElementId>,
-        editor: Entity<InputState>,
+        editor: Entity<EditorState>,
         range: Range<usize>,
         f: F,
     ) -> Self
@@ -107,28 +103,7 @@ impl Popover {
     /// Get the bounds of the range in the editor, if it is visible.
     fn trigger_bounds(&self, cx: &App) -> Option<Bounds<Pixels>> {
         let editor = self.editor.read(cx);
-        let Some(last_layout) = editor.last_layout.as_ref() else {
-            return None;
-        };
-
-        let Some(last_bounds) = editor.last_bounds else {
-            return None;
-        };
-
-        let (_, _, start_pos) = editor.line_and_position_for_offset(self.range.start);
-        let (_, _, end_pos) = editor.line_and_position_for_offset(self.range.end);
-
-        let Some(start_pos) = start_pos else {
-            return None;
-        };
-        let Some(end_pos) = end_pos else {
-            return None;
-        };
-
-        Some(Bounds::from_corners(
-            last_bounds.origin + start_pos,
-            last_bounds.origin + end_pos + point(px(0.), last_layout.line_height),
-        ))
+        editor.range_to_bounds(&self.range)
     }
 }
 

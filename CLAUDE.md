@@ -2,6 +2,27 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Canonical Design and Coding Guides
+
+Before changing UI, interaction, interface language, layout, styling,
+components, or application architecture, read and follow the repository's
+canonical guides:
+
+- [Design Guides](website/docs/design-guides.md)
+- [Coding Guides](website/docs/coding-guides.md)
+
+These guides are requirements, not optional inspiration. Do not copy generic
+web conventions, infer a design system from one existing screen, or add a
+control merely because the underlying feature exists. Preserve the documented
+task hierarchy, interaction promise, desktop conventions, spacing, alignment,
+theme tokens, component boundaries, naming, and crate architecture. Review the
+finished work against both guides before considering it complete.
+
+For Chinese documentation and UI, apply the terminology rules in Design Guides.
+Keep established framework, component, and API names in their canonical English
+form when translation would reduce precision; write the surrounding Chinese as
+natural Chinese rather than word-for-word translation.
+
 ## Project Overview
 
 GPUI Component is a UI component library for building desktop applications using [GPUI](https://gpui.rs). It provides 60+ cross-platform desktop UI components, inspired by macOS/Windows controls and combined with shadcn/ui design.
@@ -48,6 +69,10 @@ cargo machete
 
 **Note**: Per user configuration, tests do not need to be run.
 
+For pure UI visual or sizing adjustments, do not add automated tests solely to
+assert presentation dimensions. Add tests when the change affects behavior,
+interaction, data flow, or prevents a meaningful regression.
+
 ```bash
 # Run all tests
 cargo test --all
@@ -70,6 +95,31 @@ samply record cargo run
 ```
 
 ## Core Architecture
+
+### Architecture Refactoring Constraints
+
+The implemented foundation architecture is documented in
+`docs/ARCHITECTURE.md`, with styling and motion rules in
+`docs/STYLING-AND-MOTION.md`. Preserve these constraints when designing or
+implementing this architecture:
+
+- Do not modify `gpui-base` unless the user explicitly requests a Base-layer
+  change. By default, implement component behavior and visual styling in
+  `crates/ui` or the application layer.
+
+- Keep `gpui-component` as the ecosystem and product brand.
+- Name the foundation crate `gpui-base`.
+- Follow the ownership boundary: the framework owns behavior and infrastructure;
+  the application owns component source and visual style.
+- Keep the base layer visually unopinionated. It may provide interaction behavior,
+  accessibility, focus, overlay and popup infrastructure, positioning, animation,
+  virtual lists, dock infrastructure, and semantic design tokens.
+- Theme APIs must expose semantic tokens (colors, spacing, radius, typography, and
+  shadows), not an ever-growing set of component-specific styling fields.
+- Keep source distribution or registry tooling above the `gpui-base` seam; no
+  registry or CLI crate is currently part of the workspace.
+- Preserve 100% backward compatibility for existing consumers, including current
+  imports such as `use gpui_component::button::Button;`.
 
 ### Component Initialization
 
@@ -119,17 +169,18 @@ The first view of every window must be a `Root`.
 
 ### Dock System
 
-A complex panel layout system supporting:
+Layout behavior lives in `crates/base/src/dock`; `crates/ui/src/dock` is a
+presentation skin (`DockSkin`) over it. See `docs/ARCHITECTURE.md`.
 
-- **DockArea**: Main container managing center area and left/bottom/right docks
-- **DockItem**: Tree-based layout structure
-  - `Split`: Split layout (horizontal/vertical)
-  - `Tabs`: Tab layout
-  - `Panel`: Individual panel
-- **Panel**: Defined via `PanelView` trait
-- **PanelRegistry**: Global panel registry for serializing/deserializing layouts
-- **StackPanel**: Resizable split panel container
-- **TabPanel**: Tab panel container
+- **`LayoutTree`**: Pure-data layout tree, the single source of truth.
+  - `NodeKind::Split` / `Tabs` / `Tiles`: containers, addressed by `NodeId`
+  - Panels are addressed by `PanelId`; the tree holds no entity handles
+- **`DockArea`**: Owns the center and dock trees, reconciles them into a
+  cache of container entities keyed by `NodeId`
+- **`TabGroup`** / **`TilesState`**: The `Tabs`/`Tiles` container entities
+- **`Panel`**: Split at the seam — `gpui_base::dock::Panel` for behavior,
+  `gpui_component::dock::Panel` for presentation; a panel implements both
+- **`PanelRegistry`**: Resolves a persisted `panel_name` back to a panel type
 
 The Dock system supports:
 
@@ -157,6 +208,30 @@ Text input system based on Rope data structure:
 2. **Size system**: Supports `xs`, `sm`, `md` (default), `lg` sizes via `Sizable` trait.
 3. **Mouse cursor**: Buttons use `default` cursor not `pointer` (desktop app convention), unless it's a link button
 4. **Style system**: Provides CSS-like styling API via `Styled` trait and `ElementExt` extensions
+5. **Base controls are no-style**: Base controls and parts do not install layout,
+   positioning, colors, sizing, gaps, radius, borders, shadows, variants, or animation.
+   Complete presentation belongs to `crates/ui` or the application. The deliberate
+   exception is the foundational Base Input frame, which provides only a semantic
+   one-pixel input border and semantic radius baseline; UI/application layers own
+   its background, sizing, padding, typography, adornments, and richer focus style.
+6. **GPUI builder style**: Keep element construction as one fluent builder chain. Express
+   conditions with `when`, `when_some`, `when_none`, and `map`; do not split a chain into a
+   mutable temporary element followed by imperative reassignment when the builder API can
+   express the same operation.
+7. **No `pub` fields on public data types**: A public struct handed across the
+   `gpui-base`/application seam — a state snapshot, capability set, render context, or
+   option set — keeps its fields private, is constructed with a builder, and is read
+   through methods. Adding a `pub` field is a breaking change; adding one behind a builder
+   is not. Setters and readers must not collide: an all-boolean type names setters after
+   the field and readers `is_<adjective>`/`has_<noun>`, never `can_`; a type with
+   non-boolean fields prefixes every setter with `with_` and keeps the field name for
+   readers. Value types whose fields are the definition and cannot grow (`Point`,
+   `Selection`, `Edges`) are exempt. See the "Public Data Types Across the Seam" section
+   of `docs/ARCHITECTURE.md`.
+8. **Spell `Context` out**: Name a context type `ComboboxTriggerContext`, never `…Ctx`.
+   `cx` is reserved for GPUI's `App`, `Context<T>`, and `AsyncApp`, so `ctx` for anything
+   else reads as a competing context. A callback receiving both takes the GPUI one as `cx`
+   and names the other after what it holds (`trigger`, `state`).
 
 ## Code Style
 
@@ -167,6 +242,20 @@ Text input system based on Rope data structure:
 - When creating a PR, inspect previous PR titles in the repository and match
   that style. Do not blindly use conventional prefixes like `fix:` or `feat:`
   unless the existing PR title style uses them.
+- When a PR changes the public API of `crates/ui`, add a `## Breaking Changes`
+  section with `diff` blocks showing the old and new usage. See PR #2691 and
+  `.claude/skills/gpui-component-dev/references/pr-description.md`.
+- Avoid `Kind` as a type-name suffix. It says an enum classifies something
+  without saying what it classifies, and carries no meaning a reader could not
+  already infer from `enum`. Name the type after what its variants *are*
+  instead. Keep `Kind` only when no honest name covers the variant set —
+  `NodeKind`'s variants straddle two levels (`Split` is an interior node,
+  `Tabs` and `Tiles` are leaves), and every domain word for the leaf level
+  (`Pane`, most of all) would misdescribe `Split`; a vaguer name is better
+  than a precise wrong one. Prefer confining such a type to `pub(crate)`.
+  This governs new code; existing `Kind` names are not a rewrite target on
+  their own, and names owned by external crates (`CodeActionKind`,
+  `CompletionItemKind`, `WindowKind`) keep their upstream spelling.
 
 ## Icon System
 
@@ -194,9 +283,22 @@ Uses `rust-i18n` crate.
 
 ## Documentation
 
-- Documentation source files are in `docs/`.
-- Docs have two locales: English (`docs/docs/`) and Chinese (`docs/zh-CN/docs/`).
+- The documentation site source is in `website/`.
+- Site docs have two locales: English (`website/docs/`) and Chinese (`website/zh-CN/docs/`).
 - When modifying any documentation file, always sync changes to both `en` and `zh-CN` versions.
+- `docs/` holds internal architecture specifications (RFC, migration status, reviews).
+  These are single-language and are not published to the site; see `docs/README.md`.
+- `skills/gpui-component/references/{coding,design}-guides.md` are verbatim copies
+  of the English `website/docs/` originals, vendored so the skill works after
+  `npx skills add` in a project that does not have this repo. After editing either
+  guide, copy it across:
+
+  ```bash
+  cp website/docs/design-guides.md skills/gpui-component/references/design-guides.md
+  cp website/docs/coding-guides.md skills/gpui-component/references/coding-guides.md
+  ```
+
+  CI fails if the copies drift. Never edit the copy directly — edit `website/docs/`.
 
 ## Platform Support
 

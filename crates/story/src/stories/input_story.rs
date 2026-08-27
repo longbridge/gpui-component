@@ -1,13 +1,10 @@
 use gpui::{
-    App, AppContext as _, ClickEvent, Context, Entity, HighlightStyle, InteractiveElement,
-    IntoElement, ParentElement as _, Render, Role, Styled, Subscription, Window, div,
+    App, AppContext as _, Context, Entity, InteractiveElement, IntoElement, ParentElement as _,
+    Render, Role, Styled, Subscription, Window, div,
 };
 
-use crate::section;
+use crate::{ChangeStorySize, section, story_toolbar};
 use gpui_component::{button::*, input::*, label::Label, *};
-
-const CODE_EXAMPLE: &str = r#"{"single_line":"code editor"}"#;
-const DECORATIONS_EXAMPLE: &str = "/review decorations with $code-review before merging";
 
 pub fn init(_: &mut App) {}
 
@@ -19,25 +16,21 @@ pub struct InputStory {
     input_text_right: Entity<InputState>,
     mask_input: Entity<InputState>,
     disabled_input: Entity<InputState>,
+    readonly_input: Entity<InputState>,
     prefix_input1: Entity<InputState>,
     suffix_input1: Entity<InputState>,
     both_input1: Entity<InputState>,
     complete_input: Entity<InputState>,
     complete_disabled_input: Entity<InputState>,
-    large_input: Entity<InputState>,
     small_input: Entity<InputState>,
     phone_input: Entity<InputState>,
     mask_input2: Entity<InputState>,
     currency_input: Entity<InputState>,
     custom_input: Entity<InputState>,
     custom_menu_input: Entity<InputState>,
-    code_input: Entity<InputState>,
     color_input: Entity<InputState>,
-    decorations_input: Entity<InputState>,
-    color_decorations: TextDecorationCollection,
-    underline_decorations: TextDecorationCollection,
-    decorations_visible: bool,
     content_type_inputs: Vec<ContentTypeInput>,
+    size: gpui_component::Size,
 
     _subscriptions: Vec<Subscription>,
 }
@@ -52,6 +45,10 @@ struct ContentTypeInput {
 impl super::Story for InputStory {
     fn title() -> &'static str {
         "Input"
+    }
+
+    fn description() -> &'static str {
+        "Capture and validate short-form text, credentials, identifiers, and formatted values."
     }
 
     fn closable() -> bool {
@@ -130,54 +127,6 @@ impl InputStory {
             InputState::new(window, cx)
                 .placeholder("Type something...")
                 .default_value("Custom text color input")
-        });
-
-        let decorations_input =
-            cx.new(|cx| InputState::new(window, cx).default_value(DECORATIONS_EXAMPLE));
-        let (color_decorations, underline_decorations) =
-            decorations_input.update(cx, |state, cx| {
-                let color = state.create_decorations_collection(
-                    vec![
-                        TextDecoration::new(
-                            0..7,
-                            HighlightStyle {
-                                color: Some(cx.theme().muted_foreground),
-                                ..Default::default()
-                            },
-                        ),
-                        TextDecoration::new(
-                            25..37,
-                            HighlightStyle {
-                                color: Some(cx.theme().primary),
-                                ..Default::default()
-                            },
-                        ),
-                    ],
-                    cx,
-                );
-                let underline = state.create_decorations_collection(
-                    vec![TextDecoration::new(
-                        26..37,
-                        HighlightStyle {
-                            underline: Some(gpui::UnderlineStyle {
-                                color: Some(cx.theme().primary),
-                                thickness: gpui::px(1.),
-                                wavy: false,
-                            }),
-                            ..Default::default()
-                        },
-                    )],
-                    cx,
-                );
-                (color, underline)
-            });
-
-        let code_input = cx.new(|cx| {
-            InputState::new(window, cx)
-                .code_editor("json")
-                .multi_line(false)
-                .show_whitespaces(true)
-                .default_value(CODE_EXAMPLE)
         });
 
         let input_text_centered = cx.new(|cx| {
@@ -316,7 +265,8 @@ impl InputStory {
             mask_input,
             disabled_input: cx
                 .new(|cx| InputState::new(window, cx).default_value("This is disabled input")),
-            large_input: cx.new(|cx| InputState::new(window, cx).placeholder("Large input")),
+            readonly_input: cx
+                .new(|cx| InputState::new(window, cx).default_value("This is read-only input")),
             small_input: cx.new(|cx| {
                 InputState::new(window, cx)
                     .validate(|s, _| s.parse::<f32>().is_ok())
@@ -332,15 +282,11 @@ impl InputStory {
             currency_input,
             custom_input,
             custom_menu_input,
-            code_input,
             color_input,
-            decorations_input,
-            color_decorations,
-            underline_decorations,
-            decorations_visible: true,
             input_text_centered,
             input_text_right,
             content_type_inputs,
+            size: gpui_component::Size::Medium,
             _subscriptions,
         }
     }
@@ -420,58 +366,6 @@ impl InputStory {
             InputEvent::Blur => println!("Blur"),
         };
     }
-
-    fn on_click_reset(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
-        self.code_input.update(cx, |input_state, cx| {
-            input_state.set_value(CODE_EXAMPLE, window, cx);
-        });
-    }
-
-    fn on_click_toggle_decorations(
-        &mut self,
-        _: &ClickEvent,
-        _: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.decorations_visible = !self.decorations_visible;
-        let color_decorations = self.decorations_visible.then(|| {
-            vec![
-                TextDecoration::new(
-                    0..7,
-                    HighlightStyle {
-                        color: Some(cx.theme().muted_foreground),
-                        ..Default::default()
-                    },
-                ),
-                TextDecoration::new(
-                    25..37,
-                    HighlightStyle {
-                        color: Some(cx.theme().primary),
-                        ..Default::default()
-                    },
-                ),
-            ]
-        });
-        self.color_decorations
-            .set(color_decorations.unwrap_or_default(), cx);
-
-        let underline_decorations = self.decorations_visible.then(|| {
-            vec![TextDecoration::new(
-                26..37,
-                HighlightStyle {
-                    underline: Some(gpui::UnderlineStyle {
-                        color: Some(cx.theme().primary),
-                        thickness: gpui::px(1.),
-                        wavy: false,
-                    }),
-                    ..Default::default()
-                },
-            )]
-        });
-        self.underline_decorations
-            .set(underline_decorations.unwrap_or_default(), cx);
-        cx.notify();
-    }
 }
 
 impl Render for InputStory {
@@ -481,65 +375,112 @@ impl Render for InputStory {
             .size_full()
             .justify_start()
             .gap_3()
+            .on_action(cx.listener(|this, action: &ChangeStorySize, _, cx| {
+                this.size = action.0;
+                cx.notify();
+            }))
+            .child(story_toolbar(self.size))
             .child(
-                section("Normal Input")
-                    .max_w_md()
-                    .child(Input::new(&self.input1).cleanable(true))
-                    .child(Input::new(&self.input2).role(Role::EmailInput)),
+                section("Default")
+                    .description("Text, email, and clearable inputs.")
+                    .w_128()
+                    .child(
+                        Input::new(&self.input1)
+                            .with_size(self.size)
+                            .cleanable(true),
+                    )
+                    .child(
+                        Input::new(&self.input2)
+                            .with_size(self.size)
+                            .role(Role::EmailInput),
+                    ),
             )
             .child(
-                section("Input State")
-                    .max_w_md()
-                    .child(Input::new(&self.disabled_input).disabled(true))
+                section("States")
+                    .description("Disabled, read-only and revealable password inputs.")
+                    .w_128()
+                    .child(
+                        Input::new(&self.disabled_input)
+                            .with_size(self.size)
+                            .disabled(true),
+                    )
+                    .child(
+                        Input::new(&self.readonly_input)
+                            .with_size(self.size)
+                            .readonly(true),
+                    )
                     .child(
                         Input::new(&self.mask_input)
+                            .with_size(self.size)
                             .content_type(InputContentType::Password)
                             .mask_toggle()
                             .cleanable(true),
                     ),
             )
             .child(
-                section("Content Type").max_w_lg().children(
-                    self.content_type_inputs
-                        .iter()
-                        .map(Self::render_content_type_input),
-                ),
+                section("Content type")
+                    .description("Content types adapt input behavior.")
+                    .w_128()
+                    .children(
+                        self.content_type_inputs
+                            .iter()
+                            .map(Self::render_content_type_input),
+                    ),
             )
             .child(
-                section("Text Align").max_w_lg().child(
-                    h_flex()
-                        .w_full()
-                        .gap_4()
-                        .flex_wrap()
-                        .child(Input::new(&self.input_text_centered).text_center().flex_1())
-                        .child(Input::new(&self.input_text_right).text_right().flex_1()),
-                ),
+                section("Alignment")
+                    .description("Align text to the center or end.")
+                    .w_128()
+                    .child(
+                        h_flex()
+                            .w_full()
+                            .gap_4()
+                            .flex_wrap()
+                            .child(
+                                Input::new(&self.input_text_centered)
+                                    .with_size(self.size)
+                                    .text_center()
+                                    .flex_1(),
+                            )
+                            .child(
+                                Input::new(&self.input_text_right)
+                                    .with_size(self.size)
+                                    .text_right()
+                                    .flex_1(),
+                            ),
+                    ),
             )
             .child(
-                section("Prefix and Suffix")
-                    .max_w_md()
+                section("Prefix and suffix")
+                    .description("Add icons or actions inside the field.")
+                    .w_128()
                     .child(
                         Input::new(&self.prefix_input1)
+                            .with_size(self.size)
                             .cleanable(true)
                             .prefix(Icon::new(IconName::Search).small()),
                     )
                     .child(
                         Input::new(&self.both_input1)
+                            .with_size(self.size)
                             .cleanable(true)
                             .prefix(div().child(Icon::new(IconName::Search).small()))
                             .suffix(Button::new("info").text().icon(IconName::Info).xsmall()),
                     )
                     .child(
                         Input::new(&self.suffix_input1)
+                            .with_size(self.size)
                             .cleanable(true)
                             .suffix(Button::new("info").text().icon(IconName::Info).xsmall()),
                     ),
             )
             .child(
-                section("Complete Input")
-                    .max_w_md()
+                section("Composed states")
+                    .description("Composed inputs support disabled state.")
+                    .w_128()
                     .child(
                         Input::new(&self.complete_input)
+                            .with_size(self.size)
                             .cleanable(true)
                             .prefix(Icon::new(IconName::Search).small())
                             .suffix(
@@ -551,6 +492,7 @@ impl Render for InputStory {
                     )
                     .child(
                         Input::new(&self.complete_disabled_input)
+                            .with_size(self.size)
                             .cleanable(true)
                             .disabled(true)
                             .prefix(Icon::new(IconName::Search).small())
@@ -563,17 +505,19 @@ impl Render for InputStory {
                     ),
             )
             .child(
-                section("Currency Input with thousands separator")
-                    .max_w_md()
-                    .child(Input::new(&self.currency_input))
+                section("Currency")
+                    .description("Format currency while retaining its value.")
+                    .w_128()
+                    .child(Input::new(&self.currency_input).with_size(self.size))
                     .child(
                         div().child(format!("Value: {:?}", self.currency_input.read(cx).value())),
                     ),
             )
             .child(
-                section("Input with mask pattern: (999)-999-9999")
-                    .max_w_md()
-                    .child(Input::new(&self.phone_input))
+                section("Phone mask")
+                    .description("Expose formatted and raw phone values.")
+                    .w_128()
+                    .child(Input::new(&self.phone_input).with_size(self.size))
                     .child(
                         v_flex()
                             .child(format!("Value: {:?}", self.phone_input.read(cx).value()))
@@ -584,9 +528,10 @@ impl Render for InputStory {
                     ),
             )
             .child(
-                section("Input with mask pattern: AAA-###-AAA")
-                    .max_w_md()
-                    .child(Input::new(&self.mask_input2))
+                section("Mask pattern")
+                    .description("Combine letter and number placeholders.")
+                    .w_128()
+                    .child(Input::new(&self.mask_input2).with_size(self.size))
                     .child(
                         v_flex()
                             .child(format!("Value: {:?}", self.mask_input2.read(cx).value()))
@@ -597,78 +542,77 @@ impl Render for InputStory {
                     ),
             )
             .child(
-                section("Input Size")
-                    .max_w_md()
-                    .child(Input::new(&self.large_input).large())
-                    .child(Input::new(&self.small_input).small()),
+                section("Validation")
+                    .description("Validate values while the user types.")
+                    .w_128()
+                    .child(Input::new(&self.small_input).with_size(self.size)),
             )
             .child(
-                section("Cleanable and ESC to clean")
-                    .max_w_md()
-                    .child(Input::new(&self.input_esc).cleanable(true)),
+                section("Clear on Escape")
+                    .description("Clear a value with its action or Escape.")
+                    .w_128()
+                    .child(
+                        Input::new(&self.input_esc)
+                            .with_size(self.size)
+                            .cleanable(true),
+                    ),
             )
             .child(
-                section("Focused Input")
-                    .max_w_md()
+                section("Focused value")
+                    .description("Read the value of the focused input.")
+                    .w_128()
                     .whitespace_normal()
                     .overflow_hidden()
                     .child(div().child(format!(
                         "Value: {:?}",
-                        window.focused_input(cx).map(|input| input.read(cx).value())
+                        window.focused_input(cx).map(|input| input.value(cx))
                     ))),
             )
             .child(
-                section("Custom Appearance").max_w_md().child(
-                    div()
-                        .border_b_2()
-                        .px_6()
-                        .py_3()
-                        .font_family(cx.theme().mono_font_family.clone())
-                        .border_color(cx.theme().border)
-                        .bg(cx.theme().secondary)
-                        .text_color(cx.theme().secondary_foreground)
-                        .w_full()
-                        .child(Input::new(&self.custom_input).appearance(false)),
-                ),
-            )
-            .child(section("Custom Context Menu").max_w_md().child(
-                Input::new(&self.custom_menu_input).context_menu(|menu, _, _| {
-                    menu.menu("Custom Action", Box::new(input::SelectAll))
-                        .separator()
-                        .menu("Copy", Box::new(input::Copy))
-                        .menu("Paste", Box::new(input::Paste))
-                }),
-            ))
-            .child(
-                section("Custom Text Color")
-                    .max_w_md()
-                    .child(Input::new(&self.color_input).text_color(cx.theme().info)),
-            )
-            .child(
-                section("Text Decorations").max_w_md().child(
-                    Input::new(&self.decorations_input).suffix(
-                        Button::new("toggle-text-decorations")
-                            .text()
-                            .xsmall()
-                            .label(if self.decorations_visible {
-                                "Hide decorations"
-                            } else {
-                                "Show decorations"
-                            })
-                            .on_click(cx.listener(Self::on_click_toggle_decorations)),
+                section("Custom appearance")
+                    .description("Remove the default field appearance.")
+                    .w_128()
+                    .child(
+                        div()
+                            .border_b_2()
+                            .px_6()
+                            .py_3()
+                            .font_family(cx.theme().mono_font_family.clone())
+                            .border_color(cx.theme().border)
+                            .bg(cx.theme().secondary)
+                            .text_color(cx.theme().secondary_foreground)
+                            .w_full()
+                            .child(
+                                Input::new(&self.custom_input)
+                                    .with_size(self.size)
+                                    .appearance(false),
+                            ),
                     ),
-                ),
             )
             .child(
-                section("Single line code editor").max_w_md().child(
-                    Input::new(&self.code_input).suffix(
-                        Button::new("code-reset")
-                            .text()
-                            .label("Reset")
-                            .xsmall()
-                            .on_click(cx.listener(Self::on_click_reset)),
+                section("Context menu")
+                    .description("Add actions to the editing menu.")
+                    .w_128()
+                    .child(
+                        Input::new(&self.custom_menu_input)
+                            .with_size(self.size)
+                            .context_menu(|menu, _, _| {
+                                menu.menu("Custom Action", Box::new(input::SelectAll))
+                                    .separator()
+                                    .menu("Copy", Box::new(input::Copy))
+                                    .menu("Paste", Box::new(input::Paste))
+                            }),
                     ),
-                ),
+            )
+            .child(
+                section("Text color")
+                    .description("Apply a semantic text color.")
+                    .w_128()
+                    .child(
+                        Input::new(&self.color_input)
+                            .with_size(self.size)
+                            .text_color(cx.theme().info),
+                    ),
             )
     }
 }

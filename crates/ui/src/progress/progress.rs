@@ -1,12 +1,13 @@
 use crate::{ActiveTheme, Sizable, Size, StyledExt};
 use gpui::{
-    Animation, AnimationExt as _, App, Background, ElementId, Hsla, InteractiveElement as _,
-    IntoElement, ParentElement, RenderOnce, Role, StatefulInteractiveElement as _, StyleRefinement,
-    Styled, Window, div, ease_in_out, prelude::FluentBuilder, px, relative,
+    Animation, AnimationExt as _, App, Background, ElementId, Hsla, IntoElement, IsZero as _,
+    ParentElement, RenderOnce, StyleRefinement, Styled, Window, ease_in_out,
+    prelude::FluentBuilder, px, relative,
+};
+use gpui_base::{
+    Progress as BaseProgress, ProgressIndicator, ProgressTrack, Transition, transition,
 };
 use instant::Duration;
-
-use super::ProgressState;
 
 /// A linear horizontal progress bar element.
 #[derive(IntoElement)]
@@ -77,37 +78,53 @@ impl RenderOnce for Progress {
             .unwrap_or(cx.theme().tokens.progress_bar.into());
         let value = self.value;
         let loading = self.loading;
+        let reduce_motion = cx.reduce_motion();
 
         let radius = self.style.corner_radii.clone();
         let mut inner_style = StyleRefinement::default();
         inner_style.corner_radii = radius;
 
-        let (height, radius) = match self.size {
+        let (height, pill_radius) = match self.size {
             Size::XSmall => (px(4.), px(2.)),
             Size::Small => (px(6.), px(3.)),
             Size::Medium => (px(8.), px(4.)),
             Size::Large => (px(10.), px(5.)),
             Size::Size(s) => (s, s / 2.),
         };
+        // The bar reads as a pill of half its own height, and squares off with
+        // the rest of the UI when the theme has no radius.
+        let radius = if cx.theme().radius.is_zero() {
+            px(0.)
+        } else {
+            pill_radius
+        };
 
-        let state = window.use_keyed_state(self.id.clone(), cx, |_, _| ProgressState::new(value));
-        let prev_target = state.read(cx).target();
-        let has_changed = prev_target != value;
+        let animated_value = transition(
+            (self.id.clone(), "indicator"),
+            value,
+            Transition::new(Duration::from_millis(180)),
+            window,
+            cx,
+        );
 
-        div()
-            .id(self.id)
-            .role(Role::ProgressIndicator)
-            .aria_numeric_value(value as f64)
-            .aria_min_numeric_value(0.0)
-            .aria_max_numeric_value(100.0)
+        BaseProgress::new(self.id)
+            .value(value)
+            .indeterminate(loading)
             .w_full()
             .relative()
             .h(height)
             .rounded(radius)
             .refine_style(&self.style)
-            .bg(bg.opacity(0.2))
             .child(
-                div()
+                ProgressTrack::new()
+                    .absolute()
+                    .size_full()
+                    .bg(bg.opacity(0.2))
+                    .rounded(radius)
+                    .refine_style(&inner_style),
+            )
+            .child(
+                ProgressIndicator::new()
                     .absolute()
                     .top_0()
                     .left_0()
@@ -115,38 +132,8 @@ impl RenderOnce for Progress {
                     .bg(bg)
                     .rounded(radius)
                     .refine_style(&inner_style)
-                    .map(|this| match value {
-                        v if v >= 100. || loading => this,
-                        _ => this.rounded_r_none(),
-                    })
                     .map(|this| {
-                        if has_changed {
-                            let from = prev_target;
-                            state.read(cx).set_target(value);
-
-                            let duration = Duration::from_secs_f64(0.15);
-                            cx.spawn({
-                                let state = state.clone();
-                                async move |cx| {
-                                    cx.background_executor().timer(duration).await;
-                                    _ = state.update(cx, |this, _| {
-                                        this.value = this.target();
-                                    });
-                                }
-                            })
-                            .detach();
-
-                            this.with_animation(
-                                "progress-animation",
-                                Animation::new(duration),
-                                move |this, delta| {
-                                    let current_value = from + (value - from) * delta;
-                                    let w = relative((current_value / 100.).clamp(0., 1.));
-                                    this.w(w)
-                                },
-                            )
-                            .into_any_element()
-                        } else if loading {
+                        if loading && !reduce_motion {
                             this.with_animation(
                                 "progress-loading",
                                 Animation::new(Duration::from_secs(1)).repeat(),
@@ -158,8 +145,12 @@ impl RenderOnce for Progress {
                                 },
                             )
                             .into_any_element()
+                        } else if loading {
+                            this.left(relative(0.325))
+                                .right(relative(0.325))
+                                .into_any_element()
                         } else {
-                            this.w(relative((value / 100.).clamp(0., 1.)))
+                            this.w(relative((animated_value / 100.).clamp(0., 1.)))
                                 .into_any_element()
                         }
                     }),

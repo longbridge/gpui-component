@@ -234,6 +234,19 @@ Dialog:
     zh-HK: 取消
     zh-TW: 取消
     it: Annulla
+Command:
+  placeholder:
+    en: Type a command or search...
+    zh-CN: 输入命令或搜索...
+    zh-HK: 輸入命令或搜尋...
+    zh-TW: 輸入命令或搜尋...
+    it: Digita un comando o cerca...
+  empty:
+    en: No results found.
+    zh-CN: 未找到结果。
+    zh-HK: 未找到結果。
+    zh-TW: 未找到結果。
+    it: Nessun risultato trovato.
 List:
   search_placeholder:
     en: Search...
@@ -242,6 +255,16 @@ List:
     zh-TW: 搜尋...
     it: Ricerca...
 Input:
+  Decrement:
+    en: Decrement
+    zh-CN: 减少
+    zh-HK: 減少
+    zh-TW: 減少
+  Increment:
+    en: Increment
+    zh-CN: 增加
+    zh-HK: 增加
+    zh-TW: 增加
   Replace:
     en: Replace
     zh-CN: 替换

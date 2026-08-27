@@ -135,8 +135,7 @@ pub fn icon_named(input: TokenStream) -> TokenStream {
         });
         std::path::PathBuf::from(env_value)
     } else {
-        let manifest_dir =
-            std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
+        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
         std::path::Path::new(&manifest_dir).join(&raw_path)
     };
 

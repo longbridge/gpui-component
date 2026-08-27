@@ -6,15 +6,21 @@ use std::{
 };
 
 use gpui::{
-    App, BorderStyle, Bounds, CursorStyle, Edges, Element, ElementId, GlobalElementId, Half,
-    HighlightStyle, Hitbox, HitboxBehavior, InspectorElementId, IntoElement, LayoutId, MouseButton,
-    MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point, SharedString, StyledText,
-    TextLayout, Window, point, px, quad,
+    App, BorderStyle, Bounds, ClickEvent, CursorStyle, Edges, Element, ElementId, GlobalElementId,
+    Half, HighlightStyle, Hitbox, HitboxBehavior, InspectorElementId, IntoElement, LayoutId,
+    MouseButton, MouseClickEvent, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point,
+    SharedString, StyledText, TextLayout, Window, point, px, quad,
 };
 
 use crate::{
-    ActiveTheme, WindowExt as _, global_state::GlobalState, input::Selection,
-    text::TextViewMultiClickKind, text::node::LinkMark, text::selection::word_range_at,
+    ActiveTheme,
+    global_state::UiGlobalState,
+    input::Selection,
+    text::TextViewMultiClickKind,
+    text::node::LinkMark,
+    text::selection::word_range_at,
+    text::state::LineSpan,
+    text::text_view::{LinkClickHandlerFn, handle_link_click},
 };
 
 /// A inline element used to render a inline text and support selectable.
@@ -26,6 +32,7 @@ pub(super) struct Inline {
     links: Rc<Vec<(Range<usize>, LinkMark)>>,
     highlights: Vec<(Range<usize>, HighlightStyle)>,
     styled_text: StyledText,
+    link_click_handler: Option<Arc<LinkClickHandlerFn>>,
 
     state: Arc<Mutex<InlineState>>,
 }
@@ -52,6 +59,7 @@ impl Inline {
         state: Arc<Mutex<InlineState>>,
         links: Vec<(Range<usize>, LinkMark)>,
         highlights: Vec<(Range<usize>, HighlightStyle)>,
+        link_click_handler: Option<Arc<LinkClickHandlerFn>>,
     ) -> Self {
         let text = state
             .lock()
@@ -64,6 +72,7 @@ impl Inline {
             highlights,
             text: text.clone(),
             styled_text: StyledText::new(text),
+            link_click_handler,
             state,
         }
     }
@@ -104,7 +113,7 @@ impl Inline {
         window: &mut Window,
         cx: &mut App,
     ) -> (bool, bool, Option<Selection>) {
-        let Some(text_view_state) = GlobalState::global(cx).text_view_state() else {
+        let Some(text_view_state) = UiGlobalState::global(cx).text_view_state() else {
             return (false, false, None);
         };
 
@@ -133,16 +142,33 @@ impl Inline {
             );
         }
 
-        let Some((selection_start, selection_end)) = text_view_state.selection_points(window, cx)
-        else {
+        let Some((selection_start, selection_end)) = text_view_state.selection_points(cx) else {
             return (is_selectable, false, None);
         };
         let line_height = window.line_height();
-        let mask_bounds = window.content_mask().bounds;
 
         // Use for debug selection bounds
         // self.paint_selected_bounds(Bounds::from_corners(selection_start, selection_end), window, cx);
 
+        // NOTE: the selection is computed purely from the geometric band
+        // (`selection_start`..`selection_end`), NOT from what is currently
+        // visible. Every glyph of a *painted* element is laid out (its
+        // `position_for_index` is valid) even when it is scrolled out of, or
+        // clipped by, an ancestor's viewport — the content mask only clips the
+        // painted pixels. Because the copied text is derived from
+        // `InlineState.selection`, gating the selection on `content_mask` here
+        // used to drop scrolled-out-but-selected glyphs, so a selection taller
+        // than the viewport (e.g. a long chat message, or a drag with
+        // auto-scroll) copied only the portion that happened to be on screen.
+        //
+        // This does not resurrect the #2156 clipped-hit-testing behavior: a
+        // selection can only START on visible text (window selection resolves
+        // endpoints with hitbox hover testing against visible Inline bounds),
+        // so the band's endpoints are always anchored to on-screen text.
+        // Content that is merely `overflow_hidden`
+        // (not scrolled) lies outside that band and is still excluded, while
+        // the highlight quads painted for off-screen glyphs are clipped away by
+        // GPUI's content mask as before.
         let mut selection: Option<Selection> = None;
         let mut offset = 0;
         let mut chars = self.text.chars().peekable();
@@ -160,15 +186,7 @@ impl Inline {
                 }
             }
 
-            let char_center = point(pos.x + char_width.half(), pos.y + line_height.half());
-            if mask_bounds.contains(&char_center)
-                && point_in_text_selection(
-                    pos,
-                    char_width,
-                    selection_start,
-                    selection_end,
-                    line_height,
-                )
+            if point_in_text_selection(pos, char_width, selection_start, selection_end, line_height)
             {
                 if selection.is_none() {
                     selection = Some((offset..offset).into());
@@ -373,6 +391,23 @@ impl Element for Inline {
         self.styled_text
             .prepaint(id, inspector_id, bounds, &mut (), window, cx);
 
+        // Report this element's laid-out extent so an ancestor TextView with
+        // `max_lines` can snap its clip to a whole-line boundary. The state
+        // stack only holds an entry during prepaint when that view set
+        // `max_lines`, so this is a no-op otherwise.
+        if let Some(text_view_state) = UiGlobalState::global(cx).text_view_state().cloned() {
+            let state = text_view_state.read(cx);
+            if state.max_lines.is_some()
+                && let Ok(mut line_spans) = state.line_spans.lock()
+            {
+                line_spans.push(LineSpan {
+                    top: bounds.top(),
+                    bottom: bounds.bottom(),
+                    line_height: window.line_height(),
+                });
+            }
+        }
+
         let hitbox = window.insert_hitbox(bounds, HitboxBehavior::Normal);
         hitbox
     }
@@ -418,18 +453,15 @@ impl Element for Inline {
         }
 
         if is_selectable {
-            if let Some(text_view_state) = GlobalState::global(cx).text_view_state().cloned() {
+            if let Some(text_view_state) = UiGlobalState::global(cx).text_view_state().cloned() {
                 let text_bounds = self.text_line_bounds(
                     &text_layout,
                     text_layout.line_height(),
                     window.content_mask().bounds,
                 );
-                crate::Root::register_selectable_text_inline(
-                    &text_view_state,
-                    text_bounds,
-                    window,
-                    cx,
-                );
+                text_view_state.update(cx, |state, _| {
+                    state.selection_adapter.register_inline(text_bounds);
+                });
             }
 
             window.on_mouse_event({
@@ -437,8 +469,7 @@ impl Element for Inline {
                 let text_layout = text_layout.clone();
                 let inline_state = self.state.clone();
                 let text = self.text.clone();
-                let text_view_state = GlobalState::global(cx).text_view_state().cloned();
-
+                let text_view_state = UiGlobalState::global(cx).text_view_state().cloned();
                 move |event: &MouseDownEvent, phase, window, cx| {
                     if !phase.bubble()
                         || !hitbox.is_hovered(window)
@@ -465,12 +496,21 @@ impl Element for Inline {
 
                     let selected_text = text[range.clone()].to_string();
 
+                    // This renderer owns multi-click selection. Prevent the
+                    // window selection layer from handling the same press.
+                    gpui_base::GlobalState::suppress_text_selection(cx);
+
                     if let Ok(mut inline_state) = inline_state.lock() {
                         inline_state.selection = Some(range.into());
                     }
                     if let Some(text_view_state) = &text_view_state {
-                        text_view_state.update(cx, |state, _| {
-                            state.set_multi_click_selection(event.position, kind, selected_text);
+                        text_view_state.update(cx, |state, cx| {
+                            state.set_multi_click_selection(
+                                event.position,
+                                kind,
+                                selected_text,
+                                cx,
+                            );
                         });
                     }
                     cx.notify(current_view);
@@ -504,7 +544,8 @@ impl Element for Inline {
                 let links = self.links.clone();
                 let text_layout = text_layout.clone();
                 let hitbox = hitbox.clone();
-                let text_view_state = GlobalState::global(cx).text_view_state().cloned();
+                let text_view_state = UiGlobalState::global(cx).text_view_state().cloned();
+                let link_click_handler = self.link_click_handler.clone();
 
                 move |event: &MouseUpEvent, phase, window, cx| {
                     if !phase.bubble() || !hitbox.is_hovered(window) {
@@ -512,7 +553,7 @@ impl Element for Inline {
                     }
                     if text_view_state
                         .as_ref()
-                        .is_some_and(|state| state.read(cx).has_selection(window, cx))
+                        .is_some_and(|state| state.read(cx).has_selection(cx))
                     {
                         return;
                     }
@@ -520,9 +561,19 @@ impl Element for Inline {
                     if let Some(link) =
                         Self::link_for_position(&text_layout, &links, event.position)
                     {
-                        window.end_text_selection(cx);
+                        gpui_base::TextSelection::end(window, cx);
                         cx.stop_propagation();
-                        cx.open_url(&link.url);
+                        let click = ClickEvent::Mouse(MouseClickEvent {
+                            down: MouseDownEvent {
+                                button: event.button,
+                                position: event.position,
+                                modifiers: event.modifiers,
+                                click_count: event.click_count,
+                                first_mouse: false,
+                            },
+                            up: event.clone(),
+                        });
+                        handle_link_click(&link_click_handler, link.url, click, window, cx);
                     }
                 }
             });

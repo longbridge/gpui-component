@@ -1,72 +1,48 @@
-use std::{
-    any::Any,
-    fmt::{Debug, Formatter},
-    sync::Arc,
+//! The gpui-component appearance for a tiles canvas.
+//!
+//! `gpui_base::dock::TilesState` owns the geometry — snapping, the resize
+//! arithmetic, the undo stack, the zoom flag — and draws none of it. The tile
+//! frame, its title bar and its resize affordances are here.
+
+use std::rc::Rc;
+
+use gpui::{
+    AnyElement, App, AppContext as _, Context, Div, DragMoveEvent, Empty, InteractiveElement as _,
+    IntoElement, MouseButton, MouseDownEvent, ParentElement as _, Pixels, Render, ScrollHandle,
+    Size, Stateful, StatefulInteractiveElement as _, Styled as _, Window, div,
+    prelude::FluentBuilder as _, px,
 };
+use gpui_base::dock::{
+    DRAG_BAR_HEIGHT, HANDLE_SIZE, NodeId, ResizeSide, TileContext, TilesRenderer,
+};
+use rust_i18n::t;
 
 use crate::{
-    ActiveTheme, ElementExt, Icon, IconName, h_flex,
-    history::{History, HistoryItem},
-    scroll::{Scrollbar, ScrollbarShow},
+    ActiveTheme as _, Icon, IconName, Selectable as _, Sizable as _,
+    button::{Button, ButtonVariants as _},
+    dock::{PanelHandle, SkinShared, tab_panel::panel_title},
+    h_flex,
+    menu::{DropdownMenu as _, PopupMenuItem},
+    scroll::Scrollbar,
     v_flex,
 };
 
-use super::{
-    DockArea, Panel, PanelEvent, PanelInfo, PanelState, PanelView, StackPanel, TabPanel, TileMeta,
-};
-use gpui::{
-    AnyElement, App, AppContext, Bounds, Context, DismissEvent, Div, DragMoveEvent, Empty,
-    EntityId, EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, MouseButton,
-    MouseDownEvent, MouseUpEvent, ParentElement, Pixels, Point, Render, ScrollHandle, Size,
-    StatefulInteractiveElement, Styled, WeakEntity, Window, actions, div, prelude::FluentBuilder,
-    px, size,
-};
+/// How far a resize handle sticks out past the tile's edge.
+const HANDLE_OFFSET: Pixels = px(-4.);
 
-actions!(tiles, [Undo, Redo]);
-
-const MINIMUM_SIZE: Size<Pixels> = size(px(100.), px(100.));
-const DRAG_BAR_HEIGHT: Pixels = px(30.);
-const HANDLE_SIZE: Pixels = px(5.0);
-
-#[derive(Clone, PartialEq, Debug)]
-struct TileChange {
-    tile_id: EntityId,
-    old_bounds: Option<Bounds<Pixels>>,
-    new_bounds: Option<Bounds<Pixels>>,
-    old_order: Option<usize>,
-    new_order: Option<usize>,
-    version: usize,
-}
-
-impl HistoryItem for TileChange {
-    fn version(&self) -> usize {
-        self.version
-    }
-
-    fn set_version(&mut self, version: usize) {
-        self.version = version;
-    }
-}
-
+/// The payload a tile drag carries, so one canvas ignores another's drags.
 #[derive(Clone)]
-pub struct DragMoving(EntityId);
+pub struct DragMoving(NodeId);
+
 impl Render for DragMoving {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         Empty
     }
 }
 
-#[derive(Clone, PartialEq)]
-enum ResizeSide {
-    Left,
-    Right,
-    Top,
-    Bottom,
-    BottomRight,
-}
-
+/// The payload a tile resize carries, for the same reason.
 #[derive(Clone)]
-pub struct DragResizing(EntityId);
+pub struct DragResizing(NodeId);
 
 impl Render for DragResizing {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
@@ -74,1356 +50,424 @@ impl Render for DragResizing {
     }
 }
 
-#[derive(Clone)]
-struct ResizeDrag {
-    side: ResizeSide,
-    last_position: Point<Pixels>,
-    last_bounds: Bounds<Pixels>,
-}
-
-/// TileItem is a moveable and resizable panel that can be added to a Tiles view.
-#[derive(Clone)]
-pub struct TileItem {
-    id: EntityId,
-    pub(crate) panel: Arc<dyn PanelView>,
-    bounds: Bounds<Pixels>,
-    z_index: usize,
-}
-
-impl Debug for TileItem {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("TileItem")
-            .field("bounds", &self.bounds)
-            .field("z_index", &self.z_index)
-            .finish()
-    }
-}
-
-impl TileItem {
-    pub fn new(panel: Arc<dyn PanelView>, bounds: Bounds<Pixels>) -> Self {
-        Self {
-            id: panel.view().entity_id(),
-            panel,
-            bounds,
-            z_index: 0,
-        }
-    }
-
-    pub fn z_index(mut self, z_index: usize) -> Self {
-        self.z_index = z_index;
-        self
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct AnyDrag {
-    pub value: Arc<dyn Any>,
-}
-
-impl AnyDrag {
-    pub fn new(value: impl Any) -> Self {
-        Self {
-            value: Arc::new(value),
-        }
-    }
-}
-
-/// Tiles is a canvas that can contain multiple panels, each of which can be dragged and resized.
-pub struct Tiles {
-    focus_handle: FocusHandle,
-    pub(crate) panels: Vec<TileItem>,
-    dragging_id: Option<EntityId>,
-    dragging_initial_mouse: Point<Pixels>,
-    dragging_initial_bounds: Bounds<Pixels>,
-    resizing_id: Option<EntityId>,
-    resizing_drag_data: Option<ResizeDrag>,
-    bounds: Bounds<Pixels>,
-    history: History<TileChange>,
+/// One tiles canvas's appearance.
+///
+/// Built per canvas — `DockAreaRenderer::tiles_renderer` is called once per
+/// container — so the scroll position belongs to the canvas it scrolls.
+pub(crate) struct TilesSkin {
+    shared: Rc<SkinShared>,
     scroll_handle: ScrollHandle,
-    scrollbar_show: Option<ScrollbarShow>,
 }
 
-impl Panel for Tiles {
-    fn panel_name(&self) -> &'static str {
-        "Tiles"
-    }
-
-    fn title(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
-        "Tiles".into_any_element()
-    }
-
-    fn dump(&self, cx: &App) -> PanelState {
-        let panels = self
-            .panels
-            .iter()
-            .map(|item: &TileItem| item.panel.dump(cx))
-            .collect();
-
-        let metas = self
-            .panels
-            .iter()
-            .map(|item: &TileItem| TileMeta {
-                bounds: item.bounds,
-                z_index: item.z_index,
-            })
-            .collect();
-
-        let mut state = PanelState::new(self);
-        state.panel_name = self.panel_name().to_string();
-        state.children = panels;
-        state.info = PanelInfo::Tiles { metas };
-        state
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct DragDrop(pub AnyDrag);
-
-impl EventEmitter<DragDrop> for Tiles {}
-
-impl Tiles {
-    pub fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
+impl TilesSkin {
+    pub(crate) fn new(shared: Rc<SkinShared>) -> Self {
         Self {
-            focus_handle: cx.focus_handle(),
-            panels: vec![],
-            dragging_id: None,
-            dragging_initial_mouse: Point::default(),
-            dragging_initial_bounds: Bounds::default(),
-            resizing_id: None,
-            scrollbar_show: None,
-            resizing_drag_data: None,
-            bounds: Bounds::default(),
-            history: History::new().group_interval(std::time::Duration::from_millis(100)),
+            shared,
             scroll_handle: ScrollHandle::default(),
         }
     }
 
-    /// Set the scrollbar show mode [`ScrollbarShow`], if not set use the `cx.theme().scrollbar_show`.
-    pub fn set_scrollbar_show(
-        &mut self,
-        scrollbar_show: Option<ScrollbarShow>,
-        cx: &mut Context<Self>,
-    ) {
-        self.scrollbar_show = scrollbar_show;
-        cx.notify();
-    }
-
-    pub fn panels(&self) -> &[TileItem] {
-        &self.panels
-    }
-
-    fn sorted_panels(&self) -> Vec<TileItem> {
-        let mut items: Vec<(usize, TileItem)> = self.panels.iter().cloned().enumerate().collect();
-        items.sort_by(|a, b| a.1.z_index.cmp(&b.1.z_index).then_with(|| a.0.cmp(&b.0)));
-        items.into_iter().map(|(_, item)| item).collect()
-    }
-
-    /// Return the index of the panel.
-    #[inline]
-    pub(crate) fn index_of(&self, id: &EntityId) -> Option<usize> {
-        self.panels.iter().position(|p| &p.id == id)
-    }
-
-    #[inline]
-    pub(crate) fn panel(&self, id: &EntityId) -> Option<&TileItem> {
-        self.panels.iter().find(|p| &p.id == id)
-    }
-
-    /// Remove panel from the children.
-    pub fn remove(&mut self, panel: Arc<dyn PanelView>, _: &mut Window, cx: &mut Context<Self>) {
-        if let Some(ix) = self.index_of(&panel.panel_id(cx)) {
-            self.panels.remove(ix);
-
-            cx.emit(PanelEvent::LayoutChanged);
-        }
-    }
-
-    /// Calculate magnetic snap position for the dragging panel
-    fn calculate_magnetic_snap(
+    /// One edge or corner handle.
+    fn resize_handle(
         &self,
-        dragging_bounds: Bounds<Pixels>,
-        item_ix: usize,
-        snap_threshold: Pixels,
-    ) -> (Option<Pixels>, Option<Pixels>) {
-        // Only check nearby panels
-        let search_bounds = Bounds {
-            origin: Point {
-                x: dragging_bounds.left() - snap_threshold,
-                y: dragging_bounds.top() - snap_threshold,
-            },
-            size: Size {
-                width: dragging_bounds.size.width + snap_threshold * 2.0,
-                height: dragging_bounds.size.height + snap_threshold * 2.0,
-            },
-        };
-
-        let mut snap_x: Option<Pixels> = None;
-        let mut snap_y: Option<Pixels> = None;
-        let mut min_x_dist = snap_threshold;
-        let mut min_y_dist = snap_threshold;
-
-        // Pre-calculate dragging bounds edges to avoid repeated method calls
-        let drag_left = dragging_bounds.left();
-        let drag_right = dragging_bounds.right();
-        let drag_top = dragging_bounds.top();
-        let drag_bottom = dragging_bounds.bottom();
-        let drag_width = dragging_bounds.size.width;
-        let drag_height = dragging_bounds.size.height;
-
-        // Check for edge snapping first (top and left boundaries)
-        let edge_snap_pos = px(0.);
-
-        // Snap to top edge
-        let top_dist = drag_top.abs();
-        if top_dist < snap_threshold {
-            snap_y = Some(edge_snap_pos);
-            min_y_dist = top_dist;
-        }
-
-        // Snap to left edge
-        let left_dist = drag_left.abs();
-        if left_dist < snap_threshold {
-            snap_x = Some(edge_snap_pos);
-            min_x_dist = left_dist;
-        }
-
-        // If both edges are snapped, return early
-        if snap_x.is_some() && snap_y.is_some() {
-            return (snap_x, snap_y);
-        }
-
-        for (ix, other) in self.panels.iter().enumerate() {
-            if ix == item_ix {
-                continue;
-            }
-
-            // Pre-calculate other bounds edges
-            let other_left = other.bounds.left();
-            let other_right = other.bounds.right();
-            let other_top = other.bounds.top();
-            let other_bottom = other.bounds.bottom();
-
-            // Skip panels that are far away
-            if other_right < search_bounds.left()
-                || other_left > search_bounds.right()
-                || other_bottom < search_bounds.top()
-                || other_top > search_bounds.bottom()
-            {
-                continue;
-            }
-
-            // Horizontal snapping (X axis) - find closest snap point
-            if snap_x.is_none() {
-                let candidates = [
-                    ((drag_left - other_left).abs(), other_left),
-                    ((drag_left - other_right).abs(), other_right),
-                    ((drag_right - other_left).abs(), other_left - drag_width),
-                    ((drag_right - other_right).abs(), other_right - drag_width),
-                ];
-
-                for (dist, snap_pos) in candidates {
-                    if dist < min_x_dist {
-                        min_x_dist = dist;
-                        snap_x = Some(snap_pos);
-                    }
-                }
-            }
-
-            // Vertical snapping (Y axis) - find closest snap point
-            if snap_y.is_none() {
-                let candidates = [
-                    ((drag_top - other_top).abs(), other_top),
-                    ((drag_top - other_bottom).abs(), other_bottom),
-                    ((drag_bottom - other_top).abs(), other_top - drag_height),
-                    (
-                        (drag_bottom - other_bottom).abs(),
-                        other_bottom - drag_height,
-                    ),
-                ];
-
-                for (dist, snap_pos) in candidates {
-                    if dist < min_y_dist {
-                        min_y_dist = dist;
-                        snap_y = Some(snap_pos);
-                    }
-                }
-            }
-
-            // Early exit if both axes are snapped
-            if snap_x.is_some() && snap_y.is_some() {
-                break;
-            }
-        }
-
-        (snap_x, snap_y)
-    }
-
-    /// Apply boundary constraints to the panel origin
-    fn apply_boundary_constraints(&self, mut origin: Point<Pixels>) -> Point<Pixels> {
-        // Top boundary
-        if origin.y < px(0.) {
-            origin.y = px(0.);
-        }
-
-        // Left boundary (allow partial off-screen but keep 64px visible)
-        let min_left = -self.dragging_initial_bounds.size.width + px(64.);
-        if origin.x < min_left {
-            origin.x = min_left;
-        }
-
-        origin
-    }
-
-    fn update_position(&mut self, mouse_position: Point<Pixels>, cx: &mut Context<Self>) {
-        let Some(dragging_id) = self.dragging_id else {
-            return;
-        };
-
-        let Some(item_ix) = self.panels.iter().position(|p| p.id == dragging_id) else {
-            return;
-        };
-
-        let previous_bounds = self.panels[item_ix].bounds;
-        let adjusted_position = mouse_position - self.bounds.origin;
-        let delta = adjusted_position - self.dragging_initial_mouse;
-        let mut new_origin = self.dragging_initial_bounds.origin + delta;
-
-        // Apply magnetic snap before boundary checks
-        let snap_threshold = cx.theme().tile_grid_size;
-        let dragging_bounds = Bounds {
-            origin: new_origin,
-            size: self.dragging_initial_bounds.size,
-        };
-
-        let (snap_x, snap_y) =
-            self.calculate_magnetic_snap(dragging_bounds, item_ix, snap_threshold);
-
-        // Apply snapping
-        if let Some(x) = snap_x {
-            new_origin.x = x;
-        }
-        if let Some(y) = snap_y {
-            new_origin.y = y;
-        }
-
-        // Apply boundary constraints after snapping
-        new_origin = self.apply_boundary_constraints(new_origin);
-
-        // Update position without grid rounding (smooth dragging)
-        if new_origin != previous_bounds.origin {
-            self.panels[item_ix].bounds.origin = new_origin;
-            let item = &self.panels[item_ix];
-            let bounds = item.bounds;
-            let entity_id = item.panel.view().entity_id();
-
-            if !self.history.ignore {
-                self.history.push(TileChange {
-                    tile_id: entity_id,
-                    old_bounds: Some(previous_bounds),
-                    new_bounds: Some(bounds),
-                    old_order: None,
-                    new_order: None,
-                    version: 0,
-                });
-            }
-            cx.notify();
-        }
-    }
-
-    fn resize(
-        &mut self,
-        new_x: Option<Pixels>,
-        new_y: Option<Pixels>,
-        new_width: Option<Pixels>,
-        new_height: Option<Pixels>,
-        _: &mut Window,
-        cx: &mut Context<'_, Self>,
-    ) {
-        let Some(resizing_id) = self.resizing_id else {
-            return;
-        };
-
-        let grid_size = cx.theme().tile_grid_size;
-        // Neighbor bounds drive magnetic edge snapping (exclude the resizing panel).
-        let other_bounds: Vec<Bounds<Pixels>> = self
-            .panels
-            .iter()
-            .filter(|item| item.id != resizing_id)
-            .map(|item| item.bounds)
-            .collect();
-
-        let Some(item) = self.panels.iter_mut().find(|item| item.id == resizing_id) else {
-            return;
-        };
-
-        let previous_bounds = item.bounds;
-        let new_bounds = compute_resized_bounds(
-            previous_bounds,
-            new_x,
-            new_y,
-            new_width,
-            new_height,
-            &other_bounds,
-            grid_size,
-        );
-
-        // Only push to history if the geometry actually changed.
-        if new_bounds.origin.x != previous_bounds.origin.x
-            || new_bounds.origin.y != previous_bounds.origin.y
-            || new_bounds.size.width != previous_bounds.size.width
-            || new_bounds.size.height != previous_bounds.size.height
-        {
-            item.bounds = new_bounds;
-
-            // Only push if not during history operations
-            if !self.history.ignore {
-                self.history.push(TileChange {
-                    tile_id: item.panel.view().entity_id(),
-                    old_bounds: Some(previous_bounds),
-                    new_bounds: Some(item.bounds),
-                    old_order: None,
-                    new_order: None,
-                    version: 0,
-                });
-            }
-        }
-
-        cx.notify();
-    }
-
-    pub fn add_item(
-        &mut self,
-        item: TileItem,
-        dock_area: &WeakEntity<DockArea>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        let Ok(tab_panel) = item.panel.view().downcast::<TabPanel>() else {
-            panic!("only allows to add TabPanel type")
-        };
-
-        tab_panel.update(cx, |tab_panel, _| {
-            tab_panel.set_in_tiles(true);
-        });
-
-        self.panels.push(item.clone());
-        window.defer(cx, {
-            let panel = item.panel.clone();
-            let dock_area = dock_area.clone();
-
-            move |window, cx| {
-                // Subscribe to the panel's layout change event.
-                _ = dock_area.update(cx, |this, cx| {
-                    if let Ok(tab_panel) = panel.view().downcast::<TabPanel>() {
-                        this.subscribe_panel(&tab_panel, window, cx);
-                    }
-                });
-            }
-        });
-
-        cx.emit(PanelEvent::LayoutChanged);
-        cx.notify();
-    }
-
-    #[inline]
-    fn reset_current_index(&mut self) {
-        self.dragging_id = None;
-        self.resizing_id = None;
-    }
-
-    /// Bring the panel of target_index to front, returns (old_index, new_index) if successful
-    fn bring_to_front(
-        &mut self,
-        target_id: Option<EntityId>,
-        cx: &mut Context<Self>,
-    ) -> Option<EntityId> {
-        let Some(old_id) = target_id else {
-            return None;
-        };
-
-        let old_ix = self.panels.iter().position(|item| item.id == old_id)?;
-        if old_ix < self.panels.len() {
-            let item = self.panels.remove(old_ix);
-            self.panels.push(item);
-            let new_ix = self.panels.len() - 1;
-            let new_id = self.panels[new_ix].id;
-            self.history.push(TileChange {
-                tile_id: new_id,
-                old_bounds: None,
-                new_bounds: None,
-                old_order: Some(old_ix),
-                new_order: Some(new_ix),
-                version: 0,
-            });
-            cx.notify();
-            return Some(new_id);
-        }
-        None
-    }
-
-    /// Handle the undo action
-    pub fn undo(&mut self, _: &mut Window, cx: &mut Context<Self>) {
-        self.history.ignore = true;
-
-        if let Some(changes) = self.history.undo() {
-            for change in changes {
-                if let Some(index) = self
-                    .panels
-                    .iter()
-                    .position(|item| item.panel.view().entity_id() == change.tile_id)
-                {
-                    if let Some(old_bounds) = change.old_bounds {
-                        self.panels[index].bounds = old_bounds;
-                    }
-                    if let Some(old_order) = change.old_order {
-                        let item = self.panels.remove(index);
-                        self.panels.insert(old_order, item);
-                    }
-                }
-            }
-            cx.emit(PanelEvent::LayoutChanged);
-        }
-
-        self.history.ignore = false;
-        cx.notify();
-    }
-
-    /// Handle the redo action
-    pub fn redo(&mut self, _: &mut Window, cx: &mut Context<Self>) {
-        self.history.ignore = true;
-
-        if let Some(changes) = self.history.redo() {
-            for change in changes {
-                if let Some(index) = self
-                    .panels
-                    .iter()
-                    .position(|item| item.panel.view().entity_id() == change.tile_id)
-                {
-                    if let Some(new_bounds) = change.new_bounds {
-                        self.panels[index].bounds = new_bounds;
-                    }
-                    if let Some(new_order) = change.new_order {
-                        let item = self.panels.remove(index);
-                        self.panels.insert(new_order, item);
-                    }
-                }
-            }
-            cx.emit(PanelEvent::LayoutChanged);
-        }
-
-        self.history.ignore = false;
-        cx.notify();
-    }
-
-    /// Returns the active panel, if any.
-    pub fn active_panel(&self, cx: &App) -> Option<Arc<dyn PanelView>> {
-        self.panels.last().and_then(|item| {
-            if let Ok(tab_panel) = item.panel.view().downcast::<TabPanel>() {
-                tab_panel.read(cx).active_panel(cx)
-            } else if let Ok(_) = item.panel.view().downcast::<StackPanel>() {
-                None
-            } else {
-                Some(item.panel.clone())
-            }
-        })
-    }
-
-    /// Produce a vector of AnyElement representing the three possible resize handles
-    fn render_resize_handles(
-        &mut self,
-        _: &mut Window,
-        cx: &mut Context<Self>,
-        entity_id: EntityId,
-        item: &TileItem,
-    ) -> Vec<AnyElement> {
-        let item_id = item.id;
-        let item_bounds = item.bounds;
-        let handle_offset = -HANDLE_SIZE + px(1.);
-
-        let mut elements = Vec::new();
-
-        // Left resize handle
-        elements.push(
-            div()
-                .id("left-resize-handle")
-                .cursor_ew_resize()
-                .absolute()
-                .top_0()
-                .left(handle_offset)
-                .w(HANDLE_SIZE)
-                .h(item_bounds.size.height)
-                .on_mouse_down(
-                    MouseButton::Left,
-                    cx.listener({
-                        move |this, event: &MouseDownEvent, window, cx| {
-                            this.on_resize_handle_mouse_down(
-                                ResizeSide::Left,
-                                item_id,
-                                item_bounds,
-                                event,
-                                window,
-                                cx,
-                            );
-                        }
-                    }),
-                )
-                .on_drag(DragResizing(entity_id), |drag, _, _, cx| {
-                    cx.stop_propagation();
-                    cx.new(|_| drag.clone())
-                })
-                .on_drag_move(cx.listener(
-                    move |this, e: &DragMoveEvent<DragResizing>, window, cx| match e.drag(cx) {
-                        DragResizing(id) => {
-                            if *id != entity_id {
-                                return;
-                            }
-
-                            let Some(ref drag_data) = this.resizing_drag_data else {
-                                return;
-                            };
-                            if drag_data.side != ResizeSide::Left {
-                                return;
-                            }
-
-                            let pos = e.event.position;
-                            let delta = drag_data.last_position.x - pos.x;
-                            let new_x = (drag_data.last_bounds.origin.x - delta).max(px(0.0));
-                            let size_delta = drag_data.last_bounds.origin.x - new_x;
-                            let new_width = (drag_data.last_bounds.size.width + size_delta)
-                                .max(MINIMUM_SIZE.width);
-                            this.resize(Some(new_x), None, Some(new_width), None, window, cx);
-                        }
-                    },
-                ))
-                .into_any_element(),
-        );
-
-        // Right resize handle
-        elements.push(
-            div()
-                .id("right-resize-handle")
-                .cursor_ew_resize()
-                .absolute()
-                .top_0()
-                .right(handle_offset)
-                .w(HANDLE_SIZE)
-                .h(item_bounds.size.height)
-                .on_mouse_down(
-                    MouseButton::Left,
-                    cx.listener({
-                        move |this, event: &MouseDownEvent, window, cx| {
-                            this.on_resize_handle_mouse_down(
-                                ResizeSide::Right,
-                                item_id,
-                                item_bounds,
-                                event,
-                                window,
-                                cx,
-                            );
-                        }
-                    }),
-                )
-                .on_drag(DragResizing(entity_id), |drag, _, _, cx| {
-                    cx.stop_propagation();
-                    cx.new(|_| drag.clone())
-                })
-                .on_drag_move(cx.listener(
-                    move |this, e: &DragMoveEvent<DragResizing>, window, cx| match e.drag(cx) {
-                        DragResizing(id) => {
-                            if *id != entity_id {
-                                return;
-                            }
-
-                            let Some(ref drag_data) = this.resizing_drag_data else {
-                                return;
-                            };
-
-                            if drag_data.side != ResizeSide::Right {
-                                return;
-                            }
-
-                            let pos = e.event.position;
-                            let delta = pos.x - drag_data.last_position.x;
-                            let new_width =
-                                (drag_data.last_bounds.size.width + delta).max(MINIMUM_SIZE.width);
-                            this.resize(None, None, Some(new_width), None, window, cx);
-                        }
-                    },
-                ))
-                .into_any_element(),
-        );
-
-        // Top resize handle
-        elements.push(
-            div()
-                .id("top-resize-handle")
-                .cursor_ns_resize()
-                .absolute()
-                .left(px(0.0))
-                .top(handle_offset)
-                .w(item_bounds.size.width)
-                .h(HANDLE_SIZE)
-                .on_mouse_down(
-                    MouseButton::Left,
-                    cx.listener({
-                        move |this, event: &MouseDownEvent, window, cx| {
-                            this.on_resize_handle_mouse_down(
-                                ResizeSide::Top,
-                                item_id,
-                                item_bounds,
-                                event,
-                                window,
-                                cx,
-                            );
-                        }
-                    }),
-                )
-                .on_drag(DragResizing(entity_id), |drag, _, _, cx| {
-                    cx.stop_propagation();
-                    cx.new(|_| drag.clone())
-                })
-                .on_drag_move(cx.listener(
-                    move |this, e: &DragMoveEvent<DragResizing>, window, cx| match e.drag(cx) {
-                        DragResizing(id) => {
-                            if *id != entity_id {
-                                return;
-                            }
-
-                            let Some(ref drag_data) = this.resizing_drag_data else {
-                                return;
-                            };
-                            if drag_data.side != ResizeSide::Top {
-                                return;
-                            }
-
-                            let pos = e.event.position;
-                            let delta = drag_data.last_position.y - pos.y;
-                            let new_y = (drag_data.last_bounds.origin.y - delta).max(px(0.));
-                            let size_delta = drag_data.last_bounds.origin.y - new_y;
-                            let new_height = (drag_data.last_bounds.size.height + size_delta)
-                                .max(MINIMUM_SIZE.height);
-                            this.resize(None, Some(new_y), None, Some(new_height), window, cx);
-                        }
-                    },
-                ))
-                .into_any_element(),
-        );
-
-        // Bottom resize handle
-        elements.push(
-            div()
-                .id("bottom-resize-handle")
-                .cursor_ns_resize()
-                .absolute()
-                .left(px(0.0))
-                .bottom(handle_offset)
-                .w(item_bounds.size.width)
-                .h(HANDLE_SIZE)
-                .on_mouse_down(
-                    MouseButton::Left,
-                    cx.listener({
-                        move |this, event: &MouseDownEvent, window, cx| {
-                            this.on_resize_handle_mouse_down(
-                                ResizeSide::Bottom,
-                                item_id,
-                                item_bounds,
-                                event,
-                                window,
-                                cx,
-                            );
-                        }
-                    }),
-                )
-                .on_drag(DragResizing(entity_id), |drag, _, _, cx| {
-                    cx.stop_propagation();
-                    cx.new(|_| drag.clone())
-                })
-                .on_drag_move(cx.listener(
-                    move |this, e: &DragMoveEvent<DragResizing>, window, cx| match e.drag(cx) {
-                        DragResizing(id) => {
-                            if *id != entity_id {
-                                return;
-                            }
-
-                            let Some(ref drag_data) = this.resizing_drag_data else {
-                                return;
-                            };
-
-                            if drag_data.side != ResizeSide::Bottom {
-                                return;
-                            }
-
-                            let pos = e.event.position;
-                            let delta = pos.y - drag_data.last_position.y;
-                            let new_height = (drag_data.last_bounds.size.height + delta)
-                                .max(MINIMUM_SIZE.height);
-                            this.resize(None, None, None, Some(new_height), window, cx);
-                        }
-                    },
-                ))
-                .into_any_element(),
-        );
-
-        // Anchor resize handle
-        elements.push(
-            div()
-                .child(
-                    Icon::new(IconName::ResizeCorner)
-                        .size_3()
-                        .absolute()
-                        .right(px(1.))
-                        .bottom(px(1.))
-                        .text_color(cx.theme().muted_foreground.opacity(0.5)),
-                )
-                .child(
-                    div()
-                        .id("corner-resize-handle")
-                        .cursor_nwse_resize()
-                        .absolute()
-                        .right(handle_offset)
-                        .bottom(handle_offset)
-                        .size_3()
-                        .on_mouse_down(
-                            MouseButton::Left,
-                            cx.listener({
-                                move |this, event: &MouseDownEvent, window, cx| {
-                                    this.on_resize_handle_mouse_down(
-                                        ResizeSide::BottomRight,
-                                        item_id,
-                                        item_bounds,
-                                        event,
-                                        window,
-                                        cx,
-                                    );
-                                }
-                            }),
-                        )
-                        .on_drag(DragResizing(entity_id), |drag, _, _, cx| {
-                            cx.stop_propagation();
-                            cx.new(|_| drag.clone())
-                        })
-                        .on_drag_move(cx.listener(
-                            move |this, e: &DragMoveEvent<DragResizing>, window, cx| {
-                                match e.drag(cx) {
-                                    DragResizing(id) => {
-                                        if *id != entity_id {
-                                            return;
-                                        }
-
-                                        let Some(ref drag_data) = this.resizing_drag_data else {
-                                            return;
-                                        };
-
-                                        if drag_data.side != ResizeSide::BottomRight {
-                                            return;
-                                        }
-
-                                        let pos = e.event.position;
-                                        let delta_x = pos.x - drag_data.last_position.x;
-                                        let delta_y = pos.y - drag_data.last_position.y;
-                                        let new_width = (drag_data.last_bounds.size.width
-                                            + delta_x)
-                                            .max(MINIMUM_SIZE.width);
-                                        let new_height = (drag_data.last_bounds.size.height
-                                            + delta_y)
-                                            .max(MINIMUM_SIZE.height);
-                                        this.resize(
-                                            None,
-                                            None,
-                                            Some(new_width),
-                                            Some(new_height),
-                                            window,
-                                            cx,
-                                        );
-                                    }
-                                }
-                            },
-                        )),
-                )
-                .into_any_element(),
-        );
-
-        elements
-    }
-
-    fn on_resize_handle_mouse_down(
-        &mut self,
+        tile: &TileContext,
+        id: &'static str,
         side: ResizeSide,
-        item_id: EntityId,
-        item_bounds: Bounds<Pixels>,
-        event: &MouseDownEvent,
-        _: &mut Window,
-        cx: &mut Context<'_, Self>,
-    ) {
-        let last_position = event.position;
-        self.resizing_id = Some(item_id);
-        self.resizing_drag_data = Some(ResizeDrag {
-            side,
-            last_position,
-            last_bounds: item_bounds,
-        });
+        build: impl FnOnce(Stateful<Div>) -> Stateful<Div>,
+    ) -> Stateful<Div> {
+        let node = tile.node();
 
-        if let Some(new_id) = self.bring_to_front(self.resizing_id, cx) {
-            self.resizing_id = Some(new_id);
-        }
-        cx.stop_propagation();
+        build(div().id(id).absolute())
+            .on_mouse_down(MouseButton::Left, {
+                let tile = tile.clone();
+                move |event: &MouseDownEvent, window, cx| {
+                    tile.begin_resize(side, event.position, window, cx);
+                    cx.stop_propagation();
+                }
+            })
+            .on_drag(DragResizing(node), |drag, _, _, cx| {
+                cx.stop_propagation();
+                cx.new(|_| drag.clone())
+            })
+            .on_drag_move({
+                let tile = tile.clone();
+                move |event: &DragMoveEvent<DragResizing>, window, cx| {
+                    if event.drag(cx).0 != node {
+                        return;
+                    }
+                    tile.resize_to(event.event.position, window, cx);
+                }
+            })
     }
 
-    /// Produce the drag-bar element for the given panel item
-    fn render_drag_bar(
-        &mut self,
-        _: &mut Window,
-        cx: &mut Context<Self>,
-        entity_id: EntityId,
-        item: &TileItem,
-    ) -> AnyElement {
-        let item_id = item.id;
-        let item_bounds = item.bounds;
+    /// The trailing controls of a tile's title bar.
+    ///
+    /// A tile has no tab bar to hang a toolbar off, so this is where its zoom,
+    /// close and ellipsis menu live. The entries use click handlers rather
+    /// than the [`ToggleZoom`](super::ToggleZoom) and
+    /// [`ClosePanel`](super::ClosePanel) actions: those are dispatched to a
+    /// focused tab group, and a tile is not one.
+    fn render_tile_controls(
+        &self,
+        tile: &TileContext,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> impl IntoElement {
+        let handle = PanelHandle::of(tile.panel());
+        let control = handle.and_then(|handle| handle.zoom_control(cx));
+        let zoomed = tile.is_zoomed();
+        let toolbar_zoom =
+            tile.is_zoomable() && control.is_some_and(|control| control.toolbar_visible());
+        let menu_zoom = tile.is_zoomable() && control.is_some_and(|control| control.menu_visible());
+        let closable = tile.is_closable();
+        let buttons = handle.and_then(|handle| handle.toolbar_buttons(window, cx));
+        let panel = handle.map(|handle| handle.panel());
+
+        h_flex()
+            .gap_1()
+            .flex_shrink_0()
+            .occlude()
+            .when_some(buttons, |this, buttons| {
+                this.children(
+                    buttons
+                        .into_iter()
+                        .map(|button| button.xsmall().ghost().tab_stop(false)),
+                )
+            })
+            .when_some(
+                match (zoomed, toolbar_zoom) {
+                    (true, _) => Some(("zoom-out", IconName::Minimize, t!("Dock.Zoom Out"))),
+                    (false, true) => Some(("zoom-in", IconName::Maximize, t!("Dock.Zoom In"))),
+                    (false, false) => None,
+                },
+                |this, (id, icon, tooltip)| {
+                    this.child(
+                        Button::new(id)
+                            .icon(icon)
+                            .xsmall()
+                            .ghost()
+                            .tab_stop(false)
+                            .tooltip(tooltip)
+                            .selected(zoomed)
+                            .on_click({
+                                let tile = tile.clone();
+                                move |_, window, cx| tile.toggle_zoom(window, cx)
+                            }),
+                    )
+                },
+            )
+            .child(
+                Button::new("menu")
+                    .icon(IconName::Ellipsis)
+                    .xsmall()
+                    .ghost()
+                    .tab_stop(false)
+                    .dropdown_menu({
+                        let tile = tile.clone();
+                        move |menu, window, cx| {
+                            menu.when_some(panel.clone(), |menu, panel| {
+                                panel.dropdown_menu(menu, window, cx)
+                            })
+                            .separator()
+                            .item(
+                                PopupMenuItem::new(match zoomed {
+                                    true => t!("Dock.Zoom Out"),
+                                    false => t!("Dock.Zoom In"),
+                                })
+                                .disabled(!menu_zoom && !zoomed)
+                                .on_click({
+                                    let tile = tile.clone();
+                                    move |_, window, cx| tile.toggle_zoom(window, cx)
+                                }),
+                            )
+                            .when(closable, |menu| {
+                                menu.separator().item(
+                                    PopupMenuItem::new(t!("Dock.Close")).on_click({
+                                        let tile = tile.clone();
+                                        move |_, window, cx| tile.close(window, cx)
+                                    }),
+                                )
+                            })
+                        }
+                    })
+                    .anchor(gpui::Anchor::TopRight),
+            )
+    }
+}
+
+impl TilesRenderer for TilesSkin {
+    fn frame(&self, _: &mut Window, cx: &mut App) -> Stateful<Div> {
+        div()
+            .id("tiles")
+            .relative()
+            .size_full()
+            .bg(cx.theme().tokens.tiles)
+            .track_scroll(&self.scroll_handle)
+            .overflow_scroll()
+    }
+
+    fn tile_frame(&self, tile: &TileContext, _: &mut Window, cx: &mut App) -> Stateful<Div> {
+        v_flex()
+            .id(("tile", tile.panel_id().as_u64()))
+            .occlude()
+            .overflow_hidden()
+            .bg(cx.theme().tokens.background)
+            .border_1()
+            .border_color(cx.theme().border)
+            .rounded(cx.theme().tile_radius)
+            // Room for the title bar, which is positioned over the padding so
+            // the panel below it is never covered. Base draws the panel view
+            // as a plain child, so this is the only way to keep the two from
+            // overlapping.
+            .pt(DRAG_BAR_HEIGHT)
+            // Base installs the stored bounds on an ordinary tile and nothing
+            // at all on a zoomed one — how a zoomed tile fills the dock is
+            // this skin's decision.
+            .when(tile.is_zoomed(), |this| this.size_full())
+            .on_mouse_down(MouseButton::Left, {
+                let tile = tile.clone();
+                move |_, window, cx| tile.bring_to_front(window, cx)
+            })
+            // A gesture can end with the pointer anywhere, so both halves are
+            // needed; each is a no-op unless this tile is the one moving.
+            .on_mouse_up(MouseButton::Left, {
+                let tile = tile.clone();
+                move |_, window, cx| {
+                    tile.end_move(window, cx);
+                    tile.end_resize(window, cx);
+                }
+            })
+            .on_mouse_up_out(MouseButton::Left, {
+                let tile = tile.clone();
+                move |_, window, cx| {
+                    tile.end_move(window, cx);
+                    tile.end_resize(window, cx);
+                }
+            })
+    }
+
+    fn render_drag_bar(&self, tile: &TileContext, window: &mut Window, cx: &mut App) -> AnyElement {
+        let node = tile.node();
+        let handle = PanelHandle::of(tile.panel());
+        let title_style = handle.and_then(|handle| handle.title_style(cx));
 
         h_flex()
             .id("drag-bar")
             .absolute()
+            .top_0()
+            .left_0()
             .w_full()
             .h(DRAG_BAR_HEIGHT)
-            .bg(cx.theme().transparent)
-            .on_mouse_down(
-                MouseButton::Left,
-                cx.listener(move |this, event: &MouseDownEvent, _, cx| {
-                    let inner_pos = event.position - this.bounds.origin;
-                    this.dragging_id = Some(item_id);
-                    this.dragging_initial_mouse = inner_pos;
-                    this.dragging_initial_bounds = item_bounds;
-
-                    if let Some(new_id) = this.bring_to_front(Some(item_id), cx) {
-                        this.dragging_id = Some(new_id);
-                    }
-                }),
-            )
-            .on_drag(DragMoving(entity_id), |drag, _, _, cx| {
-                cx.stop_propagation();
-                cx.new(|_| drag.clone())
+            .items_center()
+            .gap_1()
+            .pl_3()
+            .pr_2()
+            .when_some(title_style, |this, style| {
+                this.bg(style.background).text_color(style.foreground)
             })
-            .on_drag_move(
-                cx.listener(
-                    move |this, e: &DragMoveEvent<DragMoving>, _, cx| match e.drag(cx) {
-                        DragMoving(id) => {
-                            if *id != entity_id {
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_16()
+                    .overflow_hidden()
+                    .text_ellipsis()
+                    .whitespace_nowrap()
+                    .child(panel_title(tile.panel(), window, cx)),
+            )
+            .children(handle.and_then(|handle| handle.title_suffix(window, cx)))
+            .child(self.render_tile_controls(tile, window, cx))
+            // A zoomed tile is not at its stored bounds, so there is nothing
+            // for a move to mean; base refuses the gesture too.
+            .when(!tile.is_zoomed(), |this| {
+                this.cursor_grab()
+                    .on_mouse_down(MouseButton::Left, {
+                        let tile = tile.clone();
+                        move |event: &MouseDownEvent, window, cx| {
+                            tile.begin_move(event.position, window, cx);
+                        }
+                    })
+                    .on_drag(DragMoving(node), |drag, _, _, cx| {
+                        cx.stop_propagation();
+                        cx.new(|_| drag.clone())
+                    })
+                    .on_drag_move({
+                        let tile = tile.clone();
+                        move |event: &DragMoveEvent<DragMoving>, window, cx| {
+                            if event.drag(cx).0 != node {
                                 return;
                             }
-                            this.update_position(e.event.position, cx);
+                            tile.move_to(event.event.position, window, cx);
                         }
-                    },
-                ),
-            )
+                    })
+            })
             .into_any_element()
     }
 
-    fn render_panel(
-        &mut self,
-        item: &TileItem,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Div {
-        let entity_id = cx.entity_id();
-        let item_id = item.id;
-        let panel_view = item.panel.view();
+    fn render_resize_handles(
+        &self,
+        tile: &TileContext,
+        _: &mut Window,
+        cx: &mut App,
+    ) -> AnyElement {
+        let bounds = tile.bounds();
 
-        v_flex()
-            .occlude()
-            .bg(cx.theme().tokens.background)
-            .border_1()
-            .border_color(cx.theme().border)
-            .absolute()
-            .left(item.bounds.origin.x)
-            .top(item.bounds.origin.y)
-            // More 1px to account for the border width when 2 panels are too close
-            .w(item.bounds.size.width + px(1.))
-            .h(item.bounds.size.height + px(1.))
-            .rounded(cx.theme().tile_radius)
-            .child(h_flex().overflow_hidden().size_full().child(panel_view))
-            .children(self.render_resize_handles(window, cx, entity_id, &item))
-            .child(self.render_drag_bar(window, cx, entity_id, &item))
-            .on_mouse_down(
-                MouseButton::Left,
-                cx.listener(move |this, _, _, _| {
-                    this.dragging_id = Some(item_id);
-                }),
-            )
-            // Here must be mouse up for avoid conflict with Drag event
-            .on_mouse_up(
-                MouseButton::Left,
-                cx.listener(move |this, _, _, cx| {
-                    if this.dragging_id == Some(item_id) {
-                        this.dragging_id = None;
-                        this.bring_to_front(Some(item_id), cx);
-                    }
-                }),
-            )
-    }
-
-    /// Handle the mouse up event to finalize drag or resize operations
-    fn on_mouse_up(&mut self, _: &mut Window, cx: &mut Context<'_, Tiles>) {
-        // Check if a drag or resize was active
-        if self.dragging_id.is_some()
-            || self.resizing_id.is_some()
-            || self.resizing_drag_data.is_some()
-        {
-            let mut changes_to_push = vec![];
-
-            // Handle dragging
-            if let Some(dragging_id) = self.dragging_id {
-                if let Some(idx) = self.panels.iter().position(|p| p.id == dragging_id) {
-                    let initial_bounds = self.dragging_initial_bounds;
-                    let current_bounds = self.panels[idx].bounds;
-
-                    // Apply grid alignment to final position
-                    let aligned_origin = round_point_to_nearest_ten(current_bounds.origin, cx);
-
-                    if initial_bounds.origin != aligned_origin
-                        || initial_bounds.size != current_bounds.size
-                    {
-                        self.panels[idx].bounds.origin = aligned_origin;
-
-                        changes_to_push.push(TileChange {
-                            tile_id: self.panels[idx].panel.view().entity_id(),
-                            old_bounds: Some(initial_bounds),
-                            new_bounds: Some(self.panels[idx].bounds),
-                            old_order: None,
-                            new_order: None,
-                            version: 0,
-                        });
-                    }
-                }
-            }
-
-            // Handle resizing
-            if let Some(resizing_id) = self.resizing_id {
-                if let Some(drag_data) = &self.resizing_drag_data {
-                    if let Some(item) = self.panel(&resizing_id) {
-                        let initial_bounds = drag_data.last_bounds;
-                        let current_bounds = item.bounds;
-                        if initial_bounds.size != current_bounds.size {
-                            changes_to_push.push(TileChange {
-                                tile_id: item.panel.view().entity_id(),
-                                old_bounds: Some(initial_bounds),
-                                new_bounds: Some(current_bounds),
-                                old_order: None,
-                                new_order: None,
-                                version: 0,
-                            });
-                        }
-                    }
-                }
-            }
-
-            // Push changes to history if any
-            if !changes_to_push.is_empty() {
-                for change in changes_to_push {
-                    self.history.push(change);
-                }
-            }
-
-            // Reset drag and resize state
-            self.reset_current_index();
-            self.resizing_drag_data = None;
-            cx.emit(PanelEvent::LayoutChanged);
-            cx.notify();
-        }
-    }
-}
-
-/// Snap `edge` to the nearest value in `candidates` whose distance is strictly
-/// below `threshold`. Returns `None` when nothing is close enough.
-fn snap_edge(edge: Pixels, candidates: &[Pixels], threshold: Pixels) -> Option<Pixels> {
-    let mut best: Option<Pixels> = None;
-    let mut best_dist = threshold;
-    for &candidate in candidates {
-        let dist = (edge - candidate).abs();
-        if dist < best_dist {
-            best_dist = dist;
-            best = Some(candidate);
-        }
-    }
-    best
-}
-
-/// Compute the final bounds for a resize, applying magnetic edge snapping to
-/// neighboring panels and falling back to grid rounding when no neighbor edge
-/// is within `grid_size`.
-///
-/// Which edges move is inferred from the provided `Option`s, mirroring
-/// `Tiles::resize`:
-/// - `new_x` set                  => left edge moves (right edge pinned)
-/// - `new_width` set, `new_x` not => right edge moves (left edge pinned)
-/// - `new_y` set                  => top edge moves (bottom edge pinned)
-/// - `new_height` set, `new_y` not => bottom edge moves (top edge pinned)
-fn compute_resized_bounds(
-    previous: Bounds<Pixels>,
-    new_x: Option<Pixels>,
-    new_y: Option<Pixels>,
-    new_width: Option<Pixels>,
-    new_height: Option<Pixels>,
-    other_bounds: &[Bounds<Pixels>],
-    grid_size: Pixels,
-) -> Bounds<Pixels> {
-    // Candidate snap edges from neighbouring panels.
-    let mut x_edges = Vec::with_capacity(other_bounds.len() * 2);
-    let mut y_edges = Vec::with_capacity(other_bounds.len() * 2);
-    for bounds in other_bounds {
-        x_edges.push(bounds.left());
-        x_edges.push(bounds.right());
-        y_edges.push(bounds.top());
-        y_edges.push(bounds.bottom());
-    }
-
-    let prev_right = previous.origin.x + previous.size.width;
-    let prev_bottom = previous.origin.y + previous.size.height;
-
-    // --- X axis ---
-    let (final_x, final_width) = if let Some(x) = new_x {
-        // Left edge moving; right edge pinned. Canvas-left (0) is also a target.
-        let raw_left = x.max(px(0.));
-        let mut candidates = x_edges.clone();
-        candidates.push(px(0.));
-        let snapped_left = snap_edge(raw_left, &candidates, grid_size)
-            .unwrap_or_else(|| round_to_nearest_ten_with(raw_left, grid_size));
-        let width = (prev_right - snapped_left).max(MINIMUM_SIZE.width);
-        (snapped_left, width)
-    } else if let Some(width) = new_width {
-        // Right edge moving; left edge pinned.
-        let raw_right = previous.origin.x + width;
-        let snapped_right = snap_edge(raw_right, &x_edges, grid_size)
-            .unwrap_or_else(|| round_to_nearest_ten_with(raw_right, grid_size));
-        let width = (snapped_right - previous.origin.x).max(MINIMUM_SIZE.width);
-        (previous.origin.x, width)
-    } else {
-        (previous.origin.x, previous.size.width)
-    };
-
-    // --- Y axis ---
-    let (final_y, final_height) = if let Some(y) = new_y {
-        // Top edge moving; bottom edge pinned. Canvas-top (0) is also a target.
-        let raw_top = y.max(px(0.));
-        let mut candidates = y_edges.clone();
-        candidates.push(px(0.));
-        let snapped_top = snap_edge(raw_top, &candidates, grid_size)
-            .unwrap_or_else(|| round_to_nearest_ten_with(raw_top, grid_size));
-        let height = (prev_bottom - snapped_top).max(MINIMUM_SIZE.height);
-        (snapped_top, height)
-    } else if let Some(height) = new_height {
-        // Bottom edge moving; top edge pinned.
-        let raw_bottom = previous.origin.y + height;
-        let snapped_bottom = snap_edge(raw_bottom, &y_edges, grid_size)
-            .unwrap_or_else(|| round_to_nearest_ten_with(raw_bottom, grid_size));
-        let height = (snapped_bottom - previous.origin.y).max(MINIMUM_SIZE.height);
-        (previous.origin.y, height)
-    } else {
-        (previous.origin.y, previous.size.height)
-    };
-
-    Bounds {
-        origin: Point { x: final_x, y: final_y },
-        size: Size { width: final_width, height: final_height },
-    }
-}
-
-fn round_to_nearest_ten_with(value: Pixels, grid_size: Pixels) -> Pixels {
-    (value / grid_size).round() * grid_size
-}
-
-#[inline]
-fn round_to_nearest_ten(value: Pixels, cx: &App) -> Pixels {
-    round_to_nearest_ten_with(value, cx.theme().tile_grid_size)
-}
-
-#[inline]
-fn round_point_to_nearest_ten(point: Point<Pixels>, cx: &App) -> Point<Pixels> {
-    Point::new(
-        round_to_nearest_ten(point.x, cx),
-        round_to_nearest_ten(point.y, cx),
-    )
-}
-
-impl Focusable for Tiles {
-    fn focus_handle(&self, _cx: &App) -> FocusHandle {
-        self.focus_handle.clone()
-    }
-}
-impl EventEmitter<PanelEvent> for Tiles {}
-impl EventEmitter<DismissEvent> for Tiles {}
-impl Render for Tiles {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let view = cx.entity().clone();
-        let panels = self.sorted_panels();
-        let scroll_bounds =
-            self.panels
-                .iter()
-                .fold(Bounds::default(), |acc: Bounds<Pixels>, item| Bounds {
-                    origin: Point {
-                        x: acc.origin.x.min(item.bounds.origin.x),
-                        y: acc.origin.y.min(item.bounds.origin.y),
-                    },
-                    size: Size {
-                        width: acc.size.width.max(item.bounds.right()),
-                        height: acc.size.height.max(item.bounds.bottom()),
-                    },
-                });
-        let scroll_size = scroll_bounds.size - size(scroll_bounds.origin.x, scroll_bounds.origin.y);
-
+        // A passive full-tile box so each handle is positioned against the
+        // tile rather than against whatever the flow put it next to. It
+        // registers no interaction of its own, so it does not shadow the panel
+        // underneath.
         div()
-            .relative()
-            .bg(cx.theme().tokens.tiles)
+            .absolute()
+            .top_0()
+            .left_0()
+            .size_full()
             .child(
-                div()
-                    .id("tiles")
-                    .track_scroll(&self.scroll_handle)
-                    .size_full()
-                    .top(-px(1.))
-                    .left(-px(1.))
-                    .overflow_scroll()
-                    .children(
-                        panels
-                            .into_iter()
-                            .map(|item| self.render_panel(&item, window, cx)),
-                    )
-                    .on_prepaint(move |bounds, _, cx| view.update(cx, |r, _| r.bounds = bounds))
-                    .on_drop(cx.listener(move |_, item: &AnyDrag, _, cx| {
-                        cx.emit(DragDrop(item.clone()));
-                    })),
-            )
-            .on_mouse_up(
-                MouseButton::Left,
-                cx.listener(move |this, _event: &MouseUpEvent, window, cx| {
-                    this.on_mouse_up(window, cx);
+                self.resize_handle(tile, "left-resize-handle", ResizeSide::Left, |this| {
+                    this.cursor_ew_resize()
+                        .top_0()
+                        .left(HANDLE_OFFSET)
+                        .w(HANDLE_SIZE)
+                        .h(bounds.size.height)
                 }),
             )
             .child(
-                div()
-                    .absolute()
-                    .top_0()
-                    .left_0()
-                    .right_0()
-                    .bottom_0()
-                    .child(
-                        Scrollbar::new(&self.scroll_handle)
-                            .scroll_size(scroll_size)
-                            .when_some(self.scrollbar_show, |this, scrollbar_show| {
-                                this.scrollbar_show(scrollbar_show)
-                            }),
-                    ),
+                self.resize_handle(tile, "right-resize-handle", ResizeSide::Right, |this| {
+                    this.cursor_ew_resize()
+                        .top_0()
+                        .right(HANDLE_OFFSET)
+                        .w(HANDLE_SIZE)
+                        .h(bounds.size.height)
+                }),
             )
+            .child(
+                self.resize_handle(tile, "top-resize-handle", ResizeSide::Top, |this| {
+                    this.cursor_ns_resize()
+                        .left_0()
+                        .top(HANDLE_OFFSET)
+                        .w(bounds.size.width)
+                        .h(HANDLE_SIZE)
+                }),
+            )
+            .child(
+                self.resize_handle(tile, "bottom-resize-handle", ResizeSide::Bottom, |this| {
+                    this.cursor_ns_resize()
+                        .left_0()
+                        .bottom(HANDLE_OFFSET)
+                        .w(bounds.size.width)
+                        .h(HANDLE_SIZE)
+                }),
+            )
+            .child(
+                Icon::new(IconName::ResizeCorner)
+                    .size_3()
+                    .absolute()
+                    .right(px(1.))
+                    .bottom(px(1.))
+                    .text_color(cx.theme().muted_foreground.opacity(0.5)),
+            )
+            .child(self.resize_handle(
+                tile,
+                "corner-resize-handle",
+                ResizeSide::BottomRight,
+                |this| {
+                    this.cursor_nwse_resize()
+                        .right(HANDLE_OFFSET)
+                        .bottom(HANDLE_OFFSET)
+                        .size_3()
+                },
+            ))
+            .into_any_element()
+    }
+
+    /// The old canvas wrapped a tile's panel in exactly this, and base draws
+    /// the panel as a plain child, so without it a panel that does not size
+    /// itself has no size.
+    fn panel_frame(&self, tile: &TileContext, _: &mut Window, _: &mut App) -> Stateful<Div> {
+        h_flex()
+            .id(("tile-panel", tile.panel_id().as_u64()))
+            .overflow_hidden()
             .size_full()
+    }
+
+    /// The canvas scrollbar.
+    ///
+    /// It has to be an overlay rather than one of the frame's own children:
+    /// the frame is the scroll container and base appends the tiles after
+    /// whatever the frame carries, so a scrollbar placed there would paint and
+    /// hit-test underneath every tile.
+    fn render_overlay(
+        &self,
+        content: Size<Pixels>,
+        _: &mut Window,
+        _: &mut App,
+    ) -> Option<AnyElement> {
+        Some(
+            Scrollbar::new(&self.scroll_handle)
+                .scroll_size(content)
+                .when_some(self.shared.tiles_scrollbar_mode(), |this, mode| {
+                    this.mode(mode)
+                })
+                .into_any_element(),
+        )
+    }
+
+    fn grid_size(&self, cx: &App) -> Pixels {
+        cx.theme().tile_grid_size
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::cell::Cell;
+
+    use gpui::{Bounds, TestAppContext, point, size};
+    use gpui_base::dock::{DockArea, DockLayout};
+
     use super::*;
-    use gpui::{px, Bounds, Pixels, Point, Size};
+    use crate::dock::{DockSkin, panel_handle, test_support::MeasuredProbe};
 
-    fn b(x: f32, y: f32, w: f32, h: f32) -> Bounds<Pixels> {
-        Bounds {
-            origin: Point {
-                x: px(x),
-                y: px(y),
-            },
-            size: Size {
-                width: px(w),
-                height: px(h),
-            },
-        }
-    }
+    /// A tile's panel view has to be given a size.
+    ///
+    /// Base draws the panel as an ordinary child of the tile frame, so
+    /// without [`TilesSkin::panel_frame`]'s `size_full` the panel measures
+    /// zero — the same defect the tab group had, in the other container. It
+    /// would be invisible in the story example, whose panels happen to be
+    /// `size_full` themselves.
+    #[gpui::test]
+    fn a_tiles_panel_gets_the_height_below_its_drag_bar(cx: &mut TestAppContext) {
+        cx.update(|cx| {
+            crate::init(cx);
+        });
+        let height = Rc::new(Cell::new(px(0.)));
+        let (area, cx) = cx.add_window_view(|window, cx| {
+            let skin = DockSkin::new(cx);
+            DockArea::new("skin", None, window, cx).with_renderer(skin)
+        });
 
-    #[test]
-    fn test_snap_edge_within_threshold() {
-        // 102 is 2px from 100 (< 8) -> snaps to 100.
-        assert_eq!(snap_edge(px(102.), &[px(100.), px(300.)], px(8.)), Some(px(100.)));
-    }
+        let measured = height.clone();
+        let bounds = Bounds {
+            origin: point(px(20.), px(20.)),
+            size: size(px(380.), px(280.)),
+        };
+        cx.update(|window, cx| {
+            let panel = MeasuredProbe::new(measured, cx);
+            let layout = DockLayout::tiles().tile_view(panel_handle(panel), bounds, cx);
+            area.update(cx, |area, cx| area.set_center(layout, window, cx));
+        });
+        cx.run_until_parked();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
 
-    #[test]
-    fn test_snap_edge_outside_threshold() {
-        // 120 is 20px from nearest candidate (>= 8) -> no snap.
-        assert_eq!(snap_edge(px(120.), &[px(100.), px(300.)], px(8.)), None);
-    }
-
-    #[test]
-    fn test_snap_edge_picks_nearest() {
-        // 303 is 3px from 300 and 5px from 308 -> picks 300.
-        assert_eq!(snap_edge(px(303.), &[px(308.), px(300.)], px(8.)), Some(px(300.)));
-    }
-
-    #[test]
-    fn test_snap_edge_empty_candidates() {
-        assert_eq!(snap_edge(px(50.), &[], px(8.)), None);
-    }
-
-    #[test]
-    fn test_resize_right_edge_snaps_to_neighbor_left() {
-        // Panel A: x=0 w=196 (right edge 196). Neighbour B starts at x=200.
-        // Dragging right edge to 197 should snap right edge to 200 -> width 200.
-        let prev = b(0., 0., 196., 100.);
-        let neighbor = b(200., 0., 100., 100.);
-        let out = compute_resized_bounds(prev, None, None, Some(px(197.)), None, &[neighbor], px(8.));
-        assert_eq!(out.origin.x, px(0.));
-        assert_eq!(out.size.width, px(200.));
-    }
-
-    #[test]
-    fn test_resize_bottom_edge_snaps_to_neighbor_top() {
-        let prev = b(0., 0., 100., 196.);
-        let neighbor = b(0., 200., 100., 100.);
-        let out = compute_resized_bounds(prev, None, None, None, Some(px(197.)), &[neighbor], px(8.));
-        assert_eq!(out.origin.y, px(0.));
-        assert_eq!(out.size.height, px(200.));
-    }
-
-    #[test]
-    fn test_resize_left_edge_snaps_and_pins_right() {
-        // Panel: x=200 w=100 (right edge 300). Neighbour right edge at 100.
-        // Drag left edge to 103 -> snaps to 100 -> width = 300 - 100 = 200.
-        let prev = b(200., 0., 100., 100.);
-        let neighbor = b(0., 0., 100., 100.);
-        let out = compute_resized_bounds(prev, Some(px(103.)), None, Some(px(197.)), None, &[neighbor], px(8.));
-        assert_eq!(out.origin.x, px(100.));
-        assert_eq!(out.size.width, px(200.));
-    }
-
-    #[test]
-    fn test_resize_corner_snaps_both_edges() {
-        // Right edge -> neighbour-right at 300; bottom edge -> neighbour-bottom at 250.
-        let prev = b(0., 0., 196., 196.);
-        let right_neighbor = b(100., 0., 200., 100.); // right edge = 300
-        let bottom_neighbor = b(0., 100., 100., 150.); // bottom edge = 250
-        let out = compute_resized_bounds(
-            prev, None, None, Some(px(298.)), Some(px(248.)),
-            &[right_neighbor, bottom_neighbor], px(8.),
+        let panel_height = height.get();
+        assert!(
+            panel_height > px(0.),
+            "the tile's panel must receive height; it got {panel_height:?}"
         );
-        assert_eq!(out.size.width, px(300.));
-        assert_eq!(out.size.height, px(250.));
-    }
-
-    #[test]
-    fn test_resize_grid_rounds_when_no_neighbor_close() {
-        // No neighbours; raw right edge 153 -> grid round to 152 (nearest multiple of 8).
-        let prev = b(0., 0., 100., 100.);
-        let out = compute_resized_bounds(prev, None, None, Some(px(153.)), None, &[], px(8.));
-        assert_eq!(out.size.width, px(152.));
-    }
-
-    #[test]
-    fn test_resize_respects_minimum_size() {
-        let prev = b(0., 0., 100., 100.);
-        let out = compute_resized_bounds(prev, None, None, Some(px(10.)), None, &[], px(8.));
-        assert_eq!(out.size.width, MINIMUM_SIZE.width);
-    }
-
-    #[test]
-    fn test_resize_no_change_returns_previous_geometry() {
-        let prev = b(0., 0., 100., 100.);
-        let out = compute_resized_bounds(prev, None, None, None, None, &[], px(8.));
-        assert_eq!(out.origin.x, px(0.));
-        assert_eq!(out.origin.y, px(0.));
-        assert_eq!(out.size.width, px(100.));
-        assert_eq!(out.size.height, px(100.));
+        // The tile is 280 tall; the drag bar takes 30 and the border 2, so the
+        // panel gets the rest. Asserted as a range rather than a number so a
+        // border-width change is not a test failure.
+        assert!(
+            panel_height > px(200.) && panel_height < bounds.size.height,
+            "the panel should fill what the drag bar leaves of a 280px tile; \
+             it got {panel_height:?}"
+        );
     }
 }

@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 720" role="img" aria-labelledby="title desc">
+  <title id="title">Precise alignment in a desktop content region</title>
+  <desc id="desc">A restrained desktop layout demonstrates shared vertical edges, text baselines, and row centers. A small comparison isolates a one-rendered-pixel drift.</desc>
+  <defs>
+    <style>
+      .canvas { fill: #0a0a0a; }
+      .frame, .surface { fill: #0a0a0a; stroke: #303030; }
+      .titlebar { fill: #171717; }
+      .table-head { fill: #1d1d1d; }
+      .muted-surface { fill: #262626; }
+      .selected { fill: #262626; stroke: #404040; }
+      .border { stroke: #303030; }
+      .row-border { stroke: #303030; stroke-opacity: .72; }
+      .ink { fill: #fafafa; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .muted { fill: #a3a3a3; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .guide { stroke: #f87171; fill: none; }
+      .guide-text { fill: #f87171; }
+      .shadow { filter: drop-shadow(0 12px 28px rgba(0, 0, 0, .08)); }
+    </style>
+    <clipPath id="main-clip"><rect x="70" y="64" width="820" height="592" rx="16"/></clipPath>
+  </defs>
+
+  <rect class="canvas" width="1200" height="720" rx="24"/>
+  <g class="shadow"><rect class="frame" x="70" y="64" width="820" height="592" rx="16"/></g>
+  <g clip-path="url(#main-clip)">
+    <rect class="titlebar" x="70" y="64" width="820" height="48"/>
+    <line class="border" x1="70" y1="112" x2="890" y2="112"/>
+    <circle cx="94" cy="88" r="5" fill="#ff5f57"/><circle cx="112" cy="88" r="5" fill="#febc2e"/><circle cx="130" cy="88" r="5" fill="#28c840"/>
+
+    <text class="ink" x="118" y="164" font-size="24" font-weight="680">Projects</text>
+    <text class="muted" x="118" y="190" font-size="14">Review current work and recent activity</text>
+    <rect class="surface" x="750" y="137" width="92" height="36" rx="9"/>
+    <text class="ink" x="796" y="160" text-anchor="middle" font-size="14" font-weight="600">Add item</text>
+
+    <rect class="surface" x="118" y="224" width="724" height="112" rx="12"/>
+    <text class="ink" x="138" y="256" font-size="15" font-weight="650">12 active projects</text>
+    <text class="muted" x="138" y="282" font-size="14">Four changed since your last review</text>
+    <rect class="muted-surface" x="138" y="299" width="220" height="12" rx="6"/>
+    <rect x="138" y="299" width="142" height="12" rx="6" fill="#a3a3a3"/>
+    <text class="muted" x="648" y="270" font-size="13">Updated today</text>
+    <text class="ink" x="818" y="270" text-anchor="end" font-size="16" font-weight="650">4</text>
+
+    <rect class="surface" x="118" y="364" width="724" height="224" rx="12"/>
+    <rect class="table-head" x="119" y="365" width="722" height="44" rx="11"/>
+    <path class="table-head" d="M119 396h722v13H119z"/>
+    <line class="border" x1="119" y1="409" x2="841" y2="409"/>
+    <text class="muted" x="138" y="392" font-size="12" font-weight="650">PROJECT</text>
+    <text class="muted" x="558" y="392" font-size="12" font-weight="650">STATUS</text>
+    <text class="muted" x="696" y="392" font-size="12" font-weight="650">UPDATED</text>
+    <text class="muted" x="816" y="392" text-anchor="middle" font-size="12" font-weight="650">MORE</text>
+
+    <rect class="selected" x="119" y="409" width="722" height="58" stroke-width="1"/>
+    <line class="row-border" x1="118" y1="467" x2="842" y2="467"/><line class="row-border" x1="118" y1="525" x2="842" y2="525"/>
+    <rect x="837" y="415" width="3" height="68" rx="1.5" fill="#525252" fill-opacity=".72"/>
+
+    <circle class="muted-surface" cx="146" cy="438" r="12"/><text class="ink" x="146" y="443" text-anchor="middle" font-size="11" font-weight="700">A</text>
+    <text class="ink" x="174" y="443" font-size="15" font-weight="620">Atlas</text>
+    <circle cx="562" cy="438" r="4" fill="#22c55e"/><text class="muted" x="574" y="443" font-size="14">Active</text>
+    <text class="muted" x="696" y="443" font-size="14">10:42</text>
+    <g fill="#a3a3a3"><circle cx="810" cy="438" r="2"/><circle cx="816" cy="438" r="2"/><circle cx="822" cy="438" r="2"/></g>
+
+    <circle class="muted-surface" cx="146" cy="496" r="12"/><text class="ink" x="146" y="501" text-anchor="middle" font-size="11" font-weight="700">B</text>
+    <text class="ink" x="174" y="501" font-size="15" font-weight="620">Beacon</text>
+    <circle cx="562" cy="496" r="4" fill="#419cff"/><text class="muted" x="574" y="501" font-size="14">Review</text>
+    <text class="muted" x="696" y="501" font-size="14">Yesterday</text>
+    <g fill="#a3a3a3"><circle cx="810" cy="496" r="2"/><circle cx="816" cy="496" r="2"/><circle cx="822" cy="496" r="2"/></g>
+
+    <circle class="muted-surface" cx="146" cy="554" r="12"/><text class="ink" x="146" y="559" text-anchor="middle" font-size="11" font-weight="700">C</text>
+    <text class="ink" x="174" y="559" font-size="15" font-weight="620">Cedar</text>
+    <circle cx="562" cy="554" r="4" fill="#a3a3a3"/><text class="muted" x="574" y="559" font-size="14">Paused</text>
+    <text class="muted" x="696" y="559" font-size="14">Aug 12</text>
+    <g fill="#a3a3a3"><circle cx="810" cy="554" r="2"/><circle cx="816" cy="554" r="2"/><circle cx="822" cy="554" r="2"/></g>
+
+    <line class="border" x1="70" y1="612" x2="890" y2="612"/>
+    <text class="muted" x="118" y="637" font-size="13">12 projects</text><text class="muted" x="842" y="637" text-anchor="end" font-size="13">Synced just now</text>
+  </g>
+
+  <g font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+    <line class="guide" x1="114" y1="132" x2="114" y2="644" stroke-width="1.5" stroke-dasharray="5 5" opacity=".9"/>
+    <text class="guide-text" x="114" y="690" text-anchor="middle" font-size="13" font-weight="650">content edge</text>
+    <line class="guide" x1="134" y1="238" x2="134" y2="570" stroke-width="1.5" stroke-dasharray="5 5" opacity=".9"/>
+    <text class="guide-text" x="134" y="608" text-anchor="middle" font-size="12" font-weight="650">inner edge</text>
+    <line class="guide" x1="554" y1="374" x2="554" y2="570" stroke-width="1.5" stroke-dasharray="5 5" opacity=".9"/>
+    <text class="guide-text" x="554" y="608" text-anchor="middle" font-size="12" font-weight="650">status edge</text>
+    <line class="guide" x1="692" y1="374" x2="692" y2="570" stroke-width="1.5" stroke-dasharray="5 5" opacity=".9"/>
+    <text class="guide-text" x="692" y="608" text-anchor="middle" font-size="12" font-weight="650">time edge</text>
+    <line class="guide" x1="816" y1="374" x2="816" y2="570" stroke-width="1.5" stroke-dasharray="5 5" opacity=".9"/>
+    <text class="guide-text" x="816" y="608" text-anchor="middle" font-size="12" font-weight="650">action center</text>
+    <line class="guide" x1="638" y1="274" x2="824" y2="274" stroke-width="1.5" stroke-dasharray="5 5" opacity=".9"/>
+    <line class="guide" x1="128" y1="396" x2="830" y2="396" stroke-width="1.5" stroke-dasharray="5 5" opacity=".9"/>
+    <line class="guide" x1="128" y1="438" x2="830" y2="438" stroke-width="1.5" stroke-dasharray="5 5" opacity=".9"/>
+  </g>
+
+  <g>
+    <text class="ink" x="970" y="116" font-size="16" font-weight="650">Drift check</text>
+    <text class="muted" x="970" y="139" font-size="13">Expected one shared inset</text>
+    <rect class="surface" x="970" y="168" width="166" height="154" rx="12"/>
+    <line class="guide" x1="994" y1="184" x2="994" y2="306" stroke-width="1.5" stroke-dasharray="4 5" opacity=".8"/>
+    <rect class="muted-surface" x="994" y="192" width="116" height="30" rx="6"/><text class="ink" x="1006" y="212" font-size="13" font-weight="600">Header</text>
+    <rect class="muted-surface" x="995" y="234" width="115" height="30" rx="6"/><text class="ink" x="1007" y="254" font-size="13">Row + 1 px</text>
+    <rect class="muted-surface" x="994" y="276" width="116" height="30" rx="6"/><text class="ink" x="1006" y="296" font-size="13">Footer</text>
+    <path class="guide" d="M994 330h1m-1-5v10m1-10v10" stroke-width="1.5"/>
+    <text class="guide-text" x="1008" y="335" font-size="13" font-weight="650">1 rendered px</text>
+    <text class="muted" x="970" y="370" font-size="13">Fix the shared owner,</text><text class="muted" x="970" y="390" font-size="13">not the individual row.</text>
+  </g>
+</svg>
