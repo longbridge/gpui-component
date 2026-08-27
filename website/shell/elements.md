@@ -44,6 +44,8 @@ Functions are lowercase, and component types are capitalized and constructed thr
 | `Input.new(state)` | `gpui-base` | A text field backed by an [`InputState`](./state.md#retained-state) |
 | `fps_monitor()` | `gpui-fps` | The native `gpui-fps` performance HUD, shared once per window |
 
+This is the set you need to get started, not the whole of it. The full inventory of bound components — `Select`, `Combobox`, `Tabs`, `Table`, `VirtualList`, `Slider`, `Popover`, `Avatar`, `Accordion`, `Pagination`, `CalendarState` and the rest — is in the [API reference](./api.md#the-gpui-base-module).
+
 ### Performance monitor
 
 `fps_monitor()` exposes the native `gpui-fps` HUD without moving its sampling or painting into JavaScript. The monitor is created on first use and reused per window. Render it at most once in a window, inside a `relative()` parent:
@@ -173,6 +175,14 @@ These are not styles; they report state to the base layer, which handles the int
 | `.overflow_scrollbar()` | `div`, `h_flex`, `v_flex` | Scrolls both axes and paints native scrollbars |
 | `.overflow_x_scrollbar()` | `div`, `h_flex`, `v_flex` | Scrolls horizontally and paints a native scrollbar |
 | `.overflow_y_scrollbar()` | `div`, `h_flex`, `v_flex` | Scrolls vertically and paints a native scrollbar |
+| `.on_key_down(handler)` | [input-capable](#where-input-is-installed) | `handler(event, cx)` while this element holds the keyboard |
+| `.on_key_up(handler)` | [input-capable](#where-input-is-installed) | The same on release |
+| `.on_mouse_down(button, handler)` | [input-capable](#where-input-is-installed) | A press of `"left"`, `"right"` or `"middle"` |
+| `.on_mouse_up(button, handler)` | [input-capable](#where-input-is-installed) | Its release |
+| `.on_mouse_down_out(handler)` | [input-capable](#where-input-is-installed) | A press anywhere **outside** this element |
+| `.on_scroll_wheel(handler)` | [input-capable](#where-input-is-installed) | Wheel and trackpad scrolling over it |
+| `.on_action(action, handler)` | [input-capable](#where-input-is-installed) | A named action dispatched to it or into it |
+| `.key_context(name)` | [input-capable](#where-input-is-installed) | The key-binding context this element and its subtree sit in |
 
 Disabled, selected and checked **appearance** is yours to draw. The base layer only reports the state; nothing changes on screen unless the script says so:
 
@@ -219,6 +229,85 @@ An `on_click` handler receives a plain object whose field names mirror the Rust 
 ```
 
 `platform` is Command on macOS and the Windows key elsewhere. Only semantics the base layer has already normalized are exposed — Base treats "Enter activates the button" and "the button was clicked" as the same callback, and the script does not see the difference.
+
+A key handler receives the chord twice over. `keystroke` is the whole thing in the spelling a binding is written in; `key` and `modifiers` are the same chord taken apart, for when only one half matters:
+
+```js
+.on_key_down((event, cx) => {
+  if (event.keystroke === "cmd-s") {
+    this.save();
+    cx.stop_propagation();
+  }
+});
+```
+
+**The platform modifier is spelled `cmd` everywhere**, including Linux and Windows. GPUI spells it for the platform it was built for — `cmd-`, `super-`, `win-` — which is right for a keymap a person reads and wrong for a string a program compares: one script file runs on all three, so `event.keystroke === "cmd-s"` has to mean the same thing in all three.
+
+A pointer handler receives the button, how many presses are in the current sequence, and where it landed. `local_position` and `bounds` are absent until the element has been painted once:
+
+```js
+.on_mouse_down("right", (event, cx) => {
+  // event.button === "right"
+  // event.click_count === 1
+  // event.local_position?.x  — relative to this element
+  this.openMenuAt(event.position, cx);
+});
+```
+
+A scroll handler receives pixels either way, and the original line count when the device reported lines:
+
+```js
+.on_scroll_wheel((event, cx) => {
+  this.offset += event.delta.y;      // always pixels
+  // event.delta_lines?.y            — only when the device said lines
+  cx.notify();
+});
+```
+
+### Where input is installed
+
+The eight methods above are GPUI's own `InteractiveElement` builders, and the shell installs them on `div`, `h_flex`, `v_flex`, `Button`, `Link`, `Checkbox`, `Switch`, `Radio`, `Toggle`, `Tabs` and `Tab`.
+
+Every other component builds its own base type and hangs its own listeners on it, so a handler written on one of those is recorded in the description and never reaches GPUI. The log says so rather than leaving you to find it:
+
+```text
+`on_key_down` is not wired on a Select: the shell installs GPUI's input
+listeners on the element it owns outright, which is a plain `div`, `h_flex`
+or `v_flex`. Wrap it and write `on_key_down` on the wrapper
+```
+
+**Wired is not the same as reachable.** A key event travels the focus path and a pointer event travels the hitbox, so a component that accepts no focus handle — `Tab` is one — hears presses and never hears keys, however well both are wired. Which components accept a focus handle is covered under [Focus and accessibility](#focus-and-accessibility).
+
+### Actions and key bindings
+
+An action is the level above a keystroke. `cx.bind_keys` says which chord means `"save"`, in which context; `on_action` says what `"save"` does. A menu item or a toolbar button dispatching the same name reaches the same handler, and neither end knows about the other:
+
+```js
+init(_props, cx) {
+  cx.bind_keys([
+    { keystroke: "cmd-s", action: "save", context: "Editor" },
+    { keystroke: "ctrl-k ctrl-c", action: "comment", context: "Editor" },
+  ]);
+}
+
+render(_cx) {
+  return div()
+    .key_context("Editor")
+    .track_focus(this.handle)
+    .on_action("save", (_event, cx) => this.save(cx))
+    .child(
+      Button.new("save")
+        .on_click(() => window.dispatch_action("save"))
+        .child("Save"),
+    );
+}
+```
+
+`context` is a predicate matched against the `key_context(...)` an element declares, so one chord can mean one thing in a list and another in an editor. The keymap belongs to the application rather than to a window, so a chord bound in one view is live wherever its predicate matches.
+
+Registering several `on_action`s on one element is fine and they are independent. An action none of them claims carries on to an element further out, which is what lets an inner pane handle Save while the window around it handles Quit.
+
+The whole binding list is validated before any of it is installed: a keymap half-applied because the fourth entry had a typo is a worse state than one not applied, and a script cannot see which half made it.
 
 ::: tip Use arrow functions for handlers
 An arrow function does not bind its own `this`, so `this` inside the handler is still the view instance. A `function () {}` handler gets the wrong `this`. This is the single most common mistake in scripts written for this runtime, by people and by models alike.

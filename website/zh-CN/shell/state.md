@@ -202,6 +202,47 @@ this.draft.on("submit", (event, cx) => this.add(cx));
 unknown input event `changed`; expected one of: change, submit, focus, blur
 ```
 
+### 日历状态
+
+`CalendarState` 是同样的模式，留存的东西不同：正在看的是哪个月、选中的是哪一天，以及由此推出的那张日期网格。
+
+```js
+init(_props, cx) {
+  this.calendar = CalendarState.new();
+  this.calendar.on("change", (date, cx) => this.pick(date, cx));
+}
+
+render(cx) {
+  const grid = this.calendar.month_days()[0];
+  return v_flex().children(
+    grid.map((week) =>
+      h_flex().gap(4).children(
+        week.map((day) =>
+          Button.new(day)
+            .selected(day === this.calendar.value())
+            .on_click((_e, cx) => { this.calendar.set_value(day); cx.notify(); })
+            .child(String(Number(day.slice(8)))),
+        ),
+      ),
+    ),
+  );
+}
+```
+
+`month_days()` 是它存在的理由：哪些日期落在哪一周、相邻月份的日子补在哪里、这个月需要几行。格子是你自己画的——base 的 `Calendar` 元素**没有**绑定，因为它遍历同一份网格、每个格子调用一次渲染回调，一帧最多四十二次跨语言调用，而且发生在 GPUI 的 layout 过程里，为的是一批本身不带行为的格子。
+
+日期一律是 `"YYYY-MM-DD"`，区间是 `[start, end]`，没选是 `null`。区间即使终点还没定也保持成对——`["2026-08-03", null]` 不会塌成它的起点，因为“选了一天”和“区间开了个头”对 base 是两种状态，它自己的逻辑在这上面分支。
+
+| 方法 | 说明 |
+| --- | --- |
+| `CalendarState.new()` | 创建状态；和其他留存状态一样，只能在 `init` 或事件处理器里 |
+| `month_days()` | 网格：按月分组的“周”，每周固定七天 |
+| `year()` / `month()` / `today()` | 网格对应的年月，以及创建时读到的今天 |
+| `value()` / `set_value(next)` | 选中的日期 |
+| `next_month()` / `prev_month()` | 前后移一个月；在 `render` 中不合法 |
+| `on("change", handler)` | 唯一的事件，报告一个日期被选中 |
+| `release()` | 丢弃句柄 |
+
 ## 异步工作
 
 脚本代码用的是普通的 JavaScript 异步方式——`async` 函数与原生 promise。运行时补上的是裸 QuickJS 没有的那部分：一个时钟、待执行工作的 owner，以及负责推动 job 队列的人。

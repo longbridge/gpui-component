@@ -44,6 +44,8 @@ import { fps_monitor } from "gpui-fps";
 | `Input.new(state)` | `gpui-base` | 由 [`InputState`](./state.md#留存状态) 支撑的文本框 |
 | `fps_monitor()` | `gpui-fps` | 原生 `gpui-fps` 性能 HUD，每个窗口共享一个 monitor |
 
+这是入门够用的一组，不是全部。base 绑定的组件——`Select`、`Combobox`、`Tabs`、`Table`、`VirtualList`、`Slider`、`Popover`、`Avatar`、`Accordion`、`Pagination`、`CalendarState` 等等——完整清单在 [API 参考](./api.md#gpui-base-模块)里。
+
 ### 性能监视器
 
 `fps_monitor()` 直接公开原生 `gpui-fps` HUD，不会把采样或绘制搬进 JavaScript。monitor 在首次使用时创建，并按窗口复用。一个窗口最多渲染一次，并把它放在设置了 `relative()` 的父元素中：
@@ -173,6 +175,14 @@ when(...) must return the element
 | `.overflow_scrollbar()` | `div`、`h_flex`、`v_flex` | 双轴滚动并绘制原生 scrollbar |
 | `.overflow_x_scrollbar()` | `div`、`h_flex`、`v_flex` | 水平滚动并绘制原生 scrollbar |
 | `.overflow_y_scrollbar()` | `div`、`h_flex`、`v_flex` | 垂直滚动并绘制原生 scrollbar |
+| `.on_key_down(handler)` | [可接输入的元素](#哪些元素接了输入) | 该元素持有键盘时的 `handler(event, cx)` |
+| `.on_key_up(handler)` | [可接输入的元素](#哪些元素接了输入) | 松开时同上 |
+| `.on_mouse_down(button, handler)` | [可接输入的元素](#哪些元素接了输入) | 按下 `"left"`、`"right"` 或 `"middle"` |
+| `.on_mouse_up(button, handler)` | [可接输入的元素](#哪些元素接了输入) | 松开 |
+| `.on_mouse_down_out(handler)` | [可接输入的元素](#哪些元素接了输入) | 在该元素**之外**任意位置按下 |
+| `.on_scroll_wheel(handler)` | [可接输入的元素](#哪些元素接了输入) | 滚轮与触控板滚动 |
+| `.on_action(action, handler)` | [可接输入的元素](#哪些元素接了输入) | 命名 action 被派发到它或它内部 |
+| `.key_context(name)` | [可接输入的元素](#哪些元素接了输入) | 该元素与其子树所处的按键绑定上下文 |
 
 disabled、selected 与 checked 的**外观**由你来画。基础层只报告状态，脚本不说就什么都不会变：
 
@@ -219,6 +229,85 @@ Checkbox.new(`item-${item.id}`)
 ```
 
 `platform` 在 macOS 上是 Command，其他平台是 Windows 键。这里只暴露基础层已经归一化过的语义——Base 把“回车激活按钮”与“点击按钮”归为同一个回调，脚本看不到这个差别。
+
+按键处理器拿到的组合键有两种形态。`keystroke` 是整串，拼法和写绑定时一致；`key` 与 `modifiers` 是同一个组合键拆开的样子，只关心其中一半时用它：
+
+```js
+.on_key_down((event, cx) => {
+  if (event.keystroke === "cmd-s") {
+    this.save();
+    cx.stop_propagation();
+  }
+});
+```
+
+**平台修饰键在所有平台上都拼作 `cmd`**，Linux 与 Windows 也一样。GPUI 会按编译目标平台来拼——`cmd-`、`super-`、`win-`——这对给人读的 keymap 是对的，对给程序比较的字符串是错的：同一份脚本要在三个平台上跑，`event.keystroke === "cmd-s"` 必须在三个平台上是同一件事。
+
+指针处理器拿到按钮、当前连击次数以及落点。`local_position` 与 `bounds` 在元素第一次绘制之前是没有的：
+
+```js
+.on_mouse_down("right", (event, cx) => {
+  // event.button === "right"
+  // event.click_count === 1
+  // event.local_position?.x  —— 相对这个元素
+  this.openMenuAt(event.position, cx);
+});
+```
+
+滚动处理器拿到的一律是像素；设备按行上报时，原始行数也在：
+
+```js
+.on_scroll_wheel((event, cx) => {
+  this.offset += event.delta.y;      // 一律是像素
+  // event.delta_lines?.y            —— 只有设备按行上报时才有
+  cx.notify();
+});
+```
+
+### 哪些元素接了输入
+
+上面这八个方法是 GPUI 自己的 `InteractiveElement` 构建器，shell 把它们装在 `div`、`h_flex`、`v_flex`、`Button`、`Link`、`Checkbox`、`Switch`、`Radio`、`Toggle`、`Tabs` 与 `Tab` 上。
+
+其余组件各自构建自己的 base 类型、挂自己的监听器，所以写在它们上面的处理器会被记进描述、但永远到不了 GPUI。日志里会说明，而不是留给你自己去发现：
+
+```text
+`on_key_down` is not wired on a Select: the shell installs GPUI's input
+listeners on the element it owns outright, which is a plain `div`, `h_flex`
+or `v_flex`. Wrap it and write `on_key_down` on the wrapper
+```
+
+**接线了不等于收得到。** 按键沿焦点路径传递，指针沿 hitbox 传递，所以一个不接受焦点句柄的组件——`Tab` 就是——听得到按下、永远听不到按键，无论两者接线得多好。哪些组件接受焦点句柄，见[焦点与无障碍](#焦点与无障碍)。
+
+### Actions 与按键绑定
+
+action 是比按键高一层的东西。`cx.bind_keys` 说哪个组合键在什么上下文里意味着 `"save"`；`on_action` 说 `"save"` 做什么。菜单项或工具栏按钮派发同一个名字就会走到同一个处理器，而两边都不必知道对方存在：
+
+```js
+init(_props, cx) {
+  cx.bind_keys([
+    { keystroke: "cmd-s", action: "save", context: "Editor" },
+    { keystroke: "ctrl-k ctrl-c", action: "comment", context: "Editor" },
+  ]);
+}
+
+render(_cx) {
+  return div()
+    .key_context("Editor")
+    .track_focus(this.handle)
+    .on_action("save", (_event, cx) => this.save(cx))
+    .child(
+      Button.new("save")
+        .on_click(() => window.dispatch_action("save"))
+        .child("Save"),
+    );
+}
+```
+
+`context` 是一个匹配元素 `key_context(...)` 的谓词，所以同一个组合键可以在列表里是一个意思、在编辑器里是另一个意思。keymap 属于应用而不属于某个窗口，所以在一个视图里绑的组合键，在它的谓词匹配的任何地方都生效。
+
+同一个元素上注册多个 `on_action` 是可以的，彼此独立。一个它们都没认领的 action 会继续往外层传——这正是内层面板处理 Save、外层窗口处理 Quit 的做法。
+
+整份绑定列表会在安装任何一条之前先校验完：因为第四条有拼写错误而只装了一半的 keymap，比一条都没装更糟，而脚本没有办法知道装进去的是哪一半。
 
 ::: tip 事件处理器请用箭头函数
 箭头函数不绑定自己的 `this`，所以处理函数里的 `this` 仍然是视图实例。用 `function () {}` 写会拿到错误的 `this`。这是为本运行时写脚本时最常见的一处错误，人和模型都一样。

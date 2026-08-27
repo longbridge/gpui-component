@@ -202,6 +202,47 @@ A misspelled event name lists the valid ones:
 unknown input event `changed`; expected one of: change, submit, focus, blur
 ```
 
+### Calendar state
+
+`CalendarState` is the same pattern holding something different: which month is being looked at, which date is chosen, and the day grid that follows from both.
+
+```js
+init(_props, cx) {
+  this.calendar = CalendarState.new();
+  this.calendar.on("change", (date, cx) => this.pick(date, cx));
+}
+
+render(cx) {
+  const grid = this.calendar.month_days()[0];
+  return v_flex().children(
+    grid.map((week) =>
+      h_flex().gap(4).children(
+        week.map((day) =>
+          Button.new(day)
+            .selected(day === this.calendar.value())
+            .on_click((_e, cx) => { this.calendar.set_value(day); cx.notify(); })
+            .child(String(Number(day.slice(8)))),
+        ),
+      ),
+    ),
+  );
+}
+```
+
+`month_days()` is why it exists: which dates fall in which week, where the neighbouring months' days go, and how many weeks this month needs. You draw the cells — base's `Calendar` element is **not** bound, because it walks the same grid calling a renderer once per cell, up to forty-two crossings into JavaScript per frame from inside GPUI's layout pass, for cells that carry no behavior.
+
+Dates are `"YYYY-MM-DD"`, a range is `[start, end]`, and nothing selected is `null`. A range stays a pair even before its end is chosen — `["2026-08-03", null]` does not collapse to its start — because "one day is selected" and "a range has been started" are different states to base, and its own logic branches on the difference.
+
+| Call | Effect |
+| --- | --- |
+| `CalendarState.new()` | Creates the state; like every retained handle, only in `init` or an event handler |
+| `month_days()` | The grid, as months of weeks of days; every week is seven days |
+| `year()` / `month()` / `today()` | The year and month the grid is for, and today as it was read at creation |
+| `value()` / `set_value(next)` | The selection |
+| `next_month()` / `prev_month()` | Moves the grid a month either way; illegal from `render` |
+| `on("change", handler)` | The only event, reporting a date being selected |
+| `release()` | Drops the handle |
+
 ## Asynchronous work
 
 Script code is asynchronous in the ordinary JavaScript way — `async` functions and native promises. The runtime supplies the parts a bare QuickJS does not have: a clock, an owner for pending work, and something to pump the job queue.

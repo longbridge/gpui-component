@@ -141,6 +141,42 @@ unknown toast level `fatal`; expected info, success, warning or error
 
 Three toasts are mounted at once. Older ones stay in the manager and reappear as newer ones leave, so a burst is throttled rather than lost.
 
+## The window itself
+
+The same `window` global answers questions about the window, not only about what is floating over it.
+
+```js
+render(cx) {
+  const { width, height } = window.viewport_size();
+  return v_flex()
+    .when(width < 600, (el) => el.flex_col())
+    .text_size(window.rem_size() * 0.875);
+}
+```
+
+**Measurements are legal from `render`**, and that is the point of them: a view that lays itself out from the window's size has to ask during the pass that draws it.
+
+| Member | What it answers |
+| --- | --- |
+| `rem_size()` / `line_height()` | The window's type metrics, in pixels |
+| `viewport_size()` | The drawable area |
+| `bounds()` | Where the window sits on screen and how big it is — larger than the viewport by its title bar |
+| `mouse_position()` | Where the pointer is, in window coordinates |
+| `appearance()` | `"light"` or `"dark"` |
+| `is_window_active()` / `is_fullscreen()` / `is_maximized()` | The platform window's state |
+
+**Calls that change the window are refused from `render`**, for the reason `cx.notify()` is: a frame that changes the window it is drawing into is a frame arguing with itself.
+
+| Member | What it does |
+| --- | --- |
+| `set_rem_size(size)` | Rescales everything expressed in rems |
+| `refresh()` | Redraws every view in the window |
+| `focus_next()` / `focus_prev()` | Moves the keyboard one tab stop |
+| `dispatch_action(action)` | Dispatches an action down this window's focus path |
+| `activate_window()` / `minimize_window()` / `zoom_window()` / `toggle_fullscreen()` | Platform window controls |
+
+`zoom_window()` is the platform's own zoom, not a scale factor — `set_rem_size` is the one that rescales.
+
 ## Stacking and dismissal
 
 Painted back to front:

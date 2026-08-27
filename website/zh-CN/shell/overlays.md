@@ -141,6 +141,42 @@ unknown toast level `fatal`; expected info, success, warning or error
 
 同时挂载三条 toast。更早的留在管理器里，随着较新的离开再出现，所以一次爆发是被节流而不是被丢弃。
 
+## 窗口本身
+
+同一个 `window` 全局也回答窗口自身的问题，而不只是它上面浮着什么。
+
+```js
+render(cx) {
+  const { width, height } = window.viewport_size();
+  return v_flex()
+    .when(width < 600, (el) => el.flex_col())
+    .text_size(window.rem_size() * 0.875);
+}
+```
+
+**度量在 `render` 中是合法的**，而且这正是它们的用处：一个要按窗口尺寸决定自身布局的视图，只能在绘制它的那一趟里问。
+
+| 成员 | 说明 |
+| --- | --- |
+| `rem_size()` / `line_height()` | 窗口的排版度量，单位是像素 |
+| `viewport_size()` | 可绘制区域 |
+| `bounds()` | 窗口在屏幕上的位置与大小；比 viewport 大出标题栏那部分 |
+| `mouse_position()` | 指针位置，窗口坐标 |
+| `appearance()` | `"light"` 或 `"dark"` |
+| `is_window_active()` / `is_fullscreen()` / `is_maximized()` | 平台窗口的状态 |
+
+**改变窗口的调用在 `render` 中会被拒绝**，理由和 `cx.notify()` 一样：一帧去改自己正在绘制的窗口，就是这一帧在和自己较劲。
+
+| 成员 | 说明 |
+| --- | --- |
+| `set_rem_size(size)` | 重新缩放所有以 rem 表达的尺寸 |
+| `refresh()` | 重绘窗口里的每一个视图 |
+| `focus_next()` / `focus_prev()` | 把键盘移到相邻的一个 tab stop |
+| `dispatch_action(action)` | 沿本窗口的焦点路径派发一个 action |
+| `activate_window()` / `minimize_window()` / `zoom_window()` / `toggle_fullscreen()` | 平台窗口控制 |
+
+`zoom_window()` 是平台自己的“缩放”，不是缩放系数——要改的是后者的话，用 `set_rem_size`。
+
 ## 层叠与关闭
 
 从后往前绘制：
