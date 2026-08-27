@@ -31,11 +31,13 @@ use super::{InputCallbackOwner, ShellRuntime};
 
 /// A script callback, persisted at conversion time.
 ///
+/// Shared with the dock binding, whose `on(...)` takes a handler the same way.
+///
 /// A closure cannot take both `Ctx<'js>` and `Function<'js>` — the two elided
 /// lifetimes will not unify — so the function is saved into a `Persistent`
 /// inside `FromJs`, where both are still the same lifetime. The same reason the
 /// engine's `Arguments` type exists.
-struct Handler(Persistent<Function<'static>>);
+pub(super) struct Handler(pub(super) Persistent<Function<'static>>);
 
 impl<'js> FromJs<'js> for Handler {
     fn from_js(ctx: &Ctx<'js>, value: Value<'js>) -> JsResult<Self> {

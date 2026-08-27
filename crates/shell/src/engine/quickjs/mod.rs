@@ -56,6 +56,23 @@ pub struct ViewType {
     application: Option<Rc<ApplicationGeneration>>,
 }
 
+impl ViewType {
+    /// A view class handed straight to the host rather than read off a
+    /// module's default export.
+    ///
+    /// It holds no module lease: the class object is itself a live reference
+    /// into the module that defined it, so QuickJS keeps that module alive for
+    /// exactly as long as this does — which a lease taken here would only
+    /// duplicate.
+    fn from_panel_class(class: Persistent<Object<'static>>) -> Self {
+        Self {
+            value: class,
+            module_lease: None,
+            application: scope::current_application_generation(),
+        }
+    }
+}
+
 impl std::fmt::Debug for ViewType {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter.debug_struct("ViewType").finish_non_exhaustive()
@@ -171,6 +188,28 @@ enum PendingNestedOperation {
         token: u32,
         provenance: NestedViewProvenance,
     },
+    /// A change to a dock area's layout.
+    ///
+    /// Deferred for the same reason a nested view is, and in two cases it *is*
+    /// one. `load` rebuilds every panel through the registry, which constructs
+    /// views; `add_panel` is given a view from `cx.new(Class)`, which has not
+    /// been constructed yet when the call is made. Neither can happen while
+    /// QuickJS holds its runtime lock, which is exactly where both are called
+    /// from.
+    ///
+    /// Removal is queued too, though nothing about it needs to be: an edit that
+    /// jumped the queue would apply to a layout the script had already asked to
+    /// change, and "the calls take effect in the order they were made" is worth
+    /// more than one saved hop.
+    EditDock {
+        runtime: Weak<ShellRuntime>,
+        dock: EntityHandle,
+        /// Boxed: a whole persisted layout is by far the largest thing this
+        /// enum can carry, and every queued operation would otherwise be
+        /// sized for it.
+        edit: Box<dock_api::DockEdit>,
+        provenance: NestedViewProvenance,
+    },
 }
 
 struct NestedFlushGuard<'a>(&'a Cell<bool>);
@@ -181,6 +220,7 @@ impl Drop for NestedFlushGuard<'_> {
     }
 }
 
+mod dock_api;
 mod entity_api;
 pub(crate) mod host;
 mod host_modules;
@@ -303,6 +343,11 @@ pub(crate) mod exports {
         "SliderThumb",
         "OtpState",
         "OtpInput",
+        // Dock. The area is the state and `dock_area` is one description of
+        // it, which is the split `v_virtual_list` already has.
+        "DockArea",
+        "dock_area",
+        "dock_content",
         // Theme (`theme_api`). The theme belongs to `gpui-base`, even though
         // mutation is legal only while a host call supplies the current App.
         "set_theme",
@@ -416,6 +461,15 @@ pub struct ShellRuntime {
     initializing_views: RefCell<Vec<ViewObject>>,
     nested_view_handles: RefCell<HashMap<u32, NestedViewAlias>>,
     next_nested_view_token: Cell<u32>,
+    /// The panel builders this runtime registered, by their interned name.
+    ///
+    /// Declared here rather than only in the process-wide
+    /// [`PanelRegistry`](gpui_base::dock::PanelRegistry) because a panel the
+    /// script *adds* needs the same `serialize`/`deserialize` hooks a restored
+    /// one gets, and the registry hands out builders rather than the script
+    /// behind them. Each holds a `Persistent` class, so this drops before
+    /// `context` like every other field that does.
+    panel_scripts: RefCell<HashMap<String, Rc<dock_api::ScriptPanelClass>>>,
     /// A runtime whose opaque QuickJS job queue could not reach an ownership
     /// boundary safely is never entered again. QuickJS exposes no selective
     /// pending-job removal, so terminal quarantine is the only way to prevent
@@ -431,6 +485,22 @@ pub struct ShellRuntime {
     /// continue to construct the normal system-configured client in `fetch`.
     #[cfg(test)]
     test_http_client: RefCell<Option<reqwest::blocking::Client>>,
+    /// The QuickJS context currently executing, while one is.
+    ///
+    /// `Context::with` takes the runtime's lock, so calling it from inside a
+    /// host function — which is already running under that lock — panics on a
+    /// re-entrant borrow. Almost nothing needs to: a host function is handed
+    /// the `Ctx` it was called with. The exception is a hook base calls on the
+    /// shell's behalf from deep inside an operation the script started, and
+    /// `Panel::dump` is one — `dock.dump()` reaches every panel's `serialize()`
+    /// with only an `&App` in between.
+    ///
+    /// A field rather than a thread-local, so two runtimes on one thread cannot
+    /// hand each other a context. Safe for the reason [`crate::scope`]'s
+    /// pointers are: it is installed by a frame on the stack and cleared before
+    /// that frame returns, so nothing can read it after the borrow it names has
+    /// ended.
+    active_context: Cell<Option<std::ptr::NonNull<rquickjs::qjs::JSContext>>>,
     context: JsContext,
     /// Incremented per `load_app`, so a reload re-reads every module rather
     /// than serving the first version from QuickJS's module cache.
@@ -447,6 +517,14 @@ impl Drop for ShellRuntime {
         // released after its runtime aborts the process.
         scheduler::shutdown(self);
         self.callbacks.borrow_mut().clear();
+        // Each holds a `Persistent` view class, which must be released while
+        // the context is still alive — and the panel registry keeps a second
+        // reference to every one of them in an `App` global that outlives this,
+        // so clearing the map is not enough on its own.
+        for script in self.panel_scripts.borrow().values() {
+            script.retire();
+        }
+        self.panel_scripts.borrow_mut().clear();
         // Retained entities are owned by GPUI but reachable only through this
         // runtime's handles; leaving them registered outlives the app that owns
         // them, which GPUI reports as a leaked handle on shutdown.
@@ -527,6 +605,8 @@ impl ShellRuntime {
             initializing_views: RefCell::new(Vec::new()),
             nested_view_handles: RefCell::new(HashMap::new()),
             next_nested_view_token: Cell::new(0),
+            panel_scripts: RefCell::new(HashMap::new()),
+            active_context: Cell::new(None),
             terminal_job_error: RefCell::new(None),
             metrics: Metrics::default(),
             #[cfg(test)]
@@ -1187,6 +1267,31 @@ impl ShellRuntime {
                             .insert(token, NestedViewAlias { handle, provenance });
                         Ok(())
                     }
+                    PendingNestedOperation::EditDock {
+                        runtime,
+                        dock,
+                        edit,
+                        provenance,
+                    } => {
+                        let runtime = runtime.upgrade().ok_or_else(|| {
+                            anyhow!("the shell runtime shut down before a dock edit was applied")
+                        })?;
+                        if !provenance.is_current() {
+                            anyhow::bail!(
+                                "this dock edit does not belong to the current application"
+                            );
+                        }
+                        let (_scope, _) = scope::enter_with_application(
+                            &runtime,
+                            window,
+                            cx,
+                            ScopePhase::Event,
+                            scope::current_view(),
+                            provenance.policy.clone(),
+                            provenance.application.clone(),
+                        );
+                        dock_api::apply_edit(&runtime, dock, *edit, window, cx)
+                    }
                     PendingNestedOperation::Update {
                         runtime,
                         token,
@@ -1667,6 +1772,295 @@ impl ShellRuntime {
                 None
             }
         }
+    }
+
+    /// Draws one piece of a dock's chrome.
+    ///
+    /// The second call into script that runs on a frame's budget rather than an
+    /// application's, and it is safe there for the same three reasons a virtual
+    /// list's item renderer is: a [`ScopePhase::Layout`] scope, which forbids
+    /// `cx.notify()` and creating retained state; an arena of its own, swapped
+    /// in so the description cannot leak into whichever snapshot is being
+    /// built; and no job drain on the way out, because a promise continuation
+    /// is unbounded application code and GPUI's layout pass is the last place
+    /// to run one.
+    ///
+    /// It differs from the list in one way. A chrome handler is called once per
+    /// container per frame for as long as the dock is on screen, so it may not
+    /// register callbacks of its own — the `Layout` phase already refuses that
+    /// — and its elements report what they do through
+    /// [`DockCommand`](crate::dock::DockCommand)s instead.
+    ///
+    /// `None` means the script drew nothing: the handler returned `null`, or it
+    /// threw. Either way base's own behavior for that hook stands.
+    pub(super) fn render_dock_chrome(
+        self: &Rc<Self>,
+        id: CallbackId,
+        payload: serde_json::Value,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Option<gpui::AnyElement> {
+        let entry = self.callbacks.borrow().get(id)?;
+
+        if entry
+            .application
+            .as_ref()
+            .is_some_and(|application| !application.is_active())
+        {
+            tracing::debug!("dock chrome handler {id} belongs to a retired application");
+            return None;
+        }
+
+        let view = entry.live_view()?;
+        let policy = view
+            .as_ref()
+            .map(|view| view.read(cx).policy())
+            .unwrap_or_else(crate::policy::default);
+
+        self.metrics.time_frame_script(|| {
+            let (_guard, generation) = scope::enter_with_application(
+                self,
+                window,
+                cx,
+                ScopePhase::Layout,
+                view,
+                policy,
+                entry.application.clone(),
+            );
+            // The handler is a closure the script wrote inside `render(cx)`,
+            // and the element helpers it calls take that `cx`. Layout is a
+            // frame of its own, so without this the enclosing render's `cx`
+            // would read as stale here — the same reason a list's item renderer
+            // adopts it.
+            scope::adopt(entry.registered_in);
+
+            let outer = std::mem::take(&mut *self.arena.borrow_mut());
+            let described = self.with_js(|ctx| {
+                let handler = entry.value.clone().restore(ctx)?;
+                let produced: Value = handler.call((
+                    dock_api::to_js(ctx, &payload)?,
+                    context_object(ctx, ContextBinding::Call(generation))?,
+                ))?;
+                if produced.is_null() || produced.is_undefined() {
+                    return Ok(None);
+                }
+                element_id(ctx, &produced).map(Some)
+            });
+            let arena = std::mem::replace(&mut *self.arena.borrow_mut(), outer);
+
+            match described {
+                Ok(Some(root)) => Some(crate::materialize::materialize_subtree(
+                    self, &arena, root, window, cx,
+                )),
+                Ok(None) => None,
+                Err(error) => {
+                    tracing::error!("error in a dock chrome handler: {error}");
+                    None
+                }
+            }
+        })
+    }
+
+    /// Teaches the panel registry to rebuild `panel` from `class`, and answers
+    /// with the interned name it registered under.
+    pub(super) fn register_panel_class(
+        self: &Rc<Self>,
+        ctx: &Ctx<'_>,
+        panel: &str,
+        view_type: ViewType,
+    ) -> JsResult<String> {
+        let policy = scope::current_policy().ok_or_else(|| {
+            Exception::throw_type(
+                ctx,
+                "DockArea.register_panel(name, Class) needs a live host call; call it from                  init() or an event handler",
+            )
+        })?;
+        let application = policy.application().to_owned();
+        let script = Rc::new(dock_api::ScriptPanelClass::new(
+            Rc::downgrade(self),
+            view_type,
+            policy,
+        ));
+
+        let name = scope::with_current_app(|cx| {
+            crate::dock::register_panel(&application, panel, script.clone(), cx)
+        })
+        .ok_or_else(|| {
+            Exception::throw_type(
+                ctx,
+                "DockArea.register_panel(name, Class) needs a live host call; call it from                  init() or an event handler",
+            )
+        })?;
+
+        self.panel_scripts
+            .borrow_mut()
+            .insert(name.to_owned(), script);
+        Ok(name.to_owned())
+    }
+
+    /// The script behind an already-registered panel name.
+    ///
+    /// A panel the script *adds* gets the same `serialize`/`deserialize` hooks
+    /// a restored one does — otherwise a layout would round-trip only after a
+    /// restart, which is the one time nobody is watching.
+    pub(super) fn panel_script(&self, name: &str) -> Option<Rc<dyn crate::dock::PanelScript>> {
+        self.panel_scripts
+            .borrow()
+            .get(name)
+            .map(|script| script.clone() as Rc<dyn crate::dock::PanelScript>)
+    }
+
+    /// One panel's `serialize()`, or `None` for a panel that has none.
+    ///
+    /// No scope is opened, and none can be: `Panel::dump` is a read, so there
+    /// is no `&mut Window` to open one with. A `serialize()` that calls back
+    /// into the host therefore fails the way any host call outside a scope
+    /// does, which is the contract this method's caller documents.
+    pub(super) fn call_panel_serialize(&self, object: &ViewObject) -> Option<serde_json::Value> {
+        let produced = self.with_js_nested(|ctx| {
+            let instance = object.value.clone().restore(ctx)?;
+            let Some(serialize) = instance.get::<_, Option<Function>>("serialize")? else {
+                return Ok(None);
+            };
+            let produced: Value = serialize.call((This(instance),))?;
+            if produced.is_null() || produced.is_undefined() {
+                return Ok(None);
+            }
+            host::to_json(ctx, &produced, 0).map(Some)
+        });
+
+        match produced {
+            Ok(value) => value,
+            Err(error) => {
+                tracing::error!("error in a dock panel's serialize(): {error}");
+                None
+            }
+        }
+    }
+
+    /// Hands a persisted payload to one panel's `deserialize(data)`.
+    pub(super) fn call_panel_deserialize(
+        self: &Rc<Self>,
+        view: &Entity<ScriptView>,
+        data: &serde_json::Value,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        let (object, policy, application) = {
+            let view = view.read(cx);
+            (
+                view.object().clone(),
+                view.policy(),
+                view.application_generation(),
+            )
+        };
+
+        let (_guard, _) = scope::enter_with_application(
+            self,
+            window,
+            cx,
+            ScopePhase::Event,
+            Some(view.clone()),
+            policy,
+            application,
+        );
+
+        let result = self.with_js_nested(|ctx| {
+            let instance = object.value.clone().restore(ctx)?;
+            let Some(deserialize) = instance.get::<_, Option<Function>>("deserialize")? else {
+                return Ok(());
+            };
+            deserialize.call::<_, ()>((This(instance), dock_api::to_js(ctx, data)?))
+        });
+        if let Err(error) = result {
+            tracing::error!("error in a dock panel's deserialize(data): {error}");
+        }
+        // The view described itself before the payload arrived, so what it
+        // described is now out of date.
+        view.update(cx, |view, cx| view.refresh(cx));
+    }
+
+    /// Queues a layout change to be applied at the next unlocked boundary.
+    pub(super) fn queue_dock_edit(
+        self: &Rc<Self>,
+        ctx: &Ctx<'_>,
+        dock: EntityHandle,
+        edit: dock_api::DockEdit,
+        api: &str,
+    ) -> JsResult<()> {
+        let policy = scope::current_policy().ok_or_else(|| nested_view_needs_call(ctx, api))?;
+        let provenance = NestedViewProvenance {
+            application: scope::current_application_generation(),
+            policy,
+        };
+        self.pending_nested
+            .borrow_mut()
+            .push_back(PendingNestedOperation::EditDock {
+                runtime: Rc::downgrade(self),
+                dock,
+                edit: Box::new(edit),
+                provenance,
+            });
+        Ok(())
+    }
+
+    /// The entity handle behind one `cx.new(Class)` token, once the creation it
+    /// was queued alongside has been applied.
+    pub(super) fn nested_view_for_token(&self, token: u32) -> Option<EntityHandle> {
+        self.nested_view_handles
+            .borrow()
+            .get(&token)
+            .filter(|alias| alias.provenance.is_current())
+            .map(|alias| alias.handle)
+    }
+
+    /// The authority and owner a long-lived subscription runs under.
+    pub(super) fn callback_owner(&self) -> InputCallbackOwner {
+        InputCallbackOwner {
+            policy: scope::policy(),
+            application: scope::current_application_generation(),
+            view: scope::current_view().map(|view| view.downgrade()),
+        }
+    }
+
+    /// Tells a script that the layout it is watching changed.
+    ///
+    /// The event carries nothing: what changed is the whole layout, and
+    /// `dump()` is how a subscriber reads it.
+    pub(super) fn dispatch_dock_event(
+        self: &Rc<Self>,
+        handler: &Persistent<Function<'static>>,
+        owner: &InputCallbackOwner,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        if owner
+            .application
+            .as_ref()
+            .is_some_and(|application| !application.is_active())
+        {
+            tracing::debug!("dock callback belongs to a retired application");
+            return;
+        }
+        let view = owner.view.as_ref().and_then(WeakEntity::upgrade);
+        let (_guard, generation) = scope::enter_with_application(
+            self,
+            window,
+            cx,
+            ScopePhase::Event,
+            view,
+            owner.policy.clone(),
+            owner.application.clone(),
+        );
+
+        let result = self.with_js(|ctx| {
+            let handler = handler.clone().restore(ctx)?;
+            handler.call::<_, ()>((context_object(ctx, ContextBinding::Call(generation))?,))
+        });
+        if let Err(error) = result {
+            tracing::error!("error in dock layout handler: {error}");
+        }
+        scheduler::drain_runtime_jobs(self, window, cx);
     }
 
     /// Reports which stable item of a collection something happened to.
@@ -2599,9 +2993,16 @@ impl ShellRuntime {
         }
         let pending_checkpoint = self.pending_nested.borrow().len();
         sandbox::begin_host_execution();
-        let result = self.context.with(|ctx| match body(&ctx) {
-            Ok(value) => Ok(value),
-            Err(error) => Err(anyhow!("{}", describe(&ctx, error))),
+        let result = self.context.with(|ctx| {
+            // Restored rather than cleared, because a `with_js` reached from
+            // inside a host call is the case this exists for.
+            let outer = self.active_context.replace(Some(ctx.as_raw()));
+            let produced = match body(&ctx) {
+                Ok(value) => Ok(value),
+                Err(error) => Err(anyhow!("{}", describe(&ctx, error))),
+            };
+            self.active_context.set(outer);
+            produced
         });
         match result {
             Ok(value) => Ok(value),
@@ -2611,6 +3012,30 @@ impl ShellRuntime {
                     .truncate(pending_checkpoint);
                 Err(error)
             }
+        }
+    }
+
+    /// Runs `body` against the context already executing, when one is.
+    ///
+    /// For a hook base calls on the shell's behalf from inside an operation the
+    /// script started: the runtime's lock is already held, so asking
+    /// [`Self::with_js`] for it again would panic on a re-entrant borrow.
+    /// Outside such a call this is exactly `with_js`.
+    ///
+    /// It deliberately does not re-enter the sandbox's host-execution guard or
+    /// take a pending-operation checkpoint. The call it is nested inside took
+    /// both, and they are what that call will unwind to.
+    fn with_js_nested<T>(&self, body: impl FnOnce(&Ctx<'_>) -> JsResult<T>) -> Result<T> {
+        let Some(raw) = self.active_context.get() else {
+            return self.with_js(body);
+        };
+        // Safe under the same condition `Ctx::from_raw` names: the runtime's
+        // lock is held for as long as the call that installed this pointer is
+        // on the stack, and this borrow does not outlive `body`.
+        let ctx = unsafe { Ctx::from_raw(raw) };
+        match body(&ctx) {
+            Ok(value) => Ok(value),
+            Err(error) => Err(anyhow!("{}", describe(&ctx, error))),
         }
     }
 
@@ -2692,6 +3117,12 @@ impl ShellRuntime {
     /// Records an element for a component the bindings build themselves.
     pub(super) fn push_component(&self, component: Component) -> SpecId {
         self.push_node(component)
+    }
+
+    /// The description being recorded, for a binding whose node needs a check
+    /// the arena is the one holding — a dock area, which may be mounted once.
+    pub(super) fn arena_mut(&self) -> std::cell::RefMut<'_, SpecArena> {
+        self.arena.borrow_mut()
     }
 
     fn push_op(&self, id: SpecId, op: SpecOp) -> Result<(), crate::spec::SpecError> {
@@ -3576,6 +4007,221 @@ globalThis.__gpui = (() => {
     release: () => __view_release(handle),
   });
 
+  // A dockable layout, and the commands its chrome carries.
+  //
+  // Retained for a reason none of the other handles share: the layout is what
+  // the *user* changed. A drag, a resize, a closed tab and a collapsed dock all
+  // happen without this script rendering, so a dock rebuilt from a description
+  // would put every one of them back the way the last render described it.
+  const dockPlacement = (value, api) => {
+    const name = String(value ?? "center");
+    if (!["center", "left", "right", "bottom"].includes(name)) {
+      throw new TypeError(api + ' expects "center", "left", "right" or "bottom"');
+    }
+    return name;
+  };
+
+  const wholeAt = (value, api) => {
+    if (!Number.isInteger(value) || value < 0) {
+      throw new TypeError(api + " expects a whole, non-negative position");
+    }
+    return value;
+  };
+
+  // Every chrome handler is given base's own state for one container, with the
+  // area it belongs to added on this side — the commands need it, and this side
+  // already knows it, so it never has to cross.
+  const dockTarget = (value, api) => {
+    const handle = value?.__dock;
+    if (typeof handle !== "number") {
+      throw new TypeError(
+        api + " expects the group, dock or tile your chrome handler was given as its first argument",
+      );
+    }
+    return handle;
+  };
+
+  const groupNode = (group, api) => {
+    if (typeof group?.node !== "number") {
+      throw new TypeError(api + " expects a tab group, which is what tab_bar and empty_group are given");
+    }
+    return group.node;
+  };
+
+  const tilePanel = (tile, api) => {
+    if (typeof tile?.panel?.id !== "number") {
+      throw new TypeError(api + " expects a tile, which is what tile_drag_bar and tile_resize_handles are given");
+    }
+    return tile.panel.id;
+  };
+
+  // Commands, not callbacks. A chrome handler runs once per frame for as long
+  // as the dock is on screen, so a handler registered inside one would pile up
+  // exactly the way a virtual list's row handlers would. A command carries no
+  // script value at all: it names a container and what to ask it, and base does
+  // the rest.
+  methods.select_tab = function (group, index) {
+    const api = "select_tab(group, index)";
+    __apply(this.__id, "select_tab", [dockTarget(group, api), groupNode(group, api), wholeAt(index, api)]);
+    return this;
+  };
+  methods.close_panel = function (group, panel) {
+    const api = "close_panel(group, panel_id)";
+    __apply(this.__id, "close_panel", [dockTarget(group, api), groupNode(group, api), Number(panel)]);
+    return this;
+  };
+  methods.toggle_zoom = function (group) {
+    const api = "toggle_zoom(group)";
+    __apply(this.__id, "toggle_zoom", [dockTarget(group, api), groupNode(group, api)]);
+    return this;
+  };
+  methods.drag_tab = function (group, index) {
+    const api = "drag_tab(group, index)";
+    __apply(this.__id, "drag_tab", [dockTarget(group, api), groupNode(group, api), wholeAt(index, api)]);
+    return this;
+  };
+  // The one command with an optional argument: a tab bar that names no slot
+  // means "append", which is what a drop past the last tab is.
+  methods.drop_tab = function (group, index) {
+    const api = "drop_tab(group, index)";
+    const at = index === undefined || index === null ? null : wholeAt(index, api);
+    __apply(this.__id, "drop_tab", [dockTarget(group, api), groupNode(group, api), at]);
+    return this;
+  };
+  methods.toggle_dock = function (dock) {
+    const api = "toggle_dock(dock)";
+    __apply(this.__id, "toggle_dock", [dockTarget(dock, api), dockPlacement(dock?.placement, api)]);
+    return this;
+  };
+  methods.resize_dock = function (dock) {
+    const api = "resize_dock(dock)";
+    __apply(this.__id, "resize_dock", [dockTarget(dock, api), dockPlacement(dock?.placement, api)]);
+    return this;
+  };
+  methods.move_tile = function (tile) {
+    const api = "move_tile(tile)";
+    __apply(this.__id, "move_tile", [dockTarget(tile, api), tilePanel(tile, api)]);
+    return this;
+  };
+  methods.resize_tile = function (tile, side) {
+    const api = "resize_tile(tile, side)";
+    const name = String(side ?? "");
+    if (!["left", "right", "top", "bottom", "bottom_right"].includes(name)) {
+      throw new TypeError(api + ' expects "left", "right", "top", "bottom" or "bottom_right"');
+    }
+    __apply(this.__id, "resize_tile", [dockTarget(tile, api), tilePanel(tile, api), name]);
+    return this;
+  };
+  methods.raise_tile = function (tile) {
+    const api = "raise_tile(tile)";
+    __apply(this.__id, "raise_tile", [dockTarget(tile, api), tilePanel(tile, api)]);
+    return this;
+  };
+  methods.toggle_tile_zoom = function (tile) {
+    const api = "toggle_tile_zoom(tile)";
+    __apply(this.__id, "toggle_tile_zoom", [dockTarget(tile, api), tilePanel(tile, api)]);
+    return this;
+  };
+  methods.close_tile = function (tile) {
+    const api = "close_tile(tile)";
+    __apply(this.__id, "close_tile", [dockTarget(tile, api), tilePanel(tile, api)]);
+    return this;
+  };
+
+  const DOCK_CHROME = [
+    "tab_bar",
+    "empty_group",
+    "drop_indicator",
+    "dock",
+    "tile_drag_bar",
+    "tile_resize_handles",
+  ];
+
+  // The six hooks are own properties of the one element that has them, rather
+  // than prototype methods: every other element in the tree would otherwise
+  // carry a `dock` and a `tab_bar` that mean nothing on it.
+  const dockAreaElement = (area) => {
+    const handle = area?.__dock;
+    if (typeof handle !== "number") {
+      throw new TypeError("dock_area(area) expects a DockArea from DockArea.new(id)");
+    }
+    const object = element(__dock_area_element(handle));
+    for (const hook of DOCK_CHROME) {
+      object[hook] = function (handler) {
+        if (typeof handler !== "function") {
+          throw new TypeError(hook + "(handler) expects a function returning an element");
+        }
+        __apply(this.__id, hook, [
+          (payload, cx) => {
+            payload.__dock = handle;
+            return handler(payload, cx);
+          },
+        ]);
+        return this;
+      };
+    }
+    return object;
+  };
+
+  const dockArea = (handle) => ({
+    __dock: handle,
+    __handle: handle,
+    add_panel: (view, options) => {
+      if (typeof view?.__handle !== "number" || !view.__entity) {
+        throw new TypeError(
+          "add_panel(view, options) expects a view from cx.new(Class): a panel's body is a view, not an element",
+        );
+      }
+      const settings = options ?? {};
+      if (typeof settings.name !== "string" || settings.name.length === 0) {
+        throw new TypeError(
+          "add_panel(view, options) needs a name: it is what the panel is filed under in a saved layout, and what register_panel finds it again by",
+        );
+      }
+      // No id comes back: the view is still being constructed when this is
+      // called, so the panel it will hold does not exist yet. `panels()` names
+      // every panel once the call that added them has returned.
+      __dock_add_panel(handle, view.__handle, {
+        name: settings.name,
+        placement: dockPlacement(settings.placement, "add_panel placement"),
+        size: settings.size === undefined || settings.size === null ? null : Number(settings.size),
+        bounds: settings.bounds ?? null,
+        closable: settings.closable === undefined ? true : Boolean(settings.closable),
+        zoomable: settings.zoomable === undefined ? true : Boolean(settings.zoomable),
+        visible: settings.visible === undefined ? true : Boolean(settings.visible),
+      });
+    },
+    remove_panel: (id) => __dock_remove_panel(handle, Number(id)),
+    panels: () => JSON.parse(__dock_panels(handle)),
+    // The layout as plain data, and back. `load` takes effect once this call
+    // has returned: rebuilding a panel constructs a view, and a view cannot be
+    // constructed while script is running.
+    dump: () => JSON.parse(__dock_dump(handle)),
+    load: (state) => __dock_load(handle, state),
+    has_dock: (placement) => __dock_has(handle, dockPlacement(placement, "has_dock(placement)")),
+    is_dock_open: (placement) =>
+      __dock_is_open(handle, dockPlacement(placement, "is_dock_open(placement)")),
+    toggle_dock: (placement) =>
+      __dock_toggle(handle, dockPlacement(placement, "toggle_dock(placement)")),
+    remove_dock: (placement) =>
+      __dock_remove(handle, dockPlacement(placement, "remove_dock(placement)")),
+    dock_size: (placement) => __dock_size(handle, dockPlacement(placement, "dock_size(placement)")),
+    set_dock_size: (placement, size) =>
+      __dock_set_size(handle, dockPlacement(placement, "set_dock_size(placement, size)"), Number(size)),
+    set_dock_collapsible: (placement, collapsible) =>
+      __dock_set_collapsible(
+        handle,
+        dockPlacement(placement, "set_dock_collapsible(placement, collapsible)"),
+        Boolean(collapsible),
+      ),
+    is_locked: () => __dock_is_locked(handle),
+    set_locked: (locked) => __dock_set_locked(handle, Boolean(locked)),
+    is_zoomed: () => __dock_is_zoomed(handle),
+    zoom_out: () => __dock_zoom_out(handle),
+    on: (event, handler) => __dock_on(handle, String(event), handler),
+    release: () => __dock_release(handle),
+  });
+
   const virtualScrollHandle = (handle) => ({
     __handle: handle,
     // The strategy is base's own word for where the item lands. `top` puts it
@@ -4078,6 +4724,38 @@ globalThis.__gpui = (() => {
       },
     },
     OtpInput: { new: (state) => element(__otp_element(state.__handle)) },
+    DockArea: {
+      new: (id, options) =>
+        dockArea(
+          __dock_area_new(
+            String(id),
+            options?.version === undefined || options?.version === null
+              ? null
+              : Number(options.version),
+          ),
+        ),
+      // Not a method on an area: a builder is registered for the whole
+      // application, and a layout is restored into whichever area asks for it.
+      // Registering the same name twice replaces the class, which is what a hot
+      // reload does.
+      register_panel: (name, Class) => {
+        if (typeof name !== "string" || name.length === 0) {
+          throw new TypeError(
+            "DockArea.register_panel(name, Class) needs the name the panel is added under",
+          );
+        }
+        if (typeof Class !== "function") {
+          throw new TypeError(
+            "DockArea.register_panel(name, Class) expects the View subclass the panel is rebuilt from",
+          );
+        }
+        return __dock_register_panel(name, Class);
+      },
+    },
+    // Free functions, not `DockArea.element(...)`: the area is the state and
+    // this is one description of it, the same split `v_virtual_list` has.
+    dock_area: dockAreaElement,
+    dock_content: () => element(__dock_content()),
   };
 })();
 "#;
@@ -4613,6 +5291,7 @@ impl ShellRuntime {
             host_modules::install(ctx)?;
             theme_api::install(ctx, &module)?;
             entity_api::install(ctx, &module, runtime.clone())?;
+            dock_api::install(ctx, &module, runtime.clone())?;
             scheduler::install(ctx, &module)?;
             // Standard Runtime constructors and prototypes must exist before
             // the sandbox freezes built-ins, or they would remain mutable.
@@ -4805,9 +5484,26 @@ impl ShellRuntime {
                 });
                 self.push_op_checked(ctx, self.push_op(id, SpecOp::Callback(name, callback)))
             }
-            "on_click" | "on_resize" | "on_change" | "on_open_change" | "on_confirm"
-            | "on_dismiss" | "on_step" | "on_item_click" | "on_mouse_move" | "on_hover"
-            | "on_key_down" | "on_key_up" | "on_mouse_down_out" | "on_scroll_wheel" => {
+            "on_click"
+            | "on_resize"
+            | "on_change"
+            | "on_open_change"
+            | "on_confirm"
+            | "on_dismiss"
+            | "on_step"
+            | "on_item_click"
+            | "on_mouse_move"
+            | "on_hover"
+            | "on_key_down"
+            | "on_key_up"
+            | "on_mouse_down_out"
+            | "on_scroll_wheel"
+            | "tab_bar"
+            | "empty_group"
+            | "drop_indicator"
+            | "dock"
+            | "tile_drag_bar"
+            | "tile_resize_handles" => {
                 // A handler registered from inside a virtual list's item
                 // renderer has nowhere to live. Callbacks belong to the
                 // snapshot that registered them and are retired with it; the
@@ -4849,6 +5545,12 @@ impl ShellRuntime {
                     "on_scroll_wheel" => "on_scroll_wheel",
                     "on_item_click" => "on_item_click",
                     "on_resize" => "on_resize",
+                    "tab_bar" => "tab_bar",
+                    "empty_group" => "empty_group",
+                    "drop_indicator" => "drop_indicator",
+                    "dock" => "dock",
+                    "tile_drag_bar" => "tile_drag_bar",
+                    "tile_resize_handles" => "tile_resize_handles",
                     "on_change" => "on_change",
                     "on_confirm" => "on_confirm",
                     "on_dismiss" => "on_dismiss",
@@ -5095,6 +5797,43 @@ impl ShellRuntime {
                             "href(url) expects an absolute HTTP(S) URL with a host",
                         ));
                     }
+                }
+                self.push_op_checked(ctx, self.push_op(id, SpecOp::Method(name, bridged)))
+            }
+            // A dock command carries no script value: it names a container in
+            // the area and what to ask it. That is why a tab can report its
+            // click at all — a chrome handler runs once per frame for as long
+            // as the dock is on screen, so a callback registered inside one
+            // would pile up the way a virtual list's row handlers would.
+            "select_tab" | "close_panel" | "toggle_zoom" | "drag_tab" | "drop_tab"
+            | "toggle_dock" | "resize_dock" | "move_tile" | "resize_tile" | "raise_tile"
+            | "toggle_tile_zoom" | "close_tile" => {
+                let bridged = args.values(method)?;
+                let name = match method {
+                    "select_tab" => "select_tab",
+                    "close_panel" => "close_panel",
+                    "toggle_zoom" => "toggle_zoom",
+                    "drag_tab" => "drag_tab",
+                    "drop_tab" => "drop_tab",
+                    "toggle_dock" => "toggle_dock",
+                    "resize_dock" => "resize_dock",
+                    "move_tile" => "move_tile",
+                    "resize_tile" => "resize_tile",
+                    "raise_tile" => "raise_tile",
+                    "toggle_tile_zoom" => "toggle_tile_zoom",
+                    _ => "close_tile",
+                };
+                if !bridged
+                    .first()
+                    .and_then(|value| value.as_f32().ok())
+                    .is_some_and(|handle| handle >= 0.0)
+                {
+                    return Err(Exception::throw_type(
+                        ctx,
+                        &format!(
+                            "{name}(...) expects the group, dock or tile its chrome handler was                              given as its first argument"
+                        ),
+                    ));
                 }
                 self.push_op_checked(ctx, self.push_op(id, SpecOp::Method(name, bridged)))
             }

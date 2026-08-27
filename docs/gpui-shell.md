@@ -2083,18 +2083,14 @@ the state do not.
 
 ## 15. Dock and Panels
 
-`dock.rs` is what lets a panel come from somewhere other than the host binary.
-Base already has the half that is hard to build — a layout that is pure data, a
-`PanelRegistry` that rebuilds a panel from a name in a persisted file, and a
-per-panel `serde_json::Value` that rides along with it — and what it lacked was
-a way to point that machinery at a script.
+`dock.rs` is what lets a panel come from somewhere other than the host binary,
+and `engine/quickjs/dock_api.rs` is the script face of it. Base already had the
+half that is hard to build — a layout that is pure data, a `PanelRegistry` that
+rebuilds a panel from a name in a persisted file, and a per-panel
+`serde_json::Value` that rides along with it — and what it lacked was a way to
+point that machinery at a script.
 
-The module is complete on the Rust side and has **no engine binding above it**:
-nothing in `engine/quickjs/` implements `PanelScript` or `DockChrome`, so a
-script cannot yet register a panel or draw dock chrome. Everything below
-describes what a host can drive today and what the engine layer has to supply.
-
-Two halves, independent of each other.
+Three halves, and they are independent of each other.
 
 **`ScriptPanel`** is a `gpui_base::dock::Panel` whose body is a `ScriptView`.
 It implements behavior only, not the presentation trait one layer up: a script
@@ -2102,7 +2098,10 @@ panel's title, toolbar, and menus are drawn by the skin from the script's own
 elements, which is what "the script owns presentation" means here. Its `dump`
 writes the script's `serialize()` payload into `PanelInfo::panel`, and
 `register_panel` teaches the registry to rebuild it — `PanelScript::build`
-first, then `deserialize` with whatever the last save wrote.
+first, then `deserialize` with whatever the last save wrote. Three more hooks
+carry the rest of a panel's life across the seam: `set_active`, `set_zoomed`,
+and `release`, which is where the engine frees the retained handle its own
+`build` produced.
 
 **`ScriptDockSkin`** is the appearance. It implements all three renderer traits
 and forwards each callback to a `DockChrome`, whose every method has a default
@@ -2111,54 +2110,119 @@ chrome implements none of them and still gets a dock that docks, drags, resizes,
 and persists. Base keeps the drag source, drop-target hit testing, keyboard
 actions, and focus; a chrome implementation never sees a drag event, a mouse
 position, or a hit test, only resolved state through `TabGroupContext`,
-`DockContext`, and `TileContext`, and it calls those contexts' own callbacks
-(`select_tab`, `close`, `toggle_zoom`, `resize_to`) rather than reimplementing
-them.
+`DockContext`, and `TileContext`.
 
-Both halves are engine-independent, which is the point: `PanelScript` and
-`DockChrome` are traits the engine implements, and this module deals only in
-`Entity<ScriptView>`, `AnyElement`, and `serde_json::Value`. `tab_group_data`,
-`dock_data`, and `tile_data` convert the state half of each context into plain
-JSON, which is the form the engine can hand to script code. The callbacks are
-deliberately left out of that JSON — they cannot be serialized — so the engine
-keeps the context alongside the value and wires the callbacks onto the elements
-the script returns.
+**The script binding** is `DockArea` (a retained entity), `dock_area(area)` (one
+description of it), and `dock_content()` (where a dock's own content goes inside
+the chrome drawn around it).
 
-Two constraints were known in advance and both hold.
+### 15.1 Why the area is retained rather than described
+
+The layout is what the *user* changed. A drag, a resize, a closed tab and a
+collapsed dock all happen without a script render, so an area rebuilt from a
+description would put every one of them back the way the last render described
+it. It is therefore an entity in the store, exactly as an input's text is, and
+`dock_area(...)` mounts it.
+
+### 15.2 Commands, not callbacks
+
+A chrome handler runs once per container per frame for as long as the dock is on
+screen. A callback registered inside one would belong to a snapshot that stands
+for thousands of frames while the tab is rebuilt on every one of them — the same
+accumulation `materialize::components::virtual_list` refuses for a row handler,
+and it is refused here by the same `ScopePhase::Layout` check.
+
+So a chrome element carries a `DockCommand` instead: `SelectTab { node, index }`,
+`ClosePanel { node, panel }`, `MoveTile { panel }` and nine more. A command names
+a container and what to ask it, carries no script value, and is resolved against
+`DockContexts` — the table the skin files each context in as base hands it past,
+cleared once per frame by `materialize` before anything is recorded again. The
+contexts are all `Clone` over `Rc` handlers, which is what makes filing them
+possible at all.
+
+That is also why a command is only wired onto the generic stateful `div` path:
+it needs `on_click`, `on_drag` and `on_drop`, which a `Button` — building its own
+interior — does not expose.
+
+### 15.3 The chrome slots
+
+A skin is installed when the area is created and `DockArea` offers no way to
+replace it; the handlers belong to whichever snapshot is currently published.
+`DockChromeSlots` is the join. `materialize` writes the current six callback ids
+as it replays a `dock_area(...)` description — once per frame, before base asks
+the skin for anything — and the engine's `DockChrome` reads them when base does
+ask. Writing them every frame rather than only on change is deliberate: a
+callback id is meaningful only while its snapshot lives, and materialization is
+the one place that always runs against the live one.
+
+`dock` is the only hook handed an element. An `AnyElement` cannot cross into
+script, so the engine installs it in `ContentSlot` for the length of the call and
+the script's `dock_content()` takes it. A chrome that never placed it gets its
+content drawn after what it returned, with a warning, rather than losing it.
+
+### 15.4 Every edit is deferred
+
+`add_panel` is handed the token `cx.new(Class)` returned, and the view behind it
+has not been constructed yet; `load` rebuilds panels through the registry, which
+constructs more. Neither can happen while QuickJS holds its runtime lock, which
+is exactly where both calls run. So all three edits — add, remove, load — go
+through `PendingNestedOperation::EditDock` and are applied at the same unlocked
+boundary a `cx.new` is, in the order the calls were made. Removal does not need
+the deferral; it is queued so that ordering holds.
+
+The visible consequence is that `panels()` and `dump()` read the layout as it was
+before the current turn's edits, and `on("layout_changed", …)` is where a script
+reads it afterwards.
+
+### 15.5 Re-entering the VM for `serialize()`
+
+`Panel::dump` is a read with only an `&App`, so `PanelScript::serialize` opens no
+call scope and a script `serialize()` must be a plain value-returning method.
+But `dock.dump()` is itself a call *from* script, so reaching the panel's
+`serialize()` means entering the VM while its runtime lock is already held —
+which `Context::with` answers with a re-entrant borrow panic.
+
+`ShellRuntime::with_js_nested` is the answer: `with_js` records the context it is
+executing under in a field, and a nested body runs against that borrow instead of
+asking for a second one. A field rather than a thread-local, so two runtimes on
+one thread cannot hand each other a context; installed by a frame on the stack and
+cleared before that frame returns, exactly as `crate::scope`'s pointers are.
+
+### 15.6 Two constraints that were known in advance
 
 `Panel::panel_name` returns `&'static str` while a script's panel name is only
 known when the application loads, so there is no way to satisfy the signature
 without a leak. It is made once per distinct name through a process-wide intern
-table: calling `panel_name("mail", "inbox")` twice returns the same pointer, so
-passing a name back through `ScriptPanel::new` leaks nothing further. The bound
-is applications loaded × panels each, in the hundreds, at tens of bytes apiece.
-Unloading does **not** reclaim a name, deliberately: reclaiming would let a name
-be freed while a persisted layout still refers to it, and outliving the load that
-produced it is the whole purpose of the name.
+table: calling `panel_name("mail", "inbox")` twice returns the same pointer. The
+bound is applications loaded × panels each, in the hundreds, at tens of bytes
+apiece. Unloading does **not** reclaim a name, deliberately: reclaiming would let
+a name be freed while a persisted layout still refers to it, and outliving the
+load that produced it is the whole purpose of the name.
 
 The name is namespaced `shell:<application>/<panel>`. The prefix is `shell:`
 rather than an engine name so that one layout file still restores after the host
-switches engines — what wrote the panel is the shell, not QuickJS. It is applied
-however the panel was built: a `ScriptPanel::new("TabPanel", …)` becomes
-`shell:TabPanel`, so a script panel can never shadow a host one.
+switches engines. The application half comes from `Policy::application()` —
+`set_bundle_id` for a single-application host, the manifest id for a plugin —
+because a policy already answers "under whose authority?", and "filed under whose
+name?" is the same question asked of persistence.
 
-The property that makes all of this worth building is one base already
-guarantees, and `dock.rs` extends it by one step. When a panel's name is not in
-the registry, `DockArea` substitutes a draw-nothing placeholder that answers
-`dump` with the `PanelState` it was handed, so the next save writes the panel —
-name, payload, and position — back out unchanged; a user can uninstall an
-application and reinstall it and its panels return to where they were. The
-extension covers the case base does not: a panel that _is_ registered but whose
-script throws on construction gets a `RetainedPanel` with the same behavior, so
-a broken script costs the user that panel's contents for the session rather than
-its place in the layout or its saved state.
+### 15.7 The property that makes it worth building
 
-One asymmetry is worth knowing before implementing the engine half.
-`PanelScript::serialize` takes `&App`, not `&mut Window`, because `Panel::dump`
-is a read — so there is no call scope to open, and a script `serialize()` must
-be a plain value-returning method that calls nothing back into the host.
-`deserialize` runs after `build`, with a real host call available, and may open
-a scope and touch entities.
+When a panel's name is not in the registry, `DockArea` substitutes a
+draw-nothing placeholder that answers `dump` with the `PanelState` it was handed,
+so the next save writes the panel — name, payload, and position — back out
+unchanged; a user can uninstall an application and reinstall it and its panels
+return to where they were. `dock.rs` extends that by one step: a panel that *is*
+registered but whose script throws on construction gets a `RetainedPanel` with
+the same behavior, so a broken script costs the user that panel's contents for
+the session rather than its place in the layout or its saved state.
+
+Registering a panel class also has to survive the runtime outliving neither more
+nor less than it should. `register_panel` files the builder in an `App` global,
+which outlives the runtime, while the class is a `Persistent` QuickJS value that
+must be released while its context still exists. `ScriptPanelClass::retire`,
+called from `ShellRuntime::drop`, drops the class and leaves the registration in
+place — which turns those panels into exactly the placeholder case above.
 
 ---
 

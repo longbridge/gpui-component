@@ -72,8 +72,8 @@ A standalone script application uses few of these. What it gains is the iteratio
 
 Text editing, syntax highlighting, LSP, virtualization and motion sampling stay in Rust. That line is a division of responsibility rather than a limit on the script: the host owns everything that has to sit close to the GPU and the system, so a plugin never becomes a variable in the application's performance or stability.
 
-::: warning Plugins are the goal, not yet the interface
-The machinery below a plugin is built and tested — manifest parsing and discovery, load and unload, a per-plugin policy and data directory, `ScriptPanel`, `ScriptDockSkin`, panel-name interning and registry round-trip. But `gpui_shell::dock` is crate-private, so a script cannot contribute a panel, and the CLI does not use `PluginManager`. A contribution registry (`gpui.command`, `gpui.register_panel`, `gpui.keymap`) and the authorization UI are not built. **What runs end to end today is the standalone path.** See [Dock Panels](./dock.md).
+::: warning Plugins are the goal, not yet the whole interface
+The machinery below a plugin is built and tested — manifest parsing and discovery, load and unload, a per-plugin policy and data directory. A script now contributes panels and draws a dock's chrome: `DockArea`, `dock_area(...)` and `DockArea.register_panel` are public, and a layout with a script's panels in it survives a restart. What is still missing is the rest of the contribution registry (`gpui.command`, `gpui.keymap`), the authorization UI, and a CLI that uses `PluginManager`. **What runs end to end today is the standalone path, docks included.** See [Dock and Panels](./dock.md).
 :::
 
 ## What defines it
@@ -199,7 +199,7 @@ What the script gains in exchange for the extra typing is the whole application 
 | [Capabilities](./capabilities.md) | `gpui-shell.json`, default deny, filesystem, storage, process and network APIs |
 | [Hosting](./hosting.md) | The Rust side in full: mounting, refreshing, metrics, exit, hot-reload |
 | [HostModule](./host-module.md) | Lending the host's own Rust to a script, and the plain-data boundary |
-| [Dock Panels](./dock.md) | A script view as a dockable panel, and what survives a restart |
+| [Dock and Panels](./dock.md) | A script view as a dockable panel, the chrome you draw for it, and what survives a restart |
 | [The engine seam](./engine.md) | QuickJS, why the seam exists, and the measurements that tell script cost from frame cost |
 
 ## Status

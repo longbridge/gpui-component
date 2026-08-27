@@ -1572,6 +1572,57 @@ const ELEMENT_METHODS: &str = r#"    /**
     active(declare: (el: Element) => Element | void): Element;
     /** Styles applied while the element has focus. */
     focus(declare: (el: Element) => Element | void): Element;
+    /**
+     * Displays the tab at `index` in `group` when this element is clicked.
+     *
+     * One of the twelve **dock commands**, which are how an element a dock's
+     * chrome drew says what it does. A chrome handler runs once per container
+     * per frame for as long as the dock is on screen, so it may not register an
+     * event handler — one created there would pile up for as long as the dock
+     * stood. A command carries no script value: it names a container in the
+     * area and what to ask it, and base does the work.
+     *
+     * Every command takes the object its handler was given — the group, the
+     * dock, the tile — as its first argument. They belong on a `div`, an
+     * `h_flex` or a `v_flex`; a `Button` builds its own interior and has
+     * nowhere to put one.
+     */
+    select_tab(group: import("gpui-base").DockGroup, index: number): Element;
+    /** Closes `panel` when this element is clicked, if its group allows it. */
+    close_panel(group: import("gpui-base").DockGroup, panel: number): Element;
+    /** Zooms the group in, or back out. */
+    toggle_zoom(group: import("gpui-base").DockGroup): Element;
+    /**
+     * Makes this element the drag source for the tab at `index`, carrying
+     * base's own panel payload — so dropping it on another group, or on the
+     * area itself, moves the panel there.
+     */
+    drag_tab(group: import("gpui-base").DockGroup, index: number): Element;
+    /**
+     * Accepts a dragged panel here. `index` is the slot it lands in; leave it
+     * out to append, which is what a drop past the last tab means.
+     */
+    drop_tab(group: import("gpui-base").DockGroup, index?: number): Element;
+    /** Opens or closes the dock when this element is clicked. */
+    toggle_dock(dock: import("gpui-base").DockRegion): Element;
+    /**
+     * Drags the dock's edge. Base clamps every size it is given against the
+     * area and the opposite dock, so nothing here has to.
+     */
+    resize_dock(dock: import("gpui-base").DockRegion): Element;
+    /** Drags the tile around its canvas, raising it first. */
+    move_tile(tile: import("gpui-base").DockTile): Element;
+    /** Drags one edge or corner of the tile. */
+    resize_tile(
+      tile: import("gpui-base").DockTile,
+      side: import("gpui-base").TileResizeSide,
+    ): Element;
+    /** Brings the tile above the others when this element is pressed. */
+    raise_tile(tile: import("gpui-base").DockTile): Element;
+    /** Zooms the tile to fill its dock, or back out. */
+    toggle_tile_zoom(tile: import("gpui-base").DockTile): Element;
+    /** Closes the tile. */
+    close_tile(tile: import("gpui-base").DockTile): Element;
 "#;
 
 fn shell_types() -> String {
@@ -2748,6 +2799,262 @@ const BASE: &str = r#"  /** A row. */
    */
   export const OtpInput: { new: (state: OtpState) => Element };
 
+  /** Where a region sits relative to the center of a dock area. */
+  export type DockPlacement = "center" | "left" | "right" | "bottom";
+
+  /** One panel, as `panels()` reports it. */
+  export interface DockPanel {
+    /** Stable for as long as the panel lives. Pass it to `remove_panel`. */
+    readonly id: number;
+    /** Namespaced: `shell:<application>/<name>`. */
+    readonly name: string;
+    readonly placement: DockPlacement;
+    /** The container holding it, which is also `group.node` in the chrome. */
+    readonly node: number;
+    /** Its position in that container. */
+    readonly index: number;
+    /** Whether it is the one its container is showing. */
+    readonly active: boolean;
+    readonly visible: boolean;
+    readonly closable: boolean;
+    readonly zoomable: boolean;
+  }
+
+  /** One tab of a group, as a chrome handler is given it. */
+  export interface DockTab {
+    /** Its position in the group, which is what `select_tab` takes. */
+    readonly index: number;
+    readonly name: string;
+    readonly id: number;
+    readonly active: boolean;
+    /**
+     * Hidden panels are included, and keep their place in tab order — filter
+     * on this rather than re-deriving an index into an already filtered list.
+     */
+    readonly visible: boolean;
+    readonly closable: boolean;
+    readonly zoomable: boolean;
+  }
+
+  /** A tab group, as `tab_bar` and `empty_group` are given it. */
+  export interface DockGroup {
+    readonly node: number;
+    readonly active_index: number;
+    readonly zoomed: boolean;
+    readonly collapsed: boolean;
+    readonly locked: boolean;
+    readonly draggable: boolean;
+    readonly droppable: boolean;
+    readonly closable: boolean;
+    readonly tabs: readonly DockTab[];
+  }
+
+  /** One dock, as the `dock` handler is given it. */
+  export interface DockRegion {
+    readonly placement: DockPlacement;
+    /** Its extent along its own axis: width for left and right, height for bottom. */
+    readonly size: number;
+    readonly open: boolean;
+    readonly collapsible: boolean;
+  }
+
+  /** One tile of a tiles canvas, as the two tile handlers are given it. */
+  export interface DockTile {
+    readonly node: number;
+    readonly panel: { readonly name: string; readonly id: number; readonly visible: boolean };
+    /**
+     * Already resolved — base snaps, clamps and rounds before a skin sees
+     * them, so nothing here has to be positioned by hand.
+     */
+    readonly bounds: import("gpui-shell").ElementBounds;
+    readonly z_index: number;
+    readonly moving: boolean;
+    readonly resizing: boolean;
+    readonly closable: boolean;
+    readonly zoomed: boolean;
+    readonly zoomable: boolean;
+  }
+
+  /** Where a dragged panel would land, as the `drop_indicator` handler is given it. */
+  export interface DockDrop {
+    /** `null` means the drop merges into the group's tabs rather than splitting beside it. */
+    readonly placement: Placement | null;
+    /** The hovered group's content box, in window coordinates. */
+    readonly bounds: import("gpui-shell").ElementBounds;
+    /** Where the placeholder starts, relative to `bounds`. */
+    readonly from: import("gpui-shell").ElementBounds;
+    /** Where it settles. */
+    readonly to: import("gpui-shell").ElementBounds;
+  }
+
+  /** What `add_panel` is told about the panel it is adding. */
+  export interface DockPanelOptions {
+    /**
+     * What the panel is filed under in a saved layout, and what
+     * `DockArea.register_panel` finds it again by. Required.
+     */
+    name: string;
+    /** Default `"center"`. */
+    placement?: DockPlacement;
+    /** Seeds the dock's extent when the panel is the first thing in it. */
+    size?: number;
+    /**
+     * Places the panel on the region's tiles canvas instead of in a tab group.
+     * A region with no canvas has nowhere to put a tile, so nothing happens.
+     */
+    bounds?: { x: number; y: number; width: number; height: number };
+    /** Default `true`. */
+    closable?: boolean;
+    /** Default `true`. */
+    zoomable?: boolean;
+    /** Default `true`. */
+    visible?: boolean;
+  }
+
+  /**
+   * A dockable layout: splits, tab groups, docks and tiles that the user can
+   * rearrange, and that survives a restart.
+   *
+   * Retained for a reason none of the other handles share. **The layout is what
+   * the user changed** — a drag, a resize, a closed tab and a collapsed dock all
+   * happen without the script rendering — so it lives here rather than in a
+   * description that would put every one of them back the way the last render
+   * described it.
+   *
+   * `DockArea.new(id)` needs a live host call, so it belongs in `init` or an
+   * event handler, never in `render`.
+   *
+   * **Every edit takes effect once the call that made it has returned.**
+   * `add_panel` is handed a view from `cx.new(Class)`, which is itself still
+   * being constructed; `load` rebuilds panels, which constructs more. So
+   * `panels()` and `dump()` read the layout as it was before this turn's edits,
+   * and `on("layout_changed", …)` is where to read it after them.
+   *
+   * ```js
+   * init(_props, cx) {
+   *   DockArea.register_panel("inbox", Inbox);
+   *   this.dock = DockArea.new("workspace");
+   *   this.dock.add_panel(cx.new(Inbox), { name: "inbox", placement: "left", size: 240 });
+   *   this.dock.on("layout_changed", () => localStorage.setItem("layout", JSON.stringify(this.dock.dump())));
+   * }
+   * render() {
+   *   return dock_area(this.dock).size_full().tab_bar((group) => …);
+   * }
+   * ```
+   */
+  export interface DockArea {
+    /** Docks `view` — a view from `cx.new(Class)`, not an element. */
+    add_panel(view: import("gpui").Entity, options: DockPanelOptions): void;
+    /** Removes the panel with this id, wherever it sits. */
+    remove_panel(id: number): void;
+    /** Every panel in the area, in tree order. */
+    panels(): DockPanel[];
+    /**
+     * The whole layout as plain data: the tree, the docks, and each panel's own
+     * `serialize()` payload. Hand it back to `load` after a restart.
+     */
+    dump(): any;
+    /**
+     * Restores a layout `dump()` wrote, rebuilding each panel through the class
+     * registered under its name.
+     *
+     * A panel whose name nothing registered is not dropped: it is carried
+     * forward — name, payload and position — so uninstalling an application and
+     * reinstalling it puts its panels back where they were.
+     */
+    load(state: any): void;
+    has_dock(placement: DockPlacement): boolean;
+    is_dock_open(placement: DockPlacement): boolean;
+    toggle_dock(placement: DockPlacement): void;
+    remove_dock(placement: DockPlacement): void;
+    dock_size(placement: DockPlacement): number | null;
+    set_dock_size(placement: DockPlacement, size: number): void;
+    set_dock_collapsible(placement: DockPlacement, collapsible: boolean): void;
+    /** A locked area cannot be dragged, dropped into, or resized. */
+    is_locked(): boolean;
+    set_locked(locked: boolean): void;
+    is_zoomed(): boolean;
+    /** Clears the zoom, whichever container holds it. */
+    zoom_out(): void;
+    /**
+     * Fires on every edit — including each step of a tile drag — so save on a
+     * timer rather than on every one.
+     */
+    on(event: "layout_changed", handler: (cx: Context) => void): boolean;
+    release(): boolean;
+  }
+
+  export const DockArea: {
+    new: (id: string, options?: { version?: number }) => DockArea;
+    /**
+     * Teaches the runtime to rebuild `name`'s panel from `Class` when a saved
+     * layout mentions it, and answers with the namespaced name it registered
+     * under.
+     *
+     * The class is an ordinary view class. Two of its methods carry state
+     * across a restart, and both are optional:
+     *
+     * - `serialize()` returns plain data, and is read when the layout is saved.
+     *   It runs without a host call, so it must not touch entities, `cx`, or
+     *   anything else that needs one — return a value and nothing else.
+     * - `deserialize(data)` is handed back whatever `serialize()` wrote, right
+     *   after the view is built, with a real host call available.
+     *
+     * Registering the same name twice replaces the class, which is what a hot
+     * reload does.
+     */
+    register_panel: (name: string, Class: import("gpui").ViewClass) => string;
+  };
+
+  /**
+   * Draws a dock area.
+   *
+   * Base draws **no chrome at all** — an area with none still docks, drags,
+   * resizes and persists, painting only the panels — so every tab bar, dock
+   * frame and drag bar is one of the six handlers below.
+   *
+   * Each handler is called from inside GPUI's layout pass, once per container
+   * per frame, and is given base's own resolved state: never a drag event, a
+   * mouse position or a hit test. It may not register event handlers — a
+   * callback created there would pile up for as long as the dock stood — so the
+   * elements it returns say what they do with a **command** instead:
+   * `select_tab(group, i)`, `close_panel(group, id)`, `toggle_dock(dock)`,
+   * `move_tile(tile)` and the rest. A command carries no script value, and base
+   * does the work.
+   */
+  export function dock_area(area: DockArea): DockAreaElement;
+
+  export interface DockAreaElement extends Element {
+    /** The tab bar above a group's displayed panel. */
+    tab_bar(handler: (group: DockGroup, cx: Context) => Element): DockAreaElement;
+    /** What a group with no displayed panel shows. */
+    empty_group(handler: (group: DockGroup, cx: Context) => Element | null): DockAreaElement;
+    /** The hint showing where a dragged panel would land. */
+    drop_indicator(handler: (drop: DockDrop, cx: Context) => Element | null): DockAreaElement;
+    /**
+     * One dock's chrome around its content: title strip, collapse affordance,
+     * resize handle. Whatever this returns replaces the content, so put
+     * `dock_content()` where the panels belong.
+     */
+    dock(handler: (dock: DockRegion, cx: Context) => Element | null): DockAreaElement;
+    /**
+     * The strip a tile is dragged by. Its height is fixed at base's drag-bar
+     * height, which the snapping arithmetic assumes.
+     */
+    tile_drag_bar(handler: (tile: DockTile, cx: Context) => Element): DockAreaElement;
+    /** A tile's resize affordances. */
+    tile_resize_handles(handler: (tile: DockTile, cx: Context) => Element | null): DockAreaElement;
+  }
+
+  /**
+   * Where a dock's own panels go inside the chrome the `dock` handler drew
+   * around them. Legal only inside that handler, and only once.
+   */
+  export function dock_content(): Element;
+
+  /** Which edge or corner of a tile a resize handle pulls. */
+  export type TileResizeSide = "left" | "right" | "top" | "bottom" | "bottom_right";
+
   /** Semantic color roles, aligned with `gpui_base::ColorTokens`. */
   export type ColorTokens = { readonly [Role in ColorToken]: Color };
   /** Semantic spacing scale, aligned with `gpui_base::SpacingTokens`. */
@@ -2791,6 +3098,7 @@ const BASE_IMPORTS: &str = r#"  import {
     Context,
     Element,
     FocusHandle,
+    Placement,
   } from "gpui";
 
 "#;
@@ -3109,6 +3417,21 @@ mod tests {
         "cell_style",
         "cell_active_style",
         "caret_style",
+        // The dock commands. Not behaviours in the reflected sense either: no
+        // handler crosses, only the container an element names and what it asks
+        // of it. See `crate::dock::DockCommand`.
+        "select_tab",
+        "close_panel",
+        "toggle_zoom",
+        "drag_tab",
+        "drop_tab",
+        "toggle_dock",
+        "resize_dock",
+        "move_tile",
+        "resize_tile",
+        "raise_tile",
+        "toggle_tile_zoom",
+        "close_tile",
         "value",
         "indeterminate",
         "axis",
@@ -3511,7 +3834,10 @@ mod tests {
                 "missing Standard Runtime module {name}"
             );
         }
-        assert!(!declarations.contains("node:"));
+        // The alias, not the four letters: `node` is also an ordinary field
+        // name — a dock group carries the id of the layout node it mirrors.
+        assert!(!declarations.contains("declare module \"node:"));
+        assert!(!declarations.contains("from \"node:"));
         assert!(!declarations.contains("export const fs: FileSystem"));
         assert!(!declarations.contains("export const process: Process"));
         assert!(declarations.contains("declare function fetch"));

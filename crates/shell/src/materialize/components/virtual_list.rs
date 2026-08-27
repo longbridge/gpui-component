@@ -229,7 +229,7 @@ fn render_range(
         return Vec::new();
     };
 
-    runtime.metrics().time_virtual_items(|| {
+    runtime.metrics().time_frame_script(|| {
         let Some(described) =
             runtime.render_virtual_items(render_items, get_key, range.clone(), window, cx)
         else {

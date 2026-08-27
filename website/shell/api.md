@@ -304,6 +304,19 @@ Two gaps are worth knowing before you build on these: arrow-key navigation of an
 
 Both virtual lists take `(id, item_count, item_sizes, get_key, render)`. `render(range, cx)` is the only callback in this API that the host calls *during* a frame, which is why handlers, retained state and `cx.notify()` are all refused inside it.
 
+### Dock
+
+| Name | What it is |
+| --- | --- |
+| `DockArea.new(id, options?)` | A dockable layout, retained: `options` is `{ version?: number }` |
+| `DockArea.register_panel(name, Class)` | Teaches the runtime to rebuild `name`'s panel from `Class`; answers with the namespaced name |
+| `dock_area(area)` | Draws one, and carries the six chrome handlers |
+| `dock_content()` | Where a dock's own panels go inside the chrome drawn around them |
+
+The area's methods are `add_panel(view, options)`, `remove_panel(id)`, `panels()`, `dump()`, `load(state)`, `has_dock`, `is_dock_open`, `toggle_dock`, `remove_dock`, `dock_size`, `set_dock_size`, `set_dock_collapsible`, `is_locked`, `set_locked`, `is_zoomed`, `zoom_out`, `on("layout_changed", handler)` and `release()`.
+
+**Every edit is applied once the call that made it has returned**, in the order the calls were made — a panel's body comes from `cx.new(Class)`, which is still being constructed — so `panels()` and `dump()` read the layout as it was before this turn's edits. See [Dock and Panels](./dock.md).
+
 ### Retained handles
 
 Each is created once — in `init` or an event handler, never in `render` — and every one of them has `release(): boolean`, which returns whether it was still live. Using a handle after releasing it throws.
@@ -430,6 +443,13 @@ Reading the theme is `cx.theme()`. `set_theme` remains in `gpui-base` because th
 | `PartType` | The shared `new()` shape used by `gpui-base` sub-parts without their own identity |
 | `Placement` | `"top"`, `"bottom"`, `"left"` or `"right"`, mirroring `gpui_base::Placement` |
 | `ComponentType` | The shared `new(id)` shape used by identity-bearing `gpui-base` component constructors |
+| `DockPlacement` | `"center"`, `"left"`, `"right"` or `"bottom"` |
+| `DockPanel` | One panel as `panels()` reports it: `id`, `name`, `placement`, `node`, `index`, `active`, and its three flags |
+| `DockGroup` / `DockTab` | A tab group and one of its tabs, as `tab_bar` and `empty_group` are given them |
+| `DockRegion` | One dock, as the `dock` handler is given it |
+| `DockTile` | One tile, with already-resolved bounds |
+| `DockDrop` | Where a dragged panel would land |
+| `TileResizeSide` | `"left"`, `"right"`, `"top"`, `"bottom"` or `"bottom_right"` |
 
 ### Composition patterns
 
@@ -660,6 +680,43 @@ Wired is not the same as reachable. A key travels the focus path, so a component
 | `open_delay(ms)` | How long the pointer must rest on a `HoverCard` trigger; default 600 |
 | `close_delay(ms)` | How long a `HoverCard` waits before closing; default 300 |
 | `overlay_closable(value)` | Whether pressing outside an open `Popover` closes it |
+
+### Dock commands
+
+What an element a dock's chrome drew *does*. A chrome handler runs once per
+container per frame, so it may not register an event handler — a command carries
+no script value instead, and base does the work. Every one takes the object its
+handler was given as its first argument, and they belong on a `div`, an
+`h_flex` or a `v_flex`.
+
+| Method | On | What it does |
+| --- | --- | --- |
+| `select_tab(group, index)` | click | Displays that tab |
+| `close_panel(group, panel_id)` | click | Closes the panel, if its group allows it |
+| `toggle_zoom(group)` | click | Zooms the group in, or back out |
+| `drag_tab(group, index)` | drag | Makes the element the drag source for that tab |
+| `drop_tab(group, index?)` | drop | Accepts a dragged panel here; no index appends |
+| `toggle_dock(dock)` | click | Opens or closes the dock |
+| `resize_dock(dock)` | drag | Drags the dock's edge; base clamps every position |
+| `move_tile(tile)` | drag | Moves the tile around its canvas |
+| `resize_tile(tile, side)` | drag | Drags one edge or corner |
+| `raise_tile(tile)` | press | Brings the tile above the others |
+| `toggle_tile_zoom(tile)` | click | Zooms the tile to fill its dock |
+| `close_tile(tile)` | click | Closes the tile |
+
+### Dock chrome
+
+Six handlers, all optional, and legal only on a `dock_area(...)`. Each is called
+from inside GPUI's layout pass and given base's resolved state.
+
+| Method | Draws |
+| --- | --- |
+| `tab_bar(handler)` | The tab bar above a group's displayed panel |
+| `empty_group(handler)` | What a group with no displayed panel shows |
+| `drop_indicator(handler)` | Where a dragged panel would land |
+| `dock(handler)` | One dock's frame around its content; place `dock_content()` inside it |
+| `tile_drag_bar(handler)` | The strip a tile is dragged by |
+| `tile_resize_handles(handler)` | A tile's resize affordances |
 
 ### Motion
 

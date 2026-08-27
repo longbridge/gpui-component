@@ -208,17 +208,18 @@ impl Metrics {
         result
     }
 
-    /// Times one window of a virtualized list's items: the script call that
-    /// describes them and the walk that turns them into elements.
+    /// Times one script call GPUI makes from inside a frame: a window of a
+    /// virtualized list's items, or one piece of a dock's chrome — the script
+    /// call that describes it and the walk that turns it into elements.
     ///
     /// Added to the materialize total without moving the materialize count.
-    /// The count is materializations *of a snapshot*, and this is not one — it
-    /// happens two or more times inside a single frame, from inside GPUI's
-    /// layout pass rather than from `materialize`. The time belongs there all
-    /// the same: it is spent on the frame's budget, which is the question that
+    /// The count is materializations *of a snapshot*, and these are not — they
+    /// happen several times inside a single frame, from inside GPUI's layout
+    /// pass rather than from `materialize`. The time belongs there all the
+    /// same: it is spent on the frame's budget, which is the question that
     /// total answers. See [`Self::time_materialize`] and the note in this
     /// module's comment.
-    pub fn time_virtual_items<R>(&self, build: impl FnOnce() -> R) -> R {
+    pub fn time_frame_script<R>(&self, build: impl FnOnce() -> R) -> R {
         let started = instant::Instant::now();
         let result = build();
         self.materialize_nanos

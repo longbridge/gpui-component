@@ -51,11 +51,24 @@ use crate::{
     storage::Storage,
 };
 
+/// The application name a policy carries when the host named none.
+const DEFAULT_APPLICATION: &str = "app";
+
 /// The authority one application or plugin runs under.
 ///
 /// Built once by the host and shared by handle: a view holds one, a call frame
 /// borrows it, and two plugins hold two.
 pub struct Policy {
+    /// The name this application's panels are filed under.
+    ///
+    /// A dock layout persists a panel by name, and two applications that both
+    /// call a panel `inbox` must not collide in one layout file — so the name
+    /// is namespaced by the application, and *this* is where the application
+    /// half comes from. The policy carries it rather than the runtime because
+    /// one runtime can host several plugins, and because a policy already
+    /// answers "under whose authority?"; "filed under whose name?" is the same
+    /// question asked of persistence.
+    application: Rc<str>,
     capabilities: Capabilities,
     /// A live handle, not a value — and deliberately unlike `capabilities`.
     ///
@@ -98,11 +111,33 @@ impl Policy {
     /// A policy that permits nothing. Every grant is added deliberately.
     pub fn new() -> Self {
         Self {
+            application: Rc::from(DEFAULT_APPLICATION),
             capabilities: Capabilities::default(),
             modules: Rc::new(RefCell::new(Rc::new(HostModules::default()))),
             store: Rc::new(RefCell::new(None)),
             session: Rc::new(RefCell::new(Some(Storage::in_memory()))),
         }
+    }
+
+    /// Names the application this policy answers for.
+    ///
+    /// A host that loads one application never needs to call it: the default
+    /// is `app`, and a layout file written by a single-application host has
+    /// nothing to collide with. A plugin host passes the plugin's manifest id,
+    /// which is already unique among the plugins it loaded.
+    pub fn with_application(mut self, name: impl AsRef<str>) -> Self {
+        let name = name.as_ref().trim();
+        self.application = if name.is_empty() {
+            Rc::from(DEFAULT_APPLICATION)
+        } else {
+            Rc::from(name)
+        };
+        self
+    }
+
+    /// The name this application's panels are filed under.
+    pub fn application(&self) -> &str {
+        &self.application
     }
 
     pub fn with_capabilities(mut self, capabilities: Capabilities) -> Self {
@@ -224,6 +259,10 @@ impl Policy {
     /// views that can call it, and a store has to stay one cache over one file.
     pub(crate) fn duplicate(&self) -> Self {
         Self {
+            // Carried, not reset: the name is what the application's persisted
+            // panels are filed under, and a copy that renamed them would lose
+            // the layout the user had.
+            application: self.application.clone(),
             capabilities: self.capabilities.clone(),
             modules: self.modules.clone(),
             store: self.store.clone(),

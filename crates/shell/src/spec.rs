@@ -241,6 +241,23 @@ pub enum Component {
     /// `DatePicker::new` requires it: a picker without one has no trigger the
     /// keyboard can reach. It holds no date — the calendar does.
     DatePicker(String, crate::entities::EntityHandle),
+    /// A dockable layout, addressed by its entity handle for the same reason
+    /// [`Component::Input`] is: the layout is the state, it outlives every
+    /// description, and the user changes it without a script render.
+    ///
+    /// Nothing under it is described. Its panels are entities the script handed
+    /// it, and its chrome is drawn by handlers this node carries — see
+    /// [`crate::dock`] — so the node itself is the whole of the description.
+    DockArea(crate::entities::EntityHandle),
+    /// Where a dock's own content goes inside the chrome the script drew
+    /// around it.
+    ///
+    /// Base hands a dock's content to the chrome as a finished element and
+    /// takes back whatever the chrome returns, so a chrome that wants both has
+    /// to place the content itself. An element cannot cross into script, so
+    /// this stands in for it: `dock_content()` describes the position, and
+    /// materialization puts the real element there.
+    DockContent,
     /// A virtualized list: the one component whose description is not the whole
     /// of what it draws. Its rows come from a callback GPUI runs during layout,
     /// so this node carries only the list itself. See [`VirtualListSpec`] and
@@ -404,6 +421,8 @@ impl Component {
             Component::TableHead(..) => "TableHead",
             Component::TableCell(..) => "TableCell",
             Component::TableCaption(_) => "TableCaption",
+            Component::DockArea(_) => "dock_area",
+            Component::DockContent => "dock_content",
             // Named after the constructor rather than the type, because the
             // axis is not a call a reader of the dump could otherwise see.
             Component::Resizable(_, gpui::Axis::Horizontal) => "h_resizable",
@@ -597,6 +616,23 @@ impl SpecArena {
             return Err(SpecError::DuplicateChildView);
         }
         Ok(self.push(Component::ChildView(child)))
+    }
+
+    /// Records one dock area, rejecting a second `dock_area(...)` naming the
+    /// same one.
+    ///
+    /// The same rule and the same table as a child view's, because it is the
+    /// same rule: GPUI cannot mount one entity at two positions in a tree, and
+    /// a dock area is an entity. Sharing the table is safe because both handles
+    /// come from one store and no id is reused.
+    pub(crate) fn push_dock_area(
+        &mut self,
+        handle: crate::entities::EntityHandle,
+    ) -> Result<SpecId, SpecError> {
+        if !self.mounted_views.insert(handle) {
+            return Err(SpecError::DuplicateChildView);
+        }
+        Ok(self.push(Component::DockArea(handle)))
     }
 
     pub fn node(&self, id: SpecId) -> Option<&SpecNode> {

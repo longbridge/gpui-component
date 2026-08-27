@@ -26,13 +26,19 @@ use std::{
 
 use gpui::{App, AppContext as _, Entity, EntityId, FocusHandle, Subscription, Window};
 use gpui_base::VirtualListScrollHandle;
+use gpui_base::dock::{DockArea, DockEvent};
 use gpui_base::input::{
     InputBaseState, InputEditorStyle, InputEvent, InputModeKind, InputState, TextareaState,
 };
 use gpui_base::slider::{SliderEvent, SliderScale, SliderState, SliderValue};
 use gpui_base::{CalendarEvent, CalendarState, OtpEvent, OtpState};
 
-use crate::{engine::ShellRuntime, runtime::ApplicationGeneration, view::ScriptView};
+use crate::{
+    dock::{DockChromeSlots, DockContexts, ScriptDockSkin},
+    engine::ShellRuntime,
+    runtime::ApplicationGeneration,
+    view::ScriptView,
+};
 
 /// A script-visible reference to retained state.
 ///
@@ -117,6 +123,25 @@ enum Record {
     Focus {
         handle: FocusHandle,
         application: Option<Rc<ApplicationGeneration>>,
+    },
+    /// A dockable layout: its trees, its docks, its panel entities, and the
+    /// skin drawing all of it.
+    ///
+    /// Retained for the reason nothing else here is quite: the layout is what
+    /// the *user* changed. A drag, a resize, a closed tab and a collapsed dock
+    /// all happen without a script render, and rebuilding the area from a
+    /// description would put every one of them back the way the script last
+    /// described it.
+    Dock {
+        area: Entity<DockArea>,
+        /// Which script handler draws each piece of chrome for the frame being
+        /// drawn. Shared with the skin installed in `area`, which reads it.
+        slots: Rc<DockChromeSlots>,
+        /// The contexts that skin was handed while it drew, so a command
+        /// arriving from a later event handler can find its own.
+        contexts: Rc<DockContexts>,
+        application: Option<Rc<ApplicationGeneration>>,
+        subscriptions: Vec<Subscription>,
     },
     /// The scroll position of a virtualized list, and the item it has been
     /// asked to scroll to.
@@ -501,6 +526,90 @@ impl EntityStore {
         }
     }
 
+    /// Creates a dock area and returns its handle.
+    ///
+    /// The skin is installed here rather than left to the caller because
+    /// [`DockArea::with_renderer`] is a constructor step and base offers no way
+    /// to replace a renderer afterwards. What *is* replaceable is the set of
+    /// script handlers the skin forwards to, which is what
+    /// [`DockChromeSlots`] carries — so one skin built once serves every
+    /// snapshot the script publishes.
+    pub(crate) fn create_dock(
+        &mut self,
+        id: &str,
+        version: Option<usize>,
+        skin: ScriptDockSkin,
+        application: Option<Rc<ApplicationGeneration>>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> EntityHandle {
+        let contexts = skin.contexts();
+        let slots = skin.slots();
+        let id = id.to_owned();
+        let area = cx.new(|cx| DockArea::new(id, version, window, cx).with_renderer(Rc::new(skin)));
+        self.push(Record::Dock {
+            area,
+            slots,
+            contexts,
+            application,
+            subscriptions: Vec::new(),
+        })
+    }
+
+    /// The area behind a dock handle, if it is still live and belongs here.
+    pub(crate) fn dock(&self, handle: EntityHandle) -> Option<Entity<DockArea>> {
+        match self.record(handle) {
+            Some(Record::Dock { area, .. }) => Some(area.clone()),
+            _ => None,
+        }
+    }
+
+    /// Where the next frame's chrome handlers are written.
+    pub(crate) fn dock_slots(&self, handle: EntityHandle) -> Option<Rc<DockChromeSlots>> {
+        match self.record(handle) {
+            Some(Record::Dock { slots, .. }) => Some(slots.clone()),
+            _ => None,
+        }
+    }
+
+    /// The contexts the last drawn frame recorded, which is what a command from
+    /// a script event handler is resolved against.
+    pub(crate) fn dock_contexts(&self, handle: EntityHandle) -> Option<Rc<DockContexts>> {
+        match self.record(handle) {
+            Some(Record::Dock { contexts, .. }) => Some(contexts.clone()),
+            _ => None,
+        }
+    }
+
+    /// Subscribes to a dock area's layout changes.
+    ///
+    /// One `Vec` and one handler, as the calendar's is: a second registration
+    /// means the second handler rather than both, which is what every other
+    /// `on(...)` in this API means.
+    pub(crate) fn subscribe_dock(
+        &mut self,
+        handle: EntityHandle,
+        window: &mut Window,
+        cx: &mut App,
+        handler: impl Fn(&DockEvent, &mut Window, &mut App) + 'static,
+    ) -> bool {
+        let area = match self.record(handle) {
+            Some(Record::Dock { area, .. }) => area.clone(),
+            _ => return false,
+        };
+        let subscription = window.subscribe(&area, cx, move |_, event: &DockEvent, window, cx| {
+            handler(event, window, cx)
+        });
+        match self.record_mut(handle) {
+            Some(Record::Dock { subscriptions, .. }) => {
+                subscriptions.clear();
+                subscriptions.push(subscription);
+                true
+            }
+            _ => false,
+        }
+    }
+
     /// The entity behind a one-time-code handle, if it is still live and
     /// belongs here.
     pub fn otp(&self, handle: EntityHandle) -> Option<Entity<OtpState>> {
@@ -781,6 +890,9 @@ impl EntityStore {
                     application: owner, ..
                 }
                 | Record::VirtualScroll {
+                    application: owner, ..
+                }
+                | Record::Dock {
                     application: owner, ..
                 } => owner,
             };

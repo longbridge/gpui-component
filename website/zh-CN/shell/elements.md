@@ -457,11 +457,11 @@ child, children, when, on_click, on_change, disabled, selected, checked, id
 ## 还没有的东西
 
 元素接口现在已经包含 Tabs、Table、Progress、表单控件、Popover/HoverCard
-锚定浮层、Textarea、Scrollbar、PathBuilder 与 VirtualList。仍刻意缺少：
+锚定浮层、Textarea、Scrollbar、PathBuilder、VirtualList，以及一个由脚本绘制
+chrome 的 [dock area](./dock.md)。仍刻意缺少：
 
 - 更高层的 List、Tree 系统，以及尚未接入的其他 `gpui-base` 组件；
-- `gpui.memo`——它能让未变化的子树跳过重建描述的那部分脚本工作；
-- dock 面板，以及让脚本绘制 dock 自身 chrome 的 renderer trait。
+- `gpui.memo`——它能让未变化的子树跳过重建描述的那部分脚本工作。
 
 焦点现在归脚本所有，但还不完整。仍然缺少的部分：
 

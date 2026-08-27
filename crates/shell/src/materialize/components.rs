@@ -23,6 +23,7 @@
 pub(super) mod accordion;
 pub(super) mod avatar;
 pub(super) mod collapsible;
+pub(super) mod dock;
 pub(super) mod fps;
 pub(super) mod group;
 pub(super) mod number_input;

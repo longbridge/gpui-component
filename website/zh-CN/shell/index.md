@@ -72,8 +72,8 @@ export default class Counter extends View {
 
 文本编辑、语法高亮、LSP、虚拟化与动画采样都留在 Rust。这条线是职责划分，而不是对脚本的限制：所有必须贴着 GPU 与系统运行的部分都归 Host，插件因此不会成为应用性能与稳定性上的变量。
 
-::: warning 插件是目标，接口尚未开放
-插件之下的机制已经建成并有测试覆盖——manifest 解析与发现、加载与卸载、每个插件独立的 policy 与数据目录，以及 `ScriptPanel`、`ScriptDockSkin`、面板名 interning 与注册表往返。但 `gpui_shell::dock` 目前是 crate-private，脚本还够不到面板，CLI 也尚未使用 `PluginManager`；贡献注册表（`gpui.command`、`gpui.register_panel`、`gpui.keymap`）与授权 UI 都还没做。**今天能完整跑通的是独立脚本这条路径。** 见 [Dock 面板](./dock.md)。
+::: warning 插件是目标，但接口还没有全部开放
+插件之下的机制已经建成并有测试覆盖——manifest 解析与发现、加载与卸载、每个插件独立的 policy 与数据目录。脚本现在已经可以贡献面板并绘制 dock 的 chrome：`DockArea`、`dock_area(...)` 与 `DockArea.register_panel` 都已公开，带着脚本面板的布局也能熬过一次重启。还缺的是贡献注册表的其余部分（`gpui.command`、`gpui.keymap`）、授权 UI，以及一个用上 `PluginManager` 的 CLI。**今天能完整跑通的是独立脚本这条路径，dock 也在其中。** 见 [Dock 与面板](./dock.md)。
 :::
 
 ## 核心特点
@@ -199,7 +199,7 @@ GPUI 的元素是**被消费**的值：`RenderOnce::render` 按值取走 `self`�
 | [Capabilities](./capabilities.md) | `gpui-shell.json`、默认拒绝、文件、存储、进程与网络 API |
 | [Hosting](./hosting.md) | Rust 这一侧的全貌：挂载、刷新、指标、退出、hot-reload |
 | [HostModule](./host-module.md) | 把 Host 自己的 Rust 借给脚本，以及那条纯数据边界 |
-| [Dock Panels](./dock.md) | 把脚本视图变成可停靠面板，以及重启后什么会留下 |
+| [Dock 与面板](./dock.md) | 把脚本视图变成可停靠面板、为它绘制 chrome，以及重启后什么会留下 |
 | [The Engine Seam](./engine.md) | QuickJS、这条分界线存在的理由，以及把脚本成本与帧成本分开的三项实测 |
 
 ## 当前状态

@@ -304,6 +304,19 @@ slider 的四个部件接受同一个 `SliderState`，而且四个都不能少�
 
 两种虚拟列表都接受 `(id, item_count, item_sizes, get_key, render)`。`render(range, cx)` 是这套接口里唯一由 Host 在一帧*进行中*调用的回调，所以在它内部注册处理器、创建留存状态与调用 `cx.notify()` 都会被拒绝。
 
+### Dock
+
+| 名称 | 是什么 |
+| --- | --- |
+| `DockArea.new(id, options?)` | 一个可停靠布局，retained；`options` 为 `{ version?: number }` |
+| `DockArea.register_panel(name, Class)` | 教会运行时用 `Class` 重建 `name` 这块面板；返回加了命名空间的名字 |
+| `dock_area(area)` | 画出它，并承载六个 chrome handler |
+| `dock_content()` | 一侧 dock 自己的面板，在你画的 chrome 里应该出现的位置 |
+
+area 上的方法是 `add_panel(view, options)`、`remove_panel(id)`、`panels()`、`dump()`、`load(state)`、`has_dock`、`is_dock_open`、`toggle_dock`、`remove_dock`、`dock_size`、`set_dock_size`、`set_dock_collapsible`、`is_locked`、`set_locked`、`is_zoomed`、`zoom_out`、`on("layout_changed", handler)` 与 `release()`。
+
+**每一次编辑都在发起它的那次调用返回之后按调用顺序应用**——面板的主体来自 `cx.new(Class)`，那时它自己还在构造中——所以 `panels()` 与 `dump()` 读到的是本轮编辑之前的布局。见 [Dock 与面板](./dock.md)。
+
 ### 留存句柄
 
 每一个都只创建一次——在 `init` 或事件处理器里，绝不在 `render` 里——并且每一个都有 `release(): boolean`，返回它当时是否还活着。释放之后再用会抛异常。
@@ -430,6 +443,13 @@ base 的 `Calendar` 元素**没有**绑定，这是个决定而不是遗漏：�
 | `PartType` | `gpui-base` 中没有自身身份的子部件共同使用的 `new()` 形态 |
 | `Placement` | `"top"`、`"bottom"`、`"left"` 或 `"right"`，镜像 `gpui_base::Placement` |
 | `ComponentType` | `gpui-base` 中带身份的组件构造器共同使用的 `new(id)` 形态 |
+| `DockPlacement` | `"center"`、`"left"`、`"right"` 或 `"bottom"` |
+| `DockPanel` | `panels()` 报告的一块面板：`id`、`name`、`placement`、`node`、`index`、`active` 与三个标志位 |
+| `DockGroup` / `DockTab` | 一个标签组与它的一个标签页，也就是 `tab_bar` 与 `empty_group` 拿到的东西 |
+| `DockRegion` | 一侧 dock，也就是 `dock` handler 拿到的东西 |
+| `DockTile` | 一个 tile，bounds 已经解析好 |
+| `DockDrop` | 被拖动的面板会落在哪里 |
+| `TileResizeSide` | `"left"`、`"right"`、`"top"`、`"bottom"` 或 `"bottom_right"` |
 
 ### 组合模式
 
@@ -660,6 +680,38 @@ render(_cx) {
 | `open_delay(ms)` | 指针要在 `HoverCard` 触发器上停留多久；默认 600 |
 | `close_delay(ms)` | `HoverCard` 关闭前等待多久；默认 300 |
 | `overlay_closable(value)` | 在打开的 `Popover` 之外按下是否将其关闭 |
+
+### Dock 命令
+
+dock 的 chrome 画出来的元素*做什么*。chrome handler 每个容器每帧调用一次，所以它里面不能注册事件处理器——取而代之的是不携带任何脚本值的命令，由 base 完成实际动作。每一个的第一个参数都是它所在 handler 拿到的那个对象；它们只能挂在 `div`、`h_flex` 或 `v_flex` 上。
+
+| 方法 | 触发 | 作用 |
+| --- | --- | --- |
+| `select_tab(group, index)` | 点击 | 显示那个标签页 |
+| `close_panel(group, panel_id)` | 点击 | 关闭该面板（如果它所在的 group 允许） |
+| `toggle_zoom(group)` | 点击 | 放大 group，或还原 |
+| `drag_tab(group, index)` | 拖动 | 让该元素成为这个标签页的拖动源 |
+| `drop_tab(group, index?)` | 放下 | 在此接收被拖来的面板；不给 index 就追加到末尾 |
+| `toggle_dock(dock)` | 点击 | 展开或收起这侧 dock |
+| `resize_dock(dock)` | 拖动 | 拖动 dock 的边；每个位置都由 base 钳制 |
+| `move_tile(tile)` | 拖动 | 在画布上移动这个 tile |
+| `resize_tile(tile, side)` | 拖动 | 拖动某条边或某个角 |
+| `raise_tile(tile)` | 按下 | 把这个 tile 提到最上层 |
+| `toggle_tile_zoom(tile)` | 点击 | 让 tile 放大占满所在 dock |
+| `close_tile(tile)` | 点击 | 关闭这个 tile |
+
+### Dock chrome
+
+六个 handler，全都可选，且只能挂在 `dock_area(...)` 上。每一个都在 GPUI 的 layout pass 内部被调用，拿到的是 base 已经解析好的状态。
+
+| 方法 | 画什么 |
+| --- | --- |
+| `tab_bar(handler)` | 一个 group 当前显示面板上方的标签栏 |
+| `empty_group(handler)` | 没有可显示面板的 group 显示什么 |
+| `drop_indicator(handler)` | 被拖动的面板会落在哪里 |
+| `dock(handler)` | 一侧 dock 包住内容的外框；把 `dock_content()` 放进去 |
+| `tile_drag_bar(handler)` | 拖动 tile 用的那条拖拽条 |
+| `tile_resize_handles(handler)` | tile 的缩放把手 |
 
 ### 动效
 

@@ -457,12 +457,12 @@ This matters more than it looks. A mistyped style name changes nothing on screen
 ## Not there yet
 
 The element surface now includes Tabs, Table, Progress, form controls, anchored
-Popover/HoverCard surfaces, Textarea, Scrollbar, PathBuilder, and VirtualList.
-Still missing, deliberately:
+Popover/HoverCard surfaces, Textarea, Scrollbar, PathBuilder, VirtualList, and a
+[dock area](./dock.md) whose chrome the script draws. Still missing,
+deliberately:
 
 - the higher-level List and Tree systems and the remaining `gpui-base` components;
-- `gpui.memo`, which would let an unchanged subtree skip the script work that rebuilds its description;
-- dock panels, and the renderer traits that would let a script draw the dock's own chrome.
+- `gpui.memo`, which would let an unchanged subtree skip the script work that rebuilds its description.
 
 Focus is now the script's to own, but not all of it. Still missing:
 

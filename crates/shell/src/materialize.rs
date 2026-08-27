@@ -346,6 +346,20 @@ struct Behavior {
     /// Which item a `VirtualList` measures to infer its cross-axis size.
     /// `None` keeps base's own default, which is the first.
     item_to_measure_index: Option<usize>,
+    /// The dock commands a chrome element carries — what base is asked to do
+    /// when it is clicked or dragged.
+    ///
+    /// A list, because one element often carries two: a tile's drag bar both
+    /// raises the tile and moves it, and a tab both selects and drags.
+    dock_commands: SmallVec<[crate::dock::DockAction; 2]>,
+    /// Which script handler draws each piece of a `dock_area`'s chrome.
+    ///
+    /// Six handlers in one field rather than six fields, because they are
+    /// written together: they leave here for the [`DockChromeSlots`] the skin
+    /// reads, and a skin reads all six or none.
+    ///
+    /// [`DockChromeSlots`]: crate::dock::DockChromeSlots
+    dock_chrome: crate::dock::DockChromeHooks,
     /// The retained scroll position a `VirtualList` was told to drive.
     virtual_scroll: Option<crate::entities::EntityHandle>,
     /// This item's one-based position in its collection, and the collection's
@@ -1096,6 +1110,13 @@ fn materialize_component(
         Component::Scrollbar(id) => {
             components::scrollbar::scrollbar(id, refinement, behavior, states, children, window, cx)
         }
+        Component::DockArea(handle) => {
+            let hooks = behavior.dock_chrome;
+            components::dock::dock_area(
+                runtime, handle, hooks, refinement, behavior, states, children, window, cx,
+            )
+        }
+        Component::DockContent => components::dock::dock_content(refinement, behavior, children),
         Component::VirtualList(spec) => components::virtual_list::virtual_list(
             runtime, &spec, refinement, behavior, states, children, window, cx,
         ),
@@ -1680,6 +1701,7 @@ fn flex_element(
     let stateful = element.id(identity.clone());
     let stateful = with_gpui_focus(stateful, &behavior, focus.as_ref());
     let stateful = with_input_handlers(stateful, &behavior, runtime);
+    let stateful = components::dock::with_commands(stateful, &behavior, runtime, cx);
     let stateful = with_aria(stateful, &behavior);
     let mut stateful = with_active_and_focus(stateful, &states);
     if !behavior.disabled
@@ -2120,6 +2142,12 @@ pub(in crate::materialize) fn resolve_ops(
                 "on_confirm" => behavior.on_confirm = Some(*id),
                 "on_dismiss" => behavior.on_dismiss = Some(*id),
                 "on_item_click" => behavior.on_item_click = Some(*id),
+                "tab_bar" => behavior.dock_chrome.tab_bar = Some(*id),
+                "empty_group" => behavior.dock_chrome.empty_group = Some(*id),
+                "drop_indicator" => behavior.dock_chrome.drop_indicator = Some(*id),
+                "dock" => behavior.dock_chrome.dock = Some(*id),
+                "tile_drag_bar" => behavior.dock_chrome.tile_drag_bar = Some(*id),
+                "tile_resize_handles" => behavior.dock_chrome.tile_resize_handles = Some(*id),
                 other => tracing::error!("unhandled callback `{other}` reached materialize"),
             },
             SpecOp::ActionCallback(id, callback) => {
@@ -2439,8 +2467,143 @@ fn warn_unsupported(component: &str, methods: &[(&str, bool)]) {
     }
 }
 
+/// The dock command one chrome method names, or `None` for a method that is
+/// not one.
+///
+/// Every one of them takes the dock handle first, because a command is resolved
+/// against the contexts of *that* area — the script passes the container object
+/// it was handed, and the prelude unpacks the handle out of it. What follows
+/// names the container inside the area: a group's node, a dock's placement, or
+/// a tile's panel.
+fn is_dock_command(name: &str) -> bool {
+    matches!(
+        name,
+        "select_tab"
+            | "close_panel"
+            | "toggle_zoom"
+            | "drag_tab"
+            | "drop_tab"
+            | "toggle_dock"
+            | "resize_dock"
+            | "move_tile"
+            | "resize_tile"
+            | "raise_tile"
+            | "toggle_tile_zoom"
+            | "close_tile"
+    )
+}
+
+fn dock_action(name: &str, args: &[Bridged]) -> Option<crate::dock::DockAction> {
+    use crate::dock::{DockAction, DockCommand};
+
+    let number = |index: usize| args.get(index).and_then(|value| value.as_f32().ok());
+    let handle = |index: usize| {
+        args.get(index).and_then(|value| match value {
+            Bridged::Number(raw) if *raw >= 0.0 => Some(*raw as crate::entities::EntityHandle),
+            _ => None,
+        })
+    };
+    let whole = |index: usize| {
+        number(index)
+            .filter(|value| *value >= 0.0)
+            .map(|value| value as usize)
+    };
+    let text = |index: usize| args.get(index).and_then(|value| value.as_str().ok());
+
+    let dock = handle(0)?;
+    let node = || handle(1);
+    let panel = || handle(1);
+
+    let command = match name {
+        "select_tab" => DockCommand::SelectTab {
+            node: node()?,
+            index: whole(2)?,
+        },
+        "close_panel" => DockCommand::ClosePanel {
+            node: node()?,
+            panel: handle(2)?,
+        },
+        "toggle_zoom" => DockCommand::ToggleGroupZoom { node: node()? },
+        "drag_tab" => DockCommand::DragTab {
+            node: node()?,
+            index: whole(2)?,
+        },
+        // The one optional argument in the set: a tab bar that names no slot
+        // means "append", which is what a drop past the last tab is.
+        "drop_tab" => DockCommand::DropTab {
+            node: node()?,
+            index: whole(2),
+        },
+        "toggle_dock" => DockCommand::ToggleDock {
+            placement: dock_placement(text(1)?)?,
+        },
+        "resize_dock" => DockCommand::ResizeDock {
+            placement: dock_placement(text(1)?)?,
+        },
+        "move_tile" => DockCommand::MoveTile { panel: panel()? },
+        "resize_tile" => DockCommand::ResizeTile {
+            panel: panel()?,
+            side: resize_side(text(2)?)?,
+        },
+        "raise_tile" => DockCommand::RaiseTile { panel: panel()? },
+        "toggle_tile_zoom" => DockCommand::ToggleTileZoom { panel: panel()? },
+        "close_tile" => DockCommand::CloseTile { panel: panel()? },
+        _ => return None,
+    };
+
+    Some(DockAction::new(dock, command))
+}
+
+/// The four regions of an area, spelled as the persisted layout spells them.
+pub(crate) fn dock_placement(name: &str) -> Option<gpui_base::dock::DockPlacement> {
+    use gpui_base::dock::DockPlacement;
+    match name {
+        "center" => Some(DockPlacement::Center),
+        "left" => Some(DockPlacement::Left),
+        "right" => Some(DockPlacement::Right),
+        "bottom" => Some(DockPlacement::Bottom),
+        _ => {
+            tracing::error!(
+                "`{name}` is not a dock placement; expected \"center\", \"left\", \"right\" or \"bottom\""
+            );
+            None
+        }
+    }
+}
+
+/// Which edge or corner of a tile a resize handle pulls.
+fn resize_side(name: &str) -> Option<gpui_base::dock::ResizeSide> {
+    use gpui_base::dock::ResizeSide;
+    match name {
+        "left" => Some(ResizeSide::Left),
+        "right" => Some(ResizeSide::Right),
+        "top" => Some(ResizeSide::Top),
+        "bottom" => Some(ResizeSide::Bottom),
+        "bottom_right" => Some(ResizeSide::BottomRight),
+        _ => {
+            tracing::error!(
+                "`{name}` is not a tile resize side; expected \"left\", \"right\", \"top\", \
+                 \"bottom\" or \"bottom_right\""
+            );
+            None
+        }
+    }
+}
+
 fn apply_behavior(behavior: &mut Behavior, name: &str, args: &[Bridged]) {
     let flag = args.first().map(Bridged::is_truthy);
+    // Before the table below, and with its own early return: a dock command
+    // that failed to parse must not fall through to a name-keyed match whose
+    // last arm is `accessibility_label`.
+    if is_dock_command(name) {
+        match dock_action(name, args) {
+            Some(action) => behavior.dock_commands.push(action),
+            None => tracing::error!(
+                "`{name}` did not name a container in a dock area; the command is dropped"
+            ),
+        }
+        return;
+    }
     match name {
         "accessibility_label" => {
             behavior.accessibility_label = args
