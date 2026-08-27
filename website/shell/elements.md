@@ -377,7 +377,7 @@ Still missing, deliberately:
 
 Focus is now the script's to own, but not all of it. Still missing:
 
-- **Keyboard navigation inside a composite.** Tab and Shift-Tab move between controls; the arrow keys that move within a listbox, a menu or a tab list do not exist, because the runtime has no action or key-binding layer for a script to reach.
+- **Keyboard navigation inside a composite, which is yours to write.** Tab and Shift-Tab move between controls; the arrow keys that move *within* a listbox, a menu or a tab list do not appear on their own. The pieces exist now — `on_key_down`, `cx.bind_keys` and `key_context` — but turning ↑ / ↓ into a moving highlight is still the script's job.
 - **The first Tab into an unfocused window.** While nothing at all holds focus, the root's Tab binding has no dispatch path to reach; focus has to arrive some other way first — a click, or `handle.focus()`.
 - **`Tab`, `Tabs`, and the table, group and progress parts** stay out of the Tab order. Base leaves them out of keyboard focus, and `tab_index` on one of them is reported rather than honoured.
 - **`track_focus` on `Link` and `Switch`**, for the same reason: they build their own handle and expose no builder to replace it.

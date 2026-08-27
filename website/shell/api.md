@@ -284,7 +284,7 @@ There is no numeric state type: an `InputState` becomes a number state by being 
 | [`Combobox`](../base/primitives/combobox.md) | The same root, announced as a combobox whose trigger is an editable field |
 | [`DatePicker`](../base/primitives/date-picker.md) | A date-picker root: `DatePicker.new(id, focus_handle)`; it holds no date |
 
-Two gaps are worth knowing before you build on these: arrow-key navigation of an open `Select` or `Combobox` list is not there, and Enter and Escape do not reach a `DatePicker`. Both are described where they bite, in the declarations for each type.
+Two gaps are worth knowing before you build on these: arrow-key navigation of an open `Select` or `Combobox` list is yours to wire (the pieces are there — see below), and Enter and Escape do not reach a `DatePicker`. Both are described where they bite, in the declarations for each type.
 
 ### Tables and lists
 
@@ -483,7 +483,7 @@ Select.new("mode")
   );
 ```
 
-Arrow-key navigation of an open list is not there: base expects whatever is inside to run the highlight from its own key bindings, and the shell has no key-binding layer. The pointer works, Escape closes, Enter and ↓ open.
+Arrow-key navigation of an open list is yours to write: base expects whatever is inside to run the highlight from its own key bindings, and nothing does that for you. The pieces are here — put `on_key_down` on the content element the keyboard was moved to, or bind ↑ / ↓ to actions under a `key_context` of your own. Out of the box the pointer works, Escape closes, Enter and ↓ open, and the highlight does not move.
 
 **A virtual list and its scrollbar are paired by name.** The list paints no bar of its own, and nothing checks the pairing before it runs, so both halves are needed.
 

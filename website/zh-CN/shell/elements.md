@@ -376,7 +376,7 @@ child, children, when, on_click, on_change, disabled, selected, checked, id
 
 焦点现在归脚本所有，但还不完整。仍然缺少的部分：
 
-- **复合控件内部的键盘导航。** Tab 与 Shift-Tab 能在控件之间移动；在 listbox、菜单或 tab list *内部*移动的方向键还没有，因为运行时还没有可供脚本使用的 action 与快捷键层。
+- **复合控件内部的键盘导航，需要自己写。** Tab 与 Shift-Tab 能在控件之间移动；在 listbox、菜单或 tab list *内部*移动的方向键不会自动出现。零件现在都有了——`on_key_down`、`cx.bind_keys` 与 `key_context`——但把 ↑ / ↓ 变成高亮移动这件事仍然是脚本的活。
 - **窗口尚无焦点时的第一次 Tab。** 只要还没有任何元素持有焦点，根视图的 Tab 绑定就没有可达的分发路径；焦点必须先以别的方式进入——点击，或者 `handle.focus()`。
 - **`Tab`、`Tabs`，以及 table、group、progress 的各个部件**不在 Tab 顺序里。base 本身就把它们排除在键盘焦点之外，对它们调用 `tab_index` 会被记录而不是被承接。
 - **`Link` 与 `Switch` 上的 `track_focus`**，原因相同：它们自己构建 handle，且不暴露替换它的 builder。

@@ -284,7 +284,7 @@ slider 的四个部件接受同一个 `SliderState`，而且四个都不能少�
 | [`Combobox`](../../base/primitives/combobox.md) | 同一个根，被报读为一个触发器是可编辑输入框的 combobox |
 | [`DatePicker`](../../base/primitives/date-picker.md) | 日期选择器的根：`DatePicker.new(id, focus_handle)`；它不持有日期 |
 
-在这些之上动手之前，有两处缺口值得先知道：打开的 `Select` 或 `Combobox` 列表还没有方向键导航，而 Enter 与 Escape 到不了 `DatePicker`。两者都写在各自类型的声明里，也就是它们真正咬人的地方。
+在这些之上动手之前，有两处缺口值得先知道：打开的 `Select` 或 `Combobox` 列表的方向键导航要你自己接（零件都在，见下），而 Enter 与 Escape 到不了 `DatePicker`。两者都写在各自类型的声明里，也就是它们真正咬人的地方。
 
 ### 表格与列表
 
@@ -483,7 +483,7 @@ Select.new("mode")
   );
 ```
 
-展开后用方向键移动高亮这件事目前没有：base 期待里面的东西用自己的按键绑定来跑高亮，而 shell 没有按键绑定层。指针可用，Escape 关闭，Enter 与 ↓ 展开。
+展开后用方向键移动高亮这件事要你自己写：base 期待里面的东西用自己的按键绑定来跑高亮，而它不会替你跑。零件都在——把 `on_key_down` 放在键盘被移过去的那个 content 元素上，自己移动高亮；或者在自己的 `key_context` 下把 ↑ / ↓ 绑到 action。开箱状态是：指针可用，Escape 关闭，Enter 与 ↓ 展开，高亮不动。
 
 **虚拟列表和它的滚动条按名字配对。** 列表自己不画滚动条，而且配对在运行前不做任何校验，所以两半都要写。
 

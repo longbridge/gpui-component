@@ -1409,13 +1409,11 @@ That is a real gap rather than a simplification, because it means the semantic
 precedence rules in [Styling and Motion](STYLING-AND-MOTION.md) are not
 available to a script; the script re-derives them with `when`.
 
-### 10.5 Keyboard events
+### 10.5 Input events
 
-`on_key_down(handler)` and `on_key_up(handler)` are GPUI's own
-`InteractiveElement` builders, and they carry the same routing rule: a key
-event travels the focus path, so an element hears one only while it — or
-something inside it — holds the keyboard. `track_focus(handle)` is therefore
-half of the registration rather than an unrelated call.
+`on_key_down`, `on_key_up`, `on_mouse_down(button, …)`, `on_mouse_up`,
+`on_mouse_down_out` and `on_scroll_wheel` are GPUI's own `InteractiveElement`
+builders, installed together by `materialize::with_input_handlers`.
 
 ```js
 div()
@@ -1428,11 +1426,34 @@ div()
   });
 ```
 
-The payload carries the keystroke twice. `keystroke` is `Keystroke::unparse` —
-the `"cmd-shift-s"` spelling a key binding is written in, and the form a
-comparison is actually written against — and `key` with `modifiers` is the same
-thing taken apart, for when only one half matters. Reproducing the first from
-the second is exactly the fiddly work that belongs on the Rust side.
+**Where they are installed.** `div`, `h_flex`, `v_flex`, `Button`, `Link`,
+`Checkbox`, `Switch`, `Radio`, `Toggle`, `Tabs` and `Tab`. Every other
+component builds its own base type and hangs its own listeners on it, so a
+handler written there is recorded in the description and never reaches GPUI —
+reported by `warn_unhonoured_input`, the way `tooltip` reports the same shape
+of gap. Widening the list is one call per component, not a new mechanism.
+
+The two kinds route differently and it shows: a key event travels the focus
+path, a pointer event travels the hitbox. So a component that accepts no
+script focus handle — `Tab` — hears presses and never hears keys, however well
+both are wired. That is a property of the component, not of the wiring.
+
+**One function for both kinds, and that is load-bearing.** An earlier version
+factored out only the keyboard and left the pointer inline in the `div` arm, so
+every component the helper was applied to answered keys and silently ignored
+presses — while the table naming which components honour input claimed all of
+it. Half a family is worse than none, because the table is then wrong rather
+than incomplete.
+
+**The keystroke spelling is normalized.** `keystroke` is the whole chord, but
+not `Keystroke::unparse`: GPUI spells the platform modifier for the platform it
+was built for — `cmd-`, `super-`, `win-` — which is right for a keymap a person
+reads and wrong for a string a program compares. A script is one file running
+on all three, so `event.keystroke === "cmd-s"` has to mean the same thing
+everywhere. `materialize`'s `script_keystroke` spells it `cmd` on every
+platform, which is a spelling `Keystroke::parse` accepts everywhere, so a
+binding and the event it produces agree by construction. `key` and `modifiers`
+carry the same chord taken apart.
 
 `cx.stop_propagation()` and `cx.propagate()` mirror `App`'s own pair, and are
 not specific to the keyboard: GPUI delivers every event to every handler on the
@@ -1937,6 +1958,17 @@ in scope: Checkbox, Radio, Switch, Toggle, Link, Input/Textarea, Select,
 Combobox, Tabs, Dialog, Sheet, Popover, Tooltip, Scrollbar, Tree, Table,
 VirtualList, Dock, and the rest of the [module
 families](ARCHITECTURE.md#module-families).
+
+Two things are bound as *state without their element*, and the reason is
+render cost rather than cross-language cost. `Calendar` walks its month grid
+calling a renderer once per cell — up to forty-two crossings into the VM per
+frame, from inside GPUI's layout pass, for cells that carry no behavior at all;
+the exception §8 records for a virtual list is one batched call per frame, not
+forty-two unbatched ones. What a script cannot work out for itself is the grid,
+and `CalendarState::month_days` is public, so the state is bound and the
+element is not. `AlertDialog`'s four parts are the opposite case and the same
+answer: they are `div`s with fixed ids, `window.open_dialog` already exists,
+and binding them would add names without adding behavior.
 
 `input::Editor`'s LSP, folding, diagnostics, and highlighting interfaces are
 not, and will not be. They are built from Rust traits and generics —
@@ -3541,19 +3573,24 @@ both direct loading and asynchronous initialization under a manifest policy.
 
 ### Not built
 
-`gpui.memo` and every other memoization. Component bindings beyond `div`,
-`text`, `svg`, `Button`, `Link`, `Checkbox`, `Switch`, and `Input` — no Select, Tabs,
-Tree, Table, VirtualList, Radio, Toggle, Popover, Tooltip, or Textarea, and
-therefore no virtualization, which is the largest unrealized performance win.
+`gpui.memo` and every other memoization. Of base's components, `Tree` and the
+higher-level `List` are not bound, nor is `Calendar`'s element (§14.2 —
+`CalendarState` is), nor `AlertDialog`'s parts (§14.2), nor `ColorPicker`.
 Semantic state styles (checked, selected, disabled) with base's precedence rules.
-Actions and key bindings. `gpui.open_window` and multi-window
-applications. A contribution registry — no `gpui.command`,
-`gpui.keymap`, `gpui.register_panel`, or `gpui.register_theme`. The capability
-authorization model: prompting, persistence, host policy, and re-asking on
-upgrade. The binding table and the rustdoc-JSON drift check. Packaging and
-distribution. The intrinsic-level `Eval`
-withholding. DevTools and `gc_stats`. State preservation across a reload. A
-shipped preset module. The `gpui-component` binding registry.
+`gpui.open_window` and multi-window applications. A contribution registry — no
+`gpui.command`, `gpui.keymap`, `gpui.register_panel`, or `gpui.register_theme`;
+key bindings exist (§10.6) but are installed by a running script rather than
+declared in a manifest. The capability authorization model: prompting,
+persistence, host policy, and re-asking on upgrade. The binding table and the
+rustdoc-JSON drift check. Packaging and distribution. The intrinsic-level
+`Eval` withholding. DevTools and `gc_stats`. State preservation across a
+reload. A shipped preset module. The `gpui-component` binding registry.
+
+Drag and drop is not bound either, and that is a measurement rather than an
+omission: `crates/story`, which is an application written with the library and
+so is what a script author is, uses `on_drag` and `on_drop` once each, against
+94 uses of `on_action`. The library's own internals use it eighteen times, all
+of them inside `table`, `list` and `dock`.
 
 ---
 

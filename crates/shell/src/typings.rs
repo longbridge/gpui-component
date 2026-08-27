@@ -2291,13 +2291,14 @@ const BASE: &str = r#"  /** A row. */
    * `content_focus_handle(...)` the list's; without the first, nothing on
    * screen has the keyboard and no key reaches the root at all.
    *
-   * **Arrow-key navigation of an open list is not there.** Base opens the list
-   * on ↑ / ↓ / Enter, moves the keyboard onto the content handle and then
+   * **Arrow-key navigation of an open list is yours to write.** Base opens the
+   * list on ↑ / ↓ / Enter, moves the keyboard onto the content handle and then
    * expects whatever is inside to run the highlight from its own key bindings.
-   * The shell has no key-binding layer, so nothing takes over: the pointer
-   * works, Escape closes, Enter and ↓ open, and moving the highlight with the
-   * keyboard once open does not. Say so in your UI rather than shipping a
-   * control that looks keyboard-operable and is not.
+   * Nothing does that for you — but the pieces are here: put `on_key_down` on
+   * the content element the keyboard was moved to and move your own highlight,
+   * or bind ↑ / ↓ to actions under a `key_context` of your own. Out of the box
+   * the pointer works, Escape closes, Enter and ↓ open, and the highlight does
+   * not move; a control shipped that way looks keyboard-operable and is not.
    *
    * **The highlighted option marks itself.** GPUI puts the active descendant on
    * the option element rather than on the container, so the root cannot mark
