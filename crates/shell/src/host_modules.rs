@@ -480,7 +480,8 @@ impl HostModule {
                     .strip_prefix("export function ")
                     .or_else(|| line.strip_prefix("export declare function "))
                     .or_else(|| line.strip_prefix("export const "))?;
-                let end = rest.find(|it: char| !it.is_ascii_alphanumeric() && it != '_' && it != '$');
+                let end =
+                    rest.find(|it: char| !it.is_ascii_alphanumeric() && it != '_' && it != '$');
                 Some(&rest[..end.unwrap_or(rest.len())])
             })
             .collect();
@@ -953,7 +954,11 @@ mod tests {
         assert_eq!(modules.module_names(), vec!["market"]);
 
         let error = modules.validate().unwrap_err();
-        assert!(error.message().contains("path, gpui"), "{}", error.message());
+        assert!(
+            error.message().contains("path, gpui"),
+            "{}",
+            error.message()
+        );
         assert!(
             error.message().contains("belong to the runtime"),
             "{}",
@@ -1006,7 +1011,9 @@ mod tests {
 
         let error = modules.validate().unwrap_err();
         assert!(
-            error.message().contains("registered but not declared: quotes"),
+            error
+                .message()
+                .contains("registered but not declared: quotes"),
             "{}",
             error.message()
         );

@@ -87,7 +87,7 @@ impl RuntimeMetrics {
     }
 
     /// Of [`script_render_time`], how much was spent inside host functions the
-    /// script called — `native("market").quotes()` and the like.
+    /// script called — a `quotes()` imported from a host module, and the like.
     ///
     /// Subtracting it leaves the part that is genuinely the script describing
     /// itself: JavaScript, the boundary crossings, and the arena.

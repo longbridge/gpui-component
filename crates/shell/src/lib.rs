@@ -57,9 +57,9 @@ pub(crate) mod dock;
 pub(crate) mod engine;
 pub(crate) mod entities;
 pub(crate) mod error;
+pub mod host_modules;
 pub(crate) mod materialize;
 pub mod metrics;
-pub mod host_modules;
 pub(crate) mod path;
 pub mod plugin;
 pub mod policy;
@@ -84,11 +84,11 @@ pub use assets::AppAssets;
 pub use capability::{Capabilities, ExecuteGrant, HttpRequestGrant};
 pub use engine::ShellRuntime;
 pub use error::ShellError;
-pub use metrics::RuntimeMetrics;
 pub use host_modules::{
     HostArguments, HostError, HostModule, HostModules, HostObject, HostResult, HostValue,
     RESERVED_SPECIFIERS,
 };
+pub use metrics::RuntimeMetrics;
 pub use root::{DialogOptions, SheetSide, ShellRoot, ToastLevel, ToastRequest};
 pub use runtime::{
     ExitHandler, ExitRequest, clear_exit_handler, failure_surface, on_exit_request,

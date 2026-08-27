@@ -178,10 +178,7 @@ fn host_modules() -> String {
             }
             None => {
                 for function in module.function_names() {
-                    let _ = writeln!(
-                        out,
-                        "  export function {function}(...args: any[]): any;"
-                    );
+                    let _ = writeln!(out, "  export function {function}(...args: any[]): any;");
                 }
             }
         }

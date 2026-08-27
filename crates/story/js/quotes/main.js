@@ -18,6 +18,7 @@
 import { View } from "gpui";
 import { h_flex, v_flex } from "gpui-base";
 import { quotes as readQuotes, ticks as readTicks, watch, watch_all } from "market";
+/** @import { Quote } from "market" */
 import {
   ROW,
   SPACE,
@@ -44,9 +45,9 @@ export default class QuoteBoard extends View {
     return surface()
       .child(this.heading(quotes.length, watched, ticks, cx))
       .child(header(cx))
-      .child(this.rows(market, quotes, cx))
+      .child(this.rows(quotes, cx))
       .child(rule(cx))
-      .child(this.actions(market, quotes.length, watched, cx));
+      .child(this.actions(quotes.length, watched, cx));
   }
 
   /**
@@ -77,11 +78,10 @@ export default class QuoteBoard extends View {
   }
 
   /**
-   * @param {NativeModules["market"]} market
    * @param {Quote[]} quotes
    * @param {import("gpui").Context} cx
    */
-  rows(market, quotes, cx) {
+  rows(quotes, cx) {
     if (quotes.length === 0) {
       return muted("The Rust panel is holding no quotes.", cx);
     }
@@ -97,12 +97,11 @@ export default class QuoteBoard extends View {
   }
 
   /**
-   * @param {NativeModules["market"]} market
    * @param {number} total
    * @param {number} watched
    * @param {import("gpui").Context} cx
    */
-  actions(market, total, watched, cx) {
+  actions(total, watched, cx) {
     return h_flex()
       .w_full()
       .items_center()

@@ -165,7 +165,7 @@ import { fps_monitor } from "gpui-fps";
 Where a binding lives in Rust decides where it lives here: an `App` method is a
 `cx` method, a `Window` method is on the `window` global, a type's `::new` is
 `Type.new(...)`, and a free function stays a free function. Only what has no
-GPUI or base original — `store`, `native` — is a module member. Diagnostics are
+GPUI or base original — `store` — is a module member. Diagnostics are
 JavaScript's own global `console`.
 
 ### Elements
@@ -405,20 +405,26 @@ The style methods, their argument types and the colour-token union are generated
 from the tables the runtime dispatches through, so a name that type-checks is a
 name the dispatcher accepts.
 
-Host-registered native modules cannot be generated — only the host knows what it
-granted — so an application declares its own and gets a checked module name with
-completing functions:
+Host modules are generated too, one `declare module` per registered name, so
+`import { quotes } from "market"` is checked the way a built-in import is. A
+module describes its own TypeScript face in Rust, beside the registration:
 
-```ts
-declare module "gpui" {
-  interface NativeModules {
-    market: { quotes(): Quote[]; watch(symbol: string): boolean };
-  }
-}
+```rust
+module.declarations(r#"
+    export interface Quote { symbol: string; watched: boolean }
+    export function quotes(): Quote[];
+    export function watch(symbol: string): boolean;
+"#);
 ```
 
-`crates/story/js/quotes/` has both files plus a `jsconfig.json` that turns on
-checking, and is the shape to copy.
+`export_modules` compares that against what was actually registered and refuses
+a mismatch, so renaming a function on one side is a sentence at start-up rather
+than an editor completing something that is gone. Declaring nothing is allowed
+and yields `(...args: any[]) => any` signatures, which still check the module
+name and every export name.
+
+`crates/story/js/quotes/` has a `jsconfig.json` that turns on checking, and is
+the shape to copy.
 
 ### Keeping it current
 
@@ -440,7 +446,7 @@ A directory that refuses the write is logged, never fatal.
 Do not commit it. This repository ignores `gpui.d.ts` everywhere, including
 beside its own example and story scripts — a committed copy could only ever be
 the stale one. What *is* committed is the hand-written part: a `jsconfig.json`
-that turns checking on, and the application's own native-module declarations.
+that turns checking on.
 
 The header names the gpui-shell version that generated it. Application/runtime
 compatibility is declared separately by `shell-version` in `gpui-shell.json`
@@ -465,9 +471,9 @@ runtime.refresh(&root, cx)?;
 // What it is costing: script renders against frames, with the time each took.
 let reading = runtime.read_metrics();
 
-// Native module closures capture host entity handles, so a host that goes away
+// Host module closures capture host entity handles, so a host that goes away
 // clears them. GPUI's leak check catches a host that forgets.
-gpui_shell::clear_native_modules();
+gpui_shell::clear_exported_modules();
 ```
 
 ## How It Works

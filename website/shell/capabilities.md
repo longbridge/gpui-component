@@ -8,7 +8,7 @@ order: 8
 
 A script gets **nothing** by default. No file access, no storage, no clipboard, no process execution, no network. `Capabilities::default()` is the empty set, and an assertion holds it there.
 
-The host grants what it grants, because only the host knows how far it trusts the code it is about to run. What it hands *out* — its own Rust, exposed on purpose — is [Native Modules](./native.md). A view freezes its capabilities when it is loaded; changing the default affects applications loaded afterward, never code that is already running under an approved grant.
+The host grants what it grants, because only the host knows how far it trusts the code it is about to run. What it hands *out* — its own Rust, exposed on purpose — is [Host Modules](./host-modules.md). A view freezes its capabilities when it is loaded; changing the default affects applications loaded afterward, never code that is already running under an approved grant.
 
 ```rust
 gpui_shell::set_capabilities(

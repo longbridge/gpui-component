@@ -9,6 +9,7 @@
 import { div } from "gpui";
 import { h_flex, v_flex, Button } from "gpui-base";
 /** @import { AbsoluteLength, ClickEvent, Context } from "gpui" */
+/** @import { Quote } from "market" */
 
 /// Every measurement here is in **rems**, so the panel scales with the window's
 /// text size instead of pinning itself to a pixel grid that only exists at the

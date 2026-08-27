@@ -61,26 +61,29 @@ order: 13
 
 未设置的键 `store.get` 返回 `null`；`flush()` 在当前值被可靠写入之后完成。
 
-### Native 模块
+### Host 模块
 
-| 名称 | 说明 |
-| --- | --- |
-| `native(module)` | 宿主在 Rust 侧注册的模块；一个都没找到时抛异常，并列出存在的那些 |
-| `NativeModules` | 这里是空的——应用把自己的模块声明进去，`native("…")` 就有了类型 |
+宿主在 Rust 侧注册的模块，按名字 import，和其它模块没有区别：
+
+```js
+import { quotes } from "market";
+```
+
+它不属于 `"gpui"`。生成的类型声明里每个注册过的模块各有一段 `declare module`，所以模块名和每一个导出名都会被检查。见 [Host Modules](./host-modules.md)。
 
 ### 调度
 
 | 名称 | 说明 |
 | --- | --- |
 | `Task` | 一个正在运行的任务：`cancel()`、`is_done()` |
-| `TaskOptions` | `owner`——任务随之取消的那个视图，或 `null` 表示比任何视图都活得久 |
+| `TaskOptions` | `{ owner?: View \| null }`——任务随之取消的那个视图。默认是当前运行的视图；`null` 比任何视图都活得久，也是除当前视图外唯一被接受的值 |
 | `Timer` | `after(ms, handler, opts?)` 与 `every(ms, handler, opts?)` |
 
 ### 焦点与组件形态
 
 | 名称 | 说明 |
 | --- | --- |
-| `FocusHandleHandle` | 脚本自己持有的焦点目标：`focus()`、`is_focused()`、`release()` |
+| `FocusHandleHandle` | 脚本自己持有的焦点目标；[它的成员](#focushandlehandle) |
 | `ComponentType` | `new(id)`——跨渲染有身份的组件 |
 | `PartType` | `new()`——自身没有身份的子部件 |
 | `IndexedComponentType` | `new(id, index)`——会报读自身从 1 开始位置的组件 |
@@ -100,8 +103,8 @@ order: 13
 | `MouseButton` | `"left"`、`"right"` 或 `"middle"` |
 | `Phase` | `"render"`、`"event"`、`"task"`、`"layout"` 或 `"none"` |
 | `SheetSide` | sheet 贴靠哪一边 |
-| `DialogOptions` | `escape_dismissable`、`backdrop_dismissable` |
-| `ToastOptions` | `title`、`description`、`level`、`timeout`、`id` |
+| `DialogOptions` | `{ escape_dismissable?: boolean, backdrop_dismissable?: boolean }`，两者默认都是 `true` |
+| `ToastOptions` | `{ title: string, description?: string, level?: "info" \| "success" \| "warning" \| "error", timeout?: number \| null, id?: string }`。`level` 默认 `"info"`；`timeout` 默认五秒，`null` 表示留到被关掉——不写和写 `null` 不是一回事 |
 | `ClickEvent` | `click_count`、`modifiers` |
 | `MouseMoveEvent` | `position`、`local_position`、`bounds`、`modifiers` |
 | `Modifiers` | `shift`、`control`、`alt`、`platform` |
@@ -250,15 +253,82 @@ slider 的四个部件接受同一个 `SliderStateHandle`，而且四个都不�
 
 ### 留存句柄
 
-下面每一个都只创建一次——在 `init` 或事件处理器里，绝不在 `render` 里——并用 `release()` 释放。
+每一个都只创建一次——在 `init` 或事件处理器里，绝不在 `render` 里——并且每一个都有 `release(): boolean`，返回它当时是否还活着。释放之后再用会抛异常。
 
-| 句柄 | 成员 |
+`on(...)` 是替换该事件的处理器，而不是再加一个，返回值表示之前是否已经有一个。
+
+#### `InputStateHandle`
+
+来自 `InputState.new(options?)`，其中 `options` 是 `{ placeholder?: string, value?: string }`。
+
+| 方法 | 说明 |
 | --- | --- |
-| `InputStateHandle` | `value`、`set_value`、`on("change" \| "submit" \| "focus" \| "blur")`、`set_step`、`set_min`、`set_max`、`set_masked`、`set_loading` |
-| `TextareaStateHandle` | `value`、`set_value`、`on(…)`、`set_rows`、`set_auto_grow`、`set_soft_wrap` |
-| `SliderStateHandle` | `value`、`set_value`、`min_value`、`max_value`、`step_value`、`on("change" \| "release")` |
-| `OtpStateHandle` | `value`、`set_value`、`len`、`is_masked`、`set_masked`、`focus`、`on("change" \| "focus" \| "blur")` |
-| `VirtualListScrollHandleHandle` | `scroll_to_item(index, strategy?)`、`scroll_to_bottom` |
+| `value(): string` | 当前文本 |
+| `set_value(next: string): void` | 替换它 |
+| `on(event, handler): boolean` | `event` 为 `"change"`、`"submit"`、`"focus"` 或 `"blur"`；handler 收 `(event, cx)` |
+| `set_step(step: number \| null): void` | `NumberInput` 的步长，`null` 表示没有 |
+| `set_min(min: number \| null): void` | 数值下界，或 `null` |
+| `set_max(max: number \| null): void` | 数值上界，或 `null` |
+| `set_masked(masked: boolean): void` | 文本是否按密码绘制 |
+| `set_loading(loading: boolean): void` | 是否显示加载状态 |
+
+#### `TextareaStateHandle`
+
+来自 `TextareaState.new(options?)`，其中 `options` 是 `{ placeholder?: string, value?: string, rows?: number }`。
+
+| 方法 | 说明 |
+| --- | --- |
+| `value(): string` | 当前文本 |
+| `set_value(next: string): void` | 替换它 |
+| `on(event, handler): boolean` | `"change"`、`"submit"`、`"focus"` 或 `"blur"`，handler 收 `(event, cx)` |
+| `set_rows(rows: number): void` | 可见行数 |
+| `set_auto_grow(min_rows: number, max_rows: number): void` | 在这两者之间随内容增高 |
+| `set_soft_wrap(wrap: boolean): void` | 长行是否折行 |
+
+#### `SliderStateHandle`
+
+来自 `SliderState.new(options?)`，其中 `options` 是 `{ min?, max?, step?, scale?: "linear" | "logarithmic", value?: SliderValue }`。默认是 `0..100`、步长 `1`、从 `min` 起。`"logarithmic"` 需要 `min` 大于零。
+
+| 方法 | 说明 |
+| --- | --- |
+| `value(): SliderValue` | 当前值：一个数字，区间滑块则是 `[start, end]` |
+| `set_value(next: SliderValue): void` | 替换它 |
+| `min_value(): number` | 创建时的下界 |
+| `max_value(): number` | 上界 |
+| `step_value(): number` | 步长 |
+| `on(event, handler): boolean` | 拖动中的 `"change"` 或结束时的 `"release"`；handler 收 `(value, cx)` |
+
+#### `OtpStateHandle`
+
+来自 `OtpState.new(length, options?)`，其中 `options` 是 `{ value?: string, masked?: boolean }`。长度在创建时就固定了。
+
+| 方法 | 说明 |
+| --- | --- |
+| `value(): string` | 目前已输入的数字 |
+| `set_value(next: string): void` | 替换它们 |
+| `len(): number` | 它持有几位 |
+| `is_masked(): boolean` | 是否遮蔽绘制 |
+| `set_masked(masked: boolean): void` | 改变这一点 |
+| `focus(): void` | 把键盘移进去 |
+| `on(event, handler): boolean` | `"change"`、`"focus"` 或 `"blur"`，handler 收 `(event, cx)` |
+
+#### `VirtualListScrollHandleHandle`
+
+来自 `VirtualListScrollHandle.new()`，用 `track_scroll(handle)` 交给列表。
+
+| 方法 | 说明 |
+| --- | --- |
+| `scroll_to_item(index: number, strategy?): void` | 在下一帧之前把某一项带到屏幕上；`strategy` 是 `"top"`（默认）或 `"center"` |
+| `scroll_to_bottom(): void` | 滚到末尾 |
+
+#### `FocusHandleHandle`
+
+来自 `cx.focus_handle()`，用 `track_focus(handle)` 交给元素。
+
+| 方法 | 说明 |
+| --- | --- |
+| `focus(): void` | 把键盘移到跟踪它的那个元素上 |
+| `is_focused(): boolean` | 那个元素当前是否持有键盘 |
 
 ### 主题
 
@@ -281,7 +351,7 @@ slider 的四个部件接受同一个 `SliderStateHandle`，而且四个都不�
 | `ScrollbarMode` | `"scrolling"`、`"hover"` 或 `"always"` |
 | `ItemRange` | 虚拟列表的可见项，写作半开区间 `[start, end)` |
 | `SliderValue` | 一个数字，或区间 slider 的 `[start, end]` |
-| `PopupType`、`DatePickerType`、`ScrollbarType` | 构造器参数不止一个 id 的那三个类型的工厂形态 |
+| `PopupType`、`DatePickerType`、`ScrollbarType` | 构造器不是 `new(id)` 的那三个的工厂形态：`Popup.new(id, trigger)`、`DatePicker.new(id, focus_handle)`，以及 `Scrollbar` 的三个入口 |
 
 ## `gpui-fps` 模块
 

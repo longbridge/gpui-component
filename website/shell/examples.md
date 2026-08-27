@@ -1,6 +1,6 @@
 ---
 title: Examples
-description: Complete standalone and embedded applications, including retained state, native modules, and native motion.
+description: Complete standalone and embedded applications, including retained state, host modules, and native motion.
 order: 3
 ---
 
@@ -11,7 +11,7 @@ Three examples ship with the repository, and together they cover a standalone ap
 | | Runs as | Shows |
 | --- | --- | --- |
 | [Todo list](#the-todo-list) | A standalone application | The whole script surface: retained input, a dialog, a toast, gated storage, assets, types |
-| [Quote board](#the-quote-board) | A panel inside the gallery | The host half: native modules, one entity read from two languages, live cost counters |
+| [Quote board](#the-quote-board) | A panel inside the gallery | The host half: host modules, one entity read from two languages, live cost counters |
 | [Native motion](#native-motion) | A separate gallery script view | Pixel target transitions and springs retained and sampled by GPUI |
 
 ## A complete application
@@ -86,10 +86,10 @@ cargo run -- shell
 
 The gallery's Shell story runs two panels side by side: the left one drawn by `shell_story.rs` in Rust, the right one by `crates/story/js/quotes/main.js` in JavaScript, reading the same data.
 
-The script owns no state at all. The board is a Rust `Entity<Market>`, reached through the [native module](./native.md) the story registered before the runtime started:
+The script owns no state at all. The board is a Rust `Entity<Market>`, imported from the [host module](./host-modules.md) the story registered before the runtime started:
 
 ```text
-native("market")   quotes() · ticks() · watch(symbol) · watch_all(on)
+import { quotes, ticks, watch, watch_all } from "market";
 ```
 
 Theme values come from the call-scoped `cx.theme()` snapshot, not a second native module.
@@ -108,4 +108,4 @@ The script runs once to publish the new target. GPUI schedules and samples every
 
 Copy `examples/js_todolist` into a directory of your own and run it — it is a complete application with types already wired. Strip `main.js` back to a `View` with an `init` and a `render`, keep `ui.js`, and build up from there.
 
-For a host, `crates/story/src/stories/shell_story.rs` is a working reference for the other side: it builds a runtime, registers native modules, mounts a `ScriptView`, and reloads it on demand. [Hosting the Runtime](./hosting.md) walks through the same calls.
+For a host, `crates/story/src/stories/shell_story.rs` is a working reference for the other side: it builds a runtime, exports host modules, mounts a `ScriptView`, and reloads it on demand. [Hosting the Runtime](./hosting.md) walks through the same calls.

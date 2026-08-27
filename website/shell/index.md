@@ -162,7 +162,7 @@ Text editing, syntax highlighting, LSP, virtualization and motion sampling stay 
 | [State and views](./state.md) | `init` / `render`, `cx.notify()`, retained state, async |
 | [Overlays](./overlays.md) | Dialogs, the sheet, toasts, and the phase rule |
 | [Capabilities](./capabilities.md) | `gpui-shell.json`, default deny, filesystem, storage, process and network APIs |
-| [Native Modules](./native.md) | Lending the host's own Rust to a script, and the plain-data boundary |
+| [Host Modules](./host-modules.md) | Lending the host's own Rust to a script, and the plain-data boundary |
 | [Hosting the Runtime](./hosting.md) | The Rust side in full: mounting, refreshing, metrics, exit, hot-reload |
 | [Dock Panels](./dock.md) | A script view as a dockable panel, and what survives a restart |
 | [The engine seam](./engine.md) | QuickJS, why the seam exists, and the measurements that tell script cost from frame cost |

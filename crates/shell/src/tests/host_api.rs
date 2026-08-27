@@ -143,9 +143,7 @@ fn javascript_imports_a_host_registered_module(cx: &mut TestAppContext) {
 /// withdrew the module gets a refusal on the next call, not the withdrawn
 /// closure. Every export is a stub that resolves through the registry.
 #[gpui::test]
-fn withdrawing_a_module_refuses_a_call_through_an_already_imported_name(
-    cx: &mut TestAppContext,
-) {
+fn withdrawing_a_module_refuses_a_call_through_an_already_imported_name(cx: &mut TestAppContext) {
     cx.update(crate::init);
     let mut modules = HostModules::new();
     modules.register("calculator", |module| {

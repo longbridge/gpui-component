@@ -16,7 +16,7 @@ There is one module per crate that provides the capability, so an import says wh
 
 | Module | Provides |
 | --- | --- |
-| `"gpui"` | GPUI's own elements, plus what this runtime adds: views, the style surface, storage, scheduling, native modules |
+| `"gpui"` | GPUI's own elements, plus what this runtime adds: views, the style surface, storage, scheduling |
 | `"gpui-base"` | `gpui-base`'s layout helpers, components and theme |
 | `"gpui-fps"` | `gpui-fps`'s performance overlay |
 
@@ -61,26 +61,29 @@ A subclass defines `init?(props, cx)`, which runs once, and `render(cx)`, which 
 
 `store.get` answers `null` for an unset key, and `flush()` completes once the current value is durably written.
 
-### Native modules
+### Host modules
 
-| Name | What it is |
-| --- | --- |
-| `native(module)` | A module the host registered in Rust; throws and names the ones that exist when it finds none |
-| `NativeModules` | Empty here — an application declares its own modules into it and `native("…")` becomes typed |
+A module the host registered in Rust is imported by name, like any other module:
+
+```js
+import { quotes } from "market";
+```
+
+It is not part of `"gpui"`. The generated declarations carry one `declare module` per registered module, so both the module name and every export name are checked. See [Host Modules](./host-modules.md).
 
 ### Scheduling
 
 | Name | What it is |
 | --- | --- |
 | `Task` | A running task: `cancel()`, `is_done()` |
-| `TaskOptions` | `owner` — the view the task is cancelled with, or `null` to outlive every view |
+| `TaskOptions` | `{ owner?: View \| null }` — the view the task is cancelled with. Defaults to the running view; `null` outlives every view, and is the only other value accepted |
 | `Timer` | `after(ms, handler, opts?)` and `every(ms, handler, opts?)` |
 
 ### Focus and component shapes
 
 | Name | What it is |
 | --- | --- |
-| `FocusHandleHandle` | A focus target the script owns: `focus()`, `is_focused()`, `release()` |
+| `FocusHandleHandle` | A focus target the script owns; [its members](#focushandlehandle) |
 | `ComponentType` | `new(id)` — a component identified across renders |
 | `PartType` | `new()` — a sub-part with no identity of its own |
 | `IndexedComponentType` | `new(id, index)` — a component whose one-based position is announced |
@@ -100,8 +103,8 @@ A subclass defines `init?(props, cx)`, which runs once, and `render(cx)`, which 
 | `MouseButton` | `"left"`, `"right"` or `"middle"` |
 | `Phase` | `"render"`, `"event"`, `"task"`, `"layout"` or `"none"` |
 | `SheetSide` | Which edge the sheet is anchored to |
-| `DialogOptions` | `escape_dismissable`, `backdrop_dismissable` |
-| `ToastOptions` | `title`, `description`, `level`, `timeout`, `id` |
+| `DialogOptions` | `{ escape_dismissable?: boolean, backdrop_dismissable?: boolean }`, both `true` by default |
+| `ToastOptions` | `{ title: string, description?: string, level?: "info" \| "success" \| "warning" \| "error", timeout?: number \| null, id?: string }`. `level` defaults to `"info"`; `timeout` to five seconds, and `null` keeps it until dismissed — absent and `null` are not the same |
 | `ClickEvent` | `click_count`, `modifiers` |
 | `MouseMoveEvent` | `position`, `local_position`, `bounds`, `modifiers` |
 | `Modifiers` | `shift`, `control`, `alt`, `platform` |
@@ -250,15 +253,82 @@ Both virtual lists take `(id, item_count, item_sizes, get_key, render)`. `render
 
 ### Retained handles
 
-Each of these is created once — in `init` or an event handler, never in `render` — and released with `release()`.
+Each is created once — in `init` or an event handler, never in `render` — and every one of them has `release(): boolean`, which returns whether it was still live. Using a handle after releasing it throws.
 
-| Handle | Members |
+`on(...)` replaces the handler for that event rather than adding a second one, and answers whether there was one before.
+
+#### `InputStateHandle`
+
+From `InputState.new(options?)`, where `options` is `{ placeholder?: string, value?: string }`.
+
+| Method | What it does |
 | --- | --- |
-| `InputStateHandle` | `value`, `set_value`, `on("change" \| "submit" \| "focus" \| "blur")`, `set_step`, `set_min`, `set_max`, `set_masked`, `set_loading` |
-| `TextareaStateHandle` | `value`, `set_value`, `on(…)`, `set_rows`, `set_auto_grow`, `set_soft_wrap` |
-| `SliderStateHandle` | `value`, `set_value`, `min_value`, `max_value`, `step_value`, `on("change" \| "release")` |
-| `OtpStateHandle` | `value`, `set_value`, `len`, `is_masked`, `set_masked`, `focus`, `on("change" \| "focus" \| "blur")` |
-| `VirtualListScrollHandleHandle` | `scroll_to_item(index, strategy?)`, `scroll_to_bottom` |
+| `value(): string` | The current text |
+| `set_value(next: string): void` | Replaces it |
+| `on(event, handler): boolean` | `event` is `"change"`, `"submit"`, `"focus"` or `"blur"`; the handler takes `(event, cx)` |
+| `set_step(step: number \| null): void` | The `NumberInput` step, or `null` for none |
+| `set_min(min: number \| null): void` | The numeric floor, or `null` |
+| `set_max(max: number \| null): void` | The numeric ceiling, or `null` |
+| `set_masked(masked: boolean): void` | Whether the text is drawn as a password |
+| `set_loading(loading: boolean): void` | Whether the field shows its loading state |
+
+#### `TextareaStateHandle`
+
+From `TextareaState.new(options?)`, where `options` is `{ placeholder?: string, value?: string, rows?: number }`.
+
+| Method | What it does |
+| --- | --- |
+| `value(): string` | The current text |
+| `set_value(next: string): void` | Replaces it |
+| `on(event, handler): boolean` | `"change"`, `"submit"`, `"focus"` or `"blur"`, handler `(event, cx)` |
+| `set_rows(rows: number): void` | The visible row count |
+| `set_auto_grow(min_rows: number, max_rows: number): void` | Grows with its content between the two |
+| `set_soft_wrap(wrap: boolean): void` | Whether long lines wrap |
+
+#### `SliderStateHandle`
+
+From `SliderState.new(options?)`, where `options` is `{ min?, max?, step?, scale?: "linear" | "logarithmic", value?: SliderValue }`. The defaults are `0..100` in steps of `1`, starting at `min`. A `"logarithmic"` scale needs a `min` above zero.
+
+| Method | What it does |
+| --- | --- |
+| `value(): SliderValue` | The current value: a number, or `[start, end]` for a range |
+| `set_value(next: SliderValue): void` | Replaces it |
+| `min_value(): number` | The floor it was built with |
+| `max_value(): number` | The ceiling |
+| `step_value(): number` | The step |
+| `on(event, handler): boolean` | `"change"` while dragging or `"release"` at the end; handler `(value, cx)` |
+
+#### `OtpStateHandle`
+
+From `OtpState.new(length, options?)`, where `options` is `{ value?: string, masked?: boolean }`. The length is fixed at creation.
+
+| Method | What it does |
+| --- | --- |
+| `value(): string` | The digits entered so far |
+| `set_value(next: string): void` | Replaces them |
+| `len(): number` | How many digits it holds |
+| `is_masked(): boolean` | Whether they are drawn masked |
+| `set_masked(masked: boolean): void` | Changes that |
+| `focus(): void` | Moves the keyboard into it |
+| `on(event, handler): boolean` | `"change"`, `"focus"` or `"blur"`, handler `(event, cx)` |
+
+#### `VirtualListScrollHandleHandle`
+
+From `VirtualListScrollHandle.new()`, handed to a list with `track_scroll(handle)`.
+
+| Method | What it does |
+| --- | --- |
+| `scroll_to_item(index: number, strategy?): void` | Puts an item on screen before the next frame; `strategy` is `"top"` (default) or `"center"` |
+| `scroll_to_bottom(): void` | Scrolls to the end |
+
+#### `FocusHandleHandle`
+
+From `cx.focus_handle()`, handed to an element with `track_focus(handle)`.
+
+| Method | What it does |
+| --- | --- |
+| `focus(): void` | Moves the keyboard onto the element tracking it |
+| `is_focused(): boolean` | Whether that element currently has it |
 
 ### Theme
 
@@ -281,7 +351,7 @@ Reading the theme is `cx.theme()`. Replacing the whole palette is an application
 | `ScrollbarMode` | `"scrolling"`, `"hover"` or `"always"` |
 | `ItemRange` | A virtual list's visible items, as a half-open `[start, end)` |
 | `SliderValue` | A number, or `[start, end]` for a range slider |
-| `PopupType`, `DatePickerType`, `ScrollbarType` | The factory shapes of the three types whose constructor takes more than an id |
+| `PopupType`, `DatePickerType`, `ScrollbarType` | The factory shapes of the three whose constructor is not `new(id)`: `Popup.new(id, trigger)`, `DatePicker.new(id, focus_handle)`, and `Scrollbar`'s three entry points |
 
 ## The `gpui-fps` module
 

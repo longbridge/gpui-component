@@ -162,7 +162,7 @@ GPUI 的元素是**被消费**的值：`RenderOnce::render` 按值取走 `self`�
 | [State and Views](./state.md) | `init` / `render`、`cx.notify()`、留存状态、异步 |
 | [Overlays](./overlays.md) | dialog、sheet、toast，以及 phase 规则 |
 | [Capabilities](./capabilities.md) | `gpui-shell.json`、默认拒绝、文件、存储、进程与网络 API |
-| [Native Modules](./native.md) | 把宿主自己的 Rust 借给脚本，以及那条纯数据边界 |
+| [Host Modules](./host-modules.md) | 把宿主自己的 Rust 借给脚本，以及那条纯数据边界 |
 | [Hosting the Runtime](./hosting.md) | Rust 这一侧的全貌：挂载、刷新、指标、退出、hot-reload |
 | [Dock Panels](./dock.md) | 把脚本视图变成可停靠面板，以及重启后什么会留下 |
 | [The Engine Seam](./engine.md) | QuickJS、这条分界线存在的理由，以及把脚本成本与帧成本分开的三项实测 |

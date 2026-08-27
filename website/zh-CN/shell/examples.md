@@ -82,10 +82,10 @@ cargo run -- shell
 
 gallery 的 Shell story 并排跑着两块面板：左边那块由 Rust 的 `shell_story.rs` 画，右边那块由 JavaScript 的 `crates/story/js/quotes/main.js` 画，两边读的是同一份数据。
 
-脚本自己不持有任何状态。这块行情板是一个 Rust 的 `Entity<Market>`，通过 story 在运行时启动前注册的 [native 模块](./native.md)访问：
+脚本自己不持有任何状态。这块行情板是一个 Rust 的 `Entity<Market>`，从 story 在运行时启动前注册的 [host 模块](./host-modules.md) import 进来：
 
 ```text
-native("market")   quotes() · ticks() · watch(symbol) · watch_all(on)
+import { quotes, ticks, watch, watch_all } from "market";
 ```
 
 主题值来自调用作用域内的 `cx.theme()` snapshot，而不是第二个 native module。

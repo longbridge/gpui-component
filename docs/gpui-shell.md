@@ -2394,9 +2394,9 @@ reach for.
 
 There is no streaming subprocess: pipe semantics conflict with the asynchronous
 model, and a case that needs streaming output belongs behind a host-registered
-native module that can return a structured result and a timeout.
+module that can return a structured result and a timeout.
 
-### 17.6 Native modules
+### 17.6 Host modules
 
 A script cannot load a native extension. `dlopen`ed Rust has no stable ABI and,
 once inside the process, holds every permission the process holds — a sandbox
@@ -2406,29 +2406,52 @@ reaches exactly that and nothing else. The cost — a third party who needs nati
 capability must fork the host or send a patch — is deliberately retained.
 
 ```rust,ignore
-let mut modules = NativeModules::new();
+let mut modules = HostModules::new();
 modules.register("workspace", |module| {
-    module.function("project_name", |_| Ok(NativeValue::from("gpui-component")));
+    module.function("project_name", |_| Ok(HostValue::from("gpui-component")));
 });
-gpui_shell::set_native_modules(modules);
+gpui_shell::export_modules(modules)?;
 ```
 
 ```js
-import { native } from "gpui";
+import { project_name } from "workspace";
 
-const workspace = native("workspace");
-workspace.project_name();
+project_name();
 ```
 
-**The boundary is plain data.** A native function receives `NativeArguments` and
-returns a `NativeValue` — null, boolean, number, string, array, or
+**A registered module is an ES module, not a lookup.** The earlier shape was a
+`native("workspace")` call answering with a frozen bag of functions. It put every
+misspelled export on the run-time path, and it left the generated declarations
+unable to say anything — only the host knows what it registered, so the best
+`gpui.d.ts` could offer was `Record<string, (...args) => any>` plus a
+hand-written `.d.ts` that nothing checked against the registry. As an import, a
+wrong name fails while the module graph is linked, and §21's declarations are
+emitted from the registry itself.
+
+The import fixes the set of *names*, not the functions behind them: each export
+is a stub that resolves through `dispatch` on every call, so withdrawing a module
+still refuses the next call through an already-imported name. The consequence for
+a host is one ordering rule — `export_modules` before `load_app`.
+
+**The runtime's own specifiers are refused at registration.** A host module
+shares one namespace with the built-ins and the Standard Runtime, and the
+resolver chain reaches those first, so a host registering `path` would register a
+module nothing can import and never find out. `RESERVED_SPECIFIERS` names them
+and `validate` reports every bad name at once; an engine test asserts the list
+against the resolvers themselves, so a module added to one and not the other is a
+failing test rather than a name a host can silently lose.
+
+**The boundary is plain data.** A host function receives `HostArguments` and
+returns a `HostValue` — null, boolean, number, string, array, or
 insertion-ordered object — and never receives a script handle. That is not a
 convenience. A handle would let the host keep a reference to a script value past
 the call that produced it and past the scope frame that made the surrounding
 context valid. It is also what lets one registry serve any engine, since
-neither engine's value type appears in `native.rs`.
+neither engine's value type appears in `host_modules.rs`. It is also what rules
+out exporting a *class*: a constructor hands the script a live host object, and
+object identity across the seam is the thing this boundary exists to prevent.
 
-**A native function may not re-enter the engine.** A native call happens inside
+**A host function may not re-enter the engine.** A host call happens inside
 a script call, which is itself inside a host call; calling back into the VM from
 there would run script with an engine frame already on the stack, re-entering
 the render pass currently building an element tree. Holding no script handle
@@ -2438,43 +2461,49 @@ than undefined behavior. Reading and writing host state is fine and is the point
 a function may reach the ambient `App` and request a re-render, which is delivered
 after the call unwinds.
 
-**Reaching native modules is itself the grant.** The default registry is empty
+**Reaching host modules is itself the grant.** The default registry is empty
 and every entry point fails while it stays that way — the same shape as
 `Capabilities::default()`. There is deliberately no per-module capability: the
 host chose the module list, so the list _is_ the grant. The two failures get
 different sentences, because they are different facts: a host that registered
-nothing has not wired native access up, and telling that author "unknown module"
-would send them hunting for a typo that is not there.
+nothing has not wired its extension surface up, and telling that author "unknown
+module" would send them hunting for a typo that is not there.
 
 ```text
-native module `workspace` is not available: this host registered none. Native
-modules are granted by the embedding application, with gpui_shell::set_native_modules(...).
+host module `workspace` is not available: this host registered none. Host
+modules are granted by the embedding application, with gpui_shell::export_modules(...).
 ```
 
 ```text
-unknown native module `workspaces`; this host registered: editor, workspace
+unknown host module `workspaces`; this host registered: editor, workspace
 ```
 
 ```text
-native module `editor` has no function `line_cont`; it provides: line_count
+host module `editor` has no function `line_cont`; it provides: line_count
 ```
 
 Argument readers (`string`, `number`, `integer`, `boolean`) report which
 position was wrong and what arrived there, so a host writing a function does not
-write that sentence itself. A `NativeError` carries only a sentence; the engine
+write that sentence itself. A `HostError` carries only a sentence; the engine
 adds the module and function names when it turns one into a script exception.
 
-The QuickJS side is exactly the two conversions the seam forbids the registry
-from knowing about. The module object is built per call and frozen, with the
-registered functions as own properties over a `Proxy` prototype that reports an
-unknown name — so the trap is on the miss path only, the same trade the element
-prototype makes without needing its two-pass dance, because a native call is not
-on the per-element path. Freezing means a script cannot stash state on a module
-or shadow a function with its own. `then` is withheld along with the `__` names,
-because a module object answering `then` with a function would be mistaken for a
-thenable by any `await` and awaiting one would hang. Argument conversion is
-depth-limited at 16, which turns "the host was handed a 100,000-deep list" from a
-blown Rust stack into a message at the call site.
+**A module describes its own TypeScript face.** `HostModule::declarations` takes
+the body of a `declare module`, and `validate` compares the exports it declares
+with the functions actually registered. The two halves used to be two files in
+two languages with nothing between them, and the drift showed up as an editor
+completing a function the host had deleted; now it is a sentence at start-up.
+
+The QuickJS side is a resolver, a loader, and exactly the two conversions the
+seam forbids the registry from knowing about. Resolving a registered name yields
+generated source — one `export const name = __host_function(module, name)` per
+function — tagged with the registry's generation, because QuickJS caches a linked
+module by name for the life of the runtime and two plugins importing `workspace`
+would otherwise share whichever linked first. A miss is a plain resolving error
+rather than a thrown exception: this resolver is not last in the chain, and a
+thrown one leaves the exception pending so the file resolver behind it never
+answers. Argument conversion is depth-limited at 16, which turns "the host was
+handed a 100,000-deep list" from a blown Rust stack into a message at the call
+site.
 
 ---
 

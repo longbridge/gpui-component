@@ -433,7 +433,9 @@ fn host_modules(market: &Entity<Market>) -> HostModules {
         module.declarations(MARKET_TYPES);
 
         let read = market.clone();
-        module.function("quotes", move |_| with_app(|cx| read.read(cx).to_host_value()));
+        module.function("quotes", move |_| {
+            with_app(|cx| read.read(cx).to_host_value())
+        });
 
         // Read separately from `quotes()` so the script can paint how many ticks
         // it has actually seen. When the feed is only asking for repaints this
@@ -1505,22 +1507,29 @@ mod tests {
         }
     }
 
-    /// Story-specific native access is only for market data. Theme tokens are
+    /// Story-specific host access is only for market data. Theme tokens are
     /// supplied by gpui-shell's live call context, so the host must not keep a
     /// second theme projection registered beside it.
+    ///
+    /// `validate` is part of the assertion: it is what checks `MARKET_TYPES`
+    /// against the functions actually registered, so a rename on either side
+    /// fails here rather than in an editor.
     #[gpui::test]
-    fn story_native_registry_only_grants_market(cx: &mut TestAppContext) {
+    fn story_host_registry_only_grants_market(cx: &mut TestAppContext) {
         let market = cx.new(|_| Market::open());
-        let modules = native_modules(&market);
+        let modules = host_modules(&market);
 
         assert_eq!(modules.module_names(), vec!["market"]);
+        modules
+            .validate()
+            .expect("the declared types match the registered functions");
     }
 
     /// The claim the counters under the panels make, checked without a person
     /// having to watch two numbers.
     ///
     /// It is worth an end-to-end test rather than a unit one because it spans
-    /// every part that has to agree: the entity, the native module, the script's
+    /// every part that has to agree: the entity, the host module, the script's
     /// `ticks()` call, and the difference between `refresh` and `notify`.
     #[gpui::test]
     fn a_quote_tick_re_runs_the_script_and_a_repaint_does_not(cx: &mut TestAppContext) {

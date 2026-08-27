@@ -18,7 +18,7 @@ gpui_shell::init(cx);                     // gpui-base, the token palette, the s
 let runtime = ShellRuntime::new(cx)?;     // one VM, installed as this App's default
 ```
 
-`new(cx)` lets callbacks, native modules and hot reload find the default runtime without the host threading a handle through every layer. A host deliberately managing more than one VM can create additional runtimes with `new_isolated()` and retain those handles itself.
+`new(cx)` lets callbacks, host modules and hot reload find the default runtime without the host threading a handle through every layer. A host deliberately managing more than one VM can create additional runtimes with `new_isolated()` and retain those handles itself.
 
 `gpui-shell` uses GPUI's inspector reflection table to expose the fluent style
 methods, including in release builds. Depending on this crate therefore enables
@@ -122,12 +122,12 @@ gpui_shell::set_capabilities(
         .store(true),
 );
 gpui_shell::set_store_path(data_dir.join("store.json"));
-gpui_shell::set_native_modules(modules);
+gpui_shell::export_modules(modules)?;
 ```
 
-All three default to nothing: no file access, no storage location, no native modules. See [Capabilities](./capabilities.md) and [Native Modules](./native.md).
+All three default to nothing: no file access, no storage location, no host modules. See [Capabilities](./capabilities.md) and [Host Modules](./host-modules.md).
 
-The standalone binary also checks `<root>/gpui-shell.json`. Its recognized fields supply application identity, optional application/Shell version metadata, the entry point, and capability requests; only `id`, `name`, and `entry` are required. Embedders may instead construct a `Policy` directly when each loaded application needs a distinct grant and native-module registry.
+The standalone binary also checks `<root>/gpui-shell.json`. Its recognized fields supply application identity, optional application/Shell version metadata, the entry point, and capability requests; only `id`, `name`, and `entry` are required. Embedders may instead construct a `Policy` directly when each loaded application needs a distinct grant and module registry.
 
 ## Watching what it costs
 
@@ -138,7 +138,7 @@ let reading = runtime.read_metrics();
 reading.script_renders();      // follows cx.notify(), reloads, theme changes
 reading.materializations();    // follows frames
 reading.script_render_time();  // total time inside script `render`
-reading.native_time();         // of which, inside native modules
+reading.native_time();         // of which, inside host modules
 reading.slowest_script_render();
 ```
 
