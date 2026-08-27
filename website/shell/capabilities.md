@@ -214,14 +214,14 @@ export function load() {
 
 The example's footer then says so on screen — "Not saved — this host did not grant storage, so the list lasts for this run only" — which is the right shape: absorb the refusal at the boundary, and tell the user the truth.
 
-## `clipboard`
+## The clipboard
 
 ```js
-import { clipboard } from "gpui";
-
-clipboard.write_text("copied");
-const text = clipboard.read_text(); // undefined when the clipboard holds no text
+cx.write_to_clipboard("copied");
+const text = cx.read_from_clipboard(); // undefined when the clipboard holds no text
 ```
+
+Named after `App::write_to_clipboard` and `App::read_from_clipboard`, and on `cx` because that is where GPUI keeps them. Nothing to import.
 
 Read and write are **separate grants**, and a denial names the half that is missing:
 
@@ -229,10 +229,10 @@ Read and write are **separate grants**, and a denial names the half that is miss
 writing the clipboard is not granted; declare capabilities.clipboard.write in the manifest
 ```
 
-The clipboard needs a live host call — GPUI's `App` only exists for the duration of one — so calling it from a module's top level reports that plainly instead of panicking:
+The clipboard needs a live host call — GPUI's `App` only exists for the duration of one — so a `cx` with none reports that plainly instead of panicking:
 
 ```text
-clipboard.read_text() needs a live host call; call it from render, an event handler or a task
+cx.read_from_clipboard() needs a live host call; call it from render, an event handler or a task
 ```
 
 ## `log`

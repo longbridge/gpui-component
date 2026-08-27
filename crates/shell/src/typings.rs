@@ -601,7 +601,70 @@ const CONTEXT_AND_VIEW: &str = r#"  /**
     /** Reads the current `gpui_base::Theme` semantic token projection. */
     theme(): import("gpui-base").Theme;
 
+    /**
+     * Hands a URL to whatever the system opens URLs with. `App::open_url`.
+     *
+     * `Link`'s `href` without the element, for the case where the address is
+     * not known until something has already happened — the end of a device
+     * authorization, say, where waiting for a second click to open the page the
+     * first click just asked for is a step nobody wanted.
+     *
+     * It takes an absolute `http`/`https` URL with a host and refuses
+     * everything else. That guard is not about the address bar: without it this
+     * is a way to hand an arbitrary URI to whichever handler the desktop
+     * registered for its scheme.
+     */
+    open_url(url: string): void;
+
+    /** `App::read_from_clipboard`. `undefined` when it holds no text. */
+    read_from_clipboard(): string | undefined;
+    /** `App::write_to_clipboard`. */
+    write_to_clipboard(text: string): void;
+
+    /**
+     * A focus target the script owns, created once and kept on the view.
+     * `App::focus_handle` — GPUI has no `FocusHandle::new`, and neither does
+     * this.
+     *
+     * Focus is a fact about the window that outlives any one render, so an
+     * element rebuilt every frame cannot own it. Hand the handle to an element
+     * with `track_focus(...)`, and it is that element the keyboard means.
+     *
+     * It would produce a fresh handle on every frame, so it belongs in `init`
+     * or in an event handler — never in `render`.
+     */
+    focus_handle(): FocusHandleHandle;
+
+    /**
+     * Calls `body(cx)` and adopts the promise it returns, so a rejection is
+     * reported rather than swallowed. `App::spawn`.
+     *
+     * The `cx` the body receives is an [`AsyncContext`] — valid across `await`,
+     * the way GPUI's `AsyncApp` is — so the whole body can keep using it.
+     */
+    spawn(body: (cx: AsyncContext) => unknown, opts?: TaskOptions): Task;
+
+    /** Resolves after `ms` on GPUI's foreground executor. */
+    sleep(ms?: number): Promise<void>;
+
+    /** One-shot and repeating callbacks on the foreground executor. */
+    readonly timer: Timer;
   }
+
+  /**
+   * A context that may be held across an `await`.
+   *
+   * The mirror of GPUI's `AsyncApp`. An ordinary [`Context`] speaks for one
+   * host call and reports clearly once that call has returned — which is what
+   * catches a `cx` stashed in a closure. This one names no call at all: it
+   * resolves whichever is running when a member is used, and refuses only when
+   * none is.
+   *
+   * It is what `init` receives, and what `cx.spawn` and `cx.timer` hand their
+   * callbacks — the three places whose whole job is to set up or continue work
+   * that outlives the call they were started from.
+   */
+  export interface AsyncContext extends Context {}
 
 
 
@@ -679,7 +742,14 @@ const CONTEXT_AND_VIEW: &str = r#"  /**
    */
   export abstract class View {
     constructor(props?: Props);
-    init?(props?: Props): void;
+    /**
+     * Runs once when the view is created.
+     *
+     * `cx` is an [`AsyncContext`], because this is where retained things are
+     * made — tasks, timers, focus handles — and the context that starts a task
+     * is the one its body will still be using after an `await`.
+     */
+    init?(props?: Props, cx?: AsyncContext): void;
     abstract render(cx: Context): Element;
   }
 
@@ -714,9 +784,6 @@ const CONTEXT_AND_VIEW: &str = r#"  /**
 
   export const ViewHandle: ViewHandleType;
 
-  /** Mounts one retained child. A handle may appear once per parent snapshot. */
-  export function child_view(handle: ViewHandle): Element;
-
 "#;
 
 /// The element methods that are not styles.
@@ -724,10 +791,17 @@ const CONTEXT_AND_VIEW: &str = r#"  /**
 /// Hand-written because each has a signature of its own; the names match the
 /// behavior list the engine installs on the prototype, and
 /// [`tests::every_element_method_is_accounted_for`] fails if the two drift.
-const ELEMENT_METHODS: &str = r#"    /** Adds one child. The child is consumed; using it again throws. */
-    child(child: Element): Element;
+const ELEMENT_METHODS: &str = r#"    /**
+     * Adds one child. The child is consumed; using it again throws.
+     *
+     * A `ViewHandle` is a child too, the way an `Entity<V>` is renderable in
+     * GPUI — that is how a retained nested view is mounted. One handle may
+     * appear once per parent snapshot; a second mount in the same description
+     * is refused before any of it is published.
+     */
+    child(child: Element | ViewHandle): Element;
     /** Adds several children, in order. */
-    children(children: Iterable<Element>): Element;
+    children(children: Iterable<Element | ViewHandle>): Element;
     /**
      * Fills the `content` slot of a `Collapsible`, a `Popover`, a `HoverCard`
      * or a `Popup`.
@@ -1301,9 +1375,6 @@ const ELEMENTS: &str = r#"
     pattern_slash(color: Color, width: number, interval: number): BackgroundValue;
     checkerboard(color: Color, size: number): BackgroundValue;
   };
-  /** Paints immutable GPUI geometry with a reusable native Background. */
-  export function paint_path(path: Path, background: BackgroundValue | Color): Element;
-
 
   /**
    * A focus target the script owns, created once and kept on the view.
@@ -1312,9 +1383,7 @@ const ELEMENTS: &str = r#"
    * element rebuilt every frame cannot own it. Hand the handle to an element
    * with `track_focus(...)`, and it is that element the keyboard means.
    *
-   * `FocusHandle.new()` needs a live host call and would produce a fresh
-   * handle on every frame, so it belongs in `init` or in an event handler —
-   * never in `render`.
+   * Built with `cx.focus_handle()`, mirroring `App::focus_handle`.
    */
   export interface FocusHandleHandle {
     /** Moves the keyboard onto the element tracking this handle. */
@@ -1323,12 +1392,6 @@ const ELEMENTS: &str = r#"
     is_focused(): boolean;
     release(): boolean;
   }
-
-  export interface FocusHandleType {
-    new: () => FocusHandleHandle;
-  }
-
-  export const FocusHandle: FocusHandleType;
 
 "#;
 
@@ -1406,6 +1469,17 @@ const WINDOW_AND_NATIVE: &str = r#"
     remove_toast(id: string): boolean;
     /** Retracts every toast, and answers how many it retracted. */
     clear_toasts(): number;
+
+    /**
+     * Paints immutable GPUI geometry with a reusable native `Background`.
+     * `Window::paint_path`.
+     *
+     * The one element constructor reached through an object rather than as a
+     * free function, and it is one because the thing it mirrors is a method on
+     * the window rather than on the app. Legal from `render`, unlike the
+     * overlays above — it builds a description like any other element.
+     */
+    paint_path(path: Path, background: BackgroundValue | Color): Element;
   }
 
   /**
@@ -2180,8 +2254,6 @@ const BASE: &str = r#"  /** A row. */
     readonly is_dark: boolean;
   }
 
-  /** Compatibility accessor; prefer the call-scoped `cx.theme()`. */
-  export function theme(): Theme;
   /** Replaces gpui-base's active semantic tokens with an application-owned theme. */
   export function set_theme(theme: {
     readonly appearance: "light" | "dark";
@@ -2232,12 +2304,6 @@ const CAPABILITIES: &str = r#"
     flush(): Promise<void>;
   }
 
-  export interface Clipboard {
-    /** `undefined` when the clipboard holds no text. */
-    read_text(): string | undefined;
-    write_text(text: string): void;
-  }
-
   /** Diagnostics. Needs no capability: a script that runs may say something. */
   export interface Log {
     debug(message: unknown, ...rest: unknown[]): void;
@@ -2247,25 +2313,6 @@ const CAPABILITIES: &str = r#"
   }
 
   export const store: Store;
-  export const clipboard: Clipboard;
-
-  /**
-   * Hands a URL to whatever the system opens URLs with.
-   *
-   * `Link`'s `href` without the element, for the case where the address is not
-   * known until something has already happened — the end of a device
-   * authorization, say, where waiting for a second click to open the page the
-   * first click just asked for is a step nobody wanted.
-   *
-   * It takes an absolute `http`/`https` URL with a host and refuses everything
-   * else. That guard is not about the address bar: without it this is a way to
-   * hand an arbitrary URI to whichever handler the desktop registered for its
-   * scheme.
-   *
-   * Needs a live host call, so it belongs in an event handler or a task —
-   * never in `render`.
-   */
-  export function open_url(url: string): void;
   export const log: Log;
 "#;
 
@@ -2420,38 +2467,27 @@ const SCHEDULING: &str = r#"
     owner?: View | null;
   }
 
-  /** Resolves after `ms` on GPUI's foreground executor. */
-  export function sleep(ms?: number): Promise<void>;
-
   /**
-   * Runs `body` with a context that belongs to the current host call.
+   * Runs `body` with a context that belongs to the call in progress.
    *
-   * This is how code resumed after an `await` obtains a usable `cx`: the one
-   * its function was called with names a frame that has already returned.
+   * The one call for code holding no `cx` at all, which is why it is a module
+   * member rather than a method: a module's top level, a bare `constructor`,
+   * or a `.then` callback nothing handed a context to. Everywhere else the
+   * context is already in reach — `render(cx)`, a handler's second argument,
+   * `init(props, cx)`, the body of `cx.spawn` — and an [`AsyncContext`] stays
+   * usable after an `await`, so this is no longer the way to resume.
    */
   export function with_cx<T>(body: (cx: Context) => T): T;
 
-  /**
-   * Calls `body(cx)` and adopts the promise it returns, so a rejection is
-   * reported rather than swallowed.
-   *
-   * `cx` is valid until the first `await`, and is absent when there is no host
-   * call in progress — at module top level, for instance, where it is
-   * `undefined` despite what this signature can say.
-   */
-  export function spawn(body: (cx: Context) => unknown, opts?: TaskOptions): Task;
-
   export interface Timer {
     /** Calls `handler(cx)` once, after `ms`. */
-    after(ms: number, handler: (cx: Context) => void, opts?: TaskOptions): Task;
+    after(ms: number, handler: (cx: AsyncContext) => void, opts?: TaskOptions): Task;
     /**
      * Calls `handler(cx)` every `ms`. The interval is measured from the end of
      * one call, so a slow handler delays the next tick instead of stacking.
      */
-    every(ms: number, handler: (cx: Context) => void, opts?: TaskOptions): Task;
+    every(ms: number, handler: (cx: AsyncContext) => void, opts?: TaskOptions): Task;
   }
-
-  export const timer: Timer;
 "#;
 
 #[cfg(test)]
@@ -2668,14 +2704,14 @@ mod tests {
         for name in [
             "export const Button",
             "export function v_flex",
-            "export function theme",
+            "export function set_theme",
         ] {
             assert!(base.contains(name), "`{name}` is not declared in gpui-base");
             assert!(!gpui.contains(name), "`{name}` is also declared in gpui");
         }
         for name in [
             "export function div",
-            "export const FocusHandle",
+            "export interface AsyncContext",
             "export function native",
         ] {
             assert!(gpui.contains(name), "`{name}` is not declared in gpui");
@@ -2862,7 +2898,9 @@ mod tests {
             "    track_focus(handle: FocusHandleHandle): Element;",
             "    tab_index(index: number): Element;",
             "    tab_stop(value: boolean): Element;",
-            "  export const FocusHandle: FocusHandleType;",
+            // `App::focus_handle` in GPUI, so `cx` here — there is no
+            // `FocusHandle::new` to mirror.
+            "    focus_handle(): FocusHandleHandle;",
         ] {
             assert!(declarations.contains(expected), "missing: {expected}");
         }
@@ -2888,7 +2926,6 @@ mod tests {
             "    release(): boolean;",
             "  export interface ViewHandleType {",
             "  export const ViewHandle: ViewHandleType;",
-            "  export function child_view(handle: ViewHandle): Element;",
         ] {
             assert!(declarations.contains(expected), "missing: {expected}");
         }

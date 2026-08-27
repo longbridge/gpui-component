@@ -17,15 +17,15 @@ use gpui::{Entity, IntoElement as _, TestAppContext, VisualTestContext};
 /// the assertion can be made on what the script saw rather than on what the host
 /// did.
 const PROBE: &str = r#"
-import { View, text, spawn, with_cx } from "gpui";
+import { View, text, with_cx } from "gpui";
 import { v_flex } from "gpui-base";
 import * as fs from "fs/promises";
 
 export default class Probe extends View {
-  init() {
+  init(_props, cx) {
     this.state = "pending";
 
-    spawn(async (cx) => {
+    cx.spawn(async (cx) => {
       try {
         await fs.writeFile("notes.txt", "hello");
         await fs.writeFile("bytes.bin", new Uint8Array([0, 255, 42]));
@@ -59,19 +59,19 @@ export default class Probe extends View {
 "#;
 
 const DENIAL_PROBE: &str = r#"
-import { View, text, spawn, with_cx } from "gpui";
+import { View, text, with_cx } from "gpui";
 import { v_flex } from "gpui-base";
 import * as fs from "fs/promises";
 export default class Probe extends View {
-  init() {
+  init(_props, cx) {
     this.state = "pending";
-    spawn(async () => {
+    cx.spawn(async () => {
       try { await fs.readFile("__PATH__"); this.state = "unexpectedly allowed"; }
       catch (error) { this.state = `rejected:${error.message}`; }
       with_cx((cx) => cx.notify());
     });
   }
-  render() { return v_flex().child(text(this.state)); }
+  render(cx) { return v_flex().child(text(this.state)); }
 }
 "#;
 
@@ -264,11 +264,11 @@ impl gpui::Render for Empty {
 /// happens on a background thread. `flush` is for a script that has to know the
 /// write landed.
 const STORE_PROBE: &str = r#"
-import { View, text, store, spawn, with_cx } from "gpui";
+import { View, text, store, with_cx } from "gpui";
 import { v_flex } from "gpui-base";
 
 export default class Probe extends View {
-  init() {
+  init(_props, cx) {
     // Synchronous, against the cache. A burst of these is one file, not four.
     store.set("window", { title: "Notes", size: [640, 480] });
     store.set("theme", "dark");
@@ -278,14 +278,14 @@ export default class Probe extends View {
     // Readable immediately, with nothing awaited.
     this.state = `${store.get("window").title}|${store.keys().join(",")}`;
 
-    spawn(async (cx) => {
+    cx.spawn(async (cx) => {
       await store.flush();
       this.state += "|flushed";
       with_cx((cx) => cx.notify());
     });
   }
 
-  render() {
+  render(cx) {
     return v_flex().child(text(this.state));
   }
 }
@@ -342,7 +342,7 @@ fn the_store_answers_from_memory_and_persists_off_thread(cx: &mut TestAppContext
 }
 
 const STORE_RETRY_PROBE: &str = r#"
-import { View, text, store, spawn, with_cx } from "gpui";
+import { View, text, store, with_cx } from "gpui";
 import { v_flex, Checkbox } from "gpui-base";
 
 export default class Probe extends View {
@@ -351,11 +351,11 @@ export default class Probe extends View {
     store.set("attempt", 1);
   }
 
-  render() {
+  render(cx) {
     return v_flex()
       .child(text(this.state))
       .child(Checkbox.new("retry").on_change((_checked, cx) => {
-        spawn(async () => {
+        cx.spawn(async () => {
           try {
             await store.flush();
             this.state = "flushed";

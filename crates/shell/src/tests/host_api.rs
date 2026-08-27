@@ -11,26 +11,26 @@ use gpui::{Entity, IntoElement as _, TestAppContext, VisualTestContext};
 use crate::{Capabilities, NativeModules, NativeValue, ScriptView, ShellRuntime};
 
 const CLIPBOARD_PROBE: &str = r#"
-import { View, text, clipboard } from "gpui";
+import { View, text } from "gpui";
 import { v_flex } from "gpui-base";
 
 export default class Probe extends View {
-  init() {
-    clipboard.write_text("written by JavaScript");
-    this.value = clipboard.read_text();
+  init(_props, cx) {
+    cx.write_to_clipboard("written by JavaScript");
+    this.value = cx.read_from_clipboard();
   }
   render() { return v_flex().child(text(this.value)); }
 }
 "#;
 
 const CANCELLED_TIMER_PROBE: &str = r#"
-import { View, text, timer } from "gpui";
+import { View, text } from "gpui";
 import { v_flex } from "gpui-base";
 
 export default class Probe extends View {
-  init() {
+  init(_props, cx) {
     this.fired = false;
-    this.timer = timer.after(0, () => { this.fired = true; });
+    this.timer = cx.timer.after(0, () => { this.fired = true; });
     this.timer.cancel();
   }
   render() {
@@ -46,7 +46,7 @@ import { v_flex } from "gpui-base";
 const calculator = native("calculator");
 export default class Probe extends View {
   init() { this.answer = calculator.increment(41); }
-  render() { return v_flex().child(text(`answer:${this.answer}`)); }
+  render(cx) { return v_flex().child(text(`answer:${this.answer}`)); }
 }
 "#;
 
@@ -75,7 +75,7 @@ fn cancelling_a_javascript_timer_prevents_its_callback(cx: &mut TestAppContext) 
     let (runtime, mut context, view) = script_view(
         cx,
         Capabilities::new(),
-        "cancelled-timer.js",
+        "cancelled-cx.timer.js",
         CANCELLED_TIMER_PROBE,
     );
     let _keep_runtime_alive = runtime;

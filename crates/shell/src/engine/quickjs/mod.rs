@@ -231,7 +231,6 @@ pub(crate) mod exports {
         // Views (`ScriptView`).
         "View",
         "ViewHandle",
-        "child_view",
         // Elements GPUI itself draws.
         "div",
         "text",
@@ -239,19 +238,13 @@ pub(crate) mod exports {
         "image",
         "PathBuilder",
         "Background",
-        "paint_path",
-        "FocusHandle",
         // System capabilities (`host`, `sandbox`).
         "store",
-        "clipboard",
         "log",
-        "open_url",
         // Native modules (`native`).
         "native",
-        // Scheduling (`scheduler`).
-        "spawn",
-        "timer",
-        "sleep",
+        // Scheduling (`scheduler`). `spawn`, `sleep` and `timer` are on `cx`;
+        // this is the one call for code holding no context at all.
         "with_cx",
     ];
 
@@ -308,8 +301,8 @@ pub(crate) mod exports {
         "SliderThumb",
         "OtpState",
         "OtpInput",
-        // Theme (`theme_api`).
-        "theme",
+        // Theme (`theme_api`). Reading is `cx.theme()`; replacing the whole
+        // palette is an application-level act with no context to speak of.
         "set_theme",
     ];
 
@@ -1605,7 +1598,7 @@ impl ShellRuntime {
             payload.set("start", range.start)?;
             payload.set("end", range.end)?;
             let produced: Value =
-                handler.call((payload, context_object(ctx, generation)?))?;
+                handler.call((payload, context_object(ctx, ContextBinding::Call(generation))?))?;
             let items = produced.into_array().ok_or_else(|| {
                 Exception::throw_type(
                     ctx,
@@ -1686,7 +1679,7 @@ impl ShellRuntime {
 
         let result = self.with_js(|ctx| {
             let handler = entry.value.clone().restore(ctx)?;
-            handler.call::<_, ()>((key, context_object(ctx, generation)?))
+            handler.call::<_, ()>((key, context_object(ctx, ContextBinding::Call(generation))?))
         });
 
         if let Err(error) = result {
@@ -1726,7 +1719,10 @@ impl ShellRuntime {
         let result = self.with_js(|ctx| {
             let handler = handler.clone().restore(ctx)?;
             let payload = Object::new(ctx.clone())?;
-            handler.call::<_, ()>((payload, context_object(ctx, generation)?))
+            handler.call::<_, ()>((
+                payload,
+                context_object(ctx, ContextBinding::Call(generation))?,
+            ))
         });
 
         if let Err(error) = result {
@@ -1788,7 +1784,10 @@ impl ShellRuntime {
             flags.set("platform", modifiers.platform)?;
             payload.set("modifiers", flags)?;
 
-            handler.call::<_, ()>((payload, context_object(ctx, generation)?))
+            handler.call::<_, ()>((
+                payload,
+                context_object(ctx, ContextBinding::Call(generation))?,
+            ))
         });
 
         if let Err(error) = result {
@@ -1844,7 +1843,10 @@ impl ShellRuntime {
                 }
                 InputEvent::Change | InputEvent::Focus | InputEvent::Blur => {}
             }
-            handler.call::<_, ()>((payload, context_object(ctx, generation)?))
+            handler.call::<_, ()>((
+                payload,
+                context_object(ctx, ContextBinding::Call(generation))?,
+            ))
         });
 
         if let Err(error) = result {
@@ -1899,7 +1901,10 @@ impl ShellRuntime {
                     vec![f64::from(start), f64::from(end)].into_js(ctx)?
                 }
             };
-            handler.call::<_, ()>((payload, context_object(ctx, generation)?))
+            handler.call::<_, ()>((
+                payload,
+                context_object(ctx, ContextBinding::Call(generation))?,
+            ))
         });
 
         if let Err(error) = result {
@@ -1960,7 +1965,10 @@ impl ShellRuntime {
             for (index, size) in sizes.iter().enumerate() {
                 payload.set(index, *size)?;
             }
-            handler.call::<_, ()>((payload, context_object(ctx, generation)?))
+            handler.call::<_, ()>((
+                payload,
+                context_object(ctx, ContextBinding::Call(generation))?,
+            ))
         });
 
         if let Err(error) = result {
@@ -2030,7 +2038,10 @@ impl ShellRuntime {
             modifiers.set("alt", event.modifiers.alt)?;
             modifiers.set("platform", event.modifiers.platform)?;
             payload.set("modifiers", modifiers)?;
-            handler.call::<_, ()>((payload, context_object(ctx, generation)?))
+            handler.call::<_, ()>((
+                payload,
+                context_object(ctx, ContextBinding::Call(generation))?,
+            ))
         });
         if let Err(error) = result {
             tracing::error!("error in mouse move handler: {error}");
@@ -2081,7 +2092,10 @@ impl ShellRuntime {
 
         let result = self.with_js(|ctx| {
             let handler = entry.value.clone().restore(ctx)?;
-            handler.call::<_, ()>((checked, context_object(ctx, generation)?))
+            handler.call::<_, ()>((
+                checked,
+                context_object(ctx, ContextBinding::Call(generation))?,
+            ))
         });
 
         if let Err(error) = result {
@@ -2138,7 +2152,10 @@ impl ShellRuntime {
 
         let result = self.with_js(|ctx| {
             let handler = entry.value.clone().restore(ctx)?;
-            handler.call::<_, ()>((action, context_object(ctx, generation)?))
+            handler.call::<_, ()>((
+                action,
+                context_object(ctx, ContextBinding::Call(generation))?,
+            ))
         });
 
         if let Err(error) = result {
@@ -2194,7 +2211,10 @@ impl ShellRuntime {
 
         let result = self.with_js(|ctx| {
             let handler = entry.value.clone().restore(ctx)?;
-            handler.call::<_, ()>((Object::new(ctx.clone())?, context_object(ctx, generation)?))
+            handler.call::<_, ()>((
+                Object::new(ctx.clone())?,
+                context_object(ctx, ContextBinding::Call(generation))?,
+            ))
         });
 
         if let Err(error) = result {
@@ -2237,8 +2257,10 @@ impl ShellRuntime {
             let render: Function = instance.get("render").map_err(|_| {
                 Exception::throw_message(ctx, "view class has no render(cx) method")
             })?;
-            let produced: Value =
-                render.call((This(instance), context_object(ctx, generation)?))?;
+            let produced: Value = render.call((
+                This(instance),
+                context_object(ctx, ContextBinding::Call(generation))?,
+            ))?;
             element_id(ctx, &produced)
         })
     }
@@ -2618,12 +2640,26 @@ globalThis.__gpui = (() => {
   // carries no argument a `Bridged` could describe — two element ids, both
   // already numbers. It gets an entry point of its own for the same reason the
   // styles do.
+  //
+  // A retained child view is a child too — the same shape GPUI has, where an
+  // `Entity<V>` is itself renderable — so `.child(handle)` mounts one. An
+  // element always carries `__id`, so the branch costs the hot path one
+  // `undefined` test and the slow side is the case that used to fail with
+  // rquickjs' "Error converting from undefined to f64".
+  const childId = (child) => {
+    const id = child?.__id;
+    if (id !== undefined) return id;
+    if (child?.__viewHandle) return __child_view(child.__handle);
+    throw new TypeError(
+      "child(value) expects an element or a ViewHandle from ViewHandle.new(Class, props)",
+    );
+  };
   methods.child = function (child) {
-    __attach(this.__id, child.__id);
+    __attach(this.__id, childId(child));
     return this;
   };
   methods.children = function (list) {
-    for (const child of list) __attach(this.__id, child.__id);
+    for (const child of list) __attach(this.__id, childId(child));
     return this;
   };
   // A named slot. The element is consumed exactly as `child` consumes one, so
@@ -2649,7 +2685,7 @@ globalThis.__gpui = (() => {
   methods.track_focus = function (handle) {
     if (typeof handle?.__handle !== "number") {
       throw new TypeError(
-        "track_focus(handle) expects a FocusHandle from FocusHandle.new(), not a name or an element",
+        "track_focus(handle) expects a FocusHandle from cx.focus_handle(), not a name or an element",
       );
     }
     __apply(this.__id, "track_focus", [handle.__handle]);
@@ -2675,7 +2711,7 @@ globalThis.__gpui = (() => {
   methods.content_focus_handle = function (handle) {
     if (typeof handle?.__handle !== "number") {
       throw new TypeError(
-        "content_focus_handle(handle) expects a FocusHandle from FocusHandle.new(), not a name or an element",
+        "content_focus_handle(handle) expects a FocusHandle from cx.focus_handle(), not a name or an element",
       );
     }
     __apply(this.__id, "content_focus_handle", [handle.__handle]);
@@ -2999,7 +3035,7 @@ globalThis.__gpui = (() => {
   };
 
   const paintPath = (pathValue, paintValue) => {
-    if (!pathValue?.__path) throw new TypeError("paint_path(path, background) expects a Path built by PathBuilder");
+    if (!pathValue?.__path) throw new TypeError("window.paint_path(path, background) expects a Path built by PathBuilder");
     const paint = asBackground(paintValue);
     const object = element(__path(
       pathValue.fill,
@@ -3107,20 +3143,16 @@ globalThis.__gpui = (() => {
     release: () => __focus_release(handle),
   });
 
+  // `__viewHandle` is the discriminant `.child()` needs: every retained handle
+  // in this API is a `{__handle: number}` wrapper, so a focus handle and a view
+  // handle are otherwise indistinguishable, and mounting the wrong one would
+  // report a released view rather than the mistake that was made.
   const retainedViewHandle = (handle) => ({
+    __viewHandle: true,
     __handle: handle,
     set_props: (props) => __view_set_props(handle, props),
     release: () => __view_release(handle),
   });
-
-  const childView = (handle) => {
-    if (typeof handle?.__handle !== "number") {
-      throw new TypeError(
-        "child_view(handle) expects a ViewHandle from ViewHandle.new(Class, props)",
-      );
-    }
-    return element(__child_view(handle.__handle));
-  };
 
   const virtualScrollHandle = (handle) => ({
     __handle: handle,
@@ -3145,8 +3177,13 @@ globalThis.__gpui = (() => {
       deferInit = false;
     }
   };
+  // `init` gets the async flavor, and both of its paths get the same one. That
+  // is the honest shape: `init` exists to set up things that outlive the call —
+  // tasks, timers, retained handles — so the context it hands to them must
+  // outlive it too. A call-scoped `cx` here could not be given to the very work
+  // `init` is for.
   globalThis.__initialize = (instance, props) => {
-    if (typeof instance.init === "function") instance.init(props);
+    if (typeof instance.init === "function") instance.init(props, __async_cx());
   };
   // This journals ordinary reachable object and callable descriptors only. Restoration succeeds
   // only while post-update descriptors remain legally redefinable/deletable.
@@ -3199,7 +3236,10 @@ globalThis.__gpui = (() => {
 
   class View {
     constructor(props) {
-      if (!deferInit && typeof this.init === "function") this.init(props);
+      // `new MyView(props)` from script reaches `init` without the host's
+      // generation, so the context here is the async flavor — it resolves
+      // whichever call is running, and says so if there is none.
+      if (!deferInit && typeof this.init === "function") this.init(props, __async_cx());
     }
   }
 
@@ -3242,6 +3282,11 @@ globalThis.__gpui = (() => {
     push_toast: (options) => __push_toast(options),
     remove_toast: (id) => __remove_toast(String(id)),
     clear_toasts: () => __clear_toasts(),
+
+    // `Window::paint_path` in GPUI, so `window` here. It is the one element
+    // constructor that is not a free function, and it is one because the thing
+    // it mirrors is a method on the window rather than on the app.
+    paint_path: paintPath,
   };
 
   let cachedThemeSource;
@@ -3259,10 +3304,50 @@ globalThis.__gpui = (() => {
     return cachedTheme;
   };
 
-  const contextTheme = (check) => () => {
-    check();
-    return currentTheme();
-  };
+  // Every member of `cx` gates on `check()` and then does ordinary ambient
+  // work. That gate is the whole difference between a call-scoped `cx` and an
+  // async one, so a member added here is right for both flavors at once and
+  // the two cannot drift.
+  const contextMembers = (check) => ({
+    theme: () => {
+      check();
+      return currentTheme();
+    },
+    open_url: (url) => {
+      check();
+      return __open_url(String(url));
+    },
+    read_from_clipboard: () => {
+      check();
+      return __clipboard_read_text();
+    },
+    write_to_clipboard: (text) => {
+      check();
+      return __clipboard_write_text(String(text));
+    },
+    focus_handle: () => {
+      check();
+      return focusHandle(__focus_handle_new());
+    },
+    spawn: (body, opts) => {
+      check();
+      return __spawn(body, opts);
+    },
+    sleep: (ms) => {
+      check();
+      return __sleep(ms);
+    },
+    timer: {
+      after: (ms, handler, opts) => {
+        check();
+        return __timer_after(ms, handler, opts);
+      },
+      every: (ms, handler, opts) => {
+        check();
+        return __timer_every(ms, handler, opts);
+      },
+    },
+  });
 
   return {
     View,
@@ -3274,14 +3359,12 @@ globalThis.__gpui = (() => {
         return retainedViewHandle(__view_new(Class, props));
       },
     },
-    child_view: childView,
     div: () => element(__div()),
     h_flex: () => element(__h_flex()),
     v_flex: () => element(__v_flex()),
     text: (value) => element(__text(String(value))),
     svg: (path) => element(__svg(String(path))),
     image: (path) => element(__image(String(path))),
-    paint_path: paintPath,
     PathBuilder: {
       fill: () => pathBuilder(true, 0),
       stroke: (width) => pathBuilder(false, finitePositive(width, "stroke width")),
@@ -3314,8 +3397,7 @@ globalThis.__gpui = (() => {
         String(finitePositive(size, "checkerboard size")),
       ]),
     },
-    theme: currentTheme,
-    __context_theme: contextTheme,
+    __context_members: contextMembers,
     Button: { new: (id) => element(__button(String(id))) },
     Link: { new: (id) => element(__link(String(id))) },
     Checkbox: { new: (id) => element(__checkbox(String(id))) },
@@ -3373,7 +3455,7 @@ globalThis.__gpui = (() => {
       new: (id, focus_handle) => {
         if (typeof focus_handle?.__handle !== "number") {
           throw new TypeError(
-            "DatePicker.new(id, focus_handle) expects a FocusHandle from FocusHandle.new(); the picker takes the keyboard through that handle, and base has no builder to supply one later",
+            "DatePicker.new(id, focus_handle) expects a FocusHandle from cx.focus_handle(); the picker takes the keyboard through that handle, and base has no builder to supply one later",
           );
         }
         return element(__date_picker(String(id), focus_handle.__handle));
@@ -3472,7 +3554,6 @@ globalThis.__gpui = (() => {
       },
     },
     OtpInput: { new: (state) => element(__otp_element(state.__handle)) },
-    FocusHandle: { new: () => focusHandle(__focus_handle_new()) },
   };
 })();
 "#;
@@ -3882,6 +3963,14 @@ impl ShellRuntime {
                 Func::from(|ctx: Ctx<'_>, name: String| -> JsResult<()> {
                     Err(Exception::throw_type(&ctx, &unknown_method(&name)))
                 }),
+            )?;
+
+            // A `cx` for code the host is not calling with one in hand: the
+            // `View` constructor, and `init` through it. Ambient, so it works
+            // wherever a call is running and says so where none is.
+            globals.set(
+                "__async_cx",
+                Func::from(async_context_object),
             )?;
 
             let attach_runtime = runtime.clone();
@@ -4628,7 +4717,26 @@ fn virtual_list_constructor(
     )
 }
 
+/// The spec a `render` returned.
+///
+/// A retained child view counts, the way an `Entity<V>` is itself renderable in
+/// GPUI: a view whose whole job is to hold one child should be able to say so
+/// by returning it, rather than wrapping it in a container it does not want.
 fn element_id(ctx: &Ctx<'_>, value: &Value<'_>) -> JsResult<SpecId> {
+    let Some(object) = value.as_object() else {
+        return Err(Exception::throw_type(
+            ctx,
+            "render(cx) must return an element built with gpui",
+        ));
+    };
+    if let Ok(id) = object.get::<_, u32>("__id") {
+        return Ok(id as SpecId);
+    }
+    if object.get::<_, bool>("__viewHandle").unwrap_or(false) {
+        let child_view: rquickjs::Function = ctx.globals().get("__child_view")?;
+        let handle: u32 = object.get("__handle")?;
+        return child_view.call((handle,));
+    }
     value
         .as_object()
         .and_then(|object| object.get::<_, u32>("__id").ok())
@@ -4637,20 +4745,71 @@ fn element_id(ctx: &Ctx<'_>, value: &Value<'_>) -> JsResult<SpecId> {
         })
 }
 
-/// The script-side `cx`. It carries only a generation; every use is checked
-/// against the live scope stack, so a `cx` kept past its call reports clearly
-/// instead of touching a dead frame.
-fn context_object<'js>(ctx: &Ctx<'js>, generation: u64) -> JsResult<Object<'js>> {
+/// How a `cx` reaches the host call it speaks for.
+///
+/// GPUI draws this line with the borrow checker: `App` and `Context<T>` are
+/// borrows that cannot outlive their call, and `AsyncApp` is the one flavor you
+/// may hold across an `await`. A script has no borrow checker, so the same line
+/// is drawn at run time — and it is the *only* difference between the two
+/// kinds of `cx`. Every member gates on [`ContextBinding::check`] and then does
+/// the same ambient work, so the two cannot drift apart.
+#[derive(Clone, Copy)]
+pub(crate) enum ContextBinding {
+    /// One host call, named by its generation. Refuses once that call has
+    /// returned, which is what catches a `cx` stashed in a closure and used
+    /// from a later frame.
+    Call(u64),
+    /// Whichever host call is running now. Survives an `await`, because it
+    /// names no frame that could go stale — the mirror of GPUI's `AsyncApp`.
+    Ambient,
+}
+
+impl ContextBinding {
+    /// Refuses a `cx` that cannot speak for a live call, before any member acts.
+    fn check(self, ctx: &Ctx<'_>) -> JsResult<()> {
+        self.with_app(ctx, |_| ())
+    }
+
+    /// The `App` of the call this `cx` speaks for.
+    fn with_app<R>(self, ctx: &Ctx<'_>, body: impl FnOnce(&mut App) -> R) -> JsResult<R> {
+        match self {
+            Self::Call(generation) => scope::with_context(generation, |_, app| body(app))
+                .map_err(|error| Exception::throw_type(ctx, &error.to_string())),
+            Self::Ambient => scope::with_current_app(body).ok_or_else(|| {
+                Exception::throw_type(
+                    ctx,
+                    "this cx has no host call to speak for. An async cx works inside the task \
+                     that owns it — from a handler the scheduler resumed — not from a bare \
+                     promise callback or after the task was cancelled.",
+                )
+            }),
+        }
+    }
+}
+
+/// `globalThis.__async_cx()`. A free function rather than a closure because it
+/// has to be generic over the JS lifetime.
+fn async_context_object<'js>(ctx: Ctx<'js>) -> JsResult<Object<'js>> {
+    context_object(&ctx, ContextBinding::Ambient)
+}
+
+/// The script-side `cx`.
+///
+/// It carries no state a script can reach — only the binding above, closed over
+/// by the members — so `Object.keys(cx)` still shows nothing but methods and a
+/// generation cannot be forged.
+fn context_object<'js>(ctx: &Ctx<'js>, binding: ContextBinding) -> JsResult<Object<'js>> {
     let object = Object::new(ctx.clone())?;
 
     let module: Object = ctx.globals().get("__gpui")?;
-    let context_theme: Function = module.get("__context_theme")?;
-    let check = Func::from(move |ctx: Ctx<'_>| -> JsResult<()> {
-        scope::with_context(generation, |_, _| ())
-            .map_err(|error| Exception::throw_type(&ctx, &error.to_string()))
-    });
-    let theme: Function = context_theme.call((check,))?;
-    object.set("theme", theme)?;
+    let members: Function = module.get("__context_members")?;
+    let check = Func::from(move |ctx: Ctx<'_>| -> JsResult<()> { binding.check(&ctx) });
+    let members: Object = members.call((check,))?;
+    for name in members.keys::<String>() {
+        let name = name?;
+        let member: Value = members.get(&name as &str)?;
+        object.set(name, member)?;
+    }
 
     object.set(
         "notify",
@@ -4668,7 +4827,7 @@ fn context_object<'js>(ctx: &Ctx<'js>, generation: u64) -> JsResult<Object<'js>>
             }
 
             let view = scope::current_view();
-            scope::with_context(generation, move |_, app| {
+            binding.with_app(&ctx, move |app| {
                 if let Some(view) = view {
                     // Two halves, and both matter. Invalidating says the script
                     // description may have moved, which is the only thing that
@@ -4682,7 +4841,6 @@ fn context_object<'js>(ctx: &Ctx<'js>, generation: u64) -> JsResult<Object<'js>>
                     });
                 }
             })
-            .map_err(|error| Exception::throw_type(&ctx, &error.to_string()))
         }),
     )?;
 
@@ -5018,7 +5176,7 @@ mod nested_view_lifecycle_tests {
             &runtime,
             r#"
 import { View, text } from "gpui";
-export default class Child extends View { render() { return text("child"); } }
+export default class Child extends View { render(cx) { return text("child"); } }
 "#,
         );
         view_type.application = Some(owner_application.clone());
@@ -5165,19 +5323,19 @@ export default class Child extends View {
         let view_type = child_type(
             &runtime,
             r#"
-import { View, timer, text } from "gpui";
+import { View, text } from "gpui";
 import { InputState } from "gpui-base";
 
 export default class Child extends View {
-  init(props) {
+  init(props, cx) {
     this.label = props.label;
-    this.tick = timer.every(60_000, () => {});
+    this.tick = cx.timer.every(60_000, () => {});
     Promise.resolve().then(() => {
       this.continuation_input = InputState.new({ value: "continued" });
       this.continued = true;
     });
   }
-  render() { return text(this.label); }
+  render(cx) { return text(this.label); }
 }
 "#,
         );
@@ -5253,13 +5411,15 @@ export default class Child extends View {
         let parent_type = child_type(
             &runtime,
             r#"
-import { View, timer, text } from "gpui";
+import { View, text, with_cx } from "gpui";
 import { InputState } from "gpui-base";
 globalThis.parent_continuations = 0;
 globalThis.queue_parent_job = () => Promise.resolve().then(() => {
   globalThis.parent_continuations += 1;
   globalThis.parent_input = InputState.new({ value: "parent" });
-  globalThis.parent_tick = timer.every(60_000, () => {});
+  // A bare `.then` at module scope was handed no `cx`; the drain runs it
+  // inside a live task scope, which is what `with_cx` reaches.
+  globalThis.parent_tick = with_cx((cx) => cx.timer.every(60_000, () => {}));
 });
 export default class Parent extends View {
   render() { return text("parent"); }
@@ -5269,18 +5429,18 @@ export default class Parent extends View {
         let child_type = child_type(
             &runtime,
             r#"
-import { View, timer, text } from "gpui";
+import { View, text } from "gpui";
 import { InputState } from "gpui-base";
 globalThis.child_continuations = 0;
 export default class Child extends View {
-  init() {
+  init(_props, cx) {
     Promise.resolve().then(() => {
       globalThis.child_continuations += 1;
       this.input = InputState.new({ value: "child" });
-      this.tick = timer.every(60_000, () => {});
+      this.tick = cx.timer.every(60_000, () => {});
     });
   }
-  render() { return text("child"); }
+  render(cx) { return text("child"); }
 }
 "#,
         );
@@ -5371,13 +5531,15 @@ export default class Child extends View {
         let parent_type = child_type(
             &runtime,
             r#"
-import { View, timer, text } from "gpui";
+import { View, text, with_cx } from "gpui";
 import { InputState } from "gpui-base";
 globalThis.parent_continuations = 0;
 globalThis.queue_parent_job = () => Promise.resolve().then(() => {
   globalThis.parent_continuations += 1;
   globalThis.parent_input = InputState.new({ value: "parent" });
-  globalThis.parent_tick = timer.every(60_000, () => {});
+  // A bare `.then` at module scope was handed no `cx`; the drain runs it
+  // inside a live task scope, which is what `with_cx` reaches.
+  globalThis.parent_tick = with_cx((cx) => cx.timer.every(60_000, () => {}));
 });
 export default class Parent extends View {
   render() { return text("parent"); }
@@ -5387,19 +5549,19 @@ export default class Parent extends View {
         let child_type = child_type(
             &runtime,
             r#"
-import { View, timer, text } from "gpui";
+import { View, text } from "gpui";
 import { InputState } from "gpui-base";
 globalThis.child_continuations = 0;
 export default class BrokenChild extends View {
-  init() {
+  init(_props, cx) {
     Promise.resolve().then(() => {
       globalThis.child_continuations += 1;
       this.input = InputState.new({ value: "child" });
-      this.tick = timer.every(60_000, () => {});
+      this.tick = cx.timer.every(60_000, () => {});
     });
     throw new Error("mixed init failed");
   }
-  render() { return text("unreachable"); }
+  render(cx) { return text("unreachable"); }
 }
 "#,
         );
@@ -5496,13 +5658,13 @@ export default class Parent extends View {
         let child_type = child_type(
             &runtime,
             r#"
-import { View, timer, text } from "gpui";
+import { View, text } from "gpui";
 import { InputState } from "gpui-base";
 globalThis.successor_runs = 0;
 export default class BrokenChild extends View {
-  init() {
+  init(_props, cx) {
     this.input = InputState.new({ value: "candidate" });
-    this.tick = timer.every(60_000, () => {});
+    this.tick = cx.timer.every(60_000, () => {});
     const again = () => {
       Promise.resolve().then(again);
       Promise.resolve().then(again);
@@ -5510,7 +5672,7 @@ export default class BrokenChild extends View {
     };
     Promise.resolve().then(again);
   }
-  render() { return text("unreachable"); }
+  render(cx) { return text("unreachable"); }
 }
 "#,
         );
@@ -5650,15 +5812,15 @@ export default class Child extends View {
         let view_type = child_type(
             &runtime,
             r#"
-import { View, timer, text } from "gpui";
+import { View, text } from "gpui";
 import { InputState } from "gpui-base";
 
 export default class Child extends View {
-  init() {
+  init(_props, cx) {
     this.input = InputState.new();
-    this.tick = timer.every(60_000, () => {});
+    this.tick = cx.timer.every(60_000, () => {});
   }
-  render() { return text("child"); }
+  render(cx) { return text("child"); }
 }
 "#,
         );
@@ -5726,11 +5888,11 @@ export default class Child extends View {
         let view_type = child_type(
             &runtime,
             r#"
-import { View, timer, text } from "gpui";
+import { View, text } from "gpui";
 
 export default class Child extends View {
-  init() { this.tick = timer.every(60_000, () => {}); }
-  render() { return text("child"); }
+  init(_props, cx) { this.tick = cx.timer.every(60_000, () => {}); }
+  render(cx) { return text("child"); }
 }
 "#,
         );
@@ -5797,9 +5959,9 @@ export default class Child extends View {
         let view_type_a = child_type(
             &runtime_a,
             r#"
-import { View, timer, text } from "gpui";
+import { View, text } from "gpui";
 export default class Child extends View {
-  init() { this.tick = timer.every(60_000, () => {}); }
+  init(_props, cx) { this.tick = cx.timer.every(60_000, () => {}); }
   render() { return text("a"); }
 }
 "#,
@@ -5807,10 +5969,10 @@ export default class Child extends View {
         let view_type_b = child_type(
             &runtime_b,
             r#"
-import { View, timer, text } from "gpui";
+import { View, text } from "gpui";
 export default class Child extends View {
-  init() { this.tick = timer.every(60_000, () => {}); }
-  render() { return text("b"); }
+  init(_props, cx) { this.tick = cx.timer.every(60_000, () => {}); }
+  render(cx) { return text("b"); }
 }
 "#,
         );
@@ -5876,21 +6038,21 @@ export default class Child extends View {
         let view_type = child_type(
             &runtime,
             r#"
-import { View, timer, text } from "gpui";
+import { View, text } from "gpui";
 import { InputState } from "gpui-base";
 globalThis.failed_child_continuations = 0;
 
 export default class BrokenChild extends View {
-  init(props) {
+  init(props, cx) {
     this.input = InputState.new({ value: props.value });
-    this.tick = timer.every(60_000, () => {});
+    this.tick = cx.timer.every(60_000, () => {});
     Promise.resolve().then(() => {
       globalThis.failed_child_continuations += 1;
       globalThis.continuation_input = InputState.new({ value: "continued" });
     });
     throw new Error("child init failed");
   }
-  render() { return text("unreachable"); }
+  render(cx) { return text("unreachable"); }
 }
 "#,
         );

@@ -54,14 +54,14 @@ class Workspace extends View {
   }
 
   render() {
-    return child_view(this.chart);
+    return this.chart;
   }
 }
 ```
 
 `ViewHandle.new(Class, props?)` is allowed only in `init`, an event handler or a task, where a live
 window and application context exist. It constructs the script object, creates the final GPUI
-entity before calling `init(props)`, and registers the entity in the application-owned entity
+entity before calling `init(props, cx)`, and registers the entity in the application-owned entity
 store. Creation during `render` or the layout phase is rejected.
 
 `handle.set_props(props)` runs the child's optional `update(props)` under the child's event scope,
@@ -69,9 +69,10 @@ then invalidates and notifies only that child. It is also forbidden during `rend
 parent-to-child synchronization must happen where the data changes, not as a hidden render side
 effect. Values remain inside the same QuickJS runtime; the host does not serialize them.
 
-`child_view(handle)` produces a single-use description that materializes the retained child entity.
-The same handle may appear once in a parent snapshot. Reusing it twice in one description is an
-error because GPUI cannot mount one entity at two positions.
+A handle is a child wherever a child is taken — `.child(handle)`, or returned from `render` —
+exactly as an `Entity<V>` is renderable in GPUI. Mounting produces a single-use description of the
+retained child entity, so the same handle may appear once in a parent snapshot. Reusing it twice in
+one description is an error because GPUI cannot mount one entity at two positions.
 
 `handle.release()` removes the script's ownership. A mounted GPUI entity may finish its current
 frame, but the handle can no longer be updated or mounted again.

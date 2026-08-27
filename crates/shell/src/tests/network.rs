@@ -13,13 +13,13 @@ use tungstenite::Message;
 use crate::{Capabilities, ScriptView, ShellRuntime};
 
 const FETCH_PROBE: &str = r#"
-import { View, text, spawn, with_cx } from "gpui";
+import { View, text, with_cx } from "gpui";
 import { v_flex } from "gpui-base";
 
 export default class Probe extends View {
-  init() {
+  init(_props, cx) {
     this.state = "pending";
-    spawn(async () => {
+    cx.spawn(async () => {
       try {
         const response = await fetch("__URL__");
         this.state = `${response.status}|${response.ok}|${await response.text()}`;
@@ -34,14 +34,14 @@ export default class Probe extends View {
 "#;
 
 const NET_PROBE: &str = r#"
-import { View, text, spawn, with_cx } from "gpui";
+import { View, text, with_cx } from "gpui";
 import { v_flex } from "gpui-base";
 import { connect } from "net";
 
 export default class Probe extends View {
-  init() {
+  init(_props, cx) {
     this.state = "pending";
-    spawn(async () => {
+    cx.spawn(async () => {
       try {
         const socket = await connect("127.0.0.1", __PORT__);
         await socket.write("ping");
@@ -60,14 +60,14 @@ export default class Probe extends View {
 "#;
 
 const NET_LIMIT_PROBE: &str = r#"
-import { View, text, spawn, with_cx } from "gpui";
+import { View, text, with_cx } from "gpui";
 import { v_flex } from "gpui-base";
 import { connect } from "net";
 
 export default class Probe extends View {
-  init() {
+  init(_props, cx) {
     this.state = "pending";
-    spawn(async () => {
+    cx.spawn(async () => {
       const socket = await connect("127.0.0.1", __PORT__);
       const errors = [];
       try { await socket.write("x".repeat(1048577)); }
@@ -84,17 +84,17 @@ export default class Probe extends View {
 "#;
 
 const NET_PENDING_READ_CLOSE_PROBE: &str = r#"
-import { View, text, spawn, sleep, with_cx } from "gpui";
+import { View, text, with_cx } from "gpui";
 import { v_flex } from "gpui-base";
 import { connect } from "net";
 
 export default class Probe extends View {
-  init() {
+  init(_props, cx) {
     this.state = "pending";
-    spawn(async () => {
+    cx.spawn(async () => {
       const socket = await connect("127.0.0.1", __PORT__);
       const reading = socket.read(1).catch(() => undefined);
-      await sleep(50);
+      await cx.sleep(50);
       socket.close();
       await reading;
       this.state = "closed";
@@ -106,14 +106,14 @@ export default class Probe extends View {
 "#;
 
 const WEBSOCKET_PROBE: &str = r#"
-import { View, text, spawn, with_cx } from "gpui";
+import { View, text, with_cx } from "gpui";
 import { v_flex } from "gpui-base";
 import { WebSocket } from "websocket";
 
 export default class Probe extends View {
-  init() {
+  init(_props, cx) {
     this.state = "pending";
-    spawn(async () => {
+    cx.spawn(async () => {
       const standardGlobal = typeof globalThis.WebSocket;
       try {
         await WebSocket.connect("wss://quotes.example.test/v2");
@@ -129,14 +129,14 @@ export default class Probe extends View {
 "#;
 
 const WEBSOCKET_HANDSHAKE_PROBE: &str = r#"
-import { View, text, spawn, with_cx } from "gpui";
+import { View, text, with_cx } from "gpui";
 import { v_flex } from "gpui-base";
 import { WebSocket } from "websocket";
 
 export default class Probe extends View {
-  init() {
+  init(_props, cx) {
     this.state = "pending";
-    spawn(async () => {
+    cx.spawn(async () => {
       try {
         await WebSocket.connect("__URL__");
         this.state = "connected";
@@ -151,14 +151,14 @@ export default class Probe extends View {
 "#;
 
 const WEBSOCKET_HEADERS_PROBE: &str = r#"
-import { View, text, spawn, with_cx } from "gpui";
+import { View, text, with_cx } from "gpui";
 import { v_flex } from "gpui-base";
 import { WebSocket } from "websocket";
 
 export default class Probe extends View {
-  init() {
+  init(_props, cx) {
     this.state = "pending";
-    spawn(async () => {
+    cx.spawn(async () => {
       try {
         await WebSocket.connect("__URL__", { headers: __HEADERS__ });
         this.state = "connected";
@@ -173,14 +173,14 @@ export default class Probe extends View {
 "#;
 
 const WEBSOCKET_MESSAGES_PROBE: &str = r#"
-import { View, text, spawn, with_cx } from "gpui";
+import { View, text, with_cx } from "gpui";
 import { v_flex } from "gpui-base";
 import { WebSocket } from "websocket";
 
 export default class Probe extends View {
-  init() {
+  init(_props, cx) {
     this.state = "pending";
-    spawn(async () => {
+    cx.spawn(async () => {
       try {
         const socket = await WebSocket.connect("__URL__");
         await socket.write("client text");
@@ -199,14 +199,14 @@ export default class Probe extends View {
 "#;
 
 const WEBSOCKET_PENDING_READ_PROBE: &str = r#"
-import { View, text, spawn, with_cx } from "gpui";
+import { View, text, with_cx } from "gpui";
 import { v_flex } from "gpui-base";
 import { WebSocket } from "websocket";
 
 export default class Probe extends View {
-  init() {
+  init(_props, cx) {
     this.state = "pending";
-    spawn(async () => {
+    cx.spawn(async () => {
       try {
         const socket = await WebSocket.connect("__URL__");
         const reading = socket.read().catch(() => undefined);
@@ -225,14 +225,14 @@ export default class Probe extends View {
 "#;
 
 const WEBSOCKET_IDLE_PROBE: &str = r#"
-import { View, text, spawn, with_cx } from "gpui";
+import { View, text, with_cx } from "gpui";
 import { v_flex } from "gpui-base";
 import { WebSocket } from "websocket";
 
 export default class Probe extends View {
-  init() {
+  init(_props, cx) {
     this.state = "pending";
-    spawn(async () => {
+    cx.spawn(async () => {
       this.socket = await WebSocket.connect("__URL__");
       this.state = "connected";
       with_cx((cx) => cx.notify());
@@ -243,14 +243,14 @@ export default class Probe extends View {
 "#;
 
 const WEBSOCKET_CLOSED_WRITE_PROBE: &str = r#"
-import { View, text, spawn, with_cx } from "gpui";
+import { View, text, with_cx } from "gpui";
 import { v_flex } from "gpui-base";
 import { WebSocket } from "websocket";
 
 export default class Probe extends View {
-  init() {
+  init(_props, cx) {
     this.state = "pending";
-    spawn(async () => {
+    cx.spawn(async () => {
       try {
         const socket = await WebSocket.connect("__URL__");
         try { await socket.read(); } catch (_) {}
@@ -267,14 +267,14 @@ export default class Probe extends View {
 "#;
 
 const WEBSOCKET_CONCURRENT_READ_PROBE: &str = r#"
-import { View, text, spawn, with_cx } from "gpui";
+import { View, text, with_cx } from "gpui";
 import { v_flex } from "gpui-base";
 import { WebSocket } from "websocket";
 
 export default class Probe extends View {
-  init() {
+  init(_props, cx) {
     this.state = "pending";
-    spawn(async () => {
+    cx.spawn(async () => {
       const socket = await WebSocket.connect("__URL__");
       const first = socket.read().catch(() => undefined);
       try {
@@ -293,14 +293,14 @@ export default class Probe extends View {
 "#;
 
 const WEBSOCKET_STALLED_WRITE_PROBE: &str = r#"
-import { View, text, spawn, with_cx } from "gpui";
+import { View, text, with_cx } from "gpui";
 import { v_flex } from "gpui-base";
 import { WebSocket } from "websocket";
 
 export default class Probe extends View {
-  init() {
+  init(_props, cx) {
     this.state = "pending";
-    spawn(async () => {
+    cx.spawn(async () => {
       try {
         const socket = await WebSocket.connect("__URL__");
         const payload = "x".repeat(8 * 1024 * 1024);
@@ -319,14 +319,14 @@ export default class Probe extends View {
 "#;
 
 const WEBSOCKET_QUEUE_LIMIT_PROBE: &str = r#"
-import { View, text, spawn, with_cx } from "gpui";
+import { View, text, with_cx } from "gpui";
 import { v_flex } from "gpui-base";
 import { WebSocket } from "websocket";
 
 export default class Probe extends View {
-  init() {
+  init(_props, cx) {
     this.state = "pending";
-    spawn(async () => {
+    cx.spawn(async () => {
       const socket = await WebSocket.connect("__URL__");
       const payload = "x".repeat(2 * 1024 * 1024);
       const writes = [];
@@ -361,7 +361,7 @@ export default class Probe extends View {
       with_cx((cx) => cx.notify());
     });
   }
-  render() { return v_flex().child(text(this.state)); }
+  render(cx) { return v_flex().child(text(this.state)); }
 }
 "#;
 

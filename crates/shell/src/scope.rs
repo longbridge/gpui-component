@@ -387,7 +387,7 @@ impl std::fmt::Display for StaleContext {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(
             "cx is no longer valid: it was captured during an earlier call and used later. \
-             Use gpui.spawn or take cx from the callback arguments instead.",
+             Use cx.spawn or take cx from the callback arguments instead.",
         )
     }
 }

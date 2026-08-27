@@ -513,16 +513,31 @@ Runtime also provides the selected bare modules listed in §1.1; every other
 `export default` a class extending `View`. The host takes that class, constructs
 one instance, and mounts it as the window's root view.
 
-Naming follows the Rust side directly:
+Naming follows the Rust side directly. **Where a binding lives in Rust decides
+where it lives in JavaScript** — the rule is provenance, not category, so a
+binding added later lands in one place and there is nothing to argue about:
 
-| Rust              | JavaScript                              | Example                                          |
-| ----------------- | --------------------------------------- | ------------------------------------------------ |
-| Type plus `::new` | Capitalized type table with only `.new` | `Button::new(id)` → `Button.new(id)`             |
-| Free function     | Lowercase function                      | `div()`, `h_flex()`, `v_flex()`, `text(s)`       |
-| State entity      | Capitalized type table                  | `InputState::new(...)` → `InputState.new({...})` |
-| System capability | Lowercase module member                 | `fs`, `store`, `clipboard`, `log`, `process`     |
-| Scheduling        | Lowercase module member                 | `spawn`, `timer`, `sleep`, `with_cx`             |
-| View base class   | `class X extends View`                  | `export default class Counter extends View`      |
+| Rust                          | JavaScript                              | Example                                                    |
+| ----------------------------- | --------------------------------------- | ---------------------------------------------------------- |
+| Method on `App`               | Method on `cx`                          | `App::open_url` → `cx.open_url(url)`                        |
+| Method on `Window`            | Method on the `window` global           | `Window::paint_path` → `window.paint_path(path, bg)`        |
+| Type plus `::new`             | Capitalized type table with only `.new` | `Button::new(id)` → `Button.new(id)`                        |
+| Free function                 | Lowercase function                      | `div()`, `h_flex()`, `v_flex()`, `text(s)`                  |
+| State entity                  | Capitalized type table                  | `InputState::new(...)` → `InputState.new({...})`            |
+| No GPUI or base original      | Lowercase module member                 | `fs`, `store`, `log`, `process`, `native`, `with_cx`        |
+| View base class               | `class X extends View`                  | `export default class Counter extends View`                 |
+
+An earlier version of this table mapped by category — "system capability" and
+"scheduling" both became module members — and that is what let the script
+surface drift away from GPUI's. `open_url`, `spawn`, `read_from_clipboard`,
+`write_to_clipboard` and `focus_handle` are `App` methods in Rust, so they are
+`cx` methods here; `paint_path` is a `Window` method, so it is on `window`. Note
+what the rule also settles: `FocusHandle.new()` was a constructor GPUI does not
+have, because `App::focus_handle` is the only way to make one.
+
+An entity is a child wherever a child is taken, exactly as an `Entity<V>` is
+renderable in GPUI: `.child(handle)` mounts a retained nested view, and a
+`render` may return a handle directly.
 
 #### Style and behavior methods keep their Rust snake_case spelling
 
@@ -1207,8 +1222,36 @@ the stack, and a mismatch throws:
 
 ```text
 cx is no longer valid: it was captured during an earlier call and used later.
-Use gpui.spawn or take cx from the callback arguments instead.
+Use cx.spawn or take cx from the callback arguments instead.
 ```
+
+#### Two flavors, the way GPUI has two
+
+GPUI draws the same line with the borrow checker: `App` and `Context<T>` are
+borrows that cannot outlive their call, and `AsyncApp` is the one flavor you may
+hold across an `await` — `Context::spawn` says so in as many words. A script has
+no borrow checker, so the line is drawn at run time by `ContextBinding`:
+
+- **`Context`** names one call by generation, and is what `render` and every
+  event handler receive. A `cx` stashed in a closure still reports clearly.
+- **`AsyncContext`** names no call. It resolves whichever frame is live when a
+  member is used, and refuses only when none is. It is what `init` receives and
+  what `cx.spawn` and `cx.timer` hand their callbacks.
+
+That is the *whole* difference: every member gates on the binding's check and
+then does ordinary ambient work, so the two cannot drift apart. Nor is ambient
+resolution a new mechanism here — it is the majority one. `scope::with_context`
+has two call sites outside `scope.rs`; `with_current` and `with_current_app`
+back entity creation, the overlays, `store`, the clipboard, the theme and every
+native module. The overlays were themselves *moved off* `cx` onto the ambient
+`window` global for exactly this reason, and `overlay.rs` records the argument.
+
+Nothing is lost by it. `notify` already reads its view from the ambient
+`current_view()`, and every re-homed member was ambient underneath to begin
+with, so an `AsyncContext` used from a later call is not working by luck — it is
+working the way the operation always worked. What the generation refuses is a
+`cx` used in a frame that is merely *different*; what an `AsyncContext` still
+refuses is one used with no frame at all.
 
 The `unsafe` is confined to this one module and its preconditions are written
 into the module header: the VM and `App` are both main-thread only, so no other
@@ -1233,7 +1276,7 @@ what to reach.
 | `Render` | Reading state and the theme, building elements, registering callbacks | `notify`, creating entities, opening overlays      |
 | `Event`  | Everything: mutating state, `notify`, `spawn`, overlays               | Blocking                                           |
 | `Task`   | Same as `Event`                                                       | Blocking                                           |
-| `Layout` | Reading and building elements (§8.5)                                  | `notify`, creating or destroying entities, `spawn` |
+| `Layout` | Reading and building elements (§8.5)                                  | `notify`, creating or destroying entities          |
 
 Every refusal is a specific message, not undefined behavior:
 
@@ -1459,13 +1502,12 @@ Script code is asynchronous in the ordinary JavaScript way. What
 not have: a clock, an owner for pending work, and somebody to pump the queue.
 
 ```js
-gpui.spawn(async (cx) => {
-  await gpui.sleep(200);
-  gpui.with_cx((cx) => {
-    // obtain a context that belongs to this call
-    this.ready = true;
-    cx.notify();
-  });
+cx.spawn(async (cx) => {
+  await cx.sleep(200);
+  // The same `cx` the body was handed. It names no call, so the `await` does
+  // not take it away.
+  this.ready = true;
+  cx.notify();
 });
 ```
 
@@ -1485,26 +1527,30 @@ must not stop the others. The drain is bounded at 100,000 jobs so that
 `for(;;) Promise.resolve().then(f)` cannot wedge the frame loop, and hitting the
 bound is itself an error log.
 
-**A `cx` must not be held across an `await`.** After an `await` the generation
-has moved and the old token produces the §9.2 error. The correct form is
-`gpui.with_cx(...)`, or taking `cx` from the callback arguments. This is easier
-to get wrong in JavaScript, because the code before and after an `await` shares
-one lexical scope and the old `cx` is simply in reach.
+**A call-scoped `cx` must not be held across an `await`.** After an `await` the
+generation has moved and the old token produces the §9.2 error. This is easy to
+get wrong in JavaScript, because the code before and after an `await` shares one
+lexical scope and the old `cx` is simply in reach — which is why the contexts
+whose job is to survive that are a different flavor. The `cx` a `cx.spawn` or
+`cx.timer` callback receives is an `AsyncContext` and stays usable; `render`'s
+and a handler's do not, and should not be captured. `gpui.with_cx(...)` remains
+for code holding no context at all: a module's top level, a bare `constructor`,
+a `.then` callback nothing handed one to.
 
 **An unhandled rejection must be visible.** A failed promise with no `catch` is
-silent by default in JavaScript. `gpui.spawn` adopts the promise it is given and
+silent by default in JavaScript. `cx.spawn` adopts the promise it is given and
 attaches reporting handlers, so a rejection reaches `tracing::error!` with the
 script's own stack rather than vanishing. A body that throws synchronously is
 absorbed the same way.
 
 **Top-level `await` is not supported.** Module evaluation must complete
 synchronously; anything needing asynchronous start-up does it from `init` with
-`gpui.spawn`.
+`cx.spawn`.
 
 ### 12.3 Ownership and cancellation
 
 ```js
-const task = gpui.timer.every(1000, (cx) => {
+const task = cx.timer.every(1000, (cx) => {
   /* ... */
 });
 task.cancel();
@@ -1552,7 +1598,7 @@ results must be plain, thread-transferable data. There is no `Worker`.
 
 ### 12.5 Timers
 
-`gpui.timer.after(ms, fn, opts?)` and `gpui.timer.every(ms, fn, opts?)`, both
+`cx.timer.after(ms, fn, opts?)` and `cx.timer.every(ms, fn, opts?)`, both
 owner-bound. The interval on `every` is measured from the end of one callback to
 the start of the next wait, so a slow callback delays the next tick rather than
 piling ticks up behind it.
@@ -2287,9 +2333,10 @@ forever. Functions and `undefined` properties are dropped exactly as
 
 ### 17.4 Clipboard and logging
 
-`clipboard.read_text` and `write_text`, with read and write as separate grants so
-a denial names the half that was missing. Both need a live host call, and a
-clipboard call from, say, a module's top level reports that rather than panicking.
+`cx.read_from_clipboard` and `cx.write_to_clipboard`, named after the `App`
+methods they call, with read and write as separate grants so a denial names the
+half that was missing. Both need a live host call, and a clipboard call from a
+context that has none reports that rather than panicking.
 
 `log.debug/info/warn/error` need no capability: a script that can run can already
 say something, and denying it would only cost the author their diagnostics.
@@ -3404,7 +3451,7 @@ shipped preset module. The `gpui-component` binding registry.
    former, with `gpui.register_settings(schema)`, is the working preference.
 
 7. **Where is the compatibility-stub boundary?** `setTimeout` errors and points
-   at `gpui.timer`; `fetch` errors and points at a capability. What about
+   at `cx.timer`; `fetch` errors and points at a capability. What about
    `structuredClone`, `TextEncoder`, `URL`, `crypto.randomUUID`? The draft
    criterion is that anything mapping exactly may be provided and anything
    mapping approximately may not — the same rule that refuses to name the HTTP

@@ -77,19 +77,27 @@ use crate::{
     view::ScriptView,
 };
 
-use super::{ShellRuntime, context_object, describe};
+use super::{ContextBinding, ShellRuntime, context_object, describe};
 
-/// Installs `sleep`, `timer`, `spawn` and `with_cx` onto the `gpui` module.
+/// Installs the scheduling surface.
+///
+/// `spawn`, `sleep` and `timer` reach a script through `cx`, because that is
+/// where GPUI keeps them — `App::spawn`, and a timer from the executor the
+/// context hands out. These globals are the implementation the prelude composes
+/// onto `cx`; nothing names them from script. `with_cx` stays a module member:
+/// it is the one call for code holding no context at all, so there is no `cx`
+/// to reach it through.
 ///
 /// The context argument is the engine's; everything here is built from the
 /// module's own [`Object::ctx`], because `Ctx` and `Object` are invariant in
 /// `'js` and a value built from one cannot be set on the other.
 pub fn install(_ctx: &Ctx<'_>, module: &Object<'_>) -> JsResult<()> {
-    let ctx = module.ctx();
-    module.set("sleep", Func::from(js_sleep))?;
+    let globals = module.ctx().globals();
+    globals.set("__sleep", Func::from(js_sleep))?;
+    globals.set("__spawn", Func::from(js_spawn))?;
+    globals.set("__timer_after", Func::from(js_timer_after))?;
+    globals.set("__timer_every", Func::from(js_timer_every))?;
     module.set("with_cx", Func::from(js_with_cx))?;
-    module.set("spawn", Func::from(js_spawn))?;
-    module.set("timer", timer_object(ctx)?)?;
     Ok(())
 }
 
@@ -486,7 +494,7 @@ const MAX_TRANSACTIONAL_JOBS: usize = 10_000;
 /// borrows the context lifetime; a closure cannot be inferred as polymorphic
 /// over a lifetime that appears in both its parameter and its return type.
 fn js_sleep<'js>(ctx: Ctx<'js>, ms: Opt<f64>) -> JsResult<Promise<'js>> {
-    const API: &str = "gpui.sleep(ms)";
+    const API: &str = "cx.sleep(ms)";
 
     let delay = duration(&ctx, API, ms.0.unwrap_or_default())?;
     let host = host(&ctx, API)?;
@@ -539,7 +547,7 @@ fn js_with_cx<'js>(ctx: Ctx<'js>, body: Function<'js>) -> JsResult<Value<'js>> {
     let Some(generation) = scope::current_generation() else {
         return Err(outside_host_call(&ctx, "gpui.with_cx(fn)"));
     };
-    body.call((context_object(&ctx, generation)?,))
+    body.call((context_object(&ctx, ContextBinding::Call(generation))?,))
 }
 
 /// `gpui.spawn(asyncFn, opts?)` — calls `asyncFn(cx)` and adopts its promise.
@@ -560,16 +568,16 @@ fn js_spawn<'js>(
     let task = register(
         &ctx,
         TaskState::new(
-            "gpui.spawn(fn)",
+            "cx.spawn(fn)",
             owner_from_options(&ctx, opts.0.as_ref())?,
             None,
         ),
     )?;
 
-    let started = match scope::current_generation() {
-        Some(generation) => body.call::<_, Value>((context_object(&ctx, generation)?,)),
-        None => body.call::<_, Value>(()),
-    };
+    // An async `cx`, always — including at module top level, where the old
+    // call-scoped one had to be omitted and the body was handed `undefined`.
+    // It names no frame, so there is nothing to be absent.
+    let started = body.call::<_, Value>((context_object(&ctx, ContextBinding::Ambient)?,));
 
     match started {
         Ok(value) => match value.into_promise() {
@@ -595,7 +603,7 @@ fn js_timer_after<'js>(
 ) -> JsResult<Object<'js>> {
     schedule(
         ctx,
-        "gpui.timer.after(ms, fn)",
+        "cx.timer.after(ms, fn)",
         ms,
         handler,
         opts,
@@ -617,19 +625,12 @@ fn js_timer_every<'js>(
 ) -> JsResult<Object<'js>> {
     schedule(
         ctx,
-        "gpui.timer.every(ms, fn)",
+        "cx.timer.every(ms, fn)",
         ms,
         handler,
         opts,
         Repeat::Forever,
     )
-}
-
-fn timer_object<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
-    let timer = Object::new(ctx.clone())?;
-    timer.set("after", Func::from(js_timer_after))?;
-    timer.set("every", Func::from(js_timer_every))?;
-    Ok(timer)
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -678,10 +679,13 @@ fn schedule<'js>(
                     &ticking.policy(),
                     ticking.application.clone(),
                     owner,
-                    move |ctx, generation| {
+                    // A timer handler is resumed script code like any other, so
+                    // its `cx` is the async flavor: a handler that awaits keeps
+                    // a usable context instead of having to reach for `with_cx`.
+                    move |ctx, _generation| {
                         callback
                             .restore(ctx)?
-                            .call::<_, ()>((context_object(ctx, generation)?,))
+                            .call::<_, ()>((context_object(ctx, ContextBinding::Ambient)?,))
                     },
                 );
 
@@ -1531,6 +1535,15 @@ mod tests {
         let module = Object::new(ctx.clone()).expect("module");
         install(ctx, &module).expect("install");
         ctx.globals().set("gpui", module).expect("globals");
+
+        // `cx` composes its members in the prelude, which these tests do not
+        // load. The factory is the one piece of it `context_object` reaches
+        // for, so stand in for it rather than teaching the runtime to cope
+        // with a half-built module.
+        ctx.eval::<Value, _>(
+            "globalThis.__gpui = { __context_members: (check) => ({ theme: () => (check(), null) }) };",
+        )
+        .expect("context members");
     }
 
     /// The failure this module exists to prevent: without a drain, a resolved
@@ -1610,12 +1623,12 @@ mod tests {
             install_module(&ctx);
 
             let error = ctx
-                .eval::<Value, _>("gpui.sleep(10)")
+                .eval::<Value, _>("__sleep(10)")
                 .expect_err("sleep must refuse to schedule");
             describe(&ctx, error)
         });
 
-        assert!(message.contains("gpui.sleep(ms)"), "{message}");
+        assert!(message.contains("cx.sleep(ms)"), "{message}");
     }
 
     #[test]
@@ -1626,7 +1639,7 @@ mod tests {
             install_module(&ctx);
 
             let error = ctx
-                .eval::<Value, _>("gpui.sleep(-1)")
+                .eval::<Value, _>("__sleep(-1)")
                 .expect_err("a negative delay must be refused");
             describe(&ctx, error)
         });
@@ -1644,7 +1657,7 @@ mod tests {
         context.with(|ctx| {
             install_module(&ctx);
             ctx.eval::<Value, _>(
-                "globalThis.handle = gpui.spawn(async () => { throw new Error(\"boom\"); });",
+                "globalThis.handle = __spawn(async () => { throw new Error(\"boom\"); });",
             )
             .expect("spawn");
 
@@ -1673,7 +1686,7 @@ mod tests {
             ctx.eval::<Value, _>(
                 r#"
                 globalThis.ran = false;
-                globalThis.handle = gpui.spawn(async () => { globalThis.ran = true; });
+                globalThis.handle = __spawn(async () => { globalThis.ran = true; });
                 "#,
             )
             .expect("spawn");
@@ -1701,7 +1714,7 @@ mod tests {
         context.with(|ctx| {
             install_module(&ctx);
             ctx.eval::<Value, _>(
-                "globalThis.handle = gpui.spawn(() => { throw new Error(\"boom\"); });",
+                "globalThis.handle = __spawn(() => { throw new Error(\"boom\"); });",
             )
             .expect("spawn must absorb the throw");
 
@@ -1716,7 +1729,7 @@ mod tests {
         context.with(|ctx| {
             install_module(&ctx);
             ctx.eval::<Value, _>(
-                "globalThis.handle = gpui.spawn(async () => { await Promise.resolve(); });",
+                "globalThis.handle = __spawn(async () => { await Promise.resolve(); });",
             )
             .expect("spawn");
 
@@ -1735,7 +1748,7 @@ mod tests {
         let message = context.with(|ctx| {
             install_module(&ctx);
             let error = ctx
-                .eval::<Value, _>("gpui.spawn(async () => {}, { owner: {} })")
+                .eval::<Value, _>("__spawn(async () => {}, { owner: {} })")
                 .expect_err("an unrelated owner must be refused");
             describe(&ctx, error)
         });

@@ -13,7 +13,7 @@ An element in `gpui-shell` is a **description**, not an object. It exists for on
 Each module carries what its own crate provides:
 
 ```js
-import { div, text, svg, image, FocusHandle } from "gpui";
+import { div, text, svg, image } from "gpui";
 import {
   h_flex,
   v_flex,
@@ -219,11 +219,11 @@ An arrow function does not bind its own `this`, so `this` inside the handler is 
 
 ## Focus and accessibility
 
-A script owns its own focus targets. `FocusHandle.new()` creates one, it lives on the view the way an [`InputState`](./state.md#retained-state) does, and `.track_focus(handle)` gives it to an element:
+A script owns its own focus targets. `cx.focus_handle()` creates one — `App::focus_handle` in GPUI, which has no `FocusHandle::new` for this to mirror — it lives on the view the way an [`InputState`](./state.md#retained-state) does, and `.track_focus(handle)` gives it to an element:
 
 ```js
-init() {
-  this.search = FocusHandle.new();
+init(props, cx) {
+  this.search = cx.focus_handle();
 }
 
 render() {
@@ -234,7 +234,7 @@ render() {
 }
 ```
 
-`FocusHandle.new()` needs a live host call, and a handle created inside `render` would be a new one on every frame — so the focus it tracked would be dropped by the next repaint. It belongs in `init` or in an event handler; calling it in `render` throws.
+`cx.focus_handle()` needs a live host call, and a handle created inside `render` would be a new one on every frame — so the focus it tracked would be dropped by the next repaint. It belongs in `init` or in an event handler; calling it in `render` throws.
 
 | On the handle | Answers |
 | --- | --- |

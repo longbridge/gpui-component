@@ -14,6 +14,15 @@ Three examples ship with the repository, and together they cover a standalone ap
 | [Quote board](#the-quote-board) | A panel inside the gallery | The host half: native modules, one entity read from two languages, live cost counters |
 | [Native motion](#native-motion) | A separate gallery script view | Pixel target transitions and springs retained and sampled by GPUI |
 
+## A complete application
+
+The examples here are each built to show one thing. For a whole product in one
+repository — OAuth, a live WebSocket quote feed, a virtualized watchlist,
+retained nested views for the price chart, and its own Rust host binary —
+see [**longbridge/gpui-shell-longbridge**](https://github.com/longbridge/gpui-shell-longbridge).
+It is a read-only Longbridge desktop client of a few thousand lines of
+JavaScript, and it is the largest thing written against this runtime.
+
 ## The todo list
 
 ```bash

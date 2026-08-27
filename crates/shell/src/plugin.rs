@@ -1420,7 +1420,7 @@ mod tests {
             r#"
                 import { View, text } from "gpui";
                 export default class App extends View {
-                  render() { return text("loaded"); }
+                  render(cx) { return text("loaded"); }
                 }
             "#,
         )
@@ -1577,13 +1577,13 @@ mod tests {
         std::fs::write(
             application.path().join("main.js"),
             r#"
-                import { View, timer } from "gpui";
+                import { View } from "gpui";
                 export default class Broken extends View {
-                  init() {
-                    timer.every(1_000, () => {});
+                  init(_props, cx) {
+                    cx.timer.every(1_000, () => {});
                     throw new Error("initialization failed");
                   }
-                  render() { throw new Error("unreachable"); }
+                  render(cx) { throw new Error("unreachable"); }
                 }
             "#,
         )
@@ -1634,18 +1634,18 @@ mod tests {
         std::fs::write(
             root.join("main.js"),
             r#"
-                import { View, text, spawn, with_cx } from "gpui";
+                import { View, text, with_cx } from "gpui";
                 import { v_flex } from "gpui-base";
                 import * as fs from "fs/promises";
                 export default class Panel extends View {
-                  init() {
+                  init(_props, cx) {
                     this.message = "pending";
-                    spawn(async (cx) => {
+                    cx.spawn(async (cx) => {
                       this.message = await fs.readFile("message.txt", "utf8");
                       with_cx((cx) => cx.notify());
                     });
                   }
-                  render() { return v_flex().child(text(this.message)); }
+                  render(cx) { return v_flex().child(text(this.message)); }
                 }
             "#,
         )
@@ -1724,7 +1724,7 @@ mod tests {
                     this.field = InputState.new({ value: "owned by plugin" });
                     this.field.on("change", () => {});
                   }
-                  render() { return Input.new(this.field); }
+                  render(cx) { return Input.new(this.field); }
                 }
             "#,
         )
@@ -1766,14 +1766,14 @@ mod tests {
         std::fs::write(
             root.join("main.js"),
             r#"
-                import { View, timer } from "gpui";
+                import { View } from "gpui";
                 import { Input, InputState } from "gpui-base";
                 export default class Panel extends View {
-                  init() {
+                  init(_props, cx) {
                     this.field = InputState.new({ value: "owned by plugin" });
-                    timer.every(60_000, () => {});
+                    cx.timer.every(60_000, () => {});
                   }
-                  render() { return Input.new(this.field); }
+                  render(cx) { return Input.new(this.field); }
                 }
             "#,
         )

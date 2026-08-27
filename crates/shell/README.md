@@ -88,6 +88,11 @@ See [`examples/js_todolist`](../../examples/js_todolist) for the complete
 version: retained input state, controlled checkboxes, a confirmation dialog, a
 toast, icons, and storage that degrades to memory when it is not granted.
 
+For a whole product rather than a demonstration — OAuth, a live WebSocket quote
+feed, a virtualized watchlist, retained nested views, and its own Rust host —
+see [longbridge/gpui-shell-longbridge](https://github.com/longbridge/gpui-shell-longbridge),
+the largest application written against this runtime.
+
 ### Checking an application without running it
 
 JavaScript has no compiler, so the runtime provides what would otherwise be
@@ -150,15 +155,24 @@ import { fps_monitor } from "gpui-fps";
 | `Checkbox.new(id)` / `Switch.new(id)` | type | A base controlled toggle, no styling |
 | `InputState.new(options)` / `Input.new(state)` | types | Retained text state and its rendered input |
 | `View` | class | Base class of every view; subclass it and default-export the subclass |
+| `cx.open_url(url)` | `cx` method | `App::open_url` — hands a URL to the system browser |
+| `cx.read_from_clipboard()` / `cx.write_to_clipboard(s)` | `cx` methods | `App::read_from_clipboard` / `write_to_clipboard` |
+| `cx.focus_handle()` | `cx` method | `App::focus_handle` — a focus target the script keeps |
+| `cx.spawn(body, opts?)` | `cx` method | `App::spawn` — the body's `cx` survives an `await` |
+| `cx.sleep(ms)` / `cx.timer.after` / `cx.timer.every` | `cx` methods | Work on the foreground executor |
+| `window.paint_path(path, bg)` | `window` method | `Window::paint_path` |
 
-Functions are lowercase and types are capitalized and constructed through
-`.new`, mirroring the Rust side one for one.
+Where a binding lives in Rust decides where it lives here: an `App` method is a
+`cx` method, a `Window` method is on the `window` global, a type's `::new` is
+`Type.new(...)`, and a free function stays a free function. Only what has no
+GPUI or base original — `store`, `log`, `native`, `with_cx` — is a module member.
 
 ### Elements
 
 | Method | Description |
 | --- | --- |
 | `.child(element)` | Adds one child. The child is consumed; using it again is an error |
+| `.child(viewHandle)` | Mounts a retained nested view, the way an `Entity<V>` is a child in GPUI |
 | `.children([a, b])` | Adds several children |
 | `.when(condition, el => el)` | Applies the function only when `condition` holds, keeping the chain in one piece |
 | `.href(url)` | Gives a `Link` an absolute HTTP(S) target opened by the host |

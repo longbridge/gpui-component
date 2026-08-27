@@ -597,7 +597,13 @@ mod tests {
         cx.update(|window, app| {
             let (_guard, generation) = scope::enter_runtime(runtime, window, app, phase, None);
             runtime.with_js(|ctx| {
-                ctx.globals().set("cx", context_object(ctx, generation)?)?;
+                ctx.globals().set(
+                    "cx",
+                    context_object(
+                        ctx,
+                        crate::engine::quickjs::ContextBinding::Call(generation),
+                    )?,
+                )?;
                 ctx.eval::<T, _>(source)
             })
         })

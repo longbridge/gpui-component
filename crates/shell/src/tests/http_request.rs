@@ -10,13 +10,13 @@ use gpui::{Entity, IntoElement as _, TestAppContext, VisualTestContext};
 use crate::{Capabilities, ScriptView, ShellRuntime};
 
 const POST_PROBE: &str = r#"
-import { View, text, spawn, with_cx } from "gpui";
+import { View, text, with_cx } from "gpui";
 import { v_flex } from "gpui-base";
 
 export default class Probe extends View {
-  init() {
+  init(_props, cx) {
     this.state = "pending";
-    spawn(async () => {
+    cx.spawn(async () => {
       try {
         const response = await fetch("__URL__", {
           method: "POST",
@@ -40,13 +40,13 @@ export default class Probe extends View {
 "#;
 
 const JSON_PROBE: &str = r#"
-import { View, text, spawn, with_cx } from "gpui";
+import { View, text, with_cx } from "gpui";
 import { v_flex } from "gpui-base";
 
 export default class Probe extends View {
-  init() {
+  init(_props, cx) {
     this.state = "pending";
-    spawn(async () => {
+    cx.spawn(async () => {
       const response = await fetch("__URL__");
       const json = response.json();
       const value = await json;
@@ -54,7 +54,7 @@ export default class Probe extends View {
       with_cx((cx) => cx.notify());
     });
   }
-  render() { return v_flex().child(text(this.state)); }
+  render(cx) { return v_flex().child(text(this.state)); }
 }
 "#;
 

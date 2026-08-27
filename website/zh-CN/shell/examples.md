@@ -14,6 +14,15 @@ order: 3
 | [报价面板](#报价面板) | gallery 里的一块面板 | 宿主那一半：native 模块、一个实体被两种语言读取、实时的成本读数 |
 | [原生动画](#原生动画) | gallery 内独立的脚本视图 | 由 GPUI 保留并采样的像素目标 transition 与 spring |
 
+## 一个完整的应用
+
+这里的示例每个都只讲一件事。想看一个完整产品放在一个仓库里——OAuth、实时
+WebSocket 报价流、虚拟化自选列表、用留存嵌套视图承载的价格图表，以及它自己的
+Rust 宿主二进制——见
+[**longbridge/gpui-shell-longbridge**](https://github.com/longbridge/gpui-shell-longbridge)。
+它是一个只读的 Longbridge 桌面客户端，几千行 JavaScript，也是目前基于这个运行时
+写出来的最大的东西。
+
 ## Todo list
 
 ```bash

@@ -107,30 +107,37 @@ request a re-render from an event handler instead
 
 渲染中通知自己是一个死循环，所以它被拒绝而不是被延后。
 
-## `cx` 属于它所在的调用
+## 两种 `cx`
 
-在 GPUI 里 `&mut Window` 与 `&mut App` 是借用：它们的存活期恰好是一次调用。脚本对象比任何借用都活得久，所以脚本侧的 `cx` 不能持有它们。它持有的是一个 **generation 编号**，每次使用都与实时的作用域栈比对。
+在 GPUI 里 `&mut Window` 与 `&mut App` 是借用：它们的存活期恰好是一次调用。脚本对象比任何借用都活得久，所以脚本侧的 `cx` 不能持有它们。GPUI 为确实需要跨调用持有的代码准备了第二种——`AsyncApp`，由 `cx.spawn` 交给它的闭包——这里也一样。
 
-把 `cx` 留到调用之外，得到的是一条错误，而不是一帧被破坏的画面：
+**`Context`** 是 `render` 和每个事件处理器收到的那种。它持有一个 **generation 编号**，每次使用都与实时的作用域栈比对，所以把它留到调用之外得到的是一条错误，而不是一帧被破坏的画面：
 
 ```text
 cx is no longer valid: it was captured during an earlier call and used later.
-Use gpui.spawn or take cx from the callback arguments instead.
+Use cx.spawn or take cx from the callback arguments instead.
 ```
 
-`cx` 上除了函数什么都没有——`Object.keys(cx)` 只看得到方法，看不到 generation——所以脚本无法伪造一个。
-
-最常撞上这条的是 `await`：
+**`AsyncContext`** 是 `init` 收到的那种，也是 `cx.spawn` 与 `cx.timer` 交给回调的那种。它不指名任何一次调用——用到它时才解析当时正在执行的那一次——所以 `await` 不会把它带走：
 
 ```js
 async save(cx) {
-  await sleep(100);
-  cx.notify();                              // 错：这个 cx 属于已经返回的那次调用
-  with_cx((cx) => cx.notify());             // 对
+  await cx.sleep(100);
+  cx.notify();          // 同一个 cx，仍然是对的那个
 }
 ```
 
-`await` 会把控制权交回宿主，调用帧随之消失，借用也一起消失。`with_cx(fn)` 用来取一个属于“当前正在运行的这次调用”的新 `cx`。
+这三处正是职责为「安排或延续比启动它的那次调用活得更久的工作」的地方。其余场合要的就是严格的那种，被告知「你留得太久了」正是它的价值所在。
+
+`cx` 上除了函数什么都没有——`Object.keys(cx)` 只看得到方法，看不到 generation——所以脚本无法伪造一个。
+
+完全没有 `cx` 可用的代码——模块顶层、裸 `constructor`、没人给过 context 的 `.then` 回调——用 `with_cx(fn)` 要一个：
+
+```js
+import { with_cx } from "gpui";
+
+globalThis.ticker = with_cx((cx) => cx.timer.every(1000, () => {}));
+```
 
 ## 留存状态
 
@@ -207,45 +214,39 @@ unknown input event `changed`; expected one of: change, submit, focus, blur
 
 | 导出 | 作用 |
 | --- | --- |
-| `sleep(ms)` | 在 GPUI 的 foreground executor 上，`ms` 之后 resolve 的 promise |
-| `spawn(body, opts?)` | 调用 `body(cx)` 并接管它返回的 promise |
-| `timer.after(ms, handler, opts?)` | 调用一次 `handler(cx)` |
-| `timer.every(ms, handler, opts?)` | 反复调用 `handler(cx)` |
+| `cx.sleep(ms)` | 在 GPUI 的 foreground executor 上，`ms` 之后 resolve 的 promise |
+| `cx.spawn(body, opts?)` | 调用 `body(cx)` 并接管它返回的 promise |
+| `cx.timer.after(ms, handler, opts?)` | 调用一次 `handler(cx)` |
+| `cx.timer.every(ms, handler, opts?)` | 反复调用 `handler(cx)` |
 | `with_cx(body)` | 用属于当前调用的上下文执行 `body(cx)` |
+
+调度挂在 `cx` 上，因为 GPUI 就是这么放的——`App::spawn`，以及由 context 交出的 executor 上的 timer。`with_cx` 是例外，它仍是模块导出，恰恰因为它是给「手上没有 `cx`」的代码用的。
 
 它们产生的工作全部在主线程上运行。脚本可见的东西从不离开主线程：这里没有 `Worker`，VM 与 GPUI 的 `App` 都是主线程独占的。
 
 ```js
-import { spawn, sleep, with_cx } from "gpui";
-
 flash(cx) {
   this.saved = true;
   cx.notify();
 
-  spawn(async () => {
-    await sleep(1500);
-    with_cx((cx) => {
-      this.saved = false;
-      cx.notify();
-    });
+  cx.spawn(async (cx) => {
+    await cx.sleep(1500);
+    this.saved = false;
+    cx.notify();
   });
 }
 ```
 
-::: tip 两种 import 写法
-`import { spawn, sleep } from "gpui"` 按名字取用，示例应用就是这么写的。`import * as gpui from "gpui"` 把 UI 与调度接口放在一个名字下，例如 `gpui.spawn` 与 `gpui.timer.after`；文件系统和进程 API 仍是独立的标准模块。这里没有 default 导出。
-:::
+这段不需要任何 import：`cx` 就是处理器的第二个参数，而它的 body 收到的 `cx` 是能挺过 `await` 的异步那种。
 
-**`spawn` 会接管 promise，这正是它的意义。** 未处理的 rejection 是 JavaScript 最常见的静默失败：工作停了，界面保持原状，什么都没写到任何地方。在这里它会带着脚本自己的调用栈进入 `tracing::error!`。
+**`cx.spawn` 会接管 promise，这正是它的意义。** 未处理的 rejection 是 JavaScript 最常见的静默失败：工作停了，界面保持原状，什么都没写到任何地方。在这里它会带着脚本自己的调用栈进入 `tracing::error!`。
 
 ### 归属与取消
 
 每个任务都属于某个视图——`opts.owner`，或者创建它时正在运行的那个视图。任务持有弱引用，所以当发起这项工作的面板消失时，回调会被跳过，而不是写进一份再也不会被渲染的状态。
 
 ```js
-import { timer } from "gpui";
-
-const handle = timer.every(1000, (cx) => this.tick(cx));
+const handle = cx.timer.every(1000, (cx) => this.tick(cx));
 handle.cancel();
 handle.is_done();
 ```
@@ -259,12 +260,12 @@ handle.is_done();
 ### Timer 与标准宿主 API
 
 ```text
-setTimeout  -> gpui.timer.after(ms, callback)
-setInterval -> gpui.timer.every(ms, callback)
+setTimeout  -> cx.timer.after(ms, callback)
+setInterval -> cx.timer.every(ms, callback)
 clearTimeout / clearInterval -> 对 after / every 返回的 Task 调用 cancel()
 ```
 
-`setTimeout`、`setInterval`、`clearTimeout` 与 `clearInterval` 都是会抛错的 stub。一次性工作使用 `gpui.timer.after`，重复工作使用 `gpui.timer.every`；要停止其中任意一种，都对返回的 `Task` 调用 `cancel()`。全局 `fetch`，以及 [Capabilities](./capabilities.md) 中记录的安全标准模块（包括 `websocket`），都是真实的异步宿主 API。CommonJS `require` 仍不可用；请使用 ES module。
+`setTimeout`、`setInterval`、`clearTimeout` 与 `clearInterval` 都是会抛错的 stub。一次性工作使用 `cx.timer.after`，重复工作使用 `cx.timer.every`；要停止其中任意一种，都对返回的 `Task` 调用 `cancel()`。全局 `fetch`，以及 [Capabilities](./capabilities.md) 中记录的安全标准模块（包括 `websocket`），都是真实的异步宿主 API。CommonJS `require` 仍不可用；请使用 ES module。
 
 浏览器 DOM 与存储并不存在：没有 `document` 或 `localStorage`。全局 `window` 是 gpui-shell 用来承载 dialog、sheet 与 toast 的 overlay host，并不是浏览器 `Window`，也不提供 DOM。
 

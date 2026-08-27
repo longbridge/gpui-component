@@ -13,7 +13,7 @@ order: 4
 每个模块只装它自己那个包提供的东西：
 
 ```js
-import { div, text, svg, image, FocusHandle } from "gpui";
+import { div, text, svg, image } from "gpui";
 import {
   h_flex,
   v_flex,
@@ -219,11 +219,11 @@ Checkbox.new(`item-${item.id}`)
 
 ## 焦点与无障碍
 
-焦点目标由脚本自己持有。`FocusHandle.new()` 创建一个，它像 [`InputState`](./state.md#retained-state) 一样挂在视图上，再用 `.track_focus(handle)` 交给某个元素：
+焦点目标由脚本自己持有。`cx.focus_handle()` 创建一个——对应 GPUI 的 `App::focus_handle`，那边并没有 `FocusHandle::new` 可供镜像——它像 [`InputState`](./state.md#retained-state) 一样挂在视图上，再用 `.track_focus(handle)` 交给某个元素：
 
 ```js
-init() {
-  this.search = FocusHandle.new();
+init(props, cx) {
+  this.search = cx.focus_handle();
 }
 
 render() {
@@ -234,7 +234,7 @@ render() {
 }
 ```
 
-`FocusHandle.new()` 需要一次活的宿主调用；而在 `render` 里创建的 handle 每一帧都是新的，它所跟踪的焦点会被下一次重绘丢掉。所以它属于 `init` 或事件处理器，在 `render` 里调用会抛错。
+`cx.focus_handle()` 需要一次活的宿主调用；而在 `render` 里创建的 handle 每一帧都是新的，它所跟踪的焦点会被下一次重绘丢掉。所以它属于 `init` 或事件处理器，在 `render` 里调用会抛错。
 
 | handle 上的方法 | 回答什么 |
 | --- | --- |

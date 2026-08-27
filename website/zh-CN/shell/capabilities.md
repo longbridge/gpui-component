@@ -214,14 +214,14 @@ export function load() {
 
 示例的页脚随后会在界面上说明这一点——“Not saved — this host did not grant storage, so the list lasts for this run only”——这才是对的形态：在边界处吸收拒绝，并对用户说实话。
 
-## `clipboard`
+## 剪贴板
 
 ```js
-import { clipboard } from "gpui";
-
-clipboard.write_text("copied");
-const text = clipboard.read_text(); // 剪贴板中没有文本时为 undefined
+cx.write_to_clipboard("copied");
+const text = cx.read_from_clipboard(); // 剪贴板中没有文本时为 undefined
 ```
+
+名字取自 `App::write_to_clipboard` 与 `App::read_from_clipboard`，挂在 `cx` 上是因为 GPUI 就放在那里。不需要 import。
 
 读与写是**两项独立授权**，拒绝信息会指出缺的是哪一半：
 
@@ -229,10 +229,10 @@ const text = clipboard.read_text(); // 剪贴板中没有文本时为 undefined
 writing the clipboard is not granted; declare capabilities.clipboard.write in the manifest
 ```
 
-剪贴板需要一次实时的宿主调用——GPUI 的 `App` 只在一次调用期间存在——所以在模块顶层调用它会直说，而不是 panic：
+剪贴板需要一次实时的宿主调用——GPUI 的 `App` 只在一次调用期间存在——所以一个没有活调用的 `cx` 会直说，而不是 panic：
 
 ```text
-clipboard.read_text() needs a live host call; call it from render, an event handler or a task
+cx.read_from_clipboard() needs a live host call; call it from render, an event handler or a task
 ```
 
 ## `log`

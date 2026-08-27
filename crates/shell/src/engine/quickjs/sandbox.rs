@@ -226,15 +226,15 @@ const FREEZE_BUILTINS: &str = r#"
 /// a bundle take its non-browser branch. A throwing getter would turn a working
 /// feature test into a crash.
 const ABSENT_GLOBALS: &[(&str, &str)] = &[
-    ("setTimeout", "use gpui.timer.after(ms, callback)"),
-    ("setInterval", "use gpui.timer.every(ms, callback)"),
+    ("setTimeout", "use cx.timer.after(ms, callback)"),
+    ("setInterval", "use cx.timer.every(ms, callback)"),
     (
         "clearTimeout",
-        "cancel the handle returned by gpui.timer.after",
+        "cancel the handle returned by cx.timer.after",
     ),
     (
         "clearInterval",
-        "cancel the handle returned by gpui.timer.every",
+        "cancel the handle returned by cx.timer.every",
     ),
     ("require", "this runtime uses ES modules; use `import`"),
 ];
@@ -717,13 +717,13 @@ mod tests {
         let (_runtime, context) = sandboxed();
 
         let message = rejection(&context, "setTimeout(() => {}, 0)").unwrap();
-        assert!(message.contains("gpui.timer.after"), "got: {message}");
+        assert!(message.contains("cx.timer.after"), "got: {message}");
         let message = rejection(&context, "setInterval(() => {}, 0)").unwrap();
-        assert!(message.contains("gpui.timer.every"), "got: {message}");
+        assert!(message.contains("cx.timer.every"), "got: {message}");
         let message = rejection(&context, "clearTimeout(1)").unwrap();
-        assert!(message.contains("gpui.timer.after"), "got: {message}");
+        assert!(message.contains("cx.timer.after"), "got: {message}");
         let message = rejection(&context, "clearInterval(1)").unwrap();
-        assert!(message.contains("gpui.timer.every"), "got: {message}");
+        assert!(message.contains("cx.timer.every"), "got: {message}");
 
         // Environment detection has to keep working, so the DOM names stay
         // absent rather than becoming throwing stubs.

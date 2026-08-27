@@ -29,7 +29,7 @@ export default class Toggle extends View {
     this.count = 0;
   }
 
-  render() {
+  render(cx) {
     return v_flex()
       .child(text(`count: ${this.count}`))
       .child(
@@ -45,7 +45,7 @@ export default class Toggle extends View {
 const ENTRY: &str = "toggle.js";
 
 const PATH: &str = r##"
-import { View, PathBuilder, Background, paint_path } from "gpui";
+import { View, PathBuilder, Background } from "gpui";
 
 export default class NativePath extends View {
   render() {
@@ -55,7 +55,7 @@ export default class NativePath extends View {
       .line_to("100%", "100%")
       .close()
       .build();
-    return paint_path(path, Background.solid("#16a34a"))
+    return window.paint_path(path, Background.solid("#16a34a"))
       .w(200)
       .h(80);
   }
@@ -91,7 +91,7 @@ fn path_builder_freezes_commands_in_the_render_snapshot(cx: &mut TestAppContext)
 #[gpui::test]
 fn path_dash_rejects_values_that_round_to_zero_pixels(cx: &mut TestAppContext) {
     let source = r##"
-import { View, PathBuilder, paint_path } from "gpui";
+import { View, PathBuilder } from "gpui";
 export default class TinyDash extends View {
   render() {
     const path = PathBuilder.stroke(1)
@@ -99,7 +99,7 @@ export default class TinyDash extends View {
       .line_to(100, 0)
       .dash_array([Number.MIN_VALUE])
       .build();
-    return paint_path(path, "#000");
+    return window.paint_path(path, "#000");
   }
 }
 "##;
@@ -125,7 +125,7 @@ export default class Flaky extends View {
     this.fail = false;
   }
 
-  render() {
+  render(cx) {
     if (this.fail) {
       throw new Error("render failed on purpose");
     }
@@ -158,7 +158,7 @@ import { View, text } from "gpui";
 import { v_flex, InputState } from "gpui-base";
 
 export default class InputSubscription extends View {
-  init() {
+  init(_props, cx) {
     this.count = 0;
     this.field = InputState.new({});
     this.field.on("submit", (_event, cx) => {
@@ -203,7 +203,7 @@ import { Checkbox } from "gpui-base";
 
 export default class Panel extends View {
   init() { this.expanded = false; }
-  render() {
+  render(cx) {
     return div()
       .id("panel")
       .w(this.expanded ? 320 : 64)
@@ -256,7 +256,7 @@ import { Checkbox } from "gpui-base";
 
 export default class Indicator extends View {
   init() { this.selected = false; }
-  render() {
+  render(cx) {
     return div()
       .id("indicator")
       .left(this.selected ? 240 : 0)

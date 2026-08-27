@@ -85,9 +85,15 @@ pub fn set_store_path(path: PathBuf) {
 pub fn install(_ctx: &Ctx<'_>, module: &Object<'_>) -> JsResult<()> {
     let ctx = module.ctx();
     module.set("store", store_object(ctx)?)?;
-    module.set("clipboard", clipboard_object(ctx)?)?;
     module.set("log", log_object(ctx)?)?;
-    module.set("open_url", Func::from(open_url))?;
+
+    // The clipboard and the browser are `App` methods in GPUI, so the script
+    // reaches them through `cx`. These globals are the implementation the
+    // prelude composes onto it; nothing names them from script.
+    let globals = ctx.globals();
+    globals.set("__clipboard_read_text", Func::from(read_from_clipboard))?;
+    globals.set("__clipboard_write_text", Func::from(write_to_clipboard))?;
+    globals.set("__open_url", Func::from(open_url))?;
     Ok(())
 }
 
@@ -110,10 +116,10 @@ fn open_url(ctx: Ctx<'_>, url: String) -> JsResult<()> {
     if !valid {
         return Err(Exception::throw_type(
             &ctx,
-            "open_url(url) expects an absolute HTTP(S) URL with a host",
+            "cx.open_url(url) expects an absolute HTTP(S) URL with a host",
         ));
     }
-    with_app(&ctx, "open_url(url)", move |app| app.open_url(&url))
+    with_app(&ctx, "cx.open_url(url)", move |app| app.open_url(&url))
 }
 
 // -- Filesystem ------------------------------------------------------------
@@ -853,34 +859,22 @@ fn from_json<'js>(ctx: &Ctx<'js>, value: &Json) -> JsResult<Value<'js>> {
 
 // -- Clipboard -------------------------------------------------------------
 
-fn clipboard_object<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
-    let clipboard = Object::new(ctx.clone())?;
+fn read_from_clipboard(ctx: Ctx<'_>) -> JsResult<Option<String>> {
+    if !capabilities().is_clipboard_readable() {
+        return Err(Exception::throw_type(&ctx, CLIPBOARD_READ_DENIED));
+    }
+    with_app(&ctx, "cx.read_from_clipboard()", |app| {
+        app.read_from_clipboard().and_then(|item| item.text())
+    })
+}
 
-    clipboard.set(
-        "read_text",
-        Func::from(|ctx: Ctx<'_>| -> JsResult<Option<String>> {
-            if !capabilities().is_clipboard_readable() {
-                return Err(Exception::throw_type(&ctx, CLIPBOARD_READ_DENIED));
-            }
-            with_app(&ctx, "clipboard.read_text()", |app| {
-                app.read_from_clipboard().and_then(|item| item.text())
-            })
-        }),
-    )?;
-
-    clipboard.set(
-        "write_text",
-        Func::from(|ctx: Ctx<'_>, text: String| -> JsResult<()> {
-            if !capabilities().is_clipboard_writable() {
-                return Err(Exception::throw_type(&ctx, CLIPBOARD_WRITE_DENIED));
-            }
-            with_app(&ctx, "clipboard.write_text(text)", move |app| {
-                app.write_to_clipboard(ClipboardItem::new_string(text))
-            })
-        }),
-    )?;
-
-    Ok(clipboard)
+fn write_to_clipboard(ctx: Ctx<'_>, text: String) -> JsResult<()> {
+    if !capabilities().is_clipboard_writable() {
+        return Err(Exception::throw_type(&ctx, CLIPBOARD_WRITE_DENIED));
+    }
+    with_app(&ctx, "cx.write_to_clipboard(text)", move |app| {
+        app.write_to_clipboard(ClipboardItem::new_string(text))
+    })
 }
 
 /// Read and write are separate grants, so the denial names the half that was
@@ -1164,7 +1158,7 @@ mod tests {
                 .clipboard_write(true),
         );
 
-        let message = with_host(|ctx| error_of(ctx, "gpui.clipboard.read_text()"));
+        let message = with_host(|ctx| error_of(ctx, "__clipboard_read_text()"));
         assert!(
             message.contains("needs a live host call"),
             "unexpected message: {message}"
@@ -1173,7 +1167,7 @@ mod tests {
 
     #[test]
     fn the_clipboard_denial_names_the_half_that_is_missing() {
-        let message = with_host(|ctx| error_of(ctx, "gpui.clipboard.write_text('x')"));
+        let message = with_host(|ctx| error_of(ctx, "__clipboard_write_text('x')"));
         assert!(
             message.contains("capabilities.clipboard.write"),
             "unexpected message: {message}"
@@ -1183,20 +1177,38 @@ mod tests {
     #[test]
     fn every_installed_host_member_is_also_a_named_export() {
         // `install` puts these on the module object; the built-in export lists
-        // are what makes `import { open_url } from "gpui"` resolve. The two are
+        // are what makes `import { store } from "gpui"` resolve. The two are
         // separate lists, and a member added to one and not the other is a
         // binding that works through `gpui.x` and fails at the import — which
         // is how `open_url` first shipped: the call site was there, the import
         // was not, and the only symptom was a browser that never opened.
         //
-        // These are the host's own capabilities, so `"gpui"` is the module that
-        // has to name them: exporting one from a layer above would say this
-        // runtime got it from somewhere it did not.
-        for name in ["store", "clipboard", "log", "open_url"] {
+        // These are the host's own capabilities with no GPUI original, so
+        // `"gpui"` is the module that has to name them: exporting one from a
+        // layer above would say this runtime got it from somewhere it did not.
+        for name in ["store", "log"] {
             assert_eq!(
                 super::super::module_exporting(name),
                 Some("gpui"),
                 "`{name}` is installed on the gpui module but is not one of its named exports"
+            );
+        }
+
+        // The other half of the same guard, since the fix for that bug was to
+        // move these off the module entirely: `App::open_url` and
+        // `App::read_from_clipboard`/`write_to_clipboard` are methods in GPUI,
+        // so a script reaches them through `cx`. A leftover export here would
+        // be an import that resolves to a binding nothing installs.
+        for name in [
+            "open_url",
+            "clipboard",
+            "read_from_clipboard",
+            "write_to_clipboard",
+        ] {
+            assert_eq!(
+                super::super::module_exporting(name),
+                None,
+                "`{name}` lives on cx; a module still exporting it would resolve to nothing"
             );
         }
     }
@@ -1210,7 +1222,7 @@ mod tests {
             "https://",
             "not a url",
         ] {
-            let message = with_host(|ctx| error_of(ctx, &format!("gpui.open_url('{target}')")));
+            let message = with_host(|ctx| error_of(ctx, &format!("__open_url('{target}')")));
             assert!(
                 message.contains("absolute HTTP(S) URL with a host"),
                 "{target} was not refused: {message}"
@@ -1225,7 +1237,7 @@ mod tests {
         // read as protection without being any.
         crate::capability::install(Capabilities::new());
 
-        let message = with_host(|ctx| error_of(ctx, "gpui.open_url('https://example.com/x')"));
+        let message = with_host(|ctx| error_of(ctx, "__open_url('https://example.com/x')"));
         assert!(
             message.contains("needs a live host call"),
             "unexpected message: {message}"

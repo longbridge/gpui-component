@@ -14,7 +14,7 @@ import { deflateSync, inflateSync } from "zlib";
 import { createHash } from "crypto";
 
 export default class Probe extends View {
-  render() {
+  render(cx) {
     const input = Buffer.from("shell", "utf8");
     const compressed = deflateSync(input);
     const inflated = inflateSync(compressed).toString("utf8");
@@ -159,22 +159,22 @@ export default class Probe extends View {
 #[gpui::test]
 fn synchronous_unawaited_host_calls_hit_the_runtime_task_limit(cx: &mut TestAppContext) {
     let source = r#"
-import { View, text, sleep } from "gpui";
+import { View, text } from "gpui";
 import { v_flex } from "gpui-base";
 
 export default class Probe extends View {
-  init() {
+  init(_props, cx) {
     this.state = "unlimited";
     for (let index = 0; index < 2000; index += 1) {
       try {
-        sleep(60000);
+        cx.sleep(60000);
       } catch (error) {
         this.state = `limited:${error.message}`;
         break;
       }
     }
   }
-  render() { return v_flex().child(text(this.state)); }
+  render(cx) { return v_flex().child(text(this.state)); }
 }
 "#;
     cx.update(crate::init);

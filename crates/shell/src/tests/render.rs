@@ -20,7 +20,7 @@ export default class Counter extends View {
     this.count = 0;
   }
 
-  render() {
+  render(cx) {
     return v_flex()
       .size_full()
       .items_center()
@@ -131,7 +131,7 @@ import { v_flex, Button } from "gpui-base";
 
 export default class PointerRebuild extends View {
   init() { this.moves = 0; this.clicks = 0; this.hovered = false; this.hoverEvents = 0; }
-  render() {
+  render(cx) {
     return v_flex()
       .w(300)
       .h(160)
@@ -221,7 +221,7 @@ import { View, div, text } from "gpui";
 import { h_flex, v_flex } from "gpui-base";
 
 export default class ClickableFlexes extends View {
-  init() { this.clicks = [0, 0, 0]; }
+  init(_props, cx) { this.clicks = [0, 0, 0]; }
 
   row(element, index, name) {
     return element
@@ -234,7 +234,7 @@ export default class ClickableFlexes extends View {
       .child(text(`${name}: ${this.clicks[index]}`));
   }
 
-  render() {
+  render(cx) {
     return v_flex()
       .w(300)
       .h(120)
@@ -595,7 +595,7 @@ fn nested_view_updates_and_callbacks_rebuild_only_the_child(cx: &mut TestAppCont
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, ViewHandle, child_view, text } from "gpui";
+import { View, ViewHandle, text } from "gpui";
 import { v_flex, Checkbox, InputState } from "gpui-base";
 
 class Child extends View {
@@ -612,7 +612,7 @@ class Child extends View {
     Promise.resolve().then(() => { this.label = props.label; });
   }
 
-  render() {
+  render(cx) {
     return Checkbox.new("child")
       .w(300)
       .h(40)
@@ -632,7 +632,7 @@ export default class Parent extends View {
     this.child = ViewHandle.new(Child, { label: "before" });
   }
 
-  render() {
+  render(cx) {
     this.renders += 1;
     return v_flex()
       .w(300)
@@ -648,7 +648,7 @@ export default class Parent extends View {
         Checkbox.new("refresh-parent")
           .on_change((_checked, cx) => cx.notify()),
       )
-      .child(child_view(this.child));
+      .child(this.child);
   }
 }
 "#;
@@ -749,7 +749,7 @@ fn nested_view_operations_from_one_job_are_fifo_and_keep_descendant_ownership(
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, ViewHandle, child_view, text } from "gpui";
+import { View, ViewHandle, text } from "gpui";
 import { v_flex, Checkbox } from "gpui-base";
 
 class Grandchild extends View {
@@ -763,7 +763,7 @@ class Child extends View {
   }
   update(props) { this.label = props.label; }
   render() {
-    return v_flex().child(text(this.label)).child(child_view(this.grandchild));
+    return v_flex().child(text(this.label)).child(this.grandchild);
   }
 }
 
@@ -773,11 +773,11 @@ export default class Parent extends View {
     this.first.set_props({ label: "updated" });
     this.second = ViewHandle.new(Child, { label: "second" });
   }
-  render() {
+  render(cx) {
     return v_flex()
       .child(Checkbox.new("release-first").on_change(() => this.first.release()))
-      .child(child_view(this.first))
-      .child(child_view(this.second));
+      .child(this.first)
+      .child(this.second);
   }
 }
 "#;
@@ -867,7 +867,7 @@ export default class Parent extends View {
     this.child = ViewHandle.new(Child);
     Promise.resolve().then(() => { this.released = this.child.release(); });
   }
-  render() { return text(`released:${this.released}`); }
+  render(cx) { return text(`released:${this.released}`); }
 }
 "#;
     let view_type = runtime
@@ -900,7 +900,7 @@ fn failed_nested_update_rolls_back_script_fields_entities_and_tasks(cx: &mut Tes
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, ViewHandle, child_view, timer, text } from "gpui";
+import { View, ViewHandle, text } from "gpui";
 import { v_flex, Checkbox, InputState } from "gpui-base";
 
 class Child extends View {
@@ -914,13 +914,13 @@ class Child extends View {
     this.state.partial = "must disappear";
     this.callback.label = "callable-bad";
     this.input = InputState.new({ value: "must roll back" });
-    this.tick = timer.every(60_000, () => {});
+    this.tick = cx.timer.every(60_000, () => {});
     Promise.resolve().then(() => {
       this.later = InputState.new({ value: "causal rollback" });
     });
     throw new Error("reject update");
   }
-  render() {
+  render(cx) {
     return Checkbox.new("child-after-failure")
       .on_change((_checked, cx) => { this.state.clicks += 1; cx.notify(); })
       .child(text(`${this.state.label}:${this.state.clicks}:${this.state.partial ?? "clean"}:${this.callback.label}`));
@@ -929,12 +929,12 @@ class Child extends View {
 
 export default class Parent extends View {
   init() { this.child = ViewHandle.new(Child); }
-  render() {
+  render(cx) {
     return v_flex()
       .child(Checkbox.new("fail-update").on_change(() => {
         this.child.set_props({ label: "half committed" });
       }))
-      .child(child_view(this.child));
+      .child(this.child);
   }
 }
 "#;
@@ -1023,7 +1023,7 @@ fn nested_view_tokens_reject_foreign_application_mount_update_and_release(cx: &m
     std::fs::create_dir_all(&attacker_dir).expect("attacker directory");
     std::fs::write(
         victim_dir.join("main.js"),
-        r#"import { View, ViewHandle, child_view, text } from "gpui";
+        r#"import { View, ViewHandle, text } from "gpui";
 class Child extends View {
   init(props) { this.label = props.label; }
   update(props) { this.label = props.label; }
@@ -1031,7 +1031,7 @@ class Child extends View {
 }
 export default class Victim extends View {
   init() { this.child = ViewHandle.new(Child, { label: "victim-intact" }); }
-  render() { return child_view(this.child); }
+  render() { return this.child; }
 }"#,
     )
     .expect("victim source");
@@ -1046,7 +1046,7 @@ export default class Attacker extends View {
     try { globalThis.__view_release(0); this.results.push("released"); }
     catch (_) { this.results.push("release-refused"); }
   }
-  render() {
+  render(cx) {
     try { globalThis.__child_view(0); this.results.push("mounted"); }
     catch (_) { this.results.push("mount-refused"); }
     return text(this.results.join(","));
@@ -1119,33 +1119,33 @@ fn public_nested_release_retires_descendants_callbacks_tasks_snapshots_and_alias
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, ViewHandle, child_view, timer, text } from "gpui";
+import { View, ViewHandle, text } from "gpui";
 import { v_flex, Checkbox, InputState } from "gpui-base";
 class Grandchild extends View {
-  init() {
+  init(_props, cx) {
     this.input = InputState.new({ value: "grandchild" });
-    this.tick = timer.every(60_000, () => {});
+    this.tick = cx.timer.every(60_000, () => {});
   }
   render() { return Checkbox.new("grandchild-event").on_change(() => {}).child(text("grandchild")); }
 }
 class Child extends View {
-  init() {
+  init(_props, cx) {
     this.input = InputState.new({ value: "child" });
-    this.tick = timer.every(60_000, () => {});
+    this.tick = cx.timer.every(60_000, () => {});
     this.grandchild = ViewHandle.new(Grandchild);
   }
   render() {
     return v_flex()
       .child(Checkbox.new("child-event").on_change(() => {}).child(text("child")))
-      .child(child_view(this.grandchild));
+      .child(this.grandchild);
   }
 }
 export default class Parent extends View {
   init() { this.child = ViewHandle.new(Child); }
-  render() {
+  render(cx) {
     return v_flex()
       .child(Checkbox.new("release-subtree").on_change(() => this.child.release()))
-      .child(child_view(this.child));
+      .child(this.child);
   }
 }
 "#;
@@ -1225,11 +1225,11 @@ fn child_render_failure_preserves_its_previous_good_snapshot(cx: &mut TestAppCon
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, ViewHandle, child_view, text } from "gpui";
+import { View, ViewHandle, text } from "gpui";
 import { v_flex, Checkbox } from "gpui-base";
 class Child extends View {
   init() { this.fail = false; }
-  render() {
+  render(cx) {
     if (this.fail) throw new Error("child render rejected");
     return Checkbox.new("break-child")
       .on_change((_checked, cx) => { this.fail = true; cx.notify(); })
@@ -1238,9 +1238,9 @@ class Child extends View {
 }
 export default class Parent extends View {
   init() { this.renders = 0; this.child = ViewHandle.new(Child); }
-  render() {
+  render(cx) {
     this.renders += 1;
-    return v_flex().child(text(`parent:${this.renders}`)).child(child_view(this.child));
+    return v_flex().child(text(`parent:${this.renders}`)).child(this.child);
   }
 }
 "#;
@@ -1311,14 +1311,14 @@ fn a_released_nested_view_cannot_be_mounted_again(cx: &mut TestAppContext) {
         cx,
         "released-nested-view.js",
         r#"
-import { View, ViewHandle, child_view, text } from "gpui";
+import { View, ViewHandle, text } from "gpui";
 class Child extends View { render() { return text("child"); } }
 export default class Parent extends View {
   init() {
     this.child = ViewHandle.new(Child);
     if (!this.child.release()) throw new Error("the live child was not released");
   }
-  render() { return child_view(this.child); }
+  render() { return this.child; }
 }
 "#,
     );
@@ -1331,13 +1331,13 @@ fn a_nested_view_handle_can_only_be_mounted_once_per_snapshot(cx: &mut TestAppCo
         cx,
         "duplicate-nested-view.js",
         r#"
-import { View, ViewHandle, child_view, text } from "gpui";
+import { View, ViewHandle, text } from "gpui";
 import { v_flex } from "gpui-base";
 class Child extends View { render() { return text("child"); } }
 export default class Parent extends View {
   init() { this.child = ViewHandle.new(Child); }
-  render() {
-    return v_flex().child(child_view(this.child)).child(child_view(this.child));
+  render(cx) {
+    return v_flex().child(this.child).child(this.child);
   }
 }
 "#,
@@ -1382,20 +1382,22 @@ fn public_nested_constructor_failure_reaches_the_host_boundary_and_rolls_back(
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, ViewHandle, timer, text } from "gpui";
+import { View, ViewHandle, text, with_cx } from "gpui";
 import { InputState } from "gpui-base";
 class Child extends View {
   constructor() {
     super();
     this.input = InputState.new({ value: "constructor allocation" });
-    this.tick = timer.every(60_000, () => {});
+    // A constructor is handed no `cx` of its own, so this is what `with_cx`
+    // is left for.
+    this.tick = with_cx((cx) => cx.timer.every(60_000, () => {}));
     throw new Error("child constructor rejected");
   }
   render() { return text("unreachable"); }
 }
 export default class Parent extends View {
   init() { this.child = ViewHandle.new(Child); }
-  render() { return text("parent"); }
+  render(cx) { return text("parent"); }
 }
 "#;
     let tasks = crate::engine::quickjs::task_count();
@@ -1465,7 +1467,7 @@ import { View, ViewHandle, text } from "gpui";
 class Child extends View { render() { return text("child"); } }
 export default class Parent extends View {
   init() { this.child = ViewHandle.new(Child); }
-  render() {
+  render(cx) {
     this.child.release();
     return text("parent");
   }
@@ -1495,7 +1497,7 @@ export default class Parent extends View {
     this.child = ViewHandle.new(Child);
     this.errors = [];
   }
-  render() {
+  render(cx) {
     return v_flex()
       .w(300)
       .h(80)
@@ -1843,7 +1845,7 @@ import { Tabs, Tab } from "gpui-base";
 
 export default class Settings extends View {
   init() { this.tab = 0; }
-  render() {
+  render(cx) {
     const names = ["Account", "Network"];
     return Tabs.new("settings").children(
       names.map((name, index) =>
@@ -1911,7 +1913,7 @@ import { SliderState } from "gpui-base";
 
 export default class Gain extends View {
   init() { this.gain = SliderState.new({ min: 0, max: 1000, scale: "logarithmic" }); }
-  render() { return text("unreachable"); }
+  render(cx) { return text("unreachable"); }
 }
 "#;
     let view_type = runtime.load_source("gain", source).expect("load");
@@ -1943,7 +1945,7 @@ import { SliderState } from "gpui-base";
 
 export default class Gain extends View {
   init() { this.gain = SliderState.new({ min: 1e100, max: 2e100, scale: "logarithmic" }); }
-  render() { return text("unreachable"); }
+  render(cx) { return text("unreachable"); }
 }
 "#;
     let view_type = runtime.load_source("huge-gain", source).expect("load");
@@ -1976,21 +1978,14 @@ fn a_slider_is_composed_by_the_script_and_positioned_by_the_shell(cx: &mut TestA
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
 import { View, text } from "gpui";
-import {
-  SliderState,
-  Slider,
-  SliderTrack,
-  SliderIndicator,
-  SliderThumb,
-  v_flex,
-} from "gpui-base";
+import { SliderState, Slider, SliderTrack, SliderIndicator, SliderThumb, v_flex } from "gpui-base";
 
 export default class Volume extends View {
-  init() {
+  init(_props, cx) {
     this.volume = SliderState.new({ min: 0, max: 100, step: 5, value: 40 });
     this.volume.on("change", (value, cx) => { this.latest = value; cx.notify(); });
   }
-  render() {
+  render(cx) {
     return v_flex()
       .child(text(`${this.volume.value()} of ${this.volume.max_value()}`))
       .child(
@@ -2093,7 +2088,7 @@ export default class Quantity extends View {
     this.state.set_max(10);
     this.stepped = null;
   }
-  render() {
+  render(cx) {
     return NumberInput.new(this.state)
       .decrement_button(h_flex().w(20).child(text("-")))
       .increment_button(h_flex().w(20).child(text("+")))
@@ -2153,7 +2148,7 @@ import { OtpState } from "gpui-base";
 
 export default class Code extends View {
   init() { this.code = OtpState.new(0); }
-  render() { return text("unreachable"); }
+  render(cx) { return text("unreachable"); }
 }
 "#;
     let view_type = runtime.load_source("code", source).expect("load");
@@ -2187,11 +2182,11 @@ import { View, text } from "gpui";
 import { OtpState, OtpInput, v_flex } from "gpui-base";
 
 export default class Code extends View {
-  init() {
+  init(_props, cx) {
     this.code = OtpState.new(6);
     this.code.on("change", (event, cx) => { this.done = true; cx.notify(); });
   }
-  render() {
+  render(cx) {
     return v_flex()
       .child(text(`${this.code.len()} digits`))
       .child(
@@ -2272,7 +2267,7 @@ import { OtpState, OtpInput } from "gpui-base";
 
 export default class Code extends View {
   init() { this.code = OtpState.new(4); }
-  render() {
+  render(cx) {
     return OtpInput.new(this.code)
       .flex()
       .gap(8)
@@ -2329,14 +2324,14 @@ import { View, text } from "gpui";
 import { OtpState, OtpInput, v_flex } from "gpui-base";
 
 export default class Code extends View {
-  init() {
+  init(_props, cx) {
     this.code = OtpState.new(2);
     this.changes = 0;
     this.completes = 0;
     this.code.on("change", (_event, cx) => { this.changes += 1; cx.notify(); });
     this.code.on("complete", (_event, cx) => { this.completes += 1; cx.notify(); });
   }
-  render() {
+  render(cx) {
     return v_flex()
       .child(OtpInput.new(this.code).cell_style((cell) => cell.size(40)))
       .child(text(`changes ${this.changes} completes ${this.completes}`));
@@ -2407,14 +2402,14 @@ import { View, text } from "gpui";
 import { Button, OtpState, OtpInput, v_flex } from "gpui-base";
 
 export default class Code extends View {
-  init() {
+  init(_props, cx) {
     this.code = OtpState.new(2);
     this.old_calls = 0;
     this.new_calls = 0;
     this.code.on("change", (_event, cx) => { this.old_calls += 1; cx.notify(); });
     this.code.on("change", (_event, cx) => { this.new_calls += 1; cx.notify(); });
   }
-  render() {
+  render(cx) {
     return v_flex()
       .child(Button.new("set-code").w(100).h(40).on_click(() => {
         this.code.set_value("42");
@@ -2493,7 +2488,7 @@ import { Progress, ProgressTrack, ProgressIndicator } from "gpui-base";
 
 export default class Download extends View {
   init() { this.percent = 40; }
-  render() {
+  render(cx) {
     return Progress.new("download")
       .value(this.percent)
       .accessibility_label("Downloading")
@@ -2603,7 +2598,7 @@ import { Radio, Toggle, v_flex } from "gpui-base";
 
 export default class Preferences extends View {
   init() { this.appearance = 0; this.bold = false; }
-  render() {
+  render(cx) {
     const names = ["Light", "Dark"];
     return v_flex()
       .children(names.map((name, index) =>
@@ -2669,23 +2664,12 @@ fn a_table_describes_its_shape_and_its_accessibility_indices(cx: &mut TestAppCon
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import {
-  View,
-  text,
-} from "gpui";
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableRow,
-  TableHead,
-  TableCell,
-  TableCaption,
-} from "gpui-base";
+import { View, text } from "gpui";
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableCaption } from "gpui-base";
 
 export default class Positions extends View {
   init() { this.picked = -1; }
-  render() {
+  render(cx) {
     const columns = ["Symbol", "Last"];
     const rows = [["AAPL", "228.52"], ["MSFT", "417.14"]];
     return Table.new("positions")
@@ -3048,7 +3032,7 @@ export default class ThemeSwitch extends View {
       radius: { none: 0, sm: 3, md: 6, lg: 8, xl: 12, full: 9999 },
     }});
   }
-  render() { return div(); }
+  render(cx) { return div(); }
 }
 "##;
     let view_type = runtime.load_source("theme-switch", source).expect("load");
@@ -3138,7 +3122,7 @@ export default class Note extends View {
     this.body.set_soft_wrap(true);
     this.body.set_auto_grow(3, 12);
   }
-  render() {
+  render(cx) {
     return div()
       .child(Input.new(this.title))
       .child(Textarea.new(this.body).h(160))
@@ -3189,7 +3173,7 @@ export default class Bad extends View {
     this.field = InputState.new({});
     this.field.on("entered", () => {});
   }
-  render() {
+  render(cx) {
     return div();
   }
 }
@@ -3418,12 +3402,12 @@ fn hot_reload_keeps_replacement_children_and_retires_old_snapshots_and_aliases(
             "this.probe = [];"
         };
         format!(
-            "import {{ View, ViewHandle, child_view, text }} from \"gpui\";\n\
+            "import {{ View, ViewHandle, text }} from \"gpui\";\n\
              import {{ v_flex }} from \"gpui-base\";\n\
              class Child extends View {{ render() {{ return text(\"{caption}\"); }} }}\n\
              export default class Parent extends View {{\n\
                init() {{ this.child = ViewHandle.new(Child); {probe} }}\n\
-               render() {{ if ({probe_stale_token}) {{ try {{ globalThis.__child_view(0); }} catch (_) {{ this.probe.push('mount-refused'); }} }} return v_flex().child(child_view(this.child)).child(text(this.probe.join(','))); }}\n\
+               render(cx) {{ if ({probe_stale_token}) {{ try {{ globalThis.__child_view(0); }} catch (_) {{ this.probe.push('mount-refused'); }} }} return v_flex().child(this.child).child(text(this.probe.join(','))); }}\n\
              }}\n"
         )
     };
@@ -3509,8 +3493,8 @@ fn reload_replaces_old_tasks_and_rolls_back_failed_new_tasks(cx: &mut TestAppCon
 
     let source = |caption: &str| {
         format!(
-            "import {{ View, timer, text }} from \"gpui\";\n\
-             timer.every(60_000, () => {{}});\n\
+            "import {{ View, text, with_cx }} from \"gpui\";\n\
+             with_cx((cx) => cx.timer.every(60_000, () => {{}}));\n\
              export default class Panel extends View {{\n\
                render() {{ return text(\"{caption}\"); }}\n\
              }}\n"
@@ -3552,8 +3536,8 @@ fn reload_replaces_old_tasks_and_rolls_back_failed_new_tasks(cx: &mut TestAppCon
 
     std::fs::write(
         directory.join("main.js"),
-        "import { timer } from \"gpui\";\n\
-         timer.every(60_000, () => {});\n\
+        "import { with_cx } from \"gpui\";\n\
+         with_cx((cx) => cx.timer.every(60_000, () => {}));\n\
          throw new Error(\"reload failed\");",
     )
     .expect("failing source");
@@ -3570,10 +3554,10 @@ fn reload_replaces_old_tasks_and_rolls_back_failed_new_tasks(cx: &mut TestAppCon
 
     std::fs::write(
         directory.join("main.js"),
-        "import { View, timer, text } from \"gpui\";\n\
+        "import { View, text } from \"gpui\";\n\
          export default class Broken extends View {\n\
-           init() { timer.every(60_000, () => {}); throw new Error(\"init failed\"); }\n\
-           render() { return text(\"unreachable\"); }\n\
+           init(_props, cx) { cx.timer.every(60_000, () => {}); throw new Error(\"init failed\"); }\n\
+           render(cx) { return text(\"unreachable\"); }\n\
          }",
     )
     .expect("initialization-failing source");
@@ -3667,17 +3651,17 @@ fn loading_a_second_application_keeps_the_first_dynamic_import_root(cx: &mut Tes
     .expect("first feature");
     std::fs::write(
         first.join("main.js"),
-        "import { View, sleep, spawn, text, with_cx } from \"gpui\";\n\
+        "import { View, text, with_cx } from \"gpui\";\n\
          export default class First extends View {\n\
-           init() {\n\
+           init(_props, cx) {\n\
              this.label = 'waiting';\n\
-             spawn(async () => {\n\
-               await sleep(1);\n\
+             cx.spawn(async () => {\n\
+               await cx.sleep(1);\n\
                this.label = (await import('./feature.js')).label;\n\
                with_cx((cx) => cx.notify());\n\
              });\n\
            }\n\
-           render() { return text(this.label); }\n\
+           render(cx) { return text(this.label); }\n\
          }",
     )
     .expect("first entry");
@@ -3723,6 +3707,179 @@ fn loading_a_second_application_keeps_the_first_dynamic_import_root(cx: &mut Tes
     let _ = std::fs::remove_dir_all(base);
 }
 
+/// `.child()` names the mistake it was given.
+///
+/// Every retained handle in this API is a `{__handle}` wrapper, so a focus
+/// handle reaching `.child()` used to arrive as an undefined element id and
+/// fail as a numeric conversion error naming nothing.
+#[gpui::test]
+fn child_names_what_it_will_not_accept(cx: &mut TestAppContext) {
+    cx.update(|cx| crate::init(cx));
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+
+    let view_type = runtime
+        .load_source(
+            "wrong-child.js",
+            r#"
+import { View } from "gpui";
+import { v_flex } from "gpui-base";
+
+export default class Wrong extends View {
+  init(_props, cx) {
+    this.focus = cx.focus_handle();
+  }
+  render() {
+    return v_flex().child(this.focus);
+  }
+}
+"#,
+        )
+        .expect("load");
+
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .expect("instantiate");
+    let error = context
+        .update(|window, cx| runtime.render_to_spec(&object, None, window, cx))
+        .expect_err("a focus handle is not a child");
+    let message = error.to_string();
+    assert!(
+        message.contains("element or a ViewHandle"),
+        "the refusal must say what it wanted: {message}"
+    );
+}
+
+/// A module's top level holds no `cx`, and `with_cx` is what is left for it.
+///
+/// This is the one place the re-homing takes something away, so it is worth a
+/// test that the replacement actually reaches the same work.
+#[gpui::test]
+fn module_top_level_reaches_the_scheduler_through_with_cx(cx: &mut TestAppContext) {
+    cx.update(|cx| crate::init(cx));
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+
+    let directory =
+        std::env::temp_dir().join(format!("gpui-shell-top-level-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&directory);
+    std::fs::create_dir_all(&directory).expect("application directory");
+    std::fs::write(
+        directory.join("main.js"),
+        r#"
+import { View, text, with_cx } from "gpui";
+
+globalThis.started = with_cx((cx) => cx.spawn(async () => {}));
+
+export default class Panel extends View {
+  render() {
+    return text("top level");
+  }
+}
+"#,
+    )
+    .expect("main.js");
+
+    let before = crate::engine::quickjs::task_count();
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    context.update(|window, cx| {
+        let policy = Rc::new(Policy::default());
+        let (_scope, _) = crate::scope::enter_with_runtime(
+            &runtime,
+            window,
+            cx,
+            crate::scope::ScopePhase::Task,
+            None,
+            policy.clone(),
+        );
+        let view_type = runtime.load_app(&directory, "main.js").expect("load");
+        runtime
+            .instantiate_view_with_policy(&view_type, policy, window, cx)
+            .expect("instantiate")
+    });
+
+    assert_eq!(
+        crate::engine::quickjs::task_count(),
+        before + 1,
+        "work started at module top level must reach the scheduler"
+    );
+
+    let _ = std::fs::remove_dir_all(directory);
+}
+
+/// The claim the async `cx` exists to make: the context a task body was handed
+/// still works after an `await`.
+///
+/// It used to name the call that *started* the task, and that call had returned
+/// by the time the continuation ran — so every resumed line had to reach for
+/// `with_cx` to get a usable one. The context now names no frame, so there is
+/// nothing to go stale.
+#[gpui::test]
+fn a_task_context_still_works_after_an_await(cx: &mut TestAppContext) {
+    cx.update(|cx| crate::init(cx));
+
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+
+    let view_type = runtime
+        .load_source(
+            "async-context.js",
+            r#"
+import { View, text } from "gpui";
+import { v_flex } from "gpui-base";
+
+export default class Panel extends View {
+  init(_props, cx) {
+    this.label = "waiting";
+    cx.spawn(async (cx) => {
+      await cx.sleep(1);
+      // Both of these are the `cx` this body was handed, used well after the
+      // call that handed it over returned.
+      this.label = `resumed during ${cx.phase()}`;
+      cx.notify();
+    });
+  }
+  render(cx) {
+    return v_flex().child(text(this.label));
+  }
+}
+"#,
+        )
+        .expect("load");
+
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    // `instantiate_view` rather than `instantiate`: the latter opens its scope
+    // with no view attached, so a task started from `init` has no owner and its
+    // `cx.notify()` reaches nothing.
+    let view = context.update(|window, cx| {
+        runtime
+            .instantiate_view(&view_type, window, cx)
+            .expect("instantiate")
+    });
+
+    draw(&mut context, &view);
+    context
+        .executor()
+        .advance_clock(std::time::Duration::from_millis(5));
+    context.run_until_parked();
+    draw(&mut context, &view);
+
+    let tree = context.update(|_, cx| {
+        view.read(cx)
+            .snapshot()
+            .map(crate::RenderSnapshot::debug_tree)
+            .unwrap_or_default()
+    });
+    assert!(
+        tree.contains("resumed during task"),
+        "a task context must survive its await and report the live phase: {tree}"
+    );
+}
+
 fn draw(context: &mut VisualTestContext, view: &gpui::Entity<ScriptView>) {
     let view = view.clone();
     context.draw(
@@ -3746,7 +3903,7 @@ import { RadioGroup, ToggleGroup, Checkbox, Button } from "gpui-base";
 
 export default class Preferences extends View {
   init() { this.density = 0; this.bold = false; }
-  render() {
+  render(cx) {
     const densities = ["Compact", "Comfortable"];
     return RadioGroup.new("density")
       .axis("vertical")
@@ -3852,7 +4009,7 @@ import { v_flex, Collapsible } from "gpui-base";
 export default class Section extends View {
   init() { this.open = OPEN; this.hits = 0; }
 
-  render() {
+  render(cx) {
     return v_flex()
       .w(300)
       .h(200)
@@ -4029,7 +4186,7 @@ export default class Quitter extends View {
     process.exit(7);
   }
 
-  render() {
+  render(cx) {
     return v_flex().child(text("still here"));
   }
 }
@@ -4204,11 +4361,11 @@ fn a_focus_handle_cannot_be_created_during_render(cx: &mut TestAppContext) {
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, div, FocusHandle } from "gpui";
+import { View, div } from "gpui";
 
 export default class Late extends View {
-  render() {
-    return div().track_focus(FocusHandle.new());
+  render(cx) {
+    return div().track_focus(cx.focus_handle());
   }
 }
 "#;
@@ -4241,11 +4398,11 @@ fn an_existing_focus_handle_cannot_focus_during_render(cx: &mut TestAppContext) 
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, div, FocusHandle } from "gpui";
+import { View, div } from "gpui";
 
 export default class LateFocus extends View {
-  init() { this.focus = FocusHandle.new(); }
-  render() {
+  init(_props, cx) { this.focus = cx.focus_handle(); }
+  render(cx) {
     this.focus.focus();
     return div();
   }
@@ -4285,20 +4442,20 @@ fn the_tab_key_walks_the_focus_order_a_script_declared(cx: &mut TestAppContext) 
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, div, FocusHandle, text } from "gpui";
+import { View, div, text } from "gpui";
 import { v_flex, Button, Checkbox, Toggle } from "gpui-base";
 
 export default class Form extends View {
-  init() {
+  init(_props, cx) {
     this.handles = [
-      FocusHandle.new(),
-      FocusHandle.new(),
-      FocusHandle.new(),
-      FocusHandle.new(),
+      cx.focus_handle(),
+      cx.focus_handle(),
+      cx.focus_handle(),
+      cx.focus_handle(),
     ];
   }
 
-  render() {
+  render(cx) {
     return v_flex()
       .w(300)
       .h(200)
@@ -4384,13 +4541,13 @@ fn a_tracked_handle_reports_the_focus_it_was_given(cx: &mut TestAppContext) {
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, div, FocusHandle, text } from "gpui";
+import { View, div, text } from "gpui";
 import { v_flex, Button } from "gpui-base";
 
 export default class Panel extends View {
-  init() { this.target = FocusHandle.new(); }
+  init(_props, cx) { this.target = cx.focus_handle(); }
 
-  render() {
+  render(cx) {
     return v_flex()
       .w(300)
       .h(120)
@@ -4468,7 +4625,7 @@ import { v_flex } from "gpui-base";
 
 export default class Options extends View {
   init() { this.chosen = 1; }
-  render() {
+  render(cx) {
     const names = ["Daily", "Weekly"];
     return v_flex()
       .role("list_box")
@@ -4560,7 +4717,7 @@ import { v_flex, Popover } from "gpui-base";
 export default class Menu extends View {
   init() { this.open = OPEN; this.hits = 0; }
 
-  render() {
+  render(cx) {
     return v_flex()
       .w(400)
       .h(400)
@@ -4793,7 +4950,7 @@ import { v_flex, HoverCard } from "gpui-base";
 export default class Card extends View {
   init() { this.hits = 0; }
 
-  render() {
+  render(cx) {
     return v_flex()
       .w(400)
       .h(400)
@@ -4883,13 +5040,13 @@ export default class Card extends View {
 /// — inside the list, below and beside the trigger — is the one place a click
 /// can only mean "the list is on screen".
 const SELECT: &str = r#"
-import { View, div, text, FocusHandle } from "gpui";
+import { View, div, text } from "gpui";
 import { v_flex, Select, Popup } from "gpui-base";
 
 export default class Picker extends View {
-  init() {
-    this.trigger_focus = FocusHandle.new();
-    this.list_focus = FocusHandle.new();
+  init(_props, cx) {
+    this.trigger_focus = cx.focus_handle();
+    this.list_focus = cx.focus_handle();
     this.open = false;
     this.chosen = "none";
     this.confirms = 0;
@@ -4915,7 +5072,7 @@ export default class Picker extends View {
           .child(text("China")));
   }
 
-  render() {
+  render(cx) {
     return v_flex()
       .w(400)
       .h(400)
@@ -5181,7 +5338,7 @@ export default class NoHandle extends View {
         "the error must name the constructor: {message}"
     );
     assert!(
-        message.contains("FocusHandle.new()"),
+        message.contains("cx.focus_handle()"),
         "and where a handle comes from: {message}"
     );
     assert!(
@@ -5210,16 +5367,16 @@ fn a_date_picker_carries_focus_and_an_announced_open_state(cx: &mut TestAppConte
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, text, FocusHandle } from "gpui";
+import { View, text } from "gpui";
 import { v_flex, DatePicker } from "gpui-base";
 
 export default class Due extends View {
-  init() {
-    this.focus = FocusHandle.new();
+  init(_props, cx) {
+    this.focus = cx.focus_handle();
     this.open = false;
   }
 
-  render() {
+  render(cx) {
     return v_flex()
       .w(400)
       .h(400)
@@ -5451,7 +5608,7 @@ import { h_resizable, resizable_panel } from "gpui-base";
 
 export default class Workspace extends View {
   init() { this.sizes = []; }
-  render() {
+  render(cx) {
     return h_resizable("workspace")
       .w(400)
       .h(200)
@@ -5640,7 +5797,7 @@ export default class Rows extends View {{
     this.refused = "";
   }}
 
-  render() {{
+  render(cx) {{
     return v_flex()
       .w(300)
       .h(400)
@@ -5883,7 +6040,7 @@ export default class Rows extends View {
     this.items = [{ key: "alpha" }, { key: "beta" }];
     this.clicked = [];
   }
-  render() {
+  render(cx) {
     return v_flex()
       .w(300)
       .h(100)
