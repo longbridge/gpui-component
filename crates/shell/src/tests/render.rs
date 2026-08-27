@@ -6,7 +6,7 @@
 //! keeps the fallback engine honest.
 
 use crate::{
-    NativeModules, NativeValue, ScriptView, ShellRuntime, capability::Capabilities, policy::Policy,
+    HostModules, HostValue, ScriptView, ShellRuntime, capability::Capabilities, policy::Policy,
 };
 use gpui::{AppContext as _, Modifiers, TestAppContext, VisualTestContext, point, px};
 use std::{cell::Cell, path::PathBuf, rc::Rc};
@@ -3578,17 +3578,17 @@ fn reload_replaces_old_tasks_and_rolls_back_failed_new_tasks(cx: &mut TestAppCon
 fn reload_evaluates_modules_under_the_views_frozen_capabilities(cx: &mut TestAppContext) {
     cx.update(crate::init);
     let observed = Rc::new(Cell::new(false));
-    let mut modules = NativeModules::new();
+    let mut modules = HostModules::new();
     modules.register("audit", {
         let observed = observed.clone();
         move |module| {
             module.function("observe", move |_| {
                 observed.set(crate::scope::policy().capabilities().has_read_access());
-                Ok(NativeValue::from(true))
+                Ok(HostValue::from(true))
             });
         }
     });
-    crate::set_native_modules(modules);
+    crate::export_modules(modules).expect("the module names are free");
 
     let directory =
         std::env::temp_dir().join(format!("gpui-shell-reload-policy-{}", std::process::id()));
@@ -3596,8 +3596,9 @@ fn reload_evaluates_modules_under_the_views_frozen_capabilities(cx: &mut TestApp
     std::fs::create_dir_all(&directory).expect("application directory");
     let source = |caption: &str| {
         format!(
-            "import {{ div, View, native }} from \"gpui\";\n\
-             native('audit').observe();\n\
+            "import {{ div, View }} from \"gpui\";\n\
+             import {{ observe }} from \"audit\";\n\
+             observe();\n\
              export default class Panel extends View {{\n\
                render() {{ return \"{caption}\"; }}\n\
              }}"
@@ -3629,7 +3630,7 @@ fn reload_evaluates_modules_under_the_views_frozen_capabilities(cx: &mut TestApp
         "module evaluation must keep the view's frozen capability grant"
     );
 
-    crate::clear_native_modules();
+    crate::clear_exported_modules();
     let _ = std::fs::remove_dir_all(directory);
 }
 

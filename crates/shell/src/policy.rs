@@ -45,7 +45,7 @@
 
 use std::{cell::RefCell, path::PathBuf, rc::Rc};
 
-use crate::{capability::Capabilities, native::NativeModules, store::Store};
+use crate::{capability::Capabilities, host_modules::HostModules, store::Store};
 
 /// The authority one application or plugin runs under.
 ///
@@ -60,14 +60,14 @@ pub struct Policy {
     /// was built would be back where this started. The module registry is the
     /// opposite question. It is not the script's authority but the *host's own
     /// surface*, and every module closure holds GPUI entity handles — so
-    /// [`crate::native::clear_modules`] has to actually revoke, or a host that
+    /// [`crate::host_modules::clear_modules`] has to actually revoke, or a host that
     /// tears itself down leaves handles registered and GPUI reports the leak.
     ///
     /// Shared by every copy of a policy, so an edit made through
     /// [`update_default`] reaches the views already holding the old one. Not
     /// shared *between* policies: a plugin's registry is its own, and a host
     /// clearing its modules does not reach into one.
-    modules: Rc<RefCell<Rc<NativeModules>>>,
+    modules: Rc<RefCell<Rc<HostModules>>>,
     /// `None` when the host named no settings file, which is a denial with its
     /// own message rather than an empty store.
     ///
@@ -88,7 +88,7 @@ impl Policy {
     pub fn new() -> Self {
         Self {
             capabilities: Capabilities::default(),
-            modules: Rc::new(RefCell::new(Rc::new(NativeModules::default()))),
+            modules: Rc::new(RefCell::new(Rc::new(HostModules::default()))),
             store: Rc::new(RefCell::new(None)),
         }
     }
@@ -110,13 +110,13 @@ impl Policy {
         self
     }
 
-    /// The native modules this application may reach.
+    /// The host modules this application may reach.
     ///
     /// Per policy rather than per process, because "which host functions may
     /// this plugin call" is exactly as much a grant as "which directories may it
     /// read". A global registry cannot express a host that gives one plugin a
     /// module and not another.
-    pub fn with_native_modules(self, modules: NativeModules) -> Self {
+    pub fn with_host_modules(self, modules: HostModules) -> Self {
         *self.modules.borrow_mut() = Rc::new(modules);
         self
     }
@@ -125,7 +125,7 @@ impl Policy {
         &self.capabilities
     }
 
-    pub(crate) fn modules(&self) -> Rc<NativeModules> {
+    pub(crate) fn modules(&self) -> Rc<HostModules> {
         // Cloned out rather than borrowed across the call: dispatching into a
         // module may register modules again, and the borrow would still be open.
         self.modules.borrow().clone()
@@ -232,10 +232,10 @@ mod tests {
     /// registered is a leak GPUI reports at shutdown.
     #[test]
     fn revoking_a_module_reaches_a_policy_already_handed_out() {
-        set_default(Policy::new().with_native_modules(crate::native::NativeModules::new()));
+        set_default(Policy::new().with_host_modules(crate::host_modules::HostModules::new()));
         let held = default();
 
-        update_default(|policy| policy.with_native_modules(crate::native::NativeModules::new()));
+        update_default(|policy| policy.with_host_modules(crate::host_modules::HostModules::new()));
 
         assert!(
             Rc::ptr_eq(&held.modules(), &default().modules()),

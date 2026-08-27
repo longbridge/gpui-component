@@ -68,14 +68,20 @@
 //! * **Retained entities** ([`crate::entities`]) and anything else no built-in
 //!   module exports today.
 //!
-//! # What an application adds
+//! # What the host adds
 //!
-//! Host-registered native modules cannot be generated here, because only the
-//! host knows what it registered. The declarations leave a `NativeModules`
-//! interface for an application to augment, which is what turns `native("...")`
-//! from `Record<string, (...args: any[]) => any>` into a checked name with
-//! completing functions. `crates/story/js/quotes/market.d.ts` is the worked
-//! example.
+//! Every module the host registered is emitted here too, one `declare module`
+//! per name, so `import { quotes } from "market"` is checked the same way
+//! `import { div } from "gpui"` is. A module that described itself in
+//! TypeScript through [`crate::HostModule::declarations`] is emitted verbatim;
+//! one that did not gets `(...args: any[]) => any` signatures, which still
+//! check the module name and every export name.
+//!
+//! That is why the declarations live in Rust beside the registration rather
+//! than in a `.d.ts` beside the script: two files describing one boundary
+//! drift, and this one is checked against the registry before it is written.
+//! `install_host_modules` in `crates/story/src/stories/shell_story.rs` is the
+//! worked example.
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
@@ -124,7 +130,7 @@ pub fn declarations() -> String {
     out.push_str("  }\n");
     out.push_str(ELEMENTS);
     out.push_str(COMPONENT_TYPES);
-    out.push_str(WINDOW_AND_NATIVE);
+    out.push_str(WINDOW);
     out.push_str(CAPABILITIES);
     out.push_str(SCHEDULING);
     out.push_str("}\n\n");
@@ -137,7 +143,50 @@ pub fn declarations() -> String {
     out.push_str(FPS);
     out.push_str("}\n");
     out.push_str(STANDARD_RUNTIME);
+    out.push_str(&host_modules());
     out.push_str(WINDOW_GLOBAL);
+    out
+}
+
+/// The modules this host registered, as `declare module` blocks.
+///
+/// Generated from the registry rather than hand-written beside the script,
+/// which is the whole reason host modules became imports. A module that gave
+/// itself a TypeScript face through [`crate::HostModule::declarations`] is
+/// emitted verbatim — and [`crate::HostModules::validate`] has already checked
+/// that face against what was registered, so it cannot describe a function that
+/// is not there. One that did not is emitted with permissive signatures, which
+/// still check the module name and every export name.
+fn host_modules() -> String {
+    let registry = crate::host_modules::modules();
+    let mut out = String::new();
+    for name in registry.module_names() {
+        let Ok(module) = registry.get(name) else {
+            continue;
+        };
+        let _ = writeln!(out, "\ndeclare module \"{name}\" {{");
+        match module.declared() {
+            Some(declarations) => {
+                for line in declarations.lines() {
+                    match line.trim_end() {
+                        "" => out.push('\n'),
+                        line => {
+                            let _ = writeln!(out, "  {}", line.trim_start());
+                        }
+                    }
+                }
+            }
+            None => {
+                for function in module.function_names() {
+                    let _ = writeln!(
+                        out,
+                        "  export function {function}(...args: any[]): any;"
+                    );
+                }
+            }
+        }
+        out.push_str("}\n");
+    }
     out
 }
 
@@ -1441,8 +1490,8 @@ const COMPONENT_TYPES: &str = r#"
 
 "#;
 
-/// The window the script draws into, and the host's native module registry.
-const WINDOW_AND_NATIVE: &str = r#"
+/// The window the script draws into.
+const WINDOW: &str = r#"
   export interface Window {
     /**
      * Opens a dialog on the window's root, and answers the stack's new depth.
@@ -1493,39 +1542,6 @@ const WINDOW_AND_NATIVE: &str = r#"
     paint_path(path: Path, background: BackgroundValue | Color): Element;
   }
 
-  /**
-   * The native modules this host registered, declared by the application.
-   *
-   * Empty here, because only the host knows what it granted. An application
-   * describes its own in a `.d.ts` beside its source, and from then on
-   * `native("...")` is typed — the module name is checked, and its functions
-   * complete:
-   *
-   * ```ts
-   * declare module "gpui" {
-   *   interface NativeModules {
-   *     market: {
-   *       quotes(): { symbol: string; last: string }[];
-   *       watch(symbol: string): boolean;
-   *     };
-   *   }
-   * }
-   * ```
-   *
-   * Declaring nothing costs nothing: with no entries the untyped overload
-   * below still applies, so an application that never writes one keeps working
-   * exactly as before.
-   */
-  export interface NativeModules {}
-
-  /**
-   * A module the host registered in Rust. Throws when no such module exists,
-   * naming the ones that do.
-   */
-  export function native<Name extends keyof NativeModules & string>(
-    module: Name,
-  ): NativeModules[Name];
-  export function native(module: string): Record<string, (...args: any[]) => any>;
 "#;
 
 /// Everything `gpui-base` provides: its layout helpers, its components and its

@@ -27,7 +27,7 @@
 //
 // **What a host may name.** The root: `init`, the `set_*` entry points,
 // `on_exit_request`, `resolve_app_root`, `failure_surface`, and the types
-// re-exported below. The modules: `native` and `policy` to configure what a
+// re-exported below. The modules: `host_modules` and `policy` to configure what a
 // script may reach, `root` and `theme` for the window it lives in, `view` and
 // `snapshot` for the view itself, `metrics` to measure. Hot reload is exposed
 // through `ShellRuntime::watch`; its watcher implementation remains internal.
@@ -38,7 +38,7 @@
 // whatever is behind it. `spec`, `materialize`, `store`, `style` and `a11y` are
 // an internal representation. `capability` publishes `Capabilities` and
 // `ExecuteGrant` through the root and keeps the resolver — `Access`, `Grant` —
-// to itself. `scope` publishes `with_current_app`, which is how a native module
+// to itself. `scope` publishes `with_current_app`, which is how a host module
 // reaches the ambient `App`, and hides the frame stack. `scroll` is the one
 // scroll area `materialize` needs, kept here because the shell builds on
 // `gpui-base` alone and cannot borrow `gpui-component`'s copy. `runtime`,
@@ -59,7 +59,7 @@ pub(crate) mod entities;
 pub(crate) mod error;
 pub(crate) mod materialize;
 pub mod metrics;
-pub mod native;
+pub mod host_modules;
 pub(crate) mod path;
 pub mod plugin;
 pub mod policy;
@@ -85,9 +85,9 @@ pub use capability::{Capabilities, ExecuteGrant, HttpRequestGrant};
 pub use engine::ShellRuntime;
 pub use error::ShellError;
 pub use metrics::RuntimeMetrics;
-pub use native::{
-    NativeArguments, NativeError, NativeModule, NativeModules, NativeObject, NativeResult,
-    NativeValue,
+pub use host_modules::{
+    HostArguments, HostError, HostModule, HostModules, HostObject, HostResult, HostValue,
+    RESERVED_SPECIFIERS,
 };
 pub use root::{DialogOptions, SheetSide, ShellRoot, ToastLevel, ToastRequest};
 pub use runtime::{
@@ -201,21 +201,26 @@ pub fn init(cx: &mut App) {
     style::init();
 }
 
-/// Registers the native modules a script may reach.
+/// Exports a set of Rust modules for scripts to import by name.
 ///
-/// Nothing is reachable until this is called: `native("...")` fails while the
-/// registry is empty, and it only ever resolves the modules the host put in it
-/// (design doc §17.6). Call it before the application runs; the registry is
-/// read at call time, so a later change takes effect on the next call.
-pub fn set_native_modules(modules: NativeModules) {
-    native::set_modules(modules);
+/// Nothing is importable until this is called: a script that imports a module
+/// this host did not register is told so while its module graph is linked, and
+/// it only ever reaches the modules the host put here (design doc §17.6).
+///
+/// Call it **before** the application is loaded — an import is resolved at link
+/// time, so a module registered afterwards is not in the graph. Replacing the
+/// set later is still meaningful: an already-imported function forwards to the
+/// registry on every call, so revoking one takes effect immediately.
+///
+/// Fails when a module name belongs to the runtime; see [`RESERVED_SPECIFIERS`].
+pub fn export_modules(modules: HostModules) -> Result<(), HostError> {
+    host_modules::set_modules(modules)
 }
 
-/// Removes every native module.
+/// Withdraws every exported module.
 ///
 /// A host that registered modules capturing GPUI entities should call this when
-/// it goes away; leaving them installed is
-/// a leak rather than merely untidy.
-pub fn clear_native_modules() {
-    native::clear_modules();
+/// it goes away; leaving them installed is a leak rather than merely untidy.
+pub fn clear_exported_modules() {
+    host_modules::clear_modules();
 }

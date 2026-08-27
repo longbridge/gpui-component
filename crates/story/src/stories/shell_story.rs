@@ -6,14 +6,14 @@
 //! separate `crates/story/js/motion/` view demonstrates native motion without
 //! becoming part of the quote-board performance comparison.
 //! Neither half owns the data: a single `Entity<Market>` does, and the script
-//! reaches it through the **market native module** this story registers before the
+//! reaches it through the **`market` host module** this story registers before the
 //! script runtime starts.
 //!
 //! ```text
 //!   Rust panel ──┐                                  ┌── main.js
 //!   (rows drawn  │                                  │   (rows drawn
 //!    with        ▼                                  ▼    with div/text)
-//!    Label)   Entity<Market>  ◀── native("market") ──┐
+//!    Label)   Entity<Market>  ◀── import "market" ───┐
 //!                    │            quotes / ticks / watch
 //!                    │ cx.notify()
 //!                    ▼
@@ -37,8 +37,8 @@
 //!
 //! `js/quotes/` carries a generated `gpui.d.ts` and a hand-written
 //! `market.d.ts`, so an editor knows what `import ... from "gpui"` holds and
-//! what `native("market")` answers. A misspelled style method, a colour token
-//! that does not exist, or a native module nobody registered is an error in the
+//! what the `market` module answers. A misspelled style method, a colour token
+//! that does not exist, or a host module nobody registered is an error in the
 //! editor rather than an exception on the next tick. Regenerate the first after
 //! a runtime change:
 //!
@@ -72,7 +72,7 @@ use gpui_component::{
 use gpui_shell::Watcher;
 use gpui_shell::{
     RuntimeMetrics, ScriptView, ShellRoot, ShellRuntime,
-    native::{NativeError, NativeModules, NativeObject, NativeValue},
+    host_modules::{HostError, HostModules, HostObject, HostValue},
 };
 
 use crate::section;
@@ -117,8 +117,8 @@ impl Quote {
 
 /// The shared state, owned by GPUI and reachable from both languages.
 ///
-/// It is an `Entity` rather than a field on the story so the native module can
-/// hold it: a native function is a plain closure with no access to the story's
+/// It is an `Entity` rather than a field on the story so the host module can
+/// hold it: a host function is a plain closure with no access to the story's
 /// `&mut self`, and an entity handle is the one way to reach host state from
 /// inside a script call and still notify observers afterwards.
 pub struct Market {
@@ -225,7 +225,7 @@ impl Market {
     ///
     /// An unknown symbol is the script's mistake, so it gets a sentence naming
     /// what does exist rather than a silent no-op.
-    fn watch(&mut self, symbol: &str) -> Result<bool, NativeError> {
+    fn watch(&mut self, symbol: &str) -> Result<bool, HostError> {
         match self
             .quotes
             .iter_mut()
@@ -242,7 +242,7 @@ impl Market {
                     .map(|quote| quote.symbol.to_string())
                     .collect::<Vec<_>>()
                     .join(", ");
-                Err(NativeError::new(format!(
+                Err(HostError::new(format!(
                     "no quote for `{symbol}`; the board holds {known}"
                 )))
             }
@@ -268,13 +268,13 @@ impl Market {
     /// round the same way. A price that reads 372.40 on the left and 372.4 on
     /// the right would make the comparison about formatting instead of about
     /// rendering.
-    fn to_native(&self) -> NativeValue {
-        NativeValue::Array(
+    fn to_host_value(&self) -> HostValue {
+        HostValue::Array(
             self.quotes
                 .iter()
                 .map(|quote| {
-                    NativeValue::from(
-                        NativeObject::new()
+                    HostValue::from(
+                        HostObject::new()
                             .field("symbol", quote.symbol.to_string())
                             .field("name", quote.name.to_string())
                             .field("last", format!("{:.2}", quote.last))
@@ -419,18 +419,21 @@ fn motion_script_directory() -> PathBuf {
 ///
 /// This is the whole extension surface: a script cannot load native code, so
 /// what the host registers here is exactly what it can call (design doc §17.6).
-/// Registering an empty set — the default — would leave `native("market")`
-/// failing with a message saying this host granted none.
-fn install_native_modules(market: &Entity<Market>) {
-    gpui_shell::set_native_modules(native_modules(market));
+/// Registering an empty set — the default — would leave `import … from
+/// "market"` failing with a message saying this host granted none.
+fn install_host_modules(market: &Entity<Market>) {
+    gpui_shell::export_modules(host_modules(market))
+        .expect("`market` is not one of the runtime's own module names");
 }
 
-fn native_modules(market: &Entity<Market>) -> NativeModules {
-    let mut modules = NativeModules::new();
+fn host_modules(market: &Entity<Market>) -> HostModules {
+    let mut modules = HostModules::new();
 
     modules.register("market", |module| {
+        module.declarations(MARKET_TYPES);
+
         let read = market.clone();
-        module.function("quotes", move |_| with_app(|cx| read.read(cx).to_native()));
+        module.function("quotes", move |_| with_app(|cx| read.read(cx).to_host_value()));
 
         // Read separately from `quotes()` so the script can paint how many ticks
         // it has actually seen. When the feed is only asking for repaints this
@@ -438,7 +441,7 @@ fn native_modules(market: &Entity<Market>) -> NativeModules {
         // visible in the panel itself.
         let ticks = market.clone();
         module.function("ticks", move |_| {
-            with_app(|cx| NativeValue::from(ticks.read(cx).ticks as f64))
+            with_app(|cx| HostValue::from(ticks.read(cx).ticks as f64))
         });
 
         let flip = market.clone();
@@ -452,7 +455,7 @@ fn native_modules(market: &Entity<Market>) -> NativeModules {
                     // the script view together. It is delivered after this call
                     // unwinds, so it cannot re-enter the script engine.
                     cx.notify();
-                    Ok(NativeValue::from(watched))
+                    Ok(HostValue::from(watched))
                 })
             })?
         });
@@ -466,7 +469,7 @@ fn native_modules(market: &Entity<Market>) -> NativeModules {
                     if changed > 0 {
                         cx.notify();
                     }
-                    NativeValue::from(changed as f64)
+                    HostValue::from(changed as f64)
                 })
             })
         });
@@ -475,15 +478,47 @@ fn native_modules(market: &Entity<Market>) -> NativeModules {
     modules
 }
 
-/// Reaches the ambient `App` from inside a native call.
+/// The TypeScript face of the `market` module.
 ///
-/// A native function receives arguments and nothing else; the host context it
+/// Beside the registration rather than in a `.d.ts` next to the script, because
+/// the two used to be two files in two languages with nothing between them.
+/// `export_modules` checks this against what was actually registered, so
+/// renaming a function on one side fails at start-up rather than completing in
+/// an editor and throwing at the call site.
+const MARKET_TYPES: &str = r#"
+/** One row of the board, as it crosses the boundary. */
+export interface Quote {
+  symbol: string;
+  name: string;
+  /** Already formatted by Rust, so both halves round the same way. */
+  last: string;
+  change: string;
+  percent: string;
+  volume: string;
+  /** 1 up, -1 down, 0 unchanged. */
+  direction: number;
+  watched: boolean;
+}
+
+/** Every row on the board. */
+export function quotes(): Quote[];
+/** How many feed ticks have landed. */
+export function ticks(): number;
+/** Flips one row's watched flag and answers the new value. */
+export function watch(symbol: string): boolean;
+/** Sets every row, and answers how many actually moved. */
+export function watch_all(watched: boolean): number;
+"#;
+
+/// Reaches the ambient `App` from inside a host call.
+///
+/// A host function receives arguments and nothing else; the host context it
 /// runs in comes from the shell's call scope, which is live for exactly as long
 /// as the script call that is on the stack. Outside one there is no honest
 /// answer, so this says so rather than reaching for a stale pointer.
-fn with_app<R>(read: impl FnOnce(&mut App) -> R) -> Result<R, NativeError> {
+fn with_app<R>(read: impl FnOnce(&mut App) -> R) -> Result<R, HostError> {
     gpui_shell::with_current_app(read).ok_or_else(|| {
-        NativeError::new("the board is only reachable while a script call is in progress")
+        HostError::new("the board is only reachable while a script call is in progress")
     })
 }
 
@@ -557,7 +592,7 @@ impl ShellStory {
         // the runtime needs priming; the style reflection table builds itself on
         // first use.
         let market = cx.new(|_| Market::open());
-        install_native_modules(&market);
+        install_host_modules(&market);
 
         // The single place a change becomes two re-renders. Whoever moved the
         // board — the feed, a Rust button or a script button — both halves are
@@ -1252,7 +1287,7 @@ fn direction_color(direction: i32, cx: &Context<ShellStory>) -> Hsla {
 /// and which is exactly the shape of leak a plugin host would hit on unload.
 impl Drop for ShellStory {
     fn drop(&mut self) {
-        gpui_shell::clear_native_modules();
+        gpui_shell::clear_exported_modules();
     }
 }
 

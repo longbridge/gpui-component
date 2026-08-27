@@ -8,7 +8,7 @@ use std::ops::Deref;
 
 use gpui::{Entity, IntoElement as _, TestAppContext, VisualTestContext};
 
-use crate::{Capabilities, NativeModules, NativeValue, ScriptView, ShellRuntime};
+use crate::{Capabilities, HostModules, HostValue, ScriptView, ShellRuntime};
 
 const CLIPBOARD_PROBE: &str = r#"
 import { div, View } from "gpui";
@@ -39,13 +39,13 @@ export default class Probe extends View {
 }
 "#;
 
-const NATIVE_PROBE: &str = r#"
-import { div, View, native } from "gpui";
+const HOST_MODULE_PROBE: &str = r#"
+import { View } from "gpui";
 import { v_flex } from "gpui-base";
+import { increment } from "calculator";
 
-const calculator = native("calculator");
 export default class Probe extends View {
-  init() { this.answer = calculator.increment(41); }
+  init() { this.answer = increment(41); }
   render(cx) { return v_flex().child(`answer:${this.answer}`); }
 }
 "#;
@@ -90,19 +90,19 @@ fn cancelling_a_javascript_timer_prevents_its_callback(cx: &mut TestAppContext) 
 }
 
 #[gpui::test]
-fn javascript_calls_a_host_registered_native_module(cx: &mut TestAppContext) {
+fn javascript_imports_a_host_registered_module(cx: &mut TestAppContext) {
     cx.update(crate::init);
-    let mut modules = NativeModules::new();
+    let mut modules = HostModules::new();
     modules.register("calculator", |module| {
         module.function("increment", |arguments| {
-            Ok(NativeValue::from(arguments.number(0)? + 1.))
+            Ok(HostValue::from(arguments.number(0)? + 1.))
         });
     });
-    crate::set_native_modules(modules);
+    crate::export_modules(modules).expect("the module names are free");
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let view_type = runtime
-        .load_source("native.js", NATIVE_PROBE)
+        .load_source("host_module.js", HOST_MODULE_PROBE)
         .expect("load script");
     let window = cx.add_window(|_, _| Empty);
     let mut context = VisualTestContext::from_window(*window.deref(), cx);

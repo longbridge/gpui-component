@@ -183,7 +183,7 @@ impl Drop for NestedFlushGuard<'_> {
 
 mod entity_api;
 pub(crate) mod host;
-mod native;
+mod host_modules;
 mod overlay;
 pub(crate) mod sandbox;
 mod scheduler;
@@ -239,8 +239,6 @@ pub(crate) mod exports {
         // System capabilities (`host`, `sandbox`). Diagnostics are JavaScript's
         // own `console`; a second name for it bought nothing.
         "store",
-        // Native modules (`native`).
-        "native",
     ];
 
     /// Components, layout helpers and the theme, all owned by `gpui-base`.
@@ -360,6 +358,13 @@ macro_rules! builtin_modules {
             ModuleLoader::default()$(.with_module($module::SPECIFIER, $module))+
         }
 
+        /// The built-in specifiers, for the test that keeps
+        /// [`crate::RESERVED_SPECIFIERS`] honest.
+        #[cfg(test)]
+        fn builtin_specifier_list() -> Vec<&'static str> {
+            vec![$($module::SPECIFIER),+]
+        }
+
         /// Which module exports `name`, if any.
         #[cfg(test)]
         fn module_exporting(name: &str) -> Option<&'static str> {
@@ -470,13 +475,25 @@ impl ShellRuntime {
         let context = JsContext::full(&js_runtime).map_err(js_setup_error)?;
 
         let app_modules = AppModules::default();
+        // Order is the namespace policy. The runtime's own modules resolve
+        // first, so a host cannot take `gpui` or `path` from under a script;
+        // the application's files resolve last, so a host module cannot be
+        // shadowed by a file that happens to share its name. `host_modules`
+        // refuses reserved names at registration, which is what turns the first
+        // half of that from a silent shadowing into a sentence.
         js_runtime.set_loader(
             (
                 standard::resolver(),
                 builtin_resolver(),
+                host_modules::HostModuleLoader,
                 app_modules.clone(),
             ),
-            (standard::loader(), builtin_loader(), app_modules.clone()),
+            (
+                standard::loader(),
+                builtin_loader(),
+                host_modules::HostModuleLoader,
+                app_modules.clone(),
+            ),
         );
 
         // Resource limits belong to the sandbox policy, but only the engine
@@ -3693,7 +3710,7 @@ impl ShellRuntime {
                             ));
                         }
                         let value_count =
-                            crate::engine::quickjs::native::bridge_array_len(&ctx, &values)?;
+                            crate::engine::quickjs::host_modules::bridge_array_len(&ctx, &values)?;
                         let mut value_strings = Vec::new();
                         value_strings.try_reserve_exact(value_count).map_err(|_| {
                             Exception::throw_range(&ctx, "path background values are too large")
@@ -4056,7 +4073,7 @@ impl ShellRuntime {
             // Subsystems extend the same module object the prelude built.
             let module: Object = ctx.globals().get("__gpui")?;
             host::install(ctx, &module)?;
-            native::install(ctx, &module)?;
+            host_modules::install(ctx)?;
             theme_api::install(ctx, &module)?;
             entity_api::install(ctx, &module, runtime.clone())?;
             scheduler::install(ctx, &module)?;
@@ -4554,12 +4571,12 @@ impl<'js> FromJs<'js> for ItemExtents {
         let items = value.as_array().ok_or_else(|| {
             Exception::throw_type(ctx, "item_sizes must be a number or an array of numbers")
         })?;
-        let length = native::bridge_array_len(ctx, &items).map_err(|_| {
+        let length = host_modules::bridge_array_len(ctx, &items).map_err(|_| {
             Exception::throw_range(
                 ctx,
                 &format!(
                     "item_sizes may contain at most {} entries",
-                    native::MAX_BRIDGE_ARRAY_ITEMS
+                    host_modules::MAX_BRIDGE_ARRAY_ITEMS
                 ),
             )
         })?;

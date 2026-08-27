@@ -21,7 +21,7 @@ pub(super) fn direct_test_http_client()
     fetch::direct_test_client()
 }
 
-const NAMES: &[&str] = &[
+pub(super) const NAMES: &[&str] = &[
     "buffer",
     "console",
     "crypto",

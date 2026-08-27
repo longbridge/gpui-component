@@ -53,7 +53,7 @@ use crate::{
 };
 
 use super::{
-    native::{MAX_BRIDGE_ARRAY_ITEMS, bridge_array_len},
+    host_modules::{MAX_BRIDGE_ARRAY_ITEMS, bridge_array_len},
     scheduler,
 };
 

@@ -22,26 +22,19 @@ order: 13
 
 有两个名字是 ambient 的，完全不需要 import：每次宿主调用都会交给你的 `cx`，以及 `window`。标准运行时模块——`fs/promises`、`path`、`crypto`、`process`、`net`、`websocket` 等等——受宿主授权门控，记录在 [Capabilities](./capabilities.md)。
 
-下面的表格里反复出现四种形态。每一种都是一个只包含工厂方法的对象，镜像 Rust 侧类型上的关联函数：
+下面每张表里的名字，就是你实际写下的那个。小写函数在 Rust 侧同样是自由函数——`div()` 就是 `gpui::div()`。首字母大写的名字是一个只有工厂方法的对象，镜像它同名的关联函数：`Button.new(id)` 就是 `Button::new(id)`，而 `TableRow.new(id, index)` 带的是屏幕阅读器要念出的、从 1 开始的位置。
 
-| 形态 | 工厂方法 | 镜像 |
-| --- | --- | --- |
-| 类型表 | `.new(id)`，有时带第二个参数 | `Button::new(id)` |
-| 部件表 | `.new()`——自身没有身份的子部件 | `ProgressTrack::new()` |
-| 索引表 | `.new(id, index)`，从 1 开始 | `TableRow::new(id, index)` |
-| 状态表 | `.new(state)` 或 `.new(options)` | `Input::new(state)` |
-
-## `"gpui"`
+## `gpui` 模块
 
 ### 元素
 
-| 名称 | 形态 | 说明 |
-| --- | --- | --- |
-| `div()` | 函数 | 自身不带布局的元素 |
-| `svg(path)` | 函数 | 来自应用根目录的矢量图，按周围的文字颜色着色 |
-| `image(path)` | 函数 | 来自应用根目录的全彩图片，保留原色 |
-| `PathBuilder` | 常量 | `fill()` 与 `stroke(width)`，各自开启一条正在构建的路径 |
-| `Background` | 常量 | `solid`、`stop`、`linear_gradient`、`pattern_slash`、`checkerboard` |
+| 名称 | 说明 |
+| --- | --- |
+| `div()` | 自身不带布局的元素 |
+| `svg(path)` | 来自应用根目录的矢量图，按周围的文字颜色着色 |
+| `image(path)` | 来自应用根目录的全彩图片，保留原色 |
+| `PathBuilder` | `fill()` 与 `stroke(width)`，各自开启一条正在构建的路径 |
+| `Background` | `solid`、`stop`、`linear_gradient`、`pattern_slash`、`checkerboard` |
 
 `PathBuilder.fill()` 与 `.stroke(width)` 返回一个句柄，可链式调用 `move_to`、`line_to`、`curve_to`、`cubic_bezier_to`、`arc_to`、`add_polygon`、`close` 与 `dash_array`，最后以 `build()` 收尾。用 `window.paint_path(path, background)` 把结果画出来——它是唯一一个通过对象取到的元素构造器，因为它镜像的东西在 Rust 侧就是窗口上的一个方法。
 
@@ -49,81 +42,81 @@ order: 13
 
 ### 视图
 
-| 名称 | 形态 | 说明 |
-| --- | --- | --- |
-| `View` | 抽象类 | 每个视图的基类；继承它，并把子类作为 default export |
-| `ViewClass` | 类型 | 一个具体的 `View` 子类，也就是 `cx.new` 接受的东西 |
-| `Entity` | 接口 | 对一个嵌套视图的留存所有权：`set_props(props)`、`release()` |
-| `Props` | 类型 | 交给 `init` 与 `cx.new` 的属性包 |
+| 名称 | 说明 |
+| --- | --- |
+| `View` | 每个视图的基类；继承它，并把子类作为 default export |
+| `ViewClass` | 一个具体的 `View` 子类，也就是 `cx.new` 接受的东西 |
+| `Entity` | 对一个嵌套视图的留存所有权：`set_props(props)`、`release()` |
+| `Props` | 交给 `init` 与 `cx.new` 的属性包 |
 
 子类定义只执行一次的 `init?(props, cx)`，以及返回恰好一个元素、在视图被置为失效时执行的 `render(cx)`。可选的 `update(props)` 在父视图改变嵌套视图的 props 时执行。
 
 ### 存储
 
-| 名称 | 形态 | 说明 |
-| --- | --- | --- |
-| `store` | 常量 | 能挺过重启的键值存储，每次写入都会持久化 |
-| `Store` | 接口 | `get(key)`、`set(key, value)`、`remove(key)`、`keys()`、`flush()` |
-| `Json` | 类型 | store 能持久化的全部内容，仅此而已 |
+| 名称 | 说明 |
+| --- | --- |
+| `store` | 能挺过重启的键值存储，每次写入都会持久化 |
+| `Store` | `get(key)`、`set(key, value)`、`remove(key)`、`keys()`、`flush()` |
+| `Json` | store 能持久化的全部内容，仅此而已 |
 
 未设置的键 `store.get` 返回 `null`；`flush()` 在当前值被可靠写入之后完成。
 
 ### Native 模块
 
-| 名称 | 形态 | 说明 |
-| --- | --- | --- |
-| `native(module)` | 函数 | 宿主在 Rust 侧注册的模块；一个都没找到时抛异常，并列出存在的那些 |
-| `NativeModules` | 接口 | 这里是空的——应用把自己的模块声明进去，`native("…")` 就有了类型 |
+| 名称 | 说明 |
+| --- | --- |
+| `native(module)` | 宿主在 Rust 侧注册的模块；一个都没找到时抛异常，并列出存在的那些 |
+| `NativeModules` | 这里是空的——应用把自己的模块声明进去，`native("…")` 就有了类型 |
 
 ### 调度
 
-| 名称 | 形态 | 说明 |
-| --- | --- | --- |
-| `Task` | 接口 | 一个正在运行的任务：`cancel()`、`is_done()` |
-| `TaskOptions` | 接口 | `owner`——任务随之取消的那个视图，或 `null` 表示比任何视图都活得久 |
-| `Timer` | 接口 | `after(ms, handler, opts?)` 与 `every(ms, handler, opts?)` |
+| 名称 | 说明 |
+| --- | --- |
+| `Task` | 一个正在运行的任务：`cancel()`、`is_done()` |
+| `TaskOptions` | `owner`——任务随之取消的那个视图，或 `null` 表示比任何视图都活得久 |
+| `Timer` | `after(ms, handler, opts?)` 与 `every(ms, handler, opts?)` |
 
 ### 焦点与组件形态
 
-| 名称 | 形态 | 说明 |
-| --- | --- | --- |
-| `FocusHandleHandle` | 接口 | 脚本自己持有的焦点目标：`focus()`、`is_focused()`、`release()` |
-| `ComponentType` | 接口 | `new(id)`——跨渲染有身份的组件 |
-| `PartType` | 接口 | `new()`——自身没有身份的子部件 |
-| `IndexedComponentType` | 接口 | `new(id, index)`——会报读自身从 1 开始位置的组件 |
+| 名称 | 说明 |
+| --- | --- |
+| `FocusHandleHandle` | 脚本自己持有的焦点目标：`focus()`、`is_focused()`、`release()` |
+| `ComponentType` | `new(id)`——跨渲染有身份的组件 |
+| `PartType` | `new()`——自身没有身份的子部件 |
+| `IndexedComponentType` | `new(id, index)`——会报读自身从 1 开始位置的组件 |
 
 ### 共享类型
 
-| 名称 | 形态 | 说明 |
-| --- | --- | --- |
-| `Length` | 类型 | 数字（像素）、`"12px"`、`"1.5rem"`、`"50%"` 或 `"auto"` |
-| `DefiniteLength` | 类型 | 同上，但不含 `"auto"` |
-| `AbsoluteLength` | 类型 | 只有像素或 rem |
-| `LengthString` | 类型 | 长度的字符串形式 |
-| `Color` | 类型 | 一个 `ColorToken` 名字，或 `#rgb` / `#rrggbb` / `#rrggbbaa` 字面量 |
-| `ColorToken` | 类型 | 已安装调色板定义的十七个语义 token |
-| `Role` | 类型 | 一个无障碍 role，镜像 `gpui::Role` 的 snake_case 拼写 |
-| `Anchor` | 类型 | 锚定浮层的哪个角固定在它的触发元素上 |
-| `MouseButton` | 类型 | `"left"`、`"right"` 或 `"middle"` |
-| `Phase` | 类型 | `"render"`、`"event"`、`"task"`、`"layout"` 或 `"none"` |
-| `SheetSide` | 类型 | sheet 贴靠哪一边 |
-| `DialogOptions` | 接口 | `escape_dismissable`、`backdrop_dismissable` |
-| `ToastOptions` | 接口 | `title`、`description`、`level`、`timeout`、`id` |
-| `ClickEvent` | 接口 | `click_count`、`modifiers` |
-| `MouseMoveEvent` | 接口 | `position`、`local_position`、`bounds`、`modifiers` |
-| `Modifiers` | 接口 | `shift`、`control`、`alt`、`platform` |
-| `Point` | 接口 | `x`、`y` |
-| `ElementBounds` | 接口 | 带 `width` 与 `height` 的 `Point` |
-| `MotionProperty` | 类型 | `"opacity"`、`"width"`、`"height"`、`"left"`、`"top"` |
-| `MotionEasing` | 类型 | `"linear"`、`"ease-in"`、`"ease-out"`、`"ease-in-out"` |
-| `TransitionPolicy` | 接口 | `duration`、`delay`、`easing` |
-| `SpringPolicy` | 接口 | `response`、`damping`、`epsilon` |
-| `Path` | 接口 | 由 `PathBuilder.build()` 产出的不可变原生几何 |
-| `PathCoordinate` | 类型 | 像素，或所绘元素边界的百分比 |
-| `BackgroundValue` | 接口 | 可复用的原生背景：`opacity(factor)`、`color_space(space)` |
-| `BackgroundStop` | 接口 | 一个渐变色标，来自 `Background.stop(color, percentage)` |
+| 名称 | 说明 |
+| --- | --- |
+| `Length` | 数字（像素）、`"12px"`、`"1.5rem"`、`"50%"` 或 `"auto"` |
+| `DefiniteLength` | 同上，但不含 `"auto"` |
+| `AbsoluteLength` | 只有像素或 rem |
+| `LengthString` | 长度的字符串形式 |
+| `Color` | 一个 `ColorToken` 名字，或 `#rgb` / `#rrggbb` / `#rrggbbaa` 字面量 |
+| `ColorToken` | 已安装调色板定义的十七个语义 token |
+| `Role` | 一个无障碍 role，镜像 `gpui::Role` 的 snake_case 拼写 |
+| `Anchor` | 锚定浮层的哪个角固定在它的触发元素上 |
+| `MouseButton` | `"left"`、`"right"` 或 `"middle"` |
+| `Phase` | `"render"`、`"event"`、`"task"`、`"layout"` 或 `"none"` |
+| `SheetSide` | sheet 贴靠哪一边 |
+| `DialogOptions` | `escape_dismissable`、`backdrop_dismissable` |
+| `ToastOptions` | `title`、`description`、`level`、`timeout`、`id` |
+| `ClickEvent` | `click_count`、`modifiers` |
+| `MouseMoveEvent` | `position`、`local_position`、`bounds`、`modifiers` |
+| `Modifiers` | `shift`、`control`、`alt`、`platform` |
+| `Point` | `x`、`y` |
+| `ElementBounds` | 带 `width` 与 `height` 的 `Point` |
+| `MotionProperty` | `"opacity"`、`"width"`、`"height"`、`"left"`、`"top"` |
+| `MotionEasing` | `"linear"`、`"ease-in"`、`"ease-out"`、`"ease-in-out"` |
+| `TransitionPolicy` | `duration`、`delay`、`easing` |
+| `SpringPolicy` | `response`、`damping`、`epsilon` |
+| `Path` | 由 `PathBuilder.build()` 产出的不可变原生几何 |
+| `PathCoordinate` | 像素，或所绘元素边界的百分比 |
+| `BackgroundValue` | 可复用的原生背景：`opacity(factor)`、`color_space(space)` |
+| `BackgroundStop` | 一个渐变色标，来自 `Background.stop(color, percentage)` |
 
-## `cx` —— context
+## `cx` 上下文
 
 `cx` 是某一次宿主调用的脚本侧 context，并且只在那次调用中有效。`await` 会把控制权交回宿主，它指名的那一帧随之消失，所以跨越 `await` 留住的 `cx` 会报出 stale-context 错误。
 
@@ -149,7 +142,7 @@ order: 13
 
 有三处会交出一个：`init`、`cx.spawn` 的 body，以及 `cx.timer` 的回调。这三处的职责正是「安排或延续比启动它的那次调用活得更久的工作」。
 
-## `window` —— 窗口全局对象
+## `window` 全局对象
 
 和 `cx` 一样是全局的，不需要 import。每次调用都读取当前正在跑的那次宿主调用，不在任何调用中时抛异常，所以没有句柄要持有，也没有东西会过期。浮层属于窗口，而不属于打开它的那个视图——这就是这些方法在这里、而不在 `Context` 上的原因。
 
@@ -170,88 +163,88 @@ order: 13
 
 `open_dialog`、`open_sheet` 与 `open_sheet_at` 接受的是**一个返回元素的函数**，而不是元素：dialog 活得比打开它的那次调用久，每次重绘时这个函数都会再执行一次。除了两个 `has_active_*` 查询与 `paint_path`，这里的一切在 `render` 中都不合法。见 [Overlays](./overlays.md)。
 
-## `"gpui-base"`
+## `gpui-base` 模块
 
 这里的组件拥有行为、焦点，以及屏幕阅读器听到的内容，而自身几乎什么都不画。画面归脚本所有，用[样式接口](./styling.md)写出来。
 
 ### 布局
 
-| 名称 | 形态 | 说明 |
-| --- | --- | --- |
-| `h_flex()` | 函数 | 一行 |
-| `v_flex()` | 函数 | 一列 |
-| `h_resizable(id)` | 函数 | 一行带可拖拽分隔条的窗格；尺寸按这个 id 存在窗口里 |
-| `v_resizable(id)` | 函数 | 同上，纵向堆叠 |
-| `resizable_panel()` | 函数 | 可调整组里的一个窗格，用在别处都不合法 |
+| 名称 | 说明 |
+| --- | --- |
+| `h_flex()` | 一行 |
+| `v_flex()` | 一列 |
+| `h_resizable(id)` | 一行带可拖拽分隔条的窗格；尺寸按这个 id 存在窗口里 |
+| `v_resizable(id)` | 同上，纵向堆叠 |
+| `resizable_panel()` | 可调整组里的一个窗格，用在别处都不合法 |
 
 ### 控件
 
-| 名称 | 形态 | 说明 |
-| --- | --- | --- |
-| `Button` | 类型表 | 激活、焦点、disabled 与 selected 状态 |
-| `Link` | 类型表 | 通过系统浏览器打开的外部 HTTP(S) 资源 |
-| `Checkbox` | 类型表 | 受控的勾选；勾选标记自己画 |
-| `Switch` | 类型表 | 受控的 switch |
-| `Radio` | 类型表 | 一组中的一个选项；只报告 `true`，从不报告取消选中 |
-| `Toggle` | 类型表 | 一个会保持按下的按钮 |
-| `RadioGroup` | 类型表 | 被报读为一组的一批 radio；自身不持有选中项 |
-| `ToggleGroup` | 类型表 | 被报读为 toolbar 的一批 toggle |
-| `Tabs` | 类型表 | 自身不持有选中项的 tab 列表 |
-| `Tab` | 类型表 | 一个 tab：`selected(...)` 进，`on_click(...)` 出 |
-| `Progress` | 类型表 | 只有报读，没有进度条；单独的 `Progress.new(...)` 什么都不画 |
-| `ProgressTrack` | 部件表 | 凹槽：一个由你设定尺寸与颜色的普通元素 |
-| `ProgressIndicator` | 部件表 | 已填充的部分；按你报读的百分比设置它的宽度 |
-| `SliderState` | 状态表 | 留存的 slider 状态，也是一次拖拽写入的地方 |
-| `Slider` | 状态表 | 根：报读数值，并拥有 release |
-| `SliderTrack` | 状态表 | 按下与拖拽的表面 |
-| `SliderIndicator` | 状态表 | 凹槽，也是每个指针位置据以测量的那个盒子 |
-| `SliderThumb` | 状态表 | 滑块；shell 给它位置，你给它外观 |
+| 名称 | 说明 |
+| --- | --- |
+| `Button.new(id)` | 激活、焦点、disabled 与 selected 状态 |
+| `Link.new(id)` | 通过系统浏览器打开的外部 HTTP(S) 资源 |
+| `Checkbox.new(id)` | 受控的勾选；勾选标记自己画 |
+| `Switch.new(id)` | 受控的 switch |
+| `Radio.new(id)` | 一组中的一个选项；只报告 `true`，从不报告取消选中 |
+| `Toggle.new(id)` | 一个会保持按下的按钮 |
+| `RadioGroup.new(id)` | 被报读为一组的一批 radio；自身不持有选中项 |
+| `ToggleGroup.new(id)` | 被报读为 toolbar 的一批 toggle |
+| `Tabs.new(id)` | 自身不持有选中项的 tab 列表 |
+| `Tab.new(id)` | 一个 tab：`selected(...)` 进，`on_click(...)` 出 |
+| `Progress.new(id)` | 只有报读，没有进度条；单独的 `Progress.new(...)` 什么都不画 |
+| `ProgressTrack.new()` | 凹槽：一个由你设定尺寸与颜色的普通元素 |
+| `ProgressIndicator.new()` | 已填充的部分；按你报读的百分比设置它的宽度 |
+| `SliderState.new(options?)` | 留存的 slider 状态，也是一次拖拽写入的地方 |
+| `Slider.new(state)` | 根：报读数值，并拥有 release |
+| `SliderTrack.new(state)` | 按下与拖拽的表面 |
+| `SliderIndicator.new(state)` | 凹槽，也是每个指针位置据以测量的那个盒子 |
+| `SliderThumb.new(state)` | 滑块；shell 给它位置，你给它外观 |
 
 slider 的四个部件接受同一个 `SliderStateHandle`，而且四个都不能少——没有 `SliderIndicator` 的 slider 根本拖不动。
 
 ### 文本编辑
 
-| 名称 | 形态 | 说明 |
-| --- | --- | --- |
-| `InputState` | 状态表 | 留存的文本状态：`InputState.new({ placeholder, value })` |
-| `Input` | 状态表 | 包住留存文本状态的框 |
-| `NumberInput` | 状态表 | 建立在同一个 `InputState` 上的 spinbutton，三个插槽都有分量 |
-| `TextareaState` | 状态表 | 留存的多行文本状态；`rows` 是一个选项 |
-| `Textarea` | 状态表 | 包住留存多行状态的框 |
-| `OtpState` | 状态表 | 留存的一次性验证码状态；长度在创建时固定 |
-| `OtpInput` | 状态表 | 定长验证码，格子由 shell 画、由脚本设定样式 |
+| 名称 | 说明 |
+| --- | --- |
+| `InputState.new(options?)` | 留存的文本状态：`InputState.new({ placeholder, value })` |
+| `Input.new(state)` | 包住留存文本状态的框 |
+| `NumberInput.new(state)` | 建立在同一个 `InputState` 上的 spinbutton，三个插槽都有分量 |
+| `TextareaState.new(options?)` | 留存的多行文本状态；`rows` 是一个选项 |
+| `Textarea.new(state)` | 包住留存多行状态的框 |
+| `OtpState.new(length, options?)` | 留存的一次性验证码状态；长度在创建时固定 |
+| `OtpInput.new(state)` | 定长验证码，格子由 shell 画、由脚本设定样式 |
 
 没有专门的数字状态类型：给 `InputState` 设上 `set_step`、`set_min` 与 `set_max`，它就成了数字状态。
 
 ### 容器与浮层
 
-| 名称 | 形态 | 说明 |
-| --- | --- | --- |
-| `Collapsible` | 部件表 | 仅在 `open` 时渲染它的 `content` 插槽；不带 role、箭头或触发器 |
-| `Popover` | 类型表 | 锚定在触发元素上、由按下打开的浮层 |
-| `HoverCard` | 类型表 | 同上，但由指针停留打开，并有自己的打开状态 |
-| `Popup` | 类型表 | 光秃秃的锚定浮层：`Popup.new(id, trigger)`，填入 `content` 即打开 |
-| `Select` | 类型表 | combobox 的根：role、报读的打开状态、键盘——但不含任何画面 |
-| `Combobox` | 类型表 | 同一个根，被报读为一个触发器是可编辑输入框的 combobox |
-| `DatePicker` | 类型表 | 日期选择器的根：`DatePicker.new(id, focus_handle)`；它不持有日期 |
+| 名称 | 说明 |
+| --- | --- |
+| `Collapsible.new()` | 仅在 `open` 时渲染它的 `content` 插槽；不带 role、箭头或触发器 |
+| `Popover.new(id)` | 锚定在触发元素上、由按下打开的浮层 |
+| `HoverCard.new(id)` | 同上，但由指针停留打开，并有自己的打开状态 |
+| `Popup.new(id, trigger)` | 光秃秃的锚定浮层：`Popup.new(id, trigger)`，填入 `content` 即打开 |
+| `Select.new(id)` | combobox 的根：role、报读的打开状态、键盘——但不含任何画面 |
+| `Combobox.new(id)` | 同一个根，被报读为一个触发器是可编辑输入框的 combobox |
+| `DatePicker.new(id, focus_handle)` | 日期选择器的根：`DatePicker.new(id, focus_handle)`；它不持有日期 |
 
 在这些之上动手之前，有两处缺口值得先知道：打开的 `Select` 或 `Combobox` 列表还没有方向键导航，而 Enter 与 Escape 到不了 `DatePicker`。两者都写在各自类型的声明里，也就是它们真正咬人的地方。
 
 ### 表格与列表
 
-| 名称 | 形态 | 说明 |
-| --- | --- | --- |
-| `Table` | 类型表 | 语义表格的根，组合方式与 HTML 组合表格一致 |
-| `TableHeader` | 类型表 | 表头行组 |
-| `TableBody` | 类型表 | 表体行组 |
-| `TableRow` | 索引表 | 一行：`TableRow.new(id, row_index)`，从 1 开始 |
-| `TableHead` | 索引表 | 一个列头，从 1 开始 |
-| `TableCell` | 索引表 | 一个数据单元格，从 1 开始 |
-| `TableCaption` | 类型表 | caption 该在的视觉位置；它不带 caption role |
-| `v_virtual_list(…)` | 函数 | 只描述屏幕内内容的纵向列表 |
-| `h_virtual_list(…)` | 函数 | 另一个轴上的同一件事；`item_sizes` 是宽度 |
-| `VirtualListScrollHandle` | 状态表 | 虚拟列表的滚动位置，跨帧保留 |
-| `Scrollbar` | 类型表 | `new(id)`、`horizontal(id)`、`vertical(id)`——一条由你自己摆放的滚动条 |
+| 名称 | 说明 |
+| --- | --- |
+| `Table.new(id)` | 语义表格的根，组合方式与 HTML 组合表格一致 |
+| `TableHeader.new(id)` | 表头行组 |
+| `TableBody.new(id)` | 表体行组 |
+| `TableRow.new(id, index)` | 一行：`TableRow.new(id, row_index)`，从 1 开始 |
+| `TableHead.new(id, index)` | 一个列头，从 1 开始 |
+| `TableCell.new(id, index)` | 一个数据单元格，从 1 开始 |
+| `TableCaption.new(id)` | caption 该在的视觉位置；它不带 caption role |
+| `v_virtual_list(…)` | 只描述屏幕内内容的纵向列表 |
+| `h_virtual_list(…)` | 另一个轴上的同一件事；`item_sizes` 是宽度 |
+| `VirtualListScrollHandle.new()` | 虚拟列表的滚动位置，跨帧保留 |
+| `Scrollbar.new(id)` | `new(id)`、`horizontal(id)`、`vertical(id)`——一条由你自己摆放的滚动条 |
 
 两种虚拟列表都接受 `(id, item_count, item_sizes, get_key, render)`。`render(range, cx)` 是这套接口里唯一由宿主在一帧*进行中*调用的回调，所以在它内部注册处理器、创建留存状态与调用 `cx.notify()` 都会被拒绝。
 
@@ -269,32 +262,32 @@ slider 的四个部件接受同一个 `SliderStateHandle`，而且四个都不�
 
 ### 主题
 
-| 名称 | 形态 | 说明 |
-| --- | --- | --- |
-| `set_theme(theme)` | 函数 | 用应用自己的主题替换 `gpui-base` 当前生效的语义 token |
-| `Theme` | 接口 | `cx.theme()` 返回的东西：语义 token，加上 `appearance` 与 `is_dark` |
-| `SemanticThemeTokens` | 接口 | `colors`、`spacing`、`radius` |
-| `ColorTokens` | 类型 | 每个语义角色一个 `Color` |
-| `SpacingTokens` | 接口 | `xxs` `xs` `sm` `md` `lg` `xl` `xxl` |
-| `RadiusTokens` | 接口 | `none` `sm` `md` `lg` `xl` `full` |
+| 名称 | 说明 |
+| --- | --- |
+| `set_theme(theme)` | 用应用自己的主题替换 `gpui-base` 当前生效的语义 token |
+| `Theme` | `cx.theme()` 返回的东西：语义 token，加上 `appearance` 与 `is_dark` |
+| `SemanticThemeTokens` | `colors`、`spacing`、`radius` |
+| `ColorTokens` | 每个语义角色一个 `Color` |
+| `SpacingTokens` | `xxs` `xs` `sm` `md` `lg` `xl` `xxl` |
+| `RadiusTokens` | `none` `sm` `md` `lg` `xl` `full` |
 
 读主题用 `cx.theme()`。替换整套调色板是应用层面的动作，谈不上属于哪一次调用的 context——这就是 `set_theme` 是一个自由函数的原因。
 
 ### 其他类型
 
-| 名称 | 形态 | 说明 |
-| --- | --- | --- |
-| `GroupAxis` | 类型 | `"horizontal"` 或 `"vertical"`，只报读、不绘制 |
-| `ScrollbarMode` | 类型 | `"scrolling"`、`"hover"` 或 `"always"` |
-| `ItemRange` | 接口 | 虚拟列表的可见项，写作半开区间 `[start, end)` |
-| `SliderValue` | 类型 | 一个数字，或区间 slider 的 `[start, end]` |
-| `PopupType`、`DatePickerType`、`ScrollbarType` | 接口 | 构造器参数不止一个 id 的那三个类型的工厂形态 |
+| 名称 | 说明 |
+| --- | --- |
+| `GroupAxis` | `"horizontal"` 或 `"vertical"`，只报读、不绘制 |
+| `ScrollbarMode` | `"scrolling"`、`"hover"` 或 `"always"` |
+| `ItemRange` | 虚拟列表的可见项，写作半开区间 `[start, end)` |
+| `SliderValue` | 一个数字，或区间 slider 的 `[start, end]` |
+| `PopupType`、`DatePickerType`、`ScrollbarType` | 构造器参数不止一个 id 的那三个类型的工厂形态 |
 
-## `"gpui-fps"`
+## `gpui-fps` 模块
 
-| 名称 | 形态 | 说明 |
-| --- | --- | --- |
-| `fps_monitor()` | 函数 | 原生 `gpui-fps` HUD，每个窗口共享一个，固定在右上角 |
+| 名称 | 说明 |
+| --- | --- |
+| `fps_monitor()` | 原生 `gpui-fps` HUD，每个窗口共享一个，固定在右上角 |
 
 它的父元素必须设置 `relative()`。HUD 自己拥有完整外观；普通样式与子元素对它不起作用。
 
