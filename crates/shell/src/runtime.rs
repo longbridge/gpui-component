@@ -233,6 +233,14 @@ pub(crate) struct CallbackEntry<T> {
     pub(crate) value: T,
     pub(crate) view: Option<WeakEntity<ScriptView>>,
     pub(crate) application: Option<Rc<ApplicationGeneration>>,
+    /// The host call this callback was registered from, as
+    /// [`crate::scope`] numbers them.
+    ///
+    /// Only the virtualized list reads it, and only to keep the `cx` of that
+    /// call usable inside the item renderer it registered — see
+    /// [`crate::scope::adopt`]. Every other dispatch opens a scope of its own
+    /// and has no use for the one it came from.
+    pub(crate) registered_in: Option<u64>,
 }
 
 impl<T> CallbackEntry<T> {
@@ -254,6 +262,7 @@ impl<T: Clone> Clone for CallbackEntry<T> {
             value: self.value.clone(),
             view: self.view.clone(),
             application: self.application.clone(),
+            registered_in: self.registered_in,
         }
     }
 }
@@ -899,6 +908,7 @@ mod identity_tests {
             value,
             view: None,
             application: None,
+            registered_in: None,
         }
     }
 

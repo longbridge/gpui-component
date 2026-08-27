@@ -1937,6 +1937,12 @@ const BASE: &str = r#"  /** A row. */
    *   and the rest throw there as they do in `render()`, and `cx.notify()` is
    *   refused: asking for a re-render from inside layout is a loop.
    *
+   * What the layout pass does *not* cost you is the `cx` you already had: the
+   * renderer is a closure inside `render(cx)`, so the row helpers written
+   * against that `cx` — `label(text, cx)`, `surface(cx)` — keep working
+   * unchanged. The `cx` the renderer is handed reaches the same window and app,
+   * and is there for a renderer written somewhere `render`'s is not in scope.
+   *
    * The list paints no scrollbar of its own. Pair one with it by name, exactly
    * as with a scroll area:
    *

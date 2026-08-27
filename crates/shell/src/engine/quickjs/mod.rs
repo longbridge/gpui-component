@@ -1604,6 +1604,11 @@ impl ShellRuntime {
             policy,
             entry.application.clone(),
         );
+        // The renderer is a closure the script wrote inside `render(cx)`, and
+        // the row helpers it calls take that `cx`. Layout is a frame of its own,
+        // so without this the enclosing render's `cx` would read as stale here
+        // and every helper would need a second, list-only plumbing.
+        scope::adopt(entry.registered_in);
 
         let outer = std::mem::take(&mut *self.arena.borrow_mut());
         let described = self.with_js(|ctx| {
@@ -4236,6 +4241,7 @@ impl ShellRuntime {
                     value: saved,
                     view: scope::current_view().map(|view| view.downgrade()),
                     application: scope::current_application_generation(),
+                    registered_in: scope::current_generation(),
                 });
                 let name = match method {
                     "on_click" => "on_click",
@@ -4769,11 +4775,13 @@ fn virtual_list_constructor(
                     value: get_key.0,
                     view: scope::current_view().map(|view| view.downgrade()),
                     application: scope::current_application_generation(),
+                    registered_in: scope::current_generation(),
                 });
                 let callback = store.callbacks.borrow_mut().push(CallbackEntry {
                     value: render.0,
                     view: scope::current_view().map(|view| view.downgrade()),
                     application: scope::current_application_generation(),
+                    registered_in: scope::current_generation(),
                 });
                 Ok(store.push_node(Component::VirtualList(Rc::new(
                     crate::spec::VirtualListSpec::new(

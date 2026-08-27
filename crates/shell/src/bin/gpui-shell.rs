@@ -17,8 +17,8 @@ use std::{
 };
 
 use gpui::{
-    App, AppContext as _, Bounds, Context, Entity, IntoElement, Render, TitlebarOptions, Window,
-    WindowBounds, WindowHandle, WindowOptions, px, size,
+    AnyWindowHandle, App, AppContext as _, Bounds, Context, Entity, IntoElement, Render,
+    TitlebarOptions, Window, WindowBounds, WindowHandle, WindowOptions, px, size,
 };
 use gpui_shell::{AppAssets, Capabilities, ShellRoot, ShellRuntime};
 use tracing::{
@@ -656,7 +656,12 @@ fn watch_sources(
     window: WindowHandle<ShellRoot>,
     cx: &mut App,
 ) {
-    let started = window.update(cx, |_, window, cx| runtime.watch(&root, window, cx));
+    // Through the untyped handle on purpose. `WindowHandle::<ShellRoot>::update`
+    // leases the root view for the length of the closure, and `watch` reads that
+    // same entity to find the mounted application — a second borrow GPUI answers
+    // with a panic. All this call wants from the window is a `&mut Window`.
+    let started =
+        AnyWindowHandle::from(window).update(cx, |_, window, cx| runtime.watch(&root, window, cx));
 
     match started {
         // Detached on purpose: this watcher lasts as long as the window, and
