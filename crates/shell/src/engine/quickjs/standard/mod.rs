@@ -1,0 +1,72 @@
+//! LLRT-backed, authority-free Standard Runtime modules.
+//!
+//! Privileged modules live behind Shell adapters; this module only registers
+//! implementations that cannot bypass the active [`crate::Policy`].
+
+use rquickjs::{Ctx, Result, loader::BuiltinResolver, loader::ModuleLoader};
+
+mod connect;
+mod console;
+mod fetch;
+mod fs;
+mod net;
+mod os;
+mod process;
+mod upstream;
+mod websocket;
+
+#[cfg(test)]
+pub(super) fn direct_test_http_client()
+-> std::result::Result<reqwest::blocking::Client, reqwest::Error> {
+    fetch::direct_test_client()
+}
+
+const NAMES: &[&str] = &[
+    "buffer",
+    "console",
+    "crypto",
+    "fs/promises",
+    "net",
+    "os",
+    "path",
+    "process",
+    "url",
+    "websocket",
+    "zlib",
+];
+
+pub(super) fn resolver() -> BuiltinResolver {
+    NAMES
+        .iter()
+        .fold(BuiltinResolver::default(), |resolver, name| {
+            resolver.with_module(*name)
+        })
+}
+
+pub(super) fn loader() -> ModuleLoader {
+    ModuleLoader::default()
+        .with_module("buffer", llrt_buffer::BufferModule)
+        .with_module("console", console::ConsoleModule)
+        .with_module("crypto", llrt_crypto::CryptoModule)
+        .with_module("fs/promises", fs::FsModule)
+        .with_module("net", net::NetModule)
+        .with_module("os", os::OsModule)
+        .with_module("path", llrt_path::PathModule)
+        .with_module("process", process::ProcessModule)
+        .with_module("url", llrt_url::UrlModule)
+        .with_module("websocket", websocket::WebSocketModule)
+        .with_module("zlib", llrt_zlib::ZlibModule)
+}
+
+pub(super) fn install(ctx: &Ctx<'_>) -> Result<()> {
+    upstream::assert_compatible();
+    // Order is significant: URL and Crypto consume Buffer-compatible byte
+    // classes installed by the first initializer.
+    llrt_buffer::init(ctx)?;
+    llrt_url::init(ctx)?;
+    llrt_crypto::init(ctx)?;
+    console::install(ctx)?;
+    super::sandbox::install_process(ctx)?;
+    fetch::install(ctx)?;
+    Ok(())
+}

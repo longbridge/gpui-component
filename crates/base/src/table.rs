@@ -1,7 +1,7 @@
 use gpui::{
     AnyElement, App, Div, ElementId, InteractiveElement, Interactivity, IntoElement, ParentElement,
-    RenderOnce, Role, Stateful, StatefulInteractiveElement, StyleRefinement, Styled, Window, div,
-    prelude::FluentBuilder as _,
+    RenderOnce, Role, SharedString, Stateful, StatefulInteractiveElement, StyleRefinement, Styled,
+    Window, div, prelude::FluentBuilder as _,
 };
 
 use crate::StyledExt as _;
@@ -66,6 +66,7 @@ pub struct Table {
     children: Vec<AnyElement>,
     row_count: Option<usize>,
     column_count: Option<usize>,
+    accessibility_label: Option<SharedString>,
 }
 
 impl Table {
@@ -77,6 +78,7 @@ impl Table {
             children: Vec::new(),
             row_count: None,
             column_count: None,
+            accessibility_label: None,
         }
     }
 
@@ -92,6 +94,12 @@ impl Table {
     /// rendered range.
     pub fn column_count(mut self, count: usize) -> Self {
         self.column_count = Some(count);
+        self
+    }
+
+    /// Sets the table's accessible name.
+    pub fn accessibility_label(mut self, label: impl Into<SharedString>) -> Self {
+        self.accessibility_label = Some(label.into());
         self
     }
 }
@@ -120,6 +128,9 @@ impl RenderOnce for Table {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         self.base
             .role(Role::Table)
+            .when_some(self.accessibility_label, |this, label| {
+                this.aria_label(label)
+            })
             .when_some(self.row_count, |this, count| this.aria_row_count(count))
             .when_some(self.column_count, |this, count| {
                 this.aria_column_count(count)
@@ -298,6 +309,21 @@ mod tests {
     use super::*;
     use gpui::{Context, Element as _, Modifiers, Render, TestAppContext, accesskit, point, px};
     use std::{cell::Cell, rc::Rc};
+
+    #[gpui::test]
+    fn table_projects_its_accessible_name(cx: &mut TestAppContext) {
+        let window = cx.add_empty_window();
+        window.update(|window, cx| {
+            let mut node = accesskit::Node::new(Role::Table);
+            Table::new("positions")
+                .accessibility_label("Open positions")
+                .render(window, cx)
+                .into_element()
+                .write_a11y_info(&mut node);
+
+            assert_eq!(node.label(), Some("Open positions"));
+        });
+    }
 
     #[gpui::test]
     fn row_and_cells_project_accessibility_indices(cx: &mut TestAppContext) {

@@ -376,6 +376,8 @@ impl RenderOnce for StorySection {
                     .gap_4()
                     .child(
                         v_flex()
+                            .min_w_0()
+                            .flex_1()
                             .gap_1()
                             .child(div().font_medium().child(self.title))
                             .when_some(self.description, |this, description| {

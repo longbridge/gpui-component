@@ -527,4 +527,31 @@ mod tests {
         });
         assert_eq!(resizes.get(), 1);
     }
+
+    struct SizedGroupHarness;
+
+    impl Render for SizedGroupHarness {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div()
+                .w(px(400.))
+                .h(px(100.))
+                .child(
+                    h_resizable("sized-resizable").size(px(40.)).child(
+                        resizable_panel()
+                            .child(div().size_full().debug_selector(|| "sized-panel".into())),
+                    ),
+                )
+        }
+    }
+
+    #[gpui::test]
+    fn a_group_size_binds_the_cross_axis(cx: &mut TestAppContext) {
+        let (_, cx) = cx.add_window_view(|_, _| SizedGroupHarness);
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        let panel = cx.debug_bounds("sized-panel").unwrap();
+        assert_eq!(panel.size.width, px(400.));
+        assert_eq!(panel.size.height, px(40.));
+    }
 }

@@ -13,6 +13,7 @@ default = ["tree-sitter"]
 [dependencies]
 anyhow.workspace = true
 gpui.workspace = true
+gpui-base.workspace = true
 gpui_platform.workspace = true
 gpui-component = { workspace = true }
 gpui-component-assets.workspace = true
@@ -41,6 +42,7 @@ dirs = "6.0.0"
 
 # Native-only dependencies (not available on WASM)
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
+gpui-shell.workspace = true
 reqwest_client.workspace = true
 smol.workspace = true
 tree-sitter-navi = "0.2.3"
@@ -59,7 +61,7 @@ getrandom = { version = "0.2", features = ["js"] }
 gtk = { version = "0.18" }
 
 [dev-dependencies]
-gpui-base.workspace = true
+gpui = { workspace = true, features = ["test-support"] }
 
 [lints]
 workspace = true

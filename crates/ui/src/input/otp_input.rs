@@ -8,7 +8,7 @@ use super::state::sync_focused_input_registry;
 use crate::ThemeStyled as _;
 use crate::{ActiveTheme, Disableable, Icon, IconName, Sizable, Size, h_flex, v_flex};
 use gpui_base::OtpInput as BaseOtpInput;
-pub use gpui_base::OtpState;
+pub use gpui_base::{OtpEvent, OtpState};
 
 /// A One Time Password (OTP) input element.
 ///

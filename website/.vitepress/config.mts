@@ -43,7 +43,11 @@ function wasmExamplesDevServer() {
 /**
  * https://github.com/jooy2/vitepress-sidebar
  */
-function createSidebar(scanStartPath: string, rootGroupText: string) {
+function createSidebar(
+  scanStartPath: string,
+  rootGroupText: string,
+  rootLinkText?: string,
+) {
   const routePrefix = `/${scanStartPath.replace(/^\/+|\/+$/g, "")}/`;
   const sidebar = generateSidebar([
     {
@@ -63,6 +67,32 @@ function createSidebar(scanStartPath: string, rootGroupText: string) {
   if (!rootItems) return sidebar;
 
   rootItems.text = rootGroupText;
+
+  // The section's own index page is not a group heading, so it needs an entry
+  // of its own or the landing page is unreachable once you are inside.
+  //
+  // Its route *is* the section base, which a base-relative link cannot spell:
+  // an empty link renders as plain text and `index.md` resolves to a second URL
+  // that never matches the active page. So the section drops `base` and every
+  // link becomes absolute instead.
+  if (rootLinkText) {
+    const absolutize = (items: any[]) => {
+      for (const item of items) {
+        if (typeof item.link === "string" && !item.link.startsWith("/")) {
+          item.link = routePrefix + item.link.replace(/\.md$/, "");
+        }
+        if (Array.isArray(item.items)) absolutize(item.items);
+      }
+    };
+
+    absolutize(sidebar[routePrefix].items ?? []);
+    delete sidebar[routePrefix].base;
+
+    rootItems.items = [
+      { text: rootLinkText, link: routePrefix },
+      ...(rootItems.items ?? []),
+    ];
+  }
 
   const catalog = rootItems.items?.find(
     (item: any) =>
@@ -88,8 +118,10 @@ function createSidebar(scanStartPath: string, rootGroupText: string) {
 }
 
 const enSidebar = createSidebar("/docs/", "Introduction");
+const shellSidebar = createSidebar("/shell/", "GPUI Shell", "Introduction");
 const baseSidebar = createSidebar("/base/", "GPUI Base");
 const zhSidebar = createSidebar("/zh-CN/docs/", "文档");
+const zhShellSidebar = createSidebar("/zh-CN/shell/", "GPUI Shell", "简介");
 
 function createFooter(prefix = "", locale: "en" | "zh" = "en") {
   const designGuidesText = locale === "zh" ? "设计指南" : "Design Guides";
@@ -140,6 +172,9 @@ function createNav(prefix = "", locale: "en" | "zh" = "en") {
 
   return [
     { text: componentsText, link: `${prefix}/docs/components` },
+    // Shell precedes Base: it is the newest layer and the one a reader is
+    // least likely to already know about.
+    { text: "Shell", link: `${prefix}/shell/` },
     // The gpui-base docs are English-only, so both locales point at the same
     // pages; the section keeps its full "GPUI Base" name in the sidebar.
     { text: "Base", link: "/base/" },
@@ -257,6 +292,7 @@ const config: UserConfig = {
         nav: createNav("", "en"),
         sidebar: {
           ...enSidebar,
+          ...shellSidebar,
           ...baseSidebar,
         },
         footer: createFooter("", "en"),
@@ -273,7 +309,10 @@ const config: UserConfig = {
       themeConfig: {
         ...sharedThemeConfig,
         nav: createNav("/zh-CN", "zh"),
-        sidebar: zhSidebar,
+        sidebar: {
+          ...zhSidebar,
+          ...zhShellSidebar,
+        },
         footer: createFooter("/zh-CN", "zh"),
         langMenuLabel: "语言",
         returnToTopLabel: "返回顶部",

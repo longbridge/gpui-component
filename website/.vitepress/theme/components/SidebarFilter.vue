@@ -147,6 +147,9 @@ function open() {
 
 <style scoped>
 .SidebarFilter {
+  /* The sidebar's own padding-top equals the nav height, so without this the
+     field sits flush against the nav's lower edge. */
+  padding-top: 32px;
   padding-bottom: 4px;
 }
 

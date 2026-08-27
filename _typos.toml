@@ -4,6 +4,14 @@ extend-ignore-re = ['\\u\{[0-9A-Fa-f]+\}']
 [default.extend-words]
 # Correct Italian singular of "command".
 comando = "comando"
+# A deliberately misspelled manifest key: `crates/shell/src/plugin.rs` refuses
+# it by name, and the test that proves it has to contain the misspelling.
+capabilites = "capabilites"
+# Misspellings that only exist inside assertions proving a name is refused.
+backgrund = "backgrund"
+wtach = "wtach"
+netwrok = "netwrok"
+workspce = "workspce"
 
 [files]
 extend-exclude = ["crates/story/src/fixtures/"]

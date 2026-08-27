@@ -16,6 +16,9 @@ type ClickHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 ///
 /// Tabs do not participate in keyboard focus by themselves. A compound tab
 /// list may add keyboard navigation when that behavior is introduced.
+// TODO: Add compound keyboard navigation with roving focus, arrow keys,
+// Home/End, and Enter/Space activation before treating Tabs as a complete
+// desktop tab-list primitive.
 #[derive(IntoElement)]
 pub struct Tab {
     id: ElementId,

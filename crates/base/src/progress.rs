@@ -1,7 +1,7 @@
 use gpui::{
     AnyElement, App, Div, ElementId, InteractiveElement, Interactivity, IntoElement, ParentElement,
-    RenderOnce, Role, StatefulInteractiveElement, StyleRefinement, Styled, Window, div,
-    prelude::FluentBuilder as _,
+    RenderOnce, Role, SharedString, StatefulInteractiveElement, StyleRefinement, Styled, Window,
+    div, prelude::FluentBuilder as _,
 };
 use smallvec::SmallVec;
 
@@ -14,6 +14,7 @@ pub struct Progress {
     style: StyleRefinement,
     value: f32,
     indeterminate: bool,
+    accessibility_label: Option<SharedString>,
     children: SmallVec<[AnyElement; 2]>,
 }
 
@@ -24,6 +25,7 @@ impl Progress {
             style: StyleRefinement::default(),
             value: 0.,
             indeterminate: false,
+            accessibility_label: None,
             children: SmallVec::new(),
         }
     }
@@ -36,6 +38,11 @@ impl Progress {
 
     pub fn indeterminate(mut self, indeterminate: bool) -> Self {
         self.indeterminate = indeterminate;
+        self
+    }
+
+    pub fn accessibility_label(mut self, label: impl Into<SharedString>) -> Self {
+        self.accessibility_label = Some(label.into());
         self
     }
 }
@@ -64,6 +71,9 @@ impl RenderOnce for Progress {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         self.base
             .role(Role::ProgressIndicator)
+            .when_some(self.accessibility_label, |this, label| {
+                this.aria_label(label)
+            })
             .aria_min_numeric_value(0.)
             .aria_max_numeric_value(100.)
             .when(!self.indeterminate, |this| {
@@ -152,6 +162,21 @@ mod tests {
                 .write_a11y_info(&mut node);
 
             assert_eq!(node.numeric_value(), None);
+        });
+    }
+
+    #[gpui::test]
+    fn progress_projects_its_accessible_name(cx: &mut gpui::TestAppContext) {
+        let window = cx.add_empty_window();
+        window.update(|window, cx| {
+            let mut node = accesskit::Node::new(Role::ProgressIndicator);
+            Progress::new("download")
+                .accessibility_label("Downloading release")
+                .render(window, cx)
+                .into_element()
+                .write_a11y_info(&mut node);
+
+            assert_eq!(node.label(), Some("Downloading release"));
         });
     }
 }

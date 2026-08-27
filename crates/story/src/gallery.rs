@@ -113,6 +113,8 @@ impl Gallery {
                 StoryContainer::panel::<SelectStory>(window, cx),
                 StoryContainer::panel::<SeparatorStory>(window, cx),
                 StoryContainer::panel::<SettingsStory>(window, cx),
+                #[cfg(not(target_family = "wasm"))]
+                StoryContainer::panel::<ShellStory>(window, cx),
                 StoryContainer::panel::<SheetStory>(window, cx),
                 StoryContainer::panel::<SidebarStory>(window, cx),
                 StoryContainer::panel::<SkeletonStory>(window, cx),

@@ -1,10 +1,21 @@
 use gpui::{App, Global};
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
 
 use crate::{ScrollbarMode, ScrollbarMotion, ScrollbarStyles, SemanticThemeTokens};
 
 /// Application-wide defaults for Base behavior modules.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum ThemeAppearance {
+    #[default]
+    Light,
+    Dark,
+}
+
 #[derive(Clone, Default)]
 pub struct Theme {
+    pub appearance: ThemeAppearance,
     pub tokens: SemanticThemeTokens,
     pub scrollbar: ScrollbarTheme,
     pub resizable: ResizableTheme,
@@ -83,12 +94,21 @@ impl ScrollbarTheme {
 
 /// Global visual defaults used by resizable panel handles.
 ///
-/// The Base default is transparent. Applications and styled façades may
-/// project their own colors without coupling resize behavior to a theme crate.
+/// `None` means *unset*, not invisible: a handle with nothing projected onto it
+/// resolves from the active [`SemanticThemeTokens`] -- `border` at rest, `ring`
+/// while dragging -- which are the tokens those two states already mean
+/// everywhere else.
+///
+/// These were plain colors, so the Base default was `Hsla::default()`: fully
+/// transparent. That reads as a deliberate choice next to a styled façade,
+/// which projects its own values and never sees it, and as a missing divider
+/// to anything that does not -- and a consumer with no façade has no way to
+/// project anything. Making them optional keeps the projection exactly as it
+/// was while giving the unprojected case an answer.
 #[derive(Clone, Copy, Default)]
 pub struct ResizableTheme {
-    pub handle: gpui::Hsla,
-    pub active_handle: gpui::Hsla,
+    pub handle: Option<gpui::Hsla>,
+    pub active_handle: Option<gpui::Hsla>,
 }
 
 #[cfg(test)]
