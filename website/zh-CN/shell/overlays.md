@@ -1,5 +1,5 @@
 ---
-title: Overlays
+title: 浮层
 description: dialog、sheet 与 toast，它们的层叠与关闭顺序，以及为什么只能从事件中打开。
 order: 7
 ---
@@ -67,8 +67,8 @@ export default (count, onConfirm) => () =>
     .w(360)
     .p(24)
     .gap(12)
-    .child(text(`Delete ${count} completed items?`))
-    .child(text("This cannot be undone."))
+    .child(`Delete ${count} completed items?`)
+    .child("This cannot be undone.")
     .child(
       h_flex()
         .justify_end()

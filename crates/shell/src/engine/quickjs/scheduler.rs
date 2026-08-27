@@ -6,27 +6,24 @@
 //! runtime does not have — a clock, an owner for pending work, and somebody to
 //! pump the job queue.
 //!
-//! # A `cx` may not be held across an `await`
-//!
-//! This is the one rule an application author has to internalize:
-//!
-//! ```js
-//! async run(cx) {
-//!   const data = await load();
-//!   cx.notify();              // WRONG: this `cx` belongs to a call that returned
-//!   gpui.with_cx((cx) => cx.notify());  // right
-//! }
-//! ```
+//! # Which `cx` may be held across an `await`
 //!
 //! GPUI hands the host `&mut Window` and `&mut App` as borrows that live exactly
-//! as long as one call. The script-side `cx` is only a generation token for that
-//! call ([`crate::scope`]). An `await` returns to the host, the call frame goes
-//! away, and the borrows with it — so the token is stale by the time the
-//! continuation runs. Every resumption this module drives therefore opens a
-//! *fresh* [`ScopePhase::Task`] scope, and [`js_with_cx`] is how resumed code
-//! obtains a `cx` that belongs to it. Using the old one is not undefined
-//! behaviour; it is a clear [`crate::scope::StaleContext`] error, which is the
-//! whole point of the generation.
+//! as long as one call, and offers `AsyncApp` for the code that has to outlive
+//! one. The two script flavours mirror that. A call-scoped `cx` is a generation
+//! token for one call ([`crate::scope`]); an `await` returns to the host, the
+//! frame goes away, and the token is stale when the continuation runs — a clear
+//! [`crate::scope::StaleContext`] error rather than undefined behaviour.
+//!
+//! ```js
+//! cx.spawn(async (cx) => {
+//!   const data = await load();
+//!   cx.notify();              // the async cx: it names no frame to go stale
+//! });
+//! ```
+//!
+//! Every resumption this module drives opens a *fresh* [`ScopePhase::Task`]
+//! scope, which is what the async flavour resolves against.
 //!
 //! # The job queue
 //!
@@ -97,7 +94,7 @@ pub fn install(_ctx: &Ctx<'_>, module: &Object<'_>) -> JsResult<()> {
     globals.set("__spawn", Func::from(js_spawn))?;
     globals.set("__timer_after", Func::from(js_timer_after))?;
     globals.set("__timer_every", Func::from(js_timer_every))?;
-    module.set("with_cx", Func::from(js_with_cx))?;
+    let _ = module;
     Ok(())
 }
 
@@ -534,20 +531,6 @@ fn js_sleep<'js>(ctx: Ctx<'js>, ms: Opt<f64>) -> JsResult<Promise<'js>> {
         .detach();
 
     Ok(promise)
-}
-
-/// `gpui.with_cx(fn)` — runs `fn(cx)` with a context that belongs to the call in
-/// progress.
-///
-/// This is how code that has `await`ed gets a usable `cx`: the one it was handed
-/// before the `await` belongs to a call that has already returned. Outside any
-/// host call there is no context to hand out, and saying so is far better than
-/// producing one that points at a dead stack frame.
-fn js_with_cx<'js>(ctx: Ctx<'js>, body: Function<'js>) -> JsResult<Value<'js>> {
-    let Some(generation) = scope::current_generation() else {
-        return Err(outside_host_call(&ctx, "gpui.with_cx(fn)"));
-    };
-    body.call((context_object(&ctx, ContextBinding::Call(generation))?,))
 }
 
 /// `gpui.spawn(asyncFn, opts?)` — calls `asyncFn(cx)` and adopts its promise.
@@ -1594,23 +1577,6 @@ mod tests {
     fn actor_completion_can_cross_an_actor_thread() {
         fn assert_send<T: Send>() {}
         assert_send::<ActorCompletion>();
-    }
-
-    #[test]
-    fn with_cx_outside_a_host_call_reports_clearly() {
-        let (_runtime, context) = context();
-
-        let message = context.with(|ctx| {
-            install_module(&ctx);
-
-            let error = ctx
-                .eval::<Value, _>("gpui.with_cx((cx) => cx)")
-                .expect_err("with_cx must refuse to invent a context");
-            describe(&ctx, error)
-        });
-
-        assert!(message.contains("gpui.with_cx(fn)"), "{message}");
-        assert!(message.contains("no host call in progress"), "{message}");
     }
 
     /// Scheduling needs a window and an executor, both of which only exist

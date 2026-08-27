@@ -19,7 +19,7 @@ no styling draws nothing but its children.
 function saveButton(cx) {
 
   // Unstyled: activation, focus and disabled state work, but nothing is drawn.
-  Button.new("plain-save").on_click(save).child(text("Save"));
+  Button.new("plain-save").on_click(save).child("Save");
 
   // Styled: every visual decision is written out, in the script.
   return Button.new("save")
@@ -32,7 +32,7 @@ function saveButton(cx) {
     .text_color(cx.theme().colors.primary_foreground)
     .rounded(6)
     .on_click(save)
-    .child(text("Save"));
+    .child("Save");
 }
 ```
 
@@ -79,7 +79,7 @@ export default class Notes extends View {
       .p(24)
       .gap(12)
       .bg(cx.theme().colors.background)
-      .children(this.items.map((item) => text(item).text_color(cx.theme().colors.foreground)));
+      .children(this.items.map((item) => div().text_color(cx.theme().colors.foreground).child(item)));
   }
 }
 ```
@@ -147,7 +147,7 @@ import { fps_monitor } from "gpui-fps";
 | --- | --- | --- |
 | `div()` | function | An element with no layout of its own |
 | `h_flex()` / `v_flex()` | function | A row / column flex element |
-| `text(value)` | function | A text element |
+| `value` | function | A text element |
 | `svg(path)` / `image(path)` | functions | A theme-tinted vector icon / full-colour application asset |
 | `fps_monitor()` | function | The native `gpui-fps` performance HUD; place it in a `relative()` parent |
 | `Button.new(id)` | type | A base `Button`: activation, focus, disabled and selected state, no styling |
@@ -165,7 +165,8 @@ import { fps_monitor } from "gpui-fps";
 Where a binding lives in Rust decides where it lives here: an `App` method is a
 `cx` method, a `Window` method is on the `window` global, a type's `::new` is
 `Type.new(...)`, and a free function stays a free function. Only what has no
-GPUI or base original — `store`, `log`, `native`, `with_cx` — is a module member.
+GPUI or base original — `store`, `native` — is a module member. Diagnostics are
+JavaScript's own global `console`.
 
 ### Elements
 
@@ -362,7 +363,7 @@ that.
 Present today: the element and style surface, state styles (`hover` / `active` /
 `focus`), `Button`, `Checkbox`, `Switch`, retained `InputState` with input
 events, icons through `svg()`, dialogs, sheets and toasts on `window`, promises and
-timers, `fs` / `store` / `clipboard` / `log` / `process` behind capabilities,
+timers, `fs` / `store` / clipboard / `process` behind capabilities,
 capability-gated HTTP and text/binary WebSocket clients, native target-value
 transitions and springs, hot reload, `check`, and generated TypeScript
 declarations.

@@ -1,5 +1,5 @@
 ---
-title: State and Views
+title: 状态与视图
 description: 视图、init 与 render、cx.notify()、留存的输入状态，以及异步工作。
 order: 6
 ---
@@ -19,7 +19,7 @@ export default class Counter extends View {
   }
 
   render(cx) {
-    return v_flex().child(text(`${this.count}`));
+    return v_flex().child(`${this.count}`);
   }
 }
 ```
@@ -131,13 +131,7 @@ async save(cx) {
 
 `cx` 上除了函数什么都没有——`Object.keys(cx)` 只看得到方法，看不到 generation——所以脚本无法伪造一个。
 
-完全没有 `cx` 可用的代码——模块顶层、裸 `constructor`、没人给过 context 的 `.then` 回调——用 `with_cx(fn)` 要一个：
-
-```js
-import { with_cx } from "gpui";
-
-globalThis.ticker = with_cx((cx) => cx.timer.every(1000, () => {}));
-```
+没有第三种拿到它的办法。模块顶层和裸 `constructor` 不会被交给 context，也无从索取——这是设计而非缺口：GPUI 根本没有模块顶层，在那里启动的工作不属于任何视图，没有东西拥有它，也没有东西取消它。把它放进 `init`，那正是视图被交给 context 的地方。
 
 ## 留存状态
 
@@ -218,9 +212,8 @@ unknown input event `changed`; expected one of: change, submit, focus, blur
 | `cx.spawn(body, opts?)` | 调用 `body(cx)` 并接管它返回的 promise |
 | `cx.timer.after(ms, handler, opts?)` | 调用一次 `handler(cx)` |
 | `cx.timer.every(ms, handler, opts?)` | 反复调用 `handler(cx)` |
-| `with_cx(body)` | 用属于当前调用的上下文执行 `body(cx)` |
 
-调度挂在 `cx` 上，因为 GPUI 就是这么放的——`App::spawn`，以及由 context 交出的 executor 上的 timer。`with_cx` 是例外，它仍是模块导出，恰恰因为它是给「手上没有 `cx`」的代码用的。
+调度挂在 `cx` 上，因为 GPUI 就是这么放的——`App::spawn`，以及由 context 交出的 executor 上的 timer。不需要 import 任何东西。
 
 它们产生的工作全部在主线程上运行。脚本可见的东西从不离开主线程：这里没有 `Worker`，VM 与 GPUI 的 `App` 都是主线程独占的。
 

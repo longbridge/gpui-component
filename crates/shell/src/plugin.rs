@@ -1418,9 +1418,9 @@ mod tests {
         std::fs::write(
             application.path().join("main.js"),
             r#"
-                import { View, text } from "gpui";
+                import { div, View } from "gpui";
                 export default class App extends View {
-                  render(cx) { return text("loaded"); }
+                  render(cx) { return "loaded"; }
                 }
             "#,
         )
@@ -1493,9 +1493,9 @@ mod tests {
         std::fs::write(
             application.path().join("main.js"),
             r#"
-                import { View, text } from "gpui";
+                import { div, View } from "gpui";
                 export default class App extends View {
-                  render() { return text("checked through the facade"); }
+                  render(cx) { return "checked through the facade"; }
                 }
             "#,
         )
@@ -1533,9 +1533,9 @@ mod tests {
         std::fs::write(
             application.path().join("application.js"),
             r#"
-                import { View, text } from "gpui";
+                import { div, View } from "gpui";
                 export default class App extends View {
-                  render() { return text("manifest entry loaded"); }
+                  render() { return "manifest entry loaded"; }
                 }
             "#,
         )
@@ -1577,7 +1577,7 @@ mod tests {
         std::fs::write(
             application.path().join("main.js"),
             r#"
-                import { View } from "gpui";
+                import { div, View } from "gpui";
                 export default class Broken extends View {
                   init(_props, cx) {
                     cx.timer.every(1_000, () => {});
@@ -1634,7 +1634,7 @@ mod tests {
         std::fs::write(
             root.join("main.js"),
             r#"
-                import { View, text, with_cx } from "gpui";
+                import { div, View } from "gpui";
                 import { v_flex } from "gpui-base";
                 import * as fs from "fs/promises";
                 export default class Panel extends View {
@@ -1642,10 +1642,10 @@ mod tests {
                     this.message = "pending";
                     cx.spawn(async (cx) => {
                       this.message = await fs.readFile("message.txt", "utf8");
-                      with_cx((cx) => cx.notify());
+                      cx.notify();
                     });
                   }
-                  render(cx) { return v_flex().child(text(this.message)); }
+                  render(cx) { return v_flex().child(this.message); }
                 }
             "#,
         )
@@ -1717,7 +1717,7 @@ mod tests {
         std::fs::write(
             root.join("main.js"),
             r#"
-                import { View } from "gpui";
+                import { div, View } from "gpui";
                 import { Input, InputState } from "gpui-base";
                 export default class Panel extends View {
                   init() {
@@ -1766,7 +1766,7 @@ mod tests {
         std::fs::write(
             root.join("main.js"),
             r#"
-                import { View } from "gpui";
+                import { div, View } from "gpui";
                 import { Input, InputState } from "gpui-base";
                 export default class Panel extends View {
                   init(_props, cx) {

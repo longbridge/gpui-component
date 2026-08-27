@@ -1,5 +1,5 @@
 ---
-title: Elements
+title: 元素
 description: 构造器、用 child / children / when 组合，以及元素描述为什么只能使用一次。
 order: 4
 ---
@@ -32,7 +32,7 @@ import { fps_monitor } from "gpui-fps";
 | 构造器 | 来自 | 产出 |
 | --- | --- | --- |
 | `div()` | `gpui` | 自身不带布局的元素 |
-| `text(value)` | `gpui` | 文本元素，参数会被转成字符串 |
+| `value` | `gpui` | 文本元素，参数会被转成字符串 |
 | `svg(path)` | `gpui` | 来自应用自身目录、跟随主题着色的矢量图标 |
 | `image(path)` | `gpui` | 来自应用自身目录的全彩图片 |
 | `h_flex()` | `gpui-base` | 一行 |
@@ -82,14 +82,21 @@ div()
 
 ### 文本
 
-`text(value)` 会把参数转成字符串，所以模板字符串和数字可以直接用：
+**字符串本身就是元素。** GPUI 为 `&str`、`String` 与 `SharedString` 实现了 `IntoElement`，所以文本的写法就是把字符串交给承载它的元素，没有 `text()` 可调：
 
 ```js
-text(`${this.remaining} of ${this.items.length} remaining`);
-text(42);
+v_flex()
+  .child(`${this.remaining} of ${this.items.length} remaining`)
+  .child(42);
 ```
 
-文本元素最终变成一个包含该字符串的 `div`，所以它和其他元素一样接受样式，也可以再挂子元素。
+样式由承载它的元素带，和 Rust 那边完全一致：
+
+```js
+div().text_size(12).font_semibold().child("AAPL");
+```
+
+字符串子元素最终变成一个包含它的 `div`——这正是 `div().child(s)` 已经说明的事。
 
 ### 图片
 
@@ -128,7 +135,7 @@ v_flex()
   .gap(8)
   .child(this.header())
   .children(this.visible().map((item) => this.row(item)))
-  .when(this.items.length === 0, (el) => el.child(text("Nothing yet")));
+  .when(this.items.length === 0, (el) => el.child("Nothing yet"));
 ```
 
 `.when` 的存在是为了不让一个条件把链断成两截。`branch` **必须返回该元素**——不返回的分支会立刻抛异常，而不是悄悄丢掉它构建的一切：
@@ -173,7 +180,7 @@ disabled、selected 与 checked 的**外观**由你来画。基础层只报告�
 Button.new("clear")
   .disabled(this.completed === 0)
   .when(this.completed === 0, (el) => el.opacity(0.4))
-  .child(text("Clear completed"));
+  .child("Clear completed");
 ```
 
 `.accessibility_label` 对纯图标控件最重要——没有它，这类控件什么都不会被读出来：
@@ -230,7 +237,7 @@ render() {
   return Button.new("search")
     .tab_index(1)
     .track_focus(this.search)
-    .child(text("Search"));
+    .child("Search");
 }
 ```
 
@@ -268,7 +275,7 @@ div()
   .role("list_box_option")
   .aria_selected(index === this.chosen)
   .when(index === this.chosen, (el) => el.aria_active_descendant())
-  .child(text(name))
+  .child(name)
 ```
 
 role 的取值逐字镜像 `gpui::Role` 的 snake_case 拼写——`list_box`、`list_box_option`、`combo_box`、`menu_item`——整套取值以 `Role` 联合类型写在 `gpui.d.ts` 里，编辑器能补全；不在其中的名字会在调用处失败：
@@ -283,7 +290,7 @@ unknown accessibility role `listbox`; the names mirror gpui::Role in snake_case
 这条规则最容易让新读者意外，所以下面写清它长什么样、以及为什么成立。
 
 ```js
-const row = h_flex().child(text("hello"));
+const row = h_flex().child("hello");
 
 v_flex()
   .child(row)
@@ -298,11 +305,11 @@ element `h_flex` was already added to a parent; elements are single-use values
 
 ```js
 init() {
-  this.header = h_flex().child(text("Todo"));   // 错误
+  this.header = h_flex().child("Todo");   // 错误
 }
 
 render() {
-  return v_flex().child(text("Todo list")).child(this.header);
+  return v_flex().child("Todo list").child(this.header);
 }
 ```
 
@@ -324,7 +331,7 @@ and must be rebuilt each time render runs
 在 `render` 里构建，把重复部分抽成**每次返回新元素的函数**：
 
 ```js
-const label = (value, cx) => text(value).text_size(12).text_color(cx.theme().colors.foreground);
+const label = (value, cx) => div().text_size(12).text_color(cx.theme().colors.foreground).child(value);
 
 render(cx) {
   return v_flex()

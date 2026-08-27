@@ -15,7 +15,7 @@ use crate::{Capabilities, ScriptView, ShellRuntime};
 
 #[cfg(unix)]
 const OUTPUT_PROBE: &str = r#"
-import { View, text, with_cx } from "gpui";
+import { div, View } from "gpui";
 import { v_flex } from "gpui-base";
 import process from "process";
 
@@ -32,19 +32,19 @@ export default class Probe extends View {
       } catch (error) {
         this.state = `rejected:${error.message}`;
       }
-      with_cx((cx) => cx.notify());
+      cx.notify();
     });
   }
 
   render() {
-    return v_flex().child(text(this.state));
+    return v_flex().child(this.state);
   }
 }
 "#;
 
 #[cfg(unix)]
 const FAILURE_PROBE: &str = r#"
-import { View, text, with_cx } from "gpui";
+import { div, View } from "gpui";
 import { v_flex } from "gpui-base";
 import process from "process";
 
@@ -58,19 +58,19 @@ export default class Probe extends View {
       } catch (error) {
         this.state = `rejected:${error.message}`;
       }
-      with_cx((cx) => cx.notify());
+      cx.notify();
     });
   }
 
   render() {
-    return v_flex().child(text(this.state));
+    return v_flex().child(this.state);
   }
 }
 "#;
 
 #[cfg(unix)]
 const OUTPUT_LIMIT_PROBE: &str = r#"
-import { View, text, with_cx } from "gpui";
+import { div, View } from "gpui";
 import { v_flex } from "gpui-base";
 import process from "process";
 
@@ -84,23 +84,23 @@ export default class Probe extends View {
       } catch (error) {
         this.state = `rejected:${error.message}`;
       }
-      with_cx((cx) => cx.notify());
+      cx.notify();
     });
   }
 
   render() {
-    return v_flex().child(text(this.state));
+    return v_flex().child(this.state);
   }
 }
 "#;
 
 const DENIAL_PROBE: &str = r#"
-import { View, text, with_cx } from "gpui";
+import { div, View } from "gpui";
 import { v_flex } from "gpui-base";
 import process from "process";
 
 export default class Probe extends View {
-  init() {
+  init(_props, cx) {
     try {
       process.run("gpui-shell-denied-command");
       this.state = "unexpectedly allowed";
@@ -114,11 +114,11 @@ export default class Probe extends View {
       ].join("|");
       process.nextTick((suffix) => {
         this.state += suffix;
-        with_cx((cx) => cx.notify());
+        cx.notify();
       }, "|tick");
     }
   }
-  render(cx) { return v_flex().child(text(this.state)); }
+  render(cx) { return v_flex().child(this.state); }
 }
 "#;
 

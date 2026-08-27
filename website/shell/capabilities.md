@@ -204,7 +204,7 @@ export function load() {
     const saved = store.get(KEY);
     return Array.isArray(saved) ? saved : [];
   } catch (error) {
-    log.warn(
+    console.warn(
       `todolist: storage unavailable, starting empty (${error.message})`,
     );
     return [];
@@ -235,16 +235,16 @@ The clipboard needs a live host call — GPUI's `App` only exists for the durati
 cx.read_from_clipboard() needs a live host call; call it from render, an event handler or a task
 ```
 
-## `log`
+## `console`
 
 ```js
-import { log } from "gpui";
-
-log.info("loaded", count, { source: "disk" });
-log.warn("could not save");
+console.info("loaded", count, { source: "disk" });
+console.warn("could not save");
 ```
 
-`debug`, `info`, `warn` and `error`. **No capability is required**: a script that can run can already say something, and denying it would cost the author their diagnostics and nothing else.
+`debug`, `log`, `info`, `warn` and `error`. A global, as it is in every other JavaScript runtime, and nothing to import — the shell used to export the same object a second time as `gpui.log`, which bought a name and nothing else.
+
+**No capability is required**: a script that can run can already say something, and denying it would cost the author their diagnostics and nothing else.
 
 Extra arguments are appended space-separated, the way `console.log` behaves. Structured values print as JSON, because that is what an author reading a log wants to see.
 
@@ -309,7 +309,7 @@ Development mode never relaxes capability gating. It makes the language easier t
 
 ## Network and safe standard APIs
 
-Global `fetch(url, options?)` is promise-based and returns `{ status, ok, url, text(), json() }`. Its grant is narrower than raw networking: every request and redirect must match a declared HTTP host, method, and exact path or path prefix; HTTPS never downgrades to HTTP, and authorization or caller-supplied headers never cross origins.
+Global `fetch(url, options?)` is promise-based and returns `{ status, ok, url, , json() }`. Its grant is narrower than raw networking: every request and redirect must match a declared HTTP host, method, and exact path or path prefix; HTTPS never downgrades to HTTP, and authorization or caller-supplied headers never cross origins.
 
 `net.connect(host, port)` and the named `WebSocket.connect(url, { headers? })` export from `websocket` use `capabilities.network.hosts`. `WebSocket` is not installed as a browser global and is not a constructor. Raw TCP `read()` returns a `Uint8Array`, or `null` at EOF, so transport chunks never undergo lossy text decoding. WebSockets support text and `Uint8Array` messages and serialize writes through one actor. They do not follow redirects. Connect, handshake, and write operations have a 30-second timeout. A socket permits one outstanding `read()` at a time; a second is rejected immediately instead of competing for the next message. Credential and handshake-control headers are refused. Raw TCP and WebSocket access are intentionally broader than an HTTP request grant.
 

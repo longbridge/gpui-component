@@ -42,7 +42,7 @@ const ROUNDS: usize = 7;
 const SIZES: [(usize, usize); 4] = [(40, 5), (100, 10), (200, 10), (400, 10)];
 
 const TEMPLATE: &str = r#"
-import { View, div, text } from "gpui";
+import { View, div } from "gpui";
 import { v_flex, h_flex, Button } from "gpui-base";
 
 export default class Grid extends View {
@@ -63,7 +63,7 @@ export default class Grid extends View {
       .bg("surface")
       .text_color("foreground")
       .text_sm()
-      .child(text(`${row}:${column}`));
+      .child(`${row}:${column}`);
   }
 
   row(row) {
@@ -74,7 +74,7 @@ export default class Grid extends View {
     return h_flex().gap(6).py(2).children(cells);
   }
 
-  render() {
+  render(cx) {
     const rows = [];
     for (let row = 0; row < this.rows; row += 1) {
       rows.push(this.row(row));
@@ -85,7 +85,7 @@ export default class Grid extends View {
       .gap(4)
       .bg("background")
       .children(rows)
-      .child(Button.new("refresh").px(10).py(4).rounded(6).bg("primary").child(text("Refresh")));
+      .child(Button.new("refresh").px(10).py(4).rounded(6).bg("primary").child("Refresh"));
   }
 }
 "#;

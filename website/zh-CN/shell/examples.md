@@ -1,5 +1,5 @@
 ---
-title: Examples
+title: 示例
 description: 独立与嵌入式完整应用，包括留存状态、native module 与原生动画。
 order: 3
 ---
@@ -46,7 +46,7 @@ gpui.d.ts              自动生成；jsconfig.json 与 types.d.ts 把类型接�
 
 ```js
 export const label = (value, cx) =>
-  text(value).text_size(12).line_height(1).text_color(cx.theme().colors.foreground);
+  div().text_size(12).line_height(1).text_color(cx.theme().colors.foreground).child(value);
 
 export const surface = (cx) =>
   v_flex().flex_1().bg(cx.theme().colors.surface).border(1).border_color(cx.theme().colors.border).overflow_hidden();
@@ -62,7 +62,7 @@ export function load() {
     const saved = store.get(KEY);
     return Array.isArray(saved) ? saved : [];
   } catch (error) {
-    log.warn(`todolist: storage unavailable, starting empty (${error.message})`);
+    console.warn(`todolist: storage unavailable, starting empty (${error.message})`);
     return [];
   }
 }

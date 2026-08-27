@@ -69,7 +69,7 @@ export default class Hello extends View {
       .justify_center()
       .gap(12)
       .bg(cx.theme().colors.background)
-      .child(text(`Clicked ${this.clicks} times`).text_color(cx.theme().colors.foreground))
+      .child(div().text_color(cx.theme().colors.foreground).child(`Clicked ${this.clicks} times`))
       .child(
         Button.new("click")
           .h(28)
@@ -84,7 +84,7 @@ export default class Hello extends View {
             this.clicks += 1;
             cx.notify();
           })
-          .child(text("Click me")),
+          .child("Click me"),
       );
   }
 }

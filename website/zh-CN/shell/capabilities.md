@@ -1,5 +1,5 @@
 ---
-title: Capabilities
+title: 能力授权
 description: 默认全部拒绝的模型，fs / store / clipboard / log / process 接口，存储位置，以及沙箱裁掉了什么。
 order: 8
 ---
@@ -204,7 +204,7 @@ export function load() {
     const saved = store.get(KEY);
     return Array.isArray(saved) ? saved : [];
   } catch (error) {
-    log.warn(
+    console.warn(
       `todolist: storage unavailable, starting empty (${error.message})`,
     );
     return [];
@@ -235,16 +235,16 @@ writing the clipboard is not granted; declare capabilities.clipboard.write in th
 cx.read_from_clipboard() needs a live host call; call it from render, an event handler or a task
 ```
 
-## `log`
+## `console`
 
 ```js
-import { log } from "gpui";
-
-log.info("loaded", count, { source: "disk" });
-log.warn("could not save");
+console.info("loaded", count, { source: "disk" });
+console.warn("could not save");
 ```
 
-`debug`、`info`、`warn` 与 `error`。**不需要任何能力**：能跑起来的脚本本来就能说话，禁掉它只会让作者失去自己的诊断信息，别的什么都拦不住。
+`debug`、`log`、`info`、`warn` 与 `error`。它是全局的——与其他 JavaScript 运行时一样——不需要 import；shell 原本把同一个对象再以 `gpui.log` 导出了一遍，那只多了一个名字，别的什么也没多。
+
+**不需要任何能力**：能跑起来的脚本本来就能说话，禁掉它只会让作者失去自己的诊断信息，别的什么都拦不住。
 
 多余的参数会以空格分隔追加在后面，与 `console.log` 的行为一致。结构化的值以 JSON 打印，因为那是读日志的人想看到的形式。
 
@@ -309,7 +309,7 @@ process.exit(0);
 
 ## 网络与安全标准 API
 
-全局 `fetch(url, options?)` 返回 promise，结果提供 `{ status, ok, url, text(), json() }`。它的授权比原始网络更窄：每次请求与 redirect 都必须匹配声明的 HTTP host、method，以及精确 path 或 path prefix；HTTPS 永不降级到 HTTP，authorization 与调用方 header 也不会跨 origin。
+全局 `fetch(url, options?)` 返回 promise，结果提供 `{ status, ok, url, , json() }`。它的授权比原始网络更窄：每次请求与 redirect 都必须匹配声明的 HTTP host、method，以及精确 path 或 path prefix；HTTPS 永不降级到 HTTP，authorization 与调用方 header 也不会跨 origin。
 
 `net.connect(host, port)` 与 `websocket` 模块具名导出的 `WebSocket.connect(url, { headers? })` 使用 `capabilities.network.hosts`。`WebSocket` 不会安装成浏览器全局，也不是构造器。Raw TCP 的 `read()` 返回 `Uint8Array`，到达 EOF 时返回 `null`，因此传输分块不会经过有损文本解码。WebSocket 支持文本与 `Uint8Array` 消息，并通过单一 actor 串行化写入；它不会跟随 redirect。Connect、handshake 与 write 操作都有 30 秒 timeout。每个 socket 同一时间只允许一个 outstanding `read()`；第二个会立即 reject，而不是与第一个争抢下一条消息。凭证 header 与握手控制 header 会被拒绝。Raw TCP 与 WebSocket 权限有意比 HTTP request grant 更宽。
 

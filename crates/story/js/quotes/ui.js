@@ -6,7 +6,7 @@
 // read from the render's call-scoped `cx.theme()`, so changing the shell theme
 // moves this half too.
 
-import { div, text } from "gpui";
+import { div } from "gpui";
 import { h_flex, v_flex, Button } from "gpui-base";
 /** @import { AbsoluteLength, ClickEvent, Context } from "gpui" */
 
@@ -71,25 +71,28 @@ export const directionColor = (direction, cx) => {
 
 /** @param {string} value @param {Context} cx */
 export const title = (value, cx) =>
-  text(value)
+  div()
     .text_size(TYPE.title)
     .line_height(1.3)
     .font_semibold()
-    .text_color(cx.theme().colors.foreground);
+    .text_color(cx.theme().colors.foreground)
+    .child(value);
 
 /** @param {string} value @param {Context} cx */
 export const label = (value, cx) =>
-  text(value)
+  div()
     .text_size(TYPE.body)
     .line_height(TYPE.lineHeight)
-    .text_color(cx.theme().colors.foreground);
+    .text_color(cx.theme().colors.foreground)
+    .child(value);
 
 /** @param {string} value @param {Context} cx */
 export const muted = (value, cx) =>
-  text(value)
+  div()
     .text_size(TYPE.body)
     .line_height(TYPE.lineHeight)
-    .text_color(cx.theme().colors.muted_foreground);
+    .text_color(cx.theme().colors.muted_foreground)
+    .child(value);
 
 // -- Surfaces ---------------------------------------------------------------
 
@@ -203,13 +206,14 @@ export const action = (id, caption, onClick, cx, options = {}) => {
         .on_click(onClick),
     )
     .child(
-      text(caption)
+      div()
         .text_size(TYPE.body)
         .line_height(1)
         .text_color(
           primary
             ? cx.theme().colors.primary_foreground
             : cx.theme().colors.foreground,
-        ),
+        )
+        .child(caption),
     );
 };

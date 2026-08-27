@@ -85,7 +85,6 @@ pub fn set_store_path(path: PathBuf) {
 pub fn install(_ctx: &Ctx<'_>, module: &Object<'_>) -> JsResult<()> {
     let ctx = module.ctx();
     module.set("store", store_object(ctx)?)?;
-    module.set("log", log_object(ctx)?)?;
 
     // The clipboard and the browser are `App` methods in GPUI, so the script
     // reaches them through `cx`. These globals are the implementation the
@@ -946,7 +945,7 @@ pub(super) fn log_object<'js>(ctx: &Ctx<'js>) -> JsResult<Object<'js>> {
 const SCRIPT_TARGET: &str = "gpui_shell::script";
 
 /// Extra arguments are appended space-separated after the message, the way
-/// `console.log` behaves — JS authors write `log.info("loaded", count)` without
+/// `console.log` behaves — JS authors write `console.info("loaded", count)` without
 /// thinking about it.
 fn line(message: Printable, rest: Rest<Printable>) -> String {
     let mut line = message.0;
@@ -1037,6 +1036,11 @@ mod tests {
             ctx.globals()
                 .set("readFile", Func::from(read_file))
                 .expect("binding the FS test adapter");
+            // `console` is a global installed by the standard runtime, which
+            // these tests do not load. It is this same object.
+            ctx.globals()
+                .set("console", log_object(&ctx).expect("log object"))
+                .expect("binding `console`");
             body(&ctx)
         })
     }
@@ -1186,7 +1190,7 @@ mod tests {
         // These are the host's own capabilities with no GPUI original, so
         // `"gpui"` is the module that has to name them: exporting one from a
         // layer above would say this runtime got it from somewhere it did not.
-        for name in ["store", "log"] {
+        for name in ["store"] {
             assert_eq!(
                 super::super::module_exporting(name),
                 Some("gpui"),
@@ -1251,7 +1255,7 @@ mod tests {
     #[test]
     fn logging_needs_no_capability_and_takes_extra_arguments() {
         with_host(|ctx| {
-            ctx.eval::<(), _>("gpui.log.info('loaded', 3, { ok: true })")
+            ctx.eval::<(), _>("console.info('loaded', 3, { ok: true })")
                 .expect("logging is always available");
         });
     }
@@ -1260,7 +1264,7 @@ mod tests {
     fn logging_a_sparse_huge_array_is_safely_unprintable() {
         with_host(|ctx| {
             ctx.eval::<(), _>(
-                "const values = []; values.length = 0xffffffff; gpui.log.info(values)",
+                "const values = []; values.length = 0xffffffff; console.info(values)",
             )
             .expect("logging an oversized value must not panic or require a capability");
         });

@@ -47,7 +47,7 @@ Four things make up the runtime:
    with the VM behind an explicit seam (§6.5);
 2. bindings over the `gpui` element and style layer and the `gpui-base`
    behavior layer;
-3. a capability-gated system API (`fs`, `store`, `clipboard`, `log`,
+3. a capability-gated system API (`fs`, `store`, clipboard,
    `process`, HTTP, TCP, and WebSocket);
 4. a command-line host that runs an application directory, checks it, and
    generates its type declarations (§23).
@@ -489,14 +489,14 @@ export default class Counter extends View {
   render() {
     return v_flex()
       .gap(12)
-      .child(text(`${this.count}`))
+      .child(`${this.count}`)
       .child(
         Button.new("increment")
           .on_click((_event, cx) => {
             this.count += 1;
             cx.notify();
           })
-          .child(text("Increment")),
+          .child("Increment"),
       );
   }
 }
@@ -522,9 +522,9 @@ binding added later lands in one place and there is nothing to argue about:
 | Method on `App`               | Method on `cx`                          | `App::open_url` → `cx.open_url(url)`                        |
 | Method on `Window`            | Method on the `window` global           | `Window::paint_path` → `window.paint_path(path, bg)`        |
 | Type plus `::new`             | Capitalized type table with only `.new` | `Button::new(id)` → `Button.new(id)`                        |
-| Free function                 | Lowercase function                      | `div()`, `h_flex()`, `v_flex()`, `text(s)`                  |
+| Free function                 | Lowercase function                      | `div()`, `h_flex()`, `v_flex()`, `s`                  |
 | State entity                  | Capitalized type table                  | `InputState::new(...)` → `InputState.new({...})`            |
-| No GPUI or base original      | Lowercase module member                 | `fs`, `store`, `log`, `process`, `native`, `with_cx`        |
+| No GPUI or base original      | Lowercase module member                 | `fs`, `store`, `process`, `native`                          |
 | View base class               | `class X extends View`                  | `export default class Counter extends View`                 |
 
 An earlier version of this table mapped by category — "system capability" and
@@ -1113,7 +1113,7 @@ identity, and it survives the script reordering its own tree. `Button`, `Link`,
 `Checkbox` and `Switch` already take an identity from `new(id)` and say so with
 a warning rather than ignoring a second one in silence.
 
-`text(...)` materializes as a `div` carrying a string child rather than as a
+`...` materializes as a `div` carrying a string child rather than as a
 distinct element type, so every style method works on it unchanged. `Input`
 materializes as an `InputBase` frame — not a bare `div`, because `InputBase`
 carries the input semantics, the focused state style, and the accessibility role
@@ -1302,7 +1302,7 @@ generation is what tells the handler a new call has begun.
 
 ```js
 Button.new("save")
-  .child(text("Save"))
+  .child("Save")
   .on_click((event, cx) => {
     this.saved = true;
     cx.notify();
@@ -1469,7 +1469,7 @@ export default class Counter extends View {
     // phase = Render; returns exactly one element
     return v_flex()
       .gap(12)
-      .child(text(`${this.count}`));
+      .child(`${this.count}`);
   }
 }
 ```
@@ -1533,9 +1533,11 @@ get wrong in JavaScript, because the code before and after an `await` shares one
 lexical scope and the old `cx` is simply in reach — which is why the contexts
 whose job is to survive that are a different flavor. The `cx` a `cx.spawn` or
 `cx.timer` callback receives is an `AsyncContext` and stays usable; `render`'s
-and a handler's do not, and should not be captured. `gpui.with_cx(...)` remains
-for code holding no context at all: a module's top level, a bare `constructor`,
-a `.then` callback nothing handed one to.
+and a handler's do not, and should not be captured. There is no third way to
+obtain one: a module's top level and a bare `constructor` are handed no context
+and cannot ask for one, which is deliberate — GPUI has no module top level, and
+work started there would belong to no view. `init` is where a view is handed
+its context, and where its work starts.
 
 **An unhandled rejection must be visible.** A failed promise with no `catch` is
 silent by default in JavaScript. `cx.spawn` adopts the promise it is given and
@@ -2270,7 +2272,7 @@ flush barriers may wait for durability at once.
 
 Three experimental surfaces are implemented. Global `fetch(url, options?)`
 supports bounded GET and POST requests, string or `Uint8Array` bodies, safe
-request headers, and resolves to `{ status, ok, url, text(), json() }`; both
+request headers, and resolves to `{ status, ok, url, , json() }`; both
 body readers return promises. The `gpui` module exports
 `WebSocket.connect(url, { headers }?)`, returning a socket with asynchronous
 text/binary `read`, `write`, and `close`. Bare module `net` provides raw
@@ -3191,7 +3193,7 @@ They cover:
   header filtering, text/binary traffic, pending-read concurrency, and two
   simultaneous runtime policies, without depending on the public Internet;
 - clipboard read/write, timer cancellation, and a host-registered native module;
-- `with_cx` returning a live context to the original view after `await`.
+- an async context still reaching its own view after `await`.
 
 The plugin integration test adds the boundary above them: manifest declaration
 to `Policy`, async work started from `init`, filesystem access under that policy,
@@ -3369,13 +3371,13 @@ springs for opacity and pixel geometry, without per-frame script callbacks.
 Callbacks with per-pass lifetime and
 generation-checked dispatch. State styles for hover, active, and focus.
 Asynchrony: promises bridged to GPUI tasks, job-queue draining, `spawn`,
-`sleep`, `timer.after`/`every`, `with_cx`, owner-bound cancellation, and
+`cx.sleep`, `cx.timer.after`/`every`, owner-bound cancellation, and
 unhandled-rejection reporting. Multiple runtimes may coexist; tasks retain their
 originating runtime and policy, and initialization runs only after the final
 `ScriptView` exists. `Link` with an absolute HTTP(S) `.href(...)` opened by the
 host. `ShellRoot` with the dialog stack, one sheet, the
 toast stack, focus restoration, and Tab navigation, reached through `cx`. System
-capabilities for asynchronous `fs`, `store`, `clipboard`, `log`, `process`,
+capabilities for asynchronous `fs`, `store`, clipboard, `process`,
 scoped HTTP, TCP, and WebSocket, all default-denied. HTTP redirect
 reauthorization and the bounded text/binary WebSocket actor are part of that
 surface. Host-registered native modules through
@@ -3553,7 +3555,7 @@ export function save(items) {
     store.set(KEY, items);
     return true;
   } catch (error) {
-    log.warn(`todolist: could not save (${error.message})`);
+    console.warn(`todolist: could not save (${error.message})`);
     return false;
   }
 }

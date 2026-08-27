@@ -9,7 +9,7 @@
 
 import { View } from "gpui";
 import { v_flex, h_flex, InputState } from "gpui-base";
-/** @import { Context } from "gpui" */
+/** @import { AsyncContext, Context } from "gpui" */
 /** @import { InputStateHandle } from "gpui-base" */
 import { load, save } from "./storage.js";
 import confirmClear from "./confirm.js";
@@ -37,7 +37,8 @@ const FILTERS = [
 ];
 
 export default class TodoList extends View {
-  init() {
+  /** @param {unknown} _props @param {AsyncContext} cx */
+  init(_props, cx) {
     // Annotated where they are assigned rather than declared as class fields.
     // `View`'s constructor calls `init` from inside `super()`, so a field
     // declaration — even one with no initializer — would run afterwards and

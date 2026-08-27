@@ -1,5 +1,5 @@
 ---
-title: Styling
+title: 样式
 description: 流式样式接口、长度与颜色语法、语义主题 token，以及 hover / active / focus 状态样式。
 order: 5
 ---
@@ -141,7 +141,7 @@ renderSave(cx) {
     .hover((style) => style.bg(cx.theme().colors.muted).border_color(cx.theme().colors.foreground))
     .active((style) => style.bg(cx.theme().colors.border))
     .focus((style) => style.border_color(cx.theme().colors.ring))
-    .child(text("Save"));
+    .child("Save");
 }
 ```
 
@@ -161,7 +161,7 @@ v_flex()
   .id("activity")
   .h(240)
   .overflow_y_scroll()
-  .children(this.rows.map((row) => text(row)));
+  .children(this.rows.map((row) => row));
 ```
 
 `.overflow_scroll()` 同时启用两个方向，`.overflow_x_scroll()` 只启用横向滚动，`.overflow_y_scroll()` 只启用纵向滚动。稳定的 `.id(...)` 会让原生滚动位置在多次脚本 render 之间始终归属于同一个 viewport。
@@ -178,7 +178,7 @@ render(cx) {
     .gap(cx.theme().spacing.md)
     .rounded(cx.theme().radius.lg)
     .bg(cx.theme().colors.surface)
-    .child(text(`${cx.theme().appearance}: ${cx.theme().is_dark ? "dark" : "light"}`));
+    .child(`${cx.theme().appearance}: ${cx.theme().is_dark ? "dark" : "light"}`);
 }
 ```
 

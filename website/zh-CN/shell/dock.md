@@ -1,5 +1,5 @@
 ---
-title: Dock Panels
+title: Dock 面板
 description: crate 内部已经写好的面板机制、它为什么还没公开，以及公开之后会是什么样子。
 order: 11
 ---

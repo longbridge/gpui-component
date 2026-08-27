@@ -9,7 +9,7 @@
 // Spacing follows the semantic scale (2/4/8/12/16/24/32) and type stays on
 // 12/13/16/20.
 
-import { div, text, svg } from "gpui";
+import { div, svg } from "gpui";
 import { h_flex, v_flex, Button, Checkbox, Input } from "gpui-base";
 /** @import { ClickEvent, Color, Context, Element } from "gpui" */
 /** @import { InputStateHandle } from "gpui-base" */
@@ -20,15 +20,15 @@ export const SPACE = { xxs: 2, xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 };
 /// size that keeps a row scannable.
 /** @param {string} value @param {import("gpui").Context} cx */
 export const label = (value, cx) =>
-  text(value).text_size(12).line_height(1).text_color(cx.theme().colors.foreground);
+  div().text_size(12).line_height(1).text_color(cx.theme().colors.foreground).child(value);
 
 /** @param {string} value @param {import("gpui").Context} cx */
 export const muted = (value, cx) =>
-  text(value).text_size(12).line_height(1).text_color(cx.theme().colors.muted_foreground);
+  div().text_size(12).line_height(1).text_color(cx.theme().colors.muted_foreground).child(value);
 
 /** @param {string} value @param {import("gpui").Context} cx */
 export const title = (value, cx) =>
-  text(value).text_size(16).line_height(1).font_semibold().text_color(cx.theme().colors.foreground);
+  div().text_size(16).line_height(1).font_semibold().text_color(cx.theme().colors.foreground).child(value);
 
 /** @param {import("gpui").Context} cx */
 export const rule = (cx) => div().h(1).w_full().bg(cx.theme().colors.border);
@@ -89,7 +89,7 @@ export const button = (id, caption, onClick, cx, options = {}) => {
     .when(disabled, (el) => el.opacity(0.4))
     .when(!disabled, (el) => el.on_click(onClick))
     .when(Boolean(name), (el) => el.child(icon(name ?? "", 13)))
-    .child(text(caption));
+    .child(caption);
 };
 
 /// An icon-only button. It carries an accessibility label, because an icon

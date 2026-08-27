@@ -1,5 +1,5 @@
 ---
-title: Getting Started
+title: 开始使用
 description: 把运行时接进一个 Rust 应用、写它要加载的脚本，并在不开窗口的情况下检查这个脚本。
 order: 2
 ---
@@ -68,7 +68,7 @@ export default class Hello extends View {
       .justify_center()
       .gap(12)
       .bg(cx.theme().colors.background)
-      .child(text(`Clicked ${this.clicks} times`).text_color(cx.theme().colors.foreground))
+      .child(div().text_color(cx.theme().colors.foreground).child(`Clicked ${this.clicks} times`))
       .child(
         Button.new("click")
           .h(28)
@@ -83,7 +83,7 @@ export default class Hello extends View {
             this.clicks += 1;
             cx.notify();
           })
-          .child(text("Click me")),
+          .child("Click me"),
       );
   }
 }

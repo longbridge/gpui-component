@@ -67,8 +67,8 @@ export default (count, onConfirm) => () =>
     .w(360)
     .p(24)
     .gap(12)
-    .child(text(`Delete ${count} completed items?`))
-    .child(text("This cannot be undone."))
+    .child(`Delete ${count} completed items?`)
+    .child("This cannot be undone.")
     .child(
       h_flex()
         .justify_end()

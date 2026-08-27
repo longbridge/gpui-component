@@ -46,7 +46,7 @@ Four things in it are worth copying.
 
 ```js
 export const label = (value, cx) =>
-  text(value).text_size(12).line_height(1).text_color(cx.theme().colors.foreground);
+  div().text_size(12).line_height(1).text_color(cx.theme().colors.foreground).child(value);
 
 export const surface = (cx) =>
   v_flex().flex_1().bg(cx.theme().colors.surface).border(1).border_color(cx.theme().colors.border).overflow_hidden();
@@ -66,7 +66,7 @@ export function load() {
     const saved = store.get(KEY);
     return Array.isArray(saved) ? saved : [];
   } catch (error) {
-    log.warn(`todolist: storage unavailable, starting empty (${error.message})`);
+    console.warn(`todolist: storage unavailable, starting empty (${error.message})`);
     return [];
   }
 }

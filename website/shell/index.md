@@ -24,7 +24,7 @@ export default class Counter extends View {
       .justify_center()
       .gap(20)
       .bg(cx.theme().colors.background)
-      .child(text(`${this.count}`).text_3xl().text_color(cx.theme().colors.foreground))
+      .child(div().text_3xl().text_color(cx.theme().colors.foreground).child(`${this.count}`))
       .child(
         Button.new("increment")
           .h(32)
@@ -38,7 +38,7 @@ export default class Counter extends View {
             this.count += 1;
             cx.notify();
           })
-          .child(text("Increment")),
+          .child("Increment"),
       );
   }
 }

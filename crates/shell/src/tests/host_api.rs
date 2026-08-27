@@ -11,7 +11,7 @@ use gpui::{Entity, IntoElement as _, TestAppContext, VisualTestContext};
 use crate::{Capabilities, NativeModules, NativeValue, ScriptView, ShellRuntime};
 
 const CLIPBOARD_PROBE: &str = r#"
-import { View, text } from "gpui";
+import { div, View } from "gpui";
 import { v_flex } from "gpui-base";
 
 export default class Probe extends View {
@@ -19,12 +19,12 @@ export default class Probe extends View {
     cx.write_to_clipboard("written by JavaScript");
     this.value = cx.read_from_clipboard();
   }
-  render() { return v_flex().child(text(this.value)); }
+  render() { return v_flex().child(this.value); }
 }
 "#;
 
 const CANCELLED_TIMER_PROBE: &str = r#"
-import { View, text } from "gpui";
+import { div, View } from "gpui";
 import { v_flex } from "gpui-base";
 
 export default class Probe extends View {
@@ -34,19 +34,19 @@ export default class Probe extends View {
     this.timer.cancel();
   }
   render() {
-    return v_flex().child(text(`${this.timer.is_done()}|${this.fired}`));
+    return v_flex().child(`${this.timer.is_done()}|${this.fired}`);
   }
 }
 "#;
 
 const NATIVE_PROBE: &str = r#"
-import { View, text, native } from "gpui";
+import { div, View, native } from "gpui";
 import { v_flex } from "gpui-base";
 
 const calculator = native("calculator");
 export default class Probe extends View {
   init() { this.answer = calculator.increment(41); }
-  render(cx) { return v_flex().child(text(`answer:${this.answer}`)); }
+  render(cx) { return v_flex().child(`answer:${this.answer}`); }
 }
 "#;
 

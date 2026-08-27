@@ -19,7 +19,7 @@ export default class Counter extends View {
   }
 
   render(cx) {
-    return v_flex().child(text(`${this.count}`));
+    return v_flex().child(`${this.count}`);
   }
 }
 ```
@@ -131,13 +131,7 @@ Those three are exactly the places whose job is to set up or continue work that 
 
 `cx` exposes nothing but functions — `Object.keys(cx)` shows the methods and no generation — so a script cannot forge one.
 
-Code holding no `cx` at all — a module's top level, a bare `constructor`, a `.then` callback nothing handed one to — asks for one with `with_cx(fn)`:
-
-```js
-import { with_cx } from "gpui";
-
-globalThis.ticker = with_cx((cx) => cx.timer.every(1000, () => {}));
-```
+There is no third way to get one. A module's top level and a bare `constructor` are handed no context and cannot ask for one — which is the point rather than a gap: GPUI has no module top level either, and work started there would belong to no view, so nothing would own it and nothing would cancel it. Start it in `init`, which is where a view is handed its context.
 
 ## Retained state
 
@@ -218,9 +212,8 @@ Script code is asynchronous in the ordinary JavaScript way — `async` functions
 | `cx.spawn(body, opts?)` | Calls `body(cx)` and adopts the promise it returns |
 | `cx.timer.after(ms, handler, opts?)` | Calls `handler(cx)` once |
 | `cx.timer.every(ms, handler, opts?)` | Calls `handler(cx)` repeatedly |
-| `with_cx(body)` | Runs `body(cx)` with a context belonging to the call in progress |
 
-Scheduling is on `cx` because that is where GPUI keeps it — `App::spawn`, and a timer from the executor a context hands out. `with_cx` is the exception, and stays a module export precisely because it is for code that has no `cx` to reach it through.
+Scheduling is on `cx` because that is where GPUI keeps it — `App::spawn`, and a timer from the executor a context hands out. There is nothing to import.
 
 All of them return work that runs on the main thread. Nothing script-visible ever leaves it: there is no `Worker`, and the VM and GPUI's `App` are both main-thread only.
 

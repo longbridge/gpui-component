@@ -1,5 +1,5 @@
 ---
-title: Native Modules
+title: Native 模块
 description: 宿主如何把自己的 Rust 借给脚本——注册方式、纯数据边界，以及一个 native 函数要遵守的规则。
 order: 9
 ---

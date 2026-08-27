@@ -588,7 +588,8 @@ const CONTEXT_AND_VIEW: &str = r#"  /**
    *
    * It is valid only for the call that produced it: an `await` returns to the
    * host and the frame it names goes away, so a `cx` kept across one reports a
-   * stale-context error. Ask for a fresh one with `with_cx` instead.
+   * stale-context error. Work that outlives the call takes an [`AsyncContext`]
+   * instead — `cx.spawn`, `cx.timer`, `init`.
    */
   export interface Context {
     /**
@@ -634,6 +635,19 @@ const CONTEXT_AND_VIEW: &str = r#"  /**
      * or in an event handler — never in `render`.
      */
     focus_handle(): FocusHandleHandle;
+
+    /**
+     * Creates a retained nested view and hands back the entity that owns it.
+     * `AppContext::new` — the only way GPUI makes one, and so the only way here.
+     *
+     * The entity is a child wherever a child is taken: `.child(entity)`, or
+     * returned from `render`. Updating its props runs the child's optional
+     * `update(props)` and rebuilds only that child.
+     *
+     * Legal from `init`, an event handler or a task; creating one during
+     * `render` or layout throws.
+     */
+    new(Class: ViewClass, props?: Props): Entity;
 
     /**
      * Calls `body(cx)` and adopts the promise it returns, so a rejection is
@@ -773,16 +787,11 @@ const CONTEXT_AND_VIEW: &str = r#"  /**
    * newly added non-configurable properties; making an existing configurable property non-configurable;
    * and pre-existing native handles explicitly released by update.
    */
-  export interface ViewHandle {
+  export interface Entity {
     set_props(props?: Props): void;
     release(): boolean;
   }
 
-  export interface ViewHandleType {
-    new: (Class: ViewClass, props?: Props) => ViewHandle;
-  }
-
-  export const ViewHandle: ViewHandleType;
 
 "#;
 
@@ -794,14 +803,18 @@ const CONTEXT_AND_VIEW: &str = r#"  /**
 const ELEMENT_METHODS: &str = r#"    /**
      * Adds one child. The child is consumed; using it again throws.
      *
-     * A `ViewHandle` is a child too, the way an `Entity<V>` is renderable in
-     * GPUI — that is how a retained nested view is mounted. One handle may
-     * appear once per parent snapshot; a second mount in the same description
-     * is refused before any of it is published.
+     * A **string is an element**, exactly as `&str`, `String` and
+     * `SharedString` implement `IntoElement` in GPUI: `.child("hello")` is how
+     * text is written, and the style comes from the element holding it.
+     *
+     * An `Entity` from `cx.new(...)` is a child too, the way an `Entity<V>` is
+     * renderable in GPUI — that is how a retained nested view is mounted. One
+     * entity may appear once per parent snapshot; a second mount in the same
+     * description is refused before any of it is published.
      */
-    child(child: Element | ViewHandle): Element;
+    child(child: Element | Entity | string | number | boolean): Element;
     /** Adds several children, in order. */
-    children(children: Iterable<Element | ViewHandle>): Element;
+    children(children: Iterable<Element | Entity | string | number | boolean>): Element;
     /**
      * Fills the `content` slot of a `Collapsible`, a `Popover`, a `HoverCard`
      * or a `Popup`.
@@ -1322,8 +1335,6 @@ const MOTION_TYPES: &str = r#"  export type MotionProperty = "opacity" | "width"
 const ELEMENTS: &str = r#"
   /** An element with no layout of its own. */
   export function div(): Element;
-  /** A text element. The value is stringified. */
-  export function text(value: string | number | boolean): Element;
 
   /**
    * A vector image from the application's own directory.
@@ -2304,16 +2315,7 @@ const CAPABILITIES: &str = r#"
     flush(): Promise<void>;
   }
 
-  /** Diagnostics. Needs no capability: a script that runs may say something. */
-  export interface Log {
-    debug(message: unknown, ...rest: unknown[]): void;
-    info(message: unknown, ...rest: unknown[]): void;
-    warn(message: unknown, ...rest: unknown[]): void;
-    error(message: unknown, ...rest: unknown[]): void;
-  }
-
   export const store: Store;
-  export const log: Log;
 "#;
 
 const STANDARD_RUNTIME: &str = r#"
@@ -2349,8 +2351,23 @@ declare module "zlib" {
   export function gzipSync(data: string | Uint8Array): import("buffer").Buffer;
   export function gunzipSync(data: Uint8Array): import("buffer").Buffer;
 }
+interface Console {
+  debug(...values: unknown[]): void;
+  log(...values: unknown[]): void;
+  info(...values: unknown[]): void;
+  warn(...values: unknown[]): void;
+  error(...values: unknown[]): void;
+}
+/**
+ * Diagnostics. A global, as it is in every other JavaScript runtime, and the
+ * only one: the shell used to export the same object a second time as
+ * `gpui.log`, which bought a name and nothing else.
+ *
+ * Needs no capability — a script that runs may say something — and output goes
+ * to `tracing` under the `gpui_shell::script` target.
+ */
+declare const console: Console;
 declare module "console" {
-  interface Console { debug(...values: unknown[]): void; log(...values: unknown[]): void; info(...values: unknown[]): void; warn(...values: unknown[]): void; error(...values: unknown[]): void; }
   const console: Console;
   export default console;
 }
@@ -2467,17 +2484,6 @@ const SCHEDULING: &str = r#"
     owner?: View | null;
   }
 
-  /**
-   * Runs `body` with a context that belongs to the call in progress.
-   *
-   * The one call for code holding no `cx` at all, which is why it is a module
-   * member rather than a method: a module's top level, a bare `constructor`,
-   * or a `.then` callback nothing handed a context to. Everywhere else the
-   * context is already in reach — `render(cx)`, a handler's second argument,
-   * `init(props, cx)`, the body of `cx.spawn` — and an [`AsyncContext`] stays
-   * usable after an `await`, so this is no longer the way to resume.
-   */
-  export function with_cx<T>(body: (cx: Context) => T): T;
 
   export interface Timer {
     /** Calls `handler(cx)` once, after `ms`. */
@@ -2762,7 +2768,8 @@ mod tests {
                 assert!(
                     body.contains(&format!("export function {name}"))
                         || body.contains(&format!("export const {name}"))
-                        || body.contains(&format!("export class {name}")),
+                        || body.contains(&format!("export class {name}"))
+                        || body.contains(&format!("export abstract class {name}")),
                     "`{name}` is exported from \"{specifier}\" but declared nowhere in it"
                 );
             }
@@ -2921,11 +2928,9 @@ mod tests {
     fn retained_nested_views_are_declared() {
         let declarations = declarations();
         for expected in [
-            "  export interface ViewHandle {",
+            "  export interface Entity {",
             "    set_props(props?: Props): void;",
             "    release(): boolean;",
-            "  export interface ViewHandleType {",
-            "  export const ViewHandle: ViewHandleType;",
         ] {
             assert!(declarations.contains(expected), "missing: {expected}");
         }

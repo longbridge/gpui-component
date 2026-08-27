@@ -1,5 +1,5 @@
 ---
-title: Hosting the Runtime
+title: 托管运行时
 description: Rust 这一侧的全貌——运行时的生命周期、挂载脚本视图、从宿主状态刷新它、指标、退出请求与 hot-reload。
 order: 10
 ---
