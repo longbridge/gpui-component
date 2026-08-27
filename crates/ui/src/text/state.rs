@@ -916,7 +916,7 @@ fn parse_linked_text(source: &str, links: &[TextViewLink]) -> Result<ParsedDocum
 
     Ok(ParsedDocument {
         source: source.to_owned().into(),
-        blocks: vec![BlockNode::Paragraph(paragraph)],
+        blocks: vec![BlockNode::Paragraph(paragraph)].into(),
     })
 }
 
