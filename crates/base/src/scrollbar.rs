@@ -961,6 +961,25 @@ impl Scrollbar {
         )
     }
 
+    /// The thumb colour a scrollbar falls back to when nothing has overridden
+    /// it, taken from the active theme rather than fixed.
+    ///
+    /// It used to be literal black at these alphas. That reads as an ordinary
+    /// grey thumb on a light surface and as very nearly nothing at all on a
+    /// dark one, and no palette an application installed could change it:
+    /// `Theme` carries `scrollbar` beside `tokens` rather than derived from
+    /// them, so a theme swap moved every token except the ones the scrollbar
+    /// actually paints with.
+    ///
+    /// `foreground` is the token that already means "ink on this surface" and
+    /// already flips with the appearance, so on a light theme this stays within
+    /// a hair of the old constant and on a dark one it becomes visible. An
+    /// explicit `ScrollbarStyles` still wins: this is the bottom of the
+    /// cascade, not a new top of it.
+    fn thumb_default_background(cx: &App, alpha: f32) -> Background {
+        cx.theme().tokens.colors.foreground.alpha(alpha).into()
+    }
+
     fn thumb_defaults(
         background: Background,
         width: Pixels,
@@ -993,7 +1012,7 @@ impl Scrollbar {
             &self.styles.thumb_active,
             &global.thumb_active,
             Self::thumb_defaults(
-                gpui::black().alpha(0.55).into(),
+                Self::thumb_default_background(cx, 0.55),
                 THUMB_ACTIVE_WIDTH,
                 THUMB_ACTIVE_INSET,
                 THUMB_ACTIVE_RADIUS,
@@ -1019,7 +1038,7 @@ impl Scrollbar {
             &self.styles.thumb_hover,
             &global.thumb_hover,
             Self::thumb_defaults(
-                gpui::black().alpha(0.55).into(),
+                Self::thumb_default_background(cx, 0.55),
                 THUMB_ACTIVE_WIDTH,
                 THUMB_ACTIVE_INSET,
                 THUMB_ACTIVE_RADIUS,
@@ -1045,7 +1064,7 @@ impl Scrollbar {
             &self.styles.thumb,
             &global.thumb,
             Self::thumb_defaults(
-                gpui::black().alpha(0.35).into(),
+                Self::thumb_default_background(cx, 0.35),
                 THUMB_WIDTH,
                 THUMB_INSET,
                 THUMB_RADIUS,
@@ -1072,7 +1091,7 @@ impl Scrollbar {
             &self.styles.thumb,
             &global.thumb,
             Self::thumb_defaults(
-                gpui::black().alpha(0.35).into(),
+                Self::thumb_default_background(cx, 0.35),
                 THUMB_WIDTH,
                 THUMB_INSET,
                 THUMB_RADIUS,
@@ -1527,8 +1546,6 @@ impl Element for Scrollbar {
 
                                         scroll_handle.start_drag();
                                         state.set(state.get().with_drag_pos(axis, pos));
-
-                                        cx.notify(view_id);
                                     } else {
                                         // click on the scrollbar, jump to the position
                                         // Set the thumb bar center to the click position
@@ -1556,6 +1573,8 @@ impl Element for Scrollbar {
                                             ));
                                         }
                                     }
+
+                                    cx.notify(view_id);
                                 }
                             }
                         });
@@ -2164,6 +2183,41 @@ mod tests {
         assert_eq!(scrollbar.styles.thumb_hover.width, Some(px(9.)));
         assert!(scrollbar.styles.thumb_active.background.is_some());
         assert_eq!(scrollbar.styles.thumb_active.radius, Some(px(4.5)));
+    }
+
+    #[gpui::test]
+    fn unstyled_thumb_follows_the_theme_rather_than_a_fixed_colour(cx: &mut TestAppContext) {
+        cx.update(|cx| {
+            let scrollbar = Scrollbar::new(&TestHandle::new(Size::default()));
+
+            let light = gpui::hsla(0., 0., 0.04, 1.0);
+            crate::Theme::global_mut(cx).tokens.colors.foreground = light;
+            let (on_light, ..) = scrollbar.style_for_normal(cx);
+
+            let dark = gpui::hsla(0., 0., 0.98, 1.0);
+            crate::Theme::global_mut(cx).tokens.colors.foreground = dark;
+            let (on_dark, ..) = scrollbar.style_for_normal(cx);
+
+            assert_eq!(on_light, Background::from(light.alpha(0.35)));
+            assert_eq!(on_dark, Background::from(dark.alpha(0.35)));
+            // The point of the change: a thumb that never moved with the
+            // palette was invisible on one of the two surfaces.
+            assert_ne!(on_light, on_dark);
+        });
+    }
+
+    #[gpui::test]
+    fn a_styled_thumb_still_beats_the_theme_derived_default(cx: &mut TestAppContext) {
+        cx.update(|cx| {
+            let chosen = gpui::hsla(0.6, 0.5, 0.5, 1.0);
+            crate::Theme::global_mut(cx).tokens.colors.foreground = gpui::hsla(0., 0., 0.98, 1.0);
+
+            let scrollbar = Scrollbar::new(&TestHandle::new(Size::default()))
+                .styles(|styles| styles.thumb(|style| style.bg(chosen)));
+            let (thumb, ..) = scrollbar.style_for_normal(cx);
+
+            assert_eq!(thumb, Background::from(chosen));
+        });
     }
 
     #[gpui::test]

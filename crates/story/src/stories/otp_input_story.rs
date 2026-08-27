@@ -6,7 +6,7 @@ use gpui::{
 use gpui_component::{
     Disableable as _, Sizable, Size, StyledExt,
     button::Button,
-    input::{InputEvent, OtpInput, OtpState},
+    input::{OtpEvent, OtpInput, OtpState},
     v_flex,
 };
 use serde::Deserialize;
@@ -58,16 +58,17 @@ impl OtpInputStory {
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let otp_state = cx.new(|cx| OtpState::new(6, window, cx).masked(true));
 
-        let _subscriptions = vec![
-            cx.subscribe(&otp_state, |this, state, ev: &InputEvent, cx| match ev {
-                InputEvent::Change => {
-                    let text = state.read(cx).value();
-                    this.otp_value = Some(text.clone());
-                    cx.notify();
-                }
-                _ => {}
-            }),
-        ];
+        let _subscriptions =
+            vec![
+                cx.subscribe(&otp_state, |this, state, ev: &OtpEvent, cx| match ev {
+                    OtpEvent::Complete => {
+                        let text = state.read(cx).value();
+                        this.otp_value = Some(text.clone());
+                        cx.notify();
+                    }
+                    _ => {}
+                }),
+            ];
 
         Self {
             otp_masked: true,

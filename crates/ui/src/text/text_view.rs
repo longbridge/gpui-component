@@ -2,9 +2,10 @@ use std::sync::Arc;
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, App, Bounds, ClickEvent, Element, ElementId, Entity, GlobalElementId, Hitbox,
-    HitboxBehavior, InspectorElementId, InteractiveElement, IntoElement, LayoutId, MouseButton,
-    ParentElement, Pixels, SharedString, StyleRefinement, Styled, Window, div,
+    AnyElement, App, Bounds, ClickEvent, ContentMask, Element, ElementId, Entity, GlobalElementId,
+    Hitbox, HitboxBehavior, InspectorElementId, InteractiveElement, IntoElement, LayoutId,
+    MouseButton, ParentElement, Pixels, Refineable as _, SharedString, StyleRefinement, Styled,
+    Window, div, point, px,
 };
 
 use crate::StyledExt;
@@ -12,7 +13,7 @@ use crate::scroll::ScrollableElement;
 use crate::text::TextViewFormat;
 use crate::text::markdown_ext::{MarkdownExtensions, MarkdownNode, MarkdownPlugin};
 use crate::text::node::{CodeBlock, TableData};
-use crate::text::state::{SelectionFormat, TextViewState};
+use crate::text::state::{LineSpan, SelectionFormat, TextViewState};
 use crate::{global_state::UiGlobalState, text::TextViewStyle};
 
 /// Type for code block actions generator function.
@@ -73,6 +74,7 @@ pub struct TextView {
     selectable: bool,
     selection_format: SelectionFormat,
     scrollable: bool,
+    max_lines: Option<usize>,
     code_block_actions: Option<Arc<CodeBlockActionsFn>>,
     table_actions: Option<Arc<TableActionsFn>>,
     link_click_handler: Option<Arc<LinkClickHandlerFn>>,
@@ -115,6 +117,7 @@ impl TextView {
             selectable: false,
             selection_format: SelectionFormat::default(),
             scrollable: false,
+            max_lines: None,
             code_block_actions: None,
             table_actions: None,
             link_click_handler: None,
@@ -134,6 +137,7 @@ impl TextView {
             selectable: false,
             selection_format: SelectionFormat::default(),
             scrollable: false,
+            max_lines: None,
             code_block_actions: None,
             table_actions: None,
             link_click_handler: None,
@@ -153,6 +157,7 @@ impl TextView {
             selectable: false,
             selection_format: SelectionFormat::default(),
             scrollable: false,
+            max_lines: None,
             code_block_actions: None,
             table_actions: None,
             link_click_handler: None,
@@ -195,6 +200,29 @@ impl TextView {
     /// This mode is suitable for small content, such as a few lines of text, a label, etc.
     pub fn scrollable(mut self, scrollable: bool) -> Self {
         self.scrollable = scrollable;
+        self
+    }
+
+    /// Clamp the rendered content to at most `n` lines of body text.
+    ///
+    /// The view's height is capped at `n` × the base line height, and a line
+    /// of glyphs is never cut in half: a line that would straddle the bottom
+    /// of the box is left out whole, across paragraphs, lists, headings, code
+    /// blocks and tables. Nothing is shown with less than a line of itself to
+    /// show, so the border and padding a table row leads with never strands at
+    /// the bottom; whatever has more than that is cut on the box edge and keeps
+    /// the part that fits, rather than disappearing and leaving blank space
+    /// behind.
+    ///
+    /// Check [`TextViewState::is_clamped`] (which answers for the frame that
+    /// was last painted) to decide whether to show an "expand" affordance.
+    ///
+    /// `n` counts lines of body text, so paragraph spacing and taller lines
+    /// mean fewer of them fit inside the capped height. A line taller than the
+    /// whole budget keeps the part that fits rather than emptying the box.
+    /// Ignored when [`Self::scrollable`] is set.
+    pub fn max_lines(mut self, max_lines: usize) -> Self {
+        self.max_lines = Some(max_lines);
         self
     }
 
@@ -311,9 +339,99 @@ pub struct TextViewLayoutState {
     element: AnyElement,
 }
 
+pub struct TextViewPrepaintState {
+    hitbox: Hitbox,
+    /// Where paint has to pull the `max_lines` clip up to, because a glyph line
+    /// straddles the bottom of the box. `None` leaves the clip at the box edge,
+    /// where the container's hidden overflow already applies it.
+    clip_bottom: Option<Pixels>,
+}
+
+/// Absorbs sub-pixel layout jitter: a line ending within a pixel of the box
+/// bottom counts as fitting inside it.
+const CLIP_EPSILON: Pixels = px(1.);
+
+/// The bottom of the last whole line at or above `y`, with the height of a line
+/// where it sits.
+fn last_line_bottom_above(spans: &[LineSpan], y: Pixels) -> Option<(Pixels, Pixels)> {
+    let mut last: Option<(Pixels, Pixels)> = None;
+    let mut keep = |bottom: Pixels, line_height: Pixels| {
+        if bottom <= y + CLIP_EPSILON && last.is_none_or(|(last, _)| bottom > last) {
+            last = Some((bottom, line_height));
+        }
+    };
+
+    for span in spans {
+        if span.line_height <= px(0.) {
+            continue;
+        }
+        let mut bottom = span.top + span.line_height;
+        while bottom <= span.bottom + CLIP_EPSILON {
+            keep(bottom, span.line_height);
+            bottom += span.line_height;
+        }
+        // The span's own bottom covers a last line taller than the rest.
+        keep(span.bottom, span.line_height);
+    }
+
+    last
+}
+
+/// Where to clip, given the lines a descendant `Inline` reported. `None` leaves
+/// the clip on the box edge.
+///
+/// Two things are never shown: half a line of glyphs, and anything with less
+/// than a line of itself to show. A line straddling `box_bottom` is left out
+/// whole, and so is the strip between it and the line before — the border and
+/// padding a table row leads with reads as a rendering fault rather than as a
+/// row. Whatever has more than a line to show is cut on the edge and keeps the
+/// part that fits, so the box holds no blank space it could have filled.
+fn line_safe_clip_bottom(
+    spans: &[LineSpan],
+    box_bottom: Pixels,
+    content_bottom: Pixels,
+) -> Option<Pixels> {
+    let mut clip = box_bottom;
+
+    for span in spans {
+        if span.line_height <= px(0.)
+            || span.top >= box_bottom
+            || span.bottom <= box_bottom + CLIP_EPSILON
+        {
+            continue;
+        }
+        let whole_lines = ((box_bottom - span.top) / span.line_height).floor();
+        let line_top = span.top + span.line_height * whole_lines;
+        // A line starting on the box edge is not straddling it.
+        if line_top < box_bottom - CLIP_EPSILON {
+            clip = clip.min(line_top);
+        }
+    }
+
+    let Some((last_line_bottom, line_height)) = last_line_bottom_above(spans, clip) else {
+        // Leaving the straddling line out would leave nothing at all — a first
+        // line taller than the whole budget, a heading in a one-line box. It
+        // keeps the part that fits instead, because an empty clamp reads as
+        // broken where a cut one reads as more to come.
+        return None;
+    };
+
+    // Snap away a scrap. Only content that continues past the box can leave
+    // one: the space under the last line of a document that fits is the box's
+    // own, not a piece of something below.
+    if content_bottom > box_bottom + CLIP_EPSILON {
+        let strip = clip - last_line_bottom;
+        if strip > CLIP_EPSILON && strip < line_height {
+            clip = last_line_bottom;
+        }
+    }
+
+    (clip < box_bottom - CLIP_EPSILON).then_some(clip)
+}
+
 impl Element for TextView {
     type RequestLayoutState = TextViewLayoutState;
-    type PrepaintState = Hitbox;
+    type PrepaintState = TextViewPrepaintState;
 
     fn id(&self) -> Option<ElementId> {
         Some(self.id.clone())
@@ -351,6 +469,10 @@ impl Element for TextView {
             state
         };
 
+        // `max_lines` needs the whole document laid out to snap the clip to a
+        // whole line, so it only applies to the fit-content mode.
+        let max_lines = self.max_lines.filter(|_| !self.scrollable);
+
         state.update(cx, |state, cx| {
             state.code_block_actions = self.code_block_actions.clone();
             state.table_actions = self.table_actions.clone();
@@ -359,6 +481,7 @@ impl Element for TextView {
             state.selectable = self.selectable;
             state.selection_format = self.selection_format;
             state.scrollable = self.scrollable;
+            state.max_lines = max_lines;
             if state.text_view_style != self.text_view_style {
                 state.selection_revision = state.selection_revision.wrapping_add(1);
             }
@@ -372,12 +495,22 @@ impl Element for TextView {
         let focus_handle = state.read(cx).focus_handle.clone();
         let list_state = state.read(cx).list_state.clone();
 
+        // Cap the box at `n` body-text lines (the effective text style may be
+        // refined by this view's own style, e.g. `.text_sm()`); hidden
+        // overflow also clips descendant hitboxes to the box during prepaint.
+        let max_lines_cap = max_lines.map(|max_lines| {
+            let mut text_style = window.text_style();
+            text_style.refine(&self.style.text);
+            text_style.line_height_in_pixels(window.rem_size()) * max_lines as f32
+        });
+
         let mut el = div()
             .key_context("TextView")
             .track_focus(&focus_handle)
             .when(self.scrollable, |this| {
                 this.size_full().vertical_scrollbar(&list_state)
             })
+            .when_some(max_lines_cap, |this, cap| this.max_h(cap).overflow_hidden())
             .relative()
             .on_action(move |_: &crate::input::Copy, window, cx| {
                 let text = gpui_base::TextSelection::selected_text(window, cx)
@@ -406,17 +539,66 @@ impl Element for TextView {
         window: &mut Window,
         cx: &mut App,
     ) -> Self::PrepaintState {
+        let state = request_layout.state.clone();
+        let max_lines_active = state.read(cx).max_lines.is_some();
+        if max_lines_active {
+            if let Ok(mut line_spans) = state.read(cx).line_spans.lock() {
+                line_spans.clear();
+            }
+            // Descendant `Inline`s report their line spans through the state
+            // stack during prepaint (in addition to the paint-time push below).
+            UiGlobalState::global_mut(cx)
+                .text_view_state_stack
+                .push(state.clone());
+        }
         request_layout.element.prepaint(window, cx);
-        window.insert_hitbox(bounds, HitboxBehavior::Normal)
+        if max_lines_active {
+            UiGlobalState::global_mut(cx).text_view_state_stack.pop();
+        }
+
+        let mut clip_bottom = None;
+        if max_lines_active {
+            let (line_spans, content_bottom) = {
+                let state = state.read(cx);
+                (
+                    state
+                        .line_spans
+                        .lock()
+                        .map(|spans| spans.clone())
+                        .unwrap_or_default(),
+                    state.bounds().bottom(),
+                )
+            };
+            // The content keeps its natural height inside the capped box, so
+            // this sees everything the box cannot show — including a tall image
+            // that reports no lines of its own.
+            let clipped = content_bottom > bounds.bottom() + px(1.);
+            // Notify on change so observers (e.g. an "expand" button gated on
+            // `is_clamped`) re-render once the flag flips.
+            if state.read(cx).clamped != clipped {
+                state.update(cx, |state, cx| {
+                    state.clamped = clipped;
+                    cx.notify();
+                });
+            }
+            if clipped {
+                clip_bottom = line_safe_clip_bottom(&line_spans, bounds.bottom(), content_bottom);
+            }
+        }
+
+        TextViewPrepaintState {
+            hitbox: window.insert_hitbox(bounds, HitboxBehavior::Normal),
+            clip_bottom,
+        }
     }
 
     fn paint(
         &mut self,
         _: Option<&GlobalElementId>,
         _: Option<&InspectorElementId>,
-        _bounds: Bounds<Pixels>,
+        bounds: Bounds<Pixels>,
         request_layout: &mut Self::RequestLayoutState,
-        hitbox: &mut Self::PrepaintState,
+        prepaint: &mut Self::PrepaintState,
         window: &mut Window,
         cx: &mut App,
     ) {
@@ -428,7 +610,18 @@ impl Element for TextView {
         UiGlobalState::global_mut(cx)
             .text_view_state_stack
             .push(state.clone());
-        request_layout.element.paint(window, cx);
+        if let Some(clip_bottom) = prepaint.clip_bottom {
+            // Snap the `max_lines` clip to the last whole line that fits, so a
+            // line of glyphs is never cut in half.
+            let mask = ContentMask {
+                bounds: Bounds::from_corners(bounds.origin, point(bounds.right(), clip_bottom)),
+            };
+            window.with_content_mask(Some(mask), |window| {
+                request_layout.element.paint(window, cx);
+            });
+        } else {
+            request_layout.element.paint(window, cx);
+        }
         UiGlobalState::global_mut(cx).text_view_state_stack.pop();
 
         if self.selectable {
@@ -442,7 +635,7 @@ impl Element for TextView {
             };
             let document_order = UiGlobalState::global_mut(cx).next_selection_document_order();
             adapter.register(
-                hitbox.clone(),
+                prepaint.hitbox.clone(),
                 content_bounds,
                 scroll_offset,
                 document_order,
@@ -738,6 +931,221 @@ mod tests {
         let cx: &mut VisualTestContext = cx;
 
         cx.simulate_click(point(px(10.), px(34.)), Modifiers::default());
+
+        assert_eq!(cx.opened_url(), None);
+    }
+
+    struct MaxLinesTestRoot {
+        text_view: Entity<TextViewState>,
+        max_lines: usize,
+    }
+
+    impl MaxLinesTestRoot {
+        fn new(text: &str, max_lines: usize, cx: &mut Context<Self>) -> Self {
+            let text_view = cx.new(|cx| TextViewState::markdown(text, cx));
+            Self {
+                text_view,
+                max_lines,
+            }
+        }
+    }
+
+    impl Render for MaxLinesTestRoot {
+        fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+            div()
+                .w(px(200.))
+                .child(TextView::new(&self.text_view).max_lines(self.max_lines))
+        }
+    }
+
+    #[test]
+    fn the_clip_only_moves_for_a_straddling_glyph_line() {
+        use super::line_safe_clip_bottom;
+        use crate::text::state::LineSpan;
+
+        let spans = [
+            // Lines end at 20 / 40 / 60.
+            LineSpan {
+                top: px(0.),
+                bottom: px(60.),
+                line_height: px(20.),
+            },
+            // A second block after an 8px gap; lines end at 88 / 108 / 128.
+            LineSpan {
+                top: px(68.),
+                bottom: px(128.),
+                line_height: px(20.),
+            },
+        ];
+
+        // Content continues well past the box in every case but the last.
+        let below = px(400.);
+
+        // A box ending inside the line 88..108 leaves that line out whole.
+        assert_eq!(
+            line_safe_clip_bottom(&spans, px(100.), below),
+            Some(px(88.))
+        );
+
+        // A box ending on a line boundary has nothing to pull the clip up for.
+        assert_eq!(line_safe_clip_bottom(&spans, px(88.), below), None);
+
+        // A strip below the last line shorter than a line — the border and
+        // padding a block leads with — is not worth showing.
+        assert_eq!(line_safe_clip_bottom(&spans, px(64.), below), Some(px(60.)));
+
+        // One taller than a line is: whatever crosses the edge keeps the part
+        // that fits rather than leaving the box half empty.
+        let one_block = [LineSpan {
+            top: px(0.),
+            bottom: px(60.),
+            line_height: px(20.),
+        }];
+        assert_eq!(line_safe_clip_bottom(&one_block, px(200.), below), None);
+
+        // Nothing crosses the edge at all: the space under the last line is
+        // the box's own, not a scrap of something below.
+        assert_eq!(line_safe_clip_bottom(&spans, px(130.), px(128.)), None);
+    }
+
+    #[test]
+    fn a_line_taller_than_the_budget_keeps_the_part_that_fits() {
+        use super::line_safe_clip_bottom;
+        use crate::text::state::LineSpan;
+
+        // A heading line of 28px, in a box capped at one 26px body line.
+        let heading = [LineSpan {
+            top: px(70.),
+            bottom: px(98.),
+            line_height: px(28.),
+        }];
+
+        assert_eq!(line_safe_clip_bottom(&heading, px(96.), px(400.)), None);
+    }
+
+    #[test]
+    fn the_clip_does_not_stop_on_a_row_of_border_and_padding() {
+        use super::line_safe_clip_bottom;
+        use crate::text::state::LineSpan;
+
+        // Two table rows, each one line of text, 9px of border and padding
+        // between them.
+        let rows = [
+            LineSpan {
+                top: px(100.),
+                bottom: px(126.),
+                line_height: px(26.),
+            },
+            LineSpan {
+                top: px(135.),
+                bottom: px(161.),
+                line_height: px(26.),
+            },
+        ];
+
+        // Leaving out the second row's text would strand the 9px it leads
+        // with, so the clip goes back to the row above it.
+        assert_eq!(
+            line_safe_clip_bottom(&rows, px(148.), px(400.)),
+            Some(px(126.))
+        );
+    }
+
+    /// A clamped view nested the way an application nests one: inside a card,
+    /// inside a region that fills a window of a known height. The height an
+    /// ancestor hands down must not reach the clamped content and hide the
+    /// overflow the clamp measures — with the content stretched to the capped
+    /// box, nothing looks clipped and lines get cut in half.
+    struct ClampedPageRoot {
+        text_view: Entity<TextViewState>,
+        max_lines: usize,
+    }
+
+    impl Render for ClampedPageRoot {
+        fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+            use crate::scroll::ScrollableElement as _;
+            use crate::{h_flex, v_flex};
+
+            v_flex()
+                .size_full()
+                .p_4()
+                .gap_4()
+                .child(h_flex().max_w(px(480.)).gap_3().child("header"))
+                .child(
+                    v_flex()
+                        .flex_1()
+                        .min_h_0()
+                        .gap_4()
+                        .child(
+                            v_flex()
+                                .max_w(px(480.))
+                                .p_3()
+                                .gap_2()
+                                .child(TextView::new(&self.text_view).max_lines(self.max_lines)),
+                        )
+                        .overflow_y_scrollbar(),
+                )
+        }
+    }
+
+    #[gpui::test]
+    fn max_lines_measures_overflow_inside_a_sized_page(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (root, cx) = cx.add_window_view(|_, cx| {
+            let text_view = cx.new(|cx| {
+                TextViewState::markdown(
+                    "first\n\nsecond\n\nthird\n\nfourth\n\nfifth\n\nsixth\n\nseventh",
+                    cx,
+                )
+            });
+            ClampedPageRoot {
+                text_view,
+                max_lines: 3,
+            }
+        });
+        let cx: &mut VisualTestContext = cx;
+
+        assert!(root.read_with(cx, |root, cx| root.text_view.read(cx).is_clamped()));
+    }
+
+    #[gpui::test]
+    fn max_lines_clamps_overflowing_content(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (root, cx) = cx.add_window_view(|_, cx| {
+            MaxLinesTestRoot::new(
+                "first\n\nsecond\n\nthird\n\nfourth\n\nfifth\n\nsixth",
+                2,
+                cx,
+            )
+        });
+        let cx: &mut VisualTestContext = cx;
+
+        assert!(root.read_with(cx, |root, cx| root.text_view.read(cx).is_clamped()));
+    }
+
+    #[gpui::test]
+    fn max_lines_leaves_short_content_unclamped(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (root, cx) = cx.add_window_view(|_, cx| MaxLinesTestRoot::new("only line", 3, cx));
+        let cx: &mut VisualTestContext = cx;
+
+        assert!(!root.read_with(cx, |root, cx| root.text_view.read(cx).is_clamped()));
+    }
+
+    #[gpui::test]
+    fn max_lines_disables_links_hidden_by_the_clamp(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (_, cx) = cx.add_window_view(|_, cx| {
+            MaxLinesTestRoot::new(
+                "first\n\nsecond\n\nthird\n\n[hidden](https://example.com)",
+                2,
+                cx,
+            )
+        });
+        let cx: &mut VisualTestContext = cx;
+
+        // Click far below the clamped box, where the link would sit unclamped.
+        cx.simulate_click(point(px(10.), px(150.)), Modifiers::default());
 
         assert_eq!(cx.opened_url(), None);
     }

@@ -154,6 +154,12 @@ impl RenderOnce for ResizablePanelGroup {
         container
             .id(self.id)
             .size_full()
+            // The group only distributes space along its own axis, so a caller
+            // supplied size can only mean the cross axis.
+            .when_some(self.size, |this, size| match self.axis {
+                Axis::Horizontal => this.h(size),
+                Axis::Vertical => this.w(size),
+            })
             .children(
                 self.children
                     .into_iter()

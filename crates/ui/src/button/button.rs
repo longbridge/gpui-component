@@ -188,6 +188,8 @@ pub struct Button {
     base: gpui_base::Button,
     icon: Option<ButtonIcon>,
     label: Option<SharedString>,
+    /// The announced name, when the visible content is not it.
+    accessibility_label: Option<SharedString>,
     children: Vec<AnyElement>,
     disabled: bool,
     pub(crate) selected: bool,
@@ -231,6 +233,7 @@ impl Button {
             base: gpui_base::Button::new(id),
             icon: None,
             label: None,
+            accessibility_label: None,
             children: Vec::new(),
             disabled: false,
             selected: false,
@@ -311,6 +314,20 @@ impl Button {
     /// Set the developer-assigned identifier exposed to accessibility clients.
     pub fn accessibility_id(mut self, id: impl Into<SharedString>) -> Self {
         self.base = self.base.accessibility_id(id);
+        self
+    }
+
+    /// Set the name a screen reader announces, when the visible content is not
+    /// it.
+    ///
+    /// A button's name comes from its [`label`](Self::label) by default, which
+    /// is right for the ordinary case and wrong for two: an icon-only button has
+    /// no label to read, and a button whose content is a row of cells — a table
+    /// row that is also a control — would be read out cell by cell with no
+    /// statement of what pressing it does. Setting this replaces the announced
+    /// name without adding anything to the screen.
+    pub fn accessibility_label(mut self, label: impl Into<SharedString>) -> Self {
+        self.accessibility_label = Some(label.into());
         self
     }
 
@@ -606,7 +623,12 @@ impl RenderOnce for Button {
             })
             .refine_style(&instance_style);
 
-        let accessibility_label = self.label.clone();
+        // The explicit name wins: it exists precisely for the cases where the
+        // visible content is not what a listener needs to hear.
+        let accessibility_label = self
+            .accessibility_label
+            .clone()
+            .or_else(|| self.label.clone());
         let content = h_flex()
             .id("label")
             .size_full()
@@ -1235,6 +1257,29 @@ mod tests {
     use super::*;
     use crate::IconName;
     use gpui::{linear_color_stop, linear_gradient, px};
+
+    /// A button's announced name is its label, unless it was given one — which
+    /// is the case an icon-only button and a row-shaped button both need.
+    #[test]
+    fn an_explicit_accessibility_label_replaces_the_visible_one() {
+        let plain = Button::new("save").label("Save");
+        assert_eq!(plain.accessibility_label, None);
+        assert_eq!(plain.label.as_deref(), Some("Save"));
+
+        let named = Button::new("row")
+            .label("Save")
+            .accessibility_label("Save the current document");
+        assert_eq!(
+            named.accessibility_label.as_deref(),
+            Some("Save the current document"),
+            "an explicit name must win over the visible label"
+        );
+        assert_eq!(
+            named.label.as_deref(),
+            Some("Save"),
+            "and must not change what is drawn"
+        );
+    }
 
     #[gpui::test]
     fn disabled_legacy_button_keeps_existing_pointer_blocking(cx: &mut gpui::TestAppContext) {

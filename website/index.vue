@@ -299,6 +299,28 @@
                             >{{ copy.startBase }} <ArrowRight
                         /></a>
                     </article>
+
+                    <article class="path">
+                        <div class="path__meta">
+                            <Braces />
+                            <span>gpui-shell</span>
+                        </div>
+                        <h3>{{ copy.scriptTitle }}</h3>
+                        <p>{{ copy.scriptDescription }}</p>
+                        <pre><code><span class="c-kw">import</span> { Button, text } <span class="c-kw">from</span> <span class="c-str">"gpui"</span>;
+
+<span class="c-type">Button</span>.<span class="c-fn">new</span>(<span class="c-str">"save"</span>)
+    .<span class="c-fn">on_click</span>((_e, cx) =&gt; <span class="c-kw">this</span>.<span class="c-fn">save</span>(cx))
+    .<span class="c-fn">child</span>(<span class="c-fn">text</span>(<span class="c-str">"Save changes"</span>))</code></pre>
+                        <ul>
+                            <li v-for="item in copy.scriptPoints" :key="item">
+                                <Check />{{ item }}
+                            </li>
+                        </ul>
+                        <a :href="shellHref" class="path__link"
+                            >{{ copy.startShell }} <ArrowRight
+                        /></a>
+                    </article>
                 </div>
             </div>
         </section>
@@ -367,6 +389,7 @@ import {
     ArrowRight,
     ChevronDown,
     Blocks,
+    Braces,
     Check,
     Copy,
     Gauge,
@@ -423,6 +446,7 @@ const componentsHref = computed(() =>
     withBase(`${localePrefix.value}/docs/components`),
 );
 const baseHref = computed(() => withBase("/base/"));
+const shellHref = computed(() => withBase(`${localePrefix.value}/shell/`));
 const docsHref = computed(() => withBase(`${localePrefix.value}/docs/`));
 const searchHref = computed(() =>
     withBase(`${localePrefix.value}/docs/components`),
@@ -506,7 +530,7 @@ const copy = computed(() =>
               copyLabel: "复制安装命令",
               eyebrow: "基于 GPUI，经过 Longbridge 生产验证",
               title: "构建出色的高性能桌面应用。",
-              lead: "一个综合性的 Rust 桌面开发框架，集完整 UI 系统、数据表格、Dock 布局、图表与代码编辑器于一体；从第一天起用于构建 Longbridge Pro。",
+              lead: "一个综合性的 Rust 桌面开发框架，集完整 UI 系统、数据表格、Dock 布局、图表与代码编辑器于一体，并可用 JavaScript 扩展；从第一天起用于构建 Longbridge Pro。",
               componentsAction: "浏览组件",
               baseAction: "探索 gpui-base",
               signalStars: "GitHub stars",
@@ -559,10 +583,10 @@ const copy = computed(() =>
                       apis: ["Theme", "ThemeColor", "ActiveTheme"],
                   },
               ],
-              chooseKicker: "两层架构，一个生态",
+              chooseKicker: "三个层次，一个生态",
               chooseTitle: "决定由谁掌控视觉系统。",
               chooseDescription:
-                  "使用 gpui-component 保持统一风格，或基于 gpui-base 构建并拥有自己的设计系统。",
+                  "使用 gpui-component 保持统一风格，基于 gpui-base 构建自己的设计系统，或用 gpui-shell 让应用可以被 JavaScript 扩展。",
               shipTitle: "保持风格统一",
               shipDescription:
                   "gpui-component 提供完整、成熟且开箱即用的视觉与交互系统。",
@@ -581,6 +605,15 @@ const copy = computed(() =>
                   "视觉表达 100% 自主",
               ],
               startBase: "阅读 gpui-base 文档",
+              scriptTitle: "用 JavaScript 扩展应用",
+              scriptDescription:
+                  "宿主仍然是 Rust，扩展是 JavaScript：脚本能碰到什么由宿主逐项授予，界面则在同一个进程里画出来。",
+              scriptPoints: [
+                  "扩展产品不必 fork，也不必发新版本",
+                  "默认不授予任何系统能力",
+                  "保存文件即 hot-reload，无需重启",
+              ],
+              startShell: "了解 gpui-shell",
               principleKicker: "设计原则",
               principleLead: "行为属于基础层。",
               principleTail: "视觉属于应用。",
@@ -602,7 +635,7 @@ const copy = computed(() =>
               copyLabel: "Copy install command",
               eyebrow: "Built on GPUI. Proven at Longbridge.",
               title: "Build fantastic, high-performance desktop apps.",
-              lead: "A comprehensive Rust desktop framework with a complete UI system, data tables, docking, charts, and a code editor — used to build Longbridge Pro from day one.",
+              lead: "A comprehensive Rust desktop framework with a complete UI system, data tables, docking, charts, and a code editor — extensible in JavaScript, and used to build Longbridge Pro from day one.",
               componentsAction: "Browse components",
               baseAction: "Explore gpui-base",
               signalStars: "stars on GitHub",
@@ -656,10 +689,10 @@ const copy = computed(() =>
                       apis: ["Theme", "ThemeColor", "ActiveTheme"],
                   },
               ],
-              chooseKicker: "Two layers. One ecosystem.",
+              chooseKicker: "Three layers. One ecosystem.",
               chooseTitle: "Choose who owns the visual system.",
               chooseDescription:
-                  "Use gpui-component for a coherent product, or build and own your design system on gpui-base.",
+                  "Use gpui-component for a coherent product, build and own your design system on gpui-base, or open the application to JavaScript extensions with gpui-shell.",
               shipTitle: "Keep the product coherent",
               shipDescription:
                   "gpui-component provides a complete, polished visual and interaction system ready to ship.",
@@ -678,6 +711,15 @@ const copy = computed(() =>
                   "100% visual ownership",
               ],
               startBase: "Read the gpui-base docs",
+              scriptTitle: "Extend it in JavaScript",
+              scriptDescription:
+                  "The host stays Rust and grants what a script may reach, one capability at a time; the script draws real interface in the same process.",
+              scriptPoints: [
+                  "Extend the product without a fork or a release",
+                  "No capability granted by default",
+                  "Hot-reload on save, no restart",
+              ],
+              startShell: "Explore gpui-shell",
               principleKicker: "Principle",
               principleLead: "Behavior belongs to the foundation.",
               principleTail: "Presentation belongs to the application.",
@@ -1522,7 +1564,7 @@ html[lang^="zh"] .section-kicker {
 
 .paths__grid {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 1.25rem;
 }
 
@@ -1759,6 +1801,12 @@ html[lang^="zh"] .section-kicker {
     }
 
     .caps__grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 1180px) {
+    .paths__grid {
         grid-template-columns: repeat(2, 1fr);
     }
 }

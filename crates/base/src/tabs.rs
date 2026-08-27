@@ -4,6 +4,7 @@ use gpui::{
     AnyElement, App, ClickEvent, Div, ElementId, InteractiveElement, Interactivity, IntoElement,
     MouseButton, ParentElement, Refineable as _, RenderOnce, Role, SharedString,
     StatefulInteractiveElement, StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _,
+    relative,
 };
 use smallvec::SmallVec;
 
@@ -15,6 +16,9 @@ type ClickHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 ///
 /// Tabs do not participate in keyboard focus by themselves. A compound tab
 /// list may add keyboard navigation when that behavior is introduced.
+// TODO: Add compound keyboard navigation with roving focus, arrow keys,
+// Home/End, and Enter/Space activation before treating Tabs as a complete
+// desktop tab-list primitive.
 #[derive(IntoElement)]
 pub struct Tab {
     id: ElementId,
@@ -150,6 +154,13 @@ impl RenderOnce for Tab {
         self.base
             .id(self.id)
             .role(Role::Tab)
+            // Match Button's neutral control geometry: a fixed-size tab
+            // centers ordinary content, while callers still own its size,
+            // spacing and visual treatment.
+            .flex()
+            .items_center()
+            .justify_center()
+            .line_height(relative(1.))
             .when_some(self.accessibility_label, |this, label| {
                 this.aria_label(label)
             })
@@ -224,6 +235,7 @@ impl RenderOnce for Tabs {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ElementExt as _;
     use std::{
         cell::Cell,
         rc::Rc,
@@ -272,6 +284,52 @@ mod tests {
         let (cx, clicks) = harness(cx, true);
         cx.simulate_click(point(px(10.), px(10.)), Modifiers::default());
         assert_eq!(clicks.get(), 0);
+    }
+
+    #[gpui::test]
+    fn fixed_height_tab_centers_ordinary_child_geometry(cx: &mut gpui::TestAppContext) {
+        type Captured = Arc<
+            Mutex<(
+                Option<gpui::Bounds<gpui::Pixels>>,
+                Option<gpui::Bounds<gpui::Pixels>>,
+            )>,
+        >;
+
+        struct AlignmentProbe(Captured);
+
+        impl Render for AlignmentProbe {
+            fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+                let root_capture = self.0.clone();
+                let child_capture = self.0.clone();
+                Tab::new("alignment-tab")
+                    .w(px(120.))
+                    .h(px(40.))
+                    .child(
+                        div()
+                            .w(px(48.))
+                            .h(px(12.))
+                            .on_prepaint(move |bounds, _, _| {
+                                child_capture.lock().unwrap().1 = Some(bounds);
+                            }),
+                    )
+                    .on_prepaint(move |bounds, _, _| {
+                        root_capture.lock().unwrap().0 = Some(bounds);
+                    })
+            }
+        }
+
+        let captured = Arc::new(Mutex::new((None, None)));
+        let (_, context) = cx.add_window_view({
+            let captured = captured.clone();
+            move |_, _| AlignmentProbe(captured)
+        });
+        context.update(|window, cx| window.draw(cx).clear(cx));
+
+        let (root, child) = captured.lock().unwrap().clone();
+        assert_eq!(
+            child.expect("child bounds").center(),
+            root.expect("tab bounds").center()
+        );
     }
 
     #[gpui::test]

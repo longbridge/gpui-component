@@ -90,6 +90,7 @@ pub struct HoverCardState {
     open: bool,
     open_delay: Duration,
     close_delay: Duration,
+    on_open_change: Option<OpenChangeHandler>,
     open_task: Option<Task<()>>,
     close_task: Option<Task<()>>,
     epoch: usize,
@@ -103,6 +104,7 @@ impl HoverCardState {
             open: false,
             open_delay,
             close_delay,
+            on_open_change: None,
             open_task: None,
             close_task: None,
             epoch: 0,
@@ -115,35 +117,41 @@ impl HoverCardState {
         self.open
     }
 
-    fn sync(&mut self, open_delay: Duration, close_delay: Duration) {
+    fn sync(
+        &mut self,
+        open_delay: Duration,
+        close_delay: Duration,
+        on_open_change: Option<OpenChangeHandler>,
+    ) {
         self.open_delay = open_delay;
         self.close_delay = close_delay;
+        self.on_open_change = on_open_change;
     }
 
-    fn schedule_open(&mut self, cx: &mut Context<Self>) {
+    fn schedule_open(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.cancel_tasks();
         let epoch = self.next_epoch();
         let delay = self.open_delay;
-        self.open_task = Some(cx.spawn(async move |this, cx| {
+        self.open_task = Some(cx.spawn_in(window, async move |this, cx| {
             cx.background_executor().timer(delay).await;
-            let _ = this.update(cx, |state, cx| {
+            let _ = this.update_in(cx, |state, window, cx| {
                 if state.epoch == epoch {
-                    state.set_open(true, cx);
+                    state.set_open(true, window, cx);
                 }
             });
         }));
     }
 
-    fn schedule_close(&mut self, cx: &mut Context<Self>) {
+    fn schedule_close(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.cancel_tasks();
         let epoch = self.next_epoch();
         let delay = self.close_delay;
-        self.close_task = Some(cx.spawn(async move |this, cx| {
+        self.close_task = Some(cx.spawn_in(window, async move |this, cx| {
             cx.background_executor().timer(delay).await;
-            let _ = this.update(cx, |state, cx| {
+            let _ = this.update_in(cx, |state, window, cx| {
                 if state.epoch == epoch && !state.is_hovering_trigger && !state.is_hovering_content
                 {
-                    state.set_open(false, cx);
+                    state.set_open(false, window, cx);
                 }
             });
         }));
@@ -160,28 +168,36 @@ impl HoverCardState {
         self.epoch
     }
 
-    fn set_open(&mut self, open: bool, cx: &mut Context<Self>) {
-        if self.open != open {
-            self.open = open;
-            cx.notify();
+    fn set_open(&mut self, open: bool, window: &mut Window, cx: &mut Context<Self>) {
+        if self.open == open {
+            return;
+        }
+
+        self.open = open;
+        cx.notify();
+        // The change is announced from here rather than from the element,
+        // because the delay timers outlive the `HoverCard` that carried the
+        // handler: by the time the state flips, that element is long gone.
+        if let Some(on_open_change) = self.on_open_change.clone() {
+            on_open_change(&open, window, cx);
         }
     }
 
-    fn on_trigger_hover(&mut self, hovering: bool, cx: &mut Context<Self>) {
+    fn on_trigger_hover(&mut self, hovering: bool, window: &mut Window, cx: &mut Context<Self>) {
         self.is_hovering_trigger = hovering;
         if hovering {
-            self.schedule_open(cx);
+            self.schedule_open(window, cx);
         } else if !self.is_hovering_content {
-            self.schedule_close(cx);
+            self.schedule_close(window, cx);
         }
     }
 
-    fn on_content_hover(&mut self, hovering: bool, cx: &mut Context<Self>) {
+    fn on_content_hover(&mut self, hovering: bool, window: &mut Window, cx: &mut Context<Self>) {
         self.is_hovering_content = hovering;
         if hovering {
             self.cancel_tasks();
         } else if !self.is_hovering_trigger {
-            self.schedule_close(cx);
+            self.schedule_close(window, cx);
         }
     }
 }
@@ -197,21 +213,17 @@ impl RenderOnce for HoverCard {
         let state = window.use_keyed_state(self.id.clone(), cx, |_, _| {
             HoverCardState::new(self.open_delay, self.close_delay)
         });
-        let was_open = state.read(cx).is_open();
-        state.update(cx, |state, _| state.sync(self.open_delay, self.close_delay));
+        state.update(cx, |state, _| {
+            state.sync(self.open_delay, self.close_delay, self.on_open_change)
+        });
         let open = state.read(cx).is_open();
-        if was_open != open {
-            if let Some(callback) = &self.on_open_change {
-                callback(&open, window, cx);
-            }
-        }
 
         let trigger = self.trigger.unwrap_or_else(|| div().into_any_element());
         let popup = Popup::new(
             self.id,
             div().id("trigger").child(trigger).on_hover(
-                window.listener_for(&state, |state, hovered, _, cx| {
-                    state.on_trigger_hover(*hovered, cx)
+                window.listener_for(&state, |state, hovered, window, cx| {
+                    state.on_trigger_hover(*hovered, window, cx)
                 }),
             ),
         )
@@ -222,8 +234,8 @@ impl RenderOnce for HoverCard {
         }
 
         popup.when_some(self.content, |popup, content| {
-            let hover = window.listener_for(&state, |state, hovered, _, cx| {
-                state.on_content_hover(*hovered, cx)
+            let hover = window.listener_for(&state, |state, hovered, window, cx| {
+                state.on_content_hover(*hovered, window, cx)
             });
             popup.content(state.update(cx, |state, cx| content(state, window, cx).on_hover(hover)))
         })
@@ -232,18 +244,25 @@ impl RenderOnce for HoverCard {
 
 #[cfg(test)]
 mod tests {
+    use std::cell::RefCell;
+
     use gpui::{Context, Render, Styled as _, TestAppContext, point, px};
 
     use super::*;
 
-    struct Harness;
+    #[derive(Default)]
+    struct Harness {
+        open_changes: Rc<RefCell<Vec<bool>>>,
+    }
 
     impl Render for Harness {
         fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
             let delay = Duration::from_millis(100);
+            let open_changes = self.open_changes.clone();
             HoverCard::new("hover-card")
                 .open_delay(delay)
                 .close_delay(delay)
+                .on_open_change(move |open, _, _| open_changes.borrow_mut().push(*open))
                 .trigger(
                     div()
                         .debug_selector(|| "hover-card-trigger".into())
@@ -261,7 +280,7 @@ mod tests {
     #[gpui::test]
     fn public_hover_card_owns_delayed_open_and_close(cx: &mut TestAppContext) {
         let delay = Duration::from_millis(100);
-        let (_, cx) = cx.add_window_view(|_, _| Harness);
+        let (_, cx) = cx.add_window_view(|_, _| Harness::default());
         cx.update(|window, cx| window.draw(cx).clear(cx));
 
         cx.simulate_mouse_move(point(px(10.), px(10.)), None, gpui::Modifiers::default());
@@ -278,5 +297,33 @@ mod tests {
         cx.run_until_parked();
         cx.update(|window, cx| window.draw(cx).clear(cx));
         assert!(cx.debug_bounds("hover-card-content").is_none());
+    }
+
+    #[gpui::test]
+    fn public_hover_card_reports_each_open_change(cx: &mut TestAppContext) {
+        let delay = Duration::from_millis(100);
+        let open_changes = Rc::new(RefCell::new(Vec::new()));
+        let (_, cx) = cx.add_window_view({
+            let open_changes = open_changes.clone();
+            move |_, _| Harness { open_changes }
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        cx.simulate_mouse_move(point(px(10.), px(10.)), None, gpui::Modifiers::default());
+        assert_eq!(*open_changes.borrow(), Vec::<bool>::new());
+
+        cx.executor().advance_clock(delay);
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            window.draw(cx).clear(cx);
+            window.draw(cx).clear(cx);
+        });
+        assert_eq!(*open_changes.borrow(), vec![true]);
+
+        cx.simulate_mouse_move(point(px(100.), px(100.)), None, gpui::Modifiers::default());
+        cx.executor().advance_clock(delay);
+        cx.run_until_parked();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        assert_eq!(*open_changes.borrow(), vec![true, false]);
     }
 }

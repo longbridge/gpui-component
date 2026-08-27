@@ -19,6 +19,7 @@ use crate::{
     text::TextViewMultiClickKind,
     text::node::LinkMark,
     text::selection::word_range_at,
+    text::state::LineSpan,
     text::text_view::{LinkClickHandlerFn, handle_link_click},
 };
 
@@ -389,6 +390,23 @@ impl Element for Inline {
     ) -> Self::PrepaintState {
         self.styled_text
             .prepaint(id, inspector_id, bounds, &mut (), window, cx);
+
+        // Report this element's laid-out extent so an ancestor TextView with
+        // `max_lines` can snap its clip to a whole-line boundary. The state
+        // stack only holds an entry during prepaint when that view set
+        // `max_lines`, so this is a no-op otherwise.
+        if let Some(text_view_state) = UiGlobalState::global(cx).text_view_state().cloned() {
+            let state = text_view_state.read(cx);
+            if state.max_lines.is_some()
+                && let Ok(mut line_spans) = state.line_spans.lock()
+            {
+                line_spans.push(LineSpan {
+                    top: bounds.top(),
+                    bottom: bounds.bottom(),
+                    line_height: window.line_height(),
+                });
+            }
+        }
 
         let hitbox = window.insert_hitbox(bounds, HitboxBehavior::Normal);
         hitbox

@@ -261,8 +261,8 @@ mod tests {
                 base.tokens.colors.surface_foreground,
                 theme.popover_foreground
             );
-            assert_eq!(base.resizable.handle, theme.border);
-            assert_eq!(base.resizable.active_handle, theme.drag_border);
+            assert_eq!(base.resizable.handle, Some(theme.border));
+            assert_eq!(base.resizable.active_handle, Some(theme.drag_border));
             assert_eq!(base.tokens.colors.ring, theme.ring);
         });
     }

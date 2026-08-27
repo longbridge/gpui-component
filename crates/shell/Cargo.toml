@@ -1,0 +1,86 @@
+[package]
+name = "gpui-shell"
+description = "A scriptable application runtime for GPUI, built on gpui-base."
+version = "0.1.0"
+keywords = ["desktop", "gpui", "javascript", "runtime"]
+license = "Apache-2.0"
+publish = false
+edition.workspace = true
+repository = "https://github.com/longbridge/gpui-component"
+homepage = "https://longbridge.github.io/gpui-component"
+
+[lib]
+name = "gpui_shell"
+path = "src/lib.rs"
+
+[[bin]]
+name = "gpui-shell"
+path = "src/bin/gpui-shell.rs"
+
+[features]
+default = ["quickjs"]
+# The scripting engine. See `src/engine/mod.rs` for the surface an engine has
+# to provide; QuickJS is the only implementation today, and the feature exists
+# so a second one can be added without the seam having to be invented first.
+quickjs = [
+    "dep:rquickjs",
+    "dep:llrt_buffer",
+    "dep:llrt_crypto",
+    "dep:llrt_path",
+    "dep:llrt_url",
+    "dep:llrt_zlib",
+    "dep:reqwest",
+    "dep:tungstenite",
+]
+
+[dependencies]
+gpui.workspace = true
+gpui_platform.workspace = true
+gpui-base = { workspace = true, features = ["inspector"] }
+gpui-fps.workspace = true
+
+rquickjs = { version = "0.12", features = [
+    "macro",
+    "loader",
+    "classes",
+    "properties",
+], optional = true }
+# LLRT is still pre-release. Keep every module on the same audited revision;
+# crates.io's 0.8.1-beta release uses rquickjs 0.11 and cannot share our VM.
+llrt_buffer = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb2778eca4b5a63111e74f51", optional = true }
+llrt_crypto = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb2778eca4b5a63111e74f51", default-features = false, features = ["crypto-rust"], optional = true }
+llrt_path = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb2778eca4b5a63111e74f51", optional = true }
+llrt_url = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb2778eca4b5a63111e74f51", optional = true }
+llrt_zlib = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb2778eca4b5a63111e74f51", default-features = false, features = ["compression-rust"], optional = true }
+cap-std = "4.0.3"
+async-channel = "2.5"
+reqwest = { workspace = true, features = ["blocking"], optional = true }
+tungstenite = { version = "0.29", features = ["rustls-tls-webpki-roots", "url"], optional = true }
+
+anyhow.workspace = true
+instant.workspace = true
+schemars.workspace = true
+semver.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+smallvec.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+gpui = { workspace = true, features = ["test-support"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { workspace = true, features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Diagnostics_ToolHelp",
+    "Win32_System_JobObjects",
+    "Win32_System_Threading",
+] }
+
+[lints]
+workspace = true
