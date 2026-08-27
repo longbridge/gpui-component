@@ -137,7 +137,7 @@ An `await` returns control to the host, the call frame goes away, and the borrow
 A view's own fields hold plain data. Anything with cross-frame machinery of its own — a text field's content, cursor position and undo history — lives in a GPUI entity, and the script holds a **handle** to it.
 
 ```js
-import { InputState, Input } from "gpui";
+import { InputState, Input } from "gpui-base";
 
 init() {
   this.draft = InputState.new({ placeholder: "What needs doing?" });

@@ -13,7 +13,8 @@ use tungstenite::Message;
 use crate::{Capabilities, ScriptView, ShellRuntime};
 
 const FETCH_PROBE: &str = r#"
-import { View, v_flex, text, spawn, with_cx } from "gpui";
+import { View, text, spawn, with_cx } from "gpui";
+import { v_flex } from "gpui-base";
 
 export default class Probe extends View {
   init() {
@@ -33,7 +34,8 @@ export default class Probe extends View {
 "#;
 
 const NET_PROBE: &str = r#"
-import { View, v_flex, text, spawn, with_cx } from "gpui";
+import { View, text, spawn, with_cx } from "gpui";
+import { v_flex } from "gpui-base";
 import { connect } from "net";
 
 export default class Probe extends View {
@@ -58,7 +60,8 @@ export default class Probe extends View {
 "#;
 
 const NET_LIMIT_PROBE: &str = r#"
-import { View, v_flex, text, spawn, with_cx } from "gpui";
+import { View, text, spawn, with_cx } from "gpui";
+import { v_flex } from "gpui-base";
 import { connect } from "net";
 
 export default class Probe extends View {
@@ -81,7 +84,8 @@ export default class Probe extends View {
 "#;
 
 const NET_PENDING_READ_CLOSE_PROBE: &str = r#"
-import { View, v_flex, text, spawn, sleep, with_cx } from "gpui";
+import { View, text, spawn, sleep, with_cx } from "gpui";
+import { v_flex } from "gpui-base";
 import { connect } from "net";
 
 export default class Probe extends View {
@@ -102,7 +106,8 @@ export default class Probe extends View {
 "#;
 
 const WEBSOCKET_PROBE: &str = r#"
-import { View, v_flex, text, spawn, with_cx } from "gpui";
+import { View, text, spawn, with_cx } from "gpui";
+import { v_flex } from "gpui-base";
 import { WebSocket } from "websocket";
 
 export default class Probe extends View {
@@ -124,7 +129,8 @@ export default class Probe extends View {
 "#;
 
 const WEBSOCKET_HANDSHAKE_PROBE: &str = r#"
-import { View, v_flex, text, spawn, with_cx } from "gpui";
+import { View, text, spawn, with_cx } from "gpui";
+import { v_flex } from "gpui-base";
 import { WebSocket } from "websocket";
 
 export default class Probe extends View {
@@ -145,7 +151,8 @@ export default class Probe extends View {
 "#;
 
 const WEBSOCKET_HEADERS_PROBE: &str = r#"
-import { View, v_flex, text, spawn, with_cx } from "gpui";
+import { View, text, spawn, with_cx } from "gpui";
+import { v_flex } from "gpui-base";
 import { WebSocket } from "websocket";
 
 export default class Probe extends View {
@@ -166,7 +173,8 @@ export default class Probe extends View {
 "#;
 
 const WEBSOCKET_MESSAGES_PROBE: &str = r#"
-import { View, v_flex, text, spawn, with_cx } from "gpui";
+import { View, text, spawn, with_cx } from "gpui";
+import { v_flex } from "gpui-base";
 import { WebSocket } from "websocket";
 
 export default class Probe extends View {
@@ -191,7 +199,8 @@ export default class Probe extends View {
 "#;
 
 const WEBSOCKET_PENDING_READ_PROBE: &str = r#"
-import { View, v_flex, text, spawn, with_cx } from "gpui";
+import { View, text, spawn, with_cx } from "gpui";
+import { v_flex } from "gpui-base";
 import { WebSocket } from "websocket";
 
 export default class Probe extends View {
@@ -216,7 +225,8 @@ export default class Probe extends View {
 "#;
 
 const WEBSOCKET_IDLE_PROBE: &str = r#"
-import { View, v_flex, text, spawn, with_cx } from "gpui";
+import { View, text, spawn, with_cx } from "gpui";
+import { v_flex } from "gpui-base";
 import { WebSocket } from "websocket";
 
 export default class Probe extends View {
@@ -233,7 +243,8 @@ export default class Probe extends View {
 "#;
 
 const WEBSOCKET_CLOSED_WRITE_PROBE: &str = r#"
-import { View, v_flex, text, spawn, with_cx } from "gpui";
+import { View, text, spawn, with_cx } from "gpui";
+import { v_flex } from "gpui-base";
 import { WebSocket } from "websocket";
 
 export default class Probe extends View {
@@ -256,7 +267,8 @@ export default class Probe extends View {
 "#;
 
 const WEBSOCKET_CONCURRENT_READ_PROBE: &str = r#"
-import { View, v_flex, text, spawn, with_cx } from "gpui";
+import { View, text, spawn, with_cx } from "gpui";
+import { v_flex } from "gpui-base";
 import { WebSocket } from "websocket";
 
 export default class Probe extends View {
@@ -281,7 +293,8 @@ export default class Probe extends View {
 "#;
 
 const WEBSOCKET_STALLED_WRITE_PROBE: &str = r#"
-import { View, v_flex, text, spawn, with_cx } from "gpui";
+import { View, text, spawn, with_cx } from "gpui";
+import { v_flex } from "gpui-base";
 import { WebSocket } from "websocket";
 
 export default class Probe extends View {
@@ -306,7 +319,8 @@ export default class Probe extends View {
 "#;
 
 const WEBSOCKET_QUEUE_LIMIT_PROBE: &str = r#"
-import { View, v_flex, text, spawn, with_cx } from "gpui";
+import { View, text, spawn, with_cx } from "gpui";
+import { v_flex } from "gpui-base";
 import { WebSocket } from "websocket";
 
 export default class Probe extends View {

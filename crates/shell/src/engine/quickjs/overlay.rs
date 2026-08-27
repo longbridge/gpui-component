@@ -47,7 +47,8 @@
 //! `window` is a global, like `cx`. There is nothing to import.
 //!
 //! ```js
-//! import { v_flex, text } from "gpui";
+//! import { text } from "gpui";
+//! import { v_flex } from "gpui-base";
 //!
 //! const depth = window.open_dialog(() => v_flex().child(text("Delete?")), {
 //!   escape_dismissable: false,

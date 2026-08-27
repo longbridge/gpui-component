@@ -9,8 +9,10 @@
 // Spacing follows the semantic scale (2/4/8/12/16/24/32) and type stays on
 // 12/13/16/20.
 
-import { div, h_flex, v_flex, text, svg, Button, Checkbox, Input } from "gpui";
-/** @import { ClickEvent, Color, Context, Element, InputStateHandle } from "gpui" */
+import { div, text, svg } from "gpui";
+import { h_flex, v_flex, Button, Checkbox, Input } from "gpui-base";
+/** @import { ClickEvent, Color, Context, Element } from "gpui" */
+/** @import { InputStateHandle } from "gpui-base" */
 
 export const SPACE = { xxs: 2, xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 };
 

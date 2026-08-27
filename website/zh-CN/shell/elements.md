@@ -10,28 +10,39 @@ order: 4
 
 ## 构造器
 
-一次 import 就是整个命名空间：
+每个模块只装它自己那个包提供的东西：
 
 ```js
-import { div, h_flex, v_flex, text, svg, image, fps_monitor, Button, Link, Checkbox, Switch, Input, InputState, FocusHandle } from "gpui";
+import { div, text, svg, image, FocusHandle } from "gpui";
+import {
+  h_flex,
+  v_flex,
+  Button,
+  Link,
+  Checkbox,
+  Switch,
+  Input,
+  InputState,
+} from "gpui-base";
+import { fps_monitor } from "gpui-fps";
 ```
 
 函数是小写的，组件类型首字母大写并通过 `.new` 构造。这与 Rust 侧一一对应：那边 `div()` 同样是自由函数，`Button::new(id)` 同样是类型上的关联函数。
 
-| 构造器 | 产出 |
-| --- | --- |
-| `div()` | 自身不带布局的元素 |
-| `h_flex()` | 一行 |
-| `v_flex()` | 一列 |
-| `text(value)` | 文本元素，参数会被转成字符串 |
-| `svg(path)` | 来自应用自身目录、跟随主题着色的矢量图标 |
-| `image(path)` | 来自应用自身目录的全彩图片 |
-| `fps_monitor()` | 原生 `gpui-fps` 性能 HUD，每个窗口共享一个 monitor |
-| `Button.new(id)` | base 的 `Button`：激活、焦点、disabled 与 selected 状态，无样式 |
-| `Link.new(id)` | 可聚焦的外部 HTTP(S) 链接；用 `.href(url)` 设置目标 |
-| `Checkbox.new(id)` | base 的受控 checkbox，无样式也无勾选标记 |
-| `Switch.new(id)` | base 的受控 switch，无样式 |
-| `Input.new(state)` | 由 [`InputState`](./state.md#留存状态) 支撑的文本框 |
+| 构造器 | 来自 | 产出 |
+| --- | --- | --- |
+| `div()` | `gpui` | 自身不带布局的元素 |
+| `text(value)` | `gpui` | 文本元素，参数会被转成字符串 |
+| `svg(path)` | `gpui` | 来自应用自身目录、跟随主题着色的矢量图标 |
+| `image(path)` | `gpui` | 来自应用自身目录的全彩图片 |
+| `h_flex()` | `gpui-base` | 一行 |
+| `v_flex()` | `gpui-base` | 一列 |
+| `Button.new(id)` | `gpui-base` | base 的 `Button`：激活、焦点、disabled 与 selected 状态，无样式 |
+| `Link.new(id)` | `gpui-base` | 可聚焦的外部 HTTP(S) 链接；用 `.href(url)` 设置目标 |
+| `Checkbox.new(id)` | `gpui-base` | base 的受控 checkbox，无样式也无勾选标记 |
+| `Switch.new(id)` | `gpui-base` | base 的受控 switch，无样式 |
+| `Input.new(state)` | `gpui-base` | 由 [`InputState`](./state.md#留存状态) 支撑的文本框 |
+| `fps_monitor()` | `gpui-fps` | 原生 `gpui-fps` 性能 HUD，每个窗口共享一个 monitor |
 
 ### 性能监视器
 

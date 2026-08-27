@@ -21,7 +21,8 @@ use crate::{
 use gpui::{AppContext as _, Entity, IntoElement as _, TestAppContext, VisualTestContext};
 
 const TOGGLE: &str = r#"
-import { View, v_flex, text, Checkbox } from "gpui";
+import { View, text } from "gpui";
+import { v_flex, Checkbox } from "gpui-base";
 
 export default class Toggle extends View {
   init() {
@@ -116,7 +117,8 @@ export default class TinyDash extends View {
 /// A script whose `render` throws every other call, so a failed build can be
 /// observed next to a successful one.
 const FLAKY: &str = r#"
-import { View, v_flex, text } from "gpui";
+import { View, text } from "gpui";
+import { v_flex } from "gpui-base";
 
 export default class Flaky extends View {
   init() {
@@ -133,7 +135,8 @@ export default class Flaky extends View {
 "#;
 
 const ASYNC_FAILURE: &str = r#"
-import { View, v_flex, text, with_cx } from "gpui";
+import { View, text, with_cx } from "gpui";
+import { v_flex } from "gpui-base";
 
 export default class AsyncFailure extends View {
   render() {
@@ -151,7 +154,8 @@ export default class AlwaysFails extends View {
 "#;
 
 const INPUT_SUBSCRIPTION: &str = r#"
-import { View, v_flex, text, InputState } from "gpui";
+import { View, text } from "gpui";
+import { v_flex, InputState } from "gpui-base";
 
 export default class InputSubscription extends View {
   init() {
@@ -194,7 +198,8 @@ fn repeated_gpui_renders_do_not_re_enter_the_script(cx: &mut TestAppContext) {
 #[gpui::test]
 fn a_changed_motion_target_requests_native_frames_without_reentering_js(cx: &mut TestAppContext) {
     let source = r#"
-import { View, div, Checkbox } from "gpui";
+import { View, div } from "gpui";
+import { Checkbox } from "gpui-base";
 
 export default class Panel extends View {
   init() { this.expanded = false; }
@@ -246,7 +251,8 @@ export default class Panel extends View {
 #[gpui::test]
 fn a_changed_spring_target_requests_native_frames_without_reentering_js(cx: &mut TestAppContext) {
     let source = r#"
-import { View, div, Checkbox } from "gpui";
+import { View, div } from "gpui";
+import { Checkbox } from "gpui-base";
 
 export default class Indicator extends View {
   init() { this.selected = false; }

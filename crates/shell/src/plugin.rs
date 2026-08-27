@@ -1634,7 +1634,8 @@ mod tests {
         std::fs::write(
             root.join("main.js"),
             r#"
-                import { View, v_flex, text, spawn, with_cx } from "gpui";
+                import { View, text, spawn, with_cx } from "gpui";
+                import { v_flex } from "gpui-base";
                 import * as fs from "fs/promises";
                 export default class Panel extends View {
                   init() {
@@ -1716,7 +1717,8 @@ mod tests {
         std::fs::write(
             root.join("main.js"),
             r#"
-                import { View, Input, InputState } from "gpui";
+                import { View } from "gpui";
+                import { Input, InputState } from "gpui-base";
                 export default class Panel extends View {
                   init() {
                     this.field = InputState.new({ value: "owned by plugin" });
@@ -1764,7 +1766,8 @@ mod tests {
         std::fs::write(
             root.join("main.js"),
             r#"
-                import { View, Input, InputState, timer } from "gpui";
+                import { View, timer } from "gpui";
+                import { Input, InputState } from "gpui-base";
                 export default class Panel extends View {
                   init() {
                     this.field = InputState.new({ value: "owned by plugin" });

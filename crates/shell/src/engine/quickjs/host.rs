@@ -1182,16 +1182,21 @@ mod tests {
 
     #[test]
     fn every_installed_host_member_is_also_a_named_export() {
-        // `install` puts these on the module object; `MODULE_EXPORTS` is what
-        // makes `import { open_url } from "gpui"` resolve. The two are separate
-        // lists, and a member added to one and not the other is a binding that
-        // works through `gpui.x` and fails at the import — which is how
-        // `open_url` first shipped: the call site was there, the import was
-        // not, and the only symptom was a browser that never opened.
+        // `install` puts these on the module object; the built-in export lists
+        // are what makes `import { open_url } from "gpui"` resolve. The two are
+        // separate lists, and a member added to one and not the other is a
+        // binding that works through `gpui.x` and fails at the import — which
+        // is how `open_url` first shipped: the call site was there, the import
+        // was not, and the only symptom was a browser that never opened.
+        //
+        // These are the host's own capabilities, so `"gpui"` is the module that
+        // has to name them: exporting one from a layer above would say this
+        // runtime got it from somewhere it did not.
         for name in ["store", "clipboard", "log", "open_url"] {
-            assert!(
-                super::super::MODULE_EXPORTS.contains(&name),
-                "`{name}` is installed on the gpui module but is not a named export"
+            assert_eq!(
+                super::super::module_exporting(name),
+                Some("gpui"),
+                "`{name}` is installed on the gpui module but is not one of its named exports"
             );
         }
     }

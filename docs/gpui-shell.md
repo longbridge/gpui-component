@@ -212,7 +212,7 @@ Seven things are deliberately absent, and will stay absent:
 
 ```text
      JS application            main.js · views · styles · business logic
-              │  import ... from "gpui"
+              │  import ... from "gpui" · "gpui-base" · "gpui-fps"
               ▼
      crates/shell ── gpui-shell
      ┌──────────────────────────────────────────────┐
@@ -264,6 +264,15 @@ application: it implements the dock renderer traits itself, supplies its own
 WebAssembly. `examples/js_todolist` is that same posture with the composition
 and styling written in JavaScript instead of Rust, and `ui.js` deliberately
 follows the showcase's visual language.
+
+**The layering is visible in the script's import lines.** Each crate that
+provides script API gets a module named after it: `"gpui"` for GPUI's own
+elements and what this runtime adds, `"gpui-base"` for base's layout helpers,
+components and theme, `"gpui-fps"` for its overlay. A name belongs to exactly one
+of them, which makes the boundary argued for above checkable rather than merely
+intended — a script that reaches for a component says so at the top of the file,
+and the day `gpui-component` becomes bindable it arrives as `"gpui-component"`
+without a single existing name changing meaning.
 
 ### 4.3 What base-first makes the shell carry
 
@@ -469,7 +478,8 @@ the same application activity must produce the same number of script renders.
 One import, one module. Components are type tables with a single `.new`:
 
 ```js
-import { View, v_flex, text, Button } from "gpui";
+import { View, text } from "gpui";
+import { v_flex, Button } from "gpui-base";
 
 export default class Counter extends View {
   init(props = {}) {
@@ -492,9 +502,14 @@ export default class Counter extends View {
 }
 ```
 
-`"gpui"` is the UI module name. The Standard Runtime also provides the selected
-bare modules listed in §1.1; every other `import` resolves inside the
-application directory (§19.1). The entry point is `main.js`, and it must
+The built-in modules are named after the crate that provides the capability:
+`"gpui"` for GPUI's own elements and what the runtime adds, `"gpui-base"` for
+gpui-base's layout helpers, components and theme, and `"gpui-fps"` for its
+performance overlay. A name belongs to exactly one of them, so an import says
+which layer a script depends on, and a layer added later — `gpui-component` —
+arrives as its own module rather than as more names on `"gpui"`. The Standard
+Runtime also provides the selected bare modules listed in §1.1; every other
+`import` resolves inside the application directory (§19.1). The entry point is `main.js`, and it must
 `export default` a class extending `View`. The host takes that class, constructs
 one instance, and mounts it as the window's root view.
 
@@ -1833,6 +1848,14 @@ table, it is generated, and nothing about it is written by hand.
 output is deterministic — no timestamps, no reflection order — so regenerating
 after a runtime upgrade produces a reviewable diff.
 
+One file, one ambient module per crate that provides the capability: `"gpui"`,
+`"gpui-base"`, `"gpui-fps"`. A name belongs to exactly one of them. The
+dependency runs upward only — `"gpui-base"` imports the element and
+component-factory types it is built out of from `"gpui"`, and `"gpui"` refers
+down only where one shared element prototype forces it: `track_scroll`, `mode`,
+`axis` and `cx.theme()` name their argument types with an inline
+`import("gpui-base").X`.
+
 What makes the declarations trustworthy is that they are generated from **the
 tables the runtime dispatches through**, not transcribed from documentation:
 
@@ -1891,7 +1914,8 @@ The natural second step is a `gpui-component` binding as a _second registry_
 sharing the same render protocol, call scope, event model, and arena:
 
 ```js
-import { v_flex, text } from "gpui"; // base: the script owns presentation
+import { text } from "gpui";
+import { v_flex } from "gpui-base"; // base: the script owns presentation
 import { Button } from "gpui-component"; // product visuals, ready-made
 ```
 
@@ -2617,7 +2641,7 @@ prototypes.
 | -------------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Never added**      | quickjs-libc's `std` and `os`                                                    | These provide `open`, `exec`, `getenv`, and `popen`; registering either is full access. `rquickjs` does not inject them and the shell never registers them. This is "never added" rather than "removed", which is an order of magnitude more reliable — and `rquickjs-sys` does not compile that file at all, so a test asserts their absence as a guard on the build |
 | **Withheld**         | `eval` and every function constructor                                            | `globalThis.eval` is deleted outright; the `Function`, `AsyncFunction`, `GeneratorFunction`, and `AsyncGeneratorFunction` constructors are replaced with throwing stubs                                                                                                                                                                                               |
-| **Replaced**         | The module resolver (static and dynamic `import` alike)                          | Resolves `gpui`, the listed Standard Runtime bare modules, and paths inside the application root. `node:` names and unknown packages are refused before reaching the filesystem. Dynamic `import()` stays callable — it is how §18 does lazy loading                                                                                                                    |
+| **Replaced**         | The module resolver (static and dynamic `import` alike)                          | Resolves `gpui`, `gpui-base`, `gpui-fps`, the listed Standard Runtime bare modules, and paths inside the application root. `node:` names and unknown packages are refused before reaching the filesystem. Dynamic `import()` stays callable — it is how §18 does lazy loading                                                                                                                    |
 | **Frozen**           | `Object`, `Array`, `Function`, `String`, and `Number` prototypes                 | One VM hosts several plugins, so the built-ins are shared mutable state                                                                                                                                                                                                                                                                                               |
 | **Capability-gated** | `fs/promises`, `process.run`, `process.exit`, `fetch`, `net.connect`, `websocket.WebSocket.connect` | §17; each async operation captures the caller's policy before leaving the VM                                                                                                                                                                                                                                                                                          |
 | **Throwing stub**    | `setTimeout`, `setInterval`, `clearTimeout`, `clearInterval`, `require`          | Present, and throwing a message that names the replacement                                                                                                                                                                                                                                                                                                            |
@@ -3417,7 +3441,8 @@ dialog body — and a test loads and renders it, because if it stops rendering t
 quickstart is wrong.
 
 ```js
-import { View, h_flex, v_flex, text, InputState } from "gpui";
+import { View, text } from "gpui";
+import { h_flex, v_flex, InputState } from "gpui-base";
 import { store, log } from "gpui";
 
 export default class TodoList extends View {

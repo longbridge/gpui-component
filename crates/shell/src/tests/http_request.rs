@@ -10,7 +10,8 @@ use gpui::{Entity, IntoElement as _, TestAppContext, VisualTestContext};
 use crate::{Capabilities, ScriptView, ShellRuntime};
 
 const POST_PROBE: &str = r#"
-import { View, v_flex, text, spawn, with_cx } from "gpui";
+import { View, text, spawn, with_cx } from "gpui";
+import { v_flex } from "gpui-base";
 
 export default class Probe extends View {
   init() {
@@ -39,7 +40,8 @@ export default class Probe extends View {
 "#;
 
 const JSON_PROBE: &str = r#"
-import { View, v_flex, text, spawn, with_cx } from "gpui";
+import { View, text, spawn, with_cx } from "gpui";
+import { v_flex } from "gpui-base";
 
 export default class Probe extends View {
   init() {

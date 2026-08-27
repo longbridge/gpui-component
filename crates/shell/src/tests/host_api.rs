@@ -11,7 +11,8 @@ use gpui::{Entity, IntoElement as _, TestAppContext, VisualTestContext};
 use crate::{Capabilities, NativeModules, NativeValue, ScriptView, ShellRuntime};
 
 const CLIPBOARD_PROBE: &str = r#"
-import { View, v_flex, text, clipboard } from "gpui";
+import { View, text, clipboard } from "gpui";
+import { v_flex } from "gpui-base";
 
 export default class Probe extends View {
   init() {
@@ -23,7 +24,8 @@ export default class Probe extends View {
 "#;
 
 const CANCELLED_TIMER_PROBE: &str = r#"
-import { View, v_flex, text, timer } from "gpui";
+import { View, text, timer } from "gpui";
+import { v_flex } from "gpui-base";
 
 export default class Probe extends View {
   init() {
@@ -38,7 +40,8 @@ export default class Probe extends View {
 "#;
 
 const NATIVE_PROBE: &str = r#"
-import { View, v_flex, text, native } from "gpui";
+import { View, text, native } from "gpui";
+import { v_flex } from "gpui-base";
 
 const calculator = native("calculator");
 export default class Probe extends View {

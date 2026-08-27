@@ -213,87 +213,172 @@ pub(super) struct InputCallbackOwner {
 mod standard;
 mod theme_api;
 
-/// Names exported by the built-in `gpui` module.
+/// The names each built-in module exports.
 ///
-/// Anything installed onto `globalThis.__gpui` must be listed here or
-/// `import { … } from "gpui"` will not see it.
-const MODULE_EXPORTS: &[&str] = &[
-    // Elements and views.
-    "View",
-    "ViewHandle",
-    "child_view",
-    "div",
-    "h_flex",
-    "v_flex",
-    "text",
-    "svg",
-    "image",
-    "PathBuilder",
-    "Background",
-    "paint_path",
-    "Button",
-    "Link",
-    "Checkbox",
-    "Switch",
-    "Tabs",
-    "Tab",
-    "Progress",
-    "ProgressTrack",
-    "ProgressIndicator",
-    "fps_monitor",
-    "Radio",
-    "Toggle",
-    "RadioGroup",
-    "ToggleGroup",
-    "Table",
-    "TableHeader",
-    "TableBody",
-    "TableRow",
-    "TableHead",
-    "TableCell",
-    "TableCaption",
-    "h_resizable",
-    "v_resizable",
-    "resizable_panel",
-    "Collapsible",
-    "Popover",
-    "HoverCard",
-    "Popup",
-    "Select",
-    "Combobox",
-    "DatePicker",
-    "Scrollbar",
-    "v_virtual_list",
-    "h_virtual_list",
-    "VirtualListScrollHandle",
-    "Input",
-    "InputState",
-    "NumberInput",
-    "Textarea",
-    "TextareaState",
-    "SliderState",
-    "Slider",
-    "SliderTrack",
-    "SliderIndicator",
-    "SliderThumb",
-    "OtpState",
-    "OtpInput",
-    "FocusHandle",
-    // System capabilities (`host`, `sandbox`).
-    "store",
-    "clipboard",
-    "log",
-    "open_url",
-    // Native modules (`native`).
-    "native",
-    // Theme (`theme_api`).
-    "theme",
-    "set_theme",
-    // Scheduling (`scheduler`).
-    "spawn",
-    "timer",
-    "sleep",
-    "with_cx",
+/// One module per crate that provides the capability, so an import says which
+/// layer a script depends on: `gpui-base`'s components come from `"gpui-base"`,
+/// `gpui-fps`'s overlay from `"gpui-fps"`, and `"gpui"` carries only what GPUI
+/// itself and this runtime provide. A name belongs to exactly one of them —
+/// nothing is re-exported for convenience, because a name reachable from two
+/// specifiers stops saying anything about where it came from, and the next
+/// layer to arrive would have to be told apart from the ones already here.
+///
+/// Anything installed onto `globalThis.__gpui` must be listed in one of these
+/// or no `import { … }` will see it.
+pub(crate) mod exports {
+    /// GPUI's own elements and this runtime's script surface.
+    pub(crate) const GPUI: &[&str] = &[
+        // Views (`ScriptView`).
+        "View",
+        "ViewHandle",
+        "child_view",
+        // Elements GPUI itself draws.
+        "div",
+        "text",
+        "svg",
+        "image",
+        "PathBuilder",
+        "Background",
+        "paint_path",
+        "FocusHandle",
+        // System capabilities (`host`, `sandbox`).
+        "store",
+        "clipboard",
+        "log",
+        "open_url",
+        // Native modules (`native`).
+        "native",
+        // Scheduling (`scheduler`).
+        "spawn",
+        "timer",
+        "sleep",
+        "with_cx",
+    ];
+
+    /// Components, layout helpers and the theme, all owned by `gpui-base`.
+    pub(crate) const GPUI_BASE: &[&str] = &[
+        // Layout.
+        "h_flex",
+        "v_flex",
+        // Controls.
+        "Button",
+        "Link",
+        "Checkbox",
+        "Switch",
+        "Tabs",
+        "Tab",
+        "Progress",
+        "ProgressTrack",
+        "ProgressIndicator",
+        "Radio",
+        "Toggle",
+        "RadioGroup",
+        "ToggleGroup",
+        "Table",
+        "TableHeader",
+        "TableBody",
+        "TableRow",
+        "TableHead",
+        "TableCell",
+        "TableCaption",
+        "h_resizable",
+        "v_resizable",
+        "resizable_panel",
+        "Collapsible",
+        "Popover",
+        "HoverCard",
+        "Popup",
+        "Select",
+        "Combobox",
+        "DatePicker",
+        "Scrollbar",
+        "v_virtual_list",
+        "h_virtual_list",
+        "VirtualListScrollHandle",
+        // Text editing.
+        "Input",
+        "InputState",
+        "NumberInput",
+        "Textarea",
+        "TextareaState",
+        "SliderState",
+        "Slider",
+        "SliderTrack",
+        "SliderIndicator",
+        "SliderThumb",
+        "OtpState",
+        "OtpInput",
+        // Theme (`theme_api`).
+        "theme",
+        "set_theme",
+    ];
+
+    /// The performance overlay, owned by `gpui-fps`.
+    pub(crate) const GPUI_FPS: &[&str] = &["fps_monitor"];
+}
+
+/// Defines one `ModuleDef` per built-in module and the loader wiring for all of
+/// them, so adding a layer — `gpui-component`, when its components arrive — is
+/// a list and a line rather than another copy of the same three impls.
+///
+/// Every module re-exports values that were built at startup and stashed on
+/// `globalThis.__gpui`; the split is in what each one names, not in where the
+/// values live.
+macro_rules! builtin_modules {
+    ($(($module:ident, $specifier:literal, $names:expr)),+ $(,)?) => {
+        $(
+            struct $module;
+
+            impl $module {
+                const SPECIFIER: &'static str = $specifier;
+                const NAMES: &'static [&'static str] = $names;
+            }
+
+            impl ModuleDef for $module {
+                fn declare(declarations: &Declarations) -> JsResult<()> {
+                    for name in Self::NAMES {
+                        declarations.declare(*name)?;
+                    }
+                    Ok(())
+                }
+
+                fn evaluate<'js>(ctx: &Ctx<'js>, exports: &Exports<'js>) -> JsResult<()> {
+                    let module: Object = ctx.globals().get("__gpui")?;
+                    for name in Self::NAMES {
+                        let value: Value = module.get(*name)?;
+                        exports.export(*name, value)?;
+                    }
+                    Ok(())
+                }
+            }
+        )+
+
+        /// The specifiers a script may import, and nothing else.
+        fn builtin_resolver() -> BuiltinResolver {
+            BuiltinResolver::default()$(.with_module($module::SPECIFIER))+
+        }
+
+        fn builtin_loader() -> ModuleLoader {
+            ModuleLoader::default()$(.with_module($module::SPECIFIER, $module))+
+        }
+
+        /// Which module exports `name`, if any.
+        #[cfg(test)]
+        fn module_exporting(name: &str) -> Option<&'static str> {
+            $(
+                if $module::NAMES.contains(&name) {
+                    return Some($module::SPECIFIER);
+                }
+            )+
+            None
+        }
+    };
+}
+
+builtin_modules![
+    (GpuiModule, "gpui", exports::GPUI),
+    (GpuiBaseModule, "gpui-base", exports::GPUI_BASE),
+    (GpuiFpsModule, "gpui-fps", exports::GPUI_FPS),
 ];
 
 pub struct ShellRuntime {
@@ -390,14 +475,10 @@ impl ShellRuntime {
         js_runtime.set_loader(
             (
                 standard::resolver(),
-                BuiltinResolver::default().with_module("gpui"),
+                builtin_resolver(),
                 app_modules.clone(),
             ),
-            (
-                standard::loader(),
-                ModuleLoader::default().with_module("gpui", GpuiModule),
-                app_modules.clone(),
-            ),
+            (standard::loader(), builtin_loader(), app_modules.clone()),
         );
 
         // Resource limits belong to the sandbox policy, but only the engine
@@ -587,7 +668,7 @@ impl ShellRuntime {
     /// Loads `main.js` from an application directory.
     ///
     /// Module resolution is scoped to that directory: an application can import
-    /// its own files and the built-in `gpui` module, and nothing else. That is
+    /// its own files and the built-in modules, and nothing else. That is
     /// the first half of the sandbox's module policy (design doc §19.1).
     pub(crate) fn load_app(self: &Rc<Self>, dir: &Path, entry: &str) -> Result<ViewType> {
         let root = crate::runtime::resolve_app_root(dir, entry)?;
@@ -2459,29 +2540,6 @@ fn read_module_source(path: &Path) -> Result<String> {
         );
     }
     Ok(source)
-}
-
-/// The built-in `gpui` module. Its values are built at startup and stashed on
-/// the global object; this only re-exports them under module names so that
-/// `import { div } from "gpui"` works.
-struct GpuiModule;
-
-impl ModuleDef for GpuiModule {
-    fn declare(declarations: &Declarations) -> JsResult<()> {
-        for name in MODULE_EXPORTS {
-            declarations.declare(*name)?;
-        }
-        Ok(())
-    }
-
-    fn evaluate<'js>(ctx: &Ctx<'js>, exports: &Exports<'js>) -> JsResult<()> {
-        let module: Object = ctx.globals().get("__gpui")?;
-        for name in MODULE_EXPORTS {
-            let value: Value = module.get(*name)?;
-            exports.export(*name, value)?;
-        }
-        Ok(())
-    }
 }
 
 /// Installed once per context. It builds the element prototype from the style
@@ -5107,7 +5165,8 @@ export default class Child extends View {
         let view_type = child_type(
             &runtime,
             r#"
-import { View, InputState, timer, text } from "gpui";
+import { View, timer, text } from "gpui";
+import { InputState } from "gpui-base";
 
 export default class Child extends View {
   init(props) {
@@ -5194,7 +5253,8 @@ export default class Child extends View {
         let parent_type = child_type(
             &runtime,
             r#"
-import { View, InputState, timer, text } from "gpui";
+import { View, timer, text } from "gpui";
+import { InputState } from "gpui-base";
 globalThis.parent_continuations = 0;
 globalThis.queue_parent_job = () => Promise.resolve().then(() => {
   globalThis.parent_continuations += 1;
@@ -5209,7 +5269,8 @@ export default class Parent extends View {
         let child_type = child_type(
             &runtime,
             r#"
-import { View, InputState, timer, text } from "gpui";
+import { View, timer, text } from "gpui";
+import { InputState } from "gpui-base";
 globalThis.child_continuations = 0;
 export default class Child extends View {
   init() {
@@ -5310,7 +5371,8 @@ export default class Child extends View {
         let parent_type = child_type(
             &runtime,
             r#"
-import { View, InputState, timer, text } from "gpui";
+import { View, timer, text } from "gpui";
+import { InputState } from "gpui-base";
 globalThis.parent_continuations = 0;
 globalThis.queue_parent_job = () => Promise.resolve().then(() => {
   globalThis.parent_continuations += 1;
@@ -5325,7 +5387,8 @@ export default class Parent extends View {
         let child_type = child_type(
             &runtime,
             r#"
-import { View, InputState, timer, text } from "gpui";
+import { View, timer, text } from "gpui";
+import { InputState } from "gpui-base";
 globalThis.child_continuations = 0;
 export default class BrokenChild extends View {
   init() {
@@ -5433,7 +5496,8 @@ export default class Parent extends View {
         let child_type = child_type(
             &runtime,
             r#"
-import { View, InputState, timer, text } from "gpui";
+import { View, timer, text } from "gpui";
+import { InputState } from "gpui-base";
 globalThis.successor_runs = 0;
 export default class BrokenChild extends View {
   init() {
@@ -5586,7 +5650,8 @@ export default class Child extends View {
         let view_type = child_type(
             &runtime,
             r#"
-import { View, InputState, timer, text } from "gpui";
+import { View, timer, text } from "gpui";
+import { InputState } from "gpui-base";
 
 export default class Child extends View {
   init() {
@@ -5811,7 +5876,8 @@ export default class Child extends View {
         let view_type = child_type(
             &runtime,
             r#"
-import { View, InputState, timer, text } from "gpui";
+import { View, timer, text } from "gpui";
+import { InputState } from "gpui-base";
 globalThis.failed_child_continuations = 0;
 
 export default class BrokenChild extends View {

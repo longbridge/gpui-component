@@ -12,7 +12,8 @@ use gpui::{AppContext as _, Modifiers, TestAppContext, VisualTestContext, point,
 use std::{cell::Cell, path::PathBuf, rc::Rc};
 
 const COUNTER: &str = r#"
-import { View, v_flex, text, Button } from "gpui";
+import { View, text } from "gpui";
+import { v_flex, Button } from "gpui-base";
 
 export default class Counter extends View {
   init() {
@@ -125,7 +126,8 @@ fn a_mouse_move_rebuild_keeps_later_callbacks_live(cx: &mut TestAppContext) {
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, v_flex, div, text, Button } from "gpui";
+import { View, div, text } from "gpui";
+import { v_flex, Button } from "gpui-base";
 
 export default class PointerRebuild extends View {
   init() { this.moves = 0; this.clicks = 0; this.hovered = false; this.hoverEvents = 0; }
@@ -215,7 +217,8 @@ fn flex_elements_dispatch_their_click_handlers(cx: &mut TestAppContext) {
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, div, h_flex, v_flex, text } from "gpui";
+import { View, div, text } from "gpui";
+import { h_flex, v_flex } from "gpui-base";
 
 export default class ClickableFlexes extends View {
   init() { this.clicks = [0, 0, 0]; }
@@ -302,7 +305,8 @@ fn an_external_link_survives_the_script_render(cx: &mut TestAppContext) {
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { Link, View, text } from "gpui";
+import { View, text } from "gpui";
+import { Link } from "gpui-base";
 export default class ExternalLink extends View {
   render() {
     return Link.new("authorize")
@@ -338,7 +342,8 @@ fn an_external_link_requires_a_parseable_http_origin(cx: &mut TestAppContext) {
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { Link, View } from "gpui";
+import { View } from "gpui";
+import { Link } from "gpui-base";
 export default class InvalidExternalLink extends View {
   render() { return Link.new("broken").href("https://"); }
 }
@@ -487,7 +492,8 @@ fn an_element_cannot_be_added_to_two_parents(cx: &mut TestAppContext) {
     cx.update(|cx| runtime.set_global(cx));
 
     let source = r#"
-import { View, v_flex, text } from "gpui";
+import { View, text } from "gpui";
+import { v_flex } from "gpui-base";
 
 export default class Broken extends View {
   render() {
@@ -589,7 +595,8 @@ fn nested_view_updates_and_callbacks_rebuild_only_the_child(cx: &mut TestAppCont
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, ViewHandle, child_view, v_flex, Checkbox, InputState, text } from "gpui";
+import { View, ViewHandle, child_view, text } from "gpui";
+import { v_flex, Checkbox, InputState } from "gpui-base";
 
 class Child extends View {
   init(props) {
@@ -742,7 +749,8 @@ fn nested_view_operations_from_one_job_are_fifo_and_keep_descendant_ownership(
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, ViewHandle, child_view, v_flex, Checkbox, text } from "gpui";
+import { View, ViewHandle, child_view, text } from "gpui";
+import { v_flex, Checkbox } from "gpui-base";
 
 class Grandchild extends View {
   render() { return text("grandchild"); }
@@ -892,7 +900,8 @@ fn failed_nested_update_rolls_back_script_fields_entities_and_tasks(cx: &mut Tes
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, ViewHandle, child_view, v_flex, Checkbox, InputState, timer, text } from "gpui";
+import { View, ViewHandle, child_view, timer, text } from "gpui";
+import { v_flex, Checkbox, InputState } from "gpui-base";
 
 class Child extends View {
   init() {
@@ -1110,7 +1119,8 @@ fn public_nested_release_retires_descendants_callbacks_tasks_snapshots_and_alias
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, ViewHandle, child_view, v_flex, Checkbox, InputState, timer, text } from "gpui";
+import { View, ViewHandle, child_view, timer, text } from "gpui";
+import { v_flex, Checkbox, InputState } from "gpui-base";
 class Grandchild extends View {
   init() {
     this.input = InputState.new({ value: "grandchild" });
@@ -1215,7 +1225,8 @@ fn child_render_failure_preserves_its_previous_good_snapshot(cx: &mut TestAppCon
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, ViewHandle, child_view, v_flex, Checkbox, text } from "gpui";
+import { View, ViewHandle, child_view, text } from "gpui";
+import { v_flex, Checkbox } from "gpui-base";
 class Child extends View {
   init() { this.fail = false; }
   render() {
@@ -1320,7 +1331,8 @@ fn a_nested_view_handle_can_only_be_mounted_once_per_snapshot(cx: &mut TestAppCo
         cx,
         "duplicate-nested-view.js",
         r#"
-import { View, ViewHandle, child_view, v_flex, text } from "gpui";
+import { View, ViewHandle, child_view, text } from "gpui";
+import { v_flex } from "gpui-base";
 class Child extends View { render() { return text("child"); } }
 export default class Parent extends View {
   init() { this.child = ViewHandle.new(Child); }
@@ -1370,7 +1382,8 @@ fn public_nested_constructor_failure_reaches_the_host_boundary_and_rolls_back(
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, ViewHandle, InputState, timer, text } from "gpui";
+import { View, ViewHandle, timer, text } from "gpui";
+import { InputState } from "gpui-base";
 class Child extends View {
   constructor() {
     super();
@@ -1474,7 +1487,8 @@ fn nested_view_creation_updates_and_release_name_the_layout_phase(cx: &mut TestA
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, ViewHandle, v_flex, v_virtual_list, Button, text } from "gpui";
+import { View, ViewHandle, text } from "gpui";
+import { v_flex, v_virtual_list, Button } from "gpui-base";
 class Child extends View { render() { return text("child"); } }
 export default class Parent extends View {
   init() {
@@ -1622,7 +1636,8 @@ fn state_styles_reuse_the_ordinary_style_methods(cx: &mut TestAppContext) {
     cx.update(|cx| runtime.set_global(cx));
 
     let source = r#"
-import { View, div, Button, text } from "gpui";
+import { View, div, text } from "gpui";
+import { Button } from "gpui-base";
 
 export default class Styled extends View {
   render() {
@@ -1706,7 +1721,8 @@ fn native_overflow_scroll_behaviors_survive_script_render_and_materialize(cx: &m
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, text, v_flex } from "gpui";
+import { View, text } from "gpui";
+import { v_flex } from "gpui-base";
 
 export default class ScrollableQuotes extends View {
   render() {
@@ -1761,7 +1777,8 @@ fn a_scrollbar_drives_the_scroll_area_that_shares_its_name(cx: &mut TestAppConte
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, Scrollbar, v_flex, text } from "gpui";
+import { View, text } from "gpui";
+import { Scrollbar, v_flex } from "gpui-base";
 
 export default class Watchlist extends View {
   render() {
@@ -1821,7 +1838,8 @@ fn a_tab_list_carries_selection_in_and_activation_out(cx: &mut TestAppContext) {
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, Tabs, Tab, text } from "gpui";
+import { View, text } from "gpui";
+import { Tabs, Tab } from "gpui-base";
 
 export default class Settings extends View {
   init() { this.tab = 0; }
@@ -1888,7 +1906,8 @@ fn a_logarithmic_slider_that_reaches_zero_is_refused_rather_than_asserted(cx: &m
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, SliderState, text } from "gpui";
+import { View, text } from "gpui";
+import { SliderState } from "gpui-base";
 
 export default class Gain extends View {
   init() { this.gain = SliderState.new({ min: 0, max: 1000, scale: "logarithmic" }); }
@@ -1919,7 +1938,8 @@ fn a_slider_rejects_numbers_that_do_not_fit_its_native_representation(cx: &mut T
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, SliderState, text } from "gpui";
+import { View, text } from "gpui";
+import { SliderState } from "gpui-base";
 
 export default class Gain extends View {
   init() { this.gain = SliderState.new({ min: 1e100, max: 2e100, scale: "logarithmic" }); }
@@ -1955,7 +1975,15 @@ fn a_slider_is_composed_by_the_script_and_positioned_by_the_shell(cx: &mut TestA
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, SliderState, Slider, SliderTrack, SliderIndicator, SliderThumb, text, v_flex } from "gpui";
+import { View, text } from "gpui";
+import {
+  SliderState,
+  Slider,
+  SliderTrack,
+  SliderIndicator,
+  SliderThumb,
+  v_flex,
+} from "gpui-base";
 
 export default class Volume extends View {
   init() {
@@ -2054,7 +2082,8 @@ fn a_number_input_carries_three_slots_over_a_plain_input_state(cx: &mut TestAppC
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, NumberInput, InputState, h_flex, text } from "gpui";
+import { View, text } from "gpui";
+import { NumberInput, InputState, h_flex } from "gpui-base";
 
 export default class Quantity extends View {
   init() {
@@ -2119,7 +2148,8 @@ fn an_otp_length_outside_the_usable_range_is_refused(cx: &mut TestAppContext) {
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, OtpState, text } from "gpui";
+import { View, text } from "gpui";
+import { OtpState } from "gpui-base";
 
 export default class Code extends View {
   init() { this.code = OtpState.new(0); }
@@ -2153,7 +2183,8 @@ fn an_otp_input_is_styled_by_the_script_and_filled_by_the_shell(cx: &mut TestApp
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, OtpState, OtpInput, text, v_flex } from "gpui";
+import { View, text } from "gpui";
+import { OtpState, OtpInput, v_flex } from "gpui-base";
 
 export default class Code extends View {
   init() {
@@ -2236,7 +2267,8 @@ fn typing_into_an_otp_input_reaches_the_state_without_the_script(cx: &mut TestAp
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, OtpState, OtpInput } from "gpui";
+import { View } from "gpui";
+import { OtpState, OtpInput } from "gpui-base";
 
 export default class Code extends View {
   init() { this.code = OtpState.new(4); }
@@ -2293,7 +2325,8 @@ fn otp_change_and_complete_are_distinct_events(cx: &mut TestAppContext) {
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, OtpState, OtpInput, text, v_flex } from "gpui";
+import { View, text } from "gpui";
+import { OtpState, OtpInput, v_flex } from "gpui-base";
 
 export default class Code extends View {
   init() {
@@ -2370,7 +2403,8 @@ fn otp_setters_refresh_script_ui_and_same_event_subscription_is_replaced(cx: &mu
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, Button, OtpState, OtpInput, text, v_flex } from "gpui";
+import { View, text } from "gpui";
+import { Button, OtpState, OtpInput, v_flex } from "gpui-base";
 
 export default class Code extends View {
   init() {
@@ -2454,7 +2488,8 @@ fn a_progress_bar_announces_a_value_the_script_draws_itself(cx: &mut TestAppCont
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, Progress, ProgressTrack, ProgressIndicator } from "gpui";
+import { View } from "gpui";
+import { Progress, ProgressTrack, ProgressIndicator } from "gpui-base";
 
 export default class Download extends View {
   init() { this.percent = 40; }
@@ -2524,7 +2559,8 @@ fn fps_monitor_is_available_as_a_native_overlay(cx: &mut TestAppContext) {
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, div, fps_monitor } from "gpui";
+import { View, div } from "gpui";
+import { fps_monitor } from "gpui-fps";
 
 export default class Monitor extends View {
   render() {
@@ -2562,7 +2598,8 @@ fn a_radio_group_and_a_toggle_carry_their_controlled_state_both_ways(cx: &mut Te
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, Radio, Toggle, v_flex, text } from "gpui";
+import { View, text } from "gpui";
+import { Radio, Toggle, v_flex } from "gpui-base";
 
 export default class Preferences extends View {
   init() { this.appearance = 0; this.bold = false; }
@@ -2633,8 +2670,18 @@ fn a_table_describes_its_shape_and_its_accessibility_indices(cx: &mut TestAppCon
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
 import {
-  View, Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableCaption, text,
+  View,
+  text,
 } from "gpui";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+  TableCaption,
+} from "gpui-base";
 
 export default class Positions extends View {
   init() { this.picked = -1; }
@@ -2724,7 +2771,8 @@ fn a_table_index_below_one_is_refused_at_the_call_site(cx: &mut TestAppContext) 
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, TableCell, text } from "gpui";
+import { View, text } from "gpui";
+import { TableCell } from "gpui-base";
 
 export default class BadTable extends View {
   render() { return TableCell.new("cell", 0).child(text("AAPL")); }
@@ -2786,7 +2834,7 @@ fn accessibility_counts_and_positions_reject_invalid_numbers(cx: &mut TestAppCon
     ] {
         let runtime = ShellRuntime::new_isolated().expect("runtime");
         let source = format!(
-            "import {{ View, Tab, Table, Progress }} from 'gpui'; export default class Bad extends View {{ render() {{ return {expression}; }} }}"
+            "import {{ View }} from 'gpui'; import {{ Tab, Table, Progress }} from 'gpui-base'; export default class Bad extends View {{ render() {{ return {expression}; }} }}"
         );
         let view_type = runtime.load_source(name, &source).expect("load");
         let window = cx.add_window(|_, _| Empty);
@@ -2984,7 +3032,8 @@ fn javascript_can_replace_the_active_gpui_base_theme(cx: &mut TestAppContext) {
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r##"
-import { View, div, set_theme } from "gpui";
+import { View, div } from "gpui";
+import { set_theme } from "gpui-base";
 export default class ThemeSwitch extends View {
   init() {
     const color = "#111111";
@@ -3078,7 +3127,8 @@ fn a_textarea_holds_multi_line_state_beside_an_input(cx: &mut TestAppContext) {
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, div, text, Input, InputState, Textarea, TextareaState } from "gpui";
+import { View, div, text } from "gpui";
+import { Input, InputState, Textarea, TextareaState } from "gpui-base";
 
 export default class Note extends View {
   init() {
@@ -3131,7 +3181,8 @@ fn an_unknown_input_event_names_the_valid_ones(cx: &mut TestAppContext) {
     cx.update(|cx| runtime.set_global(cx));
 
     let source = r#"
-import { View, div, InputState } from "gpui";
+import { View, div } from "gpui";
+import { InputState } from "gpui-base";
 
 export default class Bad extends View {
   init() {
@@ -3176,7 +3227,8 @@ fn a_reload_picks_up_a_change_in_an_imported_module(cx: &mut TestAppContext) {
     std::fs::write(
         directory.join("main.js"),
         r#"
-import { View, v_flex, text } from "gpui";
+import { View, text } from "gpui";
+import { v_flex } from "gpui-base";
 import { caption } from "./caption.js";
 
 export default class Reloading extends View {
@@ -3274,7 +3326,8 @@ fn an_embedded_runtime_reloads_when_a_source_changes(cx: &mut TestAppContext) {
     std::fs::create_dir_all(&directory).expect("a temporary application");
     let source = |caption: &str| {
         format!(
-            "import {{ View, v_flex, text }} from \"gpui\";\n\
+            "import {{ View, text }} from \"gpui\";\n\
+             import {{ v_flex }} from \"gpui-base\";\n\
              export default class Panel extends View {{\n\
                render() {{ return v_flex().child(text(\"{caption}\")); }}\n\
              }}\n"
@@ -3365,7 +3418,8 @@ fn hot_reload_keeps_replacement_children_and_retires_old_snapshots_and_aliases(
             "this.probe = [];"
         };
         format!(
-            "import {{ View, ViewHandle, child_view, v_flex, text }} from \"gpui\";\n\
+            "import {{ View, ViewHandle, child_view, text }} from \"gpui\";\n\
+             import {{ v_flex }} from \"gpui-base\";\n\
              class Child extends View {{ render() {{ return text(\"{caption}\"); }} }}\n\
              export default class Parent extends View {{\n\
                init() {{ this.child = ViewHandle.new(Child); {probe} }}\n\
@@ -3687,7 +3741,8 @@ fn a_group_announces_its_axis_without_laying_its_children_out(cx: &mut TestAppCo
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, RadioGroup, ToggleGroup, Checkbox, Button, text } from "gpui";
+import { View, text } from "gpui";
+import { RadioGroup, ToggleGroup, Checkbox, Button } from "gpui-base";
 
 export default class Preferences extends View {
   init() { this.density = 0; this.bold = false; }
@@ -3759,7 +3814,8 @@ fn an_unknown_axis_is_rejected_at_the_call_site(cx: &mut TestAppContext) {
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, ToggleGroup } from "gpui";
+import { View } from "gpui";
+import { ToggleGroup } from "gpui-base";
 
 export default class BadAxis extends View {
   render() {
@@ -3790,7 +3846,8 @@ export default class BadAxis extends View {
 /// is a *render* decision: the description carries the content either way, so
 /// only something that has to exist on screen to work can tell the two apart.
 const COLLAPSIBLE: &str = r#"
-import { View, v_flex, div, text, Collapsible } from "gpui";
+import { View, div, text } from "gpui";
+import { v_flex, Collapsible } from "gpui-base";
 
 export default class Section extends View {
   init() { this.open = OPEN; this.hits = 0; }
@@ -3912,7 +3969,8 @@ fn an_element_given_to_a_slot_cannot_also_be_a_child(cx: &mut TestAppContext) {
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, v_flex, text, Collapsible } from "gpui";
+import { View, text } from "gpui";
+import { v_flex, Collapsible } from "gpui-base";
 
 export default class Reused extends View {
   render() {
@@ -3963,7 +4021,8 @@ fn a_granted_exit_reaches_the_host(cx: &mut TestAppContext) {
     cx.update(|cx| runtime.set_global(cx));
 
     let source = r#"
-import { View, v_flex, text } from "gpui";
+import { View, text } from "gpui";
+import { v_flex } from "gpui-base";
 
 export default class Quitter extends View {
   init() {
@@ -4011,7 +4070,8 @@ fn a_watcher_releases_its_view(cx: &mut TestAppContext) {
     std::fs::create_dir_all(&directory).expect("a temporary application");
     std::fs::write(
         directory.join("main.js"),
-        "import { View, v_flex } from \"gpui\";\n\
+        "import { View } from \"gpui\";\n\
+         import { v_flex } from \"gpui-base\";\n\
          export default class Panel extends View { render() { return v_flex(); } }\n",
     )
     .expect("writing main.js");
@@ -4225,7 +4285,8 @@ fn the_tab_key_walks_the_focus_order_a_script_declared(cx: &mut TestAppContext) 
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, v_flex, div, Button, Checkbox, Toggle, FocusHandle, text } from "gpui";
+import { View, div, FocusHandle, text } from "gpui";
+import { v_flex, Button, Checkbox, Toggle } from "gpui-base";
 
 export default class Form extends View {
   init() {
@@ -4323,7 +4384,8 @@ fn a_tracked_handle_reports_the_focus_it_was_given(cx: &mut TestAppContext) {
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, v_flex, div, Button, FocusHandle, text } from "gpui";
+import { View, div, FocusHandle, text } from "gpui";
+import { v_flex, Button } from "gpui-base";
 
 export default class Panel extends View {
   init() { this.target = FocusHandle.new(); }
@@ -4401,7 +4463,8 @@ fn accessibility_semantics_reach_the_description(cx: &mut TestAppContext) {
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, v_flex, div, text } from "gpui";
+import { View, div, text } from "gpui";
+import { v_flex } from "gpui-base";
 
 export default class Options extends View {
   init() { this.chosen = 1; }
@@ -4491,7 +4554,8 @@ export default class Wrong extends View {
 /// overhang: it is inside the content and outside the trigger, so a click there
 /// can only be reporting that the content is on screen.
 const POPOVER: &str = r#"
-import { View, v_flex, div, text, Popover } from "gpui";
+import { View, div, text } from "gpui";
+import { v_flex, Popover } from "gpui-base";
 
 export default class Menu extends View {
   init() { this.open = OPEN; this.hits = 0; }
@@ -4687,7 +4751,8 @@ fn an_unknown_anchor_is_rejected_at_the_call_site(cx: &mut TestAppContext) {
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, Popover } from "gpui";
+import { View } from "gpui";
+import { Popover } from "gpui-base";
 
 export default class BadAnchor extends View {
   render() { return Popover.new("menu").anchor("topLeft"); }
@@ -4722,7 +4787,8 @@ fn a_hover_card_opens_after_its_delay_and_closes_once_the_pointer_leaves(cx: &mu
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, v_flex, div, text, HoverCard } from "gpui";
+import { View, div, text } from "gpui";
+import { v_flex, HoverCard } from "gpui-base";
 
 export default class Card extends View {
   init() { this.hits = 0; }
@@ -4817,7 +4883,8 @@ export default class Card extends View {
 /// — inside the list, below and beside the trigger — is the one place a click
 /// can only mean "the list is on screen".
 const SELECT: &str = r#"
-import { View, v_flex, div, text, Select, Popup, FocusHandle } from "gpui";
+import { View, div, text, FocusHandle } from "gpui";
+import { v_flex, Select, Popup } from "gpui-base";
 
 export default class Picker extends View {
   init() {
@@ -5052,7 +5119,8 @@ fn a_popup_without_a_trigger_is_refused_at_the_call_site(cx: &mut TestAppContext
         cx,
         "popup-trigger",
         r#"
-import { View, Popup } from "gpui";
+import { View } from "gpui";
+import { Popup } from "gpui-base";
 
 export default class NoTrigger extends View {
   render() { return Popup.new("menu"); }
@@ -5074,7 +5142,8 @@ fn a_popup_with_an_unknown_anchor_is_refused_at_the_call_site(cx: &mut TestAppCo
         cx,
         "popup-anchor",
         r#"
-import { View, div, Popup } from "gpui";
+import { View, div } from "gpui";
+import { Popup } from "gpui-base";
 
 export default class BadAnchor extends View {
   render() { return Popup.new("menu", div()).anchor("bottomLeft"); }
@@ -5099,7 +5168,8 @@ fn a_date_picker_without_a_focus_handle_says_why_it_needs_one(cx: &mut TestAppCo
         cx,
         "date-picker-handle",
         r#"
-import { View, DatePicker } from "gpui";
+import { View } from "gpui";
+import { DatePicker } from "gpui-base";
 
 export default class NoHandle extends View {
   render() { return DatePicker.new("due"); }
@@ -5140,7 +5210,8 @@ fn a_date_picker_carries_focus_and_an_announced_open_state(cx: &mut TestAppConte
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, v_flex, text, DatePicker, FocusHandle } from "gpui";
+import { View, text, FocusHandle } from "gpui";
+import { v_flex, DatePicker } from "gpui-base";
 
 export default class Due extends View {
   init() {
@@ -5214,7 +5285,8 @@ fn a_tooltip_reaches_the_window_overlay_after_the_pointer_rests(cx: &mut TestApp
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, v_flex, Button, text } from "gpui";
+import { View, text } from "gpui";
+import { v_flex, Button } from "gpui-base";
 
 export default class Toolbar extends View {
   render() {
@@ -5316,7 +5388,8 @@ fn a_tooltip_that_is_not_a_string_is_refused_at_the_call_site(cx: &mut TestAppCo
         cx,
         "label.js",
         r#"
-import { View, Button, text } from "gpui";
+import { View, text } from "gpui";
+import { Button } from "gpui-base";
 
 export default class Toolbar extends View {
   render() {
@@ -5338,7 +5411,8 @@ export default class Toolbar extends View {
         cx,
         "label.js",
         r#"
-import { View, Button, text } from "gpui";
+import { View, text } from "gpui";
+import { Button } from "gpui-base";
 
 export default class Toolbar extends View {
   render() {
@@ -5372,7 +5446,8 @@ fn render_error(cx: &mut TestAppContext, name: &str, source: &str) -> String {
         .to_string()
 }
 const RESIZABLE: &str = r#"
-import { View, div, h_resizable, resizable_panel, text } from "gpui";
+import { View, div, text } from "gpui";
+import { h_resizable, resizable_panel } from "gpui-base";
 
 export default class Workspace extends View {
   init() { this.sizes = []; }
@@ -5495,7 +5570,8 @@ fn a_resizable_panel_outside_a_group_is_refused_at_the_call_site(cx: &mut TestAp
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, div, resizable_panel, text } from "gpui";
+import { View, div, text } from "gpui";
+import { resizable_panel } from "gpui-base";
 
 export default class Loose extends View {
   render() {
@@ -5526,7 +5602,8 @@ fn a_resizable_panel_rejects_a_reversed_size_range(cx: &mut TestAppContext) {
         cx,
         "reversed-panel-range.js",
         r#"
-import { View, h_resizable, resizable_panel } from "gpui";
+import { View } from "gpui";
+import { h_resizable, resizable_panel } from "gpui-base";
 
 export default class Workspace extends View {
   render() {
@@ -5553,7 +5630,8 @@ export default class Workspace extends View {
 fn virtual_list_source(extra: &str) -> String {
     format!(
         r#"
-import {{ View, v_flex, text, v_virtual_list }} from "gpui";
+import {{ View, text }} from "gpui";
+import {{ v_flex, v_virtual_list }} from "gpui-base";
 
 export default class Rows extends View {{
   init() {{
@@ -5797,7 +5875,8 @@ fn a_virtual_list_click_keeps_the_stable_item_key_across_reordering(cx: &mut Tes
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, v_flex, text, v_virtual_list } from "gpui";
+import { View, text } from "gpui";
+import { v_flex, v_virtual_list } from "gpui-base";
 
 export default class Rows extends View {
   init() {
@@ -5890,7 +5969,8 @@ fn item_sizes_are_taken_as_one_extent_or_one_per_item(cx: &mut TestAppContext) {
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, v_flex, v_virtual_list, h_virtual_list } from "gpui";
+import { View } from "gpui";
+import { v_flex, v_virtual_list, h_virtual_list } from "gpui-base";
 
 export default class Both extends View {
   render() {
@@ -5932,7 +6012,8 @@ fn item_sizes_that_disagree_with_the_item_count_are_refused(cx: &mut TestAppCont
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, v_virtual_list } from "gpui";
+import { View } from "gpui";
+import { v_virtual_list } from "gpui-base";
 
 export default class Mismatched extends View {
   render() {
@@ -5962,7 +6043,8 @@ fn virtual_lists_share_one_bounded_host_allocation_budget_per_render(cx: &mut Te
         cx,
         "oversized-lists.js",
         r#"
-import { View, v_flex, v_virtual_list } from "gpui";
+import { View } from "gpui";
+import { v_flex, v_virtual_list } from "gpui-base";
 
 export default class LargeLists extends View {
   render() {
@@ -5985,7 +6067,8 @@ fn a_virtual_list_rejects_a_sparse_item_size_array_without_allocating_it(cx: &mu
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let source = r#"
-import { View, v_virtual_list } from "gpui";
+import { View } from "gpui";
+import { v_virtual_list } from "gpui-base";
 
 export default class SparseSizes extends View {
   render() {

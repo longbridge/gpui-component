@@ -137,7 +137,7 @@ async save(cx) {
 视图自己的字段放普通数据。带有跨帧机制的东西——文本框的内容、光标位置与撤销历史——存放在 GPUI 实体里，脚本持有一个**句柄**。
 
 ```js
-import { InputState, Input } from "gpui";
+import { InputState, Input } from "gpui-base";
 
 init() {
   this.draft = InputState.new({ placeholder: "What needs doing?" });

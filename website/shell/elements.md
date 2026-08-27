@@ -10,28 +10,39 @@ An element in `gpui-shell` is a **description**, not an object. It exists for on
 
 ## Constructors
 
-One import provides the whole namespace:
+Each module carries what its own crate provides:
 
 ```js
-import { div, h_flex, v_flex, text, svg, image, fps_monitor, Button, Link, Checkbox, Switch, Input, InputState, FocusHandle } from "gpui";
+import { div, text, svg, image, FocusHandle } from "gpui";
+import {
+  h_flex,
+  v_flex,
+  Button,
+  Link,
+  Checkbox,
+  Switch,
+  Input,
+  InputState,
+} from "gpui-base";
+import { fps_monitor } from "gpui-fps";
 ```
 
 Functions are lowercase, and component types are capitalized and constructed through `.new`. That mirrors the Rust side one for one: `div()` is a free function there too, and `Button::new(id)` is an associated function on a type.
 
-| Constructor | Produces |
-| --- | --- |
-| `div()` | An element with no layout of its own |
-| `h_flex()` | A row |
-| `v_flex()` | A column |
-| `text(value)` | A text element; the value is stringified |
-| `svg(path)` | A theme-tinted vector icon from the application's own directory |
-| `image(path)` | A full-colour image from the application's own directory |
-| `fps_monitor()` | The native `gpui-fps` performance HUD, shared once per window |
-| `Button.new(id)` | A base `Button`: activation, focus, disabled and selected state, no styling |
-| `Link.new(id)` | A focusable external HTTP(S) link; set its target with `.href(url)` |
-| `Checkbox.new(id)` | A base controlled checkbox, no styling and no indicator |
-| `Switch.new(id)` | A base controlled switch, no styling |
-| `Input.new(state)` | A text field backed by an [`InputState`](./state.md#retained-state) |
+| Constructor | From | Produces |
+| --- | --- | --- |
+| `div()` | `gpui` | An element with no layout of its own |
+| `text(value)` | `gpui` | A text element; the value is stringified |
+| `svg(path)` | `gpui` | A theme-tinted vector icon from the application's own directory |
+| `image(path)` | `gpui` | A full-colour image from the application's own directory |
+| `h_flex()` | `gpui-base` | A row |
+| `v_flex()` | `gpui-base` | A column |
+| `Button.new(id)` | `gpui-base` | A base `Button`: activation, focus, disabled and selected state, no styling |
+| `Link.new(id)` | `gpui-base` | A focusable external HTTP(S) link; set its target with `.href(url)` |
+| `Checkbox.new(id)` | `gpui-base` | A base controlled checkbox, no styling and no indicator |
+| `Switch.new(id)` | `gpui-base` | A base controlled switch, no styling |
+| `Input.new(state)` | `gpui-base` | A text field backed by an [`InputState`](./state.md#retained-state) |
+| `fps_monitor()` | `gpui-fps` | The native `gpui-fps` performance HUD, shared once per window |
 
 ### Performance monitor
 

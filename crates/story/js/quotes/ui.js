@@ -6,7 +6,8 @@
 // read from the render's call-scoped `cx.theme()`, so changing the shell theme
 // moves this half too.
 
-import { div, h_flex, v_flex, text, Button } from "gpui";
+import { div, text } from "gpui";
+import { h_flex, v_flex, Button } from "gpui-base";
 /** @import { AbsoluteLength, ClickEvent, Context } from "gpui" */
 
 /// Every measurement here is in **rems**, so the panel scales with the window's

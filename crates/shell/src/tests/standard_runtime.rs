@@ -5,7 +5,8 @@ use gpui::{IntoElement as _, TestAppContext, VisualTestContext};
 use crate::ShellRuntime;
 
 const PURE_MODULES: &str = r#"
-import { View, v_flex, text } from "gpui";
+import { View, text } from "gpui";
+import { v_flex } from "gpui-base";
 import { Buffer } from "buffer";
 import path from "path";
 import { URL } from "url";
@@ -95,7 +96,8 @@ fn callback_style_fs_module_is_not_part_of_the_shell_contract() {
 #[gpui::test]
 fn safe_host_standard_modules_replace_the_old_gpui_exports(cx: &mut TestAppContext) {
     let source = r#"
-import { View, v_flex, text } from "gpui";
+import { View, text } from "gpui";
+import { v_flex } from "gpui-base";
 import console from "console";
 import os from "os";
 import process from "process";
@@ -157,7 +159,8 @@ export default class Probe extends View {
 #[gpui::test]
 fn synchronous_unawaited_host_calls_hit_the_runtime_task_limit(cx: &mut TestAppContext) {
     let source = r#"
-import { View, v_flex, text, sleep } from "gpui";
+import { View, text, sleep } from "gpui";
+import { v_flex } from "gpui-base";
 
 export default class Probe extends View {
   init() {

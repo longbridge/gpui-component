@@ -55,7 +55,8 @@ default-exports, and mounts one instance of it as the window's root view:
 
 ```js
 // main.js
-import { View, v_flex, text, Button, InputState } from "gpui";
+import { View, text } from "gpui";
+import { v_flex, Button, InputState } from "gpui-base";
 
 export default class Notes extends View {
   init() {
@@ -129,10 +130,12 @@ camelCase one is script code.
 
 ## API Surface
 
-One import provides the whole namespace:
+Each module carries what its own crate provides:
 
 ```js
-import { View, div, h_flex, v_flex, text, svg, image, fps_monitor, Button, Link, Checkbox, Switch } from "gpui";
+import { View, div, text, svg, image } from "gpui";
+import { h_flex, v_flex, Button, Link, Checkbox, Switch } from "gpui-base";
+import { fps_monitor } from "gpui-fps";
 ```
 
 | API | Form | Description |
@@ -367,13 +370,19 @@ The design, what is implemented, and what is not are in
 `import ... from "gpui"` is opaque without declarations, and the style surface
 is far too large to memorize. **There is nothing to run.** Every `gpui-shell`
 invocation — running an application, `check`, `types` — writes `gpui.d.ts` into
-each directory that imports the module, from the runtime it is about to use:
+each directory that imports a built-in module, from the runtime it is about to
+use:
 
 ```bash
 cargo run -p gpui-shell -- path/to/app           # runs it, and writes them
 cargo run -p gpui-shell -- check path/to/app     # checks it, and writes them
 cargo run -p gpui-shell -- types path/to/app     # writes them and nothing else
 ```
+
+One file, three modules: `"gpui"` for GPUI's own elements and what the runtime
+adds, `"gpui-base"` for gpui-base's layout helpers, components and theme, and
+`"gpui-fps"` for its performance overlay. A name belongs to exactly one of them,
+so an import says which layer a script depends on.
 
 Add `gpui.d.ts` to `.gitignore`; the file's own first line says so.
 

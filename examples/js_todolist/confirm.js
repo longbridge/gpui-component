@@ -5,7 +5,7 @@
 // outlives the call that opened it — so everything it shows comes from what the
 // caller closed over rather than from a `props` object handed across.
 
-import { v_flex, h_flex } from "gpui";
+import { v_flex, h_flex } from "gpui-base";
 import { SPACE, button, label, muted } from "./ui.js";
 
 /**

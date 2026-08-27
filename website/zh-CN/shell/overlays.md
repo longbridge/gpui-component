@@ -59,7 +59,8 @@ a function, not an element and not a view class
 
 ```js
 // confirm.js
-import { v_flex, h_flex, text } from "gpui";
+import { text } from "gpui";
+import { v_flex, h_flex } from "gpui-base";
 
 export default (count, onConfirm) => () =>
   v_flex()

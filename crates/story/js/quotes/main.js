@@ -15,7 +15,8 @@
 // twenty times a second with the default feed. The counters under the panels
 // report what that costs, and what a repaint costs when nothing here changed.
 
-import { h_flex, v_flex, View, native } from "gpui";
+import { View, native } from "gpui";
+import { h_flex, v_flex } from "gpui-base";
 /** @import { NativeModules } from "gpui" */
 import {
   ROW,
