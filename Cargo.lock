@@ -9719,6 +9719,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "text_max_lines"
+version = "0.5.1"
+dependencies = [
+ "anyhow",
+ "gpui",
+ "gpui-component",
+ "gpui-component-assets",
+ "gpui_platform",
+ "reqwest_client",
+]
+
+[[package]]
 name = "text_selection"
 version = "0.5.1"
 dependencies = [
