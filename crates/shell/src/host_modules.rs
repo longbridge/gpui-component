@@ -8,13 +8,13 @@
 //! §17.6).
 //!
 //! ```no_run
-//! use gpui_shell::{HostModules, HostValue};
+//! use gpui_shell::{HostModule, HostValue};
 //!
-//! let mut modules = HostModules::new();
-//! modules.register("workspace", |module| {
-//!     module.function("project_name", |_| Ok(HostValue::from("gpui-component")));
-//! });
-//! gpui_shell::export_modules(modules).expect("the module names are free");
+//! gpui_shell::export_module(
+//!     HostModule::new("workspace")
+//!         .function("project_name", |_| Ok(HostValue::from("gpui-component"))),
+//! )
+//! .expect("`workspace` is not one of the runtime's own module names");
 //! ```
 //!
 //! ```js
@@ -387,9 +387,15 @@ pub struct HostModule {
 }
 
 impl HostModule {
-    fn new(name: String) -> Self {
+    /// Names a module a script may import.
+    ///
+    /// The name is the specifier: `HostModule::new("workspace")` is what makes
+    /// `import { … } from "workspace"` resolve. A name the runtime already owns
+    /// is refused by [`Self::validate`], which [`crate::export_module`] calls —
+    /// see [`RESERVED_SPECIFIERS`].
+    pub fn new(name: impl Into<String>) -> Self {
         Self {
-            name,
+            name: name.into(),
             functions: BTreeMap::new(),
             declarations: None,
         }
@@ -405,10 +411,10 @@ impl HostModule {
     /// header. It may read and write host state, and may ask a view to
     /// re-render — the notification is delivered after the call unwinds.
     pub fn function(
-        &mut self,
+        mut self,
         name: impl Into<String>,
         body: impl Fn(&HostArguments) -> HostResult + 'static,
-    ) -> &mut Self {
+    ) -> Self {
         self.functions.insert(name.into(), Rc::new(body));
         self
     }
@@ -442,7 +448,7 @@ impl HostModule {
     /// Declaring nothing is allowed and costs only precision: an undeclared
     /// module is emitted with `(...args: any[]) => any` signatures, which still
     /// checks the module name and every export name.
-    pub fn declarations(&mut self, typescript: impl Into<String>) -> &mut Self {
+    pub fn declarations(mut self, typescript: impl Into<String>) -> Self {
         self.declarations = Some(typescript.into());
         self
     }

@@ -353,6 +353,84 @@ Reading the theme is `cx.theme()`. Replacing the whole palette is an application
 | `SliderValue` | A number, or `[start, end]` for a range slider |
 | `PopupType`, `DatePickerType`, `ScrollbarType` | The factory shapes of the three whose constructor is not `new(id)`: `Popup.new(id, trigger)`, `DatePicker.new(id, focus_handle)`, and `Scrollbar`'s three entry points |
 
+### Composition patterns
+
+Five of these components are not one element but an arrangement, and the tables above cannot say so. Each snippet below is the smallest thing that works; all of them were checked against the runtime.
+
+**A controlled control.** `Checkbox`, `Switch`, `Radio` and `Toggle` hold no state: you read the value in and write it back out. Nothing is drawn for you, so the indicator is a child.
+
+```js
+Checkbox.new("done")
+  .checked(this.checked)
+  .on_change((checked, cx) => {
+    this.checked = checked;
+    cx.notify();
+  })
+  .child(this.checked ? "done" : "not done");
+```
+
+**`Progress` announces; the bar is yours.** The root carries the role and the `0..=100` a screen reader reads, and draws nothing at all.
+
+```js
+Progress.new("upload")
+  .value(62)
+  .child(
+    ProgressTrack.new().w(200).h(6).bg(cx.theme().colors.muted)
+      .child(ProgressIndicator.new().w(124).h(6).bg(cx.theme().colors.primary)),
+  );
+```
+
+**A slider is four parts, and all four are needed** — a slider with no `SliderIndicator` cannot be moved, because that is the box every pointer position is measured against. All four take the same state.
+
+```js
+Slider.new(this.volume).child(
+  SliderTrack.new(this.volume).w(200).h(16)
+    .child(SliderIndicator.new(this.volume).h(4).bg(cx.theme().colors.primary))
+    .child(SliderThumb.new(this.volume).w(12).h(12).bg(cx.theme().colors.background)),
+);
+```
+
+**`Select` owns the keyboard, `Popup` owns the surface.** The root holds the combobox role and the open state; the list is a `Popup` inside it. It needs two focus handles — one for the trigger, one for the content — and without the first nothing on screen has the keyboard.
+
+```js
+Select.new("mode")
+  .accessibility_label("Mode")
+  .open(this.open)
+  .track_focus(this.trigger)
+  .content_focus_handle(this.list)
+  .on_open_change((open, cx) => { this.open = open; cx.notify(); })
+  .child(
+    Popup.new("mode-list", trigger).anchor("bottom_left")
+      .when(this.open, (el) => el.content(list)),
+  );
+```
+
+Arrow-key navigation of an open list is not there: base expects whatever is inside to run the highlight from its own key bindings, and the shell has no key-binding layer. The pointer works, Escape closes, Enter and ↓ open.
+
+**A virtual list and its scrollbar are paired by name.** The list paints no bar of its own, and nothing checks the pairing before it runs, so both halves are needed.
+
+```js
+v_flex().relative().h(200)
+  .child(
+    v_virtual_list("rows", rows.length, 28,
+      (index) => rows[index].id,
+      (range) => rows.slice(range.start, range.end).map((row) => div().child(row.name)),
+    ).size_full(),
+  )
+  .child(Scrollbar.vertical("rows").absolute().inset_0());
+```
+
+**A nested view is created once and mounted as a child.** `cx.new` belongs in `init` or an event handler; the entity is a child wherever a child is taken.
+
+```js
+init(props, cx) {
+  this.chart = cx.new(PriceChart, { symbol });
+}
+render() {
+  return v_flex().child(this.chart);
+}
+```
+
 ## The `gpui-fps` module
 
 | Name | What it is |

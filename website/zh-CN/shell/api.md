@@ -353,6 +353,84 @@ slider 的四个部件接受同一个 `SliderStateHandle`，而且四个都不�
 | `SliderValue` | 一个数字，或区间 slider 的 `[start, end]` |
 | `PopupType`、`DatePickerType`、`ScrollbarType` | 构造器不是 `new(id)` 的那三个的工厂形态：`Popup.new(id, trigger)`、`DatePicker.new(id, focus_handle)`，以及 `Scrollbar` 的三个入口 |
 
+### 组合模式
+
+其中五个组件不是一个元素，而是一种搭法，上面的表格说不出这件事。下面每段都是能跑起来的最小写法，并且都经过运行时校验。
+
+**受控控件。** `Checkbox`、`Switch`、`Radio` 与 `Toggle` 自身不持有状态：值由你读进去、再写回来。它们什么都不画，所以勾选标记是一个子元素。
+
+```js
+Checkbox.new("done")
+  .checked(this.checked)
+  .on_change((checked, cx) => {
+    this.checked = checked;
+    cx.notify();
+  })
+  .child(this.checked ? "done" : "not done");
+```
+
+**`Progress` 负责报读，进度条是你的。** root 带的是 role 和屏幕阅读器要念的 `0..=100`，它自己什么都不画。
+
+```js
+Progress.new("upload")
+  .value(62)
+  .child(
+    ProgressTrack.new().w(200).h(6).bg(cx.theme().colors.muted)
+      .child(ProgressIndicator.new().w(124).h(6).bg(cx.theme().colors.primary)),
+  );
+```
+
+**滑块是四个部件，四个都不能少**——没有 `SliderIndicator` 的滑块根本拖不动，因为每一个指针位置都是相对它的盒子测量的。四个部件收的是同一份状态。
+
+```js
+Slider.new(this.volume).child(
+  SliderTrack.new(this.volume).w(200).h(16)
+    .child(SliderIndicator.new(this.volume).h(4).bg(cx.theme().colors.primary))
+    .child(SliderThumb.new(this.volume).w(12).h(12).bg(cx.theme().colors.background)),
+);
+```
+
+**`Select` 管键盘，`Popup` 管那块面。** root 持有 combobox 的语义与展开状态；列表是放在它里面的一个 `Popup`。它需要两个 focus handle——一个给触发元素，一个给内容——没有第一个，屏幕上就没有任何东西持有键盘。
+
+```js
+Select.new("mode")
+  .accessibility_label("Mode")
+  .open(this.open)
+  .track_focus(this.trigger)
+  .content_focus_handle(this.list)
+  .on_open_change((open, cx) => { this.open = open; cx.notify(); })
+  .child(
+    Popup.new("mode-list", trigger).anchor("bottom_left")
+      .when(this.open, (el) => el.content(list)),
+  );
+```
+
+展开后用方向键移动高亮这件事目前没有：base 期待里面的东西用自己的按键绑定来跑高亮，而 shell 没有按键绑定层。指针可用，Escape 关闭，Enter 与 ↓ 展开。
+
+**虚拟列表和它的滚动条按名字配对。** 列表自己不画滚动条，而且配对在运行前不做任何校验，所以两半都要写。
+
+```js
+v_flex().relative().h(200)
+  .child(
+    v_virtual_list("rows", rows.length, 28,
+      (index) => rows[index].id,
+      (range) => rows.slice(range.start, range.end).map((row) => div().child(row.name)),
+    ).size_full(),
+  )
+  .child(Scrollbar.vertical("rows").absolute().inset_0());
+```
+
+**嵌套视图创建一次，然后作为子元素挂上。** `cx.new` 属于 `init` 或事件处理器；实体在任何接受子元素的位置都能当子元素。
+
+```js
+init(props, cx) {
+  this.chart = cx.new(PriceChart, { symbol });
+}
+render() {
+  return v_flex().child(this.chart);
+}
+```
+
 ## `gpui-fps` 模块
 
 | 名称 | 说明 |
