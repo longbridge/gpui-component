@@ -1082,12 +1082,15 @@ const ELEMENT_METHODS: &str = r#"    /**
      * event continues to the handlers above unless `cx.stop_propagation()`
      * says otherwise.
      *
-     * Wired on a plain `div`, `h_flex` or `v_flex` only — the elements the
-     * shell owns outright. Every other component builds its own base type and
-     * hangs its own listeners on it, so this on a `Button` is recorded and
-     * never reaches GPUI; the log says so. Wrap it and write the handler on
-     * the wrapper. The same applies to `on_key_up`, the four pointer handlers,
-     * `on_action` and `key_context`.
+     * Wired on `div`, `h_flex`, `v_flex`, `Button`, `Link`, `Checkbox`,
+     * `Switch`, `Radio`, `Toggle`, `Tabs` and `Tab`. On any other component it
+     * is recorded and never reaches GPUI, and the log says so — wrap it and
+     * write the handler on the wrapper. The same list applies to `on_key_up`,
+     * the four pointer handlers, `on_action` and `key_context`.
+     *
+     * Wired is not the same as reachable. A key travels the focus path, so a
+     * component that accepts no focus handle — `Tab` — hears presses and never
+     * hears keys, however well both are wired.
      */
     on_key_down(handler: (event: KeyEvent, cx: Context) => void): Element;
     /** GPUI `InteractiveElement::on_key_up`, on the same focus path as `on_key_down`. */

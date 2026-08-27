@@ -5572,6 +5572,136 @@ export default class Surface extends View {
     );
 }
 
+/// Input reaches base's own controls, not just a plain element.
+///
+/// `Button.new("save").on_key_down(...)` is a reasonable thing to write and for
+/// two commits it was recorded and never wired — the handler sat in a
+/// description while base's `Button` built its own element and hung its own
+/// listeners on it.
+///
+/// The two halves are asserted on different controls on purpose, because they
+/// need different things. A key event travels the focus path, so it can only
+/// reach a control that accepts a script's focus handle — `Button` and
+/// `Checkbox` do. A pointer event travels the hitbox, so it reaches a `Tab`,
+/// which accepts no focus handle at all and could never hear a key.
+#[gpui::test]
+fn input_reaches_a_base_control_not_only_a_plain_element(cx: &mut TestAppContext) {
+    cx.update(|cx| crate::init(cx));
+
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View, div } from "gpui";
+import { v_flex, Button, Checkbox, Tab } from "gpui-base";
+
+export default class Toolbar extends View {
+  init(_props, cx) {
+    this.button = cx.focus_handle();
+    this.check = cx.focus_handle();
+    this.log = [];
+  }
+
+  render(_cx) {
+    return v_flex()
+      .child(
+        Tab.new("first")
+          .w(200)
+          .h(40)
+          // Right, not left: base's own `Tab` stops propagation on a left
+          // press, so a left handler here would be testing that rather than
+          // the wiring.
+          .on_mouse_down("right", (event, cx) => {
+            this.log.push(`tab:${event.button}`);
+            cx.notify();
+          })
+          .child("One"),
+      )
+      .child(
+        Button.new("save")
+          .w(200)
+          .h(40)
+          .tab_index(1)
+          .track_focus(this.button)
+          .on_key_down((event, cx) => {
+            this.log.push(`button:${event.keystroke}`);
+            cx.notify();
+          })
+          .child("Save"),
+      )
+      .child(
+        Checkbox.new("wrap")
+          .w(200)
+          .h(40)
+          .tab_index(2)
+          .track_focus(this.check)
+          .on_key_down((event, cx) => {
+            this.log.push(`checkbox:${event.keystroke}`);
+            cx.notify();
+          })
+          .child("Wrap"),
+      )
+      .child(div().child(`log=${this.log.join(" ")}`));
+  }
+}
+"#;
+    let view_type = runtime.load_source("control-input", source).expect("load");
+    let runtime_for_view = Rc::clone(&runtime);
+    let window = cx.add_window(move |window, cx| {
+        let view = runtime_for_view
+            .instantiate_view(&view_type, window, cx)
+            .expect("instantiate");
+        RootedScriptView(view)
+    });
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    let view = window
+        .root(&mut context)
+        .expect("root view")
+        .read_with(&context, |root, _| root.0.clone());
+
+    let handles = runtime.entities().focus_handles();
+    assert_eq!(handles.len(), 2, "the script created two focus handles");
+
+    context.update(|window, cx| handles[0].focus(window, cx));
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    context.simulate_keystrokes("cmd-s");
+
+    context.update(|window, cx| handles[1].focus(window, cx));
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    context.simulate_keystrokes("space");
+
+    // The tab is the first 40-tall row.
+    context.simulate_mouse_move(
+        point(px(20.), px(20.)),
+        gpui::MouseButton::Right,
+        Modifiers::default(),
+    );
+    context.simulate_mouse_down(
+        point(px(20.), px(20.)),
+        gpui::MouseButton::Right,
+        Modifiers::default(),
+    );
+    context.run_until_parked();
+    context.update(|window, cx| window.draw(cx).clear(cx));
+
+    let tree = context.update(|_, cx| {
+        view.read(cx)
+            .snapshot()
+            .map(crate::RenderSnapshot::debug_tree)
+            .unwrap_or_default()
+    });
+    assert!(
+        tree.contains("button:cmd-s"),
+        "a key typed at a Button must reach the handler written on it: {tree}"
+    );
+    assert!(tree.contains("checkbox:space"), "and at a Checkbox: {tree}");
+    assert!(
+        tree.contains("tab:right"),
+        "a press on a Tab must reach it even though a key never could, because a \
+         pointer event travels the hitbox rather than the focus path: {tree}"
+    );
+}
+
 /// `cx.stop_propagation()` keeps an event at the element that handled it.
 ///
 /// GPUI delivers a key event to every handler on the focus path, so a nested

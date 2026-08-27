@@ -445,6 +445,15 @@ struct Behavior {
 }
 
 impl Behavior {
+    /// Whether anything asked for a pointer listener, and so for the box every
+    /// pointer position is reported against.
+    fn wants_pointer_geometry(&self) -> bool {
+        !self.on_mouse_down.is_empty()
+            || !self.on_mouse_up.is_empty()
+            || self.on_mouse_down_out.is_some()
+            || self.on_scroll_wheel.is_some()
+    }
+
     /// Whether focus or accessibility gave this element a reason to be
     /// identified.
     ///
@@ -791,6 +800,7 @@ fn materialize_component(
             let button = with_hover(button, &states);
             let button = with_active_and_focus(button, &states);
             let button = components::tooltip::with_tooltip(button, &behavior);
+            let button = with_input_handlers(button, &behavior, runtime);
             finish(button, refinement, children)
         }
         Component::Link(id) => {
@@ -822,6 +832,7 @@ fn materialize_component(
             }
             let link = with_hover(link, &states);
             let link = with_active_and_focus(link, &states);
+            let link = with_input_handlers(link, &behavior, runtime);
             finish(link, refinement, children)
         }
         Component::Checkbox(id) => {
@@ -869,6 +880,7 @@ fn materialize_component(
 
             let checkbox = with_hover(checkbox, &states);
             let checkbox = with_active_and_focus(checkbox, &states);
+            let checkbox = with_input_handlers(checkbox, &behavior, runtime);
             finish(checkbox, refinement, children)
         }
         Component::Switch(id) => {
@@ -902,10 +914,11 @@ fn materialize_component(
                     "state styles on a Switch are ignored; style the row around it instead"
                 );
             }
+            let switch = with_input_handlers(switch, &behavior, runtime);
             finish(switch, refinement, children)
         }
         Component::Tabs(id) => {
-            components::tabs::tab_list(id, refinement, behavior, states, children)
+            components::tabs::tab_list(runtime, id, refinement, behavior, states, children)
         }
         Component::Tab(id) => {
             components::tabs::tab(runtime, id, refinement, behavior, states, children)
@@ -1297,17 +1310,27 @@ fn with_gpui_focus<E: InteractiveElement>(
     element
 }
 
-/// The keyboard, for elements that can hold it.
+/// GPUI's own input listeners, for the components that can carry them.
 ///
-/// Takes `InteractiveElement` rather than the stateful flavour because a key
-/// event is routed by the focus path, not by an element id: an element hears
-/// one because it tracks a focus handle, which every caller has already
-/// arranged through [`with_gpui_focus`].
-fn with_key_handlers<E: InteractiveElement>(
-    element: E,
-    behavior: &Behavior,
-    runtime: &Rc<ShellRuntime>,
-) -> E {
+/// One function for the whole family rather than one per kind. The alternative
+/// was tried: the keyboard was factored out here while the pointer stayed
+/// inline in the `div` arm, so every component this was applied to answered
+/// keys and silently ignored presses — while the table saying which components
+/// honour "input" claimed all of it.
+///
+/// The bound is `InteractiveElement + ParentElement`: the listeners need the
+/// first and the bounds capture needs the second, because `on_prepaint` is a
+/// canvas child.
+///
+/// Wired is not the same as reachable. A key event travels the focus path and
+/// a pointer event travels the hitbox, so a component that accepts no script
+/// focus handle — `Tab` — hears presses and never hears keys, however well
+/// both are wired here. That is a property of the component, reported where
+/// focus is.
+fn with_input_handlers<E>(element: E, behavior: &Behavior, runtime: &Rc<ShellRuntime>) -> E
+where
+    E: InteractiveElement + ParentElement,
+{
     let mut element = element;
     if let Some(callback) = behavior.on_key_down {
         let runtime = Rc::downgrade(runtime);
@@ -1325,6 +1348,59 @@ fn with_key_handlers<E: InteractiveElement>(
             }
         });
     }
+    // The pointer half. It needs the element's box for `local_position`, and
+    // captures it only when something asked.
+    if behavior.wants_pointer_geometry() {
+        let bounds = Rc::new(Cell::new(None::<Bounds<Pixels>>));
+        let writer = Rc::clone(&bounds);
+        element = element.on_prepaint(move |value, _, _| writer.set(Some(value)));
+
+        for (button, callback) in behavior.on_mouse_down.iter().copied() {
+            let runtime = Rc::downgrade(runtime);
+            let bounds = Rc::clone(&bounds);
+            element = element.on_mouse_down(button, move |event, window, cx| {
+                dispatch_mouse_button(&runtime, callback, event, bounds.get(), window, cx);
+            });
+        }
+        for (button, callback) in behavior.on_mouse_up.iter().copied() {
+            let runtime = Rc::downgrade(runtime);
+            let bounds = Rc::clone(&bounds);
+            element = element.on_mouse_up(button, move |event, window, cx| {
+                dispatch_mouse_button(&runtime, callback, event, bounds.get(), window, cx);
+            });
+        }
+        if let Some(callback) = behavior.on_mouse_down_out {
+            let runtime = Rc::downgrade(runtime);
+            let bounds = Rc::clone(&bounds);
+            element = element.on_mouse_down_out(move |event, window, cx| {
+                dispatch_mouse_button(&runtime, callback, event, bounds.get(), window, cx);
+            });
+        }
+        if let Some(callback) = behavior.on_scroll_wheel {
+            let runtime = Rc::downgrade(runtime);
+            let bounds = Rc::clone(&bounds);
+            element = element.on_scroll_wheel(move |event, window, cx| {
+                let Some(runtime) = runtime.upgrade() else {
+                    return;
+                };
+                // A line delta is converted here rather than in the script,
+                // because the line height it needs is the window's and a
+                // script has no way to ask for it. Both delta shapes therefore
+                // arrive as pixels, and `delta_lines` keeps the original when
+                // there was one.
+                let line_height = window.line_height();
+                runtime.dispatch_scroll_wheel(
+                    callback,
+                    event,
+                    line_height,
+                    bounds.get(),
+                    window,
+                    cx,
+                );
+            });
+        }
+    }
+
     // The context has to be installed before the listeners for the same reason
     // GPUI's own components do it in that order: a keymap predicate is matched
     // against the context stack of the element the dispatch reached, so an
@@ -1377,6 +1453,64 @@ fn with_key_handlers<E: InteractiveElement>(
     element
 }
 
+/// One dispatch for the three press-and-release builders.
+///
+/// `MouseDownEvent` and `MouseUpEvent` are different types carrying the same
+/// four fields, and `on_mouse_down_out` produces the first — so one small
+/// trait over both beats writing the same six lines three times.
+fn dispatch_mouse_button<E: MouseButtonEventFields>(
+    runtime: &std::rc::Weak<ShellRuntime>,
+    callback: CallbackId,
+    event: &E,
+    bounds: Option<Bounds<Pixels>>,
+    window: &mut Window,
+    cx: &mut App,
+) {
+    let Some(runtime) = runtime.upgrade() else {
+        return;
+    };
+    runtime.dispatch_mouse_button(
+        callback,
+        event.button(),
+        event.position(),
+        event.click_count(),
+        event.modifiers(),
+        bounds,
+        window,
+        cx,
+    );
+}
+
+/// The four fields a press and a release both carry.
+trait MouseButtonEventFields {
+    fn button(&self) -> MouseButton;
+    fn position(&self) -> gpui::Point<Pixels>;
+    fn click_count(&self) -> usize;
+    fn modifiers(&self) -> gpui::Modifiers;
+}
+
+macro_rules! mouse_button_event_fields {
+    ($event:ty) => {
+        impl MouseButtonEventFields for $event {
+            fn button(&self) -> MouseButton {
+                self.button
+            }
+            fn position(&self) -> gpui::Point<Pixels> {
+                self.position
+            }
+            fn click_count(&self) -> usize {
+                self.click_count
+            }
+            fn modifiers(&self) -> gpui::Modifiers {
+                self.modifiers
+            }
+        }
+    };
+}
+
+mouse_button_event_fields!(gpui::MouseDownEvent);
+mouse_button_event_fields!(gpui::MouseUpEvent);
+
 /// Reports the input behaviors a component does not wire.
 ///
 /// The same problem `tooltip` has, and the same answer: these are GPUI's own
@@ -1418,11 +1552,33 @@ fn warn_unhonoured_input(component: &Component, behavior: &Behavior) {
     }
 }
 
-/// The components [`with_key_handlers`] and its neighbours are applied to.
+/// The components [`with_input_handlers`] is applied to.
+///
+/// Every one implements `InteractiveElement` and `ParentElement`, which is what
+/// the listeners and the bounds capture need, and every one is something a
+/// script puts input on. The rest either build no interactive base
+/// (`Collapsible`, `Progress`) or own the keyboard themselves (`Input`,
+/// `Select`, `OtpInput`), where a second set of listeners would fight the
+/// first. Widening this is one call per component, not a new mechanism.
+///
+/// Wired is not the same as reachable. A key event travels the focus path, so
+/// a component that accepts no script focus handle — `Tab` — hears presses and
+/// never hears keys. That is a property of the component, reported where focus
+/// is, not something this list can express.
 fn honours_input(component: &Component) -> bool {
     matches!(
         component,
-        Component::Div | Component::HFlex | Component::VFlex
+        Component::Div
+            | Component::HFlex
+            | Component::VFlex
+            | Component::Button(_)
+            | Component::Link(_)
+            | Component::Checkbox(_)
+            | Component::Switch(_)
+            | Component::Radio(_)
+            | Component::Toggle(_)
+            | Component::Tabs(_)
+            | Component::Tab(_)
     )
 }
 
@@ -1523,7 +1679,7 @@ fn flex_element(
     let identity = element_id(id, behavior.key.clone());
     let stateful = element.id(identity.clone());
     let stateful = with_gpui_focus(stateful, &behavior, focus.as_ref());
-    let stateful = with_key_handlers(stateful, &behavior, runtime);
+    let stateful = with_input_handlers(stateful, &behavior, runtime);
     let stateful = with_aria(stateful, &behavior);
     let mut stateful = with_active_and_focus(stateful, &states);
     if !behavior.disabled
@@ -1546,78 +1702,6 @@ fn flex_element(
             if let Some(runtime) = runtime.upgrade() {
                 runtime.dispatch_mouse_move(callback, event, local, bounds, window, cx);
             }
-        });
-    }
-    for (button, callback) in behavior.on_mouse_down.iter().copied() {
-        let runtime = Rc::downgrade(runtime);
-        let bounds = Rc::clone(&bounds);
-        stateful = stateful.on_mouse_down(button, move |event, window, cx| {
-            let Some(runtime) = runtime.upgrade() else {
-                return;
-            };
-            runtime.dispatch_mouse_button(
-                callback,
-                event.button,
-                event.position,
-                event.click_count,
-                event.modifiers,
-                bounds.get(),
-                window,
-                cx,
-            );
-        });
-    }
-    for (button, callback) in behavior.on_mouse_up.iter().copied() {
-        let runtime = Rc::downgrade(runtime);
-        let bounds = Rc::clone(&bounds);
-        stateful = stateful.on_mouse_up(button, move |event, window, cx| {
-            let Some(runtime) = runtime.upgrade() else {
-                return;
-            };
-            runtime.dispatch_mouse_button(
-                callback,
-                event.button,
-                event.position,
-                event.click_count,
-                event.modifiers,
-                bounds.get(),
-                window,
-                cx,
-            );
-        });
-    }
-    if let Some(callback) = behavior.on_mouse_down_out {
-        let runtime = Rc::downgrade(runtime);
-        let bounds = Rc::clone(&bounds);
-        stateful = stateful.on_mouse_down_out(move |event, window, cx| {
-            let Some(runtime) = runtime.upgrade() else {
-                return;
-            };
-            runtime.dispatch_mouse_button(
-                callback,
-                event.button,
-                event.position,
-                event.click_count,
-                event.modifiers,
-                bounds.get(),
-                window,
-                cx,
-            );
-        });
-    }
-    if let Some(callback) = behavior.on_scroll_wheel {
-        let runtime = Rc::downgrade(runtime);
-        let bounds = Rc::clone(&bounds);
-        stateful = stateful.on_scroll_wheel(move |event, window, cx| {
-            let Some(runtime) = runtime.upgrade() else {
-                return;
-            };
-            // A line delta is converted here rather than in the script,
-            // because the line height it needs is the window's and a script
-            // has no way to ask for it. Both delta shapes therefore arrive as
-            // pixels, and `delta_lines` keeps the original when there was one.
-            let line_height = window.line_height();
-            runtime.dispatch_scroll_wheel(callback, event, line_height, bounds.get(), window, cx);
         });
     }
     if let Some(callback) = behavior.on_hover {
@@ -1710,6 +1794,21 @@ pub(in crate::materialize) fn materialize_children(
 }
 
 /// A slot node's own styles, with its motion sampled and its leftovers named.
+///
+/// # Not covered by a test, and why
+///
+/// The sampling is the part that matters and the part nothing here can assert.
+/// It shows up only in the refinement after materialize, which this suite
+/// cannot read — it reads description trees — and it cannot be called from a
+/// unit test either: the motion sampler keys its state off the element being
+/// laid out and refuses to run outside `request_layout`, `prepaint` or `paint`.
+/// Reading the resulting geometry would need every script element to carry a
+/// `debug_bounds` marker, which is a debugging feature rather than a fix.
+///
+/// So what stands in for a test is that there is one of these rather than five
+/// copies. The bug this replaced was five resolvers that each read the
+/// refinement and ignored the motion beside it; a single function cannot drift
+/// from itself.
 ///
 /// The two things a slot resolver would otherwise silently drop. Motion is the
 /// one that bites: `AccordionPanel.new().transition("height", ...)` is the most

@@ -48,16 +48,7 @@ pub(super) fn install(ctx: &Ctx<'_>) -> JsResult<()> {
         "__window_appearance",
         Func::from(|ctx: Ctx<'_>| -> JsResult<String> {
             read(&ctx, "window.appearance()", |window| {
-                // Four platform appearances collapse to the two a script can
-                // act on. The vibrancy variants differ in how the platform
-                // paints behind the window, which a script cannot influence
-                // and does not need to branch on — what it needs to know is
-                // whether it is drawing on light or on dark.
-                match window.appearance() {
-                    WindowAppearance::Dark | WindowAppearance::VibrantDark => "dark",
-                    WindowAppearance::Light | WindowAppearance::VibrantLight => "light",
-                }
-                .to_owned()
+                appearance_name(window.appearance()).to_owned()
             })
         }),
     )?;
@@ -294,6 +285,23 @@ fn mouse_position<'js>(ctx: Ctx<'js>) -> JsResult<Object<'js>> {
     Ok(object)
 }
 
+/// The four platform appearances, as the two a script can act on.
+///
+/// The vibrancy variants differ in how the platform paints *behind* the
+/// window, which a script cannot influence and does not need to branch on —
+/// what it needs to know is whether it is drawing on light or on dark.
+///
+/// A free function so it can be tested against all four. The test window
+/// reports `Light` and offers no way to change it from outside GPUI, so
+/// exercising this through a rendered window would only ever prove one arm —
+/// the same hole that let a platform-dependent keystroke spelling ship here.
+fn appearance_name(appearance: WindowAppearance) -> &'static str {
+    match appearance {
+        WindowAppearance::Dark | WindowAppearance::VibrantDark => "dark",
+        WindowAppearance::Light | WindowAppearance::VibrantLight => "light",
+    }
+}
+
 /// A measurement, legal from any host call including `render`.
 fn read<R>(ctx: &Ctx<'_>, api: &str, body: impl FnOnce(&Window) -> R) -> JsResult<R> {
     scope::with_current(|window, _| body(window)).ok_or_else(|| {
@@ -327,4 +335,27 @@ fn write(ctx: &Ctx<'_>, api: &str, body: impl FnOnce(&mut Window, &mut gpui::App
             &format!("{api} needs a live host call; call it from an event handler or a task"),
         )
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use gpui::WindowAppearance;
+
+    /// Every appearance reduces, and the vibrant pair reduces the same way as
+    /// the plain pair.
+    #[test]
+    fn every_platform_appearance_reduces_to_light_or_dark() {
+        assert_eq!(super::appearance_name(WindowAppearance::Light), "light");
+        assert_eq!(
+            super::appearance_name(WindowAppearance::VibrantLight),
+            "light",
+            "vibrancy is about what the platform paints behind the window, not about \
+             what the script draws on"
+        );
+        assert_eq!(super::appearance_name(WindowAppearance::Dark), "dark");
+        assert_eq!(
+            super::appearance_name(WindowAppearance::VibrantDark),
+            "dark"
+        );
+    }
 }
