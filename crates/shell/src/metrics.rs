@@ -66,7 +66,7 @@ impl RuntimeMetrics {
     /// Total time spent inside script `render`.
     ///
     /// The whole pass, which is more than JavaScript: every builder call
-    /// crossing into Rust, every `SpecOp` recorded, and every native module call
+    /// crossing into Rust, every `SpecOp` recorded, and every HostModule call
     /// the script makes while describing itself. [`native_time`] is how much of
     /// it was the last of those.
     ///
@@ -87,7 +87,7 @@ impl RuntimeMetrics {
     }
 
     /// Of [`script_render_time`], how much was spent inside host functions the
-    /// script called — a `quotes()` imported from a host module, and the like.
+    /// script called — a `quotes()` imported from a HostModule, and the like.
     ///
     /// Subtracting it leaves the part that is genuinely the script describing
     /// itself: JavaScript, the boundary crossings, and the arena.

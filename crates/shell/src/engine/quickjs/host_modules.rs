@@ -1,7 +1,7 @@
 //! The QuickJS side of [`crate::host_modules`]: a resolver, a loader, and two
 //! conversions.
 //!
-//! Everything interesting about host modules is engine independent and lives
+//! Everything interesting about HostModule registrations is engine independent and lives
 //! above this file. What is left here is the module-loader wiring and exactly
 //! the two conversions the seam forbids the registry from knowing about
 //! (§6.5 rule 1): a script value becomes a [`HostValue`], and a [`HostValue`]
@@ -162,7 +162,7 @@ fn host_async_call<'js>(
 /// One name for all of them, because the scheduler's task label is `&'static
 /// str` and a module's function names are not. The failure a script sees is
 /// unaffected: a rejection carries `module.function` in its message.
-const ASYNC_API: &str = "a host module's async function";
+const ASYNC_API: &str = "a HostModule's async function";
 
 /// Resolves and loads the modules a host registered.
 ///
@@ -173,7 +173,7 @@ const ASYNC_API: &str = "a host module's async function";
 /// resolver is not the last in the chain — the application's own files are —
 /// and a resolver that throws leaves the exception pending on the context, so
 /// the file resolver behind it never gets to answer. `import "./ui.js"` failing
-/// with "not a host module" is what that mistake looks like.
+/// with "not a HostModule" is what that mistake looks like.
 #[derive(Clone, Copy, Default)]
 pub(super) struct HostModuleLoader;
 
@@ -231,7 +231,7 @@ impl Loader for HostModuleLoader {
             return Err(Exception::throw_message(
                 ctx,
                 &format!(
-                    "the host modules changed while `{module}` was being imported; \
+                    "the HostModule registry changed while `{module}` was being imported; \
                      export them before loading an application"
                 ),
             ));
@@ -251,7 +251,7 @@ impl Loader for HostModuleLoader {
                 return Err(Exception::throw_message(
                     ctx,
                     &format!(
-                        "host module `{module}` registered `{function}`, which is not a \
+                        "HostModule `{module}` registered `{function}`, which is not a \
                          JavaScript identifier and so cannot be exported"
                     ),
                 ));
@@ -483,7 +483,13 @@ mod tests {
         let mut reserved = host_modules::RESERVED_SPECIFIERS.to_vec();
         reserved.sort_unstable();
 
-        assert_eq!(reserved, resolving_first);
+        assert_eq!(
+            reserved, resolving_first,
+            "a specifier that resolves before this loader must be in \
+             RESERVED_SPECIFIERS, or a host can register that name and then \
+             never be able to import it. Add it to the list rather than \
+             loosening this assertion."
+        );
     }
 
     #[test]

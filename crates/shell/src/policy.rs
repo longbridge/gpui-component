@@ -1,6 +1,6 @@
 //! What a piece of running script is allowed to do, and who answers for it.
 //!
-//! A policy is the capability grant, the settings file and the native modules,
+//! A policy is the capability grant, the settings file and the HostModules,
 //! held together because they answer the same question: *this code, right now,
 //! under whose authority?*
 //!
@@ -122,7 +122,7 @@ impl Policy {
         self
     }
 
-    /// Adds a host module this application may import.
+    /// Adds a HostModule this application may import.
     ///
     /// Per policy rather than per process, because "which host functions may
     /// this plugin call" is exactly as much a grant as "which directories may it
@@ -149,7 +149,7 @@ impl Policy {
         self
     }
 
-    /// Withdraws every host module, keeping everything else.
+    /// Withdraws every HostModule, keeping everything else.
     pub(crate) fn without_host_modules(self) -> Self {
         *self.modules.borrow_mut() = Rc::new(HostModules::new());
         self

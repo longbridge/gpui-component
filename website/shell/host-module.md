@@ -1,10 +1,10 @@
 ---
-title: Host Module
-description: How a host lends its own Rust to a script — registration, the import that reaches it, the plain-data boundary, and the rules a host function runs under.
-order: 10
+title: HostModule
+description: How a host lends its own Rust to a script — registration, the import that reaches it, the plain-data boundary, and the rules a Host function runs under.
+order: 11
 ---
 
-# Host Module
+# HostModule
 
 [Capabilities](./capabilities.md) is the half that says what a script may **not** reach. This is the other half: what the host chooses to hand it.
 
@@ -30,7 +30,7 @@ A registered module is an ordinary ES module, resolved by the same loader that a
 
 ## Why an import rather than a lookup
 
-The obvious alternative is a lookup — a `native(name)` call answering with a bag of functions:
+The obvious alternative is a runtime registry lookup answering with a bag of functions:
 
 ```js
 // The shape this does not have.
@@ -46,7 +46,7 @@ import { projectName } from "workspace";   // typo: fails to link
 It loses twice, and both times on *when* you find out:
 
 - **A misspelled export would be a run-time failure.** `workspace.projectName()` type-checks, loads, renders, and then throws on the frame that first reaches it — which, for a name only one branch touches, can be a long way from the edit that caused it. An import is resolved when the module graph is linked, so the same typo stops the application before its first line runs, naming the module and the export.
-- **The type declarations would have nothing to say.** Only the host knows what it registered, so the best a generated `gpui.d.ts` could offer for `native(name)` is `Record<string, (...args: any[]) => any>` — leaving an application that wants real types to hand-write a `.d.ts` that nothing checks against the registry. A module specifier is a name declarations *can* be written against, so they are [generated from the registry itself](#typing-them) and the typo is red in the editor.
+- **The type declarations would have nothing to say.** Only the Host knows what it registered, so a lookup could offer no better than `Record<string, (...args: any[]) => any>` — leaving an application that wants real types to hand-write a `.d.ts` that nothing checks against the registry. A module specifier is a name declarations *can* be written against, so they are [generated from the registry itself](#typing-them) and the typo is red in the editor.
 
 What the import does **not** freeze is the function behind the name. Every export is a forwarding stub that resolves through the registry on each call, so withdrawing a module still takes effect immediately: a script holding an imported function gets a refusal, not the withdrawn closure. Only the *set of names* is fixed, at the moment the importing module is linked — which is why a host calls `export_module` **before** it loads an application.
 
@@ -55,28 +55,28 @@ What the import does **not** freeze is the function behind the name. Every expor
 The default registry is **empty**, the same shape as `Capabilities::default()`. A host that registers nothing has granted no extension surface, and a script that imports a module is told so by name:
 
 ```text
-host module `market` is not available: this host registered none.
-Host modules are granted by the embedding application, with
+HostModule `market` is not available: this Host registered none.
+HostModule access is granted by the embedding application, with
 gpui_shell::export_module(...).
 ```
 
 Register something and the message changes to name what does exist:
 
 ```text
-unknown host module `marker`; this host registered: market, theme
+unknown HostModule `marker`; this Host registered: market, theme
 ```
 
 ```text
-host module `market` has no function `quote`; it provides: quotes, ticks, watch, watch_all
+HostModule `market` has no function `quote`; it provides: quotes, ticks, watch, watch_all
 ```
 
 There is deliberately no per-module capability to grant on top of this. The host chose the list, so **the list is the grant** — and revoking one is a matter of exporting a module of the same name, or clearing the set, which takes effect on the next call rather than the next restart.
 
-For a multi-application host, each public `Policy` carries its own frozen capabilities and its own module registry — built with `Policy::with_host_module`, one module at a time, the same way. That is how two plugins in one runtime receive different authority without swapping thread-local state across `await` boundaries. Identity and requested system permissions live in `gpui-shell.json`; host modules do not, because contributions are executable behavior registered by the host.
+For a multi-application host, each public `Policy` carries its own frozen capabilities and its own module registry — built with `Policy::with_host_module`, one module at a time, the same way. That is how two plugins in one runtime receive different authority without swapping thread-local state across `await` boundaries. Identity and requested system permissions live in `gpui-shell.json`; HostModule registrations do not, because contributions are executable behavior registered by the host.
 
 ## Names the runtime keeps
 
-A host module shares one specifier namespace with the built-in modules and the [Standard Runtime](./engine.md), and the resolver reaches those first. So registering `path` would not shadow the real `path` — it would register a module nothing can ever import, silently.
+A HostModule shares one specifier namespace with the built-in modules and the [Standard Runtime](./engine.md), and the resolver reaches those first. So registering `path` would not shadow the real `path` — it would register a module nothing can ever import, silently.
 
 `export_module` refuses such a name instead, and says who owns it:
 
@@ -87,11 +87,11 @@ are: gpui, gpui-base, gpui-fps, buffer, console, crypto, fs/promises, net, os,
 path, process, url, websocket, zlib
 ```
 
-The full list is `gpui_shell::RESERVED_SPECIFIERS`. Everything else is yours — and cannot be shadowed by a file in the application directory either, because host modules resolve before the application's own files.
+The full list is `gpui_shell::RESERVED_SPECIFIERS`. Everything else is yours — and cannot be shadowed by a file in the application directory either, because HostModule registrations resolve before the application's own files.
 
 ## The boundary is plain data
 
-A host function receives `HostArguments` and returns a `HostValue`: null, boolean, number, string, array, or object. Those six cases are the intersection of what a script engine and JSON can both carry, which is what lets one registry serve any engine behind the [seam](./engine.md).
+A Host function receives `HostArguments` and returns a `HostValue`: null, boolean, number, string, array, or object. Those six cases are the intersection of what a script engine and JSON can both carry, which is what lets one registry serve any engine behind the [seam](./engine.md).
 
 It never receives a script handle. A handle would let the host keep a reference to a script value past the call that produced it — and past the call scope that made the surrounding context valid.
 
@@ -119,7 +119,7 @@ HostObject::new()
 
 An error is a message, not a type: `HostError::new("no such symbol")` reaches the script as a thrown `Error` the script can catch.
 
-## Three rules a host function runs under
+## Three rules a Host function runs under
 
 **It must not call back into the script engine.** A host call happens inside a script call, which is inside a host call; re-entering the VM from there would run script code with an engine frame already on the stack, in the middle of a render pass. Holding no script handle makes that hard to express by accident, and the dispatcher refuses a nested call outright so a host that finds another route gets a diagnosable error rather than undefined behavior.
 
@@ -132,7 +132,7 @@ fn with_app<R>(read: impl FnOnce(&mut App) -> R) -> Result<R, HostError> {
 }
 ```
 
-**`cx.notify()` from inside one is delivered after the call unwinds.** So a host function may mutate an entity and ask the views watching it to re-render, without that re-render happening underneath the script that called it.
+**`cx.notify()` from inside one is delivered after the call unwinds.** So a Host function may mutate an entity and ask the views watching it to re-render, without that re-render happening underneath the script that called it.
 
 ## Work that should not hold the thread
 
@@ -198,7 +198,7 @@ The generated `gpui.d.ts` emits that verbatim inside `declare module "market"`, 
 Writing it here rather than in a `.d.ts` beside the script is what keeps the two halves one thing. A `.d.ts` would be a second file, in a second language, with nothing holding it to the registry. `export_module` compares the declared exports with the registered ones and refuses a mismatch:
 
 ```text
-host module `market` declares a different set of functions than it registers;
+HostModule `market` declares a different set of functions than it registers;
 registered but not declared: quotes; declared but not registered: prices
 ```
 
@@ -260,4 +260,4 @@ Run it with `cargo run -- shell`. The two panels read one entity through two pat
 
 - **Classes and object identity.** A module exports functions. Exporting a class would mean handing the script a live host object, which the plain-data boundary above rules out; a factory function returning a record does the same work today.
 - **Per-function grants inside one registry.** A policy grants the registry the host assembled; it does not add another permission switch for each function.
-- **Streaming or callbacks into the host.** A script cannot hand a function to a host module; the module can only be called.
+- **Streaming or callbacks into the host.** A script cannot hand a function to a HostModule; the module can only be called.

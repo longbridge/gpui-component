@@ -1,7 +1,7 @@
 ---
 title: Hosting
 description: The Rust side in full — runtime lifetime, mounting script views, refreshing them from host state, metrics, exit requests and hot-reload.
-order: 9
+order: 10
 ---
 
 # Hosting
@@ -18,7 +18,7 @@ gpui_shell::init(cx);                     // gpui-base, the token palette, the s
 let runtime = ShellRuntime::new(cx)?;     // one VM, installed as this App's default
 ```
 
-`new(cx)` lets callbacks, host modules and hot reload find the default runtime without the host threading a handle through every layer. A host deliberately managing more than one VM can create additional runtimes with `new_isolated()` and retain those handles itself.
+`new(cx)` lets callbacks, HostModule registrations and hot reload find the default runtime without the host threading a handle through every layer. A host deliberately managing more than one VM can create additional runtimes with `new_isolated()` and retain those handles itself.
 
 `gpui-shell` uses GPUI's inspector reflection table to expose the fluent style
 methods, including in release builds. Depending on this crate therefore enables
@@ -100,7 +100,7 @@ cx.notify()        ── draw this view again          (no script runs)
 view.refresh(cx)   ── and its description is stale  (the script runs)
 ```
 
-Because a script `render` is [not a frame render](./state.md#when-render-runs), a plain `cx.notify()` repaints the snapshot that already exists. If the host changed something the script *reads* — an entity behind a native module, a setting, a document — the view must be told the description itself is out of date:
+Because a script `render` is [not a frame render](./state.md#when-render-runs), a plain `cx.notify()` repaints the snapshot that already exists. If the host changed something the script *reads* — an entity behind a HostModule, a setting, a document — the view must be told the description itself is out of date:
 
 ```rust
 runtime.refresh(&root, cx)?;
@@ -112,7 +112,7 @@ Getting it wrong in the other direction is visible immediately — the interface
 
 ## What a script may reach
 
-The three host settings have different lifetimes. Capabilities are frozen into each newly loaded view. The store handle and native-module registry are live host configuration shared with that view, so replacing either affects its next call:
+The three host settings have different lifetimes. Capabilities are frozen into each newly loaded view. The store handle and HostModule registry are live host configuration shared with that view, so replacing either affects its next call:
 
 ```rust
 gpui_shell::set_capabilities(
@@ -125,7 +125,7 @@ gpui_shell::set_store_path(data_dir.join("store.json"));
 gpui_shell::export_module(market_module(&market))?;
 ```
 
-All three default to nothing: no file access, no storage location, no host modules. See [Capabilities](./capabilities.md) and [Host Module](./host-module.md).
+All three default to nothing: no file access, no storage location, no HostModule registrations. See [Capabilities](./capabilities.md) and [HostModule](./host-module.md).
 
 The standalone binary also checks `<root>/gpui-shell.json`. Its recognized fields supply application identity, optional application/Shell version metadata, the entry point, and capability requests; only `id`, `name`, and `entry` are required. Embedders may instead construct a `Policy` directly when each loaded application needs a distinct grant and module registry.
 
@@ -138,7 +138,7 @@ let reading = runtime.read_metrics();
 reading.script_renders();      // follows cx.notify(), reloads, theme changes
 reading.materializations();    // follows frames
 reading.script_render_time();  // total time inside script `render`
-reading.native_time();         // of which, inside host modules
+reading.native_time();         // of which, inside HostModule registrations
 reading.slowest_script_render();
 ```
 

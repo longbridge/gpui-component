@@ -1,4 +1,4 @@
-//! Host modules — Rust functions the host lends to a script, imported by name.
+//! HostModule registrations — Rust functions the host lends to a script, imported by name.
 //!
 //! A script cannot load a native extension. `dlopen`-ed Rust has no stable ABI
 //! and, once inside the process, holds every permission the process holds — a
@@ -37,7 +37,7 @@
 //!
 //! A lookup also leaves the type declarations with nothing to say. Only the
 //! host knows what it registered, so the best a generated `.d.ts` can offer for
-//! `native(name)` is `Record<string, (...args) => any>`. A module specifier is
+//! A runtime registry lookup can only return a bag of untyped functions. A module specifier is
 //! a name declarations can be written against, so the generated ones name the
 //! exports in this registry directly.
 //!
@@ -85,7 +85,7 @@
 //! request a re-render with `cx.notify()`, which is delivered after the current
 //! call unwinds.
 //!
-//! # Reaching host modules is itself a capability
+//! # Reaching HostModule registrations is itself a capability
 //!
 //! The default registry is empty, and every entry point into it fails while it
 //! stays that way — the same shape as [`crate::Capabilities::default`], which
@@ -96,7 +96,7 @@
 //!
 //! # Why the runtime's own modules cannot be taken
 //!
-//! A host module shares one specifier namespace with the built-in modules and
+//! A HostModule shares one specifier namespace with the built-in modules and
 //! the Standard Runtime, and the resolver chain reaches the built-ins first. A
 //! host registering `path` would therefore not shadow the real `path` — it
 //! would register a module nothing can ever import, and never find out. So the
@@ -660,7 +660,7 @@ impl HostModule {
         }
 
         let mut message = format!(
-            "host module `{}` declares a different set of functions than it registers",
+            "HostModule `{}` declares a different set of functions than it registers",
             self.name
         );
         if !missing.is_empty() {
@@ -699,7 +699,7 @@ impl HostModule {
 
     fn no_such_function(&self, function: &str) -> HostError {
         HostError::new(format!(
-            "host module `{}` has no function `{function}`; it provides: {}",
+            "HostModule `{}` has no function `{function}`; it provides: {}",
             self.name,
             list(&self.function_names())
         ))
@@ -709,7 +709,7 @@ impl HostModule {
 /// The specifiers a host may not register, because something else answers them.
 ///
 /// Two groups, and the reason is the same for both: the resolver chain reaches
-/// them before it reaches this registry, so a host module wearing one of these
+/// them before it reaches this registry, so a HostModule wearing one of these
 /// names is unreachable rather than overriding. The engine asserts this list
 /// against its own resolvers, so a module added there and not here is a failing
 /// test rather than a name a host can quietly lose.
@@ -745,7 +745,7 @@ fn next_generation() -> u64 {
     })
 }
 
-/// Every host module a host has granted.
+/// Every HostModule a host has granted.
 ///
 /// Crate-internal: a host builds [`HostModule`]s and hands them over one at a
 /// time, through [`crate::export_module`] or [`crate::Policy::with_host_module`].
@@ -825,13 +825,13 @@ impl HostModules {
 
         Err(HostError::new(if self.modules.is_empty() {
             format!(
-                "host module `{name}` is not available: this host registered none. \
-                 Host modules are granted by the embedding application, with \
+                "HostModule `{name}` is not available: this Host registered none. \
+                 HostModule access is granted by the embedding application, with \
                  gpui_shell::export_module(...)."
             )
         } else {
             format!(
-                "unknown host module `{name}`; this host registered: {}",
+                "unknown HostModule `{name}`; this Host registered: {}",
                 list(&self.module_names())
             )
         }))
@@ -1013,7 +1013,7 @@ mod tests {
             .unwrap_err();
         assert_eq!(
             error.message(),
-            "unknown host module `workspce`; this host registered: editor, workspace"
+            "unknown HostModule `workspce`; this Host registered: editor, workspace"
         );
     }
 
@@ -1022,8 +1022,21 @@ mod tests {
         let error = HostModules::new()
             .call("workspace", "project_name", &HostArguments::default())
             .unwrap_err();
-        assert!(error.message().contains("this host registered none"));
-        assert!(error.message().contains("export_module"));
+        // Both halves of the sentence are the invariant, not incidental
+        // wording: a host that granted nothing has not wired its extension
+        // surface up, and telling that author "unknown module" would send them
+        // hunting for a typo that is not there. So the message has to say which
+        // of the two failures this is, and where to go to fix it.
+        assert!(
+            error.message().contains("this Host registered none"),
+            "an empty registry must not read like an unknown name: {}",
+            error.message()
+        );
+        assert!(
+            error.message().contains("export_module"),
+            "the refusal must name the entry point that fixes it: {}",
+            error.message()
+        );
     }
 
     #[test]
@@ -1033,7 +1046,7 @@ mod tests {
             .unwrap_err();
         assert_eq!(
             error.message(),
-            "host module `editor` has no function `line_cont`; it provides: line_count"
+            "HostModule `editor` has no function `line_cont`; it provides: line_count"
         );
     }
 
@@ -1166,7 +1179,9 @@ mod tests {
                  export function quotes(): Quote[];\n\
                  export function watch(symbol: string): boolean;\n",
             );
-        assert!(module.validate().is_ok());
+        module
+            .validate()
+            .expect("a face that names exactly the registered functions is valid");
     }
 
     /// The drift this check exists for: the host renamed a function and the
@@ -1242,7 +1257,11 @@ mod tests {
         );
 
         clear_modules();
-        assert!(modules().is_empty());
+        assert!(
+            modules().is_empty(),
+            "clearing must actually revoke: a module left registered keeps its \
+             closure's GPUI handles alive past the host that installed them"
+        );
     }
 
     #[test]

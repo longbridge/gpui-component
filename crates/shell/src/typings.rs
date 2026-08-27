@@ -128,7 +128,6 @@ pub fn declarations() -> String {
     out.push_str(&nullary_styles(&nullary));
     out.push_str("  }\n");
     out.push_str(ELEMENTS);
-    out.push_str(COMPONENT_TYPES);
     out.push_str(WINDOW);
     out.push_str(CAPABILITIES);
     out.push_str(SCHEDULING);
@@ -136,7 +135,7 @@ pub fn declarations() -> String {
     out.push_str("declare module \"gpui-base\" {\n");
     out.push_str(BASE_IMPORTS);
     out.push_str(&base_color_token_type());
-    out.push_str(BASE_PART_TYPES);
+    out.push_str(BASE_SHARED_TYPES);
     out.push_str(BASE);
     out.push_str("}\n\n");
     out.push_str("declare module \"gpui-shell\" {\n");
@@ -155,7 +154,7 @@ pub fn declarations() -> String {
 /// The modules this host registered, as `declare module` blocks.
 ///
 /// Generated from the registry rather than hand-written beside the script,
-/// which is the whole reason host modules became imports. A module that gave
+/// which is the whole reason HostModule registrations became imports. A module that gave
 /// itself a TypeScript face through [`crate::HostModule::declarations`] is
 /// emitted verbatim — and [`crate::HostModule::validate`] has already checked
 /// that face against what was registered, so it cannot describe a function that
@@ -643,8 +642,11 @@ const VALUE_TYPES: &str = r#"  /**
   /** A length with no percentage and no `"auto"`: pixels or rems. */
   export type AbsoluteLength = number | `${number}px` | `${number}rem`;
 
+  /** A layout axis, mirroring `gpui::Axis`. */
+  export type Axis = "horizontal" | "vertical";
+
   /**
-   * What a host module function takes and answers.
+   * What a HostModule function takes and answers.
    *
    * Named after the Rust type it mirrors, `HostValue`, rather than after the
    * shape it happens to have: `Json` would sit one capital letter away from the
@@ -725,7 +727,7 @@ const CONTEXT_AND_VIEW: &str = r#"  /**
      * Legal from `init`, an event handler or a task; creating one during
      * `render` or layout throws.
      */
-    new(Class: ViewClass, props?: Props): Entity;
+    new(Class: ViewClass, props?: import("gpui-shell").Props): Entity;
 
     /**
      * Calls `body(cx)` and adopts the promise it returns, so a rejection is
@@ -776,24 +778,13 @@ const CONTEXT_AND_VIEW: &str = r#"  /**
   }
 
   export interface Point { x: number; y: number; }
-  export interface ElementBounds extends Point { width: number; height: number; }
   /** GPUI mouse coordinates. `position` is window-relative; `local_position` is element-relative. */
   export interface MouseMoveEvent {
     position: Point;
     local_position: Point;
-    bounds: ElementBounds;
+    bounds: import("gpui-shell").ElementBounds;
     modifiers: Modifiers;
   }
-
-  /**
-   * Properties handed to `init`.
-   *
-   * `any` rather than `unknown` because the values come from outside the type
-   * system and every use would otherwise need a cast. The host currently
-   * constructs a root view with no properties at all, so `init` should treat
-   * its argument as absent.
-   */
-  export type Props = Record<string, any>;
 
   /**
    * The base class of every view: subclass it and default-export the subclass.
@@ -804,7 +795,7 @@ const CONTEXT_AND_VIEW: &str = r#"  /**
    * store an element on the instance: it belongs to the render that built it.
    */
   export abstract class View {
-    constructor(props?: Props);
+    constructor(props?: import("gpui-shell").Props);
     /**
      * Runs once when the view is created.
      *
@@ -812,14 +803,14 @@ const CONTEXT_AND_VIEW: &str = r#"  /**
      * made — tasks, timers, focus handles — and the context that starts a task
      * is the one its body will still be using after an `await`.
      */
-    init?(props: Props | undefined, cx: AsyncContext): void;
+    init?(props: import("gpui-shell").Props | undefined, cx: AsyncContext): void;
     /** Runs when a parent changes this retained nested view's properties. */
-    update?(props: Props | undefined): void;
+    update?(props: import("gpui-shell").Props | undefined): void;
     abstract render(cx: Context): Element | Entity | string;
   }
 
   /** A concrete script view class that can be retained as a nested view. */
-  export type ViewClass = new (props?: Props) => View;
+  export type ViewClass = new (props?: import("gpui-shell").Props) => View;
 
   /**
    * Retained ownership of one nested `View` entity.
@@ -839,7 +830,7 @@ const CONTEXT_AND_VIEW: &str = r#"  /**
    * and pre-existing native handles explicitly released by update.
    */
   export interface Entity {
-    set_props(props?: Props): void;
+    set_props(props?: import("gpui-shell").Props): void;
     release(): boolean;
   }
 
@@ -852,6 +843,13 @@ const CONTEXT_AND_VIEW: &str = r#"  /**
 /// behavior list the engine installs on the prototype, and
 /// [`tests::every_element_method_is_accounted_for`] fails if the two drift.
 const ELEMENT_METHODS: &str = r#"    /**
+     * Passes this element to `transform` and returns exactly what it returns.
+     *
+     * This mirrors GPUI's `FluentBuilder.map`: it is useful for keeping an
+     * imperative or conditional transformation inside a fluent expression.
+     */
+    map<T>(transform: (element: Element) => T): T;
+    /**
      * Adds one child. The child is consumed; using it again throws.
      *
      * A **string is an element**, exactly as `&str`, `String` and
@@ -1244,7 +1242,7 @@ const ELEMENT_METHODS: &str = r#"    /**
      * drawn. Omitted, each container keeps its own default: `RadioGroup` is
      * vertical, `ToggleGroup` horizontal.
      */
-    axis(value: import("gpui-base").GroupAxis): Element;
+    axis(value: Axis): Element;
     /**
      * A `Table`'s total number of rows, including rows outside the range the
      * script rendered, so a screen reader can announce "row 5 of 200". A table
@@ -1380,11 +1378,17 @@ fn shell_types() -> String {
     out
 }
 
-const SHELL_TYPES: &str = r#"  /** Which edge a gpui-shell sheet is anchored to. */
-  /** A path coordinate in pixels or as a percentage of the painted bounds. */
+const SHELL_TYPES: &str = r#"  /** A path coordinate in pixels or as a percentage of the painted bounds. */
   export type PathCoordinate = number | `${number}%`;
 
-  export type SheetSide = "left" | "right" | "top" | "bottom";
+  /** The property bag carried across the JavaScript view bridge. */
+  export type Props = Record<string, any>;
+
+  /** Element-local event bounds assembled by the shell. */
+  export interface ElementBounds extends import("gpui").Point {
+    width: number;
+    height: number;
+  }
 
   export interface DialogOptions {
     escape_dismissable?: boolean;
@@ -1498,17 +1502,16 @@ const ELEMENTS: &str = r#"
 
 "#;
 
-/// The shared identity-bearing component shape used by upper component layers.
-const COMPONENT_TYPES: &str = r#"
+/// Shared gpui-base types used by its component constructors and Window extensions.
+const BASE_SHARED_TYPES: &str = r#"
+  /** One of the four edges used to place an element. Mirrors `gpui_base::Placement`. */
+  export type Placement = "top" | "bottom" | "left" | "right";
+
   /** A component identified across renders by `new(id)`. */
   export interface ComponentType {
     new: (id: string | number) => Element;
   }
 
-"#;
-
-/// The constructor shape for gpui-base sub-parts without their own identity.
-const BASE_PART_TYPES: &str = r#"
   /** A sub-part with no identity of its own, constructed with `new()`. */
   export interface PartType {
     new: () => Element;
@@ -1542,8 +1545,8 @@ const WINDOW: &str = r#"
      * ever open.
      */
     open_sheet(content: () => Element): void;
-    /** The same, anchored to the side you name. */
-    open_sheet_at(side: import("gpui-shell").SheetSide, content: () => Element): void;
+    /** The same, anchored at the `gpui-base` placement you name. */
+    open_sheet_at(placement: import("gpui-base").Placement, content: () => Element): void;
     /** Closes the sheet, and answers whether one was open. */
     close_sheet(): boolean;
     /** Whether the sheet is open. Legal from `render`, unlike the rest. */
@@ -1644,9 +1647,6 @@ const BASE: &str = r#"  /** A row. */
    * `.when(pressed, el => …)`.
    */
   export const Toggle: ComponentType;
-
-  /** The semantic orientation of a grouping container. Announced, not drawn. */
-  export type GroupAxis = "horizontal" | "vertical";
 
   /**
    * A set of radios, announced as one group. It holds no selection — each
@@ -2307,7 +2307,6 @@ const BASE: &str = r#"  /** A row. */
 /// `Element`, so the dependency runs upward only.
 const BASE_IMPORTS: &str = r#"  import {
     Color,
-    ComponentType,
     Context,
     Element,
     FocusHandle,
@@ -2562,6 +2561,7 @@ mod tests {
     /// them from the interface and compare what is left against the style
     /// table. Mirrors the names bound in the engine's `apply` and prelude.
     const NON_STYLE_METHODS: &[&str] = &[
+        "map",
         "child",
         "children",
         "content",
@@ -2642,7 +2642,7 @@ mod tests {
             .take_while(|line| !line.starts_with("  }"))
             .filter_map(|line| {
                 let line = line.trim_start();
-                let name = line.split('(').next()?;
+                let name = line.split(['(', '<']).next()?;
                 (!name.is_empty()
                     && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
                     && line.len() > name.len())
@@ -2730,6 +2730,9 @@ mod tests {
         assert!(!gpui.contains("export type ColorToken"));
         for name in [
             "LengthString",
+            "PathCoordinate",
+            "Props",
+            "ElementBounds",
             "ScopePhase",
             "MotionProperty",
             "DialogOptions",
@@ -2754,6 +2757,16 @@ mod tests {
                 "{name} must stay in gpui"
             );
         }
+        assert!(base.contains("export interface PartType"));
+        assert!(!gpui.contains("export interface PartType"));
+        assert!(base.contains("export interface ComponentType"));
+        assert!(!gpui.contains("export interface ComponentType"));
+        assert!(base.contains("export type Placement"));
+        assert!(!declarations.contains("SheetSide"));
+        assert!(gpui.contains("export type Axis"));
+        assert!(!declarations.contains("GroupAxis"));
+        assert!(gpui.contains("export interface PathBuilder"));
+        assert!(!shell.contains("export interface PathBuilder"));
     }
 
     #[test]
@@ -2797,7 +2810,7 @@ mod tests {
         assert!(declarations.ends_with(";\n"));
     }
 
-    /// The reason host modules became imports: the declarations can now be
+    /// The reason HostModule registrations became imports: the declarations can now be
     /// generated from the registry instead of hand-written beside the script.
     #[test]
     fn a_registered_host_module_is_declared_from_the_registry() {
@@ -2826,8 +2839,16 @@ mod tests {
         .expect("`audit` is not reserved");
 
         let declarations = declarations();
-        assert!(declarations.contains("declare module \"market\" {"));
-        assert!(declarations.contains("  export function quotes(): Quote[];"));
+        // The point of the whole change: these names come from the registry,
+        // not from a file someone maintains beside the script.
+        assert!(
+            declarations.contains("declare module \"market\" {"),
+            "a registered module must be declared, or its import is untyped"
+        );
+        assert!(
+            declarations.contains("  export function quotes(): Quote[];"),
+            "a declared face must be emitted verbatim, not summarised"
+        );
         // The indentation the host wrote inside a multi-line type survives; only
         // the raw string's own leading margin is removed.
         assert!(
@@ -2835,10 +2856,16 @@ mod tests {
             "a multi-line declaration was flattened:\n{}",
             &declarations[declarations.find("declare module \"market\"").unwrap()..]
         );
-        assert!(declarations.contains("declare module \"audit\" {"));
+        assert!(
+            declarations.contains("declare module \"audit\" {"),
+            "a module without a face is still declared, or its name goes unchecked"
+        );
         // `HostValue` rather than `any`: the boundary is not wider than the
         // Rust type of that name, and the declarations should not claim it is.
-        assert!(declarations.contains("  import { HostValue } from \"gpui\";"));
+        assert!(
+            declarations.contains("  import { HostValue } from \"gpui\";"),
+            "the permissive signatures below need this import to resolve"
+        );
         assert!(
             declarations.contains("  export function observe(...args: HostValue[]): HostValue;")
         );
@@ -2848,7 +2875,11 @@ mod tests {
         );
 
         crate::clear_exported_modules();
-        assert!(!super::declarations().contains("declare module \"market\""));
+        assert!(
+            !super::declarations().contains("declare module \"market\""),
+            "declarations are read from the registry at write time, so a \
+             withdrawn module must stop being declared"
+        );
     }
 
     #[test]
@@ -3130,8 +3161,13 @@ mod tests {
     #[test]
     fn view_lifecycle_declaration_matches_runtime_calls() {
         let declarations = declarations();
-        assert!(declarations.contains("init?(props: Props | undefined, cx: AsyncContext): void;"));
-        assert!(declarations.contains("update?(props: Props | undefined): void;"));
+        assert!(declarations.contains(
+            "init?(props: import(\"gpui-shell\").Props | undefined, cx: AsyncContext): void;"
+        ));
+        assert!(
+            declarations
+                .contains("update?(props: import(\"gpui-shell\").Props | undefined): void;")
+        );
         assert!(!declarations.contains("cx?: AsyncContext"));
     }
 
@@ -3159,10 +3195,17 @@ mod tests {
     }
 
     #[test]
-    fn component_factory_shapes_name_only_reusable_public_concepts() {
+    fn component_constructor_shapes_name_only_reusable_public_concepts() {
         let declarations = declarations();
-        assert!(declarations.contains("export interface ComponentType"));
-        assert!(declarations.contains("export interface PartType"));
+        let base = declarations
+            .split_once("declare module \"gpui-base\" {")
+            .expect("gpui-base declarations")
+            .1
+            .split_once("\n}\n")
+            .expect("end of gpui-base declarations")
+            .0;
+        assert!(base.contains("export interface ComponentType"));
+        assert!(base.contains("export interface PartType"));
         assert!(!declarations.contains("IndexedComponentType"));
         assert!(declarations.contains(
             "export const TableRow: { new: (id: string | number, row_index: number) => Element };"
@@ -3224,7 +3267,7 @@ mod tests {
         let declarations = declarations();
         for expected in [
             "  export interface Entity {",
-            "    set_props(props?: Props): void;",
+            "    set_props(props?: import(\"gpui-shell\").Props): void;",
             "    release(): boolean;",
         ] {
             assert!(declarations.contains(expected), "missing: {expected}");

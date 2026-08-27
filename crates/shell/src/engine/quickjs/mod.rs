@@ -478,7 +478,7 @@ impl ShellRuntime {
         let app_modules = AppModules::default();
         // Order is the namespace policy. The runtime's own modules resolve
         // first, so a host cannot take `gpui` or `path` from under a script;
-        // the application's files resolve last, so a host module cannot be
+        // the application's files resolve last, so a HostModule cannot be
         // shadowed by a file that happens to share its name. `host_modules`
         // refuses reserved names at registration, which is what turns the first
         // half of that from a silent shadowing into a sentence.
@@ -3088,6 +3088,13 @@ globalThis.__gpui = (() => {
     return object;
   };
 
+  // Mirrors GPUI's `FluentBuilder::map`: unlike an ordinary element method,
+  // the callback decides the return type. Keeping this in JavaScript also
+  // avoids a host crossing for a purely fluent control-flow helper.
+  methods.map = function (transform) {
+    return transform(this);
+  };
+
   methods.when = function (condition, branch) {
     if (!condition) return this;
     const produced = branch(this);
@@ -3332,8 +3339,8 @@ globalThis.__gpui = (() => {
     has_active_dialog: () => __has_active_dialog(),
 
     open_sheet: (build) => __open_sheet(undefined, contentView(build, "window.open_sheet")),
-    open_sheet_at: (side, build) =>
-      __open_sheet(String(side), contentView(build, "window.open_sheet_at")),
+    open_sheet_at: (placement, build) =>
+      __open_sheet(String(placement), contentView(build, "window.open_sheet_at")),
     close_sheet: () => __close_sheet(),
     has_active_sheet: () => __has_active_sheet(),
 

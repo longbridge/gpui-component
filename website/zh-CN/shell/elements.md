@@ -241,7 +241,7 @@ render() {
 }
 ```
 
-`cx.focus_handle()` 需要一次活的宿主调用；而在 `render` 里创建的 handle 每一帧都是新的，它所跟踪的焦点会被下一次重绘丢掉。所以它属于 `init` 或事件处理器，在 `render` 里调用会抛错。
+`cx.focus_handle()` 需要一次活的 Host 调用；而在 `render` 里创建的 handle 每一帧都是新的，它所跟踪的焦点会被下一次重绘丢掉。所以它属于 `init` 或事件处理器，在 `render` 里调用会抛错。
 
 | handle 上的方法 | 回答什么 |
 | --- | --- |

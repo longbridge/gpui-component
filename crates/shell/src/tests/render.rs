@@ -79,6 +79,41 @@ fn a_script_view_produces_an_element_description(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
+fn element_map_returns_the_transform_result(cx: &mut TestAppContext) {
+    cx.update(crate::init);
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View, div } from "gpui";
+
+export default class MappedElement extends View {
+  render(cx) {
+    return div().map((root) =>
+      root.id("mapped-root").child(div().map(() => "mapped child"))
+    );
+  }
+}
+"#;
+    let view_type = runtime
+        .load_source("mapped-element.js", source)
+        .expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .expect("instantiate");
+    let tree = context
+        .update(|window, cx| runtime.render_to_spec(&object, None, window, cx))
+        .expect("render");
+
+    assert!(tree.contains("mapped-root"), "missing mapped root: {tree}");
+    assert!(
+        tree.contains("text \"mapped child\""),
+        "missing mapped result: {tree}"
+    );
+}
+
+#[gpui::test]
 fn flex_elements_record_pointer_handlers(cx: &mut TestAppContext) {
     cx.update(crate::init);
     let runtime = ShellRuntime::new_isolated().expect("runtime");

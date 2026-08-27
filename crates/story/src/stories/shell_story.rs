@@ -1637,7 +1637,10 @@ mod tests {
         // Only the slow one answers with a promise. Asserted rather than
         // assumed, because the script `await`s exactly this one and the
         // generated binding differs by it.
-        assert!(module.is_async("summary"));
+        assert!(
+            module.is_async("summary"),
+            "main.js awaits summary(), and the generated binding differs by this"
+        );
         for synchronous in ["quotes", "ticks", "watch", "watch_all"] {
             assert!(!module.is_async(synchronous), "{synchronous}");
         }

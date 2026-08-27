@@ -123,7 +123,7 @@ or a #rrggbb literal
 
 ### 当前 token 来自哪里
 
-gpui-shell 不拥有调色板或主题文件格式，而是读取宿主提供的
+gpui-shell 不拥有调色板或主题文件格式，而是读取 Host 提供的
 `gpui_base::Theme`。JavaScript 应用也可以通过
 `set_theme({ appearance, tokens })` 替换同一份 Base snapshot；主题名称和
 registry 始终属于应用状态。

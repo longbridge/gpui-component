@@ -1187,7 +1187,7 @@ where
 /// A promise driven by a future on the background executor.
 ///
 /// [`blocking`] is this with a synchronous closure in front; this one takes the
-/// future directly, which is what an asynchronous host module function hands
+/// future directly, which is what an asynchronous HostModule function hands
 /// over. Ownership, cancellation and scope restoration are identical — a call
 /// whose view has gone away leaves its promise pending rather than inventing an
 /// error for code that was asked to stop.

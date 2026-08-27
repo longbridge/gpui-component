@@ -116,7 +116,7 @@ window.open_sheet_at("left", () => navigation());
 At most one sheet is open at a time. `window.open_sheet` anchors it to the right; `window.open_sheet_at` takes `"left"`, `"right"`, `"top"` or `"bottom"`. It has no options at all, because there is only ever one and it is dismissed by Escape or by its overlay whenever no dialog is above it.
 
 ```text
-unknown sheet side `middle`; expected left, right, top or bottom
+unknown sheet placement `middle`; expected left, right, top or bottom
 ```
 
 ## Toasts

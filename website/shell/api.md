@@ -1,14 +1,14 @@
 ---
 title: API Reference
 description: Every name a script can import or reach — the four built-in modules, the cx and window globals, and the element methods that are not styles.
-order: 13
+order: 9
 ---
 
 # API Reference
 
 An inventory of the script surface: what exists, and which module it comes from. The other pages explain why each thing works the way it does — this one is for looking a name up.
 
-The authority is not this page. The runtime generates `gpui.d.ts` for its own version and refreshes it beside your source when the application loads. That refresh is best-effort; `gpui-shell types <directory>` performs the same write and reports a failure. The generated header names the `gpui-shell` version and includes that application's host modules. Keep the file ignored, and put `// @ts-check` at the top of a script to have an editor check against it.
+The authority is not this page. The runtime generates `gpui.d.ts` for its own version and refreshes it beside your source when the application loads. That refresh is best-effort; `gpui-shell types <directory>` performs the same write and reports a failure. The generated header names the `gpui-shell` version and includes that application's HostModule registrations. Keep the file ignored, and put `// @ts-check` at the top of a script to have an editor check against it.
 
 ## The modules
 
@@ -41,7 +41,7 @@ API shape follows the Rust original: a method on `App` is a method on `cx`, a me
 | `div()` | An element with no layout of its own |
 | `svg(path)` | A vector image from the application root, tinted by the surrounding text color |
 | `image(path)` | A full-color image from the application root, colors preserved |
-| `PathBuilder` | `fill()` and `stroke(width)`, each opening a path under construction |
+| `PathBuilder` | The GPUI path-builder type and its factory: `fill()` and `stroke(width)` each return a `PathBuilder` |
 | `Background` | `solid`, `stop`, `linear_gradient`, `pattern_slash`, `checkerboard` |
 
 `PathBuilder.fill()` and `.stroke(width)` return a handle that chains `move_to`, `line_to`, `curve_to`, `cubic_bezier_to`, `arc_to`, `add_polygon`, `close` and `dash_array`, and ends in `build()`. Paint the result with `window.paint_path(path, background)` — the one element constructor reached through an object, because the thing it mirrors is a method on the window.
@@ -55,7 +55,6 @@ A string is an element too, exactly as `&str` implements `IntoElement` in GPUI: 
 | `View` | The base class of every view; subclass it and default-export the subclass |
 | `ViewClass` | A concrete `View` subclass, as `cx.new` takes it |
 | `Entity` | Retained ownership of one nested view: `set_props(props)`, `release()` |
-| `Props` | The property bag handed to `init` and to `cx.new` |
 
 A subclass defines `init?(props, cx)`, which runs once, and `render(cx)`, which returns one `Element`, `Entity` or string and runs when the view is invalidated. An optional `update(props)` runs when a parent changes a nested view's props.
 
@@ -79,6 +78,7 @@ A subclass defines `init?(props, cx)`, which runs once, and `render(cx)`, which 
 | `Length` | A number (pixels), `"12px"`, `"1.5rem"`, `"50%"` or `"auto"` |
 | `DefiniteLength` | The same without `"auto"` |
 | `AbsoluteLength` | Pixels or rems only |
+| `Axis` | `"horizontal"` or `"vertical"`, mirroring `gpui::Axis` |
 | `Color` | A `gpui-base` `ColorToken`, or a `#rgb` / `#rrggbb` / `#rrggbbaa` literal |
 | `Role` | An accessibility role, mirroring `gpui::Role` in snake_case |
 | `Anchor` | Which corner of an anchored surface is pinned to its trigger |
@@ -87,11 +87,7 @@ A subclass defines `init?(props, cx)`, which runs once, and `render(cx)`, which 
 | `MouseMoveEvent` | `position`, `local_position`, `bounds`, `modifiers` |
 | `Modifiers` | `shift`, `control`, `alt`, `platform` |
 | `Point` | `x`, `y` |
-| `ElementBounds` | A `Point` with `width` and `height` |
-| `ComponentType` | The shared `new(id)` shape used by identity-bearing component constructors |
-| `PartType` | The shared `new()` shape used by component sub-parts without their own identity |
 | `Path` | Immutable native geometry produced by `PathBuilder.build()` |
-| `PathCoordinate` | Pixels, or a percentage of the painted element's bounds |
 | `Background` | A reusable native background from `Background.solid(...)` or another factory: `opacity(factor)`, `color_space(space)` |
 | `BackgroundStop` | One gradient stop, from `Background.stop(color, percentage)` |
 
@@ -112,9 +108,11 @@ These are type-only concepts introduced by the JavaScript bridge itself. Import 
 | Name | What it is |
 | --- | --- |
 | `LengthString` | The string forms accepted by the shell's length bridge |
+| `PathCoordinate` | Pixels, or a percentage of the painted element's bounds |
+| `Props` | The property bag carried across the JavaScript View bridge |
+| `ElementBounds` | A shell event `Point` with `width` and `height` |
 | `ScopePhase` | `"render"`, `"event"`, `"task"`, `"layout"` or `"none"` |
 | `TaskOptions` | `{ owner?: View \| null }` — the view the task is cancelled with. Defaults to the running view; `null` outlives every view |
-| `SheetSide` | Which edge a shell sheet is anchored to |
 | `DialogOptions` | `{ escape_dismissable?: boolean, backdrop_dismissable?: boolean }`, both `true` by default |
 | `ToastOptions` | `{ title: string, description?: string, level?: "info" \| "success" \| "warning" \| "error", timeout?: number \| null, id?: string }`. `level` defaults to `"info"`; `timeout` to five seconds, and `null` keeps it until dismissed |
 | `MotionProperty` | `"opacity"`, `"width"`, `"height"`, `"left"`, `"top"` |
@@ -161,14 +159,13 @@ The global has the `Window` type exported by `gpui`. Nothing hands it to you and
 | `close_all_dialogs()` | Closes every dialog, and answers how many |
 | `has_active_dialog()` | Whether any dialog is open; legal from `render`, unlike the rest |
 | `open_sheet(content)` | Opens the sheet on the right, replacing whatever was there |
-| `open_sheet_at(side, content)` | The same, anchored to the side you name |
+| `open_sheet_at(placement, content)` | The same, anchored at the `gpui-base` `Placement` you name |
 | `close_sheet()` | Closes the sheet, and answers whether one was open |
 | `has_active_sheet()` | Whether the sheet is open; legal from `render` |
 | `push_toast(options)` | Posts a toast and answers its id |
 | `remove_toast(id)` | Retracts one toast, and answers whether it was still showing |
 | `clear_toasts()` | Retracts every toast, and answers how many |
 | `paint_path(path, background)` | Paints immutable geometry with a native background; `Window::paint_path` |
-
 | `localStorage` | Web Storage backed by a file the host placed; survives a restart |
 | `sessionStorage` | Web Storage held in memory; goes with the process |
 
@@ -363,12 +360,14 @@ Reading the theme is `cx.theme()`. `set_theme` remains in `gpui-base` because th
 
 | Name | What it is |
 | --- | --- |
-| `GroupAxis` | `"horizontal"` or `"vertical"`, announced rather than drawn |
 | `ScrollbarMode` | `"scrolling"`, `"hover"` or `"always"` |
 | `ItemRange` | A virtual list's visible items, as a half-open `[start, end)` |
 | `SliderValue` | A number, or `[start, end]` for a range slider |
 | `InputEvent` | The text-state event payload; submit events carry optional `secondary` and `shift` flags |
 | `OtpEvent` | The currently empty OTP event payload; read the value from `OtpState` |
+| `PartType` | The shared `new()` shape used by `gpui-base` sub-parts without their own identity |
+| `Placement` | `"top"`, `"bottom"`, `"left"` or `"right"`, mirroring `gpui_base::Placement` |
+| `ComponentType` | The shared `new(id)` shape used by identity-bearing `gpui-base` component constructors |
 
 ### Composition patterns
 
@@ -460,12 +459,13 @@ Its parent must be `relative()`. The HUD owns its own presentation; ordinary sty
 
 Every element shares one prototype, so every method below type-checks on every element — which component a method actually suits is not expressed by the types. A behavior builder handed to a component that does not honour it is reported in the log rather than dropped in silence.
 
-Every method answers the same element, so a chain is one expression. An element is consumed when it is used as a child and belongs to the render pass that built it.
+Element builder methods answer the same element, so a chain is one expression. `map` is the exception: like GPUI's `FluentBuilder.map`, it returns exactly what its callback returns. An element is consumed when it is used as a child and belongs to the render pass that built it.
 
 ### Composition
 
 | Method | What it does |
 | --- | --- |
+| `map(transform)` | Passes the current element to `transform` and returns its result, matching GPUI's fluent builder helper |
 | `child(value)` | Adds one child: an element, an `Entity`, or a string, number or boolean |
 | `children(iterable)` | Adds several, in order |
 | `when(condition, branch)` | Applies `branch` when `condition` is truthy, keeping the chain in one piece |
@@ -594,7 +594,7 @@ Everything else on an element is a style. There are two families, and they never
 
 Both are covered in [Styling](./styling.md), along with the length and color grammars and the tokens the palette defines.
 
-## Host modules
+## HostModule registrations
 
 A module the host registered in Rust is imported by name, like any other module:
 
@@ -602,4 +602,4 @@ A module the host registered in Rust is imported by name, like any other module:
 import { quotes } from "market";
 ```
 
-It is not part of any built-in module. The generated declarations carry one `declare module` per registered module, so both the module name and every export name are checked. See [Host Module](./host-module.md).
+It is not part of any built-in module. The generated declarations carry one `declare module` per registered module, so both the module name and every export name are checked. See [HostModule](./host-module.md).

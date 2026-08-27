@@ -38,7 +38,7 @@
 // whatever is behind it. `spec`, `materialize`, `store`, `style` and `a11y` are
 // an internal representation. `capability` publishes `Capabilities` and
 // `ExecuteGrant` through the root and keeps the resolver — `Access`, `Grant` —
-// to itself. `scope` publishes `with_current_app`, which is how a host module
+// to itself. `scope` publishes `with_current_app`, which is how a HostModule
 // reaches the ambient `App`, and hides the frame stack. `scroll` is the one
 // scroll area `materialize` needs, kept here because the shell builds on
 // `gpui-base` alone and cannot borrow `gpui-component`'s copy. `runtime`,
@@ -88,7 +88,7 @@ pub use host_modules::{
     HostArguments, HostError, HostModule, HostObject, HostResult, HostValue, RESERVED_SPECIFIERS,
 };
 pub use metrics::RuntimeMetrics;
-pub use root::{DialogOptions, SheetSide, ShellRoot, ToastLevel, ToastRequest};
+pub use root::{DialogOptions, ShellRoot, ToastLevel, ToastRequest};
 pub use runtime::{
     ExitHandler, ExitRequest, clear_exit_handler, failure_surface, on_exit_request,
     resolve_app_root,

@@ -846,6 +846,14 @@ html[lang^="ja"] :is(h1, h2, h3, h4) {
     border-bottom: 0;
   }
 
+  /* The examples overview uses its first column as a compact row label. Keep
+     labels such as "Todo list" and “报价面板” intact instead of letting the
+     browser squeeze that column to the width of one word or two Han glyphs. */
+  .shell-examples-page & table:first-of-type :is(th, td):first-child {
+    min-width: 6.5rem;
+    white-space: nowrap;
+  }
+
   th:first-child,
   td:first-child {
     padding-left: 0.75rem;

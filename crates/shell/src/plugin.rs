@@ -1089,7 +1089,7 @@ fn load_failure_root(message: String, window: &mut Window, cx: &mut App) -> Enti
 /// Discovers, loads and unloads plugins.
 ///
 /// Every loaded plugin holds its own [`Policy`] — its grant, its storage, its
-/// native modules — and every call into its code runs under that policy because
+/// host modules — and every call into its code runs under that policy because
 /// the policy travels on the call frame rather than in a process-wide slot. Two
 /// plugins loaded at once hold two different grants at the same time, and
 /// neither can see the other's files.

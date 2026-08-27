@@ -6,7 +6,7 @@ order: 7
 
 # Overlays
 
-Dialog、sheet 与 toast 是**宿主**能力，通过全局的 `window` 访问。它们不是脚本画出来的东西。
+Dialog、sheet 与 toast 是**Host**能力，通过全局的 `window` 访问。它们不是脚本画出来的东西。
 
 Dialog 不是一个浮动的 `div`。它是窗口层叠顺序中的一个位置、一个焦点陷阱、一个 Escape 目标，以及一个关于“按下遮罩意味着什么”的承诺——而这些都必须由窗口的根视图决定，因为只有能同时看到所有浮层的东西才能给它们排序。脚本自己画的 dialog 一样都拥有不了；两个脚本各画一个 dialog，拥有得更少。
 
@@ -16,7 +16,7 @@ Dialog 不是一个浮动的 `div`。它是窗口层叠顺序中的一个位置�
 
 ## 接口
 
-`window` 是**全局的**。不需要 import——而且和 `cx` 不同：`cx` 是每次宿主调用作为参数交给你的，`window` 则是本来就在作用域里。
+`window` 是**全局的**。不需要 import——而且和 `cx` 不同：`cx` 是每次 Host 调用作为参数交给你的，`window` 则是本来就在作用域里。
 
 回调参数如果叫 `window`，会遮蔽这个全局——这是普通的作用域规则，不是错误；而且将来即使某个回调真的传入一个 `window`，那也是同一个对象，因为 `window` 是 ambient 的：它读的是当前正在跑的那次调用。这也正是它今天不是参数的原因。Rust 里它必须是参数，因为 Rust 没有可读的 ambient 状态；这里可以读，`fs` 和 `store` 不是参数也是同一个道理。
 
@@ -116,7 +116,7 @@ window.open_sheet_at("left", () => navigation());
 同时最多打开一个 sheet。`window.open_sheet` 贴靠右边；`window.open_sheet_at` 接受 `"left"`、`"right"`、`"top"` 或 `"bottom"`。它没有任何选项，因为总共只有一个，并且在没有 dialog 压在上面时由 Escape 或它的遮罩关闭。
 
 ```text
-unknown sheet side `middle`; expected left, right, top or bottom
+unknown sheet placement `middle`; expected left, right, top or bottom
 ```
 
 ## Toast
@@ -172,13 +172,13 @@ window.open_dialog(content, options) is not allowed during the `render` phase;
 overlays may only be opened or closed while handling an event or a task
 ```
 
-打开或关闭浮层会修改窗口，而 `render` phase 正在读它。GPUI 的借用模型无法表达“脚本在这里可以 notify、在那里不行”，所以运行时显式携带 [`ScopePhase`](./state.md#scopephase)，每一个浮层入口都拒绝 `render`、`layout`，以及根本不在任何宿主调用中的情形——最后这种情况下也没有窗口可以触达。
+打开或关闭浮层会修改窗口，而 `render` phase 正在读它。GPUI 的借用模型无法表达“脚本在这里可以 notify、在那里不行”，所以运行时显式携带 [`ScopePhase`](./state.md#scopephase)，每一个浮层入口都拒绝 `render`、`layout`，以及根本不在任何 Host 调用中的情形——最后这种情况下也没有窗口可以触达。
 
 拒绝信息会写明它是从哪个 phase 发出的，因为那是作者唯一的线索。
 
 ## 浮层需要 `ShellRoot`
 
-上述每一个调用最终都会到达窗口的根视图。第一层视图不是 `ShellRoot` 的窗口会拒绝它们，并指明这是哪一类错误——宿主接线问题，不是脚本问题：
+上述每一个调用最终都会到达窗口的根视图。第一层视图不是 `ShellRoot` 的窗口会拒绝它们，并指明这是哪一类错误——Host 接线问题，不是脚本问题：
 
 ```text
 window.open_dialog(content, options) needs a ShellRoot as the window's first view;

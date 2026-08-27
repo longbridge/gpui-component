@@ -1,7 +1,7 @@
 ---
 title: Dock Panels
 description: The panel machinery that exists inside the crate, why it is not public yet, and what it will look like when it is.
-order: 11
+order: 12
 ---
 
 # Dock Panels

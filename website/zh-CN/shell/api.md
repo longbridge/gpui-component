@@ -1,14 +1,14 @@
 ---
 title: API 参考
 description: 脚本能 import 或触及的每个名字——四个内置模块、cx 与 window 全局对象，以及那些不是样式的元素方法。
-order: 13
+order: 9
 ---
 
 # API Reference
 
 脚本接口的一份清单：有什么，以及它来自哪个模块。其余页面解释每样东西为什么是这个样子——这一页是用来查名字的。
 
-权威不在这一页。runtime 会为自己的版本生成 `gpui.d.ts`，并在应用加载时尽力刷新到源码旁；`gpui-shell types <directory>` 执行同一次写入，并会明确报告失败。生成文件的头部带有 `gpui-shell` 版本，也包含该应用注册的 host module。请忽略这个文件而不要提交，并在脚本顶部写上 `// @ts-check` 让编辑器照着它检查。
+权威不在这一页。runtime 会为自己的版本生成 `gpui.d.ts`，并在应用加载时尽力刷新到源码旁；`gpui-shell types <directory>` 执行同一次写入，并会明确报告失败。生成文件的头部带有 `gpui-shell` 版本，也包含该应用注册的 HostModule 。请忽略这个文件而不要提交，并在脚本顶部写上 `// @ts-check` 让编辑器照着它检查。
 
 ## 模块
 
@@ -27,7 +27,7 @@ import { fps_monitor } from "gpui-fps";
 | `gpui-shell` | shell 桥接层自有的纯类型概念；没有运行时导出 |
 | `gpui-fps` | 性能 HUD |
 
-有两个名字从不需要 import，但原因不同。`window` 是真正的全局：没有谁把它交给你，它本来就在作用域里。`cx` 恰恰相反——它从来不是全局的，只会作为参数到达：`render(cx)`、`init(props, cx)`、每个处理器的第二个参数、`cx.spawn` body 的形参。标准运行时模块——`fs/promises`、`path`、`crypto`、`process`、`net`、`websocket` 等等——受宿主授权门控，记录在 [Capabilities](./capabilities.md)。
+有两个名字从不需要 import，但原因不同。`window` 是真正的全局：没有谁把它交给你，它本来就在作用域里。`cx` 恰恰相反——它从来不是全局的，只会作为参数到达：`render(cx)`、`init(props, cx)`、每个处理器的第二个参数、`cx.spawn` body 的形参。标准运行时模块——`fs/promises`、`path`、`crypto`、`process`、`net`、`websocket` 等等——受 Host 授权门控，记录在 [Capabilities](./capabilities.md)。
 
 API 形态跟随 Rust 原型：`App` 上的方法放在 `cx`，`Window` 上的方法放在 `window` 全局对象，关联构造器写成 `Type.new(...)`，自由函数保持小写。没有直接 GPUI 或 Base 原型的名字，属于实现它的公开层。表中也会列出仅存在于类型系统的名字，但它们不是运行时可调用的值。
 
@@ -41,7 +41,7 @@ API 形态跟随 Rust 原型：`App` 上的方法放在 `cx`，`Window` 上的�
 | `div()` | 自身不带布局的元素 |
 | `svg(path)` | 来自应用根目录的矢量图，按周围的文字颜色着色 |
 | `image(path)` | 来自应用根目录的全彩图片，保留原色 |
-| `PathBuilder` | `fill()` 与 `stroke(width)`，各自开启一条正在构建的路径 |
+| `PathBuilder` | GPUI 的路径构建器类型及其工厂；`fill()` 与 `stroke(width)` 都返回一个 `PathBuilder` |
 | `Background` | `solid`、`stop`、`linear_gradient`、`pattern_slash`、`checkerboard` |
 
 `PathBuilder.fill()` 与 `.stroke(width)` 返回一个句柄，可链式调用 `move_to`、`line_to`、`curve_to`、`cubic_bezier_to`、`arc_to`、`add_polygon`、`close` 与 `dash_array`，最后以 `build()` 收尾。用 `window.paint_path(path, background)` 把结果画出来——它是唯一一个通过对象取到的元素构造器，因为它镜像的东西在 Rust 侧就是窗口上的一个方法。
@@ -55,7 +55,6 @@ API 形态跟随 Rust 原型：`App` 上的方法放在 `cx`，`Window` 上的�
 | `View` | 每个视图的基类；继承它，并把子类作为 default export |
 | `ViewClass` | 一个具体的 `View` 子类，也就是 `cx.new` 接受的东西 |
 | `Entity` | 对一个嵌套视图的留存所有权：`set_props(props)`、`release()` |
-| `Props` | 交给 `init` 与 `cx.new` 的属性包 |
 
 子类定义只执行一次的 `init?(props, cx)`，以及返回一个 `Element`、`Entity` 或字符串、在视图被置为失效时执行的 `render(cx)`。可选的 `update(props)` 在父视图改变嵌套视图的 props 时执行。
 
@@ -79,6 +78,7 @@ API 形态跟随 Rust 原型：`App` 上的方法放在 `cx`，`Window` 上的�
 | `Length` | 数字（像素）、`"12px"`、`"1.5rem"`、`"50%"` 或 `"auto"` |
 | `DefiniteLength` | 同上，但不含 `"auto"` |
 | `AbsoluteLength` | 只有像素或 rem |
+| `Axis` | `"horizontal"` 或 `"vertical"`，镜像 `gpui::Axis` |
 | `Color` | 一个 `gpui-base` 的 `ColorToken`，或 `#rgb` / `#rrggbb` / `#rrggbbaa` 字面量 |
 | `Role` | 一个无障碍 role，镜像 `gpui::Role` 的 snake_case 拼写 |
 | `Anchor` | 锚定浮层的哪个角固定在它的触发元素上 |
@@ -87,11 +87,7 @@ API 形态跟随 Rust 原型：`App` 上的方法放在 `cx`，`Window` 上的�
 | `MouseMoveEvent` | `position`、`local_position`、`bounds`、`modifiers` |
 | `Modifiers` | `shift`、`control`、`alt`、`platform` |
 | `Point` | `x`、`y` |
-| `ElementBounds` | 带 `width` 与 `height` 的 `Point` |
-| `ComponentType` | 带身份的组件构造器共同使用的 `new(id)` 形态 |
-| `PartType` | 没有自身身份的组件子部件共同使用的 `new()` 形态 |
 | `Path` | 由 `PathBuilder.build()` 产出的不可变原生几何 |
-| `PathCoordinate` | 像素，或所绘元素边界的百分比 |
 | `Background` | 由 `Background.solid(...)` 等工厂创建的可复用原生背景：`opacity(factor)`、`color_space(space)` |
 | `BackgroundStop` | 一个渐变色标，来自 `Background.stop(color, percentage)` |
 
@@ -112,9 +108,11 @@ API 形态跟随 Rust 原型：`App` 上的方法放在 `cx`，`Window` 上的�
 | 名称 | 说明 |
 | --- | --- |
 | `LengthString` | shell 长度桥接接受的字符串形式 |
+| `PathCoordinate` | 像素，或所绘元素边界的百分比 |
+| `Props` | 跨 JavaScript View 桥接传递的属性包 |
+| `ElementBounds` | shell 事件使用的、带 `width` 与 `height` 的 `Point` |
 | `ScopePhase` | `"render"`、`"event"`、`"task"`、`"layout"` 或 `"none"` |
 | `TaskOptions` | `{ owner?: View \| null }`——任务随之取消的视图。默认是当前运行的视图；`null` 比任何视图都活得久 |
-| `SheetSide` | shell 的 sheet 贴靠哪一边 |
 | `DialogOptions` | `{ escape_dismissable?: boolean, backdrop_dismissable?: boolean }`，两者默认都是 `true` |
 | `ToastOptions` | `{ title: string, description?: string, level?: "info" \| "success" \| "warning" \| "error", timeout?: number \| null, id?: string }`。`level` 默认 `"info"`；`timeout` 默认五秒，`null` 表示留到被关掉 |
 | `MotionProperty` | `"opacity"`、`"width"`、`"height"`、`"left"`、`"top"` |
@@ -126,7 +124,7 @@ API 形态跟随 Rust 原型：`App` 上的方法放在 `cx`，`Window` 上的�
 
 ## `cx` 上下文
 
-两种 context 的成员相同，但生命周期不同。`render` 与事件处理器收到的 `Context` 只属于那次宿主调用；把它留到调用之后，包括跨越 `await`，都会得到 stale-context 错误。下面的 `AsyncContext` 才是为跨越 `await` 准备的那一种。
+两种 context 的成员相同，但生命周期不同。`render` 与事件处理器收到的 `Context` 只属于那次 Host 调用；把它留到调用之后，包括跨越 `await`，都会得到 stale-context 错误。下面的 `AsyncContext` 才是为跨越 `await` 准备的那一种。
 
 | 成员 | 说明 |
 | --- | --- |
@@ -146,13 +144,13 @@ API 形态跟随 Rust 原型：`App` 上的方法放在 `cx`，`Window` 上的�
 
 ### `AsyncContext`
 
-`AsyncContext` 继承 `Context`，不增加任何成员。区别在生命周期，不在接口：普通的 `Context` 只为一次宿主调用发言，一旦那次调用返回就明确报错；而 `AsyncContext` 不指名任何一次调用——用到它时才解析当时正在执行的那一次，只有在一次都没有时才拒绝。它对应 GPUI 的 `AsyncApp`。
+`AsyncContext` 继承 `Context`，不增加任何成员。区别在生命周期，不在接口：普通的 `Context` 只为一次 Host 调用发言，一旦那次调用返回就明确报错；而 `AsyncContext` 不指名任何一次调用——用到它时才解析当时正在执行的那一次，只有在一次都没有时才拒绝。它对应 GPUI 的 `AsyncApp`。
 
 有三处会交出一个：`init`、`cx.spawn` 的 body，以及 `cx.timer` 的回调。这三处的职责正是「安排或延续比启动它的那次调用活得更久的工作」。
 
 ## `window` 全局对象
 
-这个全局对象的类型是 `gpui` 导出的 `Window`。调用处不需要 import，也没有谁把它交给你。每次调用都读取当前正在跑的那次宿主调用，不在任何调用中时抛异常，所以没有句柄要持有，也没有东西会过期。浮层属于窗口，而不属于打开它的那个视图——这就是这些方法在这里、而不在 `Context` 上的原因。
+这个全局对象的类型是 `gpui` 导出的 `Window`。调用处不需要 import，也没有谁把它交给你。每次调用都读取当前正在跑的那次 Host 调用，不在任何调用中时抛异常，所以没有句柄要持有，也没有东西会过期。浮层属于窗口，而不属于打开它的那个视图——这就是这些方法在这里、而不在 `Context` 上的原因。
 
 | 成员 | 说明 |
 | --- | --- |
@@ -161,15 +159,14 @@ API 形态跟随 Rust 原型：`App` 上的方法放在 `cx`，`Window` 上的�
 | `close_all_dialogs()` | 关闭所有 dialog，并回答关掉了几个 |
 | `has_active_dialog()` | 是否有 dialog 打开；与其余方法不同，它在 `render` 中合法 |
 | `open_sheet(content)` | 在右侧打开 sheet，替换掉原本在那里的内容 |
-| `open_sheet_at(side, content)` | 同上，贴靠你指定的那一边 |
+| `open_sheet_at(placement, content)` | 同上，贴靠你指定的 `gpui-base` `Placement` |
 | `close_sheet()` | 关闭 sheet，并回答原本有没有打开 |
 | `has_active_sheet()` | sheet 是否打开；在 `render` 中合法 |
 | `push_toast(options)` | 弹出一个 toast，并返回它的 id |
 | `remove_toast(id)` | 撤回一个 toast，并回答它当时是否还在显示 |
 | `clear_toasts()` | 撤回所有 toast，并回答撤回了几个 |
 | `paint_path(path, background)` | 用原生背景绘制不可变几何；对应 `Window::paint_path` |
-
-| `localStorage` | Web Storage，背后是宿主放好的一个文件，跨重启存活 |
+| `localStorage` | Web Storage，背后是 Host 放好的一个文件，跨重启存活 |
 | `sessionStorage` | Web Storage，只在内存里，随进程一起消失 |
 
 `open_dialog`、`open_sheet` 与 `open_sheet_at` 接受的是**一个返回元素的函数**，而不是元素：dialog 活得比打开它的那次调用久，每次重绘时这个函数都会再执行一次。除了两个 `has_active_*` 查询与 `paint_path`，这里的一切在 `render` 中都不合法。见 [Overlays](./overlays.md)。
@@ -188,7 +185,7 @@ API 形态跟随 Rust 原型：`App` 上的方法放在 `cx`，`Window` 上的�
 | `clear()` | 全部忘掉 |
 | `flush()` | 写入落盘后 resolve |
 
-值是字符串，所以有结构的东西照 web 上的写法走 `JSON.stringify` 与 `JSON.parse`。`flush()` 是唯一多出来的成员：浏览器不需要它，因为它的存储从头到尾都是同步的。`localStorage` 受 capability 管辖，宿主没授权时抛异常；`sessionStorage` 不受管辖，因为它持有的东西从不离开进程。见 [Capabilities](./capabilities.md#storage)。
+值是字符串，所以有结构的东西照 web 上的写法走 `JSON.stringify` 与 `JSON.parse`。`flush()` 是唯一多出来的成员：浏览器不需要它，因为它的存储从头到尾都是同步的。`localStorage` 受 capability 管辖，Host 没授权时抛异常；`sessionStorage` 不受管辖，因为它持有的东西从不离开进程。见 [Capabilities](./capabilities.md#storage)。
 
 ## `gpui-base` 模块
 
@@ -273,7 +270,7 @@ slider 的四个部件接受同一个 `SliderState`，而且四个都不能少�
 | [`VirtualListScrollHandle`](../../base/virtual-list.md) | 虚拟列表的滚动位置，跨帧保留 |
 | [`Scrollbar`](../../base/primitives/scrollbar.md) | `new(id)`、`horizontal(id)`、`vertical(id)`——一条由你自己摆放的滚动条 |
 
-两种虚拟列表都接受 `(id, item_count, item_sizes, get_key, render)`。`render(range, cx)` 是这套接口里唯一由宿主在一帧*进行中*调用的回调，所以在它内部注册处理器、创建留存状态与调用 `cx.notify()` 都会被拒绝。
+两种虚拟列表都接受 `(id, item_count, item_sizes, get_key, render)`。`render(range, cx)` 是这套接口里唯一由 Host 在一帧*进行中*调用的回调，所以在它内部注册处理器、创建留存状态与调用 `cx.notify()` 都会被拒绝。
 
 ### 留存句柄
 
@@ -357,18 +354,20 @@ slider 的四个部件接受同一个 `SliderState`，而且四个都不能少�
 | `SpacingTokens` | `xxs` `xs` `sm` `md` `lg` `xl` `xxl` |
 | `RadiusTokens` | `none` `sm` `md` `lg` `xl` `full` |
 
-读主题用 `cx.theme()`。`set_theme` 留在 `gpui-base`，因为主题属于这一层；但修改仍然要求当前存在一次宿主调用，只能从事件处理器或 task 调用，不能在 `render` 或 layout 中调用。
+读主题用 `cx.theme()`。`set_theme` 留在 `gpui-base`，因为主题属于这一层；但修改仍然要求当前存在一次 Host 调用，只能从事件处理器或 task 调用，不能在 `render` 或 layout 中调用。
 
 ### 其他类型
 
 | 名称 | 说明 |
 | --- | --- |
-| `GroupAxis` | `"horizontal"` 或 `"vertical"`，只报读、不绘制 |
 | `ScrollbarMode` | `"scrolling"`、`"hover"` 或 `"always"` |
 | `ItemRange` | 虚拟列表的可见项，写作半开区间 `[start, end)` |
 | `SliderValue` | 一个数字，或区间 slider 的 `[start, end]` |
 | `InputEvent` | 文本状态的事件 payload；submit 事件带可选的 `secondary` 与 `shift` 标志 |
 | `OtpEvent` | 当前为空的 OTP 事件 payload；值从 `OtpState` 读取 |
+| `PartType` | `gpui-base` 中没有自身身份的子部件共同使用的 `new()` 形态 |
+| `Placement` | `"top"`、`"bottom"`、`"left"` 或 `"right"`，镜像 `gpui_base::Placement` |
+| `ComponentType` | `gpui-base` 中带身份的组件构造器共同使用的 `new(id)` 形态 |
 
 ### 组合模式
 
@@ -460,12 +459,13 @@ render() {
 
 所有元素共享同一个 prototype，所以下面每个方法在任何元素上都能通过类型检查——某个方法实际适合哪个组件，类型并不表达。交给一个不承接它的组件的行为 builder 会被写进日志，而不是被悄悄丢掉。
 
-每个方法都返回同一个元素，所以一条链就是一个表达式。元素被用作子元素时即被消费，并且属于构建它的那一趟渲染。
+元素 builder 方法都返回同一个元素，所以一条链就是一个表达式。`map` 是例外：与 GPUI 的 `FluentBuilder.map` 一样，它原样返回回调的结果。元素被用作子元素时即被消费，并且属于构建它的那一趟渲染。
 
 ### 组合
 
 | 方法 | 作用 |
 | --- | --- |
+| `map(transform)` | 把当前元素交给 `transform`，并返回其结果；对应 GPUI 的 fluent builder helper |
 | `child(value)` | 添加一个子元素：元素、`Entity`，或字符串、数字、布尔值 |
 | `children(iterable)` | 按顺序添加多个 |
 | `when(condition, branch)` | `condition` 为真时应用 `branch`，让链保持完整 |
@@ -594,12 +594,12 @@ property 取 `"opacity"`、`"width"`、`"height"`、`"left"`、`"top"` 之一，
 
 两者都记录在 [Styling](./styling.md) 里，还有长度与颜色的语法，以及调色板定义的 token。
 
-## Host 模块
+## HostModule
 
-宿主在 Rust 侧注册的模块，按名字 import，和其它模块没有区别：
+Host 在 Rust 侧注册的模块，按名字 import，和其它模块没有区别：
 
 ```js
 import { quotes } from "market";
 ```
 
-它不属于任何内建模块。生成的类型声明里每个注册过的模块各有一段 `declare module`，所以模块名和每一个导出名都会被检查。见 [Host Module](./host-module.md)。
+它不属于任何内建模块。生成的类型声明里每个注册过的模块各有一段 `declare module`，所以模块名和每一个导出名都会被检查。见 [HostModule](./host-module.md)。

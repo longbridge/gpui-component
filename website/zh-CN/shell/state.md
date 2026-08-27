@@ -32,7 +32,7 @@ export default class Counter extends View {
 render(cx) must return an element, an Entity, or a string
 ```
 
-`main.js` 必须 `export default` 一个视图类。宿主构造一个实例并把它挂载为窗口的根视图；default 导出不是类的模块会被拒绝，并说明原因。
+`main.js` 必须 `export default` 一个视图类。 Host 构造一个实例并把它挂载为窗口的根视图；default 导出不是类的模块会被拒绝，并说明原因。
 
 永远不要把元素存在实例上。见 [Elements](./elements.md#元素是一次性的)。
 
@@ -71,7 +71,7 @@ snapshot 只在有东西让它失效时才重建：
 - 事件回调或异步任务里的 `cx.notify()`
 - [hot-reload](./getting-started.md) 替换了脚本
 - 主题切换——因为 `bg(cx.theme().colors.surface)` 在 `render` 执行时记录真实颜色，已经烘进了 snapshot
-- 宿主调用 `ScriptView::refresh`——Rust 用它表示“我改了脚本会读到的状态”（通过[原生模块](./capabilities.md)）。宿主侧单纯的 `cx.notify()` 只是重绘，不会跑脚本：这是两个不同的请求
+- Host 调用 `ScriptView::refresh`——Rust 用它表示“我改了脚本会读到的状态”（通过 [HostModule](./host-module.md)）。Host 侧单纯的 `cx.notify()` 只是重绘，不会跑脚本：这是两个不同的请求
 
 其余情况都在 Rust 里复用你已经产出的那份描述，不执行任何 JavaScript。
 
@@ -94,9 +94,9 @@ snapshot 只在有东西让它失效时才重建：
 | `task` | 恢复异步工作 | 全部 | 阻塞 |
 | `layout` | 在 GPUI 布局过程中渲染一个虚拟化项 | 读状态、构建元素 | `notify`、打开浮层、创建留存状态 |
 
-`cx.phase()` 返回当前 phase，不在任何宿主调用中时返回 `"none"`。
+`cx.phase()` 返回当前 phase，不在任何 Host 调用中时返回 `"none"`。
 
-`cx.theme()` 返回这次调用中 gpui-base 当前语义主题的深度只读 snapshot：既包含直接颜色角色，也包含 `colors`、`spacing`、`radius`、`appearance` 与 `is_dark`。优先使用它，而不是兼容用的 `theme()` 导出，因为 context 写法明确表达了调用生命周期与当前宿主主题。
+`cx.theme()` 返回这次调用中 gpui-base 当前语义主题的深度只读 snapshot：既包含直接颜色角色，也包含 `colors`、`spacing`、`radius`、`appearance` 与 `is_dark`。优先使用它，而不是兼容用的 `theme()` 导出，因为 context 写法明确表达了调用生命周期与当前 Host 主题。
 
 每一条拒绝都是一条具体信息，而不是未定义行为：
 
@@ -250,7 +250,7 @@ handle.is_done();
 
 `timer.every` 的间隔从上一次调用结束开始计时，所以慢的处理函数会推迟下一次 tick，而不是把 tick 堆起来。
 
-### Timer 与标准宿主 API
+### Timer 与标准 Host API
 
 ```text
 setTimeout  -> cx.timer.after(ms, callback)
@@ -258,7 +258,7 @@ setInterval -> cx.timer.every(ms, callback)
 clearTimeout / clearInterval -> 对 after / every 返回的 Task 调用 cancel()
 ```
 
-`setTimeout`、`setInterval`、`clearTimeout` 与 `clearInterval` 都是会抛错的 stub。一次性工作使用 `cx.timer.after`，重复工作使用 `cx.timer.every`；要停止其中任意一种，都对返回的 `Task` 调用 `cancel()`。全局 `fetch`，以及 [Capabilities](./capabilities.md) 中记录的安全标准模块（包括 `websocket`），都是真实的异步宿主 API。CommonJS `require` 仍不可用；请使用 ES module。
+`setTimeout`、`setInterval`、`clearTimeout` 与 `clearInterval` 都是会抛错的 stub。一次性工作使用 `cx.timer.after`，重复工作使用 `cx.timer.every`；要停止其中任意一种，都对返回的 `Task` 调用 `cancel()`。全局 `fetch`，以及 [Capabilities](./capabilities.md) 中记录的安全标准模块（包括 `websocket`），都是真实的异步 Host API。CommonJS `require` 仍不可用；请使用 ES module。
 
 浏览器 DOM 与存储并不存在：没有 `document` 或 `localStorage`。全局 `window` 是 gpui-shell 用来承载 dialog、sheet 与 toast 的 overlay host，并不是浏览器 `Window`，也不提供 DOM。
 
@@ -266,5 +266,5 @@ clearTimeout / clearInterval -> 对 after / every 返回的 Task 调用 cancel()
 
 - **全局与跨视图状态。** 除了 [Capabilities](./capabilities.md) 里的持久化层和普通模块作用域，没有别的 store。
 - **Action 与快捷键。** `gpui.action` 与 `gpui.keymap` 设计了但没有绑定；今天唯一的按键处理是 `ShellRoot` 安装的那几个（Tab、Shift-Tab、Escape）。
-- **多窗口。** 窗口由宿主打开，没有 `gpui.open_window`。
+- **多窗口。** 窗口由 Host 打开，没有 `gpui.open_window`。
 - **`gpui.gc_stats()`**，以及会读取它的调试面板。

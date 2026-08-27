@@ -406,7 +406,7 @@ The style methods, their argument types and the colour-token union are generated
 from the tables the runtime dispatches through, so a name that type-checks is a
 name the dispatcher accepts.
 
-Host modules are generated too, one `declare module` per registered name, so
+HostModule registrations are generated too, one `declare module` per registered name, so
 `import { quotes } from "market"` is checked the way a built-in import is. A
 module describes its own TypeScript face in Rust, beside the registration:
 
@@ -472,7 +472,7 @@ runtime.refresh(&root, cx)?;
 // What it is costing: script renders against frames, with the time each took.
 let reading = runtime.read_metrics();
 
-// Host module closures capture host entity handles, so a host that goes away
+// HostModule closures capture host entity handles, so a host that goes away
 // clears them. GPUI's leak check catches a host that forgets.
 gpui_shell::clear_exported_modules();
 ```
