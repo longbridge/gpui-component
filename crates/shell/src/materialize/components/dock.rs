@@ -8,8 +8,8 @@
 //! last render described it. The layout therefore lives in a retained entity —
 //! `gpui_base::dock::DockArea` — and this node mounts it.
 //!
-//! Two things do cross from the description into that entity, and this file is
-//! where both happen.
+//! Three things do cross from the description into that entity, and this file
+//! is where all three happen.
 //!
 //! # The chrome handlers, once per frame
 //!
@@ -36,6 +36,16 @@
 //!
 //! Taking, not cloning — an `AnyElement` is a value that is consumed when used.
 //! A description with two `dock_content()`s draws the content once and says so.
+//! The slot itself lives in [`crate::dock`], because the engine installs it and
+//! this file only reads it back.
+//!
+//! # The commands a chrome element carries
+//!
+//! A chrome handler may not register a callback — one created there would pile
+//! up for as long as the dock stood — so its elements say what they do with a
+//! [`DockCommand`], which names a container and what to ask it. [`with_commands`]
+//! is where those become GPUI listeners, resolved against the contexts the last
+//! drawn frame recorded.
 
 use std::rc::Rc;
 
