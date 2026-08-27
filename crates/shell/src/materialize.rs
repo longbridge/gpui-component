@@ -680,14 +680,19 @@ fn materialize_component(
             cx,
         ),
         Component::Text(value) => {
-            // Text, svg and image are the three components with no identity and
-            // no interactivity, so nothing on them can carry a role or a tab
-            // stop. Wrap them in a `div()` and put it there.
+            // A text run, not a `div` holding one. GPUI implements
+            // `IntoElement` for a string, so `div().child("x")` is one element
+            // with text in it — and a string only ever reaches here as a child,
+            // because that is the only way to write text now. Wrapping it would
+            // put a second box inside every label, which is a layout the script
+            // did not ask for.
+            //
+            // Nothing can be hung on it: it has no identity and no
+            // interactivity, so a role or a tab stop belongs on the element
+            // holding it.
             warn_unhonoured_a11y(&behavior, "text", &[]);
-            let mut element = div();
-            element.style().refine(&refinement);
-            element.extend(children);
-            element.child(SharedString::from(value)).into_any_element()
+            warn_without_surface("text", &refinement, &states, &children);
+            SharedString::from(value).into_any_element()
         }
         Component::Button(id) => {
             warn_ignored_key(&behavior, "Button");
