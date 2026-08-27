@@ -32,7 +32,7 @@ use gpui_base::{Accordion, AccordionHeader, AccordionItem, AccordionPanel, Accor
 
 use crate::ShellRuntime;
 use crate::materialize::{
-    Behavior, Children, SlotSpecs, StateStyles, materialize_children, resolve_ops, take_slot_spec,
+    Behavior, Children, SlotSpecs, StateStyles, materialize_children, resolve_slot, take_slot_spec,
     warn_unhonoured_a11y,
 };
 use crate::spec::{Component, SpecArena, SpecId};
@@ -117,7 +117,7 @@ fn accordion_header(
     cx: &mut App,
 ) -> AccordionHeader {
     let Some(node) = arena.node(slot) else {
-        return AccordionHeader::new(AccordionTrigger::new("accordion-trigger"));
+        return AccordionHeader::new(placeholder_trigger(slot));
     };
     if !matches!(node.component(), Some(Component::AccordionHeader)) {
         tracing::warn!(
@@ -127,13 +127,14 @@ fn accordion_header(
         );
     }
 
-    let (refinement, behavior, _, _, mut slots) = resolve_ops(arena, node);
+    let (refinement, behavior, mut slots) =
+        resolve_slot(arena, slot, "AccordionHeader", window, cx);
     let trigger = take_slot_spec(&mut slots, "trigger")
         .map(|slot| accordion_trigger(runtime, arena, slot, inherited, window, cx))
         // `AccordionHeader::new` takes a trigger and there is no way not to
         // give it one, so a header built without one gets an empty button
         // rather than the whole item disappearing.
-        .unwrap_or_else(|| AccordionTrigger::new("accordion-trigger"));
+        .unwrap_or_else(|| placeholder_trigger(slot));
 
     let mut header = AccordionHeader::new(trigger);
     // The heading level is announced, not drawn, and base defaults it to 3.
@@ -160,7 +161,7 @@ fn accordion_trigger(
     cx: &mut App,
 ) -> AccordionTrigger {
     let Some(node) = arena.node(slot) else {
-        return AccordionTrigger::new("accordion-trigger");
+        return placeholder_trigger(slot);
     };
     let id = match node.component() {
         Some(Component::AccordionTrigger(id)) => SharedString::from(id.clone()),
@@ -170,11 +171,11 @@ fn accordion_trigger(
                  is not rendered at all",
                 other.map(Component::name).unwrap_or("(nothing)")
             );
-            SharedString::from("accordion-trigger")
+            placeholder_trigger_id(slot)
         }
     };
 
-    let (refinement, behavior, _, _, _) = resolve_ops(arena, node);
+    let (refinement, behavior, _) = resolve_slot(arena, slot, "AccordionTrigger", window, cx);
     let mut trigger = AccordionTrigger::new(id);
     // `open` and `disabled` come from the item, which passes its own down over
     // whatever was set here — so they are not read off the trigger at all.
@@ -219,7 +220,7 @@ fn accordion_panel(
         );
     }
 
-    let (refinement, behavior, _, _, _) = resolve_ops(arena, node);
+    let (refinement, behavior, _) = resolve_slot(arena, slot, "AccordionPanel", window, cx);
     // The item passes its own `open` down, so the only state read here is
     // whether a shut panel stays in the tree — which is how its content keeps
     // its scroll position and its focus across a close and reopen.
@@ -234,6 +235,21 @@ fn accordion_panel(
         runtime, arena, slot, inherited, window, cx,
     ));
     panel
+}
+
+/// The empty button a malformed header falls back to.
+///
+/// Keyed by the slot's address rather than by a fixed name, because two items
+/// that both went wrong would otherwise be two elements sharing one id — GPUI
+/// keys element state by that, so the second would inherit the first's. An
+/// error path is where a script is already confused; handing it a second,
+/// unrelated symptom is not the moment.
+fn placeholder_trigger(slot: SpecId) -> AccordionTrigger {
+    AccordionTrigger::new(placeholder_trigger_id(slot))
+}
+
+fn placeholder_trigger_id(slot: SpecId) -> SharedString {
+    SharedString::from(format!("accordion-trigger-{slot}"))
 }
 
 /// A part reached outside the arrangement it belongs to.

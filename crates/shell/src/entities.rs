@@ -894,6 +894,21 @@ impl EntityStore {
             })
     }
 
+    /// For the test that asserts a single date is stored as `Date::Single`.
+    ///
+    /// Not observable from the script side: both `Single(Some(d))` and
+    /// `Range(Some(d), None)` read back as the same string, which is exactly
+    /// how storing the wrong one went unnoticed.
+    #[cfg(test)]
+    pub(crate) fn first_calendar(&self) -> Option<Entity<CalendarState>> {
+        self.records
+            .values()
+            .find_map(|stored| match &stored.record {
+                Record::Calendar { state, .. } => Some(state.clone()),
+                _ => None,
+            })
+    }
+
     #[cfg(test)]
     pub(crate) fn first_input(&self) -> Option<Entity<InputState>> {
         self.records

@@ -42,9 +42,16 @@ pub(in crate::materialize) fn pagination(
         );
     }
 
-    // The state is what base announces from, and the announcement is all this
-    // root does — so the page numbers it is given are only ever the two the
-    // label needs. The script drives the buttons from its own state.
+    // `Pagination::new` requires a state, and its `render` does not read one:
+    // the root announces the label and lays out its children, and that is all.
+    // So this is a placeholder to satisfy the constructor, not a number the
+    // control shows — the page a script is on lives in the script, and reaches
+    // the screen through the buttons it builds from `pagination_items`.
+    //
+    // If base ever announces the position from the state — "page 3 of 20" is
+    // the obvious thing to add — this stops being adequate and the shell has
+    // to carry the two numbers across. There is no announcement to regress
+    // today, so there is nothing to carry yet.
     let mut element = Pagination::new(
         SharedString::from(id.to_owned()),
         PaginationState::new(1, 1),

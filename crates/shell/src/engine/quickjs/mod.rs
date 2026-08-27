@@ -1926,13 +1926,10 @@ impl ShellRuntime {
             owner.application.clone(),
         );
 
-        let parts: Vec<Option<String>> = match date {
-            gpui_base::Date::Single(day) => vec![day.map(|day| day.to_string()), None],
-            gpui_base::Date::Range(start, end) => vec![
-                start.map(|day| day.to_string()),
-                end.map(|day| day.to_string()),
-            ],
-        };
+        // The same conversion `value()` answers with, not a second copy of it:
+        // a handler and a read that disagreed about the shape of one date
+        // would be a bug nobody could see from either side alone.
+        let parts = entity_api::date_to_parts(date);
         let result = self.with_js(|ctx| {
             let handler = handler.clone().restore(ctx)?;
             handler.call::<_, ()>((
@@ -3519,12 +3516,22 @@ globalThis.__gpui = (() => {
   //
   // The wire is a flat two-slot array either way; the narrowing to `null`, a
   // string or a pair happens here so a script never sees the flat form.
+  // Reads the variant off the slot count, exactly as `calendarParts` writes
+  // it. Looking at whether the second slot is null instead would collapse a
+  // range whose end is not chosen yet into a bare string — losing the one
+  // thing that distinguishes it from a single date, and losing it only in the
+  // half-finished state a range picker spends most of its time in.
   const calendarDate = (parts) => {
-    if (parts[1] !== null && parts[1] !== undefined) return [parts[0] ?? null, parts[1]];
+    if (parts.length === 2) return [parts[0] ?? null, parts[1] ?? null];
     return parts[0] ?? null;
   };
+  // How many slots go over is what says which `Date` was meant, and it has to:
+  // a single day and a range whose end is not chosen yet are different states
+  // to base — `is_single`, `is_complete` and `is_in_range` all branch on it —
+  // but they read back as the same string, so the wire cannot recover the
+  // difference from the values alone.
   const calendarParts = (value, api) => {
-    if (value === null || value === undefined) return [null, null];
+    if (value === null || value === undefined) return [null];
     if (Array.isArray(value)) {
       if (value.length !== 2) {
         throw new TypeError(`${api} range expects a two-element array [start, end]`);
@@ -3534,14 +3541,14 @@ globalThis.__gpui = (() => {
     if (typeof value !== "string") {
       throw new TypeError(`${api} expects null, a "YYYY-MM-DD" string, or a pair of those`);
     }
-    return [value, null];
+    return [value];
   };
   const calendarState = (handle) => ({
     __handle: handle,
     month_days: () => __calendar_month_days(handle),
-    year: () => Number(__calendar_position(handle)[0]),
-    month: () => Number(__calendar_position(handle)[1]),
-    today: () => __calendar_position(handle)[2],
+    year: () => __calendar_year(handle),
+    month: () => __calendar_month(handle),
+    today: () => __calendar_today(handle),
     value: () => calendarDate(__calendar_value(handle)),
     set_value: (next) => __calendar_set_value(handle, calendarParts(next, "set_value(value)")),
     next_month: () => __calendar_next_month(handle),
@@ -3737,9 +3744,9 @@ globalThis.__gpui = (() => {
     bounds: () => __window_bounds(),
     mouse_position: () => __window_mouse_position(),
     appearance: () => __window_appearance(),
-    is_window_active: () => __window_state().active,
-    is_fullscreen: () => __window_state().fullscreen,
-    is_maximized: () => __window_state().maximized,
+    is_window_active: () => __window_is_active(),
+    is_fullscreen: () => __window_is_fullscreen(),
+    is_maximized: () => __window_is_maximized(),
 
     // What the window can be told. Refused from `render` for the reason
     // `cx.notify()` is: a frame that changes the window it is drawing into is

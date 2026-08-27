@@ -30,7 +30,7 @@ use gpui_base::{Avatar, AvatarFallback, AvatarImage};
 
 use crate::ShellRuntime;
 use crate::materialize::{
-    Behavior, Children, SlotSpecs, StateStyles, take_slot_spec, warn_unhonoured_a11y,
+    Behavior, Children, SlotSpecs, StateStyles, resolve_slot, take_slot_spec, warn_unhonoured_a11y,
 };
 use crate::spec::{Component, SpecArena, SpecId};
 
@@ -74,7 +74,7 @@ pub(in crate::materialize) fn avatar(
 
     let mut element = Avatar::new()
         .when_some(
-            image.and_then(|slot| avatar_image(arena, slot)),
+            image.and_then(|slot| avatar_image(arena, slot, window, cx)),
             Avatar::image,
         )
         .when_some(
@@ -100,7 +100,12 @@ pub(in crate::materialize) fn avatar(
 /// from, so it is reported and dropped rather than silently rendered as a
 /// child: a slot element is detached from the tree, and a dropped one would
 /// simply vanish.
-fn avatar_image(arena: &SpecArena, slot: SpecId) -> Option<AvatarImage> {
+fn avatar_image(
+    arena: &SpecArena,
+    slot: SpecId,
+    window: &mut Window,
+    cx: &mut App,
+) -> Option<AvatarImage> {
     let node = arena.node(slot)?;
     let Some(Component::AvatarImage(path)) = node.component() else {
         tracing::warn!(
@@ -110,7 +115,7 @@ fn avatar_image(arena: &SpecArena, slot: SpecId) -> Option<AvatarImage> {
         );
         return None;
     };
-    let (refinement, _, _, _, _) = crate::materialize::resolve_ops(arena, node);
+    let (refinement, _, _) = resolve_slot(arena, slot, "AvatarImage", window, cx);
     let mut image = AvatarImage::new(gpui::SharedString::from(path.clone()));
     image.style().refine(&refinement);
     Some(image)
@@ -136,7 +141,7 @@ fn avatar_fallback(
             node.component().map(Component::name).unwrap_or("(nothing)")
         );
     }
-    let (refinement, _, _, _, _) = crate::materialize::resolve_ops(arena, node);
+    let (refinement, _, _) = resolve_slot(arena, slot, "AvatarFallback", window, cx);
     fallback.style().refine(&refinement);
     fallback.extend(crate::materialize::materialize_children(
         runtime, arena, slot, inherited, window, cx,

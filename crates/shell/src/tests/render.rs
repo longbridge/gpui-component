@@ -4811,6 +4811,136 @@ export default class Faq extends View {
     );
 }
 
+/// A single date is stored as one, not as a range with no end.
+///
+/// `set_value("2026-08-15")` and `set_value(["2026-08-01", null])` mean
+/// different things to base — `Date::is_single`, `is_complete` and
+/// `is_in_range` all answer differently — but they read back as the same
+/// string, because a range whose end is unset renders as its start. So the
+/// round trip a script can see agrees either way, and only the state behind it
+/// tells them apart. That is what this asserts.
+#[gpui::test]
+fn a_single_calendar_date_is_not_stored_as_an_open_range(cx: &mut TestAppContext) {
+    cx.update(|cx| crate::init(cx));
+
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View } from "gpui";
+import { v_flex, CalendarState } from "gpui-base";
+
+export default class Picker extends View {
+  init(_props, _cx) {
+    this.calendar = CalendarState.new();
+    this.calendar.set_value("2026-08-15");
+  }
+  render(_cx) {
+    return v_flex().child(`value=${this.calendar.value()}`);
+  }
+}
+"#;
+    let view_type = runtime.load_source("single-date", source).expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let view = context
+        .update(|window, cx| runtime.instantiate_view(&view_type, window, cx))
+        .expect("instantiate");
+    draw(&mut context, &view);
+
+    let state = runtime
+        .entities()
+        .first_calendar()
+        .expect("the script created a calendar state");
+    let date = context.update(|_, cx| state.read(cx).date());
+    assert!(
+        matches!(date, gpui_base::Date::Single(Some(_))),
+        "a plain string must select one day, not open a range: got {date:?}"
+    );
+    assert!(
+        date.is_single(),
+        "base has to agree it is a single date, because its own logic branches on that"
+    );
+}
+
+/// A range is stored as one, and reads back as a pair.
+///
+/// The other half of the same wire question. A pair going in has to arrive as
+/// `Date::Range`, and a range coming out has to arrive as a pair rather than
+/// collapsing to its start — which is what would happen if the two directions
+/// disagreed about how many slots a range takes.
+#[gpui::test]
+fn a_calendar_range_survives_the_round_trip_as_a_range(cx: &mut TestAppContext) {
+    cx.update(|cx| crate::init(cx));
+
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View } from "gpui";
+import { v_flex, CalendarState } from "gpui-base";
+
+export default class Picker extends View {
+  init(_props, _cx) {
+    // One state, read twice. Two would make which one the Rust side inspects
+    // depend on a hash order.
+    this.calendar = CalendarState.new();
+    this.calendar.set_value(["2026-08-03", "2026-08-09"]);
+    this.read = this.calendar.value();
+    this.calendar.set_value(["2026-08-03", null]);
+    this.open = this.calendar.value();
+  }
+  render(_cx) {
+    // Joined rather than JSON, because the debug tree escapes quotes and an
+    // assertion full of backslashes says less than the value it checks.
+    const show = (v) => (Array.isArray(v) ? `pair(${v.join("|")})` : `single(${v})`);
+    return v_flex()
+      .child(`value=${show(this.read)}`)
+      .child(`open=${show(this.open)}`);
+  }
+}
+"#;
+    let view_type = runtime.load_source("range", source).expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let view = context
+        .update(|window, cx| runtime.instantiate_view(&view_type, window, cx))
+        .expect("instantiate");
+    draw(&mut context, &view);
+
+    let state = runtime
+        .entities()
+        .first_calendar()
+        .expect("the script created a calendar state");
+    let date = context.update(|_, cx| state.read(cx).date());
+    // The state was left holding the half-finished range, which is the case
+    // worth pinning: it holds one date, exactly as a single selection does, and
+    // only the variant tells them apart.
+    assert!(
+        matches!(date, gpui_base::Date::Range(Some(_), None)),
+        "a pair with an unset end must stay a range, not become a single date: got {date:?}"
+    );
+    assert!(
+        !date.is_single(),
+        "base branches on this, and a range mistaken for a single date takes the \
+         wrong branch in every one of them"
+    );
+
+    let tree = context.update(|_, cx| {
+        view.read(cx)
+            .snapshot()
+            .map(crate::RenderSnapshot::debug_tree)
+            .unwrap_or_default()
+    });
+    assert!(
+        tree.contains("value=pair(2026-08-03|2026-08-09)"),
+        "a range must read back as a pair, not as its start: {tree}"
+    );
+    assert!(
+        tree.contains("open=pair(2026-08-03|)"),
+        "a range whose end is not chosen yet must stay a pair, which is the whole \
+         difference between it and a single date: {tree}"
+    );
+}
+
 /// Every name this change adds is reachable from a script, under its documented
 /// name and in its documented place.
 ///

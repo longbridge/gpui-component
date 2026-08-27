@@ -61,7 +61,29 @@ pub(super) fn install(ctx: &Ctx<'_>) -> JsResult<()> {
             })
         }),
     )?;
-    globals.set("__window_state", Func::from(state))?;
+    // Three host functions rather than one answering three flags. An earlier
+    // shape returned them together on the theory that they are read together;
+    // the prelude then spelled each reader as its own method, so every one of
+    // them paid for all three and for the object carrying them. `Window` has
+    // three methods, the script has three methods, and now so does this.
+    globals.set(
+        "__window_is_active",
+        Func::from(|ctx: Ctx<'_>| -> JsResult<bool> {
+            read(&ctx, "window.is_window_active()", Window::is_window_active)
+        }),
+    )?;
+    globals.set(
+        "__window_is_fullscreen",
+        Func::from(|ctx: Ctx<'_>| -> JsResult<bool> {
+            read(&ctx, "window.is_fullscreen()", Window::is_fullscreen)
+        }),
+    )?;
+    globals.set(
+        "__window_is_maximized",
+        Func::from(|ctx: Ctx<'_>| -> JsResult<bool> {
+            read(&ctx, "window.is_maximized()", Window::is_maximized)
+        }),
+    )?;
 
     // The mutations. Refused from `render` for the reason `cx.notify()` is:
     // a frame that changes the window it is drawing into is a frame arguing
@@ -237,7 +259,7 @@ fn bind_keys(ctx: Ctx<'_>, bindings: Vec<Object<'_>>) -> JsResult<u32> {
     Ok(installed)
 }
 
-/// The four measurements that answer an object.
+/// The three measurements that answer an object.
 ///
 /// Free functions rather than closures because each has to name one `'js` for
 /// both the `Ctx` it takes and the `Object` it answers, and a closure cannot
@@ -269,27 +291,6 @@ fn mouse_position<'js>(ctx: Ctx<'js>) -> JsResult<Object<'js>> {
     let object = Object::new(ctx)?;
     object.set("x", f32::from(position.x))?;
     object.set("y", f32::from(position.y))?;
-    Ok(object)
-}
-
-/// The three platform-window flags, answered together.
-///
-/// One host call rather than three because they are read together far more
-/// often than apart, and because each one crossing the boundary separately
-/// buys nothing: the `window` global still exposes them as `is_window_active`,
-/// `is_fullscreen` and `is_maximized`, matching `Window`'s own names.
-fn state<'js>(ctx: Ctx<'js>) -> JsResult<Object<'js>> {
-    let (active, fullscreen, maximized) = read(&ctx, "window state", |window| {
-        (
-            window.is_window_active(),
-            window.is_fullscreen(),
-            window.is_maximized(),
-        )
-    })?;
-    let object = Object::new(ctx)?;
-    object.set("active", active)?;
-    object.set("fullscreen", fullscreen)?;
-    object.set("maximized", maximized)?;
     Ok(object)
 }
 

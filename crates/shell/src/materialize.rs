@@ -666,6 +666,7 @@ fn materialize_node(
     }
 
     components::tooltip::warn_unhonoured_tooltip(&component, &behavior);
+    warn_unhonoured_input(&component, &behavior);
 
     materialize_component(
         runtime, arena, node, id, component, inherited, refinement, behavior, states, children,
@@ -1376,6 +1377,55 @@ fn with_key_handlers<E: InteractiveElement>(
     element
 }
 
+/// Reports the input behaviors a component does not wire.
+///
+/// The same problem `tooltip` has, and the same answer: these are GPUI's own
+/// `InteractiveElement` builders, and the shell installs them on the one
+/// element it fully owns — a plain `div`, `h_flex` or `v_flex`. Every other
+/// component builds its own base type and hangs its own listeners on it, so a
+/// handler written there would be recorded in the description and never reach
+/// GPUI.
+///
+/// Saying so is not a consolation prize. `Button.new("save").on_key_down(...)`
+/// is a reasonable thing for a script author to write, it reads as though it
+/// works, and the failure is a key that does nothing — which looks like a bug
+/// in their own code for as long as it takes them to find this. A line in the
+/// log names the cause and the workaround in one place.
+///
+/// Widening this is one call per component rather than a new mechanism, the
+/// same as [`components::tooltip::warn_unhonoured_tooltip`] says of its own.
+fn warn_unhonoured_input(component: &Component, behavior: &Behavior) {
+    if honours_input(component) {
+        return;
+    }
+    let asked = [
+        ("on_key_down", behavior.on_key_down.is_some()),
+        ("on_key_up", behavior.on_key_up.is_some()),
+        ("on_mouse_down", !behavior.on_mouse_down.is_empty()),
+        ("on_mouse_up", !behavior.on_mouse_up.is_empty()),
+        ("on_mouse_down_out", behavior.on_mouse_down_out.is_some()),
+        ("on_scroll_wheel", behavior.on_scroll_wheel.is_some()),
+        ("on_action", !behavior.on_action.is_empty()),
+        ("key_context", behavior.key_context.is_some()),
+    ];
+    for (method, called) in asked {
+        if called {
+            tracing::warn!(
+                "`{method}` is not wired on a {}: the shell installs GPUI's input listeners                  on the element it owns outright, which is a plain `div`, `h_flex` or                  `v_flex`. Wrap it and write `{method}` on the wrapper",
+                component.name()
+            );
+        }
+    }
+}
+
+/// The components [`with_key_handlers`] and its neighbours are applied to.
+fn honours_input(component: &Component) -> bool {
+    matches!(
+        component,
+        Component::Div | Component::HFlex | Component::VFlex
+    )
+}
+
 /// The accessibility semantics GPUI reads off the element itself.
 fn with_aria<E: StatefulInteractiveElement>(element: E, behavior: &Behavior) -> E {
     let mut element = element;
@@ -1657,6 +1707,51 @@ pub(in crate::materialize) fn materialize_children(
         .iter()
         .map(|child| materialize_node(runtime, arena, *child, inherited, window, cx))
         .collect()
+}
+
+/// A slot node's own styles, with its motion sampled and its leftovers named.
+///
+/// The two things a slot resolver would otherwise silently drop. Motion is the
+/// one that bites: `AccordionPanel.new().transition("height", ...)` is the most
+/// ordinary thing anyone writes on an accordion, and a resolver that read only
+/// the refinement would record it and animate nothing. It is sampled against
+/// the same identity an ordinary node's is, so a slot animates exactly as it
+/// would anywhere else.
+///
+/// State styles are reported rather than applied. Every type these resolvers
+/// rebuild is a `RenderOnce` the shell hands finished values to, so there is no
+/// `Interactivity` on this side to attach a hover to — the same position
+/// `Collapsible` and `Switch` are already in, and the same answer: say so.
+pub(in crate::materialize) fn resolve_slot(
+    arena: &SpecArena,
+    slot: SpecId,
+    part: &str,
+    window: &mut Window,
+    cx: &mut App,
+) -> (StyleRefinement, Behavior, SlotSpecs) {
+    let Some(node) = arena.node(slot) else {
+        return (
+            StyleRefinement::default(),
+            Behavior::default(),
+            SlotSpecs::new(),
+        );
+    };
+    let (mut refinement, behavior, states, motions, inner) = resolve_ops(arena, node);
+    apply_motion(
+        element_id(slot, behavior.key.clone()),
+        &motions,
+        &mut refinement,
+        window,
+        cx,
+    );
+    if states.hover.is_some() || states.active.is_some() || states.focus.is_some() {
+        tracing::warn!(
+            "state styles on a {part} are ignored: it is rebuilt from its description as a \
+             value, so there is no interactive element here for a hover or a press to land \
+             on. Put them on an element around it"
+        );
+    }
+    (refinement, behavior, inner)
 }
 
 /// Takes the `SpecId` filling `name`, for a component that resolves its own

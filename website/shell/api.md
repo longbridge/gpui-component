@@ -592,6 +592,8 @@ render(_cx) {
 
 `context` is a predicate matched against the `key_context(...)` an element declares, so one chord can mean one thing in a list and another in an editor. Registering several `on_action`s on one element is fine and they are independent; an action none of them claims carries on to an element further out.
 
+That group — `on_key_down`, `on_key_up`, the four pointer handlers, `on_action` and `key_context` — is wired on a plain `div`, `h_flex` or `v_flex` only, the elements the shell owns outright. Every other component builds its own base type and hangs its own listeners on it, so a handler written on a `Button` is recorded and never reaches GPUI; the log says so. Wrap it and write the handler on the wrapper.
+
 ### Control state
 
 | Method | What it sets |

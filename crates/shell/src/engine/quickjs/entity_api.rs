@@ -558,23 +558,38 @@ pub fn install(ctx: &Ctx<'_>, module: &Object<'_>, runtime: Weak<ShellRuntime>) 
         ),
     )?;
 
-    // Which month the grid is for, and what today is: one crossing, because a
-    // script drawing a header needs all three at once.
-    let calendar_position = runtime.clone();
+    // The month the grid is for, and today. Three readers rather than one
+    // answering all three: the prelude spells each as its own method, so a
+    // combined call would have every one of them pay for the other two and for
+    // the vector carrying them. `CalendarState` has three methods too.
+    let calendar_year = runtime.clone();
     globals.set(
-        "__calendar_position",
+        "__calendar_year",
+        Func::from(move |ctx: Ctx<'_>, handle: EntityHandle| -> JsResult<i32> {
+            let state = calendar_state(&ctx, &calendar_year, handle)?;
+            scope::with_current_app(|cx| state.read(cx).current_year())
+                .ok_or_else(|| needs_call(&ctx, "year()"))
+        }),
+    )?;
+
+    let calendar_month = runtime.clone();
+    globals.set(
+        "__calendar_month",
+        Func::from(move |ctx: Ctx<'_>, handle: EntityHandle| -> JsResult<u32> {
+            let state = calendar_state(&ctx, &calendar_month, handle)?;
+            scope::with_current_app(|cx| u32::from(state.read(cx).current_month()))
+                .ok_or_else(|| needs_call(&ctx, "month()"))
+        }),
+    )?;
+
+    let calendar_today = runtime.clone();
+    globals.set(
+        "__calendar_today",
         Func::from(
-            move |ctx: Ctx<'_>, handle: EntityHandle| -> JsResult<Vec<String>> {
-                let state = calendar_state(&ctx, &calendar_position, handle)?;
-                scope::with_current_app(|cx| {
-                    let state = state.read(cx);
-                    vec![
-                        state.current_year().to_string(),
-                        state.current_month().to_string(),
-                        state.today().to_string(),
-                    ]
-                })
-                .ok_or_else(|| needs_call(&ctx, "position()"))
+            move |ctx: Ctx<'_>, handle: EntityHandle| -> JsResult<String> {
+                let state = calendar_state(&ctx, &calendar_today, handle)?;
+                scope::with_current_app(|cx| state.read(cx).today().to_string())
+                    .ok_or_else(|| needs_call(&ctx, "today()"))
             },
         ),
     )?;
@@ -1466,16 +1481,20 @@ fn calendar_state(
         })
 }
 
-/// A `Date` as the two-slot array the script sees.
+/// A `Date` on the wire: one slot for a single day, two for a range.
 ///
-/// One shape for both variants rather than two: a single date is
-/// `[day, null]`, a range is `[start, end]`, and nothing selected is
-/// `[null, null]`. The prelude turns that back into `null`, a string or a pair,
-/// which is what a script actually reads — but keeping the wire flat means one
-/// conversion here instead of a tagged union crossing in both directions.
-fn date_to_parts(date: gpui_base::Date) -> Vec<Option<String>> {
+/// The slot *count* is what carries the variant, and it has to. A single day
+/// and a range whose end is not chosen yet hold the same one date, and both
+/// render as the same string — but base branches on the difference in
+/// `is_single`, `is_complete` and `is_in_range`, so a wire that dropped it
+/// would quietly turn every `set_value("2026-08-15")` into a half-open range.
+///
+/// The prelude narrows this to `null`, a string or a pair before a script sees
+/// it, and widens it back the same way. Shared with the event dispatch so the
+/// two directions cannot drift.
+pub(super) fn date_to_parts(date: gpui_base::Date) -> Vec<Option<String>> {
     match date {
-        gpui_base::Date::Single(day) => vec![day.map(|day| day.to_string()), None],
+        gpui_base::Date::Single(day) => vec![day.map(|day| day.to_string())],
         gpui_base::Date::Range(start, end) => vec![
             start.map(|day| day.to_string()),
             end.map(|day| day.to_string()),
@@ -1483,7 +1502,7 @@ fn date_to_parts(date: gpui_base::Date) -> Vec<Option<String>> {
     }
 }
 
-/// The same two slots, read back. A second slot means a range was meant.
+/// The same slots, read back. Two of them means a range was meant.
 fn date_from_parts(ctx: &Ctx<'_>, parts: &[Option<String>]) -> JsResult<gpui_base::Date> {
     let day = |slot: Option<&String>| -> JsResult<Option<chrono::NaiveDate>> {
         let Some(text) = slot else {
