@@ -109,7 +109,9 @@ export default class QuoteBoard extends View {
       .items_center()
       .justify_between()
       .gap(ROW.inset)
-      .child(muted(watched === 0 ? "Nothing on the watchlist" : `${watched} watched`, cx))
+      // The heading already carries "N / M watched". Only the empty case says
+      // something it does not.
+      .child(muted(watched === 0 ? "Nothing on the watchlist" : "", cx))
       .child(
         h_flex()
           .gap(SPACE.xs)

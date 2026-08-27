@@ -3707,6 +3707,43 @@ fn loading_a_second_application_keeps_the_first_dynamic_import_root(cx: &mut Tes
     let _ = std::fs::remove_dir_all(base);
 }
 
+/// An unknown bare specifier says which built-ins this runtime has.
+///
+/// A script written against a different version of the runtime fails here, and
+/// "cannot resolve module `gpui-base`" alone does not say whether the name is a
+/// typo or the binary is older than the application it is loading.
+#[gpui::test]
+fn an_unknown_built_in_module_names_the_ones_that_exist(cx: &mut TestAppContext) {
+    cx.update(|cx| crate::init(cx));
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+
+    let directory =
+        std::env::temp_dir().join(format!("gpui-shell-unknown-module-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&directory);
+    std::fs::create_dir_all(&directory).expect("application directory");
+    std::fs::write(
+        directory.join("main.js"),
+        "import { View } from \"gpui\";\n\
+         import { Button } from \"gpui-future\";\n\
+         export default class Panel extends View { render() { return Button.new(\"x\"); } }\n",
+    )
+    .expect("main.js");
+
+    let error = runtime
+        .load_app(&directory, "main.js")
+        .expect_err("an unknown built-in must be refused");
+    let message = error.to_string();
+    for expected in ["`gpui`", "`gpui-base`", "`gpui-fps`", "different versions"] {
+        assert!(
+            message.contains(expected),
+            "the refusal must name {expected}: {message}"
+        );
+    }
+
+    let _ = std::fs::remove_dir_all(directory);
+}
+
 /// `.child()` names the mistake it was given.
 ///
 /// Every retained handle in this API is a `{__handle}` wrapper, so a focus

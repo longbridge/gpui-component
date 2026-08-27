@@ -5,6 +5,15 @@ import { View, div, text } from "gpui";
 import { Button, h_flex, v_flex } from "gpui-base";
 /** @import { Context, Element } from "gpui" */
 
+// The stage is `w_full()`, so its width belongs to whatever panel holds it,
+// while a motion target has to be an absolute pixel length. These are therefore
+// chosen to fit the narrowest panel worth drawing this in — the card's far edge
+// lands at 348 — rather than measured from a container nothing here can ask.
+const REST_LEFT = 20;
+const TRAVEL = 180;
+const REST_WIDTH = 132;
+const ACTIVE_WIDTH = 148;
+
 const segment = (id, label, active, onClick, cx) =>
   Button.new(id)
     .selected(active)
@@ -117,10 +126,15 @@ export default class MotionBoard extends View {
           ),
       )
       .child(
+        // The stage clips: everything inside it is positioned absolutely, and an
+        // absolute child of a `relative()` box spills past the border rather
+        // than being contained by it. The travel below fits a narrow panel, and
+        // this keeps a narrower one honest.
         div()
           .relative()
           .w_full()
           .h(176)
+          .overflow_hidden()
           .rounded(cx.theme().radius.md)
           .border(1)
           .border_color(cx.theme().colors.border)
@@ -144,8 +158,12 @@ export default class MotionBoard extends View {
         .id("motion-runner")
         .absolute()
         .top(48)
-        .left(active ? 960 : 20)
-        .w(active ? 176 : 148)
+        // Pixels, because that is what a motion target has to be: the whole
+        // point is that GPUI samples an absolute length on native frames. So
+        // the travel is a number the stage can hold at any sensible panel
+        // width, and `track` marks the same two stations.
+        .left(active ? REST_LEFT + TRAVEL : REST_LEFT)
+        .w(active ? ACTIVE_WIDTH : REST_WIDTH)
         .h(80)
         .gap(8)
         .p(12)
@@ -186,26 +204,50 @@ export default class MotionBoard extends View {
 
   /** @param {Context} cx */
   track(cx) {
+    const end = REST_LEFT + TRAVEL;
     return [
       text("OPEN")
         .absolute()
         .top(18)
-        .left(20)
+        .left(REST_LEFT)
         .text_size(9)
         .text_color(cx.theme().colors.muted_foreground),
       text("LIVE TICK")
         .absolute()
         .top(18)
-        .left(960)
+        .left(end)
         .text_size(9)
         .text_color(cx.theme().colors.muted_foreground),
-      div().absolute().top(88).left(20).w(1116).h(1).bg(cx.theme().colors.border),
-      div().absolute().top(84).left(20).w(8).h(8).rounded(4).bg(cx.theme().colors.accent),
-      div().absolute().top(84).left(1132).w(8).h(8).rounded(4).bg(cx.theme().colors.border),
+      div()
+        .absolute()
+        .top(88)
+        .left(REST_LEFT + 4)
+        .w(TRAVEL + ACTIVE_WIDTH - 12)
+        .h(1)
+        .bg(cx.theme().colors.border),
+      div()
+        .absolute()
+        .top(84)
+        .left(REST_LEFT)
+        .w(8)
+        .h(8)
+        .rounded(4)
+        .bg(cx.theme().colors.accent),
+      div()
+        .absolute()
+        .top(84)
+        .left(end + ACTIVE_WIDTH - 8)
+        .w(8)
+        .h(8)
+        .rounded(4)
+        .bg(cx.theme().colors.border),
+      // Left and right both, so the sentence wraps inside the stage instead of
+      // running past its border on a narrow panel.
       text("Native frames interpolate the card; JavaScript only changes its target.")
         .absolute()
         .top(144)
-        .left(20)
+        .left(REST_LEFT)
+        .right(REST_LEFT)
         .text_size(10)
         .text_color(cx.theme().colors.muted_foreground),
     ];

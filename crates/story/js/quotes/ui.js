@@ -48,11 +48,21 @@ export const ROW = {
 /** @type {{ title: AbsoluteLength, body: AbsoluteLength, lineHeight: number }} */
 export const TYPE = { title: "0.8125rem", body: "0.6875rem", lineHeight: 1.4 };
 
-/// Up is `accent`, down is `destructive`, flat is ordinary text — the same question
-/// the Rust panel asks of the same theme.
+/// Down is `destructive`, flat is ordinary text — both semantic roles. Up is a
+/// literal, and deliberately: the semantic set is shadcn's, which has a
+/// `destructive` and no counterpart for it, so there is no token that means
+/// "gain". `accent` is the near-white hover surface, and reading it as one is
+/// how this column came out white on a light theme.
+///
+/// A gain/loss pair is a domain color anyway, the way a chart series is — it
+/// belongs to the market, not to the interface — so it picks its own value per
+/// appearance rather than borrowing a role that means something else.
+/** @param {Context} cx */
+const gain = (cx) => (cx.theme().is_dark ? "#4ade80" : "#16a34a");
+
 /** @param {number} direction @param {Context} cx */
 export const directionColor = (direction, cx) => {
-  if (direction > 0) return cx.theme().colors.accent;
+  if (direction > 0) return gain(cx);
   if (direction < 0) return cx.theme().colors.destructive;
   return cx.theme().colors.foreground;
 };

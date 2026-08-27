@@ -351,6 +351,16 @@ macro_rules! builtin_modules {
             BuiltinResolver::default()$(.with_module($module::SPECIFIER))+
         }
 
+        /// Named in the refusal when a bare specifier is not one of them, so a
+        /// script written against a different runtime than the one running it
+        /// is told which it is talking to rather than only that the import
+        /// failed.
+        fn builtin_specifiers() -> String {
+            [$($module::SPECIFIER),+]
+                .map(|specifier| format!("`{specifier}`"))
+                .join(", ")
+        }
+
         fn builtin_loader() -> ModuleLoader {
             ModuleLoader::default()$(.with_module($module::SPECIFIER, $module))+
         }
@@ -2500,6 +2510,23 @@ impl Resolver for AppModules {
             ));
         };
         let Some(path) = self.candidate(&application, base, name) else {
+            // A bare specifier reached the last resolver in the chain, so it is
+            // neither a built-in nor a file. Saying which built-ins this
+            // runtime does have is the difference between "you typed it wrong"
+            // and "this binary is older than the script it is loading" — and
+            // the second is what a moved module looks like from here.
+            if !name.starts_with('.') && !name.contains('/') {
+                return Err(Exception::throw_message(
+                    ctx,
+                    &format!(
+                        "cannot resolve module `{name}`: this runtime's built-in modules are {}, \
+                         and an application may otherwise import only its own files. If the \
+                         script expects a module this runtime does not have, the two are \
+                         different versions.",
+                        builtin_specifiers()
+                    ),
+                ));
+            }
             return Err(Exception::throw_message(
                 ctx,
                 &format!("cannot resolve module `{name}` from `{base}`"),

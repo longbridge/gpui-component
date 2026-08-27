@@ -144,7 +144,7 @@ pub struct Market {
 /// fastest. The mix is there at all so the symbol column has two shapes in it —
 /// a ticker and a numeric code — which is where a fixed-width column earns its
 /// keep.
-const BOARD: [(&str, &str, f32); 20] = [
+const BOARD: [(&str, &str, f32); 10] = [
     ("AAPL.US", "Apple", 214.29),
     ("NVDA.US", "NVIDIA", 118.11),
     ("MSFT.US", "Microsoft", 421.53),
@@ -152,18 +152,8 @@ const BOARD: [(&str, &str, f32); 20] = [
     ("AMZN.US", "Amazon", 186.34),
     ("GOOGL.US", "Alphabet", 165.27),
     ("META.US", "Meta", 502.18),
-    ("AVGO.US", "Broadcom", 168.44),
-    ("AMD.US", "AMD", 152.61),
-    ("NFLX.US", "Netflix", 678.90),
-    ("PLTR.US", "Palantir", 34.16),
-    ("MU.US", "Micron", 96.52),
-    ("COIN.US", "Coinbase", 214.75),
-    ("ARM.US", "Arm", 138.02),
     ("700.HK", "Tencent", 372.40),
     ("9988.HK", "Alibaba", 78.15),
-    ("3690.HK", "Meituan", 112.60),
-    ("1810.HK", "Xiaomi", 17.86),
-    ("0388.HK", "HKEX", 268.80),
     ("0005.HK", "HSBC", 62.05),
 ];
 
@@ -922,11 +912,14 @@ impl ShellStory {
             .items_center()
             .justify_between()
             .gap(rems(ROW_INSET))
+            // The heading already carries "N / M watched"; repeating the count
+            // here spent a line on a fact the reader had. The empty case is
+            // worth keeping — it is the one state the heading does not explain.
             .child(muted(
                 if watched == 0 {
-                    "Nothing on the watchlist".to_owned()
+                    "Nothing on the watchlist"
                 } else {
-                    format!("{watched} watched")
+                    ""
                 },
                 cx,
             ))
@@ -1125,9 +1118,7 @@ impl ShellStory {
             })
             .child(muted(
                 format!(
-                    "Slowest single script render this run: {:.2} ms. A mean that drifts with \
-                     load is the render being interrupted rather than getting slower; a mean near \
-                     the floor under a much larger maximum is a collection.",
+                    "Slowest single script render this run: {:.2} ms",
                     millis(self.sampled.slowest_script_render()),
                 ),
                 cx,
@@ -1135,17 +1126,15 @@ impl ShellStory {
             .child(
                 Label::new(match self.feed {
                     Feed::Idle => {
-                        "Counters are cleared when the feed changes. With no feed running, \
-                         hovering the script panel still draws frames — and still runs no script."
+                        "No feed: hovering the script panel draws frames and runs no script."
                     }
                     Feed::Quotes(_) => {
-                        "Prices are state the script reads, so every tick invalidates its \
-                         snapshot: script renders track the feed, whatever the frame rate is."
+                        "The script reads the prices, so every tick invalidates its snapshot: \
+                         script renders track the feed, not the frame rate."
                     }
                     Feed::Repaint(_) => {
-                        "Nothing the script reads has changed, so every tick is a repaint of the \
-                         snapshot it already published: frames climb, script renders stay at zero, \
-                         and the tick count in the panel stops moving."
+                        "Nothing the script reads changed, so every tick repaints the snapshot it \
+                         already published: frames climb, script renders stay at zero."
                     }
                 })
                 .text_xs()
@@ -1295,7 +1284,6 @@ impl Render for ShellStory {
                     .child(
                         div().flex_1().child(
                             section("Rust")
-                                .description("Rust implementation.")
                                 .sub_title(pause_button(
                                     "pause-rust",
                                     self.frozen.is_some(),
@@ -1308,7 +1296,6 @@ impl Render for ShellStory {
                     .child(
                         div().flex_1().child(
                             section("JavaScript · gpui-shell")
-                                .description("JavaScript implementation.")
                                 .sub_title(
                                     h_flex()
                                         .gap(rems(0.25))
@@ -1731,12 +1718,12 @@ mod tests {
             "the quote helpers must read semantic colors from the current context"
         );
         assert!(
-            motion_source.contains(".left(active ? 960 : 20)"),
-            "the motion card must travel far enough to expose spatial continuity"
+            motion_source.contains(".left(active ? REST_LEFT + TRAVEL : REST_LEFT)"),
+            "the motion card must travel between the two stations the track marks"
         );
         assert!(
-            motion_source.contains(".w(1116).h(1)"),
-            "the track spine must reach the long-distance target"
+            motion_source.contains(".overflow_hidden()"),
+            "the stage must clip: its children are absolute, and the panel's width is not ours"
         );
         for forbidden in ["colors.primary", "colors.primary_foreground"] {
             assert!(
