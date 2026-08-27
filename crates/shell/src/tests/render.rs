@@ -6073,6 +6073,98 @@ fn a_row_cannot_register_a_handler_of_its_own(cx: &mut TestAppContext) {
     );
 }
 
+/// The row helpers an application already has all take the `cx` of the render
+/// they were written in — `label(text, cx)`, `surface(cx)`, and so on. The item
+/// renderer is a closure inside that same `render()`, so that `cx` is what it
+/// has in hand, even though GPUI calls it from a layout pass of its own.
+#[gpui::test]
+fn an_item_renderer_may_use_the_cx_of_the_render_that_registered_it(cx: &mut TestAppContext) {
+    let (_runtime, _window, view, mut context) = mount_virtual_list(
+        cx,
+        "try { row.text_color(cx.theme().colors.foreground); this.refused = \"none\"; } \
+         catch (error) { this.refused = String(error.message); }",
+    );
+
+    let tree = redraw_and_read(&mut context, &view);
+    assert!(
+        tree.contains("refused none"),
+        "the enclosing render's cx must still speak for a live call here: {tree}"
+    );
+}
+
+/// And no further than that. Adopting one generation is what keeps the rule
+/// checkable: a `cx` from a render that has already been replaced is as dead
+/// inside a list as it is anywhere else.
+#[gpui::test]
+fn an_item_renderer_still_refuses_a_cx_from_an_earlier_render(cx: &mut TestAppContext) {
+    cx.update(crate::init);
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { div, View } from "gpui";
+import { v_flex, v_virtual_list } from "gpui-base";
+
+export default class Rows extends View {
+  init() {
+    this.result = "not reached";
+  }
+
+  render(cx) {
+    const previous = this.saved;
+    this.saved = cx;
+    return v_flex()
+      .w(300)
+      .h(400)
+      .child(
+        v_flex()
+          .h(200)
+          .child(
+            v_virtual_list("rows", 500, 20, (index) => String(index), (range) => {
+              const items = [];
+              for (let index = range.start; index < range.end; index++) {
+                items.push(div().h(20).child(`row ${index}`));
+              }
+              if (previous) {
+                try {
+                  previous.theme();
+                  this.result = "accepted";
+                } catch (error) {
+                  this.result = "refused";
+                }
+              }
+              return items;
+            }),
+          ),
+      )
+      .child(`result ${this.result}`);
+  }
+}
+"#;
+    let view_type = runtime.load_source("stale-rows.js", source).expect("load");
+    let runtime_for_view = Rc::clone(&runtime);
+    let window = cx.add_window(move |window, cx| {
+        let view = runtime_for_view
+            .instantiate_view(&view_type, window, cx)
+            .expect("instantiate");
+        RootedScriptView(view)
+    });
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    let view = window
+        .root(&mut context)
+        .expect("view")
+        .read_with(&context, |root, _| root.0.clone());
+
+    // The first pass has no earlier render to reach for; the second does, and
+    // the third is what shows what the second decided.
+    redraw_and_read(&mut context, &view);
+    let tree = redraw_and_read(&mut context, &view);
+    assert!(
+        tree.contains("result refused"),
+        "only the render that registered the renderer is adopted: {tree}"
+    );
+}
+
 #[gpui::test]
 fn a_virtual_list_reports_which_row_was_clicked(cx: &mut TestAppContext) {
     let (_runtime, _window, view, mut context) = mount_virtual_list(cx, "");

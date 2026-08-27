@@ -5,6 +5,9 @@
 //! would point at a dead stack frame. [`CallScope`] turns "am I inside a legal
 //! host call?" into a runtime-checkable fact: every entry point pushes a frame
 //! with a fresh generation, and the script-side `cx` only carries that generation.
+//! A frame may additionally [`adopt`] one earlier call's generation, which widens
+//! the set of `cx` values it answers for without changing where their pointers
+//! come from.
 //!
 //! # Safety
 //!
@@ -63,6 +66,8 @@ struct Frame {
     app: *mut App,
     phase: ScopePhase,
     generation: u64,
+    /// An earlier call this frame also answers for, if any. See [`adopt`].
+    adopted: Option<u64>,
     view: Option<Entity<ScriptView>>,
     /// Whose authority this code runs under.
     ///
@@ -238,6 +243,7 @@ pub(crate) fn enter_application(
             app: frame.1,
             phase: frame.2,
             generation,
+            adopted: None,
             view: None,
             policy: frame.3,
             application: Some(application),
@@ -268,6 +274,7 @@ fn enter_with_runtime_opt(
             app: app as *mut App,
             phase,
             generation,
+            adopted: None,
             view,
             policy,
             application,
@@ -276,6 +283,29 @@ fn enter_with_runtime_opt(
     });
 
     (CallScopeGuard { _private: () }, generation)
+}
+
+/// Lets the innermost frame answer for an earlier call's `cx` as well as its own.
+///
+/// One caller: the frame a virtualized list's item renderer runs in. That
+/// renderer is a closure the script wrote inside `render(cx)`, and the `cx` it
+/// closed over is the render's — but GPUI calls it from inside layout, long
+/// after the render frame was popped, so every helper the rows call would
+/// otherwise have to be re-plumbed for lists alone. Naming the render's
+/// generation here keeps that one `cx` working and leaves every other stale one
+/// refused; the pointers a member reaches are still the live frame's.
+///
+/// `None` is a no-op, which is what a callback registered outside any host call
+/// deserves.
+pub(crate) fn adopt(generation: Option<u64>) {
+    let Some(generation) = generation else {
+        return;
+    };
+    STACK.with(|stack| {
+        if let Some(frame) = stack.borrow_mut().last_mut() {
+            frame.adopted = Some(generation);
+        }
+    });
 }
 
 pub fn current_runtime() -> Option<Rc<ShellRuntime>> {
@@ -352,7 +382,8 @@ pub(crate) fn current_application_generation() -> Option<Rc<ApplicationGeneratio
     })
 }
 
-/// Runs `f` with the innermost scope's context, if `generation` is still current.
+/// Runs `f` with the innermost scope's context, if `generation` still names a
+/// live call — the innermost frame's own, or one that frame [`adopt`]ed.
 ///
 /// A stale generation is a programming error in the script, not a host bug, so
 /// it produces a descriptive error rather than a panic.
@@ -364,7 +395,7 @@ pub fn with_context<R>(
         stack
             .borrow()
             .last()
-            .filter(|frame| frame.generation == generation)
+            .filter(|frame| frame.generation == generation || frame.adopted == Some(generation))
             .map(|frame| (frame.window, frame.app))
     });
 
