@@ -1,10 +1,10 @@
 ---
-title: 托管运行时
+title: 宿主接入
 description: Rust 这一侧的全貌——运行时的生命周期、挂载脚本视图、从宿主状态刷新它、指标、退出请求与 hot-reload。
-order: 10
+order: 9
 ---
 
-# Hosting the Runtime
+# Hosting
 
 [Getting Started](./getting-started.md) 给的是把脚本视图放上屏幕的那四行。这一页是 Rust 接口的其余部分：该调什么、什么时候调，以及那两三处“看起来该调的那个其实是错的”。
 
@@ -115,7 +115,7 @@ gpui_shell::set_store_path(data_dir.join("store.json"));
 gpui_shell::export_module(market_module(&market))?;
 ```
 
-三项的默认都是“什么都没有”：没有文件访问、没有存储位置、没有 host 模块。见 [Capabilities](./capabilities.md) 与 [Host Modules](./host-modules.md)。
+三项的默认都是“什么都没有”：没有文件访问、没有存储位置、没有 host 模块。见 [Capabilities](./capabilities.md) 与 [Host Module](./host-module.md)。
 
 独立二进制还会检查 `<root>/gpui-shell.json`。其中已识别的字段提供应用身份、可选的应用/Shell 版本元数据、entry 与 capability 请求；只有 `id`、`name` 和 `entry` 必填。Embedder 若要让每个加载的应用拥有不同 grant 与 native-module registry，也可以直接构造 `Policy`。
 

@@ -1,10 +1,10 @@
 ---
-title: Host Modules
+title: Host Module
 description: How a host lends its own Rust to a script — registration, the import that reaches it, the plain-data boundary, and the rules a host function runs under.
-order: 9
+order: 10
 ---
 
-# Host Modules
+# Host Module
 
 [Capabilities](./capabilities.md) is the half that says what a script may **not** reach. This is the other half: what the host chooses to hand it.
 
@@ -26,7 +26,7 @@ import { project_name } from "workspace";
 project_name();      // "gpui-component"
 ```
 
-A registered module is an ordinary ES module, resolved by the same loader that answers `gpui` and `path`. The rest of this page is what that costs and what it refuses.
+A registered module is an ordinary ES module, resolved by the same loader that answers `gpui` and `path`. One call registers one module, and a repeated name replaces the earlier module rather than merging into it — a host with three of them calls `export_module` three times. The rest of this page is what that costs and what it refuses.
 
 ## Why an import rather than a lookup
 

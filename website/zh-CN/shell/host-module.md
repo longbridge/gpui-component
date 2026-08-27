@@ -1,10 +1,10 @@
 ---
-title: Host Modules
+title: 宿主模块
 description: 宿主如何把自己的 Rust 借给脚本——注册、脚本侧的 import、纯数据边界，以及 host function 运行时受到的约束。
-order: 9
+order: 10
 ---
 
-# Host Modules
+# Host Module
 
 [Capabilities](./capabilities.md) 管的是脚本**不能**碰什么。这一篇讲的是另一半：宿主主动递出去的东西。
 
@@ -26,7 +26,7 @@ import { project_name } from "workspace";
 project_name();      // "gpui-component"
 ```
 
-注册好的模块就是一个普通的 ES module，由解析 `gpui` 和 `path` 的同一个 loader 负责。本页余下的部分讲它的代价和它拒绝的东西。
+注册好的模块就是一个普通的 ES module，由解析 `gpui` 和 `path` 的同一个 loader 负责。一次调用注册一个模块，重名会替换掉先前那个而不是合并进去——有三个模块的宿主就调三次 `export_module`。本页余下的部分讲它的代价和它拒绝的东西。
 
 ## 为什么是 import 而不是查表
 

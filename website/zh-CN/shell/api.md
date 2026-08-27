@@ -17,7 +17,6 @@ order: 13
 ```js
 import { View, div } from "gpui";
 import { Button, v_flex } from "gpui-base";
-/** @import { ScopePhase } from "gpui-shell" */
 import { fps_monitor } from "gpui-fps";
 ```
 
@@ -32,22 +31,13 @@ import { fps_monitor } from "gpui-fps";
 
 API 形态跟随 Rust 原型：`App` 上的方法放在 `cx`，`Window` 上的方法放在 `window` 全局对象，关联构造器写成 `Type.new(...)`，自由函数保持小写。没有直接 GPUI 或 Base 原型的名字，属于实现它的公开层。表中也会列出仅存在于类型系统的名字，但它们不是运行时可调用的值。
 
-## Host 模块
-
-宿主在 Rust 侧注册的模块，按名字 import，和其它模块没有区别：
-
-```js
-import { quotes } from "market";
-```
-
-它不属于任何内建模块。生成的类型声明里每个注册过的模块各有一段 `declare module`，所以模块名和每一个导出名都会被检查。见 [Host Modules](./host-modules.md)。
-
 ## `gpui` 模块
 
 ### 元素
 
 | 名称 | 说明 |
 | --- | --- |
+| `Element` | 通过链式方法构建、只属于当前 render pass 的描述 |
 | `div()` | 自身不带布局的元素 |
 | `svg(path)` | 来自应用根目录的矢量图，按周围的文字颜色着色 |
 | `image(path)` | 来自应用根目录的全彩图片，保留原色 |
@@ -98,6 +88,8 @@ import { quotes } from "market";
 | `Modifiers` | `shift`、`control`、`alt`、`platform` |
 | `Point` | `x`、`y` |
 | `ElementBounds` | 带 `width` 与 `height` 的 `Point` |
+| `ComponentType` | 带身份的组件构造器共同使用的 `new(id)` 形态 |
+| `PartType` | 没有自身身份的组件子部件共同使用的 `new()` 形态 |
 | `Path` | 由 `PathBuilder.build()` 产出的不可变原生几何 |
 | `PathCoordinate` | 像素，或所绘元素边界的百分比 |
 | `Background` | 由 `Background.solid(...)` 等工厂创建的可复用原生背景：`opacity(factor)`、`color_space(space)` |
@@ -160,7 +152,7 @@ import { quotes } from "market";
 
 ## `window` 全局对象
 
-真正的全局：不需要 import，也没有谁把它交给你。每次调用都读取当前正在跑的那次宿主调用，不在任何调用中时抛异常，所以没有句柄要持有，也没有东西会过期。浮层属于窗口，而不属于打开它的那个视图——这就是这些方法在这里、而不在 `Context` 上的原因。
+这个全局对象的类型是 `gpui` 导出的 `Window`。调用处不需要 import，也没有谁把它交给你。每次调用都读取当前正在跑的那次宿主调用，不在任何调用中时抛异常，所以没有句柄要持有，也没有东西会过期。浮层属于窗口，而不属于打开它的那个视图——这就是这些方法在这里、而不在 `Context` 上的原因。
 
 | 成员 | 说明 |
 | --- | --- |
@@ -342,7 +334,7 @@ slider 的四个部件接受同一个 `SliderState`，而且四个都不能少�
 | `is_masked(): boolean` | 是否遮蔽绘制 |
 | `set_masked(masked: boolean): void` | 改变这一点 |
 | `focus(): void` | 把键盘移进去 |
-| `on(event, handler): boolean` | `"change"`、`"focus"` 或 `"blur"`，handler 收 `(event, cx)` |
+| `on(event, handler): boolean` | 每次编辑后的 `"change"`、填满时的 `"complete"`，或 `"focus"` / `"blur"`；handler 收 `(event, cx)` |
 
 #### `VirtualListScrollHandle`
 
@@ -375,6 +367,8 @@ slider 的四个部件接受同一个 `SliderState`，而且四个都不能少�
 | `ScrollbarMode` | `"scrolling"`、`"hover"` 或 `"always"` |
 | `ItemRange` | 虚拟列表的可见项，写作半开区间 `[start, end)` |
 | `SliderValue` | 一个数字，或区间 slider 的 `[start, end]` |
+| `InputEvent` | 文本状态的事件 payload；submit 事件带可选的 `secondary` 与 `shift` 标志 |
+| `OtpEvent` | 当前为空的 OTP 事件 payload；值从 `OtpState` 读取 |
 
 ### 组合模式
 
@@ -599,3 +593,13 @@ property 取 `"opacity"`、`"width"`、`"height"`、`"left"`、`"top"` 之一，
 - **无参方法**，从 GPUI 的反射表生成：`flex_col`、`items_center`、`gap_2`、`rounded_md`、`text_sm`、`size_full`、`truncate` 以及这一族的其余成员。生成的声明就是当前构建所用 GPUI 版本的完整清单。
 
 两者都记录在 [Styling](./styling.md) 里，还有长度与颜色的语法，以及调色板定义的 token。
+
+## Host 模块
+
+宿主在 Rust 侧注册的模块，按名字 import，和其它模块没有区别：
+
+```js
+import { quotes } from "market";
+```
+
+它不属于任何内建模块。生成的类型声明里每个注册过的模块各有一段 `declare module`，所以模块名和每一个导出名都会被检查。见 [Host Module](./host-module.md)。

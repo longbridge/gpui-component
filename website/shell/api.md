@@ -17,7 +17,6 @@ Each built-in module names the public Rust layer it exposes, so an import says w
 ```js
 import { View, div } from "gpui";
 import { Button, v_flex } from "gpui-base";
-/** @import { ScopePhase } from "gpui-shell" */
 import { fps_monitor } from "gpui-fps";
 ```
 
@@ -32,22 +31,13 @@ Two names are never imported, for two different reasons. `window` is a real glob
 
 API shape follows the Rust original: a method on `App` is a method on `cx`, a method on `Window` is on the `window` global, an associated constructor is `Type.new(...)`, and a free function stays lowercase. Names with no direct GPUI or Base original belong to the module for the layer that implements them. Type-only names appear in these tables too, but are never run-time values.
 
-## Host modules
-
-A module the host registered in Rust is imported by name, like any other module:
-
-```js
-import { quotes } from "market";
-```
-
-It is not part of any built-in module. The generated declarations carry one `declare module` per registered module, so both the module name and every export name are checked. See [Host Modules](./host-modules.md).
-
 ## The `gpui` module
 
 ### Elements
 
 | Name | What it is |
 | --- | --- |
+| `Element` | A render-pass-owned description built by chaining methods |
 | `div()` | An element with no layout of its own |
 | `svg(path)` | A vector image from the application root, tinted by the surrounding text color |
 | `image(path)` | A full-color image from the application root, colors preserved |
@@ -98,6 +88,8 @@ A subclass defines `init?(props, cx)`, which runs once, and `render(cx)`, which 
 | `Modifiers` | `shift`, `control`, `alt`, `platform` |
 | `Point` | `x`, `y` |
 | `ElementBounds` | A `Point` with `width` and `height` |
+| `ComponentType` | The shared `new(id)` shape used by identity-bearing component constructors |
+| `PartType` | The shared `new()` shape used by component sub-parts without their own identity |
 | `Path` | Immutable native geometry produced by `PathBuilder.build()` |
 | `PathCoordinate` | Pixels, or a percentage of the painted element's bounds |
 | `Background` | A reusable native background from `Background.solid(...)` or another factory: `opacity(factor)`, `color_space(space)` |
@@ -160,7 +152,7 @@ Three places hand one out: `init`, the body of `cx.spawn`, and the callbacks of 
 
 ## The `window` global
 
-A real global: nothing to import, and nothing hands it to you. Every call reads the host call that is running now and throws outside one, so there is no handle to hold and nothing that can go stale. An overlay belongs to the window rather than to the view that opened it, which is why these are here and not on `Context`.
+The global has the `Window` type exported by `gpui`. Nothing hands it to you and there is nothing to import at the call site. Every call reads the host call that is running now and throws outside one, so there is no handle to hold and nothing that can go stale. An overlay belongs to the window rather than to the view that opened it, which is why these are here and not on `Context`.
 
 | Member | What it is |
 | --- | --- |
@@ -342,7 +334,7 @@ From `OtpState.new(length, options?)`, where `options` is `{ value?: string, mas
 | `is_masked(): boolean` | Whether they are drawn masked |
 | `set_masked(masked: boolean): void` | Changes that |
 | `focus(): void` | Moves the keyboard into it |
-| `on(event, handler): boolean` | `"change"`, `"focus"` or `"blur"`, handler `(event, cx)` |
+| `on(event, handler): boolean` | `"change"` after each edit, `"complete"` when filled, or `"focus"` / `"blur"`; handler `(event, cx)` |
 
 #### `VirtualListScrollHandle`
 
@@ -375,6 +367,8 @@ Reading the theme is `cx.theme()`. `set_theme` remains in `gpui-base` because th
 | `ScrollbarMode` | `"scrolling"`, `"hover"` or `"always"` |
 | `ItemRange` | A virtual list's visible items, as a half-open `[start, end)` |
 | `SliderValue` | A number, or `[start, end]` for a range slider |
+| `InputEvent` | The text-state event payload; submit events carry optional `secondary` and `shift` flags |
+| `OtpEvent` | The currently empty OTP event payload; read the value from `OtpState` |
 
 ### Composition patterns
 
@@ -599,3 +593,13 @@ Everything else on an element is a style. There are two families, and they never
 - **No-argument methods**, generated from GPUI's reflection table: `flex_col`, `items_center`, `gap_2`, `rounded_md`, `text_sm`, `size_full`, `truncate` and the rest. The generated declarations are the inventory for the GPUI version in your build.
 
 Both are covered in [Styling](./styling.md), along with the length and color grammars and the tokens the palette defines.
+
+## Host modules
+
+A module the host registered in Rust is imported by name, like any other module:
+
+```js
+import { quotes } from "market";
+```
+
+It is not part of any built-in module. The generated declarations carry one `declare module` per registered module, so both the module name and every export name are checked. See [Host Module](./host-module.md).

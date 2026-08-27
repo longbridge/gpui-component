@@ -82,7 +82,7 @@ cargo run -- shell
 
 gallery 的 Shell story 并排跑着两块面板：左边那块由 Rust 的 `shell_story.rs` 画，右边那块由 JavaScript 的 `crates/story/js/quotes/main.js` 画，两边读的是同一份数据。
 
-脚本自己不持有任何状态。这块行情板是一个 Rust 的 `Entity<Market>`，从 story 在运行时启动前注册的 [host 模块](./host-modules.md) import 进来：
+脚本自己不持有任何状态。这块行情板是一个 Rust 的 `Entity<Market>`，从 story 在运行时启动前注册的 [host 模块](./host-module.md) import 进来：
 
 ```text
 import { quotes, ticks, watch, watch_all } from "market";
@@ -104,4 +104,4 @@ import { quotes, ticks, watch, watch_all } from "market";
 
 把 `examples/js_todolist` 复制到你自己的目录里跑起来——它是一个类型都配好了的完整应用。把 `main.js` 削回到一个只有 `init` 与 `render` 的 `View`，留着 `ui.js`，再从那里往上加。
 
-要写宿主的话，`crates/story/src/stories/shell_story.rs` 是另一侧的可用参考：它构建运行时、注册 native 模块、挂载一个 `ScriptView`，并按需重载它。[Hosting the Runtime](./hosting.md) 走的是同样这几个调用。
+要写宿主的话，`crates/story/src/stories/shell_story.rs` 是另一侧的可用参考：它构建运行时、注册 native 模块、挂载一个 `ScriptView`，并按需重载它。[Hosting](./hosting.md) 走的是同样这几个调用。

@@ -10,7 +10,7 @@ order: 8
 
 唯一的例外是存储，而且只在 manifest 这一层：没有写 `storage` 的应用会拿到属于它自己的 `localStorage`，就像浏览器不问自答地给每个 origin 一个那样。这是关于作者**要写什么**的约定，不是模型上的口子——Rust 侧的 `Capabilities` 在宿主开口之前照样拒绝，manifest 也照样可以写 `"storage": false`。见 [Storage](#storage)。
 
-授权由宿主决定，因为只有宿主知道它对即将运行的这段代码信任到什么程度。至于它主动**递出去**的东西——它自己的、有意暴露的那部分 Rust——见 [Host Modules](./host-modules.md)。视图在加载时冻结 capabilities；修改默认值只影响之后加载的应用，不会悄悄改变已经按某项授权运行的代码。
+授权由宿主决定，因为只有宿主知道它对即将运行的这段代码信任到什么程度。至于它主动**递出去**的东西——它自己的、有意暴露的那部分 Rust——见 [Host Module](./host-module.md)。视图在加载时冻结 capabilities；修改默认值只影响之后加载的应用，不会悄悄改变已经按某项授权运行的代码。
 
 ```rust
 gpui_shell::set_capabilities(

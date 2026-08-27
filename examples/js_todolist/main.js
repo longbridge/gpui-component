@@ -10,7 +10,6 @@
 import { View } from "gpui";
 import { v_flex, h_flex, InputState } from "gpui-base";
 /** @import { AsyncContext, Context } from "gpui" */
-/** @import { InputState } from "gpui-base" */
 import { load, save } from "./storage.js";
 import confirmClear from "./confirm.js";
 import {

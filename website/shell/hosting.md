@@ -1,10 +1,10 @@
 ---
-title: Hosting the Runtime
+title: Hosting
 description: The Rust side in full — runtime lifetime, mounting script views, refreshing them from host state, metrics, exit requests and hot-reload.
-order: 10
+order: 9
 ---
 
-# Hosting the Runtime
+# Hosting
 
 [Getting Started](./getting-started.md) shows the four lines that put a script view on screen. This page is the rest of the Rust surface: what to call, when, and the two or three places where the obvious call is the wrong one.
 
@@ -125,7 +125,7 @@ gpui_shell::set_store_path(data_dir.join("store.json"));
 gpui_shell::export_module(market_module(&market))?;
 ```
 
-All three default to nothing: no file access, no storage location, no host modules. See [Capabilities](./capabilities.md) and [Host Modules](./host-modules.md).
+All three default to nothing: no file access, no storage location, no host modules. See [Capabilities](./capabilities.md) and [Host Module](./host-module.md).
 
 The standalone binary also checks `<root>/gpui-shell.json`. Its recognized fields supply application identity, optional application/Shell version metadata, the entry point, and capability requests; only `id`, `name`, and `entry` are required. Embedders may instead construct a `Policy` directly when each loaded application needs a distinct grant and module registry.
 

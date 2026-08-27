@@ -136,6 +136,7 @@ pub fn declarations() -> String {
     out.push_str("declare module \"gpui-base\" {\n");
     out.push_str(BASE_IMPORTS);
     out.push_str(&base_color_token_type());
+    out.push_str(BASE_PART_TYPES);
     out.push_str(BASE);
     out.push_str("}\n\n");
     out.push_str("declare module \"gpui-shell\" {\n");
@@ -1380,6 +1381,9 @@ fn shell_types() -> String {
 }
 
 const SHELL_TYPES: &str = r#"  /** Which edge a gpui-shell sheet is anchored to. */
+  /** A path coordinate in pixels or as a percentage of the painted bounds. */
+  export type PathCoordinate = number | `${number}%`;
+
   export type SheetSide = "left" | "right" | "top" | "bottom";
 
   export interface DialogOptions {
@@ -1445,17 +1449,15 @@ const ELEMENTS: &str = r#"
    */
   export function image(path: string): Element;
 
-  /** A coordinate in pixels or relative to the painted element's bounds. */
-  export type PathCoordinate = number | `${number}%`;
   /** Immutable native GPUI geometry produced by `PathBuilder.build()`. */
   export interface Path {}
   export interface PathBuilder {
-    move_to(x: PathCoordinate, y: PathCoordinate): PathBuilder;
-    line_to(x: PathCoordinate, y: PathCoordinate): PathBuilder;
-    curve_to(to_x: PathCoordinate, to_y: PathCoordinate, control_x: PathCoordinate, control_y: PathCoordinate): PathBuilder;
-    cubic_bezier_to(to_x: PathCoordinate, to_y: PathCoordinate, control_a_x: PathCoordinate, control_a_y: PathCoordinate, control_b_x: PathCoordinate, control_b_y: PathCoordinate): PathBuilder;
-    arc_to(radius_x: PathCoordinate, radius_y: PathCoordinate, rotation: number, large_arc: boolean, sweep: boolean, to_x: PathCoordinate, to_y: PathCoordinate): PathBuilder;
-    add_polygon(points: ReadonlyArray<readonly [PathCoordinate, PathCoordinate]>, closed?: boolean): PathBuilder;
+    move_to(x: import("gpui-shell").PathCoordinate, y: import("gpui-shell").PathCoordinate): PathBuilder;
+    line_to(x: import("gpui-shell").PathCoordinate, y: import("gpui-shell").PathCoordinate): PathBuilder;
+    curve_to(to_x: import("gpui-shell").PathCoordinate, to_y: import("gpui-shell").PathCoordinate, control_x: import("gpui-shell").PathCoordinate, control_y: import("gpui-shell").PathCoordinate): PathBuilder;
+    cubic_bezier_to(to_x: import("gpui-shell").PathCoordinate, to_y: import("gpui-shell").PathCoordinate, control_a_x: import("gpui-shell").PathCoordinate, control_a_y: import("gpui-shell").PathCoordinate, control_b_x: import("gpui-shell").PathCoordinate, control_b_y: import("gpui-shell").PathCoordinate): PathBuilder;
+    arc_to(radius_x: import("gpui-shell").PathCoordinate, radius_y: import("gpui-shell").PathCoordinate, rotation: number, large_arc: boolean, sweep: boolean, to_x: import("gpui-shell").PathCoordinate, to_y: import("gpui-shell").PathCoordinate): PathBuilder;
+    add_polygon(points: ReadonlyArray<readonly [import("gpui-shell").PathCoordinate, import("gpui-shell").PathCoordinate]>, closed?: boolean): PathBuilder;
     close(): PathBuilder;
     dash_array(values: readonly number[]): PathBuilder;
     build(): Path;
@@ -1496,13 +1498,17 @@ const ELEMENTS: &str = r#"
 
 "#;
 
-/// Shared component constructor shapes used by Base and later component layers.
+/// The shared identity-bearing component shape used by upper component layers.
 const COMPONENT_TYPES: &str = r#"
   /** A component identified across renders by `new(id)`. */
   export interface ComponentType {
     new: (id: string | number) => Element;
   }
 
+"#;
+
+/// The constructor shape for gpui-base sub-parts without their own identity.
+const BASE_PART_TYPES: &str = r#"
   /** A sub-part with no identity of its own, constructed with `new()`. */
   export interface PartType {
     new: () => Element;
@@ -1998,6 +2004,15 @@ const BASE: &str = r#"  /** A row. */
     new: () => VirtualListScrollHandle;
   };
 
+  /** Payload emitted by retained text state. Submit events carry key modifiers. */
+  export interface InputEvent {
+    readonly secondary?: boolean;
+    readonly shift?: boolean;
+  }
+
+  /** The OTP event payload is currently empty; read the value from the state. */
+  export interface OtpEvent {}
+
   /**
    * Retained text state, created once and kept on the view.
    *
@@ -2008,7 +2023,7 @@ const BASE: &str = r#"  /** A row. */
     value(): string;
     set_value(next: string): void;
     /** `change`, `submit`, `focus` or `blur`. */
-    on(event: "change" | "submit" | "focus" | "blur", handler: (event: any, cx: Context) => void): boolean;
+    on(event: "change" | "submit" | "focus" | "blur", handler: (event: InputEvent, cx: Context) => void): boolean;
     /**
      * How much one step moves the value in a `NumberInput`. Default is 1;
      * `null` gives up stepping entirely.
@@ -2068,7 +2083,7 @@ const BASE: &str = r#"  /** A row. */
     value(): string;
     set_value(next: string): void;
     /** `change`, `submit`, `focus` or `blur`. */
-    on(event: "change" | "submit" | "focus" | "blur", handler: (event: any, cx: Context) => void): boolean;
+    on(event: "change" | "submit" | "focus" | "blur", handler: (event: InputEvent, cx: Context) => void): boolean;
     /** Shows this many rows. */
     set_rows(rows: number): void;
     /** Grows with the content, between the two row counts. */
@@ -2208,11 +2223,11 @@ const BASE: &str = r#"  /** A row. */
     /** Moves the keyboard onto the code. */
     focus(): void;
     /**
-     * `change` arrives **once**, when the last digit lands: it reports the
-     * completed code, not each keystroke. There is no `submit` — the base
-     * layer never emits one for a code — and there is no event for the blink.
+     * `change` arrives after each edit; `complete` arrives when the last digit
+     * lands. There is no `submit` — the base layer never emits one for a code
+     * — and there is no event for the blink.
      */
-    on(event: "change" | "focus" | "blur", handler: (event: any, cx: Context) => void): boolean;
+    on(event: "change" | "complete" | "focus" | "blur", handler: (event: OtpEvent, cx: Context) => void): boolean;
     release(): boolean;
   }
 
@@ -2236,10 +2251,9 @@ const BASE: &str = r#"  /** A row. */
    *
    * Alone among the bound components, its cells are not the script's to
    * describe — only to style. A described cell would be frozen into the
-   * snapshot the last render produced and nothing would ever thaw it: the
-   * state reports `change` only once the code is *complete*, so the first five
-   * digits of a six-digit code would leave the screen untouched, and the caret
-   * blinks on a timer that raises no script event at all.
+   * snapshot the last render produced and nothing would ever thaw it: even
+   * though edits emit `change`, the caret blinks on a native timer that raises
+   * no script event at all.
    *
    * So the shell reads the state every frame and decides what each cell holds
    * — a digit, a bullet while the state is masked, the caret, or nothing —
@@ -2297,7 +2311,6 @@ const BASE_IMPORTS: &str = r#"  import {
     Context,
     Element,
     FocusHandle,
-    PartType,
   } from "gpui";
 
 "#;
@@ -2509,7 +2522,9 @@ const WINDOW_GLOBAL: &str = r#"
  * `cx.notify()` re-renders this view, `window.open_dialog()` changes what the
  * user is looking at — which is why these are here and not on `Context`.
  */
-declare const window: import("gpui").Window;
+type GpuiShellWindow = import("gpui").Window;
+interface Window extends GpuiShellWindow {}
+declare var window: Window & typeof globalThis;
 
 /**
  * `window.localStorage`, reachable bare as it is in a browser, where `window`
@@ -2777,7 +2792,8 @@ mod tests {
         // outside it: a `declare module` body cannot introduce a global, and
         // this file is only in script mode because it has no top-level import
         // or export of its own.
-        assert!(declarations.contains("\ndeclare const window:"));
+        assert!(declarations.contains("\ninterface Window extends GpuiShellWindow {}"));
+        assert!(declarations.contains("\ndeclare var window: Window & typeof globalThis;"));
         assert!(declarations.ends_with(";\n"));
     }
 
@@ -2917,6 +2933,35 @@ mod tests {
                     "`{name}` is exported from \"{specifier}\" but declared nowhere in it"
                 );
             }
+
+            let declared_values = body
+                .lines()
+                .filter_map(|line| {
+                    let line = line.trim_start();
+                    [
+                        "export function ",
+                        "export const ",
+                        "export class ",
+                        "export abstract class ",
+                    ]
+                    .into_iter()
+                    .find_map(|prefix| {
+                        line.strip_prefix(prefix).map(|rest| {
+                            rest.split(['(', ':', ' ', '{'])
+                                .next()
+                                .expect("an exported value has a name")
+                        })
+                    })
+                })
+                .collect::<std::collections::BTreeSet<_>>();
+            let runtime_values = names
+                .iter()
+                .copied()
+                .collect::<std::collections::BTreeSet<_>>();
+            assert_eq!(
+                declared_values, runtime_values,
+                "the values declared by \"{specifier}\" differ from its run-time exports"
+            );
         }
     }
 
@@ -2984,7 +3029,12 @@ mod tests {
                 "fake system member remained declared: {fake_system_member}"
             );
         }
-        assert!(declarations.contains("declare const window:"));
+        // Outside every `declare module` block, which is what makes it global.
+        // `var` rather than `const` so it merges with the ambient `Window`.
+        assert!(
+            declarations.contains("declare var window:"),
+            "`window` must stay a top-level declaration, or it is not a global"
+        );
     }
 
     #[test]
@@ -3083,6 +3133,29 @@ mod tests {
         assert!(declarations.contains("init?(props: Props | undefined, cx: AsyncContext): void;"));
         assert!(declarations.contains("update?(props: Props | undefined): void;"));
         assert!(!declarations.contains("cx?: AsyncContext"));
+    }
+
+    #[test]
+    fn retained_state_event_names_and_payloads_match_the_runtime() {
+        let declarations = declarations();
+        let union = |names: &[&str]| {
+            names
+                .iter()
+                .map(|name| format!("\"{name}\""))
+                .collect::<Vec<_>>()
+                .join(" | ")
+        };
+        assert!(declarations.contains(&format!(
+            "on(event: {}, handler: (event: InputEvent, cx: Context)",
+            union(crate::entities::InputEventName::NAMES)
+        )));
+        assert!(declarations.contains(&format!(
+            "on(event: {}, handler: (event: OtpEvent, cx: Context)",
+            union(crate::entities::OtpEventName::NAMES)
+        )));
+        assert!(declarations.contains("export interface InputEvent"));
+        assert!(declarations.contains("export interface OtpEvent"));
+        assert!(!declarations.contains("handler: (event: any, cx: Context)"));
     }
 
     #[test]

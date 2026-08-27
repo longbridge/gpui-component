@@ -86,7 +86,7 @@ cargo run -- shell
 
 The gallery's Shell story runs two panels side by side: the left one drawn by `shell_story.rs` in Rust, the right one by `crates/story/js/quotes/main.js` in JavaScript, reading the same data.
 
-The script owns no state at all. The board is a Rust `Entity<Market>`, imported from the [host module](./host-modules.md) the story registered before the runtime started:
+The script owns no state at all. The board is a Rust `Entity<Market>`, imported from the [host module](./host-module.md) the story registered before the runtime started:
 
 ```text
 import { quotes, ticks, watch, watch_all } from "market";
@@ -108,4 +108,4 @@ The script runs once to publish the new target. GPUI schedules and samples every
 
 Copy `examples/js_todolist` into a directory of your own and run it — it is a complete application with types already wired. Strip `main.js` back to a `View` with an `init` and a `render`, keep `ui.js`, and build up from there.
 
-For a host, `crates/story/src/stories/shell_story.rs` is a working reference for the other side: it builds a runtime, exports host modules, mounts a `ScriptView`, and reloads it on demand. [Hosting the Runtime](./hosting.md) walks through the same calls.
+For a host, `crates/story/src/stories/shell_story.rs` is a working reference for the other side: it builds a runtime, exports host modules, mounts a `ScriptView`, and reloads it on demand. [Hosting](./hosting.md) walks through the same calls.
