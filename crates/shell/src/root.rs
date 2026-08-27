@@ -722,7 +722,7 @@ impl ShellRoot {
         if active_focus_trap(window, cx).is_some() {
             return;
         }
-        window.blur();
+        window.blur(cx);
     }
 }
 
