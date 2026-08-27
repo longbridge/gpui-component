@@ -7,8 +7,8 @@ use crate::text::{
     document::ParsedDocument,
     markdown_ext::MarkdownParseContext,
     node::{
-        self, BlockNode, CodeBlock, ImageNode, InlineNode, LinkMark, NodeContext, Paragraph, Span,
-        Table, TableRow, TextMark,
+        self, BlockNode, CodeBlock, Frontmatter, FrontmatterEntry, ImageNode, InlineNode, LinkMark,
+        NodeContext, Paragraph, Span, Table, TableRow, TextMark,
     },
 };
 
@@ -43,6 +43,129 @@ fn parse_table_cell(row: &mut node::TableRow, node: &mdast::TableCell, cx: &mut 
         ..Default::default()
     };
     row.children.push(table_cell);
+}
+
+/// Parse a YAML frontmatter mapping into metadata entries.
+///
+/// Frontmatter is intentionally kept to plain text here. Markdown formatting
+/// (including inline code detection) does not apply inside YAML scalar values.
+/// If the frontmatter is not a top-level mapping, it falls back to the existing
+/// YAML code-block rendering.
+fn parse_frontmatter(value: &str, span: Option<Span>) -> Option<Frontmatter> {
+    #[derive(Clone, Copy)]
+    enum ScalarStyle {
+        Folded,
+        Literal,
+        Nested,
+    }
+
+    struct Entry {
+        key: String,
+        value: String,
+        style: ScalarStyle,
+    }
+
+    fn push_continuation(entry: &mut Entry, line: &str) {
+        let line = line.trim();
+        match entry.style {
+            ScalarStyle::Folded => {
+                if line.is_empty() {
+                    if !entry.value.is_empty() && !entry.value.ends_with('\n') {
+                        entry.value.push('\n');
+                    }
+                    return;
+                }
+                if !entry.value.is_empty() && !entry.value.ends_with('\n') {
+                    entry.value.push(' ');
+                }
+            }
+            ScalarStyle::Literal | ScalarStyle::Nested => {
+                if !entry.value.is_empty() {
+                    entry.value.push('\n');
+                }
+            }
+        }
+        entry.value.push_str(line);
+    }
+
+    fn is_plain_key(key: &str) -> bool {
+        !key.is_empty()
+            && key
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_'))
+    }
+
+    let mut entries = Vec::new();
+    let mut current: Option<Entry> = None;
+
+    for line in value.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            if current
+                .as_ref()
+                .is_some_and(|entry| matches!(entry.style, ScalarStyle::Literal))
+            {
+                push_continuation(current.as_mut()?, line);
+            }
+            continue;
+        }
+
+        let is_top_level = !line.starts_with([' ', '\t']);
+        if trimmed.starts_with('#')
+            && (is_top_level
+                || !current
+                    .as_ref()
+                    .is_some_and(|entry| matches!(entry.style, ScalarStyle::Literal)))
+        {
+            continue;
+        }
+
+        if is_top_level {
+            let (key, raw_value) = line.split_once(':')?;
+            let key = key.trim();
+            if !is_plain_key(key) {
+                return None;
+            }
+
+            if let Some(entry) = current.take() {
+                entries.push(entry);
+            }
+
+            let raw_value = raw_value.trim();
+            let (value, style) = match raw_value {
+                ">" | ">-" | ">+" => (String::new(), ScalarStyle::Folded),
+                "|" | "|-" | "|+" => (String::new(), ScalarStyle::Literal),
+                "" => (String::new(), ScalarStyle::Nested),
+                _ => (raw_value.to_string(), ScalarStyle::Folded),
+            };
+            current = Some(Entry {
+                key: key.to_string(),
+                value,
+                style,
+            });
+        } else {
+            push_continuation(current.as_mut()?, line);
+        }
+    }
+
+    if let Some(entry) = current {
+        entries.push(entry);
+    }
+    if entries.is_empty() {
+        return None;
+    }
+
+    Some(Frontmatter {
+        entries: entries
+            .into_iter()
+            .map(|entry| FrontmatterEntry {
+                key: Paragraph::new(entry.key),
+                value: Paragraph::new(entry.value),
+            })
+            .collect(),
+        source: value.into(),
+        span,
+    })
 }
 
 /// Push a text run with its existing `marks` plus `new_mark` across the full
@@ -418,11 +541,14 @@ fn ast_to_node(source: &str, value: mdast::Node, cx: &mut NodeContext) -> BlockN
             Some("mdx".into()),
             new_span(val.position, cx),
         )),
-        Node::Yaml(val) => BlockNode::CodeBlock(CodeBlock::new(
-            val.value.into(),
-            Some("yml".into()),
-            new_span(val.position, cx),
-        )),
+        Node::Yaml(val) => {
+            let span = new_span(val.position, cx);
+            parse_frontmatter(&val.value, span)
+                .map(BlockNode::Frontmatter)
+                .unwrap_or_else(|| {
+                    BlockNode::CodeBlock(CodeBlock::new(val.value.into(), Some("yml".into()), span))
+                })
+        }
         Node::Toml(val) => BlockNode::CodeBlock(CodeBlock::new(
             val.value.into(),
             Some("toml".into()),
@@ -591,6 +717,75 @@ mod tests {
         );
         assert_eq!(image.width, None);
         assert_eq!(image.height, None);
+    }
+
+    #[test]
+    fn test_yaml_frontmatter_renders_as_plain_metadata_grid() {
+        let source = "---\nname: gpui-component-dev\ndescription: Contributing to `crates/ui` without inline formatting.\n---\n\n## Navigation";
+        let mut cx = NodeContext::default();
+        let document = parse(source, &mut cx).unwrap();
+
+        let BlockNode::Frontmatter(frontmatter) = &document.blocks[0] else {
+            panic!("expected frontmatter metadata");
+        };
+        assert_eq!(frontmatter.entries.len(), 2);
+        assert_eq!(frontmatter.entries[0].key.text(), "name");
+        assert_eq!(frontmatter.entries[0].value.text(), "gpui-component-dev");
+        assert_eq!(
+            frontmatter.entries[1].value.text(),
+            "Contributing to `crates/ui` without inline formatting."
+        );
+        assert!(
+            frontmatter.entries[1].value.children[0].marks.is_empty(),
+            "frontmatter values should stay plain text"
+        );
+        assert_eq!(
+            frontmatter.to_markdown(),
+            "---\nname: gpui-component-dev\ndescription: Contributing to `crates/ui` without inline formatting.\n---"
+        );
+    }
+
+    #[test]
+    fn test_yaml_frontmatter_handles_block_scalars() {
+        let source = "---\ndescription: >-\n  First line\n  second line.\nnotes: |-\n  # literal content\n\n  second line\n---";
+        let mut cx = NodeContext::default();
+        let document = parse(source, &mut cx).unwrap();
+
+        let BlockNode::Frontmatter(frontmatter) = &document.blocks[0] else {
+            panic!("expected frontmatter metadata");
+        };
+        assert_eq!(
+            frontmatter.entries[0].value.text(),
+            "First line second line."
+        );
+        assert_eq!(
+            frontmatter.entries[1].value.text(),
+            "# literal content\n\nsecond line"
+        );
+    }
+
+    #[test]
+    fn test_non_mapping_yaml_frontmatter_falls_back_to_code_block() {
+        let mut cx = NodeContext::default();
+        let document = parse("---\n- name: example\n---", &mut cx).unwrap();
+
+        let BlockNode::CodeBlock(code_block) = &document.blocks[0] else {
+            panic!("expected YAML code block fallback");
+        };
+        assert_eq!(code_block.lang().as_deref(), Some("yml"));
+        assert_eq!(code_block.code().as_ref(), "- name: example");
+    }
+
+    #[test]
+    fn test_fenced_yaml_remains_a_code_block() {
+        let mut cx = NodeContext::default();
+        let document = parse("```yaml\nname: example\n```", &mut cx).unwrap();
+
+        let BlockNode::CodeBlock(code_block) = &document.blocks[0] else {
+            panic!("expected fenced YAML code block");
+        };
+        assert_eq!(code_block.lang().as_deref(), Some("yaml"));
+        assert_eq!(code_block.code().as_ref(), "name: example");
     }
 
     #[derive(Debug, Clone, PartialEq)]
