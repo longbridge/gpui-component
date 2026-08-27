@@ -2353,7 +2353,7 @@ impl ShellRuntime {
             let handler = entry.value.clone().restore(ctx)?;
             let payload = Object::new(ctx.clone())?;
             payload.set("key", keystroke.key.as_str())?;
-            payload.set("keystroke", keystroke.unparse())?;
+            payload.set("keystroke", script_keystroke(keystroke))?;
             match keystroke.key_char.as_deref() {
                 Some(char) => payload.set("key_char", char)?,
                 None => payload.set("key_char", rquickjs::Undefined)?,
@@ -5519,6 +5519,50 @@ fn pagination_items<'js>(
     Ok(out)
 }
 
+/// One chord, spelled the same way on every platform.
+///
+/// Not `Keystroke::unparse`, and the difference is the whole point of this
+/// function. GPUI spells the platform modifier for the platform it was built
+/// for — `cmd-` on macOS, `super-` on Linux, `win-` on Windows — which is right
+/// for a keymap a person reads and wrong for a string a program compares.
+/// A script is one file running on all three, so
+///
+/// ```js
+/// if (event.keystroke === "cmd-s") this.save();
+/// ```
+///
+/// would work on macOS and silently do nothing everywhere else. That failure
+/// is invisible in review and invisible in a test suite that runs on one
+/// platform.
+///
+/// `cmd` is the spelling because the other side of this API already accepts it
+/// everywhere: `Keystroke::parse`, which `cx.bind_keys` goes through, takes
+/// `cmd`, `super` and `win` on every platform. Picking the one that parses
+/// everywhere makes a binding and the event it produces agree by construction.
+///
+/// The modifier order is GPUI's own, so a chord that round-trips through
+/// `parse` comes back identical.
+fn script_keystroke(keystroke: &gpui::Keystroke) -> String {
+    let mut out = String::new();
+    if keystroke.modifiers.function {
+        out.push_str("fn-");
+    }
+    if keystroke.modifiers.control {
+        out.push_str("ctrl-");
+    }
+    if keystroke.modifiers.alt {
+        out.push_str("alt-");
+    }
+    if keystroke.modifiers.platform {
+        out.push_str("cmd-");
+    }
+    if keystroke.modifiers.shift {
+        out.push_str("shift-");
+    }
+    out.push_str(&keystroke.key);
+    out
+}
+
 /// The modifier keys, in the shape every event payload carries them.
 fn modifiers_object<'js>(ctx: &Ctx<'js>, modifiers: gpui::Modifiers) -> JsResult<Object<'js>> {
     let object = Object::new(ctx.clone())?;
@@ -5824,6 +5868,58 @@ fn describe(ctx: &Ctx<'_>, error: JsError) -> String {
 
 fn js_setup_error(error: JsError) -> anyhow::Error {
     anyhow!("failed to start the JavaScript runtime: {error}")
+}
+
+#[cfg(test)]
+mod keystroke_tests {
+    use gpui::{Keystroke, Modifiers};
+
+    /// The chord a script compares against is the same on every platform.
+    ///
+    /// Built from `Modifiers` directly rather than from a simulated key press,
+    /// so the assertion is about the spelling and not about whichever platform
+    /// this suite happens to run on — which is the exact hole that let
+    /// `Keystroke::unparse` ship here in the first place. On macOS it is right
+    /// and on Linux it answered `super-s`, so a test that ran only on macOS
+    /// agreed with it.
+    #[test]
+    fn the_platform_modifier_is_spelled_cmd_everywhere() {
+        let chord = |modifiers: Modifiers, key: &str| {
+            super::script_keystroke(&Keystroke {
+                modifiers,
+                key: key.to_owned(),
+                key_char: None,
+            })
+        };
+
+        assert_eq!(chord(Modifiers::command(), "s"), "cmd-s");
+        assert_eq!(
+            chord(Modifiers::command_shift(), "p"),
+            "cmd-shift-p",
+            "the modifier order is GPUI's own, so a chord round-trips through parse"
+        );
+        assert_eq!(chord(Modifiers::control(), "c"), "ctrl-c");
+        assert_eq!(chord(Modifiers::alt(), "f"), "alt-f");
+        assert_eq!(chord(Modifiers::none(), "escape"), "escape");
+    }
+
+    /// And it is a spelling `Keystroke::parse` accepts, on every platform.
+    ///
+    /// This is what makes a binding and the event it produces agree: the same
+    /// text a script passes to `cx.bind_keys` is the text it will be handed
+    /// back. Asserted rather than assumed, because `parse` accepting `cmd`
+    /// away from macOS is the property the choice rests on.
+    #[test]
+    fn the_spelling_round_trips_through_gpui_parse() {
+        for chord in ["cmd-s", "cmd-shift-p", "ctrl-alt-delete", "escape"] {
+            let parsed = Keystroke::parse(chord).expect("every spelling here must parse");
+            assert_eq!(
+                super::script_keystroke(&parsed),
+                chord,
+                "`{chord}` must come back as it went in"
+            );
+        }
+    }
 }
 
 #[cfg(test)]

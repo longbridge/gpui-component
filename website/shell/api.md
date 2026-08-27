@@ -87,7 +87,7 @@ A subclass defines `init?(props, cx)`, which runs once, and `render(cx)`, which 
 | `MouseMoveEvent` | `position`, `local_position`, `bounds`, `modifiers` |
 | `MouseButtonEvent` | `button`, `click_count`, `position`, `modifiers`, and the local geometry once painted |
 | `ScrollWheelEvent` | `delta` in pixels, `delta_lines` when the device reported lines, `touch_phase` |
-| `KeyEvent` | `keystroke` (the whole chord), `key`, `key_char`, `modifiers`, `is_held` |
+| `KeyEvent` | `keystroke` (the whole chord; the platform modifier is spelled `cmd` on every platform), `key`, `key_char`, `modifiers`, `is_held` |
 | `ActionEvent` | `action` — the script's own name for it |
 | `KeyBinding` | One entry of `cx.bind_keys`: `keystroke`, `action`, optional `context` |
 | `Size` | `width`, `height` |

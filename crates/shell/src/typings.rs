@@ -810,6 +810,14 @@ const CONTEXT_AND_VIEW: &str = r#"  /**
    * in — `"cmd-shift-s"`, `"escape"`, `"ctrl-alt-delete"` — and is what a
    * comparison is normally written against. `key` and `modifiers` are the
    * same thing taken apart, for when only one half matters.
+   *
+   * The platform modifier is spelled `cmd` on every platform, including Linux
+   * and Windows. GPUI spells it for the platform it was built for, which is
+   * right for a keymap a person reads and wrong for a string a program
+   * compares: one script runs on all three, and `event.keystroke === "cmd-s"`
+   * has to mean the same thing in all three. It is also the spelling
+   * `cx.bind_keys` accepts everywhere, so a binding and the event it produces
+   * agree by construction.
    */
   export interface KeyEvent {
     /** The key printed on the key that was pressed, e.g. `"s"` or `"escape"`. */

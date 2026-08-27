@@ -87,7 +87,7 @@ API 形态跟随 Rust 原型：`App` 上的方法放在 `cx`，`Window` 上的�
 | `MouseMoveEvent` | `position`、`local_position`、`bounds`、`modifiers` |
 | `MouseButtonEvent` | `button`、`click_count`、`position`、`modifiers`，以及元素绘制之后才有的局部几何 |
 | `ScrollWheelEvent` | 以像素表示的 `delta`；设备按行上报时还有 `delta_lines`；以及 `touch_phase` |
-| `KeyEvent` | `keystroke`（整个组合键）、`key`、`key_char`、`modifiers`、`is_held` |
+| `KeyEvent` | `keystroke`（整个组合键，平台修饰键在所有平台上都拼作 `cmd`）、`key`、`key_char`、`modifiers`、`is_held` |
 | `ActionEvent` | `action`——脚本给这个 action 起的名字 |
 | `KeyBinding` | `cx.bind_keys` 的一项：`keystroke`、`action`、可选的 `context` |
 | `Modifiers` | `shift`、`control`、`alt`、`platform` |
