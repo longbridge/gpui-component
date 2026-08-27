@@ -663,10 +663,13 @@ impl<M: InputModeKind> TextElement<M> {
                 last_layout,
                 false,
             );
+            // The end of a range closes the row it lands on: a range ending exactly on a soft
+            // wrap boundary highlights to the end of that row instead of opening a zero-width
+            // sliver at the start of the next one.
             let line_cursor_end = line.position_for_index(
                 end_ix.saturating_sub(prev_lines_offset),
                 last_layout,
-                false,
+                true,
             );
 
             if line_cursor_start.is_some() || line_cursor_end.is_some() {
