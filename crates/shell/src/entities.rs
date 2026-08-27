@@ -30,7 +30,7 @@ use gpui_base::input::{
     InputBaseState, InputEditorStyle, InputEvent, InputModeKind, InputState, TextareaState,
 };
 use gpui_base::slider::{SliderEvent, SliderScale, SliderState, SliderValue};
-use gpui_base::{OtpEvent, OtpState};
+use gpui_base::{CalendarEvent, CalendarState, OtpEvent, OtpState};
 
 use crate::{engine::ShellRuntime, runtime::ApplicationGeneration, view::ScriptView};
 
@@ -72,6 +72,16 @@ enum Record {
     /// methods, which is why everything below this point treats them together.
     Textarea {
         state: Entity<TextareaState>,
+        application: Option<Rc<ApplicationGeneration>>,
+        subscriptions: Vec<Subscription>,
+    },
+    /// A calendar's month, view and selected date.
+    ///
+    /// Retained because the month a script is looking at outlives the frame
+    /// that drew it, and because the day grid is derived from it: `next_month`
+    /// moves the state and the next `month_days()` answers a different grid.
+    Calendar {
+        state: Entity<CalendarState>,
         application: Option<Rc<ApplicationGeneration>>,
         subscriptions: Vec<Subscription>,
     },
@@ -431,6 +441,66 @@ impl EntityStore {
         })
     }
 
+    /// Creates a calendar state and returns its handle.
+    ///
+    /// Needs a window for the same reason [`Self::create_otp`] does: the state
+    /// builds a focus handle in its constructor.
+    pub fn create_calendar(
+        &mut self,
+        application: Option<Rc<ApplicationGeneration>>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> EntityHandle {
+        let state = cx.new(|cx| CalendarState::new(window, cx));
+        self.push(Record::Calendar {
+            state,
+            application,
+            subscriptions: Vec::new(),
+        })
+    }
+
+    /// The entity behind a calendar handle, if it is still live and belongs
+    /// here.
+    pub fn calendar(&self, handle: EntityHandle) -> Option<Entity<CalendarState>> {
+        match self.record(handle) {
+            Some(Record::Calendar { state, .. }) => Some(state.clone()),
+            _ => None,
+        }
+    }
+
+    /// Subscribes to a calendar's one event: a date was selected.
+    ///
+    /// A `Vec` of subscriptions rather than a map keyed by event name, as the
+    /// slider's is: `CalendarEvent` has one variant, so there is nothing to
+    /// key by and nothing a second registration could mean but "also this".
+    pub fn subscribe_calendar(
+        &mut self,
+        handle: EntityHandle,
+        window: &mut Window,
+        cx: &mut App,
+        handler: impl Fn(&CalendarEvent, &mut Window, &mut App) + 'static,
+    ) -> bool {
+        let state = match self.record(handle) {
+            Some(Record::Calendar { state, .. }) => state.clone(),
+            _ => return false,
+        };
+        let subscription =
+            window.subscribe(&state, cx, move |_, event: &CalendarEvent, window, cx| {
+                handler(event, window, cx)
+            });
+        match self.record_mut(handle) {
+            Some(Record::Calendar { subscriptions, .. }) => {
+                // Replaces rather than appends, matching every other `on(...)`
+                // in this API: registering twice means the second handler, not
+                // both of them.
+                subscriptions.clear();
+                subscriptions.push(subscription);
+                true
+            }
+            _ => false,
+        }
+    }
+
     /// The entity behind a one-time-code handle, if it is still live and
     /// belongs here.
     pub fn otp(&self, handle: EntityHandle) -> Option<Entity<OtpState>> {
@@ -696,6 +766,9 @@ impl EntityStore {
                     application: owner, ..
                 }
                 | Record::Otp {
+                    application: owner, ..
+                }
+                | Record::Calendar {
                     application: owner, ..
                 }
                 | Record::Textarea {

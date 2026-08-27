@@ -51,6 +51,7 @@
 // **Not reachable at all.** `value` and `entities`: a `Bridged` and an entity
 // handle are the runtime talking to itself.
 pub(crate) mod a11y;
+pub mod action;
 pub(crate) mod assets;
 pub(crate) mod capability;
 pub(crate) mod dock;

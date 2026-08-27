@@ -678,6 +678,32 @@ const CONTEXT_AND_VIEW: &str = r#"  /**
      * loop.
      */
     notify(): void;
+    /**
+     * `App::bind_keys`. Installs key bindings and answers how many.
+     *
+     * The keymap is the application's, not a window's or a view's, so a chord
+     * bound here is live wherever its `context` predicate matches. The whole
+     * list is validated before any of it is installed: a keymap half applied
+     * because one entry had a typo is a worse state than one not applied, and
+     * the script cannot see which half made it.
+     *
+     * Illegal from `render`.
+     */
+    bind_keys(bindings: KeyBinding[]): number;
+    /**
+     * `App::stop_propagation`. Stops this event reaching the handlers above
+     * this element.
+     *
+     * GPUI delivers an event to every handler on the path, so a row inside a
+     * list with its own `on_click` fires both. Call this from the inner one to
+     * keep the event there.
+     */
+    stop_propagation(): void;
+    /**
+     * `App::propagate`. Undoes a `stop_propagation()` made earlier in the same
+     * dispatch, letting the event continue.
+     */
+    propagate(): void;
     phase(): import("gpui-shell").ScopePhase;
     /** Reads the current `gpui_base::Theme` semantic token projection. */
     theme(): import("gpui-base").Theme;
@@ -777,12 +803,85 @@ const CONTEXT_AND_VIEW: &str = r#"  /**
     modifiers: Modifiers;
   }
 
+  /**
+   * What an `on_key_down` or `on_key_up` handler receives.
+   *
+   * `keystroke` is the whole chord in the spelling a key binding is written
+   * in — `"cmd-shift-s"`, `"escape"`, `"ctrl-alt-delete"` — and is what a
+   * comparison is normally written against. `key` and `modifiers` are the
+   * same thing taken apart, for when only one half matters.
+   */
+  export interface KeyEvent {
+    /** The key printed on the key that was pressed, e.g. `"s"` or `"escape"`. */
+    key: string;
+    /** The full chord, as GPUI's `Keystroke::unparse` spells it. */
+    keystroke: string;
+    /** The character this keystroke would type, when it types one. */
+    key_char?: string;
+    modifiers: Modifiers;
+    /** Whether the key is being held down. Absent on `on_key_up`. */
+    is_held?: boolean;
+  }
+
   export interface Point { x: number; y: number; }
+  export interface Size { width: number; height: number; }
   /** GPUI mouse coordinates. `position` is window-relative; `local_position` is element-relative. */
   export interface MouseMoveEvent {
     position: Point;
     local_position: Point;
     bounds: import("gpui-shell").ElementBounds;
+    modifiers: Modifiers;
+  }
+
+  /**
+   * What an `on_mouse_down`, `on_mouse_up` or `on_mouse_down_out` handler
+   * receives.
+   *
+   * `local_position` and `bounds` are absent when the element has not been
+   * painted yet, and on an `on_mouse_down_out` press they describe an element
+   * the pointer is outside of — so `local_position` there is negative, or past
+   * the far edge, which is exactly what says which way.
+   */
+  export interface MouseButtonEvent {
+    button: MouseButton;
+    /** How many presses in the current sequence; `2` on a double-click. */
+    click_count: number;
+    position: Point;
+    local_position?: Point;
+    bounds?: import("gpui-shell").ElementBounds;
+    modifiers: Modifiers;
+  }
+
+  /** What an `on_action` handler receives. */
+  export interface ActionEvent {
+    /** The action's name, as the script bound and registered it. */
+    action: string;
+  }
+
+  /** One entry of `cx.bind_keys`. */
+  export interface KeyBinding {
+    /** The chord, e.g. `"cmd-s"`, or a sequence: `"ctrl-k ctrl-s"`. */
+    keystroke: string;
+    /** The action this chord dispatches. */
+    action: string;
+    /**
+     * Where it applies, as a key-context predicate matched against the
+     * `key_context(...)` an element declares — `"Editor"`, `"Pane && !modal"`.
+     * Omitted, the binding is global.
+     */
+    context?: string;
+  }
+
+  /** What an `on_scroll_wheel` handler receives. */
+  export interface ScrollWheelEvent {
+    /** The scroll distance in pixels, whichever unit the device reported. */
+    delta: Point;
+    /** The same distance in lines, when the device reported lines. */
+    delta_lines?: Point;
+    touch_phase: "started" | "moved" | "ended" | "cancelled";
+    position: Point;
+    local_position?: Point;
+    bounds?: import("gpui-shell").ElementBounds;
     modifiers: Modifiers;
   }
 
@@ -889,6 +988,20 @@ const ELEMENT_METHODS: &str = r#"    /**
      */
     content(element: Element): Element;
     /**
+     * Fills an `Avatar`'s `image` slot, which takes an `AvatarImage`.
+     *
+     * Consumed exactly as `content` is — a slot element is not also drawn as a
+     * child. Base renders this one when it is there and the `fallback` when it
+     * is not, so filling both is how a picture gets something to fall back to.
+     */
+    image(element: Element): Element;
+    /** Fills an `Avatar`'s `fallback` slot, which takes an `AvatarFallback`. */
+    fallback(element: Element): Element;
+    /** Fills an `AccordionItem`'s `header` slot, which takes an `AccordionHeader`. */
+    header(element: Element): Element;
+    /** Fills an `AccordionItem`'s `panel` slot, which takes an `AccordionPanel`. */
+    panel(element: Element): Element;
+    /**
      * Fills the `trigger` slot of a `Popover` or a `HoverCard`: the element
      * that is on screen while the surface is closed, and that opens it.
      *
@@ -951,6 +1064,90 @@ const ELEMENT_METHODS: &str = r#"    /**
     on_mouse_move(handler: (event: MouseMoveEvent, cx: Context) => void): Element;
     /** GPUI `InteractiveElement::on_hover`; reports both pointer entry and exit. */
     on_hover(handler: (hovered: boolean, cx: Context) => void): Element;
+    /**
+     * GPUI `InteractiveElement::on_key_down`, delivered while this element or
+     * something inside it holds the keyboard.
+     *
+     * A key event travels the focus path, so `track_focus(handle)` is half of
+     * this registration rather than a separate concern: without it the handler
+     * sits on an element the keyboard never reaches and nothing arrives. The
+     * event continues to the handlers above unless `cx.stop_propagation()`
+     * says otherwise.
+     */
+    on_key_down(handler: (event: KeyEvent, cx: Context) => void): Element;
+    /** GPUI `InteractiveElement::on_key_up`, on the same focus path as `on_key_down`. */
+    on_key_up(handler: (event: KeyEvent, cx: Context) => void): Element;
+    /**
+     * GPUI `InteractiveElement::on_mouse_down`, for one button.
+     *
+     * Lower-level than `on_click`, and the reason to reach for it is that a
+     * press is not a click: it fires before the release, it reports which
+     * button, and `click_count` distinguishes a double-click. Registering it
+     * for two buttons on one element is fine — the two handlers are
+     * independent.
+     */
+    on_mouse_down(
+      button: MouseButton,
+      handler: (event: MouseButtonEvent, cx: Context) => void,
+    ): Element;
+    /** GPUI `InteractiveElement::on_mouse_up`, for one button. */
+    on_mouse_up(
+      button: MouseButton,
+      handler: (event: MouseButtonEvent, cx: Context) => void,
+    ): Element;
+    /**
+     * GPUI `InteractiveElement::on_mouse_down_out`: a press anywhere *outside*
+     * this element, delivered during the capture phase.
+     *
+     * This is how a surface a script drew itself is dismissed by a press
+     * elsewhere — the same listener base's own components close on. It fires
+     * for any button.
+     */
+    on_mouse_down_out(handler: (event: MouseButtonEvent, cx: Context) => void): Element;
+    /**
+     * GPUI `InteractiveElement::on_scroll_wheel`: wheel and trackpad scrolling
+     * over this element.
+     *
+     * For scrolling a region, `overflow_scroll()` is the answer and this is
+     * not: it hands GPUI's own retained scroll container the job. Use this when
+     * the gesture drives something else — a zoom, a value, a custom viewport.
+     */
+    on_scroll_wheel(handler: (event: ScrollWheelEvent, cx: Context) => void): Element;
+    /**
+     * `handler(event, cx)` when the named action is dispatched to this element
+     * or to something inside it.
+     *
+     * An action is the level above a keystroke: `cx.bind_keys` says which
+     * chord means `"save"`, in which context, and this says what `"save"`
+     * does. A menu item or a button dispatching the same name through
+     * `window.dispatch_action("save")` reaches the same handler without
+     * pretending to be a keyboard.
+     *
+     * Registering several on one element is fine and they are independent. An
+     * action none of them names carries on to an element further out.
+     */
+    on_action(action: string, handler: (event: ActionEvent, cx: Context) => void): Element;
+    /**
+     * `InteractiveElement::key_context`: the key-binding context this element
+     * and its subtree sit in.
+     *
+     * What a binding's `context` predicate is matched against, so one chord can
+     * mean one thing in a list and another in an editor. The value is a name or
+     * a predicate expression, not free text; an unparsable one is reported and
+     * the context is left unset.
+     */
+    key_context(context: string): Element;
+    /**
+     * An `AccordionHeader`'s announced heading level — "heading level 3" — as
+     * `aria-level` means it. Defaults to 3. It announces; it sizes nothing.
+     */
+    aria_level(level: number): Element;
+    /**
+     * Whether an `AccordionPanel` stays in the tree while shut. Off by default;
+     * on, its content keeps a scroll position or a half-typed field across a
+     * close and reopen.
+     */
+    keep_mounted(value?: boolean): Element;
     /**
      * `handler(key, cx)` when a row of a virtual list is clicked, where `key`
      * is what the list's `get_key(index)` returned for that row.
@@ -1581,6 +1778,68 @@ const WINDOW: &str = r#"
      * overlays above — it builds a description like any other element.
      */
     paint_path(path: Path, background: Background | Color): Element;
+
+    /**
+     * `Window::dispatch_action`. Dispatches an action down this window's focus
+     * path, reaching the same handlers a bound chord would.
+     *
+     * This is how a menu item or a toolbar button does what a keystroke does,
+     * without either of them knowing about the other. Illegal from `render`.
+     */
+    dispatch_action(action: string): void;
+
+    /**
+     * `Window::rem_size`. The pixel value one `rem` currently means.
+     *
+     * Legal from `render`, like every measurement below it: a view that sizes
+     * itself from the window has to ask during the pass that draws it.
+     */
+    rem_size(): number;
+    /** `Window::line_height`, in pixels. */
+    line_height(): number;
+    /** `Window::viewport_size`: the drawable area, in pixels. */
+    viewport_size(): Size;
+    /** `Window::bounds`: where the window is on screen, and how big. */
+    bounds(): import("gpui-shell").ElementBounds;
+    /** `Window::mouse_position`, in window coordinates. */
+    mouse_position(): Point;
+    /**
+     * `Window::appearance`, reduced to the two a script can draw for.
+     *
+     * GPUI reports four — each of light and dark has a vibrant variant — but
+     * the difference is in how the platform paints *behind* the window, which
+     * a script neither controls nor needs to branch on.
+     */
+    appearance(): "light" | "dark";
+    /** `Window::is_window_active`: whether this window has the platform's focus. */
+    is_window_active(): boolean;
+    /** `Window::is_fullscreen`. */
+    is_fullscreen(): boolean;
+    /** `Window::is_maximized`. */
+    is_maximized(): boolean;
+
+    /**
+     * `Window::set_rem_size`. Rescales everything expressed in rems.
+     *
+     * Illegal from `render`, as is everything below it: a frame that changes
+     * the window it is drawing into is a frame arguing with itself. Call it
+     * from an event handler or a task.
+     */
+    set_rem_size(size: number): void;
+    /** `Window::refresh`: redraw every view in this window, not just this one. */
+    refresh(): void;
+    /** `Window::focus_next`: move the keyboard to the next tab stop. */
+    focus_next(): void;
+    /** `Window::focus_prev`: move it to the previous one. */
+    focus_prev(): void;
+    /** `Window::activate_window`: bring this window to the front. */
+    activate_window(): void;
+    /** `Window::minimize_window`. */
+    minimize_window(): void;
+    /** `Window::zoom_window`: the platform's zoom, not a scale factor. */
+    zoom_window(): void;
+    /** `Window::toggle_fullscreen`. */
+    toggle_fullscreen(): void;
   }
 
 "#;
@@ -1630,6 +1889,203 @@ const BASE: &str = r#"  /** A row. */
    * you announced, and add `transition("width", ...)` if it should slide.
    */
   export const ProgressIndicator: PartType;
+  /**
+   * An avatar root. It renders its `image` slot, or its `fallback` slot when
+   * there is no image, and never both.
+   *
+   * That choice is the whole of what it does. It draws no circle, no size and
+   * no background, so the picture is yours: `w`, `h`, `rounded_full` and a
+   * background go on the root, and the fallback is styled where it is written.
+   *
+   * ```js
+   * Avatar.new().w(40).h(40).rounded_full().overflow_hidden()
+   *   .image(AvatarImage.new("avatars/ada.png").size_full())
+   *   .fallback(AvatarFallback.new().size_full().items_center().justify_center().child("AL"));
+   * ```
+   *
+   * Ordinary children are drawn beside whichever slot won, which is where a
+   * status dot or a badge goes.
+   */
+  export const Avatar: PartType;
+  /**
+   * The image slot: a picture from the application's own directory, at the
+   * same kind of path `image(...)` takes.
+   *
+   * It is a slot type, not an element — used as an ordinary child it draws
+   * nothing and says so in the log. Give it `size_full()` unless you want it at
+   * its natural size.
+   */
+  export const AvatarImage: { new(path: string): Element };
+  /**
+   * The fallback slot: an ordinary box holding whatever stands in for the
+   * image — initials, a shape, an `svg(...)`.
+   *
+   * A slot type like `AvatarImage`, and worth filling: an `Avatar` with an
+   * image path that does not resolve has nothing else to show.
+   */
+  export const AvatarFallback: PartType;
+  /**
+   * A pagination root: a navigation landmark carrying the announced label, and
+   * nothing on screen.
+   *
+   * The page buttons are yours. What base contributes that you cannot write
+   * for yourself is which page numbers to show — that is `pagination_items`
+   * below, a calculation rather than a component.
+   *
+   * ```js
+   * Pagination.new("results").accessibility_label("Results").h_flex().gap_1().children(
+   *   pagination_items(this.page, this.pages).map((item) =>
+   *     item.ellipsis
+   *       ? div().child("…")
+   *       : Button.new(`page-${item.page}`)
+   *           .selected(item.page === this.page)
+   *           .on_click((_, cx) => { this.page = item.page; cx.notify(); })
+   *           .child(String(item.page)),
+   *   ),
+   * );
+   * ```
+   */
+  export const Pagination: ComponentType;
+  /**
+   * An accordion root: a group holding items, and nothing on screen.
+   *
+   * None of the five parts draws anything — no chevron, no border, no
+   * animation, no layout. What they carry is what a screen reader reads: the
+   * group, the heading and its level, the button and its expanded state, and
+   * the region that button controls.
+   *
+   * The item owns `open` and passes it down to both the trigger and the panel,
+   * so it is set once rather than three times in agreement with itself.
+   *
+   * ```js
+   * Accordion.new("faq").child(
+   *   AccordionItem.new()
+   *     .open(this.open === "shipping")
+   *     .header(
+   *       AccordionHeader.new(
+   *         AccordionTrigger.new("shipping-trigger")
+   *           .on_change((open, cx) => { this.open = open ? "shipping" : null; cx.notify(); })
+   *           .child("Shipping"),
+   *       ).aria_level(3),
+   *     )
+   *     .panel(AccordionPanel.new().child("Two to five business days.")),
+   * );
+   * ```
+   */
+  export const Accordion: ComponentType;
+  /**
+   * One item. `open(...)` in, and the trigger's `on_change(...)` out.
+   *
+   * `disabled(true)` stops the trigger under it responding, whatever the
+   * trigger itself says.
+   */
+  export const AccordionItem: PartType;
+  /**
+   * The heading that owns one item's trigger, which it takes at construction
+   * for the same reason `Popup.new` takes its own: a heading whose button
+   * arrived a frame later would announce nothing in between.
+   *
+   * `aria_level(n)` is what a screen reader reads out — "heading level 3" —
+   * and defaults to 3. It announces; it does not size any text.
+   */
+  export const AccordionHeader: { new(trigger: Element): Element };
+  /**
+   * The region an item reveals. Left out of the tree entirely while shut,
+   * unless `keep_mounted(true)` — which is how its content keeps a scroll
+   * position or a half-typed field across a close and reopen.
+   */
+  export const AccordionPanel: PartType;
+  /**
+   * The button. It announces the item's expanded state and asks for the
+   * opposite: `on_change` receives `true` when a shut item was pressed.
+   *
+   * `open` and `disabled` come from the item, so setting them here is
+   * overwritten. Without an `on_change` nothing can open.
+   */
+  export const AccordionTrigger: ComponentType;
+  /**
+   * A calendar's month, and the date chosen in it. Retained: create it in
+   * `init`, never in `render`.
+   *
+   * `month_days()` is why this exists — which dates fall in which week, where
+   * the neighbouring months' days go, and how many weeks this month needs.
+   * You draw the cells: a button per day, styled how you like.
+   *
+   * Base's `Calendar` element is deliberately not bound. It walks the same
+   * grid calling a renderer once per cell — up to forty-two crossings into
+   * JavaScript per frame, from inside GPUI's layout pass, for cells that carry
+   * no behavior. Reading the grid here and drawing it yourself is the same
+   * work without them.
+   *
+   * ```js
+   * const grid = this.calendar.month_days()[0];
+   * v_flex().children(grid.map((week) =>
+   *   h_flex().children(week.map((day) =>
+   *     Button.new(day)
+   *       .selected(day === this.calendar.value())
+   *       .on_click((_, cx) => { this.calendar.set_value(day); cx.notify(); })
+   *       .child(String(Number(day.slice(8)))),
+   *   )),
+   * ));
+   * ```
+   *
+   * Dates are `"YYYY-MM-DD"` — sortable as text, and readable by `new Date(s)`
+   * when you need a weekday name or a localized month label.
+   */
+  export const CalendarState: { new(): CalendarStateHandle };
+  /** A selected date: one day, a `[start, end]` range, or nothing. */
+  export type CalendarDate = string | [string | null, string | null] | null;
+  export interface CalendarStateHandle {
+    /**
+     * The grid, as months of weeks of days. One month unless base was asked
+     * for more; each week is always seven days, and the first and last carry
+     * the neighbouring months' days so the rows line up under their weekday
+     * headings.
+     */
+    month_days(): string[][][];
+    /** The year the grid is for. */
+    year(): number;
+    /** Its month, 1–12. */
+    month(): number;
+    /** Today, as the state read it when it was created. */
+    today(): string;
+    /** What is selected. */
+    value(): CalendarDate;
+    /** Selects a day, a range, or nothing. */
+    set_value(next: CalendarDate): void;
+    /** Moves the grid forward one month. Illegal from `render`. */
+    next_month(): void;
+    /** And back one. Illegal from `render`. */
+    prev_month(): void;
+    /**
+     * `"change"` is the only event, and reports a date being selected. As
+     * everywhere else, registering twice means the second handler.
+     */
+    on(event: "change", handler: (date: CalendarDate, cx: Context) => void): boolean;
+    release(): boolean;
+  }
+  /**
+   * Which page numbers to draw, and where the gaps fall.
+   *
+   * Keeps the first page, the last page and a window around the current one,
+   * collapsing each broken run into an ellipsis. `visible_pages` defaults to
+   * seven and is clamped to a minimum of five; a total of one page or fewer
+   * answers an empty list, because a control for a single page is not one.
+   *
+   * An ellipsis names the pages it stands for, inclusive on both ends, so it
+   * can be a "jump to" control rather than inert text.
+   *
+   * Legal from `render` — it reads nothing and is where the buttons are built.
+   */
+  export function pagination_items(
+    current_page: number,
+    total_pages: number,
+    visible_pages?: number,
+  ): PaginationEntry[];
+  /** One entry of the page layout: a page, or a gap standing for a range. */
+  export type PaginationEntry =
+    | { page: number; ellipsis?: undefined }
+    | { ellipsis: [first: number, last: number]; page?: undefined };
   /**
    * One option in a radio group. No styling: draw the dot yourself.
    *
@@ -2580,6 +3036,20 @@ mod tests {
         "on_click",
         "on_mouse_move",
         "on_hover",
+        "on_key_down",
+        "on_key_up",
+        "on_mouse_down",
+        "on_mouse_up",
+        "on_mouse_down_out",
+        "on_scroll_wheel",
+        "on_action",
+        "key_context",
+        "image",
+        "fallback",
+        "header",
+        "panel",
+        "aria_level",
+        "keep_mounted",
         "on_item_click",
         "on_change",
         "on_step",

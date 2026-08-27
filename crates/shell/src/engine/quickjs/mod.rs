@@ -212,6 +212,7 @@ pub(super) struct InputCallbackOwner {
 }
 mod standard;
 mod theme_api;
+mod window_api;
 
 /// The names each built-in module exports.
 ///
@@ -253,6 +254,17 @@ pub(crate) mod exports {
         "Progress",
         "ProgressTrack",
         "ProgressIndicator",
+        "Avatar",
+        "AvatarImage",
+        "AvatarFallback",
+        "Pagination",
+        "pagination_items",
+        "CalendarState",
+        "Accordion",
+        "AccordionItem",
+        "AccordionHeader",
+        "AccordionPanel",
+        "AccordionTrigger",
         "Radio",
         "Toggle",
         "RadioGroup",
@@ -1880,6 +1892,60 @@ impl ShellRuntime {
     /// The value is the whole payload rather than a field of an object,
     /// because the value is the whole of what a slider event carries: one
     /// number, or the pair a two-thumbed slider moves between.
+    /// Hands one selected date to a calendar's handler.
+    ///
+    /// The payload is the same two-slot array `value()` answers, and the
+    /// prelude narrows it the same way — so a handler and a read see the same
+    /// shape for the same date.
+    pub(super) fn dispatch_calendar_event(
+        self: &Rc<Self>,
+        handler: &Persistent<Function<'static>>,
+        owner: &InputCallbackOwner,
+        date: gpui_base::Date,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        use rquickjs::IntoJs as _;
+
+        if owner
+            .application
+            .as_ref()
+            .is_some_and(|application| !application.is_active())
+        {
+            tracing::debug!("calendar callback belongs to a retired application");
+            return;
+        }
+        let view = owner.view.as_ref().and_then(WeakEntity::upgrade);
+        let (_guard, generation) = scope::enter_with_application(
+            self,
+            window,
+            cx,
+            ScopePhase::Event,
+            view,
+            owner.policy.clone(),
+            owner.application.clone(),
+        );
+
+        let parts: Vec<Option<String>> = match date {
+            gpui_base::Date::Single(day) => vec![day.map(|day| day.to_string()), None],
+            gpui_base::Date::Range(start, end) => vec![
+                start.map(|day| day.to_string()),
+                end.map(|day| day.to_string()),
+            ],
+        };
+        let result = self.with_js(|ctx| {
+            let handler = handler.clone().restore(ctx)?;
+            handler.call::<_, ()>((
+                parts.into_js(ctx)?,
+                context_object(ctx, ContextBinding::Call(generation))?,
+            ))
+        });
+        if let Err(error) = result {
+            tracing::error!("error in calendar handler: {error}");
+        }
+        scheduler::drain_runtime_jobs(self, window, cx);
+    }
+
     pub(super) fn dispatch_slider_event(
         self: &Rc<Self>,
         handler: &Persistent<Function<'static>>,
@@ -2065,6 +2131,249 @@ impl ShellRuntime {
         });
         if let Err(error) = result {
             tracing::error!("error in mouse move handler: {error}");
+        }
+        scheduler::drain_runtime_jobs(self, window, cx);
+    }
+
+    /// Delivers one dispatched action to a script handler.
+    ///
+    /// The id is handed over even though the handler was registered for one
+    /// action: a script that routes several ids into one function has the name
+    /// it needs without closing over it, and a handler that ignores the
+    /// argument costs nothing.
+    pub(crate) fn dispatch_action(
+        self: &Rc<Self>,
+        id: CallbackId,
+        action: &str,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        let action = action.to_owned();
+        self.dispatch_simple_event(id, "action", window, cx, move |ctx| {
+            let payload = Object::new(ctx.clone())?;
+            payload.set("action", action)?;
+            Ok(payload)
+        });
+    }
+
+    /// Delivers one mouse press or release to a script handler.
+    ///
+    /// One method for four element builders because the payload is the same
+    /// shape in all four: `on_mouse_down`, `on_mouse_up` and `on_mouse_up_out`
+    /// differ only in which button and phase GPUI filtered on before calling,
+    /// and `on_mouse_down_out` differs only in where the pointer was — which
+    /// the caller can read off `local_position` for itself.
+    ///
+    /// `bounds` is what the element measured on its last prepaint. An element
+    /// that has not been painted yet has none, and rather than refuse the event
+    /// the local coordinates are simply omitted: a press is still a press, and
+    /// the window position is always there.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn dispatch_mouse_button(
+        self: &Rc<Self>,
+        id: CallbackId,
+        button: gpui::MouseButton,
+        position: gpui::Point<gpui::Pixels>,
+        click_count: usize,
+        modifiers: gpui::Modifiers,
+        bounds: Option<gpui::Bounds<gpui::Pixels>>,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        self.dispatch_simple_event(id, "mouse button", window, cx, move |ctx| {
+            let payload = Object::new(ctx.clone())?;
+            payload.set(
+                "button",
+                match button {
+                    gpui::MouseButton::Right => "right",
+                    gpui::MouseButton::Middle => "middle",
+                    _ => "left",
+                },
+            )?;
+            payload.set("click_count", click_count as u32)?;
+            set_pointer_geometry(ctx, &payload, position, bounds)?;
+            payload.set("modifiers", modifiers_object(ctx, modifiers)?)?;
+            Ok(payload)
+        });
+    }
+
+    /// Delivers one wheel or trackpad scroll to a script handler.
+    pub(crate) fn dispatch_scroll_wheel(
+        self: &Rc<Self>,
+        id: CallbackId,
+        event: &gpui::ScrollWheelEvent,
+        line_height: gpui::Pixels,
+        bounds: Option<gpui::Bounds<gpui::Pixels>>,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        let pixels = event.delta.pixel_delta(line_height);
+        let lines = match event.delta {
+            gpui::ScrollDelta::Lines(lines) => Some(lines),
+            gpui::ScrollDelta::Pixels(_) => None,
+        };
+        let position = event.position;
+        let modifiers = event.modifiers;
+        let touch_phase = match event.touch_phase {
+            gpui::TouchPhase::Started => "started",
+            gpui::TouchPhase::Moved => "moved",
+            gpui::TouchPhase::Ended => "ended",
+            gpui::TouchPhase::Cancelled => "cancelled",
+        };
+        self.dispatch_simple_event(id, "scroll wheel", window, cx, move |ctx| {
+            let payload = Object::new(ctx.clone())?;
+            let delta = Object::new(ctx.clone())?;
+            delta.set("x", f32::from(pixels.x))?;
+            delta.set("y", f32::from(pixels.y))?;
+            payload.set("delta", delta)?;
+            match lines {
+                Some(lines) => {
+                    let delta_lines = Object::new(ctx.clone())?;
+                    delta_lines.set("x", lines.x)?;
+                    delta_lines.set("y", lines.y)?;
+                    payload.set("delta_lines", delta_lines)?;
+                }
+                None => payload.set("delta_lines", rquickjs::Undefined)?,
+            }
+            payload.set("touch_phase", touch_phase)?;
+            set_pointer_geometry(ctx, &payload, position, bounds)?;
+            payload.set("modifiers", modifiers_object(ctx, modifiers)?)?;
+            Ok(payload)
+        });
+    }
+
+    /// The lifetime checks, scope entry and job drain every dispatch shares,
+    /// with only the payload left to the caller.
+    ///
+    /// "Simple" is about the payload, not the event: what these have in common
+    /// is that the handler takes one object and a `cx` and its return value is
+    /// ignored. A dispatch that has to read an answer back — a controlled
+    /// value, a confirm — does its own thing.
+    fn dispatch_simple_event(
+        self: &Rc<Self>,
+        id: CallbackId,
+        what: &str,
+        window: &mut Window,
+        cx: &mut App,
+        payload: impl for<'js> FnOnce(&Ctx<'js>) -> JsResult<Object<'js>>,
+    ) {
+        let Some(entry) = self.callbacks.borrow().get(id) else {
+            tracing::debug!("{what} callback {id} belongs to a superseded render pass");
+            return;
+        };
+        if entry
+            .application
+            .as_ref()
+            .is_some_and(|application| !application.is_active())
+        {
+            tracing::debug!("{what} callback {id} belongs to a retired application");
+            return;
+        }
+        let Some(view) = entry.live_view() else {
+            tracing::debug!("{what} callback {id} owner has been released");
+            return;
+        };
+        let policy = view
+            .as_ref()
+            .map(|view| view.read(cx).policy())
+            .unwrap_or_else(crate::policy::default);
+        let (_guard, generation) = scope::enter_with_application(
+            self,
+            window,
+            cx,
+            ScopePhase::Event,
+            view,
+            policy,
+            entry.application.clone(),
+        );
+        let result = self.with_js(|ctx| {
+            let handler = entry.value.clone().restore(ctx)?;
+            handler.call::<_, ()>((
+                payload(ctx)?,
+                context_object(ctx, ContextBinding::Call(generation))?,
+            ))
+        });
+        if let Err(error) = result {
+            tracing::error!("error in {what} handler: {error}");
+        }
+        scheduler::drain_runtime_jobs(self, window, cx);
+    }
+
+    /// Delivers one key press or release to a script handler.
+    ///
+    /// `is_held` distinguishes the two events rather than a second method
+    /// doing it: `KeyUpEvent` carries a keystroke and nothing else, so `None`
+    /// is what "this was a release" looks like on the wire, and the payload
+    /// keeps the same shape either way.
+    ///
+    /// The keystroke is handed over twice, and both forms earn their place.
+    /// `key` and `modifiers` are what GPUI holds, and a script that wants one
+    /// half of a chord reads them. `keystroke` is `Keystroke`'s own `unparse`
+    /// — the `"cmd-shift-s"` spelling a key binding is written in — which is
+    /// the form a comparison is actually written against, and reproducing it
+    /// from the parts is exactly the fiddly work that belongs on this side.
+    pub(crate) fn dispatch_key(
+        self: &Rc<Self>,
+        id: CallbackId,
+        keystroke: &gpui::Keystroke,
+        is_held: Option<bool>,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        let Some(entry) = self.callbacks.borrow().get(id) else {
+            tracing::debug!("key callback {id} belongs to a superseded render pass");
+            return;
+        };
+        if entry
+            .application
+            .as_ref()
+            .is_some_and(|application| !application.is_active())
+        {
+            tracing::debug!("key callback {id} belongs to a retired application");
+            return;
+        }
+        let Some(view) = entry.live_view() else {
+            tracing::debug!("key callback {id} owner has been released");
+            return;
+        };
+        let policy = view
+            .as_ref()
+            .map(|view| view.read(cx).policy())
+            .unwrap_or_else(crate::policy::default);
+        let (_guard, generation) = scope::enter_with_application(
+            self,
+            window,
+            cx,
+            ScopePhase::Event,
+            view,
+            policy,
+            entry.application.clone(),
+        );
+        let result = self.with_js(|ctx| {
+            let handler = entry.value.clone().restore(ctx)?;
+            let payload = Object::new(ctx.clone())?;
+            payload.set("key", keystroke.key.as_str())?;
+            payload.set("keystroke", keystroke.unparse())?;
+            match keystroke.key_char.as_deref() {
+                Some(char) => payload.set("key_char", char)?,
+                None => payload.set("key_char", rquickjs::Undefined)?,
+            }
+            if let Some(is_held) = is_held {
+                payload.set("is_held", is_held)?;
+            }
+            let modifiers = Object::new(ctx.clone())?;
+            modifiers.set("shift", keystroke.modifiers.shift)?;
+            modifiers.set("control", keystroke.modifiers.control)?;
+            modifiers.set("alt", keystroke.modifiers.alt)?;
+            modifiers.set("platform", keystroke.modifiers.platform)?;
+            payload.set("modifiers", modifiers)?;
+            handler.call::<_, ()>((
+                payload,
+                context_object(ctx, ContextBinding::Call(generation))?,
+            ))
+        });
+        if let Err(error) = result {
+            tracing::error!("error in key handler: {error}");
         }
         scheduler::drain_runtime_jobs(self, window, cx);
     }
@@ -2352,6 +2661,10 @@ impl ShellRuntime {
     fn fill_slot(&self, ctx: &Ctx<'_>, id: SpecId, name: &str, element: SpecId) -> JsResult<()> {
         let interned = match name {
             "content" => "content",
+            "image" => "image",
+            "fallback" => "fallback",
+            "header" => "header",
+            "panel" => "panel",
             "trigger" => "trigger",
             // A number input's three. Unlike the two above, none of them is
             // optional in practice: base's step buttons are unstyled, so an
@@ -2723,6 +3036,16 @@ globalThis.__gpui = (() => {
   methods.input = slot("input");
   methods.decrement_button = slot("decrement_button");
   methods.increment_button = slot("increment_button");
+
+  // An avatar's two. Base renders the image, or the fallback when there is no
+  // image, and never both.
+  methods.image = slot("image");
+  methods.fallback = slot("fallback");
+
+  // An accordion item's two. Both are read back for their own type rather than
+  // rendered, so both must be the part they name.
+  methods.header = slot("header");
+  methods.panel = slot("panel");
 
   // Focus is held by handle, so the element records the handle rather than the
   // wrapper object around it — the same unwrapping `Input.new(state)` does.
@@ -3187,6 +3510,47 @@ globalThis.__gpui = (() => {
     release: () => __otp_release(handle),
   });
 
+  // A calendar's month, and the date chosen in it.
+  //
+  // `month_days()` is the reason this is bound at all: which dates fall in
+  // which week, where the neighbouring months' days go, and how many weeks
+  // this month needs. Everything else here is what it takes to move that grid
+  // and read what was picked from it.
+  //
+  // The wire is a flat two-slot array either way; the narrowing to `null`, a
+  // string or a pair happens here so a script never sees the flat form.
+  const calendarDate = (parts) => {
+    if (parts[1] !== null && parts[1] !== undefined) return [parts[0] ?? null, parts[1]];
+    return parts[0] ?? null;
+  };
+  const calendarParts = (value, api) => {
+    if (value === null || value === undefined) return [null, null];
+    if (Array.isArray(value)) {
+      if (value.length !== 2) {
+        throw new TypeError(`${api} range expects a two-element array [start, end]`);
+      }
+      return [value[0] ?? null, value[1] ?? null];
+    }
+    if (typeof value !== "string") {
+      throw new TypeError(`${api} expects null, a "YYYY-MM-DD" string, or a pair of those`);
+    }
+    return [value, null];
+  };
+  const calendarState = (handle) => ({
+    __handle: handle,
+    month_days: () => __calendar_month_days(handle),
+    year: () => Number(__calendar_position(handle)[0]),
+    month: () => Number(__calendar_position(handle)[1]),
+    today: () => __calendar_position(handle)[2],
+    value: () => calendarDate(__calendar_value(handle)),
+    set_value: (next) => __calendar_set_value(handle, calendarParts(next, "set_value(value)")),
+    next_month: () => __calendar_next_month(handle),
+    prev_month: () => __calendar_prev_month(handle),
+    on: (event, handler) =>
+      __calendar_on(handle, String(event), (parts, cx) => handler(calendarDate(parts), cx)),
+    release: () => __calendar_release(handle),
+  });
+
   const focusHandle = (handle) => ({
     __handle: handle,
     focus: () => __focus_focus(handle),
@@ -3363,6 +3727,36 @@ globalThis.__gpui = (() => {
     // constructor that is not a free function, and it is one because the thing
     // it mirrors is a method on the window rather than on the app.
     paint_path: paintPath,
+
+    // What the window measures. All legal from `render`: a view that sizes
+    // itself from the viewport, or spaces itself in rems, has to ask during
+    // the pass that draws it.
+    rem_size: () => __window_rem_size(),
+    line_height: () => __window_line_height(),
+    viewport_size: () => __window_viewport_size(),
+    bounds: () => __window_bounds(),
+    mouse_position: () => __window_mouse_position(),
+    appearance: () => __window_appearance(),
+    is_window_active: () => __window_state().active,
+    is_fullscreen: () => __window_state().fullscreen,
+    is_maximized: () => __window_state().maximized,
+
+    // What the window can be told. Refused from `render` for the reason
+    // `cx.notify()` is: a frame that changes the window it is drawing into is
+    // a frame arguing with itself.
+    // `Window::dispatch_action` in GPUI, so `window` here — it walks the focus
+    // path of *this* window. `cx.bind_keys` is the other half and is on `cx`
+    // for the same reason: the keymap is `App`'s.
+    dispatch_action: (action) => __dispatch_action(String(action)),
+
+    set_rem_size: (size) => __window_set_rem_size(Number(size)),
+    refresh: () => __window_refresh(),
+    focus_next: () => __window_focus_next(),
+    focus_prev: () => __window_focus_prev(),
+    activate_window: () => __window_activate(),
+    minimize_window: () => __window_minimize(),
+    zoom_window: () => __window_zoom(),
+    toggle_fullscreen: () => __window_toggle_fullscreen(),
   };
 
   globalThis.localStorage = globalThis.window.localStorage;
@@ -3407,6 +3801,18 @@ globalThis.__gpui = (() => {
     focus_handle: () => {
       check();
       return focusHandle(__focus_handle_new());
+    },
+    // `App::bind_keys`, so `cx`. The keymap belongs to the application rather
+    // than to a window, which is why binding a chord in one view makes it live
+    // everywhere its `context` predicate matches.
+    bind_keys: (bindings) => {
+      check();
+      if (!Array.isArray(bindings)) {
+        throw new TypeError(
+          "cx.bind_keys(bindings) expects an array of { keystroke, action, context? }",
+        );
+      }
+      return __bind_keys(bindings);
     },
     new: (Class, props) => {
       check();
@@ -3482,6 +3888,39 @@ globalThis.__gpui = (() => {
     Tabs: { new: (id) => element(__tabs(String(id))) },
     Tab: { new: (id) => element(__tab(String(id))) },
     Progress: { new: (id) => element(__progress(String(id))) },
+    // Base's own shape: a root that chooses between two slots, and two slot
+    // types that are not elements on their own.
+    Accordion: { new: (id) => element(__accordion(String(id))) },
+    AccordionItem: { new: () => element(__accordion_item()) },
+    // `AccordionHeader::new` takes the trigger, exactly as `Popup.new` takes
+    // its own: a heading whose button arrived later would be a heading that
+    // announced nothing for a frame.
+    AccordionHeader: {
+      new: (trigger) => {
+        if (typeof trigger?.__id !== "number") {
+          throw new TypeError(
+            "AccordionHeader.new(trigger) expects an AccordionTrigger element: the heading owns the button that opens the item, and base has none of its own",
+          );
+        }
+        return element(__accordion_header()).trigger(trigger);
+      },
+    },
+    AccordionPanel: { new: () => element(__accordion_panel()) },
+    AccordionTrigger: { new: (id) => element(__accordion_trigger(String(id))) },
+    Pagination: { new: (id) => element(__pagination(String(id))) },
+    // Not a component: the one thing base contributes that a script cannot
+    // write for itself is which page numbers to show, and that is arithmetic.
+    // Called during `render`, once, and the buttons are built from what it
+    // answers.
+    pagination_items: (current_page, total_pages, visible_pages) =>
+      __pagination_items(
+        Number(current_page),
+        Number(total_pages),
+        visible_pages === undefined ? 7 : Number(visible_pages),
+      ),
+    Avatar: { new: () => element(__avatar()) },
+    AvatarImage: { new: (path) => element(__avatar_image(String(path))) },
+    AvatarFallback: { new: () => element(__avatar_fallback()) },
     ProgressTrack: { new: () => element(__progress_track()) },
     ProgressIndicator: { new: () => element(__progress_indicator()) },
     fps_monitor: () => element(__fps_monitor()),
@@ -3578,6 +4017,7 @@ globalThis.__gpui = (() => {
         ),
     },
     Textarea: { new: (state) => element(__textarea_element(state.__handle)) },
+    CalendarState: { new: () => calendarState(__calendar_state_new()) },
     SliderState: {
       new: (options) => {
         const settings = options ?? {};
@@ -3665,6 +4105,16 @@ impl ShellRuntime {
                 "on_click",
                 "on_mouse_move",
                 "on_hover",
+                "on_key_down",
+                "on_key_up",
+                "on_mouse_down",
+                "on_mouse_up",
+                "on_mouse_down_out",
+                "on_scroll_wheel",
+                "on_action",
+                "key_context",
+                "aria_level",
+                "keep_mounted",
                 "on_item_click",
                 "on_change",
                 "on_open_change",
@@ -3726,6 +4176,44 @@ impl ShellRuntime {
             text_constructor(&globals, "__text", runtime.clone(), Component::Text)?;
             text_constructor(&globals, "__svg", runtime.clone(), Component::Svg)?;
             text_constructor(&globals, "__image", runtime.clone(), Component::Image)?;
+            text_constructor(
+                &globals,
+                "__accordion",
+                runtime.clone(),
+                Component::Accordion,
+            )?;
+            constructor(&globals, "__accordion_item", runtime.clone(), || {
+                Component::AccordionItem
+            })?;
+            constructor(&globals, "__accordion_header", runtime.clone(), || {
+                Component::AccordionHeader
+            })?;
+            constructor(&globals, "__accordion_panel", runtime.clone(), || {
+                Component::AccordionPanel
+            })?;
+            text_constructor(
+                &globals,
+                "__accordion_trigger",
+                runtime.clone(),
+                Component::AccordionTrigger,
+            )?;
+            text_constructor(
+                &globals,
+                "__pagination",
+                runtime.clone(),
+                Component::Pagination,
+            )?;
+            globals.set("__pagination_items", Func::from(pagination_items))?;
+            constructor(&globals, "__avatar", runtime.clone(), || Component::Avatar)?;
+            text_constructor(
+                &globals,
+                "__avatar_image",
+                runtime.clone(),
+                Component::AvatarImage,
+            )?;
+            constructor(&globals, "__avatar_fallback", runtime.clone(), || {
+                Component::AvatarFallback
+            })?;
             let path_runtime = runtime.clone();
             globals.set(
                 "__path",
@@ -4108,6 +4596,7 @@ impl ShellRuntime {
 
             // Before the prelude, which builds the `window` object over these.
             overlay::install(ctx, &ctx.globals())?;
+            window_api::install(ctx)?;
 
             ctx.eval::<(), _>(PRELUDE)?;
 
@@ -4201,7 +4690,8 @@ impl ShellRuntime {
                     })? as SpecId;
                 self.attach(ctx, id, child)
             }
-            "content" | "trigger" | "input" | "decrement_button" | "increment_button" => {
+            "content" | "trigger" | "input" | "decrement_button" | "increment_button" | "image"
+            | "fallback" | "header" | "panel" => {
                 let element = args
                     .first_value()
                     .and_then(|value| value.as_f32().ok())
@@ -4210,8 +4700,107 @@ impl ShellRuntime {
                     })? as SpecId;
                 self.fill_slot(ctx, id, method, element)
             }
+            // The script's own name for an action, plus the handler. It is not
+            // a `Callback` op because the name is discovered at run time and a
+            // `Callback` holds a `&'static str`; see `SpecOp::ActionCallback`.
+            "on_action" => {
+                if scope::current_phase() == Some(ScopePhase::Layout) {
+                    return Err(Exception::throw_type(
+                        ctx,
+                        "`on_action` cannot be registered from a virtual list's item \
+                         renderer: the rows are rebuilt every frame, so a handler \
+                         registered there would pile up for as long as the view stood",
+                    ));
+                }
+                let action = args
+                    .first_value()
+                    .and_then(|value| value.as_str().ok().map(str::to_owned))
+                    .filter(|action| !action.is_empty())
+                    .ok_or_else(|| {
+                        Exception::throw_type(
+                            ctx,
+                            "on_action(action, handler) expects the action's name first, \
+                             as a non-empty string",
+                        )
+                    })?;
+                let saved = args.handler_at(1).ok_or_else(|| {
+                    Exception::throw_type(
+                        ctx,
+                        "on_action(action, handler) expects a function second",
+                    )
+                })?;
+                let callback = self.callbacks.borrow_mut().push(CallbackEntry {
+                    value: saved,
+                    view: scope::current_view().map(|view| view.downgrade()),
+                    application: scope::current_application_generation(),
+                    registered_in: scope::current_generation(),
+                });
+                self.push_op_checked(
+                    ctx,
+                    self.push_op(id, SpecOp::ActionCallback(action.into(), callback)),
+                )
+            }
+            // The only two element methods that take an argument *and* a
+            // handler. The button is folded into the recorded op name — three
+            // fixed names GPUI's own `MouseButton` maps onto — so the op stays
+            // the `(&'static str, CallbackId)` pair every other callback uses.
+            "on_mouse_down" | "on_mouse_up" => {
+                if scope::current_phase() == Some(ScopePhase::Layout) {
+                    return Err(Exception::throw_type(
+                        ctx,
+                        &format!(
+                            "`{method}` cannot be registered from a virtual list's item \
+                             renderer: the rows are rebuilt every frame, so a handler \
+                             registered there would pile up for as long as the view stood"
+                        ),
+                    ));
+                }
+                let button = args
+                    .first_value()
+                    .and_then(|value| value.as_str().ok().map(str::to_owned))
+                    .ok_or_else(|| {
+                        Exception::throw_type(
+                            ctx,
+                            &format!(
+                                "{method}(button, handler) expects a button first: \
+                                 \"left\", \"right\" or \"middle\""
+                            ),
+                        )
+                    })?;
+                let saved = args.handler_at(1).ok_or_else(|| {
+                    Exception::throw_type(
+                        ctx,
+                        &format!("{method}(button, handler) expects a function second"),
+                    )
+                })?;
+                let name = match (method, button.as_str()) {
+                    ("on_mouse_down", "left") => "on_mouse_down_left",
+                    ("on_mouse_down", "right") => "on_mouse_down_right",
+                    ("on_mouse_down", "middle") => "on_mouse_down_middle",
+                    ("on_mouse_up", "left") => "on_mouse_up_left",
+                    ("on_mouse_up", "right") => "on_mouse_up_right",
+                    ("on_mouse_up", "middle") => "on_mouse_up_middle",
+                    (_, other) => {
+                        return Err(Exception::throw_type(
+                            ctx,
+                            &format!(
+                                "`{other}` is not a mouse button; \
+                                 expected \"left\", \"right\" or \"middle\""
+                            ),
+                        ));
+                    }
+                };
+                let callback = self.callbacks.borrow_mut().push(CallbackEntry {
+                    value: saved,
+                    view: scope::current_view().map(|view| view.downgrade()),
+                    application: scope::current_application_generation(),
+                    registered_in: scope::current_generation(),
+                });
+                self.push_op_checked(ctx, self.push_op(id, SpecOp::Callback(name, callback)))
+            }
             "on_click" | "on_resize" | "on_change" | "on_open_change" | "on_confirm"
-            | "on_dismiss" | "on_step" | "on_item_click" | "on_mouse_move" | "on_hover" => {
+            | "on_dismiss" | "on_step" | "on_item_click" | "on_mouse_move" | "on_hover"
+            | "on_key_down" | "on_key_up" | "on_mouse_down_out" | "on_scroll_wheel" => {
                 // A handler registered from inside a virtual list's item
                 // renderer has nowhere to live. Callbacks belong to the
                 // snapshot that registered them and are retired with it; the
@@ -4247,6 +4836,10 @@ impl ShellRuntime {
                     "on_click" => "on_click",
                     "on_mouse_move" => "on_mouse_move",
                     "on_hover" => "on_hover",
+                    "on_key_down" => "on_key_down",
+                    "on_key_up" => "on_key_up",
+                    "on_mouse_down_out" => "on_mouse_down_out",
+                    "on_scroll_wheel" => "on_scroll_wheel",
                     "on_item_click" => "on_item_click",
                     "on_resize" => "on_resize",
                     "on_change" => "on_change",
@@ -4269,6 +4862,9 @@ impl ShellRuntime {
             | "track_scroll"
             | "with_item_to_measure_index"
             | "content_focus_handle"
+            | "key_context"
+            | "aria_level"
+            | "keep_mounted"
             | "tab_index"
             | "tab_stop"
             | "href"
@@ -4316,6 +4912,9 @@ impl ShellRuntime {
                     "track_scroll" => "track_scroll",
                     "with_item_to_measure_index" => "with_item_to_measure_index",
                     "content_focus_handle" => "content_focus_handle",
+                    "key_context" => "key_context",
+                    "aria_level" => "aria_level",
+                    "keep_mounted" => "keep_mounted",
                     "tab_index" => "tab_index",
                     "tab_stop" => "tab_stop",
                     "id" => "id",
@@ -4876,6 +5475,99 @@ impl ContextBinding {
     }
 }
 
+/// `pagination_items(current, total, visible)`.
+///
+/// A plain calculation rather than a component: what it answers is which page
+/// numbers to draw and where the gaps fall, and the buttons themselves are the
+/// script's. Legal from `render`, because that is where a script builds them.
+fn pagination_items<'js>(
+    ctx: Ctx<'js>,
+    current_page: f64,
+    total_pages: f64,
+    visible_pages: f64,
+) -> JsResult<Array<'js>> {
+    let clamp = |value: f64| -> JsResult<usize> {
+        if !value.is_finite() || value < 0.0 {
+            return Err(Exception::throw_type(
+                &ctx,
+                "pagination_items(current_page, total_pages, visible_pages?) expects \
+                 non-negative numbers",
+            ));
+        }
+        Ok(value as usize)
+    };
+    let items = gpui_base::PaginationState::new(clamp(current_page)?, clamp(total_pages)?)
+        .visible_pages(clamp(visible_pages)?)
+        .items();
+
+    let out = Array::new(ctx.clone())?;
+    for (index, item) in items.into_iter().enumerate() {
+        let object = Object::new(ctx.clone())?;
+        match item {
+            gpui_base::PaginationItem::Page(page) => object.set("page", page as u32)?,
+            // Base's range is half-open; a script showing "pages 4–8" wants
+            // the last page the gap covers, not the one after it.
+            gpui_base::PaginationItem::Ellipsis(range) => {
+                let bounds = Array::new(ctx.clone())?;
+                bounds.set(0, range.start as u32)?;
+                bounds.set(1, range.end.saturating_sub(1) as u32)?;
+                object.set("ellipsis", bounds)?;
+            }
+        }
+        out.set(index, object)?;
+    }
+    Ok(out)
+}
+
+/// The modifier keys, in the shape every event payload carries them.
+fn modifiers_object<'js>(ctx: &Ctx<'js>, modifiers: gpui::Modifiers) -> JsResult<Object<'js>> {
+    let object = Object::new(ctx.clone())?;
+    object.set("shift", modifiers.shift)?;
+    object.set("control", modifiers.control)?;
+    object.set("alt", modifiers.alt)?;
+    object.set("platform", modifiers.platform)?;
+    Ok(object)
+}
+
+/// The window position, and the element-relative position and box when the
+/// element has been painted.
+///
+/// `local_position` and `bounds` are omitted rather than zeroed for an element
+/// that has not been prepainted yet, so a script reading `undefined` knows the
+/// geometry was unavailable instead of being told the press landed at its
+/// top-left corner.
+fn set_pointer_geometry<'js>(
+    ctx: &Ctx<'js>,
+    payload: &Object<'js>,
+    position: gpui::Point<gpui::Pixels>,
+    bounds: Option<gpui::Bounds<gpui::Pixels>>,
+) -> JsResult<()> {
+    let window_position = Object::new(ctx.clone())?;
+    window_position.set("x", f32::from(position.x))?;
+    window_position.set("y", f32::from(position.y))?;
+    payload.set("position", window_position)?;
+    match bounds {
+        Some(bounds) => {
+            let local = position - bounds.origin;
+            let local_position = Object::new(ctx.clone())?;
+            local_position.set("x", f32::from(local.x))?;
+            local_position.set("y", f32::from(local.y))?;
+            payload.set("local_position", local_position)?;
+            let event_bounds = Object::new(ctx.clone())?;
+            event_bounds.set("x", f32::from(bounds.origin.x))?;
+            event_bounds.set("y", f32::from(bounds.origin.y))?;
+            event_bounds.set("width", f32::from(bounds.size.width))?;
+            event_bounds.set("height", f32::from(bounds.size.height))?;
+            payload.set("bounds", event_bounds)?;
+        }
+        None => {
+            payload.set("local_position", rquickjs::Undefined)?;
+            payload.set("bounds", rquickjs::Undefined)?;
+        }
+    }
+    Ok(())
+}
+
 /// `globalThis.__async_cx()`. A free function rather than a closure because it
 /// has to be generic over the JS lifetime.
 fn async_context_object<'js>(ctx: Ctx<'js>) -> JsResult<Object<'js>> {
@@ -4929,6 +5621,24 @@ fn context_object<'js>(ctx: &Ctx<'js>, binding: ContextBinding) -> JsResult<Obje
                     });
                 }
             })
+        }),
+    )?;
+
+    // GPUI dispatches an event to every handler on the path unless one of them
+    // says otherwise, so a script that puts a handler on a row inside a list
+    // hears both. These are the two halves of `App`'s own answer to that, under
+    // their own names — the mirror is exact, so what a script learns here is
+    // what GPUI documents.
+    object.set(
+        "stop_propagation",
+        Func::from(move |ctx: Ctx<'_>| -> JsResult<()> {
+            binding.with_app(&ctx, |app| app.stop_propagation())
+        }),
+    )?;
+    object.set(
+        "propagate",
+        Func::from(move |ctx: Ctx<'_>| -> JsResult<()> {
+            binding.with_app(&ctx, |app| app.propagate())
         }),
     )?;
 
@@ -5022,7 +5732,13 @@ impl Arguments {
     }
 
     fn first_handler(&self) -> Option<Persistent<Function<'static>>> {
-        match self.0.first() {
+        self.handler_at(0)
+    }
+
+    /// The handler at one position, for the two methods that take an argument
+    /// before it.
+    fn handler_at(&self, index: usize) -> Option<Persistent<Function<'static>>> {
+        match self.0.get(index) {
             Some(Argument::Handler(handler)) => Some(handler.clone()),
             _ => None,
         }

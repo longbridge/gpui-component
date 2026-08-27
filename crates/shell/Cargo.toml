@@ -52,6 +52,9 @@ llrt_crypto = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7dd
 llrt_path = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb2778eca4b5a63111e74f51", optional = true }
 llrt_url = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb2778eca4b5a63111e74f51", optional = true }
 llrt_zlib = { git = "https://github.com/awslabs/llrt", rev = "7b95c82a9b15e7ddfb2778eca4b5a63111e74f51", default-features = false, features = ["compression-rust"], optional = true }
+# The date type `gpui_base::Date` is built from, for the calendar binding. Same
+# version as `gpui-base`'s, because the two exchange `NaiveDate` values.
+chrono = "0.4.38"
 cap-std = "4.0.3"
 async-channel = "2.5"
 reqwest = { workspace = true, features = ["blocking"], optional = true }

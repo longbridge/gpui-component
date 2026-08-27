@@ -20,11 +20,14 @@
 //! element. The dispatch stays in `materialize_node`, so the description of
 //! *which* component this is never leaves the one place that knows.
 
+pub(super) mod accordion;
+pub(super) mod avatar;
 pub(super) mod collapsible;
 pub(super) mod fps;
 pub(super) mod group;
 pub(super) mod number_input;
 pub(super) mod otp_input;
+pub(super) mod pagination;
 pub(super) mod popover;
 pub(super) mod progress;
 pub(super) mod radio;
