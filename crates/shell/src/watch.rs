@@ -402,6 +402,11 @@ impl ShellRuntime {
     ///
     /// The root retains the resolved directory, manifest entry, and typed
     /// script view, so the host does not repeat metadata or downcast content.
+    ///
+    /// It reads that root, so the caller must not already be holding it: reach
+    /// the window through `AnyWindowHandle::update` or `App::update_window`,
+    /// not through `WindowHandle::<ShellRoot>::update`, which leases the root
+    /// view for the length of its closure.
     pub fn watch(
         self: &Rc<Self>,
         root: &Entity<ShellRoot>,
