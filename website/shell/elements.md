@@ -13,7 +13,7 @@ An element in `gpui-shell` is a **description**, not an object. It exists for on
 Each module carries what its own crate provides:
 
 ```js
-import { div, text, svg, image } from "gpui";
+import { div, svg, image } from "gpui";
 import {
   h_flex,
   v_flex,

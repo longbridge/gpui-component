@@ -54,7 +54,7 @@ One file is enough. Create a directory with a `main.js` in it:
 
 ```js
 // hello/main.js
-import { View, text } from "gpui";
+import { View } from "gpui";
 import { v_flex, Button } from "gpui-base";
 
 export default class Hello extends View {
@@ -98,7 +98,7 @@ Four things in that file are worth naming now, because everything else builds on
 
 **One module per crate that provides it.** `"gpui"` holds GPUI's own elements and what the runtime adds — `View`, `div`, `text`, storage, scheduling. `"gpui-base"` holds gpui-base's layout helpers, components and theme — `v_flex`, `Button`, `InputState`. `"gpui-fps"` holds its performance overlay. A name belongs to exactly one of them, so an import line says which layer a script depends on. The runtime also supplies a deliberately small JavaScript-standard layer: `buffer`, `path`, `url`, `crypto`, `zlib`, `console`, `process`, `os`, `fs/promises`, `net`, `websocket`, and global `fetch`. Application-relative imports remain confined to the application directory. Node-prefixed aliases such as `node:fs`, package lookup, and CommonJS `require` are not part of the contract.
 
-**`main.js` must `export default` a class extending `View`.** `init` runs once when the view is created; `render` returns exactly one element, and runs when the view is invalidated rather than on every frame — see [When `render` runs](./state.md#when-render-runs).
+**`main.js` must `export default` a class extending `View`.** `init` runs once when the view is created; `render` returns one element, retained `Entity` or string, and runs when the view is invalidated rather than on every frame — see [When `render` runs](./state.md#when-render-runs).
 
 **Style methods are `snake_case`, your own code is `camelCase`.** `items_center`, `on_click`, `text_color`, `gap_2` keep their Rust spelling, because the no-argument style surface is generated from GPUI's reflection table rather than written by hand. Anything the application declares itself — variables, methods, object keys — is ordinary JavaScript. The contrast is deliberate: a `snake_case` call is host surface, a `camelCase` one is your code.
 

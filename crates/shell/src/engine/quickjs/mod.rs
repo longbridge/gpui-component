@@ -236,9 +236,6 @@ pub(crate) mod exports {
         "image",
         "PathBuilder",
         "Background",
-        // System capabilities (`host`, `sandbox`). Diagnostics are JavaScript's
-        // own `console`; a second name for it bought nothing.
-        "store",
     ];
 
     /// Components, layout helpers and the theme, all owned by `gpui-base`.
@@ -294,13 +291,16 @@ pub(crate) mod exports {
         "SliderThumb",
         "OtpState",
         "OtpInput",
-        // Theme (`theme_api`). Reading is `cx.theme()`; replacing the whole
-        // palette is an application-level act with no context to speak of.
+        // Theme (`theme_api`). The theme belongs to `gpui-base`, even though
+        // mutation is legal only while a host call supplies the current App.
         "set_theme",
     ];
 
     /// The performance overlay, owned by `gpui-fps`.
     pub(crate) const GPUI_FPS: &[&str] = &["fps_monitor"];
+
+    /// Shell-owned shared types. This module currently has no run-time values.
+    pub(crate) const GPUI_SHELL: &[&str] = &[];
 }
 
 /// Defines one `ModuleDef` per built-in module and the loader wiring for all of
@@ -381,6 +381,7 @@ macro_rules! builtin_modules {
 builtin_modules![
     (GpuiModule, "gpui", exports::GPUI),
     (GpuiBaseModule, "gpui-base", exports::GPUI_BASE),
+    (GpuiShellModule, "gpui-shell", exports::GPUI_SHELL),
     (GpuiFpsModule, "gpui-fps", exports::GPUI_FPS),
 ];
 
@@ -3293,6 +3294,25 @@ globalThis.__gpui = (() => {
     return { render: () => build() };
   };
 
+  // `setItem` converts its argument, and `getItem` answers a string or `null` —
+  // the Web Storage API exactly, so an application that wants structure reaches
+  // for `JSON.stringify` as it would on the web. `length` is a getter because
+  // it is a property there, not a call.
+  const storage = (session) => ({
+    get length() {
+      return __storage_length(session);
+    },
+    key: (index) => {
+      const at = Number(index);
+      return Number.isInteger(at) && at >= 0 ? __storage_key(session, at) : null;
+    },
+    getItem: (key) => __storage_get(session, String(key)),
+    setItem: (key, value) => __storage_set(session, String(key), String(value)),
+    removeItem: (key) => __storage_remove(session, String(key)),
+    clear: () => __storage_clear(session),
+    flush: () => __storage_flush(session),
+  });
+
   // Overlays are window-level, not view-level: `cx.notify()` re-renders this
   // view, `window.open_dialog()` changes what the user is looking at. Grouped
   // under `window` because that is where `gpui-component` puts them — the
@@ -3321,11 +3341,20 @@ globalThis.__gpui = (() => {
     remove_toast: (id) => __remove_toast(String(id)),
     clear_toasts: () => __clear_toasts(),
 
+    // The Web Storage API, where a browser keeps it. The two differ only in how
+    // long they last: `localStorage` is a file the host placed, `sessionStorage`
+    // is memory that goes with the process.
+    localStorage: storage(false),
+    sessionStorage: storage(true),
+
     // `Window::paint_path` in GPUI, so `window` here. It is the one element
     // constructor that is not a free function, and it is one because the thing
     // it mirrors is a method on the window rather than on the app.
     paint_path: paintPath,
   };
+
+  globalThis.localStorage = globalThis.window.localStorage;
+  globalThis.sessionStorage = globalThis.window.sessionStorage;
 
   let cachedThemeSource;
   let cachedTheme;
@@ -4768,7 +4797,7 @@ fn element_id(ctx: &Ctx<'_>, value: &Value<'_>) -> JsResult<SpecId> {
     let Some(object) = value.as_object() else {
         return Err(Exception::throw_type(
             ctx,
-            "render(cx) must return an element or a string",
+            "render(cx) must return an element, an Entity, or a string",
         ));
     };
     if let Ok(id) = object.get::<_, u32>("__id") {
@@ -4783,7 +4812,10 @@ fn element_id(ctx: &Ctx<'_>, value: &Value<'_>) -> JsResult<SpecId> {
         .as_object()
         .and_then(|object| object.get::<_, u32>("__id").ok())
         .ok_or_else(|| {
-            Exception::throw_type(ctx, "render(cx) must return an element built with gpui")
+            Exception::throw_type(
+                ctx,
+                "render(cx) must return an element, an Entity, or a string",
+            )
         })
 }
 
@@ -4852,7 +4884,6 @@ fn context_object<'js>(ctx: &Ctx<'js>, binding: ContextBinding) -> JsResult<Obje
         let member: Value = members.get(&name as &str)?;
         object.set(name, member)?;
     }
-
     object.set(
         "notify",
         Func::from(move |ctx: Ctx<'_>| -> JsResult<()> {

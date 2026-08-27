@@ -8,7 +8,7 @@ use std::ops::Deref;
 
 use gpui::{Entity, IntoElement as _, TestAppContext, VisualTestContext};
 
-use crate::{Capabilities, HostModules, HostValue, ScriptView, ShellRuntime};
+use crate::{Capabilities, HostError, HostModule, HostValue, ScriptView, ShellRuntime};
 
 const CLIPBOARD_PROBE: &str = r#"
 import { div, View } from "gpui";
@@ -51,6 +51,33 @@ export default class Probe extends View {
     } catch (error) {
       return v_flex().child(`refused:${error.message}`);
     }
+  }
+}
+"#;
+
+const ASYNC_MODULE_PROBE: &str = r#"
+import { View } from "gpui";
+import { v_flex } from "gpui-base";
+import { double, refuse } from "slow";
+
+export default class Probe extends View {
+  init(_props, cx) {
+    this.state = "pending";
+    cx.spawn(async (cx) => {
+      const answer = await double(21);
+      let refusal = "none";
+      try {
+        await refuse("nope");
+      } catch (error) {
+        refusal = error.message;
+      }
+      this.state = `answer:${answer}|refused:${refusal}`;
+      cx.notify();
+    });
+  }
+
+  render() {
+    return v_flex().child(this.state);
   }
 }
 "#;
@@ -108,13 +135,12 @@ fn cancelling_a_javascript_timer_prevents_its_callback(cx: &mut TestAppContext) 
 #[gpui::test]
 fn javascript_imports_a_host_registered_module(cx: &mut TestAppContext) {
     cx.update(crate::init);
-    let mut modules = HostModules::new();
-    modules.register("calculator", |module| {
-        module.function("increment", |arguments| {
+    crate::export_module(
+        HostModule::new("calculator").function("increment", |arguments| {
             Ok(HostValue::from(arguments.number(0)? + 1.))
-        });
-    });
-    crate::export_modules(modules).expect("the module names are free");
+        }),
+    )
+    .expect("`calculator` is not a reserved name");
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let view_type = runtime
@@ -136,6 +162,62 @@ fn javascript_imports_a_host_registered_module(cx: &mut TestAppContext) {
     crate::clear_exported_modules();
 }
 
+/// An asynchronous host function answers with a promise, and its work runs off
+/// the main thread.
+///
+/// End-to-end because that is where the parts have to agree: the registry's
+/// two-half closure, the generated arrow rather than a bound stub, the
+/// scheduler's promise, and the scope the continuation is resumed in.
+#[gpui::test]
+fn javascript_awaits_an_asynchronous_host_function(cx: &mut TestAppContext) {
+    cx.update(crate::init);
+    crate::export_module(
+        HostModule::new("slow")
+            .async_function("double", |arguments| {
+                let value = arguments.number(0)?;
+                Ok(async move { Ok(HostValue::from(value * 2.)) })
+            })
+            // A failure inside the future rejects the promise, so the script
+            // catches it the way it catches any other async refusal.
+            .async_function("refuse", |arguments| {
+                let reason = arguments.string(0)?.to_owned();
+                Ok(async move { Err(HostError::new(format!("refused: {reason}"))) })
+            }),
+    )
+    .expect("`slow` is not a reserved name");
+
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let view_type = runtime
+        .load_source("async.js", ASYNC_MODULE_PROBE)
+        .expect("load script");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let view = context
+        .update(|window, cx| runtime.instantiate_view(&view_type, window, cx))
+        .expect("instantiate script view");
+
+    draw(&mut context, &view);
+    assert!(
+        snapshot_text(&mut context, &view).contains("pending"),
+        "the call answered before it was awaited"
+    );
+
+    context.run_until_parked();
+    draw(&mut context, &view);
+    let rendered = snapshot_text(&mut context, &view);
+    assert!(
+        rendered.contains("answer:42"),
+        "the promise did not resolve with the future's value: {rendered}"
+    );
+    assert!(
+        rendered.contains("refused: nope"),
+        "a failing future did not reject its promise: {rendered}"
+    );
+
+    crate::clear_exported_modules();
+}
+
 /// An import fixes the *names* a module exports, not the functions behind them.
 ///
 /// This is the one semantic an import could plausibly have cost, so it is the
@@ -145,13 +227,12 @@ fn javascript_imports_a_host_registered_module(cx: &mut TestAppContext) {
 #[gpui::test]
 fn withdrawing_a_module_refuses_a_call_through_an_already_imported_name(cx: &mut TestAppContext) {
     cx.update(crate::init);
-    let mut modules = HostModules::new();
-    modules.register("calculator", |module| {
-        module.function("increment", |arguments| {
+    crate::export_module(
+        HostModule::new("calculator").function("increment", |arguments| {
             Ok(HostValue::from(arguments.number(0)? + 1.))
-        });
-    });
-    crate::export_modules(modules).expect("the module names are free");
+        }),
+    )
+    .expect("`calculator` is not a reserved name");
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
     let view_type = runtime

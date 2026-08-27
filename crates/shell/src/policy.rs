@@ -45,7 +45,11 @@
 
 use std::{cell::RefCell, path::PathBuf, rc::Rc};
 
-use crate::{capability::Capabilities, host_modules::HostModules, store::Store};
+use crate::{
+    capability::Capabilities,
+    host_modules::{HostModule, HostModules},
+    storage::Storage,
+};
 
 /// The authority one application or plugin runs under.
 ///
@@ -74,7 +78,14 @@ pub struct Policy {
     /// Shared like `modules` and for a sharper reason: a store *is* its file, so
     /// two caches for one path is never a thing anyone wants. Two would answer
     /// `get` differently and run two write queues over the same temporary file.
-    store: Rc<RefCell<Option<Store>>>,
+    store: Rc<RefCell<Option<Storage>>>,
+    /// `sessionStorage`: the same store with no file behind it.
+    ///
+    /// Always present, unlike `store` — there is no placement for a host to
+    /// skip and no capability to grant, because nothing here outlives the
+    /// process. Shared across copies of a policy for the same reason the other
+    /// two are: one application, one storage.
+    session: Rc<RefCell<Option<Storage>>>,
 }
 
 impl Default for Policy {
@@ -90,6 +101,7 @@ impl Policy {
             capabilities: Capabilities::default(),
             modules: Rc::new(RefCell::new(Rc::new(HostModules::default()))),
             store: Rc::new(RefCell::new(None)),
+            session: Rc::new(RefCell::new(Some(Storage::in_memory()))),
         }
     }
 
@@ -98,26 +110,48 @@ impl Policy {
         self
     }
 
-    /// Names the settings file and reads it.
+    /// Names the `localStorage` file and reads it.
     ///
     /// The read happens here rather than on first use, because here is
     /// start-up — before a window exists — and first use is wherever the script
     /// happens to touch the store, which may be `render`.
-    pub fn with_store_path(self, path: PathBuf) -> Self {
-        let mut store = Store::new(path);
+    pub fn with_storage_path(self, path: PathBuf) -> Self {
+        let mut store = Storage::new(path);
         store.warm = Some(store.load());
         *self.store.borrow_mut() = Some(store);
         self
     }
 
-    /// The host modules this application may reach.
+    /// Adds a host module this application may import.
     ///
     /// Per policy rather than per process, because "which host functions may
     /// this plugin call" is exactly as much a grant as "which directories may it
     /// read". A global registry cannot express a host that gives one plugin a
     /// module and not another.
-    pub fn with_host_modules(self, modules: HostModules) -> Self {
+    ///
+    /// Fails on a name the runtime owns, or on a TypeScript face that disagrees
+    /// with the functions registered — see [`crate::HostModule::validate`]. It
+    /// is the builder step rather than the module construction that answers for
+    /// this, because this is where a host is still holding the `?`.
+    pub fn with_host_module(self, module: HostModule) -> Result<Self, crate::HostError> {
+        module.validate()?;
+        Ok(self.with_module_unchecked(module))
+    }
+
+    /// Adds a module whose name and declarations have already been checked.
+    pub(crate) fn with_module_unchecked(self, module: HostModule) -> Self {
+        // Cloned out and put back rather than edited in place: the registry is
+        // handed out by `Rc` on every call, and the copies already in flight
+        // must keep answering with the set they were linked against.
+        let mut modules = (**self.modules.borrow()).clone();
+        modules.insert(module);
         *self.modules.borrow_mut() = Rc::new(modules);
+        self
+    }
+
+    /// Withdraws every host module, keeping everything else.
+    pub(crate) fn without_host_modules(self) -> Self {
+        *self.modules.borrow_mut() = Rc::new(HostModules::new());
         self
     }
 
@@ -132,8 +166,17 @@ impl Policy {
     }
 
     /// Runs `body` against the settings file, if the host named one.
-    pub(crate) fn with_store<R>(&self, body: impl FnOnce(&mut Store) -> R) -> Option<R> {
+    pub(crate) fn with_local_storage<R>(&self, body: impl FnOnce(&mut Storage) -> R) -> Option<R> {
         self.store.borrow_mut().as_mut().map(body)
+    }
+
+    /// The session storage. Always `Some`; the `Option` is only so that the two
+    /// fields have one shape.
+    pub(crate) fn with_session_storage<R>(
+        &self,
+        body: impl FnOnce(&mut Storage) -> R,
+    ) -> Option<R> {
+        self.session.borrow_mut().as_mut().map(body)
     }
 }
 
@@ -184,6 +227,7 @@ impl Policy {
             capabilities: self.capabilities.clone(),
             modules: self.modules.clone(),
             store: self.store.clone(),
+            session: self.session.clone(),
         }
     }
 }
@@ -232,10 +276,10 @@ mod tests {
     /// registered is a leak GPUI reports at shutdown.
     #[test]
     fn revoking_a_module_reaches_a_policy_already_handed_out() {
-        set_default(Policy::new().with_host_modules(crate::host_modules::HostModules::new()));
+        set_default(Policy::new());
         let held = default();
 
-        update_default(|policy| policy.with_host_modules(crate::host_modules::HostModules::new()));
+        update_default(|policy| policy.with_module_unchecked(crate::HostModule::new("market")));
 
         assert!(
             Rc::ptr_eq(&held.modules(), &default().modules()),
@@ -248,15 +292,15 @@ mod tests {
     #[test]
     fn a_copy_of_a_policy_shares_its_store() {
         let path = std::env::temp_dir().join("gpui-shell-policy-test.json");
-        set_default(Policy::new().with_store_path(path));
+        set_default(Policy::new().with_storage_path(path));
         let held = default();
 
         update_default(|policy| policy.with_capabilities(Capabilities::new()));
 
-        held.with_store(|store| store.touch());
+        held.with_local_storage(|store| store.touch());
         assert!(
             default()
-                .with_store(|store| store.is_dirty())
+                .with_local_storage(|store| store.is_dirty())
                 .expect("the copy has the same store"),
             "the two handles are one store"
         );

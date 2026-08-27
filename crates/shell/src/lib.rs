@@ -70,7 +70,7 @@ pub(crate) mod scope;
 pub(crate) mod scroll;
 pub mod snapshot;
 pub(crate) mod spec;
-pub(crate) mod store;
+pub(crate) mod storage;
 pub(crate) mod style;
 #[cfg(test)]
 mod tests;
@@ -85,8 +85,7 @@ pub use capability::{Capabilities, ExecuteGrant, HttpRequestGrant};
 pub use engine::ShellRuntime;
 pub use error::ShellError;
 pub use host_modules::{
-    HostArguments, HostError, HostModule, HostModules, HostObject, HostResult, HostValue,
-    RESERVED_SPECIFIERS,
+    HostArguments, HostError, HostModule, HostObject, HostResult, HostValue, RESERVED_SPECIFIERS,
 };
 pub use metrics::RuntimeMetrics;
 pub use root::{DialogOptions, SheetSide, ShellRoot, ToastLevel, ToastRequest};
@@ -158,7 +157,7 @@ pub fn set_capabilities(capabilities: Capabilities) {
 /// it, so `a-z`, `0-9`, `.`, `-`, `_` and no `..`.
 pub fn set_bundle_id(id: &str) -> anyhow::Result<PathBuf> {
     let directory = runtime::app_data_dir(id)?;
-    set_store_path(directory.join("store.json"));
+    set_storage_path(directory.join("store.json"));
     Ok(directory)
 }
 
@@ -171,7 +170,7 @@ pub fn bundle_id_for_path(root: &std::path::Path) -> String {
     runtime::path_identity(root)
 }
 
-/// Points `gpui.store` at an exact file.
+/// Points `localStorage` at an exact file.
 ///
 /// The mechanism under [`set_bundle_id`], which is what a host should normally
 /// call. This is for a host that places its own data — a test, or an embedder
@@ -181,8 +180,8 @@ pub fn bundle_id_for_path(root: &std::path::Path) -> String {
 /// application cannot name its own storage location, or two applications could
 /// collide on purpose. Like [`set_capabilities`], this configures the default
 /// policy.
-pub fn set_store_path(path: PathBuf) {
-    engine::set_store_path(path);
+pub fn set_storage_path(path: PathBuf) {
+    engine::set_storage_path(path);
 }
 
 /// Relaxes the sandbox for a development session.
@@ -201,26 +200,108 @@ pub fn init(cx: &mut App) {
     style::init();
 }
 
-/// Exports a set of Rust modules for scripts to import by name.
+/// Exports one Rust module for scripts to import by name.
 ///
-/// Nothing is importable until this is called: a script that imports a module
-/// this host did not register is told so while its module graph is linked, and
-/// it only ever reaches the modules the host put here (design doc §17.6).
+/// This is the host's whole extension surface. A script cannot load a native
+/// extension — `dlopen`ed Rust holds every permission the process holds, so a
+/// sandbox that permits it does not mean anything — and instead reaches exactly
+/// the modules registered here, and nothing else (design doc §17.6).
 ///
-/// Call it **before** the application is loaded — an import is resolved at link
-/// time, so a module registered afterwards is not in the graph. Replacing the
-/// set later is still meaningful: an already-imported function forwards to the
-/// registry on every call, so revoking one takes effect immediately.
+/// ```no_run
+/// use gpui_shell::{HostModule, HostValue};
 ///
-/// Fails when a module name belongs to the runtime; see [`RESERVED_SPECIFIERS`].
-pub fn export_modules(modules: HostModules) -> Result<(), HostError> {
-    host_modules::set_modules(modules)
+/// gpui_shell::export_module(
+///     HostModule::new("workspace")
+///         .declarations(
+///             r#"
+///             export function project_name(): string;
+///             export function version(): string;
+///             "#,
+///         )
+///         .function("project_name", |_| Ok(HostValue::from("gpui-component")))
+///         .function("version", |_| Ok(HostValue::from("0.1.0"))),
+/// )?;
+/// # Ok::<(), gpui_shell::HostError>(())
+/// ```
+///
+/// A script imports that by name, the way it imports `gpui` or `path`:
+///
+/// ```js
+/// import { project_name } from "workspace";
+/// ```
+///
+/// # Slow work
+///
+/// [`HostModule::function`] is synchronous, so a slow one holds the thread that
+/// renders. [`HostModule::async_function`] takes a closure that returns a
+/// future instead: the script gets a promise, and the work runs on GPUI's
+/// background executor.
+///
+/// # Call it before loading the application
+///
+/// An import is resolved while the module graph is linked, so a module exported
+/// after `load_app` is not in the graph — a script importing it fails to link,
+/// naming the modules that do exist. Registration is start-up work.
+///
+/// Replacing or withdrawing a module *afterwards* is a different matter and
+/// does work: every export is a forwarding stub that resolves through the
+/// registry on each call, so a script holding a function it imported earlier
+/// gets the new behavior, or a refusal, on its next call. What an import fixes
+/// is the set of names, not the functions behind them.
+///
+/// # One module per call
+///
+/// Exporting a name twice replaces the earlier module rather than merging into
+/// it: two registrations of one name are a mistake, and merging would hide it
+/// behind a module that half works. Call this once per module.
+///
+/// # Give it a TypeScript face
+///
+/// [`HostModule::declarations`] is optional but worth writing. With it, the
+/// generated `gpui.d.ts` describes the module exactly, and this function checks
+/// that description against the functions actually registered — so renaming one
+/// half is a sentence at start-up rather than an editor that keeps completing a
+/// function you deleted. Without it, the module is still declared, with
+/// `(...args: any[]) => any` signatures that check the module name and every
+/// export name but nothing further.
+///
+/// # A host that runs more than one application
+///
+/// This installs into the policy new views are born holding, which is one
+/// thread-local set — right for a host running a single application. A host
+/// running several gives each its own [`policy::Policy`] and builds the
+/// registry with [`policy::Policy::with_host_module`] instead, so one plugin's
+/// modules are not reachable from another's script.
+///
+/// # Withdraw before going away
+///
+/// A module's closures typically capture GPUI entity handles — that is how a
+/// host function reaches host state at all — so the registry keeps those
+/// handles alive for as long as it holds them. A host that goes away without
+/// calling [`clear_exported_modules`] leaves them registered, which GPUI
+/// reports as a leaked handle at shutdown.
+///
+/// # Errors
+///
+/// Two, both reported before anything is installed:
+///
+/// * The name belongs to the runtime — see [`RESERVED_SPECIFIERS`]. The
+///   built-ins and the Standard Runtime resolve first, so such a module could
+///   never be imported; refusing it here is what stops that being silent.
+/// * The declared exports and the registered functions disagree, naming both
+///   sides of the difference.
+pub fn export_module(module: HostModule) -> Result<(), HostError> {
+    host_modules::add_module(module)
 }
 
-/// Withdraws every exported module.
+/// Withdraws every module [`export_module`] installed.
+///
+/// Takes effect immediately, including for a script that has already imported
+/// one: the next call through an imported name is refused rather than answered
+/// by a withdrawn closure.
 ///
 /// A host that registered modules capturing GPUI entities should call this when
-/// it goes away; leaving them installed is a leak rather than merely untidy.
+/// it goes away — see "Withdraw before going away" on [`export_module`].
 pub fn clear_exported_modules() {
     host_modules::clear_modules();
 }

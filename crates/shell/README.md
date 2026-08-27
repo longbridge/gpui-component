@@ -55,7 +55,7 @@ default-exports, and mounts one instance of it as the window's root view:
 
 ```js
 // main.js
-import { View, text } from "gpui";
+import { View } from "gpui";
 import { v_flex, Button, InputState } from "gpui-base";
 
 export default class Notes extends View {
@@ -138,7 +138,7 @@ camelCase one is script code.
 Each module carries what its own crate provides:
 
 ```js
-import { View, div, text, svg, image } from "gpui";
+import { View, div, svg, image } from "gpui";
 import { h_flex, v_flex, Button, Link, Checkbox, Switch } from "gpui-base";
 import { fps_monitor } from "gpui-fps";
 ```
@@ -161,12 +161,13 @@ import { fps_monitor } from "gpui-fps";
 | `cx.spawn(body, opts?)` | `cx` method | `App::spawn` — the body's `cx` survives an `await` |
 | `cx.sleep(ms)` / `cx.timer.after` / `cx.timer.every` | `cx` methods | Work on the foreground executor |
 | `window.paint_path(path, bg)` | `window` method | `Window::paint_path` |
+| `localStorage` / `sessionStorage` | globals, also on `window` | The Web Storage API, where the web keeps it |
 
 Where a binding lives in Rust decides where it lives here: an `App` method is a
 `cx` method, a `Window` method is on the `window` global, a type's `::new` is
-`Type.new(...)`, and a free function stays a free function. Only what has no
-GPUI or base original — `store` — is a module member. Diagnostics are
-JavaScript's own global `console`.
+`Type.new(...)`, and a free function stays a free function. What has no GPUI or
+base original goes where the web already keeps it: storage is `localStorage`
+and `sessionStorage`, and diagnostics are JavaScript's own global `console`.
 
 ### Elements
 
@@ -248,7 +249,7 @@ layer only reports the state.
 ```js
 export default class Counter extends View {
   init(props) {}   // called once, when the view is created
-  render(cx) {}    // returns exactly one element
+  render(cx) {}    // returns one element, retained Entity, or string
 }
 ```
 
@@ -290,7 +291,7 @@ grant the CLI installs in `gpui-shell.json`:
         "path_prefixes": ["/v1/items/"]
       }]
     },
-    "store": true,
+    "storage": true,
     "clipboard": { "write": true }
   }
 }
@@ -327,8 +328,8 @@ There are no synchronous filesystem calls. `writeFile` is capped at 8 MiB;
 
 Resource ceilings are per boundary: a JavaScript module is at most 8 MiB; an
 asset is at most 16 MiB, and asset listing stops at 10,000 entries or 1 MiB of
-names. A runtime may have 1,024 outstanding host tasks. Store data is capped at
-8 MiB total, 4,096 keys, 1 MiB per JSON value, and 1,024 pending `flush()`
+names. A runtime may have 1,024 outstanding host tasks. `localStorage` is capped at
+8 MiB total, 4,096 keys, 1 MiB per value, and 1,024 pending `flush()`
 waiters. Plugin unload cancels every task carrying that plugin's `Policy`, even
 owner-less work. `process.run` starts its child with a cleared environment, so
 host environment variables are not inherited.
@@ -363,7 +364,7 @@ that.
 Present today: the element and style surface, state styles (`hover` / `active` /
 `focus`), `Button`, `Checkbox`, `Switch`, retained `InputState` with input
 events, icons through `svg()`, dialogs, sheets and toasts on `window`, promises and
-timers, `fs` / `store` / clipboard / `process` behind capabilities,
+timers, `fs` / `localStorage` / clipboard / `process` behind capabilities,
 capability-gated HTTP and text/binary WebSocket clients, native target-value
 transitions and springs, hot reload, `check`, and generated TypeScript
 declarations.
@@ -417,7 +418,7 @@ module.declarations(r#"
 "#);
 ```
 
-`export_modules` compares that against what was actually registered and refuses
+`export_module` compares that against what was actually registered and refuses
 a mismatch, so renaming a function on one side is a sentence at start-up rather
 than an editor completing something that is gone. Declaring nothing is allowed
 and yields `(...args: any[]) => any` signatures, which still check the module

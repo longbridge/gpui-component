@@ -12,7 +12,7 @@
 import { div, svg } from "gpui";
 import { h_flex, v_flex, Button, Checkbox, Input } from "gpui-base";
 /** @import { ClickEvent, Color, Context, Element } from "gpui" */
-/** @import { InputStateHandle } from "gpui-base" */
+/** @import { InputState } from "gpui-base" */
 
 export const SPACE = { xxs: 2, xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 };
 
@@ -126,7 +126,7 @@ export const iconButton = (id, name, description, onClick, cx, options = {}) => 
 
 /// A text field. The runtime frames an input as a centered row that focuses on
 /// click; height, padding and color are still ours.
-/** @param {InputStateHandle} state @param {import("gpui").Context} cx */
+/** @param {InputState} state @param {import("gpui").Context} cx */
 export const field = (state, cx) =>
   Input.new(state)
     .flex_1()

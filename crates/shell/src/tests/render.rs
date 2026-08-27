@@ -6,7 +6,7 @@
 //! keeps the fallback engine honest.
 
 use crate::{
-    HostModules, HostValue, ScriptView, ShellRuntime, capability::Capabilities, policy::Policy,
+    HostModule, HostValue, ScriptView, ShellRuntime, capability::Capabilities, policy::Policy,
 };
 use gpui::{AppContext as _, Modifiers, TestAppContext, VisualTestContext, point, px};
 use std::{cell::Cell, path::PathBuf, rc::Rc};
@@ -3578,17 +3578,14 @@ fn reload_replaces_old_tasks_and_rolls_back_failed_new_tasks(cx: &mut TestAppCon
 fn reload_evaluates_modules_under_the_views_frozen_capabilities(cx: &mut TestAppContext) {
     cx.update(crate::init);
     let observed = Rc::new(Cell::new(false));
-    let mut modules = HostModules::new();
-    modules.register("audit", {
+    crate::export_module(HostModule::new("audit").function("observe", {
         let observed = observed.clone();
-        move |module| {
-            module.function("observe", move |_| {
-                observed.set(crate::scope::policy().capabilities().has_read_access());
-                Ok(HostValue::from(true))
-            });
+        move |_| {
+            observed.set(crate::scope::policy().capabilities().has_read_access());
+            Ok(HostValue::from(true))
         }
-    });
-    crate::export_modules(modules).expect("the module names are free");
+    }))
+    .expect("`audit` is not a reserved name");
 
     let directory =
         std::env::temp_dir().join(format!("gpui-shell-reload-policy-{}", std::process::id()));

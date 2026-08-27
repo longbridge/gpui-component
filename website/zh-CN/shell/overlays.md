@@ -59,7 +59,6 @@ a function, not an element and not a view class
 
 ```js
 // confirm.js
-import { text } from "gpui";
 import { v_flex, h_flex } from "gpui-base";
 
 export default (count, onConfirm) => () =>
@@ -164,7 +163,7 @@ unknown toast level `fatal`; expected info, success, warning or error
 
 **焦点**沿着栈自身的历史恢复。打开浮层时记录当前焦点并把焦点交给浮层，关闭时恢复。关掉第二个 dialog 会把焦点还给第一个，关掉第一个则还给二者打开之前窗口所在的位置。Tab 与 Shift-Tab 遵守焦点陷阱，所以在浮层里按 Tab 是在浮层内循环，而不是走进它背后的内容。
 
-## Phase 规则
+## `ScopePhase` 规则
 
 **浮层只能从事件回调或任务中打开与关闭。**
 
@@ -173,7 +172,7 @@ window.open_dialog(content, options) is not allowed during the `render` phase;
 overlays may only be opened or closed while handling an event or a task
 ```
 
-打开或关闭浮层会修改窗口，而 `render` phase 正在读它。GPUI 的借用模型无法表达“脚本在这里可以 notify、在那里不行”，所以运行时显式携带 [phase](./state.md#phase)，每一个浮层入口都拒绝 `render`、`layout`，以及根本不在任何宿主调用中的情形——最后这种情况下也没有窗口可以触达。
+打开或关闭浮层会修改窗口，而 `render` phase 正在读它。GPUI 的借用模型无法表达“脚本在这里可以 notify、在那里不行”，所以运行时显式携带 [`ScopePhase`](./state.md#scopephase)，每一个浮层入口都拒绝 `render`、`layout`，以及根本不在任何宿主调用中的情形——最后这种情况下也没有窗口可以触达。
 
 拒绝信息会写明它是从哪个 phase 发出的，因为那是作者唯一的线索。
 

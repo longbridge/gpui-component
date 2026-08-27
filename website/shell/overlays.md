@@ -59,7 +59,6 @@ The reason is lifetime, not taste. An element belongs to the arena of the render
 
 ```js
 // confirm.js
-import { text } from "gpui";
 import { v_flex, h_flex } from "gpui-base";
 
 export default (count, onConfirm) => () =>
@@ -164,7 +163,7 @@ Dismissal is always **one layer, never a cascade**:
 
 **Focus** is restored through the stack's own history. Opening an overlay records what was focused and focuses the overlay; closing it restores that handle. Closing the second dialog returns focus to the first, and closing the first returns it to whatever the window was on before either opened. Tab and Shift-Tab honour the focus trap, so tabbing inside an overlay cycles within it rather than walking into the content behind it.
 
-## The phase rule
+## The `ScopePhase` rule
 
 **An overlay may only be opened or closed from an event handler or a task.**
 
@@ -173,7 +172,7 @@ window.open_dialog(content, options) is not allowed during the `render` phase;
 overlays may only be opened or closed while handling an event or a task
 ```
 
-Opening or closing an overlay mutates the window, and the render pass is reading it. GPUI's borrow model has no way to express "the script may notify from here but not from there", so the runtime carries the [phase](./state.md#phases) explicitly and every overlay entry point refuses `render`, `layout`, and being called from outside any host call at all — in the last case there is no window to reach either.
+Opening or closing an overlay mutates the window, and the render pass is reading it. GPUI's borrow model has no way to express "the script may notify from here but not from there", so the runtime carries the [`ScopePhase`](./state.md#scope-phases) explicitly and every overlay entry point refuses `render`, `layout`, and being called from outside any host call at all — in the last case there is no window to reach either.
 
 The refusal names the phase it came from, because that is the only clue the author has.
 

@@ -13,7 +13,7 @@ order: 4
 每个模块只装它自己那个包提供的东西：
 
 ```js
-import { div, text, svg, image } from "gpui";
+import { div, svg, image } from "gpui";
 import {
   h_flex,
   v_flex,

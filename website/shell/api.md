@@ -1,6 +1,6 @@
 ---
 title: API Reference
-description: Every name a script can import or reach — the three built-in modules, the cx and window globals, and the element methods that are not styles.
+description: Every name a script can import or reach — the four built-in modules, the cx and window globals, and the element methods that are not styles.
 order: 13
 ---
 
@@ -8,21 +8,39 @@ order: 13
 
 An inventory of the script surface: what exists, and which module it comes from. The other pages explain why each thing works the way it does — this one is for looking a name up.
 
-The authority is not this page. `gpui-shell` rewrites a `gpui.d.ts` beside your source on every run, generated from the runtime that is about to execute the script, so a committed copy could only ever be the stale one. Put `// @ts-check` at the top of a script to have an editor check against it.
+The authority is not this page. The runtime generates `gpui.d.ts` for its own version and refreshes it beside your source when the application loads. That refresh is best-effort; `gpui-shell types <directory>` performs the same write and reports a failure. The generated header names the `gpui-shell` version and includes that application's host modules. Keep the file ignored, and put `// @ts-check` at the top of a script to have an editor check against it.
 
 ## The modules
 
-There is one module per crate that provides the capability, so an import says which layer a script depends on. A name belongs to exactly one of them: nothing is re-exported for convenience, because a name reachable from two specifiers stops saying where it came from.
+Each built-in module names the public Rust layer it exposes, so an import says which layer a script depends on. The `gpui` module also carries the shell bridge needed to use GPUI from JavaScript: views, retained entities, scheduling and shared types. A name belongs to exactly one module; nothing is re-exported for convenience.
+
+```js
+import { View, div } from "gpui";
+import { Button, v_flex } from "gpui-base";
+/** @import { ScopePhase } from "gpui-shell" */
+import { fps_monitor } from "gpui-fps";
+```
 
 | Module | Provides |
 | --- | --- |
-| `"gpui"` | GPUI's own elements, plus what this runtime adds: views, the style surface, storage, scheduling |
-| `"gpui-base"` | `gpui-base`'s layout helpers, components and theme |
-| `"gpui-fps"` | `gpui-fps`'s performance overlay |
+| `gpui` | GPUI's own elements, plus what this runtime adds: views, the style surface, scheduling |
+| `gpui-base` | Layout helpers, components and the theme |
+| `gpui-shell` | Type-only concepts owned by the shell bridge; it has no run-time exports |
+| `gpui-fps` | The performance overlay |
 
 Two names are never imported, for two different reasons. `window` is a real global: nothing hands it to you, it is simply in scope. `cx` is the opposite — it is never a global, and only ever arrives as an argument: `render(cx)`, `init(props, cx)`, the second argument of every handler, the parameter of a `cx.spawn` body. The standard-runtime modules — `fs/promises`, `path`, `crypto`, `process`, `net`, `websocket` and the rest — are gated by the host's grant and are documented in [Capabilities](./capabilities.md).
 
-A lowercase name is a free function on the Rust side too — `div()` is `gpui::div()`. A capitalized name is an object whose only member is a factory, so you write `Button.new(id)` for `Button::new(id)`; the tables list the name, because the `.new` is the same every time. Two shapes differ and say so where they appear: a table row or cell takes `.new(id, index)` with a one-based position, and the state-backed components take the state rather than an id.
+API shape follows the Rust original: a method on `App` is a method on `cx`, a method on `Window` is on the `window` global, an associated constructor is `Type.new(...)`, and a free function stays lowercase. Names with no direct GPUI or Base original belong to the module for the layer that implements them. Type-only names appear in these tables too, but are never run-time values.
+
+## Host modules
+
+A module the host registered in Rust is imported by name, like any other module:
+
+```js
+import { quotes } from "market";
+```
+
+It is not part of any built-in module. The generated declarations carry one `declare module` per registered module, so both the module name and every export name are checked. See [Host Modules](./host-modules.md).
 
 ## The `gpui` module
 
@@ -49,44 +67,20 @@ A string is an element too, exactly as `&str` implements `IntoElement` in GPUI: 
 | `Entity` | Retained ownership of one nested view: `set_props(props)`, `release()` |
 | `Props` | The property bag handed to `init` and to `cx.new` |
 
-A subclass defines `init?(props, cx)`, which runs once, and `render(cx)`, which returns exactly one element and runs when the view is invalidated. An optional `update(props)` runs when a parent changes a nested view's props.
-
-### Storage
-
-| Name | What it is |
-| --- | --- |
-| `store` | Key-value storage that survives a restart, persisted on every write |
-| `Store` | `get(key)`, `set(key, value)`, `remove(key)`, `keys()`, `flush()` |
-| `Json` | Everything the store can persist, and nothing else |
-
-`store.get` answers `null` for an unset key, and `flush()` completes once the current value is durably written.
-
-### Host modules
-
-A module the host registered in Rust is imported by name, like any other module:
-
-```js
-import { quotes } from "market";
-```
-
-It is not part of `"gpui"`. The generated declarations carry one `declare module` per registered module, so both the module name and every export name are checked. See [Host Modules](./host-modules.md).
+A subclass defines `init?(props, cx)`, which runs once, and `render(cx)`, which returns one `Element`, `Entity` or string and runs when the view is invalidated. An optional `update(props)` runs when a parent changes a nested view's props.
 
 ### Scheduling
 
 | Name | What it is |
 | --- | --- |
 | `Task` | A running task: `cancel()`, `is_done()` |
-| `TaskOptions` | `{ owner?: View \| null }` — the view the task is cancelled with. Defaults to the running view; `null` outlives every view, and is the only other value accepted |
 | `Timer` | `after(ms, handler, opts?)` and `every(ms, handler, opts?)` |
 
-### Focus and component shapes
+### Focus
 
 | Name | What it is |
 | --- | --- |
-| `FocusHandleHandle` | A focus target the script owns; [its members](#focushandlehandle) |
-| `ComponentType` | `new(id)` — a component identified across renders |
-| `PartType` | `new()` — a sub-part with no identity of its own |
-| `IndexedComponentType` | `new(id, index)` — a component whose one-based position is announced |
+| `FocusHandle` | A focus target the script owns; [its members](#focushandle) |
 
 ### Shared types
 
@@ -95,43 +89,62 @@ It is not part of `"gpui"`. The generated declarations carry one `declare module
 | `Length` | A number (pixels), `"12px"`, `"1.5rem"`, `"50%"` or `"auto"` |
 | `DefiniteLength` | The same without `"auto"` |
 | `AbsoluteLength` | Pixels or rems only |
-| `LengthString` | The string forms of a length |
-| `Color` | A `ColorToken` name, or a `#rgb` / `#rrggbb` / `#rrggbbaa` literal |
-| `ColorToken` | The seventeen semantic tokens the installed palette defines |
+| `Color` | A `gpui-base` `ColorToken`, or a `#rgb` / `#rrggbb` / `#rrggbbaa` literal |
 | `Role` | An accessibility role, mirroring `gpui::Role` in snake_case |
 | `Anchor` | Which corner of an anchored surface is pinned to its trigger |
 | `MouseButton` | `"left"`, `"right"` or `"middle"` |
-| `Phase` | `"render"`, `"event"`, `"task"`, `"layout"` or `"none"` |
-| `SheetSide` | Which edge the sheet is anchored to |
-| `DialogOptions` | `{ escape_dismissable?: boolean, backdrop_dismissable?: boolean }`, both `true` by default |
-| `ToastOptions` | `{ title: string, description?: string, level?: "info" \| "success" \| "warning" \| "error", timeout?: number \| null, id?: string }`. `level` defaults to `"info"`; `timeout` to five seconds, and `null` keeps it until dismissed — absent and `null` are not the same |
 | `ClickEvent` | `click_count`, `modifiers` |
 | `MouseMoveEvent` | `position`, `local_position`, `bounds`, `modifiers` |
 | `Modifiers` | `shift`, `control`, `alt`, `platform` |
 | `Point` | `x`, `y` |
 | `ElementBounds` | A `Point` with `width` and `height` |
+| `Path` | Immutable native geometry produced by `PathBuilder.build()` |
+| `PathCoordinate` | Pixels, or a percentage of the painted element's bounds |
+| `Background` | A reusable native background from `Background.solid(...)` or another factory: `opacity(factor)`, `color_space(space)` |
+| `BackgroundStop` | One gradient stop, from `Background.stop(color, percentage)` |
+
+#### `FocusHandle`
+
+Created with `cx.focus_handle()`, handed to an element with `track_focus(handle)`, and released with `release()`.
+
+| Method | What it does |
+| --- | --- |
+| `focus(): void` | Moves the keyboard onto the element tracking it |
+| `is_focused(): boolean` | Whether that element currently has it |
+| `release(): boolean` | Releases it and reports whether it was still live |
+
+## The `gpui-shell` module
+
+These are type-only concepts introduced by the JavaScript bridge itself. Import them only for type checking; the module has no run-time values.
+
+| Name | What it is |
+| --- | --- |
+| `LengthString` | The string forms accepted by the shell's length bridge |
+| `ScopePhase` | `"render"`, `"event"`, `"task"`, `"layout"` or `"none"` |
+| `TaskOptions` | `{ owner?: View \| null }` — the view the task is cancelled with. Defaults to the running view; `null` outlives every view |
+| `SheetSide` | Which edge a shell sheet is anchored to |
+| `DialogOptions` | `{ escape_dismissable?: boolean, backdrop_dismissable?: boolean }`, both `true` by default |
+| `ToastOptions` | `{ title: string, description?: string, level?: "info" \| "success" \| "warning" \| "error", timeout?: number \| null, id?: string }`. `level` defaults to `"info"`; `timeout` to five seconds, and `null` keeps it until dismissed |
 | `MotionProperty` | `"opacity"`, `"width"`, `"height"`, `"left"`, `"top"` |
 | `MotionEasing` | `"linear"`, `"ease-in"`, `"ease-out"`, `"ease-in-out"` |
 | `TransitionPolicy` | `duration`, `delay`, `easing` |
 | `SpringPolicy` | `response`, `damping`, `epsilon` |
-| `Path` | Immutable native geometry produced by `PathBuilder.build()` |
-| `PathCoordinate` | Pixels, or a percentage of the painted element's bounds |
-| `BackgroundValue` | A reusable native background: `opacity(factor)`, `color_space(space)` |
-| `BackgroundStop` | One gradient stop, from `Background.stop(color, percentage)` |
+
+`ScopePhase` describes which shell call owns the current `Context`. It is unrelated to GPUI's `DispatchPhase`, which controls capture and bubble ordering during event dispatch.
 
 ## The `cx` context
 
-`cx` is the script-side context for one host call, and it is valid only for that call. An `await` returns to the host and the frame it names goes away, so a `cx` kept across one reports a stale-context error.
+There are two context lifetimes with the same methods. `Context`, received by `render` and event handlers, belongs to that host call; retaining it beyond the call, including across an `await`, reports a stale-context error. `AsyncContext`, described below, is the flavour intended to survive an `await`.
 
 | Member | What it is |
 | --- | --- |
 | `notify()` | Requests a re-render; throws during `render`, because notifying yourself while rendering is a loop |
-| `phase()` | Which `Phase` the call is in |
+| `phase()` | Which `ScopePhase` the call is in |
 | `theme()` | The current `gpui_base::Theme` semantic token projection |
 | `open_url(url)` | Hands an absolute `http`/`https` URL to the system handler |
 | `read_from_clipboard()` | The clipboard's text, or `undefined` when it holds none |
 | `write_to_clipboard(text)` | Replaces the clipboard's text |
-| `focus_handle()` | A new `FocusHandleHandle`; belongs in `init` or an event handler, never in `render` |
+| `focus_handle()` | A new `FocusHandle`; belongs in `init` or an event handler, never in `render` |
 | `new(Class, props?)` | Creates a retained nested view and answers the `Entity` that owns it |
 | `spawn(body, opts?)` | Runs `body(cx)` and adopts the promise it returns, so a rejection is reported |
 | `sleep(ms?)` | Resolves after `ms` on GPUI's foreground executor |
@@ -164,7 +177,26 @@ A real global: nothing to import, and nothing hands it to you. Every call reads 
 | `clear_toasts()` | Retracts every toast, and answers how many |
 | `paint_path(path, background)` | Paints immutable geometry with a native background; `Window::paint_path` |
 
+| `localStorage` | Web Storage backed by a file the host placed; survives a restart |
+| `sessionStorage` | Web Storage held in memory; goes with the process |
+
 `open_dialog`, `open_sheet` and `open_sheet_at` take a **function returning an element**, not an element: a dialog outlives the call that opened it, and the function runs again whenever it redraws. Everything here except the two `has_active_*` queries and `paint_path` is illegal from `render`. See [Overlays](./overlays.md).
+
+### Storage
+
+The [Web Storage API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Storage_API), unchanged. Both stores are also bare globals — `localStorage.getItem(k)` and `window.localStorage.getItem(k)` are the same call — because that is true in a browser too.
+
+| Member | What it is |
+| --- | --- |
+| `length` | How many keys are stored |
+| `key(index)` | The key at that position, or `null` |
+| `getItem(key)` | The value, or `null` when the key is unset |
+| `setItem(key, value)` | Stores it, converting the value to a string |
+| `removeItem(key)` | Forgets one key |
+| `clear()` | Forgets all of them |
+| `flush()` | Resolves once the writes have reached the disk |
+
+Values are strings, so structure goes through `JSON.stringify` and `JSON.parse` exactly as it would on the web. `flush()` is the one addition: a browser never needs it, because its storage is synchronous all the way down. `localStorage` is capability-gated and throws when the host did not grant it; `sessionStorage` never is, because nothing it holds leaves the process. See [Capabilities](./capabilities.md#storage).
 
 ## The `gpui-base` module
 
@@ -203,7 +235,7 @@ The components here own behavior, focus and what a screen reader hears, and draw
 | [`SliderIndicator`](../base/primitives/slider.md) | The groove, and the box every pointer position is measured against |
 | [`SliderThumb`](../base/primitives/slider.md) | The knob; the shell gives it a place, you give it a look |
 
-All four slider parts take the same `SliderStateHandle`, and all four are needed — a slider with no `SliderIndicator` cannot be moved at all.
+All four slider parts take the same `SliderState`, and all four are needed — a slider with no `SliderIndicator` cannot be moved at all.
 
 ### Text editing
 
@@ -257,7 +289,7 @@ Each is created once — in `init` or an event handler, never in `render` — an
 
 `on(...)` replaces the handler for that event rather than adding a second one, and answers whether there was one before.
 
-#### `InputStateHandle`
+#### `InputState`
 
 From `InputState.new(options?)`, where `options` is `{ placeholder?: string, value?: string }`.
 
@@ -272,7 +304,7 @@ From `InputState.new(options?)`, where `options` is `{ placeholder?: string, val
 | `set_masked(masked: boolean): void` | Whether the text is drawn as a password |
 | `set_loading(loading: boolean): void` | Whether the field shows its loading state |
 
-#### `TextareaStateHandle`
+#### `TextareaState`
 
 From `TextareaState.new(options?)`, where `options` is `{ placeholder?: string, value?: string, rows?: number }`.
 
@@ -285,7 +317,7 @@ From `TextareaState.new(options?)`, where `options` is `{ placeholder?: string, 
 | `set_auto_grow(min_rows: number, max_rows: number): void` | Grows with its content between the two |
 | `set_soft_wrap(wrap: boolean): void` | Whether long lines wrap |
 
-#### `SliderStateHandle`
+#### `SliderState`
 
 From `SliderState.new(options?)`, where `options` is `{ min?, max?, step?, scale?: "linear" | "logarithmic", value?: SliderValue }`. The defaults are `0..100` in steps of `1`, starting at `min`. A `"logarithmic"` scale needs a `min` above zero.
 
@@ -298,7 +330,7 @@ From `SliderState.new(options?)`, where `options` is `{ min?, max?, step?, scale
 | `step_value(): number` | The step |
 | `on(event, handler): boolean` | `"change"` while dragging or `"release"` at the end; handler `(value, cx)` |
 
-#### `OtpStateHandle`
+#### `OtpState`
 
 From `OtpState.new(length, options?)`, where `options` is `{ value?: string, masked?: boolean }`. The length is fixed at creation.
 
@@ -312,7 +344,7 @@ From `OtpState.new(length, options?)`, where `options` is `{ value?: string, mas
 | `focus(): void` | Moves the keyboard into it |
 | `on(event, handler): boolean` | `"change"`, `"focus"` or `"blur"`, handler `(event, cx)` |
 
-#### `VirtualListScrollHandleHandle`
+#### `VirtualListScrollHandle`
 
 From `VirtualListScrollHandle.new()`, handed to a list with `track_scroll(handle)`.
 
@@ -321,27 +353,19 @@ From `VirtualListScrollHandle.new()`, handed to a list with `track_scroll(handle
 | `scroll_to_item(index: number, strategy?): void` | Puts an item on screen before the next frame; `strategy` is `"top"` (default) or `"center"` |
 | `scroll_to_bottom(): void` | Scrolls to the end |
 
-#### `FocusHandleHandle`
-
-From `cx.focus_handle()`, handed to an element with `track_focus(handle)`.
-
-| Method | What it does |
-| --- | --- |
-| `focus(): void` | Moves the keyboard onto the element tracking it |
-| `is_focused(): boolean` | Whether that element currently has it |
-
 ### Theme
 
 | Name | What it is |
 | --- | --- |
 | `set_theme(theme)` | Replaces `gpui-base`'s active semantic tokens with an application-owned theme |
+| `ColorToken` | The semantic color names defined by the installed palette |
 | `Theme` | What `cx.theme()` answers: the semantic tokens plus `appearance` and `is_dark` |
 | `SemanticThemeTokens` | `colors`, `spacing`, `radius` |
 | `ColorTokens` | One `Color` per semantic role |
 | `SpacingTokens` | `xxs` `xs` `sm` `md` `lg` `xl` `xxl` |
 | `RadiusTokens` | `none` `sm` `md` `lg` `xl` `full` |
 
-Reading the theme is `cx.theme()`. Replacing the whole palette is an application-level act with no context to speak of, which is why `set_theme` is a free function.
+Reading the theme is `cx.theme()`. `set_theme` remains in `gpui-base` because the theme belongs to that layer. Mutation still requires a live host call and is legal only from an event handler or task, never from `render` or layout.
 
 ### Other types
 
@@ -351,7 +375,6 @@ Reading the theme is `cx.theme()`. Replacing the whole palette is an application
 | `ScrollbarMode` | `"scrolling"`, `"hover"` or `"always"` |
 | `ItemRange` | A virtual list's visible items, as a half-open `[start, end)` |
 | `SliderValue` | A number, or `[start, end]` for a range slider |
-| `PopupType`, `DatePickerType`, `ScrollbarType` | The factory shapes of the three whose constructor is not `new(id)`: `Popup.new(id, trigger)`, `DatePicker.new(id, focus_handle)`, and `Scrollbar`'s three entry points |
 
 ### Composition patterns
 
@@ -572,7 +595,7 @@ Each takes a function that receives a detached element to collect styles on; its
 
 Everything else on an element is a style. There are two families, and they never overlap:
 
-- **59 methods that take an argument**, bound by hand: the size, padding, margin, position, flex, border, radius and paint families. Which length type each accepts follows its Rust signature, so `.p("auto")` is a type error for the same reason it throws at run time.
-- **3,143 no-argument methods**, generated from GPUI's reflection table with no maintenance at all: `flex_col`, `items_center`, `gap_2`, `rounded_md`, `text_sm`, `size_full`, `truncate` and the rest of the family. The figure moves when GPUI moves; `gpui-shell types` prints the one for your build.
+- **Methods that take an argument**, bound by hand: the size, padding, margin, position, flex, border, radius and paint families. Which length type each accepts follows its Rust signature, so `.p("auto")` is a type error for the same reason it throws at run time.
+- **No-argument methods**, generated from GPUI's reflection table: `flex_col`, `items_center`, `gap_2`, `rounded_md`, `text_sm`, `size_full`, `truncate` and the rest. The generated declarations are the inventory for the GPUI version in your build.
 
 Both are covered in [Styling](./styling.md), along with the length and color grammars and the tokens the palette defines.

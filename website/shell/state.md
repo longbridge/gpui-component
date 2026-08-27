@@ -26,10 +26,10 @@ export default class Counter extends View {
 
 `init` runs once, when the view is created. It is where state that survives frames is set up — plain fields, and any [retained entity](#retained-state) the view needs.
 
-`render` **returns exactly one element**, and runs when the view has been invalidated rather than on every frame — see [When `render` runs](#when-render-runs). Returning something that is not an element built with `gpui` fails immediately:
+`render` **returns one element, retained `Entity` or string**, and runs when the view has been invalidated rather than on every frame — see [When `render` runs](#when-render-runs). Returning anything else fails immediately:
 
 ```text
-render(cx) must return an element built with gpui
+render(cx) must return an element, an Entity, or a string
 ```
 
 `main.js` must `export default` a view class. The host constructs one instance and mounts it as the window's root view; a module whose default export is not a class is refused with a message saying so.
@@ -83,11 +83,11 @@ Three consequences worth holding on to:
 
 **A failed `render` does not destroy the interface.** A snapshot is published only after `render` returns successfully, so a script that throws leaves the previous description — and the handlers registered with it — exactly as they were. The failure appears as a banner **over** the interface that still works, saying it is one version behind and offering the detail for pasting somewhere; you keep your scroll position and your focus. A view whose very first render failed has nothing to keep, and gets the full error surface instead. Either way the failing `render` is not re-run until something invalidates the view again.
 
-## Phases
+## Scope phases
 
 Every call from Rust into the script opens a scope carrying a **phase**, and the phase decides what the `cx` for that call may do.
 
-| Phase | When | May | May not |
+| `ScopePhase` | When | May | May not |
 | --- | --- | --- | --- |
 | `render` | Building an element tree | Read state, build elements, register callbacks | `notify`, open overlays, create retained state |
 | `event` | Handling a click or a change | Everything | Block |

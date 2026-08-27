@@ -9,7 +9,11 @@
 // It owns no state. The board lives in a Rust `Entity<Market>`, imported from
 // the host module the story registered before the runtime started:
 //
-//   import { quotes, ticks, watch, watch_all } from "market";
+//   import { quotes, ticks, watch, watch_all, summary } from "market";
+//
+// `summary()` is the asynchronous one: it answers with a promise and its work
+// runs off the main thread, which is visible here as the board continuing to
+// tick while it is in flight.
 //
 // Twenty rows of six cells, rebuilt from scratch every time a price moves —
 // twenty times a second with the default feed. The counters under the panels
@@ -17,7 +21,13 @@
 
 import { View } from "gpui";
 import { h_flex, v_flex } from "gpui-base";
-import { quotes as readQuotes, ticks as readTicks, watch, watch_all } from "market";
+import {
+  quotes as readQuotes,
+  summary as readSummary,
+  ticks as readTicks,
+  watch,
+  watch_all,
+} from "market";
 /** @import { Quote } from "market" */
 import {
   ROW,
@@ -107,12 +117,18 @@ export default class QuoteBoard extends View {
       .items_center()
       .justify_between()
       .gap(ROW.inset)
-      // The heading already carries "N / M watched". Only the empty case says
-      // something it does not.
-      .child(muted(watched === 0 ? "Nothing on the watchlist" : "", cx))
+      // One line, showing whichever of the two is worth saying: the summary
+      // once it has been asked for, and otherwise the empty watchlist — which
+      // is the only thing the heading's "N / M watched" does not already say.
+      .child(muted(this.summaryLine(watched), cx))
       .child(
         h_flex()
           .gap(SPACE.xs)
+          .child(
+            action("summary", "Summary", () => this.loadSummary(cx), cx, {
+              disabled: this.loading === true,
+            }),
+          )
           .child(
             action("watch-all", "Watch all", () => watch_all(true), cx, {
               primary: true,
@@ -125,5 +141,42 @@ export default class QuoteBoard extends View {
             }),
           ),
       );
+  }
+
+  /**
+   * @param {number} watched
+   * @returns {string}
+   */
+  summaryLine(watched) {
+    if (this.loading) return "Reading the session…";
+    if (this.summary) {
+      const { leader, leader_percent, laggard, laggard_percent, average_percent } = this.summary;
+      return `${leader} ${leader_percent} · ${laggard} ${laggard_percent} · avg ${average_percent}`;
+    }
+    return watched === 0 ? "Nothing on the watchlist" : "";
+  }
+
+  /**
+   * `summary()` answers with a promise, so this returns immediately and the
+   * board keeps ticking while it is in flight — which is the whole reason that
+   * function is `async_function` on the Rust side rather than `function`.
+   *
+   * @param {import("gpui").Context} cx
+   */
+  loadSummary(cx) {
+    this.loading = true;
+    this.summary = null;
+    cx.notify();
+
+    cx.spawn(async (cx) => {
+      try {
+        this.summary = await readSummary();
+      } catch (error) {
+        this.summary = null;
+        console.error(`summary failed: ${error.message}`);
+      }
+      this.loading = false;
+      cx.notify();
+    });
   }
 }

@@ -112,7 +112,7 @@ gpui_shell::set_capabilities(
         .store(true),
 );
 gpui_shell::set_store_path(data_dir.join("store.json"));
-gpui_shell::export_modules(modules)?;
+gpui_shell::export_module(market_module(&market))?;
 ```
 
 三项的默认都是“什么都没有”：没有文件访问、没有存储位置、没有 host 模块。见 [Capabilities](./capabilities.md) 与 [Host Modules](./host-modules.md)。

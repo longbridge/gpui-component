@@ -10,7 +10,7 @@
 import { View } from "gpui";
 import { v_flex, h_flex, InputState } from "gpui-base";
 /** @import { AsyncContext, Context } from "gpui" */
-/** @import { InputStateHandle } from "gpui-base" */
+/** @import { InputState } from "gpui-base" */
 import { load, save } from "./storage.js";
 import confirmClear from "./confirm.js";
 import {
@@ -43,7 +43,7 @@ export default class TodoList extends View {
     // `View`'s constructor calls `init` from inside `super()`, so a field
     // declaration — even one with no initializer — would run afterwards and
     // write `undefined` over everything set here.
-    /** @type {InputStateHandle} */
+    /** @type {InputState} */
     this.draft = InputState.new({ placeholder: "What needs doing?" });
     // Enter is how a list like this is actually used; the Add button is for
     // the pointer, not the primary path.

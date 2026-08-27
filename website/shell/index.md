@@ -9,7 +9,7 @@ order: 1
 `gpui-shell` gives a Rust [GPUI](https://gpui.rs) application **JavaScript extension points**: the host builds the runtime and grants what a script may reach, and the script draws real interface inside the same process. It is built directly on [`gpui-base`](/base/), with [QuickJS](https://github.com/quickjs-ng/quickjs) running on the host's own thread. Rust keeps rendering, layout, text editing, virtualization, focus, overlays and every system capability; the script owns composition, presentation and business logic. A script can also be run on its own, which is how one is usually developed.
 
 ```js
-import { View, text } from "gpui";
+import { View } from "gpui";
 import { v_flex, Button } from "gpui-base";
 
 export default class Counter extends View {

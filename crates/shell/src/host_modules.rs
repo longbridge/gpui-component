@@ -26,22 +26,39 @@
 //! # Why an import rather than a lookup
 //!
 //! A registered module is resolved by the engine's module loader, so a host
-//! module is imported exactly like `gpui` or `path` is. The alternative — a
-//! `native("workspace")` call answering with a bag of functions — put every
-//! misspelling on the run-time path, and left the type declarations unable to
-//! say anything: only the host knows what it registered, so the best a
-//! generated `.d.ts` could offer was `Record<string, (...args) => any>`.
+//! module is imported exactly like `gpui` or `path` is. The obvious alternative
+//! is a lookup — `native("workspace")` answering with a bag of functions — and
+//! it loses twice, both times on *when* a mistake surfaces.
 //!
-//! As an import, a wrong export name fails while the module graph is linked,
-//! before a line of the application runs, and [`crate::typings`] can emit the
-//! names from this registry directly.
+//! A lookup puts every misspelled export on the run-time path: the call
+//! type-checks, loads, renders, and throws on the frame that first reaches it.
+//! An import fails while the module graph is linked, before a line of the
+//! application runs.
+//!
+//! A lookup also leaves the type declarations with nothing to say. Only the
+//! host knows what it registered, so the best a generated `.d.ts` can offer for
+//! `native(name)` is `Record<string, (...args) => any>`. A module specifier is
+//! a name declarations can be written against, so the generated ones name the
+//! exports in this registry directly.
 //!
 //! What the import does *not* freeze is the function behind the name. Every
-//! export is a forwarding stub that resolves through [`dispatch`] on each call,
+//! export is a forwarding stub that resolves through the registry on each call,
 //! so revoking a module still takes effect immediately — a script holding an
 //! imported function gets a refusal rather than the withdrawn closure. Only the
 //! *set of names* is fixed, at the moment the importing module is linked, which
 //! is why a host registers before it loads an application.
+//!
+//! # Why an asynchronous function is two halves
+//!
+//! [`HostModule::async_function`] takes a closure that runs on the main thread
+//! and returns a `Send` future that does not. The script gets a promise, and
+//! slow work — a request, a query, a large file — stops holding the thread that
+//! renders.
+//!
+//! The split is not a concession to `Send`. It is the rule below made physical:
+//! the synchronous half may read host state because it runs inside the caller's
+//! scope, and the future cannot re-enter the engine because on another thread
+//! there is no `Ctx` to re-enter it with.
 //!
 //! # Why the boundary is plain data
 //!
@@ -86,7 +103,9 @@
 //! names in [`RESERVED_SPECIFIERS`] are refused at registration, where the
 //! author can still see the sentence.
 
-use std::{cell::Cell, collections::BTreeMap, fmt, fmt::Write as _, rc::Rc};
+use std::{
+    cell::Cell, collections::BTreeMap, fmt, fmt::Write as _, future::Future, pin::Pin, rc::Rc,
+};
 
 /// A value crossing the host boundary, in either direction.
 ///
@@ -375,12 +394,28 @@ pub type HostResult = Result<HostValue, HostError>;
 /// call — see [`modules`] — and a boxed closure cannot be shared that way.
 type HostFunction = Rc<dyn Fn(&HostArguments) -> HostResult>;
 
+/// The work an asynchronous host function hands back.
+///
+/// `Send` because it is driven on the background executor, and `'static`
+/// because it outlives the call that produced it. Both fall out of the split
+/// described on [`HostModule::async_function`]: whatever the future needs from
+/// the `App` was copied out before it was built.
+pub type HostFuture = Pin<Box<dyn Future<Output = HostResult> + Send>>;
+
+/// Builds one asynchronous call. Fallible so that argument checking can refuse
+/// before any work is scheduled.
+type HostAsyncFunction = Rc<dyn Fn(&HostArguments) -> Result<HostFuture, HostError>>;
+
 /// One registered module: a name and the functions under it.
+#[derive(Clone)]
 pub struct HostModule {
     name: String,
     /// Sorted, so the "it provides: …" line in a diagnostic reads the same on
     /// every run regardless of registration order.
     functions: BTreeMap<String, HostFunction>,
+    /// Sorted alongside `functions`, and disjoint from it: one name is either
+    /// synchronous or asynchronous, never both.
+    async_functions: BTreeMap<String, HostAsyncFunction>,
     /// The module's TypeScript face, if the host wrote one. See
     /// [`HostModule::declarations`].
     declarations: Option<String>,
@@ -397,6 +432,7 @@ impl HostModule {
         Self {
             name: name.into(),
             functions: BTreeMap::new(),
+            async_functions: BTreeMap::new(),
             declarations: None,
         }
     }
@@ -415,7 +451,83 @@ impl HostModule {
         name: impl Into<String>,
         body: impl Fn(&HostArguments) -> HostResult + 'static,
     ) -> Self {
-        self.functions.insert(name.into(), Rc::new(body));
+        let name = name.into();
+        self.async_functions.remove(&name);
+        self.functions.insert(name, Rc::new(body));
+        self
+    }
+
+    /// Registers one function whose work runs off the main thread.
+    ///
+    /// The script gets a promise. What it awaits is driven on GPUI's background
+    /// executor, so a slow call — a request, a query, a large file — does not
+    /// hold the thread that renders.
+    ///
+    /// ```no_run
+    /// # use gpui_shell::{HostModule, HostValue};
+    /// HostModule::new("db")
+    ///     .declarations("export function query(sql: string): Promise<unknown[]>;")
+    ///     .async_function("query", |arguments| {
+    ///         // Synchronous half: on the main thread, so it may read host
+    ///         // state, and refusing here costs nothing.
+    ///         let sql = arguments.string(0)?.to_owned();
+    ///
+    ///         // Asynchronous half: on the background executor.
+    ///         Ok(Box::pin(async move {
+    ///             let _ = sql;
+    ///             Ok(HostValue::Null)
+    ///         }))
+    ///     });
+    /// ```
+    ///
+    /// # The two halves, and why the split is the design
+    ///
+    /// The closure runs on the main thread, inside the calling script's scope,
+    /// and returns the future. So the *arguments* can be checked against host
+    /// state — [`crate::with_current_app`] works here, exactly as it does in a
+    /// synchronous function — and anything the work needs is copied out before
+    /// the future is built.
+    ///
+    /// The future is then `Send + 'static` and driven on another thread, where
+    /// there is no `App` and no `Ctx` to reach for. That is not a restriction
+    /// bolted on: it is the same rule the module header states for synchronous
+    /// functions — a host function may not re-enter the engine — made physical.
+    /// A synchronous body is held to it by a runtime guard; an asynchronous one
+    /// simply cannot express the violation.
+    ///
+    /// # Cancellation
+    ///
+    /// If the view that made the call goes away, or its application is
+    /// reloaded, the promise stays pending for ever and the script's
+    /// continuation never runs. No error is invented for code that was asked to
+    /// stop — the same answer `cx.sleep` gives.
+    ///
+    /// # Declaring it
+    ///
+    /// Write the return type as a `Promise` in [`Self::declarations`]. The
+    /// registry checks that the *names* on both sides agree; it does not read
+    /// signatures, so nothing stops a declaration from omitting the `Promise`
+    /// and nothing catches it later either.
+    pub fn async_function<F>(
+        mut self,
+        name: impl Into<String>,
+        body: impl Fn(&HostArguments) -> Result<F, HostError> + 'static,
+    ) -> Self
+    where
+        F: Future<Output = HostResult> + Send + 'static,
+    {
+        let name = name.into();
+        // One name, one kind. Registering over the other table rather than
+        // beside it keeps `function_names` a single list and stops a call
+        // having to decide which of two entries it meant.
+        self.functions.remove(&name);
+        self.async_functions.insert(
+            name,
+            Rc::new(move |arguments| {
+                let future = body(arguments)?;
+                Ok(Box::pin(future) as HostFuture)
+            }),
+        );
         self
     }
 
@@ -425,25 +537,23 @@ impl HostModule {
     /// the exports:
     ///
     /// ```no_run
-    /// # use gpui_shell::{HostModules, HostValue};
-    /// # let mut modules = HostModules::new();
-    /// modules.register("market", |module| {
-    ///     module.function("quotes", |_| Ok(HostValue::Null));
-    ///     module.declarations(
+    /// # use gpui_shell::{HostModule, HostValue};
+    /// HostModule::new("market")
+    ///     .function("quotes", |_| Ok(HostValue::Null))
+    ///     .declarations(
     ///         r#"
     ///         export interface Quote { symbol: string; last: string }
     ///         export function quotes(): Quote[];
     ///         "#,
     ///     );
-    /// });
     /// ```
     ///
-    /// Writing it here rather than in a `.d.ts` beside the script is what makes
-    /// the two halves one thing. They used to be two files in two languages
-    /// with nothing between them, and [`HostModules::validate`] now checks that
-    /// every registered function is declared and every declared function is
-    /// registered — so renaming one half fails at start-up instead of at the
-    /// call site.
+    /// Writing it here rather than in a `.d.ts` beside the script is what keeps
+    /// the two halves one thing. A `.d.ts` is a second file, in a second
+    /// language, with nothing holding it to the registry; here, [`Self::validate`]
+    /// checks that every registered function is declared and every declared
+    /// function is registered, so renaming one half fails at start-up instead of
+    /// at the call site.
     ///
     /// Declaring nothing is allowed and costs only precision: an undeclared
     /// module is emitted with `(...args: any[]) => any` signatures, which still
@@ -458,12 +568,54 @@ impl HostModule {
         self.declarations.as_deref()
     }
 
+    /// Every name this module exports, synchronous and asynchronous together,
+    /// sorted.
+    ///
+    /// One list because the script sees one list: both kinds are `export const`
+    /// in the generated module, and which is which is the return type's
+    /// business, not the import's.
     pub fn function_names(&self) -> Vec<&str> {
-        self.functions.keys().map(String::as_str).collect()
+        let mut names: Vec<&str> = self
+            .functions
+            .keys()
+            .chain(self.async_functions.keys())
+            .map(String::as_str)
+            .collect();
+        names.sort_unstable();
+        names
     }
 
     pub fn has(&self, function: &str) -> bool {
-        self.functions.contains_key(function)
+        self.functions.contains_key(function) || self.async_functions.contains_key(function)
+    }
+
+    /// Whether this name answers with a promise.
+    ///
+    /// Read by the engine when it builds the binding, because the two return
+    /// different things to the script and the difference cannot be deferred to
+    /// call time: a promise borrows the context lifetime.
+    pub fn is_async(&self, function: &str) -> bool {
+        self.async_functions.contains_key(function)
+    }
+
+    /// Refuses a name the runtime owns, and a TypeScript face that disagrees
+    /// with what was registered.
+    ///
+    /// Called by [`crate::export_module`] and [`crate::policy::Policy::with_host_module`],
+    /// which is where a host still has somewhere to put the sentence. Building
+    /// a module is infallible on purpose: a builder that returned a `Result`
+    /// from every step could not be a chain.
+    pub fn validate(&self) -> Result<(), HostError> {
+        if RESERVED_SPECIFIERS.contains(&self.name.as_str()) {
+            return Err(HostError::new(format!(
+                "`{}` is one of the runtime's own module names and cannot be \
+                 registered: a script importing it reaches the runtime, never this \
+                 module. The reserved names are: {}",
+                self.name,
+                list(RESERVED_SPECIFIERS)
+            )));
+        }
+        self.check_declarations()
     }
 
     /// Compares the declared exports with the registered ones.
@@ -520,17 +672,37 @@ impl HostModule {
         Err(HostError::new(message))
     }
 
-    /// Calls one function, reporting an unknown name against what this module
-    /// actually provides.
+    /// Calls one synchronous function, reporting an unknown name against what
+    /// this module actually provides.
     pub fn call(&self, function: &str, arguments: &HostArguments) -> HostResult {
         let Some(body) = self.functions.get(function) else {
-            return Err(HostError::new(format!(
-                "host module `{}` has no function `{function}`; it provides: {}",
-                self.name,
-                list(&self.function_names())
-            )));
+            return Err(self.no_such_function(function));
         };
         body(arguments)
+    }
+
+    /// Starts one asynchronous call, returning the work to be driven.
+    ///
+    /// The argument checking inside `body` happens here, on the main thread and
+    /// inside the caller's scope, which is why this is fallible separately from
+    /// the future it returns.
+    pub fn begin(
+        &self,
+        function: &str,
+        arguments: &HostArguments,
+    ) -> Result<HostFuture, HostError> {
+        let Some(body) = self.async_functions.get(function) else {
+            return Err(self.no_such_function(function));
+        };
+        body(arguments)
+    }
+
+    fn no_such_function(&self, function: &str) -> HostError {
+        HostError::new(format!(
+            "host module `{}` has no function `{function}`; it provides: {}",
+            self.name,
+            list(&self.function_names())
+        ))
     }
 }
 
@@ -545,6 +717,7 @@ pub const RESERVED_SPECIFIERS: &[&str] = &[
     // The runtime's own modules.
     "gpui",
     "gpui-base",
+    "gpui-shell",
     "gpui-fps",
     // The Standard Runtime.
     "buffer",
@@ -574,11 +747,15 @@ fn next_generation() -> u64 {
 
 /// Every host module a host has granted.
 ///
+/// Crate-internal: a host builds [`HostModule`]s and hands them over one at a
+/// time, through [`crate::export_module`] or [`crate::Policy::with_host_module`].
+/// Registering several at once is rare enough that a second public type for it
+/// would cost more than it saved.
+///
 /// Empty by default, which denies everything.
-pub struct HostModules {
+#[derive(Clone)]
+pub(crate) struct HostModules {
     modules: BTreeMap<String, HostModule>,
-    /// Names that were refused, reported together by [`Self::validate`].
-    rejected: Vec<String>,
     generation: u64,
 }
 
@@ -586,14 +763,13 @@ impl Default for HostModules {
     fn default() -> Self {
         Self {
             modules: BTreeMap::new(),
-            rejected: Vec::new(),
             generation: next_generation(),
         }
     }
 }
 
 impl HostModules {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
@@ -601,81 +777,48 @@ impl HostModules {
     /// thread.
     ///
     /// The engine caches a linked module by its resolved name, for the lifetime
-    /// of the runtime — so two plugins importing `workspace`, or one host
-    /// re-registering after a change, would otherwise share whichever module
+    /// of the runtime — so two plugins importing `workspace`, or one host adding
+    /// a module after another was linked, would otherwise share whichever module
     /// was linked first, exports and all. Tagging the resolved name with this
-    /// makes each registry a distinct module as far as that cache is concerned,
-    /// the same trick a reload uses to re-read an application's own files.
+    /// makes each version of the registry a distinct module as far as that cache
+    /// is concerned, the same trick a reload uses to re-read an application's
+    /// own files.
     pub(crate) fn generation(&self) -> u64 {
         self.generation
     }
 
-    /// Registers a module, building its functions through `build`.
+    /// Adds one module, and takes a new identity.
+    ///
+    /// The identity changes because the set of importable names just did: a
+    /// module linked against the old set must not be served for the new one.
     ///
     /// Registering the same name twice replaces the earlier module rather than
     /// merging into it: two registrations of one name are a mistake, and
     /// merging would hide it behind a module that half works.
-    ///
-    /// A name in [`RESERVED_SPECIFIERS`] is refused and reported by
-    /// [`Self::validate`], which [`crate::export_modules`] calls. Refusing here
-    /// and reporting there is what keeps this a builder: the host writes the
-    /// list it means, and hears about every bad name at once rather than
-    /// unwrapping each `register` call.
-    pub fn register(
-        &mut self,
-        name: impl Into<String>,
-        build: impl FnOnce(&mut HostModule),
-    ) -> &mut Self {
-        let name = name.into();
-        if RESERVED_SPECIFIERS.contains(&name.as_str()) {
-            self.rejected.push(name);
-            return self;
-        }
-        let mut module = HostModule::new(name.clone());
-        build(&mut module);
-        self.modules.insert(name, module);
-        self
+    pub(crate) fn insert(&mut self, module: HostModule) {
+        self.modules.insert(module.name.clone(), module);
+        self.generation = next_generation();
     }
 
-    /// Reports every name [`Self::register`] refused, and every module whose
-    /// TypeScript face disagrees with what it registered.
-    ///
-    /// The second check is the reason [`HostModule::declarations`] lives in
-    /// Rust. Two files describing one boundary drift, and the drift shows up as
-    /// an editor that completes a function the host deleted. Here it is a
-    /// sentence at start-up.
-    pub fn validate(&self) -> Result<(), HostError> {
-        if !self.rejected.is_empty() {
-            let names: Vec<&str> = self.rejected.iter().map(String::as_str).collect();
-            return Err(HostError::new(format!(
-                "these module names belong to the runtime and cannot be registered: {}. \
-                 The reserved names are: {}",
-                list(&names),
-                list(RESERVED_SPECIFIERS)
-            )));
-        }
-
-        for module in self.modules.values() {
-            module.check_declarations()?;
-        }
-        Ok(())
-    }
-
-    pub fn is_empty(&self) -> bool {
+    /// Whether this host has granted anything at all. Read by the tests that
+    /// check a refusal left nothing installed; `get` asks the map directly, so
+    /// that its two failure sentences stay side by side.
+    #[cfg(test)]
+    pub(crate) fn is_empty(&self) -> bool {
         self.modules.is_empty()
     }
 
-    pub fn module_names(&self) -> Vec<&str> {
+    pub(crate) fn module_names(&self) -> Vec<&str> {
         self.modules.keys().map(String::as_str).collect()
     }
 
     /// Looks a module up, reporting a miss against the granted set.
     ///
     /// The two failures are different facts and get different sentences: a host
-    /// that granted nothing is a host that has not wired native access up, and
-    /// telling that author "unknown module" would send them hunting for a typo
-    /// that is not there.
-    pub fn get(&self, name: &str) -> Result<&HostModule, HostError> {
+    /// that granted nothing is a host that has not wired its extension surface
+    /// up, and telling that author "unknown module" would send them hunting for
+    /// a typo that is not there.
+    pub(crate) fn get(&self, name: &str) -> Result<&HostModule, HostError> {
         if let Some(module) = self.modules.get(name) {
             return Ok(module);
         }
@@ -684,7 +827,7 @@ impl HostModules {
             format!(
                 "host module `{name}` is not available: this host registered none. \
                  Host modules are granted by the embedding application, with \
-                 gpui_shell::export_modules(...)."
+                 gpui_shell::export_module(...)."
             )
         } else {
             format!(
@@ -694,9 +837,14 @@ impl HostModules {
         }))
     }
 
-    /// Resolves and calls in one step, for a host driving the registry
-    /// directly. The engine goes through its guarded dispatcher instead.
-    pub fn call(&self, module: &str, function: &str, arguments: &HostArguments) -> HostResult {
+    /// Resolves and calls in one step. Reached through [`dispatch`], which adds
+    /// the re-entry guard.
+    pub(crate) fn call(
+        &self,
+        module: &str,
+        function: &str,
+        arguments: &HostArguments,
+    ) -> HostResult {
         self.get(module)?.call(function, arguments)
     }
 }
@@ -717,22 +865,22 @@ thread_local! {
     static IN_CALL: Cell<bool> = const { Cell::new(false) };
 }
 
-/// Installs the modules a script may reach, replacing any previous set.
+/// Adds one module to the set a script may import, replacing a same-named one.
 ///
 /// Must be called before the application is loaded, because a script's imports
-/// are resolved against this registry while its module graph is linked. What
-/// happens *after* that is unchanged from the lookup this replaced: an export
-/// forwards through [`dispatch`] on every call, so revoking a module takes
-/// effect on the next call rather than on the next restart.
-pub(crate) fn set_modules(modules: HostModules) -> Result<(), HostError> {
-    modules.validate()?;
-    crate::policy::update_default(|policy| policy.with_host_modules(modules));
+/// are resolved against this registry while its module graph is linked. Only
+/// the set of names is fixed at that point: an export forwards through
+/// [`dispatch`] on every call, so revoking a module takes effect on the next
+/// call rather than on the next restart.
+pub(crate) fn add_module(module: HostModule) -> Result<(), HostError> {
+    module.validate()?;
+    crate::policy::update_default(move |policy| policy.with_module_unchecked(module));
     Ok(())
 }
 
 /// Removes every installed module.
 ///
-/// A host closure typically captures a GPUI entity handle — that is how a native
+/// A host closure typically captures a GPUI entity handle — that is how a host
 /// function reaches host state at all — so the registry keeps those handles
 /// alive for as long as it holds the closure. A host that goes away without
 /// clearing leaves them registered, which GPUI reports as a leaked handle at
@@ -742,8 +890,7 @@ pub(crate) fn set_modules(modules: HostModules) -> Result<(), HostError> {
 /// So clearing is the installer's job, in the same place it would drop anything
 /// else it owns.
 pub(crate) fn clear_modules() {
-    // An empty registry rejects nothing, so this cannot fail.
-    let _ = set_modules(HostModules::default());
+    crate::policy::update_default(|policy| policy.without_host_modules());
 }
 
 /// The registry the code now running may reach.
@@ -774,6 +921,30 @@ pub(crate) fn dispatch(module: &str, function: &str, arguments: &HostArguments) 
     registry.call(module, function, arguments)
 }
 
+/// Starts an asynchronous call, under the same guard.
+///
+/// The guard covers the synchronous half only — checking the arguments and
+/// building the future. The future itself is driven on another thread, where
+/// there is no engine to re-enter, so nothing needs to be held across it. That
+/// is also why a nested *asynchronous* call is not a special case: the body
+/// that would make one is not running under this guard by the time it could.
+pub(crate) fn dispatch_async(
+    module: &str,
+    function: &str,
+    arguments: &HostArguments,
+) -> Result<HostFuture, HostError> {
+    if IN_CALL.with(Cell::get) {
+        return Err(HostError::new(format!(
+            "`{module}.{function}` was reached from inside another host call: \
+             a host function may not call back into the script engine"
+        )));
+    }
+
+    let registry = modules();
+    let _guard = CallGuard::enter();
+    registry.get(module)?.begin(function, arguments)
+}
+
 /// Clears the depth guard however the call leaves — returned, failed, or
 /// unwound. A flag left set would deny every later call.
 struct CallGuard;
@@ -797,20 +968,20 @@ mod tests {
 
     fn registry() -> HostModules {
         let mut modules = HostModules::new();
-        modules.register("workspace", |module| {
-            module.function("project_name", |_| Ok(HostValue::from("gpui-component")));
-            module.function("open_count", |arguments| {
-                Ok(HostValue::from(arguments.len()))
-            });
-            module.function("echo", |arguments| Ok(arguments.value(0)?.clone()));
-            module.function("close", |arguments| {
-                let id = arguments.integer(0)?;
-                Err(HostError::new(format!("tab {id} is already closed")))
-            });
-        });
-        modules.register("editor", |module| {
-            module.function("line_count", |_| Ok(HostValue::from(12)));
-        });
+        modules.insert(
+            HostModule::new("workspace")
+                .function("project_name", |_| Ok(HostValue::from("gpui-component")))
+                .function("open_count", |arguments| {
+                    Ok(HostValue::from(arguments.len()))
+                })
+                .function("echo", |arguments| Ok(arguments.value(0)?.clone()))
+                .function("close", |arguments| {
+                    let id = arguments.integer(0)?;
+                    Err(HostError::new(format!("tab {id} is already closed")))
+                }),
+        );
+        modules
+            .insert(HostModule::new("editor").function("line_count", |_| Ok(HostValue::from(12))));
         modules
     }
 
@@ -852,7 +1023,7 @@ mod tests {
             .call("workspace", "project_name", &HostArguments::default())
             .unwrap_err();
         assert!(error.message().contains("this host registered none"));
-        assert!(error.message().contains("export_modules"));
+        assert!(error.message().contains("export_module"));
     }
 
     #[test]
@@ -944,32 +1115,24 @@ mod tests {
     }
 
     #[test]
-    fn a_reserved_name_is_refused_and_reported_by_name() {
-        let mut modules = HostModules::new();
-        modules.register("market", |module| {
-            module.function("quotes", |_| Ok(HostValue::Null));
-        });
-        modules.register("path", |module| {
-            module.function("join", |_| Ok(HostValue::Null));
-        });
-        modules.register("gpui", |module| {
-            module.function("div", |_| Ok(HostValue::Null));
-        });
-
-        // The good one still registered; the reserved ones did not.
-        assert_eq!(modules.module_names(), vec!["market"]);
-
-        let error = modules.validate().unwrap_err();
+    fn a_reserved_name_is_refused_and_says_who_owns_it() {
         assert!(
-            error.message().contains("path, gpui"),
+            HostModule::new("market")
+                .function("quotes", |_| Ok(HostValue::Null))
+                .validate()
+                .is_ok()
+        );
+
+        let error = HostModule::new("path")
+            .function("join", |_| Ok(HostValue::Null))
+            .validate()
+            .unwrap_err();
+        assert!(
+            error.message().contains("the runtime's own module names"),
             "{}",
             error.message()
         );
-        assert!(
-            error.message().contains("belong to the runtime"),
-            "{}",
-            error.message()
-        );
+        assert!(error.message().contains("websocket"), "{}", error.message());
     }
 
     /// Two registries are two modules to the engine's module cache, which is
@@ -982,40 +1145,39 @@ mod tests {
     }
 
     #[test]
-    fn installing_a_reserved_name_fails_rather_than_silently_dropping_it() {
-        let mut modules = HostModules::new();
-        modules.register("console", |module| {
-            module.function("log", |_| Ok(HostValue::Null));
-        });
-        assert!(set_modules(modules).is_err());
+    fn exporting_a_reserved_name_fails_rather_than_silently_dropping_it() {
+        assert!(
+            add_module(HostModule::new("console").function("log", |_| Ok(HostValue::Null)))
+                .is_err()
+        );
+        assert!(
+            modules().is_empty(),
+            "the refused module must not be installed"
+        );
     }
 
     #[test]
     fn a_declared_face_that_matches_the_registry_passes() {
-        let mut modules = HostModules::new();
-        modules.register("market", |module| {
-            module.function("quotes", |_| Ok(HostValue::Null));
-            module.function("watch", |_| Ok(HostValue::Null));
-            module.declarations(
+        let module = HostModule::new("market")
+            .function("quotes", |_| Ok(HostValue::Null))
+            .function("watch", |_| Ok(HostValue::Null))
+            .declarations(
                 "export interface Quote { symbol: string }\n\
                  export function quotes(): Quote[];\n\
                  export function watch(symbol: string): boolean;\n",
             );
-        });
-        assert!(modules.validate().is_ok());
+        assert!(module.validate().is_ok());
     }
 
     /// The drift this check exists for: the host renamed a function and the
     /// declarations still describe the old one.
     #[test]
     fn a_declared_face_that_drifts_names_both_sides() {
-        let mut modules = HostModules::new();
-        modules.register("market", |module| {
-            module.function("quotes", |_| Ok(HostValue::Null));
-            module.declarations("export function prices(): unknown[];\n");
-        });
-
-        let error = modules.validate().unwrap_err();
+        let error = HostModule::new("market")
+            .function("quotes", |_| Ok(HostValue::Null))
+            .declarations("export function prices(): unknown[];\n")
+            .validate()
+            .unwrap_err();
         assert!(
             error
                 .message()
@@ -1035,28 +1197,22 @@ mod tests {
     /// A helper type is not an export, and must not be read as a missing one.
     #[test]
     fn only_exported_functions_are_read_as_exports() {
-        let mut modules = HostModules::new();
-        modules.register("market", |module| {
-            module.function("quotes", |_| Ok(HostValue::Null));
-            module.declarations(
+        let module = HostModule::new("market")
+            .function("quotes", |_| Ok(HostValue::Null))
+            .declarations(
                 "// export function commented(): void;\n\
                  export interface Quote { symbol: string }\n\
                  type Row = Quote;\n\
                  export function quotes(): Quote[];\n",
             );
-        });
-        assert!(modules.validate().is_ok(), "{:?}", modules.validate());
+        assert!(module.validate().is_ok(), "{:?}", module.validate());
     }
 
     #[test]
     fn registering_a_name_twice_replaces_the_module() {
         let mut modules = HostModules::new();
-        modules.register("workspace", |module| {
-            module.function("first", |_| Ok(HostValue::Null));
-        });
-        modules.register("workspace", |module| {
-            module.function("second", |_| Ok(HostValue::Null));
-        });
+        modules.insert(HostModule::new("workspace").function("first", |_| Ok(HostValue::Null)));
+        modules.insert(HostModule::new("workspace").function("second", |_| Ok(HostValue::Null)));
 
         assert_eq!(
             modules.get("workspace").unwrap().function_names(),
@@ -1064,29 +1220,41 @@ mod tests {
         );
     }
 
+    /// Adding a module changes which names are importable, so the registry has
+    /// to become a different one as far as the engine's module cache is
+    /// concerned.
+    #[test]
+    fn adding_a_module_takes_a_new_generation() {
+        let mut modules = HostModules::new();
+        let before = modules.generation();
+        modules.insert(HostModule::new("workspace"));
+        assert_ne!(modules.generation(), before);
+    }
+
     #[test]
     fn the_installed_registry_is_what_dispatch_calls() {
-        set_modules(registry()).unwrap();
+        add_module(HostModule::new("editor").function("line_count", |_| Ok(HostValue::from(12))))
+            .unwrap();
 
         assert_eq!(
             dispatch("editor", "line_count", &HostArguments::default()).unwrap(),
             HostValue::Number(12.)
         );
 
-        set_modules(HostModules::new()).unwrap();
+        clear_modules();
         assert!(modules().is_empty());
     }
 
     #[test]
-    fn a_native_function_cannot_reach_a_second_one() {
-        let mut modules = HostModules::new();
-        modules.register("loop", |module| {
-            module.function("outer", |_| {
-                dispatch("loop", "inner", &HostArguments::default())
-            });
-            module.function("inner", |_| Ok(HostValue::Null));
-        });
-        set_modules(modules).unwrap();
+    fn a_host_function_cannot_reach_a_second_one() {
+        add_module(
+            HostModule::new("loop")
+                .function("outer", |_| {
+                    dispatch("loop", "inner", &HostArguments::default())
+                })
+                .function("inner", |_| Ok(HostValue::Null)),
+        )
+        .unwrap();
 
         let error = dispatch("loop", "outer", &HostArguments::default()).unwrap_err();
         assert!(
@@ -1103,6 +1271,6 @@ mod tests {
             HostValue::Null
         );
 
-        set_modules(HostModules::new()).unwrap();
+        clear_modules();
     }
 }

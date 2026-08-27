@@ -72,7 +72,7 @@ use gpui_component::{
 use gpui_shell::Watcher;
 use gpui_shell::{
     RuntimeMetrics, ScriptView, ShellRoot, ShellRuntime,
-    host_modules::{HostError, HostModules, HostObject, HostValue},
+    host_modules::{HostError, HostModule, HostObject, HostValue},
 };
 
 use crate::section;
@@ -268,6 +268,19 @@ impl Market {
     /// round the same way. A price that reads 372.40 on the left and 372.4 on
     /// the right would make the comparison about formatting instead of about
     /// rendering.
+    /// The board as plain owned data, for work that runs off the main thread.
+    ///
+    /// An asynchronous host function's future cannot reach the `App`, so
+    /// whatever it needs is copied out while the synchronous half still can.
+    /// This is that copy, and it is deliberately the smallest one that answers
+    /// the question rather than the whole board.
+    fn movers(&self) -> Vec<(String, f32)> {
+        self.quotes
+            .iter()
+            .map(|quote| (quote.symbol.to_string(), quote.change_percent()))
+            .collect()
+    }
+
     fn to_host_value(&self) -> HostValue {
         HostValue::Array(
             self.quotes
@@ -422,32 +435,30 @@ fn motion_script_directory() -> PathBuf {
 /// Registering an empty set — the default — would leave `import … from
 /// "market"` failing with a message saying this host granted none.
 fn install_host_modules(market: &Entity<Market>) {
-    gpui_shell::export_modules(host_modules(market))
-        .expect("`market` is not one of the runtime's own module names");
+    gpui_shell::export_module(market_module(market))
+        .expect("`market` is free, and MARKET_TYPES describes what is registered");
 }
 
-fn host_modules(market: &Entity<Market>) -> HostModules {
-    let mut modules = HostModules::new();
+fn market_module(market: &Entity<Market>) -> HostModule {
+    let read = market.clone();
+    let ticks = market.clone();
+    let flip = market.clone();
+    let bulk = market.clone();
+    let summary = market.clone();
 
-    modules.register("market", |module| {
-        module.declarations(MARKET_TYPES);
-
-        let read = market.clone();
-        module.function("quotes", move |_| {
+    HostModule::new("market")
+        .declarations(MARKET_TYPES)
+        .function("quotes", move |_| {
             with_app(|cx| read.read(cx).to_host_value())
-        });
-
+        })
         // Read separately from `quotes()` so the script can paint how many ticks
         // it has actually seen. When the feed is only asking for repaints this
         // number stops moving on screen, which is the counters' claim made
         // visible in the panel itself.
-        let ticks = market.clone();
-        module.function("ticks", move |_| {
+        .function("ticks", move |_| {
             with_app(|cx| HostValue::from(ticks.read(cx).ticks as f64))
-        });
-
-        let flip = market.clone();
-        module.function("watch", move |arguments| {
+        })
+        .function("watch", move |arguments| {
             let symbol = arguments.string(0)?;
             with_app(|cx| {
                 flip.update(cx, |market, cx| {
@@ -460,10 +471,26 @@ fn host_modules(market: &Entity<Market>) -> HostModules {
                     Ok(HostValue::from(watched))
                 })
             })?
-        });
+        })
+        // The one asynchronous function on this module, and the reason it is
+        // here: a synchronous `function` would hold the thread that renders for
+        // as long as it ran. The feed keeps moving while this is in flight,
+        // which is the claim made visible rather than asserted.
+        .async_function("summary", move |_| {
+            // Synchronous half — on the main thread, so it may read the entity
+            // and take the executor the future will need.
+            let (movers, executor) =
+                with_app(|cx| (summary.read(cx).movers(), cx.background_executor().clone()))?;
 
-        let bulk = market.clone();
-        module.function("watch_all", move |arguments| {
+            // Asynchronous half — on the background executor, with no `App` in
+            // reach. The delay stands in for the slow thing a real one would
+            // do; the work after it is ordinary Rust on owned data.
+            Ok(async move {
+                executor.timer(Duration::from_millis(900)).await;
+                Ok(summarise(movers))
+            })
+        })
+        .function("watch_all", move |arguments| {
             let watched = arguments.boolean(0)?;
             with_app(|cx| {
                 bulk.update(cx, |market, cx| {
@@ -474,19 +501,16 @@ fn host_modules(market: &Entity<Market>) -> HostModules {
                     HostValue::from(changed as f64)
                 })
             })
-        });
-    });
-
-    modules
+        })
 }
 
 /// The TypeScript face of the `market` module.
 ///
-/// Beside the registration rather than in a `.d.ts` next to the script, because
-/// the two used to be two files in two languages with nothing between them.
-/// `export_modules` checks this against what was actually registered, so
-/// renaming a function on one side fails at start-up rather than completing in
-/// an editor and throwing at the call site.
+/// Beside the registration rather than in a `.d.ts` next to the script: a
+/// `.d.ts` would be a second file, in a second language, with nothing holding
+/// it to what this function registers. `export_module` checks this against the
+/// registry, so renaming a function on one side fails at start-up rather than
+/// completing in an editor and throwing at the call site.
 const MARKET_TYPES: &str = r#"
 /** One row of the board, as it crosses the boundary. */
 export interface Quote {
@@ -510,7 +534,54 @@ export function ticks(): number;
 export function watch(symbol: string): boolean;
 /** Sets every row, and answers how many actually moved. */
 export function watch_all(watched: boolean): number;
+
+/** A slow read of the board, computed off the main thread. */
+export interface Summary {
+  leader: string;
+  leader_percent: string;
+  laggard: string;
+  laggard_percent: string;
+  average_percent: string;
+}
+
+/**
+ * The session's movers.
+ *
+ * Deliberately slow, and deliberately a promise: the board keeps ticking while
+ * this is in flight, which is what a synchronous host function could not do.
+ */
+export function summary(): Promise<Summary>;
 "#;
+
+/// Turns the copied movers into the record the script paints.
+///
+/// A free function on owned data: it runs on the background executor, where
+/// there is no `App`, no window and no script engine.
+fn summarise(movers: Vec<(String, f32)>) -> HostValue {
+    let best = movers
+        .iter()
+        .max_by(|a, b| a.1.total_cmp(&b.1))
+        .cloned()
+        .unwrap_or_default();
+    let worst = movers
+        .iter()
+        .min_by(|a, b| a.1.total_cmp(&b.1))
+        .cloned()
+        .unwrap_or_default();
+    let average = if movers.is_empty() {
+        0.
+    } else {
+        movers.iter().map(|(_, percent)| percent).sum::<f32>() / movers.len() as f32
+    };
+
+    HostObject::new()
+        .field("leader", best.0)
+        .field("leader_percent", format!("{:+.2}%", best.1))
+        .field("laggard", worst.0)
+        .field("laggard_percent", format!("{:+.2}%", worst.1))
+        .field("average_percent", format!("{average:+.2}%"))
+        .into()
+}
 
 /// Reaches the ambient `App` from inside a host call.
 ///
@@ -1507,6 +1578,45 @@ mod tests {
         }
     }
 
+    /// The work an asynchronous host function does after it leaves the main
+    /// thread.
+    ///
+    /// A plain function on owned data, and tested as one — which is the point
+    /// of the split: everything the future needs was copied out while the
+    /// synchronous half still had the `App`, so what remains has no context to
+    /// stand up and can be checked directly.
+    #[test]
+    fn the_summary_names_the_session_extremes() {
+        let value = summarise(vec![
+            ("AAPL.US".into(), 1.5),
+            ("MSFT.US".into(), -2.25),
+            ("NVDA.US".into(), 0.75),
+        ]);
+
+        let field = |name: &str| {
+            value
+                .get(name)
+                .and_then(HostValue::as_str)
+                .unwrap_or_default()
+                .to_owned()
+        };
+        assert_eq!(field("leader"), "AAPL.US");
+        assert_eq!(field("leader_percent"), "+1.50%");
+        assert_eq!(field("laggard"), "MSFT.US");
+        assert_eq!(field("laggard_percent"), "-2.25%");
+        assert_eq!(field("average_percent"), "+0.00%");
+    }
+
+    /// An empty board is answered, not divided by zero.
+    #[test]
+    fn the_summary_of_an_empty_board_is_still_a_record() {
+        let value = summarise(Vec::new());
+        assert_eq!(
+            value.get("average_percent").and_then(HostValue::as_str),
+            Some("+0.00%")
+        );
+    }
+
     /// Story-specific host access is only for market data. Theme tokens are
     /// supplied by gpui-shell's live call context, so the host must not keep a
     /// second theme projection registered beside it.
@@ -1517,10 +1627,21 @@ mod tests {
     #[gpui::test]
     fn story_host_registry_only_grants_market(cx: &mut TestAppContext) {
         let market = cx.new(|_| Market::open());
-        let modules = host_modules(&market);
+        let module = market_module(&market);
 
-        assert_eq!(modules.module_names(), vec!["market"]);
-        modules
+        assert_eq!(module.name(), "market");
+        assert_eq!(
+            module.function_names(),
+            vec!["quotes", "summary", "ticks", "watch", "watch_all"]
+        );
+        // Only the slow one answers with a promise. Asserted rather than
+        // assumed, because the script `await`s exactly this one and the
+        // generated binding differs by it.
+        assert!(module.is_async("summary"));
+        for synchronous in ["quotes", "ticks", "watch", "watch_all"] {
+            assert!(!module.is_async(synchronous), "{synchronous}");
+        }
+        module
             .validate()
             .expect("the declared types match the registered functions");
     }

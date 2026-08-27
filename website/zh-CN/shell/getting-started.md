@@ -53,7 +53,7 @@ gpui_platform::application()
 
 ```js
 // hello/main.js
-import { View, text } from "gpui";
+import { View } from "gpui";
 import { v_flex, Button } from "gpui-base";
 
 export default class Hello extends View {
@@ -97,7 +97,7 @@ cargo run -p gpui-shell -- hello
 
 **能力由哪个包提供，就从哪个模块导入。** `"gpui"` 是 GPUI 自身的元素和运行时补上的部分——`View`、`div`、`text`、存储、调度。`"gpui-base"` 是 gpui-base 的布局辅助、组件和主题——`v_flex`、`Button`、`InputState`。`"gpui-fps"` 是它的性能浮层。一个名字只属于其中一个模块，所以一行 import 就说清了脚本依赖的是哪一层。运行时还提供一层刻意收窄的 JavaScript 标准能力：`buffer`、`path`、`url`、`crypto`、`zlib`、`console`、`process`、`os`、`fs/promises`、`net`、`websocket`，以及全局 `fetch`。应用相对导入仍被限制在应用目录内。`node:fs` 这类 `node:` 别名、包查找和 CommonJS `require` 不属于契约。
 
-**`main.js` 必须 `export default` 一个继承 `View` 的类。** `init` 在视图创建时只执行一次；`render` 返回恰好一个元素，并且是在视图失效时执行，而不是每帧执行——见 [`render` 什么时候执行](./state.md#render-什么时候执行)。
+**`main.js` 必须 `export default` 一个继承 `View` 的类。** `init` 在视图创建时只执行一次；`render` 返回一个元素、留存的 `Entity` 或字符串，并且是在视图失效时执行，而不是每帧执行——见 [`render` 什么时候执行](./state.md#render-什么时候执行)。
 
 **样式方法是 snake_case，你自己写的代码是 camelCase。** `items_center`、`on_click`、`text_color`、`gap_2` 保留了 Rust 的拼写，因为无参样式接口是从 GPUI 的反射表生成的，而不是手写的。应用自己声明的一切——变量、方法、对象的键——都是普通的 JavaScript camelCase。这个对比是刻意的：snake_case 的调用是宿主接口，camelCase 的是你的代码。
 

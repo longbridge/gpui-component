@@ -403,13 +403,14 @@ struct ManifestFile {
     shell_version: Option<String>,
     /// The module evaluated at load, relative to the plugin directory.
     entry: String,
-    /// What the plugin is allowed to do. Absent means nothing.
+    /// What the plugin is allowed to do. Absent means nothing but its own
+    /// storage — see [`CapabilitiesFile::storage`].
     #[serde(default)]
     capabilities: CapabilitiesFile,
 }
 
 /// The `capabilities` block, before it is anchored to real directories.
-#[derive(Clone, Debug, Default, PartialEq, Deserialize, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct CapabilitiesFile {
     /// Filesystem and subprocess access.
@@ -418,9 +419,21 @@ struct CapabilitiesFile {
     /// Outbound network access, by host.
     #[serde(default)]
     network: Option<NetworkGrantFile>,
-    /// Whether `gpui.store` is available.
-    #[serde(default)]
-    store: bool,
+    /// Whether `localStorage` is available.
+    ///
+    /// The one grant that defaults to *given*, and it follows the web: a
+    /// browser hands every origin a `localStorage` unconditionally, because
+    /// what it reaches is that origin's own data and nothing else. The same
+    /// holds here — storage is keyed by bundle id, cannot name its own file,
+    /// and is bounded — so there is nothing for an author to ask permission
+    /// for. Defaulting it to `false` also had a trap: an application that
+    /// added a manifest to declare a network host silently lost its settings.
+    ///
+    /// A host that runs code it does not trust can still say `false`, which is
+    /// why this stays a capability rather than becoming ambient like
+    /// `sessionStorage`.
+    #[serde(default = "granted")]
+    storage: bool,
     /// Clipboard access.
     #[serde(default)]
     clipboard: Option<ClipboardGrantFile>,
@@ -506,6 +519,27 @@ struct ProcessGrantFile {
 const PLUGIN_DIR_PLACEHOLDER: &str = "${pluginDir}";
 const DATA_DIR_PLACEHOLDER: &str = "${dataDir}";
 
+fn granted() -> bool {
+    true
+}
+
+/// Written out rather than derived, because a derived `Default` would ignore
+/// the `serde` field defaults above — and then an absent `capabilities` block
+/// and a block that merely omits `storage` would disagree about storage. They
+/// have to be the same answer, or "does declaring a network host cost me my
+/// settings?" depends on whether the block exists at all.
+impl Default for CapabilitiesFile {
+    fn default() -> Self {
+        Self {
+            fs: None,
+            network: None,
+            storage: granted(),
+            clipboard: None,
+            process: None,
+        }
+    }
+}
+
 impl CapabilitiesFile {
     fn grant(&self, plugin_dir: &Path, data_dir: &Path) -> Capabilities {
         let fs = self.fs.clone().unwrap_or_default();
@@ -536,7 +570,7 @@ impl CapabilitiesFile {
                 }
                 grant
             }))
-            .store(self.store)
+            .storage(self.storage)
             .clipboard_read(clipboard.read)
             .clipboard_write(clipboard.write)
             .exit(process.exit)
@@ -832,7 +866,7 @@ impl std::fmt::Display for ManifestProblem {
             ),
             ManifestProblem::Capabilities(error) => write!(
                 f,
-                "invalid `capabilities`: {error}. The block accepts fs (read, write, execute), network (hosts, http), store, clipboard (read, write) and process (exit)"
+                "invalid `capabilities`: {error}. The block accepts fs (read, write, execute), network (hosts, http), storage, clipboard (read, write) and process (exit)"
             ),
         }
     }
@@ -878,7 +912,7 @@ impl Plugin {
         &self.data_dir
     }
 
-    /// The file behind `gpui.store`.
+    /// The file behind `localStorage`.
     pub fn store_path(&self) -> &Path {
         &self.store_path
     }
@@ -923,7 +957,7 @@ fn load_plugin(
     let policy = Rc::new(
         Policy::default()
             .with_capabilities(manifest.capabilities(&root, &data_dir))
-            .with_store_path(store_path.clone()),
+            .with_storage_path(store_path.clone()),
     );
 
     let view = load_view_with_policy(runtime, &root, manifest.entry(), policy.clone(), window, cx)
@@ -1054,7 +1088,7 @@ fn load_failure_root(message: String, window: &mut Window, cx: &mut App) -> Enti
 
 /// Discovers, loads and unloads plugins.
 ///
-/// Every loaded plugin holds its own [`Policy`] — its grant, its store, its
+/// Every loaded plugin holds its own [`Policy`] — its grant, its storage, its
 /// native modules — and every call into its code runs under that policy because
 /// the policy travels on the call frame rather than in a process-wide slot. Two
 /// plugins loaded at once hold two different grants at the same time, and
@@ -1345,7 +1379,7 @@ mod tests {
                     "path_prefixes": ["/v1/quotes/"]
                 }]
             },
-            "store": true,
+            "storage": true,
             "clipboard": { "write": true },
             "process": { "exit": true }
         }
@@ -1858,7 +1892,7 @@ mod tests {
 
         let capabilities =
             manifest.capabilities(Path::new("/plugins/inbox"), Path::new("/data/inbox"));
-        assert!(capabilities.has_store());
+        assert!(capabilities.has_storage());
         assert!(capabilities.is_clipboard_writable());
         assert!(!capabilities.is_clipboard_readable());
         assert!(capabilities.may_exit());
@@ -1957,18 +1991,56 @@ mod tests {
         let _ = std::fs::remove_dir_all(&base);
     }
 
+    /// Everything that reaches outside the application is denied; its own
+    /// storage is not, on the same reasoning a browser gives every origin a
+    /// `localStorage` without asking.
     #[test]
-    fn an_absent_capabilities_block_grants_nothing() {
+    fn an_absent_capabilities_block_grants_nothing_but_storage() {
         let manifest = PluginManifest::parse(
             r#"{"id": "a.b", "name": "B", "version": "0.1.0", "shell-version": "0.1.0", "entry": "main.js"}"#,
         )
         .expect("capabilities may be omitted");
 
         let capabilities = manifest.capabilities(Path::new("/plugins/b"), Path::new("/data/b"));
-        assert!(!capabilities.has_store());
+        assert!(capabilities.has_storage());
         assert!(!capabilities.has_read_access());
         assert!(!capabilities.has_write_access());
         assert_eq!(capabilities.execute_grant(), &ExecuteGrant::Denied);
+    }
+
+    /// The point of keeping storage a capability rather than making it ambient
+    /// like `sessionStorage`: a host running code it does not trust can still
+    /// refuse, and refusing has to actually work.
+    #[test]
+    fn a_manifest_may_still_refuse_storage() {
+        let manifest = PluginManifest::parse(
+            r#"{"id": "a.b", "name": "B", "version": "0.1.0", "shell-version": "0.1.0",
+                "entry": "main.js", "capabilities": {"storage": false}}"#,
+        )
+        .expect("storage may be declined");
+
+        assert!(
+            !manifest
+                .capabilities(Path::new("/plugins/b"), Path::new("/data/b"))
+                .has_storage()
+        );
+    }
+
+    /// The trap this default exists to close: declaring one unrelated grant
+    /// must not silently cost an application its settings.
+    #[test]
+    fn declaring_another_grant_does_not_cost_an_application_its_storage() {
+        let manifest = PluginManifest::parse(
+            r#"{"id": "a.b", "name": "B", "version": "0.1.0", "shell-version": "0.1.0",
+                "entry": "main.js", "capabilities": {"network": {"hosts": ["example.com"]}}}"#,
+        )
+        .expect("a network grant is legal on its own");
+
+        assert!(
+            manifest
+                .capabilities(Path::new("/plugins/b"), Path::new("/data/b"))
+                .has_storage()
+        );
     }
 
     #[test]
@@ -2279,7 +2351,7 @@ mod tests {
             "methods",
             "paths",
             "path_prefixes",
-            "store",
+            "storage",
             "clipboard",
             "process",
             "exit",

@@ -1,6 +1,6 @@
 ---
 title: API 参考
-description: 脚本能 import 或触及的每个名字——三个内置模块、cx 与 window 全局对象，以及那些不是样式的元素方法。
+description: 脚本能 import 或触及的每个名字——四个内置模块、cx 与 window 全局对象，以及那些不是样式的元素方法。
 order: 13
 ---
 
@@ -8,21 +8,39 @@ order: 13
 
 脚本接口的一份清单：有什么，以及它来自哪个模块。其余页面解释每样东西为什么是这个样子——这一页是用来查名字的。
 
-权威不在这一页。`gpui-shell` 每次运行都会在你的源码旁边重写一份 `gpui.d.ts`，它由即将执行这段脚本的那个运行时生成，所以提交进仓库的副本只可能是过期的那一份。在脚本顶部写上 `// @ts-check`，编辑器就会照着它检查。
+权威不在这一页。runtime 会为自己的版本生成 `gpui.d.ts`，并在应用加载时尽力刷新到源码旁；`gpui-shell types <directory>` 执行同一次写入，并会明确报告失败。生成文件的头部带有 `gpui-shell` 版本，也包含该应用注册的 host module。请忽略这个文件而不要提交，并在脚本顶部写上 `// @ts-check` 让编辑器照着它检查。
 
 ## 模块
 
-提供能力的每个 crate 对应一个模块，所以一条 import 就说明了脚本依赖哪一层。一个名字只属于其中一个模块：这里不为了方便做任何 re-export，因为一个能从两个 specifier 取到的名字，就不再说明它来自哪里。
+每个内建模块都以它所暴露的公开 Rust 层命名，所以一条 import 能说明脚本依赖哪一层。`gpui` 还包含从 JavaScript 使用 GPUI 所需的 shell 桥接：视图、留存实体、调度与共享类型。一个名字只属于一个模块，这里不为了方便做 re-export。
+
+```js
+import { View, div } from "gpui";
+import { Button, v_flex } from "gpui-base";
+/** @import { ScopePhase } from "gpui-shell" */
+import { fps_monitor } from "gpui-fps";
+```
 
 | 模块 | 提供 |
 | --- | --- |
-| `"gpui"` | GPUI 自己的元素，加上这个运行时补上的部分：视图、样式接口、存储、调度、native 模块 |
-| `"gpui-base"` | `gpui-base` 的布局辅助函数、组件与主题 |
-| `"gpui-fps"` | `gpui-fps` 的性能 HUD |
+| `gpui` | GPUI 自己的元素，加上这个运行时补上的部分：视图、样式接口与调度 |
+| `gpui-base` | 布局辅助函数、组件与主题 |
+| `gpui-shell` | shell 桥接层自有的纯类型概念；没有运行时导出 |
+| `gpui-fps` | 性能 HUD |
 
 有两个名字从不需要 import，但原因不同。`window` 是真正的全局：没有谁把它交给你，它本来就在作用域里。`cx` 恰恰相反——它从来不是全局的，只会作为参数到达：`render(cx)`、`init(props, cx)`、每个处理器的第二个参数、`cx.spawn` body 的形参。标准运行时模块——`fs/promises`、`path`、`crypto`、`process`、`net`、`websocket` 等等——受宿主授权门控，记录在 [Capabilities](./capabilities.md)。
 
-小写名字在 Rust 侧同样是自由函数——`div()` 就是 `gpui::div()`。首字母大写的名字是一个只有工厂方法的对象，所以你写 `Button.new(id)`，对应 `Button::new(id)`；表格里只列名字，因为 `.new` 每次都一样。有两种形态不同，会在出现的地方注明：表格的行与单元格用 `.new(id, index)`，带的是从 1 开始的位置；由状态驱动的组件收的是状态而不是 id。
+API 形态跟随 Rust 原型：`App` 上的方法放在 `cx`，`Window` 上的方法放在 `window` 全局对象，关联构造器写成 `Type.new(...)`，自由函数保持小写。没有直接 GPUI 或 Base 原型的名字，属于实现它的公开层。表中也会列出仅存在于类型系统的名字，但它们不是运行时可调用的值。
+
+## Host 模块
+
+宿主在 Rust 侧注册的模块，按名字 import，和其它模块没有区别：
+
+```js
+import { quotes } from "market";
+```
+
+它不属于任何内建模块。生成的类型声明里每个注册过的模块各有一段 `declare module`，所以模块名和每一个导出名都会被检查。见 [Host Modules](./host-modules.md)。
 
 ## `gpui` 模块
 
@@ -49,44 +67,20 @@ order: 13
 | `Entity` | 对一个嵌套视图的留存所有权：`set_props(props)`、`release()` |
 | `Props` | 交给 `init` 与 `cx.new` 的属性包 |
 
-子类定义只执行一次的 `init?(props, cx)`，以及返回恰好一个元素、在视图被置为失效时执行的 `render(cx)`。可选的 `update(props)` 在父视图改变嵌套视图的 props 时执行。
-
-### 存储
-
-| 名称 | 说明 |
-| --- | --- |
-| `store` | 能挺过重启的键值存储，每次写入都会持久化 |
-| `Store` | `get(key)`、`set(key, value)`、`remove(key)`、`keys()`、`flush()` |
-| `Json` | store 能持久化的全部内容，仅此而已 |
-
-未设置的键 `store.get` 返回 `null`；`flush()` 在当前值被可靠写入之后完成。
-
-### Host 模块
-
-宿主在 Rust 侧注册的模块，按名字 import，和其它模块没有区别：
-
-```js
-import { quotes } from "market";
-```
-
-它不属于 `"gpui"`。生成的类型声明里每个注册过的模块各有一段 `declare module`，所以模块名和每一个导出名都会被检查。见 [Host Modules](./host-modules.md)。
+子类定义只执行一次的 `init?(props, cx)`，以及返回一个 `Element`、`Entity` 或字符串、在视图被置为失效时执行的 `render(cx)`。可选的 `update(props)` 在父视图改变嵌套视图的 props 时执行。
 
 ### 调度
 
 | 名称 | 说明 |
 | --- | --- |
 | `Task` | 一个正在运行的任务：`cancel()`、`is_done()` |
-| `TaskOptions` | `{ owner?: View \| null }`——任务随之取消的那个视图。默认是当前运行的视图；`null` 比任何视图都活得久，也是除当前视图外唯一被接受的值 |
 | `Timer` | `after(ms, handler, opts?)` 与 `every(ms, handler, opts?)` |
 
-### 焦点与组件形态
+### 焦点
 
 | 名称 | 说明 |
 | --- | --- |
-| `FocusHandleHandle` | 脚本自己持有的焦点目标；[它的成员](#focushandlehandle) |
-| `ComponentType` | `new(id)`——跨渲染有身份的组件 |
-| `PartType` | `new()`——自身没有身份的子部件 |
-| `IndexedComponentType` | `new(id, index)`——会报读自身从 1 开始位置的组件 |
+| `FocusHandle` | 脚本自己持有的焦点目标；[它的成员](#focushandle) |
 
 ### 共享类型
 
@@ -95,43 +89,62 @@ import { quotes } from "market";
 | `Length` | 数字（像素）、`"12px"`、`"1.5rem"`、`"50%"` 或 `"auto"` |
 | `DefiniteLength` | 同上，但不含 `"auto"` |
 | `AbsoluteLength` | 只有像素或 rem |
-| `LengthString` | 长度的字符串形式 |
-| `Color` | 一个 `ColorToken` 名字，或 `#rgb` / `#rrggbb` / `#rrggbbaa` 字面量 |
-| `ColorToken` | 已安装调色板定义的十七个语义 token |
+| `Color` | 一个 `gpui-base` 的 `ColorToken`，或 `#rgb` / `#rrggbb` / `#rrggbbaa` 字面量 |
 | `Role` | 一个无障碍 role，镜像 `gpui::Role` 的 snake_case 拼写 |
 | `Anchor` | 锚定浮层的哪个角固定在它的触发元素上 |
 | `MouseButton` | `"left"`、`"right"` 或 `"middle"` |
-| `Phase` | `"render"`、`"event"`、`"task"`、`"layout"` 或 `"none"` |
-| `SheetSide` | sheet 贴靠哪一边 |
-| `DialogOptions` | `{ escape_dismissable?: boolean, backdrop_dismissable?: boolean }`，两者默认都是 `true` |
-| `ToastOptions` | `{ title: string, description?: string, level?: "info" \| "success" \| "warning" \| "error", timeout?: number \| null, id?: string }`。`level` 默认 `"info"`；`timeout` 默认五秒，`null` 表示留到被关掉——不写和写 `null` 不是一回事 |
 | `ClickEvent` | `click_count`、`modifiers` |
 | `MouseMoveEvent` | `position`、`local_position`、`bounds`、`modifiers` |
 | `Modifiers` | `shift`、`control`、`alt`、`platform` |
 | `Point` | `x`、`y` |
 | `ElementBounds` | 带 `width` 与 `height` 的 `Point` |
+| `Path` | 由 `PathBuilder.build()` 产出的不可变原生几何 |
+| `PathCoordinate` | 像素，或所绘元素边界的百分比 |
+| `Background` | 由 `Background.solid(...)` 等工厂创建的可复用原生背景：`opacity(factor)`、`color_space(space)` |
+| `BackgroundStop` | 一个渐变色标，来自 `Background.stop(color, percentage)` |
+
+#### `FocusHandle`
+
+由 `cx.focus_handle()` 创建，用 `track_focus(handle)` 交给元素，并用 `release()` 释放。
+
+| 方法 | 说明 |
+| --- | --- |
+| `focus(): void` | 把键盘移到跟踪它的那个元素上 |
+| `is_focused(): boolean` | 那个元素当前是否持有键盘 |
+| `release(): boolean` | 释放句柄，并返回它当时是否还活着 |
+
+## `gpui-shell` 模块
+
+这些是 JavaScript 桥接层自身引入的纯类型概念。它们只用于类型检查；这个模块没有运行时值。
+
+| 名称 | 说明 |
+| --- | --- |
+| `LengthString` | shell 长度桥接接受的字符串形式 |
+| `ScopePhase` | `"render"`、`"event"`、`"task"`、`"layout"` 或 `"none"` |
+| `TaskOptions` | `{ owner?: View \| null }`——任务随之取消的视图。默认是当前运行的视图；`null` 比任何视图都活得久 |
+| `SheetSide` | shell 的 sheet 贴靠哪一边 |
+| `DialogOptions` | `{ escape_dismissable?: boolean, backdrop_dismissable?: boolean }`，两者默认都是 `true` |
+| `ToastOptions` | `{ title: string, description?: string, level?: "info" \| "success" \| "warning" \| "error", timeout?: number \| null, id?: string }`。`level` 默认 `"info"`；`timeout` 默认五秒，`null` 表示留到被关掉 |
 | `MotionProperty` | `"opacity"`、`"width"`、`"height"`、`"left"`、`"top"` |
 | `MotionEasing` | `"linear"`、`"ease-in"`、`"ease-out"`、`"ease-in-out"` |
 | `TransitionPolicy` | `duration`、`delay`、`easing` |
 | `SpringPolicy` | `response`、`damping`、`epsilon` |
-| `Path` | 由 `PathBuilder.build()` 产出的不可变原生几何 |
-| `PathCoordinate` | 像素，或所绘元素边界的百分比 |
-| `BackgroundValue` | 可复用的原生背景：`opacity(factor)`、`color_space(space)` |
-| `BackgroundStop` | 一个渐变色标，来自 `Background.stop(color, percentage)` |
+
+`ScopePhase` 描述当前 `Context` 属于哪一种 shell 调用。它和 GPUI 的 `DispatchPhase` 无关；后者控制事件分发时 capture 与 bubble 的顺序。
 
 ## `cx` 上下文
 
-`cx` 是某一次宿主调用的脚本侧 context，并且只在那次调用中有效。`await` 会把控制权交回宿主，它指名的那一帧随之消失，所以跨越 `await` 留住的 `cx` 会报出 stale-context 错误。
+两种 context 的成员相同，但生命周期不同。`render` 与事件处理器收到的 `Context` 只属于那次宿主调用；把它留到调用之后，包括跨越 `await`，都会得到 stale-context 错误。下面的 `AsyncContext` 才是为跨越 `await` 准备的那一种。
 
 | 成员 | 说明 |
 | --- | --- |
 | `notify()` | 请求重新渲染；在 `render` 期间抛异常，因为渲染中通知自己是一个死循环 |
-| `phase()` | 这次调用处于哪个 `Phase` |
+| `phase()` | 这次调用处于哪个 `ScopePhase` |
 | `theme()` | 当前 `gpui_base::Theme` 的语义 token 投影 |
 | `open_url(url)` | 把一个绝对的 `http`/`https` URL 交给系统处理器 |
 | `read_from_clipboard()` | 剪贴板里的文本，没有文本时是 `undefined` |
 | `write_to_clipboard(text)` | 替换剪贴板里的文本 |
-| `focus_handle()` | 一个新的 `FocusHandleHandle`；属于 `init` 或事件处理器，绝不属于 `render` |
+| `focus_handle()` | 一个新的 `FocusHandle`；属于 `init` 或事件处理器，绝不属于 `render` |
 | `new(Class, props?)` | 创建一个留存的嵌套视图，并返回拥有它的 `Entity` |
 | `spawn(body, opts?)` | 执行 `body(cx)` 并接管它返回的 promise，让 rejection 得到上报 |
 | `sleep(ms?)` | 在 GPUI 的 foreground executor 上，`ms` 之后 resolve |
@@ -164,7 +177,26 @@ import { quotes } from "market";
 | `clear_toasts()` | 撤回所有 toast，并回答撤回了几个 |
 | `paint_path(path, background)` | 用原生背景绘制不可变几何；对应 `Window::paint_path` |
 
+| `localStorage` | Web Storage，背后是宿主放好的一个文件，跨重启存活 |
+| `sessionStorage` | Web Storage，只在内存里，随进程一起消失 |
+
 `open_dialog`、`open_sheet` 与 `open_sheet_at` 接受的是**一个返回元素的函数**，而不是元素：dialog 活得比打开它的那次调用久，每次重绘时这个函数都会再执行一次。除了两个 `has_active_*` 查询与 `paint_path`，这里的一切在 `render` 中都不合法。见 [Overlays](./overlays.md)。
+
+### 存储
+
+[Web Storage API](https://developer.mozilla.org/zh-CN/docs/Web/API/Web_Storage_API)，原样照搬。两个 store 同时也是裸的全局变量——`localStorage.getItem(k)` 与 `window.localStorage.getItem(k)` 是同一次调用——因为在浏览器里也是如此。
+
+| 成员 | 说明 |
+| --- | --- |
+| `length` | 已存的键数量 |
+| `key(index)` | 该位置上的键，越界为 `null` |
+| `getItem(key)` | 值，键不存在时为 `null` |
+| `setItem(key, value)` | 存入，值会被转成字符串 |
+| `removeItem(key)` | 忘掉一个键 |
+| `clear()` | 全部忘掉 |
+| `flush()` | 写入落盘后 resolve |
+
+值是字符串，所以有结构的东西照 web 上的写法走 `JSON.stringify` 与 `JSON.parse`。`flush()` 是唯一多出来的成员：浏览器不需要它，因为它的存储从头到尾都是同步的。`localStorage` 受 capability 管辖，宿主没授权时抛异常；`sessionStorage` 不受管辖，因为它持有的东西从不离开进程。见 [Capabilities](./capabilities.md#storage)。
 
 ## `gpui-base` 模块
 
@@ -203,7 +235,7 @@ import { quotes } from "market";
 | [`SliderIndicator`](../../base/primitives/slider.md) | 凹槽，也是每个指针位置据以测量的那个盒子 |
 | [`SliderThumb`](../../base/primitives/slider.md) | 滑块；shell 给它位置，你给它外观 |
 
-slider 的四个部件接受同一个 `SliderStateHandle`，而且四个都不能少——没有 `SliderIndicator` 的 slider 根本拖不动。
+slider 的四个部件接受同一个 `SliderState`，而且四个都不能少——没有 `SliderIndicator` 的 slider 根本拖不动。
 
 ### 文本编辑
 
@@ -257,7 +289,7 @@ slider 的四个部件接受同一个 `SliderStateHandle`，而且四个都不�
 
 `on(...)` 是替换该事件的处理器，而不是再加一个，返回值表示之前是否已经有一个。
 
-#### `InputStateHandle`
+#### `InputState`
 
 来自 `InputState.new(options?)`，其中 `options` 是 `{ placeholder?: string, value?: string }`。
 
@@ -272,7 +304,7 @@ slider 的四个部件接受同一个 `SliderStateHandle`，而且四个都不�
 | `set_masked(masked: boolean): void` | 文本是否按密码绘制 |
 | `set_loading(loading: boolean): void` | 是否显示加载状态 |
 
-#### `TextareaStateHandle`
+#### `TextareaState`
 
 来自 `TextareaState.new(options?)`，其中 `options` 是 `{ placeholder?: string, value?: string, rows?: number }`。
 
@@ -285,7 +317,7 @@ slider 的四个部件接受同一个 `SliderStateHandle`，而且四个都不�
 | `set_auto_grow(min_rows: number, max_rows: number): void` | 在这两者之间随内容增高 |
 | `set_soft_wrap(wrap: boolean): void` | 长行是否折行 |
 
-#### `SliderStateHandle`
+#### `SliderState`
 
 来自 `SliderState.new(options?)`，其中 `options` 是 `{ min?, max?, step?, scale?: "linear" | "logarithmic", value?: SliderValue }`。默认是 `0..100`、步长 `1`、从 `min` 起。`"logarithmic"` 需要 `min` 大于零。
 
@@ -298,7 +330,7 @@ slider 的四个部件接受同一个 `SliderStateHandle`，而且四个都不�
 | `step_value(): number` | 步长 |
 | `on(event, handler): boolean` | 拖动中的 `"change"` 或结束时的 `"release"`；handler 收 `(value, cx)` |
 
-#### `OtpStateHandle`
+#### `OtpState`
 
 来自 `OtpState.new(length, options?)`，其中 `options` 是 `{ value?: string, masked?: boolean }`。长度在创建时就固定了。
 
@@ -312,7 +344,7 @@ slider 的四个部件接受同一个 `SliderStateHandle`，而且四个都不�
 | `focus(): void` | 把键盘移进去 |
 | `on(event, handler): boolean` | `"change"`、`"focus"` 或 `"blur"`，handler 收 `(event, cx)` |
 
-#### `VirtualListScrollHandleHandle`
+#### `VirtualListScrollHandle`
 
 来自 `VirtualListScrollHandle.new()`，用 `track_scroll(handle)` 交给列表。
 
@@ -321,27 +353,19 @@ slider 的四个部件接受同一个 `SliderStateHandle`，而且四个都不�
 | `scroll_to_item(index: number, strategy?): void` | 在下一帧之前把某一项带到屏幕上；`strategy` 是 `"top"`（默认）或 `"center"` |
 | `scroll_to_bottom(): void` | 滚到末尾 |
 
-#### `FocusHandleHandle`
-
-来自 `cx.focus_handle()`，用 `track_focus(handle)` 交给元素。
-
-| 方法 | 说明 |
-| --- | --- |
-| `focus(): void` | 把键盘移到跟踪它的那个元素上 |
-| `is_focused(): boolean` | 那个元素当前是否持有键盘 |
-
 ### 主题
 
 | 名称 | 说明 |
 | --- | --- |
 | `set_theme(theme)` | 用应用自己的主题替换 `gpui-base` 当前生效的语义 token |
+| `ColorToken` | 已安装调色板定义的语义颜色名称 |
 | `Theme` | `cx.theme()` 返回的东西：语义 token，加上 `appearance` 与 `is_dark` |
 | `SemanticThemeTokens` | `colors`、`spacing`、`radius` |
 | `ColorTokens` | 每个语义角色一个 `Color` |
 | `SpacingTokens` | `xxs` `xs` `sm` `md` `lg` `xl` `xxl` |
 | `RadiusTokens` | `none` `sm` `md` `lg` `xl` `full` |
 
-读主题用 `cx.theme()`。替换整套调色板是应用层面的动作，谈不上属于哪一次调用的 context——这就是 `set_theme` 是一个自由函数的原因。
+读主题用 `cx.theme()`。`set_theme` 留在 `gpui-base`，因为主题属于这一层；但修改仍然要求当前存在一次宿主调用，只能从事件处理器或 task 调用，不能在 `render` 或 layout 中调用。
 
 ### 其他类型
 
@@ -351,7 +375,6 @@ slider 的四个部件接受同一个 `SliderStateHandle`，而且四个都不�
 | `ScrollbarMode` | `"scrolling"`、`"hover"` 或 `"always"` |
 | `ItemRange` | 虚拟列表的可见项，写作半开区间 `[start, end)` |
 | `SliderValue` | 一个数字，或区间 slider 的 `[start, end]` |
-| `PopupType`、`DatePickerType`、`ScrollbarType` | 构造器不是 `new(id)` 的那三个的工厂形态：`Popup.new(id, trigger)`、`DatePicker.new(id, focus_handle)`，以及 `Scrollbar` 的三个入口 |
 
 ### 组合模式
 
@@ -572,7 +595,7 @@ property 取 `"opacity"`、`"width"`、`"height"`、`"left"`、`"top"` 之一，
 
 元素上其余的一切都是样式。它们分成两族，而且从不重叠：
 
-- **59 个带参数的方法**，手工绑定：size、padding、margin、position、flex、border、radius 与 paint 各族。每个方法接受哪种长度类型跟随它的 Rust 签名，所以 `.p("auto")` 是类型错误，理由与它在运行时抛异常完全相同。
-- **3,143 个无参方法**，从 GPUI 的反射表生成，完全零维护：`flex_col`、`items_center`、`gap_2`、`rounded_md`、`text_sm`、`size_full`、`truncate` 以及这一族的其余成员。这个数字跟着 GPUI 变；`gpui-shell types` 会打印你这次构建的数字。
+- **带参数的方法**，手工绑定：size、padding、margin、position、flex、border、radius 与 paint 各族。每个方法接受哪种长度类型跟随它的 Rust 签名，所以 `.p("auto")` 是类型错误，理由与它在运行时抛异常完全相同。
+- **无参方法**，从 GPUI 的反射表生成：`flex_col`、`items_center`、`gap_2`、`rounded_md`、`text_sm`、`size_full`、`truncate` 以及这一族的其余成员。生成的声明就是当前构建所用 GPUI 版本的完整清单。
 
 两者都记录在 [Styling](./styling.md) 里，还有长度与颜色的语法，以及调色板定义的 token。

@@ -11,13 +11,13 @@ order: 9
 A script cannot load a native extension. `dlopen`-ed Rust has no stable ABI, and once it is inside the process it holds every permission the process holds — a sandbox that permits that does not mean anything. So the direction is reversed. **The host registers, at compile time, the Rust it is willing to expose**, and a script reaches exactly that and nothing else.
 
 ```rust
-use gpui_shell::{HostModules, HostValue};
+use gpui_shell::{HostModule, HostValue};
 
-let mut modules = HostModules::new();
-modules.register("workspace", |module| {
-    module.function("project_name", |_| Ok(HostValue::from("gpui-component")));
-});
-gpui_shell::export_modules(modules)?;
+gpui_shell::export_module(
+    HostModule::new("workspace")
+        .function("project_name", |_| Ok(HostValue::from("gpui-component")))
+        .function("version", |_| Ok(HostValue::from("0.1.0"))),
+)?;
 ```
 
 ```js
@@ -30,14 +30,25 @@ A registered module is an ordinary ES module, resolved by the same loader that a
 
 ## Why an import rather than a lookup
 
-The earlier shape was a call — `native("workspace")` answering with a bag of functions. Two things were wrong with it, and both are about *when* you find out:
+The obvious alternative is a lookup — a `native(name)` call answering with a bag of functions:
 
-- **A misspelled export was a run-time failure.** `workspace.projectName()` type-checked, loaded, rendered, and then threw on the frame that first reached it.
-- **The type declarations could not say anything.** Only the host knows what it registered, so the best a generated `gpui.d.ts` could offer was `Record<string, (...args: any[]) => any>`, and an application that wanted real types hand-wrote a `.d.ts` that nothing checked against the registry.
+```js
+// The shape this does not have.
+const workspace = native("workspace");
+workspace.projectName();          // typo: throws, eventually
+```
 
-As an import, a wrong name fails while the module graph is linked — before a line of the application runs — and the declarations are [generated from the registry itself](#typing-them).
+```js
+// The shape it has.
+import { projectName } from "workspace";   // typo: fails to link
+```
 
-What the import does **not** freeze is the function behind the name. Every export is a forwarding stub that resolves through the registry on each call, so withdrawing a module still takes effect immediately: a script holding an imported function gets a refusal, not the withdrawn closure. Only the *set of names* is fixed, at the moment the importing module is linked — which is why a host calls `export_modules` **before** it loads an application.
+It loses twice, and both times on *when* you find out:
+
+- **A misspelled export would be a run-time failure.** `workspace.projectName()` type-checks, loads, renders, and then throws on the frame that first reaches it — which, for a name only one branch touches, can be a long way from the edit that caused it. An import is resolved when the module graph is linked, so the same typo stops the application before its first line runs, naming the module and the export.
+- **The type declarations would have nothing to say.** Only the host knows what it registered, so the best a generated `gpui.d.ts` could offer for `native(name)` is `Record<string, (...args: any[]) => any>` — leaving an application that wants real types to hand-write a `.d.ts` that nothing checks against the registry. A module specifier is a name declarations *can* be written against, so they are [generated from the registry itself](#typing-them) and the typo is red in the editor.
+
+What the import does **not** freeze is the function behind the name. Every export is a forwarding stub that resolves through the registry on each call, so withdrawing a module still takes effect immediately: a script holding an imported function gets a refusal, not the withdrawn closure. Only the *set of names* is fixed, at the moment the importing module is linked — which is why a host calls `export_module` **before** it loads an application.
 
 ## The registry is the grant
 
@@ -46,7 +57,7 @@ The default registry is **empty**, the same shape as `Capabilities::default()`. 
 ```text
 host module `market` is not available: this host registered none.
 Host modules are granted by the embedding application, with
-gpui_shell::export_modules(...).
+gpui_shell::export_module(...).
 ```
 
 Register something and the message changes to name what does exist:
@@ -59,20 +70,21 @@ unknown host module `marker`; this host registered: market, theme
 host module `market` has no function `quote`; it provides: quotes, ticks, watch, watch_all
 ```
 
-There is deliberately no per-module capability to grant on top of this. The host chose the list, so **the list is the grant** — and revoking one is a matter of exporting a different set, which takes effect on the next call rather than the next restart.
+There is deliberately no per-module capability to grant on top of this. The host chose the list, so **the list is the grant** — and revoking one is a matter of exporting a module of the same name, or clearing the set, which takes effect on the next call rather than the next restart.
 
-For a multi-application host, each public `Policy` carries its own frozen capabilities and its own module registry. That is how two plugins in one runtime receive different authority without swapping thread-local state across `await` boundaries. Identity and requested system permissions live in `gpui-shell.json`; host modules do not, because contributions are executable behavior registered by the host.
+For a multi-application host, each public `Policy` carries its own frozen capabilities and its own module registry — built with `Policy::with_host_module`, one module at a time, the same way. That is how two plugins in one runtime receive different authority without swapping thread-local state across `await` boundaries. Identity and requested system permissions live in `gpui-shell.json`; host modules do not, because contributions are executable behavior registered by the host.
 
 ## Names the runtime keeps
 
 A host module shares one specifier namespace with the built-in modules and the [Standard Runtime](./engine.md), and the resolver reaches those first. So registering `path` would not shadow the real `path` — it would register a module nothing can ever import, silently.
 
-`export_modules` refuses those names instead, and names them:
+`export_module` refuses such a name instead, and says who owns it:
 
 ```text
-these module names belong to the runtime and cannot be registered: path, gpui.
-The reserved names are: gpui, gpui-base, gpui-fps, buffer, console, crypto,
-fs/promises, net, os, path, process, url, websocket, zlib
+`path` is one of the runtime's own module names and cannot be registered: a
+script importing it reaches the runtime, never this module. The reserved names
+are: gpui, gpui-base, gpui-fps, buffer, console, crypto, fs/promises, net, os,
+path, process, url, websocket, zlib
 ```
 
 The full list is `gpui_shell::RESERVED_SPECIFIERS`. Everything else is yours — and cannot be shadowed by a file in the application directory either, because host modules resolve before the application's own files.
@@ -122,13 +134,53 @@ fn with_app<R>(read: impl FnOnce(&mut App) -> R) -> Result<R, HostError> {
 
 **`cx.notify()` from inside one is delivered after the call unwinds.** So a host function may mutate an entity and ask the views watching it to re-render, without that re-render happening underneath the script that called it.
 
+## Work that should not hold the thread
+
+`function` is synchronous: it returns a value, and the script gets that value. A slow one holds the thread that renders.
+
+`async_function` returns a future instead, and the script gets a promise:
+
+```rust
+HostModule::new("db")
+    .declarations("export function query(sql: string): Promise<Row[]>;")
+    .async_function("query", |arguments| {
+        // Synchronous half: on the main thread, inside the caller's scope. It
+        // may read host state, and refusing here throws at the call site.
+        let sql = arguments.string(0)?.to_owned();
+        let pool = with_app(|cx| cx.global::<Pool>().handle())?;
+
+        // Asynchronous half: on GPUI's background executor.
+        Ok(async move { Ok(pool.query(&sql).await?.into_host_value()) })
+    })
+```
+
+```js
+import { query } from "db";
+
+const rows = await query("select 1");
+```
+
+### The split is the design
+
+The closure runs on the main thread and returns the future. So the arguments are checked, and whatever the work needs is copied out, while `with_current_app` still answers. The future is then `Send + 'static` and driven elsewhere, where there is no `App` and no script engine to reach for.
+
+That is the same rule as [the three above](#three-rules-a-host-function-runs-under), made physical rather than enforced. A synchronous body is held to "do not re-enter the engine" by a run-time guard; an asynchronous one cannot express the violation, because on a background thread there is nothing to re-enter.
+
+### What the script sees
+
+- **A refusal from the synchronous half throws at the call site.** `arguments.string(0)?` failing is a `TypeError` where the call was written, not a rejected promise the script has to await to hear about.
+- **A failure from the future rejects the promise**, carrying `module.function` in the message, so `try`/`catch` around the `await` works normally.
+- **A cancelled call stays pending for ever.** If the view goes away or its application is reloaded, the continuation never runs and no error is invented for code that was asked to stop — the same answer `cx.sleep` gives.
+
+Declare the return type as a `Promise` yourself. The registry checks that the names on both sides agree; it does not read signatures, so nothing catches a declaration that leaves the `Promise` off.
+
 ## Typing them
 
 A module describes its own TypeScript face, in Rust, beside the registration:
 
 ```rust
-modules.register("market", |module| {
-    module.declarations(r#"
+HostModule::new("market")
+    .declarations(r#"
         /** One row of the board, as it crosses the boundary. */
         export interface Quote { symbol: string; last: string; watched: boolean }
 
@@ -136,16 +188,14 @@ modules.register("market", |module| {
         export function quotes(): Quote[];
         /** Flips one row's watched flag and answers the new value. */
         export function watch(symbol: string): boolean;
-    "#);
-
-    module.function("quotes", /* … */);
-    module.function("watch", /* … */);
-});
+    "#)
+    .function("quotes", /* … */)
+    .function("watch", /* … */)
 ```
 
 The generated `gpui.d.ts` emits that verbatim inside `declare module "market"`, so `import { quotes } from "market"` is checked exactly the way `import { div } from "gpui"` is.
 
-Writing it here rather than in a `.d.ts` beside the script is what makes the two halves one thing. `export_modules` compares the declared exports with the registered ones and refuses a mismatch:
+Writing it here rather than in a `.d.ts` beside the script is what keeps the two halves one thing. A `.d.ts` would be a second file, in a second language, with nothing holding it to the registry. `export_module` compares the declared exports with the registered ones and refuses a mismatch:
 
 ```text
 host module `market` declares a different set of functions than it registers;
@@ -158,28 +208,27 @@ Declaring nothing is allowed and costs only precision. An undeclared module is e
 
 ```ts
 declare module "audit" {
-  export function observe(...args: any[]): any;
+  import { HostValue } from "gpui";
+
+  export function observe(...args: HostValue[]): HostValue;
 }
 ```
 
-which still checks the module name and every export name.
+which still checks the module name and every export name — and is honest about the shape, since `HostValue` is exactly what crosses the boundary. `any` would be wider than the runtime: a script passing a function would type-check and then be refused at the call.
 
 ## A real one
 
 The gallery's Shell story registers one market module, and it is the entire extension surface its script has. Theme values come from `cx.theme()` instead. This is the host side:
 
 ```rust
-fn install_host_modules(market: &Entity<Market>) {
-    let mut modules = HostModules::new();
+fn market_module(market: &Entity<Market>) -> HostModule {
+    let read = market.clone();
+    let flip = market.clone();
 
-    modules.register("market", |module| {
-        module.declarations(MARKET_TYPES);
-
-        let read = market.clone();
-        module.function("quotes", move |_| with_app(|cx| read.read(cx).to_host_value()));
-
-        let flip = market.clone();
-        module.function("watch", move |arguments| {
+    HostModule::new("market")
+        .declarations(MARKET_TYPES)
+        .function("quotes", move |_| with_app(|cx| read.read(cx).to_host_value()))
+        .function("watch", move |arguments| {
             let symbol = arguments.string(0)?;
             with_app(|cx| {
                 flip.update(cx, |market, cx| {
@@ -190,11 +239,10 @@ fn install_host_modules(market: &Entity<Market>) {
                     Ok(HostValue::from(watched))
                 })
             })?
-        });
-    });
-
-    gpui_shell::export_modules(modules).expect("`market` is not a reserved name");
+        })
 }
+
+gpui_shell::export_module(market_module(&market))?;
 ```
 
 And this is the script that uses it — the same `Market` entity a Rust panel beside it is rendering from:
@@ -210,7 +258,6 @@ Run it with `cargo run -- shell`. The two panels read one entity through two pat
 
 ## Not there yet
 
-- **Asynchronous host functions.** A function returns a value, not a promise; long work blocks the thread that renders.
 - **Classes and object identity.** A module exports functions. Exporting a class would mean handing the script a live host object, which the plain-data boundary above rules out; a factory function returning a record does the same work today.
 - **Per-function grants inside one registry.** A policy grants the registry the host assembled; it does not add another permission switch for each function.
 - **Streaming or callbacks into the host.** A script cannot hand a function to a host module; the module can only be called.

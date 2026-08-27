@@ -26,10 +26,10 @@ export default class Counter extends View {
 
 `init` 在视图创建时执行一次。跨帧存活的状态在这里建立——普通字段，以及视图需要的任何[留存实体](#留存状态)。
 
-`render` **返回恰好一个元素**，并且是在视图被置为失效时执行，而不是每帧执行——见 [`render` 什么时候执行](#render-什么时候执行)。返回不是由 `gpui` 构建的东西会立刻失败：
+`render` **返回一个元素、留存的 `Entity` 或字符串**，并且是在视图被置为失效时执行，而不是每帧执行——见 [`render` 什么时候执行](#render-什么时候执行)。返回其它东西会立刻失败：
 
 ```text
-render(cx) must return an element built with gpui
+render(cx) must return an element, an Entity, or a string
 ```
 
 `main.js` 必须 `export default` 一个视图类。宿主构造一个实例并把它挂载为窗口的根视图；default 导出不是类的模块会被拒绝，并说明原因。
@@ -83,11 +83,11 @@ snapshot 只在有东西让它失效时才重建：
 
 **一次失败的 `render` 不会毁掉界面。** snapshot 只在 `render` 成功返回后才发布，所以抛异常的脚本会让上一份描述——以及随它注册的那些回调——原封不动地留着。失败以横幅的形式**盖在**仍然可用的界面之上，说明当前画面比最新版本旧了一版，并把详情交出去供粘贴；你的滚动位置和焦点都还在。首次渲染就失败的视图没有可保留的东西，会拿到整屏的错误界面。两种情况下，在有东西再次让视图失效之前，运行时都不会重跑那次失败的 `render`。
 
-## Phase
+## ScopePhase
 
 每一次从 Rust 进入脚本的调用都会开启一个带 **phase** 的作用域，phase 决定这次调用的 `cx` 能做什么。
 
-| Phase | 时机 | 允许 | 不允许 |
+| `ScopePhase` | 时机 | 允许 | 不允许 |
 | --- | --- | --- | --- |
 | `render` | 构建元素树 | 读状态、构建元素、注册回调 | `notify`、打开浮层、创建留存状态 |
 | `event` | 处理点击或变更 | 全部 | 阻塞 |

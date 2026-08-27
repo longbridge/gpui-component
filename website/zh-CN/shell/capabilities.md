@@ -1,12 +1,14 @@
 ---
 title: 能力授权
-description: 默认全部拒绝的模型，fs / store / clipboard / log / process 接口，存储位置，以及沙箱裁掉了什么。
+description: 默认全部拒绝的模型，fs / storage / clipboard / process 接口，存储位置，以及沙箱裁掉了什么。
 order: 8
 ---
 
 # Capabilities
 
-脚本默认**什么都拿不到**。没有文件访问、没有存储、没有剪贴板、没有进程执行、没有网络。`Capabilities::default()` 就是空集，并有一条断言把它钉在那里。
+脚本默认**什么都拿不到**。没有文件访问、没有剪贴板、没有进程执行、没有网络。`Capabilities::default()` 就是空集，并有一条断言把它钉在那里。
+
+唯一的例外是存储，而且只在 manifest 这一层：没有写 `storage` 的应用会拿到属于它自己的 `localStorage`，就像浏览器不问自答地给每个 origin 一个那样。这是关于作者**要写什么**的约定，不是模型上的口子——Rust 侧的 `Capabilities` 在宿主开口之前照样拒绝，manifest 也照样可以写 `"storage": false`。见 [Storage](#storage)。
 
 授权由宿主决定，因为只有宿主知道它对即将运行的这段代码信任到什么程度。至于它主动**递出去**的东西——它自己的、有意暴露的那部分 Rust——见 [Host Modules](./host-modules.md)。视图在加载时冻结 capabilities；修改默认值只影响之后加载的应用，不会悄悄改变已经按某项授权运行的代码。
 
@@ -15,7 +17,7 @@ gpui_shell::set_capabilities(
     Capabilities::new()
         .read_roots([application_root.clone()])
         .write_roots([data_directory.clone()])
-        .store(true)
+        .storage(true)
         .exit(true),
 );
 ```
@@ -50,7 +52,7 @@ add its directory to capabilities.fs.read in the manifest
 ```
 
 ```text
-storage is not granted; set capabilities.store to true
+storage is not granted; set capabilities.storage to true
 ```
 
 ```text
@@ -78,12 +80,14 @@ process.exit() is not granted; set capabilities.process.exit to true in the mani
       "hosts": ["stream.example.com"],
       "http": [{ "scheme": "https", "host": "api.example.com", "methods": ["GET"], "path_prefixes": ["/v1/"] }]
     },
-    "store": true,
+    "storage": true,
     "clipboard": { "read": false, "write": true },
     "process": { "exit": false }
   }
 }
 ```
+
+这个块里的每项授权省略时都默认**拒绝**，只有 `storage` 默认给予——要拒绝它就写 `"storage": false`。
 
 未知字段、非法 reverse-DNS id、显式填写但不合法的 SemVer、不兼容的 `shell-version`、逃出目录的 entry，以及未知 `${...}` placeholder 都会在代码执行前令 manifest 失效。省略 `version` 时显示为 `unknown`。省略 `shell-version` 时接受当前 runtime；显式填写时，它表示应用所需的最早兼容 gpui-shell 版本。兼容规则遵循 SemVer：`0.x` 应用保持相同 minor，稳定版本保持相同 major。独立 CLI 会拒绝非法 manifest，不会在假设已经不一致时继续执行 entry。
 
@@ -142,29 +146,45 @@ await fs.writeFile("notes.md", source + "\n");
 `render` 描述界面，它没法 await。在 `init` 或事件回调里读，把结果留在视图上，拿到后 `cx.notify()`。
 :::
 
-## `store`
+## Storage
 
-跨重启存活的键值存储。
+[Web Storage API](https://developer.mozilla.org/zh-CN/docs/Web/API/Web_Storage_API)，和浏览器里的是同一个。不需要 import：`localStorage` 与 `sessionStorage` 是全局变量，同时也挂在 `window` 上。
 
 ```js
-import { store } from "gpui";
-
-store.set("todolist.items", items);
-const saved = store.get("todolist.items"); // 键不存在时为 null
-store.remove("todolist.items");
-store.keys();
-await store.flush();
+localStorage.setItem("todolist.items", JSON.stringify(items));
+const saved = localStorage.getItem("todolist.items"); // 键不存在时为 null
+localStorage.removeItem("todolist.items");
+localStorage.length;
+localStorage.key(0);
+localStorage.clear();
 ```
 
-值是 JSON：`null`、布尔、数字、字符串、数组与普通对象。函数与值为 `undefined` 的属性会像 `JSON.stringify` 一样被丢弃，所以心智模型可以直接迁移过来。`NaN` 与 `Infinity` 没有 JSON 形式，会被拒绝而不是悄悄变成 `null`。嵌套深度上限 64 层——真实配置远达不到，而引用环立刻就会超过。
+| 成员                | 说明                           |
+| ------------------- | ------------------------------ |
+| `length`            | 已存的键数量                   |
+| `key(index)`        | 该位置上的键，越界为 `null`    |
+| `getItem(key)`      | 值，键不存在时为 `null`        |
+| `setItem(key, val)` | 存入，值会被转成字符串         |
+| `removeItem(key)`   | 忘掉一个键                     |
+| `clear()`           | 全部忘掉                       |
+| `flush()`           | 写入落盘后 resolve             |
 
-`get`、`set`、`remove`、`keys` 是同步的，这是刻意的：`get` 在 `render` 里也可达，所以值缓存在内存里，读取从缓存回答。每次渲染读一次文件是荒唐的。
+**两者只差在活多久。** `localStorage` 是宿主放好的一个文件，跨重启存活；`sessionStorage` 是内存，随进程一起消失。这也是只有前者是一项 capability 的原因：`sessionStorage` 里的东西从不离开进程，没有什么可授权的，因此在一个什么都没授权的宿主上它照样能用。
 
-**一次修改安排一次写入，而不是执行一次写入。** 文件在后台线程写出——先写临时文件再改名覆盖目标，所以写到一半崩溃留下的是之前完整的配置，而不是一个被截断的文件——并且同时只有一次写入在途，于是一连串 `set` 汇成一个文件，而不是一次一个文件。写入在途期间发生的改动，由下一次写入带上。
+**值是字符串**，和 web 上完全一样——`setItem` 会把拿到的东西转成字符串。有结构的东西进出各走一趟 `JSON.stringify` 和 `JSON.parse`，这跟你在浏览器里会写的代码是同一段：
 
-需要确认落盘时 `await store.flush()`。它是**屏障，不是第二个写入者**：等待此前所有修改抵达磁盘，写入失败时用写入自己的错误 reject。若让它自己再写一次，就会与自动写入抢同一个临时文件，两者之间没有任何顺序保证——旧版本可能最后落盘，把新版本抹掉。
+```js
+localStorage.setItem("window", JSON.stringify({ title: "Notes", size: [640, 480] }));
+const window = JSON.parse(localStorage.getItem("window") ?? "{}");
+```
 
-cache 与等待队列都有上限：单个 store 文件序列化后最多 8 MiB，最多 4,096 个 key，单个 JSON value 最多 1 MiB。同时最多允许 1,024 个尚未完成的 `flush()` barrier；更多调用会 reject，而不是无限增长 waiter 列表。
+每个成员都是同步的，这是刻意的：`getItem` 在 `render` 里也可达，所以值缓存在内存里，读取从缓存回答。每次渲染读一次文件是荒唐的。
+
+**一次修改安排一次写入，而不是执行一次写入。** 文件在后台线程写出——先写临时文件再改名覆盖目标，所以写到一半崩溃留下的是之前完整的配置，而不是一个被截断的文件——并且同时只有一次写入在途，于是一连串 `setItem` 汇成一个文件，而不是一次一个文件。写入在途期间发生的改动，由下一次写入带上。
+
+需要确认落盘时 `await localStorage.flush()`。这是相对浏览器接口唯一多出来的一个成员，它存在是因为浏览器根本不必回答这个问题——它的存储从头到尾都是同步的。它是**屏障，不是第二个写入者**：等待此前所有修改抵达磁盘，写入失败时用写入自己的错误 reject。若让它自己再写一次，就会与自动写入抢同一个临时文件，两者之间没有任何顺序保证——旧版本可能最后落盘，把新版本抹掉。
+
+cache 与等待队列都有上限：单个存储文件序列化后最多 8 MiB，最多 4,096 个 key，单个 value 最多 1 MiB。同时最多允许 1,024 个尚未完成的 `flush()` barrier；更多调用会 reject，而不是无限增长 waiter 列表。
 
 ### 存储在哪里
 
@@ -193,16 +213,16 @@ id 允许 `a-z`、`0-9`、`.`、`-`、`_`，不允许 `..`。这不是整洁问�
 
 ### 未被授权时的退化
 
-未被授权的存储会抛异常，而写得好的应用会把它当作关于宿主的一个事实，而不是一个错误：
+未被授权的 `localStorage` 会抛异常，而写得好的应用会把它当作关于宿主的一个事实，而不是一个错误：
 
 ```js
 // storage.js —— 取自示例应用
-import { store, log } from "gpui";
-
 export function load() {
   try {
-    const saved = store.get(KEY);
-    return Array.isArray(saved) ? saved : [];
+    const saved = localStorage.getItem(KEY);
+    if (saved === null) return [];
+    const items = JSON.parse(saved);
+    return Array.isArray(items) ? items : [];
   } catch (error) {
     console.warn(
       `todolist: storage unavailable, starting empty (${error.message})`,

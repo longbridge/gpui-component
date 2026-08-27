@@ -24,12 +24,19 @@
 //! export const steps = __host_function("release", "steps");
 //! ```
 //!
+//! An asynchronous function gets an arrow instead, because `Promise<'js>`
+//! borrows the context lifetime and so has to be produced by a free function
+//! rather than a bound closure:
+//!
+//! ```js
+//! export const fetch_notes = (...args) => __host_async_call("release", "fetch_notes", ...args);
+//! ```
+//!
 //! Two consequences follow from that shape, and both are the point:
 //!
 //! - **A wrong export name fails at link time.** `import { setps }` is a
 //!   `SyntaxError` naming the module, raised before any of the application
-//!   runs, rather than a `Proxy` trap on the first call. The generated
-//!   declarations in [`crate::typings`] catch it earlier still.
+//!   runs. The generated declarations catch it earlier still.
 //! - **The binding is a stub, not the closure.** Each export forwards through
 //!   [`host_modules::dispatch`] on every call, so the registry stays the
 //!   authority: revoking a module refuses the next call through an already
@@ -50,8 +57,8 @@
 use std::fmt::Write as _;
 
 use rquickjs::{
-    Array, Ctx, Error as JsError, Exception, FromJs, IntoJs, Module, Object, Result as JsResult,
-    Value,
+    Array, Ctx, Error as JsError, Exception, FromJs, IntoJs, Module, Object, Promise,
+    Result as JsResult, Value,
     function::{Func, Rest},
     loader::{ImportAttributes, Loader, Resolver},
     module::Declared,
@@ -62,7 +69,7 @@ use crate::{
     scope,
 };
 
-use super::ShellRuntime;
+use super::{ShellRuntime, scheduler};
 
 /// How deep an argument may nest.
 ///
@@ -115,11 +122,47 @@ pub(super) fn bridge_array_len(ctx: &Ctx<'_>, array: &Array<'_>) -> JsResult<usi
 /// cannot import anything: the module it would import from is the one being
 /// declared. The name is in the `__` space the sandbox withholds from scripts.
 pub fn install(ctx: &Ctx<'_>) -> JsResult<()> {
-    ctx.globals().set(
+    let globals = ctx.globals();
+    globals.set(
         "__host_function",
         Func::from(|module: String, function: String| Binding { module, function }),
-    )
+    )?;
+    // A free function rather than a bound closure, and called through an arrow
+    // in the generated module rather than returned from one. `Promise<'js>`
+    // borrows the context lifetime, and a closure cannot be inferred as
+    // polymorphic over a lifetime appearing in both its parameter and its
+    // return type — the same constraint `scheduler::js_sleep` works around.
+    globals.set("__host_async_call", Func::from(host_async_call))
 }
+
+/// One asynchronous call, from the arrow the generated module exports.
+fn host_async_call<'js>(
+    ctx: Ctx<'js>,
+    module: String,
+    function: String,
+    arguments: Rest<Argument>,
+) -> JsResult<Promise<'js>> {
+    let arguments = HostArguments::new(arguments.0.into_iter().map(|it| it.0));
+    // Argument checking happens here, on the main thread and inside the calling
+    // script's scope, so a refusal is a thrown `TypeError` at the call site
+    // rather than a rejected promise the script has to await to hear about.
+    let work = host_modules::dispatch_async(&module, &function, &arguments).map_err(|error| {
+        Exception::throw_message(&ctx, &format!("`{module}.{function}`: {error}"))
+    })?;
+
+    scheduler::awaiting(&ctx, ASYNC_API, async move {
+        work.await
+            .map(Bridged)
+            .map_err(|error| format!("`{module}.{function}`: {error}"))
+    })
+}
+
+/// What an asynchronous host call is called in task diagnostics.
+///
+/// One name for all of them, because the scheduler's task label is `&'static
+/// str` and a module's function names are not. The failure a script sees is
+/// unaffected: a rejection carries `module.function` in its message.
+const ASYNC_API: &str = "a host module's async function";
 
 /// Resolves and loads the modules a host registered.
 ///
@@ -213,10 +256,18 @@ impl Loader for HostModuleLoader {
                     ),
                 ));
             }
-            let _ = writeln!(
-                source,
-                "export const {function} = __host_function({module:?}, {function:?});"
-            );
+            let _ = if found.is_async(function) {
+                writeln!(
+                    source,
+                    "export const {function} = (...args) => \
+                     __host_async_call({module:?}, {function:?}, ...args);"
+                )
+            } else {
+                writeln!(
+                    source,
+                    "export const {function} = __host_function({module:?}, {function:?});"
+                )
+            };
         }
 
         Module::declare(ctx.clone(), name, source)

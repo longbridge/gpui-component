@@ -9,7 +9,7 @@ order: 1
 `gpui-shell` 为 Rust 的 [GPUI](https://gpui.rs) 应用提供 **JavaScript 扩展点**：由宿主构建运行时、决定脚本能碰到什么，而脚本在同一个进程里画出真正的界面。它直接构建在 [`gpui-base`](/base/) 之上，[QuickJS](https://github.com/quickjs-ng/quickjs) 跑在宿主自己的线程上。Rust 负责渲染、布局、文本编辑、虚拟化、焦点、浮层以及全部系统能力；脚本负责界面组合、视觉呈现与业务逻辑。脚本也可以单独跑起来，开发一段脚本时通常就是这么做的。
 
 ```js
-import { View, text } from "gpui";
+import { View } from "gpui";
 import { v_flex, Button } from "gpui-base";
 
 export default class Counter extends View {

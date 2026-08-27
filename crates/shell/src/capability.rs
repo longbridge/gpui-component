@@ -17,7 +17,7 @@ pub struct Capabilities {
     execute: ExecuteGrant,
     network_hosts: Vec<String>,
     http_requests: Vec<HttpRequestGrant>,
-    store: bool,
+    storage: bool,
     clipboard_read: bool,
     clipboard_write: bool,
     exit: bool,
@@ -151,8 +151,8 @@ impl Capabilities {
         self
     }
 
-    pub fn store(mut self, allowed: bool) -> Self {
-        self.store = allowed;
+    pub fn storage(mut self, allowed: bool) -> Self {
+        self.storage = allowed;
         self
     }
 
@@ -176,8 +176,8 @@ impl Capabilities {
         self.exit
     }
 
-    pub fn has_store(&self) -> bool {
-        self.store
+    pub fn has_storage(&self) -> bool {
+        self.storage
     }
 
     pub fn is_clipboard_readable(&self) -> bool {
@@ -342,7 +342,7 @@ pub enum CapabilityError {
     NotGranted(Access),
     OutsideRoots { path: PathBuf, access: Access },
     ExecuteDenied(String),
-    StoreDenied,
+    StorageDenied,
 }
 
 impl std::fmt::Display for CapabilityError {
@@ -364,8 +364,8 @@ impl std::fmt::Display for CapabilityError {
                 f,
                 "running `{command}` is not granted; add it to capabilities.fs.execute in the manifest"
             ),
-            CapabilityError::StoreDenied => {
-                f.write_str("storage is not granted; set capabilities.store to true")
+            CapabilityError::StorageDenied => {
+                f.write_str("storage is not granted; set capabilities.storage to true")
             }
         }
     }

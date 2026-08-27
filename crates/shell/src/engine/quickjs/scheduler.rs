@@ -51,6 +51,7 @@
 use std::{
     cell::{Cell, RefCell},
     collections::{HashMap, HashSet},
+    future::Future,
     rc::Rc,
     time::Duration,
 };
@@ -1006,7 +1007,7 @@ pub(super) fn deferred<'js>(
     api: &'static str,
     resolve: Function<'js>,
     reject: Function<'js>,
-) -> JsResult<crate::store::Settle> {
+) -> JsResult<crate::storage::Settle> {
     let host = host(ctx, api)?;
     let task = register(
         ctx,
@@ -1181,6 +1182,70 @@ where
         })
         .detach();
     Ok((promise, ActorCompletion(completion)))
+}
+
+/// A promise driven by a future on the background executor.
+///
+/// [`blocking`] is this with a synchronous closure in front; this one takes the
+/// future directly, which is what an asynchronous host module function hands
+/// over. Ownership, cancellation and scope restoration are identical — a call
+/// whose view has gone away leaves its promise pending rather than inventing an
+/// error for code that was asked to stop.
+pub(super) fn awaiting<'js, T>(
+    ctx: &Ctx<'js>,
+    api: &'static str,
+    work: impl Future<Output = Result<T, String>> + Send + 'static,
+) -> JsResult<Promise<'js>>
+where
+    T: for<'a> IntoJs<'a> + Send + 'static,
+{
+    let host = host(ctx, api)?;
+    let (promise, resolve, reject) = ctx.promise()?;
+
+    let task = register(
+        ctx,
+        TaskState::new(
+            api,
+            scope::current_view().map(|view| view.downgrade()),
+            Some(Persistent::save(ctx, resolve)),
+        )
+        .with_rejection(Persistent::save(ctx, reject)),
+    )?;
+
+    let running = task.clone();
+    host.foreground
+        .clone()
+        .spawn(async move {
+            let outcome = host.background.spawn(work).await;
+
+            if let Readiness::Ready(owner) = running.readiness() {
+                let resolve = running.take_callback();
+                let reject = running.take_rejection();
+                resume(
+                    &host,
+                    &running.policy(),
+                    running.application.clone(),
+                    owner,
+                    move |ctx, _| match outcome {
+                        Ok(value) => match resolve {
+                            Some(resolve) => resolve.restore(ctx)?.call::<_, ()>((value,)),
+                            None => Ok(()),
+                        },
+                        Err(message) => match reject {
+                            Some(reject) => {
+                                let error = Exception::from_message(ctx.clone(), &message)?;
+                                reject.restore(ctx)?.call::<_, ()>((error,))
+                            }
+                            None => Ok(()),
+                        },
+                    },
+                );
+            }
+            finish(&running);
+        })
+        .detach();
+
+    Ok(promise)
 }
 
 /// A promise settled by work that must not run on this thread.

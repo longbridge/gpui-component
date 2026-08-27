@@ -122,7 +122,7 @@ gpui_shell::set_capabilities(
         .store(true),
 );
 gpui_shell::set_store_path(data_dir.join("store.json"));
-gpui_shell::export_modules(modules)?;
+gpui_shell::export_module(market_module(&market))?;
 ```
 
 All three default to nothing: no file access, no storage location, no host modules. See [Capabilities](./capabilities.md) and [Host Modules](./host-modules.md).
