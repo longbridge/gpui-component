@@ -3435,6 +3435,12 @@ whose values **did**. A panel wants both — memo the chrome, template the rows.
 
 #### The surface: a template discovers its own slots
 
+> Written before the mechanism was built. It is accurate about how discovery
+> works — that part is implemented and tested — and wrong about the conclusion:
+> the surface below is not shipped, because measuring it showed that what an
+> author has to write for is worth 3.5× and what a wrapper can take on its own
+> is worth 1.25×. Read it for the mechanism, then read what follows.
+
 The author-declared shape is the only one the table leaves standing, and what it
 left open is what that shape *looks like* — because a form asking the author to
 write a second language is §5.3's DSL under another name.
@@ -3591,24 +3597,102 @@ should decide the API. And nothing has yet established that an author-declared
 template can be made to read like ordinary builder code — which is the whole
 reason §5.3's refusal of a DSL is not also a refusal of this.
 
+#### What was built, and what it turned out to be worth
+
+The mechanism is implemented in `engine/quickjs/template.rs` and
+`SpecArena::graft` / `write_slot`. **It is not part of the script surface**, and
+the measurements below are why.
+
+Sentinel discovery works exactly as sketched. A body is run once with a sentinel
+in each parameter position; wherever a sentinel comes to rest is a slot; every
+call after that grafts and fills. `tests/template.rs` pins the behaviour and the
+five refusals — a computed argument, an inline handler, a parameter that fills
+nothing, a nested template, a slot in a position a template cannot fill — and
+one test asserts that a filled template's description is byte-identical to the
+builder chain it replaces.
+
+**Explicitly written for, it is worth 3.5×.** Two 40-row watchlists describing
+the same rows, release build, best of seven batches of fifty:
+
+| | Per build |
+| --- | ---: |
+| Builder chain | **0.310 ms** |
+| Template | **0.090 ms** |
+
+Slightly under the 5.3× the fill measurement predicted, and the gap is what the
+fill measurement left out: the JavaScript call itself, its argument array, and
+one bridge crossing per argument.
+
+**Automatically, with no authoring change, it is worth 1.25×.** This is the
+number that decides the chapter, because a template a script has to be written
+for is a performance annotation in the source — two ways to describe one
+interface, and a decision nobody should be making while writing a panel.
+
+An automatic wrapper is safe by construction if it refuses any body where a
+sentinel is read and does not land in the description: a conditional on an
+argument reads without landing, a computed one throws on coercion, and both are
+caught. The question is what survives that rule on code nobody wrote for it. The
+Shell story's own `ui.js` answers it:
+
+| Helper | Automatic? |
+| --- | --- |
+| `title`, `label`, `muted`, `rule` | **Yes.** One varying value handed straight to a builder call |
+| `cell(width, options)`, `watchMarker(watched)`, `action(…, {primary})` | No. An argument decides *structure*, through a ternary or a `when` |
+| `quoteRow(quote, onClick, cx)` | No. `` Button.new(`quote-${quote.symbol}`) `` computes on an argument |
+
+Measured on a board of that shape — twenty rows of six cells, with only the
+first group templated:
+
+| | Per build |
+| --- | ---: |
+| Helpers as plain functions | **0.339 ms** |
+| Helpers templated | **0.272 ms** — 1.25× |
+
+So the automatic ceiling is a quarter, not a factor of three. The gap is not the
+mechanism; it is that ordinary presentation code interpolates strings and
+branches on its arguments constantly, and both are exactly what a template
+cannot hold.
+
+For comparison, the other automatic lever — reusing the recorder's own work
+rather than the script's — is smaller still. Removing the eager
+`style::apply_param` check entirely, which is the largest single thing a
+same-shape rebuild could skip, moves benchmark A from 0.628 ms to 0.573 ms: 8%.
+That is the shape of everything on the Rust side of the crossing, because
+§20.6's floor says roughly 90 ns of a 140 ns recorded call is the interpreter
+and the crossing, and neither is reachable while JavaScript is still driving the
+description.
+
+#### Where that leaves it
+
+The mechanism stays, unexposed, reachable as `globalThis.__template` for the
+tests that pin it. Three reasons not to delete it and not to ship it:
+
+1. **The measurement is the deliverable.** "A template cache is worth 3.5× if
+   written for and 1.25× if not" is a fact about this runtime that had to be
+   built to be known, and it is what any later attempt should start from.
+2. **The one place it pays automatically is a loop the runtime already owns.**
+   A virtual list's item renderer is called from the layout pass, twice a frame
+   per list, and the runtime — not the script — decides how many times. A row
+   template discovered there costs the author nothing and is paid back per
+   frame rather than per invalidation. That is the remaining piece of work worth
+   doing, and it needs no script surface at all.
+3. **Composition is the limit, and it is liftable.** A template body may not
+   call another template today, so a template can only be a leaf. Lifting it —
+   letting an outer sentinel flow into an inner template's slot during discovery
+   — is small, and it is what would let a whole panel be one template rather
+   than a row. It does not change the 1.25×, because what blocks composition on
+   real code is string interpolation rather than the restriction.
+
 #### What is left to do, in order
 
-3. **Build the surface.** Sentinel discovery above answers what it looks like;
-   what is left is the implementation and the two refusals that keep it honest —
-   a sentinel that throws on coercion, and a body that refuses an inline
-   handler. The pieces it needs from the arena are a graft with id remapping and
-   a slot write; everything else already exists. Composition with `gpui.memo`
-   belongs in the same design rather than after it.
-4. **Target virtual list rows first.** Row descriptions are produced from
-   GPUI's layout pass, twice a frame per list
-   (`materialize/components/virtual_list.rs`, `snapshot.rs`), so they are a
-   recorded-call site that is *already* on the frame budget rather than on an
-   invalidation — `frame_script_calls` counts them, along with dock chrome
-   handlers, and nothing else. A row template pays per frame rather than per
-   notify, the structure there is stable by construction, and the surface is one
-   callback rather than a whole render.
-5. **Re-run the census on the terminal** before committing to the shape, and
-   record the number here beside the story's.
+3. **Discover row templates inside the virtual list.** The one place the win
+   is automatic *and* large, because the runtime owns the loop and the rows are
+   already on the frame budget rather than on an invalidation. No script
+   surface, and the fallback rule above is the safety net.
+4. **Lift the nesting restriction** if a whole panel is ever worth templating,
+   which the 1.25× says it is not yet.
+5. **Re-run the census on the terminal** before spending anything more here, and
+   record the number beside the story's.
 
 ### 20.8 Start-up
 
@@ -4044,9 +4128,11 @@ both direct loading and asynchronous initialization under a manifest policy.
 
 ### Not built
 
-`gpui.memo` and every other memoization, including the template cache of §20.7
-— whose instrumentation *is* built and reports through `RuntimeMetrics`, while
-nothing acts on what it reports. Of base's components, `Tree` and the
+`gpui.memo` and every other memoization. The template cache of §20.7 is a
+partial exception and is described there: its instrumentation reports through
+`RuntimeMetrics`, and its mechanism is implemented and tested but reaches no
+script — measuring it showed an automatic wrapper would be worth 1.25×, and
+only a script written for one is worth 3.5×. Of base's components, `Tree` and the
 higher-level `List` are not bound, nor is `Calendar`'s element (§14.2 —
 `CalendarState` is), nor `AlertDialog`'s parts (§14.2), nor `ColorPicker`.
 Semantic state styles (checked, selected, disabled) with base's precedence rules.

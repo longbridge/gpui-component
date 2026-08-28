@@ -398,7 +398,7 @@ impl gpui::Render for Empty {
     }
 }
 
-fn script_view(
+pub(super) fn script_view(
     cx: &mut TestAppContext,
     source: &str,
 ) -> (
@@ -411,7 +411,7 @@ fn script_view(
     (runtime, context, view)
 }
 
-fn script_object(
+pub(super) fn script_object(
     cx: &mut TestAppContext,
     source: &str,
 ) -> (
@@ -437,7 +437,7 @@ fn script_object(
     (runtime, context, object)
 }
 
-fn render_once(context: &mut VisualTestContext, view: &Entity<ScriptView>) {
+pub(super) fn render_once(context: &mut VisualTestContext, view: &Entity<ScriptView>) {
     let view = view.clone();
     context.draw(
         gpui::Point::default(),
@@ -448,7 +448,7 @@ fn render_once(context: &mut VisualTestContext, view: &Entity<ScriptView>) {
 
 /// Marks the view dirty the way `cx.notify()` does, then draws — which is the
 /// only thing that runs the script again.
-fn invalidate(context: &mut VisualTestContext, view: &Entity<ScriptView>) {
+pub(super) fn invalidate(context: &mut VisualTestContext, view: &Entity<ScriptView>) {
     context.update(|_, cx| view.update(cx, |view, _| view.invalidate()));
     render_once(context, view);
 }

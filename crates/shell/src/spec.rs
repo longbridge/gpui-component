@@ -702,6 +702,110 @@ impl ItemSpecs {
     }
 }
 
+/// Where inside a node a template writes one of a call's arguments.
+///
+/// The three positions a value can reach in a recorded description, and the
+/// only three [`crate::spec::Template`] fills. A slot is addressed by the
+/// operation's index rather than by its name because a node may record the same
+/// method twice, and the second one is a different position.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SlotSite {
+    /// The string a [`Component::Text`] node carries — what `.child(value)`
+    /// records.
+    Text,
+    /// One argument of a recorded [`SpecOp::ParamStyle`] or [`SpecOp::Method`].
+    Argument { op: u16, argument: u8 },
+    /// The [`CallbackId`] of a recorded [`SpecOp::Callback`]. A handler is a
+    /// slot like any other, but the value written into it is minted per call
+    /// rather than carried — which is why a template does not make a handler
+    /// free, only the structure around it.
+    Handler { op: u16 },
+}
+
+/// One position a template fills, and which of the call's arguments fills it.
+#[derive(Clone, Copy, Debug)]
+pub struct Slot {
+    node: SpecId,
+    site: SlotSite,
+    /// The index of the template parameter whose sentinel came to rest here.
+    argument: u16,
+}
+
+impl Slot {
+    pub(crate) fn new(node: SpecId, site: SlotSite, argument: u16) -> Self {
+        Self {
+            node,
+            site,
+            argument,
+        }
+    }
+
+    pub(crate) fn node(&self) -> SpecId {
+        self.node
+    }
+
+    pub(crate) fn site(&self) -> SlotSite {
+        self.site
+    }
+
+    pub(crate) fn argument(&self) -> u16 {
+        self.argument
+    }
+}
+
+/// What a call writes into one slot.
+#[derive(Clone, Debug)]
+pub enum SlotValue {
+    Text(String),
+    Value(Bridged),
+    Handler(CallbackId),
+}
+
+/// A description recorded once, with the positions its values occupy left open.
+///
+/// The structure half of §20.7's split. Built by running a script's template
+/// body a single time with a sentinel in each parameter position, and used
+/// afterwards by grafting it into the live arena and writing that call's
+/// arguments into [`Self::slots`] — which is the whole of an instantiation, and
+/// runs no script at all.
+///
+/// It holds no [`CallbackId`] of its own: a handler is a slot, minted per call,
+/// because a closure recorded at discovery would capture that first call's
+/// values for as long as the template lived.
+pub struct Template {
+    arena: SpecArena,
+    root: SpecId,
+    slots: Vec<Slot>,
+    arity: usize,
+}
+
+impl Template {
+    pub(crate) fn new(arena: SpecArena, root: SpecId, slots: Vec<Slot>, arity: usize) -> Self {
+        Self {
+            arena,
+            root,
+            slots,
+            arity,
+        }
+    }
+
+    pub(crate) fn arena(&self) -> &SpecArena {
+        &self.arena
+    }
+
+    pub(crate) fn root(&self) -> SpecId {
+        self.root
+    }
+
+    pub(crate) fn slots(&self) -> &[Slot] {
+        &self.slots
+    }
+
+    pub(crate) fn arity(&self) -> usize {
+        self.arity
+    }
+}
+
 /// Element descriptions for one script render.
 #[derive(Default)]
 pub struct SpecArena {
@@ -849,6 +953,111 @@ impl SpecArena {
         self.parented[child as usize] = true;
         self.nodes[parent as usize].children.push(child);
         Ok(())
+    }
+
+    /// Copies a template's nodes into this arena and answers where its root
+    /// landed.
+    ///
+    /// This is an instantiation's whole structural half: no script runs, no
+    /// value crosses the bridge, and no builder method is interpreted. A
+    /// template arena's ids are dense and start at zero, so remapping is one
+    /// addition — every id inside a copied node moves by the same base, and the
+    /// nodes keep their order.
+    ///
+    /// The grafted nodes arrive carrying the `parented` and `claimed` flags
+    /// they were recorded with, which is what makes a grafted subtree obey the
+    /// same single-use rule as a described one: its interior is already spoken
+    /// for, and only its root is free to be attached.
+    pub(crate) fn graft(&mut self, template: &Template) -> SpecId {
+        let base = self.nodes.len() as SpecId;
+        let source = &template.arena;
+
+        self.nodes.reserve(source.nodes.len());
+        for node in &source.nodes {
+            let mut node = node.clone();
+            for child in &mut node.children {
+                *child += base;
+            }
+            for op in &mut node.ops {
+                match op {
+                    SpecOp::StateStyle(_, id) | SpecOp::Slot(_, id) => *id += base,
+                    SpecOp::NullaryStyle(_)
+                    | SpecOp::ParamStyle(..)
+                    | SpecOp::Method(..)
+                    | SpecOp::Callback(..)
+                    | SpecOp::ActionCallback(..) => {}
+                }
+            }
+            self.nodes.push(node);
+        }
+        self.parented.extend_from_slice(&source.parented);
+        self.claimed.extend_from_slice(&source.claimed);
+
+        // The root arrives with no parent so the caller can attach it, whatever
+        // it was in the template.
+        self.parented[(template.root + base) as usize] = false;
+
+        // One mix for the whole graft rather than one per node: the template's
+        // own fingerprint already summarizes everything inside it, and a
+        // description that instantiates the same template twice must not look
+        // like one that instantiated two different ones.
+        self.structure = mix(self.structure, mix(9, source.structure));
+
+        template.root + base
+    }
+
+    /// Writes one call's value into a grafted slot.
+    ///
+    /// `base` is what [`Self::graft`] returned less the template's own root, so
+    /// that a slot recorded against the template's ids reaches the copy.
+    pub(crate) fn write_slot(
+        &mut self,
+        base: SpecId,
+        slot: &Slot,
+        value: SlotValue,
+    ) -> Result<(), SpecError> {
+        let node = self
+            .nodes
+            .get_mut((slot.node() + base) as usize)
+            .ok_or(SpecError::Expired)?;
+
+        match (slot.site(), value) {
+            (SlotSite::Text, SlotValue::Text(text)) => {
+                node.component = Some(Component::Text(text));
+            }
+            (SlotSite::Argument { op, argument }, SlotValue::Value(bridged)) => {
+                let target = node.ops.get_mut(op as usize).ok_or(SpecError::Expired)?;
+                let arguments = match target {
+                    SpecOp::ParamStyle(_, arguments) | SpecOp::Method(_, arguments) => arguments,
+                    _ => return Err(SpecError::Expired),
+                };
+                *arguments
+                    .get_mut(argument as usize)
+                    .ok_or(SpecError::Expired)? = bridged;
+            }
+            (SlotSite::Handler { op }, SlotValue::Handler(callback)) => {
+                match node.ops.get_mut(op as usize).ok_or(SpecError::Expired)? {
+                    SpecOp::Callback(_, id) => *id = callback,
+                    _ => return Err(SpecError::Expired),
+                }
+            }
+            // Every pairing is decided when the slot is recorded, so a mismatch
+            // is the runtime disagreeing with itself rather than a script
+            // mistake. `Expired` is the arena's word for "this description is
+            // not what you think it is".
+            _ => return Err(SpecError::Expired),
+        }
+
+        Ok(())
+    }
+
+    /// Whether anything in this arena mounts a retained entity.
+    ///
+    /// A template is grafted many times and GPUI cannot mount one entity at two
+    /// positions in a tree, so a body that describes one is refused at
+    /// definition rather than at the second call.
+    pub(crate) fn mounts_an_entity(&self) -> bool {
+        !self.mounted_views.is_empty()
     }
 
     fn check_live(&self, id: SpecId) -> Result<(), SpecError> {
