@@ -16,3 +16,4 @@ mod process;
 mod render;
 mod snapshot;
 mod standard_runtime;
+mod structure;

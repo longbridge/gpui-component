@@ -130,11 +130,14 @@ reading.materializations();    // 跟着帧走
 reading.script_render_time();  // 脚本 render 里的总耗时
 reading.native_time();         // 其中花在 HostModule 里的部分
 reading.slowest_script_render();
+reading.structure_repeat_rate();  // 一次重建产出的结构，与它替换掉的那份是否相同
 ```
 
 `RuntimeMetrics::since(&earlier)` 给出两次读数之间的差值，每秒速率就是这么算的。这里没有重置：计数器属于运行时，把它们清零会把正在读它们的其他人一起挪动。要量某一段，就自己留一个基线再相减——Shell story 每次切换 feed 都会取一次基线，所以它的读数回答的是“这个 feed 要花多少”，而不是“这个窗口从打开到现在干了多少”。
 
 回归测试可以直接对 `script_renders` 做断言；[基准测试里的第三个数](./engine.md#那次实测)靠的正是这一点。
+
+`structure_repeats()` 与 `structure_changes()` 回答的是另一个问题：在那些有上一份描述可比的重建里，有多少次产出的**结构**完全相同——相同的组件、相同的 builder 方法、相同的树，只有其中的取值变了。运行时不会因为这个答案而少做任何事；它存在，是为了给[snapshot 缓存止步于哪里](./performance.md#snapshot-缓存止步于哪里)量个尺寸。视图的第一次构建没有前一份可比，两个计数都不计它。
 
 ## 开发构建的配置
 

@@ -3293,9 +3293,10 @@ animation interpolation, or hit testing.
 
 ### 20.7 The template cache
 
-Not implemented, and the largest unspent lever in this chapter. This section
-states what it would be, what has to be true for it to pay, and what to measure
-before building any of it.
+The largest unspent lever in this chapter. The cache is not implemented; the
+measurement that decides whether it should be **is**, and its results are below.
+This section states what a template would be, what has to be true for it to pay,
+what the numbers say, and what is left to design.
 
 **What the snapshot cache does and does not cover.** §8.4 removed the cost of
 *no change*: an unchanged view is replayed in Rust and enters the VM zero times
@@ -3442,34 +3443,86 @@ JIT cannot reach. Given that §20.6 has already taken the cheap wins on `C_op`
 and reports the remainder as a floor, "do less" is the only lever left with an
 order of magnitude in it.
 
-#### What to verify first, and in what order
+#### What was measured
 
-The whole idea rests on one unmeasured assumption: that on real workloads a
-dirty render usually produces the structure the previous one produced. If that
-is false, nothing above is worth building.
+Steps 1 and 2 below are built and have run. The instrumentation is
+[`StructureFingerprint`](../crates/shell/src/spec.rs) — a hash of a
+description's shape accumulated *while it is recorded*, with payloads and
+`CallbackId`s deliberately left out — surfaced as
+`RuntimeMetrics::structure_repeats`, `structure_changes` and
+`structure_repeat_rate`, compared in `ScriptView::rebuild`, and reported live
+under the Shell story's counters. **Nothing acts on it.** It is a reading, and
+§20.7's first problem is exactly why it cannot become a cache as it stands.
 
-1. **Measure the hit rate before designing the API.** Accumulate a structural
-   fingerprint while recording — hash each `Component` discriminant and each
-   `SpecOp` discriminant as it is pushed, ignoring payloads — and report, per
-   view, how often a dirty render's fingerprint equals the previous one's. This
-   is the "record and compare" shape used purely as instrumentation, costs a few
-   nanoseconds per op, and answers the question outright. The Longbridge market
-   terminal of §20.3 is the workload to run it against.
-2. **Count what the slots would be.** On a hit, count the nodes whose payloads
-   differ, and separately the handler ops. That gives both the ceiling
-   (`slots.len()` against `arena.len()`) and problem 3's bound in one number.
-3. **Only then choose the surface.** If the hit rate is high and the handler
-   share is low, the author-declared form is worth designing. If the handler
-   share dominates, the useful work is lifting captures out of per-render
-   closures, and the template is a smaller idea than it looks.
+Three results.
+
+**The assumption holds.** On the Shell story's own board — twenty rows of six
+cells fed by a live market entity, written before this question was asked —
+**40 of 40** quote-driven rebuilds produced the structure they replaced
+(`stories/shell_story.rs`). A moving price is a value, not a
+structure, and the runtime rebuilds all of it anyway.
+
+**The slot ceiling is about 4%, and half of it is handlers.** On a 40-row
+watchlist — 361 nodes, 684 recorded operations, 1,045 addressable positions —
+a value-only tick differs in **80** of them (`tests/structure.rs`):
+
+| | Count | Share |
+| --- | ---: | ---: |
+| Nodes | 361 | |
+| Recorded operations | 684 | |
+| Component payloads that differ (the prices) | 40 | 11.1% of nodes |
+| Argument values that differ | 0 | 0% of operations |
+| Handler operations, which differ by construction | 40 | 5.8% of operations |
+| **Positions a rebuild actually changes** | **80** | **7.7% of 1,045** |
+
+So a template would reuse 96% of the description and write 4% of it — and half
+of what it writes is handler registration, which problem 3 says a template
+cannot fill. The reusable share is real; the *saving* is bounded by the closure
+allocation and callback registration that stay.
+
+**The measurement is free.** Benchmark A on the 443-node panel, best of seven
+batches of fifty, release build, one Linux x86-64 machine: **0.628 ms** before
+the fingerprint and **0.623 ms** after. Two or three mixes per recorded
+operation sit below the noise of the measurement they are inside, which is why
+the counter is always on rather than behind a flag.
+
+#### What that licenses, and what it does not
+
+It licenses designing the surface. The assumption the whole idea rested on is
+not merely plausible on a real script — it was unanimous on the workload
+measured, which is the outcome that makes an author-declared template worth an
+API rather than a note.
+
+It does not license expecting the full `C_op` back. The census sizes problem 3
+rather than dissolving it: a panel with one button per row spends half its write
+set on handlers, and *that* half is not builder calls a template skips — it is
+closure allocation and registration that happen whether or not the structure was
+reused. A panel with fewer handlers per row does better; one that is mostly
+controls does worse.
+
+Two things are still unmeasured. The Longbridge terminal of §20.3 is a larger
+and less obliging workload than the story's board, and its rate is the one that
+should decide the API. And nothing has yet established that an author-declared
+template can be made to read like ordinary builder code — which is the whole
+reason §5.3's refusal of a DSL is not also a refusal of this.
+
+#### What is left to do, in order
+
+3. **Choose the surface.** The author-declared form is the only shape §20.7's
+   table leaves standing, so the question is what it looks like: how a template
+   is keyed, how a variant is selected, and how the values reach the slots
+   without the author writing a second language. Composition with `gpui.memo`
+   belongs in the same design rather than after it.
 4. **Target virtual list rows first.** Row descriptions are produced from
    GPUI's layout pass, twice a frame per list
    (`materialize/components/virtual_list.rs`, `snapshot.rs`), so they are a
    recorded-call site that is *already* on the frame budget rather than on an
    invalidation — `frame_script_calls` counts them, along with dock chrome
-   handlers, and nothing else. A row template pays per frame rather than per notify, the
-   structure there is stable by construction, and the surface is one callback
-   rather than a whole render.
+   handlers, and nothing else. A row template pays per frame rather than per
+   notify, the structure there is stable by construction, and the surface is one
+   callback rather than a whole render.
+5. **Re-run the census on the terminal** before committing to the shape, and
+   record the number here beside the story's.
 
 ### 20.8 Start-up
 
@@ -3905,7 +3958,9 @@ both direct loading and asynchronous initialization under a manifest policy.
 
 ### Not built
 
-`gpui.memo` and every other memoization, including the template cache of §20.7. Of base's components, `Tree` and the
+`gpui.memo` and every other memoization, including the template cache of §20.7
+— whose instrumentation *is* built and reports through `RuntimeMetrics`, while
+nothing acts on what it reports. Of base's components, `Tree` and the
 higher-level `List` are not bound, nor is `Calendar`'s element (§14.2 —
 `CalendarState` is), nor `AlertDialog`'s parts (§14.2), nor `ColorPicker`.
 Semantic state styles (checked, selected, disabled) with base's precedence rules.

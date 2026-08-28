@@ -140,11 +140,14 @@ reading.materializations();    // follows frames
 reading.script_render_time();  // total time inside script `render`
 reading.native_time();         // of which, inside HostModule registrations
 reading.slowest_script_render();
+reading.structure_repeat_rate();  // how often a rebuild described the shape it replaced
 ```
 
 `RuntimeMetrics::since(&earlier)` gives the delta between two readings, which is how a per-second rate is built. There is no reset: the counters belong to the runtime, and zeroing them would move them under anything else that is reading. To measure one stretch, keep a baseline and subtract — the Shell story takes one whenever its feed changes, so its readout answers "what is this feed costing" rather than "what has this window done since it opened".
 
 A regression test can assert on `script_renders` directly; that is what keeps [the benchmark's third figure](./engine.md#the-measurement) honest.
+
+`structure_repeats()` and `structure_changes()` answer a different question: of the rebuilds that had a previous description to compare with, how many produced the same *shape* — the same components, the same builder methods, the same tree — and differed only in the values inside it. Nothing in the runtime acts on the answer; it is there to size [where the snapshot cache stops](./performance.md#where-the-snapshot-cache-stops). A view's first build has no predecessor and is counted in neither.
 
 ## Building for development
 

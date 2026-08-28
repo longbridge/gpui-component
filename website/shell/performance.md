@@ -115,6 +115,7 @@ The runtime counts the two events apart, and the host can read them with `runtim
 | `mean_native()` | How much of that was inside HostModule functions rather than describing |
 | `slowest_script_render()` | The worst single build in the run |
 | `frame_script_calls()` | Entries into the VM from the frame path — [virtual list](./elements.md) item renderers and [dock](./dock.md) chrome handlers, which are the only two |
+| `structure_repeat_rate()` | Of the rebuilds that had a predecessor, what fraction described the same *shape* — see below |
 
 What the shape of a reading says:
 
@@ -140,4 +141,6 @@ When the price becomes `230.51`, the structure is identical and only one leaf di
 
 Until that changes, the lever is the one this page opens with: **shrink the boundary that has to be rebuilt.** A price cell in a child view of its own is a description of two nodes rather than four hundred, and it is available today.
 
-The direction beyond it is a **template cache** — splitting a description into a reusable structure and the dynamic slots inside it, so a value-only change fills slots instead of re-running the builder. It is a design direction rather than a feature: it is not implemented, and sits beside the other levers this runtime has [not spent yet](./elements.md#not-there-yet).
+The direction beyond it is a **template cache** — splitting a description into a reusable structure and the dynamic slots inside it, so a value-only change fills slots instead of re-running the builder. It is not implemented, and sits beside the other levers this runtime has [not spent yet](./elements.md#not-there-yet).
+
+What *is* implemented is the reading that says whether it would be worth it. `structure_repeats()` and `structure_changes()` count how often a rebuild produced the shape it replaced, differing only in the values inside it — the ceiling such a cache could reach. On a twenty-row market board driven by a live quote feed the shape repeated on every rebuild, so if a panel of yours reports a low rate, that is worth knowing on its own: something in its description is changing structure when you thought only a number was.
