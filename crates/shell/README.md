@@ -26,8 +26,10 @@ logic. JavaScript is the default scripting language.
 
 Its design is specified in [`docs/gpui-shell.md`](../../docs/gpui-shell.md).
 This crate is at milestone M0: a feasibility baseline, not a stable interface.
-The machinery below a plugin is built and tested, but not yet reachable from a
-script: `gpui_shell::dock` is crate-private and the CLI does not use
+A script now contributes dockable panels and draws a dock's chrome —
+`gpui_shell::dock` is public, and `DockArea`, `dock_area(...)` and
+`DockArea.register_panel` are part of the script surface. What is still missing
+above them is the rest of the contribution registry and a CLI that uses
 `PluginManager`, so the standalone path is what runs end to end today.
 
 ## Base-First: The Script Owns Presentation

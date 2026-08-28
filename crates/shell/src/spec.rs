@@ -15,6 +15,7 @@
 
 use std::{collections::HashSet, rc::Rc};
 
+use gpui::SharedString;
 use smallvec::SmallVec;
 
 use crate::value::Bridged;
@@ -99,6 +100,39 @@ pub enum Component {
     OtpInput(crate::entities::EntityHandle),
     /// A vector image, loaded from the application's own directory.
     Svg(String),
+    /// An accordion root: a group, and nothing else on screen.
+    Accordion(String),
+    /// One item: it connects a header with a panel and passes its own `open`
+    /// down to both, which is the whole of what it does.
+    AccordionItem,
+    /// The heading that owns one item's trigger.
+    AccordionHeader,
+    /// The region an item reveals. Unmounted while shut unless
+    /// `keep_mounted(true)` says otherwise.
+    AccordionPanel,
+    /// The button that asks for the opposite of the item's `open`.
+    AccordionTrigger(String),
+    /// A pagination root: a navigation landmark carrying the announced label,
+    /// and nothing else on screen.
+    ///
+    /// The page buttons are the script's own elements. What base contributes
+    /// that a script could not write for itself is the ellipsis layout, and
+    /// that is a calculation rather than an element — it is exported as
+    /// `pagination_items(...)`, not as a component.
+    Pagination(String),
+    /// An avatar root: it renders its `image` slot, or its `fallback` slot when
+    /// there is no image, and nothing else. The picture is the script's.
+    Avatar,
+    /// The image slot of a [`Component::Avatar`], loaded from the
+    /// application's own directory exactly as [`Component::Image`] is.
+    ///
+    /// A component of its own rather than a plain `Image` in the slot, because
+    /// base's `Avatar::image` takes an `AvatarImage` and not an element: the
+    /// slot has to be resolved into that type, which needs the path back.
+    AvatarImage(String),
+    /// The fallback slot: an ordinary box holding whatever stands in for the
+    /// image — initials, a shape, an svg the script supplies.
+    AvatarFallback,
     /// A full-color image, loaded from the application's own directory.
     Image(String),
     /// A native GPUI path. Its geometry is retained in method operations and
@@ -207,6 +241,23 @@ pub enum Component {
     /// `DatePicker::new` requires it: a picker without one has no trigger the
     /// keyboard can reach. It holds no date — the calendar does.
     DatePicker(String, crate::entities::EntityHandle),
+    /// A dockable layout, addressed by its entity handle for the same reason
+    /// [`Component::Input`] is: the layout is the state, it outlives every
+    /// description, and the user changes it without a script render.
+    ///
+    /// Nothing under it is described. Its panels are entities the script handed
+    /// it, and its chrome is drawn by handlers this node carries — see
+    /// [`crate::dock`] — so the node itself is the whole of the description.
+    DockArea(crate::entities::EntityHandle),
+    /// Where a dock's own content goes inside the chrome the script drew
+    /// around it.
+    ///
+    /// Base hands a dock's content to the chrome as a finished element and
+    /// takes back whatever the chrome returns, so a chrome that wants both has
+    /// to place the content itself. An element cannot cross into script, so
+    /// this stands in for it: `dock_content()` describes the position, and
+    /// materialization puts the real element there.
+    DockContent,
     /// A virtualized list: the one component whose description is not the whole
     /// of what it draws. Its rows come from a callback GPUI runs during layout,
     /// so this node carries only the list itself. See [`VirtualListSpec`] and
@@ -338,6 +389,15 @@ impl Component {
             Component::OtpInput(_) => "OtpInput",
             Component::Svg(_) => "svg",
             Component::Image(_) => "image",
+            Component::Accordion(_) => "Accordion",
+            Component::AccordionItem => "AccordionItem",
+            Component::AccordionHeader => "AccordionHeader",
+            Component::AccordionPanel => "AccordionPanel",
+            Component::AccordionTrigger(_) => "AccordionTrigger",
+            Component::Pagination(_) => "Pagination",
+            Component::Avatar => "Avatar",
+            Component::AvatarImage(_) => "AvatarImage",
+            Component::AvatarFallback => "AvatarFallback",
             Component::Path { fill: true, .. } => "path fill",
             Component::Path { fill: false, .. } => "path stroke",
             Component::Tabs(_) => "Tabs",
@@ -361,6 +421,8 @@ impl Component {
             Component::TableHead(..) => "TableHead",
             Component::TableCell(..) => "TableCell",
             Component::TableCaption(_) => "TableCaption",
+            Component::DockArea(_) => "dock_area",
+            Component::DockContent => "dock_content",
             // Named after the constructor rather than the type, because the
             // axis is not a call a reader of the dump could otherwise see.
             Component::Resizable(_, gpui::Axis::Horizontal) => "h_resizable",
@@ -394,6 +456,14 @@ pub enum SpecOp {
     Method(&'static str, SmallVec<[Bridged; 2]>),
     /// An event handler pointing into the callback arena.
     Callback(&'static str, CallbackId),
+    /// A handler for one named action.
+    ///
+    /// Its own op rather than a [`SpecOp::Callback`] because the name it
+    /// carries is the script's, discovered at run time, and a `Callback` holds
+    /// a `&'static str`. Interning every script id to get it into that slot
+    /// would leak one `&'static str` per distinct name a reload ever produced,
+    /// to buy a variant that already exists.
+    ActionCallback(SharedString, CallbackId),
     /// A state style — hover, active, focus — whose declarations were recorded
     /// into a detached node. Reusing the ordinary style methods there is what
     /// keeps state styling from needing a second value grammar.
@@ -548,6 +618,23 @@ impl SpecArena {
         Ok(self.push(Component::ChildView(child)))
     }
 
+    /// Records one dock area, rejecting a second `dock_area(...)` naming the
+    /// same one.
+    ///
+    /// The same rule and the same table as a child view's, because it is the
+    /// same rule: GPUI cannot mount one entity at two positions in a tree, and
+    /// a dock area is an entity. Sharing the table is safe because both handles
+    /// come from one store and no id is reused.
+    pub(crate) fn push_dock_area(
+        &mut self,
+        handle: crate::entities::EntityHandle,
+    ) -> Result<SpecId, SpecError> {
+        if !self.mounted_views.insert(handle) {
+            return Err(SpecError::DuplicateChildView);
+        }
+        Ok(self.push(Component::DockArea(handle)))
+    }
+
     pub fn node(&self, id: SpecId) -> Option<&SpecNode> {
         self.nodes.get(id as usize)
     }
@@ -655,6 +742,13 @@ impl SpecArena {
             | Component::TableHead(value, index)
             | Component::TableCell(value, index) => out.push_str(&format!(" {value:?} #{index}")),
             Component::Scrollbar(value) => out.push_str(&format!(" {value:?}")),
+            Component::Pagination(value) => out.push_str(&format!(" {value:?}")),
+            Component::Accordion(value) | Component::AccordionTrigger(value) => {
+                out.push_str(&format!(" {value:?}"))
+            }
+            // The path is what an avatar image *is*; without it the dump says
+            // an image is there but not which one.
+            Component::AvatarImage(path) => out.push_str(&format!(" {path:?}")),
             // The item count, not the item sizes: a dump of a hundred thousand
             // extents is not something a test reads, and the count is the part
             // that says what the list is.
@@ -710,6 +804,7 @@ impl SpecArena {
                 }
                 SpecOp::Method(name, args) => out.push_str(&format!(" :{name}{args:?}")),
                 SpecOp::Callback(name, _) => out.push_str(&format!(" :{name}(fn)")),
+                SpecOp::ActionCallback(id, _) => out.push_str(&format!(" :on_action({id}, fn)")),
                 SpecOp::StateStyle(name, node) => {
                     out.push_str(&format!(" :{name}("));
                     match self.node(*node) {

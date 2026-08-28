@@ -56,6 +56,23 @@ pub struct ViewType {
     application: Option<Rc<ApplicationGeneration>>,
 }
 
+impl ViewType {
+    /// A view class handed straight to the host rather than read off a
+    /// module's default export.
+    ///
+    /// It holds no module lease: the class object is itself a live reference
+    /// into the module that defined it, so QuickJS keeps that module alive for
+    /// exactly as long as this does — which a lease taken here would only
+    /// duplicate.
+    fn from_panel_class(class: Persistent<Object<'static>>) -> Self {
+        Self {
+            value: class,
+            module_lease: None,
+            application: scope::current_application_generation(),
+        }
+    }
+}
+
 impl std::fmt::Debug for ViewType {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter.debug_struct("ViewType").finish_non_exhaustive()
@@ -166,9 +183,36 @@ enum PendingNestedOperation {
         provenance: NestedViewProvenance,
         props: Persistent<Value<'static>>,
     },
+    Notify {
+        runtime: Weak<ShellRuntime>,
+        token: u32,
+        provenance: NestedViewProvenance,
+    },
     Release {
         runtime: Weak<ShellRuntime>,
         token: u32,
+        provenance: NestedViewProvenance,
+    },
+    /// A change to a dock area's layout.
+    ///
+    /// Deferred for the same reason a nested view is, and in two cases it *is*
+    /// one. `load` rebuilds every panel through the registry, which constructs
+    /// views; `add_panel` is given a view from `cx.new(Class)`, which has not
+    /// been constructed yet when the call is made. Neither can happen while
+    /// QuickJS holds its runtime lock, which is exactly where both are called
+    /// from.
+    ///
+    /// Removal is queued too, though nothing about it needs to be: an edit that
+    /// jumped the queue would apply to a layout the script had already asked to
+    /// change, and "the calls take effect in the order they were made" is worth
+    /// more than one saved hop.
+    EditDock {
+        runtime: Weak<ShellRuntime>,
+        dock: EntityHandle,
+        /// Boxed: a whole persisted layout is by far the largest thing this
+        /// enum can carry, and every queued operation would otherwise be
+        /// sized for it.
+        edit: Box<dock_api::DockEdit>,
         provenance: NestedViewProvenance,
     },
 }
@@ -181,6 +225,7 @@ impl Drop for NestedFlushGuard<'_> {
     }
 }
 
+mod dock_api;
 mod entity_api;
 pub(crate) mod host;
 mod host_modules;
@@ -212,6 +257,7 @@ pub(super) struct InputCallbackOwner {
 }
 mod standard;
 mod theme_api;
+mod window_api;
 
 /// The names each built-in module exports.
 ///
@@ -253,6 +299,17 @@ pub(crate) mod exports {
         "Progress",
         "ProgressTrack",
         "ProgressIndicator",
+        "Avatar",
+        "AvatarImage",
+        "AvatarFallback",
+        "Pagination",
+        "pagination_items",
+        "CalendarState",
+        "Accordion",
+        "AccordionItem",
+        "AccordionHeader",
+        "AccordionPanel",
+        "AccordionTrigger",
         "Radio",
         "Toggle",
         "RadioGroup",
@@ -291,6 +348,11 @@ pub(crate) mod exports {
         "SliderThumb",
         "OtpState",
         "OtpInput",
+        // Dock. The area is the state and `dock_area` is one description of
+        // it, which is the split `v_virtual_list` already has.
+        "DockArea",
+        "dock_area",
+        "dock_content",
         // Theme (`theme_api`). The theme belongs to `gpui-base`, even though
         // mutation is legal only while a host call supplies the current App.
         "set_theme",
@@ -404,6 +466,15 @@ pub struct ShellRuntime {
     initializing_views: RefCell<Vec<ViewObject>>,
     nested_view_handles: RefCell<HashMap<u32, NestedViewAlias>>,
     next_nested_view_token: Cell<u32>,
+    /// The panel builders this runtime registered, by their interned name.
+    ///
+    /// Declared here rather than only in the process-wide
+    /// [`PanelRegistry`](gpui_base::dock::PanelRegistry) because a panel the
+    /// script *adds* needs the same `serialize`/`deserialize` hooks a restored
+    /// one gets, and the registry hands out builders rather than the script
+    /// behind them. Each holds a `Persistent` class, so this drops before
+    /// `context` like every other field that does.
+    panel_scripts: RefCell<HashMap<String, Rc<dock_api::ScriptPanelClass>>>,
     /// A runtime whose opaque QuickJS job queue could not reach an ownership
     /// boundary safely is never entered again. QuickJS exposes no selective
     /// pending-job removal, so terminal quarantine is the only way to prevent
@@ -419,6 +490,22 @@ pub struct ShellRuntime {
     /// continue to construct the normal system-configured client in `fetch`.
     #[cfg(test)]
     test_http_client: RefCell<Option<reqwest::blocking::Client>>,
+    /// The QuickJS context currently executing, while one is.
+    ///
+    /// `Context::with` takes the runtime's lock, so calling it from inside a
+    /// host function — which is already running under that lock — panics on a
+    /// re-entrant borrow. Almost nothing needs to: a host function is handed
+    /// the `Ctx` it was called with. The exception is a hook base calls on the
+    /// shell's behalf from deep inside an operation the script started, and
+    /// `Panel::dump` is one — `dock.dump()` reaches every panel's `serialize()`
+    /// with only an `&App` in between.
+    ///
+    /// A field rather than a thread-local, so two runtimes on one thread cannot
+    /// hand each other a context. Safe for the reason [`crate::scope`]'s
+    /// pointers are: it is installed by a frame on the stack and cleared before
+    /// that frame returns, so nothing can read it after the borrow it names has
+    /// ended.
+    active_context: Cell<Option<std::ptr::NonNull<rquickjs::qjs::JSContext>>>,
     context: JsContext,
     /// Incremented per `load_app`, so a reload re-reads every module rather
     /// than serving the first version from QuickJS's module cache.
@@ -435,6 +522,14 @@ impl Drop for ShellRuntime {
         // released after its runtime aborts the process.
         scheduler::shutdown(self);
         self.callbacks.borrow_mut().clear();
+        // Each holds a `Persistent` view class, which must be released while
+        // the context is still alive — and the panel registry keeps a second
+        // reference to every one of them in an `App` global that outlives this,
+        // so clearing the map is not enough on its own.
+        for script in self.panel_scripts.borrow().values() {
+            script.retire();
+        }
+        self.panel_scripts.borrow_mut().clear();
         // Retained entities are owned by GPUI but reachable only through this
         // runtime's handles; leaving them registered outlives the app that owns
         // them, which GPUI reports as a leaked handle on shutdown.
@@ -515,6 +610,8 @@ impl ShellRuntime {
             initializing_views: RefCell::new(Vec::new()),
             nested_view_handles: RefCell::new(HashMap::new()),
             next_nested_view_token: Cell::new(0),
+            panel_scripts: RefCell::new(HashMap::new()),
+            active_context: Cell::new(None),
             terminal_job_error: RefCell::new(None),
             metrics: Metrics::default(),
             #[cfg(test)]
@@ -907,17 +1004,21 @@ impl ShellRuntime {
             }
         };
 
-        if self.entities().len() >= crate::entities::MAX_LIVE_ENTITIES {
-            self.rollback_retained_since(entity_checkpoint, task_checkpoint, cx);
-            anyhow::bail!(
-                "the application reached gpui-shell's retained entity limit; release unused handles"
-            );
-        }
         let view =
             cx.new(|cx| ScriptView::nested(self.clone(), object, policy.clone(), cx.entity_id()));
-        let handle = self
+        let handle = match self
             .entities()
-            .create_view(view.clone(), application.clone(), self);
+            .create_view(view.clone(), application.clone(), self)
+        {
+            Ok(handle) => handle,
+            Err(_) => {
+                self.rollback_retained_since(entity_checkpoint, task_checkpoint, cx);
+                anyhow::bail!(
+                    "the application reached gpui-shell's retained entity limit; release unused \
+                     handles"
+                );
+            }
+        };
         let object = view.read(cx).object().clone();
 
         let (_initialize_scope, _) = scope::enter_with_application(
@@ -1055,6 +1156,56 @@ impl ShellRuntime {
         Ok(())
     }
 
+    fn queue_nested_view_notify(self: &Rc<Self>, ctx: &Ctx<'_>, token: u32) -> JsResult<()> {
+        let pending = self.pending_nested.borrow();
+        let pending_create = pending.iter().find_map(|operation| match operation {
+            PendingNestedOperation::Create {
+                token: candidate,
+                view_type,
+                policy,
+                ..
+            } if *candidate == token => Some(NestedViewProvenance {
+                application: view_type.application.clone(),
+                policy: policy.clone(),
+            }),
+            _ => None,
+        });
+        let pending_release = pending.iter().any(|operation| {
+            matches!(operation, PendingNestedOperation::Release { token: candidate, .. } if *candidate == token)
+        });
+        drop(pending);
+        let resolved = self.nested_view_handles.borrow().get(&token).cloned();
+        let provenance = resolved
+            .as_ref()
+            .map(|alias| alias.provenance.clone())
+            .or(pending_create)
+            .or_else(|| self.in_flight_nested.borrow().get(&token).cloned());
+        if pending_release || provenance.as_ref().is_none_or(|owner| !owner.is_current()) {
+            return Err(Exception::throw_type(
+                ctx,
+                "cx.notify(entity) expects a live Entity from the current application",
+            ));
+        }
+        if resolved
+            .as_ref()
+            .is_some_and(|alias| self.entities().view(alias.handle).is_none())
+        {
+            self.nested_view_handles.borrow_mut().remove(&token);
+            return Err(Exception::throw_type(
+                ctx,
+                "cx.notify(entity) expects a live Entity from the current application",
+            ));
+        }
+        self.pending_nested
+            .borrow_mut()
+            .push_back(PendingNestedOperation::Notify {
+                runtime: Rc::downgrade(self),
+                token,
+                provenance: provenance.expect("validated nested provenance"),
+            });
+        Ok(())
+    }
+
     fn queue_nested_view_release(self: &Rc<Self>, ctx: &Ctx<'_>, token: u32) -> JsResult<bool> {
         let pending = self.pending_nested.borrow();
         let pending_release = pending.iter().any(|operation| {
@@ -1175,6 +1326,31 @@ impl ShellRuntime {
                             .insert(token, NestedViewAlias { handle, provenance });
                         Ok(())
                     }
+                    PendingNestedOperation::EditDock {
+                        runtime,
+                        dock,
+                        edit,
+                        provenance,
+                    } => {
+                        let runtime = runtime.upgrade().ok_or_else(|| {
+                            anyhow!("the shell runtime shut down before a dock edit was applied")
+                        })?;
+                        if !provenance.is_current() {
+                            anyhow::bail!(
+                                "this dock edit does not belong to the current application"
+                            );
+                        }
+                        let (_scope, _) = scope::enter_with_application(
+                            &runtime,
+                            window,
+                            cx,
+                            ScopePhase::Event,
+                            scope::current_view(),
+                            provenance.policy.clone(),
+                            provenance.application.clone(),
+                        );
+                        dock_api::apply_edit(&runtime, dock, *edit, window, cx)
+                    }
                     PendingNestedOperation::Update {
                         runtime,
                         token,
@@ -1205,6 +1381,39 @@ impl ShellRuntime {
                             .map(|alias| alias.handle)
                             .ok_or_else(|| anyhow!("this Entity was released before its update"))?;
                         runtime.update_nested_view(handle, props, window, cx)?;
+                        Ok(())
+                    }
+                    PendingNestedOperation::Notify {
+                        runtime,
+                        token,
+                        provenance,
+                    } => {
+                        let runtime = runtime.upgrade().ok_or_else(|| {
+                            anyhow!("the shell runtime shut down during child notification")
+                        })?;
+                        if !provenance.is_current() {
+                            anyhow::bail!("this Entity does not belong to the current application");
+                        }
+                        let view = runtime
+                            .nested_view_handles
+                            .borrow()
+                            .get(&token)
+                            .filter(|alias| {
+                                Rc::ptr_eq(&alias.provenance.policy, &provenance.policy)
+                                    && match (
+                                        &alias.provenance.application,
+                                        &provenance.application,
+                                    ) {
+                                        (Some(left), Some(right)) => Rc::ptr_eq(left, right),
+                                        (None, None) => true,
+                                        _ => false,
+                                    }
+                            })
+                            .and_then(|alias| runtime.entities().view(alias.handle))
+                            .ok_or_else(|| {
+                                anyhow!("this Entity was released before its notification")
+                            })?;
+                        view.update(cx, |view, cx| view.refresh(cx));
                         Ok(())
                     }
                     PendingNestedOperation::Release {
@@ -1282,7 +1491,14 @@ impl ShellRuntime {
                 child.application_generation(),
             )
         };
-        let state_checkpoint = self.checkpoint_view_object(&object)?;
+        // Only when the child has an `update` to run. Nothing else in this
+        // path is script, so a child without one has nothing that could need
+        // rolling back -- and the checkpoint is the most expensive thing here
+        // by a wide margin: it walks every object reachable from the instance
+        // and reads a descriptor for every property on each. A view that holds
+        // its application, which is the ordinary way to write one, therefore
+        // paid for the whole model on every `set_props`.
+        let state_checkpoint = self.checkpoint_view_object_if_updatable(&object)?;
         let entity_checkpoint = { self.entities().checkpoint() };
         let task_checkpoint = scheduler::checkpoint_runtime_tasks(self);
         let (event_scope, _) = scope::enter_with_application(
@@ -1306,7 +1522,10 @@ impl ShellRuntime {
                 Ok(())
             }
             Err(error) => {
-                let restored = self.restore_view_object(state_checkpoint);
+                let restored = match state_checkpoint {
+                    Some(checkpoint) => self.restore_view_object(checkpoint),
+                    None => Ok(()),
+                };
                 self.rollback_retained_since(entity_checkpoint, task_checkpoint, cx);
                 if let Err(restore) = restored {
                     return Err(error.context(format!("failed to restore child state: {restore}")));
@@ -1374,6 +1593,26 @@ impl ShellRuntime {
     /// the instance. Private/internal slots, non-configurable additions, and a
     /// property hardened from configurable to non-configurable cannot be
     /// restored by JavaScript reflection.
+    /// The checkpoint, for a child that has script to run.
+    ///
+    /// `update_in_context` returns without calling anything when the instance
+    /// has no `update`, so for such a child the walk journals a graph nothing
+    /// is going to touch.
+    fn checkpoint_view_object_if_updatable(
+        &self,
+        object: &ViewObject,
+    ) -> Result<Option<ViewStateCheckpoint>> {
+        let updatable = self.with_js(|ctx| {
+            let instance = object.value.clone().restore(ctx)?;
+            let update: Value = instance.get("update")?;
+            Ok(!(update.is_undefined() || update.is_null()))
+        })?;
+        if !updatable {
+            return Ok(None);
+        }
+        self.checkpoint_view_object(object).map(Some)
+    }
+
     fn checkpoint_view_object(&self, object: &ViewObject) -> Result<ViewStateCheckpoint> {
         self.with_js(|ctx| {
             let instance = object.value.clone().restore(ctx)?;
@@ -1657,6 +1896,294 @@ impl ShellRuntime {
         }
     }
 
+    /// Draws one piece of a dock's chrome.
+    ///
+    /// The second call into script that runs on a frame's budget rather than an
+    /// application's, and it is safe there for the same three reasons a virtual
+    /// list's item renderer is: a [`ScopePhase::Layout`] scope, which forbids
+    /// `cx.notify()` and creating retained state; an arena of its own, swapped
+    /// in so the description cannot leak into whichever snapshot is being
+    /// built; and no job drain on the way out, because a promise continuation
+    /// is unbounded application code and GPUI's layout pass is the last place
+    /// to run one.
+    ///
+    /// It differs from the list in one way. A chrome handler is called once per
+    /// callback-and-payload combination, then its description is replayed from
+    /// the owning dock's bounded cache. It may not register callbacks of its
+    /// own — the `Layout` phase already refuses that — and its elements report
+    /// what they do through
+    /// [`DockCommand`](crate::dock::DockCommand)s instead.
+    ///
+    /// The outer `None` means the handler was unavailable or threw and must not
+    /// be cached. An inner `None` root is a successful `null`: valid empty
+    /// chrome which the caller can cache like any other description.
+    pub(super) fn describe_dock_chrome(
+        self: &Rc<Self>,
+        id: CallbackId,
+        payload: &serde_json::Value,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Option<(SpecArena, Option<SpecId>)> {
+        let entry = self.callbacks.borrow().get(id)?;
+
+        if entry
+            .application
+            .as_ref()
+            .is_some_and(|application| !application.is_active())
+        {
+            tracing::debug!("dock chrome handler {id} belongs to a retired application");
+            return None;
+        }
+
+        let view = entry.live_view()?;
+        let policy = view
+            .as_ref()
+            .map(|view| view.read(cx).policy())
+            .unwrap_or_else(crate::policy::default);
+
+        self.metrics.time_frame_script(|| {
+            let (_guard, generation) = scope::enter_with_application(
+                self,
+                window,
+                cx,
+                ScopePhase::Layout,
+                view,
+                policy,
+                entry.application.clone(),
+            );
+            // The handler is a closure the script wrote inside `render(cx)`,
+            // and the element helpers it calls take that `cx`. Layout is a
+            // frame of its own, so without this the enclosing render's `cx`
+            // would read as stale here — the same reason a list's item renderer
+            // adopts it.
+            scope::adopt(entry.registered_in);
+
+            let outer = std::mem::take(&mut *self.arena.borrow_mut());
+            let described = self.with_js(|ctx| {
+                let handler = entry.value.clone().restore(ctx)?;
+                let produced: Value = handler.call((
+                    dock_api::to_js(ctx, payload)?,
+                    context_object(ctx, ContextBinding::Call(generation))?,
+                ))?;
+                if produced.is_null() || produced.is_undefined() {
+                    return Ok(None);
+                }
+                element_id(ctx, &produced).map(Some)
+            });
+            let arena = std::mem::replace(&mut *self.arena.borrow_mut(), outer);
+
+            match described {
+                Ok(root) => Some((arena, root)),
+                Err(error) => {
+                    tracing::error!("error in a dock chrome handler: {error}");
+                    None
+                }
+            }
+        })
+    }
+
+    /// Teaches the panel registry to rebuild `panel` from `class`, and answers
+    /// with the interned name it registered under.
+    pub(super) fn register_panel_class(
+        self: &Rc<Self>,
+        ctx: &Ctx<'_>,
+        panel: &str,
+        view_type: ViewType,
+    ) -> JsResult<String> {
+        let policy = scope::current_policy().ok_or_else(|| {
+            Exception::throw_type(
+                ctx,
+                "DockArea.register_panel(name, Class) needs a live host call; call it from                  init() or an event handler",
+            )
+        })?;
+        let application = policy.application().to_owned();
+        let script = Rc::new(dock_api::ScriptPanelClass::new(
+            Rc::downgrade(self),
+            view_type,
+            policy,
+        ));
+
+        let name = scope::with_current_app(|cx| {
+            crate::dock::register_panel(&application, panel, script.clone(), cx)
+        })
+        .ok_or_else(|| {
+            Exception::throw_type(
+                ctx,
+                "DockArea.register_panel(name, Class) needs a live host call; call it from                  init() or an event handler",
+            )
+        })?;
+
+        self.panel_scripts
+            .borrow_mut()
+            .insert(name.to_owned(), script);
+        Ok(name.to_owned())
+    }
+
+    /// The script behind an already-registered panel name.
+    ///
+    /// A panel the script *adds* gets the same `serialize`/`deserialize` hooks
+    /// a restored one does — otherwise a layout would round-trip only after a
+    /// restart, which is the one time nobody is watching.
+    pub(super) fn panel_script(&self, name: &str) -> Option<Rc<dyn crate::dock::PanelScript>> {
+        self.panel_scripts
+            .borrow()
+            .get(name)
+            .map(|script| script.clone() as Rc<dyn crate::dock::PanelScript>)
+    }
+
+    /// One panel's `serialize()`, or `None` for a panel that has none.
+    ///
+    /// No scope is opened, and none can be: `Panel::dump` is a read, so there
+    /// is no `&mut Window` to open one with. A `serialize()` that calls back
+    /// into the host therefore fails the way any host call outside a scope
+    /// does, which is the contract this method's caller documents.
+    pub(super) fn call_panel_serialize(&self, object: &ViewObject) -> Option<serde_json::Value> {
+        let produced = self.with_js_nested(|ctx| {
+            let instance = object.value.clone().restore(ctx)?;
+            let Some(serialize) = instance.get::<_, Option<Function>>("serialize")? else {
+                return Ok(None);
+            };
+            let produced: Value = serialize.call((This(instance),))?;
+            if produced.is_null() || produced.is_undefined() {
+                return Ok(None);
+            }
+            host::to_json(ctx, &produced, 0).map(Some)
+        });
+
+        match produced {
+            Ok(value) => value,
+            Err(error) => {
+                tracing::error!("error in a dock panel's serialize(): {error}");
+                None
+            }
+        }
+    }
+
+    /// Hands a persisted payload to one panel's `deserialize(data)`.
+    pub(super) fn call_panel_deserialize(
+        self: &Rc<Self>,
+        view: &Entity<ScriptView>,
+        data: &serde_json::Value,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        let (object, policy, application) = {
+            let view = view.read(cx);
+            (
+                view.object().clone(),
+                view.policy(),
+                view.application_generation(),
+            )
+        };
+
+        let (_guard, _) = scope::enter_with_application(
+            self,
+            window,
+            cx,
+            ScopePhase::Event,
+            Some(view.clone()),
+            policy,
+            application,
+        );
+
+        let result = self.with_js_nested(|ctx| {
+            let instance = object.value.clone().restore(ctx)?;
+            let Some(deserialize) = instance.get::<_, Option<Function>>("deserialize")? else {
+                return Ok(());
+            };
+            deserialize.call::<_, ()>((This(instance), dock_api::to_js(ctx, data)?))
+        });
+        if let Err(error) = result {
+            tracing::error!("error in a dock panel's deserialize(data): {error}");
+        }
+        // The view described itself before the payload arrived, so what it
+        // described is now out of date.
+        view.update(cx, |view, cx| view.refresh(cx));
+    }
+
+    /// Queues a layout change to be applied at the next unlocked boundary.
+    pub(super) fn queue_dock_edit(
+        self: &Rc<Self>,
+        ctx: &Ctx<'_>,
+        dock: EntityHandle,
+        edit: dock_api::DockEdit,
+        api: &str,
+    ) -> JsResult<()> {
+        let policy = scope::current_policy().ok_or_else(|| nested_view_needs_call(ctx, api))?;
+        let provenance = NestedViewProvenance {
+            application: scope::current_application_generation(),
+            policy,
+        };
+        self.pending_nested
+            .borrow_mut()
+            .push_back(PendingNestedOperation::EditDock {
+                runtime: Rc::downgrade(self),
+                dock,
+                edit: Box::new(edit),
+                provenance,
+            });
+        Ok(())
+    }
+
+    /// The entity handle behind one `cx.new(Class)` token, once the creation it
+    /// was queued alongside has been applied.
+    pub(super) fn nested_view_for_token(&self, token: u32) -> Option<EntityHandle> {
+        self.nested_view_handles
+            .borrow()
+            .get(&token)
+            .filter(|alias| alias.provenance.is_current())
+            .map(|alias| alias.handle)
+    }
+
+    /// The authority and owner a long-lived subscription runs under.
+    pub(super) fn callback_owner(&self) -> InputCallbackOwner {
+        InputCallbackOwner {
+            policy: scope::policy(),
+            application: scope::current_application_generation(),
+            view: scope::current_view().map(|view| view.downgrade()),
+        }
+    }
+
+    /// Tells a script that the layout it is watching changed.
+    ///
+    /// The event carries nothing: what changed is the whole layout, and
+    /// `dump()` is how a subscriber reads it.
+    pub(super) fn dispatch_dock_event(
+        self: &Rc<Self>,
+        handler: &Persistent<Function<'static>>,
+        owner: &InputCallbackOwner,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        if owner
+            .application
+            .as_ref()
+            .is_some_and(|application| !application.is_active())
+        {
+            tracing::debug!("dock callback belongs to a retired application");
+            return;
+        }
+        let view = owner.view.as_ref().and_then(WeakEntity::upgrade);
+        let (_guard, generation) = scope::enter_with_application(
+            self,
+            window,
+            cx,
+            ScopePhase::Event,
+            view,
+            owner.policy.clone(),
+            owner.application.clone(),
+        );
+
+        let result = self.with_js(|ctx| {
+            let handler = handler.clone().restore(ctx)?;
+            handler.call::<_, ()>((context_object(ctx, ContextBinding::Call(generation))?,))
+        });
+        if let Err(error) = result {
+            tracing::error!("error in dock layout handler: {error}");
+        }
+        scheduler::drain_runtime_jobs(self, window, cx);
+    }
+
     /// Reports which stable item of a collection something happened to.
     pub(crate) fn dispatch_item_key(
         self: &Rc<Self>,
@@ -1880,6 +2407,57 @@ impl ShellRuntime {
     /// The value is the whole payload rather than a field of an object,
     /// because the value is the whole of what a slider event carries: one
     /// number, or the pair a two-thumbed slider moves between.
+    /// Hands one selected date to a calendar's handler.
+    ///
+    /// The payload is the same two-slot array `value()` answers, and the
+    /// prelude narrows it the same way — so a handler and a read see the same
+    /// shape for the same date.
+    pub(super) fn dispatch_calendar_event(
+        self: &Rc<Self>,
+        handler: &Persistent<Function<'static>>,
+        owner: &InputCallbackOwner,
+        date: gpui_base::Date,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        use rquickjs::IntoJs as _;
+
+        if owner
+            .application
+            .as_ref()
+            .is_some_and(|application| !application.is_active())
+        {
+            tracing::debug!("calendar callback belongs to a retired application");
+            return;
+        }
+        let view = owner.view.as_ref().and_then(WeakEntity::upgrade);
+        let (_guard, generation) = scope::enter_with_application(
+            self,
+            window,
+            cx,
+            ScopePhase::Event,
+            view,
+            owner.policy.clone(),
+            owner.application.clone(),
+        );
+
+        // The same conversion `value()` answers with, not a second copy of it:
+        // a handler and a read that disagreed about the shape of one date
+        // would be a bug nobody could see from either side alone.
+        let parts = entity_api::date_to_parts(date);
+        let result = self.with_js(|ctx| {
+            let handler = handler.clone().restore(ctx)?;
+            handler.call::<_, ()>((
+                parts.into_js(ctx)?,
+                context_object(ctx, ContextBinding::Call(generation))?,
+            ))
+        });
+        if let Err(error) = result {
+            tracing::error!("error in calendar handler: {error}");
+        }
+        scheduler::drain_runtime_jobs(self, window, cx);
+    }
+
     pub(super) fn dispatch_slider_event(
         self: &Rc<Self>,
         handler: &Persistent<Function<'static>>,
@@ -2065,6 +2643,249 @@ impl ShellRuntime {
         });
         if let Err(error) = result {
             tracing::error!("error in mouse move handler: {error}");
+        }
+        scheduler::drain_runtime_jobs(self, window, cx);
+    }
+
+    /// Delivers one dispatched action to a script handler.
+    ///
+    /// The id is handed over even though the handler was registered for one
+    /// action: a script that routes several ids into one function has the name
+    /// it needs without closing over it, and a handler that ignores the
+    /// argument costs nothing.
+    pub(crate) fn dispatch_action(
+        self: &Rc<Self>,
+        id: CallbackId,
+        action: &str,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        let action = action.to_owned();
+        self.dispatch_simple_event(id, "action", window, cx, move |ctx| {
+            let payload = Object::new(ctx.clone())?;
+            payload.set("action", action)?;
+            Ok(payload)
+        });
+    }
+
+    /// Delivers one mouse press or release to a script handler.
+    ///
+    /// One method for four element builders because the payload is the same
+    /// shape in all four: `on_mouse_down`, `on_mouse_up` and `on_mouse_up_out`
+    /// differ only in which button and phase GPUI filtered on before calling,
+    /// and `on_mouse_down_out` differs only in where the pointer was — which
+    /// the caller can read off `local_position` for itself.
+    ///
+    /// `bounds` is what the element measured on its last prepaint. An element
+    /// that has not been painted yet has none, and rather than refuse the event
+    /// the local coordinates are simply omitted: a press is still a press, and
+    /// the window position is always there.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn dispatch_mouse_button(
+        self: &Rc<Self>,
+        id: CallbackId,
+        button: gpui::MouseButton,
+        position: gpui::Point<gpui::Pixels>,
+        click_count: usize,
+        modifiers: gpui::Modifiers,
+        bounds: Option<gpui::Bounds<gpui::Pixels>>,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        self.dispatch_simple_event(id, "mouse button", window, cx, move |ctx| {
+            let payload = Object::new(ctx.clone())?;
+            payload.set(
+                "button",
+                match button {
+                    gpui::MouseButton::Right => "right",
+                    gpui::MouseButton::Middle => "middle",
+                    _ => "left",
+                },
+            )?;
+            payload.set("click_count", click_count as u32)?;
+            set_pointer_geometry(ctx, &payload, position, bounds)?;
+            payload.set("modifiers", modifiers_object(ctx, modifiers)?)?;
+            Ok(payload)
+        });
+    }
+
+    /// Delivers one wheel or trackpad scroll to a script handler.
+    pub(crate) fn dispatch_scroll_wheel(
+        self: &Rc<Self>,
+        id: CallbackId,
+        event: &gpui::ScrollWheelEvent,
+        line_height: gpui::Pixels,
+        bounds: Option<gpui::Bounds<gpui::Pixels>>,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        let pixels = event.delta.pixel_delta(line_height);
+        let lines = match event.delta {
+            gpui::ScrollDelta::Lines(lines) => Some(lines),
+            gpui::ScrollDelta::Pixels(_) => None,
+        };
+        let position = event.position;
+        let modifiers = event.modifiers;
+        let touch_phase = match event.touch_phase {
+            gpui::TouchPhase::Started => "started",
+            gpui::TouchPhase::Moved => "moved",
+            gpui::TouchPhase::Ended => "ended",
+            gpui::TouchPhase::Cancelled => "cancelled",
+        };
+        self.dispatch_simple_event(id, "scroll wheel", window, cx, move |ctx| {
+            let payload = Object::new(ctx.clone())?;
+            let delta = Object::new(ctx.clone())?;
+            delta.set("x", f32::from(pixels.x))?;
+            delta.set("y", f32::from(pixels.y))?;
+            payload.set("delta", delta)?;
+            match lines {
+                Some(lines) => {
+                    let delta_lines = Object::new(ctx.clone())?;
+                    delta_lines.set("x", lines.x)?;
+                    delta_lines.set("y", lines.y)?;
+                    payload.set("delta_lines", delta_lines)?;
+                }
+                None => payload.set("delta_lines", rquickjs::Undefined)?,
+            }
+            payload.set("touch_phase", touch_phase)?;
+            set_pointer_geometry(ctx, &payload, position, bounds)?;
+            payload.set("modifiers", modifiers_object(ctx, modifiers)?)?;
+            Ok(payload)
+        });
+    }
+
+    /// The lifetime checks, scope entry and job drain every dispatch shares,
+    /// with only the payload left to the caller.
+    ///
+    /// "Simple" is about the payload, not the event: what these have in common
+    /// is that the handler takes one object and a `cx` and its return value is
+    /// ignored. A dispatch that has to read an answer back — a controlled
+    /// value, a confirm — does its own thing.
+    fn dispatch_simple_event(
+        self: &Rc<Self>,
+        id: CallbackId,
+        what: &str,
+        window: &mut Window,
+        cx: &mut App,
+        payload: impl for<'js> FnOnce(&Ctx<'js>) -> JsResult<Object<'js>>,
+    ) {
+        let Some(entry) = self.callbacks.borrow().get(id) else {
+            tracing::debug!("{what} callback {id} belongs to a superseded render pass");
+            return;
+        };
+        if entry
+            .application
+            .as_ref()
+            .is_some_and(|application| !application.is_active())
+        {
+            tracing::debug!("{what} callback {id} belongs to a retired application");
+            return;
+        }
+        let Some(view) = entry.live_view() else {
+            tracing::debug!("{what} callback {id} owner has been released");
+            return;
+        };
+        let policy = view
+            .as_ref()
+            .map(|view| view.read(cx).policy())
+            .unwrap_or_else(crate::policy::default);
+        let (_guard, generation) = scope::enter_with_application(
+            self,
+            window,
+            cx,
+            ScopePhase::Event,
+            view,
+            policy,
+            entry.application.clone(),
+        );
+        let result = self.with_js(|ctx| {
+            let handler = entry.value.clone().restore(ctx)?;
+            handler.call::<_, ()>((
+                payload(ctx)?,
+                context_object(ctx, ContextBinding::Call(generation))?,
+            ))
+        });
+        if let Err(error) = result {
+            tracing::error!("error in {what} handler: {error}");
+        }
+        scheduler::drain_runtime_jobs(self, window, cx);
+    }
+
+    /// Delivers one key press or release to a script handler.
+    ///
+    /// `is_held` distinguishes the two events rather than a second method
+    /// doing it: `KeyUpEvent` carries a keystroke and nothing else, so `None`
+    /// is what "this was a release" looks like on the wire, and the payload
+    /// keeps the same shape either way.
+    ///
+    /// The keystroke is handed over twice, and both forms earn their place.
+    /// `key` and `modifiers` are what GPUI holds, and a script that wants one
+    /// half of a chord reads them. `keystroke` is `Keystroke`'s own `unparse`
+    /// — the `"cmd-shift-s"` spelling a key binding is written in — which is
+    /// the form a comparison is actually written against, and reproducing it
+    /// from the parts is exactly the fiddly work that belongs on this side.
+    pub(crate) fn dispatch_key(
+        self: &Rc<Self>,
+        id: CallbackId,
+        keystroke: &gpui::Keystroke,
+        is_held: Option<bool>,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        let Some(entry) = self.callbacks.borrow().get(id) else {
+            tracing::debug!("key callback {id} belongs to a superseded render pass");
+            return;
+        };
+        if entry
+            .application
+            .as_ref()
+            .is_some_and(|application| !application.is_active())
+        {
+            tracing::debug!("key callback {id} belongs to a retired application");
+            return;
+        }
+        let Some(view) = entry.live_view() else {
+            tracing::debug!("key callback {id} owner has been released");
+            return;
+        };
+        let policy = view
+            .as_ref()
+            .map(|view| view.read(cx).policy())
+            .unwrap_or_else(crate::policy::default);
+        let (_guard, generation) = scope::enter_with_application(
+            self,
+            window,
+            cx,
+            ScopePhase::Event,
+            view,
+            policy,
+            entry.application.clone(),
+        );
+        let result = self.with_js(|ctx| {
+            let handler = entry.value.clone().restore(ctx)?;
+            let payload = Object::new(ctx.clone())?;
+            payload.set("key", keystroke.key.as_str())?;
+            payload.set("keystroke", script_keystroke(keystroke))?;
+            match keystroke.key_char.as_deref() {
+                Some(char) => payload.set("key_char", char)?,
+                None => payload.set("key_char", rquickjs::Undefined)?,
+            }
+            if let Some(is_held) = is_held {
+                payload.set("is_held", is_held)?;
+            }
+            let modifiers = Object::new(ctx.clone())?;
+            modifiers.set("shift", keystroke.modifiers.shift)?;
+            modifiers.set("control", keystroke.modifiers.control)?;
+            modifiers.set("alt", keystroke.modifiers.alt)?;
+            modifiers.set("platform", keystroke.modifiers.platform)?;
+            payload.set("modifiers", modifiers)?;
+            handler.call::<_, ()>((
+                payload,
+                context_object(ctx, ContextBinding::Call(generation))?,
+            ))
+        });
+        if let Err(error) = result {
+            tracing::error!("error in key handler: {error}");
         }
         scheduler::drain_runtime_jobs(self, window, cx);
     }
@@ -2293,9 +3114,16 @@ impl ShellRuntime {
         }
         let pending_checkpoint = self.pending_nested.borrow().len();
         sandbox::begin_host_execution();
-        let result = self.context.with(|ctx| match body(&ctx) {
-            Ok(value) => Ok(value),
-            Err(error) => Err(anyhow!("{}", describe(&ctx, error))),
+        let result = self.context.with(|ctx| {
+            // Restored rather than cleared, because a `with_js` reached from
+            // inside a host call is the case this exists for.
+            let outer = self.active_context.replace(Some(ctx.as_raw()));
+            let produced = match body(&ctx) {
+                Ok(value) => Ok(value),
+                Err(error) => Err(anyhow!("{}", describe(&ctx, error))),
+            };
+            self.active_context.set(outer);
+            produced
         });
         match result {
             Ok(value) => Ok(value),
@@ -2305,6 +3133,30 @@ impl ShellRuntime {
                     .truncate(pending_checkpoint);
                 Err(error)
             }
+        }
+    }
+
+    /// Runs `body` against the context already executing, when one is.
+    ///
+    /// For a hook base calls on the shell's behalf from inside an operation the
+    /// script started: the runtime's lock is already held, so asking
+    /// [`Self::with_js`] for it again would panic on a re-entrant borrow.
+    /// Outside such a call this is exactly `with_js`.
+    ///
+    /// It deliberately does not re-enter the sandbox's host-execution guard or
+    /// take a pending-operation checkpoint. The call it is nested inside took
+    /// both, and they are what that call will unwind to.
+    fn with_js_nested<T>(&self, body: impl FnOnce(&Ctx<'_>) -> JsResult<T>) -> Result<T> {
+        let Some(raw) = self.active_context.get() else {
+            return self.with_js(body);
+        };
+        // Safe under the same condition `Ctx::from_raw` names: the runtime's
+        // lock is held for as long as the call that installed this pointer is
+        // on the stack, and this borrow does not outlive `body`.
+        let ctx = unsafe { Ctx::from_raw(raw) };
+        match body(&ctx) {
+            Ok(value) => Ok(value),
+            Err(error) => Err(anyhow!("{}", describe(&ctx, error))),
         }
     }
 
@@ -2352,6 +3204,10 @@ impl ShellRuntime {
     fn fill_slot(&self, ctx: &Ctx<'_>, id: SpecId, name: &str, element: SpecId) -> JsResult<()> {
         let interned = match name {
             "content" => "content",
+            "image" => "image",
+            "fallback" => "fallback",
+            "header" => "header",
+            "panel" => "panel",
             "trigger" => "trigger",
             // A number input's three. Unlike the two above, none of them is
             // optional in practice: base's step buttons are unstyled, so an
@@ -2382,6 +3238,12 @@ impl ShellRuntime {
     /// Records an element for a component the bindings build themselves.
     pub(super) fn push_component(&self, component: Component) -> SpecId {
         self.push_node(component)
+    }
+
+    /// The description being recorded, for a binding whose node needs a check
+    /// the arena is the one holding — a dock area, which may be mounted once.
+    pub(super) fn arena_mut(&self) -> std::cell::RefMut<'_, SpecArena> {
+        self.arena.borrow_mut()
     }
 
     fn push_op(&self, id: SpecId, op: SpecOp) -> Result<(), crate::spec::SpecError> {
@@ -2723,6 +3585,16 @@ globalThis.__gpui = (() => {
   methods.input = slot("input");
   methods.decrement_button = slot("decrement_button");
   methods.increment_button = slot("increment_button");
+
+  // An avatar's two. Base renders the image, or the fallback when there is no
+  // image, and never both.
+  methods.image = slot("image");
+  methods.fallback = slot("fallback");
+
+  // An accordion item's two. Both are read back for their own type rather than
+  // rendered, so both must be the part they name.
+  methods.header = slot("header");
+  methods.panel = slot("panel");
 
   // Focus is held by handle, so the element records the handle rather than the
   // wrapper object around it — the same unwrapping `Input.new(state)` does.
@@ -3187,6 +4059,57 @@ globalThis.__gpui = (() => {
     release: () => __otp_release(handle),
   });
 
+  // A calendar's month, and the date chosen in it.
+  //
+  // `month_days()` is the reason this is bound at all: which dates fall in
+  // which week, where the neighbouring months' days go, and how many weeks
+  // this month needs. Everything else here is what it takes to move that grid
+  // and read what was picked from it.
+  //
+  // The wire is a flat two-slot array either way; the narrowing to `null`, a
+  // string or a pair happens here so a script never sees the flat form.
+  // Reads the variant off the slot count, exactly as `calendarParts` writes
+  // it. Looking at whether the second slot is null instead would collapse a
+  // range whose end is not chosen yet into a bare string — losing the one
+  // thing that distinguishes it from a single date, and losing it only in the
+  // half-finished state a range picker spends most of its time in.
+  const calendarDate = (parts) => {
+    if (parts.length === 2) return [parts[0] ?? null, parts[1] ?? null];
+    return parts[0] ?? null;
+  };
+  // How many slots go over is what says which `Date` was meant, and it has to:
+  // a single day and a range whose end is not chosen yet are different states
+  // to base — `is_single`, `is_complete` and `is_in_range` all branch on it —
+  // but they read back as the same string, so the wire cannot recover the
+  // difference from the values alone.
+  const calendarParts = (value, api) => {
+    if (value === null || value === undefined) return [null];
+    if (Array.isArray(value)) {
+      if (value.length !== 2) {
+        throw new TypeError(`${api} range expects a two-element array [start, end]`);
+      }
+      return [value[0] ?? null, value[1] ?? null];
+    }
+    if (typeof value !== "string") {
+      throw new TypeError(`${api} expects null, a "YYYY-MM-DD" string, or a pair of those`);
+    }
+    return [value];
+  };
+  const calendarState = (handle) => ({
+    __handle: handle,
+    month_days: () => __calendar_month_days(handle),
+    year: () => __calendar_year(handle),
+    month: () => __calendar_month(handle),
+    today: () => __calendar_today(handle),
+    value: () => calendarDate(__calendar_value(handle)),
+    set_value: (next) => __calendar_set_value(handle, calendarParts(next, "set_value(value)")),
+    next_month: () => __calendar_next_month(handle),
+    prev_month: () => __calendar_prev_month(handle),
+    on: (event, handler) =>
+      __calendar_on(handle, String(event), (parts, cx) => handler(calendarDate(parts), cx)),
+    release: () => __calendar_release(handle),
+  });
+
   const focusHandle = (handle) => ({
     __handle: handle,
     focus: () => __focus_focus(handle),
@@ -3203,6 +4126,253 @@ globalThis.__gpui = (() => {
     __handle: handle,
     set_props: (props) => __view_set_props(handle, props),
     release: () => __view_release(handle),
+  });
+
+  // A dockable layout, and the commands its chrome carries.
+  //
+  // Retained for a reason none of the other handles share: the layout is what
+  // the *user* changed. A drag, a resize, a closed tab and a collapsed dock all
+  // happen without this script rendering, so a dock rebuilt from a description
+  // would put every one of them back the way the last render described it.
+  const dockPlacement = (value, api) => {
+    const name = String(value ?? "center");
+    if (!["center", "left", "right", "bottom"].includes(name)) {
+      throw new TypeError(api + ' expects "center", "left", "right" or "bottom"');
+    }
+    return name;
+  };
+
+  const wholeAt = (value, api) => {
+    if (!Number.isSafeInteger(value) || value < 0) {
+      throw new TypeError(api + " expects a whole, non-negative position");
+    }
+    return value;
+  };
+
+  const finiteDockNumber = (value, api) => {
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      throw new TypeError(api + " expects a finite number");
+    }
+    return value;
+  };
+
+  const nonNegativeDockNumber = (value, api) => {
+    const number = finiteDockNumber(value, api);
+    if (number < 0) throw new RangeError(api + " expects a non-negative number");
+    return number;
+  };
+
+  const dockBounds = (value) => {
+    const api = "add_panel(view, options) bounds";
+    if (value === undefined || value === null) return null;
+    if (typeof value !== "object") throw new TypeError(api + " expects an object");
+    return {
+      x: finiteDockNumber(value.x, api + ".x"),
+      y: finiteDockNumber(value.y, api + ".y"),
+      width: nonNegativeDockNumber(value.width, api + ".width"),
+      height: nonNegativeDockNumber(value.height, api + ".height"),
+    };
+  };
+
+  // Every chrome handler is given base's own state for one container, with the
+  // area it belongs to added on this side — the commands need it, and this side
+  // already knows it, so it never has to cross.
+  const dockTarget = (value, api) => {
+    const handle = value?.__dock;
+    if (typeof handle !== "number") {
+      throw new TypeError(
+        api + " expects the group, dock or tile your chrome handler was given as its first argument",
+      );
+    }
+    return handle;
+  };
+
+  const groupNode = (group, api) => {
+    if (typeof group?.node !== "number") {
+      throw new TypeError(api + " expects a tab group, which is what tab_bar and empty_group are given");
+    }
+    return group.node;
+  };
+
+  const tilePanel = (tile, api) => {
+    if (typeof tile?.panel?.id !== "number") {
+      throw new TypeError(api + " expects a tile, which is what tile_drag_bar and tile_resize_handles are given");
+    }
+    return tile.panel.id;
+  };
+
+  // Commands, not callbacks. A chrome handler runs once per frame for as long
+  // as the dock is on screen, so a handler registered inside one would pile up
+  // exactly the way a virtual list's row handlers would. A command carries no
+  // script value at all: it names a container and what to ask it, and base does
+  // the rest.
+  methods.select_tab = function (group, index) {
+    const api = "select_tab(group, index)";
+    __apply(this.__id, "select_tab", [dockTarget(group, api), groupNode(group, api), wholeAt(index, api)]);
+    return this;
+  };
+  methods.close_panel = function (group, panel) {
+    const api = "close_panel(group, panel_id)";
+    __apply(this.__id, "close_panel", [dockTarget(group, api), groupNode(group, api), Number(panel)]);
+    return this;
+  };
+  methods.toggle_zoom = function (group) {
+    const api = "toggle_zoom(group)";
+    __apply(this.__id, "toggle_zoom", [dockTarget(group, api), groupNode(group, api)]);
+    return this;
+  };
+  methods.drag_tab = function (group, index) {
+    const api = "drag_tab(group, index)";
+    __apply(this.__id, "drag_tab", [dockTarget(group, api), groupNode(group, api), wholeAt(index, api)]);
+    return this;
+  };
+  // The one command with an optional argument: a tab bar that names no slot
+  // means "append", which is what a drop past the last tab is.
+  methods.drop_tab = function (group, index) {
+    const api = "drop_tab(group, index)";
+    const at = index === undefined || index === null ? null : wholeAt(index, api);
+    __apply(this.__id, "drop_tab", [dockTarget(group, api), groupNode(group, api), at]);
+    return this;
+  };
+  methods.toggle_dock = function (dock) {
+    const api = "toggle_dock(dock)";
+    __apply(this.__id, "toggle_dock", [dockTarget(dock, api), dockPlacement(dock?.placement, api)]);
+    return this;
+  };
+  methods.resize_dock = function (dock) {
+    const api = "resize_dock(dock)";
+    __apply(this.__id, "resize_dock", [dockTarget(dock, api), dockPlacement(dock?.placement, api)]);
+    return this;
+  };
+  methods.move_tile = function (tile) {
+    const api = "move_tile(tile)";
+    __apply(this.__id, "move_tile", [dockTarget(tile, api), tilePanel(tile, api)]);
+    return this;
+  };
+  methods.resize_tile = function (tile, side) {
+    const api = "resize_tile(tile, side)";
+    const name = String(side ?? "");
+    if (!["left", "right", "top", "bottom", "bottom_right"].includes(name)) {
+      throw new TypeError(api + ' expects "left", "right", "top", "bottom" or "bottom_right"');
+    }
+    __apply(this.__id, "resize_tile", [dockTarget(tile, api), tilePanel(tile, api), name]);
+    return this;
+  };
+  methods.raise_tile = function (tile) {
+    const api = "raise_tile(tile)";
+    __apply(this.__id, "raise_tile", [dockTarget(tile, api), tilePanel(tile, api)]);
+    return this;
+  };
+  methods.toggle_tile_zoom = function (tile) {
+    const api = "toggle_tile_zoom(tile)";
+    __apply(this.__id, "toggle_tile_zoom", [dockTarget(tile, api), tilePanel(tile, api)]);
+    return this;
+  };
+  methods.close_tile = function (tile) {
+    const api = "close_tile(tile)";
+    __apply(this.__id, "close_tile", [dockTarget(tile, api), tilePanel(tile, api)]);
+    return this;
+  };
+
+  const DOCK_CHROME = [
+    "tab_bar",
+    "empty_group",
+    "drop_indicator",
+    "dock",
+    "tile_drag_bar",
+    "tile_resize_handles",
+  ];
+
+  // The six hooks are own properties of the one element that has them, rather
+  // than prototype methods: every other element in the tree would otherwise
+  // carry a `dock` and a `tab_bar` that mean nothing on it.
+  const dockAreaElement = (area) => {
+    const handle = area?.__dock;
+    if (typeof handle !== "number") {
+      throw new TypeError("dock_area(area) expects a DockArea from DockArea.new(id)");
+    }
+    const object = element(__dock_area_element(handle));
+    for (const hook of DOCK_CHROME) {
+      object[hook] = function (handler) {
+        if (typeof handler !== "function") {
+          throw new TypeError(hook + "(handler) expects a function returning an element");
+        }
+        __apply(this.__id, hook, [
+          (payload, cx) => {
+            payload.__dock = handle;
+            return handler(payload, cx);
+          },
+        ]);
+        return this;
+      };
+    }
+    return object;
+  };
+
+  const dockArea = (handle) => ({
+    __dock: handle,
+    __handle: handle,
+    add_panel: (view, options) => {
+      if (typeof view?.__handle !== "number" || !view.__entity) {
+        throw new TypeError(
+          "add_panel(view, options) expects a view from cx.new(Class): a panel's body is a view, not an element",
+        );
+      }
+      const settings = options ?? {};
+      if (typeof settings.name !== "string" || settings.name.length === 0) {
+        throw new TypeError(
+          "add_panel(view, options) needs a name: it is what the panel is filed under in a saved layout, and what register_panel finds it again by",
+        );
+      }
+      // No id comes back: the view is still being constructed when this is
+      // called, so the panel it will hold does not exist yet. `panels()` names
+      // every panel once the call that added them has returned.
+      __dock_add_panel(handle, view.__handle, {
+        name: settings.name,
+        placement: dockPlacement(settings.placement, "add_panel placement"),
+        size:
+          settings.size === undefined || settings.size === null
+            ? null
+            : nonNegativeDockNumber(settings.size, "add_panel(view, options) size"),
+        bounds: dockBounds(settings.bounds),
+        closable: settings.closable === undefined ? true : Boolean(settings.closable),
+        zoomable: settings.zoomable === undefined ? true : Boolean(settings.zoomable),
+        visible: settings.visible === undefined ? true : Boolean(settings.visible),
+      });
+    },
+    remove_panel: (id) => __dock_remove_panel(handle, wholeAt(id, "remove_panel(id)")),
+    panels: () => JSON.parse(__dock_panels(handle)),
+    // The layout as plain data, and back. `load` takes effect once this call
+    // has returned: rebuilding a panel constructs a view, and a view cannot be
+    // constructed while script is running.
+    dump: () => JSON.parse(__dock_dump(handle)),
+    load: (state) => __dock_load(handle, state),
+    has_dock: (placement) => __dock_has(handle, dockPlacement(placement, "has_dock(placement)")),
+    is_dock_open: (placement) =>
+      __dock_is_open(handle, dockPlacement(placement, "is_dock_open(placement)")),
+    toggle_dock: (placement) =>
+      __dock_toggle(handle, dockPlacement(placement, "toggle_dock(placement)")),
+    remove_dock: (placement) =>
+      __dock_remove(handle, dockPlacement(placement, "remove_dock(placement)")),
+    dock_size: (placement) => __dock_size(handle, dockPlacement(placement, "dock_size(placement)")),
+    set_dock_size: (placement, size) =>
+      __dock_set_size(
+        handle,
+        dockPlacement(placement, "set_dock_size(placement, size)"),
+        nonNegativeDockNumber(size, "set_dock_size(placement, size)"),
+      ),
+    set_dock_collapsible: (placement, collapsible) =>
+      __dock_set_collapsible(
+        handle,
+        dockPlacement(placement, "set_dock_collapsible(placement, collapsible)"),
+        Boolean(collapsible),
+      ),
+    is_locked: () => __dock_is_locked(handle),
+    set_locked: (locked) => __dock_set_locked(handle, Boolean(locked)),
+    is_zoomed: () => __dock_is_zoomed(handle),
+    zoom_out: () => __dock_zoom_out(handle),
+    on: (event, handler) => __dock_on(handle, String(event), handler),
+    release: () => __dock_release(handle),
   });
 
   const virtualScrollHandle = (handle) => ({
@@ -3363,6 +4533,36 @@ globalThis.__gpui = (() => {
     // constructor that is not a free function, and it is one because the thing
     // it mirrors is a method on the window rather than on the app.
     paint_path: paintPath,
+
+    // What the window measures. All legal from `render`: a view that sizes
+    // itself from the viewport, or spaces itself in rems, has to ask during
+    // the pass that draws it.
+    rem_size: () => __window_rem_size(),
+    line_height: () => __window_line_height(),
+    viewport_size: () => __window_viewport_size(),
+    bounds: () => __window_bounds(),
+    mouse_position: () => __window_mouse_position(),
+    appearance: () => __window_appearance(),
+    is_window_active: () => __window_is_active(),
+    is_fullscreen: () => __window_is_fullscreen(),
+    is_maximized: () => __window_is_maximized(),
+
+    // What the window can be told. Refused from `render` for the reason
+    // `cx.notify()` is: a frame that changes the window it is drawing into is
+    // a frame arguing with itself.
+    // `Window::dispatch_action` in GPUI, so `window` here — it walks the focus
+    // path of *this* window. `cx.bind_keys` is the other half and is on `cx`
+    // for the same reason: the keymap is `App`'s.
+    dispatch_action: (action) => __dispatch_action(String(action)),
+
+    set_rem_size: (size) => __window_set_rem_size(Number(size)),
+    refresh: () => __window_refresh(),
+    focus_next: () => __window_focus_next(),
+    focus_prev: () => __window_focus_prev(),
+    activate_window: () => __window_activate(),
+    minimize_window: () => __window_minimize(),
+    zoom_window: () => __window_zoom(),
+    toggle_fullscreen: () => __window_toggle_fullscreen(),
   };
 
   globalThis.localStorage = globalThis.window.localStorage;
@@ -3407,6 +4607,18 @@ globalThis.__gpui = (() => {
     focus_handle: () => {
       check();
       return focusHandle(__focus_handle_new());
+    },
+    // `App::bind_keys`, so `cx`. The keymap belongs to the application rather
+    // than to a window, which is why binding a chord in one view makes it live
+    // everywhere its `context` predicate matches.
+    bind_keys: (bindings) => {
+      check();
+      if (!Array.isArray(bindings)) {
+        throw new TypeError(
+          "cx.bind_keys(bindings) expects an array of { keystroke, action, context? }",
+        );
+      }
+      return __bind_keys(bindings);
     },
     new: (Class, props) => {
       check();
@@ -3482,6 +4694,39 @@ globalThis.__gpui = (() => {
     Tabs: { new: (id) => element(__tabs(String(id))) },
     Tab: { new: (id) => element(__tab(String(id))) },
     Progress: { new: (id) => element(__progress(String(id))) },
+    // Base's own shape: a root that chooses between two slots, and two slot
+    // types that are not elements on their own.
+    Accordion: { new: (id) => element(__accordion(String(id))) },
+    AccordionItem: { new: () => element(__accordion_item()) },
+    // `AccordionHeader::new` takes the trigger, exactly as `Popup.new` takes
+    // its own: a heading whose button arrived later would be a heading that
+    // announced nothing for a frame.
+    AccordionHeader: {
+      new: (trigger) => {
+        if (typeof trigger?.__id !== "number") {
+          throw new TypeError(
+            "AccordionHeader.new(trigger) expects an AccordionTrigger element: the heading owns the button that opens the item, and base has none of its own",
+          );
+        }
+        return element(__accordion_header()).trigger(trigger);
+      },
+    },
+    AccordionPanel: { new: () => element(__accordion_panel()) },
+    AccordionTrigger: { new: (id) => element(__accordion_trigger(String(id))) },
+    Pagination: { new: (id) => element(__pagination(String(id))) },
+    // Not a component: the one thing base contributes that a script cannot
+    // write for itself is which page numbers to show, and that is arithmetic.
+    // Called during `render`, once, and the buttons are built from what it
+    // answers.
+    pagination_items: (current_page, total_pages, visible_pages) =>
+      __pagination_items(
+        Number(current_page),
+        Number(total_pages),
+        visible_pages === undefined ? 7 : Number(visible_pages),
+      ),
+    Avatar: { new: () => element(__avatar()) },
+    AvatarImage: { new: (path) => element(__avatar_image(String(path))) },
+    AvatarFallback: { new: () => element(__avatar_fallback()) },
     ProgressTrack: { new: () => element(__progress_track()) },
     ProgressIndicator: { new: () => element(__progress_indicator()) },
     fps_monitor: () => element(__fps_monitor()),
@@ -3578,6 +4823,7 @@ globalThis.__gpui = (() => {
         ),
     },
     Textarea: { new: (state) => element(__textarea_element(state.__handle)) },
+    CalendarState: { new: () => calendarState(__calendar_state_new()) },
     SliderState: {
       new: (options) => {
         const settings = options ?? {};
@@ -3631,6 +4877,36 @@ globalThis.__gpui = (() => {
       },
     },
     OtpInput: { new: (state) => element(__otp_element(state.__handle)) },
+    DockArea: {
+      new: (id, options) => {
+        const version = options?.version;
+        if (version !== undefined && version !== null && (!Number.isSafeInteger(version) || version < 0)) {
+          throw new TypeError("DockArea.new(id, options) version expects a whole, non-negative safe integer");
+        }
+        return dockArea(__dock_area_new(String(id), version ?? null));
+      },
+      // Not a method on an area: a builder is registered for the whole
+      // application, and a layout is restored into whichever area asks for it.
+      // Registering the same name twice replaces the class, which is what a hot
+      // reload does.
+      register_panel: (name, Class) => {
+        if (typeof name !== "string" || name.length === 0) {
+          throw new TypeError(
+            "DockArea.register_panel(name, Class) needs the name the panel is added under",
+          );
+        }
+        if (typeof Class !== "function" || !(Class.prototype instanceof View)) {
+          throw new TypeError(
+            "DockArea.register_panel(name, Class) expects the View subclass the panel is rebuilt from",
+          );
+        }
+        return __dock_register_panel(name, Class);
+      },
+    },
+    // Free functions, not `DockArea.element(...)`: the area is the state and
+    // this is one description of it, the same split `v_virtual_list` has.
+    dock_area: dockAreaElement,
+    dock_content: () => element(__dock_content()),
   };
 })();
 "#;
@@ -3665,6 +4941,16 @@ impl ShellRuntime {
                 "on_click",
                 "on_mouse_move",
                 "on_hover",
+                "on_key_down",
+                "on_key_up",
+                "on_mouse_down",
+                "on_mouse_up",
+                "on_mouse_down_out",
+                "on_scroll_wheel",
+                "on_action",
+                "key_context",
+                "aria_level",
+                "keep_mounted",
                 "on_item_click",
                 "on_change",
                 "on_open_change",
@@ -3726,6 +5012,44 @@ impl ShellRuntime {
             text_constructor(&globals, "__text", runtime.clone(), Component::Text)?;
             text_constructor(&globals, "__svg", runtime.clone(), Component::Svg)?;
             text_constructor(&globals, "__image", runtime.clone(), Component::Image)?;
+            text_constructor(
+                &globals,
+                "__accordion",
+                runtime.clone(),
+                Component::Accordion,
+            )?;
+            constructor(&globals, "__accordion_item", runtime.clone(), || {
+                Component::AccordionItem
+            })?;
+            constructor(&globals, "__accordion_header", runtime.clone(), || {
+                Component::AccordionHeader
+            })?;
+            constructor(&globals, "__accordion_panel", runtime.clone(), || {
+                Component::AccordionPanel
+            })?;
+            text_constructor(
+                &globals,
+                "__accordion_trigger",
+                runtime.clone(),
+                Component::AccordionTrigger,
+            )?;
+            text_constructor(
+                &globals,
+                "__pagination",
+                runtime.clone(),
+                Component::Pagination,
+            )?;
+            globals.set("__pagination_items", Func::from(pagination_items))?;
+            constructor(&globals, "__avatar", runtime.clone(), || Component::Avatar)?;
+            text_constructor(
+                &globals,
+                "__avatar_image",
+                runtime.clone(),
+                Component::AvatarImage,
+            )?;
+            constructor(&globals, "__avatar_fallback", runtime.clone(), || {
+                Component::AvatarFallback
+            })?;
             let path_runtime = runtime.clone();
             globals.set(
                 "__path",
@@ -4108,6 +5432,7 @@ impl ShellRuntime {
 
             // Before the prelude, which builds the `window` object over these.
             overlay::install(ctx, &ctx.globals())?;
+            window_api::install(ctx)?;
 
             ctx.eval::<(), _>(PRELUDE)?;
 
@@ -4117,6 +5442,7 @@ impl ShellRuntime {
             host_modules::install(ctx)?;
             theme_api::install(ctx, &module)?;
             entity_api::install(ctx, &module, runtime.clone())?;
+            dock_api::install(ctx, &module, runtime.clone())?;
             scheduler::install(ctx, &module)?;
             // Standard Runtime constructors and prototypes must exist before
             // the sandbox freezes built-ins, or they would remain mutable.
@@ -4201,7 +5527,8 @@ impl ShellRuntime {
                     })? as SpecId;
                 self.attach(ctx, id, child)
             }
-            "content" | "trigger" | "input" | "decrement_button" | "increment_button" => {
+            "content" | "trigger" | "input" | "decrement_button" | "increment_button" | "image"
+            | "fallback" | "header" | "panel" => {
                 let element = args
                     .first_value()
                     .and_then(|value| value.as_f32().ok())
@@ -4210,8 +5537,124 @@ impl ShellRuntime {
                     })? as SpecId;
                 self.fill_slot(ctx, id, method, element)
             }
-            "on_click" | "on_resize" | "on_change" | "on_open_change" | "on_confirm"
-            | "on_dismiss" | "on_step" | "on_item_click" | "on_mouse_move" | "on_hover" => {
+            // The script's own name for an action, plus the handler. It is not
+            // a `Callback` op because the name is discovered at run time and a
+            // `Callback` holds a `&'static str`; see `SpecOp::ActionCallback`.
+            "on_action" => {
+                if scope::current_phase() == Some(ScopePhase::Layout) {
+                    return Err(Exception::throw_type(
+                        ctx,
+                        "`on_action` cannot be registered from a virtual list's item \
+                         renderer: the rows are rebuilt every frame, so a handler \
+                         registered there would pile up for as long as the view stood",
+                    ));
+                }
+                let action = args
+                    .first_value()
+                    .and_then(|value| value.as_str().ok().map(str::to_owned))
+                    .filter(|action| !action.is_empty())
+                    .ok_or_else(|| {
+                        Exception::throw_type(
+                            ctx,
+                            "on_action(action, handler) expects the action's name first, \
+                             as a non-empty string",
+                        )
+                    })?;
+                let saved = args.handler_at(1).ok_or_else(|| {
+                    Exception::throw_type(
+                        ctx,
+                        "on_action(action, handler) expects a function second",
+                    )
+                })?;
+                let callback = self.callbacks.borrow_mut().push(CallbackEntry {
+                    value: saved,
+                    view: scope::current_view().map(|view| view.downgrade()),
+                    application: scope::current_application_generation(),
+                    registered_in: scope::current_generation(),
+                });
+                self.push_op_checked(
+                    ctx,
+                    self.push_op(id, SpecOp::ActionCallback(action.into(), callback)),
+                )
+            }
+            // The only two element methods that take an argument *and* a
+            // handler. The button is folded into the recorded op name — three
+            // fixed names GPUI's own `MouseButton` maps onto — so the op stays
+            // the `(&'static str, CallbackId)` pair every other callback uses.
+            "on_mouse_down" | "on_mouse_up" => {
+                if scope::current_phase() == Some(ScopePhase::Layout) {
+                    return Err(Exception::throw_type(
+                        ctx,
+                        &format!(
+                            "`{method}` cannot be registered from a virtual list's item \
+                             renderer: the rows are rebuilt every frame, so a handler \
+                             registered there would pile up for as long as the view stood"
+                        ),
+                    ));
+                }
+                let button = args
+                    .first_value()
+                    .and_then(|value| value.as_str().ok().map(str::to_owned))
+                    .ok_or_else(|| {
+                        Exception::throw_type(
+                            ctx,
+                            &format!(
+                                "{method}(button, handler) expects a button first: \
+                                 \"left\", \"right\" or \"middle\""
+                            ),
+                        )
+                    })?;
+                let saved = args.handler_at(1).ok_or_else(|| {
+                    Exception::throw_type(
+                        ctx,
+                        &format!("{method}(button, handler) expects a function second"),
+                    )
+                })?;
+                let name = match (method, button.as_str()) {
+                    ("on_mouse_down", "left") => "on_mouse_down_left",
+                    ("on_mouse_down", "right") => "on_mouse_down_right",
+                    ("on_mouse_down", "middle") => "on_mouse_down_middle",
+                    ("on_mouse_up", "left") => "on_mouse_up_left",
+                    ("on_mouse_up", "right") => "on_mouse_up_right",
+                    ("on_mouse_up", "middle") => "on_mouse_up_middle",
+                    (_, other) => {
+                        return Err(Exception::throw_type(
+                            ctx,
+                            &format!(
+                                "`{other}` is not a mouse button; \
+                                 expected \"left\", \"right\" or \"middle\""
+                            ),
+                        ));
+                    }
+                };
+                let callback = self.callbacks.borrow_mut().push(CallbackEntry {
+                    value: saved,
+                    view: scope::current_view().map(|view| view.downgrade()),
+                    application: scope::current_application_generation(),
+                    registered_in: scope::current_generation(),
+                });
+                self.push_op_checked(ctx, self.push_op(id, SpecOp::Callback(name, callback)))
+            }
+            "on_click"
+            | "on_resize"
+            | "on_change"
+            | "on_open_change"
+            | "on_confirm"
+            | "on_dismiss"
+            | "on_step"
+            | "on_item_click"
+            | "on_mouse_move"
+            | "on_hover"
+            | "on_key_down"
+            | "on_key_up"
+            | "on_mouse_down_out"
+            | "on_scroll_wheel"
+            | "tab_bar"
+            | "empty_group"
+            | "drop_indicator"
+            | "dock"
+            | "tile_drag_bar"
+            | "tile_resize_handles" => {
                 // A handler registered from inside a virtual list's item
                 // renderer has nowhere to live. Callbacks belong to the
                 // snapshot that registered them and are retired with it; the
@@ -4247,8 +5690,18 @@ impl ShellRuntime {
                     "on_click" => "on_click",
                     "on_mouse_move" => "on_mouse_move",
                     "on_hover" => "on_hover",
+                    "on_key_down" => "on_key_down",
+                    "on_key_up" => "on_key_up",
+                    "on_mouse_down_out" => "on_mouse_down_out",
+                    "on_scroll_wheel" => "on_scroll_wheel",
                     "on_item_click" => "on_item_click",
                     "on_resize" => "on_resize",
+                    "tab_bar" => "tab_bar",
+                    "empty_group" => "empty_group",
+                    "drop_indicator" => "drop_indicator",
+                    "dock" => "dock",
+                    "tile_drag_bar" => "tile_drag_bar",
+                    "tile_resize_handles" => "tile_resize_handles",
                     "on_change" => "on_change",
                     "on_confirm" => "on_confirm",
                     "on_dismiss" => "on_dismiss",
@@ -4269,6 +5722,9 @@ impl ShellRuntime {
             | "track_scroll"
             | "with_item_to_measure_index"
             | "content_focus_handle"
+            | "key_context"
+            | "aria_level"
+            | "keep_mounted"
             | "tab_index"
             | "tab_stop"
             | "href"
@@ -4316,6 +5772,9 @@ impl ShellRuntime {
                     "track_scroll" => "track_scroll",
                     "with_item_to_measure_index" => "with_item_to_measure_index",
                     "content_focus_handle" => "content_focus_handle",
+                    "key_context" => "key_context",
+                    "aria_level" => "aria_level",
+                    "keep_mounted" => "keep_mounted",
                     "tab_index" => "tab_index",
                     "tab_stop" => "tab_stop",
                     "id" => "id",
@@ -4489,6 +5948,43 @@ impl ShellRuntime {
                             "href(url) expects an absolute HTTP(S) URL with a host",
                         ));
                     }
+                }
+                self.push_op_checked(ctx, self.push_op(id, SpecOp::Method(name, bridged)))
+            }
+            // A dock command carries no script value: it names a container in
+            // the area and what to ask it. That is why a tab can report its
+            // click at all — a chrome handler runs once per frame for as long
+            // as the dock is on screen, so a callback registered inside one
+            // would pile up the way a virtual list's row handlers would.
+            "select_tab" | "close_panel" | "toggle_zoom" | "drag_tab" | "drop_tab"
+            | "toggle_dock" | "resize_dock" | "move_tile" | "resize_tile" | "raise_tile"
+            | "toggle_tile_zoom" | "close_tile" => {
+                let bridged = args.values(method)?;
+                let name = match method {
+                    "select_tab" => "select_tab",
+                    "close_panel" => "close_panel",
+                    "toggle_zoom" => "toggle_zoom",
+                    "drag_tab" => "drag_tab",
+                    "drop_tab" => "drop_tab",
+                    "toggle_dock" => "toggle_dock",
+                    "resize_dock" => "resize_dock",
+                    "move_tile" => "move_tile",
+                    "resize_tile" => "resize_tile",
+                    "raise_tile" => "raise_tile",
+                    "toggle_tile_zoom" => "toggle_tile_zoom",
+                    _ => "close_tile",
+                };
+                if !bridged
+                    .first()
+                    .and_then(|value| value.as_f32().ok())
+                    .is_some_and(|handle| handle >= 0.0)
+                {
+                    return Err(Exception::throw_type(
+                        ctx,
+                        &format!(
+                            "{name}(...) expects the group, dock or tile its chrome handler was                              given as its first argument"
+                        ),
+                    ));
                 }
                 self.push_op_checked(ctx, self.push_op(id, SpecOp::Method(name, bridged)))
             }
@@ -4876,6 +6372,143 @@ impl ContextBinding {
     }
 }
 
+/// `pagination_items(current, total, visible)`.
+///
+/// A plain calculation rather than a component: what it answers is which page
+/// numbers to draw and where the gaps fall, and the buttons themselves are the
+/// script's. Legal from `render`, because that is where a script builds them.
+fn pagination_items<'js>(
+    ctx: Ctx<'js>,
+    current_page: f64,
+    total_pages: f64,
+    visible_pages: f64,
+) -> JsResult<Array<'js>> {
+    let clamp = |value: f64| -> JsResult<usize> {
+        if !value.is_finite() || value < 0.0 {
+            return Err(Exception::throw_type(
+                &ctx,
+                "pagination_items(current_page, total_pages, visible_pages?) expects \
+                 non-negative numbers",
+            ));
+        }
+        Ok(value as usize)
+    };
+    let items = gpui_base::PaginationState::new(clamp(current_page)?, clamp(total_pages)?)
+        .visible_pages(clamp(visible_pages)?)
+        .items();
+
+    let out = Array::new(ctx.clone())?;
+    for (index, item) in items.into_iter().enumerate() {
+        let object = Object::new(ctx.clone())?;
+        match item {
+            gpui_base::PaginationItem::Page(page) => object.set("page", page as u32)?,
+            // Base's range is half-open; a script showing "pages 4–8" wants
+            // the last page the gap covers, not the one after it.
+            gpui_base::PaginationItem::Ellipsis(range) => {
+                let bounds = Array::new(ctx.clone())?;
+                bounds.set(0, range.start as u32)?;
+                bounds.set(1, range.end.saturating_sub(1) as u32)?;
+                object.set("ellipsis", bounds)?;
+            }
+        }
+        out.set(index, object)?;
+    }
+    Ok(out)
+}
+
+/// One chord, spelled the same way on every platform.
+///
+/// Not `Keystroke::unparse`, and the difference is the whole point of this
+/// function. GPUI spells the platform modifier for the platform it was built
+/// for — `cmd-` on macOS, `super-` on Linux, `win-` on Windows — which is right
+/// for a keymap a person reads and wrong for a string a program compares.
+/// A script is one file running on all three, so
+///
+/// ```js
+/// if (event.keystroke === "cmd-s") this.save();
+/// ```
+///
+/// would work on macOS and silently do nothing everywhere else. That failure
+/// is invisible in review and invisible in a test suite that runs on one
+/// platform.
+///
+/// `cmd` is the spelling because the other side of this API already accepts it
+/// everywhere: `Keystroke::parse`, which `cx.bind_keys` goes through, takes
+/// `cmd`, `super` and `win` on every platform. Picking the one that parses
+/// everywhere makes a binding and the event it produces agree by construction.
+///
+/// The modifier order is GPUI's own, so a chord that round-trips through
+/// `parse` comes back identical.
+fn script_keystroke(keystroke: &gpui::Keystroke) -> String {
+    let mut out = String::new();
+    if keystroke.modifiers.function {
+        out.push_str("fn-");
+    }
+    if keystroke.modifiers.control {
+        out.push_str("ctrl-");
+    }
+    if keystroke.modifiers.alt {
+        out.push_str("alt-");
+    }
+    if keystroke.modifiers.platform {
+        out.push_str("cmd-");
+    }
+    if keystroke.modifiers.shift {
+        out.push_str("shift-");
+    }
+    out.push_str(&keystroke.key);
+    out
+}
+
+/// The modifier keys, in the shape every event payload carries them.
+fn modifiers_object<'js>(ctx: &Ctx<'js>, modifiers: gpui::Modifiers) -> JsResult<Object<'js>> {
+    let object = Object::new(ctx.clone())?;
+    object.set("shift", modifiers.shift)?;
+    object.set("control", modifiers.control)?;
+    object.set("alt", modifiers.alt)?;
+    object.set("platform", modifiers.platform)?;
+    Ok(object)
+}
+
+/// The window position, and the element-relative position and box when the
+/// element has been painted.
+///
+/// `local_position` and `bounds` are omitted rather than zeroed for an element
+/// that has not been prepainted yet, so a script reading `undefined` knows the
+/// geometry was unavailable instead of being told the press landed at its
+/// top-left corner.
+fn set_pointer_geometry<'js>(
+    ctx: &Ctx<'js>,
+    payload: &Object<'js>,
+    position: gpui::Point<gpui::Pixels>,
+    bounds: Option<gpui::Bounds<gpui::Pixels>>,
+) -> JsResult<()> {
+    let window_position = Object::new(ctx.clone())?;
+    window_position.set("x", f32::from(position.x))?;
+    window_position.set("y", f32::from(position.y))?;
+    payload.set("position", window_position)?;
+    match bounds {
+        Some(bounds) => {
+            let local = position - bounds.origin;
+            let local_position = Object::new(ctx.clone())?;
+            local_position.set("x", f32::from(local.x))?;
+            local_position.set("y", f32::from(local.y))?;
+            payload.set("local_position", local_position)?;
+            let event_bounds = Object::new(ctx.clone())?;
+            event_bounds.set("x", f32::from(bounds.origin.x))?;
+            event_bounds.set("y", f32::from(bounds.origin.y))?;
+            event_bounds.set("width", f32::from(bounds.size.width))?;
+            event_bounds.set("height", f32::from(bounds.size.height))?;
+            payload.set("bounds", event_bounds)?;
+        }
+        None => {
+            payload.set("local_position", rquickjs::Undefined)?;
+            payload.set("bounds", rquickjs::Undefined)?;
+        }
+    }
+    Ok(())
+}
+
 /// `globalThis.__async_cx()`. A free function rather than a closure because it
 /// has to be generic over the JS lifetime.
 fn async_context_object<'js>(ctx: Ctx<'js>) -> JsResult<Object<'js>> {
@@ -4901,34 +6534,90 @@ fn context_object<'js>(ctx: &Ctx<'js>, binding: ContextBinding) -> JsResult<Obje
     }
     object.set(
         "notify",
-        Func::from(move |ctx: Ctx<'_>| -> JsResult<()> {
-            let phase = scope::current_phase();
-            if !phase.is_some_and(ScopePhase::allows_notify) {
-                return Err(Exception::throw_type(
-                    &ctx,
-                    &format!(
-                        "cx.notify() is not allowed during the `{}` phase; \
+        Func::from(
+            move |ctx: Ctx<'_>, target: Opt<Value<'_>>| -> JsResult<()> {
+                let phase = scope::current_phase();
+                if !phase.is_some_and(ScopePhase::allows_notify) {
+                    let api = if target.0.as_ref().is_some_and(|value| !value.is_undefined()) {
+                        "cx.notify(entity)"
+                    } else {
+                        "cx.notify()"
+                    };
+                    return Err(Exception::throw_type(
+                        &ctx,
+                        &format!(
+                            "{api} is not allowed during the `{}` phase; \
                          request a re-render from an event handler instead",
-                        phase.map(ScopePhase::as_str).unwrap_or("none")
-                    ),
-                ));
-            }
-
-            let view = scope::current_view();
-            binding.with_app(&ctx, move |app| {
-                if let Some(view) = view {
-                    // Two halves, and both matter. Invalidating says the script
-                    // description may have moved, which is the only thing that
-                    // lets the next frame enter the VM; notifying hands the
-                    // scheduling and coalescing of that frame back to GPUI,
-                    // which already does it well. Three notifies before the
-                    // next frame therefore rebuild one snapshot, not three.
-                    view.update(app, |view, cx| {
-                        view.invalidate();
-                        cx.notify();
-                    });
+                            phase.map(ScopePhase::as_str).unwrap_or("none")
+                        ),
+                    ));
                 }
-            })
+
+                let current = scope::current_view();
+                let target = match target.0 {
+                    None => None,
+                    Some(value) if value.is_undefined() => None,
+                    Some(value) => {
+                        let object = value.as_object().ok_or_else(|| {
+                            Exception::throw_type(&ctx, "cx.notify(entity) expects an Entity")
+                        })?;
+                        let branded = object.get::<_, bool>("__entity").unwrap_or(false);
+                        let token = object.get::<_, u32>("__handle").map_err(|_| {
+                            Exception::throw_type(&ctx, "cx.notify(entity) expects an Entity")
+                        })?;
+                        if !branded {
+                            return Err(Exception::throw_type(
+                                &ctx,
+                                "cx.notify(entity) expects an Entity",
+                            ));
+                        }
+                        Some(token)
+                    }
+                };
+                let notify_ctx = ctx.clone();
+                binding.with_app(&ctx, move |app| -> JsResult<()> {
+                    let view = match target {
+                        None => current,
+                        Some(token) => {
+                            let current = current.as_ref().ok_or_else(|| {
+                                Exception::throw_type(
+                                    &notify_ctx,
+                                    "cx.notify(entity) requires a current script view",
+                                )
+                            })?;
+                            let runtime = { current.read(app).runtime() };
+                            runtime.queue_nested_view_notify(&notify_ctx, token)?;
+                            None
+                        }
+                    };
+                    if let Some(view) = view {
+                        // Two halves, and both matter. Invalidating says the script
+                        // description may have moved, which is the only thing that
+                        // lets the next frame enter the VM; notifying hands the
+                        // scheduling and coalescing of that frame back to GPUI.
+                        view.update(app, |view, cx| view.refresh(cx));
+                    }
+                    Ok(())
+                })?
+            },
+        ),
+    )?;
+
+    // GPUI dispatches an event to every handler on the path unless one of them
+    // says otherwise, so a script that puts a handler on a row inside a list
+    // hears both. These are the two halves of `App`'s own answer to that, under
+    // their own names — the mirror is exact, so what a script learns here is
+    // what GPUI documents.
+    object.set(
+        "stop_propagation",
+        Func::from(move |ctx: Ctx<'_>| -> JsResult<()> {
+            binding.with_app(&ctx, |app| app.stop_propagation())
+        }),
+    )?;
+    object.set(
+        "propagate",
+        Func::from(move |ctx: Ctx<'_>| -> JsResult<()> {
+            binding.with_app(&ctx, |app| app.propagate())
         }),
     )?;
 
@@ -5022,7 +6711,13 @@ impl Arguments {
     }
 
     fn first_handler(&self) -> Option<Persistent<Function<'static>>> {
-        match self.0.first() {
+        self.handler_at(0)
+    }
+
+    /// The handler at one position, for the two methods that take an argument
+    /// before it.
+    fn handler_at(&self, index: usize) -> Option<Persistent<Function<'static>>> {
+        match self.0.get(index) {
             Some(Argument::Handler(handler)) => Some(handler.clone()),
             _ => None,
         }
@@ -5108,6 +6803,58 @@ fn describe(ctx: &Ctx<'_>, error: JsError) -> String {
 
 fn js_setup_error(error: JsError) -> anyhow::Error {
     anyhow!("failed to start the JavaScript runtime: {error}")
+}
+
+#[cfg(test)]
+mod keystroke_tests {
+    use gpui::{Keystroke, Modifiers};
+
+    /// The chord a script compares against is the same on every platform.
+    ///
+    /// Built from `Modifiers` directly rather than from a simulated key press,
+    /// so the assertion is about the spelling and not about whichever platform
+    /// this suite happens to run on — which is the exact hole that let
+    /// `Keystroke::unparse` ship here in the first place. On macOS it is right
+    /// and on Linux it answered `super-s`, so a test that ran only on macOS
+    /// agreed with it.
+    #[test]
+    fn the_platform_modifier_is_spelled_cmd_everywhere() {
+        let chord = |modifiers: Modifiers, key: &str| {
+            super::script_keystroke(&Keystroke {
+                modifiers,
+                key: key.to_owned(),
+                key_char: None,
+            })
+        };
+
+        assert_eq!(chord(Modifiers::command(), "s"), "cmd-s");
+        assert_eq!(
+            chord(Modifiers::command_shift(), "p"),
+            "cmd-shift-p",
+            "the modifier order is GPUI's own, so a chord round-trips through parse"
+        );
+        assert_eq!(chord(Modifiers::control(), "c"), "ctrl-c");
+        assert_eq!(chord(Modifiers::alt(), "f"), "alt-f");
+        assert_eq!(chord(Modifiers::none(), "escape"), "escape");
+    }
+
+    /// And it is a spelling `Keystroke::parse` accepts, on every platform.
+    ///
+    /// This is what makes a binding and the event it produces agree: the same
+    /// text a script passes to `cx.bind_keys` is the text it will be handed
+    /// back. Asserted rather than assumed, because `parse` accepting `cmd`
+    /// away from macOS is the property the choice rests on.
+    #[test]
+    fn the_spelling_round_trips_through_gpui_parse() {
+        for chord in ["cmd-s", "cmd-shift-p", "ctrl-alt-delete", "escape"] {
+            let parsed = Keystroke::parse(chord).expect("every spelling here must parse");
+            assert_eq!(
+                super::script_keystroke(&parsed),
+                chord,
+                "`{chord}` must come back as it went in"
+            );
+        }
+    }
 }
 
 #[cfg(test)]
@@ -5325,6 +7072,73 @@ export default class Child extends View { render(cx) { return "child"; } }
         });
         assert_eq!(owner.expect("owner call"), false);
         assert!(!runtime.nested_view_handles.borrow().contains_key(&token));
+    }
+
+    #[gpui::test]
+    fn targeted_notify_rejects_an_entity_from_another_application(cx: &mut TestAppContext) {
+        let runtime = ShellRuntime::new_isolated().expect("runtime");
+        let owner_application = ApplicationGeneration::new(81);
+        let foreign_application = ApplicationGeneration::new(82);
+        let owner_policy = Rc::new(Policy::default());
+        let foreign_policy = Rc::new(Policy::default());
+        let mut view_type = child_type(
+            &runtime,
+            r#"
+import { View } from "gpui";
+export default class Child extends View { render(cx) { return "child"; } }
+"#,
+        );
+        view_type.application = Some(owner_application.clone());
+        let window = cx.add_window(|_, _| gpui::Empty);
+        let mut context = VisualTestContext::from_window(*window, cx);
+        let handle = context
+            .update(|window, cx| {
+                runtime.instantiate_nested_view(&view_type, owner_policy.clone(), None, window, cx)
+            })
+            .expect("child");
+        let token = 92;
+        runtime.nested_view_handles.borrow_mut().insert(
+            token,
+            NestedViewAlias {
+                handle,
+                provenance: NestedViewProvenance {
+                    application: Some(owner_application.clone()),
+                    policy: owner_policy.clone(),
+                },
+            },
+        );
+
+        let foreign = context.update(|window, cx| {
+            let (_scope, _) = scope::enter_with_application(
+                &runtime,
+                window,
+                cx,
+                ScopePhase::Event,
+                None,
+                foreign_policy,
+                Some(foreign_application),
+            );
+            runtime.with_js(|ctx| runtime.queue_nested_view_notify(ctx, token))
+        });
+        assert!(foreign.is_err(), "foreign application must be rejected");
+        assert!(
+            runtime.nested_view_handles.borrow().contains_key(&token),
+            "a foreign notify must not invalidate the owner's alias"
+        );
+
+        let owner = context.update(|window, cx| {
+            let (_scope, _) = scope::enter_with_application(
+                &runtime,
+                window,
+                cx,
+                ScopePhase::Event,
+                None,
+                owner_policy,
+                Some(owner_application),
+            );
+            runtime.with_js(|ctx| runtime.queue_nested_view_notify(ctx, token))
+        });
+        owner.expect("owner application can notify its live child");
     }
 
     #[gpui::test]
@@ -5918,8 +7732,9 @@ export default class Child extends View {
         let window = cx.add_window(|_, _| gpui::Empty);
         let mut context = VisualTestContext::from_window(*window, cx);
         let tasks_before = task_count();
-        let application_focus =
-            context.update(|_, cx| runtime.entities().create_focus(Some(application), cx));
+        let application_focus = context
+            .update(|_, cx| runtime.entities().create_focus(Some(application), cx))
+            .expect("room for one focus handle");
         assert!(
             !context.update(|_, cx| runtime.release_view_handle(application_focus, cx)),
             "typed view release must reject a live handle of another retained type"
@@ -6156,8 +7971,9 @@ export default class BrokenChild extends View {
             .expect("props");
         let window = cx.add_window(|_, _| gpui::Empty);
         let mut context = VisualTestContext::from_window(*window, cx);
-        let application_focus =
-            context.update(|_, cx| runtime.entities().create_focus(Some(application), cx));
+        let application_focus = context
+            .update(|_, cx| runtime.entities().create_focus(Some(application), cx))
+            .expect("room for one focus handle");
         let records_before = runtime.entities().len();
         let tasks_before = task_count();
 

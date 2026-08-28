@@ -53,6 +53,7 @@ pub struct RuntimeMetrics {
     script_render_time: Duration,
     slowest_script_render: Duration,
     native_time: Duration,
+    frame_script_calls: u64,
     materializations: u64,
     materialize_time: Duration,
 }
@@ -95,6 +96,11 @@ impl RuntimeMetrics {
     /// [`script_render_time`]: Self::script_render_time
     pub fn native_time(&self) -> Duration {
         self.native_time
+    }
+
+    /// Calls into JavaScript made from GPUI's frame path.
+    pub fn frame_script_calls(&self) -> u64 {
+        self.frame_script_calls
     }
 
     /// What one script render costs without the host calls inside it.
@@ -146,6 +152,9 @@ impl RuntimeMetrics {
             // honest answer for a reading that covers part of it.
             slowest_script_render: self.slowest_script_render,
             native_time: self.native_time.saturating_sub(earlier.native_time),
+            frame_script_calls: self
+                .frame_script_calls
+                .saturating_sub(earlier.frame_script_calls),
             materializations: self
                 .materializations
                 .saturating_sub(earlier.materializations),
@@ -174,6 +183,7 @@ pub(crate) struct Metrics {
     script_render_nanos: Cell<u64>,
     slowest_script_render_nanos: Cell<u64>,
     native_nanos: Cell<u64>,
+    frame_script_calls: Cell<u64>,
     materializations: Cell<u64>,
     materialize_nanos: Cell<u64>,
 }
@@ -208,19 +218,22 @@ impl Metrics {
         result
     }
 
-    /// Times one window of a virtualized list's items: the script call that
-    /// describes them and the walk that turns them into elements.
+    /// Times one script call GPUI makes from inside a frame: a window of a
+    /// virtualized list's items, or one piece of a dock's chrome — the script
+    /// call that describes it and the walk that turns it into elements.
     ///
     /// Added to the materialize total without moving the materialize count.
-    /// The count is materializations *of a snapshot*, and this is not one — it
-    /// happens two or more times inside a single frame, from inside GPUI's
-    /// layout pass rather than from `materialize`. The time belongs there all
-    /// the same: it is spent on the frame's budget, which is the question that
+    /// The count is materializations *of a snapshot*, and these are not — they
+    /// happen several times inside a single frame, from inside GPUI's layout
+    /// pass rather than from `materialize`. The time belongs there all the
+    /// same: it is spent on the frame's budget, which is the question that
     /// total answers. See [`Self::time_materialize`] and the note in this
     /// module's comment.
-    pub fn time_virtual_items<R>(&self, build: impl FnOnce() -> R) -> R {
+    pub fn time_frame_script<R>(&self, build: impl FnOnce() -> R) -> R {
         let started = instant::Instant::now();
         let result = build();
+        self.frame_script_calls
+            .set(self.frame_script_calls.get() + 1);
         self.materialize_nanos
             .set(self.materialize_nanos.get() + elapsed_nanos(started));
         result
@@ -242,6 +255,7 @@ impl Metrics {
             script_render_time: Duration::from_nanos(self.script_render_nanos.get()),
             slowest_script_render: Duration::from_nanos(self.slowest_script_render_nanos.get()),
             native_time: Duration::from_nanos(self.native_nanos.get()),
+            frame_script_calls: self.frame_script_calls.get(),
             materializations: self.materializations.get(),
             materialize_time: Duration::from_nanos(self.materialize_nanos.get()),
         }

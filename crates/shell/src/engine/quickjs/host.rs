@@ -816,10 +816,17 @@ fn fail(ctx: &Ctx<'_>, message: &str) -> JsError {
 /// Real configuration data is nowhere near this deep.
 const MAX_JSON_DEPTH: usize = 64;
 
+/// The largest magnitude a JavaScript number represents exactly, and therefore
+/// the largest one that may be narrowed to an integer without losing anything.
+const MAX_EXACT_INTEGER: f64 = 9_007_199_254_740_992.0;
+
 /// Arrays and plain objects only, matching what the store can persist.
 /// Functions and `undefined` properties are dropped exactly as
 /// `JSON.stringify` drops them, so a script's mental model transfers.
-fn to_json(ctx: &Ctx<'_>, value: &Value<'_>, depth: usize) -> JsResult<Json> {
+///
+/// Shared with the dock binding, which reads a persisted layout back out of
+/// script: a layout is plain data under exactly these rules.
+pub(super) fn to_json(ctx: &Ctx<'_>, value: &Value<'_>, depth: usize) -> JsResult<Json> {
     if depth > MAX_JSON_DEPTH {
         return Err(Exception::throw_type(
             ctx,
@@ -838,6 +845,15 @@ fn to_json(ctx: &Ctx<'_>, value: &Value<'_>, depth: usize) -> JsResult<Json> {
         return Ok(Json::Number(number.into()));
     }
     if let Some(number) = value.as_number() {
+        // JavaScript has one number type, so an integral value *is* an integer
+        // as far as a script is concerned — and something reading it back into
+        // a Rust `usize` has to be able to see one. The tag cannot answer this:
+        // QuickJS hands `JSON.parse("0")` back as a float, so a layout that
+        // round-tripped through `JSON.stringify` would arrive as `0.0` and fail
+        // to deserialize.
+        if number.fract() == 0.0 && number.abs() <= MAX_EXACT_INTEGER {
+            return Ok(Json::Number((number as i64).into()));
+        }
         return serde_json::Number::from_f64(number)
             .map(Json::Number)
             .ok_or_else(|| {

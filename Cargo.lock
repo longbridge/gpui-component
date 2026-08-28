@@ -3666,6 +3666,7 @@ dependencies = [
  "anyhow",
  "async-channel",
  "cap-std",
+ "chrono",
  "gpui",
  "gpui-base",
  "gpui-fps",

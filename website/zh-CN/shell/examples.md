@@ -7,11 +7,12 @@ pageClass: shell-examples-page
 
 # Examples
 
-仓库自带三个示例，合起来覆盖独立应用、由 Host 状态驱动的脚本，以及动画帧完全不进入 JavaScript 的原生 motion。
+仓库自带四个示例，合起来覆盖独立应用、可停靠布局、由 Host 状态驱动的脚本，以及动画帧完全不进入 JavaScript 的原生 motion。
 
 | | 怎么跑 | 展示了什么 |
 | --- | --- | --- |
 | [Todo list](#todo-list) | 一个独立应用 | 脚本这一侧的全部：留存输入、dialog、toast、受授权约束的存储、资源、类型 |
+| [工作区](#工作区) | 一个独立应用 | 可停靠布局：熬过重启的面板，以及全部由脚本绘制的 chrome |
 | [报价面板](#报价面板) | gallery 里的一块面板 | Host 那一半：HostModule 、一个实体被两种语言读取、实时的成本读数 |
 | [原生动画](#原生动画) | gallery 内独立的脚本视图 | 由 GPUI 保留并采样的像素目标 transition 与 spring |
 
@@ -74,6 +75,29 @@ export function load() {
 **dialog 是一个函数，不是一个元素。** `confirm.js` default 导出一个返回内容函数的函数；`main.js` 用 `window.open_dialog(confirmClear(count, onConfirm))` 打开它。数量和回调是闭包捕获的，不是交接过去的。见 [Overlays](./overlays.md)。
 
 **类型是配好的，一共三个文件。** `jsconfig.json` 打开 `checkJs`，`gpui.d.ts` 由 `gpui-shell types` 生成，`types.d.ts` 放这个应用自己的形状——`Todo`、`Filter`。编辑器补全与 `checkJs` 报错从此就能用，不需要任何构建步骤。
+
+## 工作区
+
+```bash
+cargo run -p gpui-shell -- examples/js_dock
+```
+
+`examples/js_dock/` 是一个可停靠的工作区——左边是文件列表，中间是文档，布局会以你离开时的样子回来。
+
+```text
+main.js                   工作区本体：面板、dock 与持久化
+ui.js                     chrome：标签页、dock 外框、落点提示
+```
+
+其中三件事是重点。
+
+**base 不画 chrome，所以这些全在 `ui.js` 里。** 标签栏、dock 的标题条、折叠控件、缩放把手与落点提示都是用普通样式接口写出来的普通元素。一个这些都没有的 area 照样能停靠、拖动、调整大小、持久化，只是除了面板本身之外什么都不画。
+
+**标签页带的是命令，不是处理器。** chrome 描述会缓存到原生状态改变为止，所以其中的脚本事件处理器没有可靠的生命周期。`select_tab(group, tab.index)` 与 `close_panel(group, tab.id)` 完全不携带脚本值——它们只是指名某个容器、以及要请它做什么。
+
+**面板就是多了两个方法的视图。** `Document.serialize()` 返回它的标题与编辑次数；重启之后 `deserialize(data)` 把它们收回来。关于这块面板的其他一切——它在哪、是否正在显示——都是布局的事，永远不会传到脚本。
+
+完整接口见 [Dock 与面板](./dock.md)。
 
 ## 报价面板
 

@@ -8,23 +8,24 @@
 //! children, usually wrapped in a [`Popup`](super::popover::popup) so that it
 //! floats above the window instead of pushing the layout around.
 //!
-//! # What the shell cannot give them
+//! # What the shell does not give them, and what a script can
 //!
 //! Base opens the surface on ↑ / ↓ / Enter, moves the keyboard to the content
 //! handle, and then calls `cx.propagate()` — it expects whatever is inside the
 //! surface to take over and run the highlight from there. In a Rust
-//! application that "whatever" is a list with key bindings of its own. The
-//! shell has no action or key-binding layer at all (`docs/gpui-shell.md` §26
-//! lists it as not built), so there is nothing for base to hand the keyboard
-//! to.
+//! application that "whatever" is a list with key bindings of its own.
 //!
-//! The result is a control that is complete with a pointer, opens and closes
-//! from the keyboard, and cannot be *navigated* from the keyboard once open.
-//! That is written into `gpui.d.ts` rather than left for a script author to
-//! discover, and it is why `content_focus_handle` is bound even so: the focus
-//! does move, so a script drawing its highlight from `handle.is_focused()`
-//! already gets the right answer, and nothing here has to change on the day a
-//! binding layer lands.
+//! Nothing here supplies one, so out of the box the control is complete with a
+//! pointer, opens and closes from the keyboard, and cannot be *navigated* from
+//! the keyboard once open. That is written into `gpui.d.ts` rather than left
+//! for a script author to discover.
+//!
+//! What changed since this was written is that the script can now supply the
+//! missing half itself: `on_key_down` on the content element, or ↑ / ↓ bound
+//! to actions under its own `key_context` (§10.5, §10.6). Nothing in this file
+//! had to change for that, which is what `content_focus_handle` was bound for
+//! — the focus does move, so a script drawing its highlight from
+//! `handle.is_focused()` already got the right answer.
 //!
 //! `DatePicker` loses more than the other two. It handles Confirm and Cancel
 //! but sets no key context of its own, and every binding base installs is

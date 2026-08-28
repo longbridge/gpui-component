@@ -26,13 +26,19 @@ use std::{
 
 use gpui::{App, AppContext as _, Entity, EntityId, FocusHandle, Subscription, Window};
 use gpui_base::VirtualListScrollHandle;
+use gpui_base::dock::{DockArea, DockEvent};
 use gpui_base::input::{
     InputBaseState, InputEditorStyle, InputEvent, InputModeKind, InputState, TextareaState,
 };
 use gpui_base::slider::{SliderEvent, SliderScale, SliderState, SliderValue};
-use gpui_base::{OtpEvent, OtpState};
+use gpui_base::{CalendarEvent, CalendarState, OtpEvent, OtpState};
 
-use crate::{engine::ShellRuntime, runtime::ApplicationGeneration, view::ScriptView};
+use crate::{
+    dock::{DockChromeSlots, DockContexts, ScriptDockSkin},
+    engine::ShellRuntime,
+    runtime::ApplicationGeneration,
+    view::ScriptView,
+};
 
 /// A script-visible reference to retained state.
 ///
@@ -45,6 +51,10 @@ const STORE_SHIFT: u32 = 32;
 const MAX_STORE_ID: u32 = (1 << 21) - 1;
 const ENTITY_ID_MASK: u64 = u32::MAX as u64;
 pub(crate) const MAX_LIVE_ENTITIES: usize = 10_000;
+
+/// The runtime-wide retained-state budget is full.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct EntityLimitError;
 
 /// What a handle points at. One variant per entity type the script can create.
 enum Record {
@@ -72,6 +82,16 @@ enum Record {
     /// methods, which is why everything below this point treats them together.
     Textarea {
         state: Entity<TextareaState>,
+        application: Option<Rc<ApplicationGeneration>>,
+        subscriptions: Vec<Subscription>,
+    },
+    /// A calendar's month, view and selected date.
+    ///
+    /// Retained because the month a script is looking at outlives the frame
+    /// that drew it, and because the day grid is derived from it: `next_month`
+    /// moves the state and the next `month_days()` answers a different grid.
+    Calendar {
+        state: Entity<CalendarState>,
         application: Option<Rc<ApplicationGeneration>>,
         subscriptions: Vec<Subscription>,
     },
@@ -107,6 +127,25 @@ enum Record {
     Focus {
         handle: FocusHandle,
         application: Option<Rc<ApplicationGeneration>>,
+    },
+    /// A dockable layout: its trees, its docks, its panel entities, and the
+    /// skin drawing all of it.
+    ///
+    /// Retained for the reason nothing else here is quite: the layout is what
+    /// the *user* changed. A drag, a resize, a closed tab and a collapsed dock
+    /// all happen without a script render, and rebuilding the area from a
+    /// description would put every one of them back the way the script last
+    /// described it.
+    Dock {
+        area: Entity<DockArea>,
+        /// Which script handler draws each piece of chrome for the frame being
+        /// drawn. Shared with the skin installed in `area`, which reads it.
+        slots: Rc<DockChromeSlots>,
+        /// The contexts that skin was handed while it drew, so a command
+        /// arriving from a later event handler can find its own.
+        contexts: Rc<DockContexts>,
+        application: Option<Rc<ApplicationGeneration>>,
+        subscriptions: Vec<Subscription>,
     },
     /// The scroll position of a virtualized list, and the item it has been
     /// asked to scroll to.
@@ -239,7 +278,7 @@ impl EntityStore {
         view: Entity<ScriptView>,
         application: Option<Rc<ApplicationGeneration>>,
         runtime: &Rc<ShellRuntime>,
-    ) -> EntityHandle {
+    ) -> Result<EntityHandle, EntityLimitError> {
         self.push(Record::View {
             view,
             application,
@@ -268,7 +307,8 @@ impl EntityStore {
         application: Option<Rc<ApplicationGeneration>>,
         window: &mut Window,
         cx: &mut App,
-    ) -> EntityHandle {
+    ) -> Result<EntityHandle, EntityLimitError> {
+        self.ensure_capacity()?;
         let state = cx.new(|cx| {
             let mut state = InputState::new(window, cx);
             if let Some(placeholder) = placeholder {
@@ -314,7 +354,8 @@ impl EntityStore {
         application: Option<Rc<ApplicationGeneration>>,
         window: &mut Window,
         cx: &mut App,
-    ) -> EntityHandle {
+    ) -> Result<EntityHandle, EntityLimitError> {
+        self.ensure_capacity()?;
         let state = cx.new(|cx| {
             let mut state = TextareaState::new(window, cx);
             if let Some(placeholder) = placeholder {
@@ -373,7 +414,8 @@ impl EntityStore {
         value: SliderValue,
         application: Option<Rc<ApplicationGeneration>>,
         cx: &mut App,
-    ) -> EntityHandle {
+    ) -> Result<EntityHandle, EntityLimitError> {
+        self.ensure_capacity()?;
         let state = cx.new(|_| {
             SliderState::new()
                 .min(min)
@@ -415,7 +457,8 @@ impl EntityStore {
         application: Option<Rc<ApplicationGeneration>>,
         window: &mut Window,
         cx: &mut App,
-    ) -> EntityHandle {
+    ) -> Result<EntityHandle, EntityLimitError> {
+        self.ensure_capacity()?;
         let state = cx.new(|cx| {
             let state = OtpState::new(length, window, cx).masked(masked);
             match value {
@@ -429,6 +472,152 @@ impl EntityStore {
             application,
             subscriptions: HashMap::new(),
         })
+    }
+
+    /// Creates a calendar state and returns its handle.
+    ///
+    /// Needs a window for the same reason [`Self::create_otp`] does: the state
+    /// builds a focus handle in its constructor.
+    pub fn create_calendar(
+        &mut self,
+        application: Option<Rc<ApplicationGeneration>>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Result<EntityHandle, EntityLimitError> {
+        self.ensure_capacity()?;
+        let state = cx.new(|cx| CalendarState::new(window, cx));
+        self.push(Record::Calendar {
+            state,
+            application,
+            subscriptions: Vec::new(),
+        })
+    }
+
+    /// The entity behind a calendar handle, if it is still live and belongs
+    /// here.
+    pub fn calendar(&self, handle: EntityHandle) -> Option<Entity<CalendarState>> {
+        match self.record(handle) {
+            Some(Record::Calendar { state, .. }) => Some(state.clone()),
+            _ => None,
+        }
+    }
+
+    /// Subscribes to a calendar's one event: a date was selected.
+    ///
+    /// A `Vec` of subscriptions rather than a map keyed by event name, as the
+    /// slider's is: `CalendarEvent` has one variant, so there is nothing to
+    /// key by and nothing a second registration could mean but "also this".
+    pub fn subscribe_calendar(
+        &mut self,
+        handle: EntityHandle,
+        window: &mut Window,
+        cx: &mut App,
+        handler: impl Fn(&CalendarEvent, &mut Window, &mut App) + 'static,
+    ) -> bool {
+        let state = match self.record(handle) {
+            Some(Record::Calendar { state, .. }) => state.clone(),
+            _ => return false,
+        };
+        let subscription =
+            window.subscribe(&state, cx, move |_, event: &CalendarEvent, window, cx| {
+                handler(event, window, cx)
+            });
+        match self.record_mut(handle) {
+            Some(Record::Calendar { subscriptions, .. }) => {
+                // Replaces rather than appends, matching every other `on(...)`
+                // in this API: registering twice means the second handler, not
+                // both of them.
+                subscriptions.clear();
+                subscriptions.push(subscription);
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// Creates a dock area and returns its handle.
+    ///
+    /// The skin is installed here rather than left to the caller because
+    /// [`DockArea::with_renderer`] is a constructor step and base offers no way
+    /// to replace a renderer afterwards. What *is* replaceable is the set of
+    /// script handlers the skin forwards to, which is what
+    /// [`DockChromeSlots`] carries — so one skin built once serves every
+    /// snapshot the script publishes.
+    pub(crate) fn create_dock(
+        &mut self,
+        id: &str,
+        version: Option<usize>,
+        skin: ScriptDockSkin,
+        application: Option<Rc<ApplicationGeneration>>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Result<EntityHandle, EntityLimitError> {
+        self.ensure_capacity()?;
+        let contexts = skin.contexts();
+        let slots = skin.slots();
+        let id = id.to_owned();
+        let area = cx.new(|cx| DockArea::new(id, version, window, cx).with_renderer(Rc::new(skin)));
+        self.push(Record::Dock {
+            area,
+            slots,
+            contexts,
+            application,
+            subscriptions: Vec::new(),
+        })
+    }
+
+    /// The area behind a dock handle, if it is still live and belongs here.
+    pub(crate) fn dock(&self, handle: EntityHandle) -> Option<Entity<DockArea>> {
+        match self.record(handle) {
+            Some(Record::Dock { area, .. }) => Some(area.clone()),
+            _ => None,
+        }
+    }
+
+    /// Where the next frame's chrome handlers are written.
+    pub(crate) fn dock_slots(&self, handle: EntityHandle) -> Option<Rc<DockChromeSlots>> {
+        match self.record(handle) {
+            Some(Record::Dock { slots, .. }) => Some(slots.clone()),
+            _ => None,
+        }
+    }
+
+    /// The contexts the last drawn frame recorded, which is what a command from
+    /// a script event handler is resolved against.
+    pub(crate) fn dock_contexts(&self, handle: EntityHandle) -> Option<Rc<DockContexts>> {
+        match self.record(handle) {
+            Some(Record::Dock { contexts, .. }) => Some(contexts.clone()),
+            _ => None,
+        }
+    }
+
+    /// Subscribes to a dock area's layout changes.
+    ///
+    /// One `Vec` and one handler, as the calendar's is: a second registration
+    /// means the second handler rather than both, which is what every other
+    /// `on(...)` in this API means.
+    pub(crate) fn subscribe_dock(
+        &mut self,
+        handle: EntityHandle,
+        window: &mut Window,
+        cx: &mut App,
+        handler: impl Fn(&DockEvent, &mut Window, &mut App) + 'static,
+    ) -> bool {
+        let area = match self.record(handle) {
+            Some(Record::Dock { area, .. }) => area.clone(),
+            _ => return false,
+        };
+        let subscription = window.subscribe(&area, cx, move |_, event: &DockEvent, window, cx| {
+            handler(event, window, cx)
+        });
+        match self.record_mut(handle) {
+            Some(Record::Dock { subscriptions, .. }) => {
+                subscriptions.clear();
+                subscriptions.push(subscription);
+                true
+            }
+            _ => false,
+        }
     }
 
     /// The entity behind a one-time-code handle, if it is still live and
@@ -451,7 +640,7 @@ impl EntityStore {
         &mut self,
         application: Option<Rc<ApplicationGeneration>>,
         cx: &mut App,
-    ) -> EntityHandle {
+    ) -> Result<EntityHandle, EntityLimitError> {
         self.push(Record::Focus {
             handle: cx.focus_handle(),
             application,
@@ -475,7 +664,7 @@ impl EntityStore {
     pub fn create_virtual_scroll(
         &mut self,
         application: Option<Rc<ApplicationGeneration>>,
-    ) -> EntityHandle {
+    ) -> Result<EntityHandle, EntityLimitError> {
         self.push(Record::VirtualScroll {
             handle: VirtualListScrollHandle::new(),
             application,
@@ -698,6 +887,9 @@ impl EntityStore {
                 | Record::Otp {
                     application: owner, ..
                 }
+                | Record::Calendar {
+                    application: owner, ..
+                }
                 | Record::Textarea {
                     application: owner, ..
                 }
@@ -708,6 +900,9 @@ impl EntityStore {
                     application: owner, ..
                 }
                 | Record::VirtualScroll {
+                    application: owner, ..
+                }
+                | Record::Dock {
                     application: owner, ..
                 } => owner,
             };
@@ -762,8 +957,10 @@ impl EntityStore {
         }
     }
 
-    /// How many handles are live, for `gc_stats` and for tests that assert the
-    /// store does not grow without bound.
+    /// How many handles are live, for tests that assert the store does not grow
+    /// without bound. Nothing in the runtime asks: the capacity is enforced
+    /// inside [`Self::push`], which is the only way a record gets in.
+    #[cfg(test)]
     pub fn len(&self) -> usize {
         self.records.len()
     }
@@ -821,6 +1018,21 @@ impl EntityStore {
             })
     }
 
+    /// For the test that asserts a single date is stored as `Date::Single`.
+    ///
+    /// Not observable from the script side: both `Single(Some(d))` and
+    /// `Range(Some(d), None)` read back as the same string, which is exactly
+    /// how storing the wrong one went unnoticed.
+    #[cfg(test)]
+    pub(crate) fn first_calendar(&self) -> Option<Entity<CalendarState>> {
+        self.records
+            .values()
+            .find_map(|stored| match &stored.record {
+                Record::Calendar { state, .. } => Some(state.clone()),
+                _ => None,
+            })
+    }
+
     #[cfg(test)]
     pub(crate) fn first_input(&self) -> Option<Entity<InputState>> {
         self.records
@@ -859,8 +1071,8 @@ impl EntityStore {
         self.records.get_mut(&id).map(|stored| &mut stored.record)
     }
 
-    fn push(&mut self, record: Record) -> EntityHandle {
-        debug_assert!(self.records.len() < MAX_LIVE_ENTITIES);
+    fn push(&mut self, record: Record) -> Result<EntityHandle, EntityLimitError> {
+        self.ensure_capacity()?;
         let id = self.next_id;
         self.next_id = self
             .next_id
@@ -873,7 +1085,13 @@ impl EntityStore {
                 owner: crate::scope::current_view().map(|view| view.entity_id()),
             },
         );
-        (u64::from(self.id) << STORE_SHIFT) | u64::from(id)
+        Ok((u64::from(self.id) << STORE_SHIFT) | u64::from(id))
+    }
+
+    fn ensure_capacity(&self) -> Result<(), EntityLimitError> {
+        (self.records.len() < MAX_LIVE_ENTITIES)
+            .then_some(())
+            .ok_or(EntityLimitError)
     }
 }
 
@@ -1080,6 +1298,26 @@ mod tests {
     }
 
     #[test]
+    fn live_entity_limit_is_enforced_by_the_store() {
+        let mut store = EntityStore::try_new().expect("store id");
+        for _ in 0..MAX_LIVE_ENTITIES {
+            store
+                .push(Record::VirtualScroll {
+                    handle: VirtualListScrollHandle::new(),
+                    application: None,
+                })
+                .expect("the advertised live-entity capacity");
+        }
+
+        let overflow = store.push(Record::VirtualScroll {
+            handle: VirtualListScrollHandle::new(),
+            application: None,
+        });
+        assert_eq!(overflow, Err(EntityLimitError));
+        assert_eq!(store.len(), MAX_LIVE_ENTITIES);
+    }
+
+    #[test]
     fn a_handle_from_another_store_does_not_resolve() {
         let first = EntityStore::try_new().expect("first store id");
         let second = EntityStore::try_new().expect("second store id");
@@ -1097,15 +1335,21 @@ mod tests {
         let window = cx.add_window(|_, _| gpui::Empty);
         let mut context = VisualTestContext::from_window(*window, cx);
 
-        let first = context.update(|window, cx| store.create_input(None, None, None, window, cx));
+        let first = context
+            .update(|window, cx| store.create_input(None, None, None, window, cx))
+            .expect("room");
         assert!(store.release(first));
-        let second = context.update(|window, cx| store.create_input(None, None, None, window, cx));
+        let second = context
+            .update(|window, cx| store.create_input(None, None, None, window, cx))
+            .expect("room");
         assert_ne!(first, second);
         assert!(store.input(first).is_none());
         assert!(store.input(second).is_some());
 
         store.clear();
-        let third = context.update(|window, cx| store.create_input(None, None, None, window, cx));
+        let third = context
+            .update(|window, cx| store.create_input(None, None, None, window, cx))
+            .expect("room");
         assert_ne!(second, third);
         assert!(store.input(second).is_none());
         assert!(store.input(third).is_some());
@@ -1119,8 +1363,12 @@ mod tests {
         let window = cx.add_window(|_, _| gpui::Empty);
         let mut context = VisualTestContext::from_window(*window, cx);
 
-        let focus = context.update(|_, cx| store.create_focus(None, cx));
-        let input = context.update(|window, cx| store.create_input(None, None, None, window, cx));
+        let focus = context
+            .update(|_, cx| store.create_focus(None, cx))
+            .expect("room");
+        let input = context
+            .update(|window, cx| store.create_input(None, None, None, window, cx))
+            .expect("room");
 
         // The two kinds do not answer for each other, which is what stops a
         // script from rendering an input where it asked for a focus target.
@@ -1143,9 +1391,12 @@ mod tests {
         let window = cx.add_window(|_, _| gpui::Empty);
         let mut context = VisualTestContext::from_window(*window, cx);
 
-        let input = context.update(|window, cx| store.create_input(None, None, None, window, cx));
+        let input = context
+            .update(|window, cx| store.create_input(None, None, None, window, cx))
+            .expect("room");
         let textarea = context
-            .update(|window, cx| store.create_textarea(None, None, Some(4), None, window, cx));
+            .update(|window, cx| store.create_textarea(None, None, Some(4), None, window, cx))
+            .expect("room");
 
         assert!(store.textarea(input).is_none());
         assert!(store.input(textarea).is_none());
@@ -1174,13 +1425,19 @@ mod tests {
         let window = cx.add_window(|_, _| gpui::Empty);
         let mut context = VisualTestContext::from_window(*window, cx);
 
-        let first = context.update(|window, cx| {
-            store.create_input(None, None, Some(first_application.clone()), window, cx)
-        });
-        let second = context.update(|window, cx| {
-            store.create_input(None, None, Some(second_application.clone()), window, cx)
-        });
-        let focus = context.update(|_, cx| store.create_focus(Some(first_application.clone()), cx));
+        let first = context
+            .update(|window, cx| {
+                store.create_input(None, None, Some(first_application.clone()), window, cx)
+            })
+            .expect("room");
+        let second = context
+            .update(|window, cx| {
+                store.create_input(None, None, Some(second_application.clone()), window, cx)
+            })
+            .expect("room");
+        let focus = context
+            .update(|_, cx| store.create_focus(Some(first_application.clone()), cx))
+            .expect("room");
 
         store.release_application(&first_application).retire(cx);
 

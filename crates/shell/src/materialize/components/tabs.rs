@@ -21,12 +21,13 @@ use crate::{
     engine::ShellRuntime,
     materialize::{
         Behavior, Children, StateStyles, dispatch_click, finish, warn_ignored_key,
-        warn_unhonoured_a11y, with_active_and_focus, with_hover,
+        warn_unhonoured_a11y, with_active_and_focus, with_hover, with_input_handlers,
     },
 };
 
 /// The tab list. Its identity comes from `new(id)`, so `id()` is ignored.
 pub(in crate::materialize) fn tab_list(
+    runtime: &Rc<ShellRuntime>,
     id: String,
     refinement: StyleRefinement,
     behavior: Behavior,
@@ -38,6 +39,7 @@ pub(in crate::materialize) fn tab_list(
     let tabs = Tabs::new(SharedString::from(id));
     let tabs = with_hover(tabs, &states);
     let tabs = with_active_and_focus(tabs, &states);
+    let tabs = with_input_handlers(tabs, &behavior, runtime);
     finish(tabs, refinement, children)
 }
 
@@ -73,5 +75,6 @@ pub(in crate::materialize) fn tab(
 
     let tab = with_hover(tab, &states);
     let tab = with_active_and_focus(tab, &states);
+    let tab = with_input_handlers(tab, &behavior, runtime);
     finish(tab, refinement, children)
 }

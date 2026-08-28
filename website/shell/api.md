@@ -85,6 +85,12 @@ A subclass defines `init?(props, cx)`, which runs once, and `render(cx)`, which 
 | `MouseButton` | `"left"`, `"right"` or `"middle"` |
 | `ClickEvent` | `click_count`, `modifiers` |
 | `MouseMoveEvent` | `position`, `local_position`, `bounds`, `modifiers` |
+| `MouseButtonEvent` | `button`, `click_count`, `position`, `modifiers`, and the local geometry once painted |
+| `ScrollWheelEvent` | `delta` in pixels, `delta_lines` when the device reported lines, `touch_phase` |
+| `KeyEvent` | `keystroke` (the whole chord; the platform modifier is spelled `cmd` on every platform), `key`, `key_char`, `modifiers`, `is_held` |
+| `ActionEvent` | `action` — the script's own name for it |
+| `KeyBinding` | One entry of `cx.bind_keys`: `keystroke`, `action`, optional `context` |
+| `Size` | `width`, `height` |
 | `Modifiers` | `shift`, `control`, `alt`, `platform` |
 | `Point` | `x`, `y` |
 | `Path` | Immutable native geometry produced by `PathBuilder.build()` |
@@ -129,6 +135,9 @@ There are two context lifetimes with the same methods. `Context`, received by `r
 | Member | What it is |
 | --- | --- |
 | `notify()` | Requests a re-render; throws during `render`, because notifying yourself while rendering is a loop |
+| `bind_keys(bindings)` | Installs key bindings and answers how many; `App::bind_keys` |
+| `stop_propagation()` | Keeps this event from reaching the handlers above; `App::stop_propagation` |
+| `propagate()` | Undoes that within the same dispatch; `App::propagate` |
 | `phase()` | Which `ScopePhase` the call is in |
 | `theme()` | The current `gpui_base::Theme` semantic token projection |
 | `open_url(url)` | Hands an absolute `http`/`https` URL to the system handler |
@@ -166,8 +175,20 @@ The global has the `Window` type exported by `gpui`. Nothing hands it to you and
 | `remove_toast(id)` | Retracts one toast, and answers whether it was still showing |
 | `clear_toasts()` | Retracts every toast, and answers how many |
 | `paint_path(path, background)` | Paints immutable geometry with a native background; `Window::paint_path` |
+| `dispatch_action(action)` | Dispatches an action down this window's focus path; `Window::dispatch_action` |
+| `rem_size()` / `line_height()` | The window's type metrics, in pixels |
+| `viewport_size()` / `bounds()` | The drawable area, and where the window sits on screen |
+| `mouse_position()` | Where the pointer is, in window coordinates |
+| `appearance()` | `"light"` or `"dark"` |
+| `is_window_active()` / `is_fullscreen()` / `is_maximized()` | The platform window's state |
+| `set_rem_size(size)` | Rescales everything expressed in rems |
+| `refresh()` | Redraws every view in the window |
+| `focus_next()` / `focus_prev()` | Moves the keyboard one tab stop |
+| `activate_window()` / `minimize_window()` / `zoom_window()` / `toggle_fullscreen()` | Platform window controls |
 | `localStorage` | Web Storage backed by a file the host placed; survives a restart |
 | `sessionStorage` | Web Storage held in memory; goes with the process |
+
+The measurements — everything from `rem_size()` down to `is_maximized()` — are legal from `render`, because a view that sizes itself from the window has to ask during the pass that draws it. Everything that *changes* the window is refused there, for the reason `cx.notify()` is: a frame that changes the window it is drawing into is a frame arguing with itself.
 
 `open_dialog`, `open_sheet` and `open_sheet_at` take a **function returning an element**, not an element: a dialog outlives the call that opened it, and the function runs again whenever it redraws. Everything here except the two `has_active_*` queries and `paint_path` is illegal from `render`. See [Overlays](./overlays.md).
 
@@ -218,6 +239,17 @@ The components here own behavior, focus and what a screen reader hears, and draw
 | [`Progress`](../base/primitives/progress.md) | The announcement, not the bar; `Progress.new(...)` alone draws nothing |
 | [`ProgressTrack`](../base/primitives/progress.md) | The groove: a plain element you size and color |
 | [`ProgressIndicator`](../base/primitives/progress.md) | The filled part; set its width from the percentage you announced |
+| [`Avatar`](../base/primitives/avatar.md) | Renders its `image` slot, or its `fallback` when there is none; no circle, size or background of its own |
+| [`AvatarImage`](../base/primitives/avatar.md) | The image slot: `AvatarImage.new(path)`, and legal nowhere else |
+| [`AvatarFallback`](../base/primitives/avatar.md) | The fallback slot: an ordinary box holding initials, a shape or an `svg` |
+| [`Pagination`](../base/primitives/pagination.md) | A navigation landmark carrying the announced label; the page buttons are yours |
+| `pagination_items(current, total, visible?)` | Which page numbers to draw and where the gaps fall. `visible` defaults to 7, floors at 5; one page or fewer answers nothing |
+| [`Accordion`](../base/primitives/accordion.md) | A group holding items |
+| [`AccordionItem`](../base/primitives/accordion.md) | One item: `open(...)` in, the trigger's `on_change(...)` out; it passes its `open` down to both halves |
+| [`AccordionHeader`](../base/primitives/accordion.md) | The heading: `AccordionHeader.new(trigger)`, with `aria_level(n)` announcing its level (default 3) |
+| [`AccordionPanel`](../base/primitives/accordion.md) | The revealed region. Out of the tree while shut, unless `keep_mounted(true)` |
+| [`AccordionTrigger`](../base/primitives/accordion.md) | The button: announces the expanded state, and `on_change` asks for the other one |
+| [`CalendarState`](../base/primitives/calendar.md) | Retained calendar state: the month grid, the month being shown, and the chosen date |
 | [`SliderState`](../base/primitives/slider.md) | Retained slider state, and where a drag writes |
 | [`Slider`](../base/primitives/slider.md) | The root: announces the value and owns the release |
 | [`SliderTrack`](../base/primitives/slider.md) | The press and drag surface |
@@ -252,7 +284,7 @@ There is no numeric state type: an `InputState` becomes a number state by being 
 | [`Combobox`](../base/primitives/combobox.md) | The same root, announced as a combobox whose trigger is an editable field |
 | [`DatePicker`](../base/primitives/date-picker.md) | A date-picker root: `DatePicker.new(id, focus_handle)`; it holds no date |
 
-Two gaps are worth knowing before you build on these: arrow-key navigation of an open `Select` or `Combobox` list is not there, and Enter and Escape do not reach a `DatePicker`. Both are described where they bite, in the declarations for each type.
+Two gaps are worth knowing before you build on these: arrow-key navigation of an open `Select` or `Combobox` list is yours to wire (the pieces are there — see below), and Enter and Escape do not reach a `DatePicker`. Both are described where they bite, in the declarations for each type.
 
 ### Tables and lists
 
@@ -271,6 +303,19 @@ Two gaps are worth knowing before you build on these: arrow-key navigation of an
 | [`Scrollbar`](../base/primitives/scrollbar.md) | `new(id)`, `horizontal(id)`, `vertical(id)` — a bar you place yourself |
 
 Both virtual lists take `(id, item_count, item_sizes, get_key, render)`. `render(range, cx)` is the only callback in this API that the host calls *during* a frame, which is why handlers, retained state and `cx.notify()` are all refused inside it.
+
+### Dock
+
+| Name | What it is |
+| --- | --- |
+| `DockArea.new(id, options?)` | A dockable layout, retained: `options` is `{ version?: number }` |
+| `DockArea.register_panel(name, Class)` | Teaches the runtime to rebuild `name`'s panel from `Class`; answers with the namespaced name |
+| `dock_area(area)` | Draws one, and carries the six chrome handlers |
+| `dock_content()` | Where a dock's own panels go inside the chrome drawn around them |
+
+The area's methods are `add_panel(view, options)`, `remove_panel(id)`, `panels()`, `dump()`, `load(state)`, `has_dock`, `is_dock_open`, `toggle_dock`, `remove_dock`, `dock_size`, `set_dock_size`, `set_dock_collapsible`, `is_locked`, `set_locked`, `is_zoomed`, `zoom_out`, `on("layout_changed", handler)` and `release()`.
+
+**Every edit is applied once the call that made it has returned**, in the order the calls were made — a panel's body comes from `cx.new(Class)`, which is still being constructed — so `panels()` and `dump()` read the layout as it was before this turn's edits. See [Dock and Panels](./dock.md).
 
 ### Retained handles
 
@@ -342,6 +387,36 @@ From `VirtualListScrollHandle.new()`, handed to a list with `track_scroll(handle
 | `scroll_to_item(index: number, strategy?): void` | Puts an item on screen before the next frame; `strategy` is `"top"` (default) or `"center"` |
 | `scroll_to_bottom(): void` | Scrolls to the end |
 
+
+### Calendar
+
+`CalendarState` exists for `month_days()` — which dates fall in which week, where the neighbouring months' days go, and how many weeks this month needs. You draw the cells.
+
+```js
+const grid = this.calendar.month_days()[0];
+v_flex().children(grid.map((week) =>
+  h_flex().children(week.map((day) =>
+    Button.new(day)
+      .selected(day === this.calendar.value())
+      .on_click((_, cx) => { this.calendar.set_value(day); cx.notify(); })
+      .child(String(Number(day.slice(8)))),
+  )),
+));
+```
+
+Base's `Calendar` element is **not** bound, and that is a decision rather than an omission: it walks the same grid calling a renderer once per cell — up to forty-two crossings into JavaScript per frame, from inside GPUI's layout pass, for cells that carry no behavior. Reading the grid here and drawing it yourself is the same work without them.
+
+Dates are `"YYYY-MM-DD"`: sorting them as text sorts them by time, and `new Date(s)` reads one — which is where a weekday name or a localized month label comes from.
+
+| Method | What it does |
+| --- | --- |
+| `month_days()` | The grid, as months of weeks of days. Every week is seven days; the first and last carry the neighbouring months' |
+| `year()` / `month()` | The year and month (1–12) the grid is for |
+| `today()` | Today, as the state read it when it was created |
+| `value()` / `set_value(next)` | The selection: one day, a `[start, end]` range, or `null` |
+| `next_month()` / `prev_month()` | Moves the grid a month either way; illegal from `render` |
+| `on("change", handler)` | The only event, reporting a date being selected |
+
 ### Theme
 
 | Name | What it is |
@@ -368,6 +443,13 @@ Reading the theme is `cx.theme()`. `set_theme` remains in `gpui-base` because th
 | `PartType` | The shared `new()` shape used by `gpui-base` sub-parts without their own identity |
 | `Placement` | `"top"`, `"bottom"`, `"left"` or `"right"`, mirroring `gpui_base::Placement` |
 | `ComponentType` | The shared `new(id)` shape used by identity-bearing `gpui-base` component constructors |
+| `DockPlacement` | `"center"`, `"left"`, `"right"` or `"bottom"` |
+| `DockPanel` | One panel as `panels()` reports it: `id`, `name`, `placement`, `node`, `index`, `active`, and its three flags |
+| `DockGroup` / `DockTab` | A tab group and one of its tabs, as `tab_bar` and `empty_group` are given them |
+| `DockRegion` | One dock, as the `dock` handler is given it |
+| `DockTile` | One tile, with already-resolved bounds |
+| `DockDrop` | Where a dragged panel would land |
+| `TileResizeSide` | `"left"`, `"right"`, `"top"`, `"bottom"` or `"bottom_right"` |
 
 ### Composition patterns
 
@@ -421,7 +503,7 @@ Select.new("mode")
   );
 ```
 
-Arrow-key navigation of an open list is not there: base expects whatever is inside to run the highlight from its own key bindings, and the shell has no key-binding layer. The pointer works, Escape closes, Enter and ↓ open.
+Arrow-key navigation of an open list is yours to write: base expects whatever is inside to run the highlight from its own key bindings, and nothing does that for you. The pieces are here — put `on_key_down` on the content element the keyboard was moved to, or bind ↑ / ↓ to actions under a `key_context` of your own. Out of the box the pointer works, Escape closes, Enter and ↓ open, and the highlight does not move.
 
 **A virtual list and its scrollbar are paired by name.** The list paints no bar of its own, and nothing checks the pairing before it runs, so both halves are needed.
 
@@ -478,6 +560,10 @@ A slot is not a child: the element is consumed by the component and rendered whe
 | Method | What it does |
 | --- | --- |
 | `content(element)` | The content of a `Collapsible`, `Popover`, `HoverCard` or `Popup` |
+| `image(element)` | An `Avatar`'s image slot; takes an `AvatarImage` |
+| `fallback(element)` | An `Avatar`'s fallback slot; takes an `AvatarFallback` |
+| `header(element)` | An `AccordionItem`'s header slot; takes an `AccordionHeader` |
+| `panel(element)` | An `AccordionItem`'s panel slot; takes an `AccordionPanel` |
 | `trigger(element)` | The trigger of a `Popover` or `HoverCard` |
 | `input(element)` | The editor slot of a `NumberInput`; empty draws the bare editor |
 | `decrement_button(element)` | The look of a `NumberInput`'s decrement button — replayed onto base's button, not rendered |
@@ -491,6 +577,13 @@ A slot is not a child: the element is consumed by the component and rendered whe
 | `on_click(handler)` | `(ClickEvent, cx)` on activation |
 | `on_mouse_move(handler)` | `(MouseMoveEvent, cx)` while the element is hovered |
 | `on_hover(handler)` | `(hovered, cx)` on both pointer entry and exit |
+| `on_key_down(handler)` | `(KeyEvent, cx)` while this element holds the keyboard |
+| `on_key_up(handler)` | `(KeyEvent, cx)` on the same focus path |
+| `on_mouse_down(button, handler)` | `(MouseButtonEvent, cx)` on a press of that button |
+| `on_mouse_up(button, handler)` | `(MouseButtonEvent, cx)` on its release |
+| `on_mouse_down_out(handler)` | `(MouseButtonEvent, cx)` on a press anywhere outside this element |
+| `on_scroll_wheel(handler)` | `(ScrollWheelEvent, cx)` on wheel or trackpad scrolling |
+| `on_action(action, handler)` | `(ActionEvent, cx)` when that named action is dispatched to this element or into it |
 | `on_change(handler)` | `(checked, cx)` on a toggle; the script owns the new value |
 | `on_step(handler)` | `("increment" \| "decrement", cx)`, and it **replaces** built-in stepping |
 | `on_item_click(handler)` | `(key, cx)` when a virtual list row is clicked, keyed rather than indexed |
@@ -498,6 +591,30 @@ A slot is not a child: the element is consumed by the component and rendered whe
 | `on_confirm(handler)` | Enter in an open `Select` or `Combobox`; no payload |
 | `on_dismiss(handler)` | Escape in an open `Select` or `Combobox`, before `on_open_change(false)` |
 | `on_resize(handler)` | `(sizes, cx)` once a resizable group's drag has ended |
+
+
+### Actions and key bindings
+
+An action is the level above a keystroke. `cx.bind_keys` says which chord means `"save"`, in which context; `on_action("save", ...)` on an element says what `"save"` does. A menu item or a toolbar button dispatching the same name through `window.dispatch_action("save")` reaches the same handler, and neither end has to know about the other.
+
+```js
+init(_props, cx) {
+  cx.bind_keys([{ keystroke: "cmd-s", action: "save", context: "Editor" }]);
+}
+
+render(_cx) {
+  return div()
+    .key_context("Editor")
+    .track_focus(this.handle)
+    .on_action("save", (event, cx) => this.save(cx));
+}
+```
+
+`context` is a predicate matched against the `key_context(...)` an element declares, so one chord can mean one thing in a list and another in an editor. Registering several `on_action`s on one element is fine and they are independent; an action none of them claims carries on to an element further out.
+
+That group — `on_key_down`, `on_key_up`, the four pointer handlers, `on_action` and `key_context` — is wired on `div`, `h_flex`, `v_flex`, `Button`, `Link`, `Checkbox`, `Switch`, `Radio`, `Toggle`, `Tabs` and `Tab`. On any other component the handler is recorded and never reaches GPUI, and the log says so — wrap it and write the handler on the wrapper.
+
+Wired is not the same as reachable. A key travels the focus path, so a component that accepts no focus handle — `Tab` — hears presses and never hears keys, however well both are wired.
 
 ### Control state
 
@@ -511,6 +628,7 @@ A slot is not a child: the element is consumed by the component and rendered whe
 | `indeterminate(value)` | Withdraws a `Progress` value from the accessibility tree |
 | `open(value)` | Whether a `Collapsible` renders its content, or a surface is showing |
 | `default_open(value)` | Whether an uncontrolled `Popover` starts open |
+| `keep_mounted(value)` | Whether a shut `AccordionPanel` stays in the tree. Off by default; on, its content keeps a scroll position or a half-typed field across a close |
 | `start(value)` | Which thumb of a range slider a `SliderThumb` is |
 | `href(url)` | The absolute HTTP(S) target of a `Link` |
 
@@ -525,6 +643,7 @@ A slot is not a child: the element is consumed by the component and rendered whe
 | `set_position(position, size)` | One-based position and total size — "tab 2 of 5" |
 | `row_count(count)` | A `Table`'s total rows, including unrendered ones |
 | `column_count(count)` | A `Table`'s total columns |
+| `aria_level(level)` | An `AccordionHeader`'s announced heading level, default 3; it announces, it sizes nothing |
 | `axis(value)` | A `RadioGroup`'s or `ToggleGroup`'s orientation; semantic only, it lays out nothing |
 | `tooltip(text)` | A pointer-only hover label, and no substitute for `accessibility_label` |
 
@@ -561,6 +680,44 @@ A slot is not a child: the element is consumed by the component and rendered whe
 | `open_delay(ms)` | How long the pointer must rest on a `HoverCard` trigger; default 600 |
 | `close_delay(ms)` | How long a `HoverCard` waits before closing; default 300 |
 | `overlay_closable(value)` | Whether pressing outside an open `Popover` closes it |
+
+### Dock commands
+
+What an element a dock's chrome drew *does*. A cached chrome description has no
+script event-handler lifetime, so it may not register one — a command carries
+no script value instead, and base does the work. Every one takes the object its
+handler was given as its first argument, and they belong on a `div`, an
+`h_flex` or a `v_flex`.
+
+| Method | On | What it does |
+| --- | --- | --- |
+| `select_tab(group, index)` | click | Displays that tab |
+| `close_panel(group, panel_id)` | click | Closes the panel, if its group allows it |
+| `toggle_zoom(group)` | click | Zooms the group in, or back out |
+| `drag_tab(group, index)` | drag | Makes the element the drag source for that tab |
+| `drop_tab(group, index?)` | drop | Accepts a dragged panel here; no index appends |
+| `toggle_dock(dock)` | click | Opens or closes the dock |
+| `resize_dock(dock)` | drag | Drags the dock's edge; base clamps every position |
+| `move_tile(tile)` | drag | Moves the tile around its canvas |
+| `resize_tile(tile, side)` | drag | Drags one edge or corner |
+| `raise_tile(tile)` | press | Brings the tile above the others |
+| `toggle_tile_zoom(tile)` | click | Zooms the tile to fill its dock |
+| `close_tile(tile)` | click | Closes the tile |
+
+### Dock chrome
+
+Six handlers, all optional, and legal only on a `dock_area(...)`. Each is first
+called from inside GPUI's layout pass and given base's resolved state. Its
+description is cached until that state or handler changes.
+
+| Method | Draws |
+| --- | --- |
+| `tab_bar(handler)` | The tab bar above a group's displayed panel |
+| `empty_group(handler)` | What a group with no displayed panel shows |
+| `drop_indicator(handler)` | Where a dragged panel would land |
+| `dock(handler)` | One dock's frame around its content; place `dock_content()` inside it |
+| `tile_drag_bar(handler)` | The strip a tile is dragged by |
+| `tile_resize_handles(handler)` | A tile's resize affordances |
 
 ### Motion
 

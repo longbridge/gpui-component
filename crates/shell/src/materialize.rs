@@ -244,6 +244,51 @@ struct Behavior {
     on_change: Option<CallbackId>,
     on_mouse_move: Option<CallbackId>,
     on_hover: Option<CallbackId>,
+    /// Reports a key press that reached this element.
+    ///
+    /// GPUI routes a key event down the focus path, so an element only hears
+    /// one while it — or something inside it — holds the keyboard. That makes
+    /// `track_focus(handle)` half of the registration rather than an unrelated
+    /// call: without it the handler is installed on an element the keyboard
+    /// never reaches, and nothing arrives.
+    on_key_down: Option<CallbackId>,
+    /// Reports the release of a key, on the same focus path as
+    /// [`Behavior::on_key_down`].
+    on_key_up: Option<CallbackId>,
+    /// Presses on this element, one entry per button listened for.
+    ///
+    /// A list rather than one field, because GPUI takes the button as an
+    /// argument and an element may well want two of them — a left press that
+    /// selects and a right press that opens a menu are one element's job.
+    on_mouse_down: SmallVec<[(MouseButton, CallbackId); 1]>,
+    /// Releases on this element, listed the same way.
+    on_mouse_up: SmallVec<[(MouseButton, CallbackId); 1]>,
+    /// A press anywhere outside this element, delivered during the capture
+    /// phase.
+    ///
+    /// The one event here that is about somewhere else, and the reason a
+    /// script can dismiss a surface it drew itself: base's own components close
+    /// on an outside press through exactly this listener, and until now a
+    /// script had no way to.
+    on_mouse_down_out: Option<CallbackId>,
+    /// Wheel and trackpad scrolling over this element.
+    on_scroll_wheel: Option<CallbackId>,
+    /// Handlers for named actions, one entry per action listened for.
+    ///
+    /// A list because an element that responds to actions usually responds to
+    /// several — a pane handling Save, Close and Split is one element's job —
+    /// and because every script action shares one GPUI type, so the id is what
+    /// tells them apart.
+    on_action: SmallVec<[(SharedString, CallbackId); 1]>,
+    /// A heading's announced level, for an `AccordionHeader`.
+    aria_level: Option<usize>,
+    /// Whether a shut `AccordionPanel` stays in the tree.
+    keep_mounted: bool,
+    /// The key-binding context this element and its subtree sit in.
+    ///
+    /// What a keymap's `context` predicate is matched against, so a chord can
+    /// mean one thing in a list and another in an editor.
+    key_context: Option<SharedString>,
 
     /// Reports which way a `NumberInput` was asked to step.
     ///
@@ -301,6 +346,20 @@ struct Behavior {
     /// Which item a `VirtualList` measures to infer its cross-axis size.
     /// `None` keeps base's own default, which is the first.
     item_to_measure_index: Option<usize>,
+    /// The dock commands a chrome element carries — what base is asked to do
+    /// when it is clicked or dragged.
+    ///
+    /// A list, because one element often carries two: a tile's drag bar both
+    /// raises the tile and moves it, and a tab both selects and drags.
+    dock_commands: SmallVec<[crate::dock::DockAction; 2]>,
+    /// Which script handler draws each piece of a `dock_area`'s chrome.
+    ///
+    /// Six handlers in one field rather than six fields, because they are
+    /// written together: they leave here for the [`DockChromeSlots`] the skin
+    /// reads, and a skin reads all six or none.
+    ///
+    /// [`DockChromeSlots`]: crate::dock::DockChromeSlots
+    dock_chrome: crate::dock::DockChromeHooks,
     /// The retained scroll position a `VirtualList` was told to drive.
     virtual_scroll: Option<crate::entities::EntityHandle>,
     /// This item's one-based position in its collection, and the collection's
@@ -400,6 +459,15 @@ struct Behavior {
 }
 
 impl Behavior {
+    /// Whether anything asked for a pointer listener, and so for the box every
+    /// pointer position is reported against.
+    fn wants_pointer_geometry(&self) -> bool {
+        !self.on_mouse_down.is_empty()
+            || !self.on_mouse_up.is_empty()
+            || self.on_mouse_down_out.is_some()
+            || self.on_scroll_wheel.is_some()
+    }
+
     /// Whether focus or accessibility gave this element a reason to be
     /// identified.
     ///
@@ -416,6 +484,14 @@ impl Behavior {
             || self.aria_active_descendant
             || self.on_mouse_move.is_some()
             || self.on_hover.is_some()
+            || self.on_key_down.is_some()
+            || self.on_key_up.is_some()
+            || !self.on_mouse_down.is_empty()
+            || !self.on_mouse_up.is_empty()
+            || self.on_mouse_down_out.is_some()
+            || self.on_scroll_wheel.is_some()
+            || !self.on_action.is_empty()
+            || self.key_context.is_some()
     }
 }
 
@@ -613,6 +689,7 @@ fn materialize_node(
     }
 
     components::tooltip::warn_unhonoured_tooltip(&component, &behavior);
+    warn_unhonoured_input(&component, &behavior);
 
     materialize_component(
         runtime, arena, node, id, component, inherited, refinement, behavior, states, children,
@@ -737,6 +814,7 @@ fn materialize_component(
             let button = with_hover(button, &states);
             let button = with_active_and_focus(button, &states);
             let button = components::tooltip::with_tooltip(button, &behavior);
+            let button = with_input_handlers(button, &behavior, runtime);
             finish(button, refinement, children)
         }
         Component::Link(id) => {
@@ -768,6 +846,7 @@ fn materialize_component(
             }
             let link = with_hover(link, &states);
             let link = with_active_and_focus(link, &states);
+            let link = with_input_handlers(link, &behavior, runtime);
             finish(link, refinement, children)
         }
         Component::Checkbox(id) => {
@@ -815,6 +894,7 @@ fn materialize_component(
 
             let checkbox = with_hover(checkbox, &states);
             let checkbox = with_active_and_focus(checkbox, &states);
+            let checkbox = with_input_handlers(checkbox, &behavior, runtime);
             finish(checkbox, refinement, children)
         }
         Component::Switch(id) => {
@@ -848,10 +928,11 @@ fn materialize_component(
                     "state styles on a Switch are ignored; style the row around it instead"
                 );
             }
+            let switch = with_input_handlers(switch, &behavior, runtime);
             finish(switch, refinement, children)
         }
         Component::Tabs(id) => {
-            components::tabs::tab_list(id, refinement, behavior, states, children)
+            components::tabs::tab_list(runtime, id, refinement, behavior, states, children)
         }
         Component::Tab(id) => {
             components::tabs::tab(runtime, id, refinement, behavior, states, children)
@@ -979,6 +1060,32 @@ fn materialize_component(
             image.style().text.color = Some(inherited);
             image.into_any_element()
         }
+        Component::Accordion(id) => {
+            components::accordion::accordion(&id, refinement, behavior, children)
+        }
+        Component::AccordionItem => components::accordion::accordion_item(
+            runtime, arena, inherited, refinement, behavior, states, slot_specs, children, window,
+            cx,
+        ),
+        Component::AccordionHeader => {
+            components::accordion::orphan("AccordionHeader", "an AccordionItem's `header` slot")
+        }
+        Component::AccordionPanel => {
+            components::accordion::orphan("AccordionPanel", "an AccordionItem's `panel` slot")
+        }
+        Component::AccordionTrigger(_) => components::accordion::orphan(
+            "AccordionTrigger",
+            "an AccordionHeader.new(trigger) call",
+        ),
+        Component::Pagination(id) => {
+            components::pagination::pagination(&id, refinement, behavior, states, children)
+        }
+        Component::Avatar => components::avatar::avatar(
+            runtime, arena, inherited, refinement, behavior, states, slot_specs, children, window,
+            cx,
+        ),
+        Component::AvatarImage(_) => components::avatar::orphan("AvatarImage"),
+        Component::AvatarFallback => components::avatar::orphan("AvatarFallback"),
         Component::Image(path) => {
             warn_unhonoured_a11y(&behavior, "image", &[]);
             let mut image = gpui::img(SharedString::from(path));
@@ -1003,6 +1110,13 @@ fn materialize_component(
         Component::Scrollbar(id) => {
             components::scrollbar::scrollbar(id, refinement, behavior, states, children, window, cx)
         }
+        Component::DockArea(handle) => {
+            let hooks = behavior.dock_chrome;
+            components::dock::dock_area(
+                runtime, handle, hooks, refinement, behavior, states, children, window, cx,
+            )
+        }
+        Component::DockContent => components::dock::dock_content(refinement, behavior, children),
         Component::VirtualList(spec) => components::virtual_list::virtual_list(
             runtime, &spec, refinement, behavior, states, children, window, cx,
         ),
@@ -1065,7 +1179,16 @@ fn materializes_slots(component: &Component, behavior: &Behavior) -> bool {
     // does: not because they might not be drawn, but because it reads the
     // descriptions itself. Building them here would be the same subtree built
     // twice, under the same element id.
-    if matches!(component, Component::NumberInput(_)) {
+    // An `Avatar` is here for the same reason: `Avatar::image` takes an
+    // `AvatarImage`, not an element, so the slot has to be read back for its
+    // path rather than handed over already built.
+    // An `AccordionItem` is here for the strongest version of the reason: its
+    // header and panel are concrete types, and the header's own trigger is a
+    // third one under that. The whole subtree is read back rather than built.
+    if matches!(
+        component,
+        Component::NumberInput(_) | Component::Avatar | Component::AccordionItem
+    ) {
         return false;
     }
     // A `Popover` or a `HoverCard` is not here, and not by oversight: its
@@ -1208,6 +1331,278 @@ fn with_gpui_focus<E: InteractiveElement>(
     element
 }
 
+/// GPUI's own input listeners, for the components that can carry them.
+///
+/// One function for the whole family rather than one per kind. The alternative
+/// was tried: the keyboard was factored out here while the pointer stayed
+/// inline in the `div` arm, so every component this was applied to answered
+/// keys and silently ignored presses — while the table saying which components
+/// honour "input" claimed all of it.
+///
+/// The bound is `InteractiveElement + ParentElement`: the listeners need the
+/// first and the bounds capture needs the second, because `on_prepaint` is a
+/// canvas child.
+///
+/// Wired is not the same as reachable. A key event travels the focus path and
+/// a pointer event travels the hitbox, so a component that accepts no script
+/// focus handle — `Tab` — hears presses and never hears keys, however well
+/// both are wired here. That is a property of the component, reported where
+/// focus is.
+fn with_input_handlers<E>(element: E, behavior: &Behavior, runtime: &Rc<ShellRuntime>) -> E
+where
+    E: InteractiveElement + ParentElement,
+{
+    let mut element = element;
+    if let Some(callback) = behavior.on_key_down {
+        let runtime = Rc::downgrade(runtime);
+        element = element.on_key_down(move |event, window, cx| {
+            if let Some(runtime) = runtime.upgrade() {
+                runtime.dispatch_key(callback, &event.keystroke, Some(event.is_held), window, cx);
+            }
+        });
+    }
+    if let Some(callback) = behavior.on_key_up {
+        let runtime = Rc::downgrade(runtime);
+        element = element.on_key_up(move |event, window, cx| {
+            if let Some(runtime) = runtime.upgrade() {
+                runtime.dispatch_key(callback, &event.keystroke, None, window, cx);
+            }
+        });
+    }
+    // The pointer half. It needs the element's box for `local_position`, and
+    // captures it only when something asked.
+    if behavior.wants_pointer_geometry() {
+        let bounds = Rc::new(Cell::new(None::<Bounds<Pixels>>));
+        let writer = Rc::clone(&bounds);
+        element = element.on_prepaint(move |value, _, _| writer.set(Some(value)));
+
+        for (button, callback) in behavior.on_mouse_down.iter().copied() {
+            let runtime = Rc::downgrade(runtime);
+            let bounds = Rc::clone(&bounds);
+            element = element.on_mouse_down(button, move |event, window, cx| {
+                dispatch_mouse_button(&runtime, callback, event, bounds.get(), window, cx);
+            });
+        }
+        for (button, callback) in behavior.on_mouse_up.iter().copied() {
+            let runtime = Rc::downgrade(runtime);
+            let bounds = Rc::clone(&bounds);
+            element = element.on_mouse_up(button, move |event, window, cx| {
+                dispatch_mouse_button(&runtime, callback, event, bounds.get(), window, cx);
+            });
+        }
+        if let Some(callback) = behavior.on_mouse_down_out {
+            let runtime = Rc::downgrade(runtime);
+            let bounds = Rc::clone(&bounds);
+            element = element.on_mouse_down_out(move |event, window, cx| {
+                dispatch_mouse_button(&runtime, callback, event, bounds.get(), window, cx);
+            });
+        }
+        if let Some(callback) = behavior.on_scroll_wheel {
+            let runtime = Rc::downgrade(runtime);
+            let bounds = Rc::clone(&bounds);
+            element = element.on_scroll_wheel(move |event, window, cx| {
+                let Some(runtime) = runtime.upgrade() else {
+                    return;
+                };
+                // A line delta is converted here rather than in the script,
+                // because the line height it needs is the window's and a
+                // script has no way to ask for it. Both delta shapes therefore
+                // arrive as pixels, and `delta_lines` keeps the original when
+                // there was one.
+                let line_height = window.line_height();
+                runtime.dispatch_scroll_wheel(
+                    callback,
+                    event,
+                    line_height,
+                    bounds.get(),
+                    window,
+                    cx,
+                );
+            });
+        }
+    }
+
+    // The context has to be installed before the listeners for the same reason
+    // GPUI's own components do it in that order: a keymap predicate is matched
+    // against the context stack of the element the dispatch reached, so an
+    // element that names its context after registering a listener is an
+    // element whose own bindings do not see it.
+    if let Some(context) = behavior.key_context.as_deref() {
+        // Parsed rather than taken: a key context is a predicate grammar, not
+        // a name, and `"my pane"` is not one. Reported rather than refused,
+        // because the element is otherwise fine and losing a whole frame to a
+        // typo in a context string is the worse trade.
+        match gpui::KeyContext::try_from(context) {
+            Ok(context) => element = element.key_context(context),
+            Err(error) => {
+                tracing::error!("`key_context(\"{context}\")` is not a valid key context: {error}")
+            }
+        }
+    }
+    // One GPUI listener for every action this element handles, rather than one
+    // per action, and the difference is not tidiness.
+    //
+    // GPUI matches an action listener by `TypeId` and, during the bubble
+    // phase, stops the dispatch after the first listener it finds: an action
+    // is handled once, by the innermost element that claims it. That is right
+    // when every action is its own Rust type, which is how GPUI's own actions
+    // work. Every script action is one `ShellAction`, so two registrations on
+    // one element would be two listeners with the same `TypeId` — and the
+    // first would swallow every action, including the ones meant for the
+    // second, which would then never run at all.
+    //
+    // So the routing that GPUI does by type is done here by id, in one
+    // listener. An action this element does not handle re-opens propagation,
+    // which is what lets it carry on to an element further out — the behavior
+    // a per-action listener would have had.
+    if !behavior.on_action.is_empty() {
+        let runtime = Rc::downgrade(runtime);
+        let handlers: SmallVec<[(SharedString, CallbackId); 1]> = behavior.on_action.clone();
+        element = element.on_action::<crate::action::ShellAction>(move |action, window, cx| {
+            let Some((_, callback)) = handlers
+                .iter()
+                .find(|(wanted, _)| wanted.as_ref() == action.id())
+            else {
+                cx.propagate();
+                return;
+            };
+            if let Some(runtime) = runtime.upgrade() {
+                runtime.dispatch_action(*callback, action.id(), window, cx);
+            }
+        });
+    }
+    element
+}
+
+/// One dispatch for the three press-and-release builders.
+///
+/// `MouseDownEvent` and `MouseUpEvent` are different types carrying the same
+/// four fields, and `on_mouse_down_out` produces the first — so one small
+/// trait over both beats writing the same six lines three times.
+fn dispatch_mouse_button<E: MouseButtonEventFields>(
+    runtime: &std::rc::Weak<ShellRuntime>,
+    callback: CallbackId,
+    event: &E,
+    bounds: Option<Bounds<Pixels>>,
+    window: &mut Window,
+    cx: &mut App,
+) {
+    let Some(runtime) = runtime.upgrade() else {
+        return;
+    };
+    runtime.dispatch_mouse_button(
+        callback,
+        event.button(),
+        event.position(),
+        event.click_count(),
+        event.modifiers(),
+        bounds,
+        window,
+        cx,
+    );
+}
+
+/// The four fields a press and a release both carry.
+trait MouseButtonEventFields {
+    fn button(&self) -> MouseButton;
+    fn position(&self) -> gpui::Point<Pixels>;
+    fn click_count(&self) -> usize;
+    fn modifiers(&self) -> gpui::Modifiers;
+}
+
+macro_rules! mouse_button_event_fields {
+    ($event:ty) => {
+        impl MouseButtonEventFields for $event {
+            fn button(&self) -> MouseButton {
+                self.button
+            }
+            fn position(&self) -> gpui::Point<Pixels> {
+                self.position
+            }
+            fn click_count(&self) -> usize {
+                self.click_count
+            }
+            fn modifiers(&self) -> gpui::Modifiers {
+                self.modifiers
+            }
+        }
+    };
+}
+
+mouse_button_event_fields!(gpui::MouseDownEvent);
+mouse_button_event_fields!(gpui::MouseUpEvent);
+
+/// Reports the input behaviors a component does not wire.
+///
+/// The same problem `tooltip` has, and the same answer: these are GPUI's own
+/// `InteractiveElement` builders, and the shell installs them on the one
+/// element it fully owns — a plain `div`, `h_flex` or `v_flex`. Every other
+/// component builds its own base type and hangs its own listeners on it, so a
+/// handler written there would be recorded in the description and never reach
+/// GPUI.
+///
+/// Saying so is not a consolation prize. `Button.new("save").on_key_down(...)`
+/// is a reasonable thing for a script author to write, it reads as though it
+/// works, and the failure is a key that does nothing — which looks like a bug
+/// in their own code for as long as it takes them to find this. A line in the
+/// log names the cause and the workaround in one place.
+///
+/// Widening this is one call per component rather than a new mechanism, the
+/// same as [`components::tooltip::warn_unhonoured_tooltip`] says of its own.
+fn warn_unhonoured_input(component: &Component, behavior: &Behavior) {
+    if honours_input(component) {
+        return;
+    }
+    let asked = [
+        ("on_key_down", behavior.on_key_down.is_some()),
+        ("on_key_up", behavior.on_key_up.is_some()),
+        ("on_mouse_down", !behavior.on_mouse_down.is_empty()),
+        ("on_mouse_up", !behavior.on_mouse_up.is_empty()),
+        ("on_mouse_down_out", behavior.on_mouse_down_out.is_some()),
+        ("on_scroll_wheel", behavior.on_scroll_wheel.is_some()),
+        ("on_action", !behavior.on_action.is_empty()),
+        ("key_context", behavior.key_context.is_some()),
+    ];
+    for (method, called) in asked {
+        if called {
+            tracing::warn!(
+                "`{method}` is not wired on a {}: the shell installs GPUI's input listeners                  on the element it owns outright, which is a plain `div`, `h_flex` or                  `v_flex`. Wrap it and write `{method}` on the wrapper",
+                component.name()
+            );
+        }
+    }
+}
+
+/// The components [`with_input_handlers`] is applied to.
+///
+/// Every one implements `InteractiveElement` and `ParentElement`, which is what
+/// the listeners and the bounds capture need, and every one is something a
+/// script puts input on. The rest either build no interactive base
+/// (`Collapsible`, `Progress`) or own the keyboard themselves (`Input`,
+/// `Select`, `OtpInput`), where a second set of listeners would fight the
+/// first. Widening this is one call per component, not a new mechanism.
+///
+/// Wired is not the same as reachable. A key event travels the focus path, so
+/// a component that accepts no script focus handle — `Tab` — hears presses and
+/// never hears keys. That is a property of the component, reported where focus
+/// is, not something this list can express.
+fn honours_input(component: &Component) -> bool {
+    matches!(
+        component,
+        Component::Div
+            | Component::HFlex
+            | Component::VFlex
+            | Component::Button(_)
+            | Component::Link(_)
+            | Component::Checkbox(_)
+            | Component::Switch(_)
+            | Component::Radio(_)
+            | Component::Toggle(_)
+            | Component::Tabs(_)
+            | Component::Tab(_)
+    )
+}
+
 /// The accessibility semantics GPUI reads off the element itself.
 fn with_aria<E: StatefulInteractiveElement>(element: E, behavior: &Behavior) -> E {
     let mut element = element;
@@ -1281,6 +1676,14 @@ fn flex_element(
         && behavior.on_click.is_none()
         && behavior.on_mouse_move.is_none()
         && behavior.on_hover.is_none()
+        && behavior.on_key_down.is_none()
+        && behavior.on_key_up.is_none()
+        && behavior.on_mouse_down.is_empty()
+        && behavior.on_mouse_up.is_empty()
+        && behavior.on_mouse_down_out.is_none()
+        && behavior.on_scroll_wheel.is_none()
+        && behavior.on_action.is_empty()
+        && behavior.key_context.is_none()
         && !behavior.scroll_x
         && !behavior.scroll_y
     {
@@ -1297,6 +1700,8 @@ fn flex_element(
     let identity = element_id(id, behavior.key.clone());
     let stateful = element.id(identity.clone());
     let stateful = with_gpui_focus(stateful, &behavior, focus.as_ref());
+    let stateful = with_input_handlers(stateful, &behavior, runtime);
+    let stateful = components::dock::with_commands(stateful, &behavior, runtime, cx);
     let stateful = with_aria(stateful, &behavior);
     let mut stateful = with_active_and_focus(stateful, &states);
     if !behavior.disabled
@@ -1386,6 +1791,97 @@ fn should_dispatch_hover(
     mouse_position: gpui::Point<Pixels>,
 ) -> bool {
     hovered || !bounds.is_some_and(|bounds| bounds.contains(&mouse_position))
+}
+
+/// Materializes the children of a described node.
+///
+/// For a slot a component resolves itself rather than receiving as a finished
+/// element: the node is read back for its own type and styles, and its
+/// children still have to be built the ordinary way.
+pub(in crate::materialize) fn materialize_children(
+    runtime: &Rc<ShellRuntime>,
+    arena: &SpecArena,
+    id: SpecId,
+    inherited: gpui::Hsla,
+    window: &mut Window,
+    cx: &mut App,
+) -> Children {
+    let Some(node) = arena.node(id) else {
+        return Children::new();
+    };
+    node.children()
+        .iter()
+        .map(|child| materialize_node(runtime, arena, *child, inherited, window, cx))
+        .collect()
+}
+
+/// A slot node's own styles, with its motion sampled and its leftovers named.
+///
+/// # Not covered by a test, and why
+///
+/// The sampling is the part that matters and the part nothing here can assert.
+/// It shows up only in the refinement after materialize, which this suite
+/// cannot read — it reads description trees — and it cannot be called from a
+/// unit test either: the motion sampler keys its state off the element being
+/// laid out and refuses to run outside `request_layout`, `prepaint` or `paint`.
+/// Reading the resulting geometry would need every script element to carry a
+/// `debug_bounds` marker, which is a debugging feature rather than a fix.
+///
+/// So what stands in for a test is that there is one of these rather than five
+/// copies. The bug this replaced was five resolvers that each read the
+/// refinement and ignored the motion beside it; a single function cannot drift
+/// from itself.
+///
+/// The two things a slot resolver would otherwise silently drop. Motion is the
+/// one that bites: `AccordionPanel.new().transition("height", ...)` is the most
+/// ordinary thing anyone writes on an accordion, and a resolver that read only
+/// the refinement would record it and animate nothing. It is sampled against
+/// the same identity an ordinary node's is, so a slot animates exactly as it
+/// would anywhere else.
+///
+/// State styles are reported rather than applied. Every type these resolvers
+/// rebuild is a `RenderOnce` the shell hands finished values to, so there is no
+/// `Interactivity` on this side to attach a hover to — the same position
+/// `Collapsible` and `Switch` are already in, and the same answer: say so.
+pub(in crate::materialize) fn resolve_slot(
+    arena: &SpecArena,
+    slot: SpecId,
+    part: &str,
+    window: &mut Window,
+    cx: &mut App,
+) -> (StyleRefinement, Behavior, SlotSpecs) {
+    let Some(node) = arena.node(slot) else {
+        return (
+            StyleRefinement::default(),
+            Behavior::default(),
+            SlotSpecs::new(),
+        );
+    };
+    let (mut refinement, behavior, states, motions, inner) = resolve_ops(arena, node);
+    apply_motion(
+        element_id(slot, behavior.key.clone()),
+        &motions,
+        &mut refinement,
+        window,
+        cx,
+    );
+    if states.hover.is_some() || states.active.is_some() || states.focus.is_some() {
+        tracing::warn!(
+            "state styles on a {part} are ignored: it is rebuilt from its description as a \
+             value, so there is no interactive element here for a hover or a press to land \
+             on. Put them on an element around it"
+        );
+    }
+    (refinement, behavior, inner)
+}
+
+/// Takes the `SpecId` filling `name`, for a component that resolves its own
+/// slots rather than receiving them materialized.
+pub(in crate::materialize) fn take_slot_spec(slots: &mut SlotSpecs, name: &str) -> Option<SpecId> {
+    slots
+        .iter()
+        .position(|(slot, _)| *slot == name)
+        .map(|index| slots.remove(index).1)
 }
 
 /// Takes the element filling `name`, leaving any other slot for its own reader.
@@ -1508,7 +2004,7 @@ fn motion_element_id(
     }
 }
 
-fn resolve_ops(
+pub(in crate::materialize) fn resolve_ops(
     arena: &SpecArena,
     node: &SpecNode,
 ) -> (
@@ -1625,6 +2121,20 @@ fn resolve_ops(
                 "on_click" => behavior.on_click = Some(*id),
                 "on_mouse_move" => behavior.on_mouse_move = Some(*id),
                 "on_hover" => behavior.on_hover = Some(*id),
+                "on_key_down" => behavior.on_key_down = Some(*id),
+                "on_key_up" => behavior.on_key_up = Some(*id),
+                // The button is carried in the op name rather than beside it:
+                // `SpecOp::Callback` is a `&'static str` and a handle, and
+                // three fixed names cost nothing next to widening every op to
+                // carry an argument only these four use.
+                "on_mouse_down_left" => behavior.on_mouse_down.push((MouseButton::Left, *id)),
+                "on_mouse_down_right" => behavior.on_mouse_down.push((MouseButton::Right, *id)),
+                "on_mouse_down_middle" => behavior.on_mouse_down.push((MouseButton::Middle, *id)),
+                "on_mouse_up_left" => behavior.on_mouse_up.push((MouseButton::Left, *id)),
+                "on_mouse_up_right" => behavior.on_mouse_up.push((MouseButton::Right, *id)),
+                "on_mouse_up_middle" => behavior.on_mouse_up.push((MouseButton::Middle, *id)),
+                "on_mouse_down_out" => behavior.on_mouse_down_out = Some(*id),
+                "on_scroll_wheel" => behavior.on_scroll_wheel = Some(*id),
                 "on_resize" => behavior.on_resize = Some(*id),
                 "on_change" => behavior.on_change = Some(*id),
                 "on_step" => behavior.on_step = Some(*id),
@@ -1632,8 +2142,17 @@ fn resolve_ops(
                 "on_confirm" => behavior.on_confirm = Some(*id),
                 "on_dismiss" => behavior.on_dismiss = Some(*id),
                 "on_item_click" => behavior.on_item_click = Some(*id),
+                "tab_bar" => behavior.dock_chrome.tab_bar = Some(*id),
+                "empty_group" => behavior.dock_chrome.empty_group = Some(*id),
+                "drop_indicator" => behavior.dock_chrome.drop_indicator = Some(*id),
+                "dock" => behavior.dock_chrome.dock = Some(*id),
+                "tile_drag_bar" => behavior.dock_chrome.tile_drag_bar = Some(*id),
+                "tile_resize_handles" => behavior.dock_chrome.tile_resize_handles = Some(*id),
                 other => tracing::error!("unhandled callback `{other}` reached materialize"),
             },
+            SpecOp::ActionCallback(id, callback) => {
+                behavior.on_action.push((id.clone(), *callback))
+            }
             // Filling the same slot twice replaces it, the way a second
             // `open(...)` replaces the first: the last call in the chain is
             // what the script meant.
@@ -1948,11 +2467,159 @@ fn warn_unsupported(component: &str, methods: &[(&str, bool)]) {
     }
 }
 
+/// The dock command one chrome method names, or `None` for a method that is
+/// not one.
+///
+/// Every one of them takes the dock handle first, because a command is resolved
+/// against the contexts of *that* area — the script passes the container object
+/// it was handed, and the prelude unpacks the handle out of it. What follows
+/// names the container inside the area: a group's node, a dock's placement, or
+/// a tile's panel.
+fn is_dock_command(name: &str) -> bool {
+    matches!(
+        name,
+        "select_tab"
+            | "close_panel"
+            | "toggle_zoom"
+            | "drag_tab"
+            | "drop_tab"
+            | "toggle_dock"
+            | "resize_dock"
+            | "move_tile"
+            | "resize_tile"
+            | "raise_tile"
+            | "toggle_tile_zoom"
+            | "close_tile"
+    )
+}
+
+fn dock_action(name: &str, args: &[Bridged]) -> Option<crate::dock::DockAction> {
+    use crate::dock::{DockAction, DockCommand};
+
+    let number = |index: usize| args.get(index).and_then(|value| value.as_f32().ok());
+    let handle = |index: usize| {
+        args.get(index).and_then(|value| match value {
+            Bridged::Number(raw) if *raw >= 0.0 => Some(*raw as crate::entities::EntityHandle),
+            _ => None,
+        })
+    };
+    let whole = |index: usize| {
+        number(index)
+            .filter(|value| *value >= 0.0)
+            .map(|value| value as usize)
+    };
+    let text = |index: usize| args.get(index).and_then(|value| value.as_str().ok());
+
+    let dock = handle(0)?;
+    let node = || handle(1);
+    let panel = || handle(1);
+
+    let command = match name {
+        "select_tab" => DockCommand::SelectTab {
+            node: node()?,
+            index: whole(2)?,
+        },
+        "close_panel" => DockCommand::ClosePanel {
+            node: node()?,
+            panel: handle(2)?,
+        },
+        "toggle_zoom" => DockCommand::ToggleGroupZoom { node: node()? },
+        "drag_tab" => DockCommand::DragTab {
+            node: node()?,
+            index: whole(2)?,
+        },
+        // The one optional argument in the set: a tab bar that names no slot
+        // means "append", which is what a drop past the last tab is.
+        "drop_tab" => DockCommand::DropTab {
+            node: node()?,
+            index: whole(2),
+        },
+        "toggle_dock" => DockCommand::ToggleDock {
+            placement: dock_placement(text(1)?)?,
+        },
+        "resize_dock" => DockCommand::ResizeDock {
+            placement: dock_placement(text(1)?)?,
+        },
+        "move_tile" => DockCommand::MoveTile { panel: panel()? },
+        "resize_tile" => DockCommand::ResizeTile {
+            panel: panel()?,
+            side: resize_side(text(2)?)?,
+        },
+        "raise_tile" => DockCommand::RaiseTile { panel: panel()? },
+        "toggle_tile_zoom" => DockCommand::ToggleTileZoom { panel: panel()? },
+        "close_tile" => DockCommand::CloseTile { panel: panel()? },
+        _ => return None,
+    };
+
+    Some(DockAction::new(dock, command))
+}
+
+/// The four regions of an area, spelled as the persisted layout spells them.
+pub(crate) fn dock_placement(name: &str) -> Option<gpui_base::dock::DockPlacement> {
+    use gpui_base::dock::DockPlacement;
+    match name {
+        "center" => Some(DockPlacement::Center),
+        "left" => Some(DockPlacement::Left),
+        "right" => Some(DockPlacement::Right),
+        "bottom" => Some(DockPlacement::Bottom),
+        _ => {
+            tracing::error!(
+                "`{name}` is not a dock placement; expected \"center\", \"left\", \"right\" or \"bottom\""
+            );
+            None
+        }
+    }
+}
+
+/// Which edge or corner of a tile a resize handle pulls.
+fn resize_side(name: &str) -> Option<gpui_base::dock::ResizeSide> {
+    use gpui_base::dock::ResizeSide;
+    match name {
+        "left" => Some(ResizeSide::Left),
+        "right" => Some(ResizeSide::Right),
+        "top" => Some(ResizeSide::Top),
+        "bottom" => Some(ResizeSide::Bottom),
+        "bottom_right" => Some(ResizeSide::BottomRight),
+        _ => {
+            tracing::error!(
+                "`{name}` is not a tile resize side; expected \"left\", \"right\", \"top\", \
+                 \"bottom\" or \"bottom_right\""
+            );
+            None
+        }
+    }
+}
+
 fn apply_behavior(behavior: &mut Behavior, name: &str, args: &[Bridged]) {
     let flag = args.first().map(Bridged::is_truthy);
+    // Before the table below, and with its own early return: a dock command
+    // that failed to parse must not fall through to a name-keyed match whose
+    // last arm is `accessibility_label`.
+    if is_dock_command(name) {
+        match dock_action(name, args) {
+            Some(action) => behavior.dock_commands.push(action),
+            None => tracing::error!(
+                "`{name}` did not name a container in a dock area; the command is dropped"
+            ),
+        }
+        return;
+    }
     match name {
         "accessibility_label" => {
             behavior.accessibility_label = args
+                .first()
+                .and_then(|value| value.as_str().ok())
+                .map(SharedString::from);
+        }
+        "aria_level" => {
+            behavior.aria_level = args
+                .first()
+                .and_then(|value| value.as_f32().ok())
+                .map(|level| level.max(1.0) as usize);
+        }
+        "keep_mounted" => behavior.keep_mounted = flag.unwrap_or(true),
+        "key_context" => {
+            behavior.key_context = args
                 .first()
                 .and_then(|value| value.as_str().ok())
                 .map(SharedString::from);

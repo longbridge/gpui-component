@@ -956,6 +956,10 @@ fn load_plugin(
 
     let policy = Rc::new(
         Policy::default()
+            // The manifest id is already unique among loaded plugins, which is
+            // exactly what a dock layout needs to keep two plugins' panels of
+            // the same name apart.
+            .with_application(&id)
             .with_capabilities(manifest.capabilities(&root, &data_dir))
             .with_storage_path(store_path.clone()),
     );
