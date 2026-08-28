@@ -908,7 +908,7 @@ that temptation sharp, because object literals are the most natural thing in the
 language and React has made "UI is data" reflexive. What it would buy — fewer
 host calls per description — is worth much less now that a description is not
 rebuilt per frame (§8.4), and what remains is available from virtualization
-instead (§20.4).
+instead (§20.6).
 
 ### 8.3 The description arena
 
@@ -1182,8 +1182,10 @@ longer costs a script render at all.
 
 What is left for `gpui.memo` is _sub_-tree granularity — skipping the part of a
 rebuild whose data has not changed when the rest of the view has. That is a
-smaller win than it used to be, and it is not implemented. §20.4 places it
-against the other levers.
+smaller win than it used to be, and it is not implemented. §20.6 places it
+against the other levers, and §20.7 states its complement: memo reuses a subtree
+whose values did not change, a template cache reuses a structure whose values
+did.
 
 ---
 
@@ -2853,7 +2855,7 @@ runs at load and its only job is registration; the real implementation lives in
 other modules that a handler pulls in with a dynamic `import()` when it is
 triggered. That is why dynamic `import()` is deliberately left callable by the
 sandbox (§19.1) — it is the mechanism, not a hole. It also gives every plugin a
-non-zero start-up cost that has to be budgeted (§20.5), and makes "do real work
+non-zero start-up cost that has to be budgeted (§20.8), and makes "do real work
 in the entry module" a convention violation tooling can flag.
 
 Data lives under the plugin's `id` rather than under its path, so it survives an
@@ -3170,7 +3172,79 @@ is the reproducible comparison point for subsequent LLRT revision or feature
 changes rather than a retroactively estimated delta. Measurements are platform
 and linker specific; CI correctness gates do not assert these absolute values.
 
-### 20.4 What is left
+### 20.4 The view as the invalidation boundary
+
+A script `render` describes one view **completely**. There is no partial
+rebuild inside it: `cx.notify()` on a view whose description is four hundred
+nodes rebuilds four hundred nodes, whatever prompted it. So the cost model of
+§20.2 is not paid per window or per panel. It is paid per **view that was
+invalidated**, and the application decides how large that is.
+
+`cx.new(Class, props)` is what makes it smaller. A nested view is its own
+`ScriptView` entity with its own snapshot and its own dirty flag (`view.rs`), so
+three things hold:
+
+| Event | What enters the VM |
+| --- | --- |
+| A child calls `cx.notify()` | That child's `render` |
+| The parent calls `cx.notify()` | The parent's `render`. Each child answers the frame from the snapshot it already published — `ScriptView::render` materializes without rebuilding when it is not dirty |
+| `entity.set_props(props)` | That child's `update` and `render`. The parent is not rebuilt, which `tests/render.rs` asserts directly |
+
+The middle row is the load-bearing one. Mounting a child is recording a handle
+(`Component::ChildView`), and materializing that handle is a GPUI entity render,
+not a script render. Rebuilding a five-panel window therefore costs the parent's
+own description plus four entity renders that never reach the engine.
+
+This is the granularity lever, and unlike everything in §20.6 it is already
+built. It also settles a question that keeps being asked the wrong way round:
+splitting an application for performance means splitting it into **views**, not
+into plugins, applications, or processes. A second application is how a second
+*authority* is obtained (§18), not how a second cache is.
+
+What is missing is attribution rather than mechanism. `RuntimeMetrics` counts
+the runtime, not the view, so "which boundary is being rebuilt, and how large is
+it" has to be assembled from `ScriptView::is_dirty` and `snapshot().len()` by
+hand. Per-view counters are the diagnostic this chapter is short of; §20.5 is
+the other half of the same gap.
+
+### 20.5 Rendering frequency and presentation latency
+
+§20.1 separates two frequencies. Diagnosis needs a second separation, between
+two *latencies*, because the design's own success at the first one hides the
+second:
+
+```text
+rendering FPS          is the frame smooth?
+state → presentation   how long after state changes does the reader see it?
+```
+
+Explicit invalidation has a symmetric pair of failure modes, and only one of
+them is visible to any frame measurement:
+
+- **Notifying too often** costs script renders that describe things nobody can
+  see. It shows up as `script_renders` per second above the rate the data
+  changes, and eventually as dropped frames.
+- **Notifying too late, or not at all** costs nothing at all on the frame
+  budget. GPUI keeps replaying the last good description at full rate, so the
+  HUD reads a steady 120 FPS while the interface shows something that stopped
+  being true, and then jumps when something unrelated invalidates the view.
+
+The second is the one this architecture makes newly possible. Under a
+render-per-frame model a stale view could not exist for longer than a frame; here
+it can persist indefinitely and every rendering metric will call it healthy.
+Benchmark C (§20.3) asserts one direction — a clean view enters the VM zero
+times — and nothing asserts the other, because "a render that should have
+happened" is a statement about application intent that the runtime cannot
+derive.
+
+What follows is a reporting rule rather than a mechanism: performance work on a
+script application must state which of the two numbers it moved. An FPS reading
+that never dropped is not evidence that invalidation is correct, and the
+`gpui-shell` metrics surface should grow a state-to-presentation figure — a
+timestamp carried from the host state change to the materialization that first
+showed it — before it grows anything else.
+
+### 20.6 What is left
 
 **Virtualization stays in Rust.** `VirtualList` and `Tree` call back only for
 visible items, so a ten-thousand-row list costs the same in script as a
@@ -3204,13 +3278,200 @@ already done (§8.4), which took most of what memoization was originally for; wh
 is left is worth doing only for views where one small region changes constantly
 and the rest is large. Not implemented (§8.6).
 
+**A template cache** would split a description into a reusable structure and the
+dynamic slots inside it, so a value-only change writes slots instead of running
+the builder again. It is the largest unspent lever here and the one that
+addresses the path §8.4 left alone — an invalidated view whose structure did not
+change. §20.7 states what it would be, the four problems it has to solve, and
+what to measure before building any of it.
+
 **Reuse argument objects.** The context objects handed to item renderers and
 dock renderers should be pre-allocated and reused rather than built per row.
 
 **Never let script participate** in layout, text shaping, scroll offsets,
 animation interpolation, or hit testing.
 
-### 20.5 Start-up
+### 20.7 The template cache
+
+Not implemented, and the largest unspent lever in this chapter. This section
+states what it would be, what has to be true for it to pay, and what to measure
+before building any of it.
+
+**What the snapshot cache does and does not cover.** §8.4 removed the cost of
+*no change*: an unchanged view is replayed in Rust and enters the VM zero times
+(benchmark C). It did not touch the cost of a *small* change. A snapshot holds
+structure and values in the same nodes:
+
+```text
+StockRow
+├── Text("AAPL")
+├── Text("230.42")
+└── Text("+1.42%")
+```
+
+When the price becomes `230.51` the structure is identical and one leaf differs,
+but a description is produced by running the builder, so the whole view is
+described again — every `div()`, every `.gap()`, every `.bg()`, every crossing
+recorded into a fresh `SpecArena`. That is the dirty-render path, and on a feed
+it is the path that runs.
+
+So there are three levels rather than two:
+
+| Level | Condition | Cost | State |
+| --- | --- | --- | --- |
+| 1 — snapshot cache | Nothing invalidated the view | Materialization only, zero VM entries | Built (§8.4) |
+| 2 — template cache | Invalidated, structure unchanged | Write the changed values into a retained structure | Not built |
+| 3 — full render | Invalidated, structure changed | `render` runs, a description is recorded | Built |
+
+#### What a template would be
+
+The IR already has the right shape to cut. A `SpecArena` is `Vec<SpecNode>`, and
+a `SpecNode` is a `Component`, a `SmallVec<[SpecOp; 8]>` and a child list
+(`spec.rs`). A template is that arena with holes:
+
+```rust,ignore
+struct Template {
+    /// Structure and every constant op, recorded once.
+    arena: SpecArena,
+    /// Where this render's values go, in the order the script supplies them.
+    slots: Box<[Slot]>,
+}
+
+struct Slot {
+    node: SpecId,
+    site: SlotSite,
+}
+
+enum SlotSite {
+    /// A payload carried by the constructor: `Component::Text(String)`,
+    /// `Component::Button(String)`.
+    Component,
+    /// One `Bridged` argument of a recorded `ParamStyle` or `Method`.
+    OpArgument { op: u16, argument: u8 },
+    /// A `CallbackId` in a `Callback` or `ActionCallback`.
+    Handler { op: u16 },
+}
+```
+
+Filling it is a walk over `slots` writing `slots.len()` values, not a walk over
+`arena.len()` nodes. That is the entire proposition: a 443-node panel with 4,430
+recorded operations has, on a quote tick, on the order of *tens* of varying
+values.
+
+#### The four problems, in the order they bite
+
+**1. Validity has to be O(slots), not O(nodes).** A template hit that is
+established by comparing this render's description against the cached one has
+already paid for producing this render's description, which is the cost being
+removed. Validity must therefore come from *which template the script selected*,
+before any builder call is made — not from a comparison after the fact. Every
+design decision below follows from this one.
+
+**2. The win only exists if the builder calls are not made.** §20.6 puts the
+floor at roughly 60 ns of QuickJS interpreting a builder method and 30 ns for
+the crossing, per recorded call. Reusing the arena on the Rust side while
+JavaScript still runs `div().flex().gap(4).p(8).bg(…)` removes the smaller half
+and leaves the interpreter cost untouched. A template cache that saves 30% is
+not worth the machinery; one that removes the builder calls is. This is what
+makes it a *language surface* question rather than an arena optimization.
+
+**3. Handlers are not values.** Every `on_click(() => …)` allocates a closure
+that captures this render's state and registers a `CallbackId` retired with the
+snapshot generation (§8.4, `snapshot.rs`). A template can hold the handler
+position as a slot, but something still has to produce a closure per render
+unless the capture is lifted into an argument. A row with a handler on it will
+not be free, and the achievable win is bounded by how much of a description is
+handlers rather than structure — which is worth counting on a real panel before
+anything else.
+
+**4. Some ops look constant and are not.** `bg(cx.theme().colors.surface)`
+records a resolved colour, so a palette change alters an op that no script
+expression appears to vary (§13.3, §8.4). The same holds for any value read from
+a HostModule while describing, and for `t()`-style locale lookups. Either those
+become slots too — which grows the slot list well past the values the author
+thinks of as dynamic — or a template is invalidated wholesale by a theme or
+locale change, which is the honest and much simpler rule.
+
+#### Loops and conditionals are not the obstacle
+
+A repeated structure is the *best* case, not the worst. In
+
+```js
+items.map((item) => h_flex().child(text(item.symbol)).child(text(item.price)))
+```
+
+the item count varies while the body's structure does not, so one row template
+is instantiated *n* times. Virtual list rows, table cells, tree items and menu
+items are all this shape, and they are the highest-density recorded-call sites
+in a real application.
+
+A conditional is a small set of stable structures rather than an unstable one:
+
+```text
+Variant 0 → loading
+Variant 1 → content
+```
+
+A template cache does not require one structure forever. It requires a *bounded*
+number of them, selected by something cheaper than describing them. That is the
+same requirement as problem 1, stated from the other side.
+
+#### Where the separation could come from
+
+Four shapes, and the design's existing commitments eliminate two of them.
+
+| Shape | How structure and values separate | Verdict |
+| --- | --- | --- |
+| **Build-time transform** — lift each `render` body's static chains into a template constant, leave a value function | Automatic, full win | **Out of scope.** It is a compile step, which §5.3 and §24 reject by name, and it costs the source-map-free line numbers of §21.1 |
+| **Engine call-site keys** — key a template on the QuickJS bytecode position of the builder chain | Automatic, no source change | Reaches into the engine's internals from above the seam (§6.5), and the seam exists to keep exactly this out of the contract |
+| **Author-declared templates** — an explicit form the script opts into, carrying its own key and its values | Explicit, full win, no compile step | The only shape that fits the design as written. Costs an API and asks the author to mark hot paths |
+| **Record and compare** — record as today, hash the structure, reuse on a match | No win on the JavaScript side (problem 2) | Not a shipping design, but the right *instrumentation* — see below |
+
+The author-declared shape is also the one that composes with `gpui.memo`
+(§8.6, §20.6) rather than replacing it. The two cache opposite halves: memo
+reuses a subtree whose **values** did not change, a template reuses a structure
+whose values **did**. A panel wants both — memo the chrome, template the rows.
+
+#### Why this comes before a QuickJS JIT
+
+A JIT makes the same JavaScript run faster. It does nothing to the rest of the
+path — the crossing, the `Bridged` conversion, the `SmallVec` push, the arena —
+and §20.6 measures roughly a third of a recorded call in exactly those. A
+template removes the work instead of accelerating it, and it removes the part a
+JIT cannot reach. Given that §20.6 has already taken the cheap wins on `C_op`
+and reports the remainder as a floor, "do less" is the only lever left with an
+order of magnitude in it.
+
+#### What to verify first, and in what order
+
+The whole idea rests on one unmeasured assumption: that on real workloads a
+dirty render usually produces the structure the previous one produced. If that
+is false, nothing above is worth building.
+
+1. **Measure the hit rate before designing the API.** Accumulate a structural
+   fingerprint while recording — hash each `Component` discriminant and each
+   `SpecOp` discriminant as it is pushed, ignoring payloads — and report, per
+   view, how often a dirty render's fingerprint equals the previous one's. This
+   is the "record and compare" shape used purely as instrumentation, costs a few
+   nanoseconds per op, and answers the question outright. The Longbridge market
+   terminal of §20.3 is the workload to run it against.
+2. **Count what the slots would be.** On a hit, count the nodes whose payloads
+   differ, and separately the handler ops. That gives both the ceiling
+   (`slots.len()` against `arena.len()`) and problem 3's bound in one number.
+3. **Only then choose the surface.** If the hit rate is high and the handler
+   share is low, the author-declared form is worth designing. If the handler
+   share dominates, the useful work is lifting captures out of per-render
+   closures, and the template is a smaller idea than it looks.
+4. **Target virtual list rows first.** Row descriptions are produced from
+   GPUI's layout pass, twice a frame per list
+   (`materialize/components/virtual_list.rs`, `snapshot.rs`), so they are a
+   recorded-call site that is *already* on the frame budget rather than on an
+   invalidation — `frame_script_calls` counts them, along with dock chrome
+   handlers, and nothing else. A row template pays per frame rather than per notify, the
+   structure there is stable by construction, and the surface is one callback
+   rather than a whole render.
+
+### 20.8 Start-up
 
 The start-up budget — under 2 ms for VM creation and sandbox trimming, under
 5 ms for global registration including the reflection table, under 1 ms for the
@@ -3644,7 +3905,7 @@ both direct loading and asynchronous initialization under a manifest policy.
 
 ### Not built
 
-`gpui.memo` and every other memoization. Of base's components, `Tree` and the
+`gpui.memo` and every other memoization, including the template cache of §20.7. Of base's components, `Tree` and the
 higher-level `List` are not bound, nor is `Calendar`'s element (§14.2 —
 `CalendarState` is), nor `AlertDialog`'s parts (§14.2), nor `ColorPicker`.
 Semantic state styles (checked, selected, disabled) with base's precedence rules.

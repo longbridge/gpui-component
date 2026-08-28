@@ -200,6 +200,7 @@ What the script gains in exchange for the extra typing is the whole application 
 | [Hosting](./hosting.md) | The Rust side in full: mounting, refreshing, metrics, exit, hot-reload |
 | [HostModule](./host-module.md) | Lending the host's own Rust to a script, and the plain-data boundary |
 | [Dock and Panels](./dock.md) | A script view as a dockable panel, the chrome you draw for it, and what survives a restart |
+| [Performance](./performance.md) | What a script costs: invalidation against description size, the view as the boundary, and the counters |
 | [The engine seam](./engine.md) | QuickJS, why the seam exists, and the measurements that tell script cost from frame cost |
 
 ## Status
