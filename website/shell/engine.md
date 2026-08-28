@@ -1,7 +1,7 @@
 ---
 title: The Engine Seam
 description: QuickJS behind one internal interface, why the seam exists, and the three measurements that tell script cost apart from frame cost.
-order: 13
+order: 14
 ---
 
 # The Engine Seam
