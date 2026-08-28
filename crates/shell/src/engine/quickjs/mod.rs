@@ -456,10 +456,11 @@ pub struct ShellRuntime {
     arena: RefCell<SpecArena>,
     /// Templates the script has defined, indexed by the id its closure keeps.
     ///
-    /// Grows once per `template(...)` call site reached, and never shrinks: a
-    /// template is structure, not state, and the closure that holds its id
-    /// lives as long as the module that defined it.
-    templates: RefCell<Vec<Rc<crate::spec::Template>>>,
+    /// An entry is emptied when the application that defined it is released —
+    /// a hot reload re-evaluates the module and defines its templates again, so
+    /// without that this would grow by one arena per call site per save. The
+    /// slot itself stays, because the id is the index.
+    templates: RefCell<Vec<Option<Rc<crate::spec::Template>>>>,
     /// The template being discovered, while one is. See [`template`].
     discovery: RefCell<Option<template::Discovery>>,
     /// Retained state created by this runtime's scripts, and only this one's.
@@ -741,6 +742,7 @@ impl ShellRuntime {
         self.purge_released_view_aliases(&release);
         release.retire(cx);
         cancel_application_tasks(application);
+        self.retire_templates(application);
     }
 
     pub(crate) fn release_application_generation_without_context(
@@ -751,6 +753,7 @@ impl ShellRuntime {
         self.purge_released_view_aliases(&release);
         release.retire_without_context();
         cancel_application_tasks(application);
+        self.retire_templates(application);
     }
 
     fn rollback_retained_since(

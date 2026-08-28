@@ -118,6 +118,14 @@ Setting a flag three times is setting it once. Nothing is dropped: all three han
 
 The runtime adds no throttle of its own on top of that, and there is none to tune. The coalescing is GPUI's own scheduling, and it never defers a rebuild past the next frame — so it costs no latency, which is the other half of the pair below.
 
+### What the cache costs in memory
+
+A View holds **two** descriptions: the one it published, and the one it replaced. The second is kept a moment longer because an event can still be dispatched against a frame that has already been superseded, and the handlers that frame needs belong to that older description.
+
+There is no third. Publishing a new description drops the oldest, and dropping it retires the callbacks registered with it. So the ceiling is two descriptions per live View, and nothing accumulates with time: a View that has re-rendered a million times holds exactly what a View that rendered twice holds. Closing a panel drops its View, and both of its descriptions go with it.
+
+This is the other reason to split a large View rather than fear splitting: a hundred small Views hold a hundred small pairs, which together are the same interface described twice — not a hundred times.
+
 ## Frame rate and presentation latency are different failures
 
 Two things can be wrong with a running interface, and only one of them shows up as FPS:

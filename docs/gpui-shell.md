@@ -3594,6 +3594,27 @@ against, and the gap between them is problem 3 priced rather than argued.
 Neither includes selecting the template and its variant, which the surface above
 makes a property lookup rather than a search — but which is not zero.
 
+#### What a template costs to keep
+
+A template outlives every render that uses it, which is the point of it and also
+the reason nothing in a render would ever free one. Left alone, the store would
+grow by one recorded arena per `template(...)` call site **per hot reload**: a
+reload re-evaluates the module, the closure's cached id is gone with it, and
+discovery runs again.
+
+So a template holds the `ApplicationGeneration` of the script that defined it,
+and `release_application_generation` — the same release that retires that
+application's callbacks and tasks — empties its templates. The slot in the store
+stays, because a template's id is its index and a closure in a still-loaded
+module may hold one; what is freed is the arena, which is all of the memory. A
+script reaching a retired id is told so rather than handed another
+application's structure.
+
+That leaves the runtime with no cache that grows with time. A snapshot is two
+descriptions per live view (§8.4), retired with the view; callbacks are retired
+with the snapshot that registered them; templates are retired with the
+application that defined them.
+
 #### What that licenses, and what it does not
 
 It licenses designing the surface. The assumption the whole idea rested on is

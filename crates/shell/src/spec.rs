@@ -45,7 +45,7 @@ pub type SpecId = u32;
 /// first problem is that validity has to come from the call site rather than
 /// from a comparison after the fact.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-pub struct StructureFingerprint(u64);
+pub(crate) struct StructureFingerprint(u64);
 
 /// One step of the fingerprint's mixer.
 ///
@@ -709,7 +709,7 @@ impl ItemSpecs {
 /// operation's index rather than by its name because a node may record the same
 /// method twice, and the second one is a different position.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum SlotSite {
+pub(crate) enum SlotSite {
     /// The string a [`Component::Text`] node carries — what `.child(value)`
     /// records.
     Text,
@@ -724,7 +724,7 @@ pub enum SlotSite {
 
 /// One position a template fills, and which of the call's arguments fills it.
 #[derive(Clone, Copy, Debug)]
-pub struct Slot {
+pub(crate) struct Slot {
     node: SpecId,
     site: SlotSite,
     /// The index of the template parameter whose sentinel came to rest here.
@@ -755,7 +755,7 @@ impl Slot {
 
 /// What a call writes into one slot.
 #[derive(Clone, Debug)]
-pub enum SlotValue {
+pub(crate) enum SlotValue {
     Text(String),
     Value(Bridged),
     Handler(CallbackId),
@@ -772,21 +772,47 @@ pub enum SlotValue {
 /// It holds no [`CallbackId`] of its own: a handler is a slot, minted per call,
 /// because a closure recorded at discovery would capture that first call's
 /// values for as long as the template lived.
-pub struct Template {
+pub(crate) struct Template {
     arena: SpecArena,
     root: SpecId,
     slots: Vec<Slot>,
     arity: usize,
+    /// The application whose script defined it.
+    ///
+    /// A template outlives every render, which is the point of it, so nothing
+    /// else would ever free one: the store would grow by one entry per
+    /// `template(...)` call site per hot reload, forever. Holding the
+    /// generation lets the same release that retires an application's callbacks
+    /// and tasks drop its templates too. `None` only for a runtime that has no
+    /// application generation at all, which is a test.
+    application: Option<Rc<crate::runtime::ApplicationGeneration>>,
 }
 
 impl Template {
-    pub(crate) fn new(arena: SpecArena, root: SpecId, slots: Vec<Slot>, arity: usize) -> Self {
+    pub(crate) fn new(
+        arena: SpecArena,
+        root: SpecId,
+        slots: Vec<Slot>,
+        arity: usize,
+        application: Option<Rc<crate::runtime::ApplicationGeneration>>,
+    ) -> Self {
         Self {
             arena,
             root,
             slots,
             arity,
+            application,
         }
+    }
+
+    /// Whether this template belongs to the application generation given.
+    pub(crate) fn belongs_to(
+        &self,
+        application: &Rc<crate::runtime::ApplicationGeneration>,
+    ) -> bool {
+        self.application
+            .as_ref()
+            .is_some_and(|owner| Rc::ptr_eq(owner, application))
     }
 
     pub(crate) fn arena(&self) -> &SpecArena {
@@ -848,7 +874,7 @@ impl SpecArena {
     /// Read from a published snapshot rather than from the scratch arena: the
     /// scratch one is reset by the next render, and the question is what *this*
     /// description looked like beside the one before it.
-    pub fn structure(&self) -> StructureFingerprint {
+    pub(crate) fn structure(&self) -> StructureFingerprint {
         StructureFingerprint(self.structure)
     }
 

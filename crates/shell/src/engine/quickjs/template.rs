@@ -58,6 +58,7 @@ use smallvec::SmallVec;
 
 use super::{CallbackEntry, ShellRuntime};
 use crate::{
+    runtime::ApplicationGeneration,
     scope,
     spec::{CallbackId, Component, Slot, SlotSite, SlotValue, SpecArena, SpecId, SpecOp, Template},
     style,
@@ -172,12 +173,13 @@ impl ShellRuntime {
         }
 
         let mut templates = self.templates.borrow_mut();
-        templates.push(std::rc::Rc::new(Template::new(
+        templates.push(Some(std::rc::Rc::new(Template::new(
             recorded,
             root,
             discovery.slots,
             discovery.arity,
-        )));
+            scope::current_application_generation(),
+        ))));
         Ok((templates.len() - 1) as u32)
     }
 
@@ -206,7 +208,13 @@ impl ShellRuntime {
             .borrow()
             .get(id as usize)
             .cloned()
-            .ok_or_else(|| Exception::throw_type(ctx, "unknown template"))?;
+            .flatten()
+            .ok_or_else(|| {
+                Exception::throw_type(
+                    ctx,
+                    "this template belongs to an application that has been unloaded",
+                )
+            })?;
 
         if arguments.len() != template.arity() {
             return Err(Exception::throw_type(
@@ -355,13 +363,39 @@ impl ShellRuntime {
     ///
     /// The callback belongs to the view and the snapshot generation that are
     /// current now, which is what retires it when that description is replaced.
-    pub(super) fn register_handler(&self, handler: Persistent<Function<'static>>) -> CallbackId {
+    fn register_handler(&self, handler: Persistent<Function<'static>>) -> CallbackId {
         self.callbacks.borrow_mut().push(CallbackEntry {
             value: handler,
             view: scope::current_view().map(|view| view.downgrade()),
             application: scope::current_application_generation(),
             registered_in: scope::current_generation(),
         })
+    }
+
+    /// Drops every template an application defined, when that application is
+    /// released.
+    ///
+    /// The slot is emptied rather than removed, because a template's id is its
+    /// index and a closure in a still-loaded module may hold one. Emptying frees
+    /// the arena, which is all of the memory; what is left is one `None` per
+    /// template ever defined, and a script that reaches a retired id is told so
+    /// rather than handed someone else's structure.
+    pub(super) fn retire_templates(&self, application: &std::rc::Rc<ApplicationGeneration>) {
+        let mut templates = self.templates.borrow_mut();
+        for slot in templates.iter_mut() {
+            if slot
+                .as_ref()
+                .is_some_and(|template| template.belongs_to(application))
+            {
+                *slot = None;
+            }
+        }
+    }
+
+    /// How many templates are holding memory. Read by this module's tests.
+    #[cfg(test)]
+    fn live_template_count(&self) -> usize {
+        self.templates.borrow().iter().flatten().count()
     }
 
     fn require_discovery(&self, ctx: &Ctx<'_>) -> JsResult<()> {
@@ -458,4 +492,76 @@ fn text_of<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> JsResult<String> {
         ));
     }
     Ok(value.clone().get::<Coerced<String>>()?.0)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{ops::Deref, rc::Rc};
+
+    use gpui::{TestAppContext, VisualTestContext};
+
+    use crate::{ShellRuntime, runtime::ApplicationGeneration};
+
+    /// A template is defined once and used for the life of the module, so
+    /// nothing in a render would ever free one. What frees them is the release
+    /// that already retires an application's callbacks and tasks — and it has
+    /// to, because a hot reload re-evaluates the module and defines every
+    /// template in it again.
+    #[gpui::test]
+    fn releasing_an_application_drops_the_templates_it_defined(cx: &mut TestAppContext) {
+        struct Host;
+
+        impl gpui::Render for Host {
+            fn render(
+                &mut self,
+                _: &mut gpui::Window,
+                _: &mut gpui::Context<Self>,
+            ) -> impl gpui::IntoElement {
+                gpui::div()
+            }
+        }
+
+        const SOURCE: &str = r#"
+import { View, div } from "gpui";
+const template = globalThis.__template;
+const Row = template((value) => div().child(value));
+export default class Board extends View {
+  render() { return div().child(Row("one")).child(Row("two")); }
+}
+"#;
+
+        cx.update(|cx| crate::init(cx));
+        let runtime = ShellRuntime::new_isolated().expect("runtime");
+        cx.update(|cx| runtime.set_global(cx));
+
+        let application = ApplicationGeneration::new(41);
+        let mut view_type = runtime.load_source("templates.js", SOURCE).expect("load");
+        view_type.application = Some(Rc::clone(&application));
+
+        let window = cx.add_window(|_, _| Host);
+        let mut context = VisualTestContext::from_window(*window.deref(), cx);
+        let object = context.update(|window, cx| {
+            runtime
+                .instantiate(&view_type, window, cx)
+                .expect("instantiate")
+        });
+
+        context.update(|window, cx| {
+            runtime
+                .build_snapshot(&object, None, crate::policy::default(), window, cx)
+                .expect("render");
+        });
+        assert_eq!(
+            runtime.live_template_count(),
+            1,
+            "the render should have defined the row template"
+        );
+
+        context.update(|_, _| runtime.release_application_generation_without_context(&application));
+        assert_eq!(
+            runtime.live_template_count(),
+            0,
+            "releasing the application must free what its templates were holding"
+        );
+    }
 }
