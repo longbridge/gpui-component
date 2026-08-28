@@ -1,7 +1,7 @@
 use crate::{ActiveTheme, Sizable, Size, StyledExt};
 use gpui::{
     Animation, AnimationExt as _, App, Background, ElementId, Hsla, IntoElement, IsZero as _,
-    ParentElement, RenderOnce, StyleRefinement, Styled, Window, ease_in_out,
+    ParentElement, RenderOnce, SharedString, StyleRefinement, Styled, Window, ease_in_out,
     prelude::FluentBuilder, px, relative,
 };
 use gpui_base::{
@@ -16,6 +16,7 @@ pub struct Progress {
     style: StyleRefinement,
     color: Option<Hsla>,
     value: f32,
+    accessibility_label: Option<SharedString>,
     size: Size,
     loading: bool,
 }
@@ -27,6 +28,7 @@ impl Progress {
             id: id.into(),
             value: Default::default(),
             color: None,
+            accessibility_label: None,
             style: StyleRefinement::default(),
             size: Size::default(),
             loading: false,
@@ -55,6 +57,12 @@ impl Progress {
         self.value = value.clamp(0., 100.);
         self
     }
+
+    /// Set the accessible name exposed by the progress indicator.
+    pub fn accessibility_label(mut self, label: impl Into<SharedString>) -> Self {
+        self.accessibility_label = Some(label.into());
+        self
+    }
 }
 
 impl Styled for Progress {
@@ -78,6 +86,7 @@ impl RenderOnce for Progress {
             .unwrap_or(cx.theme().tokens.progress_bar.into());
         let value = self.value;
         let loading = self.loading;
+        let accessibility_label = self.accessibility_label;
         let reduce_motion = cx.reduce_motion();
 
         let radius = self.style.corner_radii.clone();
@@ -110,6 +119,9 @@ impl RenderOnce for Progress {
         BaseProgress::new(self.id)
             .value(value)
             .indeterminate(loading)
+            .when_some(accessibility_label, |this, label| {
+                this.accessibility_label(label)
+            })
             .w_full()
             .relative()
             .h(height)
@@ -155,5 +167,22 @@ impl RenderOnce for Progress {
                         }
                     }),
             )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stores_an_explicit_accessibility_label() {
+        let plain = Progress::new("upload");
+        assert_eq!(plain.accessibility_label, None);
+
+        let named = Progress::new("upload").accessibility_label("Upload progress");
+        assert_eq!(
+            named.accessibility_label.as_deref(),
+            Some("Upload progress")
+        );
     }
 }

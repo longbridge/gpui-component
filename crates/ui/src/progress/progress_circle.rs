@@ -3,7 +3,8 @@ use gpui::Bounds;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     Animation, AnimationExt as _, AnyElement, App, ElementId, Hsla, IntoElement, ParentElement,
-    Pixels, RenderOnce, StyleRefinement, Styled, Window, canvas, ease_in_out, px, relative,
+    Pixels, RenderOnce, SharedString, StyleRefinement, Styled, Window, canvas, ease_in_out, px,
+    relative,
 };
 use gpui_base::Progress as BaseProgress;
 use instant::Duration;
@@ -19,6 +20,7 @@ pub struct ProgressCircle {
     style: StyleRefinement,
     color: Option<Hsla>,
     value: f32,
+    accessibility_label: Option<SharedString>,
     size: Size,
     children: Vec<AnyElement>,
     loading: bool,
@@ -31,6 +33,7 @@ impl ProgressCircle {
             id: id.into(),
             value: Default::default(),
             color: None,
+            accessibility_label: None,
             style: StyleRefinement::default(),
             size: Size::default(),
             children: Vec::new(),
@@ -58,6 +61,12 @@ impl ProgressCircle {
     /// The value should be between 0.0 and 100.0.
     pub fn value(mut self, value: f32) -> Self {
         self.value = value.clamp(0., 100.);
+        self
+    }
+
+    /// Set the accessible name exposed by the progress indicator.
+    pub fn accessibility_label(mut self, label: impl Into<SharedString>) -> Self {
+        self.accessibility_label = Some(label.into());
         self
     }
 
@@ -155,6 +164,7 @@ impl RenderOnce for ProgressCircle {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let value = self.value;
         let loading = self.loading;
+        let accessibility_label = self.accessibility_label;
         let state = window.use_keyed_state(self.id.clone(), cx, |_, _| ProgressState::new(value));
         let prev_target = state.read(cx).target();
         let has_changed = prev_target != value;
@@ -164,6 +174,9 @@ impl RenderOnce for ProgressCircle {
         BaseProgress::new(self.id.clone())
             .value(value)
             .indeterminate(loading)
+            .when_some(accessibility_label, |this, label| {
+                this.accessibility_label(label)
+            })
             .flex()
             .items_center()
             .justify_center()
@@ -219,5 +232,22 @@ impl RenderOnce for ProgressCircle {
                         .into_any_element()
                 }
             })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stores_an_explicit_accessibility_label() {
+        let plain = ProgressCircle::new("upload");
+        assert_eq!(plain.accessibility_label, None);
+
+        let named = ProgressCircle::new("upload").accessibility_label("Upload progress");
+        assert_eq!(
+            named.accessibility_label.as_deref(),
+            Some("Upload progress")
+        );
     }
 }
