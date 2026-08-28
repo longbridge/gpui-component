@@ -142,6 +142,9 @@ StockRow
 
 When the price becomes `230.51`, the structure is identical and only one leaf differs — but a new description is the only way to say so, so the whole view is described again: every `div()`, every `.gap()`, every `.bg()`, every crossing into Rust. That is the dirty-render path, and on a fast feed it is the one that runs.
 
+<img class="architecture-light" src="/shell-change-cost-light.svg" alt="Three lanes, bars to the same scale. Nothing the view reads changed: no bar, no script runs, the frame replays the description already published. A value changed, which is what happens today: the whole panel is described again at 0.315 milliseconds, however small the change. The same change filling a structure recorded earlier: 0.060 milliseconds, about a fifth as long — measured, and deliberately not reachable from a script.">
+<img class="architecture-dark" src="/shell-change-cost-dark.svg" alt="Three lanes, bars to the same scale. Nothing the view reads changed: no bar, no script runs, the frame replays the description already published. A value changed, which is what happens today: the whole panel is described again at 0.315 milliseconds, however small the change. The same change filling a structure recorded earlier: 0.060 milliseconds, about a fifth as long — measured, and deliberately not reachable from a script.">
+
 Until that changes, the lever is the one this page opens with: **shrink the boundary that has to be rebuilt.** A price cell in a child view of its own is a description of two nodes rather than four hundred, and it is available today.
 
 The direction beyond it is a **template cache** — splitting a description into a reusable structure and the dynamic slots inside it, so a value-only change fills slots instead of re-running the builder. The mechanism exists in the runtime and reaches no script, which is a decision rather than an omission. These are the figures behind it, all release builds, best of seven batches of fifty:
