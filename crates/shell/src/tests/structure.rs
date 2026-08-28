@@ -200,6 +200,11 @@ fn a_value_only_change_repeats_the_structure(cx: &mut TestAppContext) {
         (0, 0),
         "a first build has no predecessor and is not a data point either way"
     );
+    assert_eq!(
+        first.structure_repeat_rate(),
+        None,
+        "and a rate over no comparisons is absent rather than zero"
+    );
 
     invalidate(&mut context, &view);
     invalidate(&mut context, &view);

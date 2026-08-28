@@ -601,3 +601,122 @@ export default class Board extends View {
   }
 }
 "#;
+
+/// A state style is a detached node the operation points at by id, so grafting
+/// a template has to move that id along with everything else.
+///
+/// Nothing above catches this: every other test's template is flat, and a
+/// wrongly remapped id would not fail — it would point at whatever node landed
+/// land at that index, and the second instance would style the first one's
+/// interior.
+#[gpui::test]
+fn a_state_style_survives_being_grafted_twice(cx: &mut TestAppContext) {
+    let tree = tree(
+        cx,
+        r#"
+import { View, div } from "gpui";
+import { v_flex } from "gpui-base";
+
+const template = globalThis.__template;
+
+const Row = template((label) =>
+  div().bg("surface").hover((style) => style.bg("muted")).child(label));
+
+export default class Board extends View {
+  render() { return v_flex().child(Row("one")).child(Row("two")); }
+}
+"#,
+    )
+    .expect("the board renders");
+
+    assert_eq!(
+        tree.matches("hover").count(),
+        2,
+        "each instance needs a hover style of its own: {tree}"
+    );
+    assert_eq!(
+        tree.matches(r#"bg[Str("muted")]"#).count(),
+        2,
+        "and each hover style needs its own declarations: {tree}"
+    );
+    assert!(
+        tree.contains(r#"text "one""#) && tree.contains(r#"text "two""#),
+        "the slots still fill: {tree}"
+    );
+}
+
+/// The same for a named slot, which is the other operation carrying a `SpecId`.
+#[gpui::test]
+fn a_named_slot_survives_being_grafted_twice(cx: &mut TestAppContext) {
+    let tree = tree(
+        cx,
+        r#"
+import { View, div } from "gpui";
+import { v_flex, Collapsible } from "gpui-base";
+
+const template = globalThis.__template;
+
+const Panel = template((label, body) =>
+  Collapsible.new().child(div().child(label)).content(div().child(body)));
+
+export default class Board extends View {
+  render() { return v_flex().child(Panel("one", "first")).child(Panel("two", "second")); }
+}
+"#,
+    )
+    .expect("the board renders");
+
+    assert_eq!(
+        tree.matches("content").count(),
+        2,
+        "each instance needs its own filled slot: {tree}"
+    );
+    assert!(
+        tree.contains(r#"text "first""#) && tree.contains(r#"text "second""#),
+        "and each slot's content must be its own: {tree}"
+    );
+}
+
+/// A body that throws must leave the description it interrupted exactly where
+/// it was.
+///
+/// Discovery swaps the arena the live render is recording into for an empty
+/// one, so a body that throws half-way through has to put the original back.
+/// If it did not, the rest of that render would be recorded into an arena that
+/// is about to be discarded, and the view would draw nothing or the wrong
+/// thing — with no error to say why.
+#[gpui::test]
+fn a_body_that_throws_leaves_the_render_it_interrupted_intact(cx: &mut TestAppContext) {
+    let tree = tree(
+        cx,
+        r#"
+import { View, div } from "gpui";
+import { v_flex } from "gpui-base";
+
+const template = globalThis.__template;
+
+// Formatting the argument consumes the sentinel, so this body throws.
+const Broken = template((value) => div().child(`value: ${value}`));
+
+export default class Board extends View {
+  render() {
+    const parts = v_flex().child(div().child("before"));
+    try {
+      parts.child(Broken("x"));
+    } catch (error) {
+      parts.child(div().child("caught"));
+    }
+    return parts.child(div().child("after"));
+  }
+}
+"#,
+    )
+    .expect("the render must survive a template body that threw");
+
+    assert!(
+        tree.contains(r#"text "before""#)
+            && tree.contains(r#"text "caught""#)
+            && tree.contains(r#"text "after""#),
+        "everything described around the failed body must still be there: {tree}"
+    );
+}
