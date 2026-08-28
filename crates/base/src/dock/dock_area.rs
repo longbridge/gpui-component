@@ -1486,9 +1486,28 @@ impl DockArea {
         cx: &mut App,
     ) -> Option<AnyElement> {
         let pane = self.docks.get(&placement)?;
-        let content = self.render_node(pane.tree.root(), window, cx);
         let dock = self.dock_context(placement, &pane.dock);
-        Some(self.renderer.render_dock(&dock, content, window, cx))
+
+        // A closed left or right dock takes no space at all; a closed bottom
+        // dock keeps a strip so its tab bar stays clickable. Nothing is drawn
+        // for a dock with no extent, and the renderer is not asked for chrome
+        // nobody can see.
+        let size = dock_extent(&dock);
+        if size <= px(0.) {
+            return Some(div().into_any_element());
+        }
+
+        let content = self.render_node(pane.tree.root(), window, cx);
+        // The box is applied here rather than left to the renderer, and that is
+        // the whole point of it being here. A dock's extent along its own axis
+        // is not presentation -- it is what makes the dock a column beside the
+        // centre instead of a block in the flow below it -- and a renderer that
+        // did not know to state it produced a dock with no width, every pane
+        // inside it shrunk to its content. `render_dock` on the renderer is a
+        // chrome hook, so a renderer that draws nothing at all still gets a
+        // dock that is the right shape.
+        let chrome = self.renderer.render_dock(&dock, content, window, cx);
+        Some(dock_frame(&dock, size).child(chrome).into_any_element())
     }
 
     fn dock_context(&self, placement: DockPlacement, dock: &Dock) -> DockContext {
@@ -1832,6 +1851,39 @@ impl DockContext {
 /// skin draws it inside [`Self::render_dock`] and drives it through
 /// [`DockContext::resize_to`].
 #[allow(unused_variables)]
+/// A closed bottom dock keeps this much, so its tab bar stays clickable. A
+/// closed side dock keeps nothing: there is no tab bar left to click at zero
+/// width, and reopening it is the application's to offer.
+pub const CLOSED_BOTTOM_STRIP: Pixels = px(29.);
+
+/// How much room a dock asks for along its own axis.
+pub fn dock_extent(dock: &DockContext) -> Pixels {
+    match (dock.is_open(), dock.placement()) {
+        (true, _) => dock.size(),
+        (false, DockPlacement::Bottom) => CLOSED_BOTTOM_STRIP,
+        (false, _) => px(0.),
+    }
+}
+
+/// The box a dock occupies: its extent along its own axis, full across, and
+/// held at that size rather than stretched by the row it sits in.
+///
+/// Structural, not decorative, which is why it is built here and not in a
+/// renderer. See [`DockArea::render_dock`].
+pub fn dock_frame(dock: &DockContext, size: Pixels) -> Div {
+    div()
+        .flex()
+        .flex_none()
+        .relative()
+        .overflow_hidden()
+        .map(|this| match dock.placement() {
+            DockPlacement::Left | DockPlacement::Right => this.flex_row().h_full().w(size),
+            DockPlacement::Bottom => this.w_full().h(size),
+            // Base never builds a dock for the centre.
+            DockPlacement::Center => this,
+        })
+}
+
 pub trait DockAreaRenderer: 'static {
     /// The area's outer frame, which base records its bounds on.
     fn frame(&self, window: &mut Window, cx: &mut App) -> Stateful<Div> {
@@ -1879,6 +1931,12 @@ pub trait DockAreaRenderer: 'static {
 
     /// One dock's chrome around its content: the title strip, the collapse
     /// affordance, and the resize handle.
+    ///
+    /// Chrome only. The dock's own box -- its extent along its own axis, and
+    /// the `flex_none` that holds it there -- is applied by
+    /// [`DockArea::render_dock`] around whatever this returns, so a renderer
+    /// cannot misplace a dock by not knowing to size it, and the default here
+    /// can be what it is: the content, undecorated.
     fn render_dock(
         &self,
         dock: &DockContext,

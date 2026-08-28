@@ -518,6 +518,14 @@ pub trait DockChrome: 'static {
     /// One dock's chrome around its content: title strip, collapse
     /// affordance, resize handle. Whatever this returns replaces the content,
     /// so a chrome that wants both must place `content` itself.
+    ///
+    /// Chrome only, and the emphasis is earned. The dock's own box -- its
+    /// extent along its own axis, and the `flex_none` that holds it there --
+    /// is base's, applied around whatever this returns, so a script cannot
+    /// misplace a dock by not knowing it had a box to draw. It used to be able
+    /// to: the extent lived in base's `DockSkin::render_dock`, this hook
+    /// replaced that method whole, and its default handed the content straight
+    /// back, so every script-drawn dock came out with no width at all.
     fn dock(
         &self,
         dock: &DockContext,

@@ -14,7 +14,7 @@ use gpui_base::dock::{
 };
 
 use crate::{
-    ActiveTheme as _, Side, StyledExt as _,
+    ActiveTheme as _, Side,
     dock::{
         DockSkin, SkinShared, invalid_panel::InvalidPanel, panel_handle, tab_panel::TabGroupSkin,
         tiles::TilesSkin,
@@ -22,8 +22,6 @@ use crate::{
     resize_handle,
 };
 
-/// The height a closed bottom dock keeps, so its tab bar stays clickable.
-const CLOSED_BOTTOM_STRIP: Pixels = px(29.);
 
 /// The payload a dock's resize handle drags. It draws nothing: the handle
 /// itself is the affordance.
@@ -81,31 +79,14 @@ impl DockAreaRenderer for DockSkin {
         window: &mut Window,
         cx: &mut App,
     ) -> AnyElement {
-        let placement = dock.placement();
-
-        // A closed left or right dock takes no space at all; a closed bottom
-        // dock keeps a strip so its tab bar stays clickable.
-        let size = match (dock.is_open(), placement) {
-            (true, _) => dock.size(),
-            (false, DockPlacement::Bottom) => CLOSED_BOTTOM_STRIP,
-            (false, _) => px(0.),
-        };
-
-        if size <= px(0.) {
-            return div().into_any_element();
-        }
-
+        // No box here any more. A dock's extent is structural, so
+        // `DockArea::render_dock` applies it around whatever this returns --
+        // which also means a renderer that draws no chrome still gets a dock
+        // the right shape. This adds the edge you drag and nothing else.
         div()
             .flex()
-            .flex_none()
+            .size_full()
             .relative()
-            .overflow_hidden()
-            .map(|this| match placement {
-                DockPlacement::Left | DockPlacement::Right => this.h_flex().h_full().w(size),
-                DockPlacement::Bottom => this.w_full().h(size),
-                // Base never builds a dock for the centre.
-                DockPlacement::Center => this,
-            })
             .child(content)
             .child(self.render_resize_handle(dock, window, cx))
             .child(DockResizeTracker {
@@ -281,10 +262,91 @@ mod tests {
     use std::rc::Rc;
 
     use gpui::{
-        Entity, Modifiers, MouseButton, TestAppContext, VisualTestContext, point, px, size,
+        Entity, IntoElement as _, Modifiers, MouseButton, TestAppContext, VisualTestContext, point,
+        px, size,
     };
 
-    use crate::dock::{DockArea, DockLayout, DockPlacement, DockSkin, test_support::MeasuredProbe};
+    use std::cell::Cell;
+
+    use gpui_base::dock::DockAreaRenderer;
+
+    use crate::dock::{
+        DockArea, DockLayout, DockPlacement, DockSkin,
+        test_support::{MeasuredProbe, SizedProbe},
+    };
+
+
+    /// Everything `DockSkin` draws, except a dock's chrome.
+    ///
+    /// `render_dock` is deliberately left at its trait default -- which hands
+    /// the content straight back -- because that is the position every renderer
+    /// that is not `DockSkin` starts from, including the one gpui-shell installs
+    /// so a script can draw the chrome itself. The tab and tile hooks delegate,
+    /// so the only thing missing from this skin is the dock's chrome.
+    struct ChromelessDockSkin(Rc<DockSkin>);
+
+    impl DockAreaRenderer for ChromelessDockSkin {
+        fn tab_group_renderer(&self) -> Rc<dyn gpui_base::dock::TabGroupRenderer> {
+            self.0.tab_group_renderer()
+        }
+
+        fn tiles_renderer(&self) -> Rc<dyn gpui_base::dock::TilesRenderer> {
+            self.0.tiles_renderer()
+        }
+    }
+
+    /// A dock's box is base's, not its renderer's.
+    ///
+    /// This is the regression. The extent lived in `DockSkin::render_dock`, so
+    /// it was reachable only through that one renderer, and `render_dock`'s
+    /// trait default hands the content straight back. A dock that never states
+    /// its extent is not a column beside the centre: it takes whatever the row
+    /// gives it and the panes inside shrink to their content. Nothing failed,
+    /// and nothing said why.
+    #[gpui::test]
+    fn a_dock_is_its_own_width_under_a_renderer_that_draws_no_chrome(cx: &mut TestAppContext) {
+        cx.update(|cx| crate::init(cx));
+        let measured = Rc::new(Cell::new(gpui::Size::default()));
+        let probe = measured.clone();
+        let (area, cx) = cx.add_window_view(|window, cx| {
+            let skin = DockSkin::new(cx);
+            DockArea::new("test", None, window, cx).with_renderer(Rc::new(ChromelessDockSkin(skin)))
+        });
+        cx.simulate_resize(size(px(800.), px(600.)));
+        cx.update(|window, cx| {
+            area.update(cx, |area, cx| {
+                area.set_center(
+                    DockLayout::tabs().panel(MeasuredProbe::new(Rc::default(), cx)),
+                    window,
+                    cx,
+                );
+                area.set_dock(
+                    DockPlacement::Right,
+                    DockLayout::tabs().panel(SizedProbe::new(probe, cx)),
+                    window,
+                    cx,
+                );
+                area.set_dock_size(DockPlacement::Right, px(200.), window, cx);
+            });
+        });
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            area.update(cx, |area, cx| {
+                if !area.is_dock_open(DockPlacement::Right) {
+                    area.toggle_dock(DockPlacement::Right, window, cx);
+                }
+            });
+        });
+        cx.run_until_parked();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        let width = measured.get().width;
+        assert_eq!(
+            width,
+            px(200.),
+            "the right dock has to be its own width, not the area's: got {width:?}"
+        );
+    }
 
     fn area_with_side_docks(cx: &mut TestAppContext) -> (Entity<DockArea>, &mut VisualTestContext) {
         cx.update(|cx| crate::init(cx));
