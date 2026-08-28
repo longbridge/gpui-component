@@ -21,7 +21,7 @@ Three examples ship with the repository, and together they cover a standalone ap
 The examples here are each built to show one thing. For a whole product in one
 repository — OAuth, a live WebSocket quote feed, a virtualized watchlist,
 retained nested views for the price chart, and its own Rust host binary —
-see [**longbridge/gpui-shell-longbridge**](https://github.com/longbridge/gpui-shell-longbridge).
+see [**longbridge/longbridge-lite**](https://github.com/longbridge/longbridge-lite).
 It is a read-only Longbridge desktop client of a few thousand lines of
 JavaScript, and it is the largest thing written against this runtime.
 

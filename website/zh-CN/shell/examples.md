@@ -21,7 +21,7 @@ pageClass: shell-examples-page
 这里的示例每个都只讲一件事。想看一个完整产品放在一个仓库里——OAuth、实时
 WebSocket 报价流、虚拟化自选列表、用留存嵌套视图承载的价格图表，以及它自己的
 Rust Host 二进制——见
-[**longbridge/gpui-shell-longbridge**](https://github.com/longbridge/gpui-shell-longbridge)。
+[**longbridge/longbridge-lite**](https://github.com/longbridge/longbridge-lite)。
 它是一个只读的 Longbridge 桌面客户端，几千行 JavaScript，也是目前基于这个运行时
 写出来的最大的东西。
 

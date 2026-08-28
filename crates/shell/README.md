@@ -114,7 +114,7 @@ toast, icons, and storage that degrades to memory when it is not granted.
 
 For a whole product rather than a demonstration — OAuth, a live WebSocket quote
 feed, a virtualized watchlist, retained nested views, and its own Rust host —
-see [longbridge/gpui-shell-longbridge](https://github.com/longbridge/gpui-shell-longbridge),
+see [longbridge/longbridge-lite](https://github.com/longbridge/longbridge-lite),
 the largest application written against this runtime.
 
 ### Checking an application without running it
