@@ -434,6 +434,47 @@ export default class Probe extends View {
 
   render() { return div().child("refused:" + this.refused.join(",")); }
 }
+
+#[gpui::test]
+fn programmatic_dock_size_change_reaches_persistence_subscriber(cx: &mut TestAppContext) {
+    const SOURCE: &str = r#"
+import { View, div } from "gpui";
+import { DockArea } from "gpui-base";
+
+class Panel extends View { render() { return div(); } }
+
+export default class Probe extends View {
+  init(_props, cx) {
+    this.events = 0;
+    this.changed = false;
+    this.dock = DockArea.new("events");
+    this.dock.on("layout_changed", (cx) => {
+      this.events += 1;
+      if (!this.changed) {
+        this.changed = true;
+        this.dock.set_dock_size("left", 333);
+      }
+      cx.notify();
+    });
+    this.dock.add_panel(cx.new(Panel), { name: "panel", placement: "left", size: 200 });
+  }
+
+  render() {
+    return div().child("events:" + this.events + " size:" + this.dock.dock_size("left"));
+  }
+}
+"#;
+
+    let (view, window) = run(cx, SOURCE);
+    let mut context = VisualTestContext::from_window(window, cx);
+    context.run_until_parked();
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    let tree = described(&mut context, &view);
+    assert!(
+        tree.contains("events:2 size:333"),
+        "the size edit must emit the event persistence listens to: {tree}"
+    );
+}
 "#;
 
     let (view, window) = run(cx, SOURCE);

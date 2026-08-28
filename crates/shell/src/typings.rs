@@ -2970,7 +2970,7 @@ const BASE: &str = r#"  /** A row. */
     dock_size(placement: DockPlacement): number | null;
     set_dock_size(placement: DockPlacement, size: number): void;
     set_dock_collapsible(placement: DockPlacement, collapsible: boolean): void;
-    /** A locked area cannot be dragged, dropped into, or resized. */
+    /** A locked area cannot be rearranged or dropped into; dock and tile resizing stays available. */
     is_locked(): boolean;
     set_locked(locked: boolean): void;
     is_zoomed(): boolean;

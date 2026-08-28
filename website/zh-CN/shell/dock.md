@@ -255,7 +255,7 @@ area.is_zoomed();                       area.zoom_out();
 area.on("layout_changed", handler);     area.release();
 ```
 
-被锁定的 area 不能被拖动、不能被放入、也不能调整大小——正是应用把「锁定布局」做成菜单项时的那种行为。
+被锁定的 area 不能重新排列，也不能接受放入操作；dock 和 tile 仍可调整大小。因此「锁定布局」固定的是面板所在位置，而不是面板的可用尺寸。
 
 ## 一个完整的例子
 

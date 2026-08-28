@@ -377,8 +377,13 @@ impl DockArea {
         cx: &mut Context<Self>,
     ) {
         if let Some(pane) = self.docks.get_mut(&placement) {
+            let previous = pane.dock.size();
             pane.dock.set_size(size);
+            if pane.dock.size() == previous {
+                return;
+            }
             cx.notify();
+            cx.emit(DockEvent::LayoutChanged);
         }
     }
 }
@@ -2058,7 +2063,10 @@ impl DockArea {
 mod tests {
     use gpui::{TestAppContext, VisualTestContext};
 
-    use std::cell::RefCell;
+    use std::{
+        cell::{Cell, RefCell},
+        rc::Rc,
+    };
 
     use super::*;
     use crate::dock::test_support::{Log, PanelSignal, TestPanel, drain, drain_active, log_of};
@@ -2069,6 +2077,39 @@ mod tests {
             let _ = crate::Theme::global_mut(cx);
         });
         cx.add_window_view(|window, cx| DockArea::new("test-dock", None, window, cx))
+    }
+
+    #[gpui::test]
+    fn dock_size_change_emits_one_layout_event(cx: &mut TestAppContext) {
+        let (area, cx) = setup(cx);
+        cx.update(|window, cx| {
+            area.update(cx, |area, cx| {
+                area.set_dock(
+                    DockPlacement::Left,
+                    DockLayout::tabs().panel(TestPanel::new("Left", cx)),
+                    window,
+                    cx,
+                );
+            });
+        });
+
+        let events = Rc::new(Cell::new(0));
+        let observed = events.clone();
+        let _subscription = cx.update(|window, cx| {
+            window.subscribe(&area, cx, move |_, event: &DockEvent, _, _| {
+                if matches!(event, DockEvent::LayoutChanged) {
+                    observed.set(observed.get() + 1);
+                }
+            })
+        });
+
+        cx.update(|window, cx| {
+            area.update(cx, |area, cx| {
+                area.set_dock_size(DockPlacement::Left, px(320.), window, cx);
+                area.set_dock_size(DockPlacement::Left, px(320.), window, cx);
+            });
+        });
+        assert_eq!(events.get(), 1, "only an effective size change is persisted");
     }
 
     /// Two tab groups side by side, holding one logging panel each.

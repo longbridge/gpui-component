@@ -255,7 +255,7 @@ area.is_zoomed();                       area.zoom_out();
 area.on("layout_changed", handler);     area.release();
 ```
 
-A locked area cannot be dragged, dropped into, or resized — the way an application offers "lock layout" as a menu item.
+A locked area cannot be rearranged or dropped into. Dock and tile resizing stays available, so “lock layout” freezes where panels live without freezing their usable size.
 
 ## A complete example
 
