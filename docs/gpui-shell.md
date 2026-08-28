@@ -2126,11 +2126,11 @@ it. It is therefore an entity in the store, exactly as an input's text is, and
 
 ### 15.2 Commands, not callbacks
 
-A chrome handler runs once per container per frame for as long as the dock is on
-screen. A callback registered inside one would belong to a snapshot that stands
-for thousands of frames while the tab is rebuilt on every one of them — the same
-accumulation `materialize::components::virtual_list` refuses for a row handler,
-and it is refused here by the same `ScopePhase::Layout` check.
+A chrome handler runs when its callback or resolved native state changes; the
+resulting spec is cached and replayed in Rust on unchanged frames. A callback
+registered inside one would therefore have no sound event lifetime and could be
+duplicated by later state changes, so it is refused by the same
+`ScopePhase::Layout` check used for virtual-list row descriptions.
 
 So a chrome element carries a `DockCommand` instead: `SelectTab { node, index }`,
 `ClosePanel { node, panel }`, `MoveTile { panel }` and nine more. A command names
@@ -2154,6 +2154,13 @@ the skin for anything — and the engine's `DockChrome` reads them when base doe
 ask. Writing them every frame rather than only on change is deliberate: a
 callback id is meaningful only while its snapshot lives, and materialization is
 the one place that always runs against the live one.
+
+`ScriptChrome` caches the `SpecArena` and root produced for each native
+container, together with the callback id and resolved JSON payload. A match
+replays that spec without entering QuickJS; a changed callback or payload
+replaces it. The cache is per retained dock and hard-bounded. It stores no
+`AnyElement`: the current frame still materializes the spec, which is how
+`dock_content()` consumes the native content handed over for that frame.
 
 `dock` is the only hook handed an element. An `AnyElement` cannot cross into
 script, so the engine installs it in `ContentSlot` for the length of the call and

@@ -5,7 +5,7 @@ use std::{rc::Rc, sync::Arc};
 use gpui::{
     AnyElement, AnyView, App, Bounds, Context, Div, DragMoveEvent, Empty, EventEmitter,
     FocusHandle, Focusable, InteractiveElement as _, IntoElement, ParentElement as _, Pixels,
-    Render, Stateful, Styled as _, WeakEntity, Window, div, prelude::FluentBuilder as _,
+    Render, Stateful, Styled as _, WeakEntity, Window, div, prelude::FluentBuilder as _, px,
 };
 
 use crate::Placement;
@@ -720,6 +720,14 @@ impl Render for TabGroup {
                     .flex()
                     .flex_col()
                     .when(!context.is_collapsed(), |this| this.flex_1())
+                    // A flex item's `min-height` is `auto`, so a column that
+                    // grows to fill the group is still floored by the height
+                    // its content wants. A panel holding a virtualized list
+                    // measured itself against every row rather than the region
+                    // it was given: the clip was right, so it looked correct,
+                    // and the list built rows nobody could see. Flooring it at
+                    // zero lets the region win.
+                    .min_h(px(0.))
                     .overflow_hidden()
                     // Both drag kinds hang off `droppable` alone. The old
                     // `TabPanel` nested a second guard inside the same
@@ -911,7 +919,6 @@ pub trait TabGroupRenderer: 'static {
     ) -> Stateful<Div> {
         div().id("tab-group-content")
     }
-
 
     fn render_tab_bar(
         &self,

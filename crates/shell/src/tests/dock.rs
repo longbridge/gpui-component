@@ -30,6 +30,19 @@ impl Render for Host {
 
 /// Boots a runtime with one application loaded, drawn in a real window.
 fn run(cx: &mut TestAppContext, source: &str) -> (gpui::Entity<ScriptView>, gpui::AnyWindowHandle) {
+    let (_runtime, view, window) = run_with_runtime(cx, source);
+    (view, window)
+}
+
+/// The same, for a test that reads the runtime's own metrics back.
+fn run_with_runtime(
+    cx: &mut TestAppContext,
+    source: &str,
+) -> (
+    Rc<ShellRuntime>,
+    gpui::Entity<ScriptView>,
+    gpui::AnyWindowHandle,
+) {
     cx.update(crate::init);
     let runtime = ShellRuntime::new_isolated().expect("runtime");
     cx.update(|cx| runtime.set_global(cx));
@@ -43,7 +56,7 @@ fn run(cx: &mut TestAppContext, source: &str) -> (gpui::Entity<ScriptView>, gpui
         Host(view)
     });
     let view = cx.update(|cx| window.root(cx).expect("root").read(cx).0.clone());
-    (view, window.into())
+    (runtime, view, window.into())
 }
 
 /// What the script last described, which is where these tests read the layout
@@ -145,12 +158,13 @@ fn a_script_dock_holds_the_panels_it_was_given(cx: &mut TestAppContext) {
 /// GPUI's layout pass.
 #[gpui::test]
 fn clicking_a_tab_the_chrome_drew_selects_it(cx: &mut TestAppContext) {
-    let (view, window) = run(cx, WORKSPACE);
+    let (runtime, view, window) = run_with_runtime(cx, WORKSPACE);
     let mut context = VisualTestContext::from_window(window, cx);
     context.simulate_resize(size(px(800.), px(600.)));
     context.update(|window, cx| window.draw(cx).clear(cx));
     context.run_until_parked();
     context.update(|window, cx| window.draw(cx).clear(cx));
+    let before_change = runtime.read_metrics().frame_script_calls();
 
     // Adding a panel displays it, so the second tab starts active. The first
     // is the first 80px slot of the bar base drew at the top of the area, which
@@ -167,8 +181,122 @@ fn clicking_a_tab_the_chrome_drew_selects_it(cx: &mut TestAppContext) {
 
     let tree = described(&mut context, &view);
     assert!(
+        runtime.read_metrics().frame_script_calls() > before_change,
+        "changing the active tab invalidates the cached tab-bar payload"
+    );
+    assert!(
         tree.contains("panels: shell:app/inbox@0*,shell:app/inbox@1"),
         "the clicked tab became the displayed one: {tree}"
+    );
+}
+
+#[gpui::test]
+fn unchanged_dock_chrome_does_not_reenter_quickjs(cx: &mut TestAppContext) {
+    let (runtime, _view, window) = run_with_runtime(cx, WORKSPACE);
+    let mut context = VisualTestContext::from_window(window, cx);
+    context.simulate_resize(size(px(800.), px(600.)));
+    context.run_until_parked();
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    let after_first = runtime.read_metrics().frame_script_calls();
+    assert!(
+        after_first > 0,
+        "the first chrome description must run its handler"
+    );
+
+    for _ in 0..5 {
+        context.update(|window, cx| window.draw(cx).clear(cx));
+    }
+    assert_eq!(
+        runtime.read_metrics().frame_script_calls(),
+        after_first,
+        "unchanged dock chrome must replay its cached spec without entering QuickJS"
+    );
+}
+
+/// A handler that returns `null` drew nothing, which is a description like any
+/// other: the hook is optional and `null` is its answer. Only a handler that
+/// *threw* is worth asking again, so the empty answer is cached and the next
+/// frame does not re-enter the VM to be told the same thing.
+#[gpui::test]
+fn a_null_chrome_description_is_cached_rather_than_retried(cx: &mut TestAppContext) {
+    const SOURCE: &str = r#"
+import { View, div } from "gpui";
+import { DockArea, dock_area } from "gpui-base";
+
+class Inbox extends View {
+  render() { return div().child("panel"); }
+}
+
+export default class Workspace extends View {
+  init(_props, cx) {
+    this.dock = DockArea.new("workspace");
+    this.dock.add_panel(cx.new(Inbox), { name: "inbox" });
+  }
+
+  render() { return dock_area(this.dock).size_full().tab_bar(() => null); }
+}
+"#;
+    let (runtime, _view, window) = run_with_runtime(cx, SOURCE);
+    let mut context = VisualTestContext::from_window(window, cx);
+    context.simulate_resize(size(px(800.), px(600.)));
+    context.run_until_parked();
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    let after_first = runtime.read_metrics().frame_script_calls();
+    assert!(
+        after_first > 0,
+        "the handler that answers null must be consulted once"
+    );
+
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    assert_eq!(
+        runtime.read_metrics().frame_script_calls(),
+        after_first,
+        "a successful null is an empty cached description, not an error to retry"
+    );
+}
+
+/// The retained-entity limit is the store's, not each constructor's.
+///
+/// The store is filled through one constructor and the refusal is read back
+/// through another: whatever a future constructor is, it inherits the limit by
+/// going through `push`, and the script sees the same `RangeError` either way.
+#[gpui::test]
+fn a_dock_area_obeys_the_retained_entity_limit(cx: &mut TestAppContext) {
+    const SOURCE: &str = r#"
+import { View, div } from "gpui";
+import { DockArea } from "gpui-base";
+
+export default class Probe extends View {
+  init(_props, cx) {
+    this.handles = [];
+    this.thrown = "nothing";
+    try {
+      for (;;) this.handles.push(cx.focus_handle());
+    } catch (error) {
+      this.filled = error.constructor.name;
+    }
+    try {
+      DockArea.new("overflow");
+    } catch (error) {
+      this.thrown = error.constructor.name + ":" + error.message;
+    }
+  }
+
+  render() { return div().child("filled:" + this.filled + " thrown:" + this.thrown); }
+}
+"#;
+    let (view, window) = run(cx, SOURCE);
+    let mut context = VisualTestContext::from_window(window, cx);
+    context.update(|window, cx| window.draw(cx).clear(cx));
+
+    let tree = described(&mut context, &view);
+    assert!(
+        tree.contains("filled:RangeError"),
+        "filling the store has to refuse rather than grow: {tree}"
+    );
+    assert!(
+        tree.contains("thrown:RangeError") && tree.contains("retained entity limit"),
+        "a full store refuses DockArea.new with the same error: {tree}"
     );
 }
 
@@ -329,7 +457,7 @@ export default class Workspace extends View {
   render() {
     return v_flex()
       .size_full()
-      .child(div().h(10).child("size: " + Math.round(this.dock.dock_size("left"))))
+      .child(div().h(10).child("size: " + Math.round(this.dock.dock_size("left")) + " open: " + this.dock.is_dock_open("left")))
       .child(
         dock_area(this.dock)
           .flex_1()
@@ -351,13 +479,19 @@ export default class Workspace extends View {
 
     let tree = described(&mut context, &view);
     assert!(
-        tree.contains("size: 200"),
+        tree.contains("size: 200 open: true"),
         "the dock kept the size it was given: {tree}"
     );
     assert!(
         tree.contains(":dock(fn)"),
         "the dock chrome handler is recorded: {tree}"
     );
+
+    // Nothing changed, so this frame replays the cached description rather than
+    // asking the handler again. The command the cached element carries still
+    // has to resolve — against the contexts *this* frame recorded, not the ones
+    // standing when the description was made.
+    context.update(|window, cx| window.draw(cx).clear(cx));
 
     // The collapse control the chrome drew sits at the top of the left dock.
     context.simulate_click(point(px(60.), px(20.)), Modifiers::default());
@@ -366,8 +500,8 @@ export default class Workspace extends View {
 
     let closed = described(&mut context, &view);
     assert!(
-        closed.contains("closed: ") || !closed.is_empty(),
-        "the chrome's own control reached base: {closed}"
+        closed.contains("open: false"),
+        "a command replayed from the cached chrome has to reach base: {closed}"
     );
 }
 
@@ -434,6 +568,28 @@ export default class Probe extends View {
 
   render() { return div().child("refused:" + this.refused.join(",")); }
 }
+"#;
+
+    let (view, window) = run(cx, SOURCE);
+    let mut context = VisualTestContext::from_window(window, cx);
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    let tree = described(&mut context, &view);
+    for expected in [
+        "version:TypeError",
+        "panel-id:TypeError",
+        "size:TypeError",
+        "panel-size:RangeError",
+        "bounds-x:TypeError",
+        "bounds-width:RangeError",
+        "name:TypeError",
+        "class:TypeError",
+    ] {
+        assert!(
+            tree.contains(expected),
+            "{expected} was not refused: {tree}"
+        );
+    }
+}
 
 #[gpui::test]
 fn programmatic_dock_size_change_reaches_persistence_subscriber(cx: &mut TestAppContext) {
@@ -474,23 +630,4 @@ export default class Probe extends View {
         tree.contains("events:2 size:333"),
         "the size edit must emit the event persistence listens to: {tree}"
     );
-}
-"#;
-
-    let (view, window) = run(cx, SOURCE);
-    let mut context = VisualTestContext::from_window(window, cx);
-    context.update(|window, cx| window.draw(cx).clear(cx));
-    let tree = described(&mut context, &view);
-    for expected in [
-        "version:TypeError",
-        "panel-id:TypeError",
-        "size:TypeError",
-        "panel-size:RangeError",
-        "bounds-x:TypeError",
-        "bounds-width:RangeError",
-        "name:TypeError",
-        "class:TypeError",
-    ] {
-        assert!(tree.contains(expected), "{expected} was not refused: {tree}");
-    }
 }

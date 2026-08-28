@@ -683,8 +683,8 @@ Wired is not the same as reachable. A key travels the focus path, so a component
 
 ### Dock commands
 
-What an element a dock's chrome drew *does*. A chrome handler runs once per
-container per frame, so it may not register an event handler — a command carries
+What an element a dock's chrome drew *does*. A cached chrome description has no
+script event-handler lifetime, so it may not register one — a command carries
 no script value instead, and base does the work. Every one takes the object its
 handler was given as its first argument, and they belong on a `div`, an
 `h_flex` or a `v_flex`.
@@ -706,8 +706,9 @@ handler was given as its first argument, and they belong on a `div`, an
 
 ### Dock chrome
 
-Six handlers, all optional, and legal only on a `dock_area(...)`. Each is called
-from inside GPUI's layout pass and given base's resolved state.
+Six handlers, all optional, and legal only on a `dock_area(...)`. Each is first
+called from inside GPUI's layout pass and given base's resolved state. Its
+description is cached until that state or handler changes.
 
 | Method | Draws |
 | --- | --- |

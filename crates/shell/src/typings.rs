@@ -1895,7 +1895,27 @@ const WINDOW: &str = r#"
      * from an event handler or a task.
      */
     set_rem_size(size: number): void;
-    /** `Window::refresh`: redraw every view in this window, not just this one. */
+    /**
+     * `Window::refresh`: redraw every view in this window, not just this one.
+     *
+     * The most expensive call on this object, and the one easiest to reach for.
+     * Every view rebuilds -- retained children, charts, virtualized lists, the
+     * lot -- so calling it where `cx.notify()` would do turns one view's update
+     * into all of them, and calling it per incoming message turns a data feed
+     * into a frame-rate problem. An application that pushed a quote through it
+     * for each tick of a live market watchlist measured seven frames a second.
+     *
+     * Reach for it only when there is genuinely no view to notify:
+     *
+     * - `cx.notify()` repaints the view that owns the state that changed, which
+     *   is almost always the right call.
+     * - `handle.set_props(...)` repaints a nested view from its parent.
+     * - A dock panel is the case that tempts you here, because a panel rebuilt
+     *   by `DockArea.load` is not the instance the script created and
+     *   `set_props` on the old handle reaches nothing. If you must refresh for
+     *   that reason, coalesce: let a timer collect a burst into one call rather
+     *   than making one per event.
+     */
     refresh(): void;
     /** `Window::focus_next`: move the keyboard to the next tab stop. */
     focus_next(): void;
@@ -3013,11 +3033,12 @@ const BASE: &str = r#"  /** A row. */
    * resizes and persists, painting only the panels — so every tab bar, dock
    * frame and drag bar is one of the six handlers below.
    *
-   * Each handler is called from inside GPUI's layout pass, once per container
-   * per frame, and is given base's own resolved state: never a drag event, a
-   * mouse position or a hit test. It may not register event handlers — a
-   * callback created there would pile up for as long as the dock stood — so the
-   * elements it returns say what they do with a **command** instead:
+   * Each handler is first called from inside GPUI's layout pass and is given
+   * base's own resolved state: never a drag event, a mouse position or a hit
+   * test. Its description is cached until that state or the handler changes,
+   * so unchanged frames do not enter JavaScript. It may not register event
+   * handlers — cached chrome has no script callback lifecycle of its own — so
+   * the elements it returns say what they do with a **command** instead:
    * `select_tab(group, i)`, `close_panel(group, id)`, `toggle_dock(dock)`,
    * `move_tile(tile)` and the rest. A command carries no script value, and base
    * does the work.

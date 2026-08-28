@@ -1875,17 +1875,6 @@ impl DockContext {
     }
 }
 
-/// Appearance for the dock area. Base draws none of it.
-///
-/// The frame hooks return the element itself rather than wrapping one, for the
-/// same reason [`TabGroupRenderer`]'s do: base tracks focus and records the
-/// area bounds on the very element the skin styles.
-///
-/// There is no separate `render_resize_handle` hook. A handle needs to be
-/// positioned against the dock it resizes, and positioning is the skin's; the
-/// skin draws it inside [`Self::render_dock`] and drives it through
-/// [`DockContext::resize_to`].
-#[allow(unused_variables)]
 /// A closed bottom dock keeps this much, so its tab bar stays clickable. A
 /// closed side dock keeps nothing: there is no tab bar left to click at zero
 /// width, and reopening it is the application's to offer.
@@ -1919,6 +1908,17 @@ pub fn dock_frame(dock: &DockContext, size: Pixels) -> Div {
         })
 }
 
+/// Appearance for the dock area. Base draws none of it.
+///
+/// The frame hooks return the element itself rather than wrapping one, for the
+/// same reason [`TabGroupRenderer`]'s do: base tracks focus and records the
+/// area bounds on the very element the skin styles.
+///
+/// There is no separate `render_resize_handle` hook. A handle needs to be
+/// positioned against the dock it resizes, and positioning is the skin's; the
+/// skin draws it inside [`Self::render_dock`] and drives it through
+/// [`DockContext::resize_to`].
+#[allow(unused_variables)]
 pub trait DockAreaRenderer: 'static {
     /// The area's outer frame, which base records its bounds on.
     /// Appearance only. The area is laid out as a row around whatever this
@@ -1947,7 +1947,6 @@ pub trait DockAreaRenderer: 'static {
     ) -> Stateful<Div> {
         div().id(("dock-split-frame", node.as_u64()))
     }
-
 
     /// The column holding the center region and the bottom dock.
     /// Appearance only; see [`DockAreaRenderer::frame`]. The centre fills what
@@ -2109,7 +2108,11 @@ mod tests {
                 area.set_dock_size(DockPlacement::Left, px(320.), window, cx);
             });
         });
-        assert_eq!(events.get(), 1, "only an effective size change is persisted");
+        assert_eq!(
+            events.get(),
+            1,
+            "only an effective size change is persisted"
+        );
     }
 
     /// Two tab groups side by side, holding one logging panel each.

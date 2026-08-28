@@ -14,16 +14,18 @@
 //! description would put every one of them back the way the last render
 //! described it.
 //!
-//! **The chrome, called from layout.** The six handlers a script hangs on
-//! `dock_area(...)` are called from inside GPUI's layout pass, exactly as a
-//! virtual list's item renderer is, and with the same three protections — a
-//! [`ScopePhase::Layout`] scope, an arena of its own, and no job drain on the
-//! way out. See [`ShellRuntime::render_dock_chrome`].
+//! **The chrome, requested from layout.** The six handlers a script hangs on
+//! `dock_area(...)` are first requested from inside GPUI's layout pass, exactly
+//! as a virtual list's item renderer is, and with the same three protections —
+//! a [`ScopePhase::Layout`] scope, an arena of its own, and no job drain on the
+//! way out. Their descriptions are then cached by callback and resolved native
+//! state, so an unchanged frame replays Rust data rather than entering the VM.
+//! See [`ShellRuntime::describe_dock_chrome`].
 //!
 //! **Commands, not callbacks.** A tab's click does not carry a script function.
-//! A chrome handler runs once per frame for as long as the dock is on screen,
-//! so a handler registered inside one would pile up the way a virtual list's
-//! row handlers would. Instead a chrome element carries a
+//! A chrome handler may rerun whenever its native state changes, so a handler
+//! registered inside one would outlive the temporary description unpredictably.
+//! Instead a chrome element carries a
 //! [`DockCommand`](crate::dock::DockCommand) — `select_tab(group, i)`,
 //! `close_panel(group, id)`, `move_tile(tile)` — which names a container and
 //! what to ask it, and is resolved against the contexts the last drawn frame
@@ -58,7 +60,7 @@ use crate::{
     entities::EntityHandle,
     materialize::dock_placement,
     scope::{self, ScopePhase},
-    spec::{CallbackId, Component},
+    spec::{CallbackId, Component, SpecArena, SpecId},
     view::ScriptView,
 };
 
@@ -106,13 +108,7 @@ pub fn install(
                             window,
                             cx,
                         )
-                        .map_err(|_| {
-                            Exception::throw_range(
-                                &ctx,
-                                "the application reached gpui-shell's retained entity limit; \
-                                 release unused handles",
-                            )
-                        })
+                        .map_err(|_| super::entity_api::entity_limit_reached(&ctx))
                 })
                 .ok_or_else(|| {
                     Exception::throw_type(
@@ -605,11 +601,39 @@ impl<'js> rquickjs::FromJs<'js> for JsonArgument {
 ///
 /// It holds no handlers of its own: which script function draws each piece is
 /// written by [`crate::materialize`] into the slots it shares with the skin,
-/// once per frame, because a handler belongs to the snapshot that registered it
-/// and the skin outlives every snapshot.
+/// whenever a snapshot is replayed. The skin outlives every snapshot, while
+/// callback ids and cached descriptions remain tied to the snapshot that
+/// registered them.
 pub(super) struct ScriptChrome {
     runtime: std::rc::Weak<ShellRuntime>,
     slots: Rc<crate::dock::DockChromeSlots>,
+    cache: RefCell<HashMap<ChromeSlotKey, ChromeSpec>>,
+}
+
+const MAX_CHROME_CACHE_ENTRIES: usize = 4_096;
+
+/// Which piece of chrome a cached description belongs to, named so that the
+/// same container asking again lands on the same entry.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum ChromeSlotKey {
+    TabBar(u64),
+    EmptyGroup(u64),
+    /// The one hook with no container in its key, because an area never draws
+    /// two at once: a group raises its indicator only while its own bounds hold
+    /// the pointer, and clears it on the same drag move when they do not, so
+    /// the group under the pointer is the only one with an indicator to draw.
+    /// [`DropIndicator`] carries no node id to key on either.
+    DropIndicator,
+    Dock(DockPlacement),
+    TileDragBar(u64),
+    TileResizeHandles(u64),
+}
+
+struct ChromeSpec {
+    callback: CallbackId,
+    payload: Json,
+    arena: SpecArena,
+    root: Option<SpecId>,
 }
 
 impl ScriptChrome {
@@ -617,6 +641,7 @@ impl ScriptChrome {
         Self {
             runtime,
             slots: Rc::new(crate::dock::DockChromeSlots::default()),
+            cache: RefCell::new(HashMap::new()),
         }
     }
 
@@ -624,9 +649,17 @@ impl ScriptChrome {
         self.slots.clone()
     }
 
-    /// Runs one handler and materializes the single element it described.
+    /// Answers one hook: the description this callback and this state produced,
+    /// materialized into an element for the frame being drawn.
+    ///
+    /// The handler runs only when there is no description for that pair yet. A
+    /// description that threw is not one — it is retried on the next frame,
+    /// after the entry that stood before it is left alone, because the state it
+    /// answers is the state that just failed. A description that answered
+    /// `null` is one: the hook is optional, and nothing is a valid answer.
     fn draw(
         &self,
+        key: ChromeSlotKey,
         handler: Option<CallbackId>,
         payload: Json,
         window: &mut Window,
@@ -634,7 +667,42 @@ impl ScriptChrome {
     ) -> Option<AnyElement> {
         let handler = handler?;
         let runtime = self.runtime.upgrade()?;
-        runtime.render_dock_chrome(handler, payload, window, cx)
+        let stale = self
+            .cache
+            .borrow()
+            .get(&key)
+            .is_none_or(|cached| cached.callback != handler || cached.payload != payload);
+        if stale {
+            let (arena, root) = runtime.describe_dock_chrome(handler, &payload, window, cx)?;
+            let mut cache = self.cache.borrow_mut();
+            // Past the bound the whole cache goes rather than one entry: which
+            // container is worth keeping is not a question this has an answer
+            // to, and an area with thousands of live containers is describing
+            // each of them again anyway.
+            if cache.len() >= MAX_CHROME_CACHE_ENTRIES && !cache.contains_key(&key) {
+                cache.clear();
+            }
+            cache.insert(
+                key,
+                ChromeSpec {
+                    callback: handler,
+                    payload,
+                    arena,
+                    root,
+                },
+            );
+        }
+
+        // Taken out for the length of the materialization rather than borrowed
+        // across it: materializing reaches back into the runtime with the same
+        // `cx`, and a borrow held over that is a panic waiting for the first
+        // description that draws a dock inside a dock.
+        let spec = self.cache.borrow_mut().remove(&key)?;
+        let element = spec.root.map(|root| {
+            crate::materialize::materialize_subtree(&runtime, &spec.arena, root, window, cx)
+        });
+        self.cache.borrow_mut().insert(key, spec);
+        element
     }
 }
 
@@ -642,8 +710,14 @@ impl DockChrome for ScriptChrome {
     fn tab_bar(&self, group: &TabGroupContext, window: &mut Window, cx: &mut App) -> AnyElement {
         let hooks = self.slots.get();
         let payload = tab_group_data(group, cx);
-        self.draw(hooks.tab_bar, payload, window, cx)
-            .unwrap_or_else(|| Empty.into_any_element())
+        self.draw(
+            ChromeSlotKey::TabBar(group.node().as_u64()),
+            hooks.tab_bar,
+            payload,
+            window,
+            cx,
+        )
+        .unwrap_or_else(|| Empty.into_any_element())
     }
 
     fn empty_group(
@@ -654,7 +728,13 @@ impl DockChrome for ScriptChrome {
     ) -> Option<AnyElement> {
         let hooks = self.slots.get();
         let payload = tab_group_data(group, cx);
-        self.draw(hooks.empty_group, payload, window, cx)
+        self.draw(
+            ChromeSlotKey::EmptyGroup(group.node().as_u64()),
+            hooks.empty_group,
+            payload,
+            window,
+            cx,
+        )
     }
 
     fn drop_indicator(
@@ -665,7 +745,13 @@ impl DockChrome for ScriptChrome {
     ) -> Option<AnyElement> {
         let hooks = self.slots.get();
         let payload = drop_indicator_data(&indicator);
-        self.draw(hooks.drop_indicator, payload, window, cx)
+        self.draw(
+            ChromeSlotKey::DropIndicator,
+            hooks.drop_indicator,
+            payload,
+            window,
+            cx,
+        )
     }
 
     /// The one hook that is handed an element rather than only state.
@@ -688,7 +774,13 @@ impl DockChrome for ScriptChrome {
         };
         let payload = dock_data(dock);
         let slot = crate::dock::ContentSlot::install(content);
-        let drawn = self.draw(Some(handler), payload, window, cx);
+        let drawn = self.draw(
+            ChromeSlotKey::Dock(dock.placement()),
+            Some(handler),
+            payload,
+            window,
+            cx,
+        );
         let unplaced = slot.unplaced();
         drop(slot);
 
@@ -713,8 +805,14 @@ impl DockChrome for ScriptChrome {
     fn tile_drag_bar(&self, tile: &TileContext, window: &mut Window, cx: &mut App) -> AnyElement {
         let hooks = self.slots.get();
         let payload = tile_data(tile, cx);
-        self.draw(hooks.tile_drag_bar, payload, window, cx)
-            .unwrap_or_else(|| Empty.into_any_element())
+        self.draw(
+            ChromeSlotKey::TileDragBar(tile.panel_id().as_u64()),
+            hooks.tile_drag_bar,
+            payload,
+            window,
+            cx,
+        )
+        .unwrap_or_else(|| Empty.into_any_element())
     }
 
     fn tile_resize_handles(
@@ -725,7 +823,13 @@ impl DockChrome for ScriptChrome {
     ) -> Option<AnyElement> {
         let hooks = self.slots.get();
         let payload = tile_data(tile, cx);
-        self.draw(hooks.tile_resize_handles, payload, window, cx)
+        self.draw(
+            ChromeSlotKey::TileResizeHandles(tile.panel_id().as_u64()),
+            hooks.tile_resize_handles,
+            payload,
+            window,
+            cx,
+        )
     }
 }
 
@@ -966,10 +1070,7 @@ fn finite_non_negative(ctx: &Ctx<'_>, value: f32, api: &str) -> JsResult<()> {
 }
 
 fn non_negative_integer(ctx: &Ctx<'_>, value: f64, api: &str) -> JsResult<u64> {
-    if !value.is_finite()
-        || value < 0.0
-        || value.fract() != 0.0
-        || value > 9_007_199_254_740_991.0
+    if !value.is_finite() || value < 0.0 || value.fract() != 0.0 || value > 9_007_199_254_740_991.0
     {
         return Err(Exception::throw_type(
             ctx,
@@ -1004,9 +1105,9 @@ fn refuse_in_render(ctx: &Ctx<'_>, api: &str) -> JsResult<()> {
 
 /// A JSON document as a JavaScript value.
 ///
-/// Written out rather than routed through `JSON.parse`: the chrome payloads
-/// cross once per hook per frame, and a string built and reparsed on that path
-/// would be the one allocation nobody could see.
+/// Written out rather than routed through `JSON.parse`: a chrome payload crosses
+/// on every cache miss, and a string built and reparsed there would be an
+/// otherwise unnecessary allocation.
 pub(super) fn to_js<'js>(ctx: &Ctx<'js>, value: &Json) -> JsResult<Value<'js>> {
     Ok(match value {
         Json::Null => Value::new_null(ctx.clone()),

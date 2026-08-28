@@ -6,7 +6,7 @@ use std::{ops::Deref as _, rc::Rc, sync::Arc};
 use gpui::{
     AnyElement, App, AppContext as _, Axis, Context, Div, Element, Empty, InteractiveElement as _,
     IntoElement, MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Render, Stateful, Style,
-    Styled as _, Window, div, prelude::FluentBuilder as _, px,
+    Styled as _, Window, div, prelude::FluentBuilder as _,
 };
 use gpui_base::dock::{
     DockAreaRenderer, DockContext, DockEvent, DockPlacement, NodeId, PanelState, PanelView,
@@ -21,7 +21,6 @@ use crate::{
     },
     resize_handle,
 };
-
 
 /// The payload a dock's resize handle drags. It draws nothing: the handle
 /// itself is the affordance.
@@ -257,7 +256,6 @@ mod tests {
         test_support::{MeasuredProbe, SizedProbe},
     };
 
-
     /// A renderer that draws no chrome at all: every hook at its trait default.
     ///
     /// This is the position every renderer that is not `DockSkin` starts from,
@@ -350,7 +348,8 @@ mod tests {
 
         let dock = measured.get().width;
         assert_eq!(
-            dock, px(200.),
+            dock,
+            px(200.),
             "the right dock has to be its own width, not the area's: got {dock:?}"
         );
         // The other half of the same fault: a dock area that is not a row puts
@@ -358,7 +357,8 @@ mod tests {
         // it at what the dock leaves.
         let middle = centre.get().width;
         assert_eq!(
-            middle, px(600.),
+            middle,
+            px(600.),
             "the centre has to be what the docks leave: got {middle:?}"
         );
         // This renderer draws no tab bar, so a group that fills its slot leaves
@@ -368,7 +368,8 @@ mod tests {
         // resolves to zero and the group is a strip of tabs.
         let tall = centre.get().height;
         assert_eq!(
-            tall, px(600.),
+            tall,
+            px(600.),
             "a group has to fill its slot, or its panel gets no height: got {tall:?}"
         );
     }

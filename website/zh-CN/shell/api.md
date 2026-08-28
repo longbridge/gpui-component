@@ -683,7 +683,7 @@ render(_cx) {
 
 ### Dock 命令
 
-dock 的 chrome 画出来的元素*做什么*。chrome handler 每个容器每帧调用一次，所以它里面不能注册事件处理器——取而代之的是不携带任何脚本值的命令，由 base 完成实际动作。每一个的第一个参数都是它所在 handler 拿到的那个对象；它们只能挂在 `div`、`h_flex` 或 `v_flex` 上。
+dock 的 chrome 画出来的元素*做什么*。缓存的 chrome 描述没有脚本事件处理器的生命周期，所以其中不能注册事件处理器——取而代之的是不携带任何脚本值的命令，由 base 完成实际动作。每一个的第一个参数都是它所在 handler 拿到的那个对象；它们只能挂在 `div`、`h_flex` 或 `v_flex` 上。
 
 | 方法 | 触发 | 作用 |
 | --- | --- | --- |
@@ -702,7 +702,7 @@ dock 的 chrome 画出来的元素*做什么*。chrome handler 每个容器每�
 
 ### Dock chrome
 
-六个 handler，全都可选，且只能挂在 `dock_area(...)` 上。每一个都在 GPUI 的 layout pass 内部被调用，拿到的是 base 已经解析好的状态。
+六个 handler，全都可选，且只能挂在 `dock_area(...)` 上。每一个都会先在 GPUI 的 layout pass 内部被调用，拿到的是 base 已经解析好的状态；描述会缓存到该状态或 handler 改变为止。
 
 | 方法 | 画什么 |
 | --- | --- |

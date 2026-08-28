@@ -36,7 +36,6 @@ use crate::{
     h_flex,
     menu::DropdownMenu as _,
     tab::{Tab, TabBar},
-    v_flex,
 };
 
 /// Names the tab bar's zoom button in the debug-bounds map, so a test can ask
@@ -695,9 +694,7 @@ impl TabGroupRenderer for TabGroupSkin {
 
         // The fill and the collapsed-group exception are base's; the padding
         // is this skin's, and is the only reason this hook is implemented.
-        div()
-            .id("active-panel")
-            .when(padded, |this| this.pt_2())
+        div().id("active-panel").when(padded, |this| this.pt_2())
     }
 
     fn render_tab_bar(

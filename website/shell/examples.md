@@ -97,7 +97,7 @@ Three things in it are the point.
 
 **Base draws no chrome, so all of it is in `ui.js`.** The tab bar, the dock's title strip, the collapse control, the resize handle and the drop hint are ordinary elements written with the ordinary style surface. An area with none of them still docks, drags, resizes and persists; it simply paints nothing but the panels.
 
-**A tab carries commands, not handlers.** A chrome handler runs once per container per frame for as long as the dock is on screen, so a callback registered inside one would pile up. `select_tab(group, tab.index)` and `close_panel(group, tab.id)` carry no script value at all — they name a container and what to ask it.
+**A tab carries commands, not handlers.** A chrome description is cached until its native state changes, so a script event handler inside it would have no sound lifetime. `select_tab(group, tab.index)` and `close_panel(group, tab.id)` carry no script value at all — they name a container and what to ask it.
 
 **A panel is a view with two extra methods.** `Document.serialize()` returns its caption and its edit count; `deserialize(data)` takes them back after a restart. Everything else about the panel — where it sits, whether it is displayed — is the layout's business and never reaches the script.
 

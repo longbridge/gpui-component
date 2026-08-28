@@ -22,10 +22,10 @@
 //!   a script wants has to come back through the three renderer traits. The
 //!   skin forwards each one to [`DockChrome`], and a skin with no chrome is
 //!   still a working dock.
-//! - A **dock command** is what a chrome element *does*. A chrome callback runs
-//!   once per container per frame for as long as the dock is on screen, so it
-//!   may not register a handler — one created there would pile up for as long
-//!   as the dock stood. A command names a container and what to ask it,
+//! - A **dock command** is what a chrome element *does*. A chrome description
+//!   is cached until its callback or resolved native state changes, so it may
+//!   not register a handler — cached elements have no script callback lifetime.
+//!   A command names a container and what to ask it,
 //!   carries no script value at all, and is resolved against the contexts the
 //!   last drawn frame recorded, when the pointer arrives.
 //!
@@ -46,9 +46,9 @@ use std::{
 };
 
 use gpui::{
-    AnyElement, App, AppContext as _, Context, Div, Empty, Entity, EventEmitter, FocusHandle,
-    Focusable, InteractiveElement as _, IntoElement, ParentElement as _, Render, Stateful,
-    Styled as _, Window, div,
+    AnyElement, AnyView, App, AppContext as _, Context, Div, Empty, Entity, EventEmitter,
+    FocusHandle, Focusable, InteractiveElement as _, IntoElement, ParentElement as _, Render,
+    Stateful, Styled as _, Window, div,
 };
 use gpui_base::dock::{
     DockAreaRenderer, DockContext, DockPlacement, DropIndicator, DropPlaceholderBounds, Panel,
@@ -962,6 +962,26 @@ impl TabGroupRenderer for ScriptDockSkin {
         in_layout_scope(window, cx, |window, cx| {
             self.chrome.tab_bar(group, window, cx)
         })
+    }
+
+    /// Nothing at all while the group is folded away.
+    ///
+    /// A collapsed group is a strip of tabs with no content region, and the
+    /// trait's default still renders the panel into it -- so the pane the user
+    /// folded away went on paying for itself behind the fold. The host's own
+    /// `TabPanel` has always drawn a collapsed group empty.
+    fn render_active_panel(
+        &self,
+        panel: AnyView,
+        group: &TabGroupContext,
+        _: &mut Window,
+        _: &mut App,
+    ) -> AnyElement {
+        if group.is_collapsed() {
+            return Empty.into_any_element();
+        }
+
+        panel.into_any_element()
     }
 
     fn render_empty(

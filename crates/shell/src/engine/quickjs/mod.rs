@@ -999,17 +999,21 @@ impl ShellRuntime {
             }
         };
 
-        if self.entities().len() >= crate::entities::MAX_LIVE_ENTITIES {
-            self.rollback_retained_since(entity_checkpoint, task_checkpoint, cx);
-            anyhow::bail!(
-                "the application reached gpui-shell's retained entity limit; release unused handles"
-            );
-        }
         let view =
             cx.new(|cx| ScriptView::nested(self.clone(), object, policy.clone(), cx.entity_id()));
-        let handle = self
+        let handle = match self
             .entities()
-            .create_view(view.clone(), application.clone(), self);
+            .create_view(view.clone(), application.clone(), self)
+        {
+            Ok(handle) => handle,
+            Err(_) => {
+                self.rollback_retained_since(entity_checkpoint, task_checkpoint, cx);
+                anyhow::bail!(
+                    "the application reached gpui-shell's retained entity limit; release unused \
+                     handles"
+                );
+            }
+        };
         let object = view.read(cx).object().clone();
 
         let (_initialize_scope, _) = scope::enter_with_application(
@@ -1399,7 +1403,14 @@ impl ShellRuntime {
                 child.application_generation(),
             )
         };
-        let state_checkpoint = self.checkpoint_view_object(&object)?;
+        // Only when the child has an `update` to run. Nothing else in this
+        // path is script, so a child without one has nothing that could need
+        // rolling back -- and the checkpoint is the most expensive thing here
+        // by a wide margin: it walks every object reachable from the instance
+        // and reads a descriptor for every property on each. A view that holds
+        // its application, which is the ordinary way to write one, therefore
+        // paid for the whole model on every `set_props`.
+        let state_checkpoint = self.checkpoint_view_object_if_updatable(&object)?;
         let entity_checkpoint = { self.entities().checkpoint() };
         let task_checkpoint = scheduler::checkpoint_runtime_tasks(self);
         let (event_scope, _) = scope::enter_with_application(
@@ -1423,7 +1434,10 @@ impl ShellRuntime {
                 Ok(())
             }
             Err(error) => {
-                let restored = self.restore_view_object(state_checkpoint);
+                let restored = match state_checkpoint {
+                    Some(checkpoint) => self.restore_view_object(checkpoint),
+                    None => Ok(()),
+                };
                 self.rollback_retained_since(entity_checkpoint, task_checkpoint, cx);
                 if let Err(restore) = restored {
                     return Err(error.context(format!("failed to restore child state: {restore}")));
@@ -1491,6 +1505,26 @@ impl ShellRuntime {
     /// the instance. Private/internal slots, non-configurable additions, and a
     /// property hardened from configurable to non-configurable cannot be
     /// restored by JavaScript reflection.
+    /// The checkpoint, for a child that has script to run.
+    ///
+    /// `update_in_context` returns without calling anything when the instance
+    /// has no `update`, so for such a child the walk journals a graph nothing
+    /// is going to touch.
+    fn checkpoint_view_object_if_updatable(
+        &self,
+        object: &ViewObject,
+    ) -> Result<Option<ViewStateCheckpoint>> {
+        let updatable = self.with_js(|ctx| {
+            let instance = object.value.clone().restore(ctx)?;
+            let update: Value = instance.get("update")?;
+            Ok(!(update.is_undefined() || update.is_null()))
+        })?;
+        if !updatable {
+            return Ok(None);
+        }
+        self.checkpoint_view_object(object).map(Some)
+    }
+
     fn checkpoint_view_object(&self, object: &ViewObject) -> Result<ViewStateCheckpoint> {
         self.with_js(|ctx| {
             let instance = object.value.clone().restore(ctx)?;
@@ -1786,20 +1820,22 @@ impl ShellRuntime {
     /// to run one.
     ///
     /// It differs from the list in one way. A chrome handler is called once per
-    /// container per frame for as long as the dock is on screen, so it may not
-    /// register callbacks of its own — the `Layout` phase already refuses that
-    /// — and its elements report what they do through
+    /// callback-and-payload combination, then its description is replayed from
+    /// the owning dock's bounded cache. It may not register callbacks of its
+    /// own — the `Layout` phase already refuses that — and its elements report
+    /// what they do through
     /// [`DockCommand`](crate::dock::DockCommand)s instead.
     ///
-    /// `None` means the script drew nothing: the handler returned `null`, or it
-    /// threw. Either way base's own behavior for that hook stands.
-    pub(super) fn render_dock_chrome(
+    /// The outer `None` means the handler was unavailable or threw and must not
+    /// be cached. An inner `None` root is a successful `null`: valid empty
+    /// chrome which the caller can cache like any other description.
+    pub(super) fn describe_dock_chrome(
         self: &Rc<Self>,
         id: CallbackId,
-        payload: serde_json::Value,
+        payload: &serde_json::Value,
         window: &mut Window,
         cx: &mut App,
-    ) -> Option<gpui::AnyElement> {
+    ) -> Option<(SpecArena, Option<SpecId>)> {
         let entry = self.callbacks.borrow().get(id)?;
 
         if entry
@@ -1838,7 +1874,7 @@ impl ShellRuntime {
             let described = self.with_js(|ctx| {
                 let handler = entry.value.clone().restore(ctx)?;
                 let produced: Value = handler.call((
-                    dock_api::to_js(ctx, &payload)?,
+                    dock_api::to_js(ctx, payload)?,
                     context_object(ctx, ContextBinding::Call(generation))?,
                 ))?;
                 if produced.is_null() || produced.is_undefined() {
@@ -1849,10 +1885,7 @@ impl ShellRuntime {
             let arena = std::mem::replace(&mut *self.arena.borrow_mut(), outer);
 
             match described {
-                Ok(Some(root)) => Some(crate::materialize::materialize_subtree(
-                    self, &arena, root, window, cx,
-                )),
-                Ok(None) => None,
+                Ok(root) => Some((arena, root)),
                 Err(error) => {
                     tracing::error!("error in a dock chrome handler: {error}");
                     None
@@ -7506,8 +7539,9 @@ export default class Child extends View {
         let window = cx.add_window(|_, _| gpui::Empty);
         let mut context = VisualTestContext::from_window(*window, cx);
         let tasks_before = task_count();
-        let application_focus =
-            context.update(|_, cx| runtime.entities().create_focus(Some(application), cx));
+        let application_focus = context
+            .update(|_, cx| runtime.entities().create_focus(Some(application), cx))
+            .expect("room for one focus handle");
         assert!(
             !context.update(|_, cx| runtime.release_view_handle(application_focus, cx)),
             "typed view release must reject a live handle of another retained type"
@@ -7744,8 +7778,9 @@ export default class BrokenChild extends View {
             .expect("props");
         let window = cx.add_window(|_, _| gpui::Empty);
         let mut context = VisualTestContext::from_window(*window, cx);
-        let application_focus =
-            context.update(|_, cx| runtime.entities().create_focus(Some(application), cx));
+        let application_focus = context
+            .update(|_, cx| runtime.entities().create_focus(Some(application), cx))
+            .expect("room for one focus handle");
         let records_before = runtime.entities().len();
         let tasks_before = task_count();
 

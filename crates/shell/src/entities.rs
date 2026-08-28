@@ -278,13 +278,12 @@ impl EntityStore {
         view: Entity<ScriptView>,
         application: Option<Rc<ApplicationGeneration>>,
         runtime: &Rc<ShellRuntime>,
-    ) -> EntityHandle {
+    ) -> Result<EntityHandle, EntityLimitError> {
         self.push(Record::View {
             view,
             application,
             runtime: Rc::downgrade(runtime),
         })
-        .expect("view construction checks the retained-entity limit")
     }
 
     /// The nested script view behind a handle, if it is live and belongs here.
@@ -308,7 +307,8 @@ impl EntityStore {
         application: Option<Rc<ApplicationGeneration>>,
         window: &mut Window,
         cx: &mut App,
-    ) -> EntityHandle {
+    ) -> Result<EntityHandle, EntityLimitError> {
+        self.ensure_capacity()?;
         let state = cx.new(|cx| {
             let mut state = InputState::new(window, cx);
             if let Some(placeholder) = placeholder {
@@ -327,7 +327,6 @@ impl EntityStore {
             application,
             subscriptions: Vec::new(),
         })
-        .expect("input construction checks the retained-entity limit")
     }
 
     /// The entity behind an input handle, if it is still live and belongs here.
@@ -355,7 +354,8 @@ impl EntityStore {
         application: Option<Rc<ApplicationGeneration>>,
         window: &mut Window,
         cx: &mut App,
-    ) -> EntityHandle {
+    ) -> Result<EntityHandle, EntityLimitError> {
+        self.ensure_capacity()?;
         let state = cx.new(|cx| {
             let mut state = TextareaState::new(window, cx);
             if let Some(placeholder) = placeholder {
@@ -377,7 +377,6 @@ impl EntityStore {
             application,
             subscriptions: Vec::new(),
         })
-        .expect("textarea construction checks the retained-entity limit")
     }
 
     /// The entity behind a textarea handle, if it is still live and belongs
@@ -415,7 +414,8 @@ impl EntityStore {
         value: SliderValue,
         application: Option<Rc<ApplicationGeneration>>,
         cx: &mut App,
-    ) -> EntityHandle {
+    ) -> Result<EntityHandle, EntityLimitError> {
+        self.ensure_capacity()?;
         let state = cx.new(|_| {
             SliderState::new()
                 .min(min)
@@ -430,7 +430,6 @@ impl EntityStore {
             application,
             subscriptions: Vec::new(),
         })
-        .expect("slider construction checks the retained-entity limit")
     }
 
     /// The entity behind a slider handle, if it is still live and belongs here.
@@ -458,7 +457,8 @@ impl EntityStore {
         application: Option<Rc<ApplicationGeneration>>,
         window: &mut Window,
         cx: &mut App,
-    ) -> EntityHandle {
+    ) -> Result<EntityHandle, EntityLimitError> {
+        self.ensure_capacity()?;
         let state = cx.new(|cx| {
             let state = OtpState::new(length, window, cx).masked(masked);
             match value {
@@ -472,7 +472,6 @@ impl EntityStore {
             application,
             subscriptions: HashMap::new(),
         })
-        .expect("OTP construction checks the retained-entity limit")
     }
 
     /// Creates a calendar state and returns its handle.
@@ -484,14 +483,14 @@ impl EntityStore {
         application: Option<Rc<ApplicationGeneration>>,
         window: &mut Window,
         cx: &mut App,
-    ) -> EntityHandle {
+    ) -> Result<EntityHandle, EntityLimitError> {
+        self.ensure_capacity()?;
         let state = cx.new(|cx| CalendarState::new(window, cx));
         self.push(Record::Calendar {
             state,
             application,
             subscriptions: Vec::new(),
         })
-        .expect("calendar construction checks the retained-entity limit")
     }
 
     /// The entity behind a calendar handle, if it is still live and belongs
@@ -641,12 +640,11 @@ impl EntityStore {
         &mut self,
         application: Option<Rc<ApplicationGeneration>>,
         cx: &mut App,
-    ) -> EntityHandle {
+    ) -> Result<EntityHandle, EntityLimitError> {
         self.push(Record::Focus {
             handle: cx.focus_handle(),
             application,
         })
-        .expect("focus construction checks the retained-entity limit")
     }
 
     /// The focus handle behind a handle, if it is still live and belongs here.
@@ -666,12 +664,11 @@ impl EntityStore {
     pub fn create_virtual_scroll(
         &mut self,
         application: Option<Rc<ApplicationGeneration>>,
-    ) -> EntityHandle {
+    ) -> Result<EntityHandle, EntityLimitError> {
         self.push(Record::VirtualScroll {
             handle: VirtualListScrollHandle::new(),
             application,
         })
-        .expect("virtual-scroll construction checks the retained-entity limit")
     }
 
     /// The scroll position behind a handle, if it is still live and belongs
@@ -960,8 +957,10 @@ impl EntityStore {
         }
     }
 
-    /// How many handles are live, for `gc_stats` and for tests that assert the
-    /// store does not grow without bound.
+    /// How many handles are live, for tests that assert the store does not grow
+    /// without bound. Nothing in the runtime asks: the capacity is enforced
+    /// inside [`Self::push`], which is the only way a record gets in.
+    #[cfg(test)]
     pub fn len(&self) -> usize {
         self.records.len()
     }
@@ -1336,15 +1335,21 @@ mod tests {
         let window = cx.add_window(|_, _| gpui::Empty);
         let mut context = VisualTestContext::from_window(*window, cx);
 
-        let first = context.update(|window, cx| store.create_input(None, None, None, window, cx));
+        let first = context
+            .update(|window, cx| store.create_input(None, None, None, window, cx))
+            .expect("room");
         assert!(store.release(first));
-        let second = context.update(|window, cx| store.create_input(None, None, None, window, cx));
+        let second = context
+            .update(|window, cx| store.create_input(None, None, None, window, cx))
+            .expect("room");
         assert_ne!(first, second);
         assert!(store.input(first).is_none());
         assert!(store.input(second).is_some());
 
         store.clear();
-        let third = context.update(|window, cx| store.create_input(None, None, None, window, cx));
+        let third = context
+            .update(|window, cx| store.create_input(None, None, None, window, cx))
+            .expect("room");
         assert_ne!(second, third);
         assert!(store.input(second).is_none());
         assert!(store.input(third).is_some());
@@ -1358,8 +1363,12 @@ mod tests {
         let window = cx.add_window(|_, _| gpui::Empty);
         let mut context = VisualTestContext::from_window(*window, cx);
 
-        let focus = context.update(|_, cx| store.create_focus(None, cx));
-        let input = context.update(|window, cx| store.create_input(None, None, None, window, cx));
+        let focus = context
+            .update(|_, cx| store.create_focus(None, cx))
+            .expect("room");
+        let input = context
+            .update(|window, cx| store.create_input(None, None, None, window, cx))
+            .expect("room");
 
         // The two kinds do not answer for each other, which is what stops a
         // script from rendering an input where it asked for a focus target.
@@ -1382,9 +1391,12 @@ mod tests {
         let window = cx.add_window(|_, _| gpui::Empty);
         let mut context = VisualTestContext::from_window(*window, cx);
 
-        let input = context.update(|window, cx| store.create_input(None, None, None, window, cx));
+        let input = context
+            .update(|window, cx| store.create_input(None, None, None, window, cx))
+            .expect("room");
         let textarea = context
-            .update(|window, cx| store.create_textarea(None, None, Some(4), None, window, cx));
+            .update(|window, cx| store.create_textarea(None, None, Some(4), None, window, cx))
+            .expect("room");
 
         assert!(store.textarea(input).is_none());
         assert!(store.input(textarea).is_none());
@@ -1413,13 +1425,19 @@ mod tests {
         let window = cx.add_window(|_, _| gpui::Empty);
         let mut context = VisualTestContext::from_window(*window, cx);
 
-        let first = context.update(|window, cx| {
-            store.create_input(None, None, Some(first_application.clone()), window, cx)
-        });
-        let second = context.update(|window, cx| {
-            store.create_input(None, None, Some(second_application.clone()), window, cx)
-        });
-        let focus = context.update(|_, cx| store.create_focus(Some(first_application.clone()), cx));
+        let first = context
+            .update(|window, cx| {
+                store.create_input(None, None, Some(first_application.clone()), window, cx)
+            })
+            .expect("room");
+        let second = context
+            .update(|window, cx| {
+                store.create_input(None, None, Some(second_application.clone()), window, cx)
+            })
+            .expect("room");
+        let focus = context
+            .update(|_, cx| store.create_focus(Some(first_application.clone()), cx))
+            .expect("room");
 
         store.release_application(&first_application).retire(cx);
 

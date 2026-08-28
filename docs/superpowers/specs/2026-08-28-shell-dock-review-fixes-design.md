@@ -70,10 +70,10 @@ the existing scoped slot, so caching does not retain or reuse consumed GPUI
 elements. Native command resolution likewise continues to use the contexts
 recorded for the current frame.
 
-Entries are bounded by the live dock structure and are cleared when chrome
-slots are cleared or the owning dock/runtime is released. Errors and null
-results are not cached, allowing a later frame to recover after logging the
-failure.
+Entries are bounded by a per-dock hard limit and disappear with the owning
+dock/runtime. Errors are not cached, allowing a later frame to recover after
+logging the failure. A successful `null` is cached as an empty description:
+it is a valid answer for optional chrome, not an error to retry every frame.
 
 ## Verification
 

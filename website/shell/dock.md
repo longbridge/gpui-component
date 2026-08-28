@@ -152,7 +152,7 @@ Six handlers, all optional, hung on the `dock_area(...)` element:
 | `tile_drag_bar(tile => …)` | The strip a tile is dragged by |
 | `tile_resize_handles(tile => …)` | A tile's resize affordances |
 
-Each is called from inside GPUI's layout pass, once per container per frame, and is given base's **resolved** state — never a drag event, a mouse position or a hit test, because base attaches all of that to the elements it gets back.
+Each is first called from inside GPUI's layout pass and is given base's **resolved** state — never a drag event, a mouse position or a hit test, because base attaches all of that to the elements it gets back. The resulting description is cached by handler and resolved state, so unchanged frames replay it in Rust without entering JavaScript.
 
 ```js
 dock_area(this.dock)
@@ -181,7 +181,7 @@ dock_area(this.dock)
 
 Look at that tab again: it carries `select_tab` and `drag_tab`, not `on_click`. That is the one rule of this API worth understanding rather than memorising.
 
-A chrome handler runs **once per container per frame**, for as long as the dock is on screen. A script callback registered inside one would belong to a snapshot that stands for thousands of frames while the tab is rebuilt on every one of them — so twenty tabs over a minute of use would leave tens of thousands of unreachable JavaScript functions alive. Registering one is refused where it is written.
+A chrome description is cached and can outlive the handler call that produced it. A script callback registered inside one would therefore have no sound event lifetime, and every changed native state could create another. Registering one is refused where it is written; chrome uses native commands instead.
 
 A **command** carries no script value at all. It names a container in the area and what to ask it, and base does the work:
 

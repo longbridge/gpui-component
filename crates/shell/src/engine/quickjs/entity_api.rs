@@ -70,15 +70,17 @@ pub fn install(ctx: &Ctx<'_>, module: &Object<'_>, runtime: Weak<ShellRuntime>) 
                 refuse_creation_in_render(&ctx, "InputState.new(...)")?;
 
                 let store = alive(&ctx, &create)?;
-                ensure_entity_capacity(&ctx, &store)?;
                 scope::with_current(|window, cx| {
-                    store.entities().create_input(
-                        placeholder,
-                        value,
-                        scope::current_application_generation(),
-                        window,
-                        cx,
-                    )
+                    store
+                        .entities()
+                        .create_input(
+                            placeholder,
+                            value,
+                            scope::current_application_generation(),
+                            window,
+                            cx,
+                        )
+                        .map_err(|_| entity_limit_reached(&ctx))
                 })
                 .ok_or_else(|| {
                     Exception::throw_type(
@@ -86,7 +88,7 @@ pub fn install(ctx: &Ctx<'_>, module: &Object<'_>, runtime: Weak<ShellRuntime>) 
                         "InputState.new(...) needs a live host call; call it from init() \
                          or an event handler",
                     )
-                })
+                })?
             },
         ),
     )?;
@@ -217,16 +219,18 @@ pub fn install(ctx: &Ctx<'_>, module: &Object<'_>, runtime: Weak<ShellRuntime>) 
                 refuse_creation_in_render(&ctx, "TextareaState.new(...)")?;
 
                 let store = alive(&ctx, &create_textarea)?;
-                ensure_entity_capacity(&ctx, &store)?;
                 scope::with_current(|window, cx| {
-                    store.entities().create_textarea(
-                        placeholder,
-                        value,
-                        rows,
-                        scope::current_application_generation(),
-                        window,
-                        cx,
-                    )
+                    store
+                        .entities()
+                        .create_textarea(
+                            placeholder,
+                            value,
+                            rows,
+                            scope::current_application_generation(),
+                            window,
+                            cx,
+                        )
+                        .map_err(|_| entity_limit_reached(&ctx))
                 })
                 .ok_or_else(|| {
                     Exception::throw_type(
@@ -234,7 +238,7 @@ pub fn install(ctx: &Ctx<'_>, module: &Object<'_>, runtime: Weak<ShellRuntime>) 
                         "TextareaState.new(...) needs a live host call; call it from init() \
                          or an event handler",
                     )
-                })
+                })?
             },
         ),
     )?;
@@ -410,17 +414,19 @@ pub fn install(ctx: &Ctx<'_>, module: &Object<'_>, runtime: Weak<ShellRuntime>) 
                 }
 
                 let store = alive(&ctx, &create_slider)?;
-                ensure_entity_capacity(&ctx, &store)?;
                 scope::with_current_app(|cx| {
-                    store.entities().create_slider(
-                        min,
-                        max,
-                        step,
-                        scale,
-                        value,
-                        scope::current_application_generation(),
-                        cx,
-                    )
+                    store
+                        .entities()
+                        .create_slider(
+                            min,
+                            max,
+                            step,
+                            scale,
+                            value,
+                            scope::current_application_generation(),
+                            cx,
+                        )
+                        .map_err(|_| entity_limit_reached(&ctx))
                 })
                 .ok_or_else(|| {
                     Exception::throw_type(
@@ -428,7 +434,7 @@ pub fn install(ctx: &Ctx<'_>, module: &Object<'_>, runtime: Weak<ShellRuntime>) 
                         "SliderState.new(...) needs a live host call; call it from init() \
                          or an event handler",
                     )
-                })
+                })?
             },
         ),
     )?;
@@ -518,13 +524,11 @@ pub fn install(ctx: &Ctx<'_>, module: &Object<'_>, runtime: Weak<ShellRuntime>) 
         Func::from(move |ctx: Ctx<'_>| -> JsResult<EntityHandle> {
             refuse_creation_in_render(&ctx, "CalendarState.new()")?;
             let store = alive(&ctx, &create_calendar)?;
-            ensure_entity_capacity(&ctx, &store)?;
             scope::with_current(|window, cx| {
-                store.entities().create_calendar(
-                    scope::current_application_generation(),
-                    window,
-                    cx,
-                )
+                store
+                    .entities()
+                    .create_calendar(scope::current_application_generation(), window, cx)
+                    .map_err(|_| entity_limit_reached(&ctx))
             })
             .ok_or_else(|| {
                 Exception::throw_type(
@@ -532,7 +536,7 @@ pub fn install(ctx: &Ctx<'_>, module: &Object<'_>, runtime: Weak<ShellRuntime>) 
                     "CalendarState.new() needs a live host call; call it from init() or an \
                      event handler",
                 )
-            })
+            })?
         }),
     )?;
 
@@ -754,16 +758,18 @@ pub fn install(ctx: &Ctx<'_>, module: &Object<'_>, runtime: Weak<ShellRuntime>) 
                 }
 
                 let store = alive(&ctx, &create_otp)?;
-                ensure_entity_capacity(&ctx, &store)?;
                 scope::with_current(|window, cx| {
-                    store.entities().create_otp(
-                        length as usize,
-                        value,
-                        masked,
-                        scope::current_application_generation(),
-                        window,
-                        cx,
-                    )
+                    store
+                        .entities()
+                        .create_otp(
+                            length as usize,
+                            value,
+                            masked,
+                            scope::current_application_generation(),
+                            window,
+                            cx,
+                        )
+                        .map_err(|_| entity_limit_reached(&ctx))
                 })
                 .ok_or_else(|| {
                     Exception::throw_type(
@@ -771,7 +777,7 @@ pub fn install(ctx: &Ctx<'_>, module: &Object<'_>, runtime: Weak<ShellRuntime>) 
                         "OtpState.new(...) needs a live host call; call it from init() \
                          or an event handler",
                     )
-                })
+                })?
             },
         ),
     )?;
@@ -916,11 +922,11 @@ pub fn install(ctx: &Ctx<'_>, module: &Object<'_>, runtime: Weak<ShellRuntime>) 
             }
 
             let store = alive(&ctx, &create_focus)?;
-            ensure_entity_capacity(&ctx, &store)?;
             scope::with_current_app(|cx| {
                 store
                     .entities()
                     .create_focus(scope::current_application_generation(), cx)
+                    .map_err(|_| entity_limit_reached(&ctx))
             })
             .ok_or_else(|| {
                 Exception::throw_type(
@@ -928,7 +934,7 @@ pub fn install(ctx: &Ctx<'_>, module: &Object<'_>, runtime: Weak<ShellRuntime>) 
                     "cx.focus_handle() needs a live host call; call it from init() or an \
                      event handler",
                 )
-            })
+            })?
         }),
     )?;
 
@@ -978,11 +984,10 @@ pub fn install(ctx: &Ctx<'_>, module: &Object<'_>, runtime: Weak<ShellRuntime>) 
         Func::from(move |ctx: Ctx<'_>| -> JsResult<EntityHandle> {
             refuse_creation_in_render(&ctx, "VirtualListScrollHandle.new()")?;
             let store = alive(&ctx, &create_virtual_scroll)?;
-            ensure_entity_capacity(&ctx, &store)?;
-            let handle = store
+            store
                 .entities()
-                .create_virtual_scroll(scope::current_application_generation());
-            Ok(handle)
+                .create_virtual_scroll(scope::current_application_generation())
+                .map_err(|_| entity_limit_reached(&ctx))
         }),
     )?;
 
@@ -1414,14 +1419,18 @@ fn refuse_creation_in_render(ctx: &Ctx<'_>, constructor: &str) -> JsResult<()> {
     Ok(())
 }
 
-fn ensure_entity_capacity(ctx: &Ctx<'_>, runtime: &ShellRuntime) -> JsResult<()> {
-    if runtime.entities().len() >= crate::entities::MAX_LIVE_ENTITIES {
-        return Err(Exception::throw_range(
-            ctx,
-            "the application reached gpui-shell's retained entity limit; release unused handles",
-        ));
-    }
-    Ok(())
+/// What a store that has reached [`MAX_LIVE_ENTITIES`] reads as in script.
+///
+/// Every retained thing is created through one fallible `EntityStore`
+/// constructor, so this is the one translation of that refusal and the reason
+/// no constructor carries a capacity check of its own.
+///
+/// [`MAX_LIVE_ENTITIES`]: crate::entities::MAX_LIVE_ENTITIES
+pub(super) fn entity_limit_reached(ctx: &Ctx<'_>) -> rquickjs::Error {
+    Exception::throw_range(
+        ctx,
+        "the application reached gpui-shell's retained entity limit; release unused handles",
+    )
 }
 
 fn refuse_mutation_in_render(ctx: &Ctx<'_>, api: &str) -> JsResult<()> {

@@ -15,7 +15,7 @@
 - Preserve unrelated worktree changes, especially the existing `crates/shell/src/typings.rs` modification.
 - Invalid JavaScript throws synchronously and is never clamped, defaulted, or queued.
 - Locked means no rearrangement; resizing remains available.
-- Cache spec data only, never consumed `AnyElement`s; null/error results are not cached.
+- Cache spec data only, never consumed `AnyElement`s; cache successful null as an empty spec, but retry errors.
 - Add no dependencies or unrelated public API.
 
 ---
@@ -26,6 +26,7 @@
 - Modify/Test: `crates/shell/src/entities.rs`
 - Modify: `crates/shell/src/engine/quickjs/entity_api.rs`
 - Modify: `crates/shell/src/engine/quickjs/dock_api.rs`
+- Modify: `crates/shell/src/engine/quickjs/mod.rs`
 - Test: `crates/shell/src/tests/dock.rs`
 
 **Interfaces:**
@@ -91,16 +92,15 @@ Exception::throw_range(
 - Modify: `crates/shell/src/engine/quickjs/mod.rs`
 - Modify: `crates/shell/src/metrics.rs`
 - Test: `crates/shell/src/tests/dock.rs`
-- Test: `crates/shell/src/tests/benchmark.rs`
 
 **Interfaces:**
 - Produces: bounded `ChromeSpecCache` keyed by hook/container with `{callback, payload, arena, root}` and a `frame_script_calls` metric.
 - Consumes: `CallbackId`, `SpecArena`, `SpecId`, `materialize_subtree`, `DockChromeSlots`, container ids/placements, `ContentSlot`.
 
 - [ ] **Step 1: Write failing cache tests.** Count a JS `tab_bar` handler: unchanged draws stay at one, payload change increments, and a new callback increments. Verify cached `dock_content()` renders current native content.
-- [ ] **Step 2: Write a failing benchmark assertion.** Increment `frame_script_calls` in `time_frame_script`; draw a representative clean dock repeatedly and assert the count does not change after its first frame.
+- [ ] **Step 2: Count the frame's script calls.** Increment `frame_script_calls` in `time_frame_script`; draw a representative clean dock repeatedly and assert in `tests::dock` that the count does not change after its first frame.
 - [ ] **Step 3: Verify RED.** Run the three new focused cache/content/benchmark tests and confirm counts currently grow per draw.
-- [ ] **Step 4: Implement the cache.** Store it on `ScriptChrome`; key every hook by stable native identity. Hit only when callback and JSON payload match. On miss, call JS to produce arena/root, replace the entry, then materialize. Prune absent hooks/containers and never cache null/errors.
+- [ ] **Step 4: Implement the cache.** Store it on `ScriptChrome`; key every hook by stable native identity. Hit only when callback and JSON payload match. On miss, call JS to produce arena/root, replace the entry, then materialize. Hold the whole cache under a hard entry bound and never cache errors; a successful null is an empty description and is cached.
 - [ ] **Step 5: Preserve native frame state.** Scope `ContentSlot::install` around materialization on hits and misses; keep command lookup against current-frame `DockContexts`.
 - [ ] **Step 6: Verify GREEN.** Run `cargo test -p gpui-shell tests::dock`, the new benchmark test, and `cargo test -p gpui-shell tests::snapshot`.
 - [ ] **Step 7: Commit.** Commit the six files as `perf(shell): cache dock chrome descriptions`.
