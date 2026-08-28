@@ -3293,10 +3293,28 @@ animation interpolation, or hit testing.
 
 ### 20.7 The template cache
 
-The largest unspent lever in this chapter. The cache is not implemented; the
-measurement that decides whether it should be **is**, and its results are below.
-This section states what a template would be, what has to be true for it to pay,
-what the numbers say, and what is left to design.
+Built, measured, and deliberately not exposed. This section states what a
+template is, what has to be true for it to pay, what it turned out to be worth,
+and what is left.
+
+**The conclusion first**, because the rest of the section is how it was reached.
+All figures are release builds, best of seven batches of fifty, on one Linux
+x86-64 machine:
+
+| Question | Answer | Where |
+| --- | ---: | --- |
+| Does a dirty render usually repeat its shape? | **40 of 40** on a live quote feed | `stories/shell_story.rs` |
+| How much of a repeating description varies? | **80 of 1,045** positions — half of them handlers | `tests/structure.rs` |
+| What does filling cost against rebuilding? | 0.315 → 0.036 ms, **8.7×**; with the handlers it still pays, **5.3×** | `tests/structure.rs` |
+| What is it worth to a script written for it? | 0.310 → 0.090 ms, **3.5×** | `tests/template.rs` |
+| What is it worth with **no** authoring change? | 0.339 → 0.272 ms, **1.25×** | `tests/template.rs` |
+| What can the recorder save on its own? | 0.628 → 0.573 ms, **8%** | benchmark A |
+
+The last two rows are why there is no `template(...)` in the script surface. A
+template a script has to be written for is a performance annotation in the
+source — two ways to describe one interface, and a decision nobody should be
+making while writing a panel — and the automatic version of it is worth a
+quarter, not a factor of three.
 
 **What the snapshot cache does and does not cover.** §8.4 removed the cost of
 *no change*: an unchanged view is replayed in Rust and enters the VM zero times
@@ -3321,7 +3339,7 @@ So there are three levels rather than two:
 | Level | Condition | Cost | State |
 | --- | --- | --- | --- |
 | 1 — snapshot cache | Nothing invalidated the view | Materialization only, zero VM entries | Built (§8.4) |
-| 2 — template cache | Invalidated, structure unchanged | Write the changed values into a retained structure | Not built |
+| 2 — template cache | Invalidated, structure unchanged | Write the changed values into a retained structure | Built, reaching no script |
 | 3 — full render | Invalidated, structure changed | `render` runs, a description is recorded | Built |
 
 #### What a template would be

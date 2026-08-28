@@ -50,6 +50,9 @@ Each of those is a GPUI entity holding a snapshot of its own, and each is invali
 | The parent calls `cx.notify()` | The parent's `render`; each child materializes the snapshot it already had, in Rust, without entering the VM |
 | `this.chart.set_props({ symbol })` | That child's `update` and `render`; the parent is not rebuilt |
 
+<img class="architecture-light" src="/shell-invalidation-boundary-light.svg" alt="Two scenes of the same forty-row watchlist with one price moving. On the left each row is a retained view with an outline of its own: only the row whose price changed is described again, in orange, while the others replay the descriptions they already published, in blue, without entering the JavaScript VM — nine nodes described. On the right one outline encloses the whole panel: the same price change re-describes every row, and 361 nodes are described.">
+<img class="architecture-dark" src="/shell-invalidation-boundary-dark.svg" alt="Two scenes of the same forty-row watchlist with one price moving. On the left each row is a retained view with an outline of its own: only the row whose price changed is described again, in orange, while the others replay the descriptions they already published, in blue, without entering the JavaScript VM — nine nodes described. On the right one outline encloses the whole panel: the same price change re-describes every row, and 361 nodes are described.">
+
 The middle row is the one worth reading twice. Mounting a child view is not a re-render of that child: the parent records a handle, and the child answers the frame from the description it published last time. Rebuilding a five-panel window costs the parent's own description plus four handles.
 
 **A complex page is not, by itself, a performance problem. A large invalidation boundary is.** Ten thousand nodes behind ten views that change independently cost one view per change; the same ten thousand behind one view cost all of it every time anything moves.
@@ -141,6 +144,16 @@ When the price becomes `230.51`, the structure is identical and only one leaf di
 
 Until that changes, the lever is the one this page opens with: **shrink the boundary that has to be rebuilt.** A price cell in a child view of its own is a description of two nodes rather than four hundred, and it is available today.
 
-The direction beyond it is a **template cache** — splitting a description into a reusable structure and the dynamic slots inside it, so a value-only change fills slots instead of re-running the builder. It is not implemented, and sits beside the other levers this runtime has [not spent yet](./elements.md#not-there-yet).
+The direction beyond it is a **template cache** — splitting a description into a reusable structure and the dynamic slots inside it, so a value-only change fills slots instead of re-running the builder. The mechanism exists in the runtime and reaches no script, which is a decision rather than an omission. These are the figures behind it, all release builds, best of seven batches of fifty:
 
-What *is* implemented is the reading that says whether it would be worth it. `structure_repeats()` and `structure_changes()` count how often a rebuild produced the shape it replaced, differing only in the values inside it — the ceiling such a cache could reach. On a twenty-row market board driven by a live quote feed the shape repeated on every rebuild, so if a panel of yours reports a low rate, that is worth knowing on its own: something in its description is changing structure when you thought only a number was.
+| | |
+| --- | ---: |
+| Rebuilds that repeated the shape they replaced, on a live quote feed | **40 of 40** |
+| Of a repeating description, the positions that actually vary | **80 of 1,045** — half of them handlers |
+| Filling against rebuilding, handlers included | 0.315 → 0.060 ms — **5.3×** |
+| Worth to a script written for a template surface | 0.310 → 0.090 ms — **3.5×** |
+| Worth with **no** change to how the script is written | 0.339 → 0.272 ms — **1.25×** |
+
+The last row is why there is no `template(...)` to import. A cache a script has to be written for is a performance annotation in the source, and the version of it that costs an author nothing is worth a quarter rather than a factor of three — because ordinary presentation code interpolates strings into ids and branches on its arguments, and both are exactly what a fixed structure cannot hold. `docs/gpui-shell.md` §20.7 carries the derivation.
+
+What you *can* read is the measurement itself. `structure_repeats()` and `structure_changes()` count how often a rebuild produced the shape it replaced. A panel of yours reporting a low rate is worth knowing on its own: something in its description is changing structure when you thought only a number was.
