@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 320" width="100%" role="img" aria-labelledby="t d">
   <title id="t">What one change costs a script view, on three paths</title>
-  <desc id="d">Three lanes, their bars drawn to the same scale. First: nothing the view reads changed, so no script runs at all and the frame replays the description already published — no bar. Second, what happens today when a value changes: the whole panel is described again at 0.315 milliseconds, however small the change, drawn as a long orange bar. Third, the same change filling a structure recorded earlier: 0.060 milliseconds, a bar about a fifth as long — measured, and deliberately not reachable from a script. The snapshot cache removes the first lane's cost and does nothing for the second.</desc>
+  <desc id="d">Three lanes, their bars drawn to the same scale. First: nothing the view reads changed, so no script runs at all and the frame replays the description already published — no bar. Second, what happens today when a value changes: the whole panel is described again at 0.315 milliseconds, however small the change, drawn as a long orange bar. Third, the same change with the row a retained view of its own: 0.012 milliseconds, a bar about a twenty-sixth as long, because nine nodes are described instead of 361. The snapshot cache removes the first lane's cost and does nothing for the second; only a smaller invalidation boundary does.</desc>
   <defs>
     <style>
       text{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
@@ -13,11 +13,11 @@
       .dot{fill:#7daaff}
       .cost{font-size:13px;font-weight:650;text-anchor:end}
       .cost-blue{fill:#7daaff}
-      .cost-orange{fill:#fb923c}
+      .cost-orange{fill:#cc9e00}
       .track{stroke:rgba(255,255,255,.11);stroke-width:10;stroke-linecap:round}
       .fill{stroke-width:10;stroke-linecap:round;animation:sweep 4.8s ease-out infinite}
       .fill-blue{stroke:#7daaff}
-      .fill-orange{stroke:#fb923c}
+      .fill-orange{stroke:#cc9e00}
       /* The resting state is a full bar, so a renderer that never runs the
          animation still shows the measurement rather than an empty track. */
       @keyframes sweep{
@@ -43,11 +43,11 @@
   <line class="fill fill-orange" x1="24" y1="186" x2="690.0" y2="186" style="--len:666.0;stroke-dasharray:666.0;animation-delay:1.6s"/>
   <text class="lane-note" x="24" y="212">the whole panel is described again, however small the change</text>
 
-  <text class="lane" x="24" y="248">The same change, filling a recorded structure</text>
-  <text class="cost cost-orange" x="856" y="266">0.060 ms</text>
-  <line class="track" x1="24" y1="260" x2="150.9" y2="260"/>
-  <line class="fill fill-orange" x1="24" y1="260" x2="150.9" y2="260" style="--len:126.9;stroke-dasharray:126.9;animation-delay:3.2s"/>
-  <text class="lane-note" x="24" y="286">measured, and deliberately not reachable from a script</text>
+  <text class="lane" x="24" y="248">The same change, with the row a view of its own</text>
+  <text class="cost cost-orange" x="856" y="266">0.012 ms</text>
+  <line class="track" x1="24" y1="260" x2="49.4" y2="260"/>
+  <line class="fill fill-orange" x1="24" y1="260" x2="49.4" y2="260" style="--len:25.4;stroke-dasharray:25.4;animation-delay:3.2s"/>
+  <text class="lane-note" x="24" y="286">9 nodes described instead of 361 — the lever this page opens with</text>
 
-  <text class="note" x="24" y="308">The snapshot cache removes the first row. It does nothing for the second, which is the row a template cache would move.</text>
+  <text class="note" x="24" y="308">The snapshot cache removes the first lane. It does nothing for the second — only a smaller boundary does.</text>
 </svg>

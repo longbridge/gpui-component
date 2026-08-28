@@ -16,11 +16,37 @@ Neither factor is the frame rate. A window repainting at 120 Hz runs no more Jav
 
 Everything below is one of those two, or a way of telling which is the problem.
 
-## The view is the invalidation boundary
+## Every view has its own snapshot
 
-A `render` describes one view **completely**. There is no partial rebuild inside it. A `cx.notify()` on a view whose description is four hundred nodes rebuilds four hundred nodes, however small the change that prompted it — one price, one selected row, one spinner.
+GPUI Shell gives each JavaScript view a snapshot of its own: the description that view's `render` produced, kept in Rust.
 
-So the unit that decides the cost is not the panel and not the window. It is the view that was invalidated. Splitting an interface into retained child views is what makes that unit small:
+**A view's snapshot is reused until that view changes.** Every frame in between is drawn from it — turned into GPUI elements, laid out, painted — entirely in Rust. No JavaScript runs.
+
+```text
+the view changed  ──▶  render()  ──▶  a new snapshot  ──▶  frame
+the view did not  ─────────────────▶  the snapshot it has  ──▶  frame
+```
+
+Snapshots are per view, not per window. A window holding a hundred views holds a hundred snapshots, and each one is invalidated on its own:
+
+| What happens | What runs |
+| --- | --- |
+| `Watchlist` calls `cx.notify()` | `Watchlist.render`, and nothing else |
+| The parent calls `cx.notify()` | The parent's `render`. Each child answers the frame from its own snapshot |
+| `this.chart.set_props({ symbol })` | That child's `update` and `render`. The parent is not rebuilt |
+| A child of a child calls `cx.notify()` | That child's `render`. Invalidation does not travel upward |
+| The theme changes | Every view, because a snapshot bakes in the colours it was built with |
+
+<img class="architecture-light" src="/shell-view-invalidation-light.svg" alt="A window drawn as nested views: a sidebar, a watchlist holding four rows that are views of their own, a chart, and a detail pane holding two more. Three phases repeat. A price ticks and only the MSFT row is marked as running its script, while every other view replays the description it already published. The list reorders and the watchlist itself runs while its four rows do not, because a parent records a handle per child rather than the child's description. The theme changes and every view runs at once, because a snapshot bakes in the colours it was built with.">
+<img class="architecture-dark" src="/shell-view-invalidation-dark.svg" alt="A window drawn as nested views: a sidebar, a watchlist holding four rows that are views of their own, a chart, and a detail pane holding two more. Three phases repeat. A price ticks and only the MSFT row is marked as running its script, while every other view replays the description it already published. The list reorders and the watchlist itself runs while its four rows do not, because a parent records a handle per child rather than the child's description. The theme changes and every view runs at once, because a snapshot bakes in the colours it was built with.">
+
+## Split a large view into small ones
+
+A view is rebuilt whole. There is no partial rebuild inside one: if a view's description is four hundred nodes, any change rebuilds all four hundred, however small the change was.
+
+That is what makes a large view expensive. Everything it draws shares one snapshot, so the data that changes most often invalidates the parts that never change along with it. In a market terminal, one price moving re-describes the chart, the sidebar and the order book too — not because they changed, but because they sit inside the same view.
+
+Splitting is the fix. Give each part that changes on its own a view of its own with `cx.new`, and a change reaches one snapshot instead of all of them:
 
 ```js
 import { View } from "gpui";
@@ -42,22 +68,11 @@ export default class Terminal extends View {
 }
 ```
 
-Each of those is a GPUI entity holding a snapshot of its own, and each is invalidated on its own:
+On the 40-row watchlist this page measures, describing the whole panel costs **0.315 ms** and describing one row costs **0.012 ms** — 361 nodes against 9.
 
-| What happens | What runs |
-| --- | --- |
-| `Watchlist` calls `cx.notify()` | `Watchlist.render`, and nothing else |
-| The parent calls `cx.notify()` | The parent's `render`; each child materializes the snapshot it already had, in Rust, without entering the VM |
-| `this.chart.set_props({ symbol })` | That child's `update` and `render`; the parent is not rebuilt |
+Nesting itself costs almost nothing to weigh against that: a parent records a handle per child, not the child's description. So a complex interface is not, by itself, a performance problem. A large view is.
 
-<img class="architecture-light" src="/shell-invalidation-boundary-light.svg" alt="Two scenes of the same forty-row watchlist with one price moving. On the left each row is a retained view with an outline of its own: only the row whose price changed is described again, in orange, while the others replay the descriptions they already published, in blue, without entering the JavaScript VM — nine nodes described. On the right one outline encloses the whole panel: the same price change re-describes every row, and 361 nodes are described.">
-<img class="architecture-dark" src="/shell-invalidation-boundary-dark.svg" alt="Two scenes of the same forty-row watchlist with one price moving. On the left each row is a retained view with an outline of its own: only the row whose price changed is described again, in orange, while the others replay the descriptions they already published, in blue, without entering the JavaScript VM — nine nodes described. On the right one outline encloses the whole panel: the same price change re-describes every row, and 361 nodes are described.">
-
-The middle row is the one worth reading twice. Mounting a child view is not a re-render of that child: the parent records a handle, and the child answers the frame from the description it published last time. Rebuilding a five-panel window costs the parent's own description plus four handles.
-
-**A complex page is not, by itself, a performance problem. A large invalidation boundary is.** Ten thousand nodes behind ten views that change independently cost one view per change; the same ten thousand behind one view cost all of it every time anything moves.
-
-This is also why splitting for performance does not mean splitting into plugins, applications or processes. The view is already the boundary. Reach for a second application when you want a second *authority* — see [Capabilities](./capabilities.md) — not when you want a second cache.
+And splitting for performance means splitting into **views** — not into plugins, applications or processes. Reach for a second application when you want a second *authority*, which is [Capabilities](./capabilities.md), not when you want a second cache.
 
 ## Notify what a reader can see
 
@@ -142,21 +157,9 @@ StockRow
 
 When the price becomes `230.51`, the structure is identical and only one leaf differs — but a new description is the only way to say so, so the whole view is described again: every `div()`, every `.gap()`, every `.bg()`, every crossing into Rust. That is the dirty-render path, and on a fast feed it is the one that runs.
 
-<img class="architecture-light" src="/shell-change-cost-light.svg" alt="Three lanes, bars to the same scale. Nothing the view reads changed: no bar, no script runs, the frame replays the description already published. A value changed, which is what happens today: the whole panel is described again at 0.315 milliseconds, however small the change. The same change filling a structure recorded earlier: 0.060 milliseconds, about a fifth as long — measured, and deliberately not reachable from a script.">
-<img class="architecture-dark" src="/shell-change-cost-dark.svg" alt="Three lanes, bars to the same scale. Nothing the view reads changed: no bar, no script runs, the frame replays the description already published. A value changed, which is what happens today: the whole panel is described again at 0.315 milliseconds, however small the change. The same change filling a structure recorded earlier: 0.060 milliseconds, about a fifth as long — measured, and deliberately not reachable from a script.">
+<img class="architecture-light" src="/shell-change-cost-light.svg" alt="Three lanes, bars to the same scale. Nothing the view reads changed: no bar, no script runs, the frame replays the description already published. A value changed, which is what happens today: the whole panel is described again at 0.315 milliseconds, however small the change. The same change with the row a retained view of its own: 0.012 milliseconds, about a twenty-sixth as long, because nine nodes are described instead of 361.">
+<img class="architecture-dark" src="/shell-change-cost-dark.svg" alt="Three lanes, bars to the same scale. Nothing the view reads changed: no bar, no script runs, the frame replays the description already published. A value changed, which is what happens today: the whole panel is described again at 0.315 milliseconds, however small the change. The same change with the row a retained view of its own: 0.012 milliseconds, about a twenty-sixth as long, because nine nodes are described instead of 361.">
 
-Until that changes, the lever is the one this page opens with: **shrink the boundary that has to be rebuilt.** A price cell in a child view of its own is a description of two nodes rather than four hundred, and it is available today.
+The lever is the one this page opens with: **shrink the boundary that has to be rebuilt.** On the watchlist above, describing the whole panel costs 0.315 ms and describing one row costs 0.012 ms — 361 nodes against 9. Putting the row behind a view of its own is what turns the first number into the second, and it is available today.
 
-The direction beyond it is a **template cache** — splitting a description into a reusable structure and the dynamic slots inside it, so a value-only change fills slots instead of re-running the builder. The mechanism exists in the runtime and reaches no script, which is a decision rather than an omission. These are the figures behind it, all release builds, best of seven batches of fifty:
-
-| | |
-| --- | ---: |
-| Rebuilds that repeated the shape they replaced, on a live quote feed | **40 of 40** |
-| Of a repeating description, the positions that actually vary | **80 of 1,045** — half of them handlers |
-| Filling against rebuilding, handlers included | 0.315 → 0.060 ms — **5.3×** |
-| Worth to a script written for a template surface | 0.310 → 0.090 ms — **3.5×** |
-| Worth with **no** change to how the script is written | 0.339 → 0.272 ms — **1.25×** |
-
-The last row is why there is no `template(...)` to import. A cache a script has to be written for is a performance annotation in the source, and the version of it that costs an author nothing is worth a quarter rather than a factor of three — because ordinary presentation code interpolates strings into ids and branches on its arguments, and both are exactly what a fixed structure cannot hold. `docs/gpui-shell.md` §20.7 carries the derivation.
-
-What you *can* read is the measurement itself. `structure_repeats()` and `structure_changes()` count how often a rebuild produced the shape it replaced. A panel of yours reporting a low rate is worth knowing on its own: something in its description is changing structure when you thought only a number was.
+`structure_repeats()` and `structure_changes()` are how you check that the boundary is doing what you think. They count how often a rebuild produced the same *shape* as the description it replaced, differing only in the values inside it. A panel reporting a low rate is worth knowing about on its own: something in it is changing structure when you thought only a number was.

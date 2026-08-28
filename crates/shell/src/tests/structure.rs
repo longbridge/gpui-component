@@ -453,6 +453,89 @@ pub(super) fn invalidate(context: &mut VisualTestContext, view: &Entity<ScriptVi
     render_once(context, view);
 }
 
+/// What the boundary is worth, in the units the rest of this file uses.
+///
+/// §20.4 says the unit that decides cost is the view that was invalidated, and
+/// the Performance page draws it. This is the number under that drawing: the
+/// same forty-row watchlist described whole, against one of its rows described
+/// alone — which is what a price tick costs when the row is a retained view of
+/// its own rather than part of the panel's description.
+#[gpui::test]
+fn one_row_against_the_panel_that_holds_it(cx: &mut TestAppContext) {
+    const ITERATIONS: usize = 50;
+    const ROUNDS: usize = 7;
+
+    let panel = time_source(cx, WATCHLIST, ITERATIONS, ROUNDS);
+    let row = time_source(cx, ONE_ROW, ITERATIONS, ROUNDS);
+
+    println!(
+        "\n[J] the invalidation boundary — 40-row watchlist\
+         \n    the whole panel (361 nodes)   {:.3} ms\
+         \n    one row (9 nodes)             {:.3} ms\
+         \n    ratio                         {:.0}x",
+        panel.as_secs_f64() * 1000.0,
+        row.as_secs_f64() * 1000.0,
+        panel.as_secs_f64() / row.as_secs_f64().max(f64::MIN_POSITIVE),
+    );
+
+    assert!(
+        row < panel,
+        "describing one row must cost less than describing forty: {row:?} against {panel:?}"
+    );
+}
+
+/// One row of [`WATCHLIST`], as a view of its own.
+const ONE_ROW: &str = r#"
+import { View, div } from "gpui";
+import { h_flex, Button } from "gpui-base";
+
+export default class Row extends View {
+  init() { this.tick = 0; }
+
+  render() {
+    this.tick += 1;
+    const price = (100 + this.tick / 100).toFixed(2);
+    return h_flex()
+      .gap(6)
+      .py(2)
+      .px(6)
+      .rounded(4)
+      .bg("surface")
+      .child(div().w(80).text_sm().text_color("foreground").child("SYM0"))
+      .child(div().w(80).text_sm().text_color("foreground").child(price))
+      .child(div().w(60).text_sm().text_color("muted_foreground").child("+1.42%"))
+      .child(Button.new("trade-0").px(8).py(2).on_click(() => 0).child("Trade"));
+  }
+}
+"#;
+
+fn time_source(
+    cx: &mut TestAppContext,
+    source: &str,
+    iterations: usize,
+    rounds: usize,
+) -> std::time::Duration {
+    let (runtime, mut context, object) = script_object(cx, source);
+    context.update(|window, cx| {
+        let mut build = || {
+            runtime
+                .build_snapshot(&object, None, crate::policy::default(), window, cx)
+                .expect("render")
+        };
+        build();
+
+        let mut best = std::time::Duration::MAX;
+        for _ in 0..rounds {
+            let started = std::time::Instant::now();
+            for _ in 0..iterations {
+                build();
+            }
+            best = best.min(started.elapsed() / iterations as u32);
+        }
+        best
+    })
+}
+
 /// What level 2 would cost, if the surface existed to reach it.
 ///
 /// §20.7's second problem is that a template cache only pays if the *builder
