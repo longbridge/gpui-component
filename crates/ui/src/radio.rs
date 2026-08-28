@@ -21,6 +21,8 @@ pub struct Radio {
     style: StyleRefinement,
     id: ElementId,
     label: Option<Text>,
+    /// The announced name, when the visible label is not it.
+    accessibility_label: Option<SharedString>,
     children: Vec<AnyElement>,
     checked: bool,
     disabled: bool,
@@ -43,6 +45,7 @@ impl Radio {
             id,
             style: StyleRefinement::default(),
             label: None,
+            accessibility_label: None,
             children: Vec::new(),
             checked: false,
             disabled: false,
@@ -66,6 +69,16 @@ impl Radio {
     /// Set the label of the Radio element.
     pub fn label(mut self, label: impl Into<Text>) -> Self {
         self.label = Some(label.into());
+        self
+    }
+
+    /// Set the name a screen reader announces, when the visible label is not
+    /// it.
+    ///
+    /// A radio's name comes from its [`label`](Self::label) by default. Setting
+    /// this replaces the announced name without changing what is displayed.
+    pub fn accessibility_label(mut self, label: impl Into<SharedString>) -> Self {
+        self.accessibility_label = Some(label.into());
         self
     }
 
@@ -149,6 +162,10 @@ impl RenderOnce for Radio {
             .clone();
         let is_focused = focus_handle.is_focused(window);
         let disabled = self.disabled;
+        let accessibility_label = self
+            .accessibility_label
+            .clone()
+            .or_else(|| self.label.as_ref().map(|label| label.get_text(cx)));
 
         let (border_color, bg) = if checked {
             (cx.theme().primary, cx.theme().primary)
@@ -168,10 +185,9 @@ impl RenderOnce for Radio {
             .track_focus(&focus_handle)
             .tab_stop(self.tab_stop)
             .tab_index(self.tab_index)
-            .when_some(
-                self.label.as_ref().map(|l| l.get_text(cx)),
-                |this, label| this.accessibility_label(label),
-            )
+            .when_some(accessibility_label, |this, label| {
+                this.accessibility_label(label)
+            })
             .when_some(
                 self.position_in_set.zip(self.size_of_set),
                 |this, (position, size)| this.set_position(position, size),
@@ -379,5 +395,36 @@ impl RenderOnce for RadioGroup {
                         )
                     })),
             )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_explicit_accessibility_label_replaces_the_visible_one() {
+        let plain = Radio::new("automatic").label("Automatic");
+        assert_eq!(plain.accessibility_label, None);
+        assert!(matches!(
+            &plain.label,
+            Some(Text::String(label)) if label.as_ref() == "Automatic"
+        ));
+
+        let named = Radio::new("automatic")
+            .label("Automatic")
+            .accessibility_label("Choose automatic mode");
+        assert_eq!(
+            named.accessibility_label.as_deref(),
+            Some("Choose automatic mode"),
+            "an explicit name must win over the visible label"
+        );
+        assert!(
+            matches!(
+                &named.label,
+                Some(Text::String(label)) if label.as_ref() == "Automatic"
+            ),
+            "and must not change what is drawn"
+        );
     }
 }
