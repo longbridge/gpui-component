@@ -646,16 +646,10 @@ impl TabGroupRenderer for TabGroupSkin {
     fn frame(&self, group: &TabGroupContext, _: &mut Window, cx: &mut App) -> Stateful<Div> {
         let control = zoom_control(group, cx);
 
-        // `v_flex`, not `div`: gpui's default display is Block, and in block
-        // layout a child's `flex_grow` is ignored — the content region below
-        // the tab bar would resolve to zero height, because its only
-        // descendant is the panel view, positioned absolutely by `cached` and
-        // contributing no content height. The old `TabPanel::bind_actions`
-        // returned `v_flex()` for the same reason.
-        v_flex()
+        // The column, the fill and the clip are base's now, applied around
+        // this. What is left is the background and the two actions.
+        div()
             .id("tab-panel")
-            .size_full()
-            .overflow_hidden()
             .bg(cx.theme().tokens.background)
             // A collapsed group is a strip of tabs with no content, and the
             // actions act on content. The old dock gated them the same way.
@@ -699,11 +693,10 @@ impl TabGroupRenderer for TabGroupSkin {
                 .and_then(PanelHandle::of)
                 .is_none_or(|handle| handle.inner_padding(cx));
 
-        v_flex()
+        // The fill and the collapsed-group exception are base's; the padding
+        // is this skin's, and is the only reason this hook is implemented.
+        div()
             .id("active-panel")
-            // A collapsed group draws its tab strip and nothing else, so the
-            // content region must not claim any space.
-            .when(!group.is_collapsed(), |this| this.flex_1())
             .when(padded, |this| this.pt_2())
     }
 

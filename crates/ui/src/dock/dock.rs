@@ -244,8 +244,8 @@ mod tests {
     use std::rc::Rc;
 
     use gpui::{
-        Entity, IntoElement as _, Modifiers, MouseButton, TestAppContext, VisualTestContext, point,
-        px, size,
+        App, Entity, IntoElement as _, Modifiers, MouseButton, TestAppContext, VisualTestContext,
+        Window, point, px, size,
     };
 
     use std::cell::Cell;
@@ -258,22 +258,47 @@ mod tests {
     };
 
 
-    /// Everything `DockSkin` draws, except a dock's chrome.
+    /// A renderer that draws no chrome at all: every hook at its trait default.
     ///
-    /// `render_dock` is deliberately left at its trait default -- which hands
-    /// the content straight back -- because that is the position every renderer
-    /// that is not `DockSkin` starts from, including the one gpui-shell installs
-    /// so a script can draw the chrome itself. The tab and tile hooks delegate,
-    /// so the only thing missing from this skin is the dock's chrome.
-    struct ChromelessDockSkin(Rc<DockSkin>);
+    /// This is the position every renderer that is not `DockSkin` starts from,
+    /// including the one gpui-shell installs so a script can draw the chrome
+    /// itself, and the shape of what it gets is base's promise.
+    struct ChromelessDockSkin;
 
     impl DockAreaRenderer for ChromelessDockSkin {
         fn tab_group_renderer(&self) -> Rc<dyn gpui_base::dock::TabGroupRenderer> {
-            self.0.tab_group_renderer()
+            Rc::new(ChromelessTabs)
         }
 
         fn tiles_renderer(&self) -> Rc<dyn gpui_base::dock::TilesRenderer> {
-            self.0.tiles_renderer()
+            Rc::new(ChromelessTiles)
+        }
+    }
+
+    struct ChromelessTabs;
+    impl gpui_base::dock::TabGroupRenderer for ChromelessTabs {
+        // The one hook with no default, because a group with no tab bar has no
+        // way to choose between its panels. Drawn as nothing, so the height it
+        // leaves the content is the whole group.
+        fn render_tab_bar(
+            &self,
+            _: &gpui_base::dock::TabGroupContext,
+            _: &mut Window,
+            _: &mut App,
+        ) -> gpui::AnyElement {
+            gpui::Empty.into_any_element()
+        }
+    }
+
+    struct ChromelessTiles;
+    impl gpui_base::dock::TilesRenderer for ChromelessTiles {
+        fn render_drag_bar(
+            &self,
+            _: &gpui_base::dock::TileContext,
+            _: &mut Window,
+            _: &mut App,
+        ) -> gpui::AnyElement {
+            gpui::Empty.into_any_element()
         }
     }
 
@@ -293,8 +318,7 @@ mod tests {
         let centre = Rc::new(Cell::new(gpui::Size::default()));
         let centre_probe = centre.clone();
         let (area, cx) = cx.add_window_view(|window, cx| {
-            let skin = DockSkin::new(cx);
-            DockArea::new("test", None, window, cx).with_renderer(Rc::new(ChromelessDockSkin(skin)))
+            DockArea::new("test", None, window, cx).with_renderer(Rc::new(ChromelessDockSkin))
         });
         cx.simulate_resize(size(px(800.), px(600.)));
         cx.update(|window, cx| {
@@ -337,17 +361,15 @@ mod tests {
             middle, px(600.),
             "the centre has to be what the docks leave: got {middle:?}"
         );
-        // Against the dock rather than against 600: both sit under a tab bar,
-        // so neither is the area's full height, and pinning the difference here
-        // would pin the chrome's height too.
-        let (tall, beside) = (centre.get().height, measured.get().height);
+        // This renderer draws no tab bar, so a group that fills its slot leaves
+        // its panel the whole 600. A tab group frame without a column and a
+        // fill gives it nothing: the panel is positioned absolutely inside the
+        // content region and contributes no height of its own, so the region
+        // resolves to zero and the group is a strip of tabs.
+        let tall = centre.get().height;
         assert_eq!(
-            tall, beside,
-            "the centre and the dock are siblings in the row, so they share a height"
-        );
-        assert!(
-            tall > px(500.),
-            "and that height is the area's, less the tab bar: got {tall:?}"
+            tall, px(600.),
+            "a group has to fill its slot, or its panel gets no height: got {tall:?}"
         );
     }
 

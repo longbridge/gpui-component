@@ -5,7 +5,7 @@ use std::{rc::Rc, sync::Arc};
 use gpui::{
     AnyElement, AnyView, App, Bounds, Context, Div, DragMoveEvent, Empty, EventEmitter,
     FocusHandle, Focusable, InteractiveElement as _, IntoElement, ParentElement as _, Pixels,
-    Render, Stateful, WeakEntity, Window, div, prelude::FluentBuilder as _,
+    Render, Stateful, Styled as _, WeakEntity, Window, div, prelude::FluentBuilder as _,
 };
 
 use crate::Placement;
@@ -695,12 +695,32 @@ impl Render for TabGroup {
 
         renderer
             .frame(&context, window, cx)
+            // Structure, applied around whatever the renderer returns.
+            //
+            // A column, and not a `div`: gpui's default display is Block, and
+            // in block layout a child's `flex_grow` is ignored -- the content
+            // region below the tab bar resolves to zero height, because its
+            // only descendant is the panel view, positioned absolutely and
+            // contributing no content height. So a renderer that returned a
+            // plain frame got a group that drew its tabs and nothing else, at
+            // whatever width its tabs happened to be.
+            .flex()
+            .flex_col()
+            .size_full()
+            .overflow_hidden()
             .track_focus(&focus_handle)
             .tab_group()
             .child(renderer.render_tab_bar(&context, window, cx))
             .child(
                 renderer
                     .content_frame(&context, window, cx)
+                    // The region below the tab bar takes the rest of the
+                    // group -- except in a collapsed one, which is a strip of
+                    // tabs with no content and must claim no space at all.
+                    .flex()
+                    .flex_col()
+                    .when(!context.is_collapsed(), |this| this.flex_1())
+                    .overflow_hidden()
                     // Both drag kinds hang off `droppable` alone. The old
                     // `TabPanel` nested a second guard inside the same
                     // droppable test for the host-item handlers, asking
@@ -875,6 +895,9 @@ pub trait TabGroupRenderer: 'static {
     ///
     /// Identified rather than plain, so a skin can add a role, a tooltip, or
     /// scroll tracking; `Stateful<Div>` does everything base needs from it.
+    /// Appearance only. The group is laid out as a column that fills its slot
+    /// around whatever this returns, because a group that does not is a strip
+    /// of tabs with no content under it.
     fn frame(&self, group: &TabGroupContext, window: &mut Window, cx: &mut App) -> Stateful<Div> {
         div().id("tab-group")
     }
@@ -888,6 +911,7 @@ pub trait TabGroupRenderer: 'static {
     ) -> Stateful<Div> {
         div().id("tab-group-content")
     }
+
 
     fn render_tab_bar(
         &self,
