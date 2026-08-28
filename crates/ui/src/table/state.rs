@@ -486,13 +486,33 @@ where
     /// });
     /// ```
     pub fn set_selected_cell(&mut self, row_ix: usize, col_ix: usize, cx: &mut Context<Self>) {
+        self.set_selected_cell_with_scroll(row_ix, col_ix, true, cx);
+    }
+
+    /// [`Self::set_selected_cell`], with the scroll made optional.
+    ///
+    /// A mouse click can only land on a cell the user can already see, so
+    /// forcing it to the centre of the viewport moves content out from under
+    /// the pointer for no reason — `on_cell_click` selects with `scroll:
+    /// false` for exactly that case. Keyboard and programmatic selection
+    /// keep `scroll: true`, since either can land on a cell that is off
+    /// screen.
+    fn set_selected_cell_with_scroll(
+        &mut self,
+        row_ix: usize,
+        col_ix: usize,
+        scroll: bool,
+        cx: &mut Context<Self>,
+    ) {
         self.selection_mode = SelectionMode::Cell;
         self.selected_cell = Some((row_ix, col_ix));
 
-        // Scroll to the cell
-        self.vertical_scroll_handle
-            .scroll_to_item(row_ix, ScrollStrategy::Center);
-        self.scroll_to_col(col_ix, cx);
+        if scroll {
+            // Scroll to the cell
+            self.vertical_scroll_handle
+                .scroll_to_item(row_ix, ScrollStrategy::Center);
+            self.scroll_to_col(col_ix, cx);
+        }
 
         cx.emit(TableEvent::SelectCell(row_ix, col_ix));
         cx.notify();
@@ -726,7 +746,8 @@ where
             return;
         }
 
-        self.set_selected_cell(row_ix, col_ix, cx);
+        // `scroll: false` -- see `set_selected_cell_with_scroll`'s own note.
+        self.set_selected_cell_with_scroll(row_ix, col_ix, false, cx);
 
         if is_double_click {
             cx.emit(TableEvent::DoubleClickedCell(row_ix, col_ix));
