@@ -974,7 +974,7 @@ mod tests {
 
     use gpui::{
         AppContext as _, Entity, Modifiers, MouseButton, StatefulInteractiveElement as _,
-        Styled as _, TestAppContext, VisualTestContext, point, px, size,
+        TestAppContext, VisualTestContext, point, px, size,
     };
 
     use super::*;
