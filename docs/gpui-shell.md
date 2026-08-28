@@ -3425,13 +3425,78 @@ Four shapes, and the design's existing commitments eliminate two of them.
 | --- | --- | --- |
 | **Build-time transform** — lift each `render` body's static chains into a template constant, leave a value function | Automatic, full win | **Out of scope.** It is a compile step, which §5.3 and §24 reject by name, and it costs the source-map-free line numbers of §21.1 |
 | **Engine call-site keys** — key a template on the QuickJS bytecode position of the builder chain | Automatic, no source change | Reaches into the engine's internals from above the seam (§6.5), and the seam exists to keep exactly this out of the contract |
-| **Author-declared templates** — an explicit form the script opts into, carrying its own key and its values | Explicit, full win, no compile step | The only shape that fits the design as written. Costs an API and asks the author to mark hot paths |
+| **Author-declared templates** — an explicit form the script opts into, carrying its own key and its values | Explicit, full win, no compile step | The only shape that fits the design as written. Costs an API and asks the author to mark hot paths — see the next section for what it would look like |
 | **Record and compare** — record as today, hash the structure, reuse on a match | No win on the JavaScript side (problem 2) | Not a shipping design, but the right *instrumentation* — see below |
 
 The author-declared shape is also the one that composes with `gpui.memo`
 (§8.6, §20.6) rather than replacing it. The two cache opposite halves: memo
 reuses a subtree whose **values** did not change, a template reuses a structure
 whose values **did**. A panel wants both — memo the chrome, template the rows.
+
+#### The surface: a template discovers its own slots
+
+The author-declared shape is the only one the table leaves standing, and what it
+left open is what that shape *looks like* — because a form asking the author to
+write a second language is §5.3's DSL under another name.
+
+It does not have to be one. The separation can be discovered at run time, by
+calling the body once with values that are not values:
+
+```js
+import { template } from "gpui";
+
+const Row = template((symbol, price, onSelect) =>
+  h_flex().gap(6).py(2)
+    .child(div().w(80).text_sm().child(symbol))
+    .child(div().w(80).text_sm().child(price))
+    .child(Button.new("trade").on_click(onSelect).child("Trade")));
+
+render() {
+  return v_flex().children(
+    this.quotes.map((quote) =>
+      Row(quote.symbol, quote.price, () => this.select(quote))),
+  );
+}
+```
+
+The body is ordinary builder code. On its first call the runtime runs it once
+with a **sentinel** in each parameter position, records the description exactly
+as it records any other, and notes every place a sentinel came to rest — a text
+child, a style argument, a handler. What is left over is the structure, and the
+notes are the `slots` list of the IR above. Every call after that grafts the
+structure and writes the arguments into the slots: no builder call is made,
+nothing crosses the bridge, and no JavaScript runs beyond the caller's own
+`map`.
+
+Three properties are what make this work where a call-site key would not:
+
+- **Validity is O(slots).** The template is selected by *which function was
+  called*, before any builder call — which is problem 1's requirement, met by
+  construction rather than by a comparison after the fact.
+- **There is no compile step.** `template(...)` is a function, its body is
+  JavaScript, and a reported line number is still a source line number
+  (§5.3, §21.1).
+- **A variant is a second template.** A conditional inside a body would freeze
+  at discovery, so the rule is that a body has none: a loading state and a
+  content state are two templates. That is the variant story written by the
+  author rather than inferred, and it is the honest version of it.
+
+And two rules the runtime has to *enforce* rather than document:
+
+- **An argument may be passed through, not computed on.** `price` may be handed
+  to `.child(...)`; `` `${price}` `` would consume the sentinel during discovery
+  and bake a constant into the structure. So the sentinel refuses to become a
+  primitive — `Symbol.toPrimitive`, `toString` and `valueOf` all throw a message
+  naming the rule — and the mistake is a diagnostic at first use rather than a
+  panel that silently stops updating. Formatting belongs at the call site, where
+  it is a value being computed rather than a structure being described.
+- **A handler must arrive as an argument.** A closure written inside the body is
+  created once, at discovery, and would capture that call's values for the life
+  of the template. A body that registers one is refused for the same reason.
+
+The second rule is also where the ceiling sits. A handler passed in is allocated
+and registered per call, which is exactly the cost the census below says a
+template cannot remove.
 
 #### Why this comes before a QuickJS JIT
 
@@ -3486,6 +3551,25 @@ the fingerprint and **0.623 ms** after. Two or three mixes per recorded
 operation sit below the noise of the measurement they are inside, which is why
 the counter is always on rather than behind a flag.
 
+**And filling is worth about 5× on that panel, not 30×.** The fill path is
+priced without the surface, by replaying the same watchlist into a fresh arena
+through `push` / `push_op` / `attach` — the exact calls an instantiation would
+make, with no JavaScript, no bridge crossing and no `Bridged` conversion
+(`tests/structure.rs`). Release build, same machine and method:
+
+| | Per build |
+| --- | ---: |
+| Rebuild: script → snapshot | **0.315 ms** |
+| Fill: replay the structure and write the slots | **0.036 ms** — 8.7× |
+| The same panel rebuilt with its forty `on_click`s removed | 0.292 ms |
+| …so the handlers cost | **0.023 ms**, and a template pays them too |
+| **Fill + handlers** | **0.060 ms** — **5.3×** |
+
+The 8.7× is a floor with the hard part left out; the 5.3× is the number to plan
+against, and the gap between them is problem 3 priced rather than argued.
+Neither includes selecting the template and its variant, which the surface above
+makes a property lookup rather than a search — but which is not zero.
+
 #### What that licenses, and what it does not
 
 It licenses designing the surface. The assumption the whole idea rested on is
@@ -3493,12 +3577,13 @@ not merely plausible on a real script — it was unanimous on the workload
 measured, which is the outcome that makes an author-declared template worth an
 API rather than a note.
 
-It does not license expecting the full `C_op` back. The census sizes problem 3
-rather than dissolving it: a panel with one button per row spends half its write
-set on handlers, and *that* half is not builder calls a template skips — it is
-closure allocation and registration that happen whether or not the structure was
-reused. A panel with fewer handlers per row does better; one that is mostly
-controls does worse.
+It does not license expecting the full `C_op` back. The census and the fill
+measurement size problem 3 rather than dissolving it: a panel with one button
+per row spends half its write set on handlers, and *that* half is not builder
+calls a template skips — it is closure allocation and registration that happen
+whether or not the structure was reused. On the watchlist they are 7% of the
+rebuild and 38% of what the fill would still cost. A panel with fewer handlers
+per row does better; one that is mostly controls does worse.
 
 Two things are still unmeasured. The Longbridge terminal of §20.3 is a larger
 and less obliging workload than the story's board, and its rate is the one that
@@ -3508,10 +3593,11 @@ reason §5.3's refusal of a DSL is not also a refusal of this.
 
 #### What is left to do, in order
 
-3. **Choose the surface.** The author-declared form is the only shape §20.7's
-   table leaves standing, so the question is what it looks like: how a template
-   is keyed, how a variant is selected, and how the values reach the slots
-   without the author writing a second language. Composition with `gpui.memo`
+3. **Build the surface.** Sentinel discovery above answers what it looks like;
+   what is left is the implementation and the two refusals that keep it honest —
+   a sentinel that throws on coercion, and a body that refuses an inline
+   handler. The pieces it needs from the arena are a graft with id remapping and
+   a slot write; everything else already exists. Composition with `gpui.memo`
    belongs in the same design rather than after it.
 4. **Target virtual list rows first.** Row descriptions are produced from
    GPUI's layout pass, twice a frame per list

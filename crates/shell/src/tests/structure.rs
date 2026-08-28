@@ -150,6 +150,45 @@ export default class Watchlist extends View {
 }
 "#;
 
+/// The census panel with the one thing a template cannot fill removed, and
+/// nothing else changed: the difference between rebuilding this and rebuilding
+/// [`WATCHLIST`] is what minting forty closures and registering forty callbacks
+/// costs.
+const WATCHLIST_WITHOUT_HANDLERS: &str = r#"
+import { View, div } from "gpui";
+import { v_flex, h_flex, Button } from "gpui-base";
+
+export default class Watchlist extends View {
+  init() {
+    this.tick = 0;
+    this.rows = 40;
+  }
+
+  row(index) {
+    const price = (100 + index + this.tick / 100).toFixed(2);
+    return h_flex()
+      .gap(6)
+      .py(2)
+      .px(6)
+      .rounded(4)
+      .bg("surface")
+      .child(div().w(80).text_sm().text_color("foreground").child(`SYM${index}`))
+      .child(div().w(80).text_sm().text_color("foreground").child(price))
+      .child(div().w(60).text_sm().text_color("muted_foreground").child("+1.42%"))
+      .child(Button.new(`trade-${index}`).px(8).py(2).child("Trade"));
+  }
+
+  render() {
+    this.tick += 1;
+    const rows = [];
+    for (let index = 0; index < this.rows; index += 1) {
+      rows.push(this.row(index));
+    }
+    return v_flex().size_full().p(12).gap(4).bg("background").children(rows);
+  }
+}
+"#;
+
 #[gpui::test]
 fn a_value_only_change_repeats_the_structure(cx: &mut TestAppContext) {
     let (runtime, mut context, view) = script_view(cx, VALUES_ONLY);
@@ -290,7 +329,9 @@ fn percent(part: usize, whole: usize) -> f64 {
 /// after both borrows have ended.
 struct Census {
     structure: crate::spec::StructureFingerprint,
+    root: crate::spec::SpecId,
     nodes: Vec<(Option<Component>, Vec<SpecOp>)>,
+    children: Vec<Vec<crate::spec::SpecId>>,
 }
 
 /// How many positions two descriptions of the same shape disagree on.
@@ -332,11 +373,15 @@ fn census(snapshot: &crate::RenderSnapshot) -> Census {
     let arena = snapshot.arena();
     Census {
         structure: snapshot.structure(),
+        root: snapshot.root(),
         nodes: (0..arena.len() as u32)
             .map(|id| {
                 let node = arena.node(id).expect("node");
                 (node.component().cloned(), node.ops().to_vec())
             })
+            .collect(),
+        children: (0..arena.len() as u32)
+            .map(|id| arena.node(id).expect("node").children().to_vec())
             .collect(),
     }
 }
@@ -406,4 +451,157 @@ fn render_once(context: &mut VisualTestContext, view: &Entity<ScriptView>) {
 fn invalidate(context: &mut VisualTestContext, view: &Entity<ScriptView>) {
     context.update(|_, cx| view.update(cx, |view, _| view.invalidate()));
     render_once(context, view);
+}
+
+/// What level 2 would cost, if the surface existed to reach it.
+///
+/// §20.7's second problem is that a template cache only pays if the *builder
+/// calls are not made* — reusing the arena on the Rust side while JavaScript
+/// still runs `div().flex().gap(4)` removes the smaller half of a recorded
+/// call and leaves the interpreter cost untouched. That is an argument, not a
+/// number, and the number is what decides whether the surface is worth
+/// designing.
+///
+/// So this replays one description into a fresh arena through the arena's own
+/// API — `push`, `push_op`, `attach`, the exact calls an instantiation would
+/// make — with this render's values written into the positions the census
+/// found varying. No JavaScript runs, nothing crosses the bridge, and no
+/// `Bridged` is converted. It is the fill path with the surface left out.
+///
+/// It is a floor rather than a promise. A real instantiation carries costs
+/// this does not — resolving which template and which variant, and minting the
+/// handlers §20.7's third problem says stay — and the census above says half of
+/// what a watchlist row writes is exactly those handlers.
+#[gpui::test]
+fn the_fill_path_against_the_rebuild_it_would_replace(cx: &mut TestAppContext) {
+    const ITERATIONS: usize = 50;
+    const ROUNDS: usize = 7;
+
+    let (runtime, mut context, object) = script_object(cx, WATCHLIST);
+
+    let (rebuild, fill, nodes, ops) = context.update(|window, cx| {
+        let mut build = || {
+            runtime
+                .build_snapshot(&object, None, crate::policy::default(), window, cx)
+                .expect("render")
+        };
+
+        build();
+        let template = census(&build());
+        let ops: usize = template.nodes.iter().map(|node| node.1.len()).sum();
+
+        // Best of several batches rather than one average, for the reason
+        // `benchmark.rs` gives: every source of noise on a shared machine adds
+        // time and none removes it.
+        let mut rebuild = std::time::Duration::MAX;
+        for _ in 0..ROUNDS {
+            let started = std::time::Instant::now();
+            for _ in 0..ITERATIONS {
+                build();
+            }
+            rebuild = rebuild.min(started.elapsed() / ITERATIONS as u32);
+        }
+
+        let mut fill = std::time::Duration::MAX;
+        for _ in 0..ROUNDS {
+            let started = std::time::Instant::now();
+            for _ in 0..ITERATIONS {
+                std::hint::black_box(replay(&template));
+            }
+            fill = fill.min(started.elapsed() / ITERATIONS as u32);
+        }
+
+        (rebuild, fill, template.nodes.len(), ops)
+    });
+
+    // The same panel with `.on_click(...)` removed and nothing else changed.
+    // The gap between the two rebuilds is the cost a template keeps paying:
+    // forty closures allocated and forty callbacks registered, which happen
+    // whether or not the structure around them was reused.
+    let (bare_runtime, mut bare_context, bare) = script_object(cx, WATCHLIST_WITHOUT_HANDLERS);
+    let handlerless = bare_context.update(|window, cx| {
+        let runtime = &bare_runtime;
+        let mut build = || {
+            runtime
+                .build_snapshot(&bare, None, crate::policy::default(), window, cx)
+                .expect("render")
+        };
+        build();
+        let mut best = std::time::Duration::MAX;
+        for _ in 0..ROUNDS {
+            let started = std::time::Instant::now();
+            for _ in 0..ITERATIONS {
+                build();
+            }
+            best = best.min(started.elapsed() / ITERATIONS as u32);
+        }
+        best
+    });
+
+    let handlers = rebuild.saturating_sub(handlerless);
+    let realistic = fill + handlers;
+
+    println!(
+        "\n[G] fill against rebuild — 40-row watchlist, {nodes} nodes, {ops} recorded ops\
+         \n    rebuild (script → snapshot)        {:.3} ms\
+         \n    fill    (replay + slots)           {:.3} ms   {:.1}x\
+         \n    rebuild without the 40 handlers    {:.3} ms\
+         \n    ...so handlers cost               {:.3} ms, and a template still pays them\
+         \n    fill + handlers                    {:.3} ms   {:.1}x",
+        rebuild.as_secs_f64() * 1000.0,
+        fill.as_secs_f64() * 1000.0,
+        rebuild.as_secs_f64() / fill.as_secs_f64().max(f64::MIN_POSITIVE),
+        handlerless.as_secs_f64() * 1000.0,
+        handlers.as_secs_f64() * 1000.0,
+        realistic.as_secs_f64() * 1000.0,
+        rebuild.as_secs_f64() / realistic.as_secs_f64().max(f64::MIN_POSITIVE),
+    );
+
+    // A smoke bound rather than the real reading, which is the printed number:
+    // the assertion has to hold in a debug build too, where both sides are
+    // slower by different factors.
+    assert!(
+        fill < rebuild,
+        "replaying a description in Rust should not cost more than describing it \
+         through the bridge: fill {fill:?} against rebuild {rebuild:?}"
+    );
+}
+
+/// Rebuilds one description into a fresh arena, through the calls an
+/// instantiation would make.
+///
+/// Nodes first, then their operations, then the tree — because the arena
+/// refuses an operation on a node that has already been attached, which is the
+/// same rule that stops a script reusing an element.
+fn replay(template: &Census) -> crate::spec::SpecArena {
+    let mut arena = crate::spec::SpecArena::new();
+
+    for (component, _) in &template.nodes {
+        let component = component.clone().expect("a described node");
+        arena.push(component);
+    }
+
+    for (id, (_, ops)) in template.nodes.iter().enumerate() {
+        for op in ops {
+            arena.push_op(id as u32, op.clone()).expect("op");
+        }
+    }
+
+    // The tree, bottom up. The arena refuses an attachment to a node that has
+    // already been attached itself — the same rule that stops a script reusing
+    // an element — so a parent has to receive all of its children before its
+    // own parent receives it. A post-order walk from the root is exactly that
+    // order, and it is the order the builder produces naturally.
+    attach_below(&mut arena, template, template.root);
+
+    arena
+}
+
+fn attach_below(arena: &mut crate::spec::SpecArena, template: &Census, parent: u32) {
+    for child in &template.children[parent as usize] {
+        attach_below(arena, template, *child);
+    }
+    for child in &template.children[parent as usize] {
+        arena.attach(parent, *child).expect("attach");
+    }
 }
