@@ -1,6 +1,7 @@
 use gpui::{
     AnyElement, App, InteractiveElement as _, IntoElement, ParentElement, Pixels, RenderOnce,
-    StyleRefinement, Styled, TextAlign, Window, div, prelude::FluentBuilder as _, px, relative,
+    SharedString, StyleRefinement, Styled, TextAlign, Window, div, prelude::FluentBuilder as _, px,
+    relative,
 };
 use gpui_base::{
     Table as BaseTable, TableBody as BaseTableBody, TableCaption as BaseTableCaption,
@@ -42,6 +43,7 @@ pub struct Table {
     style: StyleRefinement,
     children: Vec<AnyChildElement>,
     size: Size,
+    accessibility_label: Option<SharedString>,
 }
 
 impl Table {
@@ -51,7 +53,17 @@ impl Table {
             style: StyleRefinement::default(),
             children: Vec::new(),
             size: Size::default(),
+            accessibility_label: None,
         }
+    }
+
+    /// Set the name a screen reader announces for the table.
+    ///
+    /// A [`TableCaption`] is visible descriptive content and is not used
+    /// automatically as the table's accessible name.
+    pub fn accessibility_label(mut self, label: impl Into<SharedString>) -> Self {
+        self.accessibility_label = Some(label.into());
+        self
     }
 
     pub fn child(mut self, child: impl ChildElement + 'static) -> Self {
@@ -92,6 +104,9 @@ impl ChildElement for Table {
 impl RenderOnce for Table {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         BaseTable::new(("table", self.ix))
+            .when_some(self.accessibility_label, |this, label| {
+                this.accessibility_label(label)
+            })
             .w_full()
             .text_sm()
             .overflow_hidden()
@@ -103,6 +118,23 @@ impl RenderOnce for Table {
                     .enumerate()
                     .map(|(ix, c)| c.into_any(ix, self.size)),
             )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stores_an_explicit_accessibility_label() {
+        let plain = Table::new();
+        assert_eq!(plain.accessibility_label, None);
+
+        let named = Table::new().accessibility_label("Recent invoices");
+        assert_eq!(
+            named.accessibility_label.as_deref(),
+            Some("Recent invoices")
+        );
     }
 }
 
