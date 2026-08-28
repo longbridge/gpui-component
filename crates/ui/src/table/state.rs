@@ -389,9 +389,58 @@ where
     pub fn scroll_to_col(&mut self, col_ix: usize, cx: &mut Context<Self>) {
         let col_ix = col_ix.saturating_sub(self.fixed_left_cols_count());
 
-        self.horizontal_scroll_handle
-            .scroll_to_item(col_ix, ScrollStrategy::Top);
+        // Resolve the offset here instead of deferring it to the virtual list.
+        //
+        // The header and the rows share `horizontal_scroll_handle`, but only
+        // the rows are a `VirtualList`, and a deferred `scroll_to_item` is
+        // applied during that list's prepaint — which runs *after* the header
+        // has already been rendered and prepainted with the old offset. The
+        // header would therefore stay one frame behind the rows.
+        match self.horizontal_offset_for_col(col_ix) {
+            Some(offset_x) => {
+                let mut offset = self.horizontal_scroll_handle.offset();
+                offset.x = offset_x;
+                self.horizontal_scroll_handle.set_offset(offset);
+            }
+            // Before the first layout the viewport size is unknown, let the
+            // virtual list resolve the offset once it has been laid out.
+            None => self
+                .horizontal_scroll_handle
+                .scroll_to_item(col_ix, ScrollStrategy::Top),
+        }
+
         cx.notify();
+    }
+
+    /// The horizontal scroll offset that brings the scrollable (non-fixed)
+    /// column at `col_ix` fully into view.
+    ///
+    /// This mirrors the nearest-edge behavior of [`VirtualListScrollHandle::scroll_to_item`]
+    /// with [`ScrollStrategy::Top`]: an already visible column keeps the current
+    /// offset, otherwise the column is aligned to the edge it overflows. Both
+    /// of those move the offset towards a column that exists, so the result
+    /// never runs past the content and needs no extra clamping.
+    ///
+    /// Returns `None` when the viewport size is not known yet, or when `col_ix`
+    /// is out of range.
+    fn horizontal_offset_for_col(&self, col_ix: usize) -> Option<Pixels> {
+        let viewport_width = self.horizontal_scroll_handle.bounds().size.width;
+        if viewport_width <= px(0.) {
+            return None;
+        }
+
+        let cols = self.col_groups.get(self.fixed_left_cols_count()..)?;
+        let col_left: Pixels = cols.get(..col_ix)?.iter().map(|col| col.width).sum();
+        let col_right = col_left + cols.get(col_ix)?.width;
+        let offset_x = self.horizontal_scroll_handle.offset().x;
+
+        Some(if col_left + offset_x < px(0.) {
+            -col_left
+        } else if col_right + offset_x > viewport_width {
+            viewport_width - col_right
+        } else {
+            offset_x
+        })
     }
 
     /// Returns the selected row index.
