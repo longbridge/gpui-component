@@ -203,6 +203,44 @@ export default class Workspace extends View {
       );
   }
 
+  /**
+   * One side dock's collapse control, drawn in the toolbar rather than in the
+   * dock.
+   *
+   * This is the whole reason it is here. A collapsed side dock has no width and
+   * base draws nothing for it -- correctly: a strip of empty column beside the
+   * centre would be worse than none. But a control that lives in a dock goes
+   * with it, so a dock collapsed from its own chrome is a dock with no way back.
+   * A bottom dock keeps a strip for exactly this reason; a side dock cannot, so
+   * whoever collapses it owns the way to reopen it.
+   *
+   * The state is read from the dock every time rather than mirrored here: the
+   * edge can also be dragged shut, and a copy of the flag would start lying the
+   * first time that happened.
+   *
+   * @param {import("gpui-base").DockPlacement} placement
+   * @param {string} caption
+   * @param {Context} cx
+   */
+  dockToggle(placement, caption, cx) {
+    if (!this.dock.has_dock(placement)) return div();
+    const open = this.dock.is_dock_open(placement);
+    return div()
+      .id("toggle-" + placement)
+      .px(8)
+      .py(3)
+      .rounded(4)
+      .text_size(11)
+      .bg(open ? cx.theme().colors.accent : cx.theme().colors.secondary)
+      .text_color(open ? cx.theme().colors.foreground : cx.theme().colors.muted_foreground)
+      .hover((it) => it.bg(cx.theme().colors.accent))
+      .on_click((_event, cx) => {
+        this.dock.toggle_dock(placement);
+        cx.notify();
+      })
+      .child(caption);
+  }
+
   /** @param {Context} cx */
   toolbar(cx) {
     const open = this.dock.panels().filter((panel) => panel.placement === "center").length;
@@ -212,11 +250,16 @@ export default class Workspace extends View {
       .px(10)
       .gap(10)
       .items_center()
-      .bg(cx.theme().colors.secondary)
+      // The window's own surface, not the tab bars': this row is the
+      // application's chrome and the row below it is the dock's, and a shared
+      // fill made the two read as one strip.
+      .bg(cx.theme().colors.background)
       .border_b(1)
       .border_color(cx.theme().colors.border)
       .child(label("Workspace", cx))
       .child(muted(open + " open", cx))
+      .child(this.dockToggle("left", "Files", cx))
+      .child(this.dockToggle("right", "Outline", cx))
       .child(
         div()
           .id("new-document")
