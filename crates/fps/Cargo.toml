@@ -24,10 +24,12 @@ instant.workspace = true
 sysinfo = "0.37"
 
 # This process' GPU usage is read straight from the platform, since `sysinfo`
-# does not report it. Each backend is the counter the platform's own activity
-# monitor attributes per process with, so no vendor SDK or elevated privilege
-# is involved.
+# does not report it, and so is its private memory, which `sysinfo` reports only
+# as a resident set that counts every shared library page. Each backend is the
+# counter the platform's own activity monitor attributes per process with, so no
+# vendor SDK or elevated privilege is involved.
 [target.'cfg(target_os = "macos")'.dependencies]
+libc = "0.2"
 objc2-core-foundation = { version = "0.3", default-features = false, features = [
     "std",
     "CFArray",
@@ -41,7 +43,11 @@ objc2-io-kit = { version = "0.3", default-features = false, features = [
 ] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows = { workspace = true, features = ["Win32_System_Performance"] }
+windows = { workspace = true, features = [
+    "Win32_System_Performance",
+    "Win32_System_ProcessStatus",
+    "Win32_System_Threading",
+] }
 
 [dev-dependencies]
 gpui = { workspace = true, features = ["test-support"] }

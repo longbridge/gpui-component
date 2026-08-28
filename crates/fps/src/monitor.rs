@@ -22,6 +22,17 @@ const DEFAULT_FRAME_BUDGET: Duration = Duration::from_nanos(16_666_667);
 const DEFAULT_CAPACITY: usize = 120;
 const DEFAULT_RESOURCE_INTERVAL: Duration = Duration::from_millis(500);
 
+/// How far back CPU, memory and GPU are averaged over. At the default interval
+/// that is six readings: long enough to settle the churn between one sample and
+/// the next, short enough that a real change reaches the HUD while the reader
+/// is still looking at what caused it.
+const RESOURCE_WINDOW: Duration = Duration::from_secs(3);
+
+/// Which frame the `P95` row reports. The 95th rather than the 99th: the chart
+/// keeps 120 frames by default, so the 99th is the second slowest of them — one
+/// frame, which moves the row on its own and reads as noise.
+const FRAME_PERCENTILE: f32 = 0.95;
+
 /// How fast the chart's y axis relaxes back down after a spike. Growth is
 /// immediate so a slow frame is never clipped, while the decay is gradual so
 /// the bars don't visibly rescale every frame.
@@ -99,7 +110,11 @@ const DEFAULT_FONT: &str = "monospace";
 struct Readout {
     fps: f32,
     frame_millis: f32,
+    /// The slow tail of the same frames `frame_millis` is the mean of.
+    percentile_millis: f32,
     dropped_percent: f32,
+    /// Mean invalidations coalesced into one frame; one means none were wasted.
+    invalidations: f32,
 }
 
 pub struct FpsMonitor {
@@ -204,7 +219,10 @@ impl FpsMonitor {
             // Probing walks the process table, so it never runs on the render
             // thread. The probe moves in and out of each background task rather
             // than living behind a lock.
-            let Some(mut probe) = executor.spawn(async { ResourceProbe::new() }).await else {
+            let Some(mut probe) = executor
+                .spawn(async { ResourceProbe::new(RESOURCE_WINDOW) })
+                .await
+            else {
                 return;
             };
 
@@ -251,7 +269,9 @@ impl FpsMonitor {
             // The mean over the interval rather than the latest frame, which
             // at this cadence would be an arbitrary sample.
             frame_millis: self.sampler.mean_draw().as_secs_f32() * 1000.,
+            percentile_millis: self.sampler.percentile_draw(FRAME_PERCENTILE).as_secs_f32() * 1000.,
             dropped_percent: self.sampler.over_budget_ratio(self.frame_budget) * 100.,
+            invalidations: self.sampler.mean_invalidations(),
         };
         self.readout_at = Some(now);
     }
@@ -399,7 +419,9 @@ impl Render for FpsMonitor {
         let Readout {
             fps,
             frame_millis,
+            percentile_millis,
             dropped_percent: dropped,
+            invalidations,
         } = self.readout;
         let fps_color = fps_color(fps, budget, style);
         let resources = self.resources.filter(|_| self.show_resources);
@@ -454,11 +476,46 @@ impl Render for FpsMonitor {
                             style,
                         ))
                         .child(reading(
-                            "DROP",
-                            format!("{dropped:.1}%"),
-                            style.level_color(if dropped > 0. { 1. } else { 0. }, 0.5),
+                            // Graded the same way, so the two millisecond rows
+                            // read as one measurement seen twice: what a frame
+                            // usually costs, and what its slow tail costs.
+                            "P95",
+                            format!("{percentile_millis:.1} ms"),
+                            style.level_color(percentile_millis / 1000., budget.as_secs_f32()),
                             style,
                         ))
+                        .child(
+                            // Dropped frames and wasted invalidations share a
+                            // row: both count redundant work rather than
+                            // measuring a duration, so neither belongs in the
+                            // millisecond column above.
+                            row()
+                                .child(pair(
+                                    "DROP",
+                                    format!("{dropped:.1}%"),
+                                    style.level_color(if dropped > 0. { 1. } else { 0. }, 0.5),
+                                    style,
+                                ))
+                                .child(pair(
+                                    "INV",
+                                    format!("{invalidations:.1}"),
+                                    // Ungraded, unlike every other reading in
+                                    // the HUD. One per frame is the ideal, but
+                                    // it is not the floor here: in continuous
+                                    // mode the monitor requests an animation
+                                    // frame of its own on every render, so an
+                                    // application invalidating once a frame
+                                    // measures two and a healthy HUD would sit
+                                    // permanently in the red. The baseline
+                                    // depends on that switch and on how the
+                                    // application drives its own redraws, which
+                                    // is not something the HUD can grade — so
+                                    // the number is reported and the reading is
+                                    // left to whoever knows what to expect.
+                                    style.foreground,
+                                    style,
+                                )),
+                        )
                         .when_some(
                             resources.and_then(|resources| resources.gpu_percent),
                             |this, gpu| {
@@ -475,20 +532,17 @@ impl Render for FpsMonitor {
                                 // CPU and memory share a row: both are coarse
                                 // background samples, unlike the per-frame
                                 // numbers.
-                                div()
-                                    .flex()
-                                    .w_full()
-                                    .justify_between()
-                                    .gap_2()
-                                    .py(px(1.))
+                                row()
                                     .child(pair(
                                         "CPU",
-                                        format!("{:.1}%", resources.cpu_percent),
+                                        format_cpu(resources.cpu_percent),
+                                        style.foreground,
                                         style,
                                     ))
                                     .child(pair(
                                         "MEM",
                                         format_bytes(resources.memory_bytes),
+                                        style.foreground,
                                         style,
                                     )),
                             )
@@ -521,14 +575,19 @@ fn fps_color(fps: f32, budget: Duration, style: FpsStyle) -> Hsla {
     }
 }
 
+/// A row carrying two [`pair`]s, pushed to either inner edge.
+fn row() -> Div {
+    div().flex().w_full().justify_between().gap_2().py(px(1.))
+}
+
 /// A `LABEL value` pair kept together, for rows that carry more than one
 /// reading. The label stays muted so it reads as a caption, not as data.
-fn pair(label: &'static str, value: String, style: FpsStyle) -> Div {
+fn pair(label: &'static str, value: String, value_color: Hsla, style: FpsStyle) -> Div {
     div()
         .flex()
         .gap_1()
         .child(div().text_color(style.muted).child(label))
-        .child(div().text_color(style.foreground).child(value))
+        .child(div().text_color(value_color).child(value))
 }
 
 /// One `LABEL … value` row. The value is right aligned against the HUD's inner
@@ -543,6 +602,22 @@ fn reading(label: &'static str, value: String, value_color: Hsla, style: FpsStyl
         .py(px(1.))
         .child(div().text_color(style.muted).child(label))
         .child(div().text_color(value_color).child(value))
+}
+
+/// A CPU reading on the single core scale, which passes 100 as soon as the
+/// process spreads over more than one core and reaches the core count times a
+/// hundred when it saturates the machine.
+///
+/// A tenth is worth showing while the reading is small, where it is the
+/// difference between idle and a busy timer; past ten the extra digit only
+/// churns, and dropping it also keeps the reading inside the row's share of the
+/// HUD on a machine with enough cores to reach four figures.
+fn format_cpu(percent: f32) -> String {
+    if percent < 10. {
+        format!("{percent:.1}%")
+    } else {
+        format!("{percent:.0}%")
+    }
 }
 
 fn format_bytes(bytes: u64) -> String {
@@ -612,5 +687,20 @@ mod tests {
     fn formats_memory_by_magnitude() {
         assert_eq!(format_bytes(184 * 1024 * 1024), "184 MB");
         assert_eq!(format_bytes(3 * 1024 * 1024 * 1024), "3.00 GB");
+    }
+
+    /// The reading is on the single core scale, so it passes 100 and keeps
+    /// going — the row must show that rather than round it away or clip it.
+    #[test]
+    fn formats_cpu_on_the_single_core_scale() {
+        // A process spread over a core and a half, which under a scale where
+        // 100 is the whole machine would have read 5.8% on a 24 core desktop.
+        assert_eq!(format_cpu(140.), "140%");
+        // Saturating every core of a big machine still has somewhere to go.
+        assert_eq!(format_cpu(2400.), "2400%");
+        // Small readings keep the tenth that distinguishes them.
+        assert_eq!(format_cpu(0.4), "0.4%");
+        assert_eq!(format_cpu(9.9), "9.9%");
+        assert_eq!(format_cpu(12.4), "12%");
     }
 }

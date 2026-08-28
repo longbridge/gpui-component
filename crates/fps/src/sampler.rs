@@ -118,6 +118,45 @@ impl FrameSampler {
         total / self.samples.len() as u32
     }
 
+    /// The draw time `percentile` of the retained frames came in at or under,
+    /// as in `0.95` for the 95th.
+    ///
+    /// The mean beside it says what a typical frame costs; this says what the
+    /// slow tail costs, and the tail is what a stutter *is*. The two separate
+    /// exactly where it matters: a run of quick frames pulls the mean down over
+    /// a spike, so a HUD reporting only the mean reads comfortable through jank
+    /// the user can see. It is the same reason a benchmark quotes a 1% low
+    /// beside its average frame rate.
+    ///
+    /// The rank is the nearest one rather than an interpolation between two
+    /// frames, so every value the HUD shows is a frame that was really drawn.
+    pub(crate) fn percentile_draw(&self, percentile: f32) -> Duration {
+        if self.samples.is_empty() {
+            return Duration::ZERO;
+        }
+        let mut draws: Vec<Duration> = self.samples.iter().map(|sample| sample.draw).collect();
+        draws.sort_unstable();
+
+        let last = draws.len() - 1;
+        let rank = (percentile.clamp(0., 1.) * last as f32).round() as usize;
+        draws[rank.min(last)]
+    }
+
+    /// Mean number of invalidations coalesced into one retained frame.
+    ///
+    /// One means every redraw the window was asked for became a frame. Well
+    /// above one means it was asked far more often than it could answer, which
+    /// is work being thrown away — and unlike a slow frame it does not show up
+    /// in the draw times at all, since each frame that *does* get drawn may be
+    /// perfectly quick.
+    pub(crate) fn mean_invalidations(&self) -> f32 {
+        if self.samples.is_empty() {
+            return 0.;
+        }
+        let total: u64 = self.samples.iter().map(|sample| sample.invalidations).sum();
+        total as f32 / self.samples.len() as f32
+    }
+
     /// The slowest retained frame, used to scale the chart's y axis.
     pub(crate) fn peak_draw(&self) -> Duration {
         self.samples
@@ -156,15 +195,103 @@ impl FrameSampler {
 /// A sample of the resource usage shown beside the frame numbers.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub(crate) struct ResourceSample {
-    /// CPU used by this process, normalized so that 100 means every logical
-    /// core is saturated. `sysinfo` reports 100 per saturated core, so the raw
-    /// value is divided by the core count.
+    /// CPU used by this process, on the scale `top`, Activity Monitor and
+    /// Task Manager's per-process column all use: 100 is one saturated logical
+    /// core, so a process spread across a core and a half reads 140.
+    ///
+    /// Deliberately not divided by the core count. Normalizing so that 100 is
+    /// the whole machine makes the reading depend on hardware that has nothing
+    /// to do with the application — the same work reads 12% on a four core
+    /// laptop and 2% on a twenty-four core desktop — and it compresses every
+    /// interesting value into the bottom of the range, where a UI thread
+    /// pinning a core reads 4% and looks idle.
     pub cpu_percent: f32,
-    /// Resident memory of this process, in bytes.
+    /// Memory this process is responsible for, in bytes: private memory rather
+    /// than the resident set, which is mostly shared library pages. See
+    /// [`crate::memory`].
     pub memory_bytes: u64,
     /// The share of the GPU this process is using, and `None` on a platform
     /// that does not attribute GPU time per process. See [`crate::gpu`].
     pub gpu_percent: Option<f32>,
+}
+
+/// Averages the resource readings taken inside a trailing window.
+///
+/// Each of the three is a coarse sample of something that moves between one
+/// sample and the next: CPU is the share of a single interval, GPU the share of
+/// another, memory a snapshot of an allocator that grows and releases in steps.
+/// Published raw at the sampling cadence they jump by tens of percent between
+/// readings that describe the same steady workload, and the eye tracks the
+/// churn instead of the value. Averaging over a window a few samples long keeps
+/// the readings legible without hiding a real change for longer than the window.
+#[cfg(not(target_family = "wasm"))]
+#[derive(Debug)]
+pub(crate) struct ResourceHistory {
+    samples: VecDeque<(Instant, ResourceSample)>,
+    window: Duration,
+}
+
+#[cfg(not(target_family = "wasm"))]
+impl ResourceHistory {
+    pub(crate) fn new(window: Duration) -> Self {
+        Self {
+            samples: VecDeque::new(),
+            window,
+        }
+    }
+
+    pub(crate) fn push(&mut self, sample: ResourceSample, now: Instant) {
+        self.samples.push_back((now, sample));
+        while let Some((at, _)) = self.samples.front() {
+            if now.duration_since(*at) > self.window {
+                self.samples.pop_front();
+            } else {
+                break;
+            }
+        }
+    }
+
+    /// The mean of the retained readings, or `None` before the first one has
+    /// landed.
+    ///
+    /// The GPU share is averaged over the readings that carried one rather than
+    /// over all of them: a momentary gap in a counter that is otherwise being
+    /// published would otherwise read as a dip towards zero.
+    pub(crate) fn mean(&self) -> Option<ResourceSample> {
+        if self.samples.is_empty() {
+            return None;
+        }
+
+        let count = self.samples.len() as f32;
+        let cpu_percent = self
+            .samples
+            .iter()
+            .map(|(_, sample)| sample.cpu_percent)
+            .sum::<f32>()
+            / count;
+        // Summed wide: the byte counts are large and the window is only bounded
+        // by time, so a fast sampling cadence must not be able to overflow it.
+        let memory_bytes = self
+            .samples
+            .iter()
+            .map(|(_, sample)| u128::from(sample.memory_bytes))
+            .sum::<u128>()
+            / self.samples.len() as u128;
+
+        let (gpu_total, readings) = self
+            .samples
+            .iter()
+            .filter_map(|(_, sample)| sample.gpu_percent)
+            .fold((0., 0u32), |(total, count), percent| {
+                (total + percent, count + 1)
+            });
+
+        Some(ResourceSample {
+            cpu_percent,
+            memory_bytes: memory_bytes as u64,
+            gpu_percent: (readings > 0).then(|| gpu_total / readings as f32),
+        })
+    }
 }
 
 /// Samples this process' CPU, memory and GPU usage.
@@ -175,27 +302,28 @@ pub(crate) struct ResourceSample {
 pub(crate) struct ResourceProbe {
     system: sysinfo::System,
     pid: sysinfo::Pid,
-    cores: f32,
     /// `None` when this platform publishes no per-process GPU counter, which
     /// the HUD shows by leaving the reading out rather than at a flat zero.
     gpu: Option<crate::gpu::GpuProbe>,
+    /// `None` when this platform publishes no private-memory counter, and the
+    /// reading falls back to the resident set `sysinfo` reports.
+    memory: Option<crate::memory::MemoryProbe>,
+    history: ResourceHistory,
 }
 
 #[cfg(not(target_family = "wasm"))]
 impl ResourceProbe {
     /// Returns `None` when the current process id cannot be determined, which
     /// is the only way sampling can be unavailable on a supported platform.
-    pub(crate) fn new() -> Option<Self> {
+    pub(crate) fn new(window: Duration) -> Option<Self> {
         let pid = sysinfo::get_current_pid().ok()?;
-        let cores = std::thread::available_parallelism()
-            .map(|cores| cores.get() as f32)
-            .unwrap_or(1.);
 
         let mut probe = Self {
             system: sysinfo::System::new(),
             pid,
-            cores,
             gpu: crate::gpu::GpuProbe::new(),
+            memory: crate::memory::MemoryProbe::new(),
+            history: ResourceHistory::new(window),
         };
         // The first refresh only establishes the baseline; `cpu_usage` is a
         // delta against the previous refresh and reads zero until then.
@@ -203,16 +331,32 @@ impl ResourceProbe {
         Some(probe)
     }
 
+    /// Takes a reading and returns the mean over the window, so the HUD is
+    /// handed a number that is already smoothed. Averaging belongs on this side
+    /// of the thread boundary: the probe is what knows the cadence the readings
+    /// arrive at, and the render thread should not be doing arithmetic over a
+    /// history it would otherwise have to keep.
     pub(crate) fn sample(&mut self) -> Option<ResourceSample> {
+        let reading = self.read()?;
+        self.history.push(reading, Instant::now());
+        self.history.mean()
+    }
+
+    fn read(&mut self) -> Option<ResourceSample> {
         self.refresh();
-        // Sampled before the process is borrowed out of `self.system`, so the
-        // two borrows of `self` do not overlap.
+        // Both are sampled before the process is borrowed out of `self.system`,
+        // so the borrows of `self` do not overlap.
         let gpu_percent = self.gpu.as_mut().and_then(crate::gpu::GpuProbe::sample);
+        let private = self
+            .memory
+            .as_mut()
+            .and_then(crate::memory::MemoryProbe::sample);
 
         let process = self.system.process(self.pid)?;
         Some(ResourceSample {
-            cpu_percent: (process.cpu_usage() / self.cores).min(100.),
-            memory_bytes: process.memory(),
+            // Left on `sysinfo`'s own scale, which is 100 per saturated core.
+            cpu_percent: process.cpu_usage(),
+            memory_bytes: private.unwrap_or_else(|| process.memory()),
             gpu_percent,
         })
     }
@@ -247,14 +391,30 @@ mod tests {
     // `std::time::Instant` off the web, so tests can build one without pulling
     // in the `scheduler` crate.
     fn timing(window_id: WindowId, draw: Duration) -> FrameTiming {
+        coalesced(window_id, draw, 1)
+    }
+
+    /// A frame that answered `invalidations` requests to redraw at once.
+    fn coalesced(window_id: WindowId, draw: Duration, invalidations: u64) -> FrameTiming {
         let start = std::time::Instant::now();
         FrameTiming {
             window_id,
             dirty_at: None,
-            invalidations: 1,
+            invalidations,
             draw_start: start,
             draw_end: start + draw,
         }
+    }
+
+    /// A sampler holding one frame per entry in `draws`, in milliseconds.
+    fn sampler_of(draws: &[u64]) -> FrameSampler {
+        let window_id = WindowId::from(1);
+        let mut sampler = FrameSampler::new(window_id, 256);
+        let now = Instant::now();
+        for millis in draws {
+            sampler.ingest(vec![timing(window_id, Duration::from_millis(*millis))], now);
+        }
+        sampler
     }
 
     #[test]
@@ -351,6 +511,97 @@ mod tests {
         assert!(measure_fps(2, Duration::from_millis(10)) > 0.);
     }
 
+    /// The resource history only exists off the web, where there is a process
+    /// to sample in the first place.
+    #[cfg(not(target_family = "wasm"))]
+    mod resource_history {
+        use super::*;
+
+        fn resources(
+            cpu_percent: f32,
+            memory_bytes: u64,
+            gpu_percent: Option<f32>,
+        ) -> ResourceSample {
+            ResourceSample {
+                cpu_percent,
+                memory_bytes,
+                gpu_percent,
+            }
+        }
+
+        #[test]
+        fn resource_readings_average_over_the_window() {
+            let mut history = ResourceHistory::new(Duration::from_secs(3));
+            let start = Instant::now();
+
+            // Four readings a second apart, all of them still inside a three
+            // second window: the oldest is exactly the window's age, and the
+            // window is inclusive of it.
+            for (second, cpu) in [(0, 400.), (1, 100.), (2, 200.), (3, 300.)] {
+                history.push(
+                    resources(cpu, 100 * 1024 * 1024, Some(cpu / 10.)),
+                    start + Duration::from_secs(second),
+                );
+            }
+
+            let mean = history.mean().expect("four readings have landed");
+            assert!((mean.cpu_percent - 250.).abs() < 0.01);
+            assert!((mean.gpu_percent.expect("every reading carried one") - 25.).abs() < 0.01);
+            assert_eq!(mean.memory_bytes, 100 * 1024 * 1024);
+
+            // A fifth a second later pushes the first out, so the reading that
+            // was four times the others stops weighing on the mean.
+            history.push(
+                resources(100., 100 * 1024 * 1024, Some(10.)),
+                start + Duration::from_secs(4),
+            );
+            let mean = history.mean().expect("the window still holds four");
+            assert!((mean.cpu_percent - 175.).abs() < 0.01);
+        }
+
+        /// The averaged CPU stays on the single core scale rather than being folded
+        /// back into `0..=100`: a process holding two cores busy reads 200 whether
+        /// it is averaged or not.
+        #[test]
+        fn averaging_does_not_cap_the_cpu_reading() {
+            let mut history = ResourceHistory::new(Duration::from_secs(3));
+            let now = Instant::now();
+
+            history.push(resources(150., 0, None), now);
+            history.push(resources(250., 0, None), now);
+
+            let mean = history.mean().expect("two readings have landed");
+            assert!((mean.cpu_percent - 200.).abs() < 0.01);
+        }
+
+        #[test]
+        fn a_gap_in_the_gpu_counter_does_not_read_as_a_dip() {
+            let mut history = ResourceHistory::new(Duration::from_secs(3));
+            let now = Instant::now();
+
+            // The middle reading missed the counter. Averaging it in as a zero
+            // would report 40%; the honest mean is over the two that carried one.
+            history.push(resources(0., 0, Some(60.)), now);
+            history.push(resources(0., 0, None), now);
+            history.push(resources(0., 0, Some(60.)), now);
+
+            let mean = history.mean().expect("three readings have landed");
+            assert_eq!(mean.gpu_percent, Some(60.));
+        }
+
+        #[test]
+        fn a_platform_with_no_gpu_counter_stays_without_one() {
+            let mut history = ResourceHistory::new(Duration::from_secs(3));
+            assert!(history.mean().is_none(), "nothing has been sampled yet");
+
+            history.push(resources(12., 0, None), Instant::now());
+            assert_eq!(
+                history.mean().expect("one reading has landed").gpu_percent,
+                None
+            );
+        }
+    }
+
     #[test]
     fn simultaneous_frames_do_not_divide_by_zero() {
         let window_id = WindowId::from(1);
@@ -369,6 +620,75 @@ mod tests {
         );
 
         assert_eq!(sampler.fps(), 0.);
+    }
+
+    #[test]
+    fn the_percentile_is_the_frame_at_the_nearest_rank() {
+        // Twenty frames, so the 95th percentile is rank 0.95 * 19 = 18.05,
+        // which rounds to the second slowest.
+        let mut draws: Vec<u64> = (1..=20).collect();
+        draws.reverse();
+        let sampler = sampler_of(&draws);
+
+        assert_eq!(sampler.percentile_draw(0.95), Duration::from_millis(19));
+        assert_eq!(sampler.percentile_draw(1.), Duration::from_millis(20));
+        assert_eq!(sampler.percentile_draw(0.), Duration::from_millis(1));
+    }
+
+    #[test]
+    fn the_percentile_separates_a_stutter_the_mean_absorbs() {
+        // Eighteen quick frames and two that took twenty times as long: the
+        // shape a stutter has. The mean stays inside a 60Hz budget while the
+        // tail is well past it, which is the whole reason the row exists.
+        let mut draws = vec![4; 18];
+        draws.extend([80, 80]);
+        let sampler = sampler_of(&draws);
+
+        assert!(sampler.mean_draw() < Duration::from_millis(12));
+        assert_eq!(sampler.percentile_draw(0.95), Duration::from_millis(80));
+    }
+
+    #[test]
+    fn one_slow_frame_in_twenty_does_not_move_the_percentile() {
+        // The complement of the test above, and the reason a percentile is
+        // worth having over `peak_draw`: a single frame is the top 5% of
+        // twenty, so it stays out of the 95th. The chart still shows it, and
+        // the axis is still scaled to it — the row is for the tail that
+        // *persists*, not for every outlier.
+        let mut draws = vec![4; 19];
+        draws.push(80);
+        let sampler = sampler_of(&draws);
+
+        assert_eq!(sampler.percentile_draw(0.95), Duration::from_millis(4));
+        assert_eq!(sampler.peak_draw(), Duration::from_millis(80));
+    }
+
+    #[test]
+    fn an_empty_sampler_has_no_percentile_rather_than_a_guess() {
+        let sampler = FrameSampler::new(WindowId::from(1), 8);
+        assert_eq!(sampler.percentile_draw(0.95), Duration::ZERO);
+        assert_eq!(sampler.mean_invalidations(), 0.);
+    }
+
+    #[test]
+    fn invalidations_average_over_the_retained_frames() {
+        let window_id = WindowId::from(1);
+        let mut sampler = FrameSampler::new(window_id, 8);
+        let now = Instant::now();
+
+        // A window asked to redraw five times for every three frames it drew.
+        for invalidations in [1, 3, 1] {
+            sampler.ingest(
+                vec![coalesced(
+                    window_id,
+                    Duration::from_millis(4),
+                    invalidations,
+                )],
+                now,
+            );
+        }
+
+        assert!((sampler.mean_invalidations() - 5. / 3.).abs() < f32::EPSILON);
     }
 
     #[test]

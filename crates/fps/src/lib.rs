@@ -32,6 +32,8 @@
 
 #[cfg(not(target_family = "wasm"))]
 mod gpu;
+#[cfg(not(target_family = "wasm"))]
+mod memory;
 mod monitor;
 mod overlay;
 mod sampler;
