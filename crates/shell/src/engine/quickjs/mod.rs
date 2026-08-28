@@ -183,6 +183,11 @@ enum PendingNestedOperation {
         provenance: NestedViewProvenance,
         props: Persistent<Value<'static>>,
     },
+    Notify {
+        runtime: Weak<ShellRuntime>,
+        token: u32,
+        provenance: NestedViewProvenance,
+    },
     Release {
         runtime: Weak<ShellRuntime>,
         token: u32,
@@ -1151,36 +1156,54 @@ impl ShellRuntime {
         Ok(())
     }
 
-    fn nested_view_for_notify(&self, ctx: &Ctx<'_>, token: u32) -> JsResult<Entity<ScriptView>> {
-        if self.pending_nested.borrow().iter().any(|operation| {
+    fn queue_nested_view_notify(self: &Rc<Self>, ctx: &Ctx<'_>, token: u32) -> JsResult<()> {
+        let pending = self.pending_nested.borrow();
+        let pending_create = pending.iter().find_map(|operation| match operation {
+            PendingNestedOperation::Create {
+                token: candidate,
+                view_type,
+                policy,
+                ..
+            } if *candidate == token => Some(NestedViewProvenance {
+                application: view_type.application.clone(),
+                policy: policy.clone(),
+            }),
+            _ => None,
+        });
+        let pending_release = pending.iter().any(|operation| {
             matches!(operation, PendingNestedOperation::Release { token: candidate, .. } if *candidate == token)
-        }) {
-            return Err(Exception::throw_type(
-                ctx,
-                "cx.notify(entity) expects a live Entity from the current application",
-            ));
-        }
-        let alias = self.nested_view_handles.borrow().get(&token).cloned();
-        if alias
+        });
+        drop(pending);
+        let resolved = self.nested_view_handles.borrow().get(&token).cloned();
+        let provenance = resolved
             .as_ref()
-            .is_none_or(|alias| !alias.provenance.is_current())
-        {
+            .map(|alias| alias.provenance.clone())
+            .or(pending_create)
+            .or_else(|| self.in_flight_nested.borrow().get(&token).cloned());
+        if pending_release || provenance.as_ref().is_none_or(|owner| !owner.is_current()) {
             return Err(Exception::throw_type(
                 ctx,
                 "cx.notify(entity) expects a live Entity from the current application",
             ));
         }
-        let alias = alias.expect("validated nested-view alias");
-        match self.entities().view(alias.handle) {
-            Some(view) => Ok(view),
-            None => {
-                self.nested_view_handles.borrow_mut().remove(&token);
-                Err(Exception::throw_type(
-                    ctx,
-                    "cx.notify(entity) expects a live Entity from the current application",
-                ))
-            }
+        if resolved
+            .as_ref()
+            .is_some_and(|alias| self.entities().view(alias.handle).is_none())
+        {
+            self.nested_view_handles.borrow_mut().remove(&token);
+            return Err(Exception::throw_type(
+                ctx,
+                "cx.notify(entity) expects a live Entity from the current application",
+            ));
         }
+        self.pending_nested
+            .borrow_mut()
+            .push_back(PendingNestedOperation::Notify {
+                runtime: Rc::downgrade(self),
+                token,
+                provenance: provenance.expect("validated nested provenance"),
+            });
+        Ok(())
     }
 
     fn queue_nested_view_release(self: &Rc<Self>, ctx: &Ctx<'_>, token: u32) -> JsResult<bool> {
@@ -1358,6 +1381,39 @@ impl ShellRuntime {
                             .map(|alias| alias.handle)
                             .ok_or_else(|| anyhow!("this Entity was released before its update"))?;
                         runtime.update_nested_view(handle, props, window, cx)?;
+                        Ok(())
+                    }
+                    PendingNestedOperation::Notify {
+                        runtime,
+                        token,
+                        provenance,
+                    } => {
+                        let runtime = runtime.upgrade().ok_or_else(|| {
+                            anyhow!("the shell runtime shut down during child notification")
+                        })?;
+                        if !provenance.is_current() {
+                            anyhow::bail!("this Entity does not belong to the current application");
+                        }
+                        let view = runtime
+                            .nested_view_handles
+                            .borrow()
+                            .get(&token)
+                            .filter(|alias| {
+                                Rc::ptr_eq(&alias.provenance.policy, &provenance.policy)
+                                    && match (
+                                        &alias.provenance.application,
+                                        &provenance.application,
+                                    ) {
+                                        (Some(left), Some(right)) => Rc::ptr_eq(left, right),
+                                        (None, None) => true,
+                                        _ => false,
+                                    }
+                            })
+                            .and_then(|alias| runtime.entities().view(alias.handle))
+                            .ok_or_else(|| {
+                                anyhow!("this Entity was released before its notification")
+                            })?;
+                        view.update(cx, |view, cx| view.refresh(cx));
                         Ok(())
                     }
                     PendingNestedOperation::Release {
@@ -6530,7 +6586,8 @@ fn context_object<'js>(ctx: &Ctx<'js>, binding: ContextBinding) -> JsResult<Obje
                                 )
                             })?;
                             let runtime = { current.read(app).runtime() };
-                            Some(runtime.nested_view_for_notify(&notify_ctx, token)?)
+                            runtime.queue_nested_view_notify(&notify_ctx, token)?;
+                            None
                         }
                     };
                     if let Some(view) = view {
@@ -7061,7 +7118,7 @@ export default class Child extends View { render(cx) { return "child"; } }
                 foreign_policy,
                 Some(foreign_application),
             );
-            runtime.with_js(|ctx| runtime.nested_view_for_notify(ctx, token).map(|_| ()))
+            runtime.with_js(|ctx| runtime.queue_nested_view_notify(ctx, token))
         });
         assert!(foreign.is_err(), "foreign application must be rejected");
         assert!(
@@ -7079,7 +7136,7 @@ export default class Child extends View { render(cx) { return "child"; } }
                 owner_policy,
                 Some(owner_application),
             );
-            runtime.with_js(|ctx| runtime.nested_view_for_notify(ctx, token).map(|_| ()))
+            runtime.with_js(|ctx| runtime.queue_nested_view_notify(ctx, token))
         });
         owner.expect("owner application can notify its live child");
     }

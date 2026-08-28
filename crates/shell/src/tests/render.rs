@@ -773,6 +773,57 @@ export default class Parent extends View {
 }
 
 #[gpui::test]
+fn targeted_notify_accepts_a_child_created_in_the_same_init(cx: &mut TestAppContext) {
+    cx.update(crate::init);
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View } from "gpui";
+
+class Child extends View {
+  init(props) { this.shared = props.shared; }
+  render() { return `child:${this.shared.label}`; }
+}
+
+export default class Parent extends View {
+  init(_props, cx) {
+    this.shared = { label: "before" };
+    this.child = cx.new(Child, { shared: this.shared });
+    this.shared.label = "after";
+    cx.notify(this.child);
+  }
+  render() { return this.child; }
+}
+"#;
+    let view_type = runtime
+        .load_source("targeted-notify-during-init.js", source)
+        .expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let parent = context
+        .update(|window, cx| runtime.instantiate_view(&view_type, window, cx))
+        .expect("a newly returned Entity is live for notification");
+
+    draw(&mut context, &parent);
+    let child_tree = context.update(|_, cx| {
+        let snapshot = parent.read(cx).snapshot().expect("parent snapshot");
+        let child = (0..snapshot.len() as u32)
+            .filter_map(|id| snapshot.arena().node(id))
+            .find_map(|node| match node.component() {
+                Some(crate::spec::Component::ChildView(child)) => Some(child.view().clone()),
+                _ => None,
+            })
+            .expect("retained child entity");
+        child
+            .read(cx)
+            .snapshot()
+            .map(crate::RenderSnapshot::debug_tree)
+            .unwrap_or_default()
+    });
+    assert!(child_tree.contains("child:after"), "{child_tree}");
+}
+
+#[gpui::test]
 fn targeted_notify_rebuilds_the_child_without_running_update(cx: &mut TestAppContext) {
     cx.update(crate::init);
     let runtime = ShellRuntime::new_isolated().expect("runtime");
