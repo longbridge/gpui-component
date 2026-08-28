@@ -772,6 +772,205 @@ export default class Parent extends View {
     assert!(parent_tree(&mut context).contains("parent renders:2"));
 }
 
+#[gpui::test]
+fn targeted_notify_rebuilds_the_child_without_running_update(cx: &mut TestAppContext) {
+    cx.update(crate::init);
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View } from "gpui";
+import { v_flex, Checkbox } from "gpui-base";
+
+class Child extends View {
+  init(props) {
+    this.shared = props.shared;
+    this.renders = 0;
+    this.updates = 0;
+  }
+  update() { this.updates += 1; }
+  render() {
+    this.renders += 1;
+    return `child:${this.shared.label}:renders=${this.renders}:updates=${this.updates}`;
+  }
+}
+
+export default class Parent extends View {
+  init(_props, cx) {
+    this.renders = 0;
+    this.shared = { label: "before" };
+    this.child = cx.new(Child, { shared: this.shared });
+  }
+  render() {
+    this.renders += 1;
+    return v_flex()
+      .child(
+        Checkbox.new("notify-child")
+          .on_change((_checked, cx) => {
+            this.shared.label = "after";
+            cx.notify(this.child);
+            cx.notify(this.child);
+          })
+          .child(`parent renders:${this.renders}`),
+      )
+      .child(this.child);
+  }
+}
+"#;
+    let view_type = runtime
+        .load_source("targeted-notify.js", source)
+        .expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let parent = context
+        .update(|window, cx| runtime.instantiate_view(&view_type, window, cx))
+        .expect("instantiate parent");
+
+    draw(&mut context, &parent);
+    let child = context.update(|_, cx| {
+        let snapshot = parent.read(cx).snapshot().expect("parent snapshot");
+        (0..snapshot.len() as u32)
+            .filter_map(|id| snapshot.arena().node(id))
+            .find_map(|node| match node.component() {
+                Some(crate::spec::Component::ChildView(child)) => Some(child.view().clone()),
+                _ => None,
+            })
+            .expect("retained child entity")
+    });
+    let callback = context.update(|_, cx| {
+        let snapshot = parent.read(cx).snapshot().expect("parent snapshot");
+        (0..snapshot.len() as u32)
+            .filter_map(|id| snapshot.arena().node(id))
+            .find(|node| {
+                matches!(
+                    node.component(),
+                    Some(crate::spec::Component::Checkbox(id)) if id == "notify-child"
+                )
+            })
+            .and_then(|node| {
+                node.ops().iter().find_map(|op| match op {
+                    crate::spec::SpecOp::Callback("on_change", id) => Some(*id),
+                    _ => None,
+                })
+            })
+            .expect("notify callback")
+    });
+    let before = runtime.metrics().read();
+
+    context.update(|window, cx| runtime.dispatch_change(callback, true, window, cx));
+    draw(&mut context, &parent);
+
+    let delta = runtime.metrics().read().since(&before);
+    assert_eq!(delta.script_renders(), 1, "two notifications coalesce");
+    let parent_tree = context.update(|_, cx| {
+        parent
+            .read(cx)
+            .snapshot()
+            .map(crate::RenderSnapshot::debug_tree)
+            .unwrap_or_default()
+    });
+    assert!(parent_tree.contains("parent renders:1"), "{parent_tree}");
+    let child_tree = context.update(|_, cx| {
+        child
+            .read(cx)
+            .snapshot()
+            .map(crate::RenderSnapshot::debug_tree)
+            .unwrap_or_default()
+    });
+    assert!(
+        child_tree.contains("child:after:renders=2:updates=0"),
+        "{child_tree}"
+    );
+}
+
+#[gpui::test]
+fn targeted_notify_rejects_malformed_and_released_entities(cx: &mut TestAppContext) {
+    cx.update(crate::init);
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View } from "gpui";
+import { v_flex, Checkbox } from "gpui-base";
+
+class Child extends View { render() { return "child"; } }
+
+export default class Parent extends View {
+  init(_props, cx) {
+    this.child = cx.new(Child);
+    this.showChild = true;
+    this.error = "none";
+  }
+  render() {
+    return v_flex()
+      .child(Checkbox.new("malformed").on_change((_checked, cx) => {
+        try { cx.notify({}); }
+        catch (error) { this.error = error.message; cx.notify(); }
+      }))
+      .child(Checkbox.new("released").on_change((_checked, cx) => {
+        this.showChild = false;
+        this.child.release();
+        try { cx.notify(this.child); }
+        catch (error) { this.error = error.message; cx.notify(); }
+      }))
+      .child(this.error)
+      .children(this.showChild ? [this.child] : []);
+  }
+}
+"#;
+    let view_type = runtime
+        .load_source("targeted-notify-errors.js", source)
+        .expect("load");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let parent = context
+        .update(|window, cx| runtime.instantiate_view(&view_type, window, cx))
+        .expect("instantiate parent");
+    draw(&mut context, &parent);
+
+    let callback = |target: &str, context: &mut VisualTestContext| {
+        context.update(|_, cx| {
+            let snapshot = parent.read(cx).snapshot().expect("parent snapshot");
+            (0..snapshot.len() as u32)
+                .filter_map(|id| snapshot.arena().node(id))
+                .find(|node| {
+                    matches!(
+                        node.component(),
+                        Some(crate::spec::Component::Checkbox(id)) if id == target
+                    )
+                })
+                .and_then(|node| {
+                    node.ops().iter().find_map(|op| match op {
+                        crate::spec::SpecOp::Callback("on_change", id) => Some(*id),
+                        _ => None,
+                    })
+                })
+                .expect("targeted notify error callback")
+        })
+    };
+    let tree = |context: &mut VisualTestContext| {
+        context.update(|_, cx| {
+            parent
+                .read(cx)
+                .snapshot()
+                .map(crate::RenderSnapshot::debug_tree)
+                .unwrap_or_default()
+        })
+    };
+
+    let malformed = callback("malformed", &mut context);
+    context.update(|window, cx| runtime.dispatch_change(malformed, true, window, cx));
+    draw(&mut context, &parent);
+    assert!(tree(&mut context).contains("expects an Entity"));
+
+    let released = callback("released", &mut context);
+    context.update(|window, cx| runtime.dispatch_change(released, true, window, cx));
+    draw(&mut context, &parent);
+    let released_tree = tree(&mut context);
+    assert!(
+        released_tree.contains("expects a live Entity"),
+        "{released_tree}"
+    );
+}
+
 /// A generic `with_js` nested inside child construction must not recursively
 /// consume the operations that follow that construction. The first update is
 /// ordered after its create, and each grandchild remains owned by the child

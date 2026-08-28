@@ -673,11 +673,17 @@ const CONTEXT_AND_VIEW: &str = r#"  /**
    */
   export interface Context {
     /**
-     * Requests a re-render. Legal from an event handler or a task; calling it
-     * during `render` throws, because notifying yourself while rendering is a
-     * loop.
+     * Requests a re-render of the current view, or of one retained `Entity`.
+     *
+     * Pass a target after changing shared state that retained child reads. It
+     * invalidates that child's script description without invoking its
+     * `update(props)`; use `entity.set_props(props)` when the child must receive
+     * and process new props.
+     *
+     * Legal from an event handler or a task. Calling it during `render` throws,
+     * because notifying a view while rendering is a loop.
      */
-    notify(): void;
+    notify(target?: Entity): void;
     /**
      * `App::bind_keys`. Installs key bindings and answers how many.
      *
@@ -4114,6 +4120,14 @@ mod tests {
         ] {
             assert!(declarations.contains(expected), "missing: {expected}");
         }
+    }
+
+    #[test]
+    fn targeted_notify_is_declared() {
+        assert!(
+            declarations().contains("    notify(target?: Entity): void;"),
+            "Context.notify must expose GPUI's targeted entity notification"
+        );
     }
 
     #[test]

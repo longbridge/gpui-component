@@ -1151,6 +1151,38 @@ impl ShellRuntime {
         Ok(())
     }
 
+    fn nested_view_for_notify(&self, ctx: &Ctx<'_>, token: u32) -> JsResult<Entity<ScriptView>> {
+        if self.pending_nested.borrow().iter().any(|operation| {
+            matches!(operation, PendingNestedOperation::Release { token: candidate, .. } if *candidate == token)
+        }) {
+            return Err(Exception::throw_type(
+                ctx,
+                "cx.notify(entity) expects a live Entity from the current application",
+            ));
+        }
+        let alias = self.nested_view_handles.borrow().get(&token).cloned();
+        if alias
+            .as_ref()
+            .is_none_or(|alias| !alias.provenance.is_current())
+        {
+            return Err(Exception::throw_type(
+                ctx,
+                "cx.notify(entity) expects a live Entity from the current application",
+            ));
+        }
+        let alias = alias.expect("validated nested-view alias");
+        match self.entities().view(alias.handle) {
+            Some(view) => Ok(view),
+            None => {
+                self.nested_view_handles.borrow_mut().remove(&token);
+                Err(Exception::throw_type(
+                    ctx,
+                    "cx.notify(entity) expects a live Entity from the current application",
+                ))
+            }
+        }
+    }
+
     fn queue_nested_view_release(self: &Rc<Self>, ctx: &Ctx<'_>, token: u32) -> JsResult<bool> {
         let pending = self.pending_nested.borrow();
         let pending_release = pending.iter().any(|operation| {
@@ -6446,35 +6478,72 @@ fn context_object<'js>(ctx: &Ctx<'js>, binding: ContextBinding) -> JsResult<Obje
     }
     object.set(
         "notify",
-        Func::from(move |ctx: Ctx<'_>| -> JsResult<()> {
-            let phase = scope::current_phase();
-            if !phase.is_some_and(ScopePhase::allows_notify) {
-                return Err(Exception::throw_type(
-                    &ctx,
-                    &format!(
-                        "cx.notify() is not allowed during the `{}` phase; \
+        Func::from(
+            move |ctx: Ctx<'_>, target: Opt<Value<'_>>| -> JsResult<()> {
+                let phase = scope::current_phase();
+                if !phase.is_some_and(ScopePhase::allows_notify) {
+                    let api = if target.0.as_ref().is_some_and(|value| !value.is_undefined()) {
+                        "cx.notify(entity)"
+                    } else {
+                        "cx.notify()"
+                    };
+                    return Err(Exception::throw_type(
+                        &ctx,
+                        &format!(
+                            "{api} is not allowed during the `{}` phase; \
                          request a re-render from an event handler instead",
-                        phase.map(ScopePhase::as_str).unwrap_or("none")
-                    ),
-                ));
-            }
-
-            let view = scope::current_view();
-            binding.with_app(&ctx, move |app| {
-                if let Some(view) = view {
-                    // Two halves, and both matter. Invalidating says the script
-                    // description may have moved, which is the only thing that
-                    // lets the next frame enter the VM; notifying hands the
-                    // scheduling and coalescing of that frame back to GPUI,
-                    // which already does it well. Three notifies before the
-                    // next frame therefore rebuild one snapshot, not three.
-                    view.update(app, |view, cx| {
-                        view.invalidate();
-                        cx.notify();
-                    });
+                            phase.map(ScopePhase::as_str).unwrap_or("none")
+                        ),
+                    ));
                 }
-            })
-        }),
+
+                let current = scope::current_view();
+                let target = match target.0 {
+                    None => None,
+                    Some(value) if value.is_undefined() => None,
+                    Some(value) => {
+                        let object = value.as_object().ok_or_else(|| {
+                            Exception::throw_type(&ctx, "cx.notify(entity) expects an Entity")
+                        })?;
+                        let branded = object.get::<_, bool>("__entity").unwrap_or(false);
+                        let token = object.get::<_, u32>("__handle").map_err(|_| {
+                            Exception::throw_type(&ctx, "cx.notify(entity) expects an Entity")
+                        })?;
+                        if !branded {
+                            return Err(Exception::throw_type(
+                                &ctx,
+                                "cx.notify(entity) expects an Entity",
+                            ));
+                        }
+                        Some(token)
+                    }
+                };
+                let notify_ctx = ctx.clone();
+                binding.with_app(&ctx, move |app| -> JsResult<()> {
+                    let view = match target {
+                        None => current,
+                        Some(token) => {
+                            let current = current.as_ref().ok_or_else(|| {
+                                Exception::throw_type(
+                                    &notify_ctx,
+                                    "cx.notify(entity) requires a current script view",
+                                )
+                            })?;
+                            let runtime = { current.read(app).runtime() };
+                            Some(runtime.nested_view_for_notify(&notify_ctx, token)?)
+                        }
+                    };
+                    if let Some(view) = view {
+                        // Two halves, and both matter. Invalidating says the script
+                        // description may have moved, which is the only thing that
+                        // lets the next frame enter the VM; notifying hands the
+                        // scheduling and coalescing of that frame back to GPUI.
+                        view.update(app, |view, cx| view.refresh(cx));
+                    }
+                    Ok(())
+                })?
+            },
+        ),
     )?;
 
     // GPUI dispatches an event to every handler on the path unless one of them
@@ -6946,6 +7015,73 @@ export default class Child extends View { render(cx) { return "child"; } }
         });
         assert_eq!(owner.expect("owner call"), false);
         assert!(!runtime.nested_view_handles.borrow().contains_key(&token));
+    }
+
+    #[gpui::test]
+    fn targeted_notify_rejects_an_entity_from_another_application(cx: &mut TestAppContext) {
+        let runtime = ShellRuntime::new_isolated().expect("runtime");
+        let owner_application = ApplicationGeneration::new(81);
+        let foreign_application = ApplicationGeneration::new(82);
+        let owner_policy = Rc::new(Policy::default());
+        let foreign_policy = Rc::new(Policy::default());
+        let mut view_type = child_type(
+            &runtime,
+            r#"
+import { View } from "gpui";
+export default class Child extends View { render(cx) { return "child"; } }
+"#,
+        );
+        view_type.application = Some(owner_application.clone());
+        let window = cx.add_window(|_, _| gpui::Empty);
+        let mut context = VisualTestContext::from_window(*window, cx);
+        let handle = context
+            .update(|window, cx| {
+                runtime.instantiate_nested_view(&view_type, owner_policy.clone(), None, window, cx)
+            })
+            .expect("child");
+        let token = 92;
+        runtime.nested_view_handles.borrow_mut().insert(
+            token,
+            NestedViewAlias {
+                handle,
+                provenance: NestedViewProvenance {
+                    application: Some(owner_application.clone()),
+                    policy: owner_policy.clone(),
+                },
+            },
+        );
+
+        let foreign = context.update(|window, cx| {
+            let (_scope, _) = scope::enter_with_application(
+                &runtime,
+                window,
+                cx,
+                ScopePhase::Event,
+                None,
+                foreign_policy,
+                Some(foreign_application),
+            );
+            runtime.with_js(|ctx| runtime.nested_view_for_notify(ctx, token).map(|_| ()))
+        });
+        assert!(foreign.is_err(), "foreign application must be rejected");
+        assert!(
+            runtime.nested_view_handles.borrow().contains_key(&token),
+            "a foreign notify must not invalidate the owner's alias"
+        );
+
+        let owner = context.update(|window, cx| {
+            let (_scope, _) = scope::enter_with_application(
+                &runtime,
+                window,
+                cx,
+                ScopePhase::Event,
+                None,
+                owner_policy,
+                Some(owner_application),
+            );
+            runtime.with_js(|ctx| runtime.nested_view_for_notify(ctx, token).map(|_| ()))
+        });
+        owner.expect("owner application can notify its live child");
     }
 
     #[gpui::test]

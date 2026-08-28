@@ -69,6 +69,10 @@ then invalidates and notifies only that child. It is also forbidden during `rend
 parent-to-child synchronization must happen where the data changes, not as a hidden render side
 effect. Values remain inside the same QuickJS runtime; the host does not serialize them.
 
+When a child reads shared state and needs no new props, its parent calls `cx.notify(handle)` instead.
+This mirrors GPUI's targeted entity notification: it invalidates and notifies the child without
+calling `update(props)` or creating the update transaction's reachable-object checkpoint.
+
 A handle is a child wherever a child is taken — `.child(handle)`, or returned from `render` —
 exactly as an `Entity<V>` is renderable in GPUI. Mounting produces a single-use description of the
 retained child entity, so the same handle may appear once in a parent snapshot. Reusing it twice in
