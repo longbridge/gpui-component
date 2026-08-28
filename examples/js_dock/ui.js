@@ -12,6 +12,21 @@ import { h_flex, v_flex } from "gpui-base";
 /** The tab bar's height, and the height a dock's title strip matches. */
 export const BAR = 30;
 
+/**
+ * The outline every panel body draws around itself.
+ *
+ * A dock area is several nested containers that all paint the same background,
+ * so without an edge a panel, its group and its dock are one flat field and a
+ * layout fault reads as "something looks off" rather than as "that pane is the
+ * wrong size". One line per panel is enough to tell them apart, and it is the
+ * example's own chrome rather than base's: a real application would rather draw
+ * its own.
+ *
+ * @param {Element} element @param {Context} cx
+ */
+export const panelBorder = (element, cx) =>
+  element.border(1).border_color(cx.theme().colors.border);
+
 /** @param {string} value @param {Context} cx */
 export const label = (value, cx) =>
   div().text_size(12).line_height(1).text_color(cx.theme().colors.foreground).child(value);

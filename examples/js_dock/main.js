@@ -10,7 +10,17 @@
 import { View, div } from "gpui";
 import { DockArea, dock_area, dock_content, v_flex } from "gpui-base";
 /** @import { AsyncContext, Context } from "gpui" */
-import { BAR, dockBar, dockHandle, dockTab, dropHint, emptyGroup, label, muted } from "./ui.js";
+import {
+  BAR,
+  dockBar,
+  dockHandle,
+  dockTab,
+  dropHint,
+  emptyGroup,
+  label,
+  muted,
+  panelBorder,
+} from "./ui.js";
 
 /** Where the layout is kept between runs. */
 const LAYOUT = "workspace.layout";
@@ -43,7 +53,7 @@ class Document extends View {
 
   /** @param {Context} cx */
   render(cx) {
-    return v_flex()
+    return panelBorder(v_flex(), cx)
       .size_full()
       .p(16)
       .gap(8)
@@ -72,12 +82,32 @@ class Document extends View {
 class Files extends View {
   /** @param {Context} cx */
   render(cx) {
-    return v_flex()
+    return panelBorder(v_flex(), cx)
       .size_full()
       .p(12)
       .gap(6)
       .bg(cx.theme().colors.background)
       .children(["main.js", "ui.js", "README.md"].map((name) => muted(name, cx)));
+  }
+}
+
+/**
+ * The right dock's occupant.
+ *
+ * A second *kind* of panel rather than a third document, because a side dock is
+ * only interesting when what it holds is not what the centre holds -- an
+ * inspector beside the thing it inspects.
+ */
+class Outline extends View {
+  /** @param {Context} cx */
+  render(cx) {
+    return panelBorder(v_flex(), cx)
+      .size_full()
+      .p(16)
+      .gap(6)
+      .bg(cx.theme().colors.background)
+      .child(label("Outline", cx))
+      .children(["imports", "Document", "Files", "Workspace"].map((each) => muted(each, cx)));
   }
 }
 
@@ -89,6 +119,7 @@ export default class Workspace extends View {
     // no serialize() — a panel with no payload still needs a way back.
     DockArea.register_panel("document", Document);
     DockArea.register_panel("files", Files);
+    DockArea.register_panel("outline", Outline);
 
     this.dock = DockArea.new("workspace", { version: 1 });
     this.saving = null;
@@ -98,9 +129,14 @@ export default class Workspace extends View {
       // Restores the tree, the dock sizes and every panel's own payload.
       this.dock.load(JSON.parse(saved));
     } else {
+      // One of each: a left dock, a centre holding two tabs, and a right dock.
+      // Both side docks are here on purpose -- they are laid out on opposite
+      // sides of the same row, and a left-only example cannot tell a dock that
+      // is placed correctly from one that merely happens to be first.
       this.dock.add_panel(cx.new(Files), { name: "files", placement: "left", size: 200 });
       this.dock.add_panel(cx.new(Document, { caption: "main.js" }), { name: "document" });
       this.dock.add_panel(cx.new(Document, { caption: "ui.js" }), { name: "document" });
+      this.dock.add_panel(cx.new(Outline), { name: "outline", placement: "right", size: 220 });
     }
 
     // Fires on every edit, including each step of a drag — so the write is on a
@@ -142,11 +178,24 @@ export default class Workspace extends View {
           .drop_indicator((drop, cx) => dropHint(drop, cx))
           // Whatever this returns replaces the dock's content, so the panels go
           // where `dock_content()` is.
+          // Chrome only: base sizes the dock itself, so this decorates the
+          // box rather than declaring it. The border is on the side the dock
+          // faces the centre from, so the seam between them is one line and not
+          // two, and so it is obvious at a glance which column is which.
           .dock((dock, cx) =>
             v_flex()
               .size_full()
               .relative()
               .bg(cx.theme().colors.background)
+              .when(dock.placement === "left", (it) =>
+                it.border_r(1).border_color(cx.theme().colors.border),
+              )
+              .when(dock.placement === "right", (it) =>
+                it.border_l(1).border_color(cx.theme().colors.border),
+              )
+              .when(dock.placement === "bottom", (it) =>
+                it.border_t(1).border_color(cx.theme().colors.border),
+              )
               .child(dockBar(dock, cx))
               .child(dock_content().flex_1().overflow_hidden())
               .child(dockHandle(dock, cx)),
