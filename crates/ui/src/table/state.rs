@@ -2493,3 +2493,87 @@ where
             })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gpui::{App, TestAppContext, VisualTestContext};
+
+    const COLS: usize = 40;
+    const COL_WIDTH: Pixels = px(100.);
+    const TARGET: usize = COLS - 1;
+
+    struct TestDelegate;
+
+    impl TableDelegate for TestDelegate {
+        fn columns_count(&self, _: &App) -> usize {
+            COLS
+        }
+
+        fn rows_count(&self, _: &App) -> usize {
+            5
+        }
+
+        fn column(&self, col_ix: usize, _: &App) -> Column {
+            Column::new(format!("c{col_ix}"), format!("Col {col_ix}")).width(COL_WIDTH)
+        }
+
+        fn render_th(
+            &mut self,
+            col_ix: usize,
+            _: &mut Window,
+            _: &mut Context<TableState<Self>>,
+        ) -> impl IntoElement {
+            div().size_full().when(col_ix == TARGET, |this| {
+                this.debug_selector(|| "target-th".to_string())
+            })
+        }
+
+        fn render_td(
+            &mut self,
+            row_ix: usize,
+            col_ix: usize,
+            _: &mut Window,
+            _: &mut Context<TableState<Self>>,
+        ) -> impl IntoElement {
+            div()
+                .size_full()
+                .when(row_ix == 0 && col_ix == TARGET, |this| {
+                    this.debug_selector(|| "target-td".to_string())
+                })
+        }
+    }
+
+    fn draw(cx: &mut VisualTestContext) {
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            _ = window.draw(cx);
+        });
+    }
+
+    /// The header and the rows share one horizontal offset, but the header is
+    /// laid out first. If `scroll_to_col` only defers the scroll to the row
+    /// list's prepaint, the header paints that frame with the stale offset.
+    #[gpui::test]
+    fn scroll_to_col_moves_the_header_in_the_same_frame(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (state, cx) =
+            cx.add_window_view(|window, cx| TableState::new(TestDelegate, window, cx));
+        let cx: &mut VisualTestContext = cx;
+        draw(cx);
+
+        state.update(cx, |state, cx| state.scroll_to_col(TARGET, cx));
+
+        let td = cx
+            .debug_bounds("target-td")
+            .expect("the target cell must be rendered");
+        let th = cx
+            .debug_bounds("target-th")
+            .expect("the header must render the target column in the same frame");
+        assert_eq!(
+            th.left(),
+            td.left(),
+            "the header and the body must agree on the offset within one frame"
+        );
+    }
+}
