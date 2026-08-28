@@ -399,3 +399,57 @@ export default class Workspace extends View {
     );
     let _ = view.deref();
 }
+
+/// Numeric narrowing at the host boundary must never turn malformed script
+/// input into a different, apparently valid layout edit.
+#[gpui::test]
+fn dock_arguments_are_validated_before_narrowing(cx: &mut TestAppContext) {
+    const SOURCE: &str = r#"
+import { View, div } from "gpui";
+import { DockArea } from "gpui-base";
+
+class Panel extends View { render() { return div(); } }
+
+export default class Probe extends View {
+  init(_props, cx) {
+    this.refused = [];
+    const reject = (name, body) => {
+      try { body(); } catch (error) { this.refused.push(name + ":" + error.name); }
+    };
+
+    reject("version", () => DockArea.new("bad", { version: 1.5 }));
+    this.dock = DockArea.new("good", { version: 0 });
+    reject("panel-id", () => this.dock.remove_panel(1.5));
+    reject("size", () => this.dock.set_dock_size("left", Number.NaN));
+    reject("panel-size", () => this.dock.add_panel(cx.new(Panel), { name: "bad-size", size: -1 }));
+    reject("bounds-x", () => this.dock.add_panel(cx.new(Panel), {
+      name: "bad-x", bounds: { x: Number.POSITIVE_INFINITY, y: 0, width: 10, height: 10 },
+    }));
+    reject("bounds-width", () => this.dock.add_panel(cx.new(Panel), {
+      name: "bad-width", bounds: { x: 0, y: 0, width: -1, height: 10 },
+    }));
+    reject("name", () => this.dock.add_panel(cx.new(Panel), { name: "" }));
+    reject("class", () => DockArea.register_panel("bad-class", function NotAView() {}));
+  }
+
+  render() { return div().child("refused:" + this.refused.join(",")); }
+}
+"#;
+
+    let (view, window) = run(cx, SOURCE);
+    let mut context = VisualTestContext::from_window(window, cx);
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    let tree = described(&mut context, &view);
+    for expected in [
+        "version:TypeError",
+        "panel-id:TypeError",
+        "size:TypeError",
+        "panel-size:RangeError",
+        "bounds-x:TypeError",
+        "bounds-width:RangeError",
+        "name:TypeError",
+        "class:TypeError",
+    ] {
+        assert!(tree.contains(expected), "{expected} was not refused: {tree}");
+    }
+}

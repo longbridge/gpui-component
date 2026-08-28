@@ -83,7 +83,18 @@ pub fn install(
                 let runtime = alive(&ctx, &create)?;
                 let chrome = Rc::new(ScriptChrome::new(std::rc::Rc::downgrade(&runtime)));
                 let skin = ScriptDockSkin::new(chrome.clone()).with_slots(chrome.slots());
-                let version = version.map(|value| value.max(0.0) as usize);
+                let version = version
+                    .map(|value| non_negative_integer(&ctx, value, "DockArea.new version"))
+                    .transpose()?
+                    .map(|value| {
+                        usize::try_from(value).map_err(|_| {
+                            Exception::throw_range(
+                                &ctx,
+                                "DockArea.new version exceeds this platform's index range",
+                            )
+                        })
+                    })
+                    .transpose()?;
                 scope::with_current(|window, cx| {
                     runtime
                         .entities()
@@ -159,6 +170,7 @@ pub fn install(
         Func::from(
             move |ctx: Ctx<'_>, dock: EntityHandle, panel: f64| -> JsResult<()> {
                 refuse_in_render(&ctx, "remove_panel(id)")?;
+                let panel = non_negative_integer(&ctx, panel, "remove_panel(id)")?;
                 let runtime = alive(&ctx, &remove)?;
                 let live = { runtime.entities().dock(dock).is_some() };
                 if !live {
@@ -167,7 +179,7 @@ pub fn install(
                 runtime.queue_dock_edit(
                     &ctx,
                     dock,
-                    DockEdit::RemovePanel(panel.max(0.0) as u64),
+                    DockEdit::RemovePanel(panel),
                     "remove_panel(id)",
                 )
             },
@@ -356,6 +368,7 @@ pub fn install(
                   value: f32|
                   -> JsResult<()> {
                 refuse_in_render(&ctx, "set_dock_size(placement, size)")?;
+                finite_non_negative(&ctx, value, "set_dock_size(placement, size)")?;
                 let area = area_of(&ctx, &set_dock_size, dock)?;
                 let placement = placement_of(&ctx, &placement)?;
                 scope::with_current(|window, cx| {
@@ -517,24 +530,39 @@ impl<'js> rquickjs::FromJs<'js> for PanelOptions {
             Exception::throw_type(ctx, "add_panel(view, options) expects an options object")
         })?;
         let bounds = match object.get::<_, Option<Object>>("bounds")? {
-            Some(bounds) => Some(Bounds {
-                origin: point(
-                    px(bounds.get::<_, f32>("x").unwrap_or(0.0)),
-                    px(bounds.get::<_, f32>("y").unwrap_or(0.0)),
-                ),
-                size: size(
-                    px(bounds.get::<_, f32>("width").unwrap_or(0.0)),
-                    px(bounds.get::<_, f32>("height").unwrap_or(0.0)),
-                ),
-            }),
+            Some(bounds) => {
+                let x = bounds.get::<_, f32>("x")?;
+                let y = bounds.get::<_, f32>("y")?;
+                let width = bounds.get::<_, f32>("width")?;
+                let height = bounds.get::<_, f32>("height")?;
+                finite_number(ctx, x, "add_panel bounds.x")?;
+                finite_number(ctx, y, "add_panel bounds.y")?;
+                finite_non_negative(ctx, width, "add_panel bounds.width")?;
+                finite_non_negative(ctx, height, "add_panel bounds.height")?;
+                Some(Bounds {
+                    origin: point(px(x), px(y)),
+                    size: size(px(width), px(height)),
+                })
+            }
             None => None,
         };
+        let name = object.get::<_, String>("name")?;
+        if name.is_empty() {
+            return Err(Exception::throw_type(
+                ctx,
+                "add_panel(view, options) expects a non-empty name",
+            ));
+        }
+        let size = object.get::<_, Option<f32>>("size")?;
+        if let Some(size) = size {
+            finite_non_negative(ctx, size, "add_panel size")?;
+        }
         Ok(Self {
-            name: object.get::<_, Option<String>>("name")?.unwrap_or_default(),
+            name,
             placement: object
                 .get::<_, Option<String>>("placement")?
                 .unwrap_or_else(|| "center".to_owned()),
-            size: object.get::<_, Option<f32>>("size")?,
+            size,
             bounds,
             closable: object.get::<_, Option<bool>>("closable")?.unwrap_or(true),
             zoomable: object.get::<_, Option<bool>>("zoomable")?.unwrap_or(true),
@@ -914,6 +942,41 @@ fn needs_call(ctx: &Ctx<'_>, api: &str) -> rquickjs::Error {
         ctx,
         &format!("{api} needs a live host call; call it from init() or an event handler"),
     )
+}
+
+fn finite_number(ctx: &Ctx<'_>, value: f32, api: &str) -> JsResult<()> {
+    if !value.is_finite() {
+        return Err(Exception::throw_type(
+            ctx,
+            &format!("{api} expects a finite number"),
+        ));
+    }
+    Ok(())
+}
+
+fn finite_non_negative(ctx: &Ctx<'_>, value: f32, api: &str) -> JsResult<()> {
+    finite_number(ctx, value, api)?;
+    if value < 0.0 {
+        return Err(Exception::throw_range(
+            ctx,
+            &format!("{api} expects a non-negative number"),
+        ));
+    }
+    Ok(())
+}
+
+fn non_negative_integer(ctx: &Ctx<'_>, value: f64, api: &str) -> JsResult<u64> {
+    if !value.is_finite()
+        || value < 0.0
+        || value.fract() != 0.0
+        || value > 9_007_199_254_740_991.0
+    {
+        return Err(Exception::throw_type(
+            ctx,
+            &format!("{api} expects a whole, non-negative safe integer"),
+        ));
+    }
+    Ok(value as u64)
 }
 
 /// Mutations are refused during a render pass for the reason every other one

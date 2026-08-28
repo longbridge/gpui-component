@@ -4022,10 +4022,35 @@ globalThis.__gpui = (() => {
   };
 
   const wholeAt = (value, api) => {
-    if (!Number.isInteger(value) || value < 0) {
+    if (!Number.isSafeInteger(value) || value < 0) {
       throw new TypeError(api + " expects a whole, non-negative position");
     }
     return value;
+  };
+
+  const finiteDockNumber = (value, api) => {
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      throw new TypeError(api + " expects a finite number");
+    }
+    return value;
+  };
+
+  const nonNegativeDockNumber = (value, api) => {
+    const number = finiteDockNumber(value, api);
+    if (number < 0) throw new RangeError(api + " expects a non-negative number");
+    return number;
+  };
+
+  const dockBounds = (value) => {
+    const api = "add_panel(view, options) bounds";
+    if (value === undefined || value === null) return null;
+    if (typeof value !== "object") throw new TypeError(api + " expects an object");
+    return {
+      x: finiteDockNumber(value.x, api + ".x"),
+      y: finiteDockNumber(value.y, api + ".y"),
+      width: nonNegativeDockNumber(value.width, api + ".width"),
+      height: nonNegativeDockNumber(value.height, api + ".height"),
+    };
   };
 
   // Every chrome handler is given base's own state for one container, with the
@@ -4184,14 +4209,17 @@ globalThis.__gpui = (() => {
       __dock_add_panel(handle, view.__handle, {
         name: settings.name,
         placement: dockPlacement(settings.placement, "add_panel placement"),
-        size: settings.size === undefined || settings.size === null ? null : Number(settings.size),
-        bounds: settings.bounds ?? null,
+        size:
+          settings.size === undefined || settings.size === null
+            ? null
+            : nonNegativeDockNumber(settings.size, "add_panel(view, options) size"),
+        bounds: dockBounds(settings.bounds),
         closable: settings.closable === undefined ? true : Boolean(settings.closable),
         zoomable: settings.zoomable === undefined ? true : Boolean(settings.zoomable),
         visible: settings.visible === undefined ? true : Boolean(settings.visible),
       });
     },
-    remove_panel: (id) => __dock_remove_panel(handle, Number(id)),
+    remove_panel: (id) => __dock_remove_panel(handle, wholeAt(id, "remove_panel(id)")),
     panels: () => JSON.parse(__dock_panels(handle)),
     // The layout as plain data, and back. `load` takes effect once this call
     // has returned: rebuilding a panel constructs a view, and a view cannot be
@@ -4207,7 +4235,11 @@ globalThis.__gpui = (() => {
       __dock_remove(handle, dockPlacement(placement, "remove_dock(placement)")),
     dock_size: (placement) => __dock_size(handle, dockPlacement(placement, "dock_size(placement)")),
     set_dock_size: (placement, size) =>
-      __dock_set_size(handle, dockPlacement(placement, "set_dock_size(placement, size)"), Number(size)),
+      __dock_set_size(
+        handle,
+        dockPlacement(placement, "set_dock_size(placement, size)"),
+        nonNegativeDockNumber(size, "set_dock_size(placement, size)"),
+      ),
     set_dock_collapsible: (placement, collapsible) =>
       __dock_set_collapsible(
         handle,
@@ -4725,15 +4757,13 @@ globalThis.__gpui = (() => {
     },
     OtpInput: { new: (state) => element(__otp_element(state.__handle)) },
     DockArea: {
-      new: (id, options) =>
-        dockArea(
-          __dock_area_new(
-            String(id),
-            options?.version === undefined || options?.version === null
-              ? null
-              : Number(options.version),
-          ),
-        ),
+      new: (id, options) => {
+        const version = options?.version;
+        if (version !== undefined && version !== null && (!Number.isSafeInteger(version) || version < 0)) {
+          throw new TypeError("DockArea.new(id, options) version expects a whole, non-negative safe integer");
+        }
+        return dockArea(__dock_area_new(String(id), version ?? null));
+      },
       // Not a method on an area: a builder is registered for the whole
       // application, and a layout is restored into whichever area asks for it.
       // Registering the same name twice replaces the class, which is what a hot
@@ -4744,7 +4774,7 @@ globalThis.__gpui = (() => {
             "DockArea.register_panel(name, Class) needs the name the panel is added under",
           );
         }
-        if (typeof Class !== "function") {
+        if (typeof Class !== "function" || !(Class.prototype instanceof View)) {
           throw new TypeError(
             "DockArea.register_panel(name, Class) expects the View subclass the panel is rebuilt from",
           );
