@@ -13,11 +13,11 @@
       .dot{fill:#2563eb}
       .cost{font-size:13px;font-weight:650;text-anchor:end}
       .cost-blue{fill:#2563eb}
-      .cost-orange{fill:#cc9e00}
+      .cost-orange{fill:#ea580c}
       .track{stroke:rgba(20,20,22,.10);stroke-width:10;stroke-linecap:round}
       .fill{stroke-width:10;stroke-linecap:round;animation:sweep 4.8s ease-out infinite}
       .fill-blue{stroke:#2563eb}
-      .fill-orange{stroke:#cc9e00}
+      .fill-orange{stroke:#ea580c}
       /* The resting state is a full bar, so a renderer that never runs the
          animation still shows the measurement rather than an empty track. */
       @keyframes sweep{
