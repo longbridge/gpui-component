@@ -52,6 +52,10 @@ const MAX_STORE_ID: u32 = (1 << 21) - 1;
 const ENTITY_ID_MASK: u64 = u32::MAX as u64;
 pub(crate) const MAX_LIVE_ENTITIES: usize = 10_000;
 
+/// The runtime-wide retained-state budget is full.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct EntityLimitError;
+
 /// What a handle points at. One variant per entity type the script can create.
 enum Record {
     /// A retained script view. Its entity owns the child snapshot lifecycle;
@@ -280,6 +284,7 @@ impl EntityStore {
             application,
             runtime: Rc::downgrade(runtime),
         })
+        .expect("view construction checks the retained-entity limit")
     }
 
     /// The nested script view behind a handle, if it is live and belongs here.
@@ -322,6 +327,7 @@ impl EntityStore {
             application,
             subscriptions: Vec::new(),
         })
+        .expect("input construction checks the retained-entity limit")
     }
 
     /// The entity behind an input handle, if it is still live and belongs here.
@@ -371,6 +377,7 @@ impl EntityStore {
             application,
             subscriptions: Vec::new(),
         })
+        .expect("textarea construction checks the retained-entity limit")
     }
 
     /// The entity behind a textarea handle, if it is still live and belongs
@@ -423,6 +430,7 @@ impl EntityStore {
             application,
             subscriptions: Vec::new(),
         })
+        .expect("slider construction checks the retained-entity limit")
     }
 
     /// The entity behind a slider handle, if it is still live and belongs here.
@@ -464,6 +472,7 @@ impl EntityStore {
             application,
             subscriptions: HashMap::new(),
         })
+        .expect("OTP construction checks the retained-entity limit")
     }
 
     /// Creates a calendar state and returns its handle.
@@ -482,6 +491,7 @@ impl EntityStore {
             application,
             subscriptions: Vec::new(),
         })
+        .expect("calendar construction checks the retained-entity limit")
     }
 
     /// The entity behind a calendar handle, if it is still live and belongs
@@ -542,7 +552,8 @@ impl EntityStore {
         application: Option<Rc<ApplicationGeneration>>,
         window: &mut Window,
         cx: &mut App,
-    ) -> EntityHandle {
+    ) -> Result<EntityHandle, EntityLimitError> {
+        self.ensure_capacity()?;
         let contexts = skin.contexts();
         let slots = skin.slots();
         let id = id.to_owned();
@@ -635,6 +646,7 @@ impl EntityStore {
             handle: cx.focus_handle(),
             application,
         })
+        .expect("focus construction checks the retained-entity limit")
     }
 
     /// The focus handle behind a handle, if it is still live and belongs here.
@@ -659,6 +671,7 @@ impl EntityStore {
             handle: VirtualListScrollHandle::new(),
             application,
         })
+        .expect("virtual-scroll construction checks the retained-entity limit")
     }
 
     /// The scroll position behind a handle, if it is still live and belongs
@@ -1059,8 +1072,8 @@ impl EntityStore {
         self.records.get_mut(&id).map(|stored| &mut stored.record)
     }
 
-    fn push(&mut self, record: Record) -> EntityHandle {
-        debug_assert!(self.records.len() < MAX_LIVE_ENTITIES);
+    fn push(&mut self, record: Record) -> Result<EntityHandle, EntityLimitError> {
+        self.ensure_capacity()?;
         let id = self.next_id;
         self.next_id = self
             .next_id
@@ -1073,7 +1086,13 @@ impl EntityStore {
                 owner: crate::scope::current_view().map(|view| view.entity_id()),
             },
         );
-        (u64::from(self.id) << STORE_SHIFT) | u64::from(id)
+        Ok((u64::from(self.id) << STORE_SHIFT) | u64::from(id))
+    }
+
+    fn ensure_capacity(&self) -> Result<(), EntityLimitError> {
+        (self.records.len() < MAX_LIVE_ENTITIES)
+            .then_some(())
+            .ok_or(EntityLimitError)
     }
 }
 
@@ -1277,6 +1296,26 @@ mod tests {
         let store = EntityStore::try_new().expect("store id");
         assert_eq!(store.len(), 0);
         assert!(store.is_empty());
+    }
+
+    #[test]
+    fn live_entity_limit_is_enforced_by_the_store() {
+        let mut store = EntityStore::try_new().expect("store id");
+        for _ in 0..MAX_LIVE_ENTITIES {
+            store
+                .push(Record::VirtualScroll {
+                    handle: VirtualListScrollHandle::new(),
+                    application: None,
+                })
+                .expect("the advertised live-entity capacity");
+        }
+
+        let overflow = store.push(Record::VirtualScroll {
+            handle: VirtualListScrollHandle::new(),
+            application: None,
+        });
+        assert_eq!(overflow, Err(EntityLimitError));
+        assert_eq!(store.len(), MAX_LIVE_ENTITIES);
     }
 
     #[test]

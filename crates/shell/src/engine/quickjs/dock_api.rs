@@ -85,14 +85,23 @@ pub fn install(
                 let skin = ScriptDockSkin::new(chrome.clone()).with_slots(chrome.slots());
                 let version = version.map(|value| value.max(0.0) as usize);
                 scope::with_current(|window, cx| {
-                    runtime.entities().create_dock(
-                        &id,
-                        version,
-                        skin,
-                        scope::current_application_generation(),
-                        window,
-                        cx,
-                    )
+                    runtime
+                        .entities()
+                        .create_dock(
+                            &id,
+                            version,
+                            skin,
+                            scope::current_application_generation(),
+                            window,
+                            cx,
+                        )
+                        .map_err(|_| {
+                            Exception::throw_range(
+                                &ctx,
+                                "the application reached gpui-shell's retained entity limit; \
+                                 release unused handles",
+                            )
+                        })
                 })
                 .ok_or_else(|| {
                     Exception::throw_type(
@@ -100,7 +109,7 @@ pub fn install(
                         "DockArea.new(id) needs a live host call; call it from init() or an \
                          event handler",
                     )
-                })
+                })?
             },
         ),
     )?;
