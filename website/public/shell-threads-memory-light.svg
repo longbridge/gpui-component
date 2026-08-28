@@ -14,10 +14,10 @@
       .band{fill:rgba(20,20,22,.035);stroke:rgba(20,20,22,.10)}
       .card{fill:#ffffff;stroke:rgba(20,20,22,.16)}
       .rust{fill:#2563eb}
-      .js{fill:#ea580c}
+      .js{fill:#cc9e00}
       .flow{stroke:rgba(20,20,22,.42);stroke-width:1.4;fill:none}
       .dash{stroke:rgba(20,20,22,.42);stroke-width:1.2;fill:none;stroke-dasharray:4 4;opacity:.6}
-      .dot-js{fill:#ea580c;animation:describe 4s ease-in-out infinite}
+      .dot-js{fill:#cc9e00;animation:describe 4s ease-in-out infinite}
       .dot-rust{fill:#2563eb;animation:replay 1.1s linear infinite}
       .dot-timer{fill:#6b7078;animation:resolve 4s ease-in-out infinite}
       @keyframes describe{

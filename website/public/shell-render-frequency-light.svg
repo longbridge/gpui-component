@@ -9,13 +9,13 @@
       .scene{fill:#18181b;font-size:13px;font-weight:600}
       .row{font-size:12px;font-weight:600}
       .row-frame,.count-frame{fill:#2563eb}
-      .row-js,.count-js{fill:#ea580c}
+      .row-js,.count-js{fill:#cc9e00}
       .count-frame,.count-js{font-size:13px;font-weight:650;text-anchor:end}
       .note{fill:#6b7078;font-size:11.5px}
       .slot{fill:rgba(20,20,22,.10)}
       .pulse{opacity:.42;animation:pulse 1s linear infinite}
       .is-frame{fill:#2563eb}
-      .is-js{fill:#ea580c}
+      .is-js{fill:#cc9e00}
       @keyframes pulse{0%{opacity:.42}4%{opacity:1}20%{opacity:.42}100%{opacity:.42}}
       @media (prefers-reduced-motion: reduce){.pulse{animation:none;opacity:.7}}
     </style>

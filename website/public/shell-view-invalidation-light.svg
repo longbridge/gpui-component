@@ -10,7 +10,7 @@
       .label{fill:#52525b;font-size:11px;font-weight:600}
       .caption{fill:#6b7078;font-size:12px}
       .key{font-size:11.5px;font-weight:600}
-      .key-js{fill:#ea580c}
+      .key-js{fill:#cc9e00}
       .key-native{fill:#2563eb}
       .window{fill:rgba(20,20,22,.03);stroke:rgba(20,20,22,.18);stroke-width:1}
       .pane{fill:rgba(20,20,22,.05);stroke:rgba(20,20,22,.18);stroke-width:1}
@@ -22,40 +22,40 @@
       .mark{stroke:none}
       /* The base rules are the first phase, so a renderer that never runs the
          animation still shows one correct frame. */
-      .tint.pat-a{fill:#ea580c;animation:tint-a 12s linear infinite}
+      .tint.pat-a{fill:#cc9e00;animation:tint-a 12s linear infinite}
       .tint.pat-b{fill:#2563eb;opacity:.06;animation:tint-b 12s linear infinite}
       .tint.pat-c{fill:#2563eb;opacity:.06;animation:tint-c 12s linear infinite}
-      .edge.pat-a{stroke:#ea580c;animation:edge-a 12s linear infinite}
+      .edge.pat-a{stroke:#cc9e00;animation:edge-a 12s linear infinite}
       .edge.pat-b{stroke:#2563eb;animation:edge-b 12s linear infinite}
       .edge.pat-c{stroke:#2563eb;animation:edge-c 12s linear infinite}
-      .mark.pat-a{fill:#ea580c;animation:mark-a 12s linear infinite}
+      .mark.pat-a{fill:#cc9e00;animation:mark-a 12s linear infinite}
       .mark.pat-b{fill:#2563eb;animation:mark-b 12s linear infinite}
       .mark.pat-c{fill:#2563eb;animation:mark-c 12s linear infinite}
       /* Three phases of four seconds. A view is warm while its own render is
          running, blue while it is replaying the snapshot it already has. */
       @keyframes tint-a{
-        0%,28%{fill:#ea580c;opacity:.14}
+        0%,28%{fill:#cc9e00;opacity:.14}
         33%,61%{fill:#2563eb;opacity:.06}
-        66%,100%{fill:#ea580c;opacity:.14}
+        66%,100%{fill:#cc9e00;opacity:.14}
       }
       @keyframes tint-b{
         0%,28%{fill:#2563eb;opacity:.06}
-        33%,100%{fill:#ea580c;opacity:.14}
+        33%,100%{fill:#cc9e00;opacity:.14}
       }
       @keyframes tint-c{
         0%,61%{fill:#2563eb;opacity:.06}
-        66%,100%{fill:#ea580c;opacity:.14}
+        66%,100%{fill:#cc9e00;opacity:.14}
       }
       @keyframes edge-a{
-        0%,28%{stroke:#ea580c}33%,61%{stroke:#2563eb}66%,100%{stroke:#ea580c}
+        0%,28%{stroke:#cc9e00}33%,61%{stroke:#2563eb}66%,100%{stroke:#cc9e00}
       }
-      @keyframes edge-b{0%,28%{stroke:#2563eb}33%,100%{stroke:#ea580c}}
-      @keyframes edge-c{0%,61%{stroke:#2563eb}66%,100%{stroke:#ea580c}}
+      @keyframes edge-b{0%,28%{stroke:#2563eb}33%,100%{stroke:#cc9e00}}
+      @keyframes edge-c{0%,61%{stroke:#2563eb}66%,100%{stroke:#cc9e00}}
       @keyframes mark-a{
-        0%,28%{fill:#ea580c}33%,61%{fill:#2563eb}66%,100%{fill:#ea580c}
+        0%,28%{fill:#cc9e00}33%,61%{fill:#2563eb}66%,100%{fill:#cc9e00}
       }
-      @keyframes mark-b{0%,28%{fill:#2563eb}33%,100%{fill:#ea580c}}
-      @keyframes mark-c{0%,61%{fill:#2563eb}66%,100%{fill:#ea580c}}
+      @keyframes mark-b{0%,28%{fill:#2563eb}33%,100%{fill:#cc9e00}}
+      @keyframes mark-c{0%,61%{fill:#2563eb}66%,100%{fill:#cc9e00}}
       .show-a{opacity:1;animation:show-a 12s linear infinite}
       .show-b,.show-c{opacity:0}
       .show-b{animation:show-b 12s linear infinite}
