@@ -35,40 +35,22 @@ impl Render for ResizePanel {
 }
 
 impl DockAreaRenderer for DockSkin {
+    // The row, the fill and the clip are base's now -- applied around whatever
+    // these return -- so a skin that has no appearance to add returns a bare
+    // frame and still gets a dock area the right shape.
     fn frame(&self, _: &mut Window, _: &mut App) -> Stateful<Div> {
-        div()
-            .id("dock-area")
-            .relative()
-            .size_full()
-            .overflow_hidden()
-            .flex()
-            .flex_row()
+        div().id("dock-area")
     }
 
     fn center_frame(&self, _: &mut Window, _: &mut App) -> Stateful<Div> {
-        div()
-            .id("dock-area-center")
-            .flex()
-            .flex_1()
-            .flex_col()
-            .overflow_hidden()
+        div().id("dock-area-center")
     }
 
     fn split_frame(&self, node: NodeId, _: Axis, _: &mut Window, cx: &mut App) -> Stateful<Div> {
-        // A split frame with no size at all collapses: base puts it between
-        // a `resizable_panel` and the resizable group, and between
-        // `center_frame` and the centre's root split, and neither parent
-        // sizes it. `the_centre_and_the_bottom_dock_share_the_column` fails
-        // without this. `size_full` is what the old `StackPanel::render`
-        // carried; `flex_1` is belt and braces — either alone passes every
-        // case I could construct, so this does not depend on which one wins
-        // in a given parent.
+        // The size is base's; the background is this skin's, and is the only
+        // reason this hook is implemented at all.
         div()
             .id(("dock-split-frame", node.as_u64()))
-            .size_full()
-            .flex_1()
-            .min_h(px(0.))
-            .overflow_hidden()
             .bg(cx.theme().tokens.tab_bar)
     }
 
@@ -308,6 +290,8 @@ mod tests {
         cx.update(|cx| crate::init(cx));
         let measured = Rc::new(Cell::new(gpui::Size::default()));
         let probe = measured.clone();
+        let centre = Rc::new(Cell::new(gpui::Size::default()));
+        let centre_probe = centre.clone();
         let (area, cx) = cx.add_window_view(|window, cx| {
             let skin = DockSkin::new(cx);
             DockArea::new("test", None, window, cx).with_renderer(Rc::new(ChromelessDockSkin(skin)))
@@ -316,7 +300,7 @@ mod tests {
         cx.update(|window, cx| {
             area.update(cx, |area, cx| {
                 area.set_center(
-                    DockLayout::tabs().panel(MeasuredProbe::new(Rc::default(), cx)),
+                    DockLayout::tabs().panel(SizedProbe::new(centre_probe, cx)),
                     window,
                     cx,
                 );
@@ -340,11 +324,30 @@ mod tests {
         cx.run_until_parked();
         cx.update(|window, cx| window.draw(cx).clear(cx));
 
-        let width = measured.get().width;
+        let dock = measured.get().width;
         assert_eq!(
-            width,
-            px(200.),
-            "the right dock has to be its own width, not the area's: got {width:?}"
+            dock, px(200.),
+            "the right dock has to be its own width, not the area's: got {dock:?}"
+        );
+        // The other half of the same fault: a dock area that is not a row puts
+        // the centre above the dock at the area's full width instead of beside
+        // it at what the dock leaves.
+        let middle = centre.get().width;
+        assert_eq!(
+            middle, px(600.),
+            "the centre has to be what the docks leave: got {middle:?}"
+        );
+        // Against the dock rather than against 600: both sit under a tab bar,
+        // so neither is the area's full height, and pinning the difference here
+        // would pin the chrome's height too.
+        let (tall, beside) = (centre.get().height, measured.get().height);
+        assert_eq!(
+            tall, beside,
+            "the centre and the dock are siblings in the row, so they share a height"
+        );
+        assert!(
+            tall > px(500.),
+            "and that height is the area's, less the tab bar: got {tall:?}"
         );
     }
 
