@@ -6,7 +6,7 @@ use std::{ops::Deref as _, rc::Rc, sync::Arc};
 use gpui::{
     AnyElement, App, AppContext as _, Axis, Context, Div, Element, Empty, InteractiveElement as _,
     IntoElement, MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Render, Stateful, Style,
-    Styled as _, Window, div, prelude::FluentBuilder as _,
+    Styled as _, Window, div, prelude::FluentBuilder as _, px,
 };
 use gpui_base::dock::{
     DockAreaRenderer, DockContext, DockEvent, DockPlacement, NodeId, PanelState, PanelView,
@@ -14,13 +14,16 @@ use gpui_base::dock::{
 };
 
 use crate::{
-    ActiveTheme as _, Side,
+    ActiveTheme as _, Side, StyledExt as _,
     dock::{
         DockSkin, SkinShared, invalid_panel::InvalidPanel, panel_handle, tab_panel::TabGroupSkin,
         tiles::TilesSkin,
     },
     resize_handle,
 };
+
+/// The height a closed bottom dock keeps, so its tab bar stays clickable.
+const CLOSED_BOTTOM_STRIP: Pixels = px(29.);
 
 /// The payload a dock's resize handle drags. It draws nothing: the handle
 /// itself is the affordance.
@@ -34,22 +37,40 @@ impl Render for ResizePanel {
 }
 
 impl DockAreaRenderer for DockSkin {
-    // The row, the fill and the clip are base's now -- applied around whatever
-    // these return -- so a skin that has no appearance to add returns a bare
-    // frame and still gets a dock area the right shape.
     fn frame(&self, _: &mut Window, _: &mut App) -> Stateful<Div> {
-        div().id("dock-area")
+        div()
+            .id("dock-area")
+            .relative()
+            .size_full()
+            .overflow_hidden()
+            .flex()
+            .flex_row()
     }
 
     fn center_frame(&self, _: &mut Window, _: &mut App) -> Stateful<Div> {
-        div().id("dock-area-center")
+        div()
+            .id("dock-area-center")
+            .flex()
+            .flex_1()
+            .flex_col()
+            .overflow_hidden()
     }
 
     fn split_frame(&self, node: NodeId, _: Axis, _: &mut Window, cx: &mut App) -> Stateful<Div> {
-        // The size is base's; the background is this skin's, and is the only
-        // reason this hook is implemented at all.
+        // A split frame with no size at all collapses: base puts it between
+        // a `resizable_panel` and the resizable group, and between
+        // `center_frame` and the centre's root split, and neither parent
+        // sizes it. `the_centre_and_the_bottom_dock_share_the_column` fails
+        // without this. `size_full` is what the old `StackPanel::render`
+        // carried; `flex_1` is belt and braces — either alone passes every
+        // case I could construct, so this does not depend on which one wins
+        // in a given parent.
         div()
             .id(("dock-split-frame", node.as_u64()))
+            .size_full()
+            .flex_1()
+            .min_h(px(0.))
+            .overflow_hidden()
             .bg(cx.theme().tokens.tab_bar)
     }
 
@@ -60,14 +81,31 @@ impl DockAreaRenderer for DockSkin {
         window: &mut Window,
         cx: &mut App,
     ) -> AnyElement {
-        // No box here any more. A dock's extent is structural, so
-        // `DockArea::render_dock` applies it around whatever this returns --
-        // which also means a renderer that draws no chrome still gets a dock
-        // the right shape. This adds the edge you drag and nothing else.
+        let placement = dock.placement();
+
+        // A closed left or right dock takes no space at all; a closed bottom
+        // dock keeps a strip so its tab bar stays clickable.
+        let size = match (dock.is_open(), placement) {
+            (true, _) => dock.size(),
+            (false, DockPlacement::Bottom) => CLOSED_BOTTOM_STRIP,
+            (false, _) => px(0.),
+        };
+
+        if size <= px(0.) {
+            return div().into_any_element();
+        }
+
         div()
             .flex()
-            .size_full()
+            .flex_none()
             .relative()
+            .overflow_hidden()
+            .map(|this| match placement {
+                DockPlacement::Left | DockPlacement::Right => this.h_flex().h_full().w(size),
+                DockPlacement::Bottom => this.w_full().h(size),
+                // Base never builds a dock for the centre.
+                DockPlacement::Center => this,
+            })
             .child(content)
             .child(self.render_resize_handle(dock, window, cx))
             .child(DockResizeTracker {
@@ -243,136 +281,10 @@ mod tests {
     use std::rc::Rc;
 
     use gpui::{
-        App, Entity, IntoElement as _, Modifiers, MouseButton, TestAppContext, VisualTestContext,
-        Window, point, px, size,
+        Entity, Modifiers, MouseButton, TestAppContext, VisualTestContext, point, px, size,
     };
 
-    use std::cell::Cell;
-
-    use gpui_base::dock::DockAreaRenderer;
-
-    use crate::dock::{
-        DockArea, DockLayout, DockPlacement, DockSkin,
-        test_support::{MeasuredProbe, SizedProbe},
-    };
-
-    /// A renderer that draws no chrome at all: every hook at its trait default.
-    ///
-    /// This is the position every renderer that is not `DockSkin` starts from,
-    /// including the one gpui-shell installs so a script can draw the chrome
-    /// itself, and the shape of what it gets is base's promise.
-    struct ChromelessDockSkin;
-
-    impl DockAreaRenderer for ChromelessDockSkin {
-        fn tab_group_renderer(&self) -> Rc<dyn gpui_base::dock::TabGroupRenderer> {
-            Rc::new(ChromelessTabs)
-        }
-
-        fn tiles_renderer(&self) -> Rc<dyn gpui_base::dock::TilesRenderer> {
-            Rc::new(ChromelessTiles)
-        }
-    }
-
-    struct ChromelessTabs;
-    impl gpui_base::dock::TabGroupRenderer for ChromelessTabs {
-        // The one hook with no default, because a group with no tab bar has no
-        // way to choose between its panels. Drawn as nothing, so the height it
-        // leaves the content is the whole group.
-        fn render_tab_bar(
-            &self,
-            _: &gpui_base::dock::TabGroupContext,
-            _: &mut Window,
-            _: &mut App,
-        ) -> gpui::AnyElement {
-            gpui::Empty.into_any_element()
-        }
-    }
-
-    struct ChromelessTiles;
-    impl gpui_base::dock::TilesRenderer for ChromelessTiles {
-        fn render_drag_bar(
-            &self,
-            _: &gpui_base::dock::TileContext,
-            _: &mut Window,
-            _: &mut App,
-        ) -> gpui::AnyElement {
-            gpui::Empty.into_any_element()
-        }
-    }
-
-    /// A dock's box is base's, not its renderer's.
-    ///
-    /// This is the regression. The extent lived in `DockSkin::render_dock`, so
-    /// it was reachable only through that one renderer, and `render_dock`'s
-    /// trait default hands the content straight back. A dock that never states
-    /// its extent is not a column beside the centre: it takes whatever the row
-    /// gives it and the panes inside shrink to their content. Nothing failed,
-    /// and nothing said why.
-    #[gpui::test]
-    fn a_dock_is_its_own_width_under_a_renderer_that_draws_no_chrome(cx: &mut TestAppContext) {
-        cx.update(|cx| crate::init(cx));
-        let measured = Rc::new(Cell::new(gpui::Size::default()));
-        let probe = measured.clone();
-        let centre = Rc::new(Cell::new(gpui::Size::default()));
-        let centre_probe = centre.clone();
-        let (area, cx) = cx.add_window_view(|window, cx| {
-            DockArea::new("test", None, window, cx).with_renderer(Rc::new(ChromelessDockSkin))
-        });
-        cx.simulate_resize(size(px(800.), px(600.)));
-        cx.update(|window, cx| {
-            area.update(cx, |area, cx| {
-                area.set_center(
-                    DockLayout::tabs().panel(SizedProbe::new(centre_probe, cx)),
-                    window,
-                    cx,
-                );
-                area.set_dock(
-                    DockPlacement::Right,
-                    DockLayout::tabs().panel(SizedProbe::new(probe, cx)),
-                    window,
-                    cx,
-                );
-                area.set_dock_size(DockPlacement::Right, px(200.), window, cx);
-            });
-        });
-        cx.run_until_parked();
-        cx.update(|window, cx| {
-            area.update(cx, |area, cx| {
-                if !area.is_dock_open(DockPlacement::Right) {
-                    area.toggle_dock(DockPlacement::Right, window, cx);
-                }
-            });
-        });
-        cx.run_until_parked();
-        cx.update(|window, cx| window.draw(cx).clear(cx));
-
-        let dock = measured.get().width;
-        assert_eq!(
-            dock,
-            px(200.),
-            "the right dock has to be its own width, not the area's: got {dock:?}"
-        );
-        // The other half of the same fault: a dock area that is not a row puts
-        // the centre above the dock at the area's full width instead of beside
-        // it at what the dock leaves.
-        let middle = centre.get().width;
-        assert_eq!(
-            middle,
-            px(600.),
-            "the centre has to be what the docks leave: got {middle:?}"
-        );
-        // This renderer draws no tab bar, so a group that fills its slot leaves
-        // its panel the whole 600. A tab group frame without a column and a
-        // fill gives it nothing: the panel is positioned absolutely inside the
-        // content region and contributes no height of its own, so the region
-        // resolves to zero and the group is a strip of tabs.
-        let tall = centre.get().height;
-        assert_eq!(
-            tall,
-            px(600.),
-            "a group has to fill its slot, or its panel gets no height: got {tall:?}"
-        );
-    }
+    use crate::dock::{DockArea, DockLayout, DockPlacement, DockSkin, test_support::MeasuredProbe};
 
     fn area_with_side_docks(cx: &mut TestAppContext) -> (Entity<DockArea>, &mut VisualTestContext) {
         cx.update(|cx| crate::init(cx));

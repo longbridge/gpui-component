@@ -59,49 +59,6 @@ impl Render for MeasuredProbe {
     }
 }
 
-/// A probe that records the whole box it was given, not only its height.
-///
-/// A dock's fault is a width fault -- a dock that never states its extent stops
-/// being a column and takes whatever the row hands it -- so asking about it
-/// needs the measurement `MeasuredProbe` does not keep.
-pub(crate) struct SizedProbe {
-    focus_handle: FocusHandle,
-    size: Rc<Cell<gpui::Size<Pixels>>>,
-}
-
-impl SizedProbe {
-    pub(crate) fn new(size: Rc<Cell<gpui::Size<Pixels>>>, cx: &mut App) -> Entity<Self> {
-        cx.new(|cx| Self {
-            focus_handle: cx.focus_handle(),
-            size,
-        })
-    }
-}
-
-impl gpui_base::dock::Panel for SizedProbe {
-    fn panel_name(&self) -> &'static str {
-        "SizedProbe"
-    }
-}
-
-impl Panel for SizedProbe {}
-impl EventEmitter<PanelEvent> for SizedProbe {}
-
-impl Focusable for SizedProbe {
-    fn focus_handle(&self, _: &App) -> FocusHandle {
-        self.focus_handle.clone()
-    }
-}
-
-impl Render for SizedProbe {
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        let size = self.size.clone();
-        div()
-            .size_full()
-            .on_prepaint(move |bounds, _, _| size.set(bounds.size))
-    }
-}
-
 /// A [`MeasuredProbe`] whose `visible` can be switched off.
 ///
 /// Hiding the only panel of a slot is the one edit that takes a whole slot out

@@ -377,13 +377,8 @@ impl DockArea {
         cx: &mut Context<Self>,
     ) {
         if let Some(pane) = self.docks.get_mut(&placement) {
-            let previous = pane.dock.size();
             pane.dock.set_size(size);
-            if pane.dock.size() == previous {
-                return;
-            }
             cx.notify();
-            cx.emit(DockEvent::LayoutChanged);
         }
     }
 }
@@ -1452,17 +1447,6 @@ impl DockArea {
 
                 self.renderer
                     .split_frame(node.id(), axis, window, cx)
-                    // A split frame with no size collapses: base puts it
-                    // between a `resizable_panel` and the resizable group, and
-                    // between `center_frame` and the centre's root split, and
-                    // neither parent sizes it. `size_full` and `flex_1` are
-                    // belt and braces -- either alone passes every case I could
-                    // construct, so this does not depend on which one wins in a
-                    // given parent.
-                    .size_full()
-                    .flex_1()
-                    .min_h(px(0.))
-                    .overflow_hidden()
                     .child(group)
                     .into_any_element()
             }
@@ -1502,28 +1486,9 @@ impl DockArea {
         cx: &mut App,
     ) -> Option<AnyElement> {
         let pane = self.docks.get(&placement)?;
-        let dock = self.dock_context(placement, &pane.dock);
-
-        // A closed left or right dock takes no space at all; a closed bottom
-        // dock keeps a strip so its tab bar stays clickable. Nothing is drawn
-        // for a dock with no extent, and the renderer is not asked for chrome
-        // nobody can see.
-        let size = dock_extent(&dock);
-        if size <= px(0.) {
-            return Some(div().into_any_element());
-        }
-
         let content = self.render_node(pane.tree.root(), window, cx);
-        // The box is applied here rather than left to the renderer, and that is
-        // the whole point of it being here. A dock's extent along its own axis
-        // is not presentation -- it is what makes the dock a column beside the
-        // centre instead of a block in the flow below it -- and a renderer that
-        // did not know to state it produced a dock with no width, every pane
-        // inside it shrunk to its content. `render_dock` on the renderer is a
-        // chrome hook, so a renderer that draws nothing at all still gets a
-        // dock that is the right shape.
-        let chrome = self.renderer.render_dock(&dock, content, window, cx);
-        Some(dock_frame(&dock, size).child(chrome).into_any_element())
+        let dock = self.dock_context(placement, &pane.dock);
+        Some(self.renderer.render_dock(&dock, content, window, cx))
     }
 
     fn dock_context(&self, placement: DockPlacement, dock: &Dock) -> DockContext {
@@ -1562,17 +1527,6 @@ impl Render for DockArea {
 
         renderer
             .frame(window, cx)
-            // Structure, applied after the hook and not inside it. A dock area
-            // lays its left dock, centre and right dock out in a row; a frame
-            // that is not one stacks them down the window instead, which is
-            // what every renderer that is not `DockSkin` used to get, because
-            // the row lived in `DockSkin`'s override of this hook and the trait
-            // default is a bare `div`.
-            .relative()
-            .size_full()
-            .overflow_hidden()
-            .flex()
-            .flex_row()
             .on_prepaint(move |bounds, _, cx| {
                 area.update(cx, |area, _| area.bounds = bounds);
             })
@@ -1587,14 +1541,6 @@ impl Render for DockArea {
                     .child(
                         renderer
                             .center_frame(window, cx)
-                            // Same reason as the frame above: the centre is
-                            // whatever the side docks leave, in a column with
-                            // the bottom dock. Without this it is neither, and
-                            // shrinks to its content.
-                            .flex()
-                            .flex_1()
-                            .flex_col()
-                            .overflow_hidden()
                             .child(self.render_node(self.center.root(), window, cx))
                             .when_some(
                                 self.render_dock(DockPlacement::Bottom, window, cx),
@@ -1875,39 +1821,6 @@ impl DockContext {
     }
 }
 
-/// A closed bottom dock keeps this much, so its tab bar stays clickable. A
-/// closed side dock keeps nothing: there is no tab bar left to click at zero
-/// width, and reopening it is the application's to offer.
-pub const CLOSED_BOTTOM_STRIP: Pixels = px(29.);
-
-/// How much room a dock asks for along its own axis.
-pub fn dock_extent(dock: &DockContext) -> Pixels {
-    match (dock.is_open(), dock.placement()) {
-        (true, _) => dock.size(),
-        (false, DockPlacement::Bottom) => CLOSED_BOTTOM_STRIP,
-        (false, _) => px(0.),
-    }
-}
-
-/// The box a dock occupies: its extent along its own axis, full across, and
-/// held at that size rather than stretched by the row it sits in.
-///
-/// Structural, not decorative, which is why it is built here and not in a
-/// renderer. See [`DockArea::render_dock`].
-pub fn dock_frame(dock: &DockContext, size: Pixels) -> Div {
-    div()
-        .flex()
-        .flex_none()
-        .relative()
-        .overflow_hidden()
-        .map(|this| match dock.placement() {
-            DockPlacement::Left | DockPlacement::Right => this.flex_row().h_full().w(size),
-            DockPlacement::Bottom => this.w_full().h(size),
-            // Base never builds a dock for the centre.
-            DockPlacement::Center => this,
-        })
-}
-
 /// Appearance for the dock area. Base draws none of it.
 ///
 /// The frame hooks return the element itself rather than wrapping one, for the
@@ -1921,10 +1834,6 @@ pub fn dock_frame(dock: &DockContext, size: Pixels) -> Div {
 #[allow(unused_variables)]
 pub trait DockAreaRenderer: 'static {
     /// The area's outer frame, which base records its bounds on.
-    /// Appearance only. The area is laid out as a row around whatever this
-    /// returns, because that is what makes a dock a column beside the centre
-    /// rather than a block above it, and a renderer cannot be expected to know
-    /// it had a row to declare.
     fn frame(&self, window: &mut Window, cx: &mut App) -> Stateful<Div> {
         div().id("dock-area")
     }
@@ -1949,8 +1858,6 @@ pub trait DockAreaRenderer: 'static {
     }
 
     /// The column holding the center region and the bottom dock.
-    /// Appearance only; see [`DockAreaRenderer::frame`]. The centre fills what
-    /// the side docks leave and stacks with the bottom dock either way.
     fn center_frame(&self, window: &mut Window, cx: &mut App) -> Stateful<Div> {
         div().id("dock-area-center")
     }
@@ -1972,12 +1879,6 @@ pub trait DockAreaRenderer: 'static {
 
     /// One dock's chrome around its content: the title strip, the collapse
     /// affordance, and the resize handle.
-    ///
-    /// Chrome only. The dock's own box -- its extent along its own axis, and
-    /// the `flex_none` that holds it there -- is applied by
-    /// [`DockArea::render_dock`] around whatever this returns, so a renderer
-    /// cannot misplace a dock by not knowing to size it, and the default here
-    /// can be what it is: the content, undecorated.
     fn render_dock(
         &self,
         dock: &DockContext,
@@ -2062,10 +1963,7 @@ impl DockArea {
 mod tests {
     use gpui::{TestAppContext, VisualTestContext};
 
-    use std::{
-        cell::{Cell, RefCell},
-        rc::Rc,
-    };
+    use std::cell::RefCell;
 
     use super::*;
     use crate::dock::test_support::{Log, PanelSignal, TestPanel, drain, drain_active, log_of};
@@ -2076,43 +1974,6 @@ mod tests {
             let _ = crate::Theme::global_mut(cx);
         });
         cx.add_window_view(|window, cx| DockArea::new("test-dock", None, window, cx))
-    }
-
-    #[gpui::test]
-    fn dock_size_change_emits_one_layout_event(cx: &mut TestAppContext) {
-        let (area, cx) = setup(cx);
-        cx.update(|window, cx| {
-            area.update(cx, |area, cx| {
-                area.set_dock(
-                    DockPlacement::Left,
-                    DockLayout::tabs().panel(TestPanel::new("Left", cx)),
-                    window,
-                    cx,
-                );
-            });
-        });
-
-        let events = Rc::new(Cell::new(0));
-        let observed = events.clone();
-        let _subscription = cx.update(|window, cx| {
-            window.subscribe(&area, cx, move |_, event: &DockEvent, _, _| {
-                if matches!(event, DockEvent::LayoutChanged) {
-                    observed.set(observed.get() + 1);
-                }
-            })
-        });
-
-        cx.update(|window, cx| {
-            area.update(cx, |area, cx| {
-                area.set_dock_size(DockPlacement::Left, px(320.), window, cx);
-                area.set_dock_size(DockPlacement::Left, px(320.), window, cx);
-            });
-        });
-        assert_eq!(
-            events.get(),
-            1,
-            "only an effective size change is persisted"
-        );
     }
 
     /// Two tab groups side by side, holding one logging panel each.
