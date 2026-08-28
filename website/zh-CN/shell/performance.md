@@ -72,7 +72,7 @@ export default class Terminal extends View {
 
 在本页测量的那块 40 行看板上，描述整块面板要 **0.315 ms**，描述其中一行只要 **0.012 ms**——361 个节点对 9 个。
 
-嵌套本身的开销和这个差距比几乎可以忽略：父 View 为每个子 View 记录的是一个句柄，不是子 View 的描述。所以界面复杂本身不是性能问题，View 太大才是。
+嵌套本身的开销和这个差距比几乎可以忽略：父 View 为每个子 View 记录的是一个句柄，不是子 View 的描述。所以界面复杂本身不是性能问题， View 太大才是。
 
 而且「为了性能而拆」指的是拆成 **View**，不是拆成多个插件、多个应用或多个进程。需要第二个应用，是因为你想要第二份**授权**，那是 [Capabilities](./capabilities.md) 的事，而不是因为你想要第二份缓存。
 
@@ -102,7 +102,7 @@ onQuote(quote, cx) {
 
 - **让变化的那个 View 失效。** 只属于某个子 View 的状态，就应该放在那个子 View 上、在那里 notify，而不是放在挂载它的父 View 上。
 - **一次回调里的多次 `notify` 会合并成一次 render。** 手动攒批换不来什么，加条件才有用。
-- **在 Host 一侧，`cx.notify()` 与 `ScriptView::refresh` 是两个不同的请求。** 单纯的 `notify` 只是重绘已有的描述。如果 Rust 改的是脚本通过 [HostModule](./host-module.md) 读到的状态，那描述已经陈旧，只有 `refresh` 能说明这一点。见 [Hosting](./hosting.md#host-状态变了-怎么刷新视图)。
+- **在 Host 一侧，`cx.notify()` 与 `ScriptView::refresh` 是两个不同的请求。** 单纯的 `notify` 只是重绘已有的描述。如果 Rust 改的是脚本通过 [HostModule](./host-module.md) 读到的状态，那描述已经陈旧，只有 `refresh` 能说明这一点。见 [Hosting](./hosting.md#host-状态变了-怎么刷新-view)。
 
 ## 帧率与呈现延迟是两类问题
 

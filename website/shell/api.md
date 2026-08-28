@@ -12,7 +12,7 @@ The authority is not this page. The runtime generates `gpui.d.ts` for its own ve
 
 ## The modules
 
-Each built-in module names the public Rust layer it exposes, so an import says which layer a script depends on. The `gpui` module also carries the shell bridge needed to use GPUI from JavaScript: views, retained entities, scheduling and shared types. A name belongs to exactly one module; nothing is re-exported for convenience.
+Each built-in module names the public Rust layer it exposes, so an import says which layer a script depends on. The `gpui` module also carries the shell bridge needed to use GPUI from JavaScript: Views, retained entities, scheduling and shared types. A name belongs to exactly one module; nothing is re-exported for convenience.
 
 ```js
 import { View, div } from "gpui";
@@ -22,7 +22,7 @@ import { fps_monitor } from "gpui-fps";
 
 | Module | Provides |
 | --- | --- |
-| `gpui` | GPUI's own elements, plus what this runtime adds: views, the style surface, scheduling |
+| `gpui` | GPUI's own elements, plus what this runtime adds: Views, the style surface, scheduling |
 | `gpui-base` | Layout helpers, components and the theme |
 | `gpui-shell` | Type-only concepts owned by the shell bridge; it has no run-time exports |
 | `gpui-fps` | The performance overlay |
@@ -52,11 +52,11 @@ A string is an element too, exactly as `&str` implements `IntoElement` in GPUI: 
 
 | Name | What it is |
 | --- | --- |
-| `View` | The base class of every view; subclass it and default-export the subclass |
+| `View` | The base class of every View; subclass it and default-export the subclass |
 | `ViewClass` | A concrete `View` subclass, as `cx.new` takes it |
-| `Entity` | Retained ownership of one nested view: `set_props(props)`, `release()` |
+| `Entity` | Retained ownership of one nested View: `set_props(props)`, `release()` |
 
-A subclass defines `init?(props, cx)`, which runs once, and `render(cx)`, which returns one `Element`, `Entity` or string and runs when the view is invalidated. An optional `update(props)` runs when a parent changes a nested view's props.
+A subclass defines `init?(props, cx)`, which runs once, and `render(cx)`, which returns one `Element`, `Entity` or string and runs when the View is invalidated. An optional `update(props)` runs when a parent changes a nested View's props.
 
 ### Scheduling
 
@@ -118,7 +118,7 @@ These are type-only concepts introduced by the JavaScript bridge itself. Import 
 | `Props` | The property bag carried across the JavaScript View bridge |
 | `ElementBounds` | A shell event `Point` with `width` and `height` |
 | `ScopePhase` | `"render"`, `"event"`, `"task"`, `"layout"` or `"none"` |
-| `TaskOptions` | `{ owner?: View \| null }` — the view the task is cancelled with. Defaults to the running view; `null` outlives every view |
+| `TaskOptions` | `{ owner?: View \| null }` — the View the task is cancelled with. Defaults to the running View; `null` outlives every View |
 | `DialogOptions` | `{ escape_dismissable?: boolean, backdrop_dismissable?: boolean }`, both `true` by default |
 | `ToastOptions` | `{ title: string, description?: string, level?: "info" \| "success" \| "warning" \| "error", timeout?: number \| null, id?: string }`. `level` defaults to `"info"`; `timeout` to five seconds, and `null` keeps it until dismissed |
 | `MotionProperty` | `"opacity"`, `"width"`, `"height"`, `"left"`, `"top"` |
@@ -144,7 +144,7 @@ There are two context lifetimes with the same methods. `Context`, received by `r
 | `read_from_clipboard()` | The clipboard's text, or `undefined` when it holds none |
 | `write_to_clipboard(text)` | Replaces the clipboard's text |
 | `focus_handle()` | A new `FocusHandle`; belongs in `init` or an event handler, never in `render` |
-| `new(Class, props?)` | Creates a retained nested view and answers the `Entity` that owns it |
+| `new(Class, props?)` | Creates a retained nested View and answers the `Entity` that owns it |
 | `spawn(body, opts?)` | Runs `body(cx)` and adopts the promise it returns, so a rejection is reported |
 | `sleep(ms?)` | Resolves after `ms` on GPUI's foreground executor |
 | `timer` | The `Timer`: `after` and `every` |
@@ -159,7 +159,7 @@ Three places hand one out: `init`, the body of `cx.spawn`, and the callbacks of 
 
 ## The `window` global
 
-The global has the `Window` type exported by `gpui`. Nothing hands it to you and there is nothing to import at the call site. Every call reads the host call that is running now and throws outside one, so there is no handle to hold and nothing that can go stale. An overlay belongs to the window rather than to the view that opened it, which is why these are here and not on `Context`.
+The global has the `Window` type exported by `gpui`. Nothing hands it to you and there is nothing to import at the call site. Every call reads the host call that is running now and throws outside one, so there is no handle to hold and nothing that can go stale. An overlay belongs to the window rather than to the View that opened it, which is why these are here and not on `Context`.
 
 | Member | What it is |
 | --- | --- |
@@ -182,13 +182,13 @@ The global has the `Window` type exported by `gpui`. Nothing hands it to you and
 | `appearance()` | `"light"` or `"dark"` |
 | `is_window_active()` / `is_fullscreen()` / `is_maximized()` | The platform window's state |
 | `set_rem_size(size)` | Rescales everything expressed in rems |
-| `refresh()` | Redraws every view in the window |
+| `refresh()` | Redraws every View in the window |
 | `focus_next()` / `focus_prev()` | Moves the keyboard one tab stop |
 | `activate_window()` / `minimize_window()` / `zoom_window()` / `toggle_fullscreen()` | Platform window controls |
 | `localStorage` | Web Storage backed by a file the host placed; survives a restart |
 | `sessionStorage` | Web Storage held in memory; goes with the process |
 
-The measurements — everything from `rem_size()` down to `is_maximized()` — are legal from `render`, because a view that sizes itself from the window has to ask during the pass that draws it. Everything that *changes* the window is refused there, for the reason `cx.notify()` is: a frame that changes the window it is drawing into is a frame arguing with itself.
+The measurements — everything from `rem_size()` down to `is_maximized()` — are legal from `render`, because a View that sizes itself from the window has to ask during the pass that draws it. Everything that *changes* the window is refused there, for the reason `cx.notify()` is: a frame that changes the window it is drawing into is a frame arguing with itself.
 
 `open_dialog`, `open_sheet` and `open_sheet_at` take a **function returning an element**, not an element: a dialog outlives the call that opened it, and the function runs again whenever it redraws. Everything here except the two `has_active_*` queries and `paint_path` is illegal from `render`. See [Overlays](./overlays.md).
 
@@ -518,7 +518,7 @@ v_flex().relative().h(200)
   .child(Scrollbar.vertical("rows").absolute().inset_0());
 ```
 
-**A nested view is created once and mounted as a child.** `cx.new` belongs in `init` or an event handler; the entity is a child wherever a child is taken.
+**A nested View is created once and mounted as a child.** `cx.new` belongs in `init` or an event handler; the entity is a child wherever a child is taken.
 
 ```js
 init(props, cx) {

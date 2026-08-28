@@ -64,7 +64,7 @@ It is pinned to the top right by default. Use the existing anchor vocabulary to 
 
 The JavaScript habit would be `new Button(id)`. The runtime does not offer it, and the reason is the whole subject of this page: `new` promises an object with an identity — something you can keep, store on the instance, and use again. That is exactly what a description is not. `Button.new(id)` reads as "construct a description", which is what it does, and it matches the Rust spelling character for character.
 
-Views are the opposite case, and use the standard form: `class Counter extends View`. A view genuinely does have an identity and cross-frame state, and it is owned by GPUI. Two construction shapes in one file, because the two kinds of thing have different lifetimes.
+Views are the opposite case, and use the standard form: `class Counter extends View`. A View genuinely does have an identity and cross-frame state, and it is owned by GPUI. Two construction shapes in one file, because the two kinds of thing have different lifetimes.
 
 ### Ids
 
@@ -303,19 +303,19 @@ render(_cx) {
 }
 ```
 
-`context` is a predicate matched against the `key_context(...)` an element declares, so one chord can mean one thing in a list and another in an editor. The keymap belongs to the application rather than to a window, so a chord bound in one view is live wherever its predicate matches.
+`context` is a predicate matched against the `key_context(...)` an element declares, so one chord can mean one thing in a list and another in an editor. The keymap belongs to the application rather than to a window, so a chord bound in one View is live wherever its predicate matches.
 
 Registering several `on_action`s on one element is fine and they are independent. An action none of them claims carries on to an element further out, which is what lets an inner pane handle Save while the window around it handles Quit.
 
 The whole binding list is validated before any of it is installed: a keymap half-applied because the fourth entry had a typo is a worse state than one not applied, and a script cannot see which half made it.
 
 ::: tip Use arrow functions for handlers
-An arrow function does not bind its own `this`, so `this` inside the handler is still the view instance. A `function () {}` handler gets the wrong `this`. This is the single most common mistake in scripts written for this runtime, by people and by models alike.
+An arrow function does not bind its own `this`, so `this` inside the handler is still the View instance. A `function () {}` handler gets the wrong `this`. This is the single most common mistake in scripts written for this runtime, by people and by models alike.
 :::
 
 ## Focus and accessibility
 
-A script owns its own focus targets. `cx.focus_handle()` creates one — `App::focus_handle` in GPUI, which has no `FocusHandle::new` for this to mirror — it lives on the view the way an [`InputState`](./state.md#retained-state) does, and `.track_focus(handle)` gives it to an element:
+A script owns its own focus targets. `cx.focus_handle()` creates one — `App::focus_handle` in GPUI, which has no `FocusHandle::new` for this to mirror — it lives on the View the way an [`InputState`](./state.md#retained-state) does, and `.track_focus(handle)` gives it to an element:
 
 ```js
 init(props, cx) {
@@ -437,7 +437,7 @@ A handler passed to `.on_click` belongs to the description that render produced 
 
 The description a render replaced is kept one generation longer, because an event can be dispatched against a frame that has already been superseded. An event that arrives later than that is dropped with a `debug` log rather than an error — the author did nothing wrong, and there is nothing for them to fix.
 
-The practical consequence is that a rendered callback is not a subscription. For something that must outlive the pass that created it — reacting to an input's `change` event, say — see [State and views](./state.md#input-events).
+The practical consequence is that a rendered callback is not a subscription. For something that must outlive the pass that created it — reacting to an input's `change` event, say — see [State and Views](./state.md#input-events).
 
 ## Unknown methods are errors
 

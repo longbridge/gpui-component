@@ -14,12 +14,12 @@ pageClass: shell-examples-page
 | [Todo list](#todo-list) | 一个独立应用 | 脚本这一侧的全部：留存输入、dialog、toast、受授权约束的存储、资源、类型 |
 | [工作区](#工作区) | 一个独立应用 | 可停靠布局：熬过重启的面板，以及全部由脚本绘制的 chrome |
 | [报价面板](#报价面板) | gallery 里的一块面板 | Host 那一半：HostModule 、一个实体被两种语言读取、实时的成本读数 |
-| [原生动画](#原生动画) | gallery 内独立的脚本视图 | 由 GPUI 保留并采样的像素目标 transition 与 spring |
+| [原生动画](#原生动画) | gallery 内独立的脚本 View | 由 GPUI 保留并采样的像素目标 transition 与 spring |
 
 ## 一个完整的应用
 
 这里的示例每个都只讲一件事。想看一个完整产品放在一个仓库里——OAuth、实时
-WebSocket 报价流、虚拟化自选列表、用留存嵌套视图承载的价格图表，以及它自己的
+WebSocket 报价流、虚拟化自选列表、用留存嵌套 View 承载的价格图表，以及它自己的
 Rust Host 二进制——见
 [**longbridge/longbridge-lite**](https://github.com/longbridge/longbridge-lite)。
 它是一个只读的 Longbridge 桌面客户端，几千行 JavaScript，也是目前基于这个运行时
@@ -34,10 +34,10 @@ cargo run -p gpui-shell -- examples/js_todolist
 `examples/js_todolist/` 的目的是把整个运行时都跑一遍，而不是做到最小——`gpui-shell` 哪里坏了，通常先在这里露出来。
 
 ```text
-main.js                视图：状态、筛选、所有事件处理
+main.js                View：状态、筛选、所有事件处理
 ui.js                  呈现层，以函数形式导出
 storage.js             持久化，以及没拿到授权时怎么办
-confirm.js             确认 dialog，它自己也是一个视图
+confirm.js             确认 dialog，它自己也是一个 View
 icons/                 四个 SVG，相对应用根目录解析
 gpui.d.ts              自动生成；jsconfig.json 与 types.d.ts 把类型接上
 ```
@@ -95,7 +95,7 @@ ui.js                     chrome：标签页、dock 外框、落点提示
 
 **标签页带的是命令，不是处理器。** chrome 描述会缓存到原生状态改变为止，所以其中的脚本事件处理器没有可靠的生命周期。`select_tab(group, tab.index)` 与 `close_panel(group, tab.id)` 完全不携带脚本值——它们只是指名某个容器、以及要请它做什么。
 
-**面板就是多了两个方法的视图。** `Document.serialize()` 返回它的标题与编辑次数；重启之后 `deserialize(data)` 把它们收回来。关于这块面板的其他一切——它在哪、是否正在显示——都是布局的事，永远不会传到脚本。
+**面板就是多了两个方法的 View。** `Document.serialize()` 返回它的标题与编辑次数；重启之后 `deserialize(data)` 把它们收回来。关于这块面板的其他一切——它在哪、是否正在显示——都是布局的事，永远不会传到脚本。
 
 完整接口见 [Dock 与面板](./dock.md)。
 
@@ -113,7 +113,7 @@ gallery 的 Shell story 并排跑着两块面板：左边那块由 Rust 的 `she
 import { quotes, ticks, watch, watch_all } from "market";
 ```
 
-主题值来自调用作用域内的 `cx.theme()` snapshot，而不是第二个 HostModule 。
+主题值来自调用作用域内的 `cx.theme()` Snapshot，而不是第二个 HostModule 。
 
 因为两块面板读的是同一个实体，两边一旦对不上就会立刻看出来——这也是它算一个测试而不只是演示的原因。改 `main.js` 就能改变右边那块面板，中间不需要 `cargo build`；面板旁边有一个 “Reload script” 按钮。
 

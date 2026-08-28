@@ -12,7 +12,7 @@ order: 9
 
 ## 模块
 
-每个内建模块都以它所暴露的公开 Rust 层命名，所以一条 import 能说明脚本依赖哪一层。`gpui` 还包含从 JavaScript 使用 GPUI 所需的 shell 桥接：视图、留存实体、调度与共享类型。一个名字只属于一个模块，这里不为了方便做 re-export。
+每个内建模块都以它所暴露的公开 Rust 层命名，所以一条 import 能说明脚本依赖哪一层。`gpui` 还包含从 JavaScript 使用 GPUI 所需的 shell 桥接： View、留存实体、调度与共享类型。一个名字只属于一个模块，这里不为了方便做 re-export。
 
 ```js
 import { View, div } from "gpui";
@@ -22,7 +22,7 @@ import { fps_monitor } from "gpui-fps";
 
 | 模块 | 提供 |
 | --- | --- |
-| `gpui` | GPUI 自己的元素，加上这个运行时补上的部分：视图、样式接口与调度 |
+| `gpui` | GPUI 自己的元素，加上这个运行时补上的部分： View、样式接口与调度 |
 | `gpui-base` | 布局辅助函数、组件与主题 |
 | `gpui-shell` | shell 桥接层自有的纯类型概念；没有运行时导出 |
 | `gpui-fps` | 性能 HUD |
@@ -48,15 +48,15 @@ API 形态跟随 Rust 原型：`App` 上的方法放在 `cx`，`Window` 上的�
 
 字符串本身也是元素，和 GPUI 里 `&str` 实现 `IntoElement` 完全一样：`.child("hello")` 就是写文本的方式，样式来自持有它的那个元素。
 
-### 视图
+### View
 
 | 名称 | 说明 |
 | --- | --- |
-| `View` | 每个视图的基类；继承它，并把子类作为 default export |
+| `View` | 每个 View 的基类；继承它，并把子类作为 default export |
 | `ViewClass` | 一个具体的 `View` 子类，也就是 `cx.new` 接受的东西 |
-| `Entity` | 对一个嵌套视图的留存所有权：`set_props(props)`、`release()` |
+| `Entity` | 对一个嵌套 View 的留存所有权：`set_props(props)`、`release()` |
 
-子类定义只执行一次的 `init?(props, cx)`，以及返回一个 `Element`、`Entity` 或字符串、在视图被置为失效时执行的 `render(cx)`。可选的 `update(props)` 在父视图改变嵌套视图的 props 时执行。
+子类定义只执行一次的 `init?(props, cx)`，以及返回一个 `Element`、`Entity` 或字符串、在 View 被置为失效时执行的 `render(cx)`。可选的 `update(props)` 在父 View 改变嵌套 View 的 props 时执行。
 
 ### 调度
 
@@ -118,7 +118,7 @@ API 形态跟随 Rust 原型：`App` 上的方法放在 `cx`，`Window` 上的�
 | `Props` | 跨 JavaScript View 桥接传递的属性包 |
 | `ElementBounds` | shell 事件使用的、带 `width` 与 `height` 的 `Point` |
 | `ScopePhase` | `"render"`、`"event"`、`"task"`、`"layout"` 或 `"none"` |
-| `TaskOptions` | `{ owner?: View \| null }`——任务随之取消的视图。默认是当前运行的视图；`null` 比任何视图都活得久 |
+| `TaskOptions` | `{ owner?: View \| null }`——任务随之取消的 View。默认是当前运行的 View；`null` 比任何 View 都活得久 |
 | `DialogOptions` | `{ escape_dismissable?: boolean, backdrop_dismissable?: boolean }`，两者默认都是 `true` |
 | `ToastOptions` | `{ title: string, description?: string, level?: "info" \| "success" \| "warning" \| "error", timeout?: number \| null, id?: string }`。`level` 默认 `"info"`；`timeout` 默认五秒，`null` 表示留到被关掉 |
 | `MotionProperty` | `"opacity"`、`"width"`、`"height"`、`"left"`、`"top"` |
@@ -144,7 +144,7 @@ API 形态跟随 Rust 原型：`App` 上的方法放在 `cx`，`Window` 上的�
 | `read_from_clipboard()` | 剪贴板里的文本，没有文本时是 `undefined` |
 | `write_to_clipboard(text)` | 替换剪贴板里的文本 |
 | `focus_handle()` | 一个新的 `FocusHandle`；属于 `init` 或事件处理器，绝不属于 `render` |
-| `new(Class, props?)` | 创建一个留存的嵌套视图，并返回拥有它的 `Entity` |
+| `new(Class, props?)` | 创建一个留存的嵌套 View，并返回拥有它的 `Entity` |
 | `spawn(body, opts?)` | 执行 `body(cx)` 并接管它返回的 promise，让 rejection 得到上报 |
 | `sleep(ms?)` | 在 GPUI 的 foreground executor 上，`ms` 之后 resolve |
 | `timer` | `Timer`：`after` 与 `every` |
@@ -159,7 +159,7 @@ API 形态跟随 Rust 原型：`App` 上的方法放在 `cx`，`Window` 上的�
 
 ## `window` 全局对象
 
-这个全局对象的类型是 `gpui` 导出的 `Window`。调用处不需要 import，也没有谁把它交给你。每次调用都读取当前正在跑的那次 Host 调用，不在任何调用中时抛异常，所以没有句柄要持有，也没有东西会过期。浮层属于窗口，而不属于打开它的那个视图——这就是这些方法在这里、而不在 `Context` 上的原因。
+这个全局对象的类型是 `gpui` 导出的 `Window`。调用处不需要 import，也没有谁把它交给你。每次调用都读取当前正在跑的那次 Host 调用，不在任何调用中时抛异常，所以没有句柄要持有，也没有东西会过期。浮层属于窗口，而不属于打开它的那个 View——这就是这些方法在这里、而不在 `Context` 上的原因。
 
 | 成员 | 说明 |
 | --- | --- |
@@ -182,13 +182,13 @@ API 形态跟随 Rust 原型：`App` 上的方法放在 `cx`，`Window` 上的�
 | `appearance()` | `"light"` 或 `"dark"` |
 | `is_window_active()` / `is_fullscreen()` / `is_maximized()` | 平台窗口的状态 |
 | `set_rem_size(size)` | 重新缩放所有以 rem 表达的尺寸 |
-| `refresh()` | 重绘窗口里的每一个视图 |
+| `refresh()` | 重绘窗口里的每一个 View |
 | `focus_next()` / `focus_prev()` | 把键盘移到相邻的一个 tab stop |
 | `activate_window()` / `minimize_window()` / `zoom_window()` / `toggle_fullscreen()` | 平台窗口控制 |
 | `localStorage` | Web Storage，背后是 Host 放好的一个文件，跨重启存活 |
 | `sessionStorage` | Web Storage，只在内存里，随进程一起消失 |
 
-上面这些度量——从 `rem_size()` 一直到 `is_maximized()`——在 `render` 中都是合法的：一个要按窗口尺寸决定自身大小的视图，只能在绘制它的那一趟里问。而所有*改变*窗口的调用在 `render` 中都会被拒绝，理由和 `cx.notify()` 一样：一帧去改自己正在绘制的窗口，就是这一帧在和自己较劲。
+上面这些度量——从 `rem_size()` 一直到 `is_maximized()`——在 `render` 中都是合法的：一个要按窗口尺寸决定自身大小的 View，只能在绘制它的那一趟里问。而所有*改变*窗口的调用在 `render` 中都会被拒绝，理由和 `cx.notify()` 一样：一帧去改自己正在绘制的窗口，就是这一帧在和自己较劲。
 
 `open_dialog`、`open_sheet` 与 `open_sheet_at` 接受的是**一个返回元素的函数**，而不是元素：dialog 活得比打开它的那次调用久，每次重绘时这个函数都会再执行一次。除了两个 `has_active_*` 查询与 `paint_path`，这里的一切在 `render` 中都不合法。见 [Overlays](./overlays.md)。
 
@@ -518,7 +518,7 @@ v_flex().relative().h(200)
   .child(Scrollbar.vertical("rows").absolute().inset_0());
 ```
 
-**嵌套视图创建一次，然后作为子元素挂上。** `cx.new` 属于 `init` 或事件处理器；实体在任何接受子元素的位置都能当子元素。
+**嵌套 View 创建一次，然后作为子元素挂上。** `cx.new` 属于 `init` 或事件处理器；实体在任何接受子元素的位置都能当子元素。
 
 ```js
 init(props, cx) {

@@ -6,9 +6,9 @@ order: 6
 
 # State and Views
 
-A view is the one thing in this runtime that has an identity, survives a frame, and is owned by GPUI. Everything else — elements, callbacks, the `cx` handed to a call — belongs to the pass that created it.
+A View is the one thing in this runtime that has an identity, survives a frame, and is owned by GPUI. Everything else — elements, callbacks, the `cx` handed to a call — belongs to the pass that created it.
 
-## Defining a view
+## Defining a View
 
 ```js
 import { View } from "gpui";
@@ -24,15 +24,15 @@ export default class Counter extends View {
 }
 ```
 
-`init` runs once, when the view is created. It is where state that survives frames is set up — plain fields, and any [retained entity](#retained-state) the view needs.
+`init` runs once, when the View is created. It is where state that survives frames is set up — plain fields, and any [retained entity](#retained-state) the View needs.
 
-`render` **returns one element, retained `Entity` or string**, and runs when the view has been invalidated rather than on every frame — see [When `render` runs](#when-render-runs). Returning anything else fails immediately:
+`render` **returns one element, retained `Entity` or string**, and runs when the View has been invalidated rather than on every frame — see [When `render` runs](#when-render-runs). Returning anything else fails immediately:
 
 ```text
 render(cx) must return an element, an Entity, or a string
 ```
 
-`main.js` must `export default` a view class. The host constructs one instance and mounts it as the window's root view; a module whose default export is not a class is refused with a message saying so.
+`main.js` must `export default` a View class. The host constructs one instance and mounts it as the window's root View; a module whose default export is not a class is refused with a message saying so.
 
 Never store an element on the instance. See [Elements](./elements.md#elements-are-single-use).
 
@@ -50,7 +50,7 @@ add(cx) {
 
 This runs against the whole default assumption of the front-end ecosystem, so it is worth stating flatly: **there is no `useState` here, and no dependency array.** Three reasons the runtime does not add one.
 
-GPUI is itself an explicit-`notify` model, and two reactive mental models inside one application interfere with each other rather than compose. Automatic tracking would mean wrapping every view instance in a `Proxy`, which is a permanent cost on the render path — and QuickJS has no JIT to amortize it. And a missing `notify` has a determinate symptom: the interface does not update. That is far cheaper to find than an automatic system that fires too often.
+GPUI is itself an explicit-`notify` model, and two reactive mental models inside one application interfere with each other rather than compose. Automatic tracking would mean wrapping every View instance in a `Proxy`, which is a permanent cost on the render path — and QuickJS has no JIT to amortize it. And a missing `notify` has a determinate symptom: the interface does not update. That is far cheaper to find than an automatic system that fires too often.
 
 Several `notify` calls inside one event handler collapse into a single repaint — and into a single `render`.
 
@@ -58,30 +58,30 @@ Several `notify` calls inside one event handler collapse into a single repaint �
 
 `render` does **not** run once per frame. GPUI repaints for reasons your application never hears about — a pointer moving over a button, a text cursor blinking, a list scrolling, an animation advancing — and none of those are a reason to run JavaScript.
 
-So a `render` call does not describe *this frame*. It describes the interface once, into a snapshot the runtime keeps:
+So a `render` call does not describe *this frame*. It describes the interface once, into a Snapshot the runtime keeps:
 
 ```text
-cx.notify()  ──▶  render()  ──▶  snapshot  ──┬──▶  frame
+cx.notify()  ──▶  render()  ──▶  Snapshot  ──┬──▶  frame
                                              ├──▶  frame
                                              └──▶  frame  …
 ```
 
-The snapshot is rebuilt when, and only when, something invalidates it:
+The Snapshot is rebuilt when, and only when, something invalidates it:
 
 - `cx.notify()` from an event handler or an async task
 - a [hot-reload](./getting-started.md) replacing the script
-- a theme change, because `bg(cx.theme().colors.surface)` records a real colour while `render` runs and bakes it into the snapshot
+- a theme change, because `bg(cx.theme().colors.surface)` records a real colour while `render` runs and bakes it into the Snapshot
 - the Host calling `ScriptView::refresh`, which is how Rust says it changed state your script reads through a [HostModule](./host-module.md). A plain `cx.notify()` from the Host is a repaint and runs no script — the two are different requests
 
 Everything else replays the description you already produced, in Rust, without running any JavaScript.
 
 Three consequences worth holding on to:
 
-**Your `render` cost follows your users, not your frame rate.** A view that changes ten times a second costs ten renders a second, whether the window is repainting at 60 FPS or 120. Describing a large panel is affordable precisely because it is not being redescribed sixty times for no reason.
+**Your `render` cost follows your users, not your frame rate.** A View that changes ten times a second costs ten renders a second, whether the window is repainting at 60 FPS or 120. Describing a large panel is affordable precisely because it is not being redescribed sixty times for no reason.
 
-**Hover, focus and active styles never call back into script.** `.hover(s => s.opacity(0.8))` is resolved into a native style description while the snapshot is built, and GPUI applies it from there. A pointer moving across your interface runs no JavaScript at all. The same is true of an [`Input`](#retained-state)'s cursor and selection.
+**Hover, focus and active styles never call back into script.** `.hover(s => s.opacity(0.8))` is resolved into a native style description while the Snapshot is built, and GPUI applies it from there. A pointer moving across your interface runs no JavaScript at all. The same is true of an [`Input`](#retained-state)'s cursor and selection.
 
-**A failed `render` does not destroy the interface.** A snapshot is published only after `render` returns successfully, so a script that throws leaves the previous description — and the handlers registered with it — exactly as they were. The failure appears as a banner **over** the interface that still works, saying it is one version behind and offering the detail for pasting somewhere; you keep your scroll position and your focus. A view whose very first render failed has nothing to keep, and gets the full error surface instead. Either way the failing `render` is not re-run until something invalidates the view again.
+**A failed `render` does not destroy the interface.** A Snapshot is published only after `render` returns successfully, so a script that throws leaves the previous description — and the handlers registered with it — exactly as they were. The failure appears as a banner **over** the interface that still works, saying it is one version behind and offering the detail for pasting somewhere; you keep your scroll position and your focus. A View whose very first render failed has nothing to keep, and gets the full error surface instead. Either way the failing `render` is not re-run until something invalidates the View again.
 
 ## Scope phases
 
@@ -96,7 +96,7 @@ Every call from Rust into the script opens a scope carrying a **phase**, and the
 
 `cx.phase()` reports the current one, and `"none"` outside any host call.
 
-`cx.theme()` returns a deeply read-only snapshot of gpui-base's current semantic theme for this call: direct color roles as well as `colors`, `spacing`, `radius`, `appearance`, and `is_dark`.
+`cx.theme()` returns a deeply read-only Snapshot of gpui-base's current semantic theme for this call: direct color roles as well as `colors`, `spacing`, `radius`, `appearance`, and `is_dark`.
 
 Each refusal is a specific message, not undefined behaviour:
 
@@ -131,11 +131,11 @@ Those three are exactly the places whose job is to set up or continue work that 
 
 `cx` exposes nothing but functions — `Object.keys(cx)` shows the methods and no generation — so a script cannot forge one.
 
-There is no third way to get one. A module's top level and a bare `constructor` are handed no context and cannot ask for one — which is the point rather than a gap: GPUI has no module top level either, and work started there would belong to no view, so nothing would own it and nothing would cancel it. Start it in `init`, which is where a view is handed its context.
+There is no third way to get one. A module's top level and a bare `constructor` are handed no context and cannot ask for one — which is the point rather than a gap: GPUI has no module top level either, and work started there would belong to no View, so nothing would own it and nothing would cancel it. Start it in `init`, which is where a View is handed its context.
 
 ## Retained state
 
-A view's own fields hold plain data. Anything with cross-frame machinery of its own — a text field's content, cursor position and undo history — lives in a GPUI entity, and the script holds a **handle** to it.
+A View's own fields hold plain data. Anything with cross-frame machinery of its own — a text field's content, cursor position and undo history — lives in a GPUI entity, and the script holds a **handle** to it.
 
 ```js
 import { InputState, Input } from "gpui-base";
@@ -170,7 +170,7 @@ render(cx) {
 
 ```text
 InputState.new(...) cannot run during render; create state in init()
-or in an event handler and keep it on the view
+or in an event handler and keep it on the View
 ```
 
 The script holds a handle, not the entity — GPUI owns that. Using a released handle throws rather than returning `undefined`, because an `undefined` in JavaScript travels a long way before it fails and by then the origin is gone:
@@ -277,7 +277,7 @@ Nothing is imported for that: `cx` arrives as the handler's second argument, and
 
 ### Ownership and cancellation
 
-Every task belongs to a view — `opts.owner`, or the view that is running when it is created. The task holds a weak reference, so when the panel that started the work goes away the callback is skipped rather than writing into state nothing will render again.
+Every task belongs to a View — `opts.owner`, or the View that is running when it is created. The task holds a weak reference, so when the panel that started the work goes away the callback is skipped rather than writing into state nothing will render again.
 
 ```js
 const handle = cx.timer.every(1000, (cx) => this.tick(cx));
@@ -285,7 +285,7 @@ handle.cancel();
 handle.is_done();
 ```
 
-`owner: null` opts out and outlives every view; it is the only value other than the current view the runtime accepts today.
+`owner: null` opts out and outlives every View; it is the only value other than the current View the runtime accepts today.
 
 Cancelling a `cx.sleep` leaves its promise **pending for ever**. That is what cancellation means for a promise: the continuation does not run, and no error is invented for code that asked to stop.
 

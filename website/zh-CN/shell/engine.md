@@ -38,13 +38,13 @@ cargo test -p gpui-shell --release --lib benchmark -- --nocapture
 
 | | 测的是什么 | 443 个节点 | 什么时候付 |
 | --- | --- | --- | --- |
-| **A** | 脚本 → snapshot | **1.4 ms** | 应用状态每变动一次 |
-| **B** | snapshot → GPUI 元素 | **0.7 ms** | 每一帧 |
+| **A** | 脚本 → Snapshot | **1.4 ms** | 应用状态每变动一次 |
+| **B** | Snapshot → GPUI 元素 | **0.7 ms** | 每一帧 |
 | **C** | 一整帧的缓存重绘 | **1.8 ms**，**一行 JavaScript 都没跑** | 每一帧 |
 
 要用 release 跑，否则数字没有意义。本页所有绝对数值都来自一台 MacBook Pro（M3，8 核，24 GB）上的 release 构建，会随机器变化。
 
-**C 是断言，不只是计时。** 对一个未变化的视图重绘五十次，一行 JavaScript 也没有跑过。哪怕有一帧跑了，就说明运行时退回到了按帧收取脚本成本的老路上——那时基准是直接失败，而不是只变慢一点。
+**C 是断言，不只是计时。** 对一个未变化的 View 重绘五十次，一行 JavaScript 也没有跑过。哪怕有一帧跑了，就说明运行时退回到了按帧收取脚本成本的老路上——那时基准是直接失败，而不是只变慢一点。
 
 只测一个规模，看不出这三笔成本里哪几笔会随规模增长，所以第四个测试把同一个面板一路放大到 8,403 个节点。它挂在 `--ignored` 之后，因为最大的那一档要跑好几秒：
 
@@ -54,9 +54,9 @@ cargo test -p gpui-shell --release --lib benchmark -- --ignored --nocapture
 
 描述一次，443 个节点是 1.1 ms；面板放大到 2,103、4,203、8,403 个节点，则依次是 5.1、10.3、20.5 ms。而一整帧——也就是 B 加上 GPUI 的布局与绘制，即 C 量的那件事——对应是 1.3、5.9、12.0、27.0 ms。两笔都随节点数接近线性增长；不增长的是 JavaScript——每一档的每一帧都是零行。这三件事因此说清了：
 
-- **4,203 个节点是 snapshot 决定结果的那个规模。** 12 ms 一帧稳在 60 FPS；若每帧都重建描述则要 22 ms，直接掉帧。比这更小的规模，两种做法都有余量——在过度解读那个倍数之前，这一点值得先知道。
+- **4,203 个节点是 Snapshot 决定结果的那个规模。** 12 ms 一帧稳在 60 FPS；若每帧都重建描述则要 22 ms，直接掉帧。比这更小的规模，两种做法都有余量——在过度解读那个倍数之前，这一点值得先知道。
 - **描述这笔成本没有消失，只是挪了位置。** 8,403 个节点的 20 ms 是用户操作时才付，不是每秒付六十次；但它仍然是 20 ms，所以单次调用成本依旧是评判第二个引擎的那个数字。
-- **超过几千个节点之后，账单根本不在脚本一侧。** 那个规模上 27 ms 一帧、其间一行 JavaScript 都没跑，花的是 `materialize`、布局与绘制。这么大的视图该做的是虚拟化，换个更快的引擎也推不动它。
+- **超过几千个节点之后，账单根本不在脚本一侧。** 那个规模上 27 ms 一帧、其间一行 JavaScript 都没跑，花的是 `materialize`、布局与绘制。这么大的 View 该做的是虚拟化，换个更快的引擎也推不动它。
 
 把 A 对照设计给出的预算，答案仍是“在预算之内，但余量比预期少”：目标是一次脚本 `render` 花 1.5 ms，实测达标；但那份预算是按 800 个节点、每次记录操作约 150 ns 推出来的，而实测是 443 个节点上约 320 ns，三倍规模的面板放不进一次描述。变的是这件事有多要紧。按老模型，120 FPS 下每一秒会有 168 ms 花在重复描述一个没人改过的界面上；现在同一个面板在用户真正改动时花 1.4 ms，重绘则是 0.7 ms。设计为超大面板列出的三条手段——压低单次调用成本、缓存未变化的子树、对长列表做虚拟化——依然[还没有实现](./elements.md#还没有的东西)，但它们现在是优化项，不再是前提条件。
 
@@ -74,13 +74,13 @@ cargo test -p gpui-shell --release --lib benchmark -- --ignored --nocapture
 | 测量项 | 实测范围 |
 | --- | --- |
 | 完整 JavaScript `render` 加 Spec recording | 每次脏渲染 **12.0–13.5 ms** |
-| snapshot materialize | 每次 **0.93–1.08 ms** |
+| Snapshot materialize | 每次 **0.93–1.08 ms** |
 | 行情更新触发的脚本渲染 | 每秒 **8–20 次** |
 | 窗口活动时的 materialize | 每秒 **59–78 次** |
 
 一次活动窗口下的 FPS HUD 样本为 **69 FPS**、帧时间 **10.9 ms**、掉帧率 **18.3%**。HUD 的测量包含 GPUI layout 与 paint，因此不能与前两项运行时计数直接互换，但它确认了端到端负载没有达到 8.33 ms 的目标。
 
-有效结论比“JavaScript 很慢”更具体：未变化的 snapshot 能在约 1 ms 内 materialize，明显低于一帧预算；但行情造成一次脏更新时，应用会重建并记录完整描述，完成 materialize 之前总计要花约 12–13.5 ms。因此，这个负载的主要成本是反复使根 Script View 失效；只优化 native materializer 无法恢复 120 FPS。
+有效结论比“JavaScript 很慢”更具体：未变化的 Snapshot 能在约 1 ms 内 materialize，明显低于一帧预算；但行情造成一次脏更新时，应用会重建并记录完整描述，完成 materialize 之前总计要花约 12–13.5 ms。因此，这个负载的主要成本是反复使根 Script View 失效；只优化 native materializer 无法恢复 120 FPS。
 
 这些数据有意排除了 debug 构建，也排除了窗口失去活动状态后的样本。两者都会显著改变调度与帧呈现，FPS 不适合用于架构比较。这组数据也是工作负载实测，不替代上面可复现的 crate 基准：行情频率、可见内容、硬件与显示时序都会改变绝对值。
 
@@ -88,8 +88,8 @@ cargo test -p gpui-shell --release --lib benchmark -- --ignored --nocapture
 
 VM 与 GPUI 的 `App` 共用一个线程——主线程——在同一个进程里。`ShellRuntime` 是一个内部用 `RefCell` 的 `Rc`，既不是 `Send` 也不是 `Sync`。这里没有 worker，也没有第二个 VM。
 
-<img class="architecture-light" src="/shell-threads-memory-light.svg" alt="Host 进程。主线程上，GPUI 的 App 与 QuickJS VM 通过 FFI 边界互相调用普通函数。后台 worker 处理计时器与阻塞 I/O，再回到前台执行器 settle，期间不接触 VM。内存分为四块：上限 256 MiB 的 JavaScript 堆、由 snapshot 拥有的描述 arena、按 snapshot generation 索引的回调 arena，以及只存活一次绘制的 GPUI 帧 arena。">
-<img class="architecture-dark" src="/shell-threads-memory-dark.svg" alt="Host 进程。主线程上，GPUI 的 App 与 QuickJS VM 通过 FFI 边界互相调用普通函数。后台 worker 处理计时器与阻塞 I/O，再回到前台执行器 settle，期间不接触 VM。内存分为四块：上限 256 MiB 的 JavaScript 堆、由 snapshot 拥有的描述 arena、按 snapshot generation 索引的回调 arena，以及只存活一次绘制的 GPUI 帧 arena。">
+<img class="architecture-light" src="/shell-threads-memory-light.svg" alt="Host 进程。主线程上，GPUI 的 App 与 QuickJS VM 通过 FFI 边界互相调用普通函数。后台 worker 处理计时器与阻塞 I/O，再回到前台执行器 settle，期间不接触 VM。内存分为四块：上限 256 MiB 的 JavaScript 堆、由 Snapshot 拥有的描述 arena、按 Snapshot generation 索引的回调 arena，以及只存活一次绘制的 GPUI 帧 arena。">
+<img class="architecture-dark" src="/shell-threads-memory-dark.svg" alt="Host 进程。主线程上，GPUI 的 App 与 QuickJS VM 通过 FFI 边界互相调用普通函数。后台 worker 处理计时器与阻塞 I/O，再回到前台执行器 settle，期间不接触 VM。内存分为四块：上限 256 MiB 的 JavaScript 堆、由 Snapshot 拥有的描述 arena、按 Snapshot generation 索引的回调 arena，以及只存活一次绘制的 GPUI 帧 arena。">
 
 后台工作从不接触 VM。计时器（`cx.sleep`、`cx.timer`）在那里倒计时，文件、进程、fetch、TCP 与 WebSocket 也把阻塞工作交给那里。结果回到前台执行器 settle，所以 JavaScript 续体仍在主线程、在一个 `Task` scope 里执行。元素产出之后，GPUI 也会用自己的线程完成自身工作。
 
@@ -104,11 +104,11 @@ VM 与 GPUI 的 `App` 共用一个线程——主线程——在同一个进程�
 | 是什么 | 待在哪里 | 什么时候释放 |
 | --- | --- | --- |
 | 对象、闭包、模块作用域 | QuickJS 堆，上限 256 MiB | 它自己的 GC 跑过，或者运行时销毁 |
-| 元素描述 arena | Rust 侧；移交给它产出的那份 snapshot | 那份 snapshot 销毁时 |
-| 已注册的回调 | Rust 侧的 arena，按 snapshot 的 generation 索引 | 那份 snapshot 销毁并退役它那一代时 |
+| 元素描述 arena | Rust 侧；移交给它产出的那份 Snapshot | 那份 Snapshot 销毁时 |
+| 已注册的回调 | Rust 侧的 arena，按 Snapshot 的 generation 索引 | 那份 Snapshot 销毁并退役它那一代时 |
 | GPUI 元素 | GPUI 自己的帧 arena | 构建它们的那次绘制结束时 |
 
-一个视图持有的是**两份** snapshot 而不是一份：当前生效的那份描述，以及被它替换掉的上一份。上一份要多留一代，因为一个已经在途的帧可能仍在读它，提前释放会把那一帧还需要的回调一并退役掉。
+一个 View 持有的是**两份** Snapshot 而不是一份：当前生效的那份描述，以及被它替换掉的上一份。上一份要多留一代，因为一个已经在途的帧可能仍在读它，提前释放会把那一帧还需要的回调一并退役掉。
 
 跨过边界的东西没有一个是对象。元素句柄是指向 arena 的一个整数下标；由 Host 留存的状态——`InputState` 的 rope、光标与选区——待在一个 GPUI 实体里，脚本通过句柄寻址它；每一个参数与返回值都是纯数据。
 
@@ -155,12 +155,12 @@ Host 在取这个依赖之前必须知道两个数：二进制大多少，内存
 
 | 分界线之上——与引擎无关 | 分界线之下——由引擎实现 |
 | --- | --- |
-| 渲染 snapshot：脚本 `render` 一次产出什么、之后的帧复用什么 | 把引擎值转换成运行时里与引擎无关的值类型 |
+| 渲染 Snapshot：脚本 `render` 一次产出什么、之后的帧复用什么 | 把引擎值转换成运行时里与引擎无关的值类型 |
 | 元素描述 arena、一次性检查与调试树 | 模块系统的形态——ES module 加解析器，还是 `require` 加路径表 |
 | `materialize`：把描述变成真实 GPUI 元素，纯 Rust | 方法派发——共享原型上的函数，还是 `__index` 元方法 |
 | CallScope：phase、generation，以及整个 crate 唯一的 `unsafe` | 回调句柄类型 |
 | 样式表、有参样式与拼写建议 | 把与引擎无关的错误类型转成该语言自己的异常 |
-| 默认 token 调色板与颜色 token 解析 | 视图如何定义——`class extends View`，还是元表 |
+| 默认 token 调色板与颜色 token 解析 | View 如何定义——`class extends View`，还是元表 |
 | 能力模型与路径解析 | 沙箱中与语言相关的部分 |
 | 长度与颜色的转换 | |
 | 与引擎无关的错误类型、回调 arena、错误浮层 | |
@@ -168,13 +168,13 @@ Host 在取这个依赖之前必须知道两个数：二进制大多少，内存
 
 左侧的模块，源码里没有一处出现 VM 的名字。这才是这条分界线为真的证据：它不是一个 trait，而是“crate 的其余部分只通过十来个入口触达引擎、此外别无他途”这一事实。
 
-在这里用 trait 反而更糟。两个句柄类型——视图类与视图实例——在 QuickJS 一侧各自带着生命周期标注，硬套一层 trait 只会把这份复杂度搬进类型系统，而不会消掉它。
+在这里用 trait 反而更糟。两个句柄类型——View 类与 View 实例——在 QuickJS 一侧各自带着生命周期标注，硬套一层 trait 只会把这份复杂度搬进类型系统，而不会消掉它。
 
 契约里最吃重的一条规则关于*什么时候*而不是做什么：**引擎的 `build_snapshot` 是进入脚本 `render` 的唯一入口，而且没有任何东西按帧调用它。** 一个会见缝插针地渲染的引擎——重绘时、悬停时、定时器到点时——会把脚本成本重新压回帧预算，而这正是这条分界线要防的耦合。基准 C 就是抓这件事的。
 
 ## 可移植性
 
-如果将来真的增加第二个引擎，**脚本在两者之间不可移植。** 它们会是不同的语言：视图在 JavaScript 里是 `class Counter extends View`，换一门语言就是别的写法。
+如果将来真的增加第二个引擎，**脚本在两者之间不可移植。** 它们会是不同的语言： View 在 JavaScript 里是 `class Counter extends View`，换一门语言就是别的写法。
 
 必须相同的是围绕它的其余一切——绑定接口、渲染协议、phase 规则、能力模型、错误信息。设计提出的要求是行为层面的：同一个用例在两个引擎下必须产出**同一棵描述树**，同样的应用活动必须触发**同样次数的脚本 `render`**。这正是防止这条分界线腐烂成两个各行其是的运行时的东西。
 
@@ -184,7 +184,7 @@ Host 在取这个依赖之前必须知道两个数：二进制大多少，内存
 
 QuickJS 要求 Host 自己去清空 job 队列——没人来问，`await` 之后的代码就永远不执行——而这不是每个引擎都有的形态。所以调度器无法整体落在分界线之上。它需要引擎再提供两个操作：把一个 Host 任务变成脚本可等待的值，以及跑完待执行的 job。
 
-Promise job 会在 Host 调用边界被 drain；render 如果只是发现还有 pending job，会排入一次 foreground drain，而不是在 paint 路径上执行任意 continuation。这保住了核心不变量：异步 continuation 可以让视图失效，但一帧绝不会仅仅因为自己是一帧就重新进入 JavaScript。
+Promise job 会在 Host 调用边界被 drain；render 如果只是发现还有 pending job，会排入一次 foreground drain，而不是在 paint 路径上执行任意 continuation。这保住了核心不变量：异步 continuation 可以让 View 失效，但一帧绝不会仅仅因为自己是一帧就重新进入 JavaScript。
 
 在这两条被处理之前，调度器是 QuickJS 专属的。它将来要遵守的规则，与任何新增能力的规则一样：除非确实无法表达，否则加在分界线之上。
 
@@ -192,6 +192,6 @@ Promise job 会在 Host 调用边界被 drain；render 如果只是发现还有 
 
 这条分界线会引出的两个问题。
 
-`gpui-shell` 把 VM 跑在**Host 进程内、主线程上**，与 GPUI 的 `App` 在一起。正是这一点，才让单次记录调用停在 240–340 ns。独立进程会在每一次记录 builder 调用上加一次 IPC 往返；即便有了 snapshot 把频率降下来，这份预算依然没有。同样的理由也解释了为什么没有 `Worker`：VM 与 `App` 都是主线程独占的。
+`gpui-shell` 把 VM 跑在**Host 进程内、主线程上**，与 GPUI 的 `App` 在一起。正是这一点，才让单次记录调用停在 240–340 ns。独立进程会在每一次记录 builder 调用上加一次 IPC 往返；即便有了 Snapshot 把频率降下来，这份预算依然没有。同样的理由也解释了为什么没有 `Worker`：VM 与 `App` 都是主线程独占的。
 
 wasm 目标是分界线画在这个位置的另一个理由。QuickJS 是纯 C，能编到 WebAssembly；不是每个候选引擎都能，有些还会生成机器码，这在禁止可写可执行内存的平台上是一项约束。这些事实都不决定今天的引擎，但它们是“引擎是架构的一个参数，而不是架构的一部分”这句话被写下来的原因。

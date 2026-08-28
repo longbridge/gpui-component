@@ -125,7 +125,7 @@ or a #rrggbb literal
 
 gpui-shell 不拥有调色板或主题文件格式，而是读取 Host 提供的
 `gpui_base::Theme`。JavaScript 应用也可以通过
-`set_theme({ appearance, tokens })` 替换同一份 Base snapshot；主题名称和
+`set_theme({ appearance, tokens })` 替换同一份 Base Snapshot；主题名称和
 registry 始终属于应用状态。
 
 ## 状态样式
@@ -182,7 +182,7 @@ render(cx) {
 }
 ```
 
-这个 snapshot 是深度只读的。`theme()` 仍作为兼容入口保留，但优先使用 `cx.theme()`。应用可以从 event 或 task 调用 `set_theme({ appearance, tokens })`，传入自己管理的完整颜色、间距与圆角 token snapshot。gpui-shell 只把它写入 gpui-base 并重建使用 token 的脚本视图，不拥有主题名称、palette 或文件格式。
+这个 Snapshot 是深度只读的。`theme()` 仍作为兼容入口保留，但优先使用 `cx.theme()`。应用可以从 event 或 task 调用 `set_theme({ appearance, tokens })`，传入自己管理的完整颜色、间距与圆角 token Snapshot。gpui-shell 只把它写入 gpui-base 并重建使用 token 的脚本 View，不拥有主题名称、palette 或文件格式。
 
 ## 原生动画
 

@@ -12,7 +12,7 @@ A dialog is not a floating `div`. It is a place in the window's stacking order, 
 
 So the script says **what** to put in front of the user, and the root says where it goes and how it leaves. What crosses the boundary is small: a function returning an element, a side to anchor to, a sentence to show.
 
-They are on `window` rather than on `cx` because a dialog belongs to the window, not to the view that opened it: `cx.notify()` re-renders one view, `window.open_dialog()` changes what the user is looking at. `gpui-component` draws the same line, so the two halves of an application read as one vocabulary — and `window` is somewhere to grow. Overlays are what it carries today; `Window` in Rust also answers focus, size and appearance, and those land in a namespace that already exists.
+They are on `window` rather than on `cx` because a dialog belongs to the window, not to the View that opened it: `cx.notify()` re-renders one View, `window.open_dialog()` changes what the user is looking at. `gpui-component` draws the same line, so the two halves of an application read as one vocabulary — and `window` is somewhere to grow. Overlays are what it carries today; `Window` in Rust also answers focus, size and appearance, and those land in a namespace that already exists.
 
 ## The surface
 
@@ -50,7 +50,7 @@ window.clear_toasts();
 
 ```text
 expected a function returning an element; open_dialog and open_sheet take
-a function, not an element and not a view class
+a function, not an element and not a View class
 ```
 
 The reason is lifetime, not taste. An element belongs to the arena of the render pass that built it, and a dialog outlives the call that opened it — so an element built at open time would belong to the wrong pass. The function runs when the dialog draws, and again whenever it redraws, which is the same contract `render` has.
@@ -121,7 +121,7 @@ unknown sheet placement `middle`; expected left, right, top or bottom
 
 ## Toasts
 
-A toast is the one overlay that is **data rather than a view** — no function, no instance, nothing for the script to render — which is why its whole content crosses the boundary as an options object.
+A toast is the one overlay that is **data rather than a View** — no function, no instance, nothing for the script to render — which is why its whole content crosses the boundary as an options object.
 
 | Field | Default | Meaning |
 | --- | --- | --- |
@@ -154,7 +154,7 @@ render(cx) {
 }
 ```
 
-**Measurements are legal from `render`**, and that is the point of them: a view that lays itself out from the window's size has to ask during the pass that draws it.
+**Measurements are legal from `render`**, and that is the point of them: a View that lays itself out from the window's size has to ask during the pass that draws it.
 
 | Member | What it answers |
 | --- | --- |
@@ -170,7 +170,7 @@ render(cx) {
 | Member | What it does |
 | --- | --- |
 | `set_rem_size(size)` | Rescales everything expressed in rems |
-| `refresh()` | Redraws every view in the window |
+| `refresh()` | Redraws every View in the window |
 | `focus_next()` / `focus_prev()` | Moves the keyboard one tab stop |
 | `dispatch_action(action)` | Dispatches an action down this window's focus path |
 | `activate_window()` / `minimize_window()` / `zoom_window()` / `toggle_fullscreen()` | Platform window controls |
@@ -181,7 +181,7 @@ render(cx) {
 
 Painted back to front:
 
-1. **Content** — the script's root view.
+1. **Content** — the script's root View.
 2. **Sheet** — at most one, anchored to an edge. A sheet is a *place* in the window, so it sits below the dialog stack: a dialog raised from inside a sheet must be readable, and a sheet raised under a dialog must not cover it.
 3. **Dialog stack** — in open order, oldest at the bottom.
 4. **Toasts** — above everything. A toast reports the outcome of the action the user just took, and an open dialog is exactly the situation where that outcome matters most, so it is the one layer that is never occluded.
@@ -212,15 +212,15 @@ Opening or closing an overlay mutates the window, and the render pass is reading
 
 The refusal names the phase it came from, because that is the only clue the author has.
 
-`window.has_active_dialog()` and `window.has_active_sheet()` are the exception, and read the same rule: they ask a question rather than change anything, and a view that draws itself differently while a dialog is up has to ask during the pass that draws it.
+`window.has_active_dialog()` and `window.has_active_sheet()` are the exception, and read the same rule: they ask a question rather than change anything, and a View that draws itself differently while a dialog is up has to ask during the pass that draws it.
 
 ## Overlays need a `ShellRoot`
 
-Every one of these calls reaches the window's root view. A window whose first view is not a `ShellRoot` refuses them, and says which mistake it was — a host wiring problem, not a script one:
+Every one of these calls reaches the window's root View. A window whose first View is not a `ShellRoot` refuses them, and says which mistake it was — a host wiring problem, not a script one:
 
 ```text
-window.open_dialog(content, options) needs a ShellRoot as the window's first view;
-this window was opened with another view
+window.open_dialog(content, options) needs a ShellRoot as the window's first View;
+this window was opened with another View
 ```
 
 See [Getting started](./getting-started.md#add-the-runtime-to-a-rust-application).

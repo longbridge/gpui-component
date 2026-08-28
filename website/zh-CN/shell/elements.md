@@ -64,7 +64,7 @@ div()
 
 JavaScript 的习惯写法是 `new Button(id)`。运行时不提供它，理由正是本页的主题：`new` 承诺的是一个有身份的对象——可以保存、可以挂在实例上、可以再次使用。而描述恰恰不是这种东西。`Button.new(id)` 读起来是“构造一段描述”，它做的也正是这件事，并且与 Rust 侧一字不差。
 
-视图是相反的情形，用的就是标准写法：`class Counter extends View`。视图确实有身份、有跨帧状态，并且由 GPUI 拥有。同一份文件里出现两种构造形态，是因为这两类东西的生命周期本来就不同。
+View 是相反的情形，用的就是标准写法：`class Counter extends View`。 View 确实有身份、有跨帧状态，并且由 GPUI 拥有。同一份文件里出现两种构造形态，是因为这两类东西的生命周期本来就不同。
 
 ### id
 
@@ -303,19 +303,19 @@ render(_cx) {
 }
 ```
 
-`context` 是一个匹配元素 `key_context(...)` 的谓词，所以同一个组合键可以在列表里是一个意思、在编辑器里是另一个意思。keymap 属于应用而不属于某个窗口，所以在一个视图里绑的组合键，在它的谓词匹配的任何地方都生效。
+`context` 是一个匹配元素 `key_context(...)` 的谓词，所以同一个组合键可以在列表里是一个意思、在编辑器里是另一个意思。keymap 属于应用而不属于某个窗口，所以在一个 View 里绑的组合键，在它的谓词匹配的任何地方都生效。
 
 同一个元素上注册多个 `on_action` 是可以的，彼此独立。一个它们都没认领的 action 会继续往外层传——这正是内层面板处理 Save、外层窗口处理 Quit 的做法。
 
 整份绑定列表会在安装任何一条之前先校验完：因为第四条有拼写错误而只装了一半的 keymap，比一条都没装更糟，而脚本没有办法知道装进去的是哪一半。
 
 ::: tip 事件处理器请用箭头函数
-箭头函数不绑定自己的 `this`，所以处理函数里的 `this` 仍然是视图实例。用 `function () {}` 写会拿到错误的 `this`。这是为本运行时写脚本时最常见的一处错误，人和模型都一样。
+箭头函数不绑定自己的 `this`，所以处理函数里的 `this` 仍然是 View 实例。用 `function () {}` 写会拿到错误的 `this`。这是为本运行时写脚本时最常见的一处错误，人和模型都一样。
 :::
 
 ## 焦点与无障碍
 
-焦点目标由脚本自己持有。`cx.focus_handle()` 创建一个——对应 GPUI 的 `App::focus_handle`，那边并没有 `FocusHandle::new` 可供镜像——它像 [`InputState`](./state.md#retained-state) 一样挂在视图上，再用 `.track_focus(handle)` 交给某个元素：
+焦点目标由脚本自己持有。`cx.focus_handle()` 创建一个——对应 GPUI 的 `App::focus_handle`，那边并没有 `FocusHandle::new` 可供镜像——它像 [`InputState`](./state.md#留存状态) 一样挂在 View 上，再用 `.track_focus(handle)` 交给某个元素：
 
 ```js
 init(props, cx) {
@@ -338,7 +338,7 @@ render() {
 | `handle.is_focused()` | 那个元素此刻是否持有键盘 |
 | `handle.release()` | 释放这个 handle |
 
-`Tab` 与 `Shift-Tab` 由窗口根视图处理：它按下表的顺序双向行走，并遵守已打开的 dialog 或 sheet 的 focus trap。
+`Tab` 与 `Shift-Tab` 由窗口根 View 处理：它按下表的顺序双向行走，并遵守已打开的 dialog 或 sheet 的 focus trap。
 
 | 方法 | 作用于 | 效果 |
 | --- | --- | --- |
@@ -466,6 +466,6 @@ chrome 的 [dock area](./dock.md)。仍刻意缺少：
 焦点现在归脚本所有，但还不完整。仍然缺少的部分：
 
 - **复合控件内部的键盘导航，需要自己写。** Tab 与 Shift-Tab 能在控件之间移动；在 listbox、菜单或 tab list *内部*移动的方向键不会自动出现。零件现在都有了——`on_key_down`、`cx.bind_keys` 与 `key_context`——但把 ↑ / ↓ 变成高亮移动这件事仍然是脚本的活。
-- **窗口尚无焦点时的第一次 Tab。** 只要还没有任何元素持有焦点，根视图的 Tab 绑定就没有可达的分发路径；焦点必须先以别的方式进入——点击，或者 `handle.focus()`。
+- **窗口尚无焦点时的第一次 Tab。** 只要还没有任何元素持有焦点，根 View 的 Tab 绑定就没有可达的分发路径；焦点必须先以别的方式进入——点击，或者 `handle.focus()`。
 - **`Tab`、`Tabs`，以及 table、group、progress 的各个部件**不在 Tab 顺序里。base 本身就把它们排除在键盘焦点之外，对它们调用 `tab_index` 会被记录而不是被承接。
 - **`Link` 与 `Switch` 上的 `track_focus`**，原因相同：它们自己构建 handle，且不暴露替换它的 builder。
