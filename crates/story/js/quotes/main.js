@@ -125,7 +125,7 @@ export default class QuoteBoard extends View {
         h_flex()
           .gap(SPACE.xs)
           .child(
-            action("summary", "Summary", () => this.loadSummary(cx), cx, {
+            action("summary", "Summary", (_event, cx) => this.loadSummary(cx), cx, {
               disabled: this.loading === true,
             }),
           )
