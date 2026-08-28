@@ -99,8 +99,24 @@ onQuote(quote, cx) {
 Three rules follow from the same idea:
 
 - **Invalidate the View that changed.** State that belongs to one child should live on that child and be notified there, rather than on the parent that mounts it.
-- **Several `notify` calls in one handler collapse into one render.** Batching by hand buys nothing; conditioning does.
+- **Notifying more often than the frame rate costs nothing extra.** See below — batching by hand buys nothing, conditioning does.
 - **From the host, `cx.notify()` and `ScriptView::refresh` are different requests.** A bare `notify` repaints the description that already exists. If Rust changed state the script reads through a [HostModule](./host-module.md), the description is stale and only `refresh` says so. See [Hosting](./hosting.md#refreshing-a-view-from-host-state).
+
+### What `notify` does, and what coalesces it
+
+`cx.notify()` rebuilds nothing. It sets a flag on the View saying its description may be stale, and asks GPUI to draw. The rebuild happens later, inside the frame, and only if the flag is still set.
+
+So every notify between two frames collapses into one `render` — whether they came from three event handlers, from a task in a loop, or from the host:
+
+```text
+notify  notify  notify  ──▶  one frame  ──▶  one render()
+```
+
+Setting a flag three times is setting it once. Nothing is dropped: all three handlers ran and all three changed state; what they share is the single rebuild that follows.
+
+**That puts a ceiling on what invalidation can cost: at most one script render per View per frame.** A feed ticking a thousand times a second costs at most 120 renders a second on a 120 Hz display, not a thousand. It is why an over-eager `notify` shows up as wasted work rather than as a runaway.
+
+The runtime adds no throttle of its own on top of that, and there is none to tune. The coalescing is GPUI's own scheduling, and it never defers a rebuild past the next frame — so it costs no latency, which is the other half of the pair below.
 
 ## Frame rate and presentation latency are different failures
 

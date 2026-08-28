@@ -136,7 +136,8 @@ export default class Counter extends View {
 
 ## 一次渲染是怎么走完的
 
-<img src="/shell-architecture.svg" alt="脚本如何变成界面：脚本描述元素，Rust 把它们变成真实元素，GPUI 负责绘制" class="shell-architecture" />
+<img class="architecture-light" src="/shell-architecture-light.svg" alt="脚本如何变成界面：脚本描述元素，Rust 把它们变成真实元素，GPUI 负责绘制">
+<img class="architecture-dark" src="/shell-architecture-dark.svg" alt="脚本如何变成界面：脚本描述元素，Rust 把它们变成真实元素，GPUI 负责绘制">
 
 这张图画的是一帧的过程，而这张图的形状基本解释了本节文档的其余部分。
 

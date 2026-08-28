@@ -136,7 +136,8 @@ Below the grants, the sandbox trims the language itself, because one VM will eve
 
 ## How a script becomes an interface
 
-<img src="/shell-architecture.svg" alt="How a script becomes an interface: the script describes elements, Rust materializes them, GPUI paints" class="shell-architecture" />
+<img class="architecture-light" src="/shell-architecture-light.svg" alt="How a script becomes an interface: the script describes elements, Rust materializes them, GPUI paints">
+<img class="architecture-dark" src="/shell-architecture-dark.svg" alt="How a script becomes an interface: the script describes elements, Rust materializes them, GPUI paints">
 
 The diagram traces one frame, and the shape of it explains most of this documentation.
 
