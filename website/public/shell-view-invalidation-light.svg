@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 420" width="100%" role="img" aria-labelledby="t d">
+  <title id="t">Invalidation across a window of composed views</title>
+  <desc id="d">A window drawn as nested views: a sidebar, a watchlist holding four rows that are views of their own, a chart, and a detail pane holding two more. Three phases repeat. First a price ticks and only the MSFT row is marked as running its render, while every other view is drawn from the snapshot it already has. Then the list reorders and the watchlist itself runs while its four rows do not, because a parent records one handle per child rather than the child's description. Finally the theme changes and every view runs at once, because a snapshot bakes in the colours it was built with. A frame draws the whole tree either way; what varies is how much of it re-enters the JavaScript VM.</desc>
+  <defs>
+    <style>
+      text{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+      .h1{fill:#18181b;font-size:15px;font-weight:650}
+      .note{fill:#6b7078;font-size:11.5px}
+      .label{fill:#52525b;font-size:11px;font-weight:600}
+      .caption{fill:#6b7078;font-size:12px}
+      .key{font-size:11.5px;font-weight:600}
+      .key-js{fill:#ea580c}
+      .key-native{fill:#2563eb}
+      .window{fill:rgba(20,20,22,.03);stroke:rgba(20,20,22,.18);stroke-width:1}
+      .pane{fill:rgba(20,20,22,.05);stroke:rgba(20,20,22,.18);stroke-width:1}
+      /* A pane's state is carried by its stroke and its marker, over a tint too
+         faint to read as a fill. Large flat areas of the accent colours belong
+         to no diagram on this site. */
+      .tint{stroke:none;opacity:.14}
+      .edge{fill:none;stroke-width:1.5}
+      .mark{stroke:none}
+      /* The base rules are the first phase, so a renderer that never runs the
+         animation still shows one correct frame. */
+      .tint.pat-a{fill:#ea580c;animation:tint-a 12s linear infinite}
+      .tint.pat-b{fill:#2563eb;opacity:.06;animation:tint-b 12s linear infinite}
+      .tint.pat-c{fill:#2563eb;opacity:.06;animation:tint-c 12s linear infinite}
+      .edge.pat-a{stroke:#ea580c;animation:edge-a 12s linear infinite}
+      .edge.pat-b{stroke:#2563eb;animation:edge-b 12s linear infinite}
+      .edge.pat-c{stroke:#2563eb;animation:edge-c 12s linear infinite}
+      .mark.pat-a{fill:#ea580c;animation:mark-a 12s linear infinite}
+      .mark.pat-b{fill:#2563eb;animation:mark-b 12s linear infinite}
+      .mark.pat-c{fill:#2563eb;animation:mark-c 12s linear infinite}
+      /* Three phases of four seconds. A view is warm while its own render is
+         running, blue while it is replaying the snapshot it already has. */
+      @keyframes tint-a{
+        0%,28%{fill:#ea580c;opacity:.14}
+        33%,61%{fill:#2563eb;opacity:.06}
+        66%,100%{fill:#ea580c;opacity:.14}
+      }
+      @keyframes tint-b{
+        0%,28%{fill:#2563eb;opacity:.06}
+        33%,100%{fill:#ea580c;opacity:.14}
+      }
+      @keyframes tint-c{
+        0%,61%{fill:#2563eb;opacity:.06}
+        66%,100%{fill:#ea580c;opacity:.14}
+      }
+      @keyframes edge-a{
+        0%,28%{stroke:#ea580c}33%,61%{stroke:#2563eb}66%,100%{stroke:#ea580c}
+      }
+      @keyframes edge-b{0%,28%{stroke:#2563eb}33%,100%{stroke:#ea580c}}
+      @keyframes edge-c{0%,61%{stroke:#2563eb}66%,100%{stroke:#ea580c}}
+      @keyframes mark-a{
+        0%,28%{fill:#ea580c}33%,61%{fill:#2563eb}66%,100%{fill:#ea580c}
+      }
+      @keyframes mark-b{0%,28%{fill:#2563eb}33%,100%{fill:#ea580c}}
+      @keyframes mark-c{0%,61%{fill:#2563eb}66%,100%{fill:#ea580c}}
+      .show-a{opacity:1;animation:show-a 12s linear infinite}
+      .show-b,.show-c{opacity:0}
+      .show-b{animation:show-b 12s linear infinite}
+      .show-c{animation:show-c 12s linear infinite}
+      @keyframes show-a{0%,29%{opacity:1}32%,100%{opacity:0}}
+      @keyframes show-b{0%,30%{opacity:0}33%,62%{opacity:1}65%,100%{opacity:0}}
+      @keyframes show-c{0%,63%{opacity:0}66%,100%{opacity:1}}
+      @media (prefers-reduced-motion: reduce){
+        .tint,.edge,.mark{animation:none}
+        .show-a{animation:none;opacity:1}
+        .show-b,.show-c{animation:none;opacity:0}
+      }
+    </style>
+  </defs>
+
+  <text class="h1" x="24" y="28">Every view has a snapshot of its own</text>
+  <text class="note" x="24" y="48">A frame draws the whole tree. Only the view that changed runs its script again; the rest are drawn from the snapshots they already have.</text>
+
+  <circle class="key-js" cx="28" cy="74" r="4"/>
+  <text class="key key-js" x="40" y="78">runs its render — a new snapshot</text>
+  <circle class="key-native" cx="268" cy="74" r="4"/>
+  <text class="key key-native" x="280" y="78">drawn from the snapshot it has — no JavaScript</text>
+
+  <rect class="window" x="24" y="104" width="832" height="224" rx="10"/>
+
+  <rect class="pane" x="36" y="116" width="118" height="200" rx="8"/>
+  <rect class="tint pat-c" x="36" y="116" width="118" height="200" rx="8"/>
+  <rect class="edge pat-c" x="36" y="116" width="118" height="200" rx="8"/>
+  <circle class="mark pat-c" cx="143" cy="127" r="3.5"/>
+  <text class="label" x="45" y="132">Sidebar</text>
+
+  <rect class="pane" x="166" y="116" width="356" height="200" rx="8"/>
+  <rect class="tint pat-b" x="166" y="116" width="356" height="200" rx="8"/>
+  <rect class="edge pat-b" x="166" y="116" width="356" height="200" rx="8"/>
+  <circle class="mark pat-b" cx="511" cy="127" r="3.5"/>
+  <text class="label" x="175" y="132">Watchlist</text>
+
+  <rect class="pane" x="178" y="148" width="332" height="24" rx="5"/>
+  <rect class="tint pat-c" x="178" y="148" width="332" height="24" rx="5"/>
+  <rect class="edge pat-c" x="178" y="148" width="332" height="24" rx="5"/>
+  <circle class="mark pat-c" cx="499" cy="159" r="3.5"/>
+  <text class="label" x="187" y="164">Row · AAPL</text>
+
+  <rect class="pane" x="178" y="178" width="332" height="24" rx="5"/>
+  <rect class="tint pat-a" x="178" y="178" width="332" height="24" rx="5"/>
+  <rect class="edge pat-a" x="178" y="178" width="332" height="24" rx="5"/>
+  <circle class="mark pat-a" cx="499" cy="189" r="3.5"/>
+  <text class="label" x="187" y="194">Row · MSFT</text>
+
+  <rect class="pane" x="178" y="208" width="332" height="24" rx="5"/>
+  <rect class="tint pat-c" x="178" y="208" width="332" height="24" rx="5"/>
+  <rect class="edge pat-c" x="178" y="208" width="332" height="24" rx="5"/>
+  <circle class="mark pat-c" cx="499" cy="219" r="3.5"/>
+  <text class="label" x="187" y="224">Row · NVDA</text>
+
+  <rect class="pane" x="178" y="238" width="332" height="24" rx="5"/>
+  <rect class="tint pat-c" x="178" y="238" width="332" height="24" rx="5"/>
+  <rect class="edge pat-c" x="178" y="238" width="332" height="24" rx="5"/>
+  <circle class="mark pat-c" cx="499" cy="249" r="3.5"/>
+  <text class="label" x="187" y="254">Row · TSLA</text>
+
+  <rect class="pane" x="534" y="116" width="310" height="92" rx="8"/>
+  <rect class="tint pat-c" x="534" y="116" width="310" height="92" rx="8"/>
+  <rect class="edge pat-c" x="534" y="116" width="310" height="92" rx="8"/>
+  <circle class="mark pat-c" cx="833" cy="127" r="3.5"/>
+  <text class="label" x="543" y="132">Chart</text>
+
+  <rect class="pane" x="534" y="220" width="310" height="96" rx="8"/>
+  <rect class="tint pat-c" x="534" y="220" width="310" height="96" rx="8"/>
+  <rect class="edge pat-c" x="534" y="220" width="310" height="96" rx="8"/>
+  <circle class="mark pat-c" cx="833" cy="231" r="3.5"/>
+  <text class="label" x="543" y="236">Detail</text>
+
+  <rect class="pane" x="546" y="250" width="142" height="54" rx="5"/>
+  <rect class="tint pat-c" x="546" y="250" width="142" height="54" rx="5"/>
+  <rect class="edge pat-c" x="546" y="250" width="142" height="54" rx="5"/>
+  <circle class="mark pat-c" cx="677" cy="261" r="3.5"/>
+  <text class="label" x="555" y="266">Position</text>
+
+  <rect class="pane" x="700" y="250" width="132" height="54" rx="5"/>
+  <rect class="tint pat-c" x="700" y="250" width="132" height="54" rx="5"/>
+  <rect class="edge pat-c" x="700" y="250" width="132" height="54" rx="5"/>
+  <circle class="mark pat-c" cx="821" cy="261" r="3.5"/>
+  <text class="label" x="709" y="266">Orders</text>
+
+  <text class="caption show-a" x="24" y="368">A price ticks. Only the MSFT row runs its render again; every other view draws the frame from the snapshot it already has.</text>
+  <text class="caption show-b" x="24" y="368">The list reorders. The Watchlist runs — its rows do not: it records four handles, and each row still has its own snapshot.</text>
+  <text class="caption show-c" x="24" y="368">The theme changes. A snapshot bakes in the colours it was built with, so every view is invalidated at once. This case is the expensive one, and rare.</text>
+
+  <text class="note" x="24" y="408">Nesting is what keeps this cheap: a parent records one handle per child, not the child’s description.</text>
+</svg>

@@ -1231,6 +1231,7 @@ impl ShellStory {
                 ),
                 cx,
             ))
+            .child(muted(shape_repeats(&self.rate), cx))
             .child(
                 Label::new(match self.feed {
                     Feed::Idle => {
@@ -1540,6 +1541,25 @@ fn millis(duration: Duration) -> f64 {
     duration.as_secs_f64() * 1000.0
 }
 
+/// How often a rebuild described the shape it replaced, in words.
+///
+/// The counter behind it is a measurement rather than a feature: nothing skips
+/// work when a shape repeats. It is here because this story is the one place a
+/// script runs against a live feed, and the rate this line reports is the
+/// ceiling a template cache could reach — see §20.7 of `docs/gpui-shell.md`.
+fn shape_repeats(rate: &RuntimeMetrics) -> String {
+    let compared = rate.structure_repeats() + rate.structure_changes();
+    match rate.structure_repeat_rate() {
+        Some(share) => format!(
+            "Shape repeated on {} of {compared} rebuilds ({:.0}%): the values moved and the \
+             structure did not.",
+            rate.structure_repeats(),
+            share * 100.0,
+        ),
+        None => "No rebuild has had a previous description to compare with yet.".to_string(),
+    }
+}
+
 /// One line of the boundary summary: the call on the left, what it does on the
 /// right. Two columns rather than a sentence, because the reader is scanning
 /// for a name, not reading prose.
@@ -1707,6 +1727,57 @@ mod tests {
         assert!(
             description(&mut context, &script).contains("tick 1"),
             "and the description must be the one already published"
+        );
+    }
+
+    /// How often a quote tick rebuilds the shape it replaced, on the story's
+    /// own script rather than on a panel written to flatter the question.
+    ///
+    /// This is §20.7's first experiment: a template cache is worth designing
+    /// only if a dirty render usually produces the structure the previous one
+    /// produced. The board here is twenty rows of six cells fed by a live
+    /// market entity, which is the workload the chapter's numbers come from.
+    ///
+    /// The bound is deliberately loose. The exact rate depends on what the feed
+    /// does — a watched flag flipping genuinely is a different shape — and
+    /// pinning it would turn an unrelated change to the script into a failure.
+    /// What the test defends is the claim: a moving price is a value, not a
+    /// structure.
+    #[gpui::test]
+    fn a_quote_feed_mostly_repeats_the_panel_s_shape(cx: &mut TestAppContext) {
+        cx.update(gpui_component::init);
+        let window = cx.add_window(|window, cx| ShellStory::new(window, cx));
+        let story = cx.update(|cx| window.entity(cx)).expect("the story");
+        let mut context = VisualTestContext::from_window(*window.deref(), cx);
+
+        let (runtime, script) = story.read_with(&mut context, |story, _| {
+            (
+                story.runtime.clone().expect("a runtime"),
+                story.script.clone().expect("a script view"),
+            )
+        });
+
+        draw(&mut context, &script);
+        let baseline = runtime.read_metrics();
+
+        for _ in 0..40 {
+            tick(&mut context, &story, Feed::Quotes(50));
+            draw(&mut context, &script);
+        }
+
+        let reading = runtime.read_metrics().since(&baseline);
+        let compared = reading.structure_repeats() + reading.structure_changes();
+        println!(
+            "\n[F] shape repeats on the story's own board — {} of {compared} rebuilds ({:.0}%)",
+            reading.structure_repeats(),
+            reading.structure_repeat_rate().unwrap_or_default() * 100.0,
+        );
+
+        assert!(compared >= 30, "the feed should have rebuilt the panel");
+        assert!(
+            reading.structure_repeat_rate().unwrap_or_default() > 0.8,
+            "a moving price is a value, not a structure: {} of {compared} rebuilds repeated",
+            reading.structure_repeats(),
         );
     }
 

@@ -7,32 +7,17 @@
   <defs>
     <style>
       :root{
-        --band:rgba(20,20,22,.035);
-        --band-line:rgba(20,20,22,.10);
-        --band-hi:rgba(37,99,235,.07);
-        --seam:rgba(20,20,22,.055);
-        --card:#ffffff;
-        --card-line:rgba(20,20,22,.16);
-        --card-hi:rgba(37,99,235,.06);
-        --ink:#18181b;
-        --muted:#6b7078;
-        --line:rgba(20,20,22,.42);
-        --accent:#2563eb;
-      }
-      @media (prefers-color-scheme: dark){
-        :root{
-          --band:rgba(255,255,255,.045);
-          --band-line:rgba(255,255,255,.13);
-          --band-hi:rgba(125,170,255,.10);
-          --seam:rgba(255,255,255,.07);
-          --card:rgba(255,255,255,.07);
-          --card-line:rgba(255,255,255,.20);
-          --card-hi:rgba(125,170,255,.11);
-          --ink:#e9e9ec;
-          --muted:#9ca0a8;
-          --line:rgba(255,255,255,.48);
-          --accent:#7daaff;
-        }
+        --band:rgba(255,255,255,.045);
+        --band-line:rgba(255,255,255,.13);
+        --band-hi:rgba(125,170,255,.10);
+        --seam:rgba(255,255,255,.07);
+        --card:rgba(255,255,255,.07);
+        --card-line:rgba(255,255,255,.20);
+        --card-hi:rgba(125,170,255,.11);
+        --ink:#e9e9ec;
+        --muted:#9ca0a8;
+        --line:rgba(255,255,255,.48);
+        --accent:#7daaff;
       }
 
       text{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}

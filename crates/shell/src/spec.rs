@@ -23,6 +23,111 @@ use crate::value::Bridged;
 /// Index of a node inside a [`SpecArena`].
 pub type SpecId = u32;
 
+/// A hash of a description's *shape*, with the values left out of it.
+///
+/// Two renders of one view that differ only in a price, a label or a handler's
+/// identity produce the same fingerprint. One that takes a different branch,
+/// grows a node, or calls a different style method does not. That distinction
+/// is the whole question a template cache turns on — §20.7 of
+/// `docs/gpui-shell.md` — and answering it is the reason this exists: a
+/// description that repeats its predecessor's shape is one a template could
+/// have filled instead of rebuilt.
+///
+/// It is accumulated while the description is recorded rather than walked out
+/// of the arena afterwards, because a walk that costs `arena.len()` is the cost
+/// a template cache would be trying to remove, and instrumentation that
+/// distorts the thing it measures is worth less than no instrumentation.
+///
+/// **Equality here is evidence, not proof.** Two different shapes can collide,
+/// and the hash deliberately drops payloads that a stricter definition might
+/// keep (see [`Component::shape`]). That is the right trade for a counter. It
+/// would not be for a cache that skipped work on the strength of it — §20.7's
+/// first problem is that validity has to come from the call site rather than
+/// from a comparison after the fact.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub(crate) struct StructureFingerprint(u64);
+
+/// One step of the fingerprint's mixer.
+///
+/// `DefaultHasher` would do the same job, but this sits on the recording path —
+/// two or three calls per recorded builder operation — and SipHash's cost would
+/// be measured against the ~90 ns floor one recorded call has (§20.6). This is
+/// SplitMix64's finalizer with the running state rotated in, which is a handful
+/// of instructions and still moves every output bit when one input bit moves.
+#[inline]
+fn mix(state: u64, value: u64) -> u64 {
+    let mut hashed = state.rotate_left(23) ^ value.wrapping_mul(0x9E37_79B9_7F4A_7C15);
+    hashed ^= hashed >> 30;
+    hashed = hashed.wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    hashed ^ (hashed >> 27)
+}
+
+/// A method name from the reflection table is identified by *where* it is, not
+/// by what it says: the same builder method always arrives carrying the same
+/// `&'static str`, so its pointer separates it from every other name for the
+/// price of one mix. Hashing the bytes instead would put a twenty-byte loop on
+/// the recording path to learn nothing more. The length is folded in as well so
+/// that two names sharing a prefix inside one interned blob cannot alias.
+#[inline]
+fn static_name(name: &'static str) -> u64 {
+    mix(name.as_ptr() as u64, name.len() as u64)
+}
+
+/// Reduces anything `Hash` to one `u64` through [`mix`].
+///
+/// Used only for values that are not on the hot path — an enum discriminant,
+/// and an action's script-defined name.
+fn hashed<T: std::hash::Hash>(value: &T) -> u64 {
+    #[derive(Default)]
+    struct Mixer(u64);
+
+    impl std::hash::Hasher for Mixer {
+        fn finish(&self) -> u64 {
+            self.0
+        }
+
+        fn write(&mut self, bytes: &[u8]) {
+            for byte in bytes {
+                self.0 = mix(self.0, u64::from(*byte));
+            }
+        }
+
+        // Integers are written whole rather than byte by byte, which is what
+        // keeps a discriminant to a single mix.
+        fn write_u8(&mut self, value: u8) {
+            self.0 = mix(self.0, u64::from(value));
+        }
+
+        fn write_u16(&mut self, value: u16) {
+            self.0 = mix(self.0, u64::from(value));
+        }
+
+        fn write_u32(&mut self, value: u32) {
+            self.0 = mix(self.0, u64::from(value));
+        }
+
+        fn write_u64(&mut self, value: u64) {
+            self.0 = mix(self.0, value);
+        }
+
+        fn write_usize(&mut self, value: usize) {
+            self.0 = mix(self.0, value as u64);
+        }
+
+        fn write_i64(&mut self, value: i64) {
+            self.0 = mix(self.0, value as u64);
+        }
+
+        fn write_isize(&mut self, value: isize) {
+            self.0 = mix(self.0, value as u64);
+        }
+    }
+
+    let mut mixer = Mixer::default();
+    value.hash(&mut mixer);
+    std::hash::Hasher::finish(&mixer)
+}
+
 /// Runtime-unique identifier for a script callback.
 pub type CallbackId = u64;
 
@@ -371,6 +476,22 @@ impl VirtualListSpec {
 }
 
 impl Component {
+    /// What this node contributes to a [`StructureFingerprint`]: which
+    /// constructor produced it, and nothing it carries.
+    ///
+    /// A `Text`'s string, a `Button`'s id, a `VirtualList`'s item count and a
+    /// `ChildView`'s handle are all *values* as far as a template is concerned.
+    /// The slot each would fill is decided by the constructor; what is in it
+    /// this time is the thing a template would write, so counting it as
+    /// structure would answer the wrong question.
+    ///
+    /// The discriminant is not stable across builds and does not need to be. A
+    /// fingerprint is only ever compared against another taken in the same
+    /// process, from the same view, one render apart.
+    fn shape(&self) -> u64 {
+        hashed(&std::mem::discriminant(self))
+    }
+
     pub fn name(&self) -> &'static str {
         match self {
             Component::Div => "div",
@@ -479,6 +600,41 @@ pub enum SpecOp {
     Slot(&'static str, SpecId),
 }
 
+impl SpecOp {
+    /// What this operation contributes to a [`StructureFingerprint`]: which
+    /// call it was, and not what was passed to it.
+    ///
+    /// The two exclusions are the interesting ones. Arguments are left out
+    /// because a colour, a length or a label changing is precisely the case a
+    /// template exists to serve. And a [`CallbackId`] is left out because it is
+    /// minted per render and retired with the snapshot generation
+    /// (`snapshot.rs`), so keeping it would make every description containing a
+    /// single handler look like a new shape — which would answer the question
+    /// this measurement is asking before it was asked.
+    ///
+    /// What stays in is the identity of the call: the reflection-table index
+    /// for a no-argument style, and the method name for everything else. Two
+    /// ops that address different nodes stay distinct because the arena mixes
+    /// the tree separately, in [`SpecArena::attach`].
+    fn shape(&self) -> u64 {
+        match self {
+            // The table index *is* which style method was called.
+            SpecOp::NullaryStyle(index) => mix(1, u64::from(*index)),
+            SpecOp::ParamStyle(name, _) => mix(2, static_name(name)),
+            SpecOp::Method(name, _) => mix(3, static_name(name)),
+            SpecOp::Callback(name, _) => mix(4, static_name(name)),
+            // The name is the script's own, discovered at run time, so there is
+            // no pointer to lean on. Action handlers are rare enough per
+            // description that hashing the bytes is not on any hot path.
+            SpecOp::ActionCallback(name, _) => mix(5, hashed(&name.as_bytes())),
+            // The detached node these point at is part of the shape: a hover
+            // style and the declarations inside it are one structure.
+            SpecOp::StateStyle(name, id) => mix(mix(6, static_name(name)), u64::from(*id)),
+            SpecOp::Slot(name, id) => mix(mix(7, static_name(name)), u64::from(*id)),
+        }
+    }
+}
+
 /// One described element: what constructed it, what was called on it, and what
 /// was put inside it.
 ///
@@ -546,6 +702,136 @@ impl ItemSpecs {
     }
 }
 
+/// Where inside a node a template writes one of a call's arguments.
+///
+/// The three positions a value can reach in a recorded description, and the
+/// only three [`crate::spec::Template`] fills. A slot is addressed by the
+/// operation's index rather than by its name because a node may record the same
+/// method twice, and the second one is a different position.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SlotSite {
+    /// The string a [`Component::Text`] node carries — what `.child(value)`
+    /// records.
+    Text,
+    /// One argument of a recorded [`SpecOp::ParamStyle`] or [`SpecOp::Method`].
+    Argument { op: u16, argument: u8 },
+    /// The [`CallbackId`] of a recorded [`SpecOp::Callback`]. A handler is a
+    /// slot like any other, but the value written into it is minted per call
+    /// rather than carried — which is why a template does not make a handler
+    /// free, only the structure around it.
+    Handler { op: u16 },
+}
+
+/// One position a template fills, and which of the call's arguments fills it.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Slot {
+    node: SpecId,
+    site: SlotSite,
+    /// The index of the template parameter whose sentinel came to rest here.
+    argument: u16,
+}
+
+impl Slot {
+    pub(crate) fn new(node: SpecId, site: SlotSite, argument: u16) -> Self {
+        Self {
+            node,
+            site,
+            argument,
+        }
+    }
+
+    pub(crate) fn node(&self) -> SpecId {
+        self.node
+    }
+
+    pub(crate) fn site(&self) -> SlotSite {
+        self.site
+    }
+
+    pub(crate) fn argument(&self) -> u16 {
+        self.argument
+    }
+}
+
+/// What a call writes into one slot.
+#[derive(Clone, Debug)]
+pub(crate) enum SlotValue {
+    Text(String),
+    Value(Bridged),
+    Handler(CallbackId),
+}
+
+/// A description recorded once, with the positions its values occupy left open.
+///
+/// The structure half of §20.7's split. Built by running a script's template
+/// body a single time with a sentinel in each parameter position, and used
+/// afterwards by grafting it into the live arena and writing that call's
+/// arguments into [`Self::slots`] — which is the whole of an instantiation, and
+/// runs no script at all.
+///
+/// It holds no [`CallbackId`] of its own: a handler is a slot, minted per call,
+/// because a closure recorded at discovery would capture that first call's
+/// values for as long as the template lived.
+pub(crate) struct Template {
+    arena: SpecArena,
+    root: SpecId,
+    slots: Vec<Slot>,
+    arity: usize,
+    /// The application whose script defined it.
+    ///
+    /// A template outlives every render, which is the point of it, so nothing
+    /// else would ever free one: the store would grow by one entry per
+    /// `template(...)` call site per hot reload, forever. Holding the
+    /// generation lets the same release that retires an application's callbacks
+    /// and tasks drop its templates too. `None` only for a runtime that has no
+    /// application generation at all, which is a test.
+    application: Option<Rc<crate::runtime::ApplicationGeneration>>,
+}
+
+impl Template {
+    pub(crate) fn new(
+        arena: SpecArena,
+        root: SpecId,
+        slots: Vec<Slot>,
+        arity: usize,
+        application: Option<Rc<crate::runtime::ApplicationGeneration>>,
+    ) -> Self {
+        Self {
+            arena,
+            root,
+            slots,
+            arity,
+            application,
+        }
+    }
+
+    /// Whether this template belongs to the application generation given.
+    pub(crate) fn belongs_to(
+        &self,
+        application: &Rc<crate::runtime::ApplicationGeneration>,
+    ) -> bool {
+        self.application
+            .as_ref()
+            .is_some_and(|owner| Rc::ptr_eq(owner, application))
+    }
+
+    pub(crate) fn arena(&self) -> &SpecArena {
+        &self.arena
+    }
+
+    pub(crate) fn root(&self) -> SpecId {
+        self.root
+    }
+
+    pub(crate) fn slots(&self) -> &[Slot] {
+        &self.slots
+    }
+
+    pub(crate) fn arity(&self) -> usize {
+        self.arity
+    }
+}
+
 /// Element descriptions for one script render.
 #[derive(Default)]
 pub struct SpecArena {
@@ -563,6 +849,8 @@ pub struct SpecArena {
     /// Retained view handles already described in this snapshot. GPUI cannot
     /// mount one entity at two positions in the same tree.
     mounted_views: HashSet<crate::entities::EntityHandle>,
+    /// The shape of everything recorded so far. See [`StructureFingerprint`].
+    structure: u64,
 }
 
 impl SpecArena {
@@ -578,6 +866,16 @@ impl SpecArena {
         self.claimed.clear();
         self.mounted_views.clear();
         self.virtual_items = 0;
+        self.structure = 0;
+    }
+
+    /// The shape of what has been recorded, values excluded.
+    ///
+    /// Read from a published snapshot rather than from the scratch arena: the
+    /// scratch one is reset by the next render, and the question is what *this*
+    /// description looked like beside the one before it.
+    pub(crate) fn structure(&self) -> StructureFingerprint {
+        StructureFingerprint(self.structure)
     }
 
     pub(crate) fn claim_virtual_items(&mut self, count: usize, limit: usize) -> bool {
@@ -600,6 +898,7 @@ impl SpecArena {
     }
 
     pub fn push(&mut self, component: Component) -> SpecId {
+        self.structure = mix(self.structure, component.shape());
         self.nodes.push(SpecNode {
             component: Some(component),
             ..Default::default()
@@ -641,6 +940,9 @@ impl SpecArena {
 
     pub fn push_op(&mut self, id: SpecId, op: SpecOp) -> Result<(), SpecError> {
         self.check_live(id)?;
+        // After the check, not before: a rejected call records nothing, so it
+        // must not move the shape either.
+        self.structure = mix(self.structure, op.shape());
         self.nodes[id as usize].ops.push(op);
         Ok(())
     }
@@ -653,6 +955,7 @@ impl SpecArena {
         if self.claimed[id as usize] {
             return Err(SpecError::Claimed);
         }
+        self.structure = mix(self.structure, mix(8, u64::from(id)));
         self.claimed[id as usize] = true;
         Ok(())
     }
@@ -666,9 +969,121 @@ impl SpecArena {
         if parent == child {
             return Err(SpecError::SelfParent);
         }
+        // The tree is the half of the shape the nodes themselves do not carry:
+        // the same components in a different arrangement are a different
+        // structure, and a template could not fill one from the other.
+        self.structure = mix(
+            mix(self.structure, u64::from(parent)),
+            u64::from(child) ^ (1 << 32),
+        );
         self.parented[child as usize] = true;
         self.nodes[parent as usize].children.push(child);
         Ok(())
+    }
+
+    /// Copies a template's nodes into this arena and answers where its root
+    /// landed.
+    ///
+    /// This is an instantiation's whole structural half: no script runs, no
+    /// value crosses the bridge, and no builder method is interpreted. A
+    /// template arena's ids are dense and start at zero, so remapping is one
+    /// addition — every id inside a copied node moves by the same base, and the
+    /// nodes keep their order.
+    ///
+    /// The grafted nodes arrive carrying the `parented` and `claimed` flags
+    /// they were recorded with, which is what makes a grafted subtree obey the
+    /// same single-use rule as a described one: its interior is already spoken
+    /// for, and only its root is free to be attached.
+    pub(crate) fn graft(&mut self, template: &Template) -> SpecId {
+        let base = self.nodes.len() as SpecId;
+        let source = &template.arena;
+
+        self.nodes.reserve(source.nodes.len());
+        for node in &source.nodes {
+            let mut node = node.clone();
+            for child in &mut node.children {
+                *child += base;
+            }
+            for op in &mut node.ops {
+                match op {
+                    SpecOp::StateStyle(_, id) | SpecOp::Slot(_, id) => *id += base,
+                    SpecOp::NullaryStyle(_)
+                    | SpecOp::ParamStyle(..)
+                    | SpecOp::Method(..)
+                    | SpecOp::Callback(..)
+                    | SpecOp::ActionCallback(..) => {}
+                }
+            }
+            self.nodes.push(node);
+        }
+        self.parented.extend_from_slice(&source.parented);
+        self.claimed.extend_from_slice(&source.claimed);
+
+        // The root arrives with no parent so the caller can attach it, whatever
+        // it was in the template.
+        self.parented[(template.root + base) as usize] = false;
+
+        // One mix for the whole graft rather than one per node: the template's
+        // own fingerprint already summarizes everything inside it, and a
+        // description that instantiates the same template twice must not look
+        // like one that instantiated two different ones.
+        self.structure = mix(self.structure, mix(9, source.structure));
+
+        template.root + base
+    }
+
+    /// Writes one call's value into a grafted slot.
+    ///
+    /// `base` is what [`Self::graft`] returned less the template's own root, so
+    /// that a slot recorded against the template's ids reaches the copy.
+    pub(crate) fn write_slot(
+        &mut self,
+        base: SpecId,
+        slot: &Slot,
+        value: SlotValue,
+    ) -> Result<(), SpecError> {
+        let node = self
+            .nodes
+            .get_mut((slot.node() + base) as usize)
+            .ok_or(SpecError::Expired)?;
+
+        match (slot.site(), value) {
+            (SlotSite::Text, SlotValue::Text(text)) => {
+                node.component = Some(Component::Text(text));
+            }
+            (SlotSite::Argument { op, argument }, SlotValue::Value(bridged)) => {
+                let target = node.ops.get_mut(op as usize).ok_or(SpecError::Expired)?;
+                let arguments = match target {
+                    SpecOp::ParamStyle(_, arguments) | SpecOp::Method(_, arguments) => arguments,
+                    _ => return Err(SpecError::Expired),
+                };
+                *arguments
+                    .get_mut(argument as usize)
+                    .ok_or(SpecError::Expired)? = bridged;
+            }
+            (SlotSite::Handler { op }, SlotValue::Handler(callback)) => {
+                match node.ops.get_mut(op as usize).ok_or(SpecError::Expired)? {
+                    SpecOp::Callback(_, id) => *id = callback,
+                    _ => return Err(SpecError::Expired),
+                }
+            }
+            // Every pairing is decided when the slot is recorded, so a mismatch
+            // is the runtime disagreeing with itself rather than a script
+            // mistake. `Expired` is the arena's word for "this description is
+            // not what you think it is".
+            _ => return Err(SpecError::Expired),
+        }
+
+        Ok(())
+    }
+
+    /// Whether anything in this arena mounts a retained entity.
+    ///
+    /// A template is grafted many times and GPUI cannot mount one entity at two
+    /// positions in a tree, so a body that describes one is refused at
+    /// definition rather than at the second call.
+    pub(crate) fn mounts_an_entity(&self) -> bool {
+        !self.mounted_views.is_empty()
     }
 
     fn check_live(&self, id: SpecId) -> Result<(), SpecError> {

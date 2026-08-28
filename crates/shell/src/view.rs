@@ -240,6 +240,19 @@ impl ScriptView {
 
         match runtime.build_snapshot(&object, Some(entity), policy, window, cx) {
             Ok(snapshot) => {
+                // Measured here rather than anywhere else because this is the
+                // only place two consecutive descriptions of one view exist at
+                // the same time. Nothing acts on the answer: it counts how often
+                // a rebuild produced the shape it replaced, which is what a
+                // template cache would have to be able to fill instead of
+                // rebuild (§20.7 of `docs/gpui-shell.md`). A first build has no
+                // predecessor and is not a data point either way.
+                if let Some(current) = self.current.as_ref() {
+                    runtime
+                        .metrics()
+                        .record_structure(current.structure() == snapshot.structure());
+                }
+
                 // Assigning through `previous` is what retires the snapshot
                 // before last: dropping it releases its callbacks.
                 self.previous = self.current.replace(snapshot);

@@ -256,6 +256,7 @@ pub(super) struct InputCallbackOwner {
     view: Option<WeakEntity<ScriptView>>,
 }
 mod standard;
+mod template;
 mod theme_api;
 mod window_api;
 
@@ -453,6 +454,15 @@ pub struct ShellRuntime {
     /// QuickJS aborts the process if a value outlives its runtime.
     callbacks: RefCell<CallbackArena<Persistent<Function<'static>>>>,
     arena: RefCell<SpecArena>,
+    /// Templates the script has defined, indexed by the id its closure keeps.
+    ///
+    /// An entry is emptied when the application that defined it is released —
+    /// a hot reload re-evaluates the module and defines its templates again, so
+    /// without that this would grow by one arena per call site per save. The
+    /// slot itself stays, because the id is the index.
+    templates: RefCell<Vec<Option<Rc<crate::spec::Template>>>>,
+    /// The template being discovered, while one is. See [`template`].
+    discovery: RefCell<Option<template::Discovery>>,
     /// Retained state created by this runtime's scripts, and only this one's.
     /// Declared before `context` for the same reason `callbacks` is: releasing
     /// an entity can run script destructors.
@@ -603,6 +613,8 @@ impl ShellRuntime {
         let runtime = Rc::new(Self {
             callbacks: RefCell::new(CallbackArena::default()),
             arena: RefCell::new(SpecArena::new()),
+            templates: RefCell::new(Vec::new()),
+            discovery: RefCell::new(None),
             entities: RefCell::new(entities),
             pending_nested: RefCell::new(VecDeque::new()),
             flushing_nested: Cell::new(false),
@@ -730,6 +742,7 @@ impl ShellRuntime {
         self.purge_released_view_aliases(&release);
         release.retire(cx);
         cancel_application_tasks(application);
+        self.retire_templates(application);
     }
 
     pub(crate) fn release_application_generation_without_context(
@@ -740,6 +753,7 @@ impl ShellRuntime {
         self.purge_released_view_aliases(&release);
         release.retire_without_context();
         cancel_application_tasks(application);
+        self.retire_templates(application);
     }
 
     fn rollback_retained_since(
@@ -3555,6 +3569,10 @@ globalThis.__gpui = (() => {
     if (kind === "string" || kind === "number" || kind === "boolean") {
       return __text(String(child));
     }
+    // A template's sentinel, reached only while a template body is running.
+    // Checked after elements and strings so the ordinary description pays
+    // nothing for it.
+    if (child?.__slot !== undefined) return __text_slot(child.__slot);
     if (child?.__entity) return __child_view(child.__handle);
     throw new TypeError(
       "child(value) expects an element, a string, or an entity from cx.new(Class, props)",
@@ -4647,6 +4665,65 @@ globalThis.__gpui = (() => {
     },
   });
 
+  // A description recorded once and filled per call.
+  //
+  // **Not part of the script surface**, and deliberately so. Asking an author
+  // to mark their hot paths is a performance annotation in the source: two ways
+  // to write the same interface, restrictions that only report at first call,
+  // and a decision nobody should have to make while describing a panel. The
+  // machinery is kept because the runtime is meant to apply it *itself* — see
+  // `engine/quickjs/template.rs` — and `globalThis.__template` is how the tests
+  // that pin its behaviour reach it, the same standing `__apply` has.
+  //
+  // The body runs a single time, with a sentinel in each parameter position;
+  // wherever a sentinel comes to rest in what it describes is a slot, and what
+  // is left over is structure. Every call after that grafts the structure and
+  // writes its arguments into the slots, entering no builder method at all.
+  //
+  // The sentinel refuses to become a primitive. `${price}` inside a body would
+  // otherwise consume it and bake this first call's value into the structure,
+  // which is a panel that silently stops updating — so it throws where it was
+  // written instead.
+  const templateSlot = (index) => {
+    const refuse = () => {
+      throw new TypeError(
+        "a template argument can be passed to a builder call but not computed on. " +
+          "Format or compare the value where the template is called, and pass the result",
+      );
+    };
+    return {
+      __slot: index,
+      toString: refuse,
+      valueOf: refuse,
+      [Symbol.toPrimitive]: refuse,
+    };
+  };
+
+  const template = (build) => {
+    if (typeof build !== "function") {
+      throw new TypeError("template(build) expects a function that builds one element");
+    }
+    let id = -1;
+    return (...args) => {
+      if (id < 0) {
+        const slots = [];
+        for (let i = 0; i < build.length; i += 1) slots.push(templateSlot(i));
+        __template_begin(build.length);
+        let root;
+        try {
+          root = build(...slots);
+        } catch (error) {
+          __template_abort();
+          throw error;
+        }
+        id = __template_end(root?.__id);
+      }
+      return element(__template_instantiate(id, args));
+    };
+  };
+
+  globalThis.__template = template;
+
   return {
     View,
     div: () => element(__div()),
@@ -5413,6 +5490,46 @@ impl ShellRuntime {
                 ),
             )?;
 
+            // Templates. `begin` swaps the description being recorded for a
+            // fresh one so the body's ids start at zero, `end` takes it back
+            // out, and `abort` puts the interrupted one back when the body
+            // threw. Three calls rather than one because the body runs in
+            // JavaScript between them.
+            let begin_runtime = runtime.clone();
+            globals.set(
+                "__template_begin",
+                Func::from(move |ctx: Ctx<'_>, arity: usize| {
+                    upgrade(&begin_runtime, &ctx)?.begin_template(&ctx, arity)
+                }),
+            )?;
+            let end_runtime = runtime.clone();
+            globals.set(
+                "__template_end",
+                Func::from(move |ctx: Ctx<'_>, root: Option<SpecId>| {
+                    upgrade(&end_runtime, &ctx)?.end_template(&ctx, root)
+                }),
+            )?;
+            let abort_runtime = runtime.clone();
+            globals.set(
+                "__template_abort",
+                Func::from(move |ctx: Ctx<'_>| {
+                    upgrade(&abort_runtime, &ctx)?.abort_template();
+                    JsResult::Ok(())
+                }),
+            )?;
+            let instantiate_runtime = runtime.clone();
+            globals.set(
+                "__template_instantiate",
+                Func::from(instantiate_template_binding(instantiate_runtime)),
+            )?;
+            let text_slot_runtime = runtime.clone();
+            globals.set(
+                "__text_slot",
+                Func::from(move |ctx: Ctx<'_>, argument: u16| {
+                    upgrade(&text_slot_runtime, &ctx)?.text_slot(&ctx, argument)
+                }),
+            )?;
+
             // Test-only probes for `tests::benchmark`. Each one accepts a
             // prefix of `__apply`'s signature and does nothing with it, so the
             // difference between two of them is the cost of converting the one
@@ -5493,6 +5610,15 @@ impl ShellRuntime {
             .ok_or_else(|| Exception::throw_type(ctx, "unknown element method"))?;
         let value = match value {
             Some(StyleArgument::Value(value)) => value,
+            // The value is not known yet, so neither is whether it is valid.
+            // A placeholder is recorded, the position is noted, and the same
+            // `style::apply_param` check runs at instantiation with the real
+            // argument in hand — so a bad colour still reports, one call later.
+            Some(StyleArgument::Slot(argument)) => {
+                let placeholder: SmallVec<[Bridged; 2]> = smallvec::smallvec![Bridged::Nil];
+                self.push_op_checked(ctx, self.push_op(id, SpecOp::ParamStyle(name, placeholder)))?;
+                return self.record_slot_at_last_op(ctx, id, 0, argument);
+            }
             Some(StyleArgument::Handler) => {
                 return Err(Exception::throw_type(
                     ctx,
@@ -5517,6 +5643,14 @@ impl ShellRuntime {
     }
 
     fn apply(&self, ctx: &Ctx<'_>, id: SpecId, method: &str, args: Arguments) -> JsResult<()> {
+        // A sentinel among the arguments means this call is being recorded into
+        // a template rather than into a description, and the position it landed
+        // in is a slot. Checked before the dispatch below because the ordinary
+        // path would reject the sentinel as neither a value nor a function.
+        if let Some((position, argument)) = args.first_slot() {
+            return self.apply_slot(ctx, id, method, position, argument);
+        }
+
         match method {
             "child" => {
                 let child = args
@@ -5686,28 +5820,7 @@ impl ShellRuntime {
                     application: scope::current_application_generation(),
                     registered_in: scope::current_generation(),
                 });
-                let name = match method {
-                    "on_click" => "on_click",
-                    "on_mouse_move" => "on_mouse_move",
-                    "on_hover" => "on_hover",
-                    "on_key_down" => "on_key_down",
-                    "on_key_up" => "on_key_up",
-                    "on_mouse_down_out" => "on_mouse_down_out",
-                    "on_scroll_wheel" => "on_scroll_wheel",
-                    "on_item_click" => "on_item_click",
-                    "on_resize" => "on_resize",
-                    "tab_bar" => "tab_bar",
-                    "empty_group" => "empty_group",
-                    "drop_indicator" => "drop_indicator",
-                    "dock" => "dock",
-                    "tile_drag_bar" => "tile_drag_bar",
-                    "tile_resize_handles" => "tile_resize_handles",
-                    "on_change" => "on_change",
-                    "on_confirm" => "on_confirm",
-                    "on_dismiss" => "on_dismiss",
-                    "on_step" => "on_step",
-                    _ => "on_open_change",
-                };
+                let name = callback_op_name(method).expect("this arm's own list");
                 self.push_op_checked(ctx, self.push_op(id, SpecOp::Callback(name, callback)))
             }
             "disabled"
@@ -6642,6 +6755,10 @@ fn context_object<'js>(ctx: &Ctx<'js>, binding: ContextBinding) -> JsResult<Obje
 enum Argument {
     Value(Bridged),
     Handler(Persistent<Function<'static>>),
+    /// A template's sentinel: this position is filled per call rather than now.
+    /// Only reachable while a template body is being discovered, because
+    /// nothing else hands one out.
+    Slot(u16),
 }
 
 struct Arguments(SmallVec<[Argument; 2]>);
@@ -6656,6 +6773,8 @@ struct Arguments(SmallVec<[Argument; 2]>);
 enum StyleArgument {
     Value(Bridged),
     Handler,
+    /// A template's sentinel. See [`Argument::Slot`].
+    Slot(u16),
 }
 
 impl<'js> FromJs<'js> for StyleArgument {
@@ -6663,8 +6782,24 @@ impl<'js> FromJs<'js> for StyleArgument {
         if value.as_function().is_some() {
             return Ok(Self::Handler);
         }
+        if let Some(slot) = slot_index(&value) {
+            return Ok(Self::Slot(slot));
+        }
         Ok(Self::Value(bridge(ctx, &value)?))
     }
+}
+
+/// The template parameter a value stands for, if it is a sentinel.
+///
+/// Costs one tag check for the values a description is actually made of — a
+/// string, a number, a boolean — because only an object can carry the marker.
+/// The property lookup happens for objects, which reach a builder call rarely
+/// and reached one as an error before templates existed.
+fn slot_index(value: &Value<'_>) -> Option<u16> {
+    let object = value.as_object()?;
+    let index: Option<f64> = object.get(template::SENTINEL).ok()?;
+    let index = index?;
+    (index.is_finite() && index >= 0.0 && index <= f64::from(u16::MAX)).then_some(index as u16)
 }
 
 /// Converts one non-function script value.
@@ -6699,8 +6834,29 @@ impl Arguments {
                     "value",
                     format!("`{method}` does not take a function"),
                 )),
+                Argument::Slot(_) => Err(JsError::new_from_js_message(
+                    "template argument",
+                    "value",
+                    format!(
+                        "`{method}` cannot take a template argument yet; a template fills text \
+                         children, style arguments and handlers. Compute the value where the \
+                         template is called and pass the result"
+                    ),
+                )),
             })
             .collect()
+    }
+
+    /// The first sentinel among these arguments, and which parameter it stands
+    /// for.
+    fn first_slot(&self) -> Option<(usize, u16)> {
+        self.0
+            .iter()
+            .enumerate()
+            .find_map(|(index, argument)| match argument {
+                Argument::Slot(slot) => Some((index, *slot)),
+                _ => None,
+            })
     }
 
     fn first_value(&self) -> Option<&Bridged> {
@@ -6735,12 +6891,61 @@ impl<'js> FromJs<'js> for Arguments {
             let entry = entry?;
             converted.push(match entry.as_function() {
                 Some(handler) => Argument::Handler(Persistent::save(ctx, handler.clone())),
-                None => Argument::Value(bridge(ctx, &entry)?),
+                None => match slot_index(&entry) {
+                    Some(slot) => Argument::Slot(slot),
+                    None => Argument::Value(bridge(ctx, &entry)?),
+                },
             });
         }
 
         Ok(Self(converted))
     }
+}
+
+/// Binds `__template_instantiate`, which is the one global taking live script
+/// values alongside its `Ctx`.
+///
+/// A closure would give the two elided lifetimes no reason to be the same one,
+/// and `Value<'js>` is invariant — so the binding is built by a function that
+/// names the lifetime once and quantifies over it.
+fn instantiate_template_binding(
+    runtime: Weak<ShellRuntime>,
+) -> impl for<'js> Fn(Ctx<'js>, u32, Vec<rquickjs::Value<'js>>) -> JsResult<SpecId> {
+    move |ctx, id, arguments| {
+        let runtime = upgrade(&runtime, &ctx)?;
+        runtime.instantiate_template(&ctx, id, arguments)
+    }
+}
+
+/// The recorded op name for a method that takes one handler and nothing else.
+///
+/// The list the `apply` arm matches on, in a form the template path can reach
+/// too: a slot in a handler position has to record the same `SpecOp::Callback`
+/// name the ordinary path would, and two copies of this list would drift.
+fn callback_op_name(method: &str) -> Option<&'static str> {
+    Some(match method {
+        "on_click" => "on_click",
+        "on_mouse_move" => "on_mouse_move",
+        "on_hover" => "on_hover",
+        "on_key_down" => "on_key_down",
+        "on_key_up" => "on_key_up",
+        "on_mouse_down_out" => "on_mouse_down_out",
+        "on_scroll_wheel" => "on_scroll_wheel",
+        "on_item_click" => "on_item_click",
+        "on_resize" => "on_resize",
+        "tab_bar" => "tab_bar",
+        "empty_group" => "empty_group",
+        "drop_indicator" => "drop_indicator",
+        "dock" => "dock",
+        "tile_drag_bar" => "tile_drag_bar",
+        "tile_resize_handles" => "tile_resize_handles",
+        "on_change" => "on_change",
+        "on_confirm" => "on_confirm",
+        "on_dismiss" => "on_dismiss",
+        "on_step" => "on_step",
+        "on_open_change" => "on_open_change",
+        _ => return None,
+    })
 }
 
 fn unknown_method(name: &str) -> String {

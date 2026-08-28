@@ -6,7 +6,7 @@ order: 12
 
 # Dock and Panels
 
-A view that can only fill a window is not much of an application. A **dock area** turns a script view into a *panel*: draggable, dockable, zoomable, and still where the user left it after a restart.
+A View that can only fill a window is not much of an application. A **dock area** turns a script View into a *panel*: draggable, dockable, zoomable, and still where the user left it after a restart.
 
 ```js
 import { View, div } from "gpui";
@@ -33,7 +33,7 @@ That already docks, drags, resizes, zooms and persists. It draws no tab bar, bec
 
 ## What base brings, and what it does not
 
-`gpui_base::dock` has the hard half of a docking system: a layout that is **pure data**, a `PanelRegistry` that rebuilds a panel from a name in a persisted file, and a per-panel payload that rides along with it. Containers are addressed by a stable node id and panels by a stable panel id, so a drag rearranges a value rather than tearing down and rebuilding views.
+`gpui_base::dock` has the hard half of a docking system: a layout that is **pure data**, a `PanelRegistry` that rebuilds a panel from a name in a persisted file, and a per-panel payload that rides along with it. Containers are addressed by a stable node id and panels by a stable panel id, so a drag rearranges a value rather than tearing down and rebuilding Views.
 
 What it does not have is a look. The engine paints nothing — no tab bar, no dock frame, no drag handle, no drop hint — and hands every one of those back to you as a callback that returns elements. That is not a limitation to work around; it is why the whole thing is usable from a script at all. Appearance is not a set of overrides on a default look, because there is no default look.
 
@@ -72,7 +72,7 @@ init(_props, cx) {
 
 ## Panels
 
-A panel is a view that a dock happens to be holding. `add_panel` takes the view and says where it goes:
+A panel is a View that a dock happens to be holding. `add_panel` takes the View and says where it goes:
 
 ```js
 this.dock.add_panel(cx.new(Editor, { file }), {
@@ -122,12 +122,12 @@ init(_props, cx) {
 }
 ```
 
-A panel's own state rides along with its position. Two optional methods on the view class carry it:
+A panel's own state rides along with its position. Two optional methods on the View class carry it:
 
 | Method | When | Note |
 | --- | --- | --- |
 | `serialize()` | The layout is saved | Runs **without a host call**: return plain data and touch nothing else — no entities, no `cx` |
-| `deserialize(data)` | Right after the view is rebuilt | A real host call, so this one may touch entities |
+| `deserialize(data)` | Right after the View is rebuilt | A real host call, so this one may touch entities |
 
 `version` is yours to bump when the shape of what you save changes; base refuses to load a layout written under a different one, so an old file is ignored rather than half-understood.
 

@@ -14,13 +14,13 @@ Three examples ship with the repository, and together they cover a standalone ap
 | [Todo list](#the-todo-list) | A standalone application | The whole script surface: retained input, a dialog, a toast, gated storage, assets, types |
 | [Workspace](#the-workspace) | A standalone application | A dockable layout: panels that survive a restart, and every piece of its chrome drawn by script |
 | [Quote board](#the-quote-board) | A panel inside the gallery | The host half: HostModule registrations, one entity read from two languages, live cost counters |
-| [Native motion](#native-motion) | A separate gallery script view | Pixel target transitions and springs retained and sampled by GPUI |
+| [Native motion](#native-motion) | A separate gallery script View | Pixel target transitions and springs retained and sampled by GPUI |
 
 ## A complete application
 
 The examples here are each built to show one thing. For a whole product in one
 repository — OAuth, a live WebSocket quote feed, a virtualized watchlist,
-retained nested views for the price chart, and its own Rust host binary —
+retained nested Views for the price chart, and its own Rust host binary —
 see [**longbridge/longbridge-lite**](https://github.com/longbridge/longbridge-lite).
 It is a read-only Longbridge desktop client of a few thousand lines of
 JavaScript, and it is the largest thing written against this runtime.
@@ -34,10 +34,10 @@ cargo run -p gpui-shell -- examples/js_todolist
 `examples/js_todolist/` exists to exercise the whole runtime rather than to be minimal — if something in `gpui-shell` is broken, this is where it shows first.
 
 ```text
-main.js                   the view: state, filtering, every handler
+main.js                   the View: state, filtering, every handler
 ui.js                     the presentation layer, exported as functions
 storage.js                persistence, and what to do when it is not granted
-confirm.js                the confirmation dialog, a view of its own
+confirm.js                the confirmation dialog, a View of its own
 icons/                    four SVGs, resolved against the application root
 gpui.d.ts                 generated; jsconfig.json and types.d.ts wire up typing
 ```
@@ -99,7 +99,7 @@ Three things in it are the point.
 
 **A tab carries commands, not handlers.** A chrome description is cached until its native state changes, so a script event handler inside it would have no sound lifetime. `select_tab(group, tab.index)` and `close_panel(group, tab.id)` carry no script value at all — they name a container and what to ask it.
 
-**A panel is a view with two extra methods.** `Document.serialize()` returns its caption and its edit count; `deserialize(data)` takes them back after a restart. Everything else about the panel — where it sits, whether it is displayed — is the layout's business and never reaches the script.
+**A panel is a View with two extra methods.** `Document.serialize()` returns its caption and its edit count; `deserialize(data)` takes them back after a restart. Everything else about the panel — where it sits, whether it is displayed — is the layout's business and never reaches the script.
 
 See [Dock and Panels](./dock.md) for the whole surface.
 
@@ -117,7 +117,7 @@ The script owns no state at all. The board is a Rust `Entity<Market>`, imported 
 import { quotes, ticks, watch, watch_all } from "market";
 ```
 
-Theme values come from the call-scoped `cx.theme()` snapshot, not a second HostModule.
+Theme values come from the call-scoped `cx.theme()` Snapshot, not a second HostModule.
 
 Because both panels read one entity, any disagreement between them is visible immediately — which is what makes this a test rather than a demo. Editing `main.js` changes the right-hand panel with no `cargo build` in between; the story has a "Reload script" button next to the panel.
 

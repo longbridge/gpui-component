@@ -8,9 +8,9 @@ order: 7
 
 Dialog、sheet 与 toast 是**Host**能力，通过全局的 `window` 访问。它们不是脚本画出来的东西。
 
-Dialog 不是一个浮动的 `div`。它是窗口层叠顺序中的一个位置、一个焦点陷阱、一个 Escape 目标，以及一个关于“按下遮罩意味着什么”的承诺——而这些都必须由窗口的根视图决定，因为只有能同时看到所有浮层的东西才能给它们排序。脚本自己画的 dialog 一样都拥有不了；两个脚本各画一个 dialog，拥有得更少。
+Dialog 不是一个浮动的 `div`。它是窗口层叠顺序中的一个位置、一个焦点陷阱、一个 Escape 目标，以及一个关于“按下遮罩意味着什么”的承诺——而这些都必须由窗口的根 View 决定，因为只有能同时看到所有浮层的东西才能给它们排序。脚本自己画的 dialog 一样都拥有不了；两个脚本各画一个 dialog，拥有得更少。
 
-所以脚本说的是**放什么**到用户面前，根视图说的是它放在哪里、以及怎么离开。跨越这条边界的东西很少：一个返回元素的函数、一个贴靠的边、一句要显示的话。
+所以脚本说的是**放什么**到用户面前，根 View 说的是它放在哪里、以及怎么离开。跨越这条边界的东西很少：一个返回元素的函数、一个贴靠的边、一句要显示的话。
 
 这些 API 放在 `window` 而不是 `cx` 上，是因为 dialog 属于窗口，不属于打开它的 view：`cx.notify()` 重新渲染一个 view，`window.open_dialog()` 则改变窗口当前显示的内容。`gpui-component` 也采用相同的职责划分，因此 Rust 与 JavaScript 的 API 保持一致。以后若要暴露焦点、尺寸或窗口外观等能力，也可以继续放在 `window` 上。
 
@@ -82,7 +82,7 @@ export default (count, onConfirm) => () =>
 window.open_dialog(confirmClear(this.completed, (cx) => this.deleteCompleted(cx)));
 ```
 
-注意根视图提供了什么、又没有提供什么。它提供遮罩、位置、层叠、焦点陷阱，以及承载内容的表面；宽度、内边距、边框、文字与按钮和这个运行时里的其他一切一样，都是脚本的。
+注意根 View 提供了什么、又没有提供什么。它提供遮罩、位置、层叠、焦点陷阱，以及承载内容的表面；宽度、内边距、边框、文字与按钮和这个运行时里的其他一切一样，都是脚本的。
 
 | 选项 | 默认 | 作用 |
 | --- | --- | --- |
@@ -98,7 +98,7 @@ expected escape_dismissable or backdrop_dismissable
 
 一个被悄悄忽略的 `escapeDismissable` 看起来像是生效了，而那个 dialog 照样可以被 Escape 关掉。
 
-`open_dialog` 返回的是**栈的新深度**，不是句柄。根视图按位置而不是按身份寻址 dialog，所以句柄就必须承诺“关掉**这个** dialog”，而那不是一个存在的操作。深度才是脚本用得上的东西——用来断言确实打开了一个，或者退回到某个已知层级。`close_dialog` 返回它有没有找到可关的；`close_all_dialogs` 返回关掉了几个。
+`open_dialog` 返回的是**栈的新深度**，不是句柄。根 View 按位置而不是按身份寻址 dialog，所以句柄就必须承诺“关掉**这个** dialog”，而那不是一个存在的操作。深度才是脚本用得上的东西——用来断言确实打开了一个，或者退回到某个已知层级。`close_dialog` 返回它有没有找到可关的；`close_all_dialogs` 返回关掉了几个。
 
 ::: warning 不要把 `cx` 带进 dialog
 打开 dialog 的那个回调里的 `cx` 属于那个回调。等到 dialog 自己的按钮被按下时，它已经过期，使用它会报出 stale context 错误。请闭包捕获**数据**，并从 dialog 自身回调的参数里取 `cx`——上面的例子给 `onConfirm` 传的是一个 `cx`，而不是捕获一个，正是这个原因。
@@ -121,7 +121,7 @@ unknown sheet placement `middle`; expected left, right, top or bottom
 
 ## Toast
 
-Toast 是唯一**是数据而不是视图**的浮层——没有类、没有实例，也没有什么要脚本去渲染——所以它的全部内容以一个选项对象的形式跨越边界。
+Toast 是唯一**是数据而不是 View**的浮层——没有类、没有实例，也没有什么要脚本去渲染——所以它的全部内容以一个选项对象的形式跨越边界。
 
 | 字段 | 默认 | 含义 |
 | --- | --- | --- |
@@ -154,7 +154,7 @@ render(cx) {
 }
 ```
 
-**度量在 `render` 中是合法的**，而且这正是它们的用处：一个要按窗口尺寸决定自身布局的视图，只能在绘制它的那一趟里问。
+**度量在 `render` 中是合法的**，而且这正是它们的用处：一个要按窗口尺寸决定自身布局的 View，只能在绘制它的那一趟里问。
 
 | 成员 | 说明 |
 | --- | --- |
@@ -170,7 +170,7 @@ render(cx) {
 | 成员 | 说明 |
 | --- | --- |
 | `set_rem_size(size)` | 重新缩放所有以 rem 表达的尺寸 |
-| `refresh()` | 重绘窗口里的每一个视图 |
+| `refresh()` | 重绘窗口里的每一个 View |
 | `focus_next()` / `focus_prev()` | 把键盘移到相邻的一个 tab stop |
 | `dispatch_action(action)` | 沿本窗口的焦点路径派发一个 action |
 | `activate_window()` / `minimize_window()` / `zoom_window()` / `toggle_fullscreen()` | 平台窗口控制 |
@@ -181,7 +181,7 @@ render(cx) {
 
 从后往前绘制：
 
-1. **内容**——脚本的根视图。
+1. **内容**——脚本的根 View。
 2. **Sheet**——最多一个，贴靠某条边。Sheet 是窗口里的一个*位置*，所以它位于 dialog 栈之下：从 sheet 里唤起的 dialog 必须可读，而在 dialog 之下唤起的 sheet 不能盖住它。
 3. **Dialog 栈**——按打开顺序，最早的在最下面。
 4. **Toast**——在所有东西之上。Toast 报告的是用户刚做的那个操作的结果，而“正开着一个 dialog”恰恰是这个结果最重要的时刻，所以它是唯一永不被遮挡的一层。
@@ -193,7 +193,7 @@ render(cx) {
 - **Escape** 只关闭最上层的 dialog。下层 dialog 渲染时禁用键盘处理，所以连按 Escape 会一层一层退栈，并且在还有 dialog 打开时永远不会波及 sheet。
 - `escape_dismissable: false` 撤掉的是**按键绑定**，不是底层的取消动作。脚本放在 dialog 里的关闭控件照样有效——这正是“不可关闭的 dialog”意味着用户必须回答它，而不是被困在里面。
 - **按下遮罩**关闭最上层的 dialog，且仅当它是以 `backdrop_dismissable` 打开的。
-- **回车在这一层什么都不做。** Base 的 dialog host 把回车视为“确认并关闭”；那属于 dialog 自己的主按钮，而主按钮归脚本所有，所以根视图否决了内建的确认行为，而不是去猜哪份内容需要它。
+- **回车在这一层什么都不做。** Base 的 dialog host 把回车视为“确认并关闭”；那属于 dialog 自己的主按钮，而主按钮归脚本所有，所以根 View 否决了内建的确认行为，而不是去猜哪份内容需要它。
 - **Sheet** 只在没有 dialog 打开时由 Escape 或它的遮罩关闭，因为压在上面的 dialog 持有焦点。
 - `close_all_dialogs` 是唯一会整体退栈的操作，而且它不动 sheet。
 
@@ -214,7 +214,7 @@ overlays may only be opened or closed while handling an event or a task
 
 ## 浮层需要 `ShellRoot`
 
-上述每一个调用最终都会到达窗口的根视图。第一层视图不是 `ShellRoot` 的窗口会拒绝它们，并指明这是哪一类错误——Host 接线问题，不是脚本问题：
+上述每一个调用最终都会到达窗口的根 View。第一层 View 不是 `ShellRoot` 的窗口会拒绝它们，并指明这是哪一类错误——Host 接线问题，不是脚本问题：
 
 ```text
 window.open_dialog(content, options) needs a ShellRoot as the window's first view;
