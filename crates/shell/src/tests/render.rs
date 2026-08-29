@@ -80,7 +80,7 @@ fn a_script_view_produces_an_element_description(cx: &mut TestAppContext) {
 
 #[gpui::test]
 fn a_registered_component_payload_reaches_its_materializer(cx: &mut TestAppContext) {
-    use gpui::{AnyElement, IntoElement as _, div};
+    use gpui::{AnyElement, IntoElement as _, ParentElement as _, div};
     use std::sync::{
         Arc,
         atomic::{AtomicUsize, Ordering},
@@ -97,10 +97,25 @@ fn a_registered_component_payload_reaches_its_materializer(cx: &mut TestAppConte
     struct TestBoxMaterializer(Arc<AtomicUsize>);
 
     impl ComponentMaterializer for TestBoxMaterializer {
-        fn materialize(&self, request: MaterializeRequest<'_>) -> anyhow::Result<AnyElement> {
+        fn materialize(&self, mut request: MaterializeRequest<'_>) -> anyhow::Result<AnyElement> {
             assert_eq!(request.payload().downcast_ref::<String>().unwrap(), "alpha");
+            let error = request
+                .with_window_app(|_, _| Err::<(), _>(anyhow::anyhow!("synthetic overlay failed")))
+                .expect_err("a scoped overlay error must cross the service seam");
+            assert_eq!(error.to_string(), "synthetic overlay failed");
+            let has_window = request.with_window_app(|window, cx| {
+                Ok(cx.has_global::<gpui_component::Theme>() && window.bounds().size.width > px(0.))
+            })?;
+            assert!(
+                has_window,
+                "registered overlays receive the active render window"
+            );
             self.0.fetch_add(1, Ordering::SeqCst);
-            Ok(div().into_any_element())
+            let children = request.take_children()?;
+            Ok(div()
+                .child("synthetic overlay")
+                .children(children)
+                .into_any_element())
         }
     }
 
@@ -121,11 +136,17 @@ fn a_registered_component_payload_reaches_its_materializer(cx: &mut TestAppConte
     let runtime = ShellRuntime::new_isolated_with_components(registry.freeze().unwrap()).unwrap();
 
     let mut arena = SpecArena::new();
+    let child = arena.push(Component::Registered(RegisteredComponentSpec::new(
+        id,
+        "TestBox",
+        ComponentPayload::new(String::from("alpha")),
+    )));
     let root = arena.push(Component::Registered(RegisteredComponentSpec::new(
         id,
         "TestBox",
         ComponentPayload::new(String::from("alpha")),
     )));
+    arena.attach(root, child).unwrap();
     let snapshot = RenderSnapshot::new(&runtime, 0, root, arena);
     let window = cx.add_window(|_, _| Empty);
     let mut context = VisualTestContext::from_window(*window.deref(), cx);
@@ -136,8 +157,8 @@ fn a_registered_component_payload_reaches_its_materializer(cx: &mut TestAppConte
         ));
     });
 
-    assert_eq!(calls.load(Ordering::SeqCst), 1);
-    assert_eq!(snapshot.debug_tree(), "TestBox\n");
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
+    assert_eq!(snapshot.debug_tree(), "TestBox\n  TestBox\n");
 }
 
 #[gpui::test]

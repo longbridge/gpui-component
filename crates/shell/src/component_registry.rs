@@ -441,7 +441,10 @@ pub struct MaterializeRequest<'a> {
     payload: &'a ComponentPayload,
     operations: &'a [crate::spec::SpecOp],
     runtime: &'a Rc<crate::ShellRuntime>,
-    resolve_element: &'a mut dyn FnMut(u32) -> anyhow::Result<AnyElement>,
+    resolve_element:
+        &'a mut dyn FnMut(u32, Option<&mut Window>, Option<&mut App>) -> anyhow::Result<AnyElement>,
+    window: Option<&'a mut Window>,
+    cx: Option<&'a mut App>,
     style: Option<StyleRefinement>,
     children: Vec<AnyElement>,
     child_specs: Vec<(u32, Option<&'static str>)>,
@@ -460,7 +463,8 @@ pub(crate) struct MaterializeRequestInit<'a> {
     pub payload: &'a ComponentPayload,
     pub operations: &'a [crate::spec::SpecOp],
     pub runtime: &'a Rc<crate::ShellRuntime>,
-    pub resolve_element: &'a mut dyn FnMut(u32) -> anyhow::Result<AnyElement>,
+    pub resolve_element:
+        &'a mut dyn FnMut(u32, Option<&mut Window>, Option<&mut App>) -> anyhow::Result<AnyElement>,
     pub style: StyleRefinement,
     pub children: Vec<AnyElement>,
     pub child_specs: Vec<(u32, Option<&'static str>)>,
@@ -478,6 +482,8 @@ impl<'a> MaterializeRequest<'a> {
             operations: init.operations,
             runtime: init.runtime,
             resolve_element: init.resolve_element,
+            window: None,
+            cx: None,
             style: Some(init.style),
             children: init.children,
             child_specs: init.child_specs,
@@ -494,6 +500,34 @@ impl<'a> MaterializeRequest<'a> {
 
     pub fn payload(&self) -> &ComponentPayload {
         self.payload
+    }
+
+    pub(crate) fn attach_render_authority(&mut self, window: &'a mut Window, cx: &'a mut App) {
+        self.window = Some(window);
+        self.cx = Some(cx);
+    }
+
+    /// Runs `body` with the active GPUI render authority.
+    ///
+    /// This capability exists for components such as overlays whose native
+    /// constructors require the current [`Window`] and [`App`]. The shell
+    /// enforces only the references' lifetime and availability during the
+    /// render phase. These are raw GPUI authorities and can mutate application
+    /// state; adapters remain responsible for following their own state and
+    /// callback conventions and must not retain either reference.
+    pub fn with_window_app<R>(
+        &mut self,
+        body: impl FnOnce(&mut Window, &mut App) -> anyhow::Result<R>,
+    ) -> anyhow::Result<R> {
+        let window = self
+            .window
+            .as_deref_mut()
+            .ok_or_else(|| anyhow::anyhow!("render Window authority is unavailable"))?;
+        let cx = self
+            .cx
+            .as_deref_mut()
+            .ok_or_else(|| anyhow::anyhow!("render App authority is unavailable"))?;
+        body(window, cx)
     }
 
     /// Reads adapter-owned retained state without allowing render-time mutation.
@@ -559,7 +593,8 @@ impl<'a> MaterializeRequest<'a> {
         self.child_lane = ChildLane::Ordinary;
         let mut children = std::mem::take(&mut self.children);
         while let Some((id, _)) = self.child_specs.first().copied() {
-            let child = (self.resolve_element)(id)?;
+            let child =
+                (self.resolve_element)(id, self.window.as_deref_mut(), self.cx.as_deref_mut())?;
             self.child_specs.remove(0);
             children.push(child);
         }
@@ -613,7 +648,8 @@ impl<'a> MaterializeRequest<'a> {
             .position(|(token, _)| *token == child.token)
             .ok_or_else(|| anyhow::anyhow!("component child was already consumed"))?;
         let id = self.issued_children[index].1;
-        let element = (self.resolve_element)(id)?;
+        let element =
+            (self.resolve_element)(id, self.window.as_deref_mut(), self.cx.as_deref_mut())?;
         self.issued_children.remove(index);
         Ok(element)
     }
@@ -677,7 +713,7 @@ impl<'a> MaterializeRequest<'a> {
         let ComponentArgument::Element(element) = argument else {
             anyhow::bail!("component argument is not an Element");
         };
-        (self.resolve_element)(*element)
+        (self.resolve_element)(*element, self.window.as_deref_mut(), self.cx.as_deref_mut())
     }
 
     pub fn resolve_entity(
@@ -1401,7 +1437,9 @@ mod tests {
         let runtime = crate::ShellRuntime::new_isolated().unwrap();
         let payload = ComponentPayload::new(());
         let operations = [];
-        let mut resolve_element = |_| anyhow::bail!("no element argument expected");
+        let mut resolve_element = |_, _: Option<&mut Window>, _: Option<&mut App>| {
+            anyhow::bail!("no element argument expected")
+        };
         let mut request = MaterializeRequest::new(MaterializeRequestInit {
             component_name: "Slotted",
             payload: &payload,
@@ -1417,6 +1455,10 @@ mod tests {
             on_click: None,
         });
 
+        let error = request
+            .with_window_app(|_, _| Ok::<(), anyhow::Error>(()))
+            .expect_err("a request outside render has no Window/App authority");
+        assert_eq!(error.to_string(), "render Window authority is unavailable");
         assert_eq!(request.unread_parts(), (true, 1, vec!["trigger"]));
         assert!(request.take_slot("content").is_none());
         assert!(request.take_slot("trigger").is_some());
@@ -1430,7 +1472,9 @@ mod tests {
         let runtime = crate::ShellRuntime::new_isolated().unwrap();
         let payload = ComponentPayload::new(());
         let operations = [];
-        let mut resolve_element = |_| anyhow::bail!("no element argument expected");
+        let mut resolve_element = |_, _: Option<&mut Window>, _: Option<&mut App>| {
+            anyhow::bail!("no element argument expected")
+        };
         let mut request = MaterializeRequest::new(MaterializeRequestInit {
             component_name: "Slotted",
             payload: &payload,
@@ -1463,7 +1507,7 @@ mod tests {
         let payload = ComponentPayload::new(());
         let operations = [];
         let attempts = std::cell::Cell::new(0);
-        let mut resolve_element = |_| {
+        let mut resolve_element = |_, _: Option<&mut Window>, _: Option<&mut App>| {
             attempts.set(attempts.get() + 1);
             if attempts.get() == 1 {
                 anyhow::bail!("candidate failed")
@@ -1500,7 +1544,7 @@ mod tests {
         let payload = ComponentPayload::new(());
         let operations = [];
         let resolutions = std::cell::Cell::new(0);
-        let mut resolve_element = |_| {
+        let mut resolve_element = |_, _: Option<&mut Window>, _: Option<&mut App>| {
             resolutions.set(resolutions.get() + 1);
             Ok(div().into_any_element())
         };
@@ -1535,7 +1579,8 @@ mod tests {
         let payload = ComponentPayload::new(());
         let operations = [];
 
-        let mut ordinary_resolver = |_| Ok(div().into_any_element());
+        let mut ordinary_resolver =
+            |_, _: Option<&mut Window>, _: Option<&mut App>| Ok(div().into_any_element());
         let mut ordinary = MaterializeRequest::new(MaterializeRequestInit {
             component_name: "Ordinary",
             payload: &payload,
@@ -1554,7 +1599,8 @@ mod tests {
         assert!(ordinary.take_typed_children().is_empty());
         assert_eq!(ordinary.child_lane, ChildLane::Ordinary);
 
-        let mut typed_resolver = |_| Ok(div().into_any_element());
+        let mut typed_resolver =
+            |_, _: Option<&mut Window>, _: Option<&mut App>| Ok(div().into_any_element());
         let mut typed = MaterializeRequest::new(MaterializeRequestInit {
             component_name: "Typed",
             payload: &payload,
@@ -1589,7 +1635,8 @@ mod tests {
         let runtime = crate::ShellRuntime::new_isolated().unwrap();
         let payload = ComponentPayload::new(());
         let operations = [];
-        let mut resolve_element = |_| anyhow::bail!("child adapter failed");
+        let mut resolve_element =
+            |_, _: Option<&mut Window>, _: Option<&mut App>| anyhow::bail!("child adapter failed");
         let request = MaterializeRequest::new(MaterializeRequestInit {
             component_name: "Parent",
             payload: &payload,
@@ -1618,9 +1665,12 @@ mod tests {
         let runtime_b = crate::ShellRuntime::new_isolated().unwrap();
         let payload = ComponentPayload::new(());
         let operations = [];
-        let mut resolver_a = |_| Ok(div().into_any_element());
-        let mut resolver_b = |_| Ok(div().into_any_element());
-        let mut resolver_c = |_| Ok(div().into_any_element());
+        let mut resolver_a =
+            |_, _: Option<&mut Window>, _: Option<&mut App>| Ok(div().into_any_element());
+        let mut resolver_b =
+            |_, _: Option<&mut Window>, _: Option<&mut App>| Ok(div().into_any_element());
+        let mut resolver_c =
+            |_, _: Option<&mut Window>, _: Option<&mut App>| Ok(div().into_any_element());
         let mut request_a = MaterializeRequest::new(MaterializeRequestInit {
             component_name: "A",
             payload: &payload,

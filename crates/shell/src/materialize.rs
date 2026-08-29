@@ -735,11 +735,16 @@ fn materialize_component(
                     .child(format!("Unknown component: {}", component.name()))
                     .into_any_element();
             };
-            let mut resolve_element = |element| {
-                Ok(materialize_node(
-                    runtime, arena, element, inherited, window, cx,
-                ))
-            };
+            let mut resolve_element =
+                |element, window: Option<&mut Window>, cx: Option<&mut App>| {
+                    let window = window
+                        .ok_or_else(|| anyhow::anyhow!("render Window authority is unavailable"))?;
+                    let cx =
+                        cx.ok_or_else(|| anyhow::anyhow!("render App authority is unavailable"))?;
+                    Ok(materialize_node(
+                        runtime, arena, element, inherited, window, cx,
+                    ))
+                };
             let child_specs =
                 node.children()
                     .iter()
@@ -753,24 +758,23 @@ fn materialize_component(
                         (*child, name)
                     })
                     .collect();
-            match descriptor
-                .materializer
-                .materialize(crate::MaterializeRequest::new(
-                    crate::component_registry::MaterializeRequestInit {
-                        component_name: component.name(),
-                        payload: component.payload(),
-                        operations: node.ops(),
-                        runtime,
-                        resolve_element: &mut resolve_element,
-                        style: refinement,
-                        children: children.into_vec(),
-                        child_specs,
-                        slots: slots.into_vec(),
-                        disabled: behavior.disabled,
-                        selected: behavior.selected,
-                        on_click: behavior.on_click,
-                    },
-                )) {
+            let mut request =
+                crate::MaterializeRequest::new(crate::component_registry::MaterializeRequestInit {
+                    component_name: component.name(),
+                    payload: component.payload(),
+                    operations: node.ops(),
+                    runtime,
+                    resolve_element: &mut resolve_element,
+                    style: refinement,
+                    children: children.into_vec(),
+                    child_specs,
+                    slots: slots.into_vec(),
+                    disabled: behavior.disabled,
+                    selected: behavior.selected,
+                    on_click: behavior.on_click,
+                });
+            request.attach_render_authority(window, cx);
+            match descriptor.materializer.materialize(request) {
                 Ok(element) => element,
                 Err(error) => {
                     tracing::error!("failed to materialize `{}`: {error:#}", component.name());
