@@ -1,6 +1,5 @@
 use gpui::{
     Context, IntoElement, ParentElement as _, Styled as _, div, prelude::FluentBuilder as _, px,
-    rgb,
 };
 use gpui_base::{Radio, RadioGroup};
 
@@ -38,16 +37,16 @@ impl BaseShowcase {
                             .justify_center()
                             .size(px(14.))
                             .border_1()
-                            .border_color(rgb(0x171717))
+                            .border_color(super::example_rgb(0x171717))
                             .when(self.radio_selected == 1, |this| {
-                                this.child(div().size(px(6.)).bg(rgb(0x171717)))
+                                this.child(div().size(px(6.)).bg(super::example_rgb(0x171717)))
                             }),
                     )
                     .child(
                         div().child("Express").child(
                             div()
                                 .text_xs()
-                                .text_color(rgb(0x737373))
+                                .text_color(super::example_rgb(0x737373))
                                 .child("Next business day"),
                         ),
                     ),
@@ -64,7 +63,7 @@ impl BaseShowcase {
                             .mt(px(2.))
                             .size(px(14.))
                             .border_1()
-                            .border_color(rgb(0x171717)),
+                            .border_color(super::example_rgb(0x171717)),
                     )
                     .child(
                         div()

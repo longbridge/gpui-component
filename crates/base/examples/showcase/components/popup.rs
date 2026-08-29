@@ -1,6 +1,6 @@
 use gpui::{
     Context, IntoElement, ParentElement as _, Styled as _, div, prelude::FluentBuilder as _,
-    relative, rgb,
+    relative,
 };
 use gpui_base::{Button, Popup};
 
@@ -35,15 +35,15 @@ impl BaseShowcase {
                     .w_64()
                     .p_2()
                     .text_xs()
-                    .bg(rgb(0xffffff))
+                    .bg(super::example_rgb(0xffffff))
                     .border_1()
-                    .border_color(rgb(0x171717))
+                    .border_color(super::example_rgb(0x171717))
                     .child("Anchored surface")
                     .child(
                         div()
                             .mt_1()
                             .text_sm()
-                            .text_color(rgb(0x737373))
+                            .text_color(super::example_rgb(0x737373))
                             .child("Popup positions content relative to its trigger."),
                     ),
             )

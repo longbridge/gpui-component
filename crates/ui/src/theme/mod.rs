@@ -17,11 +17,13 @@ use std::{
 };
 
 mod color;
+mod motion;
 mod registry;
 mod schema;
 mod theme_color;
 
 pub use color::*;
+pub use motion::*;
 pub use registry::*;
 pub use schema::*;
 pub use theme_color::*;
@@ -139,6 +141,9 @@ pub struct Theme {
     pub list: ListSettings,
     /// The sheet settings.
     pub sheet: SheetSettings,
+    /// Semantic motion policy for styled components.
+    #[serde(skip)]
+    pub motion: MotionTokens,
 }
 
 impl Default for Theme {
@@ -347,6 +352,11 @@ impl Theme {
             typography: self.typography_tokens(),
             shadow: self.shadow_tokens(),
         }
+    }
+
+    /// Returns the styled layer's semantic motion policy.
+    pub fn motion_tokens(&self) -> &MotionTokens {
+        &self.motion
     }
 
     pub fn color_tokens(&self) -> ColorTokens {
@@ -588,6 +598,7 @@ impl From<&ThemeColor> for Theme {
             dark_theme: Rc::new(ThemeConfig::default()),
             highlight_theme: HighlightTheme::default_light(),
             sheet: SheetSettings::default(),
+            motion: MotionTokens::default(),
         }
     }
 }
@@ -692,6 +703,19 @@ mod base_theme_projection_tests {
                 gpui_base::ScrollbarEntrance::SlideAndFade
             );
         });
+    }
+
+    #[test]
+    fn default_motion_tokens_form_a_coherent_semantic_scale() {
+        let theme = Theme::default();
+        let motion = theme.motion_tokens();
+
+        assert_eq!(motion.duration_instant, Duration::ZERO);
+        assert!(motion.duration_fast < motion.duration_normal);
+        assert!(motion.duration_normal < motion.duration_slow);
+        assert!(motion.distance_short.0 < motion.distance_medium.0);
+        assert_eq!(motion.easing_enter.sample(0.0), 0.0);
+        assert_eq!(motion.easing_enter.sample(1.0), 1.0);
     }
 
     fn assert_styled_projection(cx: &App) {

@@ -18,6 +18,12 @@ Run without a component slug to show the overview:
 cargo run -p gpui-base --example components
 ```
 
+Motion has a separate example because it demonstrates continuous behavior rather than a component catalog entry. It contains focused pages for transitions, springs, keyframes, presence, and stagger:
+
+```bash
+cargo run -p gpui-base --example motion
+```
+
 The website builds `examples/wasm`, which imports the same `showcase/mod.rs` and selects the
 component using the `?component=<slug>` query parameter.
 

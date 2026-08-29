@@ -20,8 +20,10 @@ impl BaseShowcase {
                     .flex()
                     .items_center()
                     .border_1()
-                    .border_color(rgb(0xd4d4d4))
-                    .styles(|styles| styles.focused(|style| style.border_color(rgb(0x171717))))
+                    .border_color(super::example_rgb(0xd4d4d4))
+                    .styles(|styles| {
+                        styles.focused(|style| style.border_color(super::example_rgb(0x171717)))
+                    })
                     .on_mouse_down(MouseButton::Left, move |_, window, cx| {
                         state.update(cx, |state, cx| state.focus(window, cx));
                     })

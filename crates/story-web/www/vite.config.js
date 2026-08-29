@@ -45,6 +45,18 @@ export default defineConfig({
     minify: true,
     sourcemap: false,
     rollupOptions: {
+      onwarn(warning, warn) {
+        // wasm-bindgen emits this binding for js_sys::eval. It is generated
+        // code, and changing it to indirect eval would change its scope
+        // semantics. Keep reporting EVAL everywhere else in the application.
+        if (
+          warning.code === 'EVAL' &&
+          warning.id?.endsWith('/src/wasm/gpui_component_story_web.js')
+        ) {
+          return;
+        }
+        warn(warning);
+      },
       output: {
         manualChunks: undefined,
       },

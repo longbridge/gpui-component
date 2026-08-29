@@ -50,7 +50,7 @@ impl BaseShowcase {
                         AlertDialogBackdrop::new()
                             .absolute()
                             .inset_0()
-                            .bg(rgb(0x000000))
+                            .bg(super::example_rgb(0x000000))
                             .opacity(0.18),
                     )
                     .popup(
@@ -62,9 +62,9 @@ impl BaseShowcase {
                                 div()
                                     .w_72()
                                     .p_3()
-                                    .bg(rgb(0xffffff))
+                                    .bg(super::example_rgb(0xffffff))
                                     .border_1()
-                                    .border_color(rgb(0x171717))
+                                    .border_color(super::example_rgb(0x171717))
                                     .child(
                                         AlertDialogTitle::new()
                                             .child("Delete project?"),
@@ -73,7 +73,7 @@ impl BaseShowcase {
                                         AlertDialogDescription::new()
                                             .mt_2()
                                             .text_xs()
-                                            .text_color(rgb(0x525252))
+                                            .text_color(super::example_rgb(0x525252))
                                             .child(
                                                 "This permanently deletes Acme Studio and all of its data.",
                                             ),
@@ -92,7 +92,7 @@ impl BaseShowcase {
                                                     .items_center()
                                                     .text_xs()
                                                     .border_1()
-                                                    .border_color(rgb(0xd4d4d4))
+                                                    .border_color(super::example_rgb(0xd4d4d4))
                                                     .on_click(move |_, _, cx| {
                                                         _ = cancel_entity.update(cx, |this, cx| {
                                                             this.alert_dialog_open = false;
@@ -109,9 +109,9 @@ impl BaseShowcase {
                                                     .items_center()
                                                     .text_xs()
                                                     .border_1()
-                                                    .border_color(rgb(0x171717))
-                                                    .bg(rgb(0x171717))
-                                                    .text_color(rgb(0xffffff))
+                                                    .border_color(super::example_rgb(0x171717))
+                                                    .bg(super::example_rgb(0x171717))
+                                                    .text_color(super::example_rgb(0xffffff))
                                                     .on_click(move |_, _, cx| {
                                                         _ = action_entity.update(cx, |this, cx| {
                                                             this.alert_dialog_open = false;

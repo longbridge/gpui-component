@@ -1,6 +1,6 @@
 use gpui::{
     AnyElement, Context, InteractiveElement, IntoElement, ParentElement as _, Styled as _, div, px,
-    relative, rgb,
+    relative,
 };
 use gpui_base::{Button, NumberInput};
 
@@ -72,15 +72,20 @@ impl BaseShowcase {
                     .flex()
                     .items_center()
                     .border_1()
-                    .border_color(if valid { rgb(0x171717) } else { rgb(0x737373) })
+                    .border_color(if valid {
+                        super::example_rgb(0x171717)
+                    } else {
+                        super::example_rgb(0x737373)
+                    })
                     .input(div().w_full().px_2().child(self.input.clone()))
                     .decrement_button(|button| render_btn(button, minus_icon()))
                     .increment_button(|button| render_btn(button, plus_icon())),
             )
-            .child(div().text_xs().text_color(rgb(0x737373)).child(if valid {
-                "Step: 1"
-            } else {
-                "Enter a number"
-            }))
+            .child(
+                div()
+                    .text_xs()
+                    .text_color(super::example_rgb(0x737373))
+                    .child(if valid { "Step: 1" } else { "Enter a number" }),
+            )
     }
 }

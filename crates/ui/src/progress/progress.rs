@@ -111,7 +111,8 @@ impl RenderOnce for Progress {
         let animated_value = transition(
             (self.id.clone(), "indicator"),
             value,
-            Transition::new(Duration::from_millis(180)),
+            Transition::new(cx.theme().motion_tokens().duration_normal)
+                .easing(cx.theme().motion_tokens().easing_move.clone()),
             window,
             cx,
         );

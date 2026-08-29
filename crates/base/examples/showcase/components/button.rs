@@ -17,10 +17,10 @@ impl BaseShowcase {
                     .items_center()
                     .text_xs()
                     .border_1()
-                    .border_color(rgb(0x171717))
-                    .bg(rgb(0x171717))
-                    .text_color(rgb(0xffffff))
-                    .hover(|style| style.bg(rgb(0x404040)))
+                    .border_color(super::example_rgb(0x171717))
+                    .bg(super::example_rgb(0x171717))
+                    .text_color(super::example_rgb(0xffffff))
+                    .hover(|style| style.bg(super::example_rgb(0x404040)))
                     .child("Save changes"),
             )
             .child(
@@ -32,9 +32,9 @@ impl BaseShowcase {
                     .items_center()
                     .text_xs()
                     .border_1()
-                    .border_color(rgb(0xd4d4d4))
-                    .bg(rgb(0xffffff))
-                    .hover(|style| style.bg(rgb(0xf5f5f5)))
+                    .border_color(super::example_rgb(0xd4d4d4))
+                    .bg(super::example_rgb(0xffffff))
+                    .hover(|style| style.bg(super::example_rgb(0xf5f5f5)))
                     .child("Cancel"),
             )
     }

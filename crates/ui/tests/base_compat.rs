@@ -45,6 +45,18 @@ fn base_crate_exports_the_same_foundation_types() {
 }
 
 #[test]
+fn motion_core_types_are_available_from_the_base_facade() {
+    let timing = gpui_base::Timing::new(std::time::Duration::from_millis(100))
+        .ease(gpui_base::Easing::Linear);
+    assert_eq!(
+        timing
+            .sample(std::time::Duration::from_millis(50))
+            .directed_progress,
+        0.5
+    );
+}
+
+#[test]
 fn base_avatar_uses_application_owned_image_and_fallback_slots() {
     let _ = gpui_base::Avatar::new()
         .image(gpui_base::AvatarImage::new(gpui::ImageSource::from(
