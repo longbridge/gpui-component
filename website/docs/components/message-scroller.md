@@ -327,7 +327,9 @@ The boundaries are:
 - `with_content_style(...)` refines the viewport containing the list and
   optional vertical scrollbar.
 - `with_list_style(...)` refines the GPUI virtual list after its default
-  `px_3()` / `py_2()` padding.
+  `px_3()` / `py_2()` padding. GPUI lists offset rows only vertically, so the
+  horizontal padding component — the default and any refinement — is carried
+  by every row wrapper.
 - `with_row_style(...)` refines the full-width wrapper around each rendered row;
   the default wrapper includes `pb_8()` so measured rows have transcript
   breathing room.

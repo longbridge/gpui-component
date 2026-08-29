@@ -295,20 +295,29 @@ impl RenderOnce for MessageScroller {
         let jump_button_renderer = self.jump_button_renderer;
         let mut renderer = self.renderer;
 
+        // GPUI's `list` lays rows out at the full list width and offsets them
+        // only by vertical padding, so the horizontal component of the list
+        // style must be carried by every row wrapper instead.
+        let mut list_style = self.list_style;
+        let row_inset_left = list_style.padding.left.take();
+        let row_inset_right = list_style.padding.right.take();
+
         let list = list(list_state.clone(), move |index, window, cx| {
             div()
                 .w_full()
                 .min_w_0()
+                .px_3()
                 .pb_8()
+                .when_some(row_inset_left, |this, left| this.pl(left))
+                .when_some(row_inset_right, |this, right| this.pr(right))
                 .refine_style(&row_style)
                 .child(renderer(index, window, cx))
                 .into_any_element()
         })
         .size_full()
         .min_h_0()
-        .px_3()
         .py_2()
-        .refine_style(&self.list_style);
+        .refine_style(&list_style);
 
         let viewport = div()
             .id((root_id.clone(), "viewport"))

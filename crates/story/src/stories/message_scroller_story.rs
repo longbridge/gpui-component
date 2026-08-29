@@ -362,8 +362,8 @@ impl MessageScrollerStory {
             .rounded(cx.theme().radius_2xl())
             .border_1()
             .border_color(cx.theme().border)
-            .bg(cx.theme().group_box)
-            .text_color(cx.theme().group_box_foreground)
+            .bg(cx.theme().background)
+            .text_color(cx.theme().foreground)
             .child(scroller.size_full())
     }
 }
@@ -456,8 +456,8 @@ impl Render for MessageScrollerStory {
                         .rounded(cx.theme().radius_4xl())
                         .border_1()
                         .border_color(cx.theme().border)
-                        .bg(cx.theme().group_box)
-                        .text_color(cx.theme().group_box_foreground)
+                        .bg(cx.theme().background)
+                        .text_color(cx.theme().foreground)
                         .child(
                             v_flex()
                                 .w_full()
@@ -704,7 +704,7 @@ impl Render for MessageScrollerStory {
                             .rounded(cx.theme().radius_2xl())
                             .border_1()
                             .border_color(cx.theme().border)
-                            .bg(cx.theme().group_box)
+                            .bg(cx.theme().background)
                             .when(empty, |this| {
                                 this.child(
                                     v_flex()

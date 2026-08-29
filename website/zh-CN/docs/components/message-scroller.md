@@ -258,7 +258,7 @@ MessageScroller::new("conversation", scroller.clone(), render_message)
 | `with_row_style(...)` | 每个 renderer row 外层的全宽包装。 |
 | `Styled` | `MessageScroller` 根容器。 |
 
-组件会在每个 row 包装层保留默认尾部间距，以便 append/prepend 和高度测量保持一致。自定义 `with_row_style(...)` 时应明确自己是否要额外增加间距，避免重复 padding。
+组件会在每个 row 包装层保留默认尾部间距，以便 append/prepend 和高度测量保持一致。自定义 `with_row_style(...)` 时应明确自己是否要额外增加间距，避免重复 padding。GPUI list 只在垂直方向偏移 row，因此 list padding 的水平分量（默认值与 refinement 均是）由每个 row 包装层承载。
 
 ## 虚拟化、性能与可变高度
 
