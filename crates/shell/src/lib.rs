@@ -56,6 +56,7 @@ pub(crate) mod a11y;
 pub mod action;
 pub(crate) mod assets;
 pub(crate) mod capability;
+mod component_registry;
 pub mod dock;
 pub(crate) mod engine;
 pub(crate) mod entities;
@@ -85,6 +86,7 @@ pub(crate) mod watch;
 
 pub use assets::AppAssets;
 pub use capability::{Capabilities, ExecuteGrant, HttpRequestGrant};
+pub use component_registry::*;
 pub use engine::ShellRuntime;
 pub use error::ShellError;
 pub use host_modules::{
