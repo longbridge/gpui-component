@@ -9,6 +9,10 @@ use wasm_bindgen::prelude::*;
 #[allow(dead_code)]
 mod showcase;
 
+#[path = "../../motion/mod.rs"]
+#[allow(dead_code)]
+mod motion;
+
 #[cfg(target_family = "wasm")]
 thread_local! {
     static APPLICATION: RefCell<Option<ApplicationHandle>> = const { RefCell::new(None) };
@@ -21,10 +25,14 @@ pub fn run(component: Option<String>) -> Result<(), JsValue> {
     let _ = console_log::init_with_level(log::Level::Info);
     tracing_wasm::set_as_global_default();
     gpui_platform::web_init();
-    let handle = showcase::run_embedded(
-        web_application(),
-        component.unwrap_or_else(|| "overview".to_owned()),
-    );
+    let handle = if component.as_deref() == Some("motion") {
+        motion::run_embedded(web_application())
+    } else {
+        showcase::run_embedded(
+            web_application(),
+            component.unwrap_or_else(|| "overview".to_owned()),
+        )
+    };
     APPLICATION.with(|application| *application.borrow_mut() = Some(handle));
     Ok(())
 }

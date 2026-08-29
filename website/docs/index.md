@@ -82,7 +82,7 @@ fn main() {
 
 ## Community & Support
 
-Learn how to build interruptible 120 FPS animation in the [Motion guide](./motion).
+Learn how to build interruptible 120 FPS animation in the [GPUI Base Motion guide](/base/motion).
 
 - [GitHub Repository](https://github.com/longbridge/gpui-component)
 - [Issue Tracker](https://github.com/longbridge/gpui-component/issues)

@@ -28,4 +28,4 @@ GPUI Component 是一个基于 [GPUI](https://gpui.rs) 的综合性 Rust 桌面�
 
 - 阅读 [开始使用](./getting-started)
 - 浏览 [组件文档](./components/index)
-- 阅读 [动画与动效](./motion)
+- 阅读 [GPUI Base 动画与动效](/zh-CN/base/motion)
