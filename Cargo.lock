@@ -3594,6 +3594,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "gpui-component-shell"
+version = "0.1.0"
+dependencies = [
+ "gpui-shell",
+ "serde_json",
+]
+
+[[package]]
 name = "gpui-component-story"
 version = "0.5.1"
 dependencies = [
@@ -3670,6 +3678,7 @@ dependencies = [
  "chrono",
  "gpui",
  "gpui-base",
+ "gpui-component",
  "gpui-fps",
  "gpui_platform",
  "instant",

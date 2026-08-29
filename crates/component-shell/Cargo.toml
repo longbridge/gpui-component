@@ -1,0 +1,19 @@
+[package]
+name = "gpui-component-shell"
+description = "gpui-component bindings for the gpui-shell runtime."
+version = "0.1.0"
+publish = false
+edition.workspace = true
+
+[lib]
+name = "gpui_component_shell"
+path = "src/lib.rs"
+
+[dependencies]
+gpui-shell.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[lints]
+workspace = true

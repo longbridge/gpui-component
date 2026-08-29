@@ -84,11 +84,14 @@ pub(crate) mod value;
 pub mod view;
 pub(crate) mod watch;
 
+pub use anyhow;
 pub use assets::AppAssets;
 pub use capability::{Capabilities, ExecuteGrant, HttpRequestGrant};
 pub use component_registry::*;
 pub use engine::ShellRuntime;
 pub use error::ShellError;
+pub use gpui;
+pub use gpui_component;
 pub use host_modules::{
     HostArguments, HostError, HostModule, HostObject, HostResult, HostValue, RESERVED_SPECIFIERS,
 };
