@@ -44,6 +44,14 @@ struct ScrollGesture {
     total_delta: Pixels,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct LoopLayout {
+    cycle_extent: Pixels,
+    track_gap: Pixels,
+    runway_extent: Pixels,
+    runway_ready: bool,
+}
+
 /// Shared behavior state for every part of a [`super::Carousel`].
 ///
 /// `CarouselState` intentionally owns behavior only.  The content and its
@@ -65,6 +73,10 @@ pub struct CarouselState {
     scroll_settle_epoch: usize,
     suppress_pointer_click: bool,
     motion_revision: usize,
+    loop_layout: Option<LoopLayout>,
+    geometry_has_runway: bool,
+    loop_layout_removal_pending: bool,
+    loop_motion_target: Option<Point<Pixels>>,
 }
 
 impl CarouselState {
@@ -84,6 +96,10 @@ impl CarouselState {
             scroll_settle_epoch: 0,
             suppress_pointer_click: false,
             motion_revision: 0,
+            loop_layout: None,
+            geometry_has_runway: false,
+            loop_layout_removal_pending: false,
+            loop_motion_target: None,
         }
     }
 
@@ -128,20 +144,16 @@ impl CarouselState {
 
     /// Returns whether a previous item can be selected.
     pub fn has_previous(&self) -> bool {
-        match self.selected_index {
-            Some(_) if self.looping => self.item_count > 1,
-            Some(index) => index > 0,
-            None => false,
-        }
+        self.selected_index
+            .and_then(|index| self.navigation_index(index, false))
+            .is_some()
     }
 
     /// Returns whether a next item can be selected.
     pub fn has_next(&self) -> bool {
-        match self.selected_index {
-            Some(_) if self.looping => self.item_count > 1,
-            Some(index) => index + 1 < self.item_count,
-            None => false,
-        }
+        self.selected_index
+            .and_then(|index| self.navigation_index(index, true))
+            .is_some()
     }
 
     /// Silently changes the selected item for controlled/programmatic use.
@@ -149,13 +161,25 @@ impl CarouselState {
     /// The value is clamped to the available item range.  This method does
     /// not emit [`CarouselEvent::Change`].
     pub fn set_selected_index(&mut self, index: usize, cx: &mut Context<Self>) {
+        let rebased_loop_motion = self.rebase_pending_loop_motion();
         let next_index = self.clamp_index(index);
-        let changed = self.selected_index != next_index || self.is_interacting();
-        if self
-            .selected_index
+        let changed =
+            self.selected_index != next_index || self.is_interacting() || rebased_loop_motion;
+        let current = self.selected_index;
+        let wrapped = current
             .zip(next_index)
-            .is_some_and(|(current, next)| self.is_loop_wrap(current, next))
-        {
+            .is_some_and(|(current, next)| self.is_loop_wrap(current, next));
+        let loop_target = current
+            .filter(|_| wrapped)
+            .zip(next_index)
+            .and_then(|(current, next)| self.adjacent_loop_target(current, next));
+        let seamless_wrap = loop_target.is_some();
+        self.loop_motion_target = loop_target.filter(|target| {
+            next_index
+                .and_then(|index| self.snap_target_for(index))
+                .is_some_and(|real| self.primary_offset(real) != self.primary_offset(*target))
+        });
+        if wrapped && !seamless_wrap {
             self.motion_revision = self.motion_revision.wrapping_add(1);
         }
         self.selected_index = next_index;
@@ -177,7 +201,14 @@ impl CarouselState {
         if self.selected_index.is_none() && item_count > 0 {
             self.selected_index = Some(0);
         }
+        if self.loop_layout.is_some() {
+            self.scroll_handle.set_offset(Point::default());
+            self.motion_revision = self.motion_revision.wrapping_add(1);
+        }
         self.geometry.items.clear();
+        self.loop_layout = None;
+        self.loop_layout_removal_pending = self.geometry_has_runway;
+        self.loop_motion_target = None;
         self.cancel_interactions(cx);
         cx.notify();
     }
@@ -187,6 +218,9 @@ impl CarouselState {
         if self.axis != axis {
             self.axis = axis;
             self.scroll_handle.set_offset(Point::default());
+            self.loop_layout = None;
+            self.loop_layout_removal_pending = self.geometry_has_runway;
+            self.loop_motion_target = None;
             self.cancel_interactions(cx);
             self.motion_revision = self.motion_revision.wrapping_add(1);
             cx.notify();
@@ -197,6 +231,8 @@ impl CarouselState {
     pub fn set_looping(&mut self, looping: bool, cx: &mut Context<Self>) {
         if self.looping != looping {
             self.looping = looping;
+            self.update_loop_layout();
+            self.loop_motion_target = None;
             self.cancel_interactions(cx);
             cx.notify();
         }
@@ -222,14 +258,12 @@ impl CarouselState {
             return false;
         };
 
-        if current > 0 {
-            self.select_index_with_wrap(current - 1, false, cx)
-        } else if self.looping && self.item_count > 1 {
-            self.select_index_with_wrap(self.item_count - 1, true, cx)
-        } else {
+        let Some(index) = self.navigation_index(current, false) else {
             self.cancel_user_interaction(cx);
-            false
-        }
+            return false;
+        };
+        let wrapped = self.is_loop_wrap(current, index);
+        self.select_index_with_wrap(index, wrapped, cx)
     }
 
     /// Selects the next item, wrapping when looping is enabled.
@@ -238,14 +272,12 @@ impl CarouselState {
             return false;
         };
 
-        if current + 1 < self.item_count {
-            self.select_index_with_wrap(current + 1, false, cx)
-        } else if self.looping && self.item_count > 1 {
-            self.select_index_with_wrap(0, true, cx)
-        } else {
+        let Some(index) = self.navigation_index(current, true) else {
             self.cancel_user_interaction(cx);
-            false
-        }
+            return false;
+        };
+        let wrapped = self.is_loop_wrap(current, index);
+        self.select_index_with_wrap(index, wrapped, cx)
     }
 
     /// Selects the first item through the user-facing path.
@@ -289,19 +321,97 @@ impl CarouselState {
 
     /// Returns a monotonic key for motion that must be rebased immediately.
     ///
-    /// Ordinary adjacent selection leaves this value unchanged.  A logical
-    /// loop wrap increments it so the content can use a fresh spring key and
-    /// avoid animating across the entire strip.
+    /// Ordinary adjacent selection and a loop wrap leave this value unchanged.
+    /// It advances only when the scroll coordinate is silently rebased to an
+    /// equivalent cycle, letting the content start a fresh spring at the same
+    /// visual position.
     pub(super) fn motion_revision(&self) -> usize {
         self.motion_revision
     }
 
     /// Records the viewport and item bounds used for gesture snapping.
-    pub(super) fn set_geometry(&mut self, viewport: Bounds<Pixels>, items: Vec<Bounds<Pixels>>) {
+    #[cfg(test)]
+    fn set_geometry(&mut self, viewport: Bounds<Pixels>, items: Vec<Bounds<Pixels>>) {
+        let has_runway = self.loop_layout.is_some();
+        self.set_geometry_with_runway(viewport, items, has_runway);
+    }
+
+    pub(super) fn set_geometry_with_runway(
+        &mut self,
+        viewport: Bounds<Pixels>,
+        items: Vec<Bounds<Pixels>>,
+        has_runway: bool,
+    ) {
         self.geometry = CarouselGeometry {
             viewport: Some(viewport),
             items,
         };
+        self.geometry_has_runway = has_runway;
+        self.update_loop_layout();
+    }
+
+    /// Returns the runway reserved on both sides of the real item cycle.
+    pub(super) fn loop_runway(&self) -> Option<Pixels> {
+        self.loop_layout.map(|layout| layout.cycle_extent)
+    }
+
+    /// Returns whether content layout is moving into or out of its runway.
+    pub(super) fn is_loop_layout_transitioning(&self) -> bool {
+        self.loop_layout_removal_pending
+            || self.loop_layout.is_some_and(|layout| !layout.runway_ready)
+    }
+
+    /// Returns the visual offset applied to one item in the circular track.
+    pub(super) fn loop_item_offset(&self, index: usize) -> Point<Pixels> {
+        let Some(layout) = self.loop_layout else {
+            return Point::default();
+        };
+
+        if !layout.runway_ready {
+            return self.axis_point(-layout.runway_extent);
+        }
+
+        let Some(viewport) = self.geometry.viewport else {
+            return Point::default();
+        };
+        let Some(item) = self.geometry.items.get(index) else {
+            return Point::default();
+        };
+        let viewport_center = self.primary_start(viewport) + viewport.size.along(self.axis) / 2.
+            - self.primary_offset(self.scroll_handle.offset());
+        let item_center = self.primary_start(*item) + item.size.along(self.axis) / 2.;
+        let cycles = ((viewport_center - item_center) / layout.cycle_extent)
+            .round()
+            .clamp(-1., 1.);
+        self.axis_point(layout.cycle_extent * cycles)
+    }
+
+    /// Returns the target used by content motion. During a boundary wrap this
+    /// is the equivalent snap in the adjacent runway cycle.
+    pub(super) fn motion_target_for(&self, index: usize) -> Option<Point<Pixels>> {
+        self.loop_motion_target
+            .filter(|_| self.selected_index == Some(index))
+            .or_else(|| self.snap_target_for(index))
+    }
+
+    /// Silently returns a settled virtual target to the middle cycle.
+    pub(super) fn settle_loop_motion(
+        &mut self,
+        rendered: Point<Pixels>,
+        cx: &mut Context<Self>,
+    ) -> Option<Point<Pixels>> {
+        let target = self.loop_motion_target?;
+        if (self.primary_offset(rendered) - self.primary_offset(target)).abs() > px(0.01) {
+            return None;
+        }
+
+        let selected = self.selected_index?;
+        self.loop_motion_target = None;
+        let real_target = self.snap_target_for(selected)?;
+        self.scroll_handle.set_offset(real_target);
+        self.motion_revision = self.motion_revision.wrapping_add(1);
+        cx.notify();
+        Some(real_target)
     }
 
     /// Returns the geometry-derived snap offset for `index`.
@@ -319,8 +429,8 @@ impl CarouselState {
             .iter()
             .enumerate()
             .min_by(|(_, left), (_, right)| {
-                let left_distance = self.primary_distance(offset, viewport, **left);
-                let right_distance = self.primary_distance(offset, viewport, **right);
+                let left_distance = self.looping_distance(offset, viewport, **left);
+                let right_distance = self.looping_distance(offset, viewport, **right);
                 left_distance
                     .partial_cmp(&right_distance)
                     .unwrap_or(std::cmp::Ordering::Equal)
@@ -369,8 +479,10 @@ impl CarouselState {
         let mut offset = gesture.start_offset;
         let next = self.clamped_offset(self.primary_offset(offset) + primary_delta);
         self.set_primary_offset(&mut offset, next);
-        let changed = offset != self.scroll_handle.offset();
+        let previous = self.scroll_handle.offset();
         self.scroll_handle.set_offset(offset);
+        self.normalize_loop_coordinate();
+        let changed = self.scroll_handle.offset() != previous;
         if changed {
             cx.notify();
         }
@@ -408,6 +520,8 @@ impl CarouselState {
         if axis != self.axis || self.item_count < 2 {
             return false;
         }
+
+        self.rebase_pending_loop_motion();
 
         if self.ignore_scroll_until_quiet {
             match phase {
@@ -451,7 +565,8 @@ impl CarouselState {
         let next = self.clamped_offset(self.primary_offset(offset) + delta);
         self.set_primary_offset(&mut offset, next);
         self.scroll_handle.set_offset(offset);
-        let moved = offset != previous;
+        self.normalize_loop_coordinate();
+        let moved = self.scroll_handle.offset() != previous;
         if moved {
             cx.notify();
         }
@@ -495,17 +610,27 @@ impl CarouselState {
         let Some(index) = self.clamp_index(index) else {
             return false;
         };
+        let rebased_loop_motion = self.rebase_pending_loop_motion();
         let was_interacting = self.is_interacting();
         self.cancel_interactions(cx);
         if self.selected_index == Some(index) {
-            if was_interacting {
+            if was_interacting || rebased_loop_motion {
                 cx.notify();
             }
             return false;
         }
 
+        let current = self.selected_index;
+        let loop_target = current
+            .filter(|_| wrapped)
+            .and_then(|current| self.adjacent_loop_target(current, index));
+        let seamless_wrap = loop_target.is_some();
+        self.loop_motion_target = loop_target.filter(|target| {
+            self.snap_target_for(index)
+                .is_some_and(|real| self.primary_offset(real) != self.primary_offset(*target))
+        });
         self.selected_index = Some(index);
-        if wrapped {
+        if wrapped && !seamless_wrap {
             self.motion_revision = self.motion_revision.wrapping_add(1);
         }
         cx.emit(CarouselEvent::Change(index));
@@ -522,6 +647,230 @@ impl CarouselState {
             && self.item_count > 1
             && ((current == 0 && next + 1 == self.item_count)
                 || (current + 1 == self.item_count && next == 0))
+    }
+
+    /// Returns the next logical item that has a distinct physical snap point.
+    ///
+    /// When layout has not populated the geometry yet, navigation falls back
+    /// to logical item indices.  Once geometry is available, adjacent items
+    /// that clamp to the same physical endpoint are treated as one snap
+    /// point.  Keeping the first item in a duplicate group as the canonical
+    /// index preserves the existing nearest-index tie break at the end of the
+    /// track, while allowing navigation from a controlled duplicate index to
+    /// skip back over that group.
+    fn navigation_index(&self, current: usize, next: bool) -> Option<usize> {
+        if self.looping || !self.geometry_is_ready() {
+            return self.logical_navigation_index(current, next);
+        }
+
+        let current_target = self.snap_target_for(current)?;
+        let current_target = self.primary_offset(current_target);
+        if next {
+            (current.saturating_add(1)..self.item_count).find(|index| {
+                self.snap_target_for(*index)
+                    .map(|target| self.primary_offset(target) != current_target)
+                    .unwrap_or(false)
+            })
+        } else {
+            (0..current).rev().find(|index| {
+                self.snap_target_for(*index)
+                    .map(|target| self.primary_offset(target) != current_target)
+                    .unwrap_or(false)
+            })
+        }
+    }
+
+    fn logical_navigation_index(&self, current: usize, next: bool) -> Option<usize> {
+        if next {
+            if current + 1 < self.item_count {
+                Some(current + 1)
+            } else if self.looping && self.item_count > 1 {
+                Some(0)
+            } else {
+                None
+            }
+        } else if current > 0 {
+            Some(current - 1)
+        } else if self.looping && self.item_count > 1 {
+            Some(self.item_count - 1)
+        } else {
+            None
+        }
+    }
+
+    fn geometry_is_ready(&self) -> bool {
+        self.geometry.viewport.is_some() && self.geometry.items.len() == self.item_count
+    }
+
+    fn adjacent_loop_target(&self, current: usize, next: usize) -> Option<Point<Pixels>> {
+        let layout = self.loop_layout.filter(|layout| layout.runway_ready)?;
+        let mut target = self.snap_target_for(next)?;
+        let cycle = if current + 1 == self.item_count && next == 0 {
+            -layout.cycle_extent
+        } else if current == 0 && next + 1 == self.item_count {
+            layout.cycle_extent
+        } else {
+            return None;
+        };
+        let primary = self.primary_offset(target) + cycle;
+        self.set_primary_offset(&mut target, primary);
+        Some(target)
+    }
+
+    fn update_loop_layout(&mut self) {
+        let previous = self.loop_layout;
+        let next_metrics = self.measured_cycle_metrics().filter(|(extent, _)| {
+            self.looping
+                && self.item_count > 1
+                && *extent > px(0.)
+                && self
+                    .geometry
+                    .viewport
+                    .is_some_and(|viewport| *extent >= viewport.size.along(self.axis))
+        });
+
+        let Some((next_extent, next_gap)) = next_metrics else {
+            if let Some(previous) = previous.filter(|layout| layout.runway_ready) {
+                self.shift_scroll_coordinate(previous.runway_extent);
+                self.motion_revision = self.motion_revision.wrapping_add(1);
+            }
+            if previous.is_some() {
+                self.loop_layout_removal_pending = self.geometry_has_runway;
+            } else if self.loop_layout_removal_pending && !self.geometry_has_runway {
+                self.loop_layout_removal_pending = false;
+            }
+            self.loop_layout = None;
+            self.loop_motion_target = None;
+            return;
+        };
+
+        let same_extent = previous.is_some_and(|layout| {
+            (layout.cycle_extent - next_extent).abs() <= px(0.5)
+                && (layout.track_gap - next_gap).abs() <= px(0.5)
+        });
+        if !same_extent {
+            if let Some(previous) = previous.filter(|layout| layout.runway_ready) {
+                self.shift_scroll_coordinate(previous.runway_extent);
+                self.pointer_gesture = None;
+                self.scroll_gesture = None;
+                self.loop_motion_target = None;
+                self.motion_revision = self.motion_revision.wrapping_add(1);
+            }
+            self.loop_layout_removal_pending = false;
+            self.loop_layout = Some(LoopLayout {
+                cycle_extent: next_extent,
+                track_gap: next_gap,
+                runway_extent: next_extent + next_gap,
+                runway_ready: false,
+            });
+            return;
+        }
+
+        let Some(mut layout) = previous else {
+            return;
+        };
+        if !layout.runway_ready && self.geometry_has_runway {
+            self.shift_scroll_coordinate(-layout.runway_extent);
+            layout.runway_ready = true;
+            self.loop_layout = Some(layout);
+            self.motion_revision = self.motion_revision.wrapping_add(1);
+        }
+    }
+
+    fn measured_cycle_metrics(&self) -> Option<(Pixels, Pixels)> {
+        let first = *self.geometry.items.first()?;
+        let last = *self.geometry.items.last()?;
+        let gap = self
+            .geometry
+            .items
+            .get(1)
+            .map(|second| (self.primary_start(*second) - self.primary_end(first)).max(px(0.)))
+            .unwrap_or(px(0.));
+        Some((
+            (self.primary_end(last) - self.primary_start(first) + gap).max(px(0.)),
+            gap,
+        ))
+    }
+
+    fn shift_scroll_coordinate(&mut self, delta: Pixels) {
+        let mut offset = self.scroll_handle.offset();
+        let primary = self.primary_offset(offset) + delta;
+        self.set_primary_offset(&mut offset, primary);
+        self.scroll_handle.set_offset(offset);
+        if let Some(gesture) = self.pointer_gesture.as_mut() {
+            Self::shift_point_for_axis(&mut gesture.start_offset, self.axis, delta);
+        }
+        if let Some(gesture) = self.scroll_gesture.as_mut() {
+            Self::shift_point_for_axis(&mut gesture.start_offset, self.axis, delta);
+        }
+        if let Some(target) = self.loop_motion_target.as_mut() {
+            Self::shift_point_for_axis(target, self.axis, delta);
+        }
+    }
+
+    fn rebase_pending_loop_motion(&mut self) -> bool {
+        let Some(virtual_target) = self.loop_motion_target else {
+            return false;
+        };
+        let Some(real_target) = self
+            .selected_index
+            .and_then(|index| self.snap_target_for(index))
+        else {
+            self.loop_motion_target = None;
+            return false;
+        };
+        let delta = self.primary_offset(real_target) - self.primary_offset(virtual_target);
+        self.shift_scroll_coordinate(delta);
+        self.loop_motion_target = None;
+        self.motion_revision = self.motion_revision.wrapping_add(1);
+        true
+    }
+
+    /// Keeps an active pointer or trackpad gesture inside the middle runway.
+    /// Moving by one full cycle is visually identical because every item is
+    /// painted in the closest cycle, so the gesture snapshots move with the
+    /// handle and continuous input never reaches the finite runway edge.
+    fn normalize_loop_coordinate(&mut self) -> bool {
+        let Some(layout) = self
+            .loop_layout
+            .filter(|layout| layout.runway_ready && layout.cycle_extent > px(0.))
+        else {
+            return false;
+        };
+        let Some(first) = self.snap_target_for(0) else {
+            return false;
+        };
+        let Some(last_ix) = self.item_count.checked_sub(1) else {
+            return false;
+        };
+        let Some(last) = self.snap_target_for(last_ix) else {
+            return false;
+        };
+
+        let first = self.primary_offset(first);
+        let last = self.primary_offset(last);
+        let mut current = self.primary_offset(self.scroll_handle.offset());
+        let mut delta = px(0.);
+        while current <= first - layout.cycle_extent {
+            current += layout.cycle_extent;
+            delta += layout.cycle_extent;
+        }
+        while current >= last + layout.cycle_extent {
+            current -= layout.cycle_extent;
+            delta -= layout.cycle_extent;
+        }
+        if delta == px(0.) {
+            return false;
+        }
+        self.shift_scroll_coordinate(delta);
+        true
+    }
+
+    fn shift_point_for_axis(point: &mut Point<Pixels>, axis: Axis, delta: Pixels) {
+        match axis {
+            Axis::Horizontal => point.x += delta,
+            Axis::Vertical => point.y += delta,
+        }
     }
 
     fn cancel_interactions(&mut self, cx: &mut Context<Self>) {
@@ -548,6 +897,7 @@ impl CarouselState {
         if self.item_count < 2 {
             return false;
         }
+        self.rebase_pending_loop_motion();
         self.pointer_gesture = Some(PointerGesture {
             start_position: position,
             start_offset: self.scroll_handle.offset(),
@@ -676,8 +1026,20 @@ impl CarouselState {
         let target = match self.axis {
             Axis::Horizontal => viewport.left() - item.left(),
             Axis::Vertical => viewport.top() - item.top(),
-        }
-        .clamp(-self.max_snap_offset(), px(0.));
+        };
+        let target = if let Some(layout) = self.loop_layout.filter(|layout| layout.runway_ready) {
+            let content_inset = self
+                .geometry
+                .items
+                .first()
+                .map(|first| {
+                    self.primary_start(*first) - self.primary_start(viewport) - layout.runway_extent
+                })
+                .unwrap_or(px(0.));
+            target + content_inset
+        } else {
+            target.clamp(-self.max_snap_offset(), px(0.))
+        };
         self.set_primary_offset(&mut offset, target);
         offset
     }
@@ -720,10 +1082,48 @@ impl CarouselState {
         (self.primary_offset(offset) - self.primary_offset(target)).abs()
     }
 
+    fn looping_distance(
+        &self,
+        offset: Point<Pixels>,
+        viewport: Bounds<Pixels>,
+        item: Bounds<Pixels>,
+    ) -> Pixels {
+        let distance = self.primary_distance(offset, viewport, item);
+        let Some(layout) = self.loop_layout.filter(|layout| layout.runway_ready) else {
+            return distance;
+        };
+        let target = self.primary_offset(self.snap_offset(viewport, item));
+        let offset = self.primary_offset(offset);
+        distance
+            .min((offset - (target - layout.cycle_extent)).abs())
+            .min((offset - (target + layout.cycle_extent)).abs())
+    }
+
     fn primary_offset(&self, offset: Point<Pixels>) -> Pixels {
         match self.axis {
             Axis::Horizontal => offset.x,
             Axis::Vertical => offset.y,
+        }
+    }
+
+    fn primary_start(&self, bounds: Bounds<Pixels>) -> Pixels {
+        match self.axis {
+            Axis::Horizontal => bounds.left(),
+            Axis::Vertical => bounds.top(),
+        }
+    }
+
+    fn primary_end(&self, bounds: Bounds<Pixels>) -> Pixels {
+        match self.axis {
+            Axis::Horizontal => bounds.right(),
+            Axis::Vertical => bounds.bottom(),
+        }
+    }
+
+    fn axis_point(&self, value: Pixels) -> Point<Pixels> {
+        match self.axis {
+            Axis::Horizontal => Point::new(value, px(0.)),
+            Axis::Vertical => Point::new(px(0.), value),
         }
     }
 
@@ -816,6 +1216,54 @@ mod tests {
             ],
         );
         assert_eq!(narrow.snap_target_for(2), Some(point(px(-50.), px(0.))));
+    }
+
+    #[test]
+    fn nearest_index_keeps_the_first_trailing_duplicate_as_canonical() {
+        let mut state = CarouselState::new(3);
+        state.set_geometry(
+            Bounds::new(point(px(0.), px(0.)), gpui::size(px(100.), px(40.))),
+            vec![
+                Bounds::new(point(px(0.), px(0.)), gpui::size(px(50.), px(40.))),
+                Bounds::new(point(px(50.), px(0.)), gpui::size(px(50.), px(40.))),
+                Bounds::new(point(px(100.), px(0.)), gpui::size(px(50.), px(40.))),
+            ],
+        );
+
+        assert_eq!(state.snap_target_for(1), Some(point(px(-50.), px(0.))));
+        assert_eq!(state.snap_target_for(2), Some(point(px(-50.), px(0.))));
+        assert_eq!(state.nearest_index(point(px(-50.), px(0.))), Some(1));
+    }
+
+    #[gpui::test]
+    fn geometry_navigation_skips_duplicate_snap_points(cx: &mut TestAppContext) {
+        let state = cx.update(|cx| cx.new(|_| CarouselState::new(3)));
+
+        cx.update(|cx| {
+            state.update(cx, |state, cx| {
+                state.set_geometry(
+                    Bounds::new(point(px(0.), px(0.)), gpui::size(px(100.), px(40.))),
+                    vec![
+                        Bounds::new(point(px(0.), px(0.)), gpui::size(px(50.), px(40.))),
+                        Bounds::new(point(px(50.), px(0.)), gpui::size(px(50.), px(40.))),
+                        Bounds::new(point(px(100.), px(0.)), gpui::size(px(50.), px(40.))),
+                    ],
+                );
+                state.set_selected_index(1, cx);
+                assert!(!state.has_next());
+                assert!(state.has_previous());
+
+                assert!(state.select_previous(cx));
+                assert_eq!(state.selected_index(), Some(0));
+                assert!(state.select_next(cx));
+                assert_eq!(state.selected_index(), Some(1));
+
+                state.set_selected_index(2, cx);
+                assert!(!state.has_next());
+                assert!(state.select_previous(cx));
+                assert_eq!(state.selected_index(), Some(0));
+            });
+        });
     }
 
     #[gpui::test]
@@ -1086,5 +1534,356 @@ mod tests {
             });
         });
         assert_eq!(events.borrow().as_slice(), &[1, 0]);
+    }
+
+    #[gpui::test]
+    fn looping_uses_adjacent_cycle_targets_and_rebases_without_an_extra_event(
+        cx: &mut TestAppContext,
+    ) {
+        let state = cx.update(|cx| cx.new(|_| CarouselState::new(2).with_looping(true)));
+        let events = Rc::new(RefCell::new(Vec::new()));
+        let _subscription = cx.update(|cx| {
+            let events = events.clone();
+            cx.subscribe(&state, move |_, event: &CarouselEvent, _| {
+                let CarouselEvent::Change(index) = event;
+                events.borrow_mut().push(*index);
+            })
+        });
+
+        cx.update(|cx| {
+            state.update(cx, |state, cx| {
+                let viewport = Bounds::new(point(px(0.), px(0.)), gpui::size(px(100.), px(40.)));
+                state.set_geometry(
+                    viewport,
+                    vec![
+                        Bounds::new(point(px(0.), px(0.)), gpui::size(px(100.), px(40.))),
+                        Bounds::new(point(px(100.), px(0.)), gpui::size(px(100.), px(40.))),
+                    ],
+                );
+                assert_eq!(state.loop_runway(), Some(px(200.)));
+
+                state.set_geometry(
+                    viewport,
+                    vec![
+                        Bounds::new(point(px(200.), px(0.)), gpui::size(px(100.), px(40.))),
+                        Bounds::new(point(px(300.), px(0.)), gpui::size(px(100.), px(40.))),
+                    ],
+                );
+                assert_eq!(state.scroll_handle.offset(), point(px(-200.), px(0.)));
+
+                assert!(state.select_previous(cx));
+                assert_eq!(state.selected_index(), Some(1));
+                let previous_target = state.motion_target_for(1).unwrap();
+                assert_eq!(previous_target, point(px(-100.), px(0.)));
+                assert_eq!(previous_target.x - state.scroll_handle.offset().x, px(100.));
+                assert_eq!(
+                    state.settle_loop_motion(previous_target, cx),
+                    Some(point(px(-300.), px(0.)))
+                );
+
+                assert!(state.select_next(cx));
+                assert_eq!(state.selected_index(), Some(0));
+                let next_target = state.motion_target_for(0).unwrap();
+                assert_eq!(next_target, point(px(-400.), px(0.)));
+                assert_eq!(next_target.x - state.scroll_handle.offset().x, px(-100.));
+                assert_eq!(
+                    state.settle_loop_motion(next_target, cx),
+                    Some(point(px(-200.), px(0.)))
+                );
+            });
+        });
+
+        assert_eq!(events.borrow().as_slice(), &[1, 0]);
+    }
+
+    #[gpui::test]
+    fn programmatic_loop_wrap_uses_the_adjacent_cycle_without_emitting(cx: &mut TestAppContext) {
+        let state = cx.update(|cx| cx.new(|_| CarouselState::new(2).with_looping(true)));
+        let events = Rc::new(RefCell::new(Vec::new()));
+        let _subscription = cx.update(|cx| {
+            let events = events.clone();
+            cx.subscribe(&state, move |_, event: &CarouselEvent, _| {
+                let CarouselEvent::Change(index) = event;
+                events.borrow_mut().push(*index);
+            })
+        });
+
+        cx.update(|cx| {
+            state.update(cx, |state, cx| {
+                let viewport = Bounds::new(point(px(0.), px(0.)), gpui::size(px(100.), px(40.)));
+                state.set_geometry(
+                    viewport,
+                    vec![
+                        Bounds::new(point(px(0.), px(0.)), gpui::size(px(100.), px(40.))),
+                        Bounds::new(point(px(100.), px(0.)), gpui::size(px(100.), px(40.))),
+                    ],
+                );
+                state.set_geometry(
+                    viewport,
+                    vec![
+                        Bounds::new(point(px(200.), px(0.)), gpui::size(px(100.), px(40.))),
+                        Bounds::new(point(px(300.), px(0.)), gpui::size(px(100.), px(40.))),
+                    ],
+                );
+
+                state.set_selected_index(1, cx);
+                state
+                    .scroll_handle
+                    .set_offset(state.snap_target_for(1).unwrap());
+                state.set_selected_index(0, cx);
+
+                assert_eq!(state.selected_index(), Some(0));
+                assert_eq!(state.motion_target_for(0), Some(point(px(-400.), px(0.))));
+                assert_eq!(
+                    state.settle_loop_motion(point(px(-400.), px(0.)), cx),
+                    Some(point(px(-200.), px(0.)))
+                );
+            });
+        });
+
+        assert!(events.borrow().is_empty());
+    }
+
+    #[gpui::test]
+    fn vertical_loop_wrap_uses_the_adjacent_cycle(cx: &mut TestAppContext) {
+        let state = cx.update(|cx| {
+            cx.new(|_| {
+                CarouselState::new(2)
+                    .with_axis(Axis::Vertical)
+                    .with_looping(true)
+            })
+        });
+
+        cx.update(|cx| {
+            state.update(cx, |state, cx| {
+                let viewport = Bounds::new(point(px(0.), px(0.)), gpui::size(px(40.), px(100.)));
+                state.set_geometry(
+                    viewport,
+                    vec![
+                        Bounds::new(point(px(0.), px(0.)), gpui::size(px(40.), px(100.))),
+                        Bounds::new(point(px(0.), px(100.)), gpui::size(px(40.), px(100.))),
+                    ],
+                );
+                state.set_geometry(
+                    viewport,
+                    vec![
+                        Bounds::new(point(px(0.), px(200.)), gpui::size(px(40.), px(100.))),
+                        Bounds::new(point(px(0.), px(300.)), gpui::size(px(40.), px(100.))),
+                    ],
+                );
+
+                assert!(state.select_previous(cx));
+                assert_eq!(state.motion_target_for(1), Some(point(px(0.), px(-100.))));
+                assert_eq!(
+                    state.settle_loop_motion(point(px(0.), px(-100.)), cx),
+                    Some(point(px(0.), px(-300.)))
+                );
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn unequal_items_keep_the_requested_direction_across_a_loop_boundary(cx: &mut TestAppContext) {
+        let state = cx.update(|cx| cx.new(|_| CarouselState::new(2).with_looping(true)));
+
+        cx.update(|cx| {
+            state.update(cx, |state, cx| {
+                let viewport = Bounds::new(point(px(0.), px(0.)), gpui::size(px(100.), px(40.)));
+                state.set_geometry(
+                    viewport,
+                    vec![
+                        Bounds::new(point(px(0.), px(0.)), gpui::size(px(80.), px(40.))),
+                        Bounds::new(point(px(96.), px(0.)), gpui::size(px(200.), px(40.))),
+                    ],
+                );
+                state.set_geometry(
+                    viewport,
+                    vec![
+                        Bounds::new(point(px(328.), px(0.)), gpui::size(px(80.), px(40.))),
+                        Bounds::new(point(px(424.), px(0.)), gpui::size(px(200.), px(40.))),
+                    ],
+                );
+
+                state.set_selected_index(1, cx);
+                state.scroll_handle.set_offset(point(px(-424.), px(0.)));
+                assert!(state.select_next(cx));
+                assert_eq!(state.motion_target_for(0), Some(point(px(-640.), px(0.))));
+                assert_eq!(
+                    state.settle_loop_motion(point(px(-640.), px(0.)), cx),
+                    Some(point(px(-328.), px(0.)))
+                );
+
+                assert!(state.select_previous(cx));
+                assert_eq!(state.motion_target_for(1), Some(point(px(-112.), px(0.))));
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn active_loop_gesture_rebases_before_reaching_a_runway_edge(cx: &mut TestAppContext) {
+        let state = cx.update(|cx| cx.new(|_| CarouselState::new(2).with_looping(true)));
+
+        cx.update(|cx| {
+            state.update(cx, |state, cx| {
+                let viewport = Bounds::new(point(px(0.), px(0.)), gpui::size(px(100.), px(40.)));
+                state.set_geometry(
+                    viewport,
+                    vec![
+                        Bounds::new(point(px(0.), px(0.)), gpui::size(px(100.), px(40.))),
+                        Bounds::new(point(px(100.), px(0.)), gpui::size(px(100.), px(40.))),
+                    ],
+                );
+                state.set_geometry(
+                    viewport,
+                    vec![
+                        Bounds::new(point(px(200.), px(0.)), gpui::size(px(100.), px(40.))),
+                        Bounds::new(point(px(300.), px(0.)), gpui::size(px(100.), px(40.))),
+                    ],
+                );
+
+                assert!(state.begin_drag(point(px(0.), px(0.)), cx));
+                state.scroll_handle.set_offset(point(px(-420.), px(0.)));
+                assert!(state.normalize_loop_coordinate());
+                assert_eq!(state.scroll_handle.offset(), point(px(-220.), px(0.)));
+                assert_eq!(
+                    state.pointer_gesture.map(|gesture| gesture.start_offset),
+                    Some(point(px(0.), px(0.)))
+                );
+
+                assert_eq!(state.nearest_index(point(px(-110.), px(0.))), Some(1));
+                assert_eq!(state.nearest_index(point(px(-390.), px(0.))), Some(0));
+            });
+        });
+    }
+
+    #[test]
+    fn looping_falls_back_when_one_cycle_cannot_cover_the_viewport() {
+        let mut state = CarouselState::new(2).with_looping(true);
+        state.set_geometry(
+            Bounds::new(point(px(0.), px(0.)), gpui::size(px(100.), px(40.))),
+            vec![
+                Bounds::new(point(px(0.), px(0.)), gpui::size(px(40.), px(40.))),
+                Bounds::new(point(px(40.), px(0.)), gpui::size(px(40.), px(40.))),
+            ],
+        );
+
+        assert_eq!(state.loop_runway(), None);
+        assert_eq!(state.loop_item_offset(0), Point::default());
+    }
+
+    #[test]
+    fn loop_runway_accounts_for_the_track_gap_and_content_inset() {
+        let mut state = CarouselState::new(2).with_looping(true);
+        let viewport = Bounds::new(point(px(0.), px(0.)), gpui::size(px(100.), px(40.)));
+        state.set_geometry(
+            viewport,
+            vec![
+                Bounds::new(point(px(16.), px(0.)), gpui::size(px(100.), px(40.))),
+                Bounds::new(point(px(132.), px(0.)), gpui::size(px(100.), px(40.))),
+            ],
+        );
+
+        assert_eq!(state.loop_runway(), Some(px(232.)));
+        state.set_geometry(
+            viewport,
+            vec![
+                Bounds::new(point(px(264.), px(0.)), gpui::size(px(100.), px(40.))),
+                Bounds::new(point(px(380.), px(0.)), gpui::size(px(100.), px(40.))),
+            ],
+        );
+        assert_eq!(state.scroll_handle.offset(), point(px(-248.), px(0.)));
+        assert_eq!(state.snap_target_for(0), Some(point(px(-248.), px(0.))));
+        assert_eq!(state.snap_target_for(1), Some(point(px(-364.), px(0.))));
+    }
+
+    #[gpui::test]
+    fn loop_runway_resize_and_removal_preserve_the_visible_coordinate(cx: &mut TestAppContext) {
+        let state = cx.update(|cx| cx.new(|_| CarouselState::new(2).with_looping(true)));
+
+        cx.update(|cx| {
+            state.update(cx, |state, cx| {
+                let viewport = Bounds::new(point(px(0.), px(0.)), gpui::size(px(100.), px(40.)));
+                state.set_geometry(
+                    viewport,
+                    vec![
+                        Bounds::new(point(px(0.), px(0.)), gpui::size(px(100.), px(40.))),
+                        Bounds::new(point(px(100.), px(0.)), gpui::size(px(100.), px(40.))),
+                    ],
+                );
+                state.set_geometry(
+                    viewport,
+                    vec![
+                        Bounds::new(point(px(200.), px(0.)), gpui::size(px(100.), px(40.))),
+                        Bounds::new(point(px(300.), px(0.)), gpui::size(px(100.), px(40.))),
+                    ],
+                );
+
+                state.set_geometry(
+                    viewport,
+                    vec![
+                        Bounds::new(point(px(200.), px(0.)), gpui::size(px(150.), px(40.))),
+                        Bounds::new(point(px(350.), px(0.)), gpui::size(px(150.), px(40.))),
+                    ],
+                );
+                assert_eq!(state.loop_runway(), Some(px(300.)));
+                assert!(state.is_loop_layout_transitioning());
+                assert_eq!(state.scroll_handle.offset(), point(px(0.), px(0.)));
+
+                state.set_geometry(
+                    viewport,
+                    vec![
+                        Bounds::new(point(px(300.), px(0.)), gpui::size(px(150.), px(40.))),
+                        Bounds::new(point(px(450.), px(0.)), gpui::size(px(150.), px(40.))),
+                    ],
+                );
+                assert!(!state.is_loop_layout_transitioning());
+                assert_eq!(state.scroll_handle.offset(), point(px(-300.), px(0.)));
+
+                state.set_looping(false, cx);
+                assert_eq!(state.loop_runway(), None);
+                assert!(state.is_loop_layout_transitioning());
+                assert_eq!(state.scroll_handle.offset(), point(px(0.), px(0.)));
+                state.set_geometry(
+                    viewport,
+                    vec![
+                        Bounds::new(point(px(0.), px(0.)), gpui::size(px(150.), px(40.))),
+                        Bounds::new(point(px(150.), px(0.)), gpui::size(px(150.), px(40.))),
+                    ],
+                );
+                assert!(!state.is_loop_layout_transitioning());
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn laying_out_the_runway_normalizes_an_active_drag_snapshot(cx: &mut TestAppContext) {
+        let state = cx.update(|cx| cx.new(|_| CarouselState::new(2).with_looping(true)));
+
+        cx.update(|cx| {
+            state.update(cx, |state, cx| {
+                let viewport = Bounds::new(point(px(0.), px(0.)), gpui::size(px(100.), px(40.)));
+                state.set_geometry(
+                    viewport,
+                    vec![
+                        Bounds::new(point(px(0.), px(0.)), gpui::size(px(100.), px(40.))),
+                        Bounds::new(point(px(100.), px(0.)), gpui::size(px(100.), px(40.))),
+                    ],
+                );
+                assert!(state.begin_drag(point(px(0.), px(0.)), cx));
+                state.set_geometry(
+                    viewport,
+                    vec![
+                        Bounds::new(point(px(200.), px(0.)), gpui::size(px(100.), px(40.))),
+                        Bounds::new(point(px(300.), px(0.)), gpui::size(px(100.), px(40.))),
+                    ],
+                );
+
+                assert_eq!(state.scroll_handle.offset(), point(px(-200.), px(0.)));
+                assert_eq!(
+                    state.pointer_gesture.map(|gesture| gesture.start_offset),
+                    Some(point(px(-200.), px(0.)))
+                );
+            });
+        });
     }
 }

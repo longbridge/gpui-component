@@ -1,11 +1,11 @@
 use gpui::{
     App, AppContext as _, Axis, Context, Entity, FocusHandle, Focusable, InteractiveElement as _,
-    IntoElement, ParentElement as _, Render, SharedString, Styled as _, Subscription, Window, div,
-    px,
+    IntoElement, ParentElement as _, Render, SharedString, StyleRefinement, Styled as _,
+    Subscription, Window, div, prelude::FluentBuilder as _, relative, rems,
 };
 
 use gpui_component::{
-    Sizable as _, Size, StyledExt as _,
+    ActiveTheme as _, Sizable as _, Size, StyledExt as _,
     button::Button,
     carousel::{
         Carousel, CarouselContent, CarouselEvent, CarouselItem, CarouselNext, CarouselPagination,
@@ -16,9 +16,18 @@ use gpui_component::{
 
 use crate::{ChangeStorySize, section, story_toolbar};
 
+#[derive(Clone, Copy)]
+enum SlideTypography {
+    Large,
+    Medium,
+    Small,
+}
+
 pub struct CarouselStory {
     focus_handle: FocusHandle,
     horizontal: Entity<CarouselState>,
+    multiple: Entity<CarouselState>,
+    spacing: Entity<CarouselState>,
     vertical: Entity<CarouselState>,
     looped: Entity<CarouselState>,
     controlled: Entity<CarouselState>,
@@ -46,6 +55,8 @@ impl CarouselStory {
     pub fn view(_: &mut Window, cx: &mut App) -> Entity<Self> {
         cx.new(|cx| {
             let horizontal = cx.new(|_| CarouselState::new(3));
+            let multiple = cx.new(|_| CarouselState::new(5));
+            let spacing = cx.new(|_| CarouselState::new(5));
             let vertical = cx.new(|_| CarouselState::new(3).with_axis(Axis::Vertical));
             let looped = cx.new(|_| CarouselState::new(4).with_looping(true));
             let controlled = cx.new(|_| CarouselState::new(3).with_selected_index(1));
@@ -63,6 +74,8 @@ impl CarouselStory {
             Self {
                 focus_handle: cx.focus_handle(),
                 horizontal,
+                multiple,
+                spacing,
                 vertical,
                 looped,
                 controlled,
@@ -74,25 +87,70 @@ impl CarouselStory {
         })
     }
 
-    fn slide(label: impl Into<SharedString>) -> impl IntoElement {
+    fn slide(
+        label: impl Into<SharedString>,
+        typography: SlideTypography,
+        square: bool,
+        cx: &App,
+    ) -> impl IntoElement {
         div()
-            .h(px(160.))
             .w_full()
-            .flex()
-            .items_center()
-            .justify_center()
-            .rounded_lg()
-            .bg(gpui::hsla(0.61, 0.42, 0.45, 1.0))
-            .text_color(gpui::white())
-            .text_lg()
-            .child(label.into())
+            .when(!square, |this| this.h_full())
+            .p_1()
+            .child(
+                div()
+                    .w_full()
+                    .when(square, |this| this.aspect_square())
+                    .when(!square, |this| this.h_full())
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .p_6()
+                    .rounded(cx.theme().radius_tokens().xl)
+                    .border_1()
+                    .border_color(cx.theme().border)
+                    .bg(cx.theme().background)
+                    .text_color(cx.theme().foreground)
+                    .font_semibold()
+                    .when(matches!(typography, SlideTypography::Large), |this| {
+                        this.text_size(rems(2.25))
+                    })
+                    .when(matches!(typography, SlideTypography::Medium), |this| {
+                        this.text_3xl()
+                    })
+                    .when(matches!(typography, SlideTypography::Small), |this| {
+                        this.text_2xl()
+                    })
+                    .child(label.into()),
+            )
     }
 
-    fn items(state: &Entity<CarouselState>, prefix: &'static str, count: usize) -> CarouselContent {
+    fn items(
+        state: &Entity<CarouselState>,
+        prefix: &'static str,
+        count: usize,
+        typography: SlideTypography,
+        square: bool,
+        cx: &App,
+    ) -> CarouselContent {
+        Self::items_with(state, prefix, count, typography, square, |item| item, cx)
+    }
+
+    fn items_with(
+        state: &Entity<CarouselState>,
+        prefix: &'static str,
+        count: usize,
+        typography: SlideTypography,
+        square: bool,
+        configure: impl Fn(CarouselItem) -> CarouselItem,
+        cx: &App,
+    ) -> CarouselContent {
         (0..count).fold(CarouselContent::new(state), |content, index| {
-            let label = format!("{prefix} · {}", index + 1);
-            content
-                .child(CarouselItem::new((prefix, index), index, state).child(Self::slide(label)))
+            let label = (index + 1).to_string();
+            content.child(
+                configure(CarouselItem::new((prefix, index), index, state))
+                    .child(Self::slide(label, typography, square, cx)),
+            )
         })
     }
 }
@@ -114,13 +172,23 @@ impl Render for CarouselStory {
             }))
             .child(story_toolbar(self.size))
             .child(
-                section("Horizontal")
-                    .description("Use Left and Right to move between slides.")
+                section("Basic")
+                    .description("Browse one full-width item at a time with Left and Right.")
                     .v_flex()
                     .gap_3()
                     .child(
                         Carousel::new("carousel-horizontal", &self.horizontal)
-                            .child(Self::items(&self.horizontal, "Horizontal", 3))
+                            .w_full()
+                            .max_w_96()
+                            .mx_auto()
+                            .child(Self::items(
+                                &self.horizontal,
+                                "Horizontal",
+                                3,
+                                SlideTypography::Large,
+                                true,
+                                cx,
+                            ))
                             .child(CarouselPrevious::new(&self.horizontal).with_size(self.size))
                             .child(CarouselNext::new(&self.horizontal).with_size(self.size))
                             .child(CarouselPagination::new().children((0..3).map(|index| {
@@ -135,13 +203,82 @@ impl Render for CarouselStory {
                     ),
             )
             .child(
+                section("Sizes")
+                    .description(
+                        "Set a fractional flex basis on each item to show several at once.",
+                    )
+                    .v_flex()
+                    .gap_3()
+                    .child(
+                        Carousel::new("carousel-multiple", &self.multiple)
+                            .w_full()
+                            .max_w_96()
+                            .mx_auto()
+                            .child(Self::items_with(
+                                &self.multiple,
+                                "Multiple",
+                                5,
+                                SlideTypography::Medium,
+                                true,
+                                |item| item.flex_basis(relative(1. / 3.)),
+                                cx,
+                            ))
+                            .child(CarouselPrevious::new(&self.multiple).with_size(self.size))
+                            .child(CarouselNext::new(&self.multiple).with_size(self.size)),
+                    ),
+            )
+            .child(
+                section("Spacing")
+                    .description(
+                        "Pair the content's negative margin with matching item padding.",
+                    )
+                    .v_flex()
+                    .gap_3()
+                    .child(
+                        Carousel::new("carousel-spacing", &self.spacing)
+                            .w_full()
+                            .max_w_96()
+                            .mx_auto()
+                            .child(
+                                Self::items_with(
+                                    &self.spacing,
+                                    "Spacing",
+                                    5,
+                                    SlideTypography::Small,
+                                    true,
+                                    |item| {
+                                        item.flex_basis(relative(1. / 3.)).pl_1()
+                                    },
+                                    cx,
+                                )
+                                .track_style(StyleRefinement::default().ml_neg_1()),
+                            )
+                            .child(CarouselPrevious::new(&self.spacing).with_size(self.size))
+                            .child(CarouselNext::new(&self.spacing).with_size(self.size)),
+                    ),
+            )
+            .child(
                 section("Vertical")
                     .description("Use Up and Down to navigate a vertical carousel.")
                     .v_flex()
                     .gap_3()
                     .child(
                         Carousel::new("carousel-vertical", &self.vertical)
-                            .child(Self::items(&self.vertical, "Vertical", 3).h(px(160.)))
+                            .w_full()
+                            .max_w_64()
+                            .mx_auto()
+                            .child(
+                                Self::items_with(
+                                    &self.vertical,
+                                    "Vertical",
+                                    3,
+                                    SlideTypography::Medium,
+                                    false,
+                                    |item| item.flex_basis(relative(0.5)),
+                                    cx,
+                                )
+                                .h_48(),
+                            )
                             .child(CarouselPrevious::new(&self.vertical).with_size(self.size))
                             .child(CarouselNext::new(&self.vertical).with_size(self.size)),
                     ),
@@ -153,7 +290,17 @@ impl Render for CarouselStory {
                     .gap_3()
                     .child(
                         Carousel::new("carousel-looped", &self.looped)
-                            .child(Self::items(&self.looped, "Looped", 4))
+                            .w_full()
+                            .max_w_96()
+                            .mx_auto()
+                            .child(Self::items(
+                                &self.looped,
+                                "Looped",
+                                4,
+                                SlideTypography::Large,
+                                true,
+                                cx,
+                            ))
                             .child(CarouselPrevious::new(&self.looped).with_size(self.size))
                             .child(CarouselNext::new(&self.looped).with_size(self.size)),
                     ),
@@ -165,7 +312,17 @@ impl Render for CarouselStory {
                     .gap_3()
                     .child(
                         Carousel::new("carousel-controlled", &self.controlled)
-                            .child(Self::items(&self.controlled, "Controlled", 3))
+                            .w_full()
+                            .max_w_96()
+                            .mx_auto()
+                            .child(Self::items(
+                                &self.controlled,
+                                "Controlled",
+                                3,
+                                SlideTypography::Large,
+                                true,
+                                cx,
+                            ))
                             .child(CarouselPrevious::new(&self.controlled).with_size(self.size))
                             .child(CarouselNext::new(&self.controlled).with_size(self.size)),
                     )
@@ -208,7 +365,17 @@ impl Render for CarouselStory {
                     .gap_3()
                     .child(
                         Carousel::new("carousel-keyboard", &self.keyboard)
-                            .child(Self::items(&self.keyboard, "Keyboard", 3))
+                            .w_full()
+                            .max_w_96()
+                            .mx_auto()
+                            .child(Self::items(
+                                &self.keyboard,
+                                "Keyboard",
+                                3,
+                                SlideTypography::Large,
+                                true,
+                                cx,
+                            ))
                             .child(CarouselPrevious::new(&self.keyboard).with_size(self.size))
                             .child(CarouselNext::new(&self.keyboard).with_size(self.size)),
                     ),

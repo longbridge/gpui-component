@@ -1,9 +1,10 @@
 use std::{panic::Location, sync::Arc, time::Duration};
 
 use gpui::{
-    AnyElement, App, Axis, Bounds, ElementId, Entity, InteractiveElement as _, IntoElement,
-    ParentElement, Pixels, Point, RenderOnce, Role, SharedString, StatefulInteractiveElement as _,
-    StyleRefinement, Styled, Subscription, Window, div, prelude::FluentBuilder as _, px, relative,
+    AnyElement, App, Axis, Bounds, Element, ElementId, Entity, GlobalElementId, InspectorElementId,
+    InteractiveElement as _, IntoElement, LayoutId, ParentElement, Pixels, Point, RenderOnce, Role,
+    SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled, Subscription, Window,
+    div, prelude::FluentBuilder as _, px,
 };
 use gpui_base::{Spring, spring};
 use rust_i18n::t;
@@ -147,23 +148,28 @@ impl RenderOnce for Carousel {
 struct CarouselGeometry {
     viewport: Bounds<Pixels>,
     items: Vec<Bounds<Pixels>>,
+    has_runway: bool,
     revision: usize,
 }
 
 impl CarouselGeometry {
-    fn read(state: &CarouselState) -> Self {
+    fn read(state: &CarouselState, has_runway: bool, rendered_item_count: usize) -> Self {
         let handle = state.scroll_handle();
+        let item_offset = usize::from(has_runway);
         Self {
             viewport: handle.bounds(),
-            items: (0..state.item_count())
-                .filter_map(|ix| handle.bounds_for_item(ix))
+            items: (0..state.item_count().min(rendered_item_count))
+                .filter_map(|ix| handle.bounds_for_item(ix + item_offset))
                 .collect(),
+            has_runway,
             revision: 0,
         }
     }
 
     fn same_layout(&self, other: &Self) -> bool {
-        self.viewport == other.viewport && self.items == other.items
+        self.viewport == other.viewport
+            && self.items == other.items
+            && self.has_runway == other.has_runway
     }
 }
 
@@ -172,6 +178,7 @@ impl CarouselGeometry {
 pub struct CarouselContent {
     state: Entity<CarouselState>,
     style: StyleRefinement,
+    track_style: StyleRefinement,
     children: Vec<AnyElement>,
 }
 
@@ -181,8 +188,18 @@ impl CarouselContent {
         Self {
             state: state.clone(),
             style: StyleRefinement::default(),
+            track_style: StyleRefinement::default(),
             children: Vec::new(),
         }
+    }
+
+    /// Sets style overrides for the inner flex track.
+    ///
+    /// Use this for paired Carousel spacing such as a negative leading margin.
+    /// The [`Styled`] implementation applies to the clipped viewport itself.
+    pub fn track_style(mut self, style: StyleRefinement) -> Self {
+        self.track_style = style;
+        self
     }
 }
 
@@ -198,6 +215,75 @@ impl Styled for CarouselContent {
     }
 }
 
+/// A layout-transparent proxy that paints one real item in the closest loop
+/// cycle. The child keeps its original layout id, so ScrollHandle geometry
+/// continues to address logical items without cloning their elements.
+struct CarouselLoopItem {
+    child: AnyElement,
+    index: usize,
+    state: Entity<CarouselState>,
+}
+
+impl IntoElement for CarouselLoopItem {
+    type Element = Self;
+
+    fn into_element(self) -> Self::Element {
+        self
+    }
+}
+
+impl Element for CarouselLoopItem {
+    type RequestLayoutState = ();
+    type PrepaintState = Point<Pixels>;
+
+    fn id(&self) -> Option<ElementId> {
+        None
+    }
+
+    fn source_location(&self) -> Option<&'static Location<'static>> {
+        None
+    }
+
+    fn request_layout(
+        &mut self,
+        _: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> (LayoutId, Self::RequestLayoutState) {
+        (self.child.request_layout(window, cx), ())
+    }
+
+    fn prepaint(
+        &mut self,
+        _: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
+        _: Bounds<Pixels>,
+        _: &mut Self::RequestLayoutState,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Self::PrepaintState {
+        let offset = self.state.read(cx).loop_item_offset(self.index);
+        window.with_element_offset(offset, |window| {
+            self.child.prepaint(window, cx);
+        });
+        offset
+    }
+
+    fn paint(
+        &mut self,
+        _: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
+        _: Bounds<Pixels>,
+        _: &mut Self::RequestLayoutState,
+        _: &mut Self::PrepaintState,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        self.child.paint(window, cx);
+    }
+}
+
 impl RenderOnce for CarouselContent {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let entity_id = self.state.entity_id();
@@ -208,7 +294,9 @@ impl RenderOnce for CarouselContent {
         let handle = snapshot.scroll_handle().clone();
         let interacting = snapshot.is_interacting();
         let motion_revision = snapshot.motion_revision();
-        let state_snap_target = selected_ix.and_then(|ix| snapshot.snap_target_for(ix));
+        let loop_runway = snapshot.loop_runway();
+        let loop_layout_transitioning = snapshot.is_loop_layout_transitioning();
+        let state_snap_target = selected_ix.and_then(|ix| snapshot.motion_target_for(ix));
 
         let geometry = window.use_keyed_state(
             ElementId::NamedChild(
@@ -221,10 +309,18 @@ impl RenderOnce for CarouselContent {
         let geometry_revision = geometry.read(cx).revision;
 
         let current = axis_value(handle.offset(), axis);
-        let target = state_snap_target
-            .map(|target| axis_value(target, axis))
-            .or_else(|| selected_ix.and_then(|ix| snap_offset(&handle, axis, ix)))
-            .unwrap_or(current);
+        let target = if loop_layout_transitioning {
+            current
+        } else {
+            state_snap_target
+                .map(|target| axis_value(target, axis))
+                .or_else(|| {
+                    selected_ix.and_then(|ix| {
+                        snap_offset(&handle, axis, ix + usize::from(loop_runway.is_some()))
+                    })
+                })
+                .unwrap_or(current)
+        };
         let target = if interacting { current } else { target };
         let animated = spring(
             (
@@ -248,36 +344,81 @@ impl RenderOnce for CarouselContent {
             Pixels::ZERO,
         );
         handle.set_offset(offset);
+        if !interacting {
+            let rendered = offset;
+            if let Some(rebased) = self
+                .state
+                .update(cx, |state, cx| state.settle_loop_motion(rendered, cx))
+            {
+                offset = rebased;
+                handle.set_offset(offset);
+            }
+        }
 
         let geometry_state = self.state.clone();
         let viewport_id: ElementId = ("carousel-content", entity_id).into();
 
+        let rendered_item_count = self.children.len();
+        let loop_state = self.state.clone();
+        let children = self
+            .children
+            .into_iter()
+            .enumerate()
+            .map(move |(index, child)| CarouselLoopItem {
+                child,
+                index,
+                state: loop_state.clone(),
+            });
+        let runway_spacer = |runway: Pixels| {
+            div()
+                .flex_none()
+                .when(axis.is_horizontal(), |this| this.w(runway))
+                .when(axis.is_vertical(), |this| this.h(runway))
+        };
+        let has_runway = loop_runway.is_some();
+
         div()
             .relative()
             .w_full()
+            .refine_style(&self.style)
+            .overflow_hidden()
             .child(
                 div()
                     .id(viewport_id.clone())
                     .w_full()
+                    .when(axis.is_vertical(), |this| this.h_full())
                     .flex()
-                    .gap_4()
-                    .when(axis.is_horizontal(), |this| this.flex_row())
-                    .when(axis.is_vertical(), |this| this.flex_col())
-                    .overflow_hidden()
+                    .when(axis.is_horizontal(), |this| this.flex_row().ml_neg_4())
+                    .when(axis.is_vertical(), |this| this.flex_col().mt_neg_4())
                     .track_scroll(&handle)
-                    .children(self.children)
-                    .refine_style(&self.style),
+                    .when_some(loop_runway, |this, runway| {
+                        this.child(runway_spacer(runway))
+                    })
+                    .children(children)
+                    .when_some(loop_runway, |this, runway| {
+                        this.child(runway_spacer(runway))
+                    })
+                    .refine_style(&self.track_style),
             )
             .child(CarouselScrollMask::new(axis, &self.state).id(viewport_id))
             .on_prepaint(move |_, _, cx| {
-                let next = CarouselGeometry::read(geometry_state.read(cx));
+                let next = CarouselGeometry::read(
+                    geometry_state.read(cx),
+                    has_runway,
+                    rendered_item_count,
+                );
                 if !geometry.read(cx).same_layout(&next) {
                     geometry_state.update(cx, |state, _| {
-                        state.set_geometry(next.viewport, next.items.clone());
+                        state.set_geometry_with_runway(
+                            next.viewport,
+                            next.items.clone(),
+                            next.has_runway,
+                        );
                     });
                     geometry.update(cx, |current, cx| {
                         current.viewport = next.viewport;
                         current.items = next.items;
+                        current.has_runway = next.has_runway;
                         current.revision = current.revision.wrapping_add(1);
                         cx.notify();
                     });
@@ -353,8 +494,8 @@ impl RenderOnce for CarouselItem {
             .min_w_0()
             .min_h_0()
             .flex_none()
-            .when(axis.is_horizontal(), |this| this.w_full())
-            .when(axis.is_vertical(), |this| this.h_full())
+            .when(axis.is_horizontal(), |this| this.w_full().pl_4())
+            .when(axis.is_vertical(), |this| this.h_full().pt_4())
             .children(self.children)
             .refine_style(&self.style)
     }
@@ -373,7 +514,7 @@ impl CarouselPrevious {
     pub fn new(state: &Entity<CarouselState>) -> Self {
         Self {
             state: state.clone(),
-            size: Size::Small,
+            size: Size::Medium,
             style: StyleRefinement::default(),
         }
     }
@@ -411,7 +552,7 @@ impl CarouselNext {
     pub fn new(state: &Entity<CarouselState>) -> Self {
         Self {
             state: state.clone(),
-            size: Size::Small,
+            size: Size::Medium,
             style: StyleRefinement::default(),
         }
     }
@@ -463,7 +604,6 @@ fn carousel_control(
 
     Button::new(id)
         .outline()
-        .compact()
         .with_size(size)
         .icon(icon)
         .accessibility_label(label.clone())
@@ -472,16 +612,16 @@ fn carousel_control(
         .absolute()
         .rounded_full_style(cx)
         .when(axis.is_horizontal() && !next, |this| {
-            this.left(px(-40.)).top(relative(0.5)).mt(px(-15.))
+            this.right_full().mr_4().top_0().bottom_0().my_auto()
         })
         .when(axis.is_horizontal() && next, |this| {
-            this.right(px(-40.)).top(relative(0.5)).mt(px(-15.))
+            this.left_full().ml_4().top_0().bottom_0().my_auto()
         })
         .when(axis.is_vertical() && !next, |this| {
-            this.top(px(-40.)).left(relative(0.5)).ml(px(-15.))
+            this.bottom_full().mb_4().left_0().right_0().mx_auto()
         })
         .when(axis.is_vertical() && next, |this| {
-            this.bottom(px(-40.)).left(relative(0.5)).ml(px(-15.))
+            this.top_full().mt_4().left_0().right_0().mx_auto()
         })
         .when(!disabled, |this| {
             this.on_click(move |_, _, cx| {
@@ -682,6 +822,8 @@ mod tests {
     fn carousel_controls_accept_semantic_sizes(cx: &mut gpui::TestAppContext) {
         let state = cx.update(|cx| cx.new(|_| CarouselState::new(2)));
 
+        assert_eq!(CarouselPrevious::new(&state).size, Size::Medium);
+        assert_eq!(CarouselNext::new(&state).size, Size::Medium);
         assert_eq!(CarouselPrevious::new(&state).large().size, Size::Large);
         assert_eq!(CarouselNext::new(&state).xsmall().size, Size::XSmall);
         assert_eq!(

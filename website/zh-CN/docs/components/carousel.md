@@ -5,7 +5,7 @@ description: 用于浏览相关内容的可组合 Carousel 组件。
 
 # Carousel
 
-Carousel 用于逐项浏览一组相关内容，支持横向和纵向布局、键盘导航、指针与触控板手势、循环以及受控选中项。
+Carousel 在可吸附的 viewport 中展示一个或多个相关 item，支持横向和纵向布局、键盘导航、指针与触控板手势、循环以及受控选中项。
 
 ## 引入
 
@@ -38,6 +38,60 @@ Carousel::new("projects-carousel", &state)
 `CarouselContent` 管理 viewport 与吸附布局，`CarouselItem` 标识一个逻辑 slide。到达对应边界时，上一项和下一项按钮会自动禁用。
 
 state 的 item 数量应与直接 `CarouselItem` 子元素的数量一致。一个 state 及其 scroll handle 只服务一个 viewport。
+
+## 组合结构
+
+Carousel 由一个内容 viewport、其中的 item 和可选控制按钮组成：
+
+```text
+Carousel
+├── CarouselContent
+│   ├── CarouselItem
+│   └── CarouselItem
+├── CarouselPrevious
+└── CarouselNext
+```
+
+可以在 `Carousel` 根节点上使用 `.w_full().max_w_96()` 约束整个 Carousel；需要单独设置 viewport 的宽度或高度时，可以直接设置 `CarouselContent` 的样式。`track_style` 仅用于间距等内部 track 调整。
+
+## 尺寸
+
+`CarouselItem` 实现了 `Styled`。设置 flex basis 可以在 viewport 中同时显示多个 item：
+
+```rust
+use gpui::{ParentElement as _, Styled as _, relative};
+
+let state = cx.new(|_| CarouselState::new(6));
+
+CarouselContent::new(&state).children((0..6).map(|index| {
+    CarouselItem::new(("project", index), index, &state)
+        .flex_basis(relative(1. / 3.))
+        .child(format!("项目 {}", index + 1))
+}))
+```
+
+flex basis 控制的是 item 几何尺寸，与按钮等控件使用的语义 `Size` 相互独立。
+
+## 间距
+
+Carousel 采用与 shadcn/ui 相同的成对间距模型：通过 `CarouselContent::track_style` 设置负的起始 margin，并为每个 `CarouselItem` 设置数值相同的起始 padding。
+
+```rust
+use gpui::{ParentElement as _, StyleRefinement, Styled as _, relative};
+
+let state = cx.new(|_| CarouselState::new(6));
+
+CarouselContent::new(&state)
+    .track_style(StyleRefinement::default().ml_neg_1())
+    .children((0..6).map(|index| {
+        CarouselItem::new(("project", index), index, &state)
+            .flex_basis(relative(1. / 3.))
+            .pl_1()
+            .child(format!("项目 {}", index + 1))
+    }))
+```
+
+横向 Carousel 默认在 content track 上使用 `.ml_neg_4()`，在 item 上使用 `.pl_4()`；纵向 Carousel 使用对应的 `.mt_neg_4()` 与 `.pt_4()`。覆盖间距时应同步修改两侧，并使用相同的 spacing scale，这样首个 item 会继续与 viewport 对齐，同时改变可见间距。
 
 ## 方向
 
@@ -116,7 +170,7 @@ CarouselPrevious::new(&state).with_size(Size::Large);
 CarouselNext::new(&state).with_size(Size::Large);
 ```
 
-上一项和下一项控件默认使用 `Size::Small`，分页项默认使用 `Size::XSmall`。
+上一项和下一项控件默认使用 `Size::Medium`，分页项默认使用 `Size::XSmall`。
 
 ## 无障碍
 

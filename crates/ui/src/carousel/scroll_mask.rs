@@ -87,16 +87,12 @@ impl Element for CarouselScrollMask {
         &mut self,
         _: Option<&GlobalElementId>,
         _: Option<&gpui::InspectorElementId>,
-        _: Bounds<gpui::Pixels>,
+        bounds: Bounds<gpui::Pixels>,
         _: &mut Self::RequestLayoutState,
         window: &mut Window,
-        cx: &mut App,
+        _: &mut App,
     ) -> Self::PrepaintState {
-        // The layout node fills the wrapper, while the tracked scroll bounds
-        // are the actual styled viewport. Using those bounds keeps the input
-        // surface aligned when CarouselContent has a custom width or margin.
-        let viewport = self.state.read(cx).scroll_handle().bounds();
-        window.insert_hitbox(viewport, gpui::HitboxBehavior::Normal)
+        window.insert_hitbox(bounds, gpui::HitboxBehavior::Normal)
     }
 
     fn paint(

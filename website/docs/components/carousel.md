@@ -5,7 +5,7 @@ description: A composable carousel for browsing related content.
 
 # Carousel
 
-Carousel displays a set of related items one at a time. It supports horizontal and vertical layouts, keyboard navigation, pointer and trackpad gestures, looping, and controlled selection.
+Carousel displays one or more related items in a snapping viewport. It supports horizontal and vertical layouts, keyboard navigation, pointer and trackpad gestures, looping, and controlled selection.
 
 ## Import
 
@@ -38,6 +38,60 @@ Carousel::new("projects-carousel", &state)
 `CarouselContent` owns the viewport and snap layout. `CarouselItem` identifies one logical slide. The previous and next controls automatically become disabled at the corresponding boundary.
 
 Keep the state's item count equal to the number of direct `CarouselItem` children. A state and its scroll handle belong to one viewport.
+
+## Composition
+
+Build a Carousel from one content viewport, its items, and optional controls:
+
+```text
+Carousel
+├── CarouselContent
+│   ├── CarouselItem
+│   └── CarouselItem
+├── CarouselPrevious
+└── CarouselNext
+```
+
+Constrain the Carousel with `.w_full().max_w_96()` on its root, or style `CarouselContent` when the viewport itself needs a custom width or height. Use `track_style` only for inner-track adjustments such as spacing.
+
+## Sizes
+
+`CarouselItem` implements `Styled`. Set its flex basis to show more than one item in the viewport:
+
+```rust
+use gpui::{ParentElement as _, Styled as _, relative};
+
+let state = cx.new(|_| CarouselState::new(6));
+
+CarouselContent::new(&state).children((0..6).map(|index| {
+    CarouselItem::new(("project", index), index, &state)
+        .flex_basis(relative(1. / 3.))
+        .child(format!("Project {}", index + 1))
+}))
+```
+
+The flex basis controls item geometry; it is separate from the semantic `Size` used by buttons and other controls.
+
+## Spacing
+
+Carousel follows the same paired spacing model as shadcn/ui: apply a negative leading margin through `CarouselContent::track_style` and matching leading padding to every `CarouselItem`.
+
+```rust
+use gpui::{ParentElement as _, StyleRefinement, Styled as _, relative};
+
+let state = cx.new(|_| CarouselState::new(6));
+
+CarouselContent::new(&state)
+    .track_style(StyleRefinement::default().ml_neg_1())
+    .children((0..6).map(|index| {
+        CarouselItem::new(("project", index), index, &state)
+            .flex_basis(relative(1. / 3.))
+            .pl_1()
+            .child(format!("Project {}", index + 1))
+    }))
+```
+
+Horizontal carousels default to `.ml_neg_4()` on the content track and `.pl_4()` on items. Vertical carousels use the corresponding `.mt_neg_4()` and `.pt_4()` pair. Override both sides with the same spacing scale so the first item stays aligned with the viewport while the visual gap changes.
 
 ## Orientation
 
@@ -116,7 +170,7 @@ CarouselPrevious::new(&state).with_size(Size::Large);
 CarouselNext::new(&state).with_size(Size::Large);
 ```
 
-Previous and next controls default to `Size::Small`. Pagination items default to `Size::XSmall`.
+Previous and next controls default to `Size::Medium`. Pagination items default to `Size::XSmall`.
 
 ## Accessibility
 
