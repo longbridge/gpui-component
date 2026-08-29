@@ -12,6 +12,7 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
     typed_compound::register(registry)?;
     collections_remaining::register(registry)?;
     command_remaining::register(registry)?;
+    window_effects_remaining::register(registry)?;
     overlays::register(registry)?;
     retained_forms::register(registry)?;
     layout_remaining::register(registry)?;
@@ -42,3 +43,4 @@ mod skeleton;
 mod spinner;
 mod structured;
 mod typed_compound;
+mod window_effects_remaining;

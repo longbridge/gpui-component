@@ -205,10 +205,9 @@
       "name": "dialog",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "overlay-window-api",
-        "reason": "No Dialog descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "Dialog"
+        "status": "registered",
+        "descriptor": "Dialog",
+        "exports": ["Dialog"]
       }
     },
     {
@@ -367,10 +366,9 @@
       "name": "notification",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "overlay-window-api",
-        "reason": "No Notification descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "Notification"
+        "status": "registered",
+        "descriptor": "Notification",
+        "exports": ["Notification"]
       }
     },
     {
@@ -544,10 +542,9 @@
       "name": "sheet",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "overlay-window-api",
-        "reason": "No Sheet descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "Sheet"
+        "status": "registered",
+        "descriptor": "Sheet",
+        "exports": ["Sheet"]
       }
     },
     {
@@ -801,10 +798,9 @@
       "name": "alert_dialog",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "overlay-window-api",
-        "reason": "No AlertDialog descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "AlertDialog"
+        "status": "registered",
+        "descriptor": "AlertDialog",
+        "exports": ["AlertDialog"]
       }
     },
     {
@@ -1033,10 +1029,9 @@
       "name": "dialog",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "overlay-window-api",
-        "reason": "No Dialog descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "Dialog"
+        "status": "registered",
+        "descriptor": "Dialog",
+        "exports": ["Dialog"]
       }
     },
     {
@@ -1227,10 +1222,9 @@
       "name": "notification",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "overlay-window-api",
-        "reason": "No Notification descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "Notification"
+        "status": "registered",
+        "descriptor": "Notification",
+        "exports": ["Notification"]
       }
     },
     {
@@ -1416,10 +1410,9 @@
       "name": "sheet",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "overlay-window-api",
-        "reason": "No Sheet descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "Sheet"
+        "status": "registered",
+        "descriptor": "Sheet",
+        "exports": ["Sheet"]
       }
     },
     {

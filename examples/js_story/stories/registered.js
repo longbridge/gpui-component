@@ -5,6 +5,7 @@ import {
   Accordion,
   AccordionItem,
   Alert,
+  AlertDialog,
   Avatar,
   Badge,
   Breadcrumb,
@@ -24,6 +25,7 @@ import {
   DatePickerState,
   DescriptionItem,
   DescriptionList,
+  Dialog,
   DropdownButton,
   DropdownMenu,
   Editor,
@@ -43,6 +45,7 @@ import {
   NativeMenuItem,
   NativeMenuSeparator,
   NativeMenuTrigger,
+  Notification,
   OtpInput,
   OtpState,
   Pagination,
@@ -57,6 +60,7 @@ import {
   Scrollbar,
   ScrollbarHandle,
   Separator,
+  Sheet,
   SettingGroup,
   SettingItem,
   SettingPage,
@@ -123,6 +127,10 @@ export function registeredExample(surface) {
         );
     case "Alert":
       return new Alert("saved", "Your changes have been saved").title("Saved");
+    case "AlertDialog":
+      return new AlertDialog("alert-dialog", "Open alert", (_message, _cx) => {})
+        .title("Discard changes?")
+        .description("Unsaved changes will be lost.");
     case "Avatar":
       return new Avatar().name("Ada Lovelace").size("large");
     case "Badge":
@@ -167,6 +175,10 @@ export function registeredExample(surface) {
         .bordered(true)
         .child(asElement(new DescriptionItem("Owner").value("Ada Lovelace")))
         .child(asElement(new DescriptionItem("Status").value("Active")));
+    case "Dialog":
+      return new Dialog("dialog", "Open dialog", (_message, _cx) => {})
+        .title("Project details")
+        .content(asElement(new Text("Dialog content")));
     case "DropdownButton":
       return new GroupBox()
         .child(
@@ -227,6 +239,10 @@ export function registeredExample(surface) {
         .onEffectError((_message, _cx) => {})
         .child(asElement(new NativeMenuItem("Open", "open")))
         .child(asElement(new NativeMenuSeparator()));
+    case "Notification":
+      return new Notification("notification", "Show notification", (_message, _cx) => {})
+        .title("Saved")
+        .message("Your changes were saved.");
     case "OtpInput":
       return new OtpInput(OtpState(6)).groups(2);
     case "Pagination":
@@ -277,6 +293,10 @@ export function registeredExample(surface) {
     }
     case "Separator":
       return new Separator().label("Account").dashed();
+    case "Sheet":
+      return new Sheet("sheet", "Open sheet", (_message, _cx) => {})
+        .title("Inspector")
+        .content(asElement(new Text("Sheet content")));
     case "Settings":
       return new Settings("story-settings")
         .size("medium")

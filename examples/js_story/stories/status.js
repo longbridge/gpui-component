@@ -3,6 +3,7 @@
 export const REGISTERED_SURFACES = [
   "Accordion",
   "Alert",
+  "AlertDialog",
   "Avatar",
   "Badge",
   "Breadcrumb",
@@ -15,6 +16,7 @@ export const REGISTERED_SURFACES = [
   "Command",
   "DatePicker",
   "DescriptionList",
+  "Dialog",
   "DropdownButton",
   "Editor",
   "Form",
@@ -28,6 +30,7 @@ export const REGISTERED_SURFACES = [
   "Link",
   "NumberInput",
   "NativeMenuTrigger",
+  "Notification",
   "OtpInput",
   "Pagination",
   "Popover",
@@ -38,6 +41,7 @@ export const REGISTERED_SURFACES = [
   "Scroll",
   "Scrollbar",
   "Separator",
+  "Sheet",
   "Settings",
   "Sidebar",
   "Skeleton",
@@ -58,19 +62,15 @@ export const REGISTERED_SURFACES = [
 
 /** @type {Record<string, string>} */
 export const DEFERRED_SURFACES = {
-  AlertDialog: "overlay-window-api",
   Chart: "chart-family",
   Combobox: "stateful-selection",
   DataTable: "stateful-collection",
-  Dialog: "overlay-window-api",
   Dock: "dock-layout",
   List: "stateful-collection",
   Menu: "popup-menu-api",
-  Notification: "overlay-window-api",
   Plot: "plot-infrastructure",
   SearchableList: "stateful-collection",
   Select: "stateful-selection",
-  Sheet: "overlay-window-api",
   Tooltip: "element-extension",
   VirtualList: "virtualized-collection",
 };
