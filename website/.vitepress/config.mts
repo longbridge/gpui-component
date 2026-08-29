@@ -122,6 +122,7 @@ const shellSidebar = createSidebar("/shell/", "GPUI Shell", "Introduction");
 const baseSidebar = createSidebar("/base/", "GPUI Base");
 const zhSidebar = createSidebar("/zh-CN/docs/", "文档");
 const zhShellSidebar = createSidebar("/zh-CN/shell/", "GPUI Shell", "简介");
+const zhBaseSidebar = createSidebar("/zh-CN/base/", "GPUI Base");
 
 function createFooter(prefix = "", locale: "en" | "zh" = "en") {
   const designGuidesText = locale === "zh" ? "设计指南" : "Design Guides";
@@ -175,9 +176,7 @@ function createNav(prefix = "", locale: "en" | "zh" = "en") {
     // Shell precedes Base: it is the newest layer and the one a reader is
     // least likely to already know about.
     { text: "Shell", link: `${prefix}/shell/` },
-    // The gpui-base docs are English-only, so both locales point at the same
-    // pages; the section keeps its full "GPUI Base" name in the sidebar.
-    { text: "Base", link: "/base/" },
+    { text: "Base", link: `${prefix}/base/` },
     {
       text: resourcesText,
       items: [
@@ -312,6 +311,7 @@ const config: UserConfig = {
         sidebar: {
           ...zhSidebar,
           ...zhShellSidebar,
+          ...zhBaseSidebar,
         },
         footer: createFooter("/zh-CN", "zh"),
         langMenuLabel: "语言",

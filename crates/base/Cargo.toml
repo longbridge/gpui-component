@@ -14,6 +14,10 @@ edition.workspace = true
 [lib]
 doctest = false
 
+[[bench]]
+name = "motion"
+harness = false
+
 [features]
 inspector = ["gpui_macros/inspector", "gpui/inspector"]
 

@@ -20,8 +20,8 @@ impl BaseShowcase {
                     .items_center()
                     .justify_center()
                     .border_1()
-                    .border_color(rgb(0x171717))
-                    .bg(rgb(0xffffff))
+                    .border_color(super::example_rgb(0x171717))
+                    .bg(super::example_rgb(0xffffff))
                     .child("Command menu"),
             );
 
@@ -36,9 +36,9 @@ impl BaseShowcase {
                         .items_center()
                         .justify_center()
                         .border_1()
-                        .border_color(rgb(0x171717))
-                        .bg(rgb(0x171717))
-                        .text_color(rgb(0xffffff))
+                        .border_color(super::example_rgb(0x171717))
+                        .bg(super::example_rgb(0x171717))
+                        .text_color(super::example_rgb(0xffffff))
                         .child("Open command menu · ⌘K"),
                 )
             })

@@ -15,8 +15,8 @@ impl BaseShowcase {
             .items_center()
             .justify_center()
             .border_1()
-            .border_color(rgb(0x171717))
-            .bg(rgb(0xffffff))
+            .border_color(super::example_rgb(0x171717))
+            .bg(super::example_rgb(0xffffff))
             .child("Open settings")
             .on_click(move |_, _, cx| {
                 _ = open_sheet.update(cx, |this, cx| {
@@ -45,7 +45,13 @@ impl BaseShowcase {
                                 });
                             }
                         })
-                        .overlay(div().absolute().inset_0().bg(rgb(0x000000)).opacity(0.15))
+                        .overlay(
+                            div()
+                                .absolute()
+                                .inset_0()
+                                .bg(super::example_rgb(0x000000))
+                                .opacity(0.15),
+                        )
                         .surface(
                             div()
                                 .absolute()
@@ -54,9 +60,9 @@ impl BaseShowcase {
                                 .h_full()
                                 .w(px(210.))
                                 .p_3()
-                                .bg(rgb(0xffffff))
+                                .bg(super::example_rgb(0xffffff))
                                 .border_1()
-                                .border_color(rgb(0x171717))
+                                .border_color(super::example_rgb(0x171717))
                                 .child(
                                     div()
                                         .font_weight(gpui::FontWeight::SEMIBOLD)
@@ -71,14 +77,14 @@ impl BaseShowcase {
                                             .flex()
                                             .items_center()
                                             .border_1()
-                                            .border_color(rgb(0xa3a3a3))
+                                            .border_color(super::example_rgb(0xa3a3a3))
                                             .child("Acme Studio"),
                                     ),
                                 )
                                 .child(
                                     div()
                                         .mt_2()
-                                        .text_color(rgb(0x525252))
+                                        .text_color(super::example_rgb(0x525252))
                                         .child("Update the workspace preferences for your team."),
                                 )
                                 .child(
@@ -86,7 +92,7 @@ impl BaseShowcase {
                                         .mt_4()
                                         .py_1()
                                         .border_t_1()
-                                        .border_color(rgb(0xd4d4d4))
+                                        .border_color(super::example_rgb(0xd4d4d4))
                                         .child("Notifications  ·  Enabled"),
                                 )
                                 .child(

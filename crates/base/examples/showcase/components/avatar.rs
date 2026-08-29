@@ -15,16 +15,16 @@ impl BaseShowcase {
                     .size(px(34.))
                     .overflow_hidden()
                     .border_1()
-                    .border_color(rgb(0xa3a3a3))
+                    .border_color(super::example_rgb(0xa3a3a3))
                     .fallback(
                         AvatarFallback::new()
                             .flex()
                             .size_8()
                             .items_center()
                             .justify_center()
-                            .bg(rgb(background))
+                            .bg(super::example_rgb(background))
                             .text_xs()
-                            .text_color(rgb(0x262626))
+                            .text_color(super::example_rgb(0x262626))
                             .child(initials),
                     )
             }),

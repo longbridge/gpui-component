@@ -6,14 +6,8 @@ use gpui::{
     RenderOnce, SharedString, StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _,
     px,
 };
-use gpui_base::{Spring, Switch as BaseSwitch, SwitchThumb, SwitchTrack, spring};
-use std::{rc::Rc, time::Duration};
-
-/// Thumb travel motion.
-///
-/// Critically damped: the thumb slides inside a track it must not leave, so an
-/// overshoot would push it through the border.
-const THUMB_SPRING: Spring = Spring::new(Duration::from_millis(180)).with_epsilon(0.1);
+use gpui_base::{Switch as BaseSwitch, SwitchThumb, SwitchTrack, spring};
+use std::rc::Rc;
 
 /// A Switch element that can be toggled on or off.
 #[derive(IntoElement)]
@@ -161,7 +155,7 @@ impl RenderOnce for Switch {
             } else {
                 px(0.)
             },
-            THUMB_SPRING,
+            cx.theme().motion_tokens().spring_move,
             window,
             cx,
         );

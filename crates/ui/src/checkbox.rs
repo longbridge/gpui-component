@@ -1,4 +1,4 @@
-use std::{rc::Rc, time::Duration};
+use std::rc::Rc;
 
 use crate::{
     ActiveTheme, Disableable, IconName, RoleOverride, Selectable, Sizable, Size, icon::IconNamed,
@@ -10,13 +10,7 @@ use gpui::{
     RenderOnce, SharedString, StatefulInteractiveElement, StyleRefinement, Styled, Window, div,
     prelude::FluentBuilder as _, px, relative, rems, svg,
 };
-use gpui_base::{CheckboxIndicator, Spring, spring};
-
-/// Check-mark fade motion.
-///
-/// Critically damped, because an opacity that overshoots would clip at 1 and
-/// come back — a flicker rather than a flourish.
-const MARK_SPRING: Spring = Spring::new(Duration::from_millis(200));
+use gpui_base::{CheckboxIndicator, spring};
 
 /// A Checkbox element.
 #[derive(IntoElement)]
@@ -183,7 +177,7 @@ pub(crate) fn checkbox_check_icon(
     let opacity = spring(
         (id, "mark"),
         if checked { 1. } else { 0. },
-        MARK_SPRING,
+        cx.theme().motion_tokens().spring_control,
         window,
         cx,
     );

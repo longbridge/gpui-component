@@ -17,7 +17,7 @@ impl BaseShowcase {
                         Button::new("collapsible-trigger")
                             .size_7()
                             .border_1()
-                            .border_color(rgb(0xd4d4d4))
+                            .border_color(super::example_rgb(0xd4d4d4))
                             .flex()
                             .items_center()
                             .justify_center()
@@ -38,7 +38,7 @@ impl BaseShowcase {
                     .flex()
                     .items_center()
                     .border_1()
-                    .border_color(rgb(0xd4d4d4))
+                    .border_color(super::example_rgb(0xd4d4d4))
                     .text_xs()
                     .child("gpui-component"),
             )
@@ -50,7 +50,7 @@ impl BaseShowcase {
                         .flex()
                         .items_center()
                         .border_1()
-                        .border_color(rgb(0xd4d4d4))
+                        .border_color(super::example_rgb(0xd4d4d4))
                         .text_xs()
                         .child(name)
                 }),

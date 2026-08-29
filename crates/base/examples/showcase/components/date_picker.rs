@@ -13,8 +13,8 @@ impl BaseShowcase {
             .items_center()
             .justify_between()
             .border_1()
-            .border_color(rgb(0xa3a3a3))
-            .bg(rgb(0xffffff))
+            .border_color(super::example_rgb(0xa3a3a3))
+            .bg(super::example_rgb(0xffffff))
             .on_click(move |_, _, cx| {
                 _ = trigger_entity.update(cx, |this, cx| {
                     this.date_open = !open;
@@ -24,7 +24,12 @@ impl BaseShowcase {
             .child("Aug 12, 2026")
             .child("⌄");
         let popup = Popup::new("date-picker-popup", trigger).when(open, |this| {
-            this.content(div().w(px(250.)).bg(rgb(0xffffff)).child(self.calendar()))
+            this.content(
+                div()
+                    .w(px(250.))
+                    .bg(super::example_rgb(0xffffff))
+                    .child(self.calendar()),
+            )
         });
 
         DatePicker::new("example-date-picker", &self.date_focus)

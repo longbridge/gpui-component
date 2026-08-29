@@ -9,7 +9,7 @@ impl BaseShowcase {
             .h_48()
             .text_xs()
             .border_1()
-            .border_color(rgb(0x171717))
+            .border_color(super::example_rgb(0x171717))
             .overflow_scroll()
             .track_scroll(&self.example_scroll)
             .child(div().children((1..=20).map(|row| {
@@ -19,7 +19,7 @@ impl BaseShowcase {
                     .flex()
                     .items_center()
                     .border_b_1()
-                    .border_color(rgb(0xe5e7eb))
+                    .border_color(super::example_rgb(0xe5e7eb))
                     .justify_between()
                     .child(format!("Activity {row}"))
                     .child(if row % 3 == 0 { "Completed" } else { "Pending" })

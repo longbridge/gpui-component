@@ -1,3 +1,4 @@
+pub(super) use super::example_rgb;
 use super::*;
 
 mod accordion;

@@ -54,4 +54,17 @@ Collapsible::new()
 
 可以通过 `open` 方法控制当前是否展开。若值为 `false`，则通过 `content` 添加的子内容会被隐藏。
 
+### 展开动画
+
+使用稳定 motion ID 可选择启用支持中途反向的测量式高度展开：
+
+```rust
+Collapsible::new()
+    .motion_id("advanced-options")
+    .open(self.open)
+    .content(options)
+```
+
+启用后，内容在关闭时仍保持挂载，以便测量自然高度，并可在动画途中切换时立即反向。不调用 `motion_id` 时仍使用即时挂载/卸载行为。timing、reduced motion 和性能细节见 [GPUI Base 动画与动效](/zh-CN/base/motion)。
+
 [Collapsible]: https://docs.rs/gpui-component/latest/gpui_component/collapsible/struct.Collapsible.html

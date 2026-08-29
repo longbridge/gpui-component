@@ -20,7 +20,7 @@ impl BaseShowcase {
             .items_center()
             .justify_between()
             .border_1()
-            .border_color(rgb(0x171717))
+            .border_color(super::example_rgb(0x171717))
             .on_click(move |_, _, cx| {
                 _ = trigger_entity.update(cx, |this, cx| {
                     this.select_open = !open;
@@ -33,8 +33,8 @@ impl BaseShowcase {
             .mt_1()
             .p_1()
             .border_1()
-            .border_color(rgb(0x171717))
-            .bg(rgb(0xffffff))
+            .border_color(super::example_rgb(0x171717))
+            .bg(super::example_rgb(0xffffff))
             .children(labels.into_iter().enumerate().map(|(ix, label)| {
                 let entity = entity.clone();
                 div()
@@ -43,7 +43,7 @@ impl BaseShowcase {
                     .py_1()
                     .flex()
                     .justify_between()
-                    .hover(|this| this.bg(rgb(0xf5f5f5)))
+                    .hover(|this| this.bg(super::example_rgb(0xf5f5f5)))
                     .child(label)
                     .when(ix == selected, |this| this.child("✓"))
                     .on_click(move |_, _, cx| {

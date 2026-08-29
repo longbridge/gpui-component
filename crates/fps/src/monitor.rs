@@ -26,6 +26,7 @@ const DEFAULT_RESOURCE_INTERVAL: Duration = Duration::from_millis(500);
 /// that is six readings: long enough to settle the churn between one sample and
 /// the next, short enough that a real change reaches the HUD while the reader
 /// is still looking at what caused it.
+#[cfg(not(target_family = "wasm"))]
 const RESOURCE_WINDOW: Duration = Duration::from_secs(3);
 
 /// Which frame the `P95` row reports. The 95th rather than the 99th: the chart

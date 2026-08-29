@@ -38,9 +38,9 @@ impl BaseShowcase {
                     .items_center()
                     .justify_between()
                     .border_1()
-                    .border_color(rgb(0xd4d4d4))
+                    .border_color(super::example_rgb(0xd4d4d4))
                     .text_xs()
-                    .bg(rgb(0xffffff))
+                    .bg(super::example_rgb(0xffffff))
                     .on_click(move |_, window, cx| {
                         _ = trigger_entity.update(cx, |this, cx| {
                             this.combobox_open = !open;
@@ -51,21 +51,21 @@ impl BaseShowcase {
                         }
                     })
                     .child(selected)
-                    .child(div().text_color(rgb(0x737373)).child("⌄")),
+                    .child(div().text_color(super::example_rgb(0x737373)).child("⌄")),
             );
         let popup = div()
             .w_56()
             .p_1()
             .border_1()
-            .border_color(rgb(0xd4d4d4))
-            .bg(rgb(0xffffff))
+            .border_color(super::example_rgb(0xd4d4d4))
+            .bg(super::example_rgb(0xffffff))
             .child(
                 InputBase::new("combobox-search")
                     .w_full()
                     .h_7()
                     .px_2()
                     .border_1()
-                    .border_color(rgb(0xe5e5e5))
+                    .border_color(super::example_rgb(0xe5e5e5))
                     .on_mouse_down(MouseButton::Left, move |_, window, cx| {
                         query_state.update(cx, |state, cx| state.focus(window, cx));
                     })
@@ -85,7 +85,7 @@ impl BaseShowcase {
                                 .flex()
                                 .items_center()
                                 .text_xs()
-                                .hover(|s| s.bg(rgb(0xf5f5f5)))
+                                .hover(|s| s.bg(super::example_rgb(0xf5f5f5)))
                                 .on_click(move |_, _, cx| {
                                     _ = entity.update(cx, |this, cx| {
                                         this.combobox_selection = label.into();
