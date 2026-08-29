@@ -246,6 +246,42 @@ mod component_callback_value_tests {
     use gpui::{Empty, TestAppContext, VisualTestContext};
     use std::ops::Deref;
 
+    #[test]
+    fn returning_to_the_installed_app_effect_cancels_a_pending_replacement() {
+        let key = "menu".to_owned();
+        let mut pending = HashMap::new();
+        let mut installed = HashMap::from([(
+            key.clone(),
+            InstalledAppEffect {
+                revision: "a".into(),
+                cleanup: None,
+            },
+        )]);
+
+        assert!(queue_component_app_effect(
+            &mut pending,
+            &installed,
+            &key,
+            "b"
+        ));
+        assert_eq!(pending.get(&key).map(String::as_str), Some("b"));
+        assert!(!queue_component_app_effect(
+            &mut pending,
+            &installed,
+            &key,
+            "a"
+        ));
+        assert!(!pending.contains_key(&key));
+
+        installed.get_mut(&key).unwrap().revision = "b".into();
+        assert!(queue_component_app_effect(
+            &mut pending,
+            &installed,
+            &key,
+            "a"
+        ));
+    }
+
     fn callback(
         runtime: &Rc<ShellRuntime>,
         source: &str,
@@ -1171,6 +1207,26 @@ struct ComponentAppEffectGeneration {
     _release: Subscription,
 }
 
+fn queue_component_app_effect(
+    pending: &mut HashMap<String, String>,
+    installed: &HashMap<String, InstalledAppEffect>,
+    key: &str,
+    revision: &str,
+) -> bool {
+    if pending.get(key).is_some_and(|value| value == revision) {
+        return false;
+    }
+    if installed
+        .get(key)
+        .is_some_and(|effect| effect.revision == revision)
+    {
+        pending.remove(key);
+        return false;
+    }
+    pending.insert(key.to_owned(), revision.to_owned());
+    true
+}
+
 pub struct ShellRuntime {
     /// Declared first because fields drop in declaration order and every
     /// `Persistent` handle must be released while the context still exists.
@@ -1545,15 +1601,14 @@ impl ShellRuntime {
         let generation = generations
             .get_mut(&application_key)
             .expect("inserted above");
-        if generation.pending.get(&key) == Some(&revision)
-            || generation
-                .installed
-                .get(&key)
-                .is_some_and(|effect| effect.revision == revision)
-        {
+        if !queue_component_app_effect(
+            &mut generation.pending,
+            &generation.installed,
+            &key,
+            &revision,
+        ) {
             return Ok(());
         }
-        generation.pending.insert(key.clone(), revision.clone());
         drop(generations);
 
         let runtime = Rc::downgrade(self);

@@ -139,7 +139,7 @@ pub(crate) fn declarations_with_components(components: &crate::FrozenComponentRe
     out.push_str(BASE);
     out.push_str("}\n\n");
     out.push_str("declare module \"gpui-component\" {\n");
-    out.push_str("  import { Element } from \"gpui\";\n");
+    out.push_str("  import { ClickEvent, Context, Element } from \"gpui\";\n");
     for state in components.states() {
         push_jsdoc(&mut out, state.documentation, None, "  ");
         out.push_str("  export interface ");
@@ -156,9 +156,23 @@ pub(crate) fn declarations_with_components(components: &crate::FrozenComponentRe
     }
     for descriptor in components.descriptors() {
         push_jsdoc(&mut out, descriptor.typescript.documentation, None, "  ");
-        out.push_str("  export interface ");
+        out.push_str("  export type ");
         out.push_str(descriptor.name);
-        out.push_str("Element extends Element {\n");
+        out.push_str("Element = ");
+        if descriptor.methods.is_empty() {
+            out.push_str("Element & {\n");
+        } else {
+            out.push_str("Omit<Element, ");
+            for (index, method) in descriptor.methods.iter().enumerate() {
+                if index != 0 {
+                    out.push_str(" | ");
+                }
+                out.push('"');
+                out.push_str(method.name);
+                out.push('"');
+            }
+            out.push_str("> & {\n");
+        }
         for method in &descriptor.methods {
             push_jsdoc(&mut out, method.documentation, None, "    ");
             out.push_str("    ");

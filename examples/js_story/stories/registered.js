@@ -204,7 +204,7 @@ export function registeredExample(surface) {
       return new DataTable(
         state,
         () => [{ name: "Alpha", status: "Ready" }],
-        (row, column) => asElement(new Text(String(row[column]))),
+        (_row, column) => asElement(new Text(column)),
       ).stripe(true);
     }
     case "DescriptionList":
@@ -277,7 +277,8 @@ export function registeredExample(surface) {
           { id: "alpha", label: "Alpha" },
           { id: "beta", label: "Beta" },
         ],
-        (row) => asElement(new Text(row.label)),
+        (row) =>
+          asElement(new Text(/** @type {{label: string}} */ (row).label)),
       );
     case "MenuBar":
       return new MenuBar("story-menu-bar").child(
@@ -312,7 +313,7 @@ export function registeredExample(surface) {
     case "Popover":
       return new Popover("account-popover", "Open details")
         .content(asElement(new Text("Lazy popover content")))
-        .anchor("bottomLeft");
+        .anchor("bottom_left");
     case "Progress":
       return new Progress("upload")
         .value(64)
@@ -356,7 +357,8 @@ export function registeredExample(surface) {
       return new Select(
         "story-select",
         () => [{ id: "alpha", label: "Alpha" }],
-        (row) => asElement(new Text(row.label)),
+        (row) =>
+          asElement(new Text(/** @type {{label: string}} */ (row).label)),
         (_value, _cx) => {},
       ).placeholder("Choose an option");
     case "Sheet":
@@ -395,7 +397,7 @@ export function registeredExample(surface) {
         .child(
           asElement(
             new SidebarMenu().child(
-              asElement(new SidebarMenuItem("Components").active(true)),
+              asElement(new SidebarMenuItem("Components").selected(true)),
             ),
           ),
         );

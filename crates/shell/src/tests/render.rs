@@ -468,7 +468,8 @@ fn descriptor_drives_runtime_and_typescript(cx: &mut TestAppContext) {
     let components = registry.freeze().unwrap();
     let declarations = crate::typings::declarations_with_components(&components);
     assert!(declarations.contains("declare module \"gpui-component\""));
-    assert!(declarations.contains("export interface TestBoxElement extends Element"));
+    assert!(declarations.contains("export type TestBoxElement = Omit<Element, \"tone\"> & {"));
+    assert!(declarations.contains("import { ClickEvent, Context, Element } from \"gpui\";"));
     assert!(declarations.contains("export const TestBox: { new(id: string): TestBoxElement }"));
     assert!(declarations.contains("tone(value: string): TestBoxElement;"));
     assert!(declarations.contains("A test component."));
