@@ -24,7 +24,7 @@ use std::{
 };
 
 use anyhow::{Context as _, Result, anyhow};
-use gpui::{App, AppContext as _, ClickEvent, Entity, Global, WeakEntity, Window};
+use gpui::{App, AppContext as _, ClickEvent, Entity, Global, Subscription, WeakEntity, Window};
 use rquickjs::{
     Array, Context as JsContext, Ctx, Error as JsError, Exception, FromJs, Function, Object,
     Persistent, Result as JsResult, Runtime as JsRuntime, Value,
@@ -1156,6 +1156,21 @@ builtin_modules![
     (GpuiFpsModule, "gpui-fps", exports::GPUI_FPS),
 ];
 
+type AppEffectInstall =
+    Box<dyn FnOnce(&mut App) -> crate::component_registry::ComponentAppEffectCleanup>;
+
+struct InstalledAppEffect {
+    revision: String,
+    cleanup: Option<crate::component_registry::ComponentAppEffectCleanup>,
+}
+
+struct ComponentAppEffectGeneration {
+    application: Rc<ApplicationGeneration>,
+    pending: HashMap<String, String>,
+    installed: HashMap<String, InstalledAppEffect>,
+    _release: Subscription,
+}
+
 pub struct ShellRuntime {
     /// Declared first because fields drop in declaration order and every
     /// `Persistent` handle must be released while the context still exists.
@@ -1165,6 +1180,7 @@ pub struct ShellRuntime {
     component_state_proof: String,
     component_states: RefCell<crate::component_registry::RetainedStateStore>,
     pending_component_state_releases: RefCell<Vec<Rc<ApplicationGeneration>>>,
+    component_app_effects: RefCell<HashMap<usize, ComponentAppEffectGeneration>>,
     warned_deprecated_exports: RefCell<HashSet<&'static str>>,
     arena: RefCell<SpecArena>,
     /// Templates the script has defined, indexed by the id its closure keeps.
@@ -1405,6 +1421,7 @@ impl ShellRuntime {
             component_state_proof,
             component_states: RefCell::new(Default::default()),
             pending_component_state_releases: RefCell::new(Vec::new()),
+            component_app_effects: RefCell::new(HashMap::new()),
             warned_deprecated_exports: RefCell::new(HashSet::new()),
             arena: RefCell::new(SpecArena::new()),
             templates: RefCell::new(Vec::new()),
@@ -1487,6 +1504,126 @@ impl ShellRuntime {
             .borrow_mut()
             .push(application.clone());
         self.flush_component_state_releases();
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn schedule_component_app_effect(
+        self: &Rc<Self>,
+        application: Rc<ApplicationGeneration>,
+        view: WeakEntity<ScriptView>,
+        key: String,
+        revision: String,
+        window: &mut Window,
+        cx: &mut App,
+        install: AppEffectInstall,
+    ) -> anyhow::Result<()> {
+        anyhow::ensure!(
+            application.is_active(),
+            "component app effect belongs to a retired application"
+        );
+        let view = view
+            .upgrade()
+            .ok_or_else(|| anyhow!("component app effects require a live root view"))?;
+        let application_key = Rc::as_ptr(&application) as usize;
+
+        let mut generations = self.component_app_effects.borrow_mut();
+        if let std::collections::hash_map::Entry::Vacant(slot) = generations.entry(application_key)
+        {
+            let runtime = Rc::downgrade(self);
+            let release = cx.observe_release(&view, move |_, cx| {
+                if let Some(runtime) = runtime.upgrade() {
+                    runtime.cleanup_component_app_effects(application_key, cx);
+                }
+            });
+            slot.insert(ComponentAppEffectGeneration {
+                application: application.clone(),
+                pending: HashMap::new(),
+                installed: HashMap::new(),
+                _release: release,
+            });
+        }
+        let generation = generations
+            .get_mut(&application_key)
+            .expect("inserted above");
+        if generation.pending.get(&key) == Some(&revision)
+            || generation
+                .installed
+                .get(&key)
+                .is_some_and(|effect| effect.revision == revision)
+        {
+            return Ok(());
+        }
+        generation.pending.insert(key.clone(), revision.clone());
+        drop(generations);
+
+        let runtime = Rc::downgrade(self);
+        window.defer(cx, move |_, cx| {
+            let Some(runtime) = runtime.upgrade() else {
+                return;
+            };
+            runtime.apply_component_app_effect(application_key, key, revision, install, cx);
+        });
+        Ok(())
+    }
+
+    fn apply_component_app_effect(
+        &self,
+        application_key: usize,
+        key: String,
+        revision: String,
+        install: AppEffectInstall,
+        cx: &mut App,
+    ) {
+        let old_cleanup = {
+            let mut generations = self.component_app_effects.borrow_mut();
+            let Some(generation) = generations.get_mut(&application_key) else {
+                return;
+            };
+            if !generation.application.is_active()
+                || generation.pending.get(&key) != Some(&revision)
+            {
+                return;
+            }
+            generation.pending.remove(&key);
+            generation
+                .installed
+                .remove(&key)
+                .and_then(|mut effect| effect.cleanup.take())
+        };
+        if let Some(cleanup) = old_cleanup {
+            cleanup(cx);
+        }
+        let cleanup = install(cx);
+        if let Some(generation) = self
+            .component_app_effects
+            .borrow_mut()
+            .get_mut(&application_key)
+        {
+            generation.installed.insert(
+                key,
+                InstalledAppEffect {
+                    revision,
+                    cleanup: Some(cleanup),
+                },
+            );
+        } else {
+            cleanup(cx);
+        }
+    }
+
+    fn cleanup_component_app_effects(&self, application_key: usize, cx: &mut App) {
+        let Some(mut generation) = self
+            .component_app_effects
+            .borrow_mut()
+            .remove(&application_key)
+        else {
+            return;
+        };
+        for (_, mut effect) in generation.installed.drain() {
+            if let Some(cleanup) = effect.cleanup.take() {
+                cleanup(cx);
+            }
+        }
     }
 
     fn flush_component_state_releases(&self) {
@@ -2619,7 +2756,10 @@ impl ShellRuntime {
         // arena behind, so the snapshot owns its nodes outright rather than
         // sharing them with the next build.
         let arena = std::mem::take(&mut *self.arena.borrow_mut());
-        let snapshot = RenderSnapshot::new(self, callbacks, root, arena);
+        let snapshot = RenderSnapshot::new(self, callbacks, root, arena).with_application_owner(
+            object.application_generation(),
+            view.as_ref().map(Entity::downgrade),
+        );
 
         // Promise callbacks only run when the host drains QuickJS's job queue.
         // That drain is deferred to the event loop rather than run here: a
@@ -3707,6 +3847,59 @@ impl ShellRuntime {
         });
         if let Err(error) = result {
             tracing::error!("error in {what} handler: {error}");
+        }
+        scheduler::drain_runtime_jobs(self, window, cx);
+    }
+
+    pub(crate) fn dispatch_modifiers_changed(
+        self: &Rc<Self>,
+        id: CallbackId,
+        event: &gpui::ModifiersChangedEvent,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        let Some(entry) = self.callbacks.borrow().get(id) else {
+            return;
+        };
+        if entry
+            .application
+            .as_ref()
+            .is_some_and(|application| !application.is_active())
+        {
+            return;
+        }
+        let Some(view) = entry.live_view() else {
+            return;
+        };
+        let policy = view
+            .as_ref()
+            .map(|view| view.read(cx).policy())
+            .unwrap_or_else(crate::policy::default);
+        let (_guard, generation) = scope::enter_with_application(
+            self,
+            window,
+            cx,
+            ScopePhase::Event,
+            view,
+            policy,
+            entry.application.clone(),
+        );
+        let result = self.with_js(|ctx| {
+            let handler = entry.value.clone().restore(ctx)?;
+            let payload = Object::new(ctx.clone())?;
+            let modifiers = modifiers_object(&ctx, event.modifiers)?;
+            modifiers.set("function", event.modifiers.function)?;
+            payload.set("modifiers", modifiers)?;
+            let capslock = Object::new(ctx.clone())?;
+            capslock.set("on", event.capslock.on)?;
+            payload.set("capslock", capslock)?;
+            handler.call::<_, ()>((
+                payload,
+                context_object(ctx, ContextBinding::Call(generation))?,
+            ))
+        });
+        if let Err(error) = result {
+            tracing::error!("error in modifiers-changed handler: {error}");
         }
         scheduler::drain_runtime_jobs(self, window, cx);
     }
@@ -6236,6 +6429,7 @@ impl ShellRuntime {
                 "on_hover",
                 "on_key_down",
                 "on_key_up",
+                "on_modifiers_changed",
                 "on_mouse_down",
                 "on_mouse_up",
                 "on_mouse_down_out",
@@ -7146,6 +7340,7 @@ impl ShellRuntime {
             | "on_hover"
             | "on_key_down"
             | "on_key_up"
+            | "on_modifiers_changed"
             | "on_mouse_down_out"
             | "on_scroll_wheel"
             | "tab_bar"
@@ -8923,6 +9118,7 @@ fn callback_op_name(method: &str) -> Option<&'static str> {
         "on_hover" => "on_hover",
         "on_key_down" => "on_key_down",
         "on_key_up" => "on_key_up",
+        "on_modifiers_changed" => "on_modifiers_changed",
         "on_mouse_down_out" => "on_mouse_down_out",
         "on_scroll_wheel" => "on_scroll_wheel",
         "on_item_click" => "on_item_click",

@@ -540,6 +540,10 @@ pub struct MaterializeRequest<'a> {
     disabled: bool,
     selected: bool,
     on_click: Option<crate::spec::CallbackId>,
+    application_owner: Option<(
+        Rc<crate::runtime::ApplicationGeneration>,
+        gpui::WeakEntity<crate::ScriptView>,
+    )>,
 }
 
 pub(crate) struct MaterializeRequestInit<'a> {
@@ -557,6 +561,10 @@ pub(crate) struct MaterializeRequestInit<'a> {
     pub disabled: bool,
     pub selected: bool,
     pub on_click: Option<crate::spec::CallbackId>,
+    pub application_owner: Option<(
+        Rc<crate::runtime::ApplicationGeneration>,
+        gpui::WeakEntity<crate::ScriptView>,
+    )>,
 }
 
 impl<'a> MaterializeRequest<'a> {
@@ -581,7 +589,17 @@ impl<'a> MaterializeRequest<'a> {
             disabled: init.disabled,
             selected: init.selected,
             on_click: init.on_click,
+            application_owner: init.application_owner,
         }
+    }
+
+    /// Returns an application-lifecycle effect capability for this materialization.
+    /// The effect is deferred beyond render and is retired with the root view.
+    pub fn app_effects(&self) -> anyhow::Result<ComponentAppEffects> {
+        let (application, view) = self.application_owner.clone().ok_or_else(|| {
+            anyhow::anyhow!("component app effects require a root application snapshot")
+        })?;
+        Ok(ComponentAppEffects::new(self.runtime, application, view))
     }
 
     pub fn payload(&self) -> &ComponentPayload {
@@ -1140,6 +1158,56 @@ pub struct ComponentWindowEffects {
     active: Rc<Cell<bool>>,
 }
 
+/// A generation-bound capability for replacing application-wide native state
+/// after the current render effect cycle.
+#[derive(Clone)]
+pub struct ComponentAppEffects {
+    runtime: Weak<crate::ShellRuntime>,
+    application: Rc<crate::runtime::ApplicationGeneration>,
+    view: gpui::WeakEntity<crate::ScriptView>,
+}
+
+/// Cleanup returned by an application effect. It runs before replacement and
+/// when the owning root view is released.
+pub type ComponentAppEffectCleanup = Box<dyn FnOnce(&mut App)>;
+
+impl ComponentAppEffects {
+    pub(crate) fn new(
+        runtime: &Rc<crate::ShellRuntime>,
+        application: Rc<crate::runtime::ApplicationGeneration>,
+        view: gpui::WeakEntity<crate::ScriptView>,
+    ) -> Self {
+        Self {
+            runtime: Rc::downgrade(runtime),
+            application,
+            view,
+        }
+    }
+
+    pub fn replace(
+        &self,
+        key: impl Into<String>,
+        revision: impl Into<String>,
+        window: &mut Window,
+        cx: &mut App,
+        install: impl FnOnce(&mut App) -> ComponentAppEffectCleanup + 'static,
+    ) -> anyhow::Result<()> {
+        let runtime = self
+            .runtime
+            .upgrade()
+            .ok_or_else(|| anyhow::anyhow!("component app effect runtime has been released"))?;
+        runtime.schedule_component_app_effect(
+            self.application.clone(),
+            self.view.clone(),
+            key.into(),
+            revision.into(),
+            window,
+            cx,
+            Box::new(install),
+        )
+    }
+}
+
 /// The result of a keyed effect attempt within one event.
 pub enum ComponentEffectRun<R> {
     Executed(R),
@@ -1284,6 +1352,7 @@ impl ComponentCallback {
             active: Rc::new(Cell::new(false)),
         }
     }
+
     pub fn invoke(&self, window: &mut Window, cx: &mut App) -> anyhow::Result<()> {
         self.invoke_with(&[], window, cx)
     }
@@ -1549,7 +1618,7 @@ impl ComponentRegistry {
 
     pub fn register(
         &mut self,
-        descriptor: ComponentDescriptor,
+        mut descriptor: ComponentDescriptor,
     ) -> Result<ComponentId, RegistryError> {
         if self.frozen {
             return Err(RegistryError::Frozen);
@@ -1562,6 +1631,12 @@ impl ComponentRegistry {
         }
         if descriptor.constructors.is_empty() {
             return Err(RegistryError::EmptyConstructorList(descriptor.name));
+        }
+
+        for method in &mut descriptor.methods {
+            if method.documentation.is_none() {
+                method.documentation = Some("Configures this component.");
+            }
         }
 
         let mut methods = HashSet::new();
@@ -1915,6 +1990,7 @@ mod tests {
             disabled: false,
             selected: false,
             on_click: None,
+            application_owner: None,
         });
 
         let error = request
@@ -1969,6 +2045,7 @@ mod tests {
             disabled: false,
             selected: false,
             on_click: None,
+            application_owner: None,
         });
 
         assert_eq!(request.take_slots("content").len(), 2);
@@ -2006,6 +2083,7 @@ mod tests {
             disabled: false,
             selected: false,
             on_click: None,
+            application_owner: None,
         });
 
         let mut child = request.take_typed_children().pop().unwrap();
@@ -2041,6 +2119,7 @@ mod tests {
             disabled: false,
             selected: false,
             on_click: None,
+            application_owner: None,
         });
 
         let mut children = request.take_typed_children();
@@ -2075,6 +2154,7 @@ mod tests {
             disabled: false,
             selected: false,
             on_click: None,
+            application_owner: None,
         });
         assert_eq!(ordinary.take_children().unwrap().len(), 1);
         assert!(ordinary.take_typed_children().is_empty());
@@ -2096,6 +2176,7 @@ mod tests {
             disabled: false,
             selected: false,
             on_click: None,
+            application_owner: None,
         });
         let mut child = typed.take_typed_children().pop().unwrap();
         assert_eq!(child.component_name(), None, "built-ins stay opaque");
@@ -2133,6 +2214,7 @@ mod tests {
             disabled: false,
             selected: false,
             on_click: None,
+            application_owner: None,
         });
 
         let error = FinishingMaterializer
@@ -2168,6 +2250,7 @@ mod tests {
             disabled: false,
             selected: false,
             on_click: None,
+            application_owner: None,
         });
         let mut request_b = MaterializeRequest::new(MaterializeRequestInit {
             component_name: "B",
@@ -2183,6 +2266,7 @@ mod tests {
             disabled: false,
             selected: false,
             on_click: None,
+            application_owner: None,
         });
         let mut request_c = MaterializeRequest::new(MaterializeRequestInit {
             component_name: "C",
@@ -2198,6 +2282,7 @@ mod tests {
             disabled: false,
             selected: false,
             on_click: None,
+            application_owner: None,
         });
 
         let mut child = request_a.take_typed_children().pop().unwrap();

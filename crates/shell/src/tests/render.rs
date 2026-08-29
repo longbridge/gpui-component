@@ -6492,6 +6492,94 @@ export default class Keys extends View {
     );
 }
 
+/// A script receives modifier-only transitions on the focused element.
+#[gpui::test]
+fn a_script_hears_modifier_changes_at_a_focused_element(cx: &mut TestAppContext) {
+    cx.update(|cx| crate::init(cx));
+
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View, div } from "gpui";
+import { v_flex } from "gpui-base";
+
+export default class Modifiers extends View {
+  init(_props, cx) {
+    this.handle = cx.focus_handle();
+    this.changes = [];
+  }
+
+  render(_cx) {
+    return v_flex()
+      .w(200)
+      .h(100)
+      .child(
+        div()
+          .id("surface")
+          .w(200)
+          .h(60)
+          .tab_index(1)
+          .track_focus(this.handle)
+          .on_modifiers_changed((event, cx) => {
+            this.changes.push([
+              event.modifiers.shift,
+              event.modifiers.control,
+              event.modifiers.alt,
+              event.modifiers.platform,
+              event.modifiers.function,
+              event.capslock.on,
+            ].join("/"));
+            cx.notify();
+          }),
+      )
+      .child(div().child(this.changes.join(" ")));
+  }
+}
+"#;
+    let view_type = runtime.load_source("modifiers", source).expect("load");
+    let runtime_for_view = Rc::clone(&runtime);
+    let window = cx.add_window(move |window, cx| {
+        let view = runtime_for_view
+            .instantiate_view(&view_type, window, cx)
+            .expect("instantiate");
+        RootedScriptView(view)
+    });
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    let view = window
+        .root(&mut context)
+        .expect("root view")
+        .read_with(&context, |root, _| root.0.clone());
+
+    let handles = runtime.entities().focus_handles();
+    assert_eq!(handles.len(), 1, "the script created one focus handle");
+    context.update(|window, cx| handles[0].focus(window, cx));
+    context.update(|window, cx| window.draw(cx).clear(cx));
+
+    context.simulate_event(gpui::ModifiersChangedEvent {
+        modifiers: gpui::Modifiers {
+            control: true,
+            function: true,
+            ..Default::default()
+        },
+        capslock: gpui::Capslock { on: true },
+    });
+    context.simulate_event(gpui::ModifiersChangedEvent::default());
+    context.run_until_parked();
+    context.update(|window, cx| window.draw(cx).clear(cx));
+
+    let tree = context.update(|_, cx| {
+        view.read(cx)
+            .snapshot()
+            .map(crate::RenderSnapshot::debug_tree)
+            .unwrap_or_default()
+    });
+    assert!(
+        tree.contains("false/true/false/false/true/true false/false/false/false/false/false"),
+        "press and release must preserve GPUI's complete modifier event shape: {tree}"
+    );
+}
+
 /// A script binds a chord to an action, and the action reaches its handler.
 ///
 /// This is the whole loop, and every step of it is the real one: the script

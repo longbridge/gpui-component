@@ -317,6 +317,8 @@ struct Behavior {
     /// Reports the release of a key, on the same focus path as
     /// [`Behavior::on_key_down`].
     on_key_up: Option<CallbackId>,
+    /// Reports modifier-only changes on the keyboard focus path.
+    on_modifiers_changed: Option<CallbackId>,
     /// Presses on this element, one entry per button listened for.
     ///
     /// A list rather than one field, because GPUI takes the button as an
@@ -548,6 +550,7 @@ impl Behavior {
             || self.on_hover.is_some()
             || self.on_key_down.is_some()
             || self.on_key_up.is_some()
+            || self.on_modifiers_changed.is_some()
             || !self.on_mouse_down.is_empty()
             || !self.on_mouse_up.is_empty()
             || self.on_mouse_down_out.is_some()
@@ -922,6 +925,7 @@ fn materialize_registered_component(
             disabled: behavior.disabled,
             selected: behavior.selected,
             on_click: behavior.on_click,
+            application_owner: snapshot.and_then(RenderSnapshot::application_owner),
         });
     request.attach_render_authority(window, cx);
     match descriptor.materializer.materialize(request) {
@@ -1614,6 +1618,14 @@ where
             }
         });
     }
+    if let Some(callback) = behavior.on_modifiers_changed {
+        let runtime = Rc::downgrade(runtime);
+        element = element.on_modifiers_changed(move |event, window, cx| {
+            if let Some(runtime) = runtime.upgrade() {
+                runtime.dispatch_modifiers_changed(callback, event, window, cx);
+            }
+        });
+    }
     // The pointer half. It needs the element's box for `local_position`, and
     // captures it only when something asked.
     if behavior.wants_pointer_geometry() {
@@ -1801,6 +1813,10 @@ fn warn_unhonoured_input(component: &Component, behavior: &Behavior) {
     let asked = [
         ("on_key_down", behavior.on_key_down.is_some()),
         ("on_key_up", behavior.on_key_up.is_some()),
+        (
+            "on_modifiers_changed",
+            behavior.on_modifiers_changed.is_some(),
+        ),
         ("on_mouse_down", !behavior.on_mouse_down.is_empty()),
         ("on_mouse_up", !behavior.on_mouse_up.is_empty()),
         ("on_mouse_down_out", behavior.on_mouse_down_out.is_some()),
@@ -1923,6 +1939,7 @@ fn flex_element(
         && behavior.on_hover.is_none()
         && behavior.on_key_down.is_none()
         && behavior.on_key_up.is_none()
+        && behavior.on_modifiers_changed.is_none()
         && behavior.on_mouse_down.is_empty()
         && behavior.on_mouse_up.is_empty()
         && behavior.on_mouse_down_out.is_none()
@@ -2369,6 +2386,7 @@ pub(in crate::materialize) fn resolve_ops(
                 "on_hover" => behavior.on_hover = Some(*id),
                 "on_key_down" => behavior.on_key_down = Some(*id),
                 "on_key_up" => behavior.on_key_up = Some(*id),
+                "on_modifiers_changed" => behavior.on_modifiers_changed = Some(*id),
                 // The button is carried in the op name rather than beside it:
                 // `SpecOp::Callback` is a `&'static str` and a handle, and
                 // three fixed names cost nothing next to widening every op to

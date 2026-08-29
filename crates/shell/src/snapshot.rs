@@ -73,6 +73,8 @@ struct SnapshotInner {
     /// Weak so a snapshot never keeps the VM alive; a snapshot outliving its
     /// runtime has nothing to retire, and says so by failing to upgrade.
     runtime: Weak<ShellRuntime>,
+    application: Option<Rc<crate::runtime::ApplicationGeneration>>,
+    view: Option<gpui::WeakEntity<crate::ScriptView>>,
 }
 
 impl RenderSnapshot {
@@ -88,8 +90,30 @@ impl RenderSnapshot {
                 root,
                 arena,
                 runtime: Rc::downgrade(runtime),
+                application: None,
+                view: None,
             }),
         }
+    }
+
+    pub(crate) fn with_application_owner(
+        mut self,
+        application: Option<Rc<crate::runtime::ApplicationGeneration>>,
+        view: Option<gpui::WeakEntity<crate::ScriptView>>,
+    ) -> Self {
+        let inner = Rc::get_mut(&mut self.inner).expect("new snapshot is uniquely owned");
+        inner.application = application;
+        inner.view = view;
+        self
+    }
+
+    pub(crate) fn application_owner(
+        &self,
+    ) -> Option<(
+        Rc<crate::runtime::ApplicationGeneration>,
+        gpui::WeakEntity<crate::ScriptView>,
+    )> {
+        Some((self.inner.application.clone()?, self.inner.view.clone()?))
     }
 
     pub(crate) fn root(&self) -> SpecId {
