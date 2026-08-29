@@ -140,6 +140,20 @@ pub(crate) fn declarations_with_components(components: &crate::FrozenComponentRe
     out.push_str("}\n\n");
     out.push_str("declare module \"gpui-component\" {\n");
     out.push_str("  import { Element } from \"gpui\";\n");
+    for state in components.states() {
+        push_jsdoc(&mut out, state.documentation, None, "  ");
+        out.push_str("  export interface ");
+        out.push_str(state.kind);
+        out.push_str(" { readonly __gpuiComponentState: unique symbol }\n");
+        push_jsdoc(&mut out, state.documentation, None, "  ");
+        out.push_str("  export function ");
+        out.push_str(state.export);
+        out.push('(');
+        push_arguments(&mut out, &state.arguments);
+        out.push_str("): ");
+        out.push_str(state.kind);
+        out.push_str(";\n");
+    }
     for descriptor in components.descriptors() {
         push_jsdoc(&mut out, descriptor.typescript.documentation, None, "  ");
         out.push_str("  export interface ");
@@ -3480,6 +3494,32 @@ const SCHEDULING: &str = r#"
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn registered_state_factories_are_declared_from_the_runtime_catalog() {
+        let mut registry =
+            crate::ComponentRegistry::new(crate::COMPONENT_REGISTRY_API_VERSION).unwrap();
+        registry
+            .register_state(
+                crate::StateDescriptor::new(
+                    "InputState",
+                    "InputState",
+                    vec![crate::ArgumentDescriptor::new(
+                        "text",
+                        crate::ArgumentSchema::String,
+                    )],
+                    |_, _, _| Ok(Box::new(())),
+                )
+                .documented("Retained input state."),
+            )
+            .unwrap();
+
+        let declarations = declarations_with_components(&registry.freeze().unwrap());
+
+        assert!(declarations.contains("export interface InputState"));
+        assert!(declarations.contains("export function InputState(text: string): InputState;"));
+        assert!(declarations.contains("Retained input state."));
+    }
 
     /// The element methods that are not style methods, so a test can subtract
     /// them from the interface and compare what is left against the style

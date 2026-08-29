@@ -1,6 +1,6 @@
 use std::{
     any::Any,
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     fmt,
     marker::PhantomData,
     rc::{Rc, Weak},
@@ -9,6 +9,119 @@ use std::{
         atomic::{AtomicU64, Ordering},
     },
 };
+
+pub(crate) const MAX_RETAINED_COMPONENT_STATES: usize = 4096;
+
+#[derive(Default)]
+pub(crate) struct RetainedStateStore {
+    next_handle: u64,
+    values: HashMap<u64, RetainedStateEntry>,
+}
+
+struct RetainedStateEntry {
+    kind: &'static str,
+    owner: Option<Rc<crate::runtime::ApplicationGeneration>>,
+    value: RetainedState,
+}
+
+impl RetainedStateStore {
+    #[cfg(test)]
+    pub fn len(&self) -> usize {
+        self.values.len()
+    }
+    pub fn insert(
+        &mut self,
+        kind: &'static str,
+        owner: Option<Rc<crate::runtime::ApplicationGeneration>>,
+        value: RetainedState,
+    ) -> Result<u64, String> {
+        if owner.as_ref().is_some_and(|owner| !owner.is_active()) {
+            return Err("retained component state owner has already been released".into());
+        }
+        if self.values.len() >= MAX_RETAINED_COMPONENT_STATES {
+            return Err(format!(
+                "retained component state limit ({MAX_RETAINED_COMPONENT_STATES}) reached"
+            ));
+        }
+        let handle = self.next_handle;
+        self.next_handle = self
+            .next_handle
+            .checked_add(1)
+            .ok_or_else(|| "retained component state handle space exhausted".to_owned())?;
+        self.values
+            .insert(handle, RetainedStateEntry { kind, owner, value });
+        Ok(handle)
+    }
+
+    pub fn kind(&self, handle: u64) -> Option<&'static str> {
+        self.values.get(&handle).and_then(|entry| {
+            entry
+                .owner
+                .as_ref()
+                .is_none_or(|owner| owner.is_active())
+                .then_some(entry.kind)
+        })
+    }
+
+    pub fn with<T: Any, R>(
+        &self,
+        handle: u64,
+        kind: &'static str,
+        body: impl FnOnce(&T) -> R,
+    ) -> anyhow::Result<R> {
+        let entry = self
+            .values
+            .get(&handle)
+            .ok_or_else(|| anyhow::anyhow!("retained state handle has been released"))?;
+        anyhow::ensure!(
+            entry.owner.as_ref().is_none_or(|owner| owner.is_active()),
+            "retained state owner has been released"
+        );
+        anyhow::ensure!(
+            entry.kind == kind,
+            "retained state kind mismatch: expected `{kind}`, found `{}`",
+            entry.kind
+        );
+        let value = entry.value.downcast_ref::<T>().ok_or_else(|| {
+            anyhow::anyhow!("adapter state type does not match registered kind `{kind}`")
+        })?;
+        Ok(body(value))
+    }
+
+    pub fn with_mut<T: Any, R>(
+        &mut self,
+        handle: u64,
+        kind: &'static str,
+        body: impl FnOnce(&mut T) -> R,
+    ) -> anyhow::Result<R> {
+        let entry = self
+            .values
+            .get_mut(&handle)
+            .ok_or_else(|| anyhow::anyhow!("retained state handle has been released"))?;
+        anyhow::ensure!(
+            entry.owner.as_ref().is_none_or(|owner| owner.is_active()),
+            "retained state owner has been released"
+        );
+        anyhow::ensure!(
+            entry.kind == kind,
+            "retained state kind mismatch: expected `{kind}`, found `{}`",
+            entry.kind
+        );
+        let value = entry.value.downcast_mut::<T>().ok_or_else(|| {
+            anyhow::anyhow!("adapter state type does not match registered kind `{kind}`")
+        })?;
+        Ok(body(value))
+    }
+
+    pub fn release_application(&mut self, application: &Rc<crate::runtime::ApplicationGeneration>) {
+        self.values.retain(|_, entry| {
+            !entry
+                .owner
+                .as_ref()
+                .is_some_and(|owner| Rc::ptr_eq(owner, application))
+        });
+    }
+}
 
 use gpui::{
     AnyElement, App, ClickEvent, IntoElement, ParentElement, Refineable as _, StyleRefinement,
@@ -129,6 +242,79 @@ impl ArgumentDescriptor {
 
 type PayloadFactory =
     dyn Fn(&[ComponentArgument]) -> Result<ComponentPayload, String> + Send + Sync + 'static;
+
+/// A retained, adapter-owned value created on GPUI's application thread.
+///
+/// Unlike [`ComponentPayload`], the value intentionally need not be `Send` or
+/// `Sync`: GPUI entities and component state are owned by the app thread.
+pub type RetainedState = Box<dyn Any + 'static>;
+
+type StateFactory = dyn Fn(&[ComponentArgument], &mut Window, &mut App) -> Result<RetainedState, String>
+    + Send
+    + Sync
+    + 'static;
+
+#[derive(Clone)]
+pub struct StateDescriptor {
+    pub export: &'static str,
+    pub kind: &'static str,
+    pub arguments: Vec<ArgumentDescriptor>,
+    pub documentation: Option<&'static str>,
+    factory: Arc<StateFactory>,
+}
+
+impl StateDescriptor {
+    /// Registers an app-thread state factory.
+    ///
+    /// The shell validates arguments first, and only publishes the returned
+    /// value after the factory succeeds. On error it rolls back callbacks
+    /// recorded while validating arguments and inserts no retained-state slot.
+    /// The factory itself is responsible for transactional behavior: it must
+    /// not perform irreversible external side effects before returning `Ok`.
+    pub fn new(
+        export: &'static str,
+        kind: &'static str,
+        arguments: Vec<ArgumentDescriptor>,
+        factory: impl Fn(&[ComponentArgument], &mut Window, &mut App) -> Result<RetainedState, String>
+        + Send
+        + Sync
+        + 'static,
+    ) -> Self {
+        Self {
+            export,
+            kind,
+            arguments,
+            documentation: None,
+            factory: Arc::new(factory),
+        }
+    }
+
+    pub fn documented(mut self, documentation: &'static str) -> Self {
+        self.documentation = Some(documentation);
+        self
+    }
+
+    pub(crate) fn create(
+        &self,
+        arguments: &[ComponentArgument],
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Result<RetainedState, String> {
+        (self.factory)(arguments, window, cx)
+    }
+}
+
+impl fmt::Debug for StateDescriptor {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("StateDescriptor")
+            .field("export", &self.export)
+            .field("kind", &self.kind)
+            .field("arguments", &self.arguments)
+            .field("documentation", &self.documentation)
+            .finish_non_exhaustive()
+    }
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DeprecationDescriptor {
@@ -260,6 +446,7 @@ pub struct MaterializeRequest<'a> {
     children: Vec<AnyElement>,
     child_specs: Vec<(u32, Option<&'static str>)>,
     issued_children: Vec<(u64, u32)>,
+    next_child_token: u64,
     request_id: u64,
     child_lane: ChildLane,
     slots: Vec<(&'static str, AnyElement)>,
@@ -295,6 +482,7 @@ impl<'a> MaterializeRequest<'a> {
             children: init.children,
             child_specs: init.child_specs,
             issued_children: Vec::new(),
+            next_child_token: 0,
             request_id: NEXT_MATERIALIZE_REQUEST_ID.fetch_add(1, Ordering::Relaxed),
             child_lane: ChildLane::Unclaimed,
             slots: init.slots,
@@ -306,6 +494,37 @@ impl<'a> MaterializeRequest<'a> {
 
     pub fn payload(&self) -> &ComponentPayload {
         self.payload
+    }
+
+    /// Reads adapter-owned retained state without allowing render-time mutation.
+    pub fn with_state<T: Any, R>(
+        &self,
+        argument: &ComponentArgument,
+        body: impl FnOnce(&T) -> R,
+    ) -> anyhow::Result<R> {
+        let ComponentArgument::Entity { kind, handle } = argument else {
+            anyhow::bail!("component argument is not retained state");
+        };
+        self.runtime
+            .with_component_state::<T, R>(*handle, kind, body)
+    }
+
+    /// Returns an opaque capability that may update state later from a GPUI event.
+    pub fn state_handle<T: Any>(
+        &self,
+        argument: &ComponentArgument,
+    ) -> anyhow::Result<ComponentState<T>> {
+        let ComponentArgument::Entity { kind, handle } = argument else {
+            anyhow::bail!("component argument is not retained state");
+        };
+        self.runtime
+            .with_component_state::<T, _>(*handle, kind, |_| ())?;
+        Ok(ComponentState {
+            runtime: Rc::downgrade(self.runtime),
+            kind,
+            handle: *handle,
+            state: PhantomData,
+        })
     }
 
     pub fn methods(&self) -> impl Iterator<Item = &RecordedComponentMethod> {
@@ -361,7 +580,11 @@ impl<'a> MaterializeRequest<'a> {
         std::mem::take(&mut self.child_specs)
             .into_iter()
             .map(|(id, component_name)| {
-                let token = id as u64;
+                let token = self.next_child_token;
+                self.next_child_token = self
+                    .next_child_token
+                    .checked_add(1)
+                    .expect("a materialization request exhausted its child token space");
                 self.issued_children.push((token, id));
                 ComponentChild {
                     runtime: Rc::downgrade(self.runtime),
@@ -537,6 +760,40 @@ impl ComponentEntityRef {
     }
 }
 
+/// Opaque authority to update one adapter-owned state value from a GPUI event.
+pub struct ComponentState<T: Any> {
+    runtime: Weak<crate::ShellRuntime>,
+    kind: &'static str,
+    handle: u64,
+    state: PhantomData<fn() -> T>,
+}
+
+impl<T: Any> Clone for ComponentState<T> {
+    fn clone(&self) -> Self {
+        Self {
+            runtime: self.runtime.clone(),
+            kind: self.kind,
+            handle: self.handle,
+            state: PhantomData,
+        }
+    }
+}
+
+impl<T: Any> ComponentState<T> {
+    pub fn update<R>(
+        &self,
+        window: &mut Window,
+        cx: &mut App,
+        body: impl FnOnce(&mut T, &mut Window, &mut App) -> R,
+    ) -> anyhow::Result<R> {
+        let runtime = self
+            .runtime
+            .upgrade()
+            .ok_or_else(|| anyhow::anyhow!("retained state runtime has been released"))?;
+        runtime.update_component_state(self.handle, self.kind, window, cx, body)
+    }
+}
+
 #[derive(Clone)]
 pub struct ComponentCallback {
     runtime: Weak<crate::ShellRuntime>,
@@ -575,6 +832,23 @@ impl ComponentCallback {
             .upgrade()
             .ok_or_else(|| anyhow::anyhow!("component callback runtime has been released"))?;
         runtime.dispatch_component_callback(self.id, arguments, window, cx)
+    }
+
+    /// Invokes the script callback and reports any failure through the shell's
+    /// tracing subscriber.
+    ///
+    /// GPUI event closures cannot return an error. Adapters should use this
+    /// entry point instead of discarding the [`Result`] from [`Self::invoke_with`].
+    pub fn invoke_and_report_with(
+        &self,
+        context: &str,
+        arguments: &[ComponentCallbackArgument],
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        if let Err(error) = self.invoke_with(arguments, window, cx) {
+            tracing::error!("{context}: {error:#}");
+        }
     }
 }
 
@@ -667,6 +941,8 @@ pub enum RegistryError {
         replacement: &'static str,
     },
     EmptyConstructorList(&'static str),
+    InvalidStateKind(&'static str),
+    DuplicateStateKind(&'static str),
     Frozen,
 }
 
@@ -751,6 +1027,15 @@ impl fmt::Display for RegistryError {
                     "component `{name}` has no JavaScript constructor"
                 )
             }
+            Self::InvalidStateKind(kind) => {
+                write!(
+                    formatter,
+                    "state kind `{kind}` is not a valid non-reserved identifier"
+                )
+            }
+            Self::DuplicateStateKind(kind) => {
+                write!(formatter, "state kind `{kind}` is already registered")
+            }
             Self::Frozen => formatter.write_str("component registry is frozen"),
         }
     }
@@ -762,6 +1047,8 @@ pub struct ComponentRegistry {
     descriptors: Vec<Arc<ComponentDescriptor>>,
     names: HashSet<&'static str>,
     exports: HashSet<&'static str>,
+    states: Vec<Arc<StateDescriptor>>,
+    state_kinds: HashSet<&'static str>,
     frozen: bool,
 }
 
@@ -778,6 +1065,8 @@ impl ComponentRegistry {
             descriptors: Vec::new(),
             names: HashSet::new(),
             exports: HashSet::new(),
+            states: Vec::new(),
+            state_kinds: HashSet::new(),
             frozen: false,
         })
     }
@@ -848,6 +1137,29 @@ impl ComponentRegistry {
         Ok(id)
     }
 
+    pub fn register_state(&mut self, descriptor: StateDescriptor) -> Result<(), RegistryError> {
+        if self.frozen {
+            return Err(RegistryError::Frozen);
+        }
+        if !is_javascript_identifier(descriptor.export) {
+            return Err(RegistryError::InvalidExport(descriptor.export));
+        }
+        if !is_javascript_identifier(descriptor.kind) {
+            return Err(RegistryError::InvalidStateKind(descriptor.kind));
+        }
+        if self.exports.contains(descriptor.export) {
+            return Err(RegistryError::DuplicateExport(descriptor.export));
+        }
+        if self.state_kinds.contains(descriptor.kind) {
+            return Err(RegistryError::DuplicateStateKind(descriptor.kind));
+        }
+        validate_arguments(descriptor.kind, descriptor.export, &descriptor.arguments)?;
+        self.exports.insert(descriptor.export);
+        self.state_kinds.insert(descriptor.kind);
+        self.states.push(Arc::new(descriptor));
+        Ok(())
+    }
+
     pub fn freeze(&mut self) -> Result<FrozenComponentRegistry, RegistryError> {
         if self.frozen {
             return Err(RegistryError::Frozen);
@@ -855,6 +1167,7 @@ impl ComponentRegistry {
         self.frozen = true;
         Ok(FrozenComponentRegistry {
             descriptors: self.descriptors.clone().into(),
+            states: self.states.clone().into(),
         })
     }
 }
@@ -1004,6 +1317,7 @@ fn is_javascript_identifier(name: &str) -> bool {
 #[derive(Clone, Default)]
 pub struct FrozenComponentRegistry {
     descriptors: Arc<[Arc<ComponentDescriptor>]>,
+    states: Arc<[Arc<StateDescriptor>]>,
 }
 
 impl FrozenComponentRegistry {
@@ -1015,6 +1329,10 @@ impl FrozenComponentRegistry {
         self.descriptors.get(id.0 as usize).map(Arc::as_ref)
     }
 
+    pub fn states(&self) -> impl ExactSizeIterator<Item = &StateDescriptor> {
+        self.states.iter().map(Arc::as_ref)
+    }
+
     pub(crate) fn registered(
         &self,
     ) -> impl ExactSizeIterator<Item = (ComponentId, &ComponentDescriptor)> {
@@ -1024,8 +1342,24 @@ impl FrozenComponentRegistry {
             .map(|(index, descriptor)| (ComponentId(index as u32), descriptor.as_ref()))
     }
 
-    pub(crate) fn javascript_module_source(&self) -> String {
-        let mut source = String::new();
+    pub(crate) fn javascript_module_source(&self, state_proof: &str) -> String {
+        let mut source = format!(
+            "const __stateHandles = new WeakMap();\nconst __stateProof = {state_proof:?};\n\
+             function __unwrapState(value) {{\n\
+               if (__stateHandles.has(value)) return {{ __componentStateHandle: __stateHandles.get(value), __componentStateProof: __stateProof }};\n\
+               if (Array.isArray(value)) return value.map(__unwrapState);\n\
+               return value;\n\
+             }}\n"
+        );
+        for state in self.states() {
+            source.push_str("function ");
+            source.push_str(state.export);
+            source.push_str("(...args) { const handle = globalThis.__gpui[");
+            source.push_str(&format!("{:?}", state.export));
+            source.push_str("](args); const value = Object.freeze({}); __stateHandles.set(value, handle); return value; }\nexport { ");
+            source.push_str(state.export);
+            source.push_str(" };\n");
+        }
         for descriptor in self.descriptors() {
             for constructor in &descriptor.constructors {
                 source.push_str("function ");
@@ -1033,7 +1367,7 @@ impl FrozenComponentRegistry {
                 source
                     .push_str("(...args) { return globalThis.__gpui.__element(globalThis.__gpui[");
                 source.push_str(&format!("{:?}", constructor.export));
-                source.push_str("](args)); }\nexport { ");
+                source.push_str("](args.map(__unwrapState))); }\nexport { ");
                 source.push_str(constructor.export);
                 source.push_str(" };\n");
             }
@@ -1158,6 +1492,41 @@ mod tests {
         assert!(request.materialize_child(&mut child).is_ok());
         assert_eq!(request.unread_parts().1, 0);
         assert!(request.materialize_child(&mut child).is_err());
+    }
+
+    #[test]
+    fn repeated_child_spec_ids_receive_independent_exactly_once_tokens() {
+        let runtime = crate::ShellRuntime::new_isolated().unwrap();
+        let payload = ComponentPayload::new(());
+        let operations = [];
+        let resolutions = std::cell::Cell::new(0);
+        let mut resolve_element = |_| {
+            resolutions.set(resolutions.get() + 1);
+            Ok(div().into_any_element())
+        };
+        let mut request = MaterializeRequest::new(MaterializeRequestInit {
+            component_name: "RepeatedParent",
+            payload: &payload,
+            operations: &operations,
+            runtime: &runtime,
+            resolve_element: &mut resolve_element,
+            style: StyleRefinement::default(),
+            children: Vec::new(),
+            child_specs: vec![(7, Some("RepeatedChild")), (7, Some("RepeatedChild"))],
+            slots: Vec::new(),
+            disabled: false,
+            selected: false,
+            on_click: None,
+        });
+
+        let mut children = request.take_typed_children();
+        let mut first = children.remove(0);
+        let mut second = children.remove(0);
+        assert!(request.materialize_child(&mut first).is_ok());
+        assert!(request.materialize_child(&mut first).is_err());
+        assert!(request.materialize_child(&mut second).is_ok());
+        assert_eq!(resolutions.get(), 2);
+        assert_eq!(request.unread_parts().1, 0);
     }
 
     #[test]
@@ -1332,6 +1701,108 @@ mod tests {
 
     fn nullary(export: &'static str) -> ConstructorDescriptor {
         ConstructorDescriptor::new(export, Vec::new(), |_| Ok(ComponentPayload::new(())))
+    }
+
+    fn state(export: &'static str, kind: &'static str) -> StateDescriptor {
+        StateDescriptor::new(export, kind, Vec::new(), |_, _, _| Ok(Box::new(0usize)))
+    }
+
+    #[test]
+    fn state_exports_share_the_component_export_namespace() {
+        let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+        registry
+            .register_state(state("InputState", "InputState"))
+            .unwrap();
+
+        assert_eq!(
+            registry
+                .register(empty_descriptor("Input", vec![nullary("InputState")]))
+                .unwrap_err(),
+            RegistryError::DuplicateExport("InputState")
+        );
+    }
+
+    #[test]
+    fn state_descriptors_validate_export_kind_and_arguments() {
+        let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+        assert_eq!(
+            registry
+                .register_state(state("class", "State"))
+                .unwrap_err(),
+            RegistryError::InvalidExport("class")
+        );
+        assert_eq!(
+            registry
+                .register_state(state("State", "bad-kind"))
+                .unwrap_err(),
+            RegistryError::InvalidStateKind("bad-kind")
+        );
+        assert_eq!(
+            registry
+                .register_state(StateDescriptor::new(
+                    "State",
+                    "State",
+                    vec![ArgumentDescriptor::new("class", ArgumentSchema::String)],
+                    |_, _, _| Ok(Box::new(())),
+                ))
+                .unwrap_err(),
+            RegistryError::InvalidArgument {
+                component: "State",
+                callable: "State",
+                argument: "class",
+            }
+        );
+
+        let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+        registry
+            .register_state(state("FirstState", "SharedState"))
+            .unwrap();
+        assert_eq!(
+            registry
+                .register_state(state("SecondState", "SharedState"))
+                .unwrap_err(),
+            RegistryError::DuplicateStateKind("SharedState")
+        );
+    }
+
+    #[test]
+    fn frozen_registry_module_declares_state_exports() {
+        let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+        registry
+            .register_state(state("InputState", "InputState"))
+            .unwrap();
+
+        let source = registry
+            .freeze()
+            .unwrap()
+            .javascript_module_source("test-proof");
+
+        assert!(source.contains("export { InputState }"), "{source}");
+    }
+
+    #[test]
+    fn retained_state_store_enforces_its_limit_without_overwriting_live_state() {
+        let mut store = RetainedStateStore::default();
+        for value in 0..MAX_RETAINED_COMPONENT_STATES {
+            store.insert("State", None, Box::new(value)).unwrap();
+        }
+        let error = store.insert("State", None, Box::new(())).unwrap_err();
+        assert!(error.contains("limit"), "{error}");
+        assert_eq!(store.kind(0), Some("State"));
+    }
+
+    #[test]
+    fn releasing_an_application_recovers_retained_state_capacity() {
+        let owner = crate::runtime::ApplicationGeneration::new(91);
+        let mut store = RetainedStateStore::default();
+        for value in 0..MAX_RETAINED_COMPONENT_STATES {
+            store
+                .insert("State", Some(owner.clone()), Box::new(value))
+                .unwrap();
+        }
+        store.release_application(&owner);
+        assert_eq!(store.len(), 0);
+        store.insert("State", None, Box::new(())).unwrap();
     }
 
     #[test]

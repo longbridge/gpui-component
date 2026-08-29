@@ -19,6 +19,8 @@ use std::{
     collections::{HashMap, HashSet, VecDeque},
     path::Path,
     rc::{Rc, Weak},
+    sync::atomic::{AtomicU64, Ordering},
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::{Context as _, Result, anyhow};
@@ -56,6 +58,186 @@ pub struct ViewType {
     value: Persistent<Object<'static>>,
     module_lease: Option<ApplicationModuleLease>,
     application: Option<Rc<ApplicationGeneration>>,
+}
+
+#[cfg(test)]
+mod retained_component_state_tests {
+    use super::*;
+    use gpui::{TestAppContext, VisualTestContext};
+
+    #[test]
+    fn immutable_state_lookup_reports_reentrant_mutable_borrow() {
+        let runtime = ShellRuntime::new_isolated().unwrap();
+        let handle = runtime
+            .component_states
+            .borrow_mut()
+            .insert("State", None, Box::new(1usize))
+            .unwrap();
+        let _borrow = runtime.component_states.borrow_mut();
+
+        let error = runtime
+            .with_component_state::<usize, _>(handle, "State", |_| ())
+            .unwrap_err();
+
+        assert!(error.to_string().contains("already mutably borrowed"));
+    }
+
+    #[test]
+    fn root_drop_release_path_purges_generation_owned_state() {
+        let runtime = ShellRuntime::new_isolated().unwrap();
+        let application = ApplicationGeneration::new(92);
+        runtime
+            .component_states
+            .borrow_mut()
+            .insert("State", Some(application.clone()), Box::new(()))
+            .unwrap();
+
+        runtime.release_application_generation_without_context(&application);
+
+        assert_eq!(runtime.retained_component_state_count(), 0);
+        assert!(!application.is_active());
+    }
+
+    #[test]
+    fn successful_reload_release_purges_old_generation_and_preserves_new() {
+        let runtime = ShellRuntime::new_isolated().unwrap();
+        let old = ApplicationGeneration::new(94);
+        let new = ApplicationGeneration::new(95);
+        let old_handle = runtime
+            .component_states
+            .borrow_mut()
+            .insert("State", Some(old.clone()), Box::new(1usize))
+            .unwrap();
+        let new_handle = runtime
+            .component_states
+            .borrow_mut()
+            .insert("State", Some(new.clone()), Box::new(2usize))
+            .unwrap();
+
+        runtime.release_application_generation_without_context(&old);
+
+        assert!(
+            runtime
+                .with_component_state::<usize, _>(old_handle, "State", |_| ())
+                .is_err()
+        );
+        assert_eq!(
+            runtime
+                .with_component_state::<usize, _>(new_handle, "State", |value| *value)
+                .unwrap(),
+            2
+        );
+        assert!(new.is_active());
+    }
+
+    #[gpui::test]
+    fn generation_release_during_state_update_is_deferred_then_guaranteed(cx: &mut TestAppContext) {
+        let runtime = ShellRuntime::new_isolated().unwrap();
+        let application = ApplicationGeneration::new(93);
+        let handle = runtime
+            .component_states
+            .borrow_mut()
+            .insert("State", Some(application.clone()), Box::new(1usize))
+            .unwrap();
+        for value in 1..crate::component_registry::MAX_RETAINED_COMPONENT_STATES {
+            runtime
+                .component_states
+                .borrow_mut()
+                .insert("State", Some(application.clone()), Box::new(value))
+                .unwrap();
+        }
+        assert!(
+            runtime
+                .component_states
+                .borrow_mut()
+                .insert("State", None, Box::new(()))
+                .is_err()
+        );
+        let window = cx.add_window(|_, _| gpui::Empty);
+        let mut context = VisualTestContext::from_window(*window, cx);
+
+        context
+            .update(|window, cx| {
+                runtime.update_component_state::<usize, _>(
+                    handle,
+                    "State",
+                    window,
+                    cx,
+                    |value, _, _| {
+                        *value += 1;
+                        runtime.release_application_generation_without_context(&application);
+                    },
+                )
+            })
+            .unwrap();
+
+        assert_eq!(runtime.retained_component_state_count(), 0);
+        assert!(!application.is_active());
+        runtime
+            .component_states
+            .borrow_mut()
+            .insert("State", None, Box::new(()))
+            .expect("released generation must recover state capacity");
+    }
+
+    #[gpui::test]
+    fn state_update_reports_reentrant_immutable_borrow(cx: &mut TestAppContext) {
+        let runtime = ShellRuntime::new_isolated().unwrap();
+        let handle = runtime
+            .component_states
+            .borrow_mut()
+            .insert("State", None, Box::new(1usize))
+            .unwrap();
+        let window = cx.add_window(|_, _| gpui::Empty);
+        let mut context = VisualTestContext::from_window(*window, cx);
+        let _borrow = runtime.component_states.borrow();
+
+        let error = context
+            .update(|window, cx| {
+                runtime.update_component_state::<usize, _>(
+                    handle,
+                    "State",
+                    window,
+                    cx,
+                    |_, _, _| (),
+                )
+            })
+            .unwrap_err();
+
+        assert!(error.to_string().contains("already borrowed"));
+    }
+
+    #[gpui::test]
+    fn state_update_is_rejected_under_render_authority(cx: &mut TestAppContext) {
+        let runtime = ShellRuntime::new_isolated().unwrap();
+        let handle = runtime
+            .component_states
+            .borrow_mut()
+            .insert("State", None, Box::new(1usize))
+            .unwrap();
+        let window = cx.add_window(|_, _| gpui::Empty);
+        let mut context = VisualTestContext::from_window(*window, cx);
+
+        let error = context
+            .update(|window, cx| {
+                let (_scope, _) =
+                    scope::enter_runtime(&runtime, window, cx, ScopePhase::Render, None);
+                runtime.update_component_state::<usize, _>(
+                    handle,
+                    "State",
+                    window,
+                    cx,
+                    |_, _, _| (),
+                )
+            })
+            .unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("cannot be updated during render")
+        );
+    }
 }
 
 /// An application entry loaded by one [`ShellRuntime`].
@@ -469,6 +651,9 @@ pub struct ShellRuntime {
     /// QuickJS aborts the process if a value outlives its runtime.
     callbacks: RefCell<CallbackArena<Persistent<Function<'static>>>>,
     components: FrozenComponentRegistry,
+    component_state_proof: String,
+    component_states: RefCell<crate::component_registry::RetainedStateStore>,
+    pending_component_state_releases: RefCell<Vec<Rc<ApplicationGeneration>>>,
     warned_deprecated_exports: RefCell<HashSet<&'static str>>,
     arena: RefCell<SpecArena>,
     /// Templates the script has defined, indexed by the id its closure keeps.
@@ -545,6 +730,7 @@ pub struct ShellRuntime {
 
 impl Drop for ShellRuntime {
     fn drop(&mut self) {
+        self.flush_component_state_releases();
         // Both hold `Persistent` script values, and a persistent handle
         // released after its runtime aborts the process.
         scheduler::shutdown(self);
@@ -658,8 +844,18 @@ impl ShellRuntime {
         let context = JsContext::full(&js_runtime).map_err(js_setup_error)?;
 
         let app_modules = AppModules::default();
+        static NEXT_STATE_PROOF: AtomicU64 = AtomicU64::new(1);
+        let proof_sequence = NEXT_STATE_PROOF.fetch_add(1, Ordering::Relaxed);
+        let proof_time = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let component_state_proof = format!(
+            "gpui-shell-state-{}-{proof_time:x}-{proof_sequence:x}",
+            std::process::id()
+        );
         let component_module = RegisteredComponentModule {
-            source: components.javascript_module_source(),
+            source: components.javascript_module_source(&component_state_proof),
         };
         // Order is the namespace policy. The runtime's own modules resolve
         // first, so a host cannot take `gpui` or `path` from under a script;
@@ -695,6 +891,9 @@ impl ShellRuntime {
         let runtime = Rc::new(Self {
             callbacks: RefCell::new(CallbackArena::default()),
             components,
+            component_state_proof,
+            component_states: RefCell::new(Default::default()),
+            pending_component_state_releases: RefCell::new(Vec::new()),
             warned_deprecated_exports: RefCell::new(HashSet::new()),
             arena: RefCell::new(SpecArena::new()),
             templates: RefCell::new(Vec::new()),
@@ -728,6 +927,80 @@ impl ShellRuntime {
 
     pub(crate) fn component_entity_kind(&self, handle: EntityHandle) -> Option<&'static str> {
         self.entities.borrow().kind(handle)
+    }
+
+    pub(crate) fn with_component_state<T: std::any::Any, R>(
+        &self,
+        handle: u64,
+        kind: &'static str,
+        body: impl FnOnce(&T) -> R,
+    ) -> anyhow::Result<R> {
+        self.flush_component_state_releases();
+        let result = self
+            .component_states
+            .try_borrow()
+            .map_err(|_| anyhow!("retained component state is already mutably borrowed"))?
+            .with(handle, kind, body);
+        self.flush_component_state_releases();
+        result
+    }
+
+    pub(crate) fn update_component_state<T: std::any::Any, R>(
+        self: &Rc<Self>,
+        handle: u64,
+        kind: &'static str,
+        window: &mut Window,
+        cx: &mut App,
+        body: impl FnOnce(&mut T, &mut Window, &mut App) -> R,
+    ) -> anyhow::Result<R> {
+        anyhow::ensure!(
+            !matches!(
+                scope::current_phase(),
+                Some(ScopePhase::Render | ScopePhase::Layout)
+            ),
+            "retained component state cannot be updated during render or layout"
+        );
+        let (_scope, _) = scope::enter_runtime(self, window, cx, ScopePhase::Event, None);
+        self.flush_component_state_releases();
+        let result = self
+            .component_states
+            .try_borrow_mut()
+            .map_err(|_| anyhow!("retained component state is already borrowed"))?
+            .with_mut(handle, kind, |state| body(state, window, cx));
+        self.flush_component_state_releases();
+        result
+    }
+
+    fn release_component_states(&self, application: &Rc<ApplicationGeneration>) {
+        self.pending_component_state_releases
+            .borrow_mut()
+            .push(application.clone());
+        self.flush_component_state_releases();
+    }
+
+    fn flush_component_state_releases(&self) {
+        loop {
+            let pending = std::mem::take(&mut *self.pending_component_state_releases.borrow_mut());
+            if pending.is_empty() {
+                return;
+            }
+            let Ok(mut states) = self.component_states.try_borrow_mut() else {
+                self.pending_component_state_releases
+                    .borrow_mut()
+                    .extend(pending);
+                return;
+            };
+            for application in pending {
+                states.release_application(&application);
+            }
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn retained_component_state_count(&self) -> usize {
+        self.component_states
+            .try_borrow()
+            .map_or(0, |states| states.len())
     }
 
     pub fn type_declarations(&self) -> String {
@@ -838,6 +1111,7 @@ impl ShellRuntime {
         application: &Rc<ApplicationGeneration>,
         cx: &mut impl gpui::AppContext,
     ) {
+        self.release_component_states(application);
         let release = { self.entities().release_application(application) };
         self.purge_released_view_aliases(&release);
         release.retire(cx);
@@ -849,6 +1123,7 @@ impl ShellRuntime {
         &self,
         application: &Rc<ApplicationGeneration>,
     ) {
+        self.release_component_states(application);
         let release = { self.entities().release_application(application) };
         self.purge_released_view_aliases(&release);
         release.retire_without_context();
@@ -932,7 +1207,7 @@ impl ShellRuntime {
             Some(application.clone()),
         );
         if loaded.is_err() {
-            cancel_application_tasks(&application);
+            self.release_application_generation_without_context(&application);
         }
         loaded
     }
@@ -5760,6 +6035,17 @@ impl ShellRuntime {
 
             // Subsystems extend the same module object the prelude built.
             let module: Object = ctx.globals().get("__gpui")?;
+            for descriptor in self.components.states() {
+                let state_runtime = runtime.clone();
+                let descriptor = descriptor.clone();
+                module.set(
+                    descriptor.export,
+                    Func::from(move |ctx: Ctx<'_>, arguments: Arguments| -> JsResult<u64> {
+                        let runtime = upgrade(&state_runtime, &ctx)?;
+                        runtime.retained_state_transaction(&ctx, &descriptor, &arguments)
+                    }),
+                )?;
+            }
             for (id, descriptor) in self.components.registered() {
                 for constructor_descriptor in &descriptor.constructors {
                     let constructor_runtime = runtime.clone();
@@ -6530,6 +6816,7 @@ impl ShellRuntime {
         arguments: &Arguments,
         factory: impl FnOnce(&[ComponentArgument]) -> Result<ComponentPayload, String>,
     ) -> JsResult<ComponentPayload> {
+        self.flush_component_state_releases();
         let callback_checkpoint = self.callbacks.borrow().checkpoint();
         let result = (|| {
             let arguments = self.validate_component_arguments(ctx, api, descriptors, arguments)?;
@@ -6561,6 +6848,48 @@ impl ShellRuntime {
         if result.is_err() {
             self.callbacks.borrow_mut().rollback_to(callback_checkpoint);
         }
+        self.flush_component_state_releases();
+        result
+    }
+
+    fn retained_state_transaction(
+        &self,
+        ctx: &Ctx<'_>,
+        descriptor: &crate::StateDescriptor,
+        arguments: &Arguments,
+    ) -> JsResult<u64> {
+        self.flush_component_state_releases();
+        let callback_checkpoint = self.callbacks.borrow().checkpoint();
+        let result = (|| {
+            let arguments = self.validate_component_arguments(
+                ctx,
+                descriptor.export,
+                &descriptor.arguments,
+                arguments,
+            )?;
+            let state = scope::with_current(|window, cx| {
+                descriptor.create(&arguments, window, cx)
+            })
+            .ok_or_else(|| {
+                Exception::throw_type(
+                    ctx,
+                    "retained component state can only be created during a live Window/App call",
+                )
+            })?
+            .map_err(|error| Exception::throw_type(ctx, &error))?;
+            let owner = scope::current_application_generation();
+            self.component_states
+                .try_borrow_mut()
+                .map_err(|_| {
+                    Exception::throw_type(ctx, "retained component state is already borrowed")
+                })?
+                .insert(descriptor.kind, owner, state)
+                .map_err(|error| Exception::throw_range(ctx, &error))
+        })();
+        if result.is_err() {
+            self.callbacks.borrow_mut().rollback_to(callback_checkpoint);
+        }
+        self.flush_component_state_releases();
         result
     }
 
@@ -6629,6 +6958,26 @@ impl ShellRuntime {
                 if self.entities.borrow().kind(*handle) == Some(*kind) =>
             {
                 Some(ComponentArgument::Entity {
+                    kind,
+                    handle: *handle,
+                })
+            }
+            (ArgumentSchema::Entity(kind), Argument::RetainedState { handle, proof }) => {
+                let matches = if proof != &self.component_state_proof {
+                    false
+                } else {
+                    self.component_states
+                        .try_borrow()
+                        .map_err(|_| {
+                            Exception::throw_type(
+                                ctx,
+                                "retained component state is already mutably borrowed",
+                            )
+                        })?
+                        .kind(*handle)
+                        == Some(*kind)
+                };
+                matches.then_some(ComponentArgument::Entity {
                     kind,
                     handle: *handle,
                 })
@@ -7291,6 +7640,10 @@ enum Argument {
     Handler(Persistent<Function<'static>>),
     Element(SpecId),
     Entity(EntityHandle),
+    RetainedState {
+        handle: u64,
+        proof: String,
+    },
     Array(Vec<Argument>),
     /// A template's sentinel: this position is filled per call rather than now.
     /// Only reachable while a template body is being discovered, because
@@ -7380,13 +7733,14 @@ impl Arguments {
                          template is called and pass the result"
                     ),
                 )),
-                Argument::Element(_) | Argument::Entity(_) | Argument::Array(_) => {
-                    Err(JsError::new_from_js_message(
-                        "object",
-                        "value",
-                        format!("`{method}` does not take an object or array"),
-                    ))
-                }
+                Argument::Element(_)
+                | Argument::Entity(_)
+                | Argument::RetainedState { .. }
+                | Argument::Array(_) => Err(JsError::new_from_js_message(
+                    "object",
+                    "value",
+                    format!("`{method}` does not take an object or array"),
+                )),
             })
             .collect()
     }
@@ -7500,6 +7854,12 @@ fn component_argument_from_js<'js>(
         }
         if let Ok(handle) = object.get::<_, u64>("__handle") {
             return Ok(Argument::Entity(handle));
+        }
+        if let (Ok(handle), Ok(proof)) = (
+            object.get::<_, u64>("__componentStateHandle"),
+            object.get::<_, String>("__componentStateProof"),
+        ) {
+            return Ok(Argument::RetainedState { handle, proof });
         }
     }
     Ok(Argument::Value(bridge(ctx, &value)?))

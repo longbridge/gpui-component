@@ -80,12 +80,11 @@ fn a_script_view_produces_an_element_description(cx: &mut TestAppContext) {
 
 #[gpui::test]
 fn a_registered_component_payload_reaches_its_materializer(cx: &mut TestAppContext) {
+    use gpui::{AnyElement, IntoElement as _, div};
     use std::sync::{
         Arc,
         atomic::{AtomicUsize, Ordering},
     };
-
-    use gpui::{AnyElement, IntoElement as _, div};
 
     use crate::{
         COMPONENT_REGISTRY_API_VERSION, ComponentDescriptor, ComponentMaterializer,
@@ -650,6 +649,364 @@ export default class Resolved extends View {
             .contains("adapter callback ran: alpha|2.5|true|function"),
         "{error:#}"
     );
+}
+
+#[gpui::test]
+fn registered_component_state_is_created_once_and_updated_during_materialization(
+    cx: &mut TestAppContext,
+) {
+    use crate::{
+        ArgumentDescriptor, ArgumentSchema, COMPONENT_REGISTRY_API_VERSION, ComponentArgument,
+        ComponentDescriptor, ComponentMaterializer, ComponentPayload, ComponentRegistry,
+        ConstructorDescriptor, MaterializeRequest, StateDescriptor, TypeScriptDescriptor,
+    };
+    use gpui::{AnyElement, IntoElement as _, div};
+    use std::cell::RefCell;
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+
+    thread_local! {
+        static STATE_HANDLE: RefCell<Option<crate::ComponentState<usize>>> = const { RefCell::new(None) };
+    }
+
+    struct Adapter(Arc<AtomicUsize>);
+    impl ComponentMaterializer for Adapter {
+        fn materialize(&self, request: MaterializeRequest<'_>) -> anyhow::Result<AnyElement> {
+            let argument = request
+                .payload()
+                .downcast_ref::<ComponentArgument>()
+                .unwrap()
+                .clone();
+            let value = request.with_state::<usize, _>(&argument, |value| *value)?;
+            let handle = request.state_handle(&argument)?;
+            STATE_HANDLE.with(|stored| *stored.borrow_mut() = Some(handle));
+            self.0.store(value, Ordering::SeqCst);
+            Ok(div().into_any_element())
+        }
+    }
+
+    cx.update(crate::init);
+    let created = Arc::new(AtomicUsize::new(0));
+    let observed = Arc::new(AtomicUsize::new(0));
+    let factory_created = created.clone();
+    let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+    registry
+        .register_state(StateDescriptor::new(
+            "CounterState",
+            "CounterState",
+            vec![],
+            move |_, _, _| {
+                factory_created.fetch_add(1, Ordering::SeqCst);
+                Ok(Box::new(40usize))
+            },
+        ))
+        .unwrap();
+    registry
+        .register_state(StateDescriptor::new(
+            "OtherState",
+            "OtherState",
+            vec![],
+            |_, _, _| Ok(Box::new(())),
+        ))
+        .unwrap();
+    registry
+        .register(ComponentDescriptor {
+            name: "StatefulBox",
+            constructors: vec![ConstructorDescriptor::new(
+                "StatefulBox",
+                vec![ArgumentDescriptor::new(
+                    "state",
+                    ArgumentSchema::Entity("CounterState"),
+                )],
+                |arguments| Ok(ComponentPayload::new(arguments[0].clone())),
+            )],
+            methods: vec![],
+            typescript: TypeScriptDescriptor::default(),
+            materializer: Arc::new(Adapter(observed.clone())),
+        })
+        .unwrap();
+    let runtime = ShellRuntime::new_isolated_with_components(registry.freeze().unwrap()).unwrap();
+    let class = runtime
+        .load_source(
+            "stateful.js",
+            r#"
+import { View } from "gpui";
+import { CounterState, StatefulBox } from "gpui-component";
+export default class Stateful extends View {
+  init() { this.state = CounterState(); }
+  render() { return new StatefulBox(this.state); }
+}"#,
+        )
+        .unwrap();
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&class, window, cx))
+        .unwrap();
+    for expected in [40, 41] {
+        let snapshot = context
+            .update(|window, cx| {
+                runtime.build_snapshot(&object, None, crate::policy::default(), window, cx)
+            })
+            .unwrap();
+        context.update(|window, cx| {
+            drop(crate::materialize::materialize(
+                &runtime, &snapshot, window, cx,
+            ))
+        });
+        assert_eq!(observed.load(Ordering::SeqCst), expected);
+        if expected == 40 {
+            context
+                .update(|window, cx| {
+                    STATE_HANDLE.with(|stored| {
+                        stored
+                            .borrow()
+                            .as_ref()
+                            .unwrap()
+                            .update(window, cx, |value, _, _| *value += 1)
+                    })
+                })
+                .unwrap();
+        }
+    }
+    assert_eq!(created.load(Ordering::SeqCst), 1);
+
+    let forged = runtime
+        .load_source(
+            "forged-state.js",
+            r#"
+import { View } from "gpui";
+import { StatefulBox } from "gpui-component";
+export default class Forged extends View {
+  render() {
+    return new StatefulBox({ __componentStateHandle: 0, __componentStateProof: "guessed" });
+  }
+}"#,
+        )
+        .unwrap();
+    let forged = context
+        .update(|window, cx| runtime.instantiate(&forged, window, cx))
+        .unwrap();
+    let error = context
+        .update(|window, cx| {
+            runtime.build_snapshot(&forged, None, crate::policy::default(), window, cx)
+        })
+        .err()
+        .expect("forged retained state must be rejected");
+    assert!(
+        error.to_string().contains("expects a CounterState entity"),
+        "{error:#}"
+    );
+
+    let wrong_kind = runtime
+        .load_source(
+            "wrong-state-kind.js",
+            r#"
+import { View } from "gpui";
+import { OtherState, StatefulBox } from "gpui-component";
+export default class WrongKind extends View {
+  init() { this.state = OtherState(); }
+  render() { return new StatefulBox(this.state); }
+}"#,
+        )
+        .unwrap();
+    let wrong_kind = context
+        .update(|window, cx| runtime.instantiate(&wrong_kind, window, cx))
+        .unwrap();
+    let error = context
+        .update(|window, cx| {
+            runtime.build_snapshot(&wrong_kind, None, crate::policy::default(), window, cx)
+        })
+        .err()
+        .expect("wrong retained state kind must be rejected");
+    assert!(
+        error.to_string().contains("expects a CounterState entity"),
+        "{error:#}"
+    );
+}
+
+#[gpui::test]
+fn failed_registered_state_factory_rolls_back_without_retaining_a_slot(cx: &mut TestAppContext) {
+    use crate::{
+        ArgumentDescriptor, ArgumentSchema, COMPONENT_REGISTRY_API_VERSION, ComponentRegistry,
+        StateDescriptor,
+    };
+
+    cx.update(crate::init);
+    let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+    registry
+        .register_state(StateDescriptor::new(
+            "BrokenState",
+            "BrokenState",
+            vec![ArgumentDescriptor::new(
+                "callback",
+                ArgumentSchema::Callback("() => void"),
+            )],
+            |_, _, _| Err("state factory refused creation".into()),
+        ))
+        .unwrap();
+    let runtime = ShellRuntime::new_isolated_with_components(registry.freeze().unwrap()).unwrap();
+    let class = runtime
+        .load_source(
+            "broken-state.js",
+            r#"
+import { View } from "gpui";
+import { BrokenState } from "gpui-component";
+export default class Broken extends View { init() { BrokenState(() => {}); } render() { return "never"; } }
+"#,
+        )
+        .unwrap();
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let error = context
+        .update(|window, cx| runtime.instantiate(&class, window, cx))
+        .unwrap_err();
+    assert!(
+        error.to_string().contains("state factory refused creation"),
+        "{error:#}"
+    );
+    assert_eq!(runtime.retained_component_state_count(), 0);
+    assert_eq!(runtime.live_callbacks(), 0);
+}
+
+#[gpui::test]
+fn failed_application_load_releases_states_created_during_module_evaluation(
+    cx: &mut TestAppContext,
+) {
+    use crate::{COMPONENT_REGISTRY_API_VERSION, ComponentRegistry, StateDescriptor};
+
+    cx.update(crate::init);
+    let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+    registry
+        .register_state(StateDescriptor::new(
+            "LoadState",
+            "LoadState",
+            vec![],
+            |_, _, _| Ok(Box::new(())),
+        ))
+        .unwrap();
+    let runtime = ShellRuntime::new_isolated_with_components(registry.freeze().unwrap()).unwrap();
+    let directory = std::env::temp_dir().join(format!(
+        "gpui-shell-failed-state-load-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&directory);
+    std::fs::create_dir_all(&directory).unwrap();
+    std::fs::write(
+        directory.join("main.js"),
+        r#"
+import { LoadState } from "gpui-component";
+LoadState();
+throw new Error("module load failed after state creation");
+export default class Never {}
+"#,
+    )
+    .unwrap();
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let error = context
+        .update(|window, cx| {
+            let (_scope, _) = crate::scope::enter_runtime(
+                &runtime,
+                window,
+                cx,
+                crate::scope::ScopePhase::Event,
+                None,
+            );
+            runtime.load_app(&directory, "main.js")
+        })
+        .err()
+        .expect("application load must fail");
+    assert!(
+        error
+            .to_string()
+            .contains("module load failed after state creation"),
+        "{error:#}"
+    );
+    assert_eq!(runtime.retained_component_state_count(), 0);
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[gpui::test]
+fn successful_application_reload_purges_old_state_and_keeps_new_generation(
+    cx: &mut TestAppContext,
+) {
+    use crate::{COMPONENT_REGISTRY_API_VERSION, ComponentRegistry, StateDescriptor};
+
+    cx.update(crate::init);
+    let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+    registry
+        .register_state(StateDescriptor::new(
+            "ReloadState",
+            "ReloadState",
+            vec![],
+            |_, _, _| Ok(Box::new(())),
+        ))
+        .unwrap();
+    let runtime = ShellRuntime::new_isolated_with_components(registry.freeze().unwrap()).unwrap();
+    let directory = std::env::temp_dir().join(format!(
+        "gpui-shell-successful-state-reload-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&directory);
+    std::fs::create_dir_all(&directory).unwrap();
+    let source = |version| {
+        format!(
+            r#"
+import {{ ReloadState }} from "gpui-component";
+ReloadState();
+export default class Reloaded {{ render() {{ return "version {version}"; }} }}
+"#
+        )
+    };
+    std::fs::write(directory.join("main.js"), source(1)).unwrap();
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let first = context
+        .update(|window, cx| {
+            let (_scope, _) = crate::scope::enter_runtime(
+                &runtime,
+                window,
+                cx,
+                crate::scope::ScopePhase::Event,
+                None,
+            );
+            runtime.load_app(&directory, "main.js")
+        })
+        .unwrap();
+    std::fs::write(directory.join("main.js"), source(2)).unwrap();
+    let second = context
+        .update(|window, cx| {
+            let (_scope, _) = crate::scope::enter_runtime(
+                &runtime,
+                window,
+                cx,
+                crate::scope::ScopePhase::Event,
+                None,
+            );
+            runtime.load_app(&directory, "main.js")
+        })
+        .unwrap();
+    let first = context
+        .update(|window, cx| runtime.instantiate(&first, window, cx))
+        .unwrap();
+    let second = context
+        .update(|window, cx| runtime.instantiate(&second, window, cx))
+        .unwrap();
+    assert_eq!(runtime.retained_component_state_count(), 2);
+    let old = first.application_generation().unwrap();
+    let new = second.application_generation().unwrap();
+
+    context.update(|_, cx| runtime.release_application_generation(&old, cx));
+
+    assert_eq!(runtime.retained_component_state_count(), 1);
+    assert!(!old.is_active());
+    assert!(new.is_active());
+    context.update(|_, cx| runtime.release_application_generation(&new, cx));
+    assert_eq!(runtime.retained_component_state_count(), 0);
+    let _ = std::fs::remove_dir_all(&directory);
 }
 
 #[gpui::test]
