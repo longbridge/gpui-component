@@ -89,15 +89,25 @@ impl<'js> FromJs<'js> for FetchOptions {
     }
 }
 
+/// Any method the capability policy is willing to grant.
+///
+/// This is a token check rather than a list. What may be sent, to which host,
+/// on which path, is `Capabilities::may_request`'s decision and it already
+/// takes the method -- a second list here would be a second policy to keep in
+/// step with the first, and the way that goes wrong is a grant that cannot be
+/// exercised. So a method that is a method is parsed, and refusing it stays
+/// where refusing belongs.
+///
+/// What is refused here is a string that is not an HTTP method at all: an
+/// empty field, a space, a quote. `Method::from_bytes` is exactly that judge.
+/// Known methods are upper-cased on the way through, as `fetch` does.
 fn parse_method(ctx: &Ctx<'_>, method: &str) -> Result<reqwest::Method> {
-    match method.to_ascii_uppercase().as_str() {
-        "GET" => Ok(reqwest::Method::GET),
-        "POST" => Ok(reqwest::Method::POST),
-        _ => Err(Exception::throw_type(
+    reqwest::Method::from_bytes(method.to_ascii_uppercase().as_bytes()).map_err(|_| {
+        Exception::throw_type(
             ctx,
-            "fetch(url, options).method supports GET or POST",
-        )),
-    }
+            &format!("fetch(url, options).method `{method}` is not an HTTP method"),
+        )
+    })
 }
 
 fn parse_headers<'js>(ctx: &Ctx<'js>, value: Value<'js>) -> Result<reqwest::header::HeaderMap> {
