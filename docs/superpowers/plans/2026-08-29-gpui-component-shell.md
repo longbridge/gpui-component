@@ -4,7 +4,7 @@
 
 **Goal:** Register the complete `gpui-component` catalog with `gpui-shell` from an independent adapter crate and ship a JavaScript Story gallery that exercises every binding.
 
-**Architecture:** The current shell library becomes package `gpui-shell-core` while retaining Rust crate name `gpui_shell`; it gains an engine-neutral frozen component registry and erased render payload boundary. `gpui-component-shell` depends on core plus UI and owns all concrete schemas/state/materializers. A lightweight package `gpui-shell` composes core and the adapter into the existing command. Runtime JavaScript exports and generated TypeScript declarations are derived from the same descriptors.
+**Architecture:** The existing `gpui-shell` package remains intact, depends on `gpui-base` and `gpui-component`, and owns the engine-neutral registry without implementing concrete bindings. `gpui-component-shell` depends on `gpui-shell`, owns all concrete schemas/state/materializers, and exposes the full-catalog application startup/registration entry point. Runtime JavaScript exports and generated TypeScript declarations are derived from the same descriptors.
 
 **Tech Stack:** Rust 2024, GPUI, gpui-base, gpui-component, rquickjs, schemars/serde, Cargo workspace tests, JavaScript ES modules.
 
@@ -12,9 +12,11 @@
 
 ## Global Constraints
 
-- `gpui-shell-core` must not import or construct concrete `gpui-component` controls.
-- `gpui-component-shell` is the only library crate that depends on both `gpui-shell-core` and `gpui-component`.
-- The `gpui-shell` facade contains executable composition only and preserves `cargo run -p gpui-shell -- <application>`.
+- The existing `gpui-shell` package and Rust crate name must not be renamed or split.
+- `gpui-shell` must not import or construct concrete `gpui-component` controls in its library implementation.
+- `gpui-shell` depends on `gpui-base` and `gpui-component` but contains no concrete gpui-component binding implementation.
+- `gpui-component-shell` depends on `gpui-shell`; `gpui-shell` never depends back on the adapter.
+- Base-only applications may continue using `gpui-shell`; full component applications use the adapter startup entry point.
 - Existing JavaScript constructor and builder names remain compatible; renamed forms are deprecated aliases with diagnostics.
 - Registration is deterministic, rejects duplicate names, and freezes before scripts load.
 - Runtime exports and TypeScript declarations come from the same descriptor inventory.
@@ -240,15 +242,12 @@ git commit -m "shell: generate component APIs from registry"
 - Create: `crates/component-shell/Cargo.toml`
 - Create: `crates/component-shell/src/lib.rs`
 - Create: `crates/component-shell/src/shell/mod.rs`
-- Move: `crates/shell/` library sources to `crates/shell-core/`
-- Create: `crates/shell/Cargo.toml`
-- Move: `crates/shell-core/src/bin/gpui-shell.rs` to `crates/shell/src/main.rs`
-- Move: `crates/shell-core/src/materialize/components/*.rs` to `crates/component-shell/src/shell/`
+- Move: `crates/shell/src/materialize/components/*.rs` to `crates/component-shell/src/shell/`
 - Modify: `Cargo.toml`
-- Modify: `crates/shell-core/Cargo.toml`
-- Modify: `crates/shell/src/main.rs`
-- Modify: `crates/shell-core/src/materialize.rs`
-- Modify: `crates/shell-core/src/spec.rs`
+- Modify: `crates/shell/Cargo.toml`
+- Modify: `crates/shell/src/bin/gpui-shell.rs`
+- Modify: `crates/shell/src/materialize.rs`
+- Modify: `crates/shell/src/spec.rs`
 - Test: `crates/component-shell/src/lib.rs`
 
 **Interfaces:**
@@ -278,7 +277,7 @@ Expected: Cargo reports that package `gpui-component-shell` does not exist.
 
 - [ ] **Step 3: Add the crate and registration entry point**
 
-Rename the current library package to `gpui-shell-core` while keeping `[lib] name = "gpui_shell"`. Create a new `gpui-shell` facade package containing the moved binary. Declare package `gpui-component-shell`, library name `gpui_component_shell`, and dependencies on workspace `gpui`, `gpui-base`, `gpui-component`, and package `gpui-shell-core` aliased as dependency `gpui-shell`. Implement:
+Declare package `gpui-component-shell`, library name `gpui_component_shell`, and dependencies on workspace `gpui`, `gpui-base`, `gpui-component`, and `gpui-shell`. Implement:
 
 ```rust
 pub fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
@@ -296,7 +295,7 @@ Move component construction, component-specific warnings, typed child/slot handl
 
 - [ ] **Step 5: Compose the default executable**
 
-Make the `gpui-shell` facade depend on `gpui-shell-core` and `gpui-component-shell`, then build the registry before runtime startup:
+Expose an adapter startup helper that builds the registry before runtime startup; applications and the JS Story host call it instead of constructing a base-only runtime directly:
 
 ```rust
 let mut components = gpui_shell::ComponentRegistry::new(
@@ -309,14 +308,14 @@ gpui_shell::run_with_components(options, components)
 
 - [ ] **Step 6: Run migration parity and dependency audits**
 
-Run: `cargo test -p gpui-component-shell && cargo test -p gpui-shell-core --lib && cargo check -p gpui-shell -p gpui-shell-core && cargo tree -p gpui-shell-core | rg gpui-component`
+Run: `cargo test -p gpui-component-shell && cargo test -p gpui-shell --lib && cargo check -p gpui-shell -p gpui-component-shell && cargo tree -p gpui-component-shell | rg 'gpui-(shell|component|base)'`
 
-Expected: tests/check pass; the final audit prints no `gpui-component` dependency for the shell library graph.
+Expected: tests/check pass; the final audit shows `gpui-component-shell` consuming `gpui-shell`, `gpui-component`, and `gpui-base`, with no reverse adapter edge.
 
 - [ ] **Step 7: Commit the adapter migration**
 
 ```bash
-git add Cargo.toml Cargo.lock crates/shell crates/shell-core crates/component-shell
+git add Cargo.toml Cargo.lock crates/shell crates/component-shell
 git commit -m "component-shell: migrate shell component bindings"
 ```
 
@@ -418,7 +417,7 @@ Use `Entity<T>` for retained state, subscribe through adapter hooks, call `Scrip
 
 - [ ] **Step 5: Run lifecycle, QuickJS, and overlay suites**
 
-Run: `cargo test -p gpui-component-shell --test stateful && cargo test -p gpui-shell-core tests::snapshot --lib && cargo test -p gpui-shell-core engine::quickjs --lib`
+Run: `cargo test -p gpui-component-shell --test stateful && cargo test -p gpui-shell tests::snapshot --lib && cargo test -p gpui-shell engine::quickjs --lib`
 
 Expected: all selected tests pass.
 
@@ -477,7 +476,7 @@ Map chart data to gpui-component chart/plot APIs using semantic colors. Move con
 
 - [ ] **Step 5: Run complex and existing dock tests**
 
-Run: `cargo test -p gpui-component-shell --test complex && cargo test -p gpui-shell-core tests::dock --lib`
+Run: `cargo test -p gpui-component-shell --test complex && cargo test -p gpui-shell tests::dock --lib`
 
 Expected: all selected tests pass.
 
@@ -533,7 +532,7 @@ Generate declarations from the full registry, assert byte-for-byte deterministic
 
 - [ ] **Step 5: Run inventory and typings tests**
 
-Run: `cargo test -p gpui-component-shell --test inventory && cargo test -p gpui-shell-core typings --lib`
+Run: `cargo test -p gpui-component-shell --test inventory && cargo test -p gpui-shell typings --lib`
 
 Expected: all selected tests pass.
 
@@ -628,8 +627,8 @@ git commit -m "examples: add JavaScript component story"
 Run:
 
 ```bash
-rg -n "gpui_component::|use gpui_component|materialize/components" crates/shell-core/src
-cargo tree -p gpui-shell-core | rg "gpui-component($| )"
+rg -n "gpui_component::|use gpui_component|materialize/components" crates/shell/src
+cargo tree -p gpui-component-shell | rg "gpui-shell v"
 find crates/component-shell/src/shell -type f -name '*.rs' -print | sort
 ```
 
@@ -643,7 +642,7 @@ Expected: all inventory entries are classified/registered and all gallery routes
 
 - [ ] **Step 3: Run formatting and focused verification**
 
-Run: `cargo fmt --all -- --check && cargo test -p gpui-shell-core --lib && cargo test -p gpui-component-shell && cargo check -p gpui-shell -p gpui-shell-core -p gpui-component-shell`
+Run: `cargo fmt --all -- --check && cargo test -p gpui-shell --lib && cargo test -p gpui-component-shell && cargo check -p gpui-shell -p gpui-component-shell`
 
 Expected: all commands exit zero with no test failures.
 

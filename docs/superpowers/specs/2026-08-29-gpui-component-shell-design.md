@@ -14,11 +14,10 @@ depends on the adapter library.
 
 ## Crate boundaries
 
-### `gpui-shell-core`
+### `gpui-shell`
 
-The existing `gpui-shell` library becomes the `gpui-shell-core` package while
-retaining the Rust library name `gpui_shell`. It remains the script runtime and
-generic host bridge. It owns:
+The existing `gpui-shell` package, library, binary, and Rust crate name remain
+unchanged. It remains the script runtime and generic host bridge. It owns:
 
 - the JavaScript engine, modules, callbacks, entities, capabilities, and hot
   reload;
@@ -37,7 +36,8 @@ library.
 
 ### `gpui-component-shell`
 
-The new adapter crate depends on `gpui-shell` and `gpui-component`. Its
+The new adapter crate depends directly on `gpui-shell`, which in turn depends
+on both `gpui-base` and `gpui-component`. Its
 `src/shell/` directory contains one focused module per component family and a
 single public registration entry point:
 
@@ -61,18 +61,17 @@ loaded so runtime rendering does not mutate global schemas.
 
 ### Executable composition
 
-Cargo resolves dependencies at package granularity, so a binary in the core
-package cannot depend on an adapter that itself depends on the core. The
-existing binary therefore moves into a small `gpui-shell` facade package. That
-facade depends on `gpui-shell-core` and `gpui-component-shell`, registers
-generic shell primitives, invokes `gpui_component_shell::register`, and then
-starts the selected script engine. The user-facing command remains
-`cargo run -p gpui-shell -- <application>` and Rust users continue to import
-the library as `gpui_shell`.
+Using arrows from a Cargo consumer to its dependency, the dependency graph is
+`app -> gpui-component-shell -> gpui-shell -> gpui-component`, with
+`gpui-shell -> gpui-base` as the base-only path. `gpui-shell` does not depend
+back on the adapter, so Cargo sees no cycle and the existing shell package is
+not split. Although `gpui-shell` can name both UI libraries, concrete component
+registration and materialization remain exclusively in the adapter.
 
-Embedding hosts can choose the same full catalog or register only their own
-adapters. The `gpui-shell-core` library remains usable without
-`gpui-component`.
+`gpui-component-shell` exposes the full-catalog registration/startup entry
+point an application uses before loading scripts. The JavaScript Story host is
+the reference composition. A host that wants only base bindings may continue
+using `gpui-shell` directly.
 
 ## Registration model
 
@@ -159,8 +158,8 @@ The implementation is complete only when all of the following pass:
   to a registration or an explicit infrastructure classification;
 - generated TypeScript declarations match the registry snapshot;
 - existing shell tests pass after concrete component code is removed;
-- `cargo check` and targeted tests pass for `gpui-shell-core`, the `gpui-shell`
-  facade, `gpui-component-shell`, and the workspace;
+- `cargo check` and targeted tests pass for `gpui-shell`,
+  `gpui-component-shell`, and the workspace;
 - the JS Story loads through the standard `gpui-shell` command and every
   catalog route builds without a script or materialization error;
 - source and dependency audits prove concrete component implementations live
