@@ -8,7 +8,7 @@ use gpui::{
 };
 
 use crate::{
-    ActiveTheme as _, Sizable, Size, StyledExt as _, h_flex,
+    ActiveTheme as _, InteractiveElementExt as _, Sizable, Size, StyledExt as _, h_flex,
     shimmer::{ShimmerStyle, ShimmerText},
     v_flex,
 };
@@ -747,6 +747,7 @@ impl RenderOnce for AttachmentGroup {
             .gap_3()
             .py_1()
             .overflow_x_scroll()
+            .lock_scroll_axis()
             .refine_style(&self.style)
             .children(self.children)
     }
