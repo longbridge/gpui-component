@@ -3887,9 +3887,7 @@ impl ShellRuntime {
         let result = self.with_js(|ctx| {
             let handler = entry.value.clone().restore(ctx)?;
             let payload = Object::new(ctx.clone())?;
-            let modifiers = modifiers_object(&ctx, event.modifiers)?;
-            modifiers.set("function", event.modifiers.function)?;
-            payload.set("modifiers", modifiers)?;
+            payload.set("modifiers", modifiers_object(&ctx, event.modifiers)?)?;
             let capslock = Object::new(ctx.clone())?;
             capslock.set("on", event.capslock.on)?;
             payload.set("capslock", capslock)?;
@@ -3966,12 +3964,7 @@ impl ShellRuntime {
             if let Some(is_held) = is_held {
                 payload.set("is_held", is_held)?;
             }
-            let modifiers = Object::new(ctx.clone())?;
-            modifiers.set("shift", keystroke.modifiers.shift)?;
-            modifiers.set("control", keystroke.modifiers.control)?;
-            modifiers.set("alt", keystroke.modifiers.alt)?;
-            modifiers.set("platform", keystroke.modifiers.platform)?;
-            payload.set("modifiers", modifiers)?;
+            payload.set("modifiers", modifiers_object(ctx, keystroke.modifiers)?)?;
             handler.call::<_, ()>((
                 payload,
                 context_object(ctx, ContextBinding::Call(generation))?,
@@ -8650,6 +8643,7 @@ fn modifiers_object<'js>(ctx: &Ctx<'js>, modifiers: gpui::Modifiers) -> JsResult
     object.set("control", modifiers.control)?;
     object.set("alt", modifiers.alt)?;
     object.set("platform", modifiers.platform)?;
+    object.set("function", modifiers.function)?;
     Ok(object)
 }
 
