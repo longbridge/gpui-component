@@ -217,6 +217,7 @@ impl RenderOnce for BoundSelect {
 }
 
 #[cfg(test)]
+#[allow(dead_code)]
 pub(crate) mod test_probe {
     use std::cell::RefCell;
     thread_local! { static SELECTED: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) }; }

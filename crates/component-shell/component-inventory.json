@@ -165,10 +165,9 @@
       "name": "combobox",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "stateful-selection",
-        "reason": "No Combobox descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "Combobox"
+        "status": "registered",
+        "descriptor": "Combobox",
+        "exports": ["Combobox"]
       }
     },
     {
@@ -235,13 +234,8 @@
     {
       "source": "ui",
       "name": "dock",
-      "classification": "component",
-      "registration": {
-        "status": "deferred",
-        "category": "dock-layout",
-        "reason": "No Dock descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "Dock"
-      }
+      "classification": "infrastructure",
+      "explanation": "Dock is an application layout subsystem already exposed directly by gpui-shell; it is not a singular gpui-component constructor."
     },
     {
       "source": "ui",
@@ -354,10 +348,27 @@
       "name": "menu",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "popup-menu-api",
-        "reason": "No Menu descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "Menu"
+        "status": "registered",
+        "api": "MenuBar",
+        "descriptor": "Menu",
+        "exports": ["Menu"],
+        "related": [
+          {
+            "descriptor": "MenuItem",
+            "exports": ["MenuItem"],
+            "role": "direct-child-part"
+          },
+          {
+            "descriptor": "MenuSeparator",
+            "exports": ["MenuSeparator"],
+            "role": "direct-child-part"
+          },
+          {
+            "descriptor": "MenuBar",
+            "exports": ["MenuBar"],
+            "role": "renderable-menu-owner"
+          }
+        ]
       }
     },
     {
@@ -405,13 +416,8 @@
     {
       "source": "ui",
       "name": "plot",
-      "classification": "component",
-      "registration": {
-        "status": "deferred",
-        "category": "plot-infrastructure",
-        "reason": "No Plot descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "Plot"
-      }
+      "classification": "infrastructure",
+      "explanation": "Plot is the Rust painting trait implemented by the registered concrete chart elements, not a constructible component."
     },
     {
       "source": "ui",
@@ -497,23 +503,17 @@
     {
       "source": "ui",
       "name": "searchable_list",
-      "classification": "component",
-      "registration": {
-        "status": "deferred",
-        "category": "stateful-collection",
-        "reason": "No SearchableList descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "SearchableList"
-      }
+      "classification": "infrastructure",
+      "explanation": "SearchableListState and its delegate are retained selection/search infrastructure consumed by Select and Combobox; there is no standalone Render surface."
     },
     {
       "source": "ui",
       "name": "select",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "stateful-selection",
-        "reason": "No Select descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "Select"
+        "status": "registered",
+        "descriptor": "Select",
+        "exports": ["Select"]
       }
     },
     {
@@ -981,10 +981,9 @@
       "name": "combobox",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "stateful-selection",
-        "reason": "No Combobox descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "Combobox"
+        "status": "registered",
+        "descriptor": "Combobox",
+        "exports": ["Combobox"]
       }
     },
     {
@@ -1026,10 +1025,16 @@
       "name": "data_table",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "stateful-collection",
-        "reason": "No DataTable descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "DataTable"
+        "status": "registered",
+        "descriptor": "DataTable",
+        "exports": ["DataTable"],
+        "states": [
+          {
+            "export": "DataTableState",
+            "kind": "DataTableState",
+            "role": "retained-control-state"
+          }
+        ]
       }
     },
     {
@@ -1079,13 +1084,8 @@
     {
       "source": "story",
       "name": "dock",
-      "classification": "component",
-      "registration": {
-        "status": "deferred",
-        "category": "dock-layout",
-        "reason": "No Dock descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "Dock"
-      }
+      "classification": "infrastructure",
+      "explanation": "The Dock story exercises gpui-shell's application layout subsystem rather than a singular component constructor."
     },
     {
       "source": "story",
@@ -1230,10 +1230,27 @@
       "name": "menu",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "popup-menu-api",
-        "reason": "No Menu descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "Menu"
+        "status": "registered",
+        "api": "MenuBar",
+        "descriptor": "Menu",
+        "exports": ["Menu"],
+        "related": [
+          {
+            "descriptor": "MenuItem",
+            "exports": ["MenuItem"],
+            "role": "direct-child-part"
+          },
+          {
+            "descriptor": "MenuSeparator",
+            "exports": ["MenuSeparator"],
+            "role": "direct-child-part"
+          },
+          {
+            "descriptor": "MenuBar",
+            "exports": ["MenuBar"],
+            "role": "renderable-menu-owner"
+          }
+        ]
       }
     },
     {
@@ -1398,10 +1415,9 @@
       "name": "select",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "stateful-selection",
-        "reason": "No Select descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "Select"
+        "status": "registered",
+        "descriptor": "Select",
+        "exports": ["Select"]
       }
     },
     {
@@ -1711,13 +1727,8 @@
     {
       "source": "story",
       "name": "virtual_list",
-      "classification": "component",
-      "registration": {
-        "status": "deferred",
-        "category": "virtualized-collection",
-        "reason": "No VirtualList descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "VirtualList"
-      }
+      "classification": "infrastructure",
+      "explanation": "VirtualList is already a gpui-base primitive re-exported through gpui-shell, not a gpui-component registry surface."
     },
     {
       "source": "story",

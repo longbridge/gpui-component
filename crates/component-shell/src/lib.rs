@@ -207,12 +207,19 @@ mod tests {
                 .collect::<Vec<_>>(),
             ["secondary"]
         );
+        let undocumented = frozen
+            .descriptors()
+            .flat_map(|descriptor| {
+                descriptor
+                    .methods
+                    .iter()
+                    .filter(|method| method.documentation.is_none())
+                    .map(move |method| format!("{}.{}", descriptor.name, method.name))
+            })
+            .collect::<Vec<_>>();
         assert!(
-            frozen
-                .descriptors()
-                .flat_map(|descriptor| &descriptor.methods)
-                .all(|method| method.documentation.is_some()),
-            "every generated TypeScript method needs documentation"
+            undocumented.is_empty(),
+            "every generated TypeScript method needs documentation: {undocumented:?}"
         );
     }
 

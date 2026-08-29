@@ -14,8 +14,10 @@ export const REGISTERED_SURFACES = [
   "Clipboard",
   "Collapsible",
   "ColorPicker",
+  "Combobox",
   "Command",
   "DatePicker",
+  "DataTable",
   "DescriptionList",
   "Dialog",
   "DropdownButton",
@@ -30,6 +32,7 @@ export const REGISTERED_SURFACES = [
   "Label",
   "Link",
   "List",
+  "MenuBar",
   "NumberInput",
   "NativeMenuTrigger",
   "Notification",
@@ -43,6 +46,7 @@ export const REGISTERED_SURFACES = [
   "Scroll",
   "Scrollbar",
   "Separator",
+  "Select",
   "Sheet",
   "Settings",
   "Sidebar",
@@ -64,16 +68,7 @@ export const REGISTERED_SURFACES = [
 ];
 
 /** @type {Record<string, string>} */
-export const DEFERRED_SURFACES = {
-  Combobox: "stateful-selection",
-  DataTable: "stateful-collection",
-  Dock: "dock-layout",
-  Menu: "popup-menu-api",
-  Plot: "plot-infrastructure",
-  SearchableList: "stateful-collection",
-  Select: "stateful-selection",
-  VirtualList: "virtualized-collection",
-};
+export const DEFERRED_SURFACES = {};
 
 /** @param {string} surface @returns {{ status: "registered" } | { surface: string, status: "deferred", category: string, reason: string } | null} */
 export function surfaceStatus(surface) {

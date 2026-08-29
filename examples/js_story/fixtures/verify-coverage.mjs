@@ -183,9 +183,10 @@ const registeredBody = statusSource.match(
   /export const REGISTERED_SURFACES = \[([\s\S]*?)\];/,
 )?.[1];
 const deferredBody = statusSource.match(
-  /export const DEFERRED_SURFACES = \{([\s\S]*?)\n\};/,
+  /export const DEFERRED_SURFACES = \{([\s\S]*?)\};/,
 )?.[1];
-if (!registeredBody || !deferredBody) fail("status projection is missing");
+if (registeredBody == null || deferredBody == null)
+  fail("status projection is missing");
 const registered = new Set(
   [...registeredBody.matchAll(/"([^"]+)"/g)].map((match) => match[1]),
 );

@@ -18,12 +18,15 @@ import {
   Collapsible,
   ColorPicker,
   ColorPickerState,
+  Combobox,
   Command,
   CommandGroup,
   CommandItem,
   CommandState,
   DatePicker,
   DatePickerState,
+  DataTable,
+  DataTableState,
   DescriptionItem,
   DescriptionList,
   Dialog,
@@ -43,6 +46,10 @@ import {
   Label,
   Link,
   List,
+  Menu,
+  MenuBar,
+  MenuItem,
+  MenuSeparator,
   NumberInput,
   NativeMenuItem,
   NativeMenuSeparator,
@@ -62,6 +69,7 @@ import {
   Scrollbar,
   ScrollbarHandle,
   Separator,
+  Select,
   Sheet,
   SettingGroup,
   SettingItem,
@@ -165,6 +173,16 @@ export function registeredExample(surface) {
       return new ColorPicker(ColorPickerState())
         .label("Accent color")
         .accessibilityLabel("Choose an accent color");
+    case "Combobox":
+      return new Combobox(
+        "story-combobox",
+        () => [
+          { id: "alpha", label: "Alpha" },
+          { id: "beta", label: "Beta" },
+        ],
+        (_value, _cx) => {},
+        (_value, _cx) => {},
+      ).placeholder("Choose an option");
     case "Command":
       return new Command(CommandState())
         .placeholder("Type a command")
@@ -181,6 +199,14 @@ export function registeredExample(surface) {
         );
     case "DatePicker":
       return new DatePicker(DatePickerState()).placeholder("Select a date");
+    case "DataTable": {
+      const state = DataTableState(["name", "status"]);
+      return new DataTable(
+        state,
+        () => [{ name: "Alpha", status: "Ready" }],
+        (row, column) => asElement(new Text(String(row[column]))),
+      ).stripe(true);
+    }
     case "DescriptionList":
       return new DescriptionList()
         .columns(2)
@@ -253,6 +279,14 @@ export function registeredExample(surface) {
         ],
         (row) => asElement(new Text(row.label)),
       );
+    case "MenuBar":
+      return new MenuBar("story-menu-bar").child(
+        asElement(
+          new Menu("File")
+            .child(asElement(new MenuItem("Open", "open")))
+            .child(asElement(new MenuSeparator())),
+        ),
+      );
     case "NumberInput":
       return new NumberInput(InputState()).placeholder("Quantity");
     case "NativeMenuTrigger":
@@ -318,6 +352,13 @@ export function registeredExample(surface) {
     }
     case "Separator":
       return new Separator().label("Account").dashed();
+    case "Select":
+      return new Select(
+        "story-select",
+        () => [{ id: "alpha", label: "Alpha" }],
+        (row) => asElement(new Text(row.label)),
+        (_value, _cx) => {},
+      ).placeholder("Choose an option");
     case "Sheet":
       return new Sheet("sheet", "Open sheet", (_message, _cx) => {})
         .title("Inspector")

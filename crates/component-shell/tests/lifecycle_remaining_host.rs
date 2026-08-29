@@ -104,3 +104,57 @@ export default class Example extends View {
     draw(&mut context);
     assert!(tree(&mut context, &view).contains("Tooltip"));
 }
+
+#[gpui::test]
+fn menu_bar_installs_native_and_component_menu_models_after_render(cx: &mut TestAppContext) {
+    cx.update(|cx| {
+        gpui_shell::gpui_component::init(cx);
+        gpui_shell::init(cx);
+    });
+    let app = TempApp::new(
+        r#"
+import { View } from "gpui";
+import { MenuBar, Menu, MenuItem, MenuSeparator } from "gpui-component";
+export default class Example extends View {
+  render() {
+    return new MenuBar("main-menu").child(
+      new Menu("File")
+        .child(new MenuItem("Open", "file.open"))
+        .child(new MenuSeparator())
+        .child(new MenuItem("Quit", "app.quit").disabled(true))
+    );
+  }
+}
+"#,
+    );
+    let mut registry =
+        gpui_shell::ComponentRegistry::new(gpui_shell::COMPONENT_REGISTRY_API_VERSION).unwrap();
+    lifecycle_remaining::register(&mut registry).unwrap();
+    let runtime =
+        gpui_shell::ShellRuntime::new_isolated_with_components(registry.freeze().unwrap()).unwrap();
+    let loaded = runtime.load_application(&app.0, "main.js").unwrap();
+    let mounted = Rc::new(RefCell::new(None));
+    let slot = mounted.clone();
+    let window = cx.add_window(move |window, cx| {
+        let view = runtime.mount_application(&loaded, window, cx).unwrap();
+        *slot.borrow_mut() = Some(view.clone());
+        let host = cx.new(|_| Host(view));
+        Root::new(host, window, cx)
+    });
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    draw(&mut context);
+    context.run_until_parked();
+    draw(&mut context);
+    let view = mounted.borrow().clone().unwrap();
+    let rendered = tree(&mut context, &view);
+    assert!(rendered.contains("MenuBar"), "{rendered}");
+    context.update(|_, _| {});
+    context.run_until_parked();
+
+    context.update(|_, cx| {
+        let component_menus = gpui_shell::gpui_component::GlobalState::global(cx).app_menus();
+        assert_eq!(component_menus.len(), 1);
+        assert_eq!(component_menus[0].name.as_ref(), "File");
+        assert_eq!(component_menus[0].items.len(), 3);
+    });
+}

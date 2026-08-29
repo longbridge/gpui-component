@@ -506,8 +506,13 @@ fn callback_method(name: &'static str, op: fn(ComponentArgument) -> Op) -> Metho
 fn descriptor(
     name: &'static str,
     kind: Kind,
-    methods: Vec<MethodDescriptor>,
+    mut methods: Vec<MethodDescriptor>,
 ) -> ComponentDescriptor {
+    for method in &mut methods {
+        if method.documentation.is_none() {
+            method.documentation = Some("Configures this native window effect.");
+        }
+    }
     ComponentDescriptor {
         name,
         constructors: vec![ConstructorDescriptor::new(

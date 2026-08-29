@@ -10,7 +10,7 @@ export const coveredBy = [
   { route: "breadcrumb", registrations: ["Breadcrumb"] },
   { route: "button", registrations: ["Button"] },
   { route: "calendar", registrations: ["Calendar"] },
-  { route: "chart", registrations: ["BarChart", "Plot"] },
+  { route: "chart", registrations: ["BarChart"] },
   { route: "checkbox", registrations: ["Checkbox"] },
   { route: "clipboard", registrations: ["Clipboard"] },
   { route: "collapsible", registrations: ["Collapsible"] },
@@ -21,7 +21,7 @@ export const coveredBy = [
   { route: "date-picker", registrations: ["DatePicker"] },
   { route: "description-list", registrations: ["DescriptionList"] },
   { route: "dialog", registrations: ["Dialog"] },
-  { route: "dock", registrations: ["Dock"] },
+  { route: "dock", registrations: [] },
   { route: "dropdown-button", registrations: ["DropdownButton"] },
   { route: "editor", registrations: ["Editor", "Text"] },
   { route: "form", registrations: ["Form"] },
@@ -32,8 +32,8 @@ export const coveredBy = [
   { route: "input", registrations: ["Input"] },
   { route: "kbd", registrations: ["Kbd"] },
   { route: "label", registrations: ["Label"] },
-  { route: "list", registrations: ["List", "SearchableList"] },
-  { route: "menu", registrations: ["Menu"] },
+  { route: "list", registrations: ["List"] },
+  { route: "menu", registrations: ["MenuBar"] },
   { route: "native-menu", registrations: ["NativeMenuTrigger"] },
   { route: "notification", registrations: ["Notification"] },
   { route: "number-input", registrations: ["NumberInput"] },
@@ -65,7 +65,7 @@ export const coveredBy = [
   { route: "toggle", registrations: ["Toggle"] },
   { route: "tooltip", registrations: ["Tooltip"] },
   { route: "tree", registrations: ["Tree"] },
-  { route: "virtual-list", registrations: ["VirtualList"] },
+  { route: "virtual-list", registrations: [] },
 ];
 
 /** @param {string} route */

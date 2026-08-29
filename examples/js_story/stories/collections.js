@@ -78,7 +78,7 @@ export const stories = [
     rustStory: "VirtualListStory",
     description: "Large retained collection virtualization.",
     states: ["initial", "scrolled", "loading"],
-    availability: "pending",
+    availability: "infrastructure",
     api: "VirtualList",
   }),
 ];

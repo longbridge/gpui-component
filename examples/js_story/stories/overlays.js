@@ -29,7 +29,7 @@ export const stories = [
     description: "Context and dropdown menus.",
     states: ["closed", "open", "disabled item"],
     availability: "pending",
-    api: "Menu",
+    api: "MenuBar",
   }),
   pendingStory({
     id: "native-menu",

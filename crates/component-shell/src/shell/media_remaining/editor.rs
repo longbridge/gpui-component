@@ -88,10 +88,10 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
             },
         )],
         methods: vec![
-            MethodDescriptor::new("disabled", vec![ArgumentDescriptor::new("disabled", ArgumentSchema::Boolean)], |_| Ok(ComponentPayload::new(()))),
-            bool_method("appearance", Op::Appearance),
-            bool_method("bordered", Op::Bordered),
-            bool_method("readonly", Op::Readonly),
+            MethodDescriptor::new("disabled", vec![ArgumentDescriptor::new("disabled", ArgumentSchema::Boolean)], |_| Ok(ComponentPayload::new(()))).documented("Disables the editor."),
+            bool_method("appearance", Op::Appearance).documented("Controls the editor appearance."),
+            bool_method("bordered", Op::Bordered).documented("Controls the editor border."),
+            bool_method("readonly", Op::Readonly).documented("Controls read-only mode."),
             MethodDescriptor::new(
                 "ariaLabel",
                 vec![ArgumentDescriptor::new("label", ArgumentSchema::String)],
@@ -99,7 +99,7 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
                     [ComponentArgument::String(value)] if !value.trim().is_empty() => Ok(ComponentPayload::new(Op::AriaLabel(value.clone()))),
                     _ => Err("Editor.ariaLabel expects non-empty text".into()),
                 },
-            ),
+            ).documented("Sets the editor accessibility label."),
         ],
         typescript: TypeScriptDescriptor::new(
             "A retained native source editor. Shell style and common disabled state are honored; children are rejected. Language providers and custom context menus are not exposed.",

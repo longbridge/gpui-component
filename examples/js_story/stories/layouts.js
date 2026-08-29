@@ -38,7 +38,7 @@ export const stories = [
     rustStory: "DockStory",
     description: "Dockable panel layout.",
     states: ["split", "tab group", "side dock", "dragging"],
-    availability: "pending",
+    availability: "infrastructure",
     api: "Dock",
   }),
   pendingStory({

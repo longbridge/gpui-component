@@ -221,6 +221,7 @@ fn bool_method(name: &'static str, op: fn(bool) -> Op) -> MethodDescriptor {
             _ => Err(format!("{name} expects boolean")),
         },
     )
+    .documented("Configures this chart option.")
 }
 fn positive_usize_method(name: &'static str, op: fn(usize) -> Op) -> MethodDescriptor {
     MethodDescriptor::new(
@@ -238,6 +239,7 @@ fn positive_usize_method(name: &'static str, op: fn(usize) -> Op) -> MethodDescr
             _ => Err(format!("{name} expects a positive integer")),
         },
     )
+    .documented("Configures this chart option with a positive integer.")
 }
 fn number_method(name: &'static str, op: fn(f32) -> Op) -> MethodDescriptor {
     MethodDescriptor::new(
@@ -252,9 +254,11 @@ fn number_method(name: &'static str, op: fn(f32) -> Op) -> MethodDescriptor {
             _ => Err(format!("{name} expects a non-negative finite number")),
         },
     )
+    .documented("Configures this chart option with a non-negative number.")
 }
 fn flag(name: &'static str, op: Op) -> MethodDescriptor {
     MethodDescriptor::new(name, vec![], move |_| Ok(ComponentPayload::new(op)))
+        .documented("Selects this chart rendering mode.")
 }
 
 fn descriptor(name: &'static str, methods: Vec<MethodDescriptor>) -> ComponentDescriptor {

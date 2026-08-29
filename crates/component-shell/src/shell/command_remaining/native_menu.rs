@@ -182,9 +182,9 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
             },
         )],
         methods: vec![
-            MethodDescriptor::new("disabled", vec![ArgumentDescriptor::new("disabled", ArgumentSchema::Boolean)], |_| Ok(ComponentPayload::new(()))),
-            MethodDescriptor::new("checked", vec![ArgumentDescriptor::new("checked", ArgumentSchema::Boolean)], |args| match args { [ComponentArgument::Boolean(value)] => Ok(ComponentPayload::new(ItemOp::Checked(*value))), _ => Err("NativeMenuItem.checked expects boolean".into()) }),
-            MethodDescriptor::new("action", vec![ArgumentDescriptor::new("action", ArgumentSchema::String)], |args| match args { [ComponentArgument::String(value)] if !value.trim().is_empty() => Ok(ComponentPayload::new(ItemOp::Action(value.clone()))), _ => Err("NativeMenuItem.action expects non-empty action id".into()) }),
+            MethodDescriptor::new("disabled", vec![ArgumentDescriptor::new("disabled", ArgumentSchema::Boolean)], |_| Ok(ComponentPayload::new(()))).documented("Disables the native menu item."),
+            MethodDescriptor::new("checked", vec![ArgumentDescriptor::new("checked", ArgumentSchema::Boolean)], |args| match args { [ComponentArgument::Boolean(value)] => Ok(ComponentPayload::new(ItemOp::Checked(*value))), _ => Err("NativeMenuItem.checked expects boolean".into()) }).documented("Sets the native menu item checked state."),
+            MethodDescriptor::new("action", vec![ArgumentDescriptor::new("action", ArgumentSchema::String)], |args| match args { [ComponentArgument::String(value)] if !value.trim().is_empty() => Ok(ComponentPayload::new(ItemOp::Action(value.clone()))), _ => Err("NativeMenuItem.action expects non-empty action id".into()) }).documented("Dispatches the named shell action."),
         ],
         typescript: TypeScriptDescriptor::new("Typed native-menu item data with last-call-wins checked/action; disabled+checked is rejected because the native API cannot express it. ShellAction dispatches selection."),
         materializer: Arc::new(ItemMat),
@@ -204,8 +204,8 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
         name: "NativeMenuTrigger",
         constructors: vec![ConstructorDescriptor::new("NativeMenuTrigger", vec![ArgumentDescriptor::new("id", ArgumentSchema::String), ArgumentDescriptor::new("label", ArgumentSchema::String)], |args| match args { [ComponentArgument::String(id), ComponentArgument::String(label)] if !id.trim().is_empty() && !label.trim().is_empty() => Ok(ComponentPayload::new(Trigger { id: id.clone(), label: label.clone() })), _ => Err("NativeMenuTrigger expects non-empty id and label".into()) })],
         methods: vec![
-            MethodDescriptor::new("disabled", vec![ArgumentDescriptor::new("disabled", ArgumentSchema::Boolean)], |_| Ok(ComponentPayload::new(()))),
-            MethodDescriptor::new("onEffectError", vec![ArgumentDescriptor::new("callback", ArgumentSchema::Callback("(message: string, cx: Context) => void"))], |args| match args { [argument @ ComponentArgument::Callback(_)] => Ok(ComponentPayload::new(ErrorCallback(argument.clone()))), _ => Err("NativeMenuTrigger.onEffectError expects callback".into()) }),
+            MethodDescriptor::new("disabled", vec![ArgumentDescriptor::new("disabled", ArgumentSchema::Boolean)], |_| Ok(ComponentPayload::new(()))).documented("Disables the native menu trigger."),
+            MethodDescriptor::new("onEffectError", vec![ArgumentDescriptor::new("callback", ArgumentSchema::Callback("(message: string, cx: Context) => void"))], |args| match args { [argument @ ComponentArgument::Callback(_)] => Ok(ComponentPayload::new(ErrorCallback(argument.clone()))), _ => Err("NativeMenuTrigger.onEffectError expects callback".into()) }).documented("Reports asynchronous native menu failures."),
         ],
         typescript: TypeScriptDescriptor::new("A real Button trigger that shows an OS NativeMenu (or fallback) in a keyed event effect. Last onEffectError wins; typed item selection dispatches ShellAction."),
         materializer: Arc::new(TriggerMat),
