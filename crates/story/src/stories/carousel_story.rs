@@ -26,6 +26,7 @@ enum SlideTypography {
 pub struct CarouselStory {
     focus_handle: FocusHandle,
     horizontal: Entity<CarouselState>,
+    custom_controls: Entity<CarouselState>,
     multiple: Entity<CarouselState>,
     spacing: Entity<CarouselState>,
     vertical: Entity<CarouselState>,
@@ -55,6 +56,7 @@ impl CarouselStory {
     pub fn view(_: &mut Window, cx: &mut App) -> Entity<Self> {
         cx.new(|cx| {
             let horizontal = cx.new(|_| CarouselState::new(3));
+            let custom_controls = cx.new(|_| CarouselState::new(3));
             let multiple = cx.new(|_| CarouselState::new(5));
             let spacing = cx.new(|_| CarouselState::new(5));
             let vertical = cx.new(|_| CarouselState::new(3).with_axis(Axis::Vertical));
@@ -74,6 +76,7 @@ impl CarouselStory {
             Self {
                 focus_handle: cx.focus_handle(),
                 horizontal,
+                custom_controls,
                 multiple,
                 spacing,
                 vertical,
@@ -200,6 +203,40 @@ impl Render for CarouselStory {
                                 .with_size(self.size)
                                 .child((index + 1).to_string())
                             }))),
+                    ),
+            )
+            .child(
+                section("Custom controls")
+                    .description(
+                        "Replace control content and accessibility labels while retaining navigation behavior.",
+                    )
+                    .v_flex()
+                    .gap_3()
+                    .child(
+                        Carousel::new("carousel-custom-controls", &self.custom_controls)
+                            .w_full()
+                            .max_w_96()
+                            .mx_auto()
+                            .child(Self::items(
+                                &self.custom_controls,
+                                "Custom Controls",
+                                3,
+                                SlideTypography::Large,
+                                true,
+                                cx,
+                            ))
+                            .child(
+                                CarouselPrevious::new(&self.custom_controls)
+                                    .with_size(self.size)
+                                    .with_accessibility_label("Previous project")
+                                    .child("Back"),
+                            )
+                            .child(
+                                CarouselNext::new(&self.custom_controls)
+                                    .with_size(self.size)
+                                    .with_accessibility_label("Next project")
+                                    .child("Forward"),
+                            ),
                     ),
             )
             .child(

@@ -172,6 +172,41 @@ CarouselNext::new(&state).with_size(Size::Large);
 
 Previous and next controls default to `Size::Medium`. Pagination items default to `Size::XSmall`.
 
+## Custom controls
+
+`CarouselPrevious` and `CarouselNext` implement `ParentElement` and `Styled`. Without children they display the direction-appropriate chevron. Add a child to replace that visible content while preserving automatic navigation and disabled boundary states. `with_accessibility_label` also replaces the control's tooltip.
+
+```rust
+use gpui::ParentElement as _;
+
+CarouselPrevious::new(&state)
+    .with_accessibility_label("Previous project")
+    .child("Back");
+
+CarouselNext::new(&state)
+    .with_accessibility_label("Next project")
+    .child("Forward");
+```
+
+For a completely custom control, omit the corresponding Carousel part and compose any control with the public state API:
+
+```rust
+use gpui::ParentElement as _;
+use gpui_component::{Disableable as _, button::Button};
+
+let previous_state = state.clone();
+let previous_disabled = !state.read(cx).has_previous();
+
+Button::new("projects-previous")
+    .label("Back")
+    .disabled(previous_disabled)
+    .on_click(move |_, _, cx| {
+        previous_state.update(cx, |state, cx| {
+            state.select_previous(cx);
+        });
+    })
+```
+
 ## Accessibility
 
 The carousel exposes a labelled region and each item reports its position within the set. Use `with_accessibility_label` when the default "Carousel" label does not describe the content.

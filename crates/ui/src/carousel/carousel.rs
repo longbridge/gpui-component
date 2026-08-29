@@ -507,6 +507,8 @@ pub struct CarouselPrevious {
     state: Entity<CarouselState>,
     size: Size,
     style: StyleRefinement,
+    accessibility_label: Option<SharedString>,
+    children: Vec<AnyElement>,
 }
 
 impl CarouselPrevious {
@@ -516,7 +518,15 @@ impl CarouselPrevious {
             state: state.clone(),
             size: Size::Medium,
             style: StyleRefinement::default(),
+            accessibility_label: None,
+            children: Vec::new(),
         }
+    }
+
+    /// Replaces the generated previous-slide accessibility label and tooltip.
+    pub fn with_accessibility_label(mut self, label: impl Into<SharedString>) -> Self {
+        self.accessibility_label = Some(label.into());
+        self
     }
 }
 
@@ -533,9 +543,23 @@ impl Styled for CarouselPrevious {
     }
 }
 
+impl ParentElement for CarouselPrevious {
+    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
+        self.children.extend(elements);
+    }
+}
+
 impl RenderOnce for CarouselPrevious {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        carousel_control(self.state, self.size, self.style, false, cx)
+        carousel_control(
+            self.state,
+            self.size,
+            self.style,
+            self.accessibility_label,
+            self.children,
+            false,
+            cx,
+        )
     }
 }
 
@@ -545,6 +569,8 @@ pub struct CarouselNext {
     state: Entity<CarouselState>,
     size: Size,
     style: StyleRefinement,
+    accessibility_label: Option<SharedString>,
+    children: Vec<AnyElement>,
 }
 
 impl CarouselNext {
@@ -554,7 +580,15 @@ impl CarouselNext {
             state: state.clone(),
             size: Size::Medium,
             style: StyleRefinement::default(),
+            accessibility_label: None,
+            children: Vec::new(),
         }
+    }
+
+    /// Replaces the generated next-slide accessibility label and tooltip.
+    pub fn with_accessibility_label(mut self, label: impl Into<SharedString>) -> Self {
+        self.accessibility_label = Some(label.into());
+        self
     }
 }
 
@@ -571,9 +605,23 @@ impl Styled for CarouselNext {
     }
 }
 
+impl ParentElement for CarouselNext {
+    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
+        self.children.extend(elements);
+    }
+}
+
 impl RenderOnce for CarouselNext {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        carousel_control(self.state, self.size, self.style, true, cx)
+        carousel_control(
+            self.state,
+            self.size,
+            self.style,
+            self.accessibility_label,
+            self.children,
+            true,
+            cx,
+        )
     }
 }
 
@@ -581,6 +629,8 @@ fn carousel_control(
     state: Entity<CarouselState>,
     size: Size,
     style: StyleRefinement,
+    accessibility_label: Option<SharedString>,
+    children: Vec<AnyElement>,
     next: bool,
     cx: &mut App,
 ) -> impl IntoElement {
@@ -591,12 +641,14 @@ fn carousel_control(
     } else {
         !snapshot.has_previous()
     };
-    let (name, label, icon) = match (axis, next) {
+    let (name, default_label, icon) = match (axis, next) {
         (Axis::Horizontal, false) => ("previous", t!("Carousel.previous"), IconName::ChevronLeft),
         (Axis::Horizontal, true) => ("next", t!("Carousel.next"), IconName::ChevronRight),
         (Axis::Vertical, false) => ("previous", t!("Carousel.previous"), IconName::ChevronUp),
         (Axis::Vertical, true) => ("next", t!("Carousel.next"), IconName::ChevronDown),
     };
+    let label = accessibility_label.unwrap_or_else(|| default_label.into());
+    let has_custom_content = !children.is_empty();
     let id = ElementId::NamedChild(
         Arc::new(("carousel-control", state.entity_id()).into()),
         name.into(),
@@ -605,7 +657,7 @@ fn carousel_control(
     Button::new(id)
         .outline()
         .with_size(size)
-        .icon(icon)
+        .when(!has_custom_content, |this| this.icon(icon))
         .accessibility_label(label.clone())
         .tooltip(label)
         .disabled(disabled)
@@ -634,6 +686,7 @@ fn carousel_control(
                 });
             })
         })
+        .children(children)
         .refine_style(&style)
 }
 
@@ -832,5 +885,24 @@ mod tests {
                 .size,
             Size::Small
         );
+    }
+
+    #[gpui::test]
+    fn carousel_controls_accept_accessibility_labels_and_children(cx: &mut gpui::TestAppContext) {
+        let state = cx.update(|cx| cx.new(|_| CarouselState::new(2)));
+        let previous = CarouselPrevious::new(&state)
+            .with_accessibility_label("Previous project")
+            .child("Back");
+        let next = CarouselNext::new(&state)
+            .with_accessibility_label("Next project")
+            .child("Forward");
+
+        assert_eq!(
+            previous.accessibility_label.as_deref(),
+            Some("Previous project")
+        );
+        assert_eq!(next.accessibility_label.as_deref(), Some("Next project"));
+        assert_eq!(previous.children.len(), 1);
+        assert_eq!(next.children.len(), 1);
     }
 }

@@ -172,6 +172,41 @@ CarouselNext::new(&state).with_size(Size::Large);
 
 上一项和下一项控件默认使用 `Size::Medium`，分页项默认使用 `Size::XSmall`。
 
+## 自定义控制按钮
+
+`CarouselPrevious` 和 `CarouselNext` 实现了 `ParentElement` 与 `Styled`。没有子元素时，它们会根据方向显示对应的箭头；添加子元素后，可以替换可见内容，同时保留自动导航和边界禁用状态。`with_accessibility_label` 也会同步替换控件的 tooltip。
+
+```rust
+use gpui::ParentElement as _;
+
+CarouselPrevious::new(&state)
+    .with_accessibility_label("上一个项目")
+    .child("返回");
+
+CarouselNext::new(&state)
+    .with_accessibility_label("下一个项目")
+    .child("继续");
+```
+
+需要完全自定义控制按钮时，可以省略对应的 Carousel 部件，并使用公开 state API 组合任意控件：
+
+```rust
+use gpui::ParentElement as _;
+use gpui_component::{Disableable as _, button::Button};
+
+let previous_state = state.clone();
+let previous_disabled = !state.read(cx).has_previous();
+
+Button::new("projects-previous")
+    .label("返回")
+    .disabled(previous_disabled)
+    .on_click(move |_, _, cx| {
+        previous_state.update(cx, |state, cx| {
+            state.select_previous(cx);
+        });
+    })
+```
+
 ## 无障碍
 
 Carousel 会提供带 label 的区域，每个 item 会报告自己在内容集合中的位置。当默认的“轮播”无法准确描述内容时，使用 `with_accessibility_label` 设置更明确的名称。
