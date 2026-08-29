@@ -1,25 +1,17 @@
-use std::{cell::RefCell, collections::HashSet, rc::Rc, sync::Arc, time::Duration};
+use std::{cell::RefCell, collections::HashSet, rc::Rc, sync::Arc};
 
 use gpui::{
-    AnyElement, App, AvailableSpace, Bounds, ContentMask, Element, ElementId, GlobalElementId,
-    InspectorElementId, InteractiveElement as _, IntoElement, LayoutId, ParentElement, Pixels,
-    RenderOnce, SharedString, StatefulInteractiveElement as _, Style, StyleRefinement, Styled,
-    Window, div, percentage, prelude::FluentBuilder as _, px, relative, rems, size,
+    AnyElement, App, ElementId, InteractiveElement as _, IntoElement, ParentElement, RenderOnce,
+    SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
+    percentage, prelude::FluentBuilder as _, rems,
 };
 
 use crate::{ActiveTheme as _, Icon, IconName, Sizable, Size, StyledExt as _, h_flex};
 use gpui_base::{
     Accordion as BaseAccordion, AccordionHeader as BaseAccordionHeader,
     AccordionItem as BaseAccordionItem, AccordionPanel as BaseAccordionPanel, AccordionTrigger,
-    Spring, spring,
+    MotionReveal, spring,
 };
-
-/// Expand and collapse motion.
-///
-/// Critically damped, so the panel height never overshoots the measured content
-/// height. A panel toggled again mid-flight reverses from its current velocity
-/// instead of restarting.
-const PANEL_SPRING: Spring = Spring::new(Duration::from_millis(200));
 
 /// Accordion element.
 #[derive(IntoElement)]
@@ -163,133 +155,6 @@ impl RenderOnce for Accordion {
     }
 }
 
-/// The content of an [`AccordionItem`], animating its height on toggle.
-///
-/// It stays in the tree while closed, clipped to zero height, to be able to
-/// animate the collapse and to keep its natural height measured.
-struct AnimatedAccordionPanel {
-    id: ElementId,
-    progress: f32,
-    child: AnyElement,
-}
-
-#[derive(Clone, Copy, Default)]
-struct AnimatedAccordionPanelState {
-    /// The natural height measured in the last prepaint.
-    height: Option<Pixels>,
-}
-
-impl AnimatedAccordionPanel {
-    fn new(id: impl Into<ElementId>, progress: f32, child: AnyElement) -> Self {
-        Self {
-            id: id.into(),
-            progress,
-            child,
-        }
-    }
-}
-
-impl IntoElement for AnimatedAccordionPanel {
-    type Element = Self;
-
-    fn into_element(self) -> Self::Element {
-        self
-    }
-}
-
-impl Element for AnimatedAccordionPanel {
-    type RequestLayoutState = ();
-    type PrepaintState = ();
-
-    fn id(&self) -> Option<ElementId> {
-        Some(self.id.clone())
-    }
-
-    fn source_location(&self) -> Option<&'static std::panic::Location<'static>> {
-        None
-    }
-
-    fn request_layout(
-        &mut self,
-        global_id: Option<&GlobalElementId>,
-        _: Option<&InspectorElementId>,
-        window: &mut Window,
-        cx: &mut App,
-    ) -> (LayoutId, Self::RequestLayoutState) {
-        let height = window.with_element_state(
-            global_id.expect("AnimatedAccordionPanel must have an id"),
-            |state: Option<AnimatedAccordionPanelState>, _| {
-                let state = state.unwrap_or_default();
-                (state.height, state)
-            },
-        );
-
-        let mut style = Style::default();
-        style.size.width = relative(1.).into();
-        match height {
-            // Not measured yet, let the content lay itself out.
-            None if self.progress > 0. => {}
-            None => style.size.height = px(0.).into(),
-            Some(height) => style.size.height = (height * self.progress).into(),
-        }
-
-        (window.request_layout(style, None, cx), ())
-    }
-
-    fn prepaint(
-        &mut self,
-        global_id: Option<&GlobalElementId>,
-        _: Option<&InspectorElementId>,
-        bounds: Bounds<Pixels>,
-        _: &mut Self::RequestLayoutState,
-        window: &mut Window,
-        cx: &mut App,
-    ) -> Self::PrepaintState {
-        // Lay out at the natural height, `bounds` clips the visible part.
-        let available = size(
-            AvailableSpace::Definite(bounds.size.width),
-            AvailableSpace::MinContent,
-        );
-        let measured = self.child.layout_as_root(available, window, cx);
-
-        let changed = window.with_element_state(
-            global_id.expect("AnimatedAccordionPanel must have an id"),
-            |state: Option<AnimatedAccordionPanelState>, _| {
-                let mut state = state.unwrap_or_default();
-                let changed = state.height != Some(measured.height);
-                state.height = Some(measured.height);
-                (changed, state)
-            },
-        );
-
-        // The measured height is only used by the next `request_layout`, ask
-        // for that frame, or the new height never gets painted.
-        if changed {
-            window.request_animation_frame();
-        }
-
-        // Masked here too, so the hidden content takes no mouse events.
-        window.with_content_mask(Some(ContentMask { bounds }), |window| {
-            self.child.prepaint_at(bounds.origin, window, cx);
-        });
-    }
-
-    fn paint(
-        &mut self,
-        _: Option<&GlobalElementId>,
-        _: Option<&InspectorElementId>,
-        bounds: Bounds<Pixels>,
-        _: &mut Self::RequestLayoutState,
-        _: &mut Self::PrepaintState,
-        window: &mut Window,
-        cx: &mut App,
-    ) {
-        window.with_content_mask(Some(ContentMask { bounds }), |window| {
-            self.child.paint(window, cx);
-        });
-    }
-}
-
 /// An Accordion is a vertically stacked list of items, each of which can be expanded to reveal the content associated with it.
 #[derive(IntoElement)]
 pub struct AccordionItem {
@@ -420,7 +285,7 @@ impl RenderOnce for AccordionItem {
         let progress = spring(
             (self.index, "accordion-panel"),
             if self.open { 1. } else { 0. },
-            PANEL_SPRING,
+            cx.theme().motion_tokens().spring_control,
             window,
             cx,
         );
@@ -486,7 +351,7 @@ impl RenderOnce for AccordionItem {
                         .open(self.open)
                         .keep_mounted(true)
                         .w_full()
-                        .child(AnimatedAccordionPanel::new(
+                        .child(MotionReveal::new(
                             ("content", self.index),
                             progress,
                             div()

@@ -4,9 +4,28 @@ use std::{rc::Rc, time::Duration};
 #[cfg(target_family = "wasm")]
 use web_time::Instant;
 
-use gpui::{App, ElementId, SharedString, SpringConfig, SpringState, SpringTarget, Window};
+use gpui::{
+    App, Bounds, ElementId, Pixels, SharedString, Size, SpringConfig, SpringState, SpringTarget,
+    Window,
+};
 
 use crate::animation::{Lerp, ease_out_cubic};
+
+mod easing;
+mod keyframes;
+mod presence;
+mod reveal;
+mod stagger;
+mod timing;
+
+pub use easing::{Easing, EasingError, LinearStop, StepPosition};
+pub use keyframes::{Discrete, DiscreteError, Keyframe, KeyframeError, Keyframes};
+pub use presence::{Presence, PresencePhase, PresenceSample};
+pub use reveal::MotionReveal;
+pub use stagger::{Stagger, StaggerOrigin};
+pub use timing::{
+    IterationCount, MotionPhase, PlaybackDirection, SignedDuration, Timing, TimingSample,
+};
 
 /// Matches GPUI's own default spring settling tolerance.
 const DEFAULT_SPRING_EPSILON: f32 = 0.001;
@@ -22,6 +41,66 @@ impl<T: Lerp> Interpolate for T {
     }
 }
 
+impl Interpolate for Size<Pixels> {
+    fn interpolate(&self, target: &Self, progress: f32) -> Self {
+        Size::new(
+            self.width.lerp(&target.width, progress),
+            self.height.lerp(&target.height, progress),
+        )
+    }
+}
+
+impl Interpolate for Bounds<Pixels> {
+    fn interpolate(&self, target: &Self, progress: f32) -> Self {
+        Bounds::new(
+            self.origin.lerp(&target.origin, progress),
+            self.size.interpolate(&target.size, progress),
+        )
+    }
+}
+
+/// A presentation-neutral bundle for coordinated paint transforms.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct MotionTransform {
+    pub translation: gpui::Point<Pixels>,
+    pub scale: gpui::Point<f32>,
+    pub rotation_radians: f32,
+    pub opacity: f32,
+}
+
+impl MotionTransform {
+    pub fn identity() -> Self {
+        Self {
+            translation: gpui::point(gpui::px(0.0), gpui::px(0.0)),
+            scale: gpui::point(1.0, 1.0),
+            rotation_radians: 0.0,
+            opacity: 1.0,
+        }
+    }
+}
+
+impl Default for MotionTransform {
+    fn default() -> Self {
+        Self::identity()
+    }
+}
+
+impl Interpolate for MotionTransform {
+    fn interpolate(&self, target: &Self, progress: f32) -> Self {
+        Self {
+            translation: self.translation.lerp(&target.translation, progress),
+            scale: gpui::point(
+                self.scale.x.lerp(&target.scale.x, progress),
+                self.scale.y.lerp(&target.scale.y, progress),
+            ),
+            rotation_radians: self
+                .rotation_radians
+                .lerp(&target.rotation_radians, progress),
+            opacity: self.opacity.lerp(&target.opacity, progress),
+        }
+    }
+}
+
 /// CSS-like timing policy for a target-value transition.
 ///
 /// This type is intentionally separate from [`crate::animation::Transition`],
@@ -30,41 +109,55 @@ impl<T: Lerp> Interpolate for T {
 #[derive(Clone)]
 pub struct Transition {
     duration: Duration,
-    delay: Duration,
-    easing: Rc<dyn Fn(f32) -> f32>,
+    delay: SignedDuration,
+    easing: Easing,
 }
 
 impl Transition {
     pub fn new(duration: Duration) -> Self {
         Self {
             duration,
-            delay: Duration::ZERO,
-            easing: Rc::new(ease_out_cubic),
+            delay: SignedDuration::ZERO,
+            easing: Easing::Custom(Rc::new(ease_out_cubic)),
         }
     }
 
-    pub fn delay(mut self, delay: Duration) -> Self {
-        self.delay = delay;
+    pub fn delay(mut self, delay: impl Into<SignedDuration>) -> Self {
+        self.delay = delay.into();
         self
     }
 
     pub fn ease(mut self, easing: impl Fn(f32) -> f32 + 'static) -> Self {
-        self.easing = Rc::new(easing);
+        self.easing = Easing::Custom(Rc::new(easing));
+        self
+    }
+
+    pub fn easing(mut self, easing: Easing) -> Self {
+        self.easing = easing;
         self
     }
 
     fn sample(&self, progress: f32) -> f32 {
-        (self.easing)(progress.clamp(0.0, 1.0))
+        self.easing.sample(progress)
     }
 
-    fn progress(&self, elapsed: Duration) -> f32 {
-        if elapsed <= self.delay {
-            return 0.0;
+    fn progress(&self, elapsed: Duration, duration: Duration) -> (f32, MotionStatus) {
+        let Some(active_elapsed) = self.delay.active_elapsed(elapsed) else {
+            return (0.0, MotionStatus::Delayed);
+        };
+        if duration.is_zero() || active_elapsed >= duration {
+            return (1.0, MotionStatus::Finished);
         }
-        if self.duration.is_zero() {
-            return 1.0;
-        }
-        (elapsed.saturating_sub(self.delay).as_secs_f32() / self.duration.as_secs_f32()).min(1.0)
+        (
+            active_elapsed.as_secs_f32() / duration.as_secs_f32(),
+            MotionStatus::Running,
+        )
+    }
+}
+
+impl From<Duration> for SignedDuration {
+    fn from(duration: Duration) -> Self {
+        Self::positive(duration)
     }
 }
 
@@ -129,6 +222,22 @@ struct ValueTransition<T> {
     from: T,
     target: T,
     started_at: Instant,
+    reversing_factor: f32,
+    duration: Duration,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MotionStatus {
+    Idle,
+    Delayed,
+    Running,
+    Finished,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct MotionValue<T> {
+    pub value: T,
+    pub status: MotionStatus,
 }
 
 /// Returns the current value for a CSS-like transition toward `target`.
@@ -149,12 +258,27 @@ pub fn transition<T>(
 where
     T: Interpolate + PartialEq + 'static,
 {
+    transition_with_status(id, target, policy, window, cx).value
+}
+
+pub fn transition_with_status<T>(
+    id: impl Into<TransitionId>,
+    target: T,
+    policy: Transition,
+    window: &mut Window,
+    cx: &mut App,
+) -> MotionValue<T>
+where
+    T: Interpolate + PartialEq + 'static,
+{
     let id: ElementId = id.into().into();
     let now = cx.background_executor().now();
     let state = window.use_keyed_state(id, cx, |_, _| ValueTransition {
         from: target.clone(),
         target: target.clone(),
         started_at: now,
+        reversing_factor: 1.0,
+        duration: policy.duration,
     });
 
     let snapshot = state.read(cx).clone();
@@ -165,31 +289,101 @@ where
                 state.from = target.clone();
                 state.target = target.clone();
                 state.started_at = now;
+                state.reversing_factor = 1.0;
+                state.duration = policy.duration;
             });
         }
-        return target;
+        return MotionValue {
+            value: target,
+            status: MotionStatus::Finished,
+        };
     }
 
     let elapsed = now.saturating_duration_since(snapshot.started_at);
-    let progress = policy.progress(elapsed);
+    let (progress, status) = policy.progress(elapsed, snapshot.duration);
     let sampled = snapshot
         .from
         .interpolate(&snapshot.target, policy.sample(progress));
 
-    let (value, running) = if snapshot.target != target {
+    let (value, status) = if snapshot.target != target {
+        let reversing = target == snapshot.from;
+        let reversing_factor = if reversing {
+            (policy.sample(progress) * snapshot.reversing_factor
+                + (1.0 - snapshot.reversing_factor))
+                .clamp(0.0, 1.0)
+        } else {
+            1.0
+        };
+        let duration = policy.duration.mul_f32(reversing_factor);
         state.update(cx, |state, _| {
             state.from = sampled.clone();
             state.target = target.clone();
             state.started_at = now;
+            state.reversing_factor = reversing_factor;
+            state.duration = duration;
         });
-        (sampled, true)
+        let (initial_progress, initial_status) = policy.progress(Duration::ZERO, duration);
+        (
+            sampled.interpolate(&target, policy.sample(initial_progress)),
+            initial_status,
+        )
     } else {
-        (sampled, progress < 1.0 && snapshot.from != snapshot.target)
+        (
+            sampled,
+            if snapshot.from == snapshot.target {
+                MotionStatus::Idle
+            } else {
+                status
+            },
+        )
     };
-    if running {
+    if matches!(status, MotionStatus::Delayed | MotionStatus::Running) {
         window.request_animation_frame();
     }
-    value
+    MotionValue { value, status }
+}
+
+#[derive(Clone, Copy)]
+struct KeyframePlayback {
+    started_at: Instant,
+}
+
+pub fn animate_keyframes<T>(
+    id: impl Into<TransitionId>,
+    keyframes: &Keyframes<T>,
+    timing: Timing,
+    window: &mut Window,
+    cx: &mut App,
+) -> MotionValue<T>
+where
+    T: Interpolate + 'static,
+{
+    let id: TransitionId = id.into();
+    let id = ElementId::NamedChild(ElementId::from(id).into(), "__keyframes".into());
+    let now = cx.background_executor().now();
+    let state = window.use_keyed_state(id, cx, |_, _| KeyframePlayback { started_at: now });
+    let started_at = state.read(cx).started_at;
+
+    if cx.reduce_motion() {
+        return MotionValue {
+            value: keyframes.sample(1.0),
+            status: MotionStatus::Finished,
+        };
+    }
+
+    let sample = timing.sample(now.saturating_duration_since(started_at));
+    let status = match sample.phase {
+        MotionPhase::Before => MotionStatus::Delayed,
+        MotionPhase::Active => MotionStatus::Running,
+        MotionPhase::After => MotionStatus::Finished,
+    };
+    if matches!(status, MotionStatus::Delayed | MotionStatus::Running) {
+        window.request_animation_frame();
+    }
+    MotionValue {
+        value: keyframes.sample(sample.directed_progress),
+        status,
+    }
 }
 
 /// A physical spring policy for [`spring`].
@@ -200,7 +394,7 @@ where
 /// position but not in velocity. A spring carries velocity across the retarget,
 /// so a value reversed mid-flight decelerates and turns around instead of
 /// snapping to a new curve's initial speed.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct Spring {
     response: Duration,
     damping: f32,
@@ -379,6 +573,201 @@ where
 }
 
 #[cfg(test)]
+mod css_timing_tests {
+    use super::{
+        Easing, IterationCount, LinearStop, MotionPhase, PlaybackDirection, SignedDuration,
+        StepPosition, Timing,
+    };
+    use std::time::Duration;
+
+    #[test]
+    fn css_keyword_easing_matches_published_reference_samples() {
+        for (easing, samples) in [
+            (Easing::Ease, [(0.2, 0.295), (0.5, 0.802), (0.8, 0.976)]),
+            (Easing::EaseIn, [(0.2, 0.062), (0.5, 0.315), (0.8, 0.692)]),
+            (Easing::EaseOut, [(0.2, 0.308), (0.5, 0.685), (0.8, 0.938)]),
+            (Easing::EaseInOut, [(0.2, 0.082), (0.5, 0.5), (0.8, 0.918)]),
+        ] {
+            for (progress, expected) in samples {
+                let actual = easing.sample(progress);
+                assert!(
+                    (actual - expected).abs() < 0.002,
+                    "{easing:?}({progress}) = {actual}, expected {expected}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn step_easing_observes_css_jump_positions() {
+        let start = Easing::steps(4, StepPosition::JumpStart).unwrap();
+        let end = Easing::steps(4, StepPosition::JumpEnd).unwrap();
+
+        assert_eq!(start.sample(0.0), 0.25);
+        assert_eq!(start.sample(0.24), 0.25);
+        assert_eq!(start.sample(0.25), 0.5);
+        assert_eq!(end.sample(0.0), 0.0);
+        assert_eq!(end.sample(0.24), 0.0);
+        assert_eq!(end.sample(0.25), 0.25);
+        assert!(Easing::steps(0, StepPosition::JumpEnd).is_err());
+
+        let none = Easing::steps(4, StepPosition::JumpNone).unwrap();
+        let both = Easing::steps(4, StepPosition::JumpBoth).unwrap();
+        assert_eq!(none.sample(0.0), 0.0);
+        assert!((none.sample(0.5) - 2.0 / 3.0).abs() < f32::EPSILON);
+        assert_eq!(none.sample(1.0), 1.0);
+        assert_eq!(both.sample(0.0), 0.2);
+        assert_eq!(both.sample(1.0), 1.0);
+        assert!(Easing::steps(1, StepPosition::JumpNone).is_err());
+    }
+
+    #[test]
+    fn linear_stops_fill_omitted_positions_before_sampling() {
+        let easing = Easing::linear_stops([
+            LinearStop::at(0.0, 0.0),
+            LinearStop::new(0.2),
+            LinearStop::new(0.8),
+            LinearStop::at(1.0, 1.0),
+        ])
+        .unwrap();
+
+        assert!((easing.sample(1.0 / 3.0) - 0.2).abs() < 1e-6);
+        assert!((easing.sample(0.5) - 0.5).abs() < 1e-6);
+        assert!(
+            Easing::linear_stops([LinearStop::at(0.0, 0.8), LinearStop::at(1.0, 0.2)]).is_err()
+        );
+    }
+
+    #[test]
+    fn negative_delay_starts_inside_the_active_interval() {
+        let timing = Timing::new(Duration::from_millis(100))
+            .delay(SignedDuration::negative(Duration::from_millis(25)));
+        let sample = timing.sample(Duration::ZERO);
+
+        assert_eq!(sample.phase, MotionPhase::Active);
+        assert!((sample.directed_progress - 0.25).abs() < f32::EPSILON);
+        assert!(sample.active);
+        assert!(!sample.finished);
+    }
+
+    #[test]
+    fn alternate_direction_reverses_odd_iterations() {
+        let timing = Timing::new(Duration::from_millis(100))
+            .iterations(IterationCount::Finite(2))
+            .direction(PlaybackDirection::Alternate)
+            .ease(Easing::Linear);
+
+        let first = timing.sample(Duration::from_millis(25));
+        let second = timing.sample(Duration::from_millis(125));
+        let finished = timing.sample(Duration::from_millis(200));
+
+        assert_eq!(first.iteration, 0);
+        assert_eq!(first.directed_progress, 0.25);
+        assert_eq!(second.iteration, 1);
+        assert_eq!(second.directed_progress, 0.75);
+        assert_eq!(finished.phase, MotionPhase::After);
+        assert_eq!(finished.directed_progress, 0.0);
+        assert!(finished.finished);
+    }
+}
+
+#[cfg(test)]
+mod motion_track_tests {
+    use super::{
+        Discrete, Easing, Interpolate as _, Keyframe, KeyframeError, Keyframes, MotionTransform,
+        Stagger, StaggerOrigin,
+    };
+    use gpui::{Bounds, Point, Size, point, px, size};
+    use std::time::Duration;
+
+    #[test]
+    fn keyframes_validate_offsets_and_sample_each_segments_easing() {
+        assert!(matches!(
+            Keyframes::try_new([Keyframe::new(0.2, 0.0_f32), Keyframe::new(1.0, 1.0_f32),]),
+            Err(KeyframeError::MissingEndpoint)
+        ));
+        assert!(matches!(
+            Keyframes::try_new([
+                Keyframe::new(0.0, 0.0_f32),
+                Keyframe::new(0.8, 1.0_f32),
+                Keyframe::new(0.7, 2.0_f32),
+                Keyframe::new(1.0, 3.0_f32),
+            ]),
+            Err(KeyframeError::OffsetsNotMonotonic)
+        ));
+
+        let track = Keyframes::try_new([
+            Keyframe::new(0.0, 0.0_f32)
+                .ease(Easing::steps(2, super::StepPosition::JumpEnd).unwrap()),
+            Keyframe::new(0.5, 10.0_f32).ease(Easing::Linear),
+            Keyframe::new(1.0, 20.0_f32),
+        ])
+        .unwrap();
+
+        assert_eq!(track.sample(0.2), 0.0);
+        assert_eq!(track.sample(0.3), 5.0);
+        assert_eq!(track.sample(0.75), 15.0);
+        assert_eq!(track.sample(1.0), 20.0);
+    }
+
+    #[test]
+    fn discrete_values_switch_only_at_the_requested_progress() {
+        let value = Discrete::new("old", "new").switch_at(0.75).unwrap();
+        assert_eq!(value.sample(0.749), "old");
+        assert_eq!(value.sample(0.75), "new");
+        assert!(Discrete::new(0, 1).switch_at(f32::NAN).is_err());
+    }
+
+    #[test]
+    fn stagger_origins_produce_stable_delays_without_allocating_a_schedule() {
+        let interval = Duration::from_millis(20);
+        let first = Stagger::new(interval, StaggerOrigin::First);
+        let last = Stagger::new(interval, StaggerOrigin::Last);
+        let center = Stagger::new(interval, StaggerOrigin::Center);
+
+        assert_eq!(first.delay(3, 5), Duration::from_millis(60));
+        assert_eq!(last.delay(3, 5), Duration::from_millis(20));
+        assert_eq!(center.delay(2, 5), Duration::ZERO);
+        assert_eq!(center.delay(0, 5), Duration::from_millis(40));
+        assert_eq!(first.delay(7, 0), Duration::ZERO);
+    }
+
+    #[test]
+    fn common_gpui_geometry_interpolates_channel_by_channel() {
+        let from_size = size(px(10.0), px(20.0));
+        let to_size = size(px(30.0), px(60.0));
+        assert_eq!(
+            from_size.interpolate(&to_size, 0.25),
+            size(px(15.0), px(30.0))
+        );
+
+        let from = Bounds::new(point(px(0.0), px(10.0)), from_size);
+        let to = Bounds::new(point(px(40.0), px(50.0)), to_size);
+        assert_eq!(
+            from.interpolate(&to, 0.5),
+            Bounds::new(point(px(20.0), px(30.0)), size(px(20.0), px(40.0)))
+        );
+
+        let _: Point<gpui::Pixels> = from.origin;
+        let _: Size<gpui::Pixels> = from.size;
+
+        let transform = MotionTransform::identity().interpolate(
+            &MotionTransform {
+                translation: point(px(20.0), px(40.0)),
+                scale: point(2.0, 0.5),
+                rotation_radians: std::f32::consts::PI,
+                opacity: 0.0,
+            },
+            0.5,
+        );
+        assert_eq!(transform.translation, point(px(10.0), px(20.0)));
+        assert_eq!(transform.scale, point(1.5, 0.75));
+        assert_eq!(transform.rotation_radians, std::f32::consts::FRAC_PI_2);
+        assert_eq!(transform.opacity, 0.5);
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use std::{
         cell::{Cell, RefCell},
@@ -389,6 +778,284 @@ mod tests {
     use gpui::{Empty, IntoElement, Render, TestAppContext, WindowHandle, px, size};
 
     use super::*;
+
+    struct StatusView {
+        target: Rc<Cell<f32>>,
+        policy: Transition,
+        samples: Rc<RefCell<Vec<MotionValue<f32>>>>,
+    }
+
+    impl Render for StatusView {
+        fn render(
+            &mut self,
+            window: &mut Window,
+            cx: &mut gpui::Context<Self>,
+        ) -> impl IntoElement {
+            self.samples.borrow_mut().push(transition_with_status(
+                ("status-test", "value"),
+                self.target.get(),
+                self.policy.clone(),
+                window,
+                cx,
+            ));
+            Empty
+        }
+    }
+
+    struct StatusFixture {
+        window: WindowHandle<StatusView>,
+        target: Rc<Cell<f32>>,
+        samples: Rc<RefCell<Vec<MotionValue<f32>>>>,
+    }
+
+    impl StatusFixture {
+        fn open(cx: &mut TestAppContext, policy: Transition) -> Self {
+            let target = Rc::new(Cell::new(0.0));
+            let samples = Rc::new(RefCell::new(Vec::new()));
+            let window = cx.open_window(size(px(100.), px(100.)), {
+                let target = target.clone();
+                let samples = samples.clone();
+                move |_, _| StatusView {
+                    target,
+                    policy,
+                    samples,
+                }
+            });
+            cx.run_until_parked();
+            Self {
+                window,
+                target,
+                samples,
+            }
+        }
+
+        fn render(&self, cx: &mut TestAppContext, target: f32) -> MotionValue<f32> {
+            self.target.set(target);
+            self.window
+                .update(cx, |_, window, _| window.refresh())
+                .unwrap();
+            cx.run_until_parked();
+            *self.samples.borrow().last().unwrap()
+        }
+    }
+
+    #[gpui::test]
+    fn status_transition_reports_delay_running_and_finished(cx: &mut TestAppContext) {
+        let fixture = StatusFixture::open(
+            cx,
+            Transition::new(Duration::from_millis(100)).delay(Duration::from_millis(20)),
+        );
+        assert_eq!(fixture.render(cx, 1.0).status, MotionStatus::Delayed);
+
+        cx.executor().advance_clock(Duration::from_millis(20));
+        assert_eq!(fixture.render(cx, 1.0).status, MotionStatus::Running);
+        cx.executor().advance_clock(Duration::from_millis(100));
+        assert_eq!(fixture.render(cx, 1.0).status, MotionStatus::Finished);
+    }
+
+    #[gpui::test]
+    fn negative_delay_samples_a_target_change_inside_its_interval(cx: &mut TestAppContext) {
+        let fixture = StatusFixture::open(
+            cx,
+            Transition::new(Duration::from_millis(100))
+                .delay(SignedDuration::negative(Duration::from_millis(25)))
+                .ease(|t| t),
+        );
+        let sample = fixture.render(cx, 1.0);
+        assert_eq!(sample.status, MotionStatus::Running);
+        assert_eq!(sample.value, 0.25);
+    }
+
+    #[gpui::test]
+    fn a_direct_reversal_shortens_the_return_transition(cx: &mut TestAppContext) {
+        let fixture =
+            StatusFixture::open(cx, Transition::new(Duration::from_millis(100)).ease(|t| t));
+        assert_eq!(fixture.render(cx, 1.0).value, 0.0);
+        cx.executor().advance_clock(Duration::from_millis(50));
+        assert_eq!(fixture.render(cx, 0.0).value, 0.5);
+        cx.executor().advance_clock(Duration::from_millis(25));
+        assert_eq!(fixture.render(cx, 0.0).value, 0.25);
+    }
+
+    struct KeyframeView {
+        track: Keyframes<f32>,
+        timing: Timing,
+        samples: Rc<RefCell<Vec<MotionValue<f32>>>>,
+    }
+
+    impl Render for KeyframeView {
+        fn render(
+            &mut self,
+            window: &mut Window,
+            cx: &mut gpui::Context<Self>,
+        ) -> impl IntoElement {
+            self.samples.borrow_mut().push(animate_keyframes(
+                "keyframe-test",
+                &self.track,
+                self.timing.clone(),
+                window,
+                cx,
+            ));
+            Empty
+        }
+    }
+
+    #[gpui::test]
+    fn keyed_keyframes_follow_timing_and_stop_after_completion(cx: &mut TestAppContext) {
+        let samples = Rc::new(RefCell::new(Vec::new()));
+        let window = cx.open_window(size(px(100.), px(100.)), {
+            let samples = samples.clone();
+            move |_, _| KeyframeView {
+                track: Keyframes::try_new([Keyframe::new(0.0, 0.0), Keyframe::new(1.0, 10.0)])
+                    .unwrap(),
+                timing: Timing::new(Duration::from_millis(100)),
+                samples,
+            }
+        });
+        cx.run_until_parked();
+        assert_eq!(samples.borrow().last().unwrap().value, 0.0);
+        assert_eq!(
+            samples.borrow().last().unwrap().status,
+            MotionStatus::Running
+        );
+
+        cx.executor().advance_clock(Duration::from_millis(50));
+        assert_eq!(
+            window
+                .update(cx, |_, window, cx| window.simulate_next_frame(cx))
+                .unwrap(),
+            1
+        );
+        cx.run_until_parked();
+        assert_eq!(samples.borrow().last().unwrap().value, 5.0);
+
+        cx.executor().advance_clock(Duration::from_millis(50));
+        window.update(cx, |_, window, _| window.refresh()).unwrap();
+        cx.run_until_parked();
+        assert_eq!(
+            samples.borrow().last().unwrap().status,
+            MotionStatus::Finished
+        );
+        window
+            .update(cx, |_, window, cx| window.simulate_next_frame(cx))
+            .unwrap();
+        cx.run_until_parked();
+        assert_eq!(
+            window
+                .update(cx, |_, window, cx| window.simulate_next_frame(cx))
+                .unwrap(),
+            0
+        );
+    }
+
+    struct PresenceView {
+        present: Rc<Cell<bool>>,
+        samples: Rc<RefCell<Vec<PresenceSample>>>,
+    }
+
+    impl Render for PresenceView {
+        fn render(
+            &mut self,
+            window: &mut Window,
+            cx: &mut gpui::Context<Self>,
+        ) -> impl IntoElement {
+            self.samples.borrow_mut().push(
+                Presence::new("presence-test", self.present.get())
+                    .transition(Transition::new(Duration::from_millis(100)).ease(|t| t))
+                    .sample(window, cx),
+            );
+            Empty
+        }
+    }
+
+    struct PresenceFixture {
+        window: WindowHandle<PresenceView>,
+        present: Rc<Cell<bool>>,
+        samples: Rc<RefCell<Vec<PresenceSample>>>,
+    }
+
+    impl PresenceFixture {
+        fn open(cx: &mut TestAppContext, initially_present: bool) -> Self {
+            let present = Rc::new(Cell::new(initially_present));
+            let samples = Rc::new(RefCell::new(Vec::new()));
+            let window = cx.open_window(size(px(100.), px(100.)), {
+                let present = present.clone();
+                let samples = samples.clone();
+                move |_, _| PresenceView { present, samples }
+            });
+            cx.run_until_parked();
+            Self {
+                window,
+                present,
+                samples,
+            }
+        }
+
+        fn render(&self, cx: &mut TestAppContext, present: bool) -> PresenceSample {
+            self.present.set(present);
+            self.window
+                .update(cx, |_, window, _| window.refresh())
+                .unwrap();
+            cx.run_until_parked();
+            *self.samples.borrow().last().unwrap()
+        }
+    }
+
+    #[gpui::test]
+    fn presence_enters_exits_and_only_unmounts_after_exit(cx: &mut TestAppContext) {
+        let fixture = PresenceFixture::open(cx, true);
+        let entering = *fixture.samples.borrow().last().unwrap();
+        assert_eq!(entering.phase, PresencePhase::Entering);
+        assert_eq!(entering.progress, 0.0);
+        assert!(entering.should_render());
+
+        cx.executor().advance_clock(Duration::from_millis(100));
+        let present = fixture.render(cx, true);
+        assert_eq!(present.phase, PresencePhase::Present);
+        assert_eq!(present.progress, 1.0);
+
+        let exiting = fixture.render(cx, false);
+        assert_eq!(exiting.phase, PresencePhase::Exiting);
+        assert_eq!(exiting.progress, 1.0);
+        assert!(exiting.should_render());
+
+        cx.executor().advance_clock(Duration::from_millis(100));
+        let absent = fixture.render(cx, false);
+        assert_eq!(absent.phase, PresencePhase::Absent);
+        assert_eq!(absent.progress, 0.0);
+        assert!(!absent.should_render());
+    }
+
+    #[gpui::test]
+    fn presence_reentry_reverses_from_the_exit_sample(cx: &mut TestAppContext) {
+        let fixture = PresenceFixture::open(cx, true);
+        cx.executor().advance_clock(Duration::from_millis(100));
+        fixture.render(cx, true);
+        fixture.render(cx, false);
+        cx.executor().advance_clock(Duration::from_millis(40));
+        let reentering = fixture.render(cx, true);
+
+        assert_eq!(reentering.phase, PresencePhase::Entering);
+        assert_eq!(reentering.progress, 0.6);
+    }
+
+    #[gpui::test]
+    fn reduced_motion_resolves_presence_without_a_pending_frame(cx: &mut TestAppContext) {
+        cx.update(|cx| cx.set_reduce_motion(true));
+        let fixture = PresenceFixture::open(cx, true);
+        assert_eq!(
+            fixture.samples.borrow().last().unwrap().phase,
+            PresencePhase::Present
+        );
+        assert_eq!(
+            fixture
+                .window
+                .update(cx, |_, window, cx| window.simulate_next_frame(cx))
+                .unwrap(),
+            0
+        );
+        assert_eq!(fixture.render(cx, false).phase, PresencePhase::Absent);
+    }
 
     #[test]
     fn transition_ids_accept_element_like_scalars_and_named_channels() {
@@ -524,7 +1191,7 @@ mod tests {
     }
 
     #[gpui::test]
-    fn reversing_uses_the_current_sample_without_jumping(cx: &mut TestAppContext) {
+    fn reversing_uses_the_current_sample_and_shortens_the_return(cx: &mut TestAppContext) {
         let duration = Duration::from_millis(100);
         let fixture = Fixture::open(cx, duration);
         assert_eq!(fixture.render(cx, 10.0), 0.0);
@@ -532,7 +1199,7 @@ mod tests {
         cx.executor().advance_clock(Duration::from_millis(50));
         assert_eq!(fixture.render(cx, 0.0), 5.0);
         cx.executor().advance_clock(Duration::from_millis(25));
-        assert_eq!(fixture.render(cx, 0.0), 3.75);
+        assert_eq!(fixture.render(cx, 0.0), 2.5);
     }
 
     #[gpui::test]

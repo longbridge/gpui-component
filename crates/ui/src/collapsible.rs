@@ -1,14 +1,18 @@
 use gpui::{
-    AnyElement, App, IntoElement, ParentElement, RenderOnce, StyleRefinement, Styled, Window,
+    AnyElement, App, ElementId, IntoElement, ParentElement, RenderOnce, StyleRefinement, Styled,
+    Window,
 };
+use gpui_base::spring;
 
-use crate::StyledExt;
+use crate::{ActiveTheme as _, StyledExt};
 
 /// An interactive element which expands/collapses.
 #[derive(IntoElement)]
 pub struct Collapsible {
     base: gpui_base::Collapsible,
     style: StyleRefinement,
+    motion_id: Option<ElementId>,
+    open: bool,
 }
 
 impl Collapsible {
@@ -17,12 +21,21 @@ impl Collapsible {
         Self {
             base: gpui_base::Collapsible::new(),
             style: StyleRefinement::default(),
+            motion_id: None,
+            open: false,
         }
     }
 
     /// Sets whether the collapsible is open. default is false.
     pub fn open(mut self, open: bool) -> Self {
+        self.open = open;
         self.base = self.base.open(open);
+        self
+    }
+
+    /// Enables a reversible measured reveal under a stable identity.
+    pub fn motion_id(mut self, id: impl Into<ElementId>) -> Self {
+        self.motion_id = Some(id.into());
         self
     }
 
@@ -48,8 +61,21 @@ impl ParentElement for Collapsible {
 }
 
 impl RenderOnce for Collapsible {
-    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
-        self.base.v_flex().refine_style(&self.style)
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let base = match self.motion_id {
+            Some(id) => {
+                let progress = spring(
+                    (id.clone(), "reveal"),
+                    if self.open { 1.0 } else { 0.0 },
+                    cx.theme().motion_tokens().spring_control,
+                    window,
+                    cx,
+                );
+                self.base.reveal(id, progress)
+            }
+            None => self.base,
+        };
+        base.v_flex().refine_style(&self.style)
     }
 }
 
@@ -58,6 +84,7 @@ mod tests {
     use gpui::{Context, InteractiveElement as _, Render, TestAppContext, div, px};
 
     use super::*;
+    use crate::Theme;
 
     struct Harness(bool);
 
@@ -90,5 +117,29 @@ mod tests {
         cx.update(|window, cx| window.draw(cx).clear(cx));
         assert!(cx.debug_bounds("collapsible-trigger").is_some());
         assert!(cx.debug_bounds("collapsible-content").is_none());
+    }
+
+    #[gpui::test]
+    fn motion_id_keeps_closed_content_mounted_for_reversible_reveal(cx: &mut TestAppContext) {
+        cx.update(|cx| cx.set_global(Theme::default()));
+
+        struct MotionHarness;
+
+        impl Render for MotionHarness {
+            fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+                Collapsible::new()
+                    .motion_id("details-motion")
+                    .open(false)
+                    .content(
+                        div()
+                            .debug_selector(|| "motion-content".into())
+                            .size(px(10.)),
+                    )
+            }
+        }
+
+        let (_, cx) = cx.add_window_view(|_, _| MotionHarness);
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        assert!(cx.debug_bounds("motion-content").is_some());
     }
 }

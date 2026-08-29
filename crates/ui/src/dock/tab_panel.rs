@@ -10,7 +10,6 @@ use std::{
     collections::HashSet,
     rc::Rc,
     sync::Arc,
-    time::Duration,
 };
 
 use gpui::{
@@ -20,7 +19,6 @@ use gpui::{
     prelude::FluentBuilder as _, px,
 };
 use gpui_base::{
-    Spring,
     dock::{
         AnyDrag, DockPlacement, DragPanel, DropIndicator, NodeId, PaneNode, PaneRef, PanelId,
         TabGroupContext, TabGroupRenderer,
@@ -45,13 +43,6 @@ const ZOOM_CONTROL_SELECTOR: &str = "dock-tab-bar-zoom-control";
 /// The size the styled drag preview occupies, reported to base so a drop
 /// placeholder knows where to fly in from.
 const DRAG_PREVIEW_SIZE: gpui::Size<gpui::Pixels> = gpui::size(px(96.), px(30.));
-
-/// Motion for the drop placeholder as it follows the drop that would land.
-///
-/// Critically damped, so the placeholder never reads as covering a region the
-/// drop would not take. The tolerance is coarse: this runs during a drag, where
-/// a frame spent on half a pixel competes with the drag itself.
-const PLACEHOLDER_SPRING: Spring = Spring::new(Duration::from_millis(200)).with_epsilon(0.5);
 
 /// The preview that follows the cursor while a panel is dragged.
 ///
@@ -753,19 +744,20 @@ impl TabGroupRenderer for TabGroupSkin {
         // springs carry it through instead, and the element no longer needs an
         // outer frame to hold the destination while an inner one walks to it.
         let id = "drop-placeholder";
-        let left = spring((id, "left"), to.origin().x, PLACEHOLDER_SPRING, window, cx);
-        let top = spring((id, "top"), to.origin().y, PLACEHOLDER_SPRING, window, cx);
+        let placeholder_spring = cx.theme().motion_tokens().spring_control.with_epsilon(0.5);
+        let left = spring((id, "left"), to.origin().x, placeholder_spring, window, cx);
+        let top = spring((id, "top"), to.origin().y, placeholder_spring, window, cx);
         let width = spring(
             (id, "width"),
             to.size().width,
-            PLACEHOLDER_SPRING,
+            placeholder_spring,
             window,
             cx,
         );
         let height = spring(
             (id, "height"),
             to.size().height,
-            PLACEHOLDER_SPRING,
+            placeholder_spring,
             window,
             cx,
         );

@@ -111,7 +111,13 @@ pub use macos_accessibility::install_window_hit_test_forwarder;
 #[doc(hidden)]
 pub use measure::measurement_enabled;
 pub use measure::{Measure, measure, measure_if};
-pub use motion::{Interpolate, Spring, Transition, TransitionId, spring, transition};
+pub use motion::{
+    Discrete, DiscreteError, Easing, EasingError, Interpolate, IterationCount, Keyframe,
+    KeyframeError, Keyframes, LinearStop, MotionPhase, MotionReveal, MotionStatus, MotionTransform,
+    MotionValue, PlaybackDirection, Presence, PresencePhase, PresenceSample, SignedDuration,
+    Spring, Stagger, StaggerOrigin, StepPosition, Timing, TimingSample, Transition, TransitionId,
+    animate_keyframes, spring, transition, transition_with_status,
+};
 pub use number_input::{
     Decrement, Increment, NumberInput, NumberInputEvent, NumberInputText, NumberStep, StepAction,
     step_value,
