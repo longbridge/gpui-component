@@ -46,6 +46,9 @@ import {
   Rating,
   Resizable,
   ResizablePanel,
+  Scroll,
+  Scrollbar,
+  ScrollbarHandle,
   Separator,
   Sidebar,
   SidebarFooter,
@@ -223,6 +226,25 @@ export function registeredExample(surface) {
         .crossSize(180)
         .child(asElement(new ResizablePanel().size(140).child("Navigation")))
         .child(asElement(new ResizablePanel().child("Content")));
+    case "Scroll": {
+      const handle = ScrollbarHandle();
+      return new Scroll(handle)
+        .axis("vertical")
+        .h(160)
+        .child("Scrollable content");
+    }
+    case "Scrollbar": {
+      const handle = ScrollbarHandle();
+      return new GroupBox()
+        .child(asElement(new Scroll(handle).h(160).child("Scrollable content")))
+        .child(
+          asElement(
+            new Scrollbar("story-scrollbar", handle)
+              .axis("vertical")
+              .mode("always"),
+          ),
+        );
+    }
     case "Separator":
       return new Separator().label("Account").dashed();
     case "Sidebar":

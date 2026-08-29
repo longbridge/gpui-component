@@ -429,10 +429,16 @@
       "name": "scroll",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "scroll-infrastructure",
-        "reason": "No Scroll descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "Scroll"
+        "status": "registered",
+        "descriptor": "Scroll",
+        "exports": ["Scroll"],
+        "states": [
+          {
+            "export": "ScrollbarHandle",
+            "kind": "ScrollbarHandle",
+            "role": "retained-scroll-capability"
+          }
+        ]
       }
     },
     {
@@ -1256,10 +1262,16 @@
       "name": "scrollbar",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "scroll-infrastructure",
-        "reason": "No Scrollbar descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "Scrollbar"
+        "status": "registered",
+        "descriptor": "Scrollbar",
+        "exports": ["Scrollbar"],
+        "states": [
+          {
+            "export": "ScrollbarHandle",
+            "kind": "ScrollbarHandle",
+            "role": "retained-scroll-capability"
+          }
+        ]
       }
     },
     {

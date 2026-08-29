@@ -15,6 +15,7 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
     retained_forms::register(registry)?;
     layout_remaining::register(registry)?;
     media_remaining::register(registry)?;
+    scroll_remaining::register(registry)?;
     structured::register(registry)?;
     remaining::register(registry)?;
     basic_remaining::register(registry)?;
@@ -31,6 +32,7 @@ mod media_remaining;
 mod overlays;
 mod remaining;
 mod retained_forms;
+mod scroll_remaining;
 mod separator;
 mod skeleton;
 mod spinner;
