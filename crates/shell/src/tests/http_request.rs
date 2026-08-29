@@ -39,6 +39,52 @@ export default class Probe extends View {
 }
 "#;
 
+const PUT_PROBE: &str = r#"
+import { div, View } from "gpui";
+import { v_flex } from "gpui-base";
+
+export default class Probe extends View {
+  init(_props, cx) {
+    this.state = "pending";
+    cx.spawn(async (cx) => {
+      try {
+        const response = await fetch("__URL__", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: 7, mode: "add" }),
+        });
+        this.state = `${response.status}|${await response.text()}`;
+      } catch (error) {
+        this.state = `rejected:${error.message}`;
+      }
+      cx.notify();
+    });
+  }
+  render() { return v_flex().child(this.state); }
+}
+"#;
+
+const BAD_METHOD_PROBE: &str = r#"
+import { div, View } from "gpui";
+import { v_flex } from "gpui-base";
+
+export default class Probe extends View {
+  init(_props, cx) {
+    this.state = "pending";
+    cx.spawn(async (cx) => {
+      try {
+        await fetch("__URL__", { method: "not a method" });
+        this.state = "sent";
+      } catch (error) {
+        this.state = `rejected:${error.message}`;
+      }
+      cx.notify();
+    });
+  }
+  render() { return v_flex().child(this.state); }
+}
+"#;
+
 const JSON_PROBE: &str = r#"
 import { div, View } from "gpui";
 import { v_flex } from "gpui-base";
@@ -96,6 +142,52 @@ fn fetch_posts_string_bodies_with_custom_headers(cx: &mut TestAppContext) {
     let rendered = snapshot(&mut context, &view);
     assert!(rendered.contains("200|true|ok"), "{rendered}");
     server.join().expect("HTTP server");
+}
+
+/// A method is not a short list. Which methods may reach which host is the
+/// capability policy's decision, and it already takes the method -- so `fetch`
+/// parses one rather than choosing from two, and a REST API that updates with
+/// `PUT` is reachable without a second policy to keep in step with the first.
+#[gpui::test]
+fn fetch_sends_any_http_method(cx: &mut TestAppContext) {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("HTTP listener");
+    let address = listener.local_addr().expect("listener address");
+    let server = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("HTTP connection");
+        let request = read_request(&mut stream);
+        assert!(request.starts_with("PUT /groups HTTP/1.1\r\n"), "{request}");
+        assert!(
+            request.contains("content-type: application/json\r\n"),
+            "{request}"
+        );
+        assert!(request.ends_with(r#"{"id":7,"mode":"add"}"#), "{request}");
+        stream
+            .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok")
+            .expect("HTTP response");
+    });
+
+    let source = PUT_PROBE.replace("__URL__", &format!("http://{address}/groups"));
+    let (_runtime, view, mut context) = probe(cx, &source);
+    context.run_until_parked();
+    draw(&mut context, &view);
+    let rendered = snapshot(&mut context, &view);
+    assert!(rendered.contains("200|ok"), "{rendered}");
+    server.join().expect("HTTP server");
+}
+
+/// What is refused is a string that is not a method at all, and it is refused
+/// before anything reaches the network.
+#[gpui::test]
+fn fetch_refuses_a_method_that_is_not_one(cx: &mut TestAppContext) {
+    let source = BAD_METHOD_PROBE.replace("__URL__", "http://127.0.0.1:9/groups");
+    let (_runtime, view, mut context) = probe(cx, &source);
+    context.run_until_parked();
+    draw(&mut context, &view);
+    let rendered = snapshot(&mut context, &view);
+    assert!(
+        rendered.contains("rejected:") && rendered.contains("is not an HTTP method"),
+        "{rendered}"
+    );
 }
 
 #[gpui::test]

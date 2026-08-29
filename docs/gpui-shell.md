@@ -2446,7 +2446,8 @@ flush barriers may wait for durability at once.
 ### 17.2 Network
 
 Three experimental surfaces are implemented. Global `fetch(url, options?)`
-supports bounded GET and POST requests, string or `Uint8Array` bodies, safe
+supports bounded requests of any HTTP method -- which methods actually reach a
+host is the capability policy's decision -- string or `Uint8Array` bodies, safe
 request headers, and resolves to `{ status, ok, url, , json() }`; both
 body readers return promises. The `gpui` module exports
 `WebSocket.connect(url, { headers }?)`, returning a socket with asynchronous

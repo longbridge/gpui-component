@@ -3310,8 +3310,12 @@ interface ShellFetchResponse {
   json(): Promise<unknown>;
 }
 interface ShellFetchOptions {
-  /** GET by default; POST is available for OAuth-style form exchanges. */
-  method?: "GET" | "POST";
+  /**
+   * GET by default. Any HTTP method may be named; which of them may reach a
+   * given host and path is the plugin's `capabilities.network` policy, not
+   * this field.
+   */
+  method?: string;
   /** Client-managed framing headers such as Host and Content-Length are refused. */
   headers?: Record<string, string>;
   body?: string | Uint8Array;
