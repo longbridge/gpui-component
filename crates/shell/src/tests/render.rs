@@ -7924,6 +7924,89 @@ export default class LargeLists extends View {
     );
 }
 
+/// An overlay's content is a function, and what it closes over is another
+/// view's state -- the only contract `open_dialog` can have, since it answers a
+/// depth and not a handle. So the overlay has to rebuild from the script, not
+/// from the description it was opened with: a dialog that looks up what
+/// somebody typed would otherwise show the answer to nothing for as long as it
+/// is open.
+#[gpui::test]
+fn a_dialog_rebuilds_from_the_state_it_closes_over(cx: &mut TestAppContext) {
+    cx.update(|cx| crate::init(cx));
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View } from "gpui";
+import { v_flex } from "gpui-base";
+
+export default class Probe extends View {
+  init(_props, cx) {
+    this.answer = "pending";
+    cx.timer.after(5, () => {
+      window.open_dialog(() => v_flex().child(`dialog:${this.answer}`), {});
+    });
+    cx.timer.after(30, () => {
+      this.answer = "settled";
+      window.refresh();
+    });
+  }
+  render() {
+    return v_flex().child(`view:${this.answer}`);
+  }
+}
+"#;
+    let view_type = runtime
+        .load_source("dialog-rebuild.js", source)
+        .expect("load");
+    let runtime_for_view = Rc::clone(&runtime);
+    let (root, mut context) = cx.add_window_view(move |window, cx| {
+        let object = runtime_for_view
+            .instantiate(&view_type, window, cx)
+            .expect("instantiate");
+        let view = cx.new(|_| ScriptView::new(runtime_for_view, object));
+        crate::root::ShellRoot::new(view.into(), window, cx)
+    });
+    context
+        .executor()
+        .advance_clock(std::time::Duration::from_millis(10));
+    context.run_until_parked();
+    context.update(|window, cx| window.draw(cx).clear(cx));
+
+    let dialog = context
+        .update(|_, cx| root.read(cx).topmost_dialog().cloned())
+        .expect("the dialog the script opened")
+        .downcast::<ScriptView>()
+        .expect("a script dialog");
+    let opened = context.update(|_, cx| {
+        dialog
+            .read(cx)
+            .snapshot()
+            .map(crate::RenderSnapshot::debug_tree)
+            .unwrap_or_default()
+    });
+    assert!(opened.contains("dialog:pending"), "{opened}");
+
+    // The state the closure reads moves, and nothing here is the dialog's own
+    // view to notify -- `window.refresh()` is the call for exactly that.
+    context
+        .executor()
+        .advance_clock(std::time::Duration::from_millis(20));
+    context.run_until_parked();
+    context.update(|window, cx| window.draw(cx).clear(cx));
+
+    let refreshed = context.update(|_, cx| {
+        dialog
+            .read(cx)
+            .snapshot()
+            .map(crate::RenderSnapshot::debug_tree)
+            .unwrap_or_default()
+    });
+    assert!(
+        refreshed.contains("dialog:settled"),
+        "the dialog must rebuild from the state it closes over:\n{refreshed}"
+    );
+}
+
 #[gpui::test]
 fn a_virtual_list_rejects_a_sparse_item_size_array_without_allocating_it(cx: &mut TestAppContext) {
     cx.update(|cx| crate::init(cx));

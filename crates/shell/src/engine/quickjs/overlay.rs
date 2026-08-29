@@ -78,6 +78,12 @@
 //! belong to the wrong pass. The function is called when the dialog renders, and
 //! again whenever it re-renders, which is the same contract a view's `render`
 //! has. Whatever it closes over is the dialog's state.
+//!
+//! What it closes over is usually another view's state, and this call answers a
+//! depth rather than a handle — so there is nothing for a script to notify when
+//! that state moves. `window.refresh()` is the call for it: the root redraws,
+//! and an overlay built from a script rebuilds with it rather than
+//! re-materializing the description it was opened with.
 
 use std::time::Duration;
 
