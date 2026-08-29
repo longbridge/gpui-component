@@ -1,7 +1,7 @@
 ---
 title: 动画与动效
 description: gpui-base 的类型化 transition、spring、keyframes、presence、stagger 与 reduced-motion 行为。
-order: 3
+order: 4
 example: motion
 exampleKind: base
 ---

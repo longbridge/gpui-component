@@ -1,4 +1,4 @@
-use gpui::{Context, IntoElement, ParentElement as _, Styled as _, div, rgb};
+use gpui::{Context, IntoElement, ParentElement as _, Styled as _, div};
 use gpui_base::OtpInput;
 
 use super::super::BaseShowcase;
@@ -28,9 +28,9 @@ impl BaseShowcase {
                                 .justify_center()
                                 .border_1()
                                 .border_color(if ix == active {
-                                    rgb(0x171717)
+                                    super::example_rgb(0x171717)
                                 } else {
-                                    rgb(0xd4d4d4)
+                                    super::example_rgb(0xd4d4d4)
                                 })
                                 .child(value.get(ix).copied().unwrap_or(' ').to_string())
                         })),
@@ -39,7 +39,7 @@ impl BaseShowcase {
             .child(
                 div()
                     .text_xs()
-                    .text_color(rgb(0x737373))
+                    .text_color(super::example_rgb(0x737373))
                     .child("Enter the 6-digit code."),
             )
     }

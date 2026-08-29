@@ -201,9 +201,9 @@ impl BaseShowcase {
             .flex_col()
             .gap_2()
             .p_3()
-            .bg(rgb(0xf5f5f5))
+            .bg(super::example_rgb(0xf5f5f5))
             .border_1()
-            .border_color(rgb(0xe5e5e5))
+            .border_color(super::example_rgb(0xe5e5e5))
             .child(
                 div()
                     .font_weight(gpui::FontWeight::SEMIBOLD)
@@ -219,7 +219,7 @@ impl BaseShowcase {
                     .flex_1()
                     .min_h_0()
                     .overflow_y_scroll()
-                    .text_color(rgb(0x525252))
+                    .text_color(super::example_rgb(0x525252))
                     .child(selected_text),
             )
             .child(
@@ -231,7 +231,7 @@ impl BaseShowcase {
                     .justify_center()
                     .self_start()
                     .border_1()
-                    .border_color(rgb(0x171717))
+                    .border_color(super::example_rgb(0x171717))
                     .child("Clear selection")
                     .on_click(move |_, window, cx| {
                         TextSelection::clear(window, cx);
@@ -278,27 +278,36 @@ impl BaseShowcase {
                                 "Text selection across renderers",
                             )),
                     )
-                    .child(div().text_color(rgb(0x525252)).line_height(px(22.)).child(
-                        PlainSelectableText::new(
-                            self.text_selection_handles[1].clone(),
-                            1,
-                            PRODUCT_PARAGRAPH,
-                        ),
-                    ))
-                    .child(div().text_color(rgb(0x525252)).line_height(px(22.)).child(
-                        PlainSelectableText::new(
-                            self.text_selection_handles[2].clone(),
-                            2,
-                            IMPLEMENTATION_PARAGRAPH,
-                        ),
-                    ))
-                    .child(div().text_color(rgb(0x525252)).line_height(px(22.)).child(
-                        PlainSelectableText::new(
-                            self.text_selection_handles[3].clone(),
-                            3,
-                            INTERNATIONAL_PARAGRAPH,
-                        ),
-                    )),
+                    .child(
+                        div()
+                            .text_color(super::example_rgb(0x525252))
+                            .line_height(px(22.))
+                            .child(PlainSelectableText::new(
+                                self.text_selection_handles[1].clone(),
+                                1,
+                                PRODUCT_PARAGRAPH,
+                            )),
+                    )
+                    .child(
+                        div()
+                            .text_color(super::example_rgb(0x525252))
+                            .line_height(px(22.))
+                            .child(PlainSelectableText::new(
+                                self.text_selection_handles[2].clone(),
+                                2,
+                                IMPLEMENTATION_PARAGRAPH,
+                            )),
+                    )
+                    .child(
+                        div()
+                            .text_color(super::example_rgb(0x525252))
+                            .line_height(px(22.))
+                            .child(PlainSelectableText::new(
+                                self.text_selection_handles[3].clone(),
+                                3,
+                                INTERNATIONAL_PARAGRAPH,
+                            )),
+                    ),
             )
             .child(footer)
     }

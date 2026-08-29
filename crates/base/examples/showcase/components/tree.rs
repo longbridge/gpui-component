@@ -14,7 +14,7 @@ impl BaseShowcase {
             .relative()
             .text_sm()
             .border_1()
-            .border_color(rgb(0xd4d4d4))
+            .border_color(super::example_rgb(0xd4d4d4))
             .py_1()
             .item(|_, entry, state, _, _| {
                 let depth = entry.depth();
@@ -38,7 +38,9 @@ impl BaseShowcase {
                     .flex()
                     .items_center()
                     .gap_1()
-                    .when(state.is_selected(), |this| this.bg(rgb(0xf0f0f0)))
+                    .when(state.is_selected(), |this| {
+                        this.bg(super::example_rgb(0xf0f0f0))
+                    })
                     .when(depth > 0, |this| {
                         this.child(div().flex_none().w(px(depth as f32 * 12.)))
                     })

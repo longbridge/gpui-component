@@ -1,7 +1,7 @@
 ---
 title: Motion
 description: Typed transitions, springs, keyframes, presence, stagger, and reduced-motion behavior in gpui-base.
-order: 3
+order: 4
 example: motion
 exampleKind: base
 ---

@@ -1,17 +1,21 @@
 use std::time::Duration;
 
+#[path = "../shared/palette.rs"]
+mod palette;
+
 #[cfg(target_family = "wasm")]
 use gpui::ApplicationHandle;
 #[cfg(not(target_family = "wasm"))]
 use gpui::WindowBounds;
 use gpui::{
     App, AppContext as _, Application, AsyncApp, Context, IntoElement, ParentElement as _, Render,
-    Styled as _, Window, WindowOptions, div, prelude::FluentBuilder as _, px, rgb,
+    Styled as _, Window, WindowOptions, div, prelude::FluentBuilder as _, px,
 };
 use gpui_base::{
     Button, Easing, IterationCount, Keyframe, Keyframes, Presence, Spring, Stagger, StaggerOrigin,
     Timing, Transition, animate_keyframes, spring, transition,
 };
+use palette::{activate as activate_palette, canvas as example_canvas, example_rgb};
 #[cfg(target_family = "wasm")]
 use std::borrow::Cow;
 
@@ -184,7 +188,7 @@ impl MotionExample {
                     .h_9()
                     .px_3()
                     .border_1()
-                    .border_color(rgb(0xd4d4d4))
+                    .border_color(example_rgb(0xd4d4d4))
                     .child(if playing {
                         "Stop"
                     } else if self.minutes == END_MINUTES {
@@ -211,7 +215,7 @@ impl MotionExample {
             .w(px(240.))
             .h_10()
             .border_1()
-            .border_color(rgb(0xd4d4d4))
+            .border_color(example_rgb(0xd4d4d4))
             .child(
                 div()
                     .absolute()
@@ -219,7 +223,7 @@ impl MotionExample {
                     .left(px(x))
                     .w(px(119.))
                     .h_full()
-                    .bg(rgb(0x171717)),
+                    .bg(example_rgb(0x171717)),
             )
             .child(
                 div().relative().h_full().flex().children(
@@ -232,9 +236,9 @@ impl MotionExample {
                                 .w(px(119.))
                                 .h_full()
                                 .text_color(if self.spring_selected == selected {
-                                    rgb(0xffffff)
+                                    example_rgb(0xffffff)
                                 } else {
-                                    rgb(0x525252)
+                                    example_rgb(0x525252)
                                 })
                                 .child(label)
                                 .on_click(move |_, _, cx| {
@@ -254,7 +258,7 @@ impl MotionExample {
             .h(px(132.))
             .p_4()
             .border_1()
-            .border_color(rgb(0xd4d4d4))
+            .border_color(example_rgb(0xd4d4d4))
             .flex()
             .flex_col()
             .justify_between()
@@ -267,7 +271,7 @@ impl MotionExample {
                     .child(
                         div()
                             .text_xs()
-                            .text_color(rgb(0x737373))
+                            .text_color(example_rgb(0x737373))
                             .child("Infinite · 1200ms"),
                     ),
             )
@@ -299,7 +303,7 @@ impl MotionExample {
                         div()
                             .w_5()
                             .h(px(18. + 38. * value))
-                            .bg(rgb(0x171717))
+                            .bg(example_rgb(0x171717))
                             .opacity(0.35 + 0.65 * value)
                     })),
             )
@@ -320,8 +324,8 @@ impl MotionExample {
                     .w_full()
                     .p_3()
                     .border_1()
-                    .border_color(rgb(0xd4d4d4))
-                    .bg(rgb(0xffffff))
+                    .border_color(example_rgb(0xd4d4d4))
+                    .bg(example_rgb(0xffffff))
                     .opacity(sample.progress)
                     .child(
                         div()
@@ -334,13 +338,18 @@ impl MotionExample {
                                     .font_weight(gpui::FontWeight::MEDIUM)
                                     .child("Background task"),
                             )
-                            .child(div().text_xs().text_color(rgb(0x737373)).child("Complete")),
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .text_color(example_rgb(0x737373))
+                                    .child("Complete"),
+                            ),
                     )
                     .child(
                         div()
                             .mt_2()
                             .text_xs()
-                            .text_color(rgb(0x737373))
+                            .text_color(example_rgb(0x737373))
                             .child("Mounted through the exit phase."),
                     )
                     .into_any_element()
@@ -352,7 +361,7 @@ impl MotionExample {
                     .h_9()
                     .px_3()
                     .border_1()
-                    .border_color(rgb(0xd4d4d4))
+                    .border_color(example_rgb(0xd4d4d4))
                     .child(if self.present { "Remove" } else { "Insert" })
                     .on_click(move |_, _, cx| {
                         _ = entity.update(cx, |this, cx| {
@@ -375,7 +384,7 @@ impl MotionExample {
             .child(
                 div()
                     .border_1()
-                    .border_color(rgb(0xd4d4d4))
+                    .border_color(example_rgb(0xd4d4d4))
                     .children((0..3).map(|ix| {
                         let frames =
                             Keyframes::try_new([Keyframe::new(0., 0.), Keyframe::new(1., 1.)])
@@ -396,8 +405,10 @@ impl MotionExample {
                             .w_full()
                             .h_10()
                             .px_3()
-                            .when(ix < 2, |this| this.border_b_1().border_color(rgb(0xe5e5e5)))
-                            .bg(rgb(0xffffff))
+                            .when(ix < 2, |this| {
+                                this.border_b_1().border_color(example_rgb(0xe5e5e5))
+                            })
+                            .bg(example_rgb(0xffffff))
                             .opacity(value)
                             .flex()
                             .items_center()
@@ -406,7 +417,7 @@ impl MotionExample {
                                 div()
                                     .w_5()
                                     .text_xs()
-                                    .text_color(rgb(0x737373))
+                                    .text_color(example_rgb(0x737373))
                                     .child(format!("0{}", ix + 1)),
                             )
                             .child(div().text_sm().child(title))
@@ -418,7 +429,7 @@ impl MotionExample {
                     .h_9()
                     .px_3()
                     .border_1()
-                    .border_color(rgb(0xd4d4d4))
+                    .border_color(example_rgb(0xd4d4d4))
                     .child("Replay")
                     .on_click(move |_, _, cx| {
                         _ = entity.update(cx, |this, cx| {
@@ -432,6 +443,7 @@ impl MotionExample {
 
 impl Render for MotionExample {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        activate_palette(window);
         let entity = cx.entity().downgrade();
         let content = match self.demo {
             Demo::SlidingTime => self.sliding_time(window, cx).into_any_element(),
@@ -442,8 +454,8 @@ impl Render for MotionExample {
         };
         div()
             .size_full()
-            .bg(rgb(0xffffff))
-            .text_color(rgb(0x171717))
+            .bg(example_canvas())
+            .text_color(example_rgb(0x171717))
             .font_family("Inter Variable")
             .text_xs()
             .flex()
@@ -470,9 +482,10 @@ impl Render for MotionExample {
                                 .h_8()
                                 .px_3()
                                 .border_1()
-                                .border_color(rgb(0xd4d4d4))
+                                .border_color(example_rgb(0xd4d4d4))
                                 .when(self.demo == demo, |this| {
-                                    this.bg(rgb(0x171717)).text_color(rgb(0xffffff))
+                                    this.bg(example_rgb(0x171717))
+                                        .text_color(example_rgb(0xffffff))
                                 })
                                 .child(demo.label())
                                 .on_click(move |_, _, cx| {
@@ -488,7 +501,7 @@ impl Render for MotionExample {
                             .h(px(260.))
                             .pt_4()
                             .border_1()
-                            .border_color(rgb(0xd4d4d4))
+                            .border_color(example_rgb(0xd4d4d4))
                             .flex()
                             .flex_col()
                             .gap_2()
@@ -503,7 +516,7 @@ impl Render for MotionExample {
                                 div()
                                     .px_4()
                                     .text_sm()
-                                    .text_color(rgb(0x737373))
+                                    .text_color(example_rgb(0x737373))
                                     .child(self.demo.description()),
                             )
                             .child(

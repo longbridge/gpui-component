@@ -1211,15 +1211,20 @@ html[lang^="ja"] :is(h1, h2, h3, h4) {
 /* The gallery follows the docs theme, and `neutral-950` is its dark
    background. */
 .component-example--component iframe {
-  @apply bg-white dark:bg-[#0a0a0a];
+  @apply bg-white dark:bg-[#0e0e0e];
 }
 
-/* The base showcase is a deliberately unstyled demo with hard-coded light
-   colours, so its frame stays light in dark mode too. */
+/* Base owns no product theme, but its neutral example palette follows the
+   documentation appearance. `color-scheme` propagates through the iframe, so
+   GPUI Web's `prefers-color-scheme` observer sees the same mode. */
 .component-example--base iframe {
   height: 600px;
   color-scheme: light;
-  @apply bg-white;
+  @apply bg-white dark:bg-[#0a0a0a];
+}
+
+.dark .component-example--base iframe {
+  color-scheme: dark;
 }
 
 @media (max-width: 640px) {

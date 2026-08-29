@@ -20,7 +20,7 @@ impl BaseShowcase {
         Accordion::new("example-accordion")
             .w(px(270.))
             .border_t_1()
-            .border_color(rgb(0xd4d4d4))
+            .border_color(super::example_rgb(0xd4d4d4))
             .children(
                 items
                     .into_iter()
@@ -44,23 +44,23 @@ impl BaseShowcase {
                                     .justify_between()
                                     .h_7()
                                     .border_b_1()
-                                    .border_color(rgb(0xd4d4d4))
+                                    .border_color(super::example_rgb(0xd4d4d4))
                                     .text_xs()
                                     .child(question)
-                                    .child(div().text_color(rgb(0x737373)).child(if open {
-                                        "−"
-                                    } else {
-                                        "+"
-                                    })),
+                                    .child(
+                                        div()
+                                            .text_color(super::example_rgb(0x737373))
+                                            .child(if open { "−" } else { "+" }),
+                                    ),
                             ))
                             .panel(
                                 AccordionPanel::new()
                                     .px_1()
                                     .py_1()
                                     .border_b_1()
-                                    .border_color(rgb(0xd4d4d4))
+                                    .border_color(super::example_rgb(0xd4d4d4))
                                     .text_xs()
-                                    .text_color(rgb(0x525252))
+                                    .text_color(super::example_rgb(0x525252))
                                     .child(answer),
                             )
                     }),
