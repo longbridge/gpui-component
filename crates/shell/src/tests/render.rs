@@ -7959,7 +7959,7 @@ export default class Probe extends View {
         .load_source("dialog-rebuild.js", source)
         .expect("load");
     let runtime_for_view = Rc::clone(&runtime);
-    let (root, mut context) = cx.add_window_view(move |window, cx| {
+    let (root, context) = cx.add_window_view(move |window, cx| {
         let object = runtime_for_view
             .instantiate(&view_type, window, cx)
             .expect("instantiate");
