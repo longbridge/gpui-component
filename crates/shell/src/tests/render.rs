@@ -162,6 +162,249 @@ fn a_registered_component_payload_reaches_its_materializer(cx: &mut TestAppConte
 }
 
 #[gpui::test]
+fn a_registered_slot_factory_rebuilds_after_its_request_and_snapshot_owner_return(
+    cx: &mut TestAppContext,
+) {
+    use std::cell::RefCell;
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+
+    use gpui::{AnyElement, IntoElement as _, div};
+
+    use crate::{
+        COMPONENT_REGISTRY_API_VERSION, ComponentDescriptor, ComponentElementFactory,
+        ComponentMaterializer, ComponentPayload, ComponentRegistry, ConstructorDescriptor,
+        MaterializeRequest, TypeScriptDescriptor,
+        snapshot::RenderSnapshot,
+        spec::{Component, RegisteredComponentSpec, SpecArena, SpecOp},
+    };
+
+    thread_local! {
+        static DELAYED_FACTORY: RefCell<Option<ComponentElementFactory>> = const { RefCell::new(None) };
+        static FAILING_FACTORY: RefCell<Option<ComponentElementFactory>> = const { RefCell::new(None) };
+        static NESTED_FACTORY: RefCell<Option<ComponentElementFactory>> = const { RefCell::new(None) };
+        static SELF_FACTORY: RefCell<Option<ComponentElementFactory>> = const { RefCell::new(None) };
+    }
+
+    struct DelayedOverlay;
+    impl ComponentMaterializer for DelayedOverlay {
+        fn materialize(&self, mut request: MaterializeRequest<'_>) -> anyhow::Result<AnyElement> {
+            let factory = request
+                .take_slot_factory("content")
+                .ok_or_else(|| anyhow::anyhow!("missing content factory"))?;
+            assert!(request.take_slot("content").is_none());
+            DELAYED_FACTORY.with(|held| *held.borrow_mut() = Some(factory));
+            let failing = request
+                .take_slot_factory("failing")
+                .ok_or_else(|| anyhow::anyhow!("missing failing factory"))?;
+            FAILING_FACTORY.with(|held| *held.borrow_mut() = Some(failing));
+            let nested = request
+                .take_slot_factory("nested")
+                .ok_or_else(|| anyhow::anyhow!("missing nested factory"))?;
+            NESTED_FACTORY.with(|held| *held.borrow_mut() = Some(nested));
+            request.finish(div())
+        }
+    }
+
+    struct FailingSlot(Arc<AtomicUsize>);
+    impl ComponentMaterializer for FailingSlot {
+        fn materialize(&self, _request: MaterializeRequest<'_>) -> anyhow::Result<AnyElement> {
+            self.0.fetch_add(1, Ordering::SeqCst);
+            anyhow::bail!("nested slot failed")
+        }
+    }
+
+    struct NestedFactorySlot;
+    impl ComponentMaterializer for NestedFactorySlot {
+        fn materialize(&self, mut request: MaterializeRequest<'_>) -> anyhow::Result<AnyElement> {
+            request.with_window_app(|window, cx| {
+                FAILING_FACTORY.with(|held| {
+                    held.borrow()
+                        .as_ref()
+                        .expect("inner factory")
+                        .build(window, cx)
+                        .map(drop)
+                })
+            })?;
+            request.finish(div())
+        }
+    }
+
+    cx.update(|cx| crate::init(cx));
+    let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+    let id = registry
+        .register(ComponentDescriptor {
+            name: "DelayedOverlay",
+            constructors: vec![ConstructorDescriptor::new(
+                "DelayedOverlay",
+                Vec::new(),
+                |_| Ok(ComponentPayload::new(())),
+            )],
+            methods: Vec::new(),
+            typescript: TypeScriptDescriptor::default(),
+            materializer: Arc::new(DelayedOverlay),
+        })
+        .unwrap();
+    let failing_calls = Arc::new(AtomicUsize::new(0));
+    let failing_id = registry
+        .register(ComponentDescriptor {
+            name: "FailingSlot",
+            constructors: vec![ConstructorDescriptor::new(
+                "FailingSlot",
+                Vec::new(),
+                |_| Ok(ComponentPayload::new(())),
+            )],
+            methods: Vec::new(),
+            typescript: TypeScriptDescriptor::default(),
+            materializer: Arc::new(FailingSlot(failing_calls.clone())),
+        })
+        .unwrap();
+    let nested_id = registry
+        .register(ComponentDescriptor {
+            name: "NestedFactorySlot",
+            constructors: vec![ConstructorDescriptor::new(
+                "NestedFactorySlot",
+                Vec::new(),
+                |_| Ok(ComponentPayload::new(())),
+            )],
+            methods: Vec::new(),
+            typescript: TypeScriptDescriptor::default(),
+            materializer: Arc::new(NestedFactorySlot),
+        })
+        .unwrap();
+    let runtime = ShellRuntime::new_isolated_with_components(registry.freeze().unwrap()).unwrap();
+    let mut arena = SpecArena::new();
+    let content = arena.push(Component::Div);
+    let failing = arena.push(Component::Registered(RegisteredComponentSpec::new(
+        failing_id,
+        "FailingSlot",
+        ComponentPayload::new(()),
+    )));
+    let nested = arena.push(Component::Registered(RegisteredComponentSpec::new(
+        nested_id,
+        "NestedFactorySlot",
+        ComponentPayload::new(()),
+    )));
+    let root = arena.push(Component::Registered(RegisteredComponentSpec::new(
+        id,
+        "DelayedOverlay",
+        ComponentPayload::new(()),
+    )));
+    arena
+        .push_op(root, SpecOp::Slot("content", content))
+        .unwrap();
+    arena
+        .push_op(root, SpecOp::Slot("failing", failing))
+        .unwrap();
+    arena.push_op(root, SpecOp::Slot("nested", nested)).unwrap();
+    let snapshot = RenderSnapshot::new(&runtime, 7, root, arena);
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+
+    context.update(|window, cx| {
+        drop(crate::materialize::materialize(
+            &runtime, &snapshot, window, cx,
+        ))
+    });
+    assert_eq!(
+        failing_calls.load(Ordering::SeqCst),
+        0,
+        "slot factory must be lazy"
+    );
+    drop(snapshot);
+    context.update(|window, cx| {
+        DELAYED_FACTORY.with(|held| {
+            let factory = held.borrow().clone().expect("factory escaped request");
+            drop(factory.build(window, cx).expect("first delayed build"));
+            drop(factory.build(window, cx).expect("second delayed build"));
+        });
+        FAILING_FACTORY.with(|held| {
+            let factory = held
+                .borrow()
+                .clone()
+                .expect("failing factory escaped request");
+            for _ in 0..2 {
+                let error = match factory.build(window, cx) {
+                    Ok(_) => panic!("nested materializer failure must propagate"),
+                    Err(error) => error,
+                };
+                assert!(
+                    format!("{error:#}").contains("nested slot failed"),
+                    "{error:#}"
+                );
+            }
+        });
+        NESTED_FACTORY.with(|held| {
+            let error = match held.borrow().as_ref().unwrap().build(window, cx) {
+                Ok(_) => panic!("nested factory failure must cross both frames"),
+                Err(error) => error,
+            };
+            let chain = format!("{error:#}");
+            assert!(chain.contains("NestedFactorySlot"), "{chain}");
+            assert!(chain.contains("nested slot failed"), "{chain}");
+        });
+        let self_factory = ComponentElementFactory::new(|window, cx| {
+            SELF_FACTORY.with(|held| held.borrow().as_ref().unwrap().build(window, cx))
+        });
+        SELF_FACTORY.with(|held| *held.borrow_mut() = Some(self_factory.clone()));
+        for _ in 0..2 {
+            let error = match self_factory.build(window, cx) {
+                Ok(_) => panic!("self-recursive factory must fail"),
+                Err(error) => error,
+            };
+            assert_eq!(
+                error.to_string(),
+                "component element factory is already building"
+            );
+        }
+        SELF_FACTORY.with(|held| held.borrow_mut().take());
+
+        let panics = Rc::new(Cell::new(true));
+        let panic_flag = panics.clone();
+        let panic_factory = ComponentElementFactory::new(move |_, _| {
+            if panic_flag.replace(false) {
+                panic!("synthetic factory panic");
+            }
+            Ok(div().into_any_element())
+        });
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let _ = panic_factory.build(window, cx);
+            }))
+            .is_err()
+        );
+        drop(
+            panic_factory
+                .build(window, cx)
+                .expect("guard resets after panic"),
+        );
+    });
+    assert_eq!(failing_calls.load(Ordering::SeqCst), 3);
+    drop(runtime);
+    context.update(|window, cx| {
+        DELAYED_FACTORY.with(|held| {
+            let error = match held.borrow().as_ref().unwrap().build(window, cx) {
+                Ok(_) => panic!("released runtime must invalidate the factory"),
+                Err(error) => error,
+            };
+            assert_eq!(
+                error.to_string(),
+                "component element factory runtime has been released"
+            );
+            held.borrow_mut().take();
+        });
+        FAILING_FACTORY.with(|held| {
+            held.borrow_mut().take();
+        });
+        NESTED_FACTORY.with(|held| {
+            held.borrow_mut().take();
+        });
+    });
+}
+
+#[gpui::test]
 fn descriptor_drives_runtime_and_typescript(cx: &mut TestAppContext) {
     use std::sync::{Arc, Mutex};
 

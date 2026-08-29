@@ -1135,6 +1135,8 @@ const ELEMENT_METHODS: &str = r#"    /**
     fallback(element: Element): Element;
     /** Fills an `AccordionItem`'s `header` slot, which takes an `AccordionHeader`. */
     header(element: Element): Element;
+    /** Fills a component's named `footer` slot. */
+    footer(element: Element): Element;
     /** Fills an `AccordionItem`'s `panel` slot, which takes an `AccordionPanel`. */
     panel(element: Element): Element;
     /**
@@ -3549,6 +3551,7 @@ mod tests {
         "image",
         "fallback",
         "header",
+        "footer",
         "panel",
         "aria_level",
         "keep_mounted",

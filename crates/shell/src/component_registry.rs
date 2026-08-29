@@ -1,5 +1,6 @@
 use std::{
     any::Any,
+    cell::Cell,
     collections::{HashMap, HashSet},
     fmt,
     marker::PhantomData,
@@ -130,6 +131,43 @@ use gpui::{
 
 pub const COMPONENT_REGISTRY_API_VERSION: u32 = 1;
 
+#[derive(Clone)]
+/// An owned, repeatable recipe for one element description.
+///
+/// Each build walks the frozen snapshot again. Clones share the same snapshot
+/// lease and recursion guard, so deferred GPUI overlay callbacks never retain
+/// an `AnyElement` built against an arena that has already been cleared.
+pub struct ComponentElementFactory {
+    build: Rc<dyn Fn(&mut Window, &mut App) -> anyhow::Result<AnyElement>>,
+    building: Rc<Cell<bool>>,
+}
+
+impl ComponentElementFactory {
+    pub(crate) fn new(
+        build: impl Fn(&mut Window, &mut App) -> anyhow::Result<AnyElement> + 'static,
+    ) -> Self {
+        Self {
+            build: Rc::new(build),
+            building: Rc::new(Cell::new(false)),
+        }
+    }
+
+    pub fn build(&self, window: &mut Window, cx: &mut App) -> anyhow::Result<AnyElement> {
+        anyhow::ensure!(
+            !self.building.replace(true),
+            "component element factory is already building"
+        );
+        struct Reset<'a>(&'a Cell<bool>);
+        impl Drop for Reset<'_> {
+            fn drop(&mut self) {
+                self.0.set(false);
+            }
+        }
+        let _reset = Reset(&self.building);
+        (self.build)(window, cx)
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct ComponentId(u32);
 
@@ -183,6 +221,15 @@ pub enum ComponentArgument {
 /// descriptions never cross back into the script event boundary.
 #[derive(Clone, Debug, PartialEq)]
 pub enum ComponentCallbackArgument {
+    String(String),
+    Number(f64),
+    Boolean(bool),
+}
+
+/// A deliberately closed value returned by a script-backed component delegate.
+#[derive(Clone, Debug, PartialEq)]
+pub enum ComponentCallbackValue {
+    Null,
     String(String),
     Number(f64),
     Boolean(bool),
@@ -453,6 +500,7 @@ pub struct MaterializeRequest<'a> {
     request_id: u64,
     child_lane: ChildLane,
     slots: Vec<(&'static str, AnyElement)>,
+    slot_factories: Vec<(&'static str, ComponentElementFactory)>,
     disabled: bool,
     selected: bool,
     on_click: Option<crate::spec::CallbackId>,
@@ -469,6 +517,7 @@ pub(crate) struct MaterializeRequestInit<'a> {
     pub children: Vec<AnyElement>,
     pub child_specs: Vec<(u32, Option<&'static str>)>,
     pub slots: Vec<(&'static str, AnyElement)>,
+    pub slot_factories: Vec<(&'static str, ComponentElementFactory)>,
     pub disabled: bool,
     pub selected: bool,
     pub on_click: Option<crate::spec::CallbackId>,
@@ -492,6 +541,7 @@ impl<'a> MaterializeRequest<'a> {
             request_id: NEXT_MATERIALIZE_REQUEST_ID.fetch_add(1, Ordering::Relaxed),
             child_lane: ChildLane::Unclaimed,
             slots: init.slots,
+            slot_factories: init.slot_factories,
             disabled: init.disabled,
             selected: init.selected,
             on_click: init.on_click,
@@ -660,8 +710,42 @@ impl<'a> MaterializeRequest<'a> {
     /// component owns their placement. Any slot left unread is diagnosed when
     /// the request is dropped instead of disappearing silently.
     pub fn take_slot(&mut self, name: &str) -> Option<AnyElement> {
-        let index = self.slots.iter().position(|(held, _)| *held == name)?;
-        Some(self.slots.remove(index).1)
+        if let Some(index) = self.slots.iter().position(|(held, _)| *held == name) {
+            if let Some(factory) = self
+                .slot_factories
+                .iter()
+                .position(|(held, _)| *held == name)
+            {
+                self.slot_factories.remove(factory);
+            }
+            return Some(self.slots.remove(index).1);
+        }
+        let factory = self.take_slot_factory(name)?;
+        let window = self.window.as_deref_mut()?;
+        let cx = self.cx.as_deref_mut()?;
+        match factory.build(window, cx) {
+            Ok(element) => Some(element),
+            Err(error) => {
+                tracing::error!("failed to materialize `{name}` slot: {error:#}");
+                None
+            }
+        }
+    }
+
+    /// Takes the next named slot as a repeatable owned factory.
+    ///
+    /// Factory and eager access are exclusive: taking either representation
+    /// consumes the matching slot from the other lane as well. Repeated names
+    /// are returned in script order.
+    pub fn take_slot_factory(&mut self, name: &str) -> Option<ComponentElementFactory> {
+        let index = self
+            .slot_factories
+            .iter()
+            .position(|(held, _)| *held == name)?;
+        if let Some(eager) = self.slots.iter().position(|(held, _)| *held == name) {
+            self.slots.remove(eager);
+        }
+        Some(self.slot_factories.remove(index).1)
     }
 
     /// Takes all slots with `name`, preserving script order.
@@ -670,7 +754,36 @@ impl<'a> MaterializeRequest<'a> {
         let mut index = 0;
         while index < self.slots.len() {
             if self.slots[index].0 == name {
+                if let Some(factory) = self
+                    .slot_factories
+                    .iter()
+                    .position(|(held, _)| *held == name)
+                {
+                    self.slot_factories.remove(factory);
+                }
                 taken.push(self.slots.remove(index).1);
+            } else {
+                index += 1;
+            }
+        }
+        taken
+    }
+
+    /// Takes every repeatable factory named `name`, preserving script order.
+    ///
+    /// This is the batch counterpart of [`Self::take_slot_factory`]. It is
+    /// intentionally distinct from [`Self::take_slots`]: eager elements and
+    /// deferred factories are exclusive lanes, and silently draining one while
+    /// returning values from the other would lose deferred content.
+    pub fn take_slot_factories(&mut self, name: &str) -> Vec<ComponentElementFactory> {
+        let mut taken = Vec::new();
+        let mut index = 0;
+        while index < self.slot_factories.len() {
+            if self.slot_factories[index].0 == name {
+                if let Some(eager) = self.slots.iter().position(|(held, _)| *held == name) {
+                    self.slots.remove(eager);
+                }
+                taken.push(self.slot_factories.remove(index).1);
             } else {
                 index += 1;
             }
@@ -705,7 +818,16 @@ impl<'a> MaterializeRequest<'a> {
         (
             self.style.is_some(),
             self.children.len() + self.child_specs.len() + self.issued_children.len(),
-            self.slots.iter().map(|(name, _)| *name).collect(),
+            self.slots
+                .iter()
+                .map(|(name, _)| *name)
+                .chain(
+                    self.slot_factories
+                        .iter()
+                        .filter(|(name, _)| !self.slots.iter().any(|(eager, _)| eager == name))
+                        .map(|(name, _)| *name),
+                )
+                .collect(),
         )
     }
 
@@ -863,11 +985,20 @@ impl ComponentCallback {
         window: &mut Window,
         cx: &mut App,
     ) -> anyhow::Result<()> {
+        self.invoke_value_with(arguments, window, cx).map(|_| ())
+    }
+
+    pub fn invoke_value_with(
+        &self,
+        arguments: &[ComponentCallbackArgument],
+        window: &mut Window,
+        cx: &mut App,
+    ) -> anyhow::Result<ComponentCallbackValue> {
         let runtime = self
             .runtime
             .upgrade()
             .ok_or_else(|| anyhow::anyhow!("component callback runtime has been released"))?;
-        runtime.dispatch_component_callback(self.id, arguments, window, cx)
+        runtime.dispatch_component_callback_value(self.id, arguments, window, cx)
     }
 
     /// Invokes the script callback and reports any failure through the shell's
@@ -1390,7 +1521,7 @@ impl FrozenComponentRegistry {
         for state in self.states() {
             source.push_str("function ");
             source.push_str(state.export);
-            source.push_str("(...args) { const handle = globalThis.__gpui[");
+            source.push_str("(...args) { const handle = globalThis.__gpui_components[");
             source.push_str(&format!("{:?}", state.export));
             source.push_str("](args); const value = Object.freeze({}); __stateHandles.set(value, handle); return value; }\nexport { ");
             source.push_str(state.export);
@@ -1400,8 +1531,9 @@ impl FrozenComponentRegistry {
             for constructor in &descriptor.constructors {
                 source.push_str("function ");
                 source.push_str(constructor.export);
-                source
-                    .push_str("(...args) { return globalThis.__gpui.__element(globalThis.__gpui[");
+                source.push_str(
+                    "(...args) { return globalThis.__gpui.__element(globalThis.__gpui_components[",
+                );
                 source.push_str(&format!("{:?}", constructor.export));
                 source.push_str("](args.map(__unwrapState))); }\nexport { ");
                 source.push_str(constructor.export);
@@ -1416,6 +1548,23 @@ impl FrozenComponentRegistry {
 mod tests {
     use super::*;
     use gpui::div;
+
+    #[gpui::test]
+    fn component_callback_reports_a_released_runtime(cx: &mut gpui::TestAppContext) {
+        use gpui::{Empty, VisualTestContext};
+        use std::ops::Deref;
+
+        let callback = ComponentCallback {
+            runtime: Weak::new(),
+            id: 0,
+        };
+        let window = cx.add_window(|_, _| Empty);
+        let mut context = VisualTestContext::from_window(*window.deref(), cx);
+        let error = context
+            .update(|window, cx| callback.invoke_value_with(&[], window, cx))
+            .unwrap_err();
+        assert!(error.to_string().contains("runtime has been released"));
+    }
 
     #[test]
     fn component_payloads_cross_the_adapter_boundary_as_send_sync_values() {
@@ -1450,6 +1599,10 @@ mod tests {
             children: vec![div().into_any_element()],
             child_specs: Vec::new(),
             slots: vec![("trigger", div().into_any_element())],
+            slot_factories: vec![(
+                "trigger",
+                ComponentElementFactory::new(|_, _| Ok(div().into_any_element())),
+            )],
             disabled: false,
             selected: false,
             on_click: None,
@@ -1462,6 +1615,7 @@ mod tests {
         assert_eq!(request.unread_parts(), (true, 1, vec!["trigger"]));
         assert!(request.take_slot("content").is_none());
         assert!(request.take_slot("trigger").is_some());
+        assert!(request.take_slot_factory("trigger").is_none());
         assert_eq!(request.take_children().unwrap().len(), 1);
         let _ = request.take_style();
         assert_eq!(request.unread_parts(), (false, 0, Vec::new()));
@@ -1489,12 +1643,27 @@ mod tests {
                 ("content", div().into_any_element()),
                 ("trigger", div().into_any_element()),
             ],
+            slot_factories: vec![
+                (
+                    "content",
+                    ComponentElementFactory::new(|_, _| Ok(div().into_any_element())),
+                ),
+                (
+                    "content",
+                    ComponentElementFactory::new(|_, _| Ok(div().into_any_element())),
+                ),
+                (
+                    "content",
+                    ComponentElementFactory::new(|_, _| Ok(div().into_any_element())),
+                ),
+            ],
             disabled: false,
             selected: false,
             on_click: None,
         });
 
         assert_eq!(request.take_slots("content").len(), 2);
+        assert_eq!(request.take_slot_factories("content").len(), 1);
         assert!(request.take_slot("content").is_none());
         assert!(request.take_slot("trigger").is_some());
         let _ = request.take_style();
@@ -1524,6 +1693,7 @@ mod tests {
             children: Vec::new(),
             child_specs: vec![(7, Some("RegisteredChild"))],
             slots: Vec::new(),
+            slot_factories: Vec::new(),
             disabled: false,
             selected: false,
             on_click: None,
@@ -1558,6 +1728,7 @@ mod tests {
             children: Vec::new(),
             child_specs: vec![(7, Some("RepeatedChild")), (7, Some("RepeatedChild"))],
             slots: Vec::new(),
+            slot_factories: Vec::new(),
             disabled: false,
             selected: false,
             on_click: None,
@@ -1591,6 +1762,7 @@ mod tests {
             children: Vec::new(),
             child_specs: vec![(1, None)],
             slots: Vec::new(),
+            slot_factories: Vec::new(),
             disabled: false,
             selected: false,
             on_click: None,
@@ -1611,6 +1783,7 @@ mod tests {
             children: Vec::new(),
             child_specs: vec![(2, None)],
             slots: Vec::new(),
+            slot_factories: Vec::new(),
             disabled: false,
             selected: false,
             on_click: None,
@@ -1647,6 +1820,7 @@ mod tests {
             children: Vec::new(),
             child_specs: vec![(9, Some("FailingChild"))],
             slots: Vec::new(),
+            slot_factories: Vec::new(),
             disabled: false,
             selected: false,
             on_click: None,
@@ -1681,6 +1855,7 @@ mod tests {
             children: Vec::new(),
             child_specs: vec![(3, Some("Child"))],
             slots: Vec::new(),
+            slot_factories: Vec::new(),
             disabled: false,
             selected: false,
             on_click: None,
@@ -1695,6 +1870,7 @@ mod tests {
             children: Vec::new(),
             child_specs: vec![(3, Some("Child"))],
             slots: Vec::new(),
+            slot_factories: Vec::new(),
             disabled: false,
             selected: false,
             on_click: None,
@@ -1709,6 +1885,7 @@ mod tests {
             children: Vec::new(),
             child_specs: vec![(3, Some("Child"))],
             slots: Vec::new(),
+            slot_factories: Vec::new(),
             disabled: false,
             selected: false,
             on_click: None,

@@ -46,9 +46,52 @@
 
 use std::{
     cell::Cell,
+    cell::RefCell,
     rc::{Rc, Weak},
     time::Duration,
 };
+
+thread_local! {
+    static FACTORY_MATERIALIZE_ERRORS: RefCell<Vec<Option<anyhow::Error>>> = const { RefCell::new(Vec::new()) };
+}
+
+fn materialize_factory_subtree(
+    runtime: &Rc<ShellRuntime>,
+    snapshot: &RenderSnapshot,
+    root: SpecId,
+    inherited: gpui::Hsla,
+    window: &mut Window,
+    cx: &mut App,
+) -> anyhow::Result<AnyElement> {
+    FACTORY_MATERIALIZE_ERRORS.with(|errors| errors.borrow_mut().push(None));
+    struct FactoryFrame(bool);
+    impl Drop for FactoryFrame {
+        fn drop(&mut self) {
+            if !self.0 {
+                FACTORY_MATERIALIZE_ERRORS.with(|errors| {
+                    errors.borrow_mut().pop();
+                });
+            }
+        }
+    }
+    let mut frame = FactoryFrame(false);
+    let element = materialize_node(
+        runtime,
+        Some(snapshot),
+        snapshot.arena(),
+        root,
+        inherited,
+        window,
+        cx,
+    );
+    let error = FACTORY_MATERIALIZE_ERRORS
+        .with(|errors| errors.borrow_mut().pop().expect("factory error frame"));
+    frame.0 = true;
+    match error {
+        Some(error) => Err(error),
+        None => Ok(element),
+    }
+}
 
 use smallvec::SmallVec;
 
@@ -114,6 +157,7 @@ type SlotSpecs = SmallVec<[(&'static str, SpecId); 2]>;
 #[derive(Clone, Copy)]
 struct ChildSpecs<'a> {
     runtime: &'a Rc<ShellRuntime>,
+    snapshot: Option<&'a RenderSnapshot>,
     arena: &'a SpecArena,
     ids: &'a [SpecId],
     /// The text color the parent passes down, already resolved.
@@ -140,7 +184,15 @@ impl<'a> ChildSpecs<'a> {
 
     /// The ordinary path, for every child the parent does not own.
     fn element(&self, id: SpecId, window: &mut Window, cx: &mut App) -> AnyElement {
-        materialize_node(self.runtime, self.arena, id, self.inherited, window, cx)
+        materialize_node(
+            self.runtime,
+            self.snapshot,
+            self.arena,
+            id,
+            self.inherited,
+            window,
+            cx,
+        )
     }
 
     /// Everything [`materialize_node`] resolves before it decides what to
@@ -173,7 +225,17 @@ impl<'a> ChildSpecs<'a> {
         let children: Children = node
             .children()
             .iter()
-            .map(|child| materialize_node(self.runtime, self.arena, *child, inherited, window, cx))
+            .map(|child| {
+                materialize_node(
+                    self.runtime,
+                    self.snapshot,
+                    self.arena,
+                    *child,
+                    inherited,
+                    window,
+                    cx,
+                )
+            })
             .collect();
         Some(NodeParts {
             refinement,
@@ -572,6 +634,7 @@ pub fn materialize(
     metrics.time_materialize(|| {
         materialize_node(
             runtime,
+            Some(snapshot),
             snapshot.arena(),
             snapshot.root(),
             ambient,
@@ -599,7 +662,7 @@ pub(crate) fn materialize_subtree(
     cx: &mut App,
 ) -> AnyElement {
     let ambient = window.text_style().color;
-    materialize_node(runtime, arena, root, ambient, window, cx)
+    materialize_node(runtime, None, arena, root, ambient, window, cx)
 }
 
 /// Materializes one node, carrying the text color down the description.
@@ -612,6 +675,7 @@ pub(crate) fn materialize_subtree(
 /// come out light without the script saying so twice.
 fn materialize_node(
     runtime: &Rc<ShellRuntime>,
+    snapshot: Option<&RenderSnapshot>,
     arena: &SpecArena,
     id: SpecId,
     inherited: gpui::Hsla,
@@ -638,20 +702,23 @@ fn materialize_node(
     // A component that takes typed children is handed the descriptions instead:
     // flattening them here would throw away the very thing it needs. See
     // [`ChildSpecs`].
-    let children: Children =
-        if takes_typed_children(&component) || matches!(component, Component::Registered(_)) {
-            Children::new()
-        } else {
-            node.children()
-                .iter()
-                .map(|child| materialize_node(runtime, arena, *child, inherited, window, cx))
-                .collect()
-        };
+    let children: Children = if takes_typed_children(&component)
+        || matches!(component, Component::Registered(_))
+    {
+        Children::new()
+    } else {
+        node.children()
+            .iter()
+            .map(|child| materialize_node(runtime, snapshot, arena, *child, inherited, window, cx))
+            .collect()
+    };
 
     // A slot's element is built here, beside the children, so it inherits the
     // same text color: where the component chooses to put it is the component's
     // business, but what it looks like should not depend on that choice.
-    let slots: Slots = if materializes_slots(&component, &behavior) {
+    let slots: Slots = if matches!(component, Component::Registered(_)) {
+        SmallVec::new()
+    } else if materializes_slots(&component, &behavior) {
         slot_specs
             .iter()
             .filter(|(name, _)| {
@@ -662,7 +729,7 @@ fn materialize_node(
             .map(|(name, slot)| {
                 (
                     *name,
-                    materialize_node(runtime, arena, *slot, inherited, window, cx),
+                    materialize_node(runtime, snapshot, arena, *slot, inherited, window, cx),
                 )
             })
             .collect()
@@ -693,10 +760,29 @@ fn materialize_node(
     components::tooltip::warn_unhonoured_tooltip(&component, &behavior);
     warn_unhonoured_input(&component, &behavior);
 
-    materialize_component(
-        runtime, arena, node, id, component, inherited, refinement, behavior, states, children,
-        slots, slot_specs, window, cx,
-    )
+    match component {
+        Component::Registered(component) => materialize_registered_component(
+            runtime,
+            snapshot,
+            arena,
+            node,
+            component,
+            inherited,
+            Box::new(RegisteredMaterializeParts {
+                refinement,
+                behavior,
+                children,
+                slots,
+                slot_specs,
+            }),
+            window,
+            cx,
+        ),
+        component => materialize_component(
+            runtime, snapshot, arena, node, id, component, inherited, refinement, behavior, states,
+            children, slots, slot_specs, window, cx,
+        ),
+    }
 }
 
 /// Dispatches an already-materialized node to its concrete component.
@@ -706,9 +792,132 @@ fn materialize_node(
 /// is multiplied by the depth of the script's element tree. Components can
 /// grow independently without making ordinary nested layouts exhaust Rust's
 /// default test-thread stack.
+struct RegisteredMaterializeParts {
+    refinement: StyleRefinement,
+    behavior: Behavior,
+    children: Children,
+    slots: Slots,
+    slot_specs: SlotSpecs,
+}
+
+#[allow(clippy::too_many_arguments)]
+#[inline(never)]
+fn materialize_registered_component(
+    runtime: &Rc<ShellRuntime>,
+    snapshot: Option<&RenderSnapshot>,
+    arena: &SpecArena,
+    node: &SpecNode,
+    component: crate::spec::RegisteredComponentSpec,
+    inherited: gpui::Hsla,
+    parts: Box<RegisteredMaterializeParts>,
+    window: &mut Window,
+    cx: &mut App,
+) -> AnyElement {
+    let RegisteredMaterializeParts {
+        refinement,
+        behavior,
+        children,
+        slots,
+        slot_specs,
+    } = *parts;
+    let Some(descriptor) = runtime.component_registry().descriptor(component.id()) else {
+        tracing::error!(
+            "registered component `{}` has an unknown registry id {}",
+            component.name(),
+            component.id().as_u32()
+        );
+        return div()
+            .child(format!("Unknown component: {}", component.name()))
+            .into_any_element();
+    };
+    let mut resolve_element = |element, window: Option<&mut Window>, cx: Option<&mut App>| {
+        let window =
+            window.ok_or_else(|| anyhow::anyhow!("render Window authority is unavailable"))?;
+        let cx = cx.ok_or_else(|| anyhow::anyhow!("render App authority is unavailable"))?;
+        Ok(materialize_node(
+            runtime, snapshot, arena, element, inherited, window, cx,
+        ))
+    };
+    let child_specs = node
+        .children()
+        .iter()
+        .map(|child| {
+            let name = arena
+                .node(*child)
+                .and_then(SpecNode::component)
+                .and_then(|component| match component {
+                    Component::Registered(component) => Some(component.name()),
+                    _ => None,
+                });
+            (*child, name)
+        })
+        .collect();
+    let slot_factories = snapshot
+        .into_iter()
+        .flat_map(|snapshot| {
+            slot_specs.iter().map(move |(name, slot)| {
+                let snapshot = snapshot.clone();
+                let runtime = Rc::downgrade(runtime);
+                let slot = *slot;
+                (
+                    *name,
+                    crate::ComponentElementFactory::new(move |window, cx| {
+                        let runtime = runtime.upgrade().ok_or_else(|| {
+                            anyhow::anyhow!("component element factory runtime has been released")
+                        })?;
+                        anyhow::ensure!(
+                            snapshot.belongs_to(&runtime),
+                            "component element factory belongs to a different runtime"
+                        );
+                        materialize_factory_subtree(
+                            &runtime, &snapshot, slot, inherited, window, cx,
+                        )
+                    }),
+                )
+            })
+        })
+        .collect();
+    let mut request =
+        crate::MaterializeRequest::new(crate::component_registry::MaterializeRequestInit {
+            component_name: component.name(),
+            payload: component.payload(),
+            operations: node.ops(),
+            runtime,
+            resolve_element: &mut resolve_element,
+            style: refinement,
+            children: children.into_vec(),
+            child_specs,
+            slots: slots.into_vec(),
+            slot_factories,
+            disabled: behavior.disabled,
+            selected: behavior.selected,
+            on_click: behavior.on_click,
+        });
+    request.attach_render_authority(window, cx);
+    match descriptor.materializer.materialize(request) {
+        Ok(element) => element,
+        Err(error) => {
+            tracing::error!("failed to materialize `{}`: {error:#}", component.name());
+            FACTORY_MATERIALIZE_ERRORS.with(|frames| {
+                if let Some(held) = frames.borrow_mut().last_mut()
+                    && held.is_none()
+                {
+                    *held = Some(
+                        error.context(format!("failed to materialize `{}`", component.name())),
+                    );
+                }
+            });
+            div()
+                .child(format!("Failed to render {}", component.name()))
+                .into_any_element()
+        }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn materialize_component(
     runtime: &Rc<ShellRuntime>,
+    snapshot: Option<&RenderSnapshot>,
     arena: &SpecArena,
     node: &SpecNode,
     id: SpecId,
@@ -724,65 +933,8 @@ fn materialize_component(
     cx: &mut App,
 ) -> AnyElement {
     match component {
-        Component::Registered(component) => {
-            let Some(descriptor) = runtime.component_registry().descriptor(component.id()) else {
-                tracing::error!(
-                    "registered component `{}` has an unknown registry id {}",
-                    component.name(),
-                    component.id().as_u32()
-                );
-                return div()
-                    .child(format!("Unknown component: {}", component.name()))
-                    .into_any_element();
-            };
-            let mut resolve_element =
-                |element, window: Option<&mut Window>, cx: Option<&mut App>| {
-                    let window = window
-                        .ok_or_else(|| anyhow::anyhow!("render Window authority is unavailable"))?;
-                    let cx =
-                        cx.ok_or_else(|| anyhow::anyhow!("render App authority is unavailable"))?;
-                    Ok(materialize_node(
-                        runtime, arena, element, inherited, window, cx,
-                    ))
-                };
-            let child_specs =
-                node.children()
-                    .iter()
-                    .map(|child| {
-                        let name = arena.node(*child).and_then(SpecNode::component).and_then(
-                            |component| match component {
-                                Component::Registered(component) => Some(component.name()),
-                                _ => None,
-                            },
-                        );
-                        (*child, name)
-                    })
-                    .collect();
-            let mut request =
-                crate::MaterializeRequest::new(crate::component_registry::MaterializeRequestInit {
-                    component_name: component.name(),
-                    payload: component.payload(),
-                    operations: node.ops(),
-                    runtime,
-                    resolve_element: &mut resolve_element,
-                    style: refinement,
-                    children: children.into_vec(),
-                    child_specs,
-                    slots: slots.into_vec(),
-                    disabled: behavior.disabled,
-                    selected: behavior.selected,
-                    on_click: behavior.on_click,
-                });
-            request.attach_render_authority(window, cx);
-            match descriptor.materializer.materialize(request) {
-                Ok(element) => element,
-                Err(error) => {
-                    tracing::error!("failed to materialize `{}`: {error:#}", component.name());
-                    div()
-                        .child(format!("Failed to render {}", component.name()))
-                        .into_any_element()
-                }
-            }
+        Component::Registered(_) => {
+            unreachable!("registered components dispatch before the built-in component match")
         }
         Component::ChildView(child) => child.view().clone().into_any_element(),
         Component::Div => flex_element(
@@ -1059,6 +1211,7 @@ fn materialize_component(
         Component::Resizable(id, axis) => components::resizable::panel_group(
             ChildSpecs {
                 runtime,
+                snapshot,
                 arena,
                 ids: node.children(),
                 inherited,
@@ -1126,8 +1279,8 @@ fn materialize_component(
             components::accordion::accordion(&id, refinement, behavior, children)
         }
         Component::AccordionItem => components::accordion::accordion_item(
-            runtime, arena, inherited, refinement, behavior, states, slot_specs, children, window,
-            cx,
+            runtime, snapshot, arena, inherited, refinement, behavior, states, slot_specs,
+            children, window, cx,
         ),
         Component::AccordionHeader => {
             components::accordion::orphan("AccordionHeader", "an AccordionItem's `header` slot")
@@ -1143,8 +1296,8 @@ fn materialize_component(
             components::pagination::pagination(&id, refinement, behavior, states, children)
         }
         Component::Avatar => components::avatar::avatar(
-            runtime, arena, inherited, refinement, behavior, states, slot_specs, children, window,
-            cx,
+            runtime, snapshot, arena, inherited, refinement, behavior, states, slot_specs,
+            children, window, cx,
         ),
         Component::AvatarImage(_) => components::avatar::orphan("AvatarImage"),
         Component::AvatarFallback => components::avatar::orphan("AvatarFallback"),
@@ -1230,8 +1383,8 @@ fn materialize_component(
             components::textarea::textarea(runtime, handle, refinement, behavior, states, children)
         }
         Component::NumberInput(handle) => components::number_input::number_input(
-            runtime, arena, handle, inherited, refinement, behavior, states, slot_specs, children,
-            window, cx,
+            runtime, snapshot, arena, handle, inherited, refinement, behavior, states, slot_specs,
+            children, window, cx,
         ),
     }
 }
@@ -1862,6 +2015,7 @@ fn should_dispatch_hover(
 /// children still have to be built the ordinary way.
 pub(in crate::materialize) fn materialize_children(
     runtime: &Rc<ShellRuntime>,
+    snapshot: Option<&RenderSnapshot>,
     arena: &SpecArena,
     id: SpecId,
     inherited: gpui::Hsla,
@@ -1873,7 +2027,7 @@ pub(in crate::materialize) fn materialize_children(
     };
     node.children()
         .iter()
-        .map(|child| materialize_node(runtime, arena, *child, inherited, window, cx))
+        .map(|child| materialize_node(runtime, snapshot, arena, *child, inherited, window, cx))
         .collect()
 }
 

@@ -37,7 +37,7 @@ use smallvec::SmallVec;
 
 use crate::{
     ArgumentDescriptor, ArgumentSchema, ComponentArgument, ComponentCallbackArgument,
-    ComponentPayload, FrozenComponentRegistry,
+    ComponentCallbackValue, ComponentPayload, FrozenComponentRegistry,
     entities::{EntityHandle, EntityStore},
     metrics::Metrics,
     policy::Policy,
@@ -236,6 +236,140 @@ mod retained_component_state_tests {
             error
                 .to_string()
                 .contains("cannot be updated during render")
+        );
+    }
+}
+
+#[cfg(test)]
+mod component_callback_value_tests {
+    use super::*;
+    use gpui::{Empty, TestAppContext, VisualTestContext};
+    use std::ops::Deref;
+
+    fn callback(
+        runtime: &Rc<ShellRuntime>,
+        source: &str,
+        application: Option<Rc<ApplicationGeneration>>,
+    ) -> (CallbackId, u64) {
+        let value = runtime
+            .with_js(|ctx| {
+                let function: Function<'_> = ctx.eval(source)?;
+                Ok(Persistent::save(&ctx, function))
+            })
+            .unwrap();
+        let mut callbacks = runtime.callbacks.borrow_mut();
+        let generation = callbacks.begin();
+        let id = callbacks.push(CallbackEntry {
+            value,
+            view: None,
+            application,
+            registered_in: None,
+        });
+        callbacks.commit();
+        (id, generation)
+    }
+
+    #[gpui::test]
+    fn component_callback_results_are_closed_and_jobs_are_drained(cx: &mut TestAppContext) {
+        let runtime = ShellRuntime::new_isolated().unwrap();
+        let (callback, _) = callback(
+            &runtime,
+            r#"(kind) => {
+                if (kind === "undefined") return undefined;
+                if (kind === "null") return null;
+                if (kind === "bool") return true;
+                if (kind === "number") return 2.5;
+                if (kind === "nan") return NaN;
+                if (kind === "infinity") return Infinity;
+                if (kind === "negative-infinity") return -Infinity;
+                if (kind === "function") return () => {};
+                if (kind === "element") return { __id: 7 };
+                if (kind === "promise") return Promise.resolve("later");
+                if (kind === "rejected-promise") return Promise.reject(new Error("later"));
+                Promise.resolve().then(() => { globalThis.__componentJobDrained = true; });
+                return "queued";
+            }"#,
+            None,
+        );
+        let window = cx.add_window(|_, _| Empty);
+        let mut context = VisualTestContext::from_window(*window.deref(), cx);
+        let invoke = |kind: &str, context: &mut VisualTestContext| {
+            context.update(|window, cx| {
+                runtime.dispatch_component_callback_value(
+                    callback,
+                    &[ComponentCallbackArgument::String(kind.into())],
+                    window,
+                    cx,
+                )
+            })
+        };
+
+        assert_eq!(
+            invoke("undefined", &mut context).unwrap(),
+            ComponentCallbackValue::Null
+        );
+        assert_eq!(
+            invoke("null", &mut context).unwrap(),
+            ComponentCallbackValue::Null
+        );
+        assert_eq!(
+            invoke("bool", &mut context).unwrap(),
+            ComponentCallbackValue::Boolean(true)
+        );
+        assert_eq!(
+            invoke("number", &mut context).unwrap(),
+            ComponentCallbackValue::Number(2.5)
+        );
+        for kind in [
+            "nan",
+            "infinity",
+            "negative-infinity",
+            "function",
+            "element",
+            "promise",
+            "rejected-promise",
+        ] {
+            assert!(invoke(kind, &mut context).unwrap_err().to_string().contains(
+                "component callbacks may only return null, boolean, finite number, or string"
+            ));
+        }
+        assert_eq!(
+            invoke("queued", &mut context).unwrap(),
+            ComponentCallbackValue::String("queued".into())
+        );
+        assert!(
+            runtime
+                .with_js(|ctx| ctx.eval::<bool, _>("globalThis.__componentJobDrained === true"))
+                .unwrap()
+        );
+    }
+
+    #[gpui::test]
+    fn component_callback_results_obey_snapshot_and_application_lifetimes(cx: &mut TestAppContext) {
+        let runtime = ShellRuntime::new_isolated().unwrap();
+        let application = ApplicationGeneration::new(700);
+        let (retired_snapshot, generation) = callback(&runtime, "() => null", None);
+        let (retired_application, _) = callback(&runtime, "() => null", Some(application.clone()));
+        runtime.callbacks.borrow_mut().retire(generation);
+        application.retire();
+        let window = cx.add_window(|_, _| Empty);
+        let mut context = VisualTestContext::from_window(*window.deref(), cx);
+
+        let snapshot_error = context
+            .update(|window, cx| {
+                runtime.dispatch_component_callback_value(retired_snapshot, &[], window, cx)
+            })
+            .unwrap_err();
+        assert!(snapshot_error.to_string().contains("superseded render"));
+        let application_error = context
+            .update(|window, cx| {
+                runtime.dispatch_component_callback_value(retired_application, &[], window, cx)
+            })
+            .unwrap_err();
+        assert!(
+            application_error
+                .to_string()
+                .contains("retired application")
         );
     }
 }
@@ -3453,13 +3587,13 @@ impl ShellRuntime {
         scheduler::drain_runtime_jobs(self, window, cx);
     }
 
-    pub(crate) fn dispatch_component_callback(
+    pub(crate) fn dispatch_component_callback_value(
         self: &Rc<Self>,
         id: CallbackId,
         arguments: &[ComponentCallbackArgument],
         window: &mut Window,
         cx: &mut App,
-    ) -> Result<()> {
+    ) -> Result<ComponentCallbackValue> {
         let entry = self
             .callbacks
             .borrow()
@@ -3501,7 +3635,21 @@ impl ShellRuntime {
                 }
             }
             js_arguments.push_arg(context_object(ctx, ContextBinding::Call(generation))?)?;
-            handler.call_arg::<()>(js_arguments)
+            let value: Value<'_> = handler.call_arg(js_arguments)?;
+            if value.is_null() || value.is_undefined() {
+                Ok(ComponentCallbackValue::Null)
+            } else if let Some(value) = value.as_bool() {
+                Ok(ComponentCallbackValue::Boolean(value))
+            } else if let Some(value) = value.as_number().filter(|value| value.is_finite()) {
+                Ok(ComponentCallbackValue::Number(value))
+            } else if let Some(value) = value.as_string() {
+                Ok(ComponentCallbackValue::String(value.to_string()?))
+            } else {
+                Err(Exception::throw_type(
+                    &ctx,
+                    "component callbacks may only return null, boolean, finite number, or string",
+                ))
+            }
         });
         scheduler::drain_runtime_jobs(self, window, cx);
         result
@@ -3650,6 +3798,7 @@ impl ShellRuntime {
             "image" => "image",
             "fallback" => "fallback",
             "header" => "header",
+            "footer" => "footer",
             "panel" => "panel",
             "trigger" => "trigger",
             // A number input's three. Unlike the two above, none of them is
@@ -4083,6 +4232,7 @@ globalThis.__gpui = (() => {
   // An accordion item's two. Both are read back for their own type rather than
   // rendered, so both must be the part they name.
   methods.header = slot("header");
+  methods.footer = slot("footer");
   methods.panel = slot("panel");
 
   // Focus is held by handle, so the element records the handle rather than the
@@ -6033,12 +6183,18 @@ impl ShellRuntime {
 
             ctx.eval::<(), _>(PRELUDE)?;
 
-            // Subsystems extend the same module object the prelude built.
+            // Registered exports live apart from the built-in module object.
+            // Names such as `InputState` exist in both `gpui-base` and
+            // `gpui-component`; sharing `__gpui` would make the latter silently
+            // replace the former for every module that reads the global table.
             let module: Object = ctx.globals().get("__gpui")?;
+            let component_module = Object::new(ctx.clone())?;
+            ctx.globals()
+                .set("__gpui_components", component_module.clone())?;
             for descriptor in self.components.states() {
                 let state_runtime = runtime.clone();
                 let descriptor = descriptor.clone();
-                module.set(
+                component_module.set(
                     descriptor.export,
                     Func::from(move |ctx: Ctx<'_>, arguments: Arguments| -> JsResult<u64> {
                         let runtime = upgrade(&state_runtime, &ctx)?;
@@ -6051,7 +6207,7 @@ impl ShellRuntime {
                     let constructor_runtime = runtime.clone();
                     let component_name = descriptor.name;
                     let constructor = constructor_descriptor.clone();
-                    module.set(
+                    component_module.set(
                         constructor_descriptor.export,
                         Func::from(move |ctx: Ctx<'_>, arguments: Arguments| -> JsResult<SpecId> {
                             let runtime = upgrade(&constructor_runtime, &ctx)?;
@@ -6185,6 +6341,19 @@ impl ShellRuntime {
 
         let registered_method = self.registered_method_descriptor(id, method);
         let registered_common_behavior = matches!(method, "disabled" | "selected" | "on_click");
+        let registered_common_slot = matches!(
+            method,
+            "content"
+                | "trigger"
+                | "input"
+                | "decrement_button"
+                | "increment_button"
+                | "image"
+                | "fallback"
+                | "header"
+                | "footer"
+                | "panel"
+        );
         if registered_common_behavior
             && self.is_registered_component(id)
             && registered_method.is_none()
@@ -6247,7 +6416,10 @@ impl ShellRuntime {
                 ),
             );
         }
-        if self.is_registered_component(id) && !registered_common_behavior {
+        if self.is_registered_component(id)
+            && !registered_common_behavior
+            && !registered_common_slot
+        {
             return Err(Exception::throw_type(ctx, &unknown_method(method)));
         }
 
@@ -6262,7 +6434,7 @@ impl ShellRuntime {
                 self.attach(ctx, id, child)
             }
             "content" | "trigger" | "input" | "decrement_button" | "increment_button" | "image"
-            | "fallback" | "header" | "panel" => {
+            | "fallback" | "header" | "footer" | "panel" => {
                 let element = args
                     .first_value()
                     .and_then(|value| value.as_f32().ok())
