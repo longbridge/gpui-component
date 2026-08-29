@@ -958,6 +958,117 @@ pub struct ComponentCallback {
     id: u64,
 }
 
+/// A generation-bound capability for native effects initiated by one GPUI event.
+#[derive(Clone)]
+pub struct ComponentWindowEffects {
+    reporter: ComponentCallback,
+    active: Rc<Cell<bool>>,
+}
+
+/// The result of a keyed effect attempt within one event.
+pub enum ComponentEffectRun<R> {
+    Executed(R),
+    Duplicate,
+}
+
+impl<R> ComponentEffectRun<R> {
+    pub fn executed(&self) -> bool {
+        matches!(self, Self::Executed(_))
+    }
+}
+
+/// A non-retainable event transaction. Keys are idempotent only within this event.
+pub struct ComponentEventEffects<'event> {
+    completed: HashSet<String>,
+    in_progress: HashSet<String>,
+    window: &'event mut Window,
+    cx: &'event mut App,
+}
+
+impl ComponentEventEffects<'_> {
+    pub fn run_once<R>(
+        &mut self,
+        key: impl Into<String>,
+        body: impl FnOnce(&mut Window, &mut App) -> anyhow::Result<R>,
+    ) -> anyhow::Result<ComponentEffectRun<R>> {
+        let key = key.into();
+        if self.completed.contains(&key) {
+            return Ok(ComponentEffectRun::Duplicate);
+        }
+        anyhow::ensure!(
+            self.in_progress.insert(key.clone()),
+            "component window effect `{key}` is already running"
+        );
+        struct Reset<'a> {
+            keys: &'a mut HashSet<String>,
+            key: String,
+        }
+        impl Drop for Reset<'_> {
+            fn drop(&mut self) {
+                self.keys.remove(&self.key);
+            }
+        }
+        let reset = Reset {
+            keys: &mut self.in_progress,
+            key: key.clone(),
+        };
+        let value = body(self.window, self.cx)?;
+        drop(reset);
+        self.completed.insert(key);
+        Ok(ComponentEffectRun::Executed(value))
+    }
+}
+
+impl ComponentWindowEffects {
+    #[cfg(test)]
+    pub(crate) fn is_active(&self) -> bool {
+        self.active.get()
+    }
+
+    pub fn event<R>(
+        &self,
+        window: &mut Window,
+        cx: &mut App,
+        body: impl FnOnce(&mut ComponentEventEffects<'_>) -> anyhow::Result<R>,
+    ) -> anyhow::Result<R> {
+        anyhow::ensure!(
+            !self.active.replace(true),
+            "component window effect event is already running"
+        );
+        struct Reset<'a>(&'a Cell<bool>);
+        impl Drop for Reset<'_> {
+            fn drop(&mut self) {
+                self.0.set(false);
+            }
+        }
+        let _reset = Reset(&self.active);
+        let runtime =
+            self.reporter.runtime.upgrade().ok_or_else(|| {
+                anyhow::anyhow!("component window effect runtime has been released")
+            })?;
+        let result =
+            runtime.with_component_callback_event(self.reporter.id, window, cx, |window, cx| {
+                body(&mut ComponentEventEffects {
+                    completed: HashSet::new(),
+                    in_progress: HashSet::new(),
+                    window,
+                    cx,
+                })
+            });
+        if let Err(error) = &result
+            && crate::scope::current_phase().is_none_or(crate::scope::ScopePhase::allows_notify)
+            && let Err(report_error) = self.reporter.invoke_with(
+                &[ComponentCallbackArgument::String(error.to_string())],
+                window,
+                cx,
+            )
+        {
+            tracing::error!("component window effect error reporter failed: {report_error:#}");
+        }
+        result
+    }
+}
+
 #[derive(Clone)]
 pub struct ComponentClickCallback {
     runtime: Weak<crate::ShellRuntime>,
@@ -975,6 +1086,29 @@ impl ComponentClickCallback {
 }
 
 impl ComponentCallback {
+    #[cfg(test)]
+    pub(crate) fn from_runtime(runtime: &Rc<crate::ShellRuntime>, id: u64) -> Self {
+        Self {
+            runtime: Rc::downgrade(runtime),
+            id,
+        }
+    }
+
+    /// Creates an event-scoped native-effect service owned by this callback.
+    ///
+    /// The callback is both the generation lease and the script error reporter:
+    /// when an effect transaction returns an error it is invoked with the error
+    /// message followed by the ordinary script `Context`.
+    /// Adapters should therefore declare it as `(message: string, cx: Context)
+    /// => void`. Effects never run during render or layout, and a key is
+    /// idempotent only within one [`ComponentWindowEffects::event`] call so a
+    /// later user event may intentionally perform the same command again.
+    pub fn window_effects(&self) -> ComponentWindowEffects {
+        ComponentWindowEffects {
+            reporter: self.clone(),
+            active: Rc::new(Cell::new(false)),
+        }
+    }
     pub fn invoke(&self, window: &mut Window, cx: &mut App) -> anyhow::Result<()> {
         self.invoke_with(&[], window, cx)
     }

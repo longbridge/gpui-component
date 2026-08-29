@@ -372,6 +372,179 @@ mod component_callback_value_tests {
                 .contains("retired application")
         );
     }
+
+    #[gpui::test]
+    fn window_effects_are_once_per_event_and_reset_after_errors(cx: &mut TestAppContext) {
+        let runtime = ShellRuntime::new_isolated().unwrap();
+        let (reporter_id, _) = callback(
+            &runtime,
+            "(message) => { globalThis.__effectError = message; }",
+            None,
+        );
+        let reporter =
+            crate::component_registry::ComponentCallback::from_runtime(&runtime, reporter_id);
+        let effects = reporter.window_effects();
+        let window = cx.add_window(|_, _| Empty);
+        let mut context = VisualTestContext::from_window(*window.deref(), cx);
+        let runs = Cell::new(0);
+
+        context
+            .update(|window, cx| {
+                effects.event(window, cx, |event| -> anyhow::Result<()> {
+                    assert!(
+                        event
+                            .run_once::<()>("retry", |_, _| anyhow::bail!("retry me"))
+                            .is_err()
+                    );
+                    assert!(
+                        event.run_once("retry", |_, _| Ok(()))?.executed(),
+                        "a failed keyed body must remain retryable in the same event"
+                    );
+                    assert!(
+                        event
+                            .run_once("open", |_, _| {
+                                runs.set(runs.get() + 1);
+                                Ok(())
+                            })?
+                            .executed()
+                    );
+                    assert!(
+                        !event
+                            .run_once("open", |_, _| {
+                                runs.set(runs.get() + 1);
+                                Ok(())
+                            })?
+                            .executed()
+                    );
+                    anyhow::bail!("candidate failed")
+                })
+            })
+            .unwrap_err();
+        assert_eq!(runs.get(), 1);
+        assert_eq!(
+            runtime
+                .with_js(|ctx| ctx.eval::<String, _>("globalThis.__effectError"))
+                .unwrap(),
+            "candidate failed"
+        );
+
+        context
+            .update(|window, cx| {
+                effects.event(window, cx, |event| {
+                    assert!(
+                        event
+                            .run_once("open", |_, _| {
+                                runs.set(runs.get() + 1);
+                                Ok(())
+                            })?
+                            .executed()
+                    );
+                    Ok(())
+                })
+            })
+            .unwrap();
+        assert_eq!(runs.get(), 2, "a later event may reuse the same key");
+    }
+
+    #[gpui::test]
+    fn window_effects_reject_reentry_and_stale_generations(cx: &mut TestAppContext) {
+        let runtime = ShellRuntime::new_isolated().unwrap();
+        let application = ApplicationGeneration::new(701);
+        let (reporter_id, generation) = callback(
+            &runtime,
+            "(message) => { globalThis.__effectError = message; }",
+            Some(application.clone()),
+        );
+        let effects =
+            crate::component_registry::ComponentCallback::from_runtime(&runtime, reporter_id)
+                .window_effects();
+        let window = cx.add_window(|_, _| Empty);
+        let mut context = VisualTestContext::from_window(*window.deref(), cx);
+
+        let error = context
+            .update(|window, cx| {
+                effects.event(window, cx, |event| {
+                    event
+                        .run_once("nested", |window, cx| effects.event(window, cx, |_| Ok(())))
+                        .map(|_| ())
+                })
+            })
+            .unwrap_err();
+        assert!(error.to_string().contains("already running"));
+
+        runtime.callbacks.borrow_mut().retire(generation);
+        let error = context
+            .update(|window, cx| effects.event(window, cx, |_| Ok(())))
+            .unwrap_err();
+        assert!(error.to_string().contains("superseded render"));
+
+        let (application_reporter, _) = callback(&runtime, "() => null", Some(application.clone()));
+        let application_effects = crate::component_registry::ComponentCallback::from_runtime(
+            &runtime,
+            application_reporter,
+        )
+        .window_effects();
+        application.retire();
+        let error = context
+            .update(|window, cx| application_effects.event(window, cx, |_| Ok(())))
+            .unwrap_err();
+        assert!(error.to_string().contains("retired application"));
+    }
+
+    #[gpui::test]
+    fn window_effect_panic_resets_the_event_guard(cx: &mut TestAppContext) {
+        let runtime = ShellRuntime::new_isolated().unwrap();
+        let (reporter_id, _) = callback(&runtime, "() => null", None);
+        let effects =
+            crate::component_registry::ComponentCallback::from_runtime(&runtime, reporter_id)
+                .window_effects();
+        let window = cx.add_window(|_, _| Empty);
+        let mut context = VisualTestContext::from_window(*window.deref(), cx);
+        let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            context.update(|window, cx| effects.event::<()>(window, cx, |_| panic!("effect panic")))
+        }));
+        assert!(panic.is_err());
+        assert!(!effects.is_active());
+    }
+
+    #[gpui::test]
+    fn window_effects_reject_render_and_allow_nested_distinct_handles(cx: &mut TestAppContext) {
+        let runtime = ShellRuntime::new_isolated().unwrap();
+        let (a_id, _) = callback(&runtime, "() => null", None);
+        let (b_id, _) = callback(&runtime, "() => null", None);
+        let a = crate::component_registry::ComponentCallback::from_runtime(&runtime, a_id)
+            .window_effects();
+        let b = crate::component_registry::ComponentCallback::from_runtime(&runtime, b_id)
+            .window_effects();
+        let window = cx.add_window(|_, _| Empty);
+        let mut context = VisualTestContext::from_window(*window.deref(), cx);
+
+        let error = context
+            .update(|window, cx| {
+                let (_guard, _) = scope::enter_with_application(
+                    &runtime,
+                    window,
+                    cx,
+                    ScopePhase::Render,
+                    None,
+                    crate::policy::default(),
+                    None,
+                );
+                a.event(window, cx, |_| Ok(()))
+            })
+            .unwrap_err();
+        assert!(error.to_string().contains("during the `render` phase"));
+
+        context
+            .update(|window, cx| {
+                a.event(window, cx, |event| {
+                    event
+                        .run_once("a", |window, cx| b.event(window, cx, |_| Ok(())))
+                        .map(|_| ())
+                })
+            })
+            .unwrap();
+    }
 }
 
 /// An application entry loaded by one [`ShellRuntime`].
@@ -3653,6 +3826,51 @@ impl ShellRuntime {
         });
         scheduler::drain_runtime_jobs(self, window, cx);
         result
+    }
+
+    pub(crate) fn with_component_callback_event<R>(
+        self: &Rc<Self>,
+        id: CallbackId,
+        window: &mut Window,
+        cx: &mut App,
+        body: impl FnOnce(&mut Window, &mut App) -> Result<R>,
+    ) -> Result<R> {
+        if let Some(phase) = scope::current_phase() {
+            anyhow::ensure!(
+                phase.allows_notify(),
+                "component window effects are not allowed during the `{}` phase",
+                phase.as_str()
+            );
+        }
+        let entry = self
+            .callbacks
+            .borrow()
+            .get(id)
+            .ok_or_else(|| anyhow!("component callback {id} belongs to a superseded render"))?;
+        anyhow::ensure!(
+            entry
+                .application
+                .as_ref()
+                .is_none_or(|application| application.is_active()),
+            "component callback {id} belongs to a retired application"
+        );
+        let view = entry
+            .live_view()
+            .ok_or_else(|| anyhow!("component callback {id} owner has been released"))?;
+        let policy = view
+            .as_ref()
+            .map(|view| view.read(cx).policy())
+            .unwrap_or_else(crate::policy::default);
+        let (_guard, _) = scope::enter_with_application(
+            self,
+            window,
+            cx,
+            ScopePhase::Event,
+            view,
+            policy,
+            entry.application,
+        );
+        body(window, cx)
     }
 
     /// Renders once, and on a "not a function" failure renders again with the
