@@ -1413,9 +1413,10 @@ available to a script; the script re-derives them with `when`.
 
 ### 10.5 Input events
 
-`on_key_down`, `on_key_up`, `on_mouse_down(button, …)`, `on_mouse_up`,
-`on_mouse_down_out` and `on_scroll_wheel` are GPUI's own `InteractiveElement`
-builders, installed together by `materialize::with_input_handlers`.
+`on_key_down`, `on_key_up`, `on_modifiers_changed`,
+`on_mouse_down(button, …)`, `on_mouse_up`, `on_mouse_down_out` and
+`on_scroll_wheel` are GPUI's own `InteractiveElement` builders, installed
+together by `materialize::with_input_handlers`.
 
 ```js
 div()
@@ -1427,6 +1428,23 @@ div()
     }
   });
 ```
+
+Modifier-only presses and releases use GPUI's native event rather than a
+synthetic key event:
+
+```js
+div()
+  .track_focus(this.handle)
+  .on_modifiers_changed((event, cx) => {
+    this.primaryModifierDown = event.modifiers.control;
+    this.capslockOn = event.capslock.on;
+    cx.notify();
+  });
+```
+
+The event preserves GPUI's `ModifiersChangedEvent` shape. Its `modifiers`
+object contains `shift`, `control`, `alt`, `platform`, and `function`; its
+`capslock` object contains `on`. Like key events, it travels the focus path.
 
 **Where they are installed.** `div`, `h_flex`, `v_flex`, `Button`, `Link`,
 `Checkbox`, `Switch`, `Radio`, `Toggle`, `Tabs` and `Tab`. Every other

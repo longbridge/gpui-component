@@ -2338,12 +2338,7 @@ impl ShellRuntime {
             let payload = Object::new(ctx.clone())?;
             payload.set("click_count", click_count)?;
 
-            let flags = Object::new(ctx.clone())?;
-            flags.set("shift", modifiers.shift)?;
-            flags.set("control", modifiers.control)?;
-            flags.set("alt", modifiers.alt)?;
-            flags.set("platform", modifiers.platform)?;
-            payload.set("modifiers", flags)?;
+            payload.set("modifiers", modifiers_object(&ctx, modifiers)?)?;
 
             handler.call::<_, ()>((
                 payload,
@@ -2644,12 +2639,7 @@ impl ShellRuntime {
             event_bounds.set("width", f32::from(bounds.size.width))?;
             event_bounds.set("height", f32::from(bounds.size.height))?;
             payload.set("bounds", event_bounds)?;
-            let modifiers = Object::new(ctx.clone())?;
-            modifiers.set("shift", event.modifiers.shift)?;
-            modifiers.set("control", event.modifiers.control)?;
-            modifiers.set("alt", event.modifiers.alt)?;
-            modifiers.set("platform", event.modifiers.platform)?;
-            payload.set("modifiers", modifiers)?;
+            payload.set("modifiers", modifiers_object(&ctx, event.modifiers)?)?;
             handler.call::<_, ()>((
                 payload,
                 context_object(ctx, ContextBinding::Call(generation))?,
@@ -2825,6 +2815,25 @@ impl ShellRuntime {
         scheduler::drain_runtime_jobs(self, window, cx);
     }
 
+    pub(crate) fn dispatch_modifiers_changed(
+        self: &Rc<Self>,
+        id: CallbackId,
+        event: &gpui::ModifiersChangedEvent,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        let modifiers = event.modifiers;
+        let capslock = event.capslock;
+        self.dispatch_simple_event(id, "modifiers changed", window, cx, move |ctx| {
+            let payload = Object::new(ctx.clone())?;
+            payload.set("modifiers", modifiers_object(ctx, modifiers)?)?;
+            let capslock_object = Object::new(ctx.clone())?;
+            capslock_object.set("on", capslock.on)?;
+            payload.set("capslock", capslock_object)?;
+            Ok(payload)
+        });
+    }
+
     /// Delivers one key press or release to a script handler.
     ///
     /// `is_held` distinguishes the two events rather than a second method
@@ -2887,12 +2896,7 @@ impl ShellRuntime {
             if let Some(is_held) = is_held {
                 payload.set("is_held", is_held)?;
             }
-            let modifiers = Object::new(ctx.clone())?;
-            modifiers.set("shift", keystroke.modifiers.shift)?;
-            modifiers.set("control", keystroke.modifiers.control)?;
-            modifiers.set("alt", keystroke.modifiers.alt)?;
-            modifiers.set("platform", keystroke.modifiers.platform)?;
-            payload.set("modifiers", modifiers)?;
+            payload.set("modifiers", modifiers_object(ctx, keystroke.modifiers)?)?;
             handler.call::<_, ()>((
                 payload,
                 context_object(ctx, ContextBinding::Call(generation))?,
@@ -5020,6 +5024,7 @@ impl ShellRuntime {
                 "on_hover",
                 "on_key_down",
                 "on_key_up",
+                "on_modifiers_changed",
                 "on_mouse_down",
                 "on_mouse_up",
                 "on_mouse_down_out",
@@ -5781,6 +5786,7 @@ impl ShellRuntime {
             | "on_hover"
             | "on_key_down"
             | "on_key_up"
+            | "on_modifiers_changed"
             | "on_mouse_down_out"
             | "on_scroll_wheel"
             | "tab_bar"
@@ -6580,6 +6586,7 @@ fn modifiers_object<'js>(ctx: &Ctx<'js>, modifiers: gpui::Modifiers) -> JsResult
     object.set("control", modifiers.control)?;
     object.set("alt", modifiers.alt)?;
     object.set("platform", modifiers.platform)?;
+    object.set("function", modifiers.function)?;
     Ok(object)
 }
 
@@ -6929,6 +6936,7 @@ fn callback_op_name(method: &str) -> Option<&'static str> {
         "on_hover" => "on_hover",
         "on_key_down" => "on_key_down",
         "on_key_up" => "on_key_up",
+        "on_modifiers_changed" => "on_modifiers_changed",
         "on_mouse_down_out" => "on_mouse_down_out",
         "on_scroll_wheel" => "on_scroll_wheel",
         "on_item_click" => "on_item_click",

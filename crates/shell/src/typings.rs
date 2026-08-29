@@ -801,6 +801,19 @@ const CONTEXT_AND_VIEW: &str = r#"  /**
     alt: boolean;
     /** Command on macOS, Windows key elsewhere. */
     platform: boolean;
+    /** The Function key. */
+    function: boolean;
+  }
+
+  /** The Caps Lock state carried by GPUI modifier-change events. */
+  export interface Capslock {
+    on: boolean;
+  }
+
+  /** What an `on_modifiers_changed` handler receives. */
+  export interface ModifiersChangedEvent {
+    modifiers: Modifiers;
+    capslock: Capslock;
   }
 
   /** What an `on_click` handler receives. Keyboard activation counts as one. */
@@ -1101,6 +1114,10 @@ const ELEMENT_METHODS: &str = r#"    /**
     on_key_down(handler: (event: KeyEvent, cx: Context) => void): Element;
     /** GPUI `InteractiveElement::on_key_up`, on the same focus path as `on_key_down`. */
     on_key_up(handler: (event: KeyEvent, cx: Context) => void): Element;
+    /** GPUI `InteractiveElement::on_modifiers_changed`, on the keyboard focus path. */
+    on_modifiers_changed(
+      handler: (event: ModifiersChangedEvent, cx: Context) => void,
+    ): Element;
     /**
      * GPUI `InteractiveElement::on_mouse_down`, for one button.
      *
@@ -3396,6 +3413,7 @@ mod tests {
         "on_hover",
         "on_key_down",
         "on_key_up",
+        "on_modifiers_changed",
         "on_mouse_down",
         "on_mouse_up",
         "on_mouse_down_out",
