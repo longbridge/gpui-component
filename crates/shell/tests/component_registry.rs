@@ -17,7 +17,9 @@ impl ComponentMaterializer for EmptyMaterializer {
 fn descriptor(name: &'static str, export: &'static str) -> ComponentDescriptor {
     ComponentDescriptor {
         name,
-        constructors: vec![ConstructorDescriptor::new(export)],
+        constructors: vec![ConstructorDescriptor::new(export, Vec::new(), |_| {
+            Ok(gpui_shell::ComponentPayload::new(()))
+        })],
         methods: Vec::new(),
         typescript: TypeScriptDescriptor::default(),
         materializer: Arc::new(EmptyMaterializer),

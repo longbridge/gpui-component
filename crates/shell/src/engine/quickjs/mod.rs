@@ -26,7 +26,7 @@ use gpui::{App, AppContext as _, ClickEvent, Entity, Global, WeakEntity, Window}
 use rquickjs::{
     Array, Context as JsContext, Ctx, Error as JsError, Exception, FromJs, Function, Object,
     Persistent, Result as JsResult, Runtime as JsRuntime, Value,
-    function::{Func, Opt, This},
+    function::{Args as JsArgs, Func, Opt, This},
     loader::{BuiltinResolver, ImportAttributes, Loader, ModuleLoader, Resolver},
     module::Declared,
     module::{Declarations, Exports, Module, ModuleDef},
@@ -34,8 +34,8 @@ use rquickjs::{
 use smallvec::SmallVec;
 
 use crate::{
-    ArgumentDescriptor, ArgumentSchema, ComponentArgument, ComponentPayload,
-    FrozenComponentRegistry,
+    ArgumentDescriptor, ArgumentSchema, ComponentArgument, ComponentCallbackArgument,
+    ComponentPayload, FrozenComponentRegistry,
     entities::{EntityHandle, EntityStore},
     metrics::Metrics,
     policy::Policy,
@@ -56,6 +56,19 @@ pub struct ViewType {
     value: Persistent<Object<'static>>,
     module_lease: Option<ApplicationModuleLease>,
     application: Option<Rc<ApplicationGeneration>>,
+}
+
+/// An application entry loaded by one [`ShellRuntime`].
+///
+/// The JavaScript class stays opaque so hosts cannot bypass initialization,
+/// policy, task ownership, or application-generation cleanup. It is a
+/// single-mount handle: the owning runtime consumes it on its first mount
+/// attempt, including an attempt whose construction or initialization fails.
+/// A foreign runtime is rejected before that consumption.
+pub struct LoadedApplication {
+    runtime: Weak<ShellRuntime>,
+    view_type: ViewType,
+    mounted: Cell<bool>,
 }
 
 impl ViewType {
@@ -560,15 +573,71 @@ struct RuntimeGlobal(Weak<ShellRuntime>);
 impl Global for RuntimeGlobal {}
 
 impl ShellRuntime {
+    /// Loads an application's JavaScript entry without exposing engine values.
+    ///
+    /// Resolution, declaration refresh, module generations, capabilities and
+    /// watcher-compatible module leases are identical to the shell's own app
+    /// loading path.
+    pub fn load_application(
+        self: &Rc<Self>,
+        directory: &Path,
+        entry: &str,
+    ) -> Result<LoadedApplication> {
+        Ok(LoadedApplication {
+            runtime: Rc::downgrade(self),
+            view_type: self.load_app(directory, entry)?,
+            mounted: Cell::new(false),
+        })
+    }
+
+    /// Creates, initializes and mounts a loaded application as a [`ScriptView`].
+    ///
+    /// The owner consumes the handle before construction. This makes a failed
+    /// attempt terminal too, matching the application-generation cleanup that
+    /// construction and initialization failures perform.
+    pub fn mount_application(
+        self: &Rc<Self>,
+        application: &LoadedApplication,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Result<Entity<ScriptView>> {
+        anyhow::ensure!(
+            application
+                .runtime
+                .upgrade()
+                .is_some_and(|runtime| Rc::ptr_eq(&runtime, self)),
+            "loaded application belongs to a different ShellRuntime"
+        );
+        anyhow::ensure!(
+            !application.mounted.replace(true),
+            "loaded application has already been mounted"
+        );
+        self.instantiate_view_with_policy(
+            &application.view_type,
+            crate::policy::default(),
+            window,
+            cx,
+        )
+    }
+
     /// Creates the application's default runtime and makes it available to
     /// shell callbacks registered on this [`App`].
     pub fn new(cx: &mut App) -> Result<Rc<Self>> {
+        Self::new_with_components(cx, FrozenComponentRegistry::default())
+    }
+
+    /// Creates the application's default runtime with a frozen external
+    /// component catalog and makes it available to shell callbacks.
+    pub fn new_with_components(
+        cx: &mut App,
+        components: FrozenComponentRegistry,
+    ) -> Result<Rc<Self>> {
         if Self::global(cx).is_some() {
             return Err(anyhow!(
                 "a default gpui-shell runtime is already installed; use ShellRuntime::new_isolated() for an additional VM"
             ));
         }
-        let runtime = Self::new_isolated()?;
+        let runtime = Self::new_isolated_with_components(components)?;
         runtime.set_global(cx);
         Ok(runtime)
     }
@@ -3112,6 +3181,7 @@ impl ShellRuntime {
     pub(crate) fn dispatch_component_callback(
         self: &Rc<Self>,
         id: CallbackId,
+        arguments: &[ComponentCallbackArgument],
         window: &mut Window,
         cx: &mut App,
     ) -> Result<()> {
@@ -3147,7 +3217,16 @@ impl ShellRuntime {
         );
         let result = self.with_js(|ctx| {
             let handler = entry.value.clone().restore(ctx)?;
-            handler.call::<_, ()>((context_object(ctx, ContextBinding::Call(generation))?,))
+            let mut js_arguments = JsArgs::new(ctx.clone(), arguments.len() + 1);
+            for argument in arguments {
+                match argument {
+                    ComponentCallbackArgument::String(value) => js_arguments.push_arg(value)?,
+                    ComponentCallbackArgument::Number(value) => js_arguments.push_arg(*value)?,
+                    ComponentCallbackArgument::Boolean(value) => js_arguments.push_arg(*value)?,
+                }
+            }
+            js_arguments.push_arg(context_object(ctx, ContextBinding::Call(generation))?)?;
+            handler.call_arg::<()>(js_arguments)
         });
         scheduler::drain_runtime_jobs(self, window, cx);
         result

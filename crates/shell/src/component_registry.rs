@@ -2,8 +2,12 @@ use std::{
     any::Any,
     collections::HashSet,
     fmt,
+    marker::PhantomData,
     rc::{Rc, Weak},
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
 };
 
 use gpui::{
@@ -58,6 +62,44 @@ pub enum ComponentArgument {
     Enum(String),
     Array(Vec<ComponentArgument>),
     Optional(Option<Box<ComponentArgument>>),
+}
+
+/// A value an adapter may pass back to a JavaScript component callback.
+///
+/// This intentionally stays closed: opaque shell handles and retained element
+/// descriptions never cross back into the script event boundary.
+#[derive(Clone, Debug, PartialEq)]
+pub enum ComponentCallbackArgument {
+    String(String),
+    Number(f64),
+    Boolean(bool),
+}
+
+/// One child description owned by a single [`MaterializeRequest`].
+///
+/// The token is deliberately opaque. It can only be consumed by the request
+/// that issued it, and only registered component identities are exposed.
+pub struct ComponentChild<'request> {
+    runtime: Weak<crate::ShellRuntime>,
+    request_id: u64,
+    token: u64,
+    component_name: Option<&'static str>,
+    request_lifetime: PhantomData<&'request ()>,
+}
+
+impl ComponentChild<'_> {
+    pub fn component_name(&self) -> Option<&'static str> {
+        self.component_name
+    }
+}
+
+static NEXT_MATERIALIZE_REQUEST_ID: AtomicU64 = AtomicU64::new(1);
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ChildLane {
+    Unclaimed,
+    Ordinary,
+    Typed,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -216,38 +258,49 @@ pub struct MaterializeRequest<'a> {
     resolve_element: &'a mut dyn FnMut(u32) -> anyhow::Result<AnyElement>,
     style: Option<StyleRefinement>,
     children: Vec<AnyElement>,
+    child_specs: Vec<(u32, Option<&'static str>)>,
+    issued_children: Vec<(u64, u32)>,
+    request_id: u64,
+    child_lane: ChildLane,
     slots: Vec<(&'static str, AnyElement)>,
     disabled: bool,
     selected: bool,
     on_click: Option<crate::spec::CallbackId>,
 }
 
+pub(crate) struct MaterializeRequestInit<'a> {
+    pub component_name: &'static str,
+    pub payload: &'a ComponentPayload,
+    pub operations: &'a [crate::spec::SpecOp],
+    pub runtime: &'a Rc<crate::ShellRuntime>,
+    pub resolve_element: &'a mut dyn FnMut(u32) -> anyhow::Result<AnyElement>,
+    pub style: StyleRefinement,
+    pub children: Vec<AnyElement>,
+    pub child_specs: Vec<(u32, Option<&'static str>)>,
+    pub slots: Vec<(&'static str, AnyElement)>,
+    pub disabled: bool,
+    pub selected: bool,
+    pub on_click: Option<crate::spec::CallbackId>,
+}
+
 impl<'a> MaterializeRequest<'a> {
-    pub(crate) fn new(
-        component_name: &'static str,
-        payload: &'a ComponentPayload,
-        operations: &'a [crate::spec::SpecOp],
-        runtime: &'a Rc<crate::ShellRuntime>,
-        resolve_element: &'a mut dyn FnMut(u32) -> anyhow::Result<AnyElement>,
-        style: StyleRefinement,
-        children: Vec<AnyElement>,
-        slots: Vec<(&'static str, AnyElement)>,
-        disabled: bool,
-        selected: bool,
-        on_click: Option<crate::spec::CallbackId>,
-    ) -> Self {
+    pub(crate) fn new(init: MaterializeRequestInit<'a>) -> Self {
         Self {
-            component_name,
-            payload,
-            operations,
-            runtime,
-            resolve_element,
-            style: Some(style),
-            children,
-            slots,
-            disabled,
-            selected,
-            on_click,
+            component_name: init.component_name,
+            payload: init.payload,
+            operations: init.operations,
+            runtime: init.runtime,
+            resolve_element: init.resolve_element,
+            style: Some(init.style),
+            children: init.children,
+            child_specs: init.child_specs,
+            issued_children: Vec::new(),
+            request_id: NEXT_MATERIALIZE_REQUEST_ID.fetch_add(1, Ordering::Relaxed),
+            child_lane: ChildLane::Unclaimed,
+            slots: init.slots,
+            disabled: init.disabled,
+            selected: init.selected,
+            on_click: init.on_click,
         }
     }
 
@@ -273,11 +326,73 @@ impl<'a> MaterializeRequest<'a> {
     }
 
     pub fn children_len(&self) -> usize {
-        self.children.len()
+        self.children.len() + self.child_specs.len() + self.issued_children.len()
     }
 
-    pub fn take_children(&mut self) -> Vec<AnyElement> {
-        std::mem::take(&mut self.children)
+    pub fn take_children(&mut self) -> anyhow::Result<Vec<AnyElement>> {
+        if self.child_lane == ChildLane::Typed {
+            tracing::warn!(
+                "{} already issued typed children; take_children is exclusive with take_typed_children",
+                self.component_name
+            );
+            return Ok(Vec::new());
+        }
+        self.child_lane = ChildLane::Ordinary;
+        let mut children = std::mem::take(&mut self.children);
+        while let Some((id, _)) = self.child_specs.first().copied() {
+            let child = (self.resolve_element)(id)?;
+            self.child_specs.remove(0);
+            children.push(child);
+        }
+        Ok(children)
+    }
+
+    /// Takes opaque child tokens for adapters whose Rust component requires
+    /// typed children. This is exclusive with [`Self::take_children`].
+    pub fn take_typed_children(&mut self) -> Vec<ComponentChild<'a>> {
+        if self.child_lane == ChildLane::Ordinary {
+            tracing::warn!(
+                "{} already materialized ordinary children; take_typed_children is exclusive with take_children",
+                self.component_name
+            );
+            return Vec::new();
+        }
+        self.child_lane = ChildLane::Typed;
+        std::mem::take(&mut self.child_specs)
+            .into_iter()
+            .map(|(id, component_name)| {
+                let token = id as u64;
+                self.issued_children.push((token, id));
+                ComponentChild {
+                    runtime: Rc::downgrade(self.runtime),
+                    request_id: self.request_id,
+                    token,
+                    component_name,
+                    request_lifetime: PhantomData,
+                }
+            })
+            .collect()
+    }
+
+    /// Materializes one opaque child token exactly once.
+    pub fn materialize_child(
+        &mut self,
+        child: &mut ComponentChild<'a>,
+    ) -> anyhow::Result<AnyElement> {
+        anyhow::ensure!(
+            child.request_id == self.request_id
+                && Weak::ptr_eq(&child.runtime, &Rc::downgrade(self.runtime)),
+            "component child belongs to a different runtime or materialization request"
+        );
+        let index = self
+            .issued_children
+            .iter()
+            .position(|(token, _)| *token == child.token)
+            .ok_or_else(|| anyhow::anyhow!("component child was already consumed"))?;
+        let id = self.issued_children[index].1;
+        let element = (self.resolve_element)(id)?;
+        self.issued_children.remove(index);
+        Ok(element)
     }
 
     /// Takes a named, already-materialized slot.
@@ -288,6 +403,20 @@ impl<'a> MaterializeRequest<'a> {
     pub fn take_slot(&mut self, name: &str) -> Option<AnyElement> {
         let index = self.slots.iter().position(|(held, _)| *held == name)?;
         Some(self.slots.remove(index).1)
+    }
+
+    /// Takes all slots with `name`, preserving script order.
+    pub fn take_slots(&mut self, name: &str) -> Vec<AnyElement> {
+        let mut taken = Vec::new();
+        let mut index = 0;
+        while index < self.slots.len() {
+            if self.slots[index].0 == name {
+                taken.push(self.slots.remove(index).1);
+            } else {
+                index += 1;
+            }
+        }
+        taken
     }
 
     pub fn take_style(&mut self) -> StyleRefinement {
@@ -302,19 +431,21 @@ impl<'a> MaterializeRequest<'a> {
     }
 
     /// Applies this node's style and ordinary children exactly once.
-    pub fn finish<E>(mut self, mut element: E) -> AnyElement
+    pub fn finish<E>(mut self, mut element: E) -> anyhow::Result<AnyElement>
     where
         E: Styled + ParentElement + IntoElement + 'static,
     {
         element.style().refine(&self.take_style());
-        element.extend(self.take_children());
-        element.into_any_element()
+        if self.child_lane != ChildLane::Typed {
+            element.extend(self.take_children()?);
+        }
+        Ok(element.into_any_element())
     }
 
     fn unread_parts(&self) -> (bool, usize, Vec<&'static str>) {
         (
             self.style.is_some(),
-            self.children.len(),
+            self.children.len() + self.child_specs.len() + self.issued_children.len(),
             self.slots.iter().map(|(name, _)| *name).collect(),
         )
     }
@@ -430,11 +561,20 @@ impl ComponentClickCallback {
 
 impl ComponentCallback {
     pub fn invoke(&self, window: &mut Window, cx: &mut App) -> anyhow::Result<()> {
+        self.invoke_with(&[], window, cx)
+    }
+
+    pub fn invoke_with(
+        &self,
+        arguments: &[ComponentCallbackArgument],
+        window: &mut Window,
+        cx: &mut App,
+    ) -> anyhow::Result<()> {
         let runtime = self
             .runtime
             .upgrade()
             .ok_or_else(|| anyhow::anyhow!("component callback runtime has been released"))?;
-        runtime.dispatch_component_callback(self.id, window, cx)
+        runtime.dispatch_component_callback(self.id, arguments, window, cx)
     }
 }
 
@@ -776,9 +916,7 @@ fn validate_argument_schema(schema: &ArgumentSchema, top_level: bool) -> Result<
             Err("callback signature must not be empty")
         }
         ArgumentSchema::Callback(_) => Ok(()),
-        ArgumentSchema::Enum(values) if values.is_empty() => {
-            Err("enum must contain at least one literal")
-        }
+        ArgumentSchema::Enum([]) => Err("enum must contain at least one literal"),
         ArgumentSchema::Enum(values) if values.iter().any(|value| value.is_empty()) => {
             Err("enum literals must not be empty")
         }
@@ -930,26 +1068,253 @@ mod tests {
         let payload = ComponentPayload::new(());
         let operations = [];
         let mut resolve_element = |_| anyhow::bail!("no element argument expected");
-        let mut request = MaterializeRequest::new(
-            "Slotted",
-            &payload,
-            &operations,
-            &runtime,
-            &mut resolve_element,
-            StyleRefinement::default(),
-            vec![div().into_any_element()],
-            vec![("trigger", div().into_any_element())],
-            false,
-            false,
-            None,
-        );
+        let mut request = MaterializeRequest::new(MaterializeRequestInit {
+            component_name: "Slotted",
+            payload: &payload,
+            operations: &operations,
+            runtime: &runtime,
+            resolve_element: &mut resolve_element,
+            style: StyleRefinement::default(),
+            children: vec![div().into_any_element()],
+            child_specs: Vec::new(),
+            slots: vec![("trigger", div().into_any_element())],
+            disabled: false,
+            selected: false,
+            on_click: None,
+        });
 
         assert_eq!(request.unread_parts(), (true, 1, vec!["trigger"]));
         assert!(request.take_slot("content").is_none());
         assert!(request.take_slot("trigger").is_some());
-        assert_eq!(request.take_children().len(), 1);
+        assert_eq!(request.take_children().unwrap().len(), 1);
         let _ = request.take_style();
         assert_eq!(request.unread_parts(), (false, 0, Vec::new()));
+    }
+
+    #[test]
+    fn materialize_request_takes_every_repeated_named_slot_in_order() {
+        let runtime = crate::ShellRuntime::new_isolated().unwrap();
+        let payload = ComponentPayload::new(());
+        let operations = [];
+        let mut resolve_element = |_| anyhow::bail!("no element argument expected");
+        let mut request = MaterializeRequest::new(MaterializeRequestInit {
+            component_name: "Slotted",
+            payload: &payload,
+            operations: &operations,
+            runtime: &runtime,
+            resolve_element: &mut resolve_element,
+            style: StyleRefinement::default(),
+            children: Vec::new(),
+            child_specs: Vec::new(),
+            slots: vec![
+                ("content", div().into_any_element()),
+                ("content", div().into_any_element()),
+                ("trigger", div().into_any_element()),
+            ],
+            disabled: false,
+            selected: false,
+            on_click: None,
+        });
+
+        assert_eq!(request.take_slots("content").len(), 2);
+        assert!(request.take_slot("content").is_none());
+        assert!(request.take_slot("trigger").is_some());
+        let _ = request.take_style();
+        assert_eq!(request.unread_parts(), (false, 0, Vec::new()));
+    }
+
+    #[test]
+    fn typed_child_failure_keeps_the_token_retryable_and_unread() {
+        let runtime = crate::ShellRuntime::new_isolated().unwrap();
+        let payload = ComponentPayload::new(());
+        let operations = [];
+        let attempts = std::cell::Cell::new(0);
+        let mut resolve_element = |_| {
+            attempts.set(attempts.get() + 1);
+            if attempts.get() == 1 {
+                anyhow::bail!("candidate failed")
+            }
+            Ok(div().into_any_element())
+        };
+        let mut request = MaterializeRequest::new(MaterializeRequestInit {
+            component_name: "Parent",
+            payload: &payload,
+            operations: &operations,
+            runtime: &runtime,
+            resolve_element: &mut resolve_element,
+            style: StyleRefinement::default(),
+            children: Vec::new(),
+            child_specs: vec![(7, Some("RegisteredChild"))],
+            slots: Vec::new(),
+            disabled: false,
+            selected: false,
+            on_click: None,
+        });
+
+        let mut child = request.take_typed_children().pop().unwrap();
+        assert_eq!(child.component_name(), Some("RegisteredChild"));
+        assert!(request.materialize_child(&mut child).is_err());
+        assert_eq!(request.unread_parts().1, 1);
+        assert!(request.materialize_child(&mut child).is_ok());
+        assert_eq!(request.unread_parts().1, 0);
+        assert!(request.materialize_child(&mut child).is_err());
+    }
+
+    #[test]
+    fn child_lane_stays_exclusive_after_either_lane_is_drained() {
+        let runtime = crate::ShellRuntime::new_isolated().unwrap();
+        let payload = ComponentPayload::new(());
+        let operations = [];
+
+        let mut ordinary_resolver = |_| Ok(div().into_any_element());
+        let mut ordinary = MaterializeRequest::new(MaterializeRequestInit {
+            component_name: "Ordinary",
+            payload: &payload,
+            operations: &operations,
+            runtime: &runtime,
+            resolve_element: &mut ordinary_resolver,
+            style: StyleRefinement::default(),
+            children: Vec::new(),
+            child_specs: vec![(1, None)],
+            slots: Vec::new(),
+            disabled: false,
+            selected: false,
+            on_click: None,
+        });
+        assert_eq!(ordinary.take_children().unwrap().len(), 1);
+        assert!(ordinary.take_typed_children().is_empty());
+        assert_eq!(ordinary.child_lane, ChildLane::Ordinary);
+
+        let mut typed_resolver = |_| Ok(div().into_any_element());
+        let mut typed = MaterializeRequest::new(MaterializeRequestInit {
+            component_name: "Typed",
+            payload: &payload,
+            operations: &operations,
+            runtime: &runtime,
+            resolve_element: &mut typed_resolver,
+            style: StyleRefinement::default(),
+            children: Vec::new(),
+            child_specs: vec![(2, None)],
+            slots: Vec::new(),
+            disabled: false,
+            selected: false,
+            on_click: None,
+        });
+        let mut child = typed.take_typed_children().pop().unwrap();
+        assert_eq!(child.component_name(), None, "built-ins stay opaque");
+        assert!(typed.materialize_child(&mut child).is_ok());
+        assert!(typed.take_children().unwrap().is_empty());
+        assert_eq!(typed.child_lane, ChildLane::Typed);
+    }
+
+    #[test]
+    fn ordinary_child_failure_propagates_through_the_materializer_boundary() {
+        struct FinishingMaterializer;
+
+        impl ComponentMaterializer for FinishingMaterializer {
+            fn materialize(&self, request: MaterializeRequest<'_>) -> anyhow::Result<AnyElement> {
+                request.finish(div())
+            }
+        }
+
+        let runtime = crate::ShellRuntime::new_isolated().unwrap();
+        let payload = ComponentPayload::new(());
+        let operations = [];
+        let mut resolve_element = |_| anyhow::bail!("child adapter failed");
+        let request = MaterializeRequest::new(MaterializeRequestInit {
+            component_name: "Parent",
+            payload: &payload,
+            operations: &operations,
+            runtime: &runtime,
+            resolve_element: &mut resolve_element,
+            style: StyleRefinement::default(),
+            children: Vec::new(),
+            child_specs: vec![(9, Some("FailingChild"))],
+            slots: Vec::new(),
+            disabled: false,
+            selected: false,
+            on_click: None,
+        });
+
+        let error = FinishingMaterializer
+            .materialize(request)
+            .err()
+            .expect("a failed child must fail its parent materializer");
+        assert_eq!(error.to_string(), "child adapter failed");
+    }
+
+    #[test]
+    fn typed_child_rejects_a_different_runtime_and_request() {
+        let runtime_a = crate::ShellRuntime::new_isolated().unwrap();
+        let runtime_b = crate::ShellRuntime::new_isolated().unwrap();
+        let payload = ComponentPayload::new(());
+        let operations = [];
+        let mut resolver_a = |_| Ok(div().into_any_element());
+        let mut resolver_b = |_| Ok(div().into_any_element());
+        let mut resolver_c = |_| Ok(div().into_any_element());
+        let mut request_a = MaterializeRequest::new(MaterializeRequestInit {
+            component_name: "A",
+            payload: &payload,
+            operations: &operations,
+            runtime: &runtime_a,
+            resolve_element: &mut resolver_a,
+            style: StyleRefinement::default(),
+            children: Vec::new(),
+            child_specs: vec![(3, Some("Child"))],
+            slots: Vec::new(),
+            disabled: false,
+            selected: false,
+            on_click: None,
+        });
+        let mut request_b = MaterializeRequest::new(MaterializeRequestInit {
+            component_name: "B",
+            payload: &payload,
+            operations: &operations,
+            runtime: &runtime_b,
+            resolve_element: &mut resolver_b,
+            style: StyleRefinement::default(),
+            children: Vec::new(),
+            child_specs: vec![(3, Some("Child"))],
+            slots: Vec::new(),
+            disabled: false,
+            selected: false,
+            on_click: None,
+        });
+        let mut request_c = MaterializeRequest::new(MaterializeRequestInit {
+            component_name: "C",
+            payload: &payload,
+            operations: &operations,
+            runtime: &runtime_a,
+            resolve_element: &mut resolver_c,
+            style: StyleRefinement::default(),
+            children: Vec::new(),
+            child_specs: vec![(3, Some("Child"))],
+            slots: Vec::new(),
+            disabled: false,
+            selected: false,
+            on_click: None,
+        });
+
+        let mut child = request_a.take_typed_children().pop().unwrap();
+        let error = request_b
+            .materialize_child(&mut child)
+            .err()
+            .expect("foreign child must fail");
+        assert!(
+            error
+                .to_string()
+                .contains("different runtime or materialization request")
+        );
+        let error = request_c
+            .materialize_child(&mut child)
+            .err()
+            .expect("foreign request in the same runtime must fail");
+        assert!(
+            error
+                .to_string()
+                .contains("different runtime or materialization request")
+        );
+        assert_eq!(request_a.unread_parts().1, 1);
     }
 
     fn empty_descriptor(

@@ -638,14 +638,15 @@ fn materialize_node(
     // A component that takes typed children is handed the descriptions instead:
     // flattening them here would throw away the very thing it needs. See
     // [`ChildSpecs`].
-    let children: Children = if takes_typed_children(&component) {
-        Children::new()
-    } else {
-        node.children()
-            .iter()
-            .map(|child| materialize_node(runtime, arena, *child, inherited, window, cx))
-            .collect()
-    };
+    let children: Children =
+        if takes_typed_children(&component) || matches!(component, Component::Registered(_)) {
+            Children::new()
+        } else {
+            node.children()
+                .iter()
+                .map(|child| materialize_node(runtime, arena, *child, inherited, window, cx))
+                .collect()
+        };
 
     // A slot's element is built here, beside the children, so it inherits the
     // same text color: where the component chooses to put it is the component's
@@ -739,20 +740,36 @@ fn materialize_component(
                     runtime, arena, element, inherited, window, cx,
                 ))
             };
+            let child_specs =
+                node.children()
+                    .iter()
+                    .map(|child| {
+                        let name = arena.node(*child).and_then(SpecNode::component).and_then(
+                            |component| match component {
+                                Component::Registered(component) => Some(component.name()),
+                                _ => None,
+                            },
+                        );
+                        (*child, name)
+                    })
+                    .collect();
             match descriptor
                 .materializer
                 .materialize(crate::MaterializeRequest::new(
-                    component.name(),
-                    component.payload(),
-                    node.ops(),
-                    runtime,
-                    &mut resolve_element,
-                    refinement,
-                    children.into_vec(),
-                    slots.into_vec(),
-                    behavior.disabled,
-                    behavior.selected,
-                    behavior.on_click,
+                    crate::component_registry::MaterializeRequestInit {
+                        component_name: component.name(),
+                        payload: component.payload(),
+                        operations: node.ops(),
+                        runtime,
+                        resolve_element: &mut resolve_element,
+                        style: refinement,
+                        children: children.into_vec(),
+                        child_specs,
+                        slots: slots.into_vec(),
+                        disabled: behavior.disabled,
+                        selected: behavior.selected,
+                        on_click: behavior.on_click,
+                    },
                 )) {
                 Ok(element) => element,
                 Err(error) => {

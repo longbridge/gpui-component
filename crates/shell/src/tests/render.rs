@@ -607,7 +607,9 @@ import { ResolvedBox } from "gpui-component";
 export default class Resolved extends View {
   init(_props, cx) { this.focus = cx.focus_handle(); }
   render() {
-    return new ResolvedBox(div(), this.focus, () => { throw new Error("adapter callback ran"); });
+    return new ResolvedBox(div(), this.focus, (text, number, flag, cx) => {
+      throw new Error(`adapter callback ran: ${text}|${number}|${flag}|${typeof cx.notify}`);
+    });
   }
 }
 "#,
@@ -630,12 +632,112 @@ export default class Resolved extends View {
     });
     let callback = CALLBACK.with(|stored| stored.borrow_mut().take().unwrap());
     let error = context
-        .update(|window, cx| callback.invoke(window, cx))
+        .update(|window, cx| {
+            callback.invoke_with(
+                &[
+                    crate::ComponentCallbackArgument::String("alpha".into()),
+                    crate::ComponentCallbackArgument::Number(2.5),
+                    crate::ComponentCallbackArgument::Boolean(true),
+                ],
+                window,
+                cx,
+            )
+        })
         .unwrap_err();
     assert!(
-        error.to_string().contains("adapter callback ran"),
+        error
+            .to_string()
+            .contains("adapter callback ran: alpha|2.5|true|function"),
         "{error:#}"
     );
+}
+
+#[gpui::test]
+fn registered_parent_can_inspect_and_materialize_a_registered_typed_child(cx: &mut TestAppContext) {
+    use crate::{
+        COMPONENT_REGISTRY_API_VERSION, ComponentDescriptor, ComponentMaterializer,
+        ComponentPayload, ComponentRegistry, ConstructorDescriptor, MaterializeRequest,
+        TypeScriptDescriptor,
+    };
+    use gpui::{AnyElement, ParentElement as _, div};
+    use std::{cell::RefCell, sync::Arc};
+
+    thread_local! {
+        static CHILD_NAME: RefCell<Option<&'static str>> = const { RefCell::new(None) };
+    }
+
+    struct LeafMaterializer;
+    impl ComponentMaterializer for LeafMaterializer {
+        fn materialize(&self, request: MaterializeRequest<'_>) -> anyhow::Result<AnyElement> {
+            request.finish(div().child("leaf"))
+        }
+    }
+
+    struct ParentMaterializer;
+    impl ComponentMaterializer for ParentMaterializer {
+        fn materialize(&self, mut request: MaterializeRequest<'_>) -> anyhow::Result<AnyElement> {
+            let mut children = request.take_typed_children();
+            anyhow::ensure!(children.len() == 1);
+            let mut child = children.pop().unwrap();
+            CHILD_NAME.with(|name| *name.borrow_mut() = child.component_name());
+            let child = request.materialize_child(&mut child)?;
+            request.finish(div().child(child))
+        }
+    }
+
+    fn descriptor(
+        name: &'static str,
+        materializer: Arc<dyn ComponentMaterializer>,
+    ) -> ComponentDescriptor {
+        ComponentDescriptor {
+            name,
+            constructors: vec![ConstructorDescriptor::new(name, Vec::new(), |_| {
+                Ok(ComponentPayload::new(()))
+            })],
+            methods: Vec::new(),
+            typescript: TypeScriptDescriptor::default(),
+            materializer,
+        }
+    }
+
+    cx.update(crate::init);
+    let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+    registry
+        .register(descriptor("TypedLeaf", Arc::new(LeafMaterializer)))
+        .unwrap();
+    registry
+        .register(descriptor("TypedParent", Arc::new(ParentMaterializer)))
+        .unwrap();
+    let runtime = ShellRuntime::new_isolated_with_components(registry.freeze().unwrap()).unwrap();
+    let view_type = runtime
+        .load_source(
+            "typed-child.js",
+            r#"
+import { View } from "gpui";
+import { TypedLeaf, TypedParent } from "gpui-component";
+export default class TypedChildView extends View {
+  render() { return new TypedParent().child(new TypedLeaf()); }
+}
+"#,
+        )
+        .unwrap();
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .unwrap();
+    let snapshot = context
+        .update(|window, cx| {
+            runtime.build_snapshot(&object, None, crate::policy::default(), window, cx)
+        })
+        .unwrap();
+    context.update(|window, cx| {
+        drop(crate::materialize::materialize(
+            &runtime, &snapshot, window, cx,
+        ));
+    });
+
+    assert_eq!(CHILD_NAME.with(|name| *name.borrow()), Some("TypedLeaf"));
 }
 
 #[gpui::test]
@@ -677,7 +779,7 @@ fn registered_button_receives_common_parts_and_dispatches_click(cx: &mut TestApp
                     on_click.invoke(event, window, cx);
                 });
             }
-            Ok(request.finish(button))
+            request.finish(button)
         }
     }
 

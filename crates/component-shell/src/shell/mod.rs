@@ -6,9 +6,15 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
     spinner::register(registry)?;
     separator::register(registry)?;
     skeleton::register(registry)?;
+    controls::register(registry)?;
+    display::register(registry)?;
+    compound::register(registry)?;
     Ok(())
 }
 
+mod compound;
+mod controls;
+mod display;
 mod separator;
 mod skeleton;
 mod spinner;

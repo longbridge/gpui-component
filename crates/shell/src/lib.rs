@@ -88,7 +88,7 @@ pub use anyhow;
 pub use assets::AppAssets;
 pub use capability::{Capabilities, ExecuteGrant, HttpRequestGrant};
 pub use component_registry::*;
-pub use engine::ShellRuntime;
+pub use engine::{LoadedApplication, ShellRuntime};
 pub use error::ShellError;
 pub use gpui;
 pub use gpui_component;

@@ -3597,6 +3597,7 @@ dependencies = [
 name = "gpui-component-shell"
 version = "0.1.0"
 dependencies = [
+ "gpui",
  "gpui-shell",
  "serde_json",
 ]

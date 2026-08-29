@@ -6,6 +6,36 @@
 
 mod shell;
 
+/// Builds and freezes the currently registered component catalog owned by this adapter.
+pub fn components() -> Result<gpui_shell::FrozenComponentRegistry, gpui_shell::RegistryError> {
+    let mut registry =
+        gpui_shell::ComponentRegistry::new(gpui_shell::COMPONENT_REGISTRY_API_VERSION)?;
+    register(&mut registry)?;
+    registry.freeze()
+}
+
+/// Creates the application's default shell runtime with this component catalog.
+pub fn new_runtime(
+    cx: &mut gpui_shell::gpui::App,
+) -> gpui_shell::anyhow::Result<std::rc::Rc<gpui_shell::ShellRuntime>> {
+    gpui_shell::ShellRuntime::new_with_components(cx, components()?)
+}
+
+/// Creates an isolated shell runtime with this component catalog.
+pub fn new_isolated_runtime() -> gpui_shell::anyhow::Result<std::rc::Rc<gpui_shell::ShellRuntime>> {
+    gpui_shell::ShellRuntime::new_isolated_with_components(components()?)
+}
+
+/// Writes declarations for the currently registered adapter catalog.
+pub fn write_type_declarations(
+    root: impl AsRef<std::path::Path>,
+) -> gpui_shell::anyhow::Result<Vec<std::path::PathBuf>> {
+    Ok(gpui_shell::write_type_declarations_with_components(
+        root.as_ref(),
+        &components()?,
+    )?)
+}
+
 /// Registers the `gpui-component` JavaScript bindings provided by this crate.
 pub fn register(
     registry: &mut gpui_shell::ComponentRegistry,
@@ -16,6 +46,26 @@ pub fn register(
 #[cfg(test)]
 mod tests {
     use gpui_shell::{ArgumentSchema, COMPONENT_REGISTRY_API_VERSION, ComponentRegistry};
+
+    #[test]
+    fn normal_dependency_surface_is_only_gpui_shell() {
+        let manifest = include_str!("../Cargo.toml");
+        let dependencies = manifest
+            .split_once("[dependencies]")
+            .expect("dependencies table")
+            .1
+            .split_once("[dev-dependencies]")
+            .expect("dev-dependencies table")
+            .0;
+        let names = dependencies
+            .lines()
+            .filter_map(|line| line.split_once('=').map(|(name, _)| name.trim()))
+            .map(|name| name.strip_suffix(".workspace").unwrap_or(name))
+            .filter(|name| !name.is_empty())
+            .collect::<Vec<_>>();
+
+        assert_eq!(names, ["gpui-shell"]);
+    }
 
     #[test]
     fn shell_reexports_the_adapter_component_and_rendering_dependencies() {
@@ -39,6 +89,7 @@ mod tests {
         assert_eq!(
             descriptors
                 .iter()
+                .take(3)
                 .map(|descriptor| descriptor.name)
                 .collect::<Vec<_>>(),
             ["Spinner", "Separator", "Skeleton"]
@@ -46,6 +97,7 @@ mod tests {
         assert_eq!(
             descriptors
                 .iter()
+                .take(3)
                 .flat_map(|descriptor| {
                     descriptor
                         .constructors
@@ -67,6 +119,15 @@ mod tests {
                 .iter()
                 .all(|descriptor| descriptor.typescript.documentation.is_some())
         );
+    }
+
+    #[test]
+    fn adapter_runtime_owns_the_registered_component_catalog() {
+        let runtime = crate::new_isolated_runtime().unwrap();
+
+        let declarations = runtime.type_declarations();
+        assert!(declarations.contains("export const Spinner: { new(): SpinnerElement };"));
+        assert!(declarations.contains("export const Skeleton: { new(): SkeletonElement };"));
     }
 
     #[test]
