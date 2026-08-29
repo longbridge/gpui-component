@@ -14,9 +14,11 @@ depends on the adapter library.
 
 ## Crate boundaries
 
-### `gpui-shell`
+### `gpui-shell-core`
 
-`gpui-shell` remains the script runtime and generic host bridge. It owns:
+The existing `gpui-shell` library becomes the `gpui-shell-core` package while
+retaining the Rust library name `gpui_shell`. It remains the script runtime and
+generic host bridge. It owns:
 
 - the JavaScript engine, modules, callbacks, entities, capabilities, and hot
   reload;
@@ -59,10 +61,18 @@ loaded so runtime rendering does not mutate global schemas.
 
 ### Executable composition
 
-The `gpui-shell` binary registers generic shell primitives, invokes
-`gpui_component_shell::register`, and then starts the selected script engine.
+Cargo resolves dependencies at package granularity, so a binary in the core
+package cannot depend on an adapter that itself depends on the core. The
+existing binary therefore moves into a small `gpui-shell` facade package. That
+facade depends on `gpui-shell-core` and `gpui-component-shell`, registers
+generic shell primitives, invokes `gpui_component_shell::register`, and then
+starts the selected script engine. The user-facing command remains
+`cargo run -p gpui-shell -- <application>` and Rust users continue to import
+the library as `gpui_shell`.
+
 Embedding hosts can choose the same full catalog or register only their own
-adapters. The `gpui-shell` library remains usable without `gpui-component`.
+adapters. The `gpui-shell-core` library remains usable without
+`gpui-component`.
 
 ## Registration model
 
@@ -149,8 +159,8 @@ The implementation is complete only when all of the following pass:
   to a registration or an explicit infrastructure classification;
 - generated TypeScript declarations match the registry snapshot;
 - existing shell tests pass after concrete component code is removed;
-- `cargo check` and targeted tests pass for `gpui-shell`,
-  `gpui-component-shell`, and the workspace;
+- `cargo check` and targeted tests pass for `gpui-shell-core`, the `gpui-shell`
+  facade, `gpui-component-shell`, and the workspace;
 - the JS Story loads through the standard `gpui-shell` command and every
   catalog route builds without a script or materialization error;
 - source and dependency audits prove concrete component implementations live
