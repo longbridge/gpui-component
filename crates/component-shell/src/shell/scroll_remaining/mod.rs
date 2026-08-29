@@ -14,6 +14,7 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
 }
 
 #[cfg(test)]
+#[allow(unused_imports)]
 pub(crate) use scroll::test_probe;
 
 #[cfg(test)]

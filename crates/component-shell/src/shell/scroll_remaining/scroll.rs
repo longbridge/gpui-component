@@ -240,6 +240,7 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
 }
 
 #[cfg(test)]
+#[allow(dead_code)]
 pub(crate) mod test_probe {
     use std::cell::RefCell;
 

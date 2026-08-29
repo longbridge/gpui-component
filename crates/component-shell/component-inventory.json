@@ -154,10 +154,33 @@
       "name": "command",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "command-palette",
-        "reason": "No Command descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "Command"
+        "status": "registered",
+        "descriptor": "Command",
+        "exports": ["Command"],
+        "states": [
+          {
+            "export": "CommandState",
+            "kind": "CommandState",
+            "role": "retained-command-state"
+          }
+        ],
+        "related": [
+          {
+            "descriptor": "CommandItem",
+            "exports": ["CommandItem"],
+            "role": "typed-item"
+          },
+          {
+            "descriptor": "CommandGroup",
+            "exports": ["CommandGroup"],
+            "role": "typed-group"
+          },
+          {
+            "descriptor": "CommandSeparator",
+            "exports": ["CommandSeparator"],
+            "role": "typed-separator"
+          }
+        ]
       }
     },
     {
@@ -322,10 +345,21 @@
       "name": "native_menu",
       "classification": "platform",
       "registration": {
-        "status": "deferred",
-        "category": "platform-integration",
-        "reason": "No NativeMenu descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "NativeMenu"
+        "status": "registered",
+        "descriptor": "NativeMenuTrigger",
+        "exports": ["NativeMenuTrigger"],
+        "related": [
+          {
+            "descriptor": "NativeMenuItem",
+            "exports": ["NativeMenuItem"],
+            "role": "typed-item"
+          },
+          {
+            "descriptor": "NativeMenuSeparator",
+            "exports": ["NativeMenuSeparator"],
+            "role": "typed-separator"
+          }
+        ]
       }
     },
     {
@@ -920,10 +954,33 @@
       "name": "command",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "command-palette",
-        "reason": "No Command descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "Command"
+        "status": "registered",
+        "descriptor": "Command",
+        "exports": ["Command"],
+        "states": [
+          {
+            "export": "CommandState",
+            "kind": "CommandState",
+            "role": "retained-command-state"
+          }
+        ],
+        "related": [
+          {
+            "descriptor": "CommandItem",
+            "exports": ["CommandItem"],
+            "role": "typed-item"
+          },
+          {
+            "descriptor": "CommandGroup",
+            "exports": ["CommandGroup"],
+            "role": "typed-group"
+          },
+          {
+            "descriptor": "CommandSeparator",
+            "exports": ["CommandSeparator"],
+            "role": "typed-separator"
+          }
+        ]
       }
     },
     {
@@ -1148,10 +1205,21 @@
       "name": "native_menu",
       "classification": "platform",
       "registration": {
-        "status": "deferred",
-        "category": "platform-integration",
-        "reason": "No NativeMenu descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "NativeMenu"
+        "status": "registered",
+        "descriptor": "NativeMenuTrigger",
+        "exports": ["NativeMenuTrigger"],
+        "related": [
+          {
+            "descriptor": "NativeMenuItem",
+            "exports": ["NativeMenuItem"],
+            "role": "typed-item"
+          },
+          {
+            "descriptor": "NativeMenuSeparator",
+            "exports": ["NativeMenuSeparator"],
+            "role": "typed-separator"
+          }
+        ]
       }
     },
     {

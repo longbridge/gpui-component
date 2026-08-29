@@ -164,6 +164,7 @@ fn validate_unique_ids(items: &[TreeItem]) -> anyhow::Result<()> {
     Ok(())
 }
 #[cfg(test)]
+#[allow(dead_code)]
 pub(crate) mod test_probe {
     use super::TreeItem;
     use std::cell::RefCell;

@@ -11,6 +11,7 @@ mod tree;
 mod typed;
 use gpui_shell::{ComponentRegistry, RegistryError};
 #[cfg(test)]
+#[allow(unused_imports)]
 pub(crate) use tree::test_probe;
 pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
     tree::register(registry)

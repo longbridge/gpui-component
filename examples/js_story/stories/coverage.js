@@ -34,7 +34,7 @@ export const coveredBy = [
   { route: "label", registrations: ["Label"] },
   { route: "list", registrations: ["List", "SearchableList"] },
   { route: "menu", registrations: ["Menu"] },
-  { route: "native-menu", registrations: ["NativeMenu"] },
+  { route: "native-menu", registrations: ["NativeMenuTrigger"] },
   { route: "notification", registrations: ["Notification"] },
   { route: "number-input", registrations: ["NumberInput"] },
   { route: "otp-input", registrations: ["OtpInput"] },

@@ -16,6 +16,10 @@ import {
   Collapsible,
   ColorPicker,
   ColorPickerState,
+  Command,
+  CommandGroup,
+  CommandItem,
+  CommandState,
   DatePicker,
   DatePickerState,
   DescriptionItem,
@@ -36,6 +40,9 @@ import {
   Label,
   Link,
   NumberInput,
+  NativeMenuItem,
+  NativeMenuSeparator,
+  NativeMenuTrigger,
   OtpInput,
   OtpState,
   Pagination,
@@ -138,6 +145,20 @@ export function registeredExample(surface) {
       return new ColorPicker(ColorPickerState())
         .label("Accent color")
         .accessibilityLabel("Choose an accent color");
+    case "Command":
+      return new Command(CommandState())
+        .placeholder("Type a command")
+        .header(asElement(new Text("Commands")))
+        .footer(asElement(new Text("Press Enter to run")))
+        .child(
+          asElement(
+            new CommandGroup("Files").child(
+              asElement(
+                new CommandItem("Open file").keyword("file").action("open"),
+              ),
+            ),
+          ),
+        );
     case "DatePicker":
       return new DatePicker(DatePickerState()).placeholder("Select a date");
     case "DescriptionList":
@@ -201,6 +222,11 @@ export function registeredExample(surface) {
         .child("Documentation");
     case "NumberInput":
       return new NumberInput(InputState()).placeholder("Quantity");
+    case "NativeMenuTrigger":
+      return new NativeMenuTrigger("native-menu", "Native menu")
+        .onEffectError((_message, _cx) => {})
+        .child(asElement(new NativeMenuItem("Open", "open")))
+        .child(asElement(new NativeMenuSeparator()));
     case "OtpInput":
       return new OtpInput(OtpState(6)).groups(2);
     case "Pagination":

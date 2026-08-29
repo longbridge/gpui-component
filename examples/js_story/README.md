@@ -33,7 +33,8 @@ reason from `stories/status.js`; the verifier checks that projection against the
 inventory. This keeps a missing binding visible without adding a private Rust
 host module.
 
-`Shell` is gallery infrastructure, while `NativeMenu` is explicitly deferred
+`Shell` is gallery infrastructure. `NativeMenuTrigger` provides the registered
+native-menu surface used by the JavaScript story
 under the inventory's `platform-integration` category.
 
 ## Editor checking

@@ -11,6 +11,7 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
     compound::register(registry)?;
     typed_compound::register(registry)?;
     collections_remaining::register(registry)?;
+    command_remaining::register(registry)?;
     overlays::register(registry)?;
     retained_forms::register(registry)?;
     layout_remaining::register(registry)?;
@@ -25,6 +26,7 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
 
 mod basic_remaining;
 mod collections_remaining;
+mod command_remaining;
 mod compound;
 mod controls;
 mod display;

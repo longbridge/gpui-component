@@ -39,7 +39,7 @@ export const stories = [
     description: "Platform application menu.",
     states: ["macOS", "Windows", "fallback"],
     availability: "platform",
-    api: "NativeMenu",
+    api: "NativeMenuTrigger",
   }),
   pendingStory({
     id: "notification",
