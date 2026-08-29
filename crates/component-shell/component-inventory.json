@@ -483,10 +483,26 @@
       "name": "setting",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "component-binding",
-        "reason": "No Setting descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "Setting"
+        "status": "registered",
+        "descriptor": "Settings",
+        "exports": ["Settings"],
+        "related": [
+          {
+            "descriptor": "SettingPage",
+            "exports": ["SettingPage"],
+            "role": "typed-page"
+          },
+          {
+            "descriptor": "SettingGroup",
+            "exports": ["SettingGroup"],
+            "role": "typed-group"
+          },
+          {
+            "descriptor": "SettingItem",
+            "exports": ["SettingItem"],
+            "role": "typed-field-item"
+          }
+        ]
       }
     },
     {
@@ -1305,10 +1321,26 @@
       "name": "settings",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "component-binding",
-        "reason": "No Settings descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "Settings"
+        "status": "registered",
+        "descriptor": "Settings",
+        "exports": ["Settings"],
+        "related": [
+          {
+            "descriptor": "SettingPage",
+            "exports": ["SettingPage"],
+            "role": "typed-page"
+          },
+          {
+            "descriptor": "SettingGroup",
+            "exports": ["SettingGroup"],
+            "role": "typed-group"
+          },
+          {
+            "descriptor": "SettingItem",
+            "exports": ["SettingItem"],
+            "role": "typed-field-item"
+          }
+        ]
       }
     },
     {

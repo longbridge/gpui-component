@@ -47,7 +47,7 @@ export const coveredBy = [
   { route: "scrollbar", registrations: ["Scrollbar", "Scroll"] },
   { route: "select", registrations: ["Select"] },
   { route: "separator", registrations: ["Separator"] },
-  { route: "settings", registrations: ["Settings", "Setting"] },
+  { route: "settings", registrations: ["Settings"] },
   { route: "shell", registrations: [] },
   { route: "sheet", registrations: ["Sheet"] },
   { route: "sidebar", registrations: ["Sidebar"] },

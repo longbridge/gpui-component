@@ -50,6 +50,10 @@ import {
   Scrollbar,
   ScrollbarHandle,
   Separator,
+  SettingGroup,
+  SettingItem,
+  SettingPage,
+  Settings,
   Sidebar,
   SidebarFooter,
   SidebarHeader,
@@ -247,6 +251,29 @@ export function registeredExample(surface) {
     }
     case "Separator":
       return new Separator().label("Account").dashed();
+    case "Settings":
+      return new Settings("story-settings")
+        .size("medium")
+        .sidebarWidth(220)
+        .child(
+          asElement(
+            new SettingPage("General")
+              .content(asElement(new Text("Help")))
+              .child(
+                asElement(
+                  new SettingGroup()
+                    .title("Appearance")
+                    .child(
+                      asElement(
+                        new SettingItem("Theme").content(
+                          asElement(new Text("System")),
+                        ),
+                      ),
+                    ),
+                ),
+              ),
+          ),
+        );
     case "Sidebar":
       return new Sidebar("story-sidebar")
         .side("left")
