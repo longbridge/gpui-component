@@ -733,10 +733,19 @@ fn materialize_component(
                     .child(format!("Unknown component: {}", component.name()))
                     .into_any_element();
             };
+            let mut resolve_element = |element| {
+                Ok(materialize_node(
+                    runtime, arena, element, inherited, window, cx,
+                ))
+            };
             match descriptor
                 .materializer
-                .materialize(crate::MaterializeRequest::new(component.payload()))
-            {
+                .materialize(crate::MaterializeRequest::new(
+                    component.payload(),
+                    node.ops(),
+                    runtime,
+                    &mut resolve_element,
+                )) {
                 Ok(element) => element,
                 Err(error) => {
                     tracing::error!("failed to materialize `{}`: {error:#}", component.name());
@@ -2177,6 +2186,7 @@ pub(in crate::materialize) fn resolve_ops(
             SpecOp::ActionCallback(id, callback) => {
                 behavior.on_action.push((id.clone(), *callback))
             }
+            SpecOp::RegisteredMethod(_) => {}
             // Filling the same slot twice replaces it, the way a second
             // `open(...)` replaces the first: the last call in the chain is
             // what the script meant.

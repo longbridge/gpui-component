@@ -98,12 +98,12 @@ use crate::value::Bridged;
 /// having them in the project, not by being told where.
 pub const FILE_NAME: &str = "gpui.d.ts";
 
-/// Emits the TypeScript declarations for the script API.
-///
-/// The output is deterministic — no timestamps, no reflection order — so
-/// regenerating it after a runtime upgrade produces a reviewable diff rather
-/// than a reshuffled file.
-pub fn declarations() -> String {
+#[cfg(test)]
+fn base_declarations() -> String {
+    declarations_with_components(&crate::FrozenComponentRegistry::default())
+}
+
+pub(crate) fn declarations_with_components(components: &crate::FrozenComponentRegistry) -> String {
     let (nullary, parametric) = style_methods();
 
     let mut out = String::with_capacity(160 * 1024);
@@ -138,6 +138,41 @@ pub fn declarations() -> String {
     out.push_str(BASE_SHARED_TYPES);
     out.push_str(BASE);
     out.push_str("}\n\n");
+    out.push_str("declare module \"gpui-component\" {\n");
+    out.push_str("  import { Element } from \"gpui\";\n");
+    for descriptor in components.descriptors() {
+        push_jsdoc(&mut out, descriptor.typescript.documentation, None, "  ");
+        out.push_str("  export interface ");
+        out.push_str(descriptor.name);
+        out.push_str("Element extends Element {\n");
+        for method in &descriptor.methods {
+            push_jsdoc(&mut out, method.documentation, None, "    ");
+            out.push_str("    ");
+            out.push_str(method.name);
+            out.push('(');
+            push_arguments(&mut out, &method.arguments);
+            out.push_str("): ");
+            out.push_str(descriptor.name);
+            out.push_str("Element;\n");
+        }
+        out.push_str("  }\n");
+        for constructor in &descriptor.constructors {
+            push_jsdoc(
+                &mut out,
+                descriptor.typescript.documentation,
+                constructor.deprecation.as_ref().map(|entry| entry.message),
+                "  ",
+            );
+            out.push_str("  export const ");
+            out.push_str(constructor.export);
+            out.push_str(": { new(");
+            push_arguments(&mut out, &constructor.arguments);
+            out.push_str("): ");
+            out.push_str(descriptor.name);
+            out.push_str("Element };\n");
+        }
+    }
+    out.push_str("}\n\n");
     out.push_str("declare module \"gpui-shell\" {\n");
     out.push_str(&shell_types());
     out.push_str("}\n\n");
@@ -149,6 +184,67 @@ pub fn declarations() -> String {
     out.push_str(&host_modules());
     out.push_str(WINDOW_GLOBAL);
     out
+}
+
+fn push_arguments(out: &mut String, arguments: &[crate::ArgumentDescriptor]) {
+    for (index, argument) in arguments.iter().enumerate() {
+        if index > 0 {
+            out.push_str(", ");
+        }
+        out.push_str(argument.name);
+        if matches!(argument.schema, crate::ArgumentSchema::Optional(_)) {
+            out.push('?');
+        }
+        out.push_str(": ");
+        out.push_str(&argument_type(&argument.schema));
+    }
+}
+
+fn argument_type(schema: &crate::ArgumentSchema) -> String {
+    match schema {
+        crate::ArgumentSchema::String => "string".into(),
+        crate::ArgumentSchema::Number => "number".into(),
+        crate::ArgumentSchema::Boolean => "boolean".into(),
+        crate::ArgumentSchema::Element => "Element".into(),
+        crate::ArgumentSchema::Entity(kind) => (*kind).into(),
+        crate::ArgumentSchema::Callback(signature) => (*signature).into(),
+        crate::ArgumentSchema::Enum(values) => values
+            .iter()
+            .map(|value| format!("{value:?}"))
+            .collect::<Vec<_>>()
+            .join(" | "),
+        crate::ArgumentSchema::Array(item) => format!("Array<{}>", argument_type(item)),
+        crate::ArgumentSchema::Optional(item) => argument_type(item),
+    }
+}
+
+fn push_jsdoc(
+    out: &mut String,
+    documentation: Option<&str>,
+    deprecated: Option<&str>,
+    indent: &str,
+) {
+    if documentation.is_none() && deprecated.is_none() {
+        return;
+    }
+    out.push_str(indent);
+    out.push_str("/**\n");
+    if let Some(documentation) = documentation {
+        for line in documentation.lines() {
+            out.push_str(indent);
+            out.push_str(" * ");
+            out.push_str(line);
+            out.push('\n');
+        }
+    }
+    if let Some(message) = deprecated {
+        out.push_str(indent);
+        out.push_str(" * @deprecated ");
+        out.push_str(message);
+        out.push('\n');
+    }
+    out.push_str(indent);
+    out.push_str(" */\n");
 }
 
 /// The modules this host registered, as `declare module` blocks.
@@ -235,7 +331,10 @@ fn host_modules() -> String {
 /// The explicit tooling API reports write failures. Ordinary application loads
 /// log them at debug level and continue, because an unwritable declaration is a
 /// worse editing experience, not a reason to refuse to run the application.
-pub(crate) fn write_application(root: &Path) -> std::io::Result<Vec<PathBuf>> {
+pub(crate) fn write_application_with_components(
+    root: &Path,
+    components: &crate::FrozenComponentRegistry,
+) -> std::io::Result<Vec<PathBuf>> {
     std::fs::create_dir_all(root)?;
     let mut directories = vec![root.to_path_buf()];
     directories.extend(
@@ -247,7 +346,7 @@ pub(crate) fn write_application(root: &Path) -> std::io::Result<Vec<PathBuf>> {
     let mut written = Vec::new();
     let mut first_error = None;
     for directory in directories {
-        match refresh(&directory) {
+        match refresh_with_components(&directory, components) {
             Ok(Some(path)) => written.push(path),
             Ok(None) => {}
             Err(error) => {
@@ -332,7 +431,13 @@ fn directories_importing_builtins(root: &Path) -> Vec<PathBuf> {
 
 /// The specifiers one `gpui.d.ts` declares. A script importing any of them
 /// wants the file beside it.
-const BUILTIN_SPECIFIERS: [&str; 4] = ["gpui", "gpui-base", "gpui-shell", "gpui-fps"];
+const BUILTIN_SPECIFIERS: [&str; 5] = [
+    "gpui",
+    "gpui-base",
+    "gpui-component",
+    "gpui-shell",
+    "gpui-fps",
+];
 
 /// Whether a script imports one of the built-in modules.
 ///
@@ -355,7 +460,10 @@ fn imports_builtin(source: &str) -> bool {
 /// Nothing is written when the file already matches, so an editor watching the
 /// directory is not woken on every launch, and a read-only checkout is not an
 /// error worth reporting. Returns the path only when it actually wrote.
-pub fn refresh(directory: &Path) -> std::io::Result<Option<PathBuf>> {
+pub(crate) fn refresh_with_components(
+    directory: &Path,
+    components: &crate::FrozenComponentRegistry,
+) -> std::io::Result<Option<PathBuf>> {
     let path = directory.join(FILE_NAME);
     if std::fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.file_type().is_symlink()) {
         return Err(std::io::Error::new(
@@ -363,7 +471,7 @@ pub fn refresh(directory: &Path) -> std::io::Result<Option<PathBuf>> {
             format!("refusing to replace symlink {}", path.display()),
         ));
     }
-    let current = declarations();
+    let current = declarations_with_components(components);
 
     if std::fs::read_to_string(&path).is_ok_and(|committed| committed == current) {
         return Ok(None);
@@ -3498,7 +3606,7 @@ mod tests {
 
     #[test]
     fn a_reflected_style_is_declared_with_no_arguments() {
-        let declarations = declarations();
+        let declarations = base_declarations();
         assert!(declarations.contains("\n    items_center(): Element;\n"));
         assert!(declarations.contains("\n    flex_col(): Element;\n"));
         // Reflection misses the macro-generated font weights; the runtime adds
@@ -3508,7 +3616,7 @@ mod tests {
 
     #[test]
     fn a_parametric_style_is_declared_with_the_type_the_runtime_enforces() {
-        let declarations = declarations();
+        let declarations = base_declarations();
         for expected in [
             "    bg(value: Color): Element;",
             "    border_color(value: Color): Element;",
@@ -3541,7 +3649,7 @@ mod tests {
 
     #[test]
     fn every_color_token_is_in_the_color_union() {
-        let declarations = declarations();
+        let declarations = base_declarations();
         for name in color_token_names() {
             assert!(
                 declarations.contains(&format!("    | \"{name}\"\n")),
@@ -3556,7 +3664,7 @@ mod tests {
 
     #[test]
     fn shared_types_are_declared_by_the_layer_that_owns_them() {
-        let declarations = declarations();
+        let declarations = base_declarations();
         let module = |specifier: &str| {
             let start = declarations
                 .find(&format!("declare module \"{specifier}\" {{"))
@@ -3616,7 +3724,7 @@ mod tests {
 
     #[test]
     fn no_internal_name_leaks_into_the_surface() {
-        let declarations = declarations();
+        let declarations = base_declarations();
         for internal in ["__id", "__apply", "__state", "__gpui", "__styleNames"] {
             assert!(
                 !declarations.contains(internal),
@@ -3628,7 +3736,7 @@ mod tests {
 
     #[test]
     fn compatibility_is_manifest_metadata_not_a_script_api() {
-        let declarations = declarations();
+        let declarations = base_declarations();
         assert!(!declarations.contains("require_api"));
         assert!(
             declarations.contains(&format!("for gpui-shell {}.", crate::plugin::SHELL_VERSION))
@@ -3637,7 +3745,7 @@ mod tests {
 
     #[test]
     fn the_output_is_structurally_balanced() {
-        let declarations = declarations();
+        let declarations = base_declarations();
         let opened = declarations.matches('{').count();
         let closed = declarations.matches('}').count();
         assert_eq!(opened, closed, "unbalanced braces");
@@ -3683,7 +3791,7 @@ mod tests {
         )
         .expect("`audit` is not reserved");
 
-        let declarations = declarations();
+        let declarations = base_declarations();
         // The point of the whole change: these names come from the registry,
         // not from a file someone maintains beside the script.
         assert!(
@@ -3721,7 +3829,7 @@ mod tests {
 
         crate::clear_exported_modules();
         assert!(
-            !super::declarations().contains("declare module \"market\""),
+            !super::base_declarations().contains("declare module \"market\""),
             "declarations are read from the registry at write time, so a \
              withdrawn module must stop being declared"
         );
@@ -3729,7 +3837,7 @@ mod tests {
 
     #[test]
     fn each_built_in_module_declares_only_what_its_crate_provides() {
-        let declarations = declarations();
+        let declarations = base_declarations();
         let module = |specifier: &str| {
             let start = declarations
                 .find(&format!("declare module \"{specifier}\" {{"))
@@ -3781,7 +3889,7 @@ mod tests {
     fn the_declarations_name_exactly_what_the_runtime_exports() {
         use crate::engine::quickjs::exports;
 
-        let declarations = declarations();
+        let declarations = base_declarations();
         for (specifier, names) in [
             ("gpui", exports::GPUI),
             ("gpui-base", exports::GPUI_BASE),
@@ -3843,7 +3951,7 @@ mod tests {
 
     #[test]
     fn standard_runtime_modules_are_declared_without_node_aliases() {
-        let declarations = declarations();
+        let declarations = base_declarations();
         for name in [
             "buffer",
             "path",
@@ -3872,7 +3980,7 @@ mod tests {
 
     #[test]
     fn standard_names_only_claim_standard_compatible_contracts() {
-        let declarations = declarations();
+        let declarations = base_declarations();
 
         assert!(!declarations.contains("declare module \"fs\""));
         assert!(declarations.contains("readFile(path: string): Promise<Uint8Array>;"));
@@ -3918,7 +4026,7 @@ mod tests {
 
     #[test]
     fn websocket_binary_and_text_messages_are_declared() {
-        let declarations = declarations();
+        let declarations = base_declarations();
         assert!(declarations.contains("export interface WebSocketSocket {"));
         assert!(declarations.contains("read(): Promise<string | Uint8Array>;"));
         assert!(declarations.contains("write(data: string | Uint8Array): Promise<void>;"));
@@ -3932,13 +4040,13 @@ mod tests {
 
     #[test]
     fn raw_tcp_reads_preserve_bytes_and_expose_eof() {
-        let declarations = declarations();
+        let declarations = base_declarations();
         assert!(declarations.contains("read(maxBytes?: number): Promise<Uint8Array | null>;"));
     }
 
     #[test]
     fn every_element_method_is_accounted_for() {
-        let declared = element_methods(&declarations());
+        let declared = element_methods(&base_declarations());
         let styles: Vec<&String> = declared
             .iter()
             .filter(|name| !NON_STYLE_METHODS.contains(&name.as_str()))
@@ -3970,7 +4078,7 @@ mod tests {
     /// out beside it.
     #[test]
     fn focus_and_accessibility_are_declared_from_the_runtime_tables() {
-        let declarations = declarations();
+        let declarations = base_declarations();
         for expected in [
             "    role(name: Role): Element;",
             "    aria_selected(value: boolean): Element;",
@@ -4002,13 +4110,13 @@ mod tests {
 
     #[test]
     fn render_accepts_every_runtime_renderable_shape() {
-        let declarations = declarations();
+        let declarations = base_declarations();
         assert!(declarations.contains("abstract render(cx: Context): Element | Entity | string;"));
     }
 
     #[test]
     fn view_lifecycle_declaration_matches_runtime_calls() {
-        let declarations = declarations();
+        let declarations = base_declarations();
         assert!(declarations.contains(
             "init?(props: import(\"gpui-shell\").Props | undefined, cx: AsyncContext): void;"
         ));
@@ -4021,7 +4129,7 @@ mod tests {
 
     #[test]
     fn retained_state_event_names_and_payloads_match_the_runtime() {
-        let declarations = declarations();
+        let declarations = base_declarations();
         let union = |names: &[&str]| {
             names
                 .iter()
@@ -4044,7 +4152,7 @@ mod tests {
 
     #[test]
     fn component_constructor_shapes_name_only_reusable_public_concepts() {
-        let declarations = declarations();
+        let declarations = base_declarations();
         let base = declarations
             .split_once("declare module \"gpui-base\" {")
             .expect("gpui-base declarations")
@@ -4065,7 +4173,7 @@ mod tests {
 
     #[test]
     fn public_types_name_script_concepts_not_declaration_scaffolding() {
-        let declarations = declarations();
+        let declarations = base_declarations();
 
         for name in [
             "PathBuilderHandle",
@@ -4112,7 +4220,7 @@ mod tests {
 
     #[test]
     fn retained_nested_views_are_declared() {
-        let declarations = declarations();
+        let declarations = base_declarations();
         for expected in [
             "  export interface Entity {",
             "    set_props(props?: import(\"gpui-shell\").Props): void;",
@@ -4125,14 +4233,14 @@ mod tests {
     #[test]
     fn targeted_notify_is_declared() {
         assert!(
-            declarations().contains("    notify(target?: Entity): void;"),
+            base_declarations().contains("    notify(target?: Entity): void;"),
             "Context.notify must expose GPUI's targeted entity notification"
         );
     }
 
     #[test]
     fn nested_update_rollback_contract_names_its_supported_boundary() {
-        let declarations = declarations();
+        let declarations = base_declarations();
         for expected in [
             "post-update descriptors remain legally redefinable or deletable",
             "including callable objects",
@@ -4155,7 +4263,7 @@ mod tests {
     /// so a corner an editor accepts is one `anchor(...)` accepts.
     #[test]
     fn the_anchored_surfaces_are_declared_from_the_runtime_anchor_table() {
-        let declarations = declarations();
+        let declarations = base_declarations();
         for name in crate::materialize::ANCHOR_NAMES {
             assert!(
                 declarations.contains(&format!("    | \"{name}\"\n")),
@@ -4177,7 +4285,7 @@ mod tests {
 
     #[test]
     fn motion_policies_are_declared_without_per_frame_callbacks() {
-        let declarations = declarations();
+        let declarations = base_declarations();
         assert!(declarations.contains(
             "transition(property: import(\"gpui-shell\").MotionProperty, policy: number | import(\"gpui-shell\").TransitionPolicy): Element;"
         ));
@@ -4230,18 +4338,21 @@ mod tests {
         let _ = std::fs::remove_dir_all(&directory);
         std::fs::create_dir_all(&directory).expect("a temporary directory");
 
-        let written = refresh(&directory).expect("the first refresh");
+        let written =
+            refresh_with_components(&directory, &crate::FrozenComponentRegistry::default())
+                .expect("the first refresh");
         assert_eq!(
             written.as_deref(),
             Some(directory.join(FILE_NAME).as_path())
         );
         assert_eq!(
             std::fs::read_to_string(directory.join(FILE_NAME)).expect("the file"),
-            declarations()
+            base_declarations()
         );
 
         assert_eq!(
-            refresh(&directory).expect("the second refresh"),
+            refresh_with_components(&directory, &crate::FrozenComponentRegistry::default())
+                .expect("the second refresh"),
             None,
             "an up-to-date file must not be rewritten"
         );
@@ -4249,7 +4360,11 @@ mod tests {
         // A stale one is replaced, which is the case this exists for.
         std::fs::write(directory.join(FILE_NAME), "// from an older runtime\n")
             .expect("overwriting");
-        assert!(refresh(&directory).expect("the third refresh").is_some());
+        assert!(
+            refresh_with_components(&directory, &crate::FrozenComponentRegistry::default())
+                .expect("the third refresh")
+                .is_some()
+        );
 
         let _ = std::fs::remove_dir_all(&directory);
     }
@@ -4258,12 +4373,16 @@ mod tests {
     fn write_application_creates_the_file_beside_an_application() {
         let directory =
             std::env::temp_dir().join(format!("gpui-shell-typings-{}", std::process::id()));
-        let written = write_application(&directory).expect("declarations are writable");
+        let written = write_application_with_components(
+            &directory,
+            &crate::FrozenComponentRegistry::default(),
+        )
+        .expect("declarations are writable");
         let path = directory.join(FILE_NAME);
 
         assert_eq!(written, vec![path.clone()]);
         assert_eq!(path.file_name().unwrap(), FILE_NAME);
-        assert_eq!(std::fs::read_to_string(&path).unwrap(), declarations());
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), base_declarations());
 
         let _ = std::fs::remove_dir_all(&directory);
     }
@@ -4284,7 +4403,8 @@ mod tests {
             .expect("outside script");
         symlink(&outside, root.join("escape")).expect("directory symlink");
 
-        write_application(&root).expect("root declarations");
+        write_application_with_components(&root, &crate::FrozenComponentRegistry::default())
+            .expect("root declarations");
 
         assert!(root.join(FILE_NAME).is_file());
         assert!(
@@ -4311,7 +4431,8 @@ mod tests {
         std::fs::write(&outside, "do not replace").expect("outside target");
         symlink(&outside, root.join(FILE_NAME)).expect("declaration symlink");
 
-        let error = refresh(&root).expect_err("a declaration symlink must be refused");
+        let error = refresh_with_components(&root, &crate::FrozenComponentRegistry::default())
+            .expect_err("a declaration symlink must be refused");
         assert_eq!(error.kind(), std::io::ErrorKind::PermissionDenied);
         assert_eq!(
             std::fs::read_to_string(&outside).expect("outside target"),

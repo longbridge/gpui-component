@@ -31,7 +31,7 @@
 // script may reach, `root` and `theme` for the window it lives in, `view` and
 // `snapshot` for the view itself, `metrics` to measure. Hot reload is exposed
 // through `ShellRuntime::watch`; its watcher implementation remains internal.
-// `write_type_declarations` is the explicit tooling hook for `gpui.d.ts`;
+// `write_type_declarations_with_components` is the explicit tooling hook for `gpui.d.ts`;
 // ordinary application loading updates it automatically.
 //
 // **Crate-private, and why.** `engine` is the seam and its shape follows
@@ -107,13 +107,19 @@ use std::path::PathBuf;
 
 use gpui::App;
 
-/// Writes current `gpui.d.ts` declarations into an application tree.
-///
-/// [`ShellRuntime::load`] already performs this best-effort for ordinary hosts.
-/// This explicit operation exists for tooling such as `gpui-shell types` that
-/// must report a write failure to its caller.
-pub fn write_type_declarations(root: &std::path::Path) -> std::io::Result<Vec<PathBuf>> {
-    typings::write_application(root)
+/// Returns declarations for one frozen component registry without installing
+/// process-global component state.
+pub fn type_declarations(components: &FrozenComponentRegistry) -> String {
+    typings::declarations_with_components(components)
+}
+
+/// Writes declarations for one frozen component registry into an application
+/// tree without changing another runtime's catalog.
+pub fn write_type_declarations_with_components(
+    root: &std::path::Path,
+    components: &FrozenComponentRegistry,
+) -> std::io::Result<Vec<PathBuf>> {
+    typings::write_application_with_components(root, components)
 }
 
 /// Grants an application its capabilities.

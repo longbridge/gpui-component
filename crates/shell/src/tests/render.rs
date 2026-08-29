@@ -111,7 +111,9 @@ fn a_registered_component_payload_reaches_its_materializer(cx: &mut TestAppConte
     let id = registry
         .register(ComponentDescriptor {
             name: "TestBox",
-            constructors: vec![ConstructorDescriptor::new("TestBox")],
+            constructors: vec![ConstructorDescriptor::new("TestBox", Vec::new(), |_| {
+                Ok(ComponentPayload::new(()))
+            })],
             methods: Vec::new(),
             typescript: TypeScriptDescriptor::default(),
             materializer: Arc::new(TestBoxMaterializer(calls.clone())),
@@ -137,6 +139,608 @@ fn a_registered_component_payload_reaches_its_materializer(cx: &mut TestAppConte
 
     assert_eq!(calls.load(Ordering::SeqCst), 1);
     assert_eq!(snapshot.debug_tree(), "TestBox\n");
+}
+
+#[gpui::test]
+fn descriptor_drives_runtime_and_typescript(cx: &mut TestAppContext) {
+    use std::sync::{Arc, Mutex};
+
+    use gpui::{AnyElement, IntoElement as _, div};
+
+    use crate::{
+        ArgumentDescriptor, ArgumentSchema, COMPONENT_REGISTRY_API_VERSION, ComponentArgument,
+        ComponentDescriptor, ComponentMaterializer, ComponentPayload, ComponentRegistry,
+        ConstructorDescriptor, MaterializeRequest, MethodDescriptor, TypeScriptDescriptor,
+    };
+
+    struct TestBoxMaterializer(Arc<Mutex<Vec<String>>>);
+
+    impl ComponentMaterializer for TestBoxMaterializer {
+        fn materialize(&self, request: MaterializeRequest<'_>) -> anyhow::Result<AnyElement> {
+            let id = request.payload().downcast_ref::<String>().unwrap().clone();
+            let tone = request
+                .methods()
+                .find(|method| method.name() == "tone")
+                .unwrap()
+                .payload()
+                .downcast_ref::<String>()
+                .unwrap()
+                .clone();
+            self.0.lock().unwrap().extend([id, tone]);
+            Ok(div().into_any_element())
+        }
+    }
+
+    cx.update(|cx| crate::init(cx));
+    let materialized = Arc::new(Mutex::new(Vec::new()));
+    let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+    registry
+        .register(ComponentDescriptor {
+            name: "TestBox",
+            constructors: vec![ConstructorDescriptor::new(
+                "TestBox",
+                vec![ArgumentDescriptor::new("id", ArgumentSchema::String)],
+                |arguments| match arguments {
+                    [ComponentArgument::String(id)] => Ok(ComponentPayload::new(id.clone())),
+                    _ => Err("TestBox.new(id) expects a string".into()),
+                },
+            )],
+            methods: vec![
+                MethodDescriptor::new(
+                    "tone",
+                    vec![ArgumentDescriptor::new("value", ArgumentSchema::String)],
+                    |arguments| match arguments {
+                        [ComponentArgument::String(value)] => {
+                            Ok(ComponentPayload::new(value.clone()))
+                        }
+                        _ => Err("tone(value) expects a string".into()),
+                    },
+                )
+                .documented("Sets the visual tone."),
+            ],
+            typescript: TypeScriptDescriptor::new("A test component."),
+            materializer: Arc::new(TestBoxMaterializer(materialized.clone())),
+        })
+        .unwrap();
+    let components = registry.freeze().unwrap();
+    let declarations = crate::typings::declarations_with_components(&components);
+    assert!(declarations.contains("declare module \"gpui-component\""));
+    assert!(declarations.contains("export interface TestBoxElement extends Element"));
+    assert!(declarations.contains("export const TestBox: { new(id: string): TestBoxElement }"));
+    assert!(declarations.contains("tone(value: string): TestBoxElement;"));
+    assert!(declarations.contains("A test component."));
+    assert!(declarations.contains("Sets the visual tone."));
+
+    let runtime = ShellRuntime::new_isolated_with_components(components).unwrap();
+    let view_type = runtime
+        .load_source(
+            "registered.js",
+            r#"
+import { View } from "gpui";
+import { TestBox } from "gpui-component";
+export default class Registered extends View {
+  render() { return new TestBox("alpha").tone("quiet"); }
+}
+"#,
+        )
+        .unwrap();
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .unwrap();
+    let snapshot = context
+        .update(|window, cx| {
+            runtime.build_snapshot(&object, None, crate::policy::default(), window, cx)
+        })
+        .unwrap();
+    let tree = snapshot.debug_tree();
+    context.update(|window, cx| {
+        drop(crate::materialize::materialize(
+            &runtime, &snapshot, window, cx,
+        ));
+    });
+
+    assert!(tree.starts_with("TestBox"), "unexpected tree: {tree}");
+    assert!(tree.contains(":tone(registered)"), "missing method: {tree}");
+    assert_eq!(*materialized.lock().unwrap(), ["alpha", "quiet"]);
+}
+
+#[gpui::test]
+fn registered_method_schema_overrides_legacy_dispatch(cx: &mut TestAppContext) {
+    use crate::{
+        ArgumentDescriptor, ArgumentSchema, COMPONENT_REGISTRY_API_VERSION, ComponentDescriptor,
+        ComponentMaterializer, ComponentPayload, ComponentRegistry, ConstructorDescriptor,
+        MaterializeRequest, MethodDescriptor, TypeScriptDescriptor,
+    };
+    use gpui::{AnyElement, IntoElement as _, div};
+    use std::sync::Arc;
+
+    struct EmptyMaterializer;
+    impl ComponentMaterializer for EmptyMaterializer {
+        fn materialize(&self, _: MaterializeRequest<'_>) -> anyhow::Result<AnyElement> {
+            Ok(div().into_any_element())
+        }
+    }
+
+    cx.update(crate::init);
+    let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+    registry
+        .register(ComponentDescriptor {
+            name: "StrictBox",
+            constructors: vec![ConstructorDescriptor::new("StrictBox", Vec::new(), |_| {
+                Ok(ComponentPayload::new(()))
+            })],
+            methods: vec![MethodDescriptor::new(
+                "disabled",
+                vec![ArgumentDescriptor::new("value", ArgumentSchema::Boolean)],
+                |_| Ok(ComponentPayload::new(())),
+            )],
+            typescript: TypeScriptDescriptor::default(),
+            materializer: Arc::new(EmptyMaterializer),
+        })
+        .unwrap();
+    let runtime = ShellRuntime::new_isolated_with_components(registry.freeze().unwrap()).unwrap();
+    let view_type = runtime
+        .load_source(
+            "strict.js",
+            r#"
+import { View } from "gpui";
+import { StrictBox } from "gpui-component";
+export default class Strict extends View { render() { return new StrictBox().disabled("yes"); } }
+"#,
+        )
+        .unwrap();
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .unwrap();
+    let error = context
+        .update(|window, cx| runtime.render_to_spec(&object, None, window, cx))
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("disabled(value) expects a boolean"),
+        "{error:#}"
+    );
+}
+
+#[gpui::test]
+fn registered_argument_conversion_has_recursive_depth_and_aggregate_budgets(
+    cx: &mut TestAppContext,
+) {
+    use crate::{
+        ArgumentDescriptor, ArgumentSchema, COMPONENT_REGISTRY_API_VERSION, ComponentDescriptor,
+        ComponentMaterializer, ComponentPayload, ComponentRegistry, ConstructorDescriptor,
+        MaterializeRequest, TypeScriptDescriptor,
+    };
+    use gpui::{AnyElement, IntoElement as _, div};
+    use std::sync::Arc;
+
+    struct EmptyMaterializer;
+    impl ComponentMaterializer for EmptyMaterializer {
+        fn materialize(&self, _: MaterializeRequest<'_>) -> anyhow::Result<AnyElement> {
+            Ok(div().into_any_element())
+        }
+    }
+
+    cx.update(crate::init);
+    let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+    registry
+        .register(ComponentDescriptor {
+            name: "BudgetBox",
+            constructors: vec![ConstructorDescriptor::new(
+                "BudgetBox",
+                vec![ArgumentDescriptor::new("value", ArgumentSchema::String)],
+                |_| Ok(ComponentPayload::new(())),
+            )],
+            methods: Vec::new(),
+            typescript: TypeScriptDescriptor::default(),
+            materializer: Arc::new(EmptyMaterializer),
+        })
+        .unwrap();
+    let runtime = ShellRuntime::new_isolated_with_components(registry.freeze().unwrap()).unwrap();
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+
+    for (name, body, expected) in [
+        (
+            "deep.js",
+            "let value = 'x'; for (let i = 0; i < 40; i++) value = [value]; return new BudgetBox(value);",
+            "nested too deeply",
+        ),
+        (
+            "wide.js",
+            "let value = []; for (let i = 0; i < 101; i++) { let row = []; for (let j = 0; j < 100; j++) row.push('x'); value.push(row); } return new BudgetBox(value);",
+            "too many nested values",
+        ),
+    ] {
+        let source = format!(
+            "import {{ View }} from 'gpui'; import {{ BudgetBox }} from 'gpui-component'; export default class Budgeted extends View {{ render() {{ {body} }} }}"
+        );
+        let view_type = runtime.load_source(name, &source).unwrap();
+        let object = context
+            .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+            .unwrap();
+        let error = context
+            .update(|window, cx| runtime.render_to_spec(&object, None, window, cx))
+            .unwrap_err();
+        assert!(error.to_string().contains(expected), "{error:#}");
+    }
+}
+
+#[gpui::test]
+fn failed_registered_factory_does_not_claim_elements_or_persist_callbacks(cx: &mut TestAppContext) {
+    use crate::{
+        ArgumentDescriptor, ArgumentSchema, COMPONENT_REGISTRY_API_VERSION, ComponentDescriptor,
+        ComponentMaterializer, ComponentPayload, ComponentRegistry, ConstructorDescriptor,
+        MaterializeRequest, MethodDescriptor, TypeScriptDescriptor,
+    };
+    use gpui::{AnyElement, IntoElement as _, div};
+    use std::sync::Arc;
+
+    struct EmptyMaterializer;
+    impl ComponentMaterializer for EmptyMaterializer {
+        fn materialize(&self, _: MaterializeRequest<'_>) -> anyhow::Result<AnyElement> {
+            Ok(div().into_any_element())
+        }
+    }
+
+    cx.update(crate::init);
+    let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+    registry
+        .register(ComponentDescriptor {
+            name: "RejectBox",
+            constructors: vec![
+                ConstructorDescriptor::new(
+                    "RejectBox",
+                    vec![
+                        ArgumentDescriptor::new("child", ArgumentSchema::Element),
+                        ArgumentDescriptor::new("handler", ArgumentSchema::Callback("() => void")),
+                    ],
+                    |_| Err("RejectBox deliberately rejects its payload".into()),
+                ),
+                ConstructorDescriptor::new("MethodBox", Vec::new(), |_| {
+                    Ok(ComponentPayload::new(()))
+                }),
+                ConstructorDescriptor::new(
+                    "ValidateBox",
+                    vec![
+                        ArgumentDescriptor::new("handler", ArgumentSchema::Callback("() => void")),
+                        ArgumentDescriptor::new("enabled", ArgumentSchema::Boolean),
+                    ],
+                    |_| Ok(ComponentPayload::new(())),
+                ),
+            ],
+            methods: vec![MethodDescriptor::new(
+                "reject",
+                vec![
+                    ArgumentDescriptor::new("child", ArgumentSchema::Element),
+                    ArgumentDescriptor::new("handler", ArgumentSchema::Callback("() => void")),
+                ],
+                |_| Err("reject deliberately rejects its payload".into()),
+            )],
+            typescript: TypeScriptDescriptor::default(),
+            materializer: Arc::new(EmptyMaterializer),
+        })
+        .unwrap();
+    let runtime = ShellRuntime::new_isolated_with_components(registry.freeze().unwrap()).unwrap();
+    let view_type = runtime
+        .load_source(
+            "transactional-component.js",
+            r#"
+import { View, div } from "gpui";
+import { MethodBox, RejectBox, ValidateBox } from "gpui-component";
+export default class Transactional extends View {
+  render() {
+    const child = div();
+    try { new RejectBox(child, () => {}); } catch (_) {}
+    const methodChild = div();
+    try { new MethodBox().reject(methodChild, () => {}); } catch (_) {}
+    try { new ValidateBox(() => {}, "not boolean"); } catch (_) {}
+    return div().child(child).child(methodChild);
+  }
+}
+"#,
+        )
+        .unwrap();
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .unwrap();
+    let snapshot = context
+        .update(|window, cx| {
+            runtime.build_snapshot(&object, None, crate::policy::default(), window, cx)
+        })
+        .unwrap();
+
+    assert_eq!(snapshot.debug_tree(), "div\n  div\n  div\n");
+    assert_eq!(runtime.live_callbacks(), 0);
+}
+
+#[gpui::test]
+fn registered_entity_arguments_validate_the_actual_entity_kind(cx: &mut TestAppContext) {
+    use crate::{
+        ArgumentDescriptor, ArgumentSchema, COMPONENT_REGISTRY_API_VERSION, ComponentDescriptor,
+        ComponentMaterializer, ComponentPayload, ComponentRegistry, ConstructorDescriptor,
+        MaterializeRequest, TypeScriptDescriptor,
+    };
+    use gpui::{AnyElement, IntoElement as _, div};
+    use std::sync::Arc;
+
+    struct EmptyMaterializer;
+    impl ComponentMaterializer for EmptyMaterializer {
+        fn materialize(&self, _: MaterializeRequest<'_>) -> anyhow::Result<AnyElement> {
+            Ok(div().into_any_element())
+        }
+    }
+
+    cx.update(crate::init);
+    let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+    registry
+        .register(ComponentDescriptor {
+            name: "FocusBox",
+            constructors: vec![ConstructorDescriptor::new(
+                "FocusBox",
+                vec![ArgumentDescriptor::new(
+                    "focus",
+                    ArgumentSchema::Entity("FocusHandle"),
+                )],
+                |_| Ok(ComponentPayload::new(())),
+            )],
+            methods: Vec::new(),
+            typescript: TypeScriptDescriptor::default(),
+            materializer: Arc::new(EmptyMaterializer),
+        })
+        .unwrap();
+    let runtime = ShellRuntime::new_isolated_with_components(registry.freeze().unwrap()).unwrap();
+    let view_type = runtime
+        .load_source(
+            "wrong-entity-kind.js",
+            r#"
+import { View } from "gpui";
+import { InputState } from "gpui-base";
+import { FocusBox } from "gpui-component";
+export default class WrongKind extends View {
+  init() { this.input = InputState.new(); }
+  render() { return new FocusBox(this.input); }
+}
+"#,
+        )
+        .unwrap();
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .unwrap();
+    let error = context
+        .update(|window, cx| runtime.render_to_spec(&object, None, window, cx))
+        .unwrap_err();
+
+    assert!(
+        error
+            .to_string()
+            .contains("FocusBox(focus) expects a FocusHandle entity"),
+        "{error:#}"
+    );
+}
+
+#[gpui::test]
+fn materialize_request_resolves_opaque_component_arguments(cx: &mut TestAppContext) {
+    use crate::{
+        ArgumentDescriptor, ArgumentSchema, COMPONENT_REGISTRY_API_VERSION, ComponentArgument,
+        ComponentCallback, ComponentDescriptor, ComponentMaterializer, ComponentPayload,
+        ComponentRegistry, ConstructorDescriptor, MaterializeRequest, TypeScriptDescriptor,
+    };
+    use gpui::{AnyElement, IntoElement as _, ParentElement as _, div};
+    use std::{cell::RefCell, sync::Arc};
+
+    thread_local! {
+        static CALLBACK: RefCell<Option<ComponentCallback>> = const { RefCell::new(None) };
+    }
+
+    struct ResolvingMaterializer;
+    impl ComponentMaterializer for ResolvingMaterializer {
+        fn materialize(&self, mut request: MaterializeRequest<'_>) -> anyhow::Result<AnyElement> {
+            let arguments = request
+                .payload()
+                .downcast_ref::<Vec<ComponentArgument>>()
+                .unwrap()
+                .clone();
+            let child = request.resolve_element(&arguments[0])?;
+            let entity = request.resolve_entity(&arguments[1])?;
+            anyhow::ensure!(entity.kind() == "FocusHandle");
+            let callback = request.resolve_callback(&arguments[2])?;
+            CALLBACK.with(|stored| *stored.borrow_mut() = Some(callback));
+            Ok(div().child(child).into_any_element())
+        }
+    }
+
+    cx.update(crate::init);
+    let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+    registry
+        .register(ComponentDescriptor {
+            name: "ResolvedBox",
+            constructors: vec![ConstructorDescriptor::new(
+                "ResolvedBox",
+                vec![
+                    ArgumentDescriptor::new("child", ArgumentSchema::Element),
+                    ArgumentDescriptor::new("focus", ArgumentSchema::Entity("FocusHandle")),
+                    ArgumentDescriptor::new("handler", ArgumentSchema::Callback("() => void")),
+                ],
+                |arguments| Ok(ComponentPayload::new(arguments.to_vec())),
+            )],
+            methods: Vec::new(),
+            typescript: TypeScriptDescriptor::default(),
+            materializer: Arc::new(ResolvingMaterializer),
+        })
+        .unwrap();
+    let runtime = ShellRuntime::new_isolated_with_components(registry.freeze().unwrap()).unwrap();
+    let view_type = runtime
+        .load_source(
+            "resolved-component.js",
+            r#"
+import { View, div } from "gpui";
+import { ResolvedBox } from "gpui-component";
+export default class Resolved extends View {
+  init(_props, cx) { this.focus = cx.focus_handle(); }
+  render() {
+    return new ResolvedBox(div(), this.focus, () => { throw new Error("adapter callback ran"); });
+  }
+}
+"#,
+        )
+        .unwrap();
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .unwrap();
+    let snapshot = context
+        .update(|window, cx| {
+            runtime.build_snapshot(&object, None, crate::policy::default(), window, cx)
+        })
+        .unwrap();
+    context.update(|window, cx| {
+        drop(crate::materialize::materialize(
+            &runtime, &snapshot, window, cx,
+        ));
+    });
+    let callback = CALLBACK.with(|stored| stored.borrow_mut().take().unwrap());
+    let error = context
+        .update(|window, cx| callback.invoke(window, cx))
+        .unwrap_err();
+    assert!(
+        error.to_string().contains("adapter callback ran"),
+        "{error:#}"
+    );
+}
+
+#[gpui::test]
+fn deprecated_alias_constructs_the_same_component_and_warns_once(cx: &mut TestAppContext) {
+    use crate::{
+        COMPONENT_REGISTRY_API_VERSION, ComponentDescriptor, ComponentMaterializer,
+        ComponentPayload, ComponentRegistry, ConstructorDescriptor, MaterializeRequest,
+        TypeScriptDescriptor,
+    };
+    use gpui::{AnyElement, IntoElement as _, div};
+    use std::sync::Arc;
+
+    struct EmptyMaterializer;
+    impl ComponentMaterializer for EmptyMaterializer {
+        fn materialize(&self, _: MaterializeRequest<'_>) -> anyhow::Result<AnyElement> {
+            Ok(div().into_any_element())
+        }
+    }
+
+    cx.update(crate::init);
+    let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+    registry
+        .register(ComponentDescriptor {
+            name: "TestBox",
+            constructors: vec![
+                ConstructorDescriptor::new("TestBox", Vec::new(), |_| {
+                    Ok(ComponentPayload::new(()))
+                }),
+                ConstructorDescriptor::new("OldTestBox", Vec::new(), |_| {
+                    Ok(ComponentPayload::new(()))
+                })
+                .deprecated("TestBox", "Use TestBox instead."),
+            ],
+            methods: Vec::new(),
+            typescript: TypeScriptDescriptor::new("A test box."),
+            materializer: Arc::new(EmptyMaterializer),
+        })
+        .unwrap();
+    let components = registry.freeze().unwrap();
+    let declarations = crate::typings::declarations_with_components(&components);
+    assert!(declarations.contains("@deprecated Use TestBox instead."));
+    let runtime = ShellRuntime::new_isolated_with_components(components).unwrap();
+    let view_type = runtime
+        .load_source(
+            "alias.js",
+            r#"
+import { View } from "gpui";
+import { OldTestBox } from "gpui-component";
+export default class Alias extends View { render() { return new OldTestBox(); } }
+"#,
+        )
+        .unwrap();
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .unwrap();
+    for _ in 0..2 {
+        let tree = context
+            .update(|window, cx| runtime.render_to_spec(&object, None, window, cx))
+            .unwrap();
+        assert_eq!(tree, "TestBox\n");
+    }
+    assert_eq!(runtime.deprecation_warning_count("OldTestBox"), 1);
+}
+
+#[test]
+fn isolated_runtimes_write_their_own_component_declarations() {
+    use crate::{
+        COMPONENT_REGISTRY_API_VERSION, ComponentDescriptor, ComponentMaterializer,
+        ComponentPayload, ComponentRegistry, ConstructorDescriptor, MaterializeRequest,
+        TypeScriptDescriptor,
+    };
+    use gpui::{AnyElement, IntoElement as _, div};
+    use std::sync::Arc;
+
+    struct EmptyMaterializer;
+    impl ComponentMaterializer for EmptyMaterializer {
+        fn materialize(&self, _: MaterializeRequest<'_>) -> anyhow::Result<AnyElement> {
+            Ok(div().into_any_element())
+        }
+    }
+
+    let runtime = |export: &'static str| {
+        let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+        registry
+            .register(ComponentDescriptor {
+                name: export,
+                constructors: vec![ConstructorDescriptor::new(export, Vec::new(), |_| {
+                    Ok(ComponentPayload::new(()))
+                })],
+                methods: Vec::new(),
+                typescript: TypeScriptDescriptor::default(),
+                materializer: Arc::new(EmptyMaterializer),
+            })
+            .unwrap();
+        ShellRuntime::new_isolated_with_components(registry.freeze().unwrap()).unwrap()
+    };
+
+    let unique = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let root = std::env::temp_dir().join(format!("gpui-shell-component-types-{unique}"));
+    let first = root.join("first");
+    let second = root.join("second");
+    std::fs::create_dir_all(&first).unwrap();
+    std::fs::create_dir_all(&second).unwrap();
+    std::fs::write(first.join("main.js"), "export default class First {}").unwrap();
+    std::fs::write(second.join("main.js"), "export default class Second {}").unwrap();
+    let first_runtime = runtime("FirstBox");
+    let second_runtime = runtime("SecondBox");
+    first_runtime.load_app(&first, "main.js").unwrap();
+    second_runtime.load_app(&second, "main.js").unwrap();
+
+    let first_types = std::fs::read_to_string(first.join("gpui.d.ts")).unwrap();
+    let second_types = std::fs::read_to_string(second.join("gpui.d.ts")).unwrap();
+    assert!(first_types.contains("FirstBox"));
+    assert!(!first_types.contains("SecondBox"));
+    assert!(second_types.contains("SecondBox"));
+    assert!(!second_types.contains("FirstBox"));
+    assert_eq!(first_types, first_runtime.type_declarations());
+    assert_eq!(second_types, second_runtime.type_declarations());
+    std::fs::remove_dir_all(root).unwrap();
 }
 
 #[gpui::test]
@@ -575,7 +1179,8 @@ export default class Themed extends View {
 
 #[test]
 fn link_typings_expose_a_real_external_target() {
-    let types = crate::typings::declarations();
+    let types =
+        crate::typings::declarations_with_components(&crate::FrozenComponentRegistry::default());
     assert!(types.contains("export const Link: ComponentType;"));
     assert!(types.contains("href(url: string): Element;"));
 }

@@ -46,7 +46,10 @@ fn main() {
             // this command was asked for explicitly, and an empty directory is a
             // reasonable place to start an application. Every other directory
             // that imports `gpui` comes along with it.
-            match gpui_shell::write_type_declarations(&directory) {
+            match gpui_shell::write_type_declarations_with_components(
+                &directory,
+                &gpui_shell::FrozenComponentRegistry::default(),
+            ) {
                 Ok(_) => {}
                 Err(error) => {
                     eprintln!("gpui-shell: {error}");

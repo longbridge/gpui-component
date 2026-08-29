@@ -255,6 +255,20 @@ pub(crate) struct EntityCheckpoint {
 }
 
 impl EntityStore {
+    pub(crate) fn kind(&self, handle: EntityHandle) -> Option<&'static str> {
+        match self.record(handle)? {
+            Record::View { .. } => Some("View"),
+            Record::Input { .. } => Some("InputState"),
+            Record::Textarea { .. } => Some("TextareaState"),
+            Record::Calendar { .. } => Some("CalendarState"),
+            Record::Slider { .. } => Some("SliderState"),
+            Record::Otp { .. } => Some("OtpState"),
+            Record::Focus { .. } => Some("FocusHandle"),
+            Record::Dock { .. } => Some("DockArea"),
+            Record::VirtualScroll { .. } => Some("VirtualListScrollHandle"),
+        }
+    }
+
     /// Creates a store with a process-unique JavaScript-safe namespace.
     ///
     /// Exhaustion is reported instead of wrapping: reusing a namespace could

@@ -611,6 +611,9 @@ pub enum SpecOp {
     ParamStyle(&'static str, SmallVec<[Bridged; 2]>),
     /// A component behavior method.
     Method(&'static str, SmallVec<[Bridged; 2]>),
+    /// A method recorded by a registered descriptor. Its erased payload is
+    /// interpreted only by the adapter that registered the component.
+    RegisteredMethod(crate::RecordedComponentMethod),
     /// An event handler pointing into the callback arena.
     Callback(&'static str, CallbackId),
     /// A handler for one named action.
@@ -658,6 +661,7 @@ impl SpecOp {
             SpecOp::NullaryStyle(index) => mix(1, u64::from(*index)),
             SpecOp::ParamStyle(name, _) => mix(2, static_name(name)),
             SpecOp::Method(name, _) => mix(3, static_name(name)),
+            SpecOp::RegisteredMethod(method) => mix(3, static_name(method.name())),
             SpecOp::Callback(name, _) => mix(4, static_name(name)),
             // The name is the script's own, discovered at run time, so there is
             // no pointer to lean on. Action handlers are rare enough per
@@ -983,16 +987,25 @@ impl SpecArena {
         Ok(())
     }
 
+    pub(crate) fn can_push_op(&self, id: SpecId) -> Result<(), SpecError> {
+        self.check_live(id)
+    }
+
     /// Attaches `child` to `parent`, consuming the child.
     /// Marks a node as consumed by an op rather than by a parent, so it cannot
     /// also be added to the tree.
     pub fn claim(&mut self, id: SpecId) -> Result<(), SpecError> {
+        self.can_claim(id)?;
+        self.structure = mix(self.structure, mix(8, u64::from(id)));
+        self.claimed[id as usize] = true;
+        Ok(())
+    }
+
+    pub(crate) fn can_claim(&self, id: SpecId) -> Result<(), SpecError> {
         self.check_live(id)?;
         if self.claimed[id as usize] {
             return Err(SpecError::Claimed);
         }
-        self.structure = mix(self.structure, mix(8, u64::from(id)));
-        self.claimed[id as usize] = true;
         Ok(())
     }
 
@@ -1046,6 +1059,7 @@ impl SpecArena {
                     SpecOp::NullaryStyle(_)
                     | SpecOp::ParamStyle(..)
                     | SpecOp::Method(..)
+                    | SpecOp::RegisteredMethod(..)
                     | SpecOp::Callback(..)
                     | SpecOp::ActionCallback(..) => {}
                 }
@@ -1254,6 +1268,9 @@ impl SpecArena {
                     }
                 }
                 SpecOp::Method(name, args) => out.push_str(&format!(" :{name}{args:?}")),
+                SpecOp::RegisteredMethod(method) => {
+                    out.push_str(&format!(" :{}(registered)", method.name()))
+                }
                 SpecOp::Callback(name, _) => out.push_str(&format!(" :{name}(fn)")),
                 SpecOp::ActionCallback(id, _) => out.push_str(&format!(" :on_action({id}, fn)")),
                 SpecOp::StateStyle(name, node) => {

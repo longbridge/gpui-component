@@ -34,6 +34,7 @@ use rquickjs::{
 use smallvec::SmallVec;
 
 use crate::{
+    ArgumentDescriptor, ArgumentSchema, ComponentArgument, ComponentPayload,
     FrozenComponentRegistry,
     entities::{EntityHandle, EntityStore},
     metrics::Metrics,
@@ -413,7 +414,7 @@ macro_rules! builtin_modules {
         /// is told which it is talking to rather than only that the import
         /// failed.
         fn builtin_specifiers() -> String {
-            [$($module::SPECIFIER),+]
+            [$($module::SPECIFIER),+, "gpui-component"]
                 .map(|specifier| format!("`{specifier}`"))
                 .join(", ")
         }
@@ -426,7 +427,7 @@ macro_rules! builtin_modules {
         /// [`crate::RESERVED_SPECIFIERS`] honest.
         #[cfg(test)]
         fn builtin_specifier_list() -> Vec<&'static str> {
-            vec![$($module::SPECIFIER),+]
+            vec![$($module::SPECIFIER),+, "gpui-component"]
         }
 
         /// Which module exports `name`, if any.
@@ -455,6 +456,7 @@ pub struct ShellRuntime {
     /// QuickJS aborts the process if a value outlives its runtime.
     callbacks: RefCell<CallbackArena<Persistent<Function<'static>>>>,
     components: FrozenComponentRegistry,
+    warned_deprecated_exports: RefCell<HashSet<&'static str>>,
     arena: RefCell<SpecArena>,
     /// Templates the script has defined, indexed by the id its closure keeps.
     ///
@@ -587,6 +589,9 @@ impl ShellRuntime {
         let context = JsContext::full(&js_runtime).map_err(js_setup_error)?;
 
         let app_modules = AppModules::default();
+        let component_module = RegisteredComponentModule {
+            source: components.javascript_module_source(),
+        };
         // Order is the namespace policy. The runtime's own modules resolve
         // first, so a host cannot take `gpui` or `path` from under a script;
         // the application's files resolve last, so a HostModule cannot be
@@ -595,12 +600,14 @@ impl ShellRuntime {
         // half of that from a silent shadowing into a sentence.
         js_runtime.set_loader(
             (
+                component_module.clone(),
                 standard::resolver(),
                 builtin_resolver(),
                 host_modules::HostModuleLoader,
                 app_modules.clone(),
             ),
             (
+                component_module,
                 standard::loader(),
                 builtin_loader(),
                 host_modules::HostModuleLoader,
@@ -619,6 +626,7 @@ impl ShellRuntime {
         let runtime = Rc::new(Self {
             callbacks: RefCell::new(CallbackArena::default()),
             components,
+            warned_deprecated_exports: RefCell::new(HashSet::new()),
             arena: RefCell::new(SpecArena::new()),
             templates: RefCell::new(Vec::new()),
             discovery: RefCell::new(None),
@@ -647,6 +655,18 @@ impl ShellRuntime {
 
     pub fn component_registry(&self) -> &FrozenComponentRegistry {
         &self.components
+    }
+
+    pub(crate) fn component_entity_kind(&self, handle: EntityHandle) -> Option<&'static str> {
+        self.entities.borrow().kind(handle)
+    }
+
+    pub fn type_declarations(&self) -> String {
+        crate::typings::declarations_with_components(&self.components)
+    }
+
+    pub fn write_type_declarations(&self, root: &Path) -> std::io::Result<Vec<std::path::PathBuf>> {
+        crate::typings::write_application_with_components(root, &self.components)
     }
 
     pub(crate) fn set_global(self: &Rc<Self>, cx: &mut App) {
@@ -810,7 +830,7 @@ impl ShellRuntime {
     /// the first half of the sandbox's module policy (design doc §19.1).
     pub(crate) fn load_app(self: &Rc<Self>, dir: &Path, entry: &str) -> Result<ViewType> {
         let root = crate::runtime::resolve_app_root(dir, entry)?;
-        if let Err(error) = crate::write_type_declarations(&root) {
+        if let Err(error) = self.write_type_declarations(&root) {
             tracing::debug!(
                 "could not update declarations in {}: {error}",
                 root.display()
@@ -3089,6 +3109,50 @@ impl ShellRuntime {
         scheduler::drain_runtime_jobs(self, window, cx);
     }
 
+    pub(crate) fn dispatch_component_callback(
+        self: &Rc<Self>,
+        id: CallbackId,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Result<()> {
+        let entry = self
+            .callbacks
+            .borrow()
+            .get(id)
+            .ok_or_else(|| anyhow!("component callback {id} belongs to a superseded render"))?;
+        if entry
+            .application
+            .as_ref()
+            .is_some_and(|application| !application.is_active())
+        {
+            return Err(anyhow!(
+                "component callback {id} belongs to a retired application"
+            ));
+        }
+        let view = entry
+            .live_view()
+            .ok_or_else(|| anyhow!("component callback {id} owner has been released"))?;
+        let policy = view
+            .as_ref()
+            .map(|view| view.read(cx).policy())
+            .unwrap_or_else(crate::policy::default);
+        let (_guard, generation) = scope::enter_with_application(
+            self,
+            window,
+            cx,
+            ScopePhase::Event,
+            view,
+            policy,
+            entry.application.clone(),
+        );
+        let result = self.with_js(|ctx| {
+            let handler = entry.value.clone().restore(ctx)?;
+            handler.call::<_, ()>((context_object(ctx, ContextBinding::Call(generation))?,))
+        });
+        scheduler::drain_runtime_jobs(self, window, cx);
+        result
+    }
+
     /// Renders once, and on a "not a function" failure renders again with the
     /// diagnostic prototype installed so the error can name the method and
     /// suggest a correction. See the prelude for why this is two passes.
@@ -3283,6 +3347,48 @@ impl ShellRuntime {
 /// never matches. Owning the resolver also puts the sandbox's module policy in
 /// one place — a module must live inside the application root, which is what
 /// stops `import "../../../etc/passwd"` before it reaches the filesystem.
+#[derive(Clone)]
+struct RegisteredComponentModule {
+    source: String,
+}
+
+impl Resolver for RegisteredComponentModule {
+    fn resolve<'js>(
+        &mut self,
+        _ctx: &Ctx<'js>,
+        base: &str,
+        name: &str,
+        _attributes: Option<ImportAttributes<'js>>,
+    ) -> JsResult<String> {
+        if name == "gpui-component" {
+            Ok(name.to_owned())
+        } else {
+            Err(JsError::new_resolving_message(
+                base,
+                name,
+                "not the registered component module",
+            ))
+        }
+    }
+}
+
+impl Loader for RegisteredComponentModule {
+    fn load<'js>(
+        &mut self,
+        ctx: &Ctx<'js>,
+        name: &str,
+        _attributes: Option<ImportAttributes<'js>>,
+    ) -> JsResult<Module<'js, Declared>> {
+        if name != "gpui-component" {
+            return Err(JsError::new_loading_message(
+                name,
+                "not the registered component module",
+            ));
+        }
+        Module::declare(ctx.clone(), name, self.source.clone())
+    }
+}
+
 #[derive(Clone, Default)]
 struct AppModules {
     applications: Rc<RefCell<Vec<ApplicationModules>>>,
@@ -4736,6 +4842,7 @@ globalThis.__gpui = (() => {
   globalThis.__template = template;
 
   return {
+    __element: element,
     View,
     div: () => element(__div()),
     h_flex: () => element(__h_flex()),
@@ -5025,6 +5132,7 @@ impl ShellRuntime {
             globals.set("__paramStyles", parametric)?;
 
             let behaviors = rquickjs::Array::new(ctx.clone())?;
+            let mut behavior_count = 0;
             for (index, name) in [
                 "on_click",
                 "on_mouse_move",
@@ -5082,6 +5190,13 @@ impl ShellRuntime {
             .enumerate()
             {
                 behaviors.set(index, name)?;
+                behavior_count = index + 1;
+            }
+            for descriptor in self.components.descriptors() {
+                for method in &descriptor.methods {
+                    behaviors.set(behavior_count, method.name)?;
+                    behavior_count += 1;
+                }
             }
             globals.set("__behaviorNames", behaviors)?;
 
@@ -5566,6 +5681,39 @@ impl ShellRuntime {
 
             // Subsystems extend the same module object the prelude built.
             let module: Object = ctx.globals().get("__gpui")?;
+            for (id, descriptor) in self.components.registered() {
+                for constructor_descriptor in &descriptor.constructors {
+                    let constructor_runtime = runtime.clone();
+                    let component_name = descriptor.name;
+                    let constructor = constructor_descriptor.clone();
+                    module.set(
+                        constructor_descriptor.export,
+                        Func::from(move |ctx: Ctx<'_>, arguments: Arguments| -> JsResult<SpecId> {
+                            let runtime = upgrade(&constructor_runtime, &ctx)?;
+                            if let Some(deprecation) = &constructor.deprecation {
+                                runtime.warn_deprecated_export(
+                                    constructor.export,
+                                    deprecation.replacement,
+                                    deprecation.message,
+                                );
+                            }
+                            let payload = runtime.component_payload_transaction(
+                                &ctx,
+                                constructor.export,
+                                &constructor.arguments,
+                                &arguments,
+                                |arguments| constructor.payload(arguments),
+                            )?;
+                            let component = crate::spec::RegisteredComponentSpec::new(
+                                id,
+                                component_name,
+                                payload,
+                            );
+                            Ok(runtime.push_node(Component::Registered(component)))
+                        }),
+                    )?;
+                }
+            }
             host::install(ctx, &module)?;
             host_modules::install(ctx)?;
             theme_api::install(ctx, &module)?;
@@ -5659,7 +5807,42 @@ impl ShellRuntime {
         // in is a slot. Checked before the dispatch below because the ordinary
         // path would reject the sentinel as neither a value nor a function.
         if let Some((position, argument)) = args.first_slot() {
+            if self.is_registered_component(id) {
+                return Err(Exception::throw_type(
+                    ctx,
+                    &format!(
+                        "`{method}` cannot take a template argument yet; registered component methods are validated when their values are recorded"
+                    ),
+                ));
+            }
             return self.apply_slot(ctx, id, method, position, argument);
+        }
+
+        if let Some(descriptor) = self.registered_method_descriptor(id, method) {
+            self.arena
+                .borrow()
+                .can_push_op(id)
+                .map_err(|error| Exception::throw_type(ctx, &error.to_string()))?;
+            let payload = self.component_payload_transaction(
+                ctx,
+                descriptor.name,
+                &descriptor.arguments,
+                &args,
+                |arguments| descriptor.record(arguments),
+            )?;
+            return self.push_op_checked(
+                ctx,
+                self.push_op(
+                    id,
+                    SpecOp::RegisteredMethod(crate::RecordedComponentMethod::new(
+                        descriptor.name,
+                        payload,
+                    )),
+                ),
+            );
+        }
+        if self.is_registered_component(id) {
+            return Err(Exception::throw_type(ctx, &unknown_method(method)));
         }
 
         match method {
@@ -6143,6 +6326,226 @@ impl ShellRuntime {
                 Err(Exception::throw_type(ctx, &unknown_method(method)))
             }
         }
+    }
+
+    fn registered_component_id(&self, id: SpecId) -> Option<crate::ComponentId> {
+        let component_id = {
+            let arena = self.arena.borrow();
+            let Component::Registered(component) = arena.node(id)?.component()? else {
+                return None;
+            };
+            component.id()
+        };
+        Some(component_id)
+    }
+
+    fn warn_deprecated_export(
+        &self,
+        export: &'static str,
+        replacement: &'static str,
+        message: &'static str,
+    ) {
+        if self.warned_deprecated_exports.borrow_mut().insert(export) {
+            tracing::warn!(
+                "JavaScript component export `{export}` is deprecated; use `{replacement}`. {message}"
+            );
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn deprecation_warning_count(&self, export: &str) -> usize {
+        usize::from(self.warned_deprecated_exports.borrow().contains(export))
+    }
+
+    fn is_registered_component(&self, id: SpecId) -> bool {
+        self.registered_component_id(id).is_some()
+    }
+
+    fn registered_method_descriptor(
+        &self,
+        id: SpecId,
+        method: &str,
+    ) -> Option<crate::MethodDescriptor> {
+        let component_id = self.registered_component_id(id)?;
+        self.components
+            .descriptor(component_id)?
+            .methods
+            .iter()
+            .find(|descriptor| descriptor.name == method)
+            .cloned()
+    }
+
+    fn validate_component_arguments(
+        &self,
+        ctx: &Ctx<'_>,
+        api: &str,
+        descriptors: &[ArgumentDescriptor],
+        arguments: &Arguments,
+    ) -> JsResult<Vec<ComponentArgument>> {
+        if arguments.0.len() > descriptors.len() {
+            return Err(Exception::throw_type(
+                ctx,
+                &format!(
+                    "{api}(...) expects at most {} argument{}",
+                    descriptors.len(),
+                    if descriptors.len() == 1 { "" } else { "s" }
+                ),
+            ));
+        }
+        descriptors
+            .iter()
+            .enumerate()
+            .map(|(index, descriptor)| {
+                let argument = arguments.0.get(index);
+                self.validate_component_argument(ctx, api, descriptor, argument)
+            })
+            .collect()
+    }
+
+    fn component_payload_transaction(
+        &self,
+        ctx: &Ctx<'_>,
+        api: &str,
+        descriptors: &[ArgumentDescriptor],
+        arguments: &Arguments,
+        factory: impl FnOnce(&[ComponentArgument]) -> Result<ComponentPayload, String>,
+    ) -> JsResult<ComponentPayload> {
+        let callback_checkpoint = self.callbacks.borrow().checkpoint();
+        let result = (|| {
+            let arguments = self.validate_component_arguments(ctx, api, descriptors, arguments)?;
+            let mut element_ids = Vec::new();
+            for argument in &arguments {
+                collect_component_elements(argument, &mut element_ids);
+            }
+            let mut unique = HashSet::with_capacity(element_ids.len());
+            if let Some(duplicate) = element_ids
+                .iter()
+                .copied()
+                .find(|element| !unique.insert(*element))
+            {
+                return Err(Exception::throw_type(
+                    ctx,
+                    &format!("{api}(...) cannot consume element {duplicate} twice"),
+                ));
+            }
+            let payload =
+                factory(&arguments).map_err(|error| Exception::throw_type(ctx, &error))?;
+            for element in element_ids {
+                self.arena
+                    .borrow_mut()
+                    .claim(element)
+                    .map_err(|error| Exception::throw_type(ctx, &error.to_string()))?;
+            }
+            Ok(payload)
+        })();
+        if result.is_err() {
+            self.callbacks.borrow_mut().rollback_to(callback_checkpoint);
+        }
+        result
+    }
+
+    fn validate_component_argument(
+        &self,
+        ctx: &Ctx<'_>,
+        api: &str,
+        descriptor: &ArgumentDescriptor,
+        argument: Option<&Argument>,
+    ) -> JsResult<ComponentArgument> {
+        if let ArgumentSchema::Optional(inner) = &descriptor.schema {
+            return match argument {
+                None | Some(Argument::Value(Bridged::Nil)) => Ok(ComponentArgument::Optional(None)),
+                Some(argument) => self
+                    .validate_component_argument_kind(ctx, api, descriptor.name, inner, argument)
+                    .map(|argument| ComponentArgument::Optional(Some(Box::new(argument)))),
+            };
+        }
+        let argument = argument.ok_or_else(|| {
+            Exception::throw_type(
+                ctx,
+                &format!(
+                    "{api}({}) expects {}",
+                    descriptor.name,
+                    schema_name(&descriptor.schema)
+                ),
+            )
+        })?;
+        self.validate_component_argument_kind(
+            ctx,
+            api,
+            descriptor.name,
+            &descriptor.schema,
+            argument,
+        )
+    }
+
+    fn validate_component_argument_kind(
+        &self,
+        ctx: &Ctx<'_>,
+        api: &str,
+        name: &str,
+        schema: &ArgumentSchema,
+        argument: &Argument,
+    ) -> JsResult<ComponentArgument> {
+        let validated = match (schema, argument) {
+            (ArgumentSchema::String, Argument::Value(Bridged::Str(value))) => {
+                Some(ComponentArgument::String(value.clone()))
+            }
+            (ArgumentSchema::Number, Argument::Value(Bridged::Number(value)))
+                if value.is_finite() =>
+            {
+                Some(ComponentArgument::Number(*value))
+            }
+            (ArgumentSchema::Boolean, Argument::Value(Bridged::Bool(value))) => {
+                Some(ComponentArgument::Boolean(*value))
+            }
+            (ArgumentSchema::Element, Argument::Element(id)) => {
+                self.arena
+                    .borrow()
+                    .can_claim(*id)
+                    .map_err(|error| Exception::throw_type(ctx, &error.to_string()))?;
+                Some(ComponentArgument::Element(*id))
+            }
+            (ArgumentSchema::Entity(kind), Argument::Entity(handle))
+                if self.entities.borrow().kind(*handle) == Some(*kind) =>
+            {
+                Some(ComponentArgument::Entity {
+                    kind,
+                    handle: *handle,
+                })
+            }
+            (ArgumentSchema::Callback(_), Argument::Handler(handler)) => {
+                let callback = self.callbacks.borrow_mut().push(CallbackEntry {
+                    value: handler.clone(),
+                    view: scope::current_view().map(|view| view.downgrade()),
+                    application: scope::current_application_generation(),
+                    registered_in: scope::current_generation(),
+                });
+                Some(ComponentArgument::Callback(callback))
+            }
+            (ArgumentSchema::Enum(values), Argument::Value(Bridged::Str(value)))
+                if values.contains(&value.as_str()) =>
+            {
+                Some(ComponentArgument::Enum(value.clone()))
+            }
+            (ArgumentSchema::Array(item), Argument::Array(values)) => {
+                let mut validated = Vec::with_capacity(values.len());
+                for value in values {
+                    validated
+                        .push(self.validate_component_argument_kind(ctx, api, name, item, value)?);
+                }
+                Some(ComponentArgument::Array(validated))
+            }
+            (ArgumentSchema::Optional(inner), value) => Some(ComponentArgument::Optional(Some(
+                Box::new(self.validate_component_argument_kind(ctx, api, name, inner, value)?),
+            ))),
+            _ => None,
+        };
+        validated.ok_or_else(|| {
+            Exception::throw_type(
+                ctx,
+                &format!("{api}({name}) expects {}", schema_name(schema)),
+            )
+        })
     }
 
     fn push_op_checked<E: std::fmt::Display>(
@@ -6766,6 +7169,9 @@ fn context_object<'js>(ctx: &Ctx<'js>, binding: ContextBinding) -> JsResult<Obje
 enum Argument {
     Value(Bridged),
     Handler(Persistent<Function<'static>>),
+    Element(SpecId),
+    Entity(EntityHandle),
+    Array(Vec<Argument>),
     /// A template's sentinel: this position is filled per call rather than now.
     /// Only reachable while a template body is being discovered, because
     /// nothing else hands one out.
@@ -6854,6 +7260,13 @@ impl Arguments {
                          template is called and pass the result"
                     ),
                 )),
+                Argument::Element(_) | Argument::Entity(_) | Argument::Array(_) => {
+                    Err(JsError::new_from_js_message(
+                        "object",
+                        "value",
+                        format!("`{method}` does not take an object or array"),
+                    ))
+                }
             })
             .collect()
     }
@@ -6897,19 +7310,117 @@ impl<'js> FromJs<'js> for Arguments {
             .into_array()
             .ok_or_else(|| Exception::throw_type(ctx, "expected an argument list"))?;
 
-        let mut converted = SmallVec::new();
-        for entry in array.iter::<Value>() {
-            let entry = entry?;
-            converted.push(match entry.as_function() {
-                Some(handler) => Argument::Handler(Persistent::save(ctx, handler.clone())),
-                None => match slot_index(&entry) {
-                    Some(slot) => Argument::Slot(slot),
-                    None => Argument::Value(bridge(ctx, &entry)?),
-                },
-            });
+        let length = host_modules::bridge_array_len(ctx, &array)?;
+        let mut converted = SmallVec::with_capacity(length);
+        let mut budget = ComponentArgumentBudget::default();
+        for index in 0..length {
+            converted.push(component_argument_from_js(
+                ctx,
+                array.get(index)?,
+                0,
+                &mut budget,
+            )?);
         }
 
         Ok(Self(converted))
+    }
+}
+
+const MAX_COMPONENT_ARGUMENT_DEPTH: usize = 32;
+const MAX_COMPONENT_ARGUMENT_NODES: usize = 10_000;
+
+#[derive(Default)]
+struct ComponentArgumentBudget {
+    nodes: usize,
+}
+
+fn component_argument_from_js<'js>(
+    ctx: &Ctx<'js>,
+    value: Value<'js>,
+    depth: usize,
+    budget: &mut ComponentArgumentBudget,
+) -> JsResult<Argument> {
+    if depth > MAX_COMPONENT_ARGUMENT_DEPTH {
+        return Err(Exception::throw_range(
+            ctx,
+            "component arguments are nested too deeply",
+        ));
+    }
+    budget.nodes = budget.nodes.checked_add(1).ok_or_else(|| {
+        Exception::throw_range(ctx, "component arguments contain too many nested values")
+    })?;
+    if budget.nodes > MAX_COMPONENT_ARGUMENT_NODES {
+        return Err(Exception::throw_range(
+            ctx,
+            "component arguments contain too many nested values",
+        ));
+    }
+    if let Some(handler) = value.as_function() {
+        return Ok(Argument::Handler(Persistent::save(ctx, handler.clone())));
+    }
+    if let Some(slot) = slot_index(&value) {
+        return Ok(Argument::Slot(slot));
+    }
+    if let Some(array) = value.as_array() {
+        let length = host_modules::bridge_array_len(ctx, &array)?;
+        let mut converted = Vec::with_capacity(length);
+        for index in 0..length {
+            converted.push(component_argument_from_js(
+                ctx,
+                array.get(index)?,
+                depth + 1,
+                budget,
+            )?);
+        }
+        return Ok(Argument::Array(converted));
+    }
+    if let Some(object) = value.as_object() {
+        if let Ok(id) = object.get::<_, u32>("__id") {
+            return Ok(Argument::Element(id));
+        }
+        if let Ok(handle) = object.get::<_, u64>("__handle") {
+            return Ok(Argument::Entity(handle));
+        }
+    }
+    Ok(Argument::Value(bridge(ctx, &value)?))
+}
+
+fn schema_name(schema: &ArgumentSchema) -> String {
+    match schema {
+        ArgumentSchema::String => "a string".into(),
+        ArgumentSchema::Number => "a finite number".into(),
+        ArgumentSchema::Boolean => "a boolean".into(),
+        ArgumentSchema::Element => "an Element".into(),
+        ArgumentSchema::Entity(kind) => format!("a {kind} entity"),
+        ArgumentSchema::Callback(_) => "a function".into(),
+        ArgumentSchema::Enum(values) => values
+            .iter()
+            .map(|value| format!("`{value}`"))
+            .collect::<Vec<_>>()
+            .join(", "),
+        ArgumentSchema::Array(item) => format!("an array of {}", schema_name(item)),
+        ArgumentSchema::Optional(item) => format!("an optional {}", schema_name(item)),
+    }
+}
+
+fn collect_component_elements(argument: &ComponentArgument, elements: &mut Vec<SpecId>) {
+    match argument {
+        ComponentArgument::Element(element) => elements.push(*element),
+        ComponentArgument::Array(arguments) => {
+            for argument in arguments {
+                collect_component_elements(argument, elements);
+            }
+        }
+        ComponentArgument::Optional(Some(argument)) => {
+            collect_component_elements(argument, elements);
+        }
+        ComponentArgument::String(_)
+        | ComponentArgument::Number(_)
+        | ComponentArgument::Boolean(_)
+        | ComponentArgument::Entity { .. }
+        | ComponentArgument::Callback(_)
+        | ComponentArgument::Enum(_)
+        | ComponentArgument::Optional(None) => {}
     }
 }
 
