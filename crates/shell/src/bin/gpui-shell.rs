@@ -38,21 +38,35 @@ const ENTRY: &str = "main.js";
 /// 1, which is a runtime that failed to start.
 const EXIT_USAGE: i32 = 2;
 
+#[allow(dead_code)] // Also compiled as the shared `gpui_shell::host` module.
 fn main() {
-    let arguments = match parse(std::env::args().skip(1)) {
+    main_with_components(gpui_shell::FrozenComponentRegistry::default());
+}
+
+/// Runs the shipped command-line host with one frozen component catalog.
+///
+/// Embedding binaries use this entry point so command parsing, capabilities,
+/// assets, theming, checking, and diagnostics stay identical to `gpui-shell`.
+pub fn main_with_components(components: gpui_shell::FrozenComponentRegistry) {
+    main_with_brand_and_components(HostBrand::gpui_shell(), components);
+}
+
+/// Runs the shared host under an embedding command's public name and version.
+pub fn main_with_brand_and_components(
+    brand: HostBrand,
+    components: gpui_shell::FrozenComponentRegistry,
+) {
+    let arguments = match parse(std::env::args().skip(1), brand) {
         Ok(Invocation::Run(arguments)) => arguments,
         Ok(Invocation::Types(directory)) => {
             // The root always, whether or not anything there imports the module:
             // this command was asked for explicitly, and an empty directory is a
             // reasonable place to start an application. Every other directory
             // that imports `gpui` comes along with it.
-            match gpui_shell::write_type_declarations_with_components(
-                &directory,
-                &gpui_shell::FrozenComponentRegistry::default(),
-            ) {
+            match gpui_shell::write_type_declarations_with_components(&directory, &components) {
                 Ok(_) => {}
                 Err(error) => {
-                    eprintln!("gpui-shell: {error}");
+                    eprintln!("{}: {error}", brand.name);
                     std::process::exit(1);
                 }
             }
@@ -62,15 +76,15 @@ fn main() {
             // A check reports diagnostics, not progress, so only warnings and
             // errors reach the terminal.
             install_log_sink(Level::WARN);
-            check(arguments);
+            check(arguments, components);
         }
         Ok(Invocation::Print(text)) => {
             println!("{text}");
             return;
         }
         Err(message) => {
-            eprintln!("gpui-shell: {message}");
-            eprintln!("Try `gpui-shell --help` for the accepted arguments.");
+            eprintln!("{}: {message}", brand.name);
+            eprintln!("Try `{} --help` for the accepted arguments.", brand.name);
             std::process::exit(EXIT_USAGE);
         }
     };
@@ -84,7 +98,7 @@ fn main() {
         Level::INFO
     });
 
-    run(arguments);
+    run(arguments, components, brand);
 }
 
 // ---------------------------------------------------------------------------
@@ -105,6 +119,48 @@ enum Invocation {
     Types(PathBuf),
     /// Text for stdout, followed by a successful exit.
     Print(String),
+}
+
+/// The command name and version shown by the reusable CLI host.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct HostBrand {
+    pub name: &'static str,
+    pub version: &'static str,
+}
+
+impl HostBrand {
+    pub const fn new(name: &'static str, version: &'static str) -> Self {
+        Self { name, version }
+    }
+
+    const fn gpui_shell() -> Self {
+        Self::new("gpui-shell", env!("CARGO_PKG_VERSION"))
+    }
+}
+
+/// Stable command classification exposed for wrapper-binary parser tests.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum InvocationKind {
+    Run,
+    Check,
+    Types,
+    Print,
+}
+
+/// Parses a command line without starting GPUI or terminating the process.
+pub fn parse_invocation(
+    arguments: impl IntoIterator<Item = impl Into<String>>,
+) -> Result<InvocationKind, String> {
+    parse(
+        arguments.into_iter().map(Into::into),
+        HostBrand::gpui_shell(),
+    )
+    .map(|invocation| match invocation {
+        Invocation::Run(_) => InvocationKind::Run,
+        Invocation::Check(_) => InvocationKind::Check,
+        Invocation::Types(_) => InvocationKind::Types,
+        Invocation::Print(_) => InvocationKind::Print,
+    })
 }
 
 /// The command line, parsed.
@@ -137,16 +193,19 @@ impl Arguments {
 /// Hand-rolled because the whole surface is three flags and one path: a parser
 /// dependency would be larger than the thing it parses. The error is the exact
 /// sentence printed to stderr, so the caller decides nothing about wording.
-fn parse(arguments: impl IntoIterator<Item = String>) -> Result<Invocation, String> {
+fn parse(
+    arguments: impl IntoIterator<Item = String>,
+    brand: HostBrand,
+) -> Result<Invocation, String> {
     let arguments: Vec<String> = arguments.into_iter().collect();
 
     // Answered before anything else can fail. A caller who mistyped one flag is
     // exactly the caller who needs `--help` to still work.
     if arguments.iter().any(|it| it == "--help" || it == "-h") {
-        return Ok(Invocation::Print(help()));
+        return Ok(Invocation::Print(help(brand)));
     }
     if arguments.iter().any(|it| it == "--version" || it == "-V") {
-        return Ok(Invocation::Print(version()));
+        return Ok(Invocation::Print(version(brand)));
     }
 
     let mut directory: Option<PathBuf> = None;
@@ -174,7 +233,8 @@ fn parse(arguments: impl IntoIterator<Item = String>) -> Result<Invocation, Stri
             other if directory.is_none() => directory = Some(PathBuf::from(other)),
             other => {
                 return Err(format!(
-                    "unexpected argument `{other}`; gpui-shell runs one application directory"
+                    "unexpected argument `{other}`; {} runs one application directory",
+                    brand.name
                 ));
             }
         }
@@ -211,14 +271,14 @@ struct CheckArguments {
 
 /// One line per flag, no decoration — the tone the repository's documentation
 /// uses everywhere else.
-fn help() -> String {
+fn help(brand: HostBrand) -> String {
     format!(
         "\
-{}
+{version}
 
-Usage: gpui-shell <directory> [options]
-       gpui-shell check <directory> [--print-spec]
-       gpui-shell types <directory>
+Usage: {name} <directory> [options]
+       {name} check <directory> [--print-spec]
+       {name} types <directory>
 
 Arguments:
   <directory>  The application root, or the {ENTRY} inside it.
@@ -240,19 +300,20 @@ Options:
   --print-spec With check, also print the element description that was built.
   --help       Print this message and exit.
   --version    Print the version and exit.",
-        version()
+        name = brand.name,
+        version = version(brand)
     )
 }
 
-fn version() -> String {
-    format!("gpui-shell {}", env!("CARGO_PKG_VERSION"))
+fn version(brand: HostBrand) -> String {
+    format!("{} {}", brand.name, brand.version)
 }
 
 // ---------------------------------------------------------------------------
 // The host
 // ---------------------------------------------------------------------------
 
-fn run(arguments: Arguments) {
+fn run(arguments: Arguments, components: gpui_shell::FrozenComponentRegistry, brand: HostBrand) {
     // Assets are served from the application directory, so the source has to be
     // installed on the `Application` before the loop starts. Resolving the root
     // here rather than inside the loop is what makes that possible; a path that
@@ -274,7 +335,7 @@ fn run(arguments: Arguments) {
                 tracing::debug!("development mode: eval and the built-in prototypes are open");
             }
 
-            let runtime = match ShellRuntime::new(cx) {
+            let runtime = match ShellRuntime::new_with_components(cx, components) {
                 Ok(runtime) => runtime,
                 Err(error) => {
                     eprintln!("failed to start the script runtime: {error}");
@@ -323,7 +384,7 @@ fn run(arguments: Arguments) {
             let application_root = root.clone();
 
             let window = cx
-                .open_window(window_options(&root, cx), move |window, cx| {
+                .open_window(window_options(&root, brand, cx), move |window, cx| {
                     let loaded = match &manifest_error {
                         Some(message) => Err(anyhow::anyhow!(message.clone())),
                         None => builder_runtime.try_load(&application_root, window, cx),
@@ -366,7 +427,7 @@ fn run(arguments: Arguments) {
 /// reused element are all runtime facts — so the only honest way to check an
 /// application is to build it and render one frame. The window is real but
 /// never shown, because rendering is where those facts surface.
-fn check(arguments: CheckArguments) -> ! {
+fn check(arguments: CheckArguments, components: gpui_shell::FrozenComponentRegistry) -> ! {
     // The exit status has to survive the app's own event loop, which does not
     // return a value, so it is stashed and read after `run` unwinds.
     let outcome = Rc::new(RefCell::new(CheckOutcome::default()));
@@ -387,7 +448,7 @@ fn check(arguments: CheckArguments) -> ! {
             gpui_shell::init(cx);
             install_palette(cx);
 
-            let runtime = match ShellRuntime::new(cx) {
+            let runtime = match ShellRuntime::new_with_components(cx, components) {
                 Ok(runtime) => runtime,
                 Err(error) => {
                     sink.borrow_mut().fail(format!("{error:#}"));
@@ -623,11 +684,11 @@ fn local_capabilities(
         .exit(true)
 }
 
-fn window_options(root: &Path, cx: &App) -> WindowOptions {
+fn window_options(root: &Path, brand: HostBrand, cx: &App) -> WindowOptions {
     let title = root
         .file_name()
-        .map(|name| format!("{} — gpui-shell", name.to_string_lossy()))
-        .unwrap_or_else(|| "gpui-shell".to_owned());
+        .map(|name| format!("{} — {}", name.to_string_lossy(), brand.name))
+        .unwrap_or_else(|| brand.name.to_owned());
 
     WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
@@ -779,7 +840,10 @@ mod tests {
     use super::*;
 
     fn parse_args(arguments: &[&str]) -> Result<Invocation, String> {
-        parse(arguments.iter().map(|argument| (*argument).to_string()))
+        parse(
+            arguments.iter().map(|argument| (*argument).to_string()),
+            HostBrand::gpui_shell(),
+        )
     }
 
     fn run_args(arguments: &[&str]) -> Arguments {
@@ -884,7 +948,7 @@ mod tests {
 
     #[test]
     fn help_lists_every_flag() {
-        let help = help();
+        let help = help(HostBrand::gpui_shell());
         for flag in ["--watch", "--dev", "--help", "--version"] {
             assert!(help.contains(flag), "`{flag}` is missing from the help");
         }

@@ -1,20 +1,34 @@
-use std::path::PathBuf;
-
 fn main() {
-    let mut arguments = std::env::args_os().skip(1);
-    let command = arguments.next();
-    let directory = arguments.next().map(PathBuf::from);
+    let components = match gpui_component_shell::components() {
+        Ok(components) => components,
+        Err(error) => {
+            eprintln!("gpui-component-shell: {error:#}");
+            std::process::exit(1);
+        }
+    };
+    gpui_shell::host::main_with_brand_and_components(
+        gpui_shell::host::HostBrand::new("gpui-component-shell", env!("CARGO_PKG_VERSION")),
+        components,
+    );
+}
 
-    if command.as_deref() != Some(std::ffi::OsStr::new("types"))
-        || directory.is_none()
-        || arguments.next().is_some()
-    {
-        eprintln!("usage: gpui-component-shell types <application-directory>");
-        std::process::exit(2);
-    }
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn component_shell_accepts_the_same_run_check_and_types_commands_as_shell() {
+        use gpui_shell::host::{InvocationKind, parse_invocation};
 
-    if let Err(error) = gpui_component_shell::write_type_declarations(directory.unwrap()) {
-        eprintln!("gpui-component-shell: {error:#}");
-        std::process::exit(1);
+        assert_eq!(
+            parse_invocation(["examples/js_story"]).unwrap(),
+            InvocationKind::Run
+        );
+        assert_eq!(
+            parse_invocation(["check", "examples/js_story"]).unwrap(),
+            InvocationKind::Check
+        );
+        assert_eq!(
+            parse_invocation(["types", "examples/js_story"]).unwrap(),
+            InvocationKind::Types
+        );
     }
 }

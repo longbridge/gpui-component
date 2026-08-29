@@ -15,6 +15,10 @@
 //! `gpui-base/inspector`, which Cargo unifies across the embedding application's
 //! dependency graph.
 
+// Lets the shared CLI host use the same `gpui_shell::...` paths whether it is
+// compiled as this library module or as the standalone binary crate.
+extern crate self as gpui_shell;
+
 // # The surface a host may rely on
 //
 // Everything `pub` here is a promise. That is the point of the list being
@@ -61,6 +65,8 @@ pub mod dock;
 pub(crate) mod engine;
 pub(crate) mod entities;
 pub(crate) mod error;
+#[path = "bin/gpui-shell.rs"]
+pub mod host;
 pub mod host_modules;
 pub(crate) mod materialize;
 pub mod metrics;
@@ -215,12 +221,28 @@ pub fn set_development_mode(enabled: bool) {
     engine::set_development_mode(enabled);
 }
 
-/// Initializes the base layer and style reflection table.
+/// Initializes GPUI Component (which transitively initializes `gpui-base`) and
+/// the shell style reflection table.
 ///
 /// Must be called once at application startup, before any script runs.
 pub fn init(cx: &mut App) {
-    gpui_base::init(cx);
+    gpui_component::init(cx);
     style::init();
+}
+
+#[cfg(test)]
+mod init_tests {
+    use gpui::TestAppContext;
+
+    #[gpui::test]
+    fn shell_init_installs_component_and_base_globals(cx: &mut TestAppContext) {
+        cx.update(super::init);
+
+        cx.read(|cx| {
+            assert!(cx.has_global::<gpui_component::Theme>());
+            assert!(cx.has_global::<gpui_base::Theme>());
+        });
+    }
 }
 
 /// Exports one Rust module for scripts to import by name.
