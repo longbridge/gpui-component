@@ -95,3 +95,18 @@ cargo bench -p gpui-base --bench motion
 ```
 
 选择最小且合适的 primitive：固定时长目标使用 `transition`，频繁变化的空间目标使用 `spring`，编排序列使用 keyframes，卸载前退出使用 `Presence`，列表错峰使用 `Stagger`。
+
+## Benchmark 结果
+
+以下数据来自 Linux x86_64 release 构建，每项运行 31 个 batch、每个 batch 迭代 200 次：
+
+| 工作负载 | Median | P95 | Worst | 内存分配 |
+| --- | ---: | ---: | ---: | ---: |
+| 1,000 次 scalar timing + easing 采样 | 26.490 µs | 26.567 µs | 27.290 µs | 0 |
+| 1,000 次 keyframe 采样，2 frames | 21.656 µs | 21.707 µs | 21.729 µs | 0 |
+| 1,000 次 keyframe 采样，8 frames | 25.197 µs | 25.251 µs | 25.269 µs | 0 |
+| 1,000 次 keyframe 采样，32 frames | 27.932 µs | 27.969 µs | 27.971 µs | 0 |
+| 1,000 次解析式 spring 积分采样 | 6.042 µs | 6.106 µs | 6.216 µs | 0 |
+| 1,000 次 stagger delay 计算 | 0.574 µs | 0.583 µs | 0.587 µs | 0 |
+
+Scalar timing/easing 工作负载低于 100 µs median 预算。这些数值是可复现的开发基线，并非跨平台性能保证；对特定平台性能有要求时，应在对应目标平台重新运行 benchmark。

@@ -117,3 +117,18 @@ cargo bench -p gpui-base --bench motion
 ```
 
 Choose the smallest suitable primitive: `transition` for duration-based targets, `spring` for changing spatial targets, keyframes for authored sequences, `Presence` for exit-before-unmount, and `Stagger` for list choreography.
+
+## Benchmark results
+
+Measured on Linux x86_64 with a release build, 31 batches, and 200 iterations per batch:
+
+| Workload | Median | P95 | Worst | Allocations |
+| --- | ---: | ---: | ---: | ---: |
+| 1,000 scalar timing + easing samples | 26.490 µs | 26.567 µs | 27.290 µs | 0 |
+| 1,000 keyframe samples, 2 frames | 21.656 µs | 21.707 µs | 21.729 µs | 0 |
+| 1,000 keyframe samples, 8 frames | 25.197 µs | 25.251 µs | 25.269 µs | 0 |
+| 1,000 keyframe samples, 32 frames | 27.932 µs | 27.969 µs | 27.971 µs | 0 |
+| 1,000 analytic spring integration samples | 6.042 µs | 6.106 µs | 6.216 µs | 0 |
+| 1,000 stagger delay calculations | 0.574 µs | 0.583 µs | 0.587 µs | 0 |
+
+The scalar timing/easing workload remains below its 100 µs median budget. These figures are a reproducible development baseline rather than a cross-platform guarantee; run the benchmark on each target platform when platform-specific performance matters.
