@@ -331,12 +331,71 @@ Reduced motion snaps to the target and clears the stored velocity.
 Applications may implement `Interpolate` for their own value types when the
 interpolation is meaningful and deterministic.
 
+Base also implements composite interpolation for `Size<Pixels>`,
+`Bounds<Pixels>`, and `MotionTransform`. The transform bundle coordinates
+translation, scale, rotation, and opacity while leaving the actual paint
+strategy to its caller.
+
 `spring` accepts values implementing GPUI's `SpringTarget`, which projects a
 value onto the single scalar coordinate the spring integrates and back again.
 GPUI implements it for `f32`, `Pixels`, `Rems`, and `bool`, the last resolving
 to an `AnimationPhase` that interpolates between two endpoint values. A value
 that needs more than one coordinate — a position, a pair of bounds — uses one
 spring per channel rather than one spring over the composite.
+
+## CSS-Aligned Timing and Keyframes
+
+`Easing` provides the CSS keyword curves, typed cubic Bézier curves, all CSS
+step positions, and piecewise-linear stops. `Timing` adds signed delay,
+finite/infinite iteration counts, and normal, reverse, alternate, and
+alternate-reverse playback directions. Both are pure samplers.
+
+`Keyframes<T>` validates endpoint and ordering invariants once, stores its
+track behind shared ownership, and binary-searches the active segment when
+sampled. Each segment may carry its own easing. `animate_keyframes` combines a
+track with `Timing` and keyed GPUI lifecycle state. `Discrete<T>` explicitly
+models values that switch rather than interpolate, and `Stagger` calculates
+per-item delay without allocating a schedule.
+
+All timing is derived from absolute elapsed time. Frame rate affects how many
+samples are painted, not the value reached at a particular time.
+
+## Presence and Measured Reveal
+
+`Presence` retains the enter/present/exit/absent lifecycle independently from
+the caller's logical boolean. Its sample reports progress and whether content
+must remain mounted. Reentry during exit reverses from the current sample.
+
+`MotionReveal` is a lower-level custom element for vertical measured reveals.
+It lays its child out at natural height, reports the progress-scaled height to
+its parent, and clips paint and hit testing to the visible region. The styled
+`Collapsible::motion_id` facade combines it with the theme's control spring.
+The opt-in ID preserves the legacy immediate mount/unmount contract for callers
+that do not request motion.
+
+## Product Motion Tokens
+
+`gpui-component::MotionTokens` centralizes styled policy. It contains four
+semantic duration tiers, enter/exit/move easing, control/movement springs, and
+short/medium travel distances. Styled controls read these tokens instead of
+defining local constants. Base remains presentation-neutral and can be used by
+another design system with different policy.
+
+## Sampling Budget
+
+The steady timing/easing/keyframe sampling paths allocate nothing. The release
+benchmark samples batches of 1,000 values and enforces a `0.10 ms` median
+ceiling for scalar timing/easing on the reference machine. It is run with:
+
+```bash
+cargo bench -p gpui-base --bench motion
+```
+
+At 120 Hz the full application has about 8.33 ms per frame. Motion sampling is
+kept well below one tenth of a millisecond so layout, paint, text, and
+application work retain nearly the whole budget. This does not make arbitrary
+layout animation free: prefer opacity and paint transforms when they express
+the same relationship.
 
 ## Legacy Element Animation
 
