@@ -64,11 +64,15 @@ let x = spring(
 
 指针直接控制数值时，不要让 spring 追赶指针；拖动中使用 `with_travel(false)`，释放后再恢复。
 
+`with_damping` 要求有限且非负的 ratio；`with_epsilon` 要求有限且大于零，并以目标值自身的单位解释。builder 会在无效的可信常量上 panic；配置值或用户输入应使用 `try_with_damping` 和 `try_with_epsilon`。归一化值通常保留默认的 `0.001`，像素移动可以使用 `0.1` 等较粗容差。
+
 ## Keyframes 与 Timing
 
 `Keyframes` 定义经过校验的值序列；`Timing` 按绝对 elapsed time 采样，支持正负 delay、有限或无限迭代，以及 normal、reverse 和 alternate 播放方向。
 
 offset 必须从 `0` 开始、以 `1` 结束并保持单调。不可插值属性使用 `Discrete`。
+
+`animate_keyframes` 会在传入的稳定 ID 下保留播放起始时间。使用相同 ID 重新渲染只会继续当前序列，不会重新开始。需要重播时，把应用持有的 generation 放进 ID，例如 `("notification-enter", generation)`，并在每次重播时递增它。
 
 ## Presence 与 Stagger
 
@@ -84,7 +88,7 @@ offset 必须从 `0` 开始、以 `1` 结束并保持单调。不可插值属性
 
 Transition、spring、keyframes、presence 和 reveal 控件都遵守 GPUI 的 reduced-motion 偏好。有限动画会直接同步目标、更新 retained state，并且不留下待处理 frame。动画不能成为表达状态的唯一方式。
 
-稳定采样路径零分配，采样使用绝对时间，关键帧查找使用二分搜索。运行 release benchmark：
+benchmark 覆盖的纯稳定采样路径——timing/easing、关键帧查找、解析式 spring 积分和 stagger delay 计算——均为零分配。Keyed transition、spring、presence 和 reveal 生命周期由 GPUI retained state 与 frame-request 测试覆盖，因为这些更新属于框架生命周期，而不是纯采样器。采样使用绝对时间，关键帧查找使用二分搜索。运行 release benchmark：
 
 ```bash
 cargo bench -p gpui-base --bench motion

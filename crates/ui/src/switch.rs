@@ -155,7 +155,7 @@ impl RenderOnce for Switch {
             } else {
                 px(0.)
             },
-            cx.theme().motion_tokens().spring_control,
+            cx.theme().motion_tokens().spring_move,
             window,
             cx,
         );

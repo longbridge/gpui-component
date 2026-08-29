@@ -1,5 +1,8 @@
 use std::time::Duration;
 
+// Components and Motion are standalone example apps. The WASM host embeds
+// both, so each deliberately instantiates its own thread-local active palette.
+#[allow(clippy::duplicate_mod)]
 #[path = "../shared/palette.rs"]
 mod palette;
 

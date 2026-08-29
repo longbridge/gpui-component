@@ -37,10 +37,29 @@ impl LinearStop {
 /// Invalid easing configuration.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum EasingError {
+    /// Retained for source compatibility. New validation reports
+    /// [`Self::InvalidBezierControlPoint`].
+    #[deprecated(note = "use InvalidBezierControlPoint")]
     InvalidBezierX,
+    InvalidBezierControlPoint,
     InvalidStepCount,
     InvalidLinearStops,
 }
+
+impl fmt::Display for EasingError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        #[allow(deprecated)]
+        match self {
+            Self::InvalidBezierX | Self::InvalidBezierControlPoint => {
+                f.write_str("cubic Bézier control points must be finite and x must be within 0..=1")
+            }
+            Self::InvalidStepCount => f.write_str("step easing requires a valid step count"),
+            Self::InvalidLinearStops => f.write_str("linear easing stops are invalid"),
+        }
+    }
+}
+
+impl std::error::Error for EasingError {}
 
 /// A cheap, cloneable CSS-compatible easing policy.
 #[derive(Clone, Default)]
@@ -100,7 +119,7 @@ impl Easing {
             || !y1.is_finite()
             || !y2.is_finite()
         {
-            return Err(EasingError::InvalidBezierX);
+            return Err(EasingError::InvalidBezierControlPoint);
         }
         Ok(Self::CubicBezier { x1, y1, x2, y2 })
     }
@@ -194,5 +213,22 @@ impl Easing {
             }
             Self::Custom(easing) => easing(progress),
         }
+    }
+}
+
+#[cfg(test)]
+mod error_tests {
+    use super::*;
+
+    #[test]
+    fn bezier_errors_name_the_invalid_control_point() {
+        let error = Easing::cubic_bezier(0.2, f32::NAN, 0.8, 1.0).unwrap_err();
+
+        assert_eq!(error, EasingError::InvalidBezierControlPoint);
+        assert_eq!(
+            error.to_string(),
+            "cubic Bézier control points must be finite and x must be within 0..=1"
+        );
+        let _: &dyn std::error::Error = &error;
     }
 }

@@ -348,6 +348,12 @@ struct KeyframePlayback {
     started_at: Instant,
 }
 
+/// Samples a keyed keyframe playback and requests frames while it is active.
+///
+/// The stable `id` owns the playback's start time. Re-rendering with the same
+/// ID continues that playback; it does not restart when `keyframes` or `timing`
+/// is reconstructed. To replay a sequence, include an application-owned
+/// generation in the ID, for example `("notification-enter", generation)`.
 pub fn animate_keyframes<T>(
     id: impl Into<TransitionId>,
     keyframes: &Keyframes<T>,
@@ -402,6 +408,26 @@ pub struct Spring {
     travel: bool,
 }
 
+/// Invalid physical or settling parameters for a [`Spring`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SpringError {
+    InvalidDamping,
+    InvalidEpsilon,
+}
+
+impl std::fmt::Display for SpringError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::InvalidDamping => f.write_str("spring damping must be finite and non-negative"),
+            Self::InvalidEpsilon => {
+                f.write_str("spring epsilon must be finite and greater than zero")
+            }
+        }
+    }
+}
+
+impl std::error::Error for SpringError {}
+
 impl Spring {
     /// Builds a spring that reaches its target in about `response` without
     /// overshooting it.
@@ -435,9 +461,25 @@ impl Spring {
     ///
     /// This is $\zeta$, not GPUI's `SpringConfig::damping`, which is the
     /// coefficient $c = 2 \zeta \omega_0$.
-    pub const fn with_damping(mut self, ratio: f32) -> Self {
+    ///
+    /// # Panics
+    ///
+    /// Panics when `ratio` is negative or non-finite. Use
+    /// [`Self::try_with_damping`] when the value is not a trusted constant.
+    pub const fn with_damping(self, ratio: f32) -> Self {
+        match self.try_with_damping(ratio) {
+            Ok(spring) => spring,
+            Err(_) => panic!("spring damping must be finite and non-negative"),
+        }
+    }
+
+    /// Checked form of [`Self::with_damping`].
+    pub const fn try_with_damping(mut self, ratio: f32) -> Result<Self, SpringError> {
+        if !ratio.is_finite() || ratio < 0.0 {
+            return Err(SpringError::InvalidDamping);
+        }
         self.damping = ratio;
-        self
+        Ok(self)
     }
 
     /// Sets whether the spring travels to its target or adopts it on the spot.
@@ -463,9 +505,30 @@ impl Spring {
     /// spring over pixels settles perceptibly sooner with a coarser tolerance,
     /// which also ends the animation frames that the remaining sub-pixel motion
     /// would otherwise request.
-    pub const fn with_epsilon(mut self, epsilon: f32) -> Self {
+    ///
+    /// # Panics
+    ///
+    /// Panics when `epsilon` is zero, negative, or non-finite. Use
+    /// [`Self::try_with_epsilon`] when the value is not a trusted constant.
+    pub const fn with_epsilon(self, epsilon: f32) -> Self {
+        match self.try_with_epsilon(epsilon) {
+            Ok(spring) => spring,
+            Err(_) => panic!("spring epsilon must be finite and greater than zero"),
+        }
+    }
+
+    /// Checked form of [`Self::with_epsilon`].
+    pub const fn try_with_epsilon(mut self, epsilon: f32) -> Result<Self, SpringError> {
+        if !epsilon.is_finite() || epsilon <= 0.0 {
+            return Err(SpringError::InvalidEpsilon);
+        }
         self.epsilon = epsilon;
-        self
+        Ok(self)
+    }
+
+    /// Returns the settling tolerance in the target's own units.
+    pub const fn epsilon(self) -> f32 {
+        self.epsilon
     }
 
     /// The physical parameters GPUI integrates. The response must be non-zero;
@@ -1422,6 +1485,37 @@ mod tests {
         let fixture = SpringFixture::open(cx, Spring::new(Duration::ZERO));
         assert_eq!(fixture.render(cx, 1.0), 1.0);
         assert_eq!(fixture.pending_frame(cx), 0);
+    }
+
+    #[test]
+    fn spring_rejects_non_finite_or_negative_physical_parameters() {
+        let spring = Spring::new(Duration::from_millis(300));
+
+        assert_eq!(
+            spring.try_with_damping(f32::NAN).unwrap_err(),
+            SpringError::InvalidDamping
+        );
+        assert_eq!(
+            spring.try_with_damping(-0.1).unwrap_err(),
+            SpringError::InvalidDamping
+        );
+        assert_eq!(
+            spring.try_with_epsilon(f32::INFINITY).unwrap_err(),
+            SpringError::InvalidEpsilon
+        );
+        assert_eq!(
+            spring.try_with_epsilon(-0.1).unwrap_err(),
+            SpringError::InvalidEpsilon
+        );
+    }
+
+    #[test]
+    fn spring_reports_its_unit_specific_settling_tolerance() {
+        let normalized = Spring::new(Duration::from_millis(180));
+        let pixels = Spring::new(Duration::from_millis(180)).with_epsilon(0.1);
+
+        assert!(normalized.epsilon() < 0.01);
+        assert_eq!(pixels.epsilon(), 0.1);
     }
 
     #[gpui::test]

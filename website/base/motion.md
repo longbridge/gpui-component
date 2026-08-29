@@ -64,6 +64,8 @@ let x = spring(
 
 Do not make a pointer-controlled value chase the pointer through a spring. Set `with_travel(false)` during direct manipulation and restore travel after release.
 
+`with_damping` requires a finite, non-negative ratio; `with_epsilon` requires a finite value greater than zero and interprets it in the target's own units. The builders panic for invalid trusted constants. Use `try_with_damping` and `try_with_epsilon` for configuration or user-provided values. Normalized values normally keep the `0.001` default; pixel motion can use a coarser tolerance such as `0.1`.
+
 ## Keyframes and timing
 
 `Keyframes` describes validated value stops. `Timing` uses absolute elapsed time and supports signed delays, finite or infinite iterations, and normal, reverse, or alternating playback.
@@ -87,6 +89,8 @@ let opacity = animate_keyframes(
 
 Offsets must start at `0`, end at `1`, and be monotonic. Use `Discrete` when a value cannot be interpolated.
 
+`animate_keyframes` retains its playback start time under the supplied stable ID. Re-rendering with the same ID continues the current sequence. To replay it, include an application-owned generation in the ID, such as `("notification-enter", generation)`, and increment that generation for each replay.
+
 ## Presence and stagger
 
 `Presence` separates logical visibility from physical mounting. Its phases are entering, present, exiting, and absent. Render while `should_render()` is true and use `progress` for the chosen visual properties. Reopening during exit reverses from the current sample.
@@ -106,7 +110,7 @@ let delay = stagger.delay(index, item_count);
 
 Transitions, springs, keyframes, presence, and reveal-compatible controls honor GPUI's reduced-motion preference. Finite motion snaps to the target, synchronizes retained state, and leaves no pending animation frame. Motion must never be the only way state is communicated.
 
-The steady sampling path is allocation-free. Sampling uses absolute elapsed time, and keyframe lookup uses binary search. Run the release benchmark with:
+The pure steady sampling paths measured by the benchmark—timing/easing, keyframe lookup, analytic spring integration, and stagger delay calculation—are allocation-free. Keyed transition, spring, presence, and reveal lifecycles are covered by GPUI retained-state and frame-request tests because those updates belong to the framework lifecycle rather than the pure sampler. Sampling uses absolute elapsed time, and keyframe lookup uses binary search. Run the release benchmark with:
 
 ```bash
 cargo bench -p gpui-base --bench motion

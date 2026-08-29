@@ -32,12 +32,25 @@ impl Default for MotionTokens {
                 .expect("static exit curve is valid"),
             easing_move: Easing::cubic_bezier(0.2, 0.0, 0.0, 1.0)
                 .expect("static move curve is valid"),
-            spring_control: Spring::new(Duration::from_millis(180)).with_epsilon(0.1),
+            spring_control: Spring::new(Duration::from_millis(180)),
             spring_move: Spring::new(Duration::from_millis(280))
                 .with_damping(0.85)
                 .with_epsilon(0.1),
             distance_short: rems(0.25),
             distance_medium: rems(0.5),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalized_and_pixel_springs_use_unit_appropriate_tolerances() {
+        let motion = MotionTokens::default();
+
+        assert!(motion.spring_control.epsilon() < 0.01);
+        assert_eq!(motion.spring_move.epsilon(), 0.1);
     }
 }

@@ -744,7 +744,7 @@ impl TabGroupRenderer for TabGroupSkin {
         // springs carry it through instead, and the element no longer needs an
         // outer frame to hold the destination while an inner one walks to it.
         let id = "drop-placeholder";
-        let placeholder_spring = cx.theme().motion_tokens().spring_control.with_epsilon(0.5);
+        let placeholder_spring = cx.theme().motion_tokens().spring_move.with_epsilon(0.5);
         let left = spring((id, "left"), to.origin().x, placeholder_spring, window, cx);
         let top = spring((id, "top"), to.origin().y, placeholder_spring, window, cx);
         let width = spring(

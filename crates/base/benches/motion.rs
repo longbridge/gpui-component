@@ -5,7 +5,8 @@ use std::{
     time::Instant,
 };
 
-use gpui_base::{Easing, Keyframe, Keyframes, Timing};
+use gpui::{SpringConfig, SpringState};
+use gpui_base::{Easing, Keyframe, Keyframes, Stagger, StaggerOrigin, Timing};
 
 const BATCHES: usize = 31;
 const WARMUP_BATCHES: usize = 5;
@@ -77,6 +78,27 @@ fn main() {
             },
         );
     }
+
+    let spring = SpringConfig::new(438.65, 41.89, 1.0);
+    measure("1,000 analytic spring integration samples", || {
+        let mut state = SpringState {
+            position: 0.0,
+            velocity: 0.0,
+        };
+        for index in 0..1_000 {
+            state = spring.step(state, black_box(1.0), (index % 3 + 1) as f32 / 240.0);
+        }
+        black_box(state);
+    });
+
+    let stagger = Stagger::new(std::time::Duration::from_millis(24), StaggerOrigin::Center);
+    measure("1,000 stagger delay calculations", || {
+        let mut sum = 0;
+        for index in 0..1_000 {
+            sum += stagger.delay(black_box(index % 32), 32).as_nanos();
+        }
+        black_box(sum);
+    });
 }
 
 fn measure(name: &str, mut operation: impl FnMut()) {

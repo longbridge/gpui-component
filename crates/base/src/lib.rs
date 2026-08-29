@@ -115,8 +115,8 @@ pub use motion::{
     Discrete, DiscreteError, Easing, EasingError, Interpolate, IterationCount, Keyframe,
     KeyframeError, Keyframes, LinearStop, MotionPhase, MotionReveal, MotionStatus, MotionTransform,
     MotionValue, PlaybackDirection, Presence, PresencePhase, PresenceSample, SignedDuration,
-    Spring, Stagger, StaggerOrigin, StepPosition, Timing, TimingSample, Transition, TransitionId,
-    animate_keyframes, spring, transition, transition_with_status,
+    Spring, SpringError, Stagger, StaggerOrigin, StepPosition, Timing, TimingSample, Transition,
+    TransitionId, animate_keyframes, spring, transition, transition_with_status,
 };
 pub use number_input::{
     Decrement, Increment, NumberInput, NumberInputEvent, NumberInputText, NumberStep, StepAction,
