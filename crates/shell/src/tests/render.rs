@@ -165,7 +165,14 @@ import { View, div } from "gpui";
 import { v_flex, Button } from "gpui-base";
 
 export default class PointerRebuild extends View {
-  init() { this.moves = 0; this.clicks = 0; this.hovered = false; this.hoverEvents = 0; }
+  init() {
+    this.moves = 0;
+    this.clicks = 0;
+    this.hovered = false;
+    this.hoverEvents = 0;
+    this.moveFunction = null;
+    this.clickFunction = null;
+  }
   render(cx) {
     return v_flex()
       .w(300)
@@ -175,8 +182,9 @@ export default class PointerRebuild extends View {
           .id("plot")
           .w(300)
           .h(80)
-          .on_mouse_move((_event, cx) => {
+          .on_mouse_move((event, cx) => {
             this.moves += 1;
+            this.moveFunction = event.modifiers.function;
             cx.notify();
           })
           .on_hover((hovered, cx) => {
@@ -185,17 +193,18 @@ export default class PointerRebuild extends View {
             this.hovered = hovered;
             cx.notify();
           })
-          .child(`Moves: ${this.moves}; Hovered: ${this.hovered}; Hover events: ${this.hoverEvents}`),
+          .child(`Moves: ${this.moves}; Move function: ${this.moveFunction}; Hovered: ${this.hovered}; Hover events: ${this.hoverEvents}`),
       )
       .child(
         Button.new("after-hover")
           .w(300)
           .h(80)
-          .on_click((_event, cx) => {
+          .on_click((event, cx) => {
             this.clicks += 1;
+            this.clickFunction = event.modifiers.function;
             cx.notify();
           })
-          .child(`Clicks: ${this.clicks}`),
+          .child(`Clicks: ${this.clicks}; Click function: ${this.clickFunction}`),
       );
   }
 }
@@ -226,6 +235,7 @@ export default class PointerRebuild extends View {
     context.run_until_parked();
     context.update(|window, cx| window.draw(cx).clear(cx));
     assert!(tree(&mut context).contains("Moves: 1"));
+    assert!(tree(&mut context).contains("Move function: false"));
     assert!(tree(&mut context).contains("Hovered: true"));
     assert!(
         tree(&mut context).contains("Hover events: 1"),
@@ -244,6 +254,7 @@ export default class PointerRebuild extends View {
     context.simulate_click(point(px(20.), px(120.)), Modifiers::default());
     context.run_until_parked();
     assert!(tree(&mut context).contains("Clicks: 1"));
+    assert!(tree(&mut context).contains("Click function: false"));
 }
 
 #[gpui::test]
@@ -4849,6 +4860,93 @@ export default class Keys extends View {
     assert!(
         tree.contains("up=escape"),
         "a release must arrive on the same focus path as a press: {tree}"
+    );
+}
+
+#[gpui::test]
+fn a_script_hears_modifier_changes_at_a_focused_element(cx: &mut TestAppContext) {
+    cx.update(|cx| crate::init(cx));
+
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View, div } from "gpui";
+import { v_flex } from "gpui-base";
+
+export default class Modifiers extends View {
+  init(_props, cx) {
+    this.handle = cx.focus_handle();
+    this.changes = [];
+  }
+
+  render(_cx) {
+    return v_flex()
+      .w(200)
+      .h(100)
+      .child(
+        div()
+          .id("surface")
+          .w(200)
+          .h(60)
+          .tab_index(1)
+          .track_focus(this.handle)
+          .on_modifiers_changed((event, cx) => {
+            this.changes.push([
+              event.modifiers.shift,
+              event.modifiers.control,
+              event.modifiers.alt,
+              event.modifiers.platform,
+              event.modifiers.function,
+              event.capslock.on,
+            ].join("/"));
+            cx.notify();
+          }),
+      )
+      .child(div().child(this.changes.join(" ")));
+  }
+}
+"#;
+    let view_type = runtime.load_source("modifiers", source).expect("load");
+    let runtime_for_view = Rc::clone(&runtime);
+    let window = cx.add_window(move |window, cx| {
+        let view = runtime_for_view
+            .instantiate_view(&view_type, window, cx)
+            .expect("instantiate");
+        RootedScriptView(view)
+    });
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    let view = window
+        .root(&mut context)
+        .expect("root view")
+        .read_with(&context, |root, _| root.0.clone());
+
+    let handles = runtime.entities().focus_handles();
+    assert_eq!(handles.len(), 1, "the script created one focus handle");
+    context.update(|window, cx| handles[0].focus(window, cx));
+    context.update(|window, cx| window.draw(cx).clear(cx));
+
+    context.simulate_event(gpui::ModifiersChangedEvent {
+        modifiers: gpui::Modifiers {
+            control: true,
+            function: true,
+            ..Default::default()
+        },
+        capslock: gpui::Capslock { on: true },
+    });
+    context.simulate_event(gpui::ModifiersChangedEvent::default());
+    context.run_until_parked();
+    context.update(|window, cx| window.draw(cx).clear(cx));
+
+    let tree = context.update(|_, cx| {
+        view.read(cx)
+            .snapshot()
+            .map(crate::RenderSnapshot::debug_tree)
+            .unwrap_or_default()
+    });
+    assert!(
+        tree.contains("false/true/false/false/true/true false/false/false/false/false/false"),
+        "modifier press and release must preserve GPUI's complete event payload: {tree}"
     );
 }
 
