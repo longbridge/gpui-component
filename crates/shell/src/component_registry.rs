@@ -6,7 +6,10 @@ use std::{
     sync::Arc,
 };
 
-use gpui::{AnyElement, App, Window};
+use gpui::{
+    AnyElement, App, ClickEvent, IntoElement, ParentElement, Refineable as _, StyleRefinement,
+    Styled, Window,
+};
 
 pub const COMPONENT_REGISTRY_API_VERSION: u32 = 1;
 
@@ -206,24 +209,45 @@ impl TypeScriptDescriptor {
 }
 
 pub struct MaterializeRequest<'a> {
+    component_name: &'static str,
     payload: &'a ComponentPayload,
     operations: &'a [crate::spec::SpecOp],
     runtime: &'a Rc<crate::ShellRuntime>,
     resolve_element: &'a mut dyn FnMut(u32) -> anyhow::Result<AnyElement>,
+    style: Option<StyleRefinement>,
+    children: Vec<AnyElement>,
+    slots: Vec<(&'static str, AnyElement)>,
+    disabled: bool,
+    selected: bool,
+    on_click: Option<crate::spec::CallbackId>,
 }
 
 impl<'a> MaterializeRequest<'a> {
     pub(crate) fn new(
+        component_name: &'static str,
         payload: &'a ComponentPayload,
         operations: &'a [crate::spec::SpecOp],
         runtime: &'a Rc<crate::ShellRuntime>,
         resolve_element: &'a mut dyn FnMut(u32) -> anyhow::Result<AnyElement>,
+        style: StyleRefinement,
+        children: Vec<AnyElement>,
+        slots: Vec<(&'static str, AnyElement)>,
+        disabled: bool,
+        selected: bool,
+        on_click: Option<crate::spec::CallbackId>,
     ) -> Self {
         Self {
+            component_name,
             payload,
             operations,
             runtime,
             resolve_element,
+            style: Some(style),
+            children,
+            slots,
+            disabled,
+            selected,
+            on_click,
         }
     }
 
@@ -238,6 +262,61 @@ impl<'a> MaterializeRequest<'a> {
                 crate::spec::SpecOp::RegisteredMethod(method) => Some(method),
                 _ => None,
             })
+    }
+
+    pub fn disabled(&self) -> bool {
+        self.disabled
+    }
+
+    pub fn selected(&self) -> bool {
+        self.selected
+    }
+
+    pub fn children_len(&self) -> usize {
+        self.children.len()
+    }
+
+    pub fn take_children(&mut self) -> Vec<AnyElement> {
+        std::mem::take(&mut self.children)
+    }
+
+    /// Takes a named, already-materialized slot.
+    ///
+    /// Slots remain separate from ordinary children because the registered
+    /// component owns their placement. Any slot left unread is diagnosed when
+    /// the request is dropped instead of disappearing silently.
+    pub fn take_slot(&mut self, name: &str) -> Option<AnyElement> {
+        let index = self.slots.iter().position(|(held, _)| *held == name)?;
+        Some(self.slots.remove(index).1)
+    }
+
+    pub fn take_style(&mut self) -> StyleRefinement {
+        self.style.take().unwrap_or_default()
+    }
+
+    pub fn on_click(&self) -> Option<ComponentClickCallback> {
+        self.on_click.map(|id| ComponentClickCallback {
+            runtime: Rc::downgrade(self.runtime),
+            id,
+        })
+    }
+
+    /// Applies this node's style and ordinary children exactly once.
+    pub fn finish<E>(mut self, mut element: E) -> AnyElement
+    where
+        E: Styled + ParentElement + IntoElement + 'static,
+    {
+        element.style().refine(&self.take_style());
+        element.extend(self.take_children());
+        element.into_any_element()
+    }
+
+    fn unread_parts(&self) -> (bool, usize, Vec<&'static str>) {
+        (
+            self.style.is_some(),
+            self.children.len(),
+            self.slots.iter().map(|(name, _)| *name).collect(),
+        )
     }
 
     pub fn resolve_element(&mut self, argument: &ComponentArgument) -> anyhow::Result<AnyElement> {
@@ -283,6 +362,31 @@ impl<'a> MaterializeRequest<'a> {
     }
 }
 
+impl Drop for MaterializeRequest<'_> {
+    fn drop(&mut self) {
+        let (style, children, slots) = self.unread_parts();
+        if style {
+            tracing::warn!(
+                "{} did not consume its style; call MaterializeRequest::finish or take_style",
+                self.component_name
+            );
+        }
+        if children != 0 {
+            tracing::warn!(
+                "{} did not consume {} child element(s)",
+                self.component_name,
+                children
+            );
+        }
+        for name in slots {
+            tracing::warn!(
+                "{} has no `{name}` slot, so the element given to it is not rendered at all",
+                self.component_name
+            );
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct ComponentEntityRef {
     runtime: Weak<crate::ShellRuntime>,
@@ -306,6 +410,22 @@ impl ComponentEntityRef {
 pub struct ComponentCallback {
     runtime: Weak<crate::ShellRuntime>,
     id: u64,
+}
+
+#[derive(Clone)]
+pub struct ComponentClickCallback {
+    runtime: Weak<crate::ShellRuntime>,
+    id: crate::spec::CallbackId,
+}
+
+impl ComponentClickCallback {
+    pub fn invoke(&self, event: &ClickEvent, window: &mut Window, cx: &mut App) {
+        let Some(runtime) = self.runtime.upgrade() else {
+            tracing::debug!("component click callback runtime has been released");
+            return;
+        };
+        runtime.dispatch_click(self.id, event, window, cx);
+    }
 }
 
 impl ComponentCallback {
@@ -787,7 +907,7 @@ impl FrozenComponentRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gpui::{IntoElement as _, div};
+    use gpui::div;
 
     #[test]
     fn component_payloads_cross_the_adapter_boundary_as_send_sync_values() {
@@ -802,6 +922,34 @@ mod tests {
         fn materialize(&self, _request: MaterializeRequest<'_>) -> anyhow::Result<AnyElement> {
             Ok(div().into_any_element())
         }
+    }
+
+    #[test]
+    fn materialize_request_keeps_named_slots_separate_until_the_adapter_takes_them() {
+        let runtime = crate::ShellRuntime::new_isolated().unwrap();
+        let payload = ComponentPayload::new(());
+        let operations = [];
+        let mut resolve_element = |_| anyhow::bail!("no element argument expected");
+        let mut request = MaterializeRequest::new(
+            "Slotted",
+            &payload,
+            &operations,
+            &runtime,
+            &mut resolve_element,
+            StyleRefinement::default(),
+            vec![div().into_any_element()],
+            vec![("trigger", div().into_any_element())],
+            false,
+            false,
+            None,
+        );
+
+        assert_eq!(request.unread_parts(), (true, 1, vec!["trigger"]));
+        assert!(request.take_slot("content").is_none());
+        assert!(request.take_slot("trigger").is_some());
+        assert_eq!(request.take_children().len(), 1);
+        let _ = request.take_style();
+        assert_eq!(request.unread_parts(), (false, 0, Vec::new()));
     }
 
     fn empty_descriptor(

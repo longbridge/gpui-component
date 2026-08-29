@@ -466,7 +466,7 @@ fn registered_entity_arguments_validate_the_actual_entity_kind(cx: &mut TestAppC
     use crate::{
         ArgumentDescriptor, ArgumentSchema, COMPONENT_REGISTRY_API_VERSION, ComponentDescriptor,
         ComponentMaterializer, ComponentPayload, ComponentRegistry, ConstructorDescriptor,
-        MaterializeRequest, TypeScriptDescriptor,
+        MaterializeRequest, MethodDescriptor, TypeScriptDescriptor,
     };
     use gpui::{AnyElement, IntoElement as _, div};
     use std::sync::Arc;
@@ -491,7 +491,26 @@ fn registered_entity_arguments_validate_the_actual_entity_kind(cx: &mut TestAppC
                 )],
                 |_| Ok(ComponentPayload::new(())),
             )],
-            methods: Vec::new(),
+            methods: vec![
+                MethodDescriptor::new(
+                    "disabled",
+                    vec![ArgumentDescriptor::new("disabled", ArgumentSchema::Boolean)],
+                    |_| Ok(ComponentPayload::new(())),
+                ),
+                MethodDescriptor::new(
+                    "selected",
+                    vec![ArgumentDescriptor::new("selected", ArgumentSchema::Boolean)],
+                    |_| Ok(ComponentPayload::new(())),
+                ),
+                MethodDescriptor::new(
+                    "on_click",
+                    vec![ArgumentDescriptor::new(
+                        "handler",
+                        ArgumentSchema::Callback("(event, cx) => void"),
+                    )],
+                    |_| Ok(ComponentPayload::new(())),
+                ),
+            ],
             typescript: TypeScriptDescriptor::default(),
             materializer: Arc::new(EmptyMaterializer),
         })
@@ -617,6 +636,238 @@ export default class Resolved extends View {
         error.to_string().contains("adapter callback ran"),
         "{error:#}"
     );
+}
+
+#[gpui::test]
+fn registered_button_receives_common_parts_and_dispatches_click(cx: &mut TestAppContext) {
+    use std::sync::{
+        Arc, Mutex,
+        atomic::{AtomicUsize, Ordering},
+    };
+
+    use gpui::AnyElement;
+    use gpui_base::Button;
+
+    use crate::{
+        ArgumentDescriptor, ArgumentSchema, COMPONENT_REGISTRY_API_VERSION, ComponentDescriptor,
+        ComponentMaterializer, ComponentPayload, ComponentRegistry, ConstructorDescriptor,
+        MaterializeRequest, MethodDescriptor, TypeScriptDescriptor,
+    };
+
+    #[derive(Default)]
+    struct Observed {
+        states: Mutex<Vec<(String, bool, bool, usize)>>,
+        click_recordings: AtomicUsize,
+    }
+
+    struct AdapterButton(Arc<Observed>);
+
+    impl ComponentMaterializer for AdapterButton {
+        fn materialize(&self, request: MaterializeRequest<'_>) -> anyhow::Result<AnyElement> {
+            let id = request.payload().downcast_ref::<String>().unwrap().clone();
+            self.0.states.lock().unwrap().push((
+                id.clone(),
+                request.disabled(),
+                request.selected(),
+                request.children_len(),
+            ));
+            let mut button = Button::new(id).disabled(request.disabled());
+            if let Some(on_click) = request.on_click() {
+                button = button.on_click(move |event, window, cx| {
+                    on_click.invoke(event, window, cx);
+                });
+            }
+            Ok(request.finish(button))
+        }
+    }
+
+    cx.update(crate::init);
+    let observed = Arc::new(Observed::default());
+    let observed_clicks = Arc::clone(&observed);
+    let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+    registry
+        .register(ComponentDescriptor {
+            name: "AdapterButton",
+            constructors: vec![ConstructorDescriptor::new(
+                "AdapterButton",
+                vec![ArgumentDescriptor::new("id", ArgumentSchema::String)],
+                |arguments| match arguments {
+                    [crate::ComponentArgument::String(id)] => Ok(ComponentPayload::new(id.clone())),
+                    _ => unreachable!("argument schema validated before payload construction"),
+                },
+            )],
+            methods: vec![
+                MethodDescriptor::new(
+                    "disabled",
+                    vec![ArgumentDescriptor::new("disabled", ArgumentSchema::Boolean)],
+                    |_| Ok(ComponentPayload::new(())),
+                ),
+                MethodDescriptor::new(
+                    "selected",
+                    vec![ArgumentDescriptor::new("selected", ArgumentSchema::Boolean)],
+                    |_| Ok(ComponentPayload::new(())),
+                ),
+                MethodDescriptor::new(
+                    "on_click",
+                    vec![ArgumentDescriptor::new(
+                        "handler",
+                        ArgumentSchema::Callback("(event, cx) => void"),
+                    )],
+                    move |_| {
+                        observed_clicks
+                            .click_recordings
+                            .fetch_add(1, Ordering::SeqCst);
+                        Ok(ComponentPayload::new(()))
+                    },
+                ),
+            ],
+            typescript: TypeScriptDescriptor::default(),
+            materializer: Arc::new(AdapterButton(Arc::clone(&observed))),
+        })
+        .unwrap();
+    registry
+        .register(ComponentDescriptor {
+            name: "RejectClick",
+            constructors: vec![ConstructorDescriptor::new(
+                "RejectClick",
+                Vec::new(),
+                |_| Ok(ComponentPayload::new(String::from("reject"))),
+            )],
+            methods: vec![MethodDescriptor::new(
+                "on_click",
+                vec![ArgumentDescriptor::new(
+                    "handler",
+                    ArgumentSchema::Callback("(event, cx) => void"),
+                )],
+                |_| Err("click recorder refused the handler".into()),
+            )],
+            typescript: TypeScriptDescriptor::default(),
+            materializer: Arc::new(AdapterButton(Arc::clone(&observed))),
+        })
+        .unwrap();
+    let runtime = ShellRuntime::new_isolated_with_components(registry.freeze().unwrap()).unwrap();
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View, div } from "gpui";
+import { AdapterButton } from "gpui-component";
+export default class AdapterButtons extends View {
+  init() { this.clicks = 0; }
+  render() {
+    return div().w(300).h(100)
+      .child(new AdapterButton("disabled").disabled(true).selected(true).w(120).h(40).child("Disabled"))
+      .child(new AdapterButton("active").w(120).h(40).on_click((_event, cx) => {
+        this.clicks += 1;
+        cx.notify();
+      }).child("Clicks: " + this.clicks));
+  }
+}
+"#;
+    let view_type = runtime.load_source("adapter-button.js", source).unwrap();
+    let runtime_for_view = Rc::clone(&runtime);
+    let window = cx.add_window(move |window, cx| {
+        let object = runtime_for_view
+            .instantiate(&view_type, window, cx)
+            .expect("instantiate");
+        ScriptView::new(runtime_for_view, object)
+    });
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let refusing = runtime
+        .load_source(
+            "refusing-click.js",
+            r#"
+import { View } from "gpui";
+import { RejectClick } from "gpui-component";
+export default class RefusingClick extends View {
+  render() { return new RejectClick().on_click(() => {}); }
+}
+"#,
+        )
+        .unwrap();
+    let object = context
+        .update(|window, cx| runtime.instantiate(&refusing, window, cx))
+        .unwrap();
+    let callbacks_before = runtime.live_callbacks();
+    let error = context
+        .update(|window, cx| runtime.render_to_spec(&object, None, window, cx))
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("click recorder refused the handler"),
+        "{error:#}"
+    );
+    assert_eq!(
+        runtime.live_callbacks(),
+        callbacks_before,
+        "a recorder failure must roll back the callback it validated"
+    );
+
+    let undeclared = runtime
+        .load_source(
+            "undeclared-common.js",
+            r#"
+import { View } from "gpui";
+import { AdapterButton } from "gpui-component";
+export default class UndeclaredCommon extends View {
+  render() { return new AdapterButton("bad").checked(true); }
+}
+"#,
+        )
+        .unwrap();
+    let object = context
+        .update(|window, cx| runtime.instantiate(&undeclared, window, cx))
+        .unwrap();
+    let error = context
+        .update(|window, cx| runtime.render_to_spec(&object, None, window, cx))
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("unknown element method `checked`")
+    );
+
+    let view = window.root(&mut context).unwrap();
+    context.update(|_, cx| view.update(cx, |_, cx| cx.notify()));
+    context.run_until_parked();
+    context.update(|window, _| window.refresh());
+    context.update(|window, cx| window.draw(cx).clear(cx));
+
+    let initial_tree = context.update(|_, cx| {
+        view.read(cx)
+            .snapshot()
+            .map(crate::RenderSnapshot::debug_tree)
+            .unwrap_or_default()
+    });
+    assert!(
+        !initial_tree.is_empty(),
+        "script view did not publish a snapshot"
+    );
+    let states = observed.states.lock().unwrap().clone();
+    assert!(
+        states.contains(&("disabled".into(), true, true, 1)),
+        "{states:?}"
+    );
+    assert!(
+        states.contains(&("active".into(), false, false, 1)),
+        "{states:?}"
+    );
+    assert_eq!(observed.click_recordings.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        runtime.live_callbacks(),
+        1,
+        "the descriptor transaction and common Behavior must share one callback"
+    );
+
+    context.simulate_click(point(px(20.), px(60.)), Modifiers::default());
+    context.run_until_parked();
+    let view = window.root(&mut context).unwrap();
+    let tree = context.update(|_, cx| {
+        view.read(cx)
+            .snapshot()
+            .map(crate::RenderSnapshot::debug_tree)
+            .unwrap_or_default()
+    });
+    assert!(tree.contains("Clicks: 1"), "{tree}");
 }
 
 #[gpui::test]

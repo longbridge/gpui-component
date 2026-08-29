@@ -672,7 +672,8 @@ fn materialize_node(
     // it knows which names it read.
     if !matches!(
         component,
-        Component::Collapsible
+        Component::Registered(_)
+            | Component::Collapsible
             | Component::Popover(_)
             | Component::HoverCard(_)
             | Component::Popup(_)
@@ -741,10 +742,17 @@ fn materialize_component(
             match descriptor
                 .materializer
                 .materialize(crate::MaterializeRequest::new(
+                    component.name(),
                     component.payload(),
                     node.ops(),
                     runtime,
                     &mut resolve_element,
+                    refinement,
+                    children.into_vec(),
+                    slots.into_vec(),
+                    behavior.disabled,
+                    behavior.selected,
+                    behavior.on_click,
                 )) {
                 Ok(element) => element,
                 Err(error) => {

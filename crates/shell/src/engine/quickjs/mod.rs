@@ -5818,7 +5818,48 @@ impl ShellRuntime {
             return self.apply_slot(ctx, id, method, position, argument);
         }
 
-        if let Some(descriptor) = self.registered_method_descriptor(id, method) {
+        let registered_method = self.registered_method_descriptor(id, method);
+        let registered_common_behavior = matches!(method, "disabled" | "selected" | "on_click");
+        if registered_common_behavior
+            && self.is_registered_component(id)
+            && registered_method.is_none()
+        {
+            return Err(Exception::throw_type(ctx, &unknown_method(method)));
+        }
+        if registered_common_behavior && let Some(descriptor) = registered_method.as_ref() {
+            self.arena
+                .borrow()
+                .can_push_op(id)
+                .map_err(|error| Exception::throw_type(ctx, &error.to_string()))?;
+            let mut callback = None;
+            self.component_payload_transaction(
+                ctx,
+                descriptor.name,
+                &descriptor.arguments,
+                &args,
+                |arguments| {
+                    if method == "on_click"
+                        && let [ComponentArgument::Callback(id)] = arguments
+                    {
+                        callback = Some(*id);
+                    }
+                    descriptor.record(arguments)
+                },
+            )?;
+            if method == "on_click" {
+                let callback = callback.ok_or_else(|| {
+                    Exception::throw_type(
+                        ctx,
+                        "on_click descriptor must declare exactly one callback argument",
+                    )
+                })?;
+                return self.push_op_checked(
+                    ctx,
+                    self.push_op(id, SpecOp::Callback("on_click", callback)),
+                );
+            }
+        }
+        if !registered_common_behavior && let Some(descriptor) = registered_method {
             self.arena
                 .borrow()
                 .can_push_op(id)
@@ -5841,7 +5882,7 @@ impl ShellRuntime {
                 ),
             );
         }
-        if self.is_registered_component(id) {
+        if self.is_registered_component(id) && !registered_common_behavior {
             return Err(Exception::throw_type(ctx, &unknown_method(method)));
         }
 
