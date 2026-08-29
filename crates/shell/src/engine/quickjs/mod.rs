@@ -34,6 +34,7 @@ use rquickjs::{
 use smallvec::SmallVec;
 
 use crate::{
+    FrozenComponentRegistry,
     entities::{EntityHandle, EntityStore},
     metrics::Metrics,
     policy::Policy,
@@ -453,6 +454,7 @@ pub struct ShellRuntime {
     /// `Persistent` handle must be released while the context still exists.
     /// QuickJS aborts the process if a value outlives its runtime.
     callbacks: RefCell<CallbackArena<Persistent<Function<'static>>>>,
+    components: FrozenComponentRegistry,
     arena: RefCell<SpecArena>,
     /// Templates the script has defined, indexed by the id its closure keeps.
     ///
@@ -575,6 +577,10 @@ impl ShellRuntime {
     /// call frame rather than in runtime-global state. Use this only when a host
     /// deliberately owns multiple isolated runtimes.
     pub fn new_isolated() -> Result<Rc<Self>> {
+        Self::new_isolated_with_components(FrozenComponentRegistry::default())
+    }
+
+    pub fn new_isolated_with_components(components: FrozenComponentRegistry) -> Result<Rc<Self>> {
         let entities = EntityStore::try_new()
             .ok_or_else(|| anyhow!("gpui-shell entity store id space is exhausted"))?;
         let js_runtime = JsRuntime::new().map_err(js_setup_error)?;
@@ -612,6 +618,7 @@ impl ShellRuntime {
 
         let runtime = Rc::new(Self {
             callbacks: RefCell::new(CallbackArena::default()),
+            components,
             arena: RefCell::new(SpecArena::new()),
             templates: RefCell::new(Vec::new()),
             discovery: RefCell::new(None),
@@ -636,6 +643,10 @@ impl ShellRuntime {
 
         runtime.install_globals()?;
         Ok(runtime)
+    }
+
+    pub fn component_registry(&self) -> &FrozenComponentRegistry {
+        &self.components
     }
 
     pub(crate) fn set_global(self: &Rc<Self>, cx: &mut App) {

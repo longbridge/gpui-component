@@ -171,6 +171,8 @@ pub enum Component {
     /// that was already published.
     ChildView(ChildViewSpec),
     Text(String),
+    #[allow(dead_code)] // Constructed by descriptor-driven QuickJS installation in the next layer.
+    Registered(RegisteredComponentSpec),
     Button(String),
     Link(String),
     Checkbox(String),
@@ -370,6 +372,36 @@ pub enum Component {
     VirtualList(Rc<VirtualListSpec>),
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct RegisteredComponentSpec {
+    id: crate::ComponentId,
+    name: &'static str,
+    payload: crate::ComponentPayload,
+}
+
+impl RegisteredComponentSpec {
+    #[allow(dead_code)] // Constructed by descriptor-driven QuickJS installation in the next layer.
+    pub fn new(
+        id: crate::ComponentId,
+        name: &'static str,
+        payload: crate::ComponentPayload,
+    ) -> Self {
+        Self { id, name, payload }
+    }
+
+    pub fn id(&self) -> crate::ComponentId {
+        self.id
+    }
+
+    pub fn name(&self) -> &'static str {
+        self.name
+    }
+
+    pub fn payload(&self) -> &crate::ComponentPayload {
+        &self.payload
+    }
+}
+
 /// The retained entity mounted by one `child_view(handle)` description.
 ///
 /// Equality and diagnostics use the runtime-unique handle. The entity is the
@@ -489,7 +521,10 @@ impl Component {
     /// fingerprint is only ever compared against another taken in the same
     /// process, from the same view, one render apart.
     fn shape(&self) -> u64 {
-        hashed(&std::mem::discriminant(self))
+        match self {
+            Component::Registered(component) => mix(59, u64::from(component.id().as_u32())),
+            _ => hashed(&std::mem::discriminant(self)),
+        }
     }
 
     pub fn name(&self) -> &'static str {
@@ -499,6 +534,7 @@ impl Component {
             Component::VFlex => "v_flex",
             Component::ChildView(_) => "child_view",
             Component::Text(_) => "text",
+            Component::Registered(component) => component.name(),
             Component::Button(_) => "Button",
             Component::Link(_) => "Link",
             Component::Checkbox(_) => "Checkbox",

@@ -79,6 +79,67 @@ fn a_script_view_produces_an_element_description(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
+fn a_registered_component_payload_reaches_its_materializer(cx: &mut TestAppContext) {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+
+    use gpui::{AnyElement, IntoElement as _, div};
+
+    use crate::{
+        COMPONENT_REGISTRY_API_VERSION, ComponentDescriptor, ComponentMaterializer,
+        ComponentPayload, ComponentRegistry, ConstructorDescriptor, MaterializeRequest,
+        TypeScriptDescriptor,
+        snapshot::RenderSnapshot,
+        spec::{Component, RegisteredComponentSpec, SpecArena},
+    };
+
+    struct TestBoxMaterializer(Arc<AtomicUsize>);
+
+    impl ComponentMaterializer for TestBoxMaterializer {
+        fn materialize(&self, request: MaterializeRequest<'_>) -> anyhow::Result<AnyElement> {
+            assert_eq!(request.payload().downcast_ref::<String>().unwrap(), "alpha");
+            self.0.fetch_add(1, Ordering::SeqCst);
+            Ok(div().into_any_element())
+        }
+    }
+
+    cx.update(|cx| crate::init(cx));
+    let calls = Arc::new(AtomicUsize::new(0));
+    let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+    let id = registry
+        .register(ComponentDescriptor {
+            name: "TestBox",
+            constructors: vec![ConstructorDescriptor::new("TestBox")],
+            methods: Vec::new(),
+            typescript: TypeScriptDescriptor::default(),
+            materializer: Arc::new(TestBoxMaterializer(calls.clone())),
+        })
+        .unwrap();
+    let runtime = ShellRuntime::new_isolated_with_components(registry.freeze().unwrap()).unwrap();
+
+    let mut arena = SpecArena::new();
+    let root = arena.push(Component::Registered(RegisteredComponentSpec::new(
+        id,
+        "TestBox",
+        ComponentPayload::new(String::from("alpha")),
+    )));
+    let snapshot = RenderSnapshot::new(&runtime, 0, root, arena);
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+
+    context.update(|window, cx| {
+        drop(crate::materialize::materialize(
+            &runtime, &snapshot, window, cx,
+        ));
+    });
+
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    assert_eq!(snapshot.debug_tree(), "TestBox\n");
+}
+
+#[gpui::test]
 fn element_map_returns_the_transform_result(cx: &mut TestAppContext) {
     cx.update(crate::init);
     let runtime = ShellRuntime::new_isolated().expect("runtime");

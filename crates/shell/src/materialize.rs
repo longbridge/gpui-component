@@ -722,6 +722,30 @@ fn materialize_component(
     cx: &mut App,
 ) -> AnyElement {
     match component {
+        Component::Registered(component) => {
+            let Some(descriptor) = runtime.component_registry().descriptor(component.id()) else {
+                tracing::error!(
+                    "registered component `{}` has an unknown registry id {}",
+                    component.name(),
+                    component.id().as_u32()
+                );
+                return div()
+                    .child(format!("Unknown component: {}", component.name()))
+                    .into_any_element();
+            };
+            match descriptor
+                .materializer
+                .materialize(crate::MaterializeRequest::new(component.payload()))
+            {
+                Ok(element) => element,
+                Err(error) => {
+                    tracing::error!("failed to materialize `{}`: {error:#}", component.name());
+                    div()
+                        .child(format!("Failed to render {}", component.name()))
+                        .into_any_element()
+                }
+            }
+        }
         Component::ChildView(child) => child.view().clone().into_any_element(),
         Component::Div => flex_element(
             runtime,

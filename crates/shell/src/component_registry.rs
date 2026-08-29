@@ -1,4 +1,4 @@
-use std::{any::Any, collections::HashSet, fmt, marker::PhantomData, sync::Arc};
+use std::{any::Any, collections::HashSet, fmt, rc::Rc, sync::Arc};
 
 use gpui::AnyElement;
 
@@ -14,15 +14,27 @@ impl ComponentId {
 }
 
 #[derive(Clone)]
-pub struct ComponentPayload(Arc<dyn Any + Send + Sync>);
+pub struct ComponentPayload(Rc<dyn Any>);
 
 impl ComponentPayload {
-    pub fn new<T: Any + Send + Sync>(value: T) -> Self {
-        Self(Arc::new(value))
+    pub fn new<T: Any>(value: T) -> Self {
+        Self(Rc::new(value))
     }
 
     pub fn downcast_ref<T: Any>(&self) -> Option<&T> {
         self.0.downcast_ref()
+    }
+}
+
+impl fmt::Debug for ComponentPayload {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.debug_tuple("ComponentPayload").finish()
+    }
+}
+
+impl PartialEq for ComponentPayload {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.0, &other.0)
     }
 }
 
@@ -54,14 +66,16 @@ pub struct TypeScriptDescriptor {
 }
 
 pub struct MaterializeRequest<'a> {
-    marker: PhantomData<&'a mut ()>,
+    payload: &'a ComponentPayload,
 }
 
-impl MaterializeRequest<'_> {
-    pub fn empty() -> Self {
-        Self {
-            marker: PhantomData,
-        }
+impl<'a> MaterializeRequest<'a> {
+    pub(crate) fn new(payload: &'a ComponentPayload) -> Self {
+        Self { payload }
+    }
+
+    pub fn payload(&self) -> &ComponentPayload {
+        self.payload
     }
 }
 
