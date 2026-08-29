@@ -10,13 +10,27 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
     display::register(registry)?;
     compound::register(registry)?;
     typed_compound::register(registry)?;
+    overlays::register(registry)?;
+    retained_forms::register(registry)?;
+    layout_remaining::register(registry)?;
+    media_remaining::register(registry)?;
+    structured::register(registry)?;
+    remaining::register(registry)?;
+    basic_remaining::register(registry)?;
     Ok(())
 }
 
+mod basic_remaining;
 mod compound;
 mod controls;
 mod display;
+mod layout_remaining;
+mod media_remaining;
+mod overlays;
+mod remaining;
+mod retained_forms;
 mod separator;
 mod skeleton;
 mod spinner;
+mod structured;
 mod typed_compound;

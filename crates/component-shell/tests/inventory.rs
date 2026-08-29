@@ -40,6 +40,7 @@ fn inventory_entries_have_a_registration_or_a_reason() {
                     descriptor,
                     exports,
                     related,
+                    states,
                 }) => {
                     assert!(
                         !descriptor.is_empty(),
@@ -56,6 +57,11 @@ fn inventory_entries_have_a_registration_or_a_reason() {
                             "related exports cannot be empty"
                         );
                         assert!(!companion.role.is_empty(), "related role cannot be empty");
+                    }
+                    for state in states {
+                        assert!(!state.export.is_empty(), "state export cannot be empty");
+                        assert!(!state.kind.is_empty(), "state kind cannot be empty");
+                        assert!(!state.role.is_empty(), "state role cannot be empty");
                     }
                 }
                 Some(Registration::Deferred {
@@ -103,14 +109,20 @@ fn registered_inventory_matches_the_frozen_component_catalog() {
             )
         })
         .collect::<std::collections::BTreeMap<_, _>>();
+    let actual_states = frozen
+        .states()
+        .map(|state| (state.export.to_owned(), state.kind.to_owned()))
+        .collect::<std::collections::BTreeMap<_, _>>();
 
     let mut inventoried_descriptors = BTreeSet::new();
     let mut inventoried_exports = BTreeSet::new();
+    let mut inventoried_states = BTreeSet::new();
     for entry in inventory.entries {
         let Some(Registration::Registered {
             descriptor,
             exports,
             related,
+            states,
         }) = entry.registration
         else {
             continue;
@@ -145,10 +157,25 @@ fn registered_inventory_matches_the_frozen_component_catalog() {
             inventoried_descriptors.insert(companion.descriptor);
             inventoried_exports.extend(claimed_exports);
         }
+        for state in states {
+            let actual_kind = actual_states.get(&state.export).unwrap_or_else(|| {
+                panic!(
+                    "{}:{} claims missing retained state `{}`",
+                    entry.source, entry.name, state.export
+                )
+            });
+            assert_eq!(
+                &state.kind, actual_kind,
+                "{}:{} has stale kind for state `{}` ({})",
+                entry.source, entry.name, state.export, state.role
+            );
+            inventoried_states.insert(state.export);
+        }
     }
 
     let actual_descriptors = actual.keys().cloned().collect::<BTreeSet<_>>();
     let actual_exports = actual.values().flatten().cloned().collect::<BTreeSet<_>>();
+    let actual_state_exports = actual_states.keys().cloned().collect::<BTreeSet<_>>();
     assert_eq!(
         inventoried_descriptors, actual_descriptors,
         "registered descriptors must all be inventoried"
@@ -156,6 +183,10 @@ fn registered_inventory_matches_the_frozen_component_catalog() {
     assert_eq!(
         inventoried_exports, actual_exports,
         "registered constructor exports must all be inventoried"
+    );
+    assert_eq!(
+        inventoried_states, actual_state_exports,
+        "registered retained-state exports must all be inventoried"
     );
 }
 
@@ -177,6 +208,7 @@ enum Registration {
         descriptor: String,
         exports: Vec<String>,
         related: Vec<RelatedRegistration>,
+        states: Vec<StateRegistration>,
     },
     Deferred {
         target: String,
@@ -188,6 +220,12 @@ enum Registration {
 struct RelatedRegistration {
     descriptor: String,
     exports: Vec<String>,
+    role: String,
+}
+
+struct StateRegistration {
+    export: String,
+    kind: String,
     role: String,
 }
 
@@ -251,6 +289,20 @@ impl Inventory {
                                         .as_str()
                                         .expect("related role")
                                         .to_owned(),
+                                })
+                                .collect(),
+                            states: registration
+                                .get("states")
+                                .and_then(Value::as_array)
+                                .into_iter()
+                                .flatten()
+                                .map(|state| StateRegistration {
+                                    export: state["export"]
+                                        .as_str()
+                                        .expect("state export")
+                                        .to_owned(),
+                                    kind: state["kind"].as_str().expect("state kind").to_owned(),
+                                    role: state["role"].as_str().expect("state role").to_owned(),
                                 })
                                 .collect(),
                         },

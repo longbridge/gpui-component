@@ -143,6 +143,135 @@ export default class InvalidComponentApp extends View {
 }
 
 #[gpui_shell::gpui::test]
+fn all_retained_form_bindings_materialize_and_keep_their_state_across_frames(
+    cx: &mut TestAppContext,
+) {
+    let source = r#"
+import { div, View } from "gpui";
+import {
+  Calendar, CalendarState, ColorPicker, ColorPickerState,
+  DatePicker, DatePickerState, Input, InputState, NumberInput,
+  OtpInput, OtpState, Slider, SliderState,
+} from "gpui-component";
+export default class RetainedForms extends View {
+  init() {
+    this.input = InputState();
+    this.otp = OtpState(6);
+    this.slider = SliderState();
+    this.color = ColorPickerState();
+    this.calendar = CalendarState();
+    this.date = DatePickerState();
+  }
+  render() {
+    return div()
+      .child(new Input(this.input).ariaLabel("Project").disabled(false))
+      .child(new NumberInput(this.input).placeholder("Quantity").disabled(true))
+      .child(new OtpInput(this.otp).w(320).groups(3).disabled(false))
+      .child(new Slider(this.slider).vertical().reverse().disabled(false))
+      .child(new ColorPicker(this.color).label("Accent").accessibilityLabel("Accent color"))
+      .child(new Calendar(this.calendar).numberOfMonths(2))
+      .child(new DatePicker(this.date).placeholder("Choose date").disabled(false));
+  }
+}
+"#;
+    let (mut context, view, _runtime) = mount(cx, source);
+    for _ in 0..2 {
+        context.draw(
+            gpui_shell::gpui::Point::default(),
+            gpui_shell::gpui::size(gpui_shell::gpui::px(400.), gpui_shell::gpui::px(300.)),
+            {
+                let view = view.clone();
+                move |_, _| view.into_any_element()
+            },
+        );
+        let tree = context.update(|_, cx| {
+            let view = view.read(cx);
+            assert_eq!(view.build_error(), None);
+            view.snapshot().expect("retained OTP snapshot").debug_tree()
+        });
+        for expected in [
+            "Input",
+            "NumberInput",
+            "OtpInput",
+            "Slider",
+            "ColorPicker",
+            "Calendar",
+            "DatePicker",
+            ":ariaLabel(registered)",
+            ":placeholder(registered)",
+            ":groups(registered)",
+            ":vertical(registered)",
+            ":reverse(registered)",
+            ":label(registered)",
+            ":accessibilityLabel(registered)",
+            ":numberOfMonths(registered)",
+            ".w[Number(320.0)]",
+        ] {
+            assert!(tree.contains(expected), "missing `{expected}`:\n{tree}");
+        }
+    }
+}
+
+#[gpui_shell::gpui::test]
+fn retained_otp_rejects_an_ordinary_child_during_public_host_materialization(
+    cx: &mut TestAppContext,
+) {
+    let source = r#"
+import { div, View } from "gpui";
+import { OtpInput, OtpState } from "gpui-component";
+export default class InvalidOtp extends View {
+  init() { this.otp = OtpState(6); }
+  render() { return new OtpInput(this.otp).child(div().child("not allowed")); }
+}
+"#;
+    let (mut context, view, _runtime) = mount(cx, source);
+    context.draw(
+        gpui_shell::gpui::Point::default(),
+        gpui_shell::gpui::size(gpui_shell::gpui::px(400.), gpui_shell::gpui::px(300.)),
+        {
+            let view = view.clone();
+            move |_, _| view.into_any_element()
+        },
+    );
+
+    let tree = context.update(|_, cx| {
+        view.read(cx)
+            .snapshot()
+            .expect("invalid OTP still has a script snapshot")
+            .debug_tree()
+    });
+    assert!(tree.contains("OtpInput"), "{tree}");
+    assert!(tree.contains("not allowed"), "{tree}");
+}
+
+#[gpui_shell::gpui::test]
+fn retained_state_constructor_rejects_rounded_overflow_from_js(cx: &mut TestAppContext) {
+    let source = r#"
+import { View } from "gpui";
+import { OtpInput, OtpState } from "gpui-component";
+export default class InvalidOtpState extends View {
+  init() { this.otp = OtpState(18446744073709551616); }
+  render() { return new OtpInput(this.otp); }
+}
+"#;
+    cx.update(|cx| {
+        gpui_shell::gpui_component::init(cx);
+        gpui_shell::init(cx);
+    });
+    let app = TempApp::new(source);
+    let runtime = gpui_component_shell::new_isolated_runtime().expect("runtime");
+    let loaded = runtime
+        .load_application(app.path(), "main.js")
+        .expect("load application");
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let error = context
+        .update(|window, cx| runtime.mount_application(&loaded, window, cx))
+        .expect_err("rounded usize overflow must reject state construction");
+    assert!(error.to_string().contains("positive integer"), "{error}");
+}
+
+#[gpui_shell::gpui::test]
 fn loaded_applications_are_single_mount_and_runtime_bound(cx: &mut TestAppContext) {
     cx.update(|cx| {
         gpui_shell::gpui_component::init(cx);
@@ -274,4 +403,39 @@ export default class TypedCompounds extends View {
     let profile = tree.find("Profile").expect("second step label");
     assert!(account < profile, "{tree}");
     assert_eq!(tree.matches(".w[Number(500.0)]").count(), 4, "{tree}");
+}
+
+#[gpui_shell::gpui::test]
+fn component_state_exports_do_not_shadow_same_named_gpui_base_exports(cx: &mut TestAppContext) {
+    let source = r#"
+import { View } from "gpui";
+import { InputState as BaseInputState } from "gpui-base";
+import { Input, InputState as ComponentInputState } from "gpui-component";
+export default class CoexistingStates extends View {
+  init() {
+    this.baseState = BaseInputState.new({ placeholder: "Search" });
+    this.componentState = ComponentInputState();
+  }
+  render() { return new Input(this.componentState).ariaLabel("Name"); }
+}
+"#;
+    let (mut context, view, _runtime) = mount(cx, source);
+    context.draw(
+        gpui_shell::gpui::Point::default(),
+        gpui_shell::gpui::size(gpui_shell::gpui::px(400.), gpui_shell::gpui::px(120.)),
+        {
+            let view = view.clone();
+            move |_, _| view.into_any_element()
+        },
+    );
+    context.update(|_, cx| {
+        assert_eq!(view.read(cx).build_error(), None);
+        assert!(
+            view.read(cx)
+                .snapshot()
+                .expect("render snapshot")
+                .debug_tree()
+                .contains("Input")
+        );
+    });
 }

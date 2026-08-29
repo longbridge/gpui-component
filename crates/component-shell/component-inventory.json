@@ -14,15 +14,11 @@
       "registration": {
         "status": "registered",
         "descriptor": "Accordion",
-        "exports": [
-          "Accordion"
-        ],
+        "exports": ["Accordion"],
         "related": [
           {
             "descriptor": "AccordionItem",
-            "exports": [
-              "AccordionItem"
-            ],
+            "exports": ["AccordionItem"],
             "role": "direct-child-part"
           }
         ]
@@ -51,9 +47,7 @@
       "registration": {
         "status": "registered",
         "descriptor": "Avatar",
-        "exports": [
-          "Avatar"
-        ]
+        "exports": ["Avatar"]
       }
     },
     {
@@ -63,9 +57,7 @@
       "registration": {
         "status": "registered",
         "descriptor": "Badge",
-        "exports": [
-          "Badge"
-        ]
+        "exports": ["Badge"]
       }
     },
     {
@@ -75,9 +67,7 @@
       "registration": {
         "status": "registered",
         "descriptor": "Breadcrumb",
-        "exports": [
-          "Breadcrumb"
-        ]
+        "exports": ["Breadcrumb"]
       }
     },
     {
@@ -87,9 +77,7 @@
       "registration": {
         "status": "registered",
         "descriptor": "Button",
-        "exports": [
-          "Button"
-        ]
+        "exports": ["Button"]
       }
     },
     {
@@ -110,9 +98,7 @@
       "registration": {
         "status": "registered",
         "descriptor": "Checkbox",
-        "exports": [
-          "Checkbox"
-        ]
+        "exports": ["Checkbox"]
       }
     },
     {
@@ -122,9 +108,7 @@
       "registration": {
         "status": "registered",
         "descriptor": "Clipboard",
-        "exports": [
-          "Clipboard"
-        ]
+        "exports": ["Clipboard"]
       }
     },
     {
@@ -134,9 +118,7 @@
       "registration": {
         "status": "registered",
         "descriptor": "Collapsible",
-        "exports": [
-          "Collapsible"
-        ]
+        "exports": ["Collapsible"]
       }
     },
     {
@@ -144,10 +126,16 @@
       "name": "color_picker",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "stateful-selection",
-        "reason": "No ColorPicker descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "ColorPicker"
+        "status": "registered",
+        "descriptor": "ColorPicker",
+        "exports": ["ColorPicker"],
+        "states": [
+          {
+            "export": "ColorPickerState",
+            "kind": "ColorPickerState",
+            "role": "retained-control-state"
+          }
+        ]
       }
     },
     {
@@ -177,10 +165,16 @@
       "name": "description_list",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "component-binding",
-        "reason": "No DescriptionList descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "DescriptionList"
+        "status": "registered",
+        "descriptor": "DescriptionList",
+        "exports": ["DescriptionList"],
+        "related": [
+          {
+            "descriptor": "DescriptionItem",
+            "exports": ["DescriptionItem"],
+            "role": "direct-child-part"
+          }
+        ]
       }
     },
     {
@@ -210,10 +204,16 @@
       "name": "form",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "layout-helper",
-        "reason": "No Form descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "Form"
+        "status": "registered",
+        "descriptor": "Form",
+        "exports": ["Form", "VForm", "HForm"],
+        "related": [
+          {
+            "descriptor": "Field",
+            "exports": ["Field"],
+            "role": "direct-child-part"
+          }
+        ]
       }
     },
     {
@@ -223,9 +223,7 @@
       "registration": {
         "status": "registered",
         "descriptor": "GroupBox",
-        "exports": [
-          "GroupBox"
-        ]
+        "exports": ["GroupBox"]
       }
     },
     {
@@ -245,10 +243,9 @@
       "name": "hover_card",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "overlay-state",
-        "reason": "No HoverCard descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "HoverCard"
+        "status": "registered",
+        "descriptor": "HoverCard",
+        "exports": ["HoverCard"]
       }
     },
     {
@@ -256,10 +253,16 @@
       "name": "input",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "stateful-input",
-        "reason": "No Input descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "Input"
+        "status": "registered",
+        "descriptor": "Input",
+        "exports": ["Input"],
+        "states": [
+          {
+            "export": "InputState",
+            "kind": "InputState",
+            "role": "retained-control-state"
+          }
+        ]
       }
     },
     {
@@ -269,9 +272,7 @@
       "registration": {
         "status": "registered",
         "descriptor": "Kbd",
-        "exports": [
-          "Kbd"
-        ]
+        "exports": ["Kbd"]
       }
     },
     {
@@ -281,9 +282,7 @@
       "registration": {
         "status": "registered",
         "descriptor": "Label",
-        "exports": [
-          "Label"
-        ]
+        "exports": ["Label"]
       }
     },
     {
@@ -293,9 +292,7 @@
       "registration": {
         "status": "registered",
         "descriptor": "Link",
-        "exports": [
-          "Link"
-        ]
+        "exports": ["Link"]
       }
     },
     {
@@ -349,9 +346,7 @@
       "registration": {
         "status": "registered",
         "descriptor": "Pagination",
-        "exports": [
-          "Pagination"
-        ]
+        "exports": ["Pagination"]
       }
     },
     {
@@ -370,10 +365,9 @@
       "name": "popover",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "overlay-state",
-        "reason": "No Popover descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "Popover"
+        "status": "registered",
+        "descriptor": "Popover",
+        "exports": ["Popover"]
       }
     },
     {
@@ -383,9 +377,7 @@
       "registration": {
         "status": "registered",
         "descriptor": "Progress",
-        "exports": [
-          "Progress"
-        ]
+        "exports": ["Progress"]
       }
     },
     {
@@ -395,16 +387,11 @@
       "registration": {
         "status": "registered",
         "descriptor": "Radio",
-        "exports": [
-          "Radio"
-        ],
+        "exports": ["Radio"],
         "related": [
           {
             "descriptor": "RadioGroup",
-            "exports": [
-              "RadioGroup",
-              "HorizontalRadioGroup"
-            ],
+            "exports": ["RadioGroup", "HorizontalRadioGroup"],
             "role": "typed-container"
           }
         ]
@@ -417,9 +404,7 @@
       "registration": {
         "status": "registered",
         "descriptor": "Rating",
-        "exports": [
-          "Rating"
-        ]
+        "exports": ["Rating"]
       }
     },
     {
@@ -427,10 +412,16 @@
       "name": "resizable",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "layout-state",
-        "reason": "No Resizable descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "Resizable"
+        "status": "registered",
+        "descriptor": "Resizable",
+        "exports": ["Resizable"],
+        "related": [
+          {
+            "descriptor": "ResizablePanel",
+            "exports": ["ResizablePanel"],
+            "role": "direct-child-part"
+          }
+        ]
       }
     },
     {
@@ -508,10 +499,36 @@
       "name": "sidebar",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "component-binding",
-        "reason": "No Sidebar descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "Sidebar"
+        "status": "registered",
+        "descriptor": "Sidebar",
+        "exports": ["Sidebar"],
+        "related": [
+          {
+            "descriptor": "SidebarHeader",
+            "exports": ["SidebarHeader"],
+            "role": "named-slot-part"
+          },
+          {
+            "descriptor": "SidebarFooter",
+            "exports": ["SidebarFooter"],
+            "role": "named-slot-part"
+          },
+          {
+            "descriptor": "SidebarMenu",
+            "exports": ["SidebarMenu"],
+            "role": "typed-container"
+          },
+          {
+            "descriptor": "SidebarMenuItem",
+            "exports": ["SidebarMenuItem"],
+            "role": "direct-child-part"
+          },
+          {
+            "descriptor": "SidebarToggleButton",
+            "exports": ["SidebarToggleButton"],
+            "role": "companion-control"
+          }
+        ]
       }
     },
     {
@@ -521,9 +538,7 @@
       "registration": {
         "status": "registered",
         "descriptor": "Skeleton",
-        "exports": [
-          "Skeleton"
-        ]
+        "exports": ["Skeleton"]
       }
     },
     {
@@ -531,10 +546,16 @@
       "name": "slider",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "stateful-control",
-        "reason": "No Slider descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "Slider"
+        "status": "registered",
+        "descriptor": "Slider",
+        "exports": ["Slider"],
+        "states": [
+          {
+            "export": "SliderState",
+            "kind": "SliderState",
+            "role": "retained-control-state"
+          }
+        ]
       }
     },
     {
@@ -544,9 +565,7 @@
       "registration": {
         "status": "registered",
         "descriptor": "Spinner",
-        "exports": [
-          "Spinner"
-        ]
+        "exports": ["Spinner"]
       }
     },
     {
@@ -556,9 +575,7 @@
       "registration": {
         "status": "registered",
         "descriptor": "StatusBar",
-        "exports": [
-          "StatusBar"
-        ]
+        "exports": ["StatusBar"]
       }
     },
     {
@@ -568,15 +585,11 @@
       "registration": {
         "status": "registered",
         "descriptor": "Stepper",
-        "exports": [
-          "Stepper"
-        ],
+        "exports": ["Stepper"],
         "related": [
           {
             "descriptor": "StepperItem",
-            "exports": [
-              "StepperItem"
-            ],
+            "exports": ["StepperItem"],
             "role": "direct-child-part"
           }
         ]
@@ -589,9 +602,7 @@
       "registration": {
         "status": "registered",
         "descriptor": "Switch",
-        "exports": [
-          "Switch"
-        ]
+        "exports": ["Switch"]
       }
     },
     {
@@ -601,16 +612,11 @@
       "registration": {
         "status": "registered",
         "descriptor": "Tab",
-        "exports": [
-          "Tab"
-        ],
+        "exports": ["Tab"],
         "related": [
           {
             "descriptor": "TabBar",
-            "exports": [
-              "TabBar",
-              "Tabs"
-            ],
+            "exports": ["TabBar", "Tabs"],
             "role": "typed-container-with-compatibility-alias"
           }
         ]
@@ -621,10 +627,46 @@
       "name": "table",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "stateful-collection",
-        "reason": "No Table descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "Table"
+        "status": "registered",
+        "descriptor": "Table",
+        "exports": ["Table"],
+        "related": [
+          {
+            "descriptor": "TableHeader",
+            "exports": ["TableHeader"],
+            "role": "typed-table-part"
+          },
+          {
+            "descriptor": "TableBody",
+            "exports": ["TableBody"],
+            "role": "typed-table-part"
+          },
+          {
+            "descriptor": "TableFooter",
+            "exports": ["TableFooter"],
+            "role": "typed-table-part"
+          },
+          {
+            "descriptor": "TableRow",
+            "exports": ["TableRow"],
+            "role": "typed-table-part"
+          },
+          {
+            "descriptor": "TableHead",
+            "exports": ["TableHead"],
+            "role": "typed-table-part"
+          },
+          {
+            "descriptor": "TableCell",
+            "exports": ["TableCell"],
+            "role": "typed-table-part"
+          },
+          {
+            "descriptor": "TableCaption",
+            "exports": ["TableCaption"],
+            "role": "typed-table-part"
+          }
+        ]
       }
     },
     {
@@ -634,9 +676,7 @@
       "registration": {
         "status": "registered",
         "descriptor": "Tag",
-        "exports": [
-          "Tag"
-        ]
+        "exports": ["Tag"]
       }
     },
     {
@@ -644,10 +684,9 @@
       "name": "text",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "component-binding",
-        "reason": "No Text descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "Text"
+        "status": "registered",
+        "descriptor": "Text",
+        "exports": ["Text"]
       }
     },
     {
@@ -685,15 +724,11 @@
       "registration": {
         "status": "registered",
         "descriptor": "Accordion",
-        "exports": [
-          "Accordion"
-        ],
+        "exports": ["Accordion"],
         "related": [
           {
             "descriptor": "AccordionItem",
-            "exports": [
-              "AccordionItem"
-            ],
+            "exports": ["AccordionItem"],
             "role": "direct-child-part"
           }
         ]
@@ -733,9 +768,7 @@
       "registration": {
         "status": "registered",
         "descriptor": "Avatar",
-        "exports": [
-          "Avatar"
-        ]
+        "exports": ["Avatar"]
       }
     },
     {
@@ -745,9 +778,7 @@
       "registration": {
         "status": "registered",
         "descriptor": "Badge",
-        "exports": [
-          "Badge"
-        ]
+        "exports": ["Badge"]
       }
     },
     {
@@ -757,9 +788,7 @@
       "registration": {
         "status": "registered",
         "descriptor": "Breadcrumb",
-        "exports": [
-          "Breadcrumb"
-        ]
+        "exports": ["Breadcrumb"]
       }
     },
     {
@@ -769,9 +798,7 @@
       "registration": {
         "status": "registered",
         "descriptor": "Button",
-        "exports": [
-          "Button"
-        ]
+        "exports": ["Button"]
       }
     },
     {
@@ -779,10 +806,16 @@
       "name": "calendar",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "component-binding",
-        "reason": "No Calendar descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "Calendar"
+        "status": "registered",
+        "descriptor": "Calendar",
+        "exports": ["Calendar"],
+        "states": [
+          {
+            "export": "CalendarState",
+            "kind": "CalendarState",
+            "role": "retained-control-state"
+          }
+        ]
       }
     },
     {
@@ -803,9 +836,7 @@
       "registration": {
         "status": "registered",
         "descriptor": "Checkbox",
-        "exports": [
-          "Checkbox"
-        ]
+        "exports": ["Checkbox"]
       }
     },
     {
@@ -815,9 +846,7 @@
       "registration": {
         "status": "registered",
         "descriptor": "Clipboard",
-        "exports": [
-          "Clipboard"
-        ]
+        "exports": ["Clipboard"]
       }
     },
     {
@@ -827,9 +856,7 @@
       "registration": {
         "status": "registered",
         "descriptor": "Collapsible",
-        "exports": [
-          "Collapsible"
-        ]
+        "exports": ["Collapsible"]
       }
     },
     {
@@ -837,10 +864,16 @@
       "name": "color_picker",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "stateful-selection",
-        "reason": "No ColorPicker descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "ColorPicker"
+        "status": "registered",
+        "descriptor": "ColorPicker",
+        "exports": ["ColorPicker"],
+        "states": [
+          {
+            "export": "ColorPickerState",
+            "kind": "ColorPickerState",
+            "role": "retained-control-state"
+          }
+        ]
       }
     },
     {
@@ -881,10 +914,16 @@
       "name": "date_picker",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "stateful-selection",
-        "reason": "No DatePicker descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "DatePicker"
+        "status": "registered",
+        "descriptor": "DatePicker",
+        "exports": ["DatePicker"],
+        "states": [
+          {
+            "export": "DatePickerState",
+            "kind": "DatePickerState",
+            "role": "retained-control-state"
+          }
+        ]
       }
     },
     {
@@ -892,10 +931,16 @@
       "name": "description_list",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "component-binding",
-        "reason": "No DescriptionList descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "DescriptionList"
+        "status": "registered",
+        "descriptor": "DescriptionList",
+        "exports": ["DescriptionList"],
+        "related": [
+          {
+            "descriptor": "DescriptionItem",
+            "exports": ["DescriptionItem"],
+            "role": "direct-child-part"
+          }
+        ]
       }
     },
     {
@@ -925,10 +970,16 @@
       "name": "dropdown_button",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "component-binding",
-        "reason": "No DropdownButton descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "DropdownButton"
+        "status": "registered",
+        "descriptor": "DropdownButton",
+        "exports": ["DropdownButton"],
+        "related": [
+          {
+            "descriptor": "DropdownMenu",
+            "exports": ["DropdownMenu"],
+            "role": "closed-menu-companion"
+          }
+        ]
       }
     },
     {
@@ -936,10 +987,16 @@
       "name": "editor",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "editor-integration",
-        "reason": "No Editor descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "Editor"
+        "status": "registered",
+        "descriptor": "Editor",
+        "exports": ["Editor"],
+        "states": [
+          {
+            "export": "EditorState",
+            "kind": "EditorState",
+            "role": "retained-editor-state"
+          }
+        ]
       }
     },
     {
@@ -947,10 +1004,16 @@
       "name": "form",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "layout-helper",
-        "reason": "No Form descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "Form"
+        "status": "registered",
+        "descriptor": "Form",
+        "exports": ["Form", "VForm", "HForm"],
+        "related": [
+          {
+            "descriptor": "Field",
+            "exports": ["Field"],
+            "role": "direct-child-part"
+          }
+        ]
       }
     },
     {
@@ -960,9 +1023,7 @@
       "registration": {
         "status": "registered",
         "descriptor": "GroupBox",
-        "exports": [
-          "GroupBox"
-        ]
+        "exports": ["GroupBox"]
       }
     },
     {
@@ -970,10 +1031,9 @@
       "name": "hover_card",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "overlay-state",
-        "reason": "No HoverCard descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "HoverCard"
+        "status": "registered",
+        "descriptor": "HoverCard",
+        "exports": ["HoverCard"]
       }
     },
     {
@@ -981,10 +1041,9 @@
       "name": "icon",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "shared-primitive",
-        "reason": "No Icon descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "Icon"
+        "status": "registered",
+        "descriptor": "Icon",
+        "exports": ["Icon"]
       }
     },
     {
@@ -992,10 +1051,9 @@
       "name": "image",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "shared-primitive",
-        "reason": "No Image descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "Image"
+        "status": "registered",
+        "descriptor": "Image",
+        "exports": ["Image"]
       }
     },
     {
@@ -1003,10 +1061,16 @@
       "name": "input",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "stateful-input",
-        "reason": "No Input descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "Input"
+        "status": "registered",
+        "descriptor": "Input",
+        "exports": ["Input"],
+        "states": [
+          {
+            "export": "InputState",
+            "kind": "InputState",
+            "role": "retained-control-state"
+          }
+        ]
       }
     },
     {
@@ -1016,9 +1080,7 @@
       "registration": {
         "status": "registered",
         "descriptor": "Kbd",
-        "exports": [
-          "Kbd"
-        ]
+        "exports": ["Kbd"]
       }
     },
     {
@@ -1028,9 +1090,7 @@
       "registration": {
         "status": "registered",
         "descriptor": "Label",
-        "exports": [
-          "Label"
-        ]
+        "exports": ["Label"]
       }
     },
     {
@@ -1082,10 +1142,16 @@
       "name": "number_input",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "stateful-input",
-        "reason": "No NumberInput descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "NumberInput"
+        "status": "registered",
+        "descriptor": "NumberInput",
+        "exports": ["NumberInput"],
+        "states": [
+          {
+            "export": "InputState",
+            "kind": "InputState",
+            "role": "shared-retained-control-state"
+          }
+        ]
       }
     },
     {
@@ -1093,10 +1159,16 @@
       "name": "otp_input",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "stateful-input",
-        "reason": "No OtpInput descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "OtpInput"
+        "status": "registered",
+        "descriptor": "OtpInput",
+        "exports": ["OtpInput"],
+        "states": [
+          {
+            "export": "OtpState",
+            "kind": "OtpState",
+            "role": "retained-control-state"
+          }
+        ]
       }
     },
     {
@@ -1106,9 +1178,7 @@
       "registration": {
         "status": "registered",
         "descriptor": "Pagination",
-        "exports": [
-          "Pagination"
-        ]
+        "exports": ["Pagination"]
       }
     },
     {
@@ -1116,10 +1186,9 @@
       "name": "popover",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "overlay-state",
-        "reason": "No Popover descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "Popover"
+        "status": "registered",
+        "descriptor": "Popover",
+        "exports": ["Popover"]
       }
     },
     {
@@ -1129,9 +1198,7 @@
       "registration": {
         "status": "registered",
         "descriptor": "Progress",
-        "exports": [
-          "Progress"
-        ]
+        "exports": ["Progress"]
       }
     },
     {
@@ -1141,16 +1208,11 @@
       "registration": {
         "status": "registered",
         "descriptor": "Radio",
-        "exports": [
-          "Radio"
-        ],
+        "exports": ["Radio"],
         "related": [
           {
             "descriptor": "RadioGroup",
-            "exports": [
-              "RadioGroup",
-              "HorizontalRadioGroup"
-            ],
+            "exports": ["RadioGroup", "HorizontalRadioGroup"],
             "role": "typed-container"
           }
         ]
@@ -1163,9 +1225,7 @@
       "registration": {
         "status": "registered",
         "descriptor": "Rating",
-        "exports": [
-          "Rating"
-        ]
+        "exports": ["Rating"]
       }
     },
     {
@@ -1173,10 +1233,16 @@
       "name": "resizable",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "layout-state",
-        "reason": "No Resizable descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "Resizable"
+        "status": "registered",
+        "descriptor": "Resizable",
+        "exports": ["Resizable"],
+        "related": [
+          {
+            "descriptor": "ResizablePanel",
+            "exports": ["ResizablePanel"],
+            "role": "direct-child-part"
+          }
+        ]
       }
     },
     {
@@ -1249,10 +1315,36 @@
       "name": "sidebar",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "component-binding",
-        "reason": "No Sidebar descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "Sidebar"
+        "status": "registered",
+        "descriptor": "Sidebar",
+        "exports": ["Sidebar"],
+        "related": [
+          {
+            "descriptor": "SidebarHeader",
+            "exports": ["SidebarHeader"],
+            "role": "named-slot-part"
+          },
+          {
+            "descriptor": "SidebarFooter",
+            "exports": ["SidebarFooter"],
+            "role": "named-slot-part"
+          },
+          {
+            "descriptor": "SidebarMenu",
+            "exports": ["SidebarMenu"],
+            "role": "typed-container"
+          },
+          {
+            "descriptor": "SidebarMenuItem",
+            "exports": ["SidebarMenuItem"],
+            "role": "direct-child-part"
+          },
+          {
+            "descriptor": "SidebarToggleButton",
+            "exports": ["SidebarToggleButton"],
+            "role": "companion-control"
+          }
+        ]
       }
     },
     {
@@ -1262,9 +1354,7 @@
       "registration": {
         "status": "registered",
         "descriptor": "Skeleton",
-        "exports": [
-          "Skeleton"
-        ]
+        "exports": ["Skeleton"]
       }
     },
     {
@@ -1272,10 +1362,16 @@
       "name": "slider",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "stateful-control",
-        "reason": "No Slider descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "Slider"
+        "status": "registered",
+        "descriptor": "Slider",
+        "exports": ["Slider"],
+        "states": [
+          {
+            "export": "SliderState",
+            "kind": "SliderState",
+            "role": "retained-control-state"
+          }
+        ]
       }
     },
     {
@@ -1285,9 +1381,7 @@
       "registration": {
         "status": "registered",
         "descriptor": "Spinner",
-        "exports": [
-          "Spinner"
-        ]
+        "exports": ["Spinner"]
       }
     },
     {
@@ -1297,9 +1391,7 @@
       "registration": {
         "status": "registered",
         "descriptor": "StatusBar",
-        "exports": [
-          "StatusBar"
-        ]
+        "exports": ["StatusBar"]
       }
     },
     {
@@ -1309,15 +1401,11 @@
       "registration": {
         "status": "registered",
         "descriptor": "Stepper",
-        "exports": [
-          "Stepper"
-        ],
+        "exports": ["Stepper"],
         "related": [
           {
             "descriptor": "StepperItem",
-            "exports": [
-              "StepperItem"
-            ],
+            "exports": ["StepperItem"],
             "role": "direct-child-part"
           }
         ]
@@ -1330,9 +1418,7 @@
       "registration": {
         "status": "registered",
         "descriptor": "Switch",
-        "exports": [
-          "Switch"
-        ]
+        "exports": ["Switch"]
       }
     },
     {
@@ -1340,10 +1426,46 @@
       "name": "table",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "stateful-collection",
-        "reason": "No Table descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "Table"
+        "status": "registered",
+        "descriptor": "Table",
+        "exports": ["Table"],
+        "related": [
+          {
+            "descriptor": "TableHeader",
+            "exports": ["TableHeader"],
+            "role": "typed-table-part"
+          },
+          {
+            "descriptor": "TableBody",
+            "exports": ["TableBody"],
+            "role": "typed-table-part"
+          },
+          {
+            "descriptor": "TableFooter",
+            "exports": ["TableFooter"],
+            "role": "typed-table-part"
+          },
+          {
+            "descriptor": "TableRow",
+            "exports": ["TableRow"],
+            "role": "typed-table-part"
+          },
+          {
+            "descriptor": "TableHead",
+            "exports": ["TableHead"],
+            "role": "typed-table-part"
+          },
+          {
+            "descriptor": "TableCell",
+            "exports": ["TableCell"],
+            "role": "typed-table-part"
+          },
+          {
+            "descriptor": "TableCaption",
+            "exports": ["TableCaption"],
+            "role": "typed-table-part"
+          }
+        ]
       }
     },
     {
@@ -1353,17 +1475,12 @@
       "registration": {
         "status": "registered",
         "descriptor": "TabBar",
-        "exports": [
-          "TabBar",
-          "Tabs"
-        ],
+        "exports": ["TabBar", "Tabs"],
         "api": "Tabs",
         "related": [
           {
             "descriptor": "Tab",
-            "exports": [
-              "Tab"
-            ],
+            "exports": ["Tab"],
             "role": "direct-child-part"
           }
         ]
@@ -1376,9 +1493,7 @@
       "registration": {
         "status": "registered",
         "descriptor": "Tag",
-        "exports": [
-          "Tag"
-        ]
+        "exports": ["Tag"]
       }
     },
     {
@@ -1386,10 +1501,16 @@
       "name": "textarea",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "stateful-input",
-        "reason": "No Textarea descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "Textarea"
+        "status": "registered",
+        "descriptor": "Textarea",
+        "exports": ["Textarea"],
+        "states": [
+          {
+            "export": "TextareaState",
+            "kind": "TextareaState",
+            "role": "retained-control-state"
+          }
+        ]
       }
     },
     {
@@ -1405,9 +1526,7 @@
       "registration": {
         "status": "registered",
         "descriptor": "Toggle",
-        "exports": [
-          "Toggle"
-        ]
+        "exports": ["Toggle"]
       }
     },
     {
