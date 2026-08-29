@@ -33,6 +33,7 @@ pub(super) struct Inline {
     highlights: Vec<(Range<usize>, HighlightStyle)>,
     styled_text: StyledText,
     link_click_handler: Option<Arc<LinkClickHandlerFn>>,
+    link_underline_on_hover: bool,
 
     state: Arc<Mutex<InlineState>>,
 }
@@ -58,13 +59,40 @@ impl Inline {
         id: impl Into<ElementId>,
         state: Arc<Mutex<InlineState>>,
         links: Vec<(Range<usize>, LinkMark)>,
-        highlights: Vec<(Range<usize>, HighlightStyle)>,
+        mut highlights: Vec<(Range<usize>, HighlightStyle)>,
         link_click_handler: Option<Arc<LinkClickHandlerFn>>,
+        link_underline_on_hover: bool,
     ) -> Self {
         let text = state
             .lock()
             .map(|state| state.text.clone())
             .unwrap_or_default();
+        highlights.retain(|(range, _)| range.start <= range.end && range.end <= text.len());
+
+        if link_underline_on_hover
+            && let Some(index) = state.lock().ok().and_then(|state| state.hovered_index)
+            && let Some((range, _)) = links.iter().find(|(range, _)| range.contains(&index))
+            && range.end <= text.len()
+        {
+            let underline = gpui::UnderlineStyle {
+                thickness: gpui::px(1.),
+                ..Default::default()
+            };
+            if let Some((_, highlight)) = highlights
+                .iter_mut()
+                .find(|(highlight_range, _)| highlight_range == range)
+            {
+                highlight.underline = Some(underline);
+            } else {
+                highlights.push((
+                    range.clone(),
+                    HighlightStyle {
+                        underline: Some(underline),
+                        ..Default::default()
+                    },
+                ));
+            }
+        }
 
         Self {
             id: id.into(),
@@ -73,6 +101,7 @@ impl Inline {
             text: text.clone(),
             styled_text: StyledText::new(text),
             link_click_handler,
+            link_underline_on_hover,
             state,
         }
     }
@@ -177,7 +206,6 @@ impl Inline {
                 offset += c.len_utf8();
                 continue;
             };
-
             let next_offset = offset + c.len_utf8();
             let mut char_width = line_height.half();
             if let Some(next_pos) = text_layout.position_for_index(next_offset) {
@@ -361,6 +389,9 @@ impl Element for Inline {
         let mut runs = Vec::new();
         let mut ix = 0;
         for (range, highlight) in self.highlights.iter() {
+            if range.start < ix || range.start > range.end || range.end > self.text.len() {
+                continue;
+            }
             if ix < range.start {
                 runs.push(text_style.clone().to_run(range.start - ix));
             }
@@ -518,25 +549,37 @@ impl Element for Inline {
             });
         }
 
-        // mouse move, update hovered link
-        window.on_mouse_event({
-            let hitbox = hitbox.clone();
-            let text_layout = text_layout.clone();
-            let mut hovered_index = state.hovered_index;
-            move |event: &MouseMoveEvent, phase, window, cx| {
-                if !phase.bubble() || !hitbox.is_hovered(window) {
-                    return;
-                }
+        if self.link_underline_on_hover {
+            // mouse move, update hovered link
+            window.on_mouse_event({
+                let hitbox = hitbox.clone();
+                let text_layout = text_layout.clone();
+                let inline_state = self.state.clone();
+                let links = self.links.clone();
+                move |event: &MouseMoveEvent, phase, window, cx| {
+                    if !phase.bubble() {
+                        return;
+                    }
 
-                let current = hovered_index;
-                let updated = text_layout.index_for_position(event.position).ok();
-                //  notify update when hovering over different links
-                if current != updated {
-                    hovered_index = updated;
-                    cx.notify(current_view);
+                    let updated = hitbox
+                        .is_hovered(window)
+                        .then(|| text_layout.index_for_position(event.position).ok())
+                        .flatten()
+                        .filter(|index| links.iter().any(|(range, _)| range.contains(index)));
+                    let changed = inline_state.lock().ok().is_some_and(|mut state| {
+                        if state.hovered_index == updated {
+                            false
+                        } else {
+                            state.hovered_index = updated;
+                            true
+                        }
+                    });
+                    if changed {
+                        cx.notify(current_view);
+                    }
                 }
-            }
-        });
+            });
+        }
 
         if !is_selection {
             // click to open link
@@ -648,8 +691,49 @@ fn point_in_text_selection(
 
 #[cfg(test)]
 mod tests {
-    use super::point_in_text_selection;
-    use gpui::{point, px};
+    use std::sync::{Arc, Mutex};
+
+    use super::{Inline, InlineState, LinkMark, point_in_text_selection};
+    use gpui::{HighlightStyle, point, px};
+
+    #[test]
+    fn hovered_link_underline_ignores_stale_ranges() {
+        let state = Arc::new(Mutex::new(InlineState {
+            hovered_index: Some(1),
+            ..Default::default()
+        }));
+        let inline = Inline::new(
+            "stale-hover",
+            state,
+            vec![(0..4, LinkMark::default())],
+            vec![],
+            None,
+            true,
+        );
+
+        assert!(inline.highlights.is_empty());
+    }
+
+    #[test]
+    fn hovered_link_underline_merges_existing_highlight() {
+        let state = Arc::new(Mutex::new(InlineState {
+            text: "link".into(),
+            hovered_index: Some(1),
+            ..Default::default()
+        }));
+        let inline = Inline::new(
+            "hover-merge",
+            state,
+            vec![(0..4, LinkMark::default())],
+            vec![(0..4, HighlightStyle::default())],
+            None,
+            true,
+        );
+
+        assert_eq!(inline.highlights.len(), 1);
+        assert_eq!(inline.highlights[0].0, 0..4);
+        assert!(inline.highlights[0].1.underline.is_some());
+    }
 
     #[test]
     fn test_point_in_text_selection() {

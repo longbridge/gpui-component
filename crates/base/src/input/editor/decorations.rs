@@ -5,7 +5,7 @@ use gpui::{App, Context, HighlightStyle, WeakEntity};
 use ropey::Rope;
 use sum_tree::Bias;
 
-use super::{InputBaseState, RopeExt as _};
+use super::{InputBaseState, RopeExt as _, TextareaMode};
 
 /// A presentation style applied to a UTF-8 byte range in an input.
 ///
@@ -33,8 +33,14 @@ struct TextDecorationCollectionId(usize);
 /// [`IEditorDecorationsCollection`](https://microsoft.github.io/monaco-editor/typedoc/interfaces/editor_editor_api.editor.IEditorDecorationsCollection.html).
 #[derive(Clone, Debug)]
 pub struct TextDecorationCollection {
-    state: WeakEntity<InputBaseState<EditorMode>>,
+    state: DecorationState,
     id: TextDecorationCollectionId,
+}
+
+#[derive(Clone, Debug)]
+enum DecorationState {
+    Editor(WeakEntity<InputBaseState<EditorMode>>),
+    Textarea(WeakEntity<InputBaseState<TextareaMode>>),
 }
 
 impl TextDecorationCollection {
@@ -43,12 +49,24 @@ impl TextDecorationCollection {
     /// This corresponds to Monaco's
     /// [`IEditorDecorationsCollection.set`](https://microsoft.github.io/monaco-editor/typedoc/interfaces/editor_editor_api.editor.IEditorDecorationsCollection.html#set).
     pub fn set(&self, decorations: Vec<TextDecoration>, cx: &mut App) {
-        let _ = self.state.update(cx, |state, cx| {
-            let decorations = normalize(&state.text, decorations);
-            if state.extras.decorations.set(self.id, decorations) {
-                cx.notify();
+        match &self.state {
+            DecorationState::Editor(state) => {
+                let _ = state.update(cx, |state, cx| {
+                    let decorations = normalize(&state.text, decorations);
+                    if state.extras.decorations.set(self.id, decorations) {
+                        cx.notify();
+                    }
+                });
             }
-        });
+            DecorationState::Textarea(state) => {
+                let _ = state.update(cx, |state, cx| {
+                    let decorations = normalize(&state.text, decorations);
+                    if state.extras.decorations.set(self.id, decorations) {
+                        cx.notify();
+                    }
+                });
+            }
+        }
     }
 
     /// Add decorations to this collection.
@@ -56,12 +74,24 @@ impl TextDecorationCollection {
     /// This corresponds to Monaco's
     /// [`IEditorDecorationsCollection.append`](https://microsoft.github.io/monaco-editor/typedoc/interfaces/editor_editor_api.editor.IEditorDecorationsCollection.html#append).
     pub fn append(&self, decorations: Vec<TextDecoration>, cx: &mut App) {
-        let _ = self.state.update(cx, |state, cx| {
-            let decorations = normalize(&state.text, decorations);
-            if state.extras.decorations.append(self.id, decorations) {
-                cx.notify();
+        match &self.state {
+            DecorationState::Editor(state) => {
+                let _ = state.update(cx, |state, cx| {
+                    let decorations = normalize(&state.text, decorations);
+                    if state.extras.decorations.append(self.id, decorations) {
+                        cx.notify();
+                    }
+                });
             }
-        });
+            DecorationState::Textarea(state) => {
+                let _ = state.update(cx, |state, cx| {
+                    let decorations = normalize(&state.text, decorations);
+                    if state.extras.decorations.append(self.id, decorations) {
+                        cx.notify();
+                    }
+                });
+            }
+        }
     }
 
     /// Remove all decorations from this collection.
@@ -77,18 +107,47 @@ impl TextDecorationCollection {
     /// This corresponds to Monaco's
     /// [`IEditorDecorationsCollection.getRanges`](https://microsoft.github.io/monaco-editor/typedoc/interfaces/editor_editor_api.editor.IEditorDecorationsCollection.html#getRanges).
     pub fn get_ranges(&self, cx: &App) -> Vec<Range<usize>> {
-        self.state
-            .read_with(cx, |state, _| {
-                state
-                    .extras
-                    .decorations
-                    .get(self.id)
-                    .unwrap_or_default()
-                    .iter()
-                    .map(|decoration| decoration.range.clone())
-                    .collect()
-            })
-            .unwrap_or_default()
+        match &self.state {
+            DecorationState::Editor(state) => state
+                .read_with(cx, |state, _| decoration_ranges(state, self.id))
+                .unwrap_or_default(),
+            DecorationState::Textarea(state) => state
+                .read_with(cx, |state, _| decoration_ranges(state, self.id))
+                .unwrap_or_default(),
+        }
+    }
+}
+
+fn decoration_ranges<M: super::InputModeKind>(
+    state: &InputBaseState<M>,
+    id: TextDecorationCollectionId,
+) -> Vec<Range<usize>>
+where
+    M::Extras: DecorationExtras,
+{
+    state
+        .extras
+        .decorations()
+        .get(id)
+        .unwrap_or_default()
+        .iter()
+        .map(|decoration| decoration.range.clone())
+        .collect()
+}
+
+trait DecorationExtras {
+    fn decorations(&self) -> &DecorationCollections;
+}
+
+impl DecorationExtras for super::EditorExtras {
+    fn decorations(&self) -> &DecorationCollections {
+        &self.decorations
+    }
+}
+
+impl DecorationExtras for super::kind::TextareaExtras {
+    fn decorations(&self) -> &DecorationCollections {
+        &self.decorations
     }
 }
 
@@ -244,7 +303,26 @@ impl InputBaseState<EditorMode> {
         let id = self.extras.decorations.create(decorations);
         cx.notify();
         TextDecorationCollection {
-            state: cx.entity().downgrade(),
+            state: DecorationState::Editor(cx.entity().downgrade()),
+            id,
+        }
+    }
+}
+
+impl InputBaseState<TextareaMode> {
+    /// Create an independently managed collection of text decorations.
+    ///
+    /// Ranges use UTF-8 byte offsets into [`Self::value`] and follow edits.
+    pub fn create_decorations_collection(
+        &mut self,
+        decorations: Vec<TextDecoration>,
+        cx: &mut Context<Self>,
+    ) -> TextDecorationCollection {
+        let decorations = normalize(&self.text, decorations);
+        let id = self.extras.decorations.create(decorations);
+        cx.notify();
+        TextDecorationCollection {
+            state: DecorationState::Textarea(cx.entity().downgrade()),
             id,
         }
     }

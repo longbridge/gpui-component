@@ -290,6 +290,7 @@ impl Element for InlineFlow {
                         links,
                         highlights,
                         self.link_click_handler.clone(),
+                        false,
                     )
                     .into_any_element();
                     element.prepaint_as_root(

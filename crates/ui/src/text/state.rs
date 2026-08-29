@@ -1,6 +1,6 @@
 use futures::Stream as _;
 use std::{
-    ops::RangeInclusive,
+    ops::{Range, RangeInclusive},
     pin::Pin,
     sync::{Arc, Mutex},
     task::Poll,
@@ -21,7 +21,7 @@ use crate::{
         CodeBlockActionsFn, LinkClickHandlerFn, MarkdownExtensions, TableActionsFn, TextViewStyle,
         document::ParsedDocument,
         format,
-        node::{self, NodeContext},
+        node::{self, BlockNode, InlineNode, LinkMark, NodeContext, Paragraph, Span, TextMark},
         selection_adapter::TextViewSelectionAdapter,
     },
     v_flex,
@@ -54,6 +54,24 @@ pub(super) enum TextViewFormat {
     Markdown,
     /// HTML view
     Html,
+    /// Plain text with explicit link ranges.
+    LinkedText,
+}
+
+/// A byte range in plain text that should render and behave as a link.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TextViewLink {
+    pub range: Range<usize>,
+    pub url: SharedString,
+}
+
+impl TextViewLink {
+    pub fn new(range: Range<usize>, url: impl Into<SharedString>) -> Self {
+        Self {
+            range,
+            url: url.into(),
+        }
+    }
 }
 
 /// The format of the text returned by
@@ -104,6 +122,7 @@ pub struct TextViewState {
     pub(super) table_actions: Option<std::sync::Arc<TableActionsFn>>,
     pub(super) link_click_handler: Option<std::sync::Arc<LinkClickHandlerFn>>,
     pub(super) markdown_extensions: Arc<MarkdownExtensions>,
+    linked_text_links: Arc<[TextViewLink]>,
 
     pub(super) is_selecting: bool,
     multi_click_selection: Option<TextViewMultiClickSelection>,
@@ -135,6 +154,14 @@ impl TextViewState {
     /// Create a HTML TextViewState.
     pub fn html(text: &str, cx: &mut Context<Self>) -> Self {
         Self::new(TextViewFormat::Html, text, cx)
+    }
+
+    /// Create a selectable plain-text view with explicit link ranges.
+    pub fn linked_text(text: &str, links: Vec<TextViewLink>, cx: &mut Context<Self>) -> Self {
+        let mut state = Self::new(TextViewFormat::LinkedText, text, cx);
+        state.linked_text_links = links.into();
+        state.increment_update(text, false, cx);
+        state
     }
 
     /// Create a new TextViewState.
@@ -202,6 +229,7 @@ impl TextViewState {
             table_actions: None,
             link_click_handler: None,
             markdown_extensions: Arc::default(),
+            linked_text_links: Arc::default(),
             is_selecting: false,
             auto_scroll: AutoScroll::default(),
             selection_adapter,
@@ -286,6 +314,25 @@ impl TextViewState {
         self.increment_update(text, false, cx);
     }
 
+    /// Replace plain text and its explicit link ranges as one atomic update.
+    pub fn set_linked_text(
+        &mut self,
+        text: &str,
+        links: Vec<TextViewLink>,
+        cx: &mut Context<Self>,
+    ) {
+        let links: Arc<[TextViewLink]> = links.into();
+        if self.text == text && self.linked_text_links == links {
+            return;
+        }
+
+        self.text.clear();
+        self.text.push_str(text);
+        self.linked_text_links = links;
+        self.parsed_error = None;
+        self.increment_update(text, false, cx);
+    }
+
     /// Append partial text content to the existing text.
     pub fn push_str(&mut self, new_text: &str, cx: &mut Context<Self>) {
         if new_text.is_empty() {
@@ -328,7 +375,7 @@ impl TextViewState {
     fn effective_format(&self) -> SelectionFormat {
         match self.format {
             TextViewFormat::Markdown => self.selection_format,
-            TextViewFormat::Html => SelectionFormat::Plain,
+            TextViewFormat::Html | TextViewFormat::LinkedText => SelectionFormat::Plain,
         }
     }
 
@@ -342,6 +389,9 @@ impl TextViewState {
         let format = self.effective_format();
 
         if self.select_all {
+            if self.format == TextViewFormat::LinkedText {
+                return self.source().to_string();
+            }
             if format == SelectionFormat::Source {
                 return self.source().to_string();
             }
@@ -380,6 +430,7 @@ impl TextViewState {
             },
             pending_text: text.to_string(),
             markdown_extensions: self.markdown_extensions.clone(),
+            linked_text_links: self.linked_text_links.clone(),
         };
 
         // Keep small full replacements synchronous so their first layout has
@@ -721,6 +772,7 @@ struct UpdateOptions {
     append: bool,
     mode: ParseMode,
     markdown_extensions: Arc<MarkdownExtensions>,
+    linked_text_links: Arc<[TextViewLink]>,
 }
 
 impl UpdateOptions {
@@ -810,6 +862,7 @@ fn parse_content(
     let new_document = match format {
         TextViewFormat::Markdown => format::markdown::parse(&source, &mut node_cx),
         TextViewFormat::Html => format::html::parse(&source, &mut node_cx),
+        TextViewFormat::LinkedText => parse_linked_text(&source, &options.linked_text_links),
     }?;
 
     if options.append {
@@ -822,6 +875,49 @@ fn parse_content(
     }
 
     Ok(content)
+}
+
+fn parse_linked_text(source: &str, links: &[TextViewLink]) -> Result<ParsedDocument, SharedString> {
+    let mut paragraph = Paragraph::default();
+    paragraph.set_span(Span {
+        start: 0,
+        end: source.len(),
+    });
+    let mut cursor = 0;
+
+    for link in links {
+        if link.range.start < cursor
+            || link.range.end > source.len()
+            || link.range.start >= link.range.end
+            || !source.is_char_boundary(link.range.start)
+            || !source.is_char_boundary(link.range.end)
+        {
+            continue;
+        }
+        if cursor < link.range.start {
+            paragraph.push(InlineNode::new(&source[cursor..link.range.start]));
+        }
+        let linked = &source[link.range.clone()];
+        paragraph.push(InlineNode::new(linked).marks(vec![(
+            0..linked.len(),
+            TextMark {
+                link: Some(LinkMark {
+                    url: link.url.clone(),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+        )]));
+        cursor = link.range.end;
+    }
+    if cursor < source.len() {
+        paragraph.push(InlineNode::new(&source[cursor..]));
+    }
+
+    Ok(ParsedDocument {
+        source: source.to_owned().into(),
+        blocks: vec![BlockNode::Paragraph(paragraph)].into(),
+    })
 }
 
 #[cfg(test)]
@@ -983,6 +1079,7 @@ mod tests {
             append: true,
             mode: ParseMode::Compatible,
             markdown_extensions: Arc::default(),
+            linked_text_links: Arc::default(),
         };
 
         options.merge(UpdateOptions {
@@ -991,6 +1088,7 @@ mod tests {
             append: false,
             mode: ParseMode::BaselineAck,
             markdown_extensions: Arc::default(),
+            linked_text_links: Arc::default(),
         });
         options.merge(UpdateOptions {
             revision: 3,
@@ -998,6 +1096,7 @@ mod tests {
             append: true,
             mode: ParseMode::Compatible,
             markdown_extensions: Arc::default(),
+            linked_text_links: Arc::default(),
         });
 
         assert_eq!(options.revision, 3);
@@ -1013,6 +1112,7 @@ mod tests {
             append: false,
             mode: ParseMode::Replace,
             markdown_extensions: Arc::default(),
+            linked_text_links: Arc::default(),
         };
 
         options.merge(UpdateOptions {
@@ -1046,6 +1146,7 @@ mod tests {
                     ParseMode::Compatible
                 },
                 markdown_extensions: Arc::default(),
+                linked_text_links: Arc::default(),
             })
             .unwrap();
         }
