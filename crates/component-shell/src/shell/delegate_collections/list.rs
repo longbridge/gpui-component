@@ -93,6 +93,7 @@ impl ListDelegate for Delegate {
 }
 
 #[cfg(test)]
+#[allow(dead_code)]
 pub(crate) mod test_probe {
     use std::cell::RefCell;
 

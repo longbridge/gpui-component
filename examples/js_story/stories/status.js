@@ -5,6 +5,7 @@ export const REGISTERED_SURFACES = [
   "Alert",
   "AlertDialog",
   "Avatar",
+  "BarChart",
   "Badge",
   "Breadcrumb",
   "Button",
@@ -28,6 +29,7 @@ export const REGISTERED_SURFACES = [
   "Kbd",
   "Label",
   "Link",
+  "List",
   "NumberInput",
   "NativeMenuTrigger",
   "Notification",
@@ -57,21 +59,19 @@ export const REGISTERED_SURFACES = [
   "Textarea",
   "Stepper",
   "Toggle",
+  "Tooltip",
   "Tree",
 ];
 
 /** @type {Record<string, string>} */
 export const DEFERRED_SURFACES = {
-  Chart: "chart-family",
   Combobox: "stateful-selection",
   DataTable: "stateful-collection",
   Dock: "dock-layout",
-  List: "stateful-collection",
   Menu: "popup-menu-api",
   Plot: "plot-infrastructure",
   SearchableList: "stateful-collection",
   Select: "stateful-selection",
-  Tooltip: "element-extension",
   VirtualList: "virtualized-collection",
 };
 

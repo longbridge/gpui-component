@@ -19,7 +19,7 @@ export const stories = [
     description: "Data visualizations.",
     states: ["line", "bar", "area", "empty"],
     availability: "pending",
-    api: "Chart",
+    api: "BarChart",
   }),
   pendingStory({
     id: "date-picker",

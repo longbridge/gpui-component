@@ -85,10 +85,32 @@
       "name": "chart",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "chart-family",
-        "reason": "No Chart descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "Chart"
+        "status": "registered",
+        "api": "BarChart",
+        "descriptor": "BarChart",
+        "exports": ["BarChart"],
+        "related": [
+          {
+            "descriptor": "LineChart",
+            "exports": ["LineChart"],
+            "role": "concrete-chart-variant"
+          },
+          {
+            "descriptor": "AreaChart",
+            "exports": ["AreaChart"],
+            "role": "concrete-chart-variant"
+          },
+          {
+            "descriptor": "PieChart",
+            "exports": ["PieChart"],
+            "role": "concrete-chart-variant"
+          },
+          {
+            "descriptor": "RadarChart",
+            "exports": ["RadarChart"],
+            "role": "concrete-chart-variant"
+          }
+        ]
       }
     },
     {
@@ -322,10 +344,9 @@
       "name": "list",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "stateful-collection",
-        "reason": "No List descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "List"
+        "status": "registered",
+        "descriptor": "List",
+        "exports": ["List"]
       }
     },
     {
@@ -753,10 +774,9 @@
       "name": "tooltip",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "element-extension",
-        "reason": "No Tooltip descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "Tooltip"
+        "status": "registered",
+        "descriptor": "Tooltip",
+        "exports": ["Tooltip"]
       }
     },
     {
@@ -881,10 +901,32 @@
       "name": "chart",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "chart-family",
-        "reason": "No Chart descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "Chart"
+        "status": "registered",
+        "api": "BarChart",
+        "descriptor": "BarChart",
+        "exports": ["BarChart"],
+        "related": [
+          {
+            "descriptor": "LineChart",
+            "exports": ["LineChart"],
+            "role": "concrete-chart-variant"
+          },
+          {
+            "descriptor": "AreaChart",
+            "exports": ["AreaChart"],
+            "role": "concrete-chart-variant"
+          },
+          {
+            "descriptor": "PieChart",
+            "exports": ["PieChart"],
+            "role": "concrete-chart-variant"
+          },
+          {
+            "descriptor": "RadarChart",
+            "exports": ["RadarChart"],
+            "role": "concrete-chart-variant"
+          }
+        ]
       }
     },
     {
@@ -1178,10 +1220,9 @@
       "name": "list",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "stateful-collection",
-        "reason": "No List descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "List"
+        "status": "registered",
+        "descriptor": "List",
+        "exports": ["List"]
       }
     },
     {
@@ -1645,10 +1686,9 @@
       "name": "tooltip",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "element-extension",
-        "reason": "No Tooltip descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "Tooltip"
+        "status": "registered",
+        "descriptor": "Tooltip",
+        "exports": ["Tooltip"]
       }
     },
     {

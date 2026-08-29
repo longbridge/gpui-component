@@ -7,6 +7,7 @@ import {
   Alert,
   AlertDialog,
   Avatar,
+  BarChart,
   Badge,
   Breadcrumb,
   Button,
@@ -41,6 +42,7 @@ import {
   Kbd,
   Label,
   Link,
+  List,
   NumberInput,
   NativeMenuItem,
   NativeMenuSeparator,
@@ -93,6 +95,7 @@ import {
   Stepper,
   StepperItem,
   Toggle,
+  Tooltip,
   Tree,
   TreeItem,
 } from "gpui-component";
@@ -128,11 +131,20 @@ export function registeredExample(surface) {
     case "Alert":
       return new Alert("saved", "Your changes have been saved").title("Saved");
     case "AlertDialog":
-      return new AlertDialog("alert-dialog", "Open alert", (_message, _cx) => {})
+      return new AlertDialog(
+        "alert-dialog",
+        "Open alert",
+        (_message, _cx) => {},
+      )
         .title("Discard changes?")
         .description("Unsaved changes will be lost.");
     case "Avatar":
       return new Avatar().name("Ada Lovelace").size("large");
+    case "BarChart":
+      return new BarChart(() => [
+        { label: "Alpha", value: 42 },
+        { label: "Beta", value: 68 },
+      ]).grid(true);
     case "Badge":
       return new Badge().count(12).color("blue-600");
     case "Breadcrumb":
@@ -232,6 +244,15 @@ export function registeredExample(surface) {
       return new Link("documentation")
         .href("https://gpui.rs")
         .child("Documentation");
+    case "List":
+      return new List(
+        "story-list",
+        () => [
+          { id: "alpha", label: "Alpha" },
+          { id: "beta", label: "Beta" },
+        ],
+        (row) => asElement(new Text(row.label)),
+      );
     case "NumberInput":
       return new NumberInput(InputState()).placeholder("Quantity");
     case "NativeMenuTrigger":
@@ -240,7 +261,11 @@ export function registeredExample(surface) {
         .child(asElement(new NativeMenuItem("Open", "open")))
         .child(asElement(new NativeMenuSeparator()));
     case "Notification":
-      return new Notification("notification", "Show notification", (_message, _cx) => {})
+      return new Notification(
+        "notification",
+        "Show notification",
+        (_message, _cx) => {},
+      )
         .title("Saved")
         .message("Your changes were saved.");
     case "OtpInput":
@@ -392,6 +417,8 @@ export function registeredExample(surface) {
         .child(new StepperItem().child("Finish"));
     case "Toggle":
       return new Toggle("favorite").checked(true).label("Favorite").outline();
+    case "Tooltip":
+      return new Tooltip("tooltip", "Hover for help", "Helpful details");
     case "Tree":
       return new Tree("project-tree").child(
         asElement(

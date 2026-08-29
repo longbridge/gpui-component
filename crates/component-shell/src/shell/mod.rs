@@ -7,9 +7,11 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
     separator::register(registry)?;
     skeleton::register(registry)?;
     controls::register(registry)?;
+    delegate_collections::register(registry)?;
     display::register(registry)?;
     compound::register(registry)?;
     typed_compound::register(registry)?;
+    lifecycle_remaining::register(registry)?;
     collections_remaining::register(registry)?;
     command_remaining::register(registry)?;
     window_effects_remaining::register(registry)?;
@@ -22,16 +24,20 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
     structured::register(registry)?;
     remaining::register(registry)?;
     basic_remaining::register(registry)?;
+    chart_remaining::register(registry)?;
     Ok(())
 }
 
 mod basic_remaining;
+mod chart_remaining;
 mod collections_remaining;
 mod command_remaining;
 mod compound;
 mod controls;
+mod delegate_collections;
 mod display;
 mod layout_remaining;
+mod lifecycle_remaining;
 mod media_remaining;
 mod overlays;
 mod remaining;

@@ -10,7 +10,7 @@ export const coveredBy = [
   { route: "breadcrumb", registrations: ["Breadcrumb"] },
   { route: "button", registrations: ["Button"] },
   { route: "calendar", registrations: ["Calendar"] },
-  { route: "chart", registrations: ["Chart", "Plot"] },
+  { route: "chart", registrations: ["BarChart", "Plot"] },
   { route: "checkbox", registrations: ["Checkbox"] },
   { route: "clipboard", registrations: ["Clipboard"] },
   { route: "collapsible", registrations: ["Collapsible"] },
