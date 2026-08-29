@@ -75,6 +75,8 @@ import {
   Stepper,
   StepperItem,
   Toggle,
+  Tree,
+  TreeItem,
 } from "gpui-component";
 
 /**
@@ -295,6 +297,15 @@ export function registeredExample(surface) {
         .child(new StepperItem().child("Finish"));
     case "Toggle":
       return new Toggle("favorite").checked(true).label("Favorite").outline();
+    case "Tree":
+      return new Tree("project-tree").child(
+        asElement(
+          new TreeItem("src", "src")
+            .expanded(true)
+            .child(asElement(new TreeItem("main", "main.rs")))
+            .child(asElement(new TreeItem("lib", "lib.rs"))),
+        ),
+      );
     default:
       throw new Error(
         `No JavaScript Story example is defined for registered ${surface}`,

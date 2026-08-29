@@ -711,10 +711,16 @@
       "name": "tree",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "stateful-collection",
-        "reason": "No Tree descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "Tree"
+        "status": "registered",
+        "descriptor": "Tree",
+        "exports": ["Tree"],
+        "related": [
+          {
+            "descriptor": "TreeItem",
+            "exports": ["TreeItem"],
+            "role": "recursive-typed-item"
+          }
+        ]
       }
     },
     {
@@ -1545,10 +1551,16 @@
       "name": "tree",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "stateful-collection",
-        "reason": "No Tree descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "Tree"
+        "status": "registered",
+        "descriptor": "Tree",
+        "exports": ["Tree"],
+        "related": [
+          {
+            "descriptor": "TreeItem",
+            "exports": ["TreeItem"],
+            "role": "recursive-typed-item"
+          }
+        ]
       }
     },
     {

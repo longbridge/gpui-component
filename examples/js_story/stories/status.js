@@ -48,6 +48,7 @@ export const REGISTERED_SURFACES = [
   "Textarea",
   "Stepper",
   "Toggle",
+  "Tree",
 ];
 
 /** @type {Record<string, string>} */
@@ -72,7 +73,6 @@ export const DEFERRED_SURFACES = {
   Settings: "component-binding",
   Sheet: "overlay-window-api",
   Tooltip: "element-extension",
-  Tree: "stateful-collection",
   VirtualList: "virtualized-collection",
 };
 
