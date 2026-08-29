@@ -50,7 +50,7 @@ for (const item of inventory.items) {
   if (!item.registration) continue;
   const surface =
     item.registration.status === "registered"
-      ? item.registration.descriptor
+      ? (item.registration.api ?? item.registration.descriptor)
       : item.registration.target;
   const current = inventorySurfaces.get(surface);
   const next = {
@@ -97,7 +97,7 @@ for (const item of inventoryStories) {
   } else {
     const registration =
       item.registration.status === "registered"
-        ? item.registration.descriptor
+        ? (item.registration.api ?? item.registration.descriptor)
         : item.registration.target;
     if (record.api === registration) continue;
     fail(

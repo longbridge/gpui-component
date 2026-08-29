@@ -215,3 +215,63 @@ export default class Broken extends View {
         "{second}"
     );
 }
+
+#[gpui_shell::gpui::test]
+fn public_host_materializes_real_typed_compound_children_in_script_order(cx: &mut TestAppContext) {
+    let source = r#"
+import { View, div } from "gpui";
+import {
+  Accordion, AccordionItem, Radio, RadioGroup,
+  Stepper, StepperItem, Tab, TabBar,
+} from "gpui-component";
+export default class TypedCompounds extends View {
+  render() {
+    return div().v_flex().gap(8)
+      .child(new Accordion("faq").w(500).multiple(true)
+        .child(new AccordionItem().px(2).title(div().child("Question A")).open(true).child("Answer A"))
+        .child(new AccordionItem().title(div().child("Question B")).child("Answer B")))
+      .child(new TabBar("sections").w(500).selectedIndex(1).variant("underline")
+        .child(new Tab().label("First"))
+        .child(new Tab().label("Second")))
+      .child(new Stepper("setup").w(500).selectedIndex(1)
+        .child(new StepperItem().child("Account")).child(new StepperItem().child("Profile")))
+      .child(new RadioGroup("density").w(500).selectedIndex(1)
+        .child(new Radio("comfortable").px(2).label("Comfortable"))
+        .child(new Radio("compact").label("Compact")));
+  }
+}
+"#;
+    let (mut context, view, _runtime) = mount(cx, source);
+    context.draw(
+        gpui_shell::gpui::Point::default(),
+        gpui_shell::gpui::size(gpui_shell::gpui::px(700.), gpui_shell::gpui::px(600.)),
+        {
+            let view = view.clone();
+            move |_, _| view.into_any_element()
+        },
+    );
+    let tree = context.update(|_, cx| {
+        let view = view.read(cx);
+        assert_eq!(view.build_error(), None);
+        view.snapshot().expect("typed render snapshot").debug_tree()
+    });
+    for component in [
+        "AccordionItem",
+        "Accordion",
+        "Tab",
+        "TabBar",
+        "StepperItem",
+        "Stepper",
+        "Radio",
+        "RadioGroup",
+    ] {
+        assert!(tree.contains(component), "missing {component}: {tree}");
+    }
+    let answer_a = tree.find("Answer A").expect("first accordion answer");
+    let answer_b = tree.find("Answer B").expect("second accordion answer");
+    assert!(answer_a < answer_b, "{tree}");
+    let account = tree.find("Account").expect("first step label");
+    let profile = tree.find("Profile").expect("second step label");
+    assert!(account < profile, "{tree}");
+    assert_eq!(tree.matches(".w[Number(500.0)]").count(), 4, "{tree}");
+}

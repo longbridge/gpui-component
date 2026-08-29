@@ -19,7 +19,7 @@ enum RadioOp {
 }
 struct RadioMaterializer;
 impl ComponentMaterializer for RadioMaterializer {
-    fn materialize(&self, request: MaterializeRequest<'_>) -> anyhow::Result<gpui::AnyElement> {
+    fn materialize(&self, mut request: MaterializeRequest<'_>) -> anyhow::Result<gpui::AnyElement> {
         let id = &request
             .payload()
             .downcast_ref::<RadioPayload>()
@@ -40,7 +40,7 @@ impl ComponentMaterializer for RadioMaterializer {
                 RadioOp::Size(v) => radio.with_size(*v),
             }
         }
-        request.finish(radio)
+        crate::shell::typed_compound::finish_part(&mut request, radio)
     }
 }
 fn method(

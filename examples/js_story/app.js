@@ -1,5 +1,6 @@
 import { View, div } from "gpui";
-import { Button, Input, InputState, h_flex, v_flex } from "gpui-base";
+import { Input, InputState, h_flex, v_flex } from "gpui-base";
+import { Button } from "gpui-component";
 import { catalog, filterCatalog, route } from "./catalog.js";
 
 /** A sidebar gallery that stays entirely on the documented script surface. */
@@ -203,8 +204,8 @@ export default class StoryGallery extends View {
     const selected = story.id === this.activeId;
     const highlighted = story.id === this.highlightedId;
     return (
-      Button.new(`route-${story.id}`)
-        .selected(selected)
+      div()
+        .id(`route-${story.id}`)
         .track_focus(this.routeFocus.get(story.id))
         .accessibility_label(`Open ${story.title} story`)
         .w_full()
@@ -224,7 +225,7 @@ export default class StoryGallery extends View {
         // repainting a highlight. Submitting a search picks its first result
         // and transfers focus here.
         .on_click((_event, context) => this.select(story.id, context))
-        .child(story.title)
+        .child(new Button(`route-button-${story.id}`).child(story.title))
     );
   }
 }

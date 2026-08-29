@@ -1,6 +1,7 @@
 // Script-side projection of the checked-in component inventory. Gallery code
 // cannot import repository JSON at runtime; verify-coverage.mjs rejects drift.
 export const REGISTERED_SURFACES = [
+  "Accordion",
   "Alert",
   "Avatar",
   "Badge",
@@ -23,12 +24,14 @@ export const REGISTERED_SURFACES = [
   "StatusBar",
   "Switch",
   "Tag",
+  "Tab",
+  "Tabs",
+  "Stepper",
   "Toggle",
 ];
 
 /** @type {Record<string, string>} */
 export const DEFERRED_SURFACES = {
-  Accordion: "component-binding",
   AlertDialog: "overlay-window-api",
   Calendar: "component-binding",
   Chart: "chart-family",
@@ -65,10 +68,7 @@ export const DEFERRED_SURFACES = {
   Sheet: "overlay-window-api",
   Sidebar: "component-binding",
   Slider: "stateful-control",
-  Stepper: "component-binding",
-  Tab: "component-binding",
   Table: "stateful-collection",
-  Tabs: "component-binding",
   Text: "component-binding",
   Textarea: "stateful-input",
   Tooltip: "element-extension",

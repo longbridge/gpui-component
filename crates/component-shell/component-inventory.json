@@ -12,10 +12,20 @@
       "name": "accordion",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "component-binding",
-        "reason": "No Accordion descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "Accordion"
+        "status": "registered",
+        "descriptor": "Accordion",
+        "exports": [
+          "Accordion"
+        ],
+        "related": [
+          {
+            "descriptor": "AccordionItem",
+            "exports": [
+              "AccordionItem"
+            ],
+            "role": "direct-child-part"
+          }
+        ]
       }
     },
     {
@@ -387,6 +397,16 @@
         "descriptor": "Radio",
         "exports": [
           "Radio"
+        ],
+        "related": [
+          {
+            "descriptor": "RadioGroup",
+            "exports": [
+              "RadioGroup",
+              "HorizontalRadioGroup"
+            ],
+            "role": "typed-container"
+          }
         ]
       }
     },
@@ -546,10 +566,20 @@
       "name": "stepper",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "component-binding",
-        "reason": "No Stepper descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "Stepper"
+        "status": "registered",
+        "descriptor": "Stepper",
+        "exports": [
+          "Stepper"
+        ],
+        "related": [
+          {
+            "descriptor": "StepperItem",
+            "exports": [
+              "StepperItem"
+            ],
+            "role": "direct-child-part"
+          }
+        ]
       }
     },
     {
@@ -569,10 +599,21 @@
       "name": "tab",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "component-binding",
-        "reason": "No Tab descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "Tab"
+        "status": "registered",
+        "descriptor": "Tab",
+        "exports": [
+          "Tab"
+        ],
+        "related": [
+          {
+            "descriptor": "TabBar",
+            "exports": [
+              "TabBar",
+              "Tabs"
+            ],
+            "role": "typed-container-with-compatibility-alias"
+          }
+        ]
       }
     },
     {
@@ -642,10 +683,20 @@
       "name": "accordion",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "component-binding",
-        "reason": "No Accordion descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "Accordion"
+        "status": "registered",
+        "descriptor": "Accordion",
+        "exports": [
+          "Accordion"
+        ],
+        "related": [
+          {
+            "descriptor": "AccordionItem",
+            "exports": [
+              "AccordionItem"
+            ],
+            "role": "direct-child-part"
+          }
+        ]
       }
     },
     {
@@ -1092,6 +1143,16 @@
         "descriptor": "Radio",
         "exports": [
           "Radio"
+        ],
+        "related": [
+          {
+            "descriptor": "RadioGroup",
+            "exports": [
+              "RadioGroup",
+              "HorizontalRadioGroup"
+            ],
+            "role": "typed-container"
+          }
         ]
       }
     },
@@ -1246,10 +1307,20 @@
       "name": "stepper",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "component-binding",
-        "reason": "No Stepper descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "Stepper"
+        "status": "registered",
+        "descriptor": "Stepper",
+        "exports": [
+          "Stepper"
+        ],
+        "related": [
+          {
+            "descriptor": "StepperItem",
+            "exports": [
+              "StepperItem"
+            ],
+            "role": "direct-child-part"
+          }
+        ]
       }
     },
     {
@@ -1280,10 +1351,22 @@
       "name": "tabs",
       "classification": "component",
       "registration": {
-        "status": "deferred",
-        "category": "component-binding",
-        "reason": "No Tabs descriptor is present in the frozen gpui-component-shell catalog yet; this source surface remains explicitly deferred.",
-        "target": "Tabs"
+        "status": "registered",
+        "descriptor": "TabBar",
+        "exports": [
+          "TabBar",
+          "Tabs"
+        ],
+        "api": "Tabs",
+        "related": [
+          {
+            "descriptor": "Tab",
+            "exports": [
+              "Tab"
+            ],
+            "role": "direct-child-part"
+          }
+        ]
       }
     },
     {

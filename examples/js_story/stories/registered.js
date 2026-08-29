@@ -2,6 +2,8 @@
 // inventory. Constructor calls intentionally use `new`, matching the generated
 // gpui-component declarations.
 import {
+  Accordion,
+  AccordionItem,
   Alert,
   Avatar,
   Badge,
@@ -17,6 +19,7 @@ import {
   Pagination,
   Progress,
   Radio,
+  RadioGroup,
   Rating,
   Separator,
   Skeleton,
@@ -24,12 +27,31 @@ import {
   StatusBar,
   Switch,
   Tag,
+  Tab,
+  Tabs,
+  Stepper,
+  StepperItem,
   Toggle,
 } from "gpui-component";
 
 /** @param {string} surface */
 export function registeredExample(surface) {
   switch (surface) {
+    case "Accordion":
+      return new Accordion("preferences")
+        .bordered(true)
+        .multiple(false)
+        .child(
+          new AccordionItem()
+            .title(new Label("Appearance"))
+            .open(true)
+            .child("Theme and density preferences"),
+        )
+        .child(
+          new AccordionItem()
+            .title(new Label("Notifications"))
+            .child("Email and desktop notification preferences"),
+        );
     case "Alert":
       return new Alert("saved", "Your changes have been saved").title("Saved");
     case "Avatar":
@@ -68,10 +90,11 @@ export function registeredExample(surface) {
         .value(64)
         .accessibilityLabel("Upload progress");
     case "Radio":
-      return new Radio("compact")
-        .label("Compact layout")
-        .checked(true)
-        .tabStop(true);
+      return new RadioGroup("layout-density")
+        .selectedIndex(1)
+        .onChange((_index, cx) => cx.notify())
+        .child(new Radio("comfortable").label("Comfortable layout"))
+        .child(new Radio("compact").label("Compact layout"));
     case "Rating":
       return new Rating("quality").value(4).max(5).color("amber-500");
     case "Separator":
@@ -86,6 +109,21 @@ export function registeredExample(surface) {
       return new Switch("notifications").checked(true).label("Notifications");
     case "Tag":
       return new Tag().variant("success").roundedFull().child("Active");
+    case "Tab":
+      return new Tab().label("Profile").selected(true);
+    case "Tabs":
+      return new Tabs("profile-tabs")
+        .selectedIndex(0)
+        .variant("underline")
+        .child(new Tab().label("Profile"))
+        .child(new Tab().label("Security"));
+    case "Stepper":
+      return new Stepper("onboarding")
+        .selectedIndex(1)
+        .textCenter(true)
+        .child(new StepperItem().child("Account"))
+        .child(new StepperItem().child("Profile"))
+        .child(new StepperItem().child("Finish"));
     case "Toggle":
       return new Toggle("favorite").checked(true).label("Favorite").outline();
     default:

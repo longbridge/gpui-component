@@ -39,12 +39,24 @@ fn inventory_entries_have_a_registration_or_a_reason() {
                 Some(Registration::Registered {
                     descriptor,
                     exports,
+                    related,
                 }) => {
                     assert!(
                         !descriptor.is_empty(),
                         "registered descriptor cannot be empty"
                     );
                     assert!(!exports.is_empty(), "registered exports cannot be empty");
+                    for companion in related {
+                        assert!(
+                            !companion.descriptor.is_empty(),
+                            "related descriptor cannot be empty"
+                        );
+                        assert!(
+                            !companion.exports.is_empty(),
+                            "related exports cannot be empty"
+                        );
+                        assert!(!companion.role.is_empty(), "related role cannot be empty");
+                    }
                 }
                 Some(Registration::Deferred {
                     target,
@@ -98,6 +110,7 @@ fn registered_inventory_matches_the_frozen_component_catalog() {
         let Some(Registration::Registered {
             descriptor,
             exports,
+            related,
         }) = entry.registration
         else {
             continue;
@@ -116,6 +129,22 @@ fn registered_inventory_matches_the_frozen_component_catalog() {
         );
         inventoried_descriptors.insert(descriptor);
         inventoried_exports.extend(claimed_exports);
+        for companion in related {
+            let actual_exports = actual.get(&companion.descriptor).unwrap_or_else(|| {
+                panic!(
+                    "{}:{} claims missing related descriptor `{}`",
+                    entry.source, entry.name, companion.descriptor
+                )
+            });
+            let claimed_exports = companion.exports.into_iter().collect::<BTreeSet<_>>();
+            assert_eq!(
+                &claimed_exports, actual_exports,
+                "{}:{} has stale exports for related `{}` ({})",
+                entry.source, entry.name, companion.descriptor, companion.role
+            );
+            inventoried_descriptors.insert(companion.descriptor);
+            inventoried_exports.extend(claimed_exports);
+        }
     }
 
     let actual_descriptors = actual.keys().cloned().collect::<BTreeSet<_>>();
@@ -147,12 +176,19 @@ enum Registration {
     Registered {
         descriptor: String,
         exports: Vec<String>,
+        related: Vec<RelatedRegistration>,
     },
     Deferred {
         target: String,
         category: String,
         reason: String,
     },
+}
+
+struct RelatedRegistration {
+    descriptor: String,
+    exports: Vec<String>,
+    role: String,
 }
 
 impl Inventory {
@@ -191,6 +227,30 @@ impl Inventory {
                                 .iter()
                                 .map(|export| {
                                     export.as_str().expect("registered export").to_owned()
+                                })
+                                .collect(),
+                            related: registration
+                                .get("related")
+                                .and_then(Value::as_array)
+                                .into_iter()
+                                .flatten()
+                                .map(|related| RelatedRegistration {
+                                    descriptor: related["descriptor"]
+                                        .as_str()
+                                        .expect("related descriptor")
+                                        .to_owned(),
+                                    exports: related["exports"]
+                                        .as_array()
+                                        .expect("related exports")
+                                        .iter()
+                                        .map(|export| {
+                                            export.as_str().expect("related export").to_owned()
+                                        })
+                                        .collect(),
+                                    role: related["role"]
+                                        .as_str()
+                                        .expect("related role")
+                                        .to_owned(),
                                 })
                                 .collect(),
                         },
