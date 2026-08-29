@@ -665,6 +665,36 @@ pub(crate) fn materialize_subtree(
     materialize_node(runtime, None, arena, root, ambient, window, cx)
 }
 
+pub(crate) fn try_materialize_subtree(
+    runtime: &Rc<ShellRuntime>,
+    arena: &SpecArena,
+    root: SpecId,
+    window: &mut Window,
+    cx: &mut App,
+) -> anyhow::Result<AnyElement> {
+    FACTORY_MATERIALIZE_ERRORS.with(|errors| errors.borrow_mut().push(None));
+    struct Frame(bool);
+    impl Drop for Frame {
+        fn drop(&mut self) {
+            if !self.0 {
+                FACTORY_MATERIALIZE_ERRORS.with(|errors| {
+                    errors.borrow_mut().pop();
+                });
+            }
+        }
+    }
+    let mut frame = Frame(false);
+    let element = materialize_subtree(runtime, arena, root, window, cx);
+    let error = FACTORY_MATERIALIZE_ERRORS.with(|errors| {
+        errors
+            .borrow_mut()
+            .pop()
+            .expect("temporary materialize error frame")
+    });
+    frame.0 = true;
+    error.map_or(Ok(element), Err)
+}
+
 /// Materializes one node, carrying the text color down the description.
 ///
 /// GPUI resolves inherited text color while painting, but an svg needs the

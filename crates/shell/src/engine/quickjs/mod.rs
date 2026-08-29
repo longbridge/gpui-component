@@ -37,7 +37,7 @@ use smallvec::SmallVec;
 
 use crate::{
     ArgumentDescriptor, ArgumentSchema, ComponentArgument, ComponentCallbackArgument,
-    ComponentCallbackValue, ComponentPayload, FrozenComponentRegistry,
+    ComponentCallbackValue, ComponentDataValue, ComponentPayload, FrozenComponentRegistry,
     entities::{EntityHandle, EntityStore},
     metrics::Metrics,
     policy::Policy,
@@ -342,6 +342,210 @@ mod component_callback_value_tests {
                 .with_js(|ctx| ctx.eval::<bool, _>("globalThis.__componentJobDrained === true"))
                 .unwrap()
         );
+    }
+
+    #[gpui::test]
+    fn component_delegate_data_is_recursive_bounded_and_does_not_drain_jobs(
+        cx: &mut TestAppContext,
+    ) {
+        let runtime = ShellRuntime::new_isolated().unwrap();
+        let (id, _) = callback(
+            &runtime,
+            r#"() => { Promise.resolve().then(() => globalThis.__delegateJob = true); return {id: "a", cells: [1, true, null]}; }"#,
+            None,
+        );
+        let data_callback = crate::ComponentDataCallback::from_runtime(&runtime, id);
+        let window = cx.add_window(|_, _| Empty);
+        let mut context = VisualTestContext::from_window(*window.deref(), cx);
+        let value = context
+            .update(|window, cx| data_callback.snapshot_with(&[], window, cx))
+            .unwrap();
+        let crate::ComponentDataValue::Object(fields) = value else {
+            panic!("object")
+        };
+        assert_eq!(fields[0].0, "id");
+        assert!(
+            !runtime
+                .with_js(|ctx| ctx.eval::<bool, _>("globalThis.__delegateJob === true"))
+                .unwrap()
+        );
+        let (leaky, _) = callback(&runtime, "() => { __div(); return {ok: true}; }", None);
+        let leaky = crate::ComponentDataCallback::from_runtime(&runtime, leaky);
+        let arena_len = runtime.arena.borrow().len();
+        for _ in 0..2 {
+            context
+                .update(|window, cx| leaky.snapshot_with(&[], window, cx))
+                .unwrap();
+            assert_eq!(runtime.arena.borrow().len(), arena_len);
+        }
+    }
+
+    #[gpui::test]
+    fn component_delegate_element_is_lazy_and_rejects_non_elements(cx: &mut TestAppContext) {
+        let runtime = ShellRuntime::new_isolated().unwrap();
+        let (good, _) = callback(&runtime, "(label) => label", None);
+        let (bad, _) = callback(&runtime, "() => ({row: 1})", None);
+        let good = crate::ComponentElementCallback::from_runtime(&runtime, good);
+        let bad = crate::ComponentElementCallback::from_runtime(&runtime, bad);
+        let window = cx.add_window(|_, _| Empty);
+        let mut context = VisualTestContext::from_window(*window.deref(), cx);
+        assert!(
+            context
+                .update(|window, cx| good.build_with(
+                    &[ComponentCallbackArgument::String("row".into())],
+                    window,
+                    cx
+                ))
+                .unwrap()
+                .is_some()
+        );
+        assert!(
+            context
+                .update(|window, cx| bad.build_with(&[], window, cx))
+                .is_err()
+        );
+        let row = ComponentDataValue::Object(vec![
+            ("label".into(), ComponentDataValue::String("Ada".into())),
+            (
+                "__proto__".into(),
+                ComponentDataValue::String("safe".into()),
+            ),
+        ]);
+        let (row_renderer, _) = callback(
+            &runtime,
+            "(row) => Object.getPrototypeOf(row) === null && Object.prototype.hasOwnProperty.call(row, '__proto__') && row.__proto__ === 'safe' ? row.label : ({bad: true})",
+            None,
+        );
+        let row_renderer = crate::ComponentElementCallback::from_runtime(&runtime, row_renderer);
+        assert!(
+            context
+                .update(|window, cx| row_renderer.build_data_with(&[row], window, cx))
+                .unwrap()
+                .is_some()
+        );
+    }
+
+    #[gpui::test]
+    fn temporary_delegate_arena_restores_after_panic_and_later_materializes(
+        cx: &mut TestAppContext,
+    ) {
+        let runtime = ShellRuntime::new_isolated().unwrap();
+        let window = cx.add_window(|_, _| Empty);
+        let mut context = VisualTestContext::from_window(*window.deref(), cx);
+        let before = runtime.arena.borrow().len();
+        let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            context.update(|window, cx| {
+                let (_scope, _) = scope::enter_with_application(
+                    &runtime,
+                    window,
+                    cx,
+                    ScopePhase::Layout,
+                    None,
+                    crate::policy::default(),
+                    None,
+                );
+                let _temporary = TemporarySpecArena::enter(&runtime);
+                runtime
+                    .with_js(|ctx| {
+                        let div: Function = ctx.globals().get("__div")?;
+                        div.call::<_, ()>(())
+                    })
+                    .unwrap();
+                panic!("delegate dispatch scope panic probe");
+            })
+        }));
+        assert!(panic.is_err());
+        assert_eq!(scope::current_phase(), None);
+        assert_eq!(runtime.arena.borrow().len(), before);
+        drop(context);
+        let window = cx.add_window(|_, _| Empty);
+        let mut context = VisualTestContext::from_window(*window.deref(), cx);
+        let (id, _) = callback(&runtime, "() => 'still works'", None);
+        let callback = crate::ComponentElementCallback::from_runtime(&runtime, id);
+        assert!(
+            context
+                .update(|window, cx| callback.build_with(&[], window, cx))
+                .unwrap()
+                .is_some()
+        );
+    }
+
+    #[gpui::test]
+    fn component_delegate_capabilities_reject_invalid_data_and_stale_lifetimes(
+        cx: &mut TestAppContext,
+    ) {
+        let runtime = ShellRuntime::new_isolated().unwrap();
+        let application = ApplicationGeneration::new(991);
+        let (invalid, _) = callback(
+            &runtime,
+            r#"(kind) => {
+                if (kind === "promise") return Promise.resolve(1);
+                if (kind === "function") return () => {};
+                if (kind === "element") return {__id: 7};
+                if (kind === "accessor") return Object.defineProperty({}, "value", {get() { globalThis.__delegateAccessorRan = true; throw new Error("getter ran"); }, enumerable: true});
+                if (kind === "prototype") return Object.create({inherited: true});
+                return Infinity;
+            }"#,
+            None,
+        );
+        let invalid = crate::ComponentDataCallback::from_runtime(&runtime, invalid);
+        let (stale, generation) = callback(&runtime, "()=>[]", None);
+        let stale = crate::ComponentDataCallback::from_runtime(&runtime, stale);
+        let (retired, _) = callback(&runtime, "()=>[]", Some(application.clone()));
+        let retired = crate::ComponentElementCallback::from_runtime(&runtime, retired);
+        let (notify, _) = callback(&runtime, "(cx)=>{ cx.notify(); return []; }", None);
+        let notify = crate::ComponentDataCallback::from_runtime(&runtime, notify);
+        let window = cx.add_window(|_, _| Empty);
+        let mut context = VisualTestContext::from_window(*window.deref(), cx);
+        for kind in [
+            "promise",
+            "function",
+            "element",
+            "accessor",
+            "prototype",
+            "number",
+        ] {
+            assert!(
+                context
+                    .update(|window, cx| invalid.snapshot_with(
+                        &[ComponentCallbackArgument::String(kind.into())],
+                        window,
+                        cx
+                    ))
+                    .is_err()
+            );
+        }
+        assert!(
+            !runtime
+                .with_js(|ctx| ctx.eval::<bool, _>("globalThis.__delegateAccessorRan === true"))
+                .unwrap(),
+            "delegate validation must reject accessors without invoking their getter"
+        );
+        let notify_error = context
+            .update(|window, cx| notify.snapshot_with(&[], window, cx))
+            .unwrap_err();
+        assert!(
+            notify_error.to_string().contains("layout"),
+            "{notify_error:#}"
+        );
+        runtime.callbacks.borrow_mut().retire(generation);
+        assert!(
+            context
+                .update(|window, cx| stale.snapshot_with(&[], window, cx))
+                .unwrap_err()
+                .to_string()
+                .contains("superseded render")
+        );
+        application.retire();
+        let retired_error = match context.update(|window, cx| retired.build_with(&[], window, cx)) {
+            Ok(_) => panic!("retired element callback must fail"),
+            Err(error) => error,
+        };
+        assert!(retired_error.to_string().contains("retired application"));
+        let snapshot =
+            crate::ComponentDelegateSnapshot::new(vec![ComponentDataValue::String("row".into())]);
+        assert_eq!(snapshot.len(), 1);
+        assert!(snapshot.row(1).is_err());
     }
 
     #[gpui::test]
@@ -3826,6 +4030,177 @@ impl ShellRuntime {
         });
         scheduler::drain_runtime_jobs(self, window, cx);
         result
+    }
+
+    pub(crate) fn dispatch_component_data_callback(
+        self: &Rc<Self>,
+        id: CallbackId,
+        arguments: &[ComponentCallbackArgument],
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Result<ComponentDataValue> {
+        let entry = self
+            .callbacks
+            .borrow()
+            .get(id)
+            .ok_or_else(|| anyhow!("component callback {id} belongs to a superseded render"))?;
+        if entry.application.as_ref().is_some_and(|a| !a.is_active()) {
+            return Err(anyhow!(
+                "component callback {id} belongs to a retired application"
+            ));
+        }
+        let view = entry
+            .live_view()
+            .ok_or_else(|| anyhow!("component callback {id} owner has been released"))?;
+        let policy = view
+            .as_ref()
+            .map(|v| v.read(cx).policy())
+            .unwrap_or_else(crate::policy::default);
+        self.metrics.time_frame_script(|| {
+            let (_guard, generation) = scope::enter_with_application(
+                self,
+                window,
+                cx,
+                ScopePhase::Layout,
+                view,
+                policy,
+                entry.application.clone(),
+            );
+            scope::adopt(entry.registered_in);
+            let temporary = TemporarySpecArena::enter(self);
+            let result = self.with_js(|ctx| {
+                let handler = entry.value.clone().restore(ctx)?;
+                let mut args = JsArgs::new(ctx.clone(), arguments.len() + 1);
+                push_component_callback_arguments(&mut args, arguments)?;
+                args.push_arg(context_object(ctx, ContextBinding::Call(generation))?)?;
+                let value: Value = handler.call_arg(args)?;
+                component_data_from_js(&ctx, value, 0, &mut ComponentDataBudget::default())
+            });
+            drop(temporary.finish());
+            result.map_err(Into::into)
+        })
+    }
+
+    pub(crate) fn dispatch_component_element_callback(
+        self: &Rc<Self>,
+        id: CallbackId,
+        arguments: &[ComponentCallbackArgument],
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Result<Option<gpui::AnyElement>> {
+        let entry = self
+            .callbacks
+            .borrow()
+            .get(id)
+            .ok_or_else(|| anyhow!("component callback {id} belongs to a superseded render"))?;
+        if entry.application.as_ref().is_some_and(|a| !a.is_active()) {
+            return Err(anyhow!(
+                "component callback {id} belongs to a retired application"
+            ));
+        }
+        let view = entry
+            .live_view()
+            .ok_or_else(|| anyhow!("component callback {id} owner has been released"))?;
+        let policy = view
+            .as_ref()
+            .map(|v| v.read(cx).policy())
+            .unwrap_or_else(crate::policy::default);
+        self.metrics.time_frame_script(|| {
+            let (_guard, generation) = scope::enter_with_application(
+                self,
+                window,
+                cx,
+                ScopePhase::Layout,
+                view,
+                policy,
+                entry.application.clone(),
+            );
+            scope::adopt(entry.registered_in);
+            let temporary = TemporarySpecArena::enter(self);
+            let described = self.with_js(|ctx| {
+                let handler = entry.value.clone().restore(ctx)?;
+                let mut args = JsArgs::new(ctx.clone(), arguments.len() + 1);
+                push_component_callback_arguments(&mut args, arguments)?;
+                args.push_arg(context_object(ctx, ContextBinding::Call(generation))?)?;
+                let value: Value = handler.call_arg(args)?;
+                if value.is_null() || value.is_undefined() {
+                    Ok(None)
+                } else {
+                    element_id(ctx, &value).map(Some)
+                }
+            });
+            let arena = temporary.finish();
+            match described {
+                Ok(Some(root)) => {
+                    crate::materialize::try_materialize_subtree(self, &arena, root, window, cx)
+                        .map(Some)
+                }
+                Ok(None) => Ok(None),
+                Err(error) => Err(error.into()),
+            }
+        })
+    }
+
+    pub(crate) fn dispatch_component_element_data_callback(
+        self: &Rc<Self>,
+        id: CallbackId,
+        arguments: &[ComponentDataValue],
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Result<Option<gpui::AnyElement>> {
+        let entry = self
+            .callbacks
+            .borrow()
+            .get(id)
+            .ok_or_else(|| anyhow!("component callback {id} belongs to a superseded render"))?;
+        if entry.application.as_ref().is_some_and(|a| !a.is_active()) {
+            return Err(anyhow!(
+                "component callback {id} belongs to a retired application"
+            ));
+        }
+        let view = entry
+            .live_view()
+            .ok_or_else(|| anyhow!("component callback {id} owner has been released"))?;
+        let policy = view
+            .as_ref()
+            .map(|v| v.read(cx).policy())
+            .unwrap_or_else(crate::policy::default);
+        self.metrics.time_frame_script(|| {
+            let (_guard, generation) = scope::enter_with_application(
+                self,
+                window,
+                cx,
+                ScopePhase::Layout,
+                view,
+                policy,
+                entry.application.clone(),
+            );
+            scope::adopt(entry.registered_in);
+            let temporary = TemporarySpecArena::enter(self);
+            let described = self.with_js(|ctx| {
+                let handler = entry.value.clone().restore(ctx)?;
+                let mut args = JsArgs::new(ctx.clone(), arguments.len() + 1);
+                for argument in arguments {
+                    args.push_arg(component_data_into_js(ctx, argument)?)?;
+                }
+                args.push_arg(context_object(ctx, ContextBinding::Call(generation))?)?;
+                let value: Value = handler.call_arg(args)?;
+                if value.is_null() || value.is_undefined() {
+                    Ok(None)
+                } else {
+                    element_id(ctx, &value).map(Some)
+                }
+            });
+            let arena = temporary.finish();
+            match described {
+                Ok(Some(root)) => {
+                    crate::materialize::try_materialize_subtree(self, &arena, root, window, cx)
+                        .map(Some)
+                }
+                Ok(None) => Ok(None),
+                Err(error) => Err(error.into()),
+            }
+        })
     }
 
     pub(crate) fn with_component_callback_event<R>(
@@ -7714,6 +8089,233 @@ fn element_id(ctx: &Ctx<'_>, value: &Value<'_>) -> JsResult<SpecId> {
                 "render(cx) must return an element, an Entity, or a string",
             )
         })
+}
+
+fn push_component_callback_arguments<'js>(
+    arguments: &mut JsArgs<'js>,
+    values: &[ComponentCallbackArgument],
+) -> JsResult<()> {
+    for value in values {
+        match value {
+            ComponentCallbackArgument::String(value) => arguments.push_arg(value)?,
+            ComponentCallbackArgument::Number(value) => arguments.push_arg(*value)?,
+            ComponentCallbackArgument::Boolean(value) => arguments.push_arg(*value)?,
+        }
+    }
+    Ok(())
+}
+
+const MAX_COMPONENT_DATA_DEPTH: usize = 16;
+const MAX_COMPONENT_DATA_NODES: usize = 4096;
+const MAX_COMPONENT_DATA_STRING_BYTES: usize = 1024 * 1024;
+const MAX_COMPONENT_DATA_OBJECT_KEYS: usize = 1024;
+
+#[derive(Default)]
+struct ComponentDataBudget {
+    nodes: usize,
+    string_bytes: usize,
+    keys: usize,
+}
+
+struct TemporarySpecArena {
+    runtime: Rc<ShellRuntime>,
+    outer: Option<SpecArena>,
+}
+
+impl TemporarySpecArena {
+    fn enter(runtime: &Rc<ShellRuntime>) -> Self {
+        let outer = std::mem::take(&mut *runtime.arena.borrow_mut());
+        Self {
+            runtime: runtime.clone(),
+            outer: Some(outer),
+        }
+    }
+
+    fn finish(mut self) -> SpecArena {
+        let generated = std::mem::replace(
+            &mut *self.runtime.arena.borrow_mut(),
+            self.outer.take().expect("temporary arena outer"),
+        );
+        generated
+    }
+}
+
+impl Drop for TemporarySpecArena {
+    fn drop(&mut self) {
+        if let Some(outer) = self.outer.take() {
+            *self.runtime.arena.borrow_mut() = outer;
+        }
+    }
+}
+
+fn component_data_from_js<'js>(
+    ctx: &Ctx<'js>,
+    value: Value<'js>,
+    depth: usize,
+    budget: &mut ComponentDataBudget,
+) -> JsResult<ComponentDataValue> {
+    if depth > MAX_COMPONENT_DATA_DEPTH {
+        return Err(Exception::throw_range(
+            ctx,
+            "component delegate data is nested too deeply",
+        ));
+    }
+    budget.nodes = budget.nodes.checked_add(1).ok_or_else(|| {
+        Exception::throw_range(ctx, "component delegate data contains too many values")
+    })?;
+    if budget.nodes > MAX_COMPONENT_DATA_NODES {
+        return Err(Exception::throw_range(
+            ctx,
+            "component delegate data contains too many values",
+        ));
+    }
+    if value.is_null() || value.is_undefined() {
+        return Ok(ComponentDataValue::Null);
+    }
+    if let Some(v) = value.as_bool() {
+        return Ok(ComponentDataValue::Boolean(v));
+    }
+    if let Some(v) = value.as_number() {
+        if !v.is_finite() {
+            return Err(Exception::throw_type(
+                ctx,
+                "component delegate numbers must be finite",
+            ));
+        }
+        return Ok(ComponentDataValue::Number(v));
+    }
+    if let Some(v) = value.as_string() {
+        let v = v.to_string()?;
+        budget.string_bytes = budget.string_bytes.saturating_add(v.len());
+        if budget.string_bytes > MAX_COMPONENT_DATA_STRING_BYTES {
+            return Err(Exception::throw_range(
+                ctx,
+                "component delegate strings exceed the byte limit",
+            ));
+        }
+        return Ok(ComponentDataValue::String(v));
+    }
+    if value.as_function().is_some() {
+        return Err(Exception::throw_type(
+            ctx,
+            "component delegate data cannot contain functions",
+        ));
+    }
+    if value.is_promise() {
+        return Err(Exception::throw_type(
+            ctx,
+            "component delegate data cannot contain promises",
+        ));
+    }
+    if let Some(array) = value.as_array() {
+        let len = host_modules::bridge_array_len(ctx, &array)?;
+        let mut out = Vec::new();
+        out.try_reserve_exact(len)
+            .map_err(|_| Exception::throw_range(ctx, "component delegate array is too large"))?;
+        for ix in 0..len {
+            out.push(component_data_from_js(
+                ctx,
+                array.get(ix)?,
+                depth + 1,
+                budget,
+            )?);
+        }
+        return Ok(ComponentDataValue::Array(out));
+    }
+    if let Some(object) = value.as_object() {
+        let object_constructor: Object = ctx.globals().get("Object")?;
+        let get_prototype: Function = object_constructor.get("getPrototypeOf")?;
+        let prototype: Value = get_prototype.call((object.clone(),))?;
+        let ordinary_prototype: Value = object_constructor.get("prototype")?;
+        if !prototype.is_null() && prototype != ordinary_prototype {
+            return Err(Exception::throw_type(
+                ctx,
+                "component delegate objects must have Object.prototype or null prototype",
+            ));
+        }
+        let get_symbols: Function = object_constructor.get("getOwnPropertySymbols")?;
+        let symbols: Array = get_symbols.call((object.clone(),))?;
+        if host_modules::bridge_array_len(ctx, &symbols)? != 0 {
+            return Err(Exception::throw_type(
+                ctx,
+                "component delegate objects cannot contain symbol keys",
+            ));
+        }
+        let get_descriptors: Function = object_constructor.get("getOwnPropertyDescriptors")?;
+        let descriptors: Object = get_descriptors.call((object.clone(),))?;
+        let mut out = Vec::new();
+        for key in object.keys::<String>() {
+            budget.keys += 1;
+            if budget.keys > MAX_COMPONENT_DATA_OBJECT_KEYS {
+                return Err(Exception::throw_range(
+                    ctx,
+                    "component delegate objects contain too many keys",
+                ));
+            }
+            let key = key?;
+            budget.string_bytes = budget.string_bytes.saturating_add(key.len());
+            if budget.string_bytes > MAX_COMPONENT_DATA_STRING_BYTES {
+                return Err(Exception::throw_range(
+                    ctx,
+                    "component delegate strings exceed the byte limit",
+                ));
+            }
+            let descriptor: Object = descriptors.get(key.as_str())?;
+            let getter: Value = descriptor.get("get")?;
+            let setter: Value = descriptor.get("set")?;
+            if !getter.is_undefined() || !setter.is_undefined() {
+                return Err(Exception::throw_type(
+                    ctx,
+                    "component delegate objects cannot contain accessors",
+                ));
+            }
+            if matches!(key.as_str(), "__id" | "__handle" | "__componentStateHandle") {
+                return Err(Exception::throw_type(
+                    ctx,
+                    "component delegate data cannot contain shell handles or elements",
+                ));
+            }
+            let value: Value = descriptor.get("value")?;
+            out.push((key, component_data_from_js(ctx, value, depth + 1, budget)?));
+        }
+        return Ok(ComponentDataValue::Object(out));
+    }
+    Err(Exception::throw_type(
+        ctx,
+        "component delegate callbacks may return only plain data",
+    ))
+}
+
+fn component_data_into_js<'js>(ctx: &Ctx<'js>, value: &ComponentDataValue) -> JsResult<Value<'js>> {
+    Ok(match value {
+        ComponentDataValue::Null => Value::new_null(ctx.clone()),
+        ComponentDataValue::Boolean(value) => Value::new_bool(ctx.clone(), *value),
+        ComponentDataValue::Number(value) => Value::new_number(ctx.clone(), *value),
+        ComponentDataValue::String(value) => {
+            rquickjs::String::from_str(ctx.clone(), value)?.into_value()
+        }
+        ComponentDataValue::Array(values) => {
+            let array = Array::new(ctx.clone())?;
+            for (index, value) in values.iter().enumerate() {
+                array.set(index, component_data_into_js(ctx, value)?)?;
+            }
+            array.into_value()
+        }
+        ComponentDataValue::Object(fields) => {
+            let object = Object::new(ctx.clone())?;
+            object.set_prototype(None)?;
+            for (key, value) in fields {
+                object.prop(
+                    key.as_str(),
+                    rquickjs::object::Property::from(component_data_into_js(ctx, value)?)
+                        .writable()
+                        .enumerable()
+                        .configurable(),
+                )?;
+            }
+            object.into_value()
+        }
+    })
 }
 
 /// How a `cx` reaches the host call it speaks for.

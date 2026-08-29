@@ -235,6 +235,42 @@ pub enum ComponentCallbackValue {
     Boolean(bool),
 }
 
+/// Immutable plain data returned by a generation-bound delegate snapshot.
+#[derive(Clone, Debug, PartialEq)]
+pub enum ComponentDataValue {
+    Null,
+    Boolean(bool),
+    Number(f64),
+    String(String),
+    Array(Vec<ComponentDataValue>),
+    Object(Vec<(String, ComponentDataValue)>),
+}
+
+#[derive(Clone, Debug)]
+pub struct ComponentDelegateSnapshot {
+    rows: Arc<[ComponentDataValue]>,
+}
+
+impl ComponentDelegateSnapshot {
+    pub fn new(rows: Vec<ComponentDataValue>) -> Self {
+        Self { rows: rows.into() }
+    }
+    pub fn len(&self) -> usize {
+        self.rows.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.rows.is_empty()
+    }
+    pub fn row(&self, index: usize) -> anyhow::Result<&ComponentDataValue> {
+        self.rows.get(index).ok_or_else(|| {
+            anyhow::anyhow!(
+                "delegate row index {index} is out of bounds for {} rows",
+                self.rows.len()
+            )
+        })
+    }
+}
+
 /// One child description owned by a single [`MaterializeRequest`].
 ///
 /// The token is deliberately opaque. It can only be consumed by the request
@@ -872,6 +908,28 @@ impl<'a> MaterializeRequest<'a> {
             id: *callback,
         })
     }
+
+    pub fn resolve_data_callback(
+        &self,
+        argument: &ComponentArgument,
+    ) -> anyhow::Result<ComponentDataCallback> {
+        let callback = self.resolve_callback(argument)?;
+        Ok(ComponentDataCallback {
+            callback,
+            active: Rc::new(Cell::new(false)),
+        })
+    }
+
+    pub fn resolve_element_callback(
+        &self,
+        argument: &ComponentArgument,
+    ) -> anyhow::Result<ComponentElementCallback> {
+        let callback = self.resolve_callback(argument)?;
+        Ok(ComponentElementCallback {
+            callback,
+            active: Rc::new(Cell::new(false)),
+        })
+    }
 }
 
 impl Drop for MaterializeRequest<'_> {
@@ -956,6 +1014,123 @@ impl<T: Any> ComponentState<T> {
 pub struct ComponentCallback {
     runtime: Weak<crate::ShellRuntime>,
     id: u64,
+}
+
+#[derive(Clone)]
+pub struct ComponentDataCallback {
+    callback: ComponentCallback,
+    active: Rc<Cell<bool>>,
+}
+
+#[derive(Clone)]
+pub struct ComponentElementCallback {
+    callback: ComponentCallback,
+    active: Rc<Cell<bool>>,
+}
+
+impl ComponentDataCallback {
+    #[cfg(test)]
+    pub(crate) fn from_runtime(runtime: &Rc<crate::ShellRuntime>, id: u64) -> Self {
+        Self {
+            callback: ComponentCallback::from_runtime(runtime, id),
+            active: Rc::new(Cell::new(false)),
+        }
+    }
+    pub fn snapshot_with(
+        &self,
+        arguments: &[ComponentCallbackArgument],
+        window: &mut Window,
+        cx: &mut App,
+    ) -> anyhow::Result<ComponentDataValue> {
+        anyhow::ensure!(
+            !self.active.replace(true),
+            "component data callback is already running"
+        );
+        struct Reset<'a>(&'a Cell<bool>);
+        impl Drop for Reset<'_> {
+            fn drop(&mut self) {
+                self.0.set(false)
+            }
+        }
+        let _reset = Reset(&self.active);
+        let runtime = self
+            .callback
+            .runtime
+            .upgrade()
+            .ok_or_else(|| anyhow::anyhow!("component callback runtime has been released"))?;
+        runtime.dispatch_component_data_callback(self.callback.id, arguments, window, cx)
+    }
+
+    pub fn snapshot_rows_with(
+        &self,
+        arguments: &[ComponentCallbackArgument],
+        window: &mut Window,
+        cx: &mut App,
+    ) -> anyhow::Result<ComponentDelegateSnapshot> {
+        match self.snapshot_with(arguments, window, cx)? {
+            ComponentDataValue::Array(rows) => Ok(ComponentDelegateSnapshot::new(rows)),
+            _ => anyhow::bail!("component delegate snapshot callback must return an array of rows"),
+        }
+    }
+}
+
+impl ComponentElementCallback {
+    #[cfg(test)]
+    pub(crate) fn from_runtime(runtime: &Rc<crate::ShellRuntime>, id: u64) -> Self {
+        Self {
+            callback: ComponentCallback::from_runtime(runtime, id),
+            active: Rc::new(Cell::new(false)),
+        }
+    }
+    pub fn build_with(
+        &self,
+        arguments: &[ComponentCallbackArgument],
+        window: &mut Window,
+        cx: &mut App,
+    ) -> anyhow::Result<Option<AnyElement>> {
+        anyhow::ensure!(
+            !self.active.replace(true),
+            "component element callback is already running"
+        );
+        struct Reset<'a>(&'a Cell<bool>);
+        impl Drop for Reset<'_> {
+            fn drop(&mut self) {
+                self.0.set(false)
+            }
+        }
+        let _reset = Reset(&self.active);
+        let runtime = self
+            .callback
+            .runtime
+            .upgrade()
+            .ok_or_else(|| anyhow::anyhow!("component callback runtime has been released"))?;
+        runtime.dispatch_component_element_callback(self.callback.id, arguments, window, cx)
+    }
+
+    pub fn build_data_with(
+        &self,
+        arguments: &[ComponentDataValue],
+        window: &mut Window,
+        cx: &mut App,
+    ) -> anyhow::Result<Option<AnyElement>> {
+        anyhow::ensure!(
+            !self.active.replace(true),
+            "component element callback is already running"
+        );
+        struct Reset<'a>(&'a Cell<bool>);
+        impl Drop for Reset<'_> {
+            fn drop(&mut self) {
+                self.0.set(false)
+            }
+        }
+        let _reset = Reset(&self.active);
+        let runtime = self
+            .callback
+            .runtime
+            .upgrade()
+            .ok_or_else(|| anyhow::anyhow!("component callback runtime has been released"))?;
+        runtime.dispatch_component_element_data_callback(self.callback.id, arguments, window, cx)
+    }
 }
 
 /// A generation-bound capability for native effects initiated by one GPUI event.
