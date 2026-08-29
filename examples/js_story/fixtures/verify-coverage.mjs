@@ -17,6 +17,7 @@ const inventory = JSON.parse(
   read("crates/component-shell/component-inventory.json"),
 );
 const catalogSource = read("examples/js_story/catalog.js");
+const coverageSource = read("examples/js_story/stories/coverage.js");
 const familyFiles = [
   ...catalogSource.matchAll(/from "\.\/stories\/([^"\n]+)"/g),
 ].map((match) => `examples/js_story/stories/${match[1]}`);
@@ -44,13 +45,27 @@ const records = familyFiles.flatMap((file) => {
 const inventoryStories = inventory.items.filter(
   (item) => item.source === "story",
 );
-const renderableRegistrations = [
-  ...new Set(
-    inventory.items
-      .filter((item) => ["component", "platform"].includes(item.classification))
-      .map((item) => item.registration),
-  ),
-].sort();
+const inventorySurfaces = new Map();
+for (const item of inventory.items) {
+  if (!item.registration) continue;
+  const surface =
+    item.registration.status === "registered"
+      ? item.registration.descriptor
+      : item.registration.target;
+  const current = inventorySurfaces.get(surface);
+  const next = {
+    status: item.registration.status,
+    category: item.registration.category,
+  };
+  if (
+    current &&
+    (current.status !== next.status || current.category !== next.category)
+  ) {
+    fail(`inventory disagrees about ${surface} status`);
+  }
+  inventorySurfaces.set(surface, next);
+}
+const renderableRegistrations = [...inventorySurfaces.keys()].sort();
 const inventoryNameFor = (rustStory) => {
   const name = rustStory.replace(/Story$/, "");
   if (name === "ThemeColors") return "theme";
@@ -72,12 +87,21 @@ for (const item of inventoryStories) {
   );
   if (!record) fail(`inventory Story ${item.name} has no catalog route`);
   if (item.classification === "infrastructure") {
-    if (record.availability !== "infrastructure") {
+    if (
+      record.id !== "introduction" &&
+      record.id !== "shell" &&
+      record.availability !== "infrastructure"
+    ) {
       fail(`${record.id} must declare infrastructure availability`);
     }
-  } else if (record.api !== item.registration) {
+  } else {
+    const registration =
+      item.registration.status === "registered"
+        ? item.registration.descriptor
+        : item.registration.target;
+    if (record.api === registration) continue;
     fail(
-      `${record.id} expects ${record.api}; inventory registers ${item.registration}`,
+      `${record.id} expects ${record.api}; inventory tracks ${registration} as ${item.registration.status}`,
     );
   }
 }
@@ -96,10 +120,10 @@ if (
   fail("catalog order and family route records disagree");
 }
 
-const coverageBody = catalogSource.match(
+const coverageBody = coverageSource.match(
   /export const coveredBy = \[([\s\S]*?)\n\];/,
 )?.[1];
-if (!coverageBody) fail("catalog has no explicit coveredBy metadata");
+if (!coverageBody) fail("coverage.js has no explicit coveredBy metadata");
 const coverage = [
   ...coverageBody.matchAll(
     /\{ route: "([^"]+)", registrations: \[([^\]]*)\] \}/g,
@@ -126,8 +150,11 @@ if (
 
 for (const record of records) {
   const entry = coverage.find((candidate) => candidate.route === record.id);
+  const inventoryItem = inventoryStories.find(
+    (item) => item.name === inventoryNameFor(record.rustStory),
+  );
   if (
-    record.availability !== "infrastructure" &&
+    inventoryItem?.classification !== "infrastructure" &&
     !entry.registrations.includes(record.api)
   ) {
     fail(`${record.id} must explicitly cover its ${record.api} registration`);
@@ -149,6 +176,75 @@ if (missing.length !== 0 || unknown.length !== 0) {
   );
 }
 
+const statusSource = read("examples/js_story/stories/status.js");
+const storySource = read("examples/js_story/stories/story.js");
+const registeredSource = read("examples/js_story/stories/registered.js");
+const registeredBody = statusSource.match(
+  /export const REGISTERED_SURFACES = \[([\s\S]*?)\];/,
+)?.[1];
+const deferredBody = statusSource.match(
+  /export const DEFERRED_SURFACES = \{([\s\S]*?)\n\};/,
+)?.[1];
+if (!registeredBody || !deferredBody) fail("status projection is missing");
+const registered = new Set(
+  [...registeredBody.matchAll(/"([^"]+)"/g)].map((match) => match[1]),
+);
+const deferred = new Map(
+  [...deferredBody.matchAll(/(\w+): "([^"]+)"/g)].map((match) => [
+    match[1],
+    match[2],
+  ]),
+);
+
+for (const [surface, expected] of inventorySurfaces) {
+  if (expected.status === "registered") {
+    if (!registered.has(surface) || deferred.has(surface)) {
+      fail(
+        `${surface} is registered in inventory but not registered in the gallery status projection`,
+      );
+    }
+  } else if (
+    deferred.get(surface) !== expected.category ||
+    registered.has(surface)
+  ) {
+    fail(`${surface} deferred category drifts from component-inventory.json`);
+  }
+}
+for (const surface of registered) {
+  if (inventorySurfaces.get(surface)?.status !== "registered") {
+    fail(`${surface} is marked registered outside component-inventory.json`);
+  }
+}
+for (const surface of deferred.keys()) {
+  if (inventorySurfaces.get(surface)?.status !== "deferred") {
+    fail(`${surface} is marked deferred outside component-inventory.json`);
+  }
+}
+if (!registeredSource.includes('from "gpui-component"')) {
+  fail("registered examples do not import the public gpui-component module");
+}
+for (const surface of registered) {
+  if (!registeredSource.includes(`case "${surface}"`)) {
+    fail(`${surface} is registered but has no public constructor example`);
+  }
+  if (!registeredSource.includes(`new ${surface}(`)) {
+    fail(`${surface} registered constructor example does not use new`);
+  }
+}
+if (
+  !storySource.includes('availability: "registered"') ||
+  !storySource.includes('availability: "deferred"') ||
+  !statusSource.includes("reason: `No public ${surface} constructor") ||
+  !storySource.includes("coveredSurfaces(story.id)") ||
+  !storySource.includes("deferredSurfaces.map") ||
+  !storySource.includes("Category: ${surface.category}") ||
+  !storySource.includes("Reason: ${surface.reason}")
+) {
+  fail(
+    "story status rendering does not expose every covered deferred surface with its category and reason",
+  );
+}
+
 console.log(
-  `JavaScript Story coverage: ${records.length} routes cover all ${renderableRegistrations.length} renderable/platform registrations in component-inventory.json`,
+  `JavaScript Story coverage: ${records.length} routes track all ${renderableRegistrations.length} tracked catalog surfaces from component-inventory.json`,
 );

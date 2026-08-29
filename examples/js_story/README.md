@@ -3,49 +3,47 @@
 This is the JavaScript Story gallery scaffold: an auditable, reviewable route
 catalog for the component-shell work.
 
-The gallery is not yet runnable in this checkout: its `gpui-component` adapter
-bindings and executable composition are still in progress. Its routes render
-explicit availability panels until a public constructor is registered.
+The gallery imports the registered public `gpui-component` surface through the
+completed public component-shell host. Deferred and infrastructure routes remain
+explicit status panels rather than fabricated constructors.
 
 ## Coverage audit
 
-The independent coverage check derives all renderable/platform registrations
+The independent coverage check derives all tracked component-shell surfaces
 from `crates/component-shell/component-inventory.json` and checks them against
-the explicit imports, routes, and `coveredBy` metadata in `catalog.js`:
+the explicit imports, routes, and `coveredBy` metadata in `stories/coverage.js`:
 
 ```bash
 node examples/js_story/fixtures/verify-coverage.mjs
 ```
 
-The gallery intentionally imports only `gpui` and `gpui-base`, both public
+The gallery imports only public `gpui`, `gpui-base`, and `gpui-component`
 script modules. `catalog.js` explicitly imports each family module and every
 route records its Rust Story source. The inventory currently supplies 65 Story
-entries and 71 renderable/platform registrations. The check fails if either
-side changes without matching catalog coverage.
+entries and 69 tracked catalog surfaces. The check fails if either side changes
+without matching catalog coverage and status.
 
 ## Registration status
 
-The adapter and its generated `gpui-component` module are implemented outside
-this directory. Until a component constructor is registered, its route renders
-an availability panel naming the expected public export and the interactive
-states that the eventual story must exercise. This is deliberate: importing a
-future constructor would make every route fail to load today, and adding a
-private Rust host module would hide an API-boundary violation.
+Registered inventory surfaces render a real public constructor and invoke a
+descriptor-backed method when that descriptor exposes one. `Breadcrumb` and
+`StatusBar` are constructor-only public descriptors. Deferred surfaces render
+every checked surface covered by their route, with the inventory category and
+reason from `stories/status.js`; the verifier checks that projection against the
+inventory. This keeps a missing binding visible without adding a private Rust
+host module.
 
-`Shell` and `NativeMenu` are platform-aware entries. Their panels explain the
-availability constraint instead of pretending that a platform-only control can
-render everywhere.
+`Shell` is gallery infrastructure, while `NativeMenu` is explicitly deferred
+under the inventory's `platform-integration` category.
 
 ## Editor checking
 
-When the component-shell build and registry are available, declarations will be
-generated from the host with:
+`gpui.d.ts` is generated from the public component-shell host's declaration
+API and is not hand-authored by this example:
 
 ```bash
-cargo run -p gpui-shell -- types examples/js_story
+cargo run -p gpui-component-shell --bin gpui-component-shell -- types examples/js_story
 ```
 
-That command writes `gpui.d.ts`, which is intentionally generated and not
-hand-authored by this example. It cannot succeed until the adapter composition
-builds. `jsconfig.json` enables strict JSDoc checking for the gallery and all
-family modules once those declarations exist.
+`jsconfig.json` enables strict JSDoc checking for the gallery and all family
+modules against that generated surface.

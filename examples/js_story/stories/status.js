@@ -1,0 +1,90 @@
+// Script-side projection of the checked-in component inventory. Gallery code
+// cannot import repository JSON at runtime; verify-coverage.mjs rejects drift.
+export const REGISTERED_SURFACES = [
+  "Alert",
+  "Avatar",
+  "Badge",
+  "Breadcrumb",
+  "Button",
+  "Checkbox",
+  "Clipboard",
+  "Collapsible",
+  "GroupBox",
+  "Kbd",
+  "Label",
+  "Link",
+  "Pagination",
+  "Progress",
+  "Radio",
+  "Rating",
+  "Separator",
+  "Skeleton",
+  "Spinner",
+  "StatusBar",
+  "Switch",
+  "Tag",
+  "Toggle",
+];
+
+/** @type {Record<string, string>} */
+export const DEFERRED_SURFACES = {
+  Accordion: "component-binding",
+  AlertDialog: "overlay-window-api",
+  Calendar: "component-binding",
+  Chart: "chart-family",
+  ColorPicker: "stateful-selection",
+  Combobox: "stateful-selection",
+  Command: "command-palette",
+  DataTable: "stateful-collection",
+  DatePicker: "stateful-selection",
+  DescriptionList: "component-binding",
+  Dialog: "overlay-window-api",
+  Dock: "dock-layout",
+  DropdownButton: "component-binding",
+  Editor: "editor-integration",
+  Form: "layout-helper",
+  HoverCard: "overlay-state",
+  Icon: "shared-primitive",
+  Image: "shared-primitive",
+  Input: "stateful-input",
+  List: "stateful-collection",
+  Menu: "popup-menu-api",
+  NativeMenu: "platform-integration",
+  Notification: "overlay-window-api",
+  NumberInput: "stateful-input",
+  OtpInput: "stateful-input",
+  Plot: "plot-infrastructure",
+  Popover: "overlay-state",
+  Resizable: "layout-state",
+  Scroll: "scroll-infrastructure",
+  Scrollbar: "scroll-infrastructure",
+  SearchableList: "stateful-collection",
+  Select: "stateful-selection",
+  Setting: "component-binding",
+  Settings: "component-binding",
+  Sheet: "overlay-window-api",
+  Sidebar: "component-binding",
+  Slider: "stateful-control",
+  Stepper: "component-binding",
+  Tab: "component-binding",
+  Table: "stateful-collection",
+  Tabs: "component-binding",
+  Text: "component-binding",
+  Textarea: "stateful-input",
+  Tooltip: "element-extension",
+  Tree: "stateful-collection",
+  VirtualList: "virtualized-collection",
+};
+
+/** @param {string} surface @returns {{ status: "registered" } | { surface: string, status: "deferred", category: string, reason: string } | null} */
+export function surfaceStatus(surface) {
+  if (REGISTERED_SURFACES.includes(surface)) return { status: "registered" };
+  const category = DEFERRED_SURFACES[surface];
+  if (!category) return null;
+  return {
+    surface,
+    status: "deferred",
+    category,
+    reason: `No public ${surface} constructor is registered; the adapter defers this ${category} surface.`,
+  };
+}

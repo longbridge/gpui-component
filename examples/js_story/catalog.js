@@ -8,6 +8,9 @@ import { stories as content } from "./stories/content.js";
 import { stories as overlays } from "./stories/overlays.js";
 import { stories as collections } from "./stories/collections.js";
 import { stories as layouts } from "./stories/layouts.js";
+import { coveredBy } from "./stories/coverage.js";
+
+export { coveredBy } from "./stories/coverage.js";
 
 /** The complete JavaScript Story route manifest, in Rust Story display order. */
 const byRustStory = [
@@ -103,79 +106,6 @@ export const catalog = RUST_STORY_ORDER.map((rustStory) => {
   return story;
 });
 
-// Inventory registrations are sometimes implementation helpers rather than a
-// one-to-one Rust Story (for example Plot is exercised by Chart). Keep those
-// relationships explicit instead of silently treating the Story subset as the
-// whole component catalog. verify-coverage.mjs checks this map against every
-// renderable/platform registration in component-inventory.json.
-export const coveredBy = [
-  { route: "introduction", registrations: ["Welcome", "Link"] },
-  { route: "accordion", registrations: ["Accordion"] },
-  { route: "alert", registrations: ["Alert"] },
-  { route: "alert-dialog", registrations: ["AlertDialog"] },
-  { route: "avatar", registrations: ["Avatar"] },
-  { route: "badge", registrations: ["Badge"] },
-  { route: "breadcrumb", registrations: ["Breadcrumb"] },
-  { route: "button", registrations: ["Button"] },
-  { route: "calendar", registrations: ["Calendar"] },
-  { route: "chart", registrations: ["Chart", "Plot"] },
-  { route: "checkbox", registrations: ["Checkbox"] },
-  { route: "clipboard", registrations: ["Clipboard"] },
-  { route: "collapsible", registrations: ["Collapsible"] },
-  { route: "color-picker", registrations: ["ColorPicker"] },
-  { route: "combobox", registrations: ["Combobox"] },
-  { route: "command", registrations: ["Command"] },
-  { route: "data-table", registrations: ["DataTable"] },
-  { route: "date-picker", registrations: ["DatePicker"] },
-  { route: "description-list", registrations: ["DescriptionList"] },
-  { route: "dialog", registrations: ["Dialog"] },
-  { route: "dock", registrations: ["Dock"] },
-  { route: "dropdown-button", registrations: ["DropdownButton"] },
-  { route: "editor", registrations: ["Editor", "Text"] },
-  { route: "form", registrations: ["Form"] },
-  { route: "group-box", registrations: ["GroupBox"] },
-  { route: "hover-card", registrations: ["HoverCard"] },
-  { route: "icon", registrations: ["Icon"] },
-  { route: "image", registrations: ["Image"] },
-  { route: "input", registrations: ["Input"] },
-  { route: "kbd", registrations: ["Kbd"] },
-  { route: "label", registrations: ["Label"] },
-  { route: "list", registrations: ["List", "SearchableList"] },
-  { route: "menu", registrations: ["Menu"] },
-  { route: "native-menu", registrations: ["NativeMenu"] },
-  { route: "notification", registrations: ["Notification"] },
-  { route: "number-input", registrations: ["NumberInput"] },
-  { route: "otp-input", registrations: ["OtpInput"] },
-  { route: "pagination", registrations: ["Pagination"] },
-  { route: "popover", registrations: ["Popover"] },
-  { route: "progress", registrations: ["Progress"] },
-  { route: "radio", registrations: ["Radio"] },
-  { route: "rating", registrations: ["Rating"] },
-  { route: "resizable", registrations: ["Resizable"] },
-  { route: "scrollbar", registrations: ["Scrollbar", "Scroll"] },
-  { route: "select", registrations: ["Select"] },
-  { route: "separator", registrations: ["Separator"] },
-  { route: "settings", registrations: ["Settings", "Setting"] },
-  { route: "shell", registrations: ["Shell"] },
-  { route: "sheet", registrations: ["Sheet"] },
-  { route: "sidebar", registrations: ["Sidebar"] },
-  { route: "skeleton", registrations: ["Skeleton"] },
-  { route: "slider", registrations: ["Slider"] },
-  { route: "spinner", registrations: ["Spinner"] },
-  { route: "status-bar", registrations: ["StatusBar"] },
-  { route: "stepper", registrations: ["Stepper"] },
-  { route: "switch", registrations: ["Switch"] },
-  { route: "table", registrations: ["Table"] },
-  { route: "tabs", registrations: ["Tabs", "Tab"] },
-  { route: "tag", registrations: ["Tag"] },
-  { route: "textarea", registrations: ["Textarea"] },
-  { route: "theme-colors", registrations: [] },
-  { route: "toggle", registrations: ["Toggle"] },
-  { route: "tooltip", registrations: ["Tooltip"] },
-  { route: "tree", registrations: ["Tree"] },
-  { route: "virtual-list", registrations: ["VirtualList"] },
-];
-
 /** @type {Map<string, StoryRoute>} */
 export const routesById = new Map(catalog.map((story) => [story.id, story]));
 
@@ -215,7 +145,7 @@ export function filterCatalog(query) {
  * @property {string} rustStory Source `Story` implementation in crates/story.
  * @property {string} description
  * @property {string[]} states Examples to provide once the binding is available.
- * @property {"pending" | "platform" | "infrastructure"} availability
+ * @property {"registered" | "deferred" | "infrastructure"} availability
  * @property {string} api The expected public gpui-component export.
  * @property {(cx: import("gpui").Context) => import("gpui").Element} render
  */

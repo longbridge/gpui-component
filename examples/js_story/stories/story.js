@@ -1,35 +1,98 @@
-// The gallery itself only imports public script modules. This fallback is
-// intentional: component constructors move into gpui-component-shell in the
-// parallel adapter task, and a route must remain executable before that lands.
+// The gallery imports only public script modules. Registered surfaces render
+// through gpui-component; deferred and infrastructure entries remain honest
+// status panels until their inventory status changes.
 import { div } from "gpui";
 import { v_flex } from "gpui-base";
+import { coveredSurfaces } from "./coverage.js";
+import { registeredExample } from "./registered.js";
+import { surfaceStatus } from "./status.js";
 
 /**
- * @param {Omit<StoryRoute, "render">} story
+ * @param {StoryDefinition} story
  * @returns {StoryRoute}
  */
 export function pendingStory(story) {
+  const surfaces = coveredSurfaces(story.id);
+  const states = surfaces.map(surfaceStatus);
+  if (
+    states.length > 0 &&
+    states.every((state) => state?.status === "registered")
+  ) {
+    return {
+      ...story,
+      availability: "registered",
+      render: (cx) => registeredPanel(story, surfaces, cx),
+    };
+  }
+  if (
+    states.length > 0 &&
+    states.every((state) => state?.status === "deferred")
+  ) {
+    const deferredSurfaces =
+      /** @type {Array<{ surface: string, status: "deferred", category: string, reason: string }>} */ (
+        states
+      );
+    return {
+      ...story,
+      availability: "deferred",
+      render: (cx) => availabilityPanel(story, deferredSurfaces, cx),
+    };
+  }
   return {
     ...story,
-    render: (cx) => availabilityPanel(story, cx),
+    availability: "infrastructure",
+    render: (cx) => availabilityPanel(story, [], cx),
   };
 }
 
-/** @param {Omit<StoryRoute, "render">} story @param {import("gpui").Context} cx */
-function availabilityPanel(story, cx) {
+/** @param {StoryDefinition} story @param {string[]} surfaces @param {import("gpui").Context} cx */
+function registeredPanel(story, surfaces, cx) {
   const colors = cx.theme().colors;
-  const platformOnly = story.availability === "platform";
-  const infrastructure = story.availability === "infrastructure";
+  return v_flex()
+    .id(`story-${story.id}`)
+    .w_full()
+    .max_w(760)
+    .gap(16)
+    .p(24)
+    .bg(colors.surface)
+    .border(1)
+    .border_color(colors.border)
+    .rounded(8)
+    .child(
+      div()
+        .text_size(18)
+        .font_semibold()
+        .text_color(colors.foreground)
+        .child("Registered public surface"),
+    )
+    .child(
+      div()
+        .text_size(13)
+        .text_color(colors.muted_foreground)
+        .child(
+          "These examples use public constructors and a descriptor method where the surface exposes one.",
+        ),
+    )
+    .children(
+      surfaces.map(
+        (surface) =>
+          /** @type {import("gpui").Element} */ (
+            /** @type {unknown} */ (registeredExample(surface))
+          ),
+      ),
+    );
+}
+
+/** @param {StoryDefinition} story @param {Array<{ surface: string, status: "deferred", category: string, reason: string }>} deferredSurfaces @param {import("gpui").Context} cx */
+function availabilityPanel(story, deferredSurfaces, cx) {
+  const colors = cx.theme().colors;
+  const infrastructure = deferredSurfaces.length === 0;
   const heading = infrastructure
     ? "Infrastructure coverage"
-    : platformOnly
-      ? "Platform availability"
-      : "Binding not registered yet";
+    : "Pending deferred surfaces";
   const detail = infrastructure
     ? "This Story route documents a non-renderable inventory entry. It is exercised through the controls that consume it, not through a fabricated constructor."
-    : platformOnly
-      ? "This control has a platform-specific implementation. Its route remains in the catalog so coverage is auditable on every host."
-      : `The public gpui-component export ${story.api} will be exercised here when gpui-component-shell registers it.`;
+    : "Every deferred catalog surface covered by this route is listed with its inventory category and reason.";
 
   return v_flex()
     .id(`story-${story.id}`)
@@ -59,7 +122,40 @@ function availabilityPanel(story, cx) {
         .rounded(6)
         .text_size(12)
         .text_color(colors.foreground)
-        .child(`Public API: ${story.api}`),
+        .child(
+          infrastructure
+            ? `Inventory scope: ${story.api}`
+            : `Route: ${story.id}`,
+        ),
+    )
+    .children(
+      deferredSurfaces.map((surface) =>
+        v_flex()
+          .gap(4)
+          .px(12)
+          .py(8)
+          .bg(colors.muted)
+          .rounded(6)
+          .child(
+            div()
+              .text_size(12)
+              .font_semibold()
+              .text_color(colors.foreground)
+              .child(`Pending catalog surface: ${surface.surface}`),
+          )
+          .child(
+            div()
+              .text_size(12)
+              .text_color(colors.muted_foreground)
+              .child(`Category: ${surface.category}`),
+          )
+          .child(
+            div()
+              .text_size(12)
+              .text_color(colors.muted_foreground)
+              .child(`Reason: ${surface.reason}`),
+          ),
+      ),
     )
     .child(
       v_flex()
@@ -83,3 +179,4 @@ function availabilityPanel(story, cx) {
 }
 
 /** @typedef {import("../catalog.js").StoryRoute} StoryRoute */
+/** @typedef {Omit<StoryRoute, "availability" | "render"> & { availability?: string }} StoryDefinition */

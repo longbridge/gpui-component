@@ -8,7 +8,6 @@ export const stories = [
     rustStory: "WelcomeStory",
     description: "Gallery overview and JavaScript API status.",
     states: ["catalog coverage", "public-module boundary"],
-    availability: "pending",
     api: "Welcome",
   }),
   pendingStory({
