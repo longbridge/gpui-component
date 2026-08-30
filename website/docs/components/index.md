@@ -22,6 +22,7 @@ collapsed: false
 - [Label](label) - Text labels for form elements
 - [Pagination](pagination) - Page navigation controls
 - [Progress](progress) - Progress bars
+- [Questionnaire](questionnaire) - Composable multi-step questions and answers
 - [Radio](radio) - Single selection from multiple options
 - [Rating](rating) - Interactive star rating component
 - [Skeleton](skeleton) - Loading placeholders
