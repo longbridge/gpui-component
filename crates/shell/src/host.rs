@@ -19,7 +19,7 @@ use std::{
 use crate::{AppAssets, Capabilities, ShellRoot, ShellRuntime};
 use gpui::{
     AnyWindowHandle, App, AppContext as _, Bounds, Context, Entity, IntoElement, Render,
-    TitlebarOptions, Window, WindowBounds, WindowHandle, WindowOptions, px, size,
+    TitlebarOptions, Window, WindowBounds, WindowOptions, px, size,
 };
 use tracing::{
     Event, Level, Metadata, Subscriber,
@@ -347,6 +347,9 @@ fn run(arguments: Arguments, components: crate::FrozenComponentRegistry, brand: 
                 tracing::debug!("development mode: eval and the built-in prototypes are open");
             }
 
+            // Read before the catalog is handed to the runtime, which takes it.
+            let window_opener = components.window_opener();
+
             let runtime = match ShellRuntime::new_with_components(cx, components) {
                 Ok(runtime) => runtime,
                 Err(error) => {
@@ -395,25 +398,39 @@ fn run(arguments: Arguments, components: crate::FrozenComponentRegistry, brand: 
             let builder_runtime = runtime.clone();
             let application_root = root.clone();
 
-            let window = cx
-                .open_window(window_options(&root, brand, cx), move |window, cx| {
-                    let loaded = match &manifest_error {
-                        Some(message) => Err(anyhow::anyhow!(message.clone())),
-                        None => builder_runtime.try_load(&application_root, window, cx),
-                    };
-                    match loaded {
-                        Ok(root) => {
-                            *sink.borrow_mut() = Some(root.clone());
-                            root
-                        }
-                        Err(error) => {
-                            eprintln!("{error:#}");
-                            let content = cx.new(|_| LoadFailure(format!("{error:#}")));
-                            cx.new(|cx| ShellRoot::new(content.into(), window, cx))
-                        }
+            let build = move |window: &mut Window, cx: &mut App| -> Entity<ShellRoot> {
+                let loaded = match &manifest_error {
+                    Some(message) => Err(anyhow::anyhow!(message.clone())),
+                    None => builder_runtime.try_load(&application_root, window, cx),
+                };
+                match loaded {
+                    Ok(root) => {
+                        *sink.borrow_mut() = Some(root.clone());
+                        root
                     }
-                })
-                .expect("failed to open window");
+                    Err(error) => {
+                        eprintln!("{error:#}");
+                        let content = cx.new(|_| LoadFailure(format!("{error:#}")));
+                        cx.new(|cx| ShellRoot::new(content.into(), window, cx))
+                    }
+                }
+            };
+
+            // A catalog whose components require a particular window root opens
+            // the window itself; see `ComponentWindowOpener`. Everything after
+            // this point only wants a `&mut Window`, so the handle is untyped
+            // either way.
+            let options = window_options(&root, brand, cx);
+            let window = match window_opener {
+                Some(open) => {
+                    let mut build = |window: &mut Window, cx: &mut App| build(window, cx).into();
+                    open(cx, options, &mut build).expect("failed to open window")
+                }
+                None => AnyWindowHandle::from(
+                    cx.open_window(options, build)
+                        .expect("failed to open window"),
+                ),
+            };
 
             let loaded = built.borrow_mut().take().ok_or(());
 
@@ -460,6 +477,9 @@ fn check(arguments: CheckArguments, components: crate::FrozenComponentRegistry) 
             crate::init_with_components(cx, &components);
             install_palette(cx);
 
+            // Read before the catalog is handed to the runtime, which takes it.
+            let window_opener = components.window_opener();
+
             let runtime = match ShellRuntime::new_with_components(cx, components) {
                 Ok(runtime) => runtime,
                 Err(error) => {
@@ -495,7 +515,11 @@ fn check(arguments: CheckArguments, components: crate::FrozenComponentRegistry) 
             let window_sink = sink.clone();
             let print_spec = arguments.print_spec;
 
-            let opened = cx.open_window(hidden_window_options(cx), move |window, cx| {
+            // Through the catalog's opener too. A check renders one frame in a
+            // real window, and a component that requires a particular window
+            // root has to find it here as well — otherwise the check passes an
+            // application the run would panic on.
+            let build = move |window: &mut Window, cx: &mut App| -> Entity<LoadFailure> {
                 let result = runtime.check(&root, window, cx);
 
                 match result {
@@ -504,7 +528,15 @@ fn check(arguments: CheckArguments, components: crate::FrozenComponentRegistry) 
                 }
 
                 cx.new(|_| LoadFailure(String::new()))
-            });
+            };
+            let options = hidden_window_options(cx);
+            let opened = match window_opener {
+                Some(open) => {
+                    let mut build = |window: &mut Window, cx: &mut App| build(window, cx).into();
+                    open(cx, options, &mut build).map(|_| ())
+                }
+                None => cx.open_window(options, build).map(|_| ()),
+            };
 
             if let Err(error) = opened {
                 sink.borrow_mut().fail(format!("{error:#}"));
@@ -729,15 +761,14 @@ fn window_options(root: &Path, brand: HostBrand, cx: &App) -> WindowOptions {
 fn watch_sources(
     runtime: Rc<ShellRuntime>,
     root: Entity<ShellRoot>,
-    window: WindowHandle<ShellRoot>,
+    window: AnyWindowHandle,
     cx: &mut App,
 ) {
-    // Through the untyped handle on purpose. `WindowHandle::<ShellRoot>::update`
-    // leases the root view for the length of the closure, and `watch` reads that
-    // same entity to find the mounted application — a second borrow GPUI answers
-    // with a panic. All this call wants from the window is a `&mut Window`.
-    let started =
-        AnyWindowHandle::from(window).update(cx, |_, window, cx| runtime.watch(&root, window, cx));
+    // Untyped on purpose. A typed `WindowHandle::update` leases the root view
+    // for the length of the closure, and `watch` reads that same entity to find
+    // the mounted application — a second borrow GPUI answers with a panic. All
+    // this call wants from the window is a `&mut Window`.
+    let started = window.update(cx, |_, window, cx| runtime.watch(&root, window, cx));
 
     match started {
         // Detached on purpose: this watcher lasts as long as the window, and

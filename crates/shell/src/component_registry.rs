@@ -1664,6 +1664,23 @@ pub enum RegistryError {
 /// claim one: the runtime's resolvers run first.
 const RUNTIME_MODULE_SPECIFIERS: &[&str] = &["gpui", "gpui-base", "gpui-shell", "gpui-fps"];
 
+/// Opens the window a catalog's components need.
+///
+/// Some component libraries reach the window through a view they require to be
+/// its root — `gpui-component`'s overlays find their host with
+/// `window.root::<Root>()` and panic when it is something else. The runtime
+/// installs its own [`crate::ShellRoot`] and cannot name such a type, so a
+/// catalog that needs one opens the window itself: it is handed the options and
+/// a builder for the runtime's root view, and returns an untyped handle.
+///
+/// A catalog that registers none gets the ordinary window, rooted at
+/// `ShellRoot`.
+pub type ComponentWindowOpener = fn(
+    &mut App,
+    gpui::WindowOptions,
+    &mut dyn FnMut(&mut Window, &mut App) -> gpui::AnyView,
+) -> anyhow::Result<gpui::AnyWindowHandle>;
+
 /// Element methods whose argument the runtime's own prototype checks against a
 /// fixed vocabulary, before the call can reach a registered component.
 ///
@@ -1805,6 +1822,7 @@ impl std::error::Error for RegistryError {}
 pub struct ComponentRegistry {
     module_specifier: &'static str,
     initializer: Option<fn(&mut App)>,
+    window_opener: Option<ComponentWindowOpener>,
     descriptors: Vec<Arc<ComponentDescriptor>>,
     names: HashSet<&'static str>,
     exports: HashSet<&'static str>,
@@ -1836,6 +1854,7 @@ impl ComponentRegistry {
         Ok(Self {
             module_specifier,
             initializer: None,
+            window_opener: None,
             descriptors: Vec::new(),
             names: HashSet::new(),
             exports: HashSet::new(),
@@ -1855,6 +1874,13 @@ impl ComponentRegistry {
     /// never installed.
     pub fn with_initializer(mut self, initializer: fn(&mut App)) -> Self {
         self.initializer = Some(initializer);
+        self
+    }
+
+    /// Opens the window this catalog's components need. See
+    /// [`ComponentWindowOpener`].
+    pub fn with_window_opener(mut self, opener: ComponentWindowOpener) -> Self {
+        self.window_opener = Some(opener);
         self
     }
 
@@ -1972,6 +1998,7 @@ impl ComponentRegistry {
         Ok(FrozenComponentRegistry {
             module_specifier: Some(self.module_specifier),
             initializer: self.initializer,
+            window_opener: self.window_opener,
             descriptors: self.descriptors.into(),
             states: self.states.into(),
         })
@@ -2148,6 +2175,7 @@ pub struct FrozenComponentRegistry {
     /// module at all rather than an empty one.
     module_specifier: Option<&'static str>,
     initializer: Option<fn(&mut App)>,
+    window_opener: Option<ComponentWindowOpener>,
     descriptors: Arc<[Arc<ComponentDescriptor>]>,
     states: Arc<[Arc<StateDescriptor>]>,
 }
@@ -2161,6 +2189,11 @@ impl FrozenComponentRegistry {
     /// The startup function this catalog registered, if any.
     pub fn initializer(&self) -> Option<fn(&mut App)> {
         self.initializer
+    }
+
+    /// The window opener this catalog registered, if any.
+    pub fn window_opener(&self) -> Option<ComponentWindowOpener> {
+        self.window_opener
     }
 
     pub fn descriptors(&self) -> impl ExactSizeIterator<Item = &ComponentDescriptor> {

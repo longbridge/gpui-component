@@ -27,7 +27,8 @@ pub fn components() -> Result<gpui_shell::FrozenComponentRegistry, gpui_shell::R
         gpui_shell::COMPONENT_REGISTRY_API_VERSION,
         gpui_shell::DEFAULT_COMPONENT_MODULE,
     )?
-    .with_initializer(gpui_component::init);
+    .with_initializer(gpui_component::init)
+    .with_window_opener(open_window_with_root);
     register(&mut registry)?;
     registry.freeze()
 }
@@ -52,6 +53,30 @@ pub fn write_type_declarations(
         root.as_ref(),
         &components()?,
     )?)
+}
+
+/// Opens the window with `gpui_component::Root` as its root view.
+///
+/// Every `gpui-component` overlay — dialog, alert dialog, sheet, notification —
+/// finds its host with `window.root::<Root>()` and panics when the window is
+/// rooted at anything else. The runtime installs its own `ShellRoot` and cannot
+/// name `Root`, so the catalog that needs one supplies it here. `ShellRoot`
+/// keeps rendering inside it, and its own overlays with it.
+fn open_window_with_root(
+    cx: &mut gpui_shell::gpui::App,
+    options: gpui_shell::gpui::WindowOptions,
+    build: &mut dyn FnMut(
+        &mut gpui_shell::gpui::Window,
+        &mut gpui_shell::gpui::App,
+    ) -> gpui_shell::gpui::AnyView,
+) -> gpui_shell::anyhow::Result<gpui_shell::gpui::AnyWindowHandle> {
+    use gpui_shell::gpui::AppContext as _;
+
+    let handle = cx.open_window(options, |window, cx| {
+        let inner = build(window, cx);
+        cx.new(|cx| gpui_component::Root::new(inner, window, cx))
+    })?;
+    Ok(handle.into())
 }
 
 /// Registers the `gpui-component` JavaScript bindings provided by this crate.
@@ -81,6 +106,57 @@ mod tests {
             "`gpui-shell` must stay free of the concrete component catalog; \
              the adapter depends on both, not the runtime on one"
         );
+    }
+
+    /// Every `gpui-component` overlay locates its host with
+    /// `window.root::<Root>()` and panics when the window is rooted at anything
+    /// else. The runtime roots its window at `ShellRoot`, so unless the catalog
+    /// supplies the `Root` itself, every dialog, alert dialog, sheet and
+    /// notification panics the moment it opens.
+    ///
+    /// The other tests in this crate build their own `Root`, which is why none
+    /// of them noticed.
+    #[gpui::test]
+    fn the_catalog_opens_a_window_its_overlays_can_find(cx: &mut gpui::TestAppContext) {
+        use gpui::AppContext as _;
+
+        let components = crate::components().unwrap();
+        let open = components
+            .window_opener()
+            .expect("a catalog whose overlays require a window root must open the window");
+
+        cx.update(crate::init);
+        let handle = cx
+            .update(|cx| {
+                let options = gpui::WindowOptions {
+                    show: false,
+                    ..Default::default()
+                };
+                open(cx, options, &mut |_window, cx| cx.new(|_| Blank).into())
+            })
+            .expect("the catalog must open a window");
+
+        let found = handle
+            .update(cx, |_, window, _| {
+                window.root::<gpui_component::Root>().is_some()
+            })
+            .expect("the window must be live");
+        assert!(
+            found,
+            "the window is not rooted at gpui_component::Root, so every overlay would panic"
+        );
+    }
+
+    struct Blank;
+
+    impl gpui::Render for Blank {
+        fn render(
+            &mut self,
+            _: &mut gpui::Window,
+            _: &mut gpui::Context<Self>,
+        ) -> impl gpui::IntoElement {
+            gpui::div()
+        }
     }
 
     #[gpui::test]
