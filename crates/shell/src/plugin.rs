@@ -2029,14 +2029,14 @@ mod tests {
     }
 
     #[test]
-    fn a_manifest_accepts_a_git_dependency_pinned_to_a_branch() {
+    fn a_manifest_accepts_the_omarchy_ui_https_remote_without_dot_git() {
         let source = r#"{
             "id": "com.example.third-party-ui",
             "name": "Third-party UI",
             "entry": "main.js",
             "dependencies": {
                 "omarchy-ui": {
-                    "git": "https://github.com/example/omarchy-ui.git",
+                    "git": "https://github.com/huacnlee/omarchy-ui",
                     "branch": "main"
                 }
             }
@@ -2045,10 +2045,7 @@ mod tests {
         let manifest =
             PluginManifest::parse(source).expect("a branch-pinned Git dependency should parse");
         let dependency = &manifest.dependencies()["omarchy-ui"];
-        assert_eq!(
-            dependency.git(),
-            "https://github.com/example/omarchy-ui.git"
-        );
+        assert_eq!(dependency.git(), "https://github.com/huacnlee/omarchy-ui");
         assert_eq!(dependency.branch(), Some("main"));
         assert_eq!(dependency.tag(), None);
         assert_eq!(dependency.entry(), "index.js");

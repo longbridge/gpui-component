@@ -577,7 +577,7 @@ impl ShellRuntime {
     /// call frame rather than in runtime-global state. Use this only when a host
     /// deliberately owns multiple isolated runtimes.
     pub fn new_isolated() -> Result<Rc<Self>> {
-        Self::new_isolated_with_dependency_store(GitDependencyStore::for_user())
+        Self::new_isolated_with_dependency_store(GitDependencyStore::for_user()?)
     }
 
     fn new_isolated_with_dependency_store(

@@ -25,20 +25,29 @@ pub(crate) struct MaterializedDependency {
 }
 
 impl GitDependencyStore {
-    pub(crate) fn for_user() -> Self {
+    pub(crate) fn for_user() -> Result<Self> {
         Self::for_user_with_environment(|variable| std::env::var_os(variable))
     }
 
-    fn for_user_with_environment(environment: impl Fn(&str) -> Option<std::ffi::OsString>) -> Self {
-        let home = ["HOME", "USERPROFILE"]
-            .into_iter()
-            .find_map(|variable| {
-                environment(variable)
-                    .filter(|value| !value.is_empty())
-                    .map(PathBuf::from)
-            })
-            .unwrap_or_else(std::env::temp_dir);
-        Self::new(dependency_cache_root(&home))
+    fn for_user_with_environment(
+        environment: impl Fn(&str) -> Option<std::ffi::OsString>,
+    ) -> Result<Self> {
+        let Some((variable, home)) = ["HOME", "USERPROFILE"].into_iter().find_map(|variable| {
+            environment(variable)
+                .filter(|value| !value.is_empty())
+                .map(|value| (variable, PathBuf::from(value)))
+        }) else {
+            bail!(
+                "cannot locate the Git dependency cache: HOME or USERPROFILE must name an absolute user directory"
+            );
+        };
+        if !home.is_absolute() {
+            bail!(
+                "cannot locate the Git dependency cache: {variable} must be an absolute path, got `{}`",
+                home.display()
+            );
+        }
+        Ok(Self::new(dependency_cache_root(&home)))
     }
 
     pub(crate) fn new(root: PathBuf) -> Self {
@@ -305,7 +314,8 @@ mod tests {
         let store = GitDependencyStore::for_user_with_environment(|variable| match variable {
             "HOME" => Some(OsString::from("/home/example")),
             _ => None,
-        });
+        })
+        .expect("an absolute HOME should select a private cache root");
 
         assert_eq!(
             store.root,
@@ -316,13 +326,14 @@ mod tests {
     #[test]
     fn for_user_uses_userprofile_when_home_is_missing() {
         let store = GitDependencyStore::for_user_with_environment(|variable| match variable {
-            "USERPROFILE" => Some(OsString::from("C:\\Users\\example")),
+            "USERPROFILE" => Some(OsString::from("/profiles/example")),
             _ => None,
-        });
+        })
+        .expect("an absolute USERPROFILE should select a private cache root");
 
         assert_eq!(
             store.root,
-            PathBuf::from("C:\\Users\\example/.gpui-shell/cache/dependencies")
+            PathBuf::from("/profiles/example/.gpui-shell/cache/dependencies")
         );
     }
 
@@ -332,12 +343,46 @@ mod tests {
             "HOME" => Some(OsString::new()),
             "USERPROFILE" => Some(OsString::from("/profiles/example")),
             _ => None,
-        });
+        })
+        .expect("an empty HOME should allow an absolute USERPROFILE");
 
         assert_eq!(
             store.root,
             PathBuf::from("/profiles/example/.gpui-shell/cache/dependencies")
         );
+    }
+
+    #[test]
+    fn for_user_rejects_missing_or_empty_home_variables() {
+        for (home, userprofile) in [(None, None), (Some(OsString::new()), Some(OsString::new()))] {
+            let result = GitDependencyStore::for_user_with_environment(|variable| match variable {
+                "HOME" => home.clone(),
+                "USERPROFILE" => userprofile.clone(),
+                _ => None,
+            });
+            let error = result.err().expect("a private home directory is required");
+
+            assert!(
+                error.to_string().contains("HOME or USERPROFILE"),
+                "{error:#}"
+            );
+        }
+    }
+
+    #[test]
+    fn for_user_rejects_a_relative_selected_home() {
+        let result = GitDependencyStore::for_user_with_environment(|variable| match variable {
+            "HOME" => Some(OsString::from("relative/home")),
+            "USERPROFILE" => Some(OsString::from("/profiles/example")),
+            _ => None,
+        });
+        let error = result
+            .err()
+            .expect("a relative HOME must not select a shared working-directory cache");
+
+        assert!(error.to_string().contains("HOME"), "{error:#}");
+        assert!(error.to_string().contains("absolute"), "{error:#}");
+        assert!(error.to_string().contains("relative/home"), "{error:#}");
     }
 
     struct GitFixture {
