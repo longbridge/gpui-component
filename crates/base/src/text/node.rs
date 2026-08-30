@@ -1797,7 +1797,7 @@ impl BlockNode {
                 this.child(
                     div()
                         .flex()
-                        .mt(rems(0.1875))
+                        .mt(rems(0.3125))
                         .mr_1p5()
                         .size(rems(0.875))
                         .items_center()
