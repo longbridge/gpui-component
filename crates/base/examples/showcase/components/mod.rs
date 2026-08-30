@@ -35,6 +35,7 @@ mod switch;
 mod table;
 mod tabs;
 mod text_selection;
+mod text_view;
 mod textarea;
 mod toast;
 mod toggle;
