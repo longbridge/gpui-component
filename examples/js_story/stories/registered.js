@@ -389,7 +389,9 @@ export function registeredExamples(surface) {
                 new Collapsible()
                   .open(/** @type {boolean} */ (state("collapsible", true)))
                   .motionId("story-collapsible")
-                  .child(asElement(new Text("Shipped 2 days ago · tracking 1Z999AA1."))),
+                  .content(
+                    asElement(new Text("Shipped 2 days ago · tracking 1Z999AA1.")),
+                  ),
               ),
             ),
         },
@@ -680,13 +682,33 @@ export function registeredExamples(surface) {
     case "Badge":
       return [
         {
-          label: "Count, capped count, and a bare dot",
+          label: "Decorating an icon: a count, a capped count, and a bare dot",
           element: h_flex()
-            .gap(16)
+            .gap(24)
             .items_center()
-            .child(asElement(new Badge().count(3)))
-            .child(asElement(new Badge().count(120).max(99)))
-            .child(asElement(new Badge().dot().color("red-500"))),
+            .child(
+              asElement(
+                new Badge()
+                  .count(3)
+                  .child(asElement(new Icon("icons/bell.svg").size("medium"))),
+              ),
+            )
+            .child(
+              asElement(
+                new Badge()
+                  .count(120)
+                  .max(99)
+                  .child(asElement(new Icon("icons/inbox.svg").size("medium"))),
+              ),
+            )
+            .child(
+              asElement(
+                new Badge()
+                  .dot()
+                  .color("red-500")
+                  .child(asElement(new Icon("icons/user.svg").size("medium"))),
+              ),
+            ),
         },
       ];
     case "Tag":
@@ -900,10 +922,23 @@ export function registeredExamples(surface) {
               .selectedIndex(/** @type {number} */ (state("stepper-v", 0)))
               .onChange((index, cx) => setState("stepper-v", index, cx))
               .vertical(true)
-              .child(new StepperItem().child("Account"))
-              .child(new StepperItem().child("Profile"))
-              .child(new StepperItem().child("Review"))
-              .child(new StepperItem().child("Finish")),
+              .children(
+                [
+                  ["Account", "Name, email and password."],
+                  ["Profile", "Avatar and display name."],
+                  ["Review", "Check everything over."],
+                  ["Finish", "Nothing left to do."],
+                ].map(([title, description], index, all) =>
+                  new StepperItem()
+                    .pb(index === all.length - 1 ? 0 : 32)
+                    .child(
+                      v_flex()
+                        .gap(2)
+                        .child(div().child(title))
+                        .child(div().text_size(12).child(description)),
+                    ),
+                ),
+              ),
           ),
         },
       ];
@@ -1383,8 +1418,6 @@ export function registeredExamples(surface) {
               .placeholder("Type a command")
               .bordered(true)
               .maxHeight(200)
-              .header(asElement(new Text("Commands")))
-              .footer(asElement(new Text("Press Enter to run")))
               .child(
                 asElement(
                   new CommandGroup("Files")
@@ -1551,7 +1584,6 @@ export function registeredExamples(surface) {
             new Settings("story-settings")
               .size("medium")
               .sidebarWidth(200)
-              .h(260)
               .child(
                 asElement(
                   new SettingPage("General").child(
