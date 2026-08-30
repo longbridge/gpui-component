@@ -217,12 +217,26 @@ pub fn set_development_mode(enabled: bool) {
 
 /// Initializes the base layer and style reflection table.
 ///
-/// Must be called once at application startup, before any script runs. A host
-/// that also renders a concrete component catalog initializes that catalog
-/// itself; the runtime deliberately knows nothing about one.
+/// Must be called once at application startup, before any script runs. This is
+/// enough for the bare runtime. A host carrying a component catalog calls
+/// [`init_with_components`] instead, so the catalog's own globals are
+/// installed too.
 pub fn init(cx: &mut App) {
     gpui_base::init(cx);
     style::init();
+}
+
+/// Initializes the runtime and the catalog it will render.
+///
+/// The runtime still knows nothing about any component library: it calls the
+/// startup function the catalog registered with
+/// [`ComponentRegistry::with_initializer`] and nothing else. A catalog that
+/// registered none behaves exactly like [`init`].
+pub fn init_with_components(cx: &mut App, components: &FrozenComponentRegistry) {
+    if let Some(initializer) = components.initializer() {
+        initializer(cx);
+    }
+    init(cx);
 }
 
 #[cfg(test)]
@@ -232,6 +246,42 @@ mod init_tests {
     #[gpui::test]
     fn shell_init_installs_the_base_globals_without_a_component_catalog(cx: &mut TestAppContext) {
         cx.update(super::init);
+
+        cx.read(|cx| assert!(cx.has_global::<gpui_base::Theme>()));
+    }
+
+    /// A host that only holds a frozen catalog — the shipped command — has no
+    /// other way to install what that catalog's components need at run time.
+    #[gpui::test]
+    fn init_with_components_runs_the_catalog_initializer(cx: &mut TestAppContext) {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        static CALLS: AtomicUsize = AtomicUsize::new(0);
+        fn record(_: &mut gpui::App) {
+            CALLS.fetch_add(1, Ordering::SeqCst);
+        }
+
+        let components = crate::ComponentRegistry::new(
+            crate::COMPONENT_REGISTRY_API_VERSION,
+            crate::DEFAULT_COMPONENT_MODULE,
+        )
+        .unwrap()
+        .with_initializer(record)
+        .freeze()
+        .unwrap();
+
+        cx.update(|cx| crate::init_with_components(cx, &components));
+
+        assert_eq!(CALLS.load(Ordering::SeqCst), 1);
+        cx.read(|cx| assert!(cx.has_global::<gpui_base::Theme>()));
+    }
+
+    #[gpui::test]
+    fn init_with_components_matches_init_for_a_catalog_without_one(cx: &mut TestAppContext) {
+        let components = crate::FrozenComponentRegistry::default();
+        assert!(components.initializer().is_none());
+
+        cx.update(|cx| crate::init_with_components(cx, &components));
 
         cx.read(|cx| assert!(cx.has_global::<gpui_base::Theme>()));
     }

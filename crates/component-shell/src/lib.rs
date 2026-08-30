@@ -12,6 +12,10 @@ mod shell;
 /// Must be called once at application startup, before any script runs. This is
 /// the entry point for a host that renders this catalog; [`gpui_shell::init`]
 /// alone installs the base layer without any concrete components.
+///
+/// The catalog also carries this function, so a host holding only the frozen
+/// registry — the shipped command, for one — gets the same startup through
+/// [`gpui_shell::init_with_components`].
 pub fn init(cx: &mut gpui_shell::gpui::App) {
     gpui_component::init(cx);
     gpui_shell::init(cx);
@@ -22,7 +26,8 @@ pub fn components() -> Result<gpui_shell::FrozenComponentRegistry, gpui_shell::R
     let mut registry = gpui_shell::ComponentRegistry::new(
         gpui_shell::COMPONENT_REGISTRY_API_VERSION,
         gpui_shell::DEFAULT_COMPONENT_MODULE,
-    )?;
+    )?
+    .with_initializer(gpui_component::init);
     register(&mut registry)?;
     registry.freeze()
 }
@@ -81,6 +86,20 @@ mod tests {
     #[gpui::test]
     fn init_installs_the_component_catalog_globals(cx: &mut gpui::TestAppContext) {
         cx.update(crate::init);
+
+        cx.read(|cx| assert!(cx.has_global::<gpui_component::Theme>()));
+    }
+
+    /// The shipped command builds a runtime from [`crate::components`] alone
+    /// and never calls [`crate::init`], so the catalog has to carry its own
+    /// startup. Without it the binary starts and then panics looking for a
+    /// theme on the first render, which no test of `init` would notice.
+    #[gpui::test]
+    fn the_frozen_catalog_carries_its_own_startup(cx: &mut gpui::TestAppContext) {
+        let components = crate::components().unwrap();
+        assert!(components.initializer().is_some());
+
+        cx.update(|cx| gpui_shell::init_with_components(cx, &components));
 
         cx.read(|cx| assert!(cx.has_global::<gpui_component::Theme>()));
     }

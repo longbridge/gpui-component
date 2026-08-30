@@ -337,7 +337,7 @@ fn run(arguments: Arguments, components: crate::FrozenComponentRegistry, brand: 
     gpui_platform::application()
         .with_assets(AppAssets::new(asset_root))
         .run(move |cx| {
-            crate::init(cx);
+            crate::init_with_components(cx, &components);
             install_palette(cx);
 
             if arguments.is_development() {
@@ -457,7 +457,7 @@ fn check(arguments: CheckArguments, components: crate::FrozenComponentRegistry) 
     gpui_platform::application()
         .with_assets(AppAssets::new(asset_root))
         .run(move |cx| {
-            crate::init(cx);
+            crate::init_with_components(cx, &components);
             install_palette(cx);
 
             let runtime = match ShellRuntime::new_with_components(cx, components) {

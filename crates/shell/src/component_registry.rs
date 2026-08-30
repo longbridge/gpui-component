@@ -1767,6 +1767,7 @@ impl std::error::Error for RegistryError {}
 
 pub struct ComponentRegistry {
     module_specifier: &'static str,
+    initializer: Option<fn(&mut App)>,
     descriptors: Vec<Arc<ComponentDescriptor>>,
     names: HashSet<&'static str>,
     exports: HashSet<&'static str>,
@@ -1797,12 +1798,27 @@ impl ComponentRegistry {
 
         Ok(Self {
             module_specifier,
+            initializer: None,
             descriptors: Vec::new(),
             names: HashSet::new(),
             exports: HashSet::new(),
             states: Vec::new(),
             state_kinds: HashSet::new(),
         })
+    }
+
+    /// Installs the globals this catalog's components need, at startup.
+    ///
+    /// A catalog usually needs more than descriptors: a theme, action
+    /// bindings, whatever its library's own `init` sets up. The runtime cannot
+    /// know what those are, so the catalog carries the function and the
+    /// runtime calls it — see [`crate::init_with_components`]. Without this a
+    /// host that only holds a `FrozenComponentRegistry`, such as the shipped
+    /// CLI, would start the catalog's components against globals that were
+    /// never installed.
+    pub fn with_initializer(mut self, initializer: fn(&mut App)) -> Self {
+        self.initializer = Some(initializer);
+        self
     }
 
     pub fn register(
@@ -1905,6 +1921,7 @@ impl ComponentRegistry {
     pub fn freeze(self) -> Result<FrozenComponentRegistry, RegistryError> {
         Ok(FrozenComponentRegistry {
             module_specifier: Some(self.module_specifier),
+            initializer: self.initializer,
             descriptors: self.descriptors.into(),
             states: self.states.into(),
         })
@@ -2058,6 +2075,7 @@ pub struct FrozenComponentRegistry {
     /// `None` for the empty catalog the bare runtime ships, which declares no
     /// module at all rather than an empty one.
     module_specifier: Option<&'static str>,
+    initializer: Option<fn(&mut App)>,
     descriptors: Arc<[Arc<ComponentDescriptor>]>,
     states: Arc<[Arc<StateDescriptor>]>,
 }
@@ -2066,6 +2084,11 @@ impl FrozenComponentRegistry {
     /// The specifier a script imports this catalog's components from.
     pub fn module_specifier(&self) -> Option<&'static str> {
         self.module_specifier
+    }
+
+    /// The startup function this catalog registered, if any.
+    pub fn initializer(&self) -> Option<fn(&mut App)> {
+        self.initializer
     }
 
     pub fn descriptors(&self) -> impl ExactSizeIterator<Item = &ComponentDescriptor> {
