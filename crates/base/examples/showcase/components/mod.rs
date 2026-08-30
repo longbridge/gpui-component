@@ -36,6 +36,7 @@ mod table;
 mod tabs;
 mod text_selection;
 mod text_view;
+pub(super) use text_view::MARKDOWN as TEXT_VIEW_MARKDOWN;
 mod textarea;
 mod toast;
 mod toggle;

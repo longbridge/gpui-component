@@ -255,13 +255,13 @@ impl TextViewState {
         cx.notify();
     }
 
-    /// Set whether the text is selectable, default false.
+    /// Set whether the text view scrolls internally, default false.
     pub fn scrollable(mut self, scrollable: bool) -> Self {
         self.scrollable = scrollable;
         self
     }
 
-    /// Set whether the text is selectable, default false.
+    /// Set whether the text view scrolls internally, default false.
     pub fn set_scrollable(&mut self, scrollable: bool, cx: &mut Context<Self>) {
         if !scrollable {
             self.reset_selection_and_adapter(cx);

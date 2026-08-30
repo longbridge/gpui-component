@@ -26,18 +26,17 @@ impl Render for AppView {
         div()
             .size_full()
             .child(TextSelectionLayer)
-            .child(
-                TextView::markdown(
-                    "readme",
-                    "# Hello\n\n选择并复制这段 **Markdown**。",
-                )
-                .selectable(true),
-            )
+            .child(TextView::markdown(
+                "readme",
+                "# Hello\n\n选择并复制这段 **Markdown**。",
+            ))
     }
 }
 ```
 
 如果应用已经调用 `gpui_component::init`，其中已包含 Base 初始化；`gpui-component::Root` 也会安装窗口选择层。
+
+TextView 默认支持选择。拖动选区靠近视口边缘时，共享选择层会自动滚动相关的 `overflow_*_scroll` 区域，不需要额外设置 TextView 的滚动或选择参数。只有明确需要禁用选择时才使用 `.selectable(false)`。
 
 ## Markdown 与 HTML
 
@@ -46,15 +45,12 @@ impl Render for AppView {
 ```rust
 use gpui_base::{html, markdown, TextView};
 
-let short_markdown = markdown("一段 **Markdown**。").selectable(true);
+let short_markdown = markdown("一段 **Markdown**。");
 let short_html = html("<p>一段 <strong>HTML</strong>。</p>");
 
-let preview = TextView::markdown("document-preview", markdown_source)
-    .selectable(true)
-    .scrollable(true);
+let preview = TextView::markdown("document-preview", markdown_source).scrollable(true);
 
-let article = TextView::html("article", html_source)
-    .selectable(true);
+let article = TextView::html("article", html_source);
 ```
 
 `scrollable(true)` 让视图填满容器并垂直滚动；未设置时视图随内容增长。`max_lines(n)` 可把非滚动预览限制在最多 `n` 行正文高度。
@@ -116,7 +112,7 @@ use gpui_base::{TextView, TextViewState};
 
 let document = cx.new(|cx| TextViewState::markdown(initial_source, cx));
 
-TextView::new(&document).selectable(true)
+TextView::new(&document)
 
 document.update(cx, |state, cx| state.set_text(updated_source, cx));
 ```

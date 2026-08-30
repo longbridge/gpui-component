@@ -3466,6 +3466,7 @@ dependencies = [
  "objc2-foundation 0.3.2",
  "raw-window-handle",
  "regex",
+ "reqwest_client",
  "ropey",
  "schemars",
  "serde",

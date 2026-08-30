@@ -157,7 +157,7 @@ pub use table::{Table, TableBody, TableCaption, TableCell, TableHead, TableHeade
 pub use tabs::{Tab, TabStyles, Tabs};
 pub use text::{
     MarkdownExtensions, MarkdownNode, MarkdownPlugin, SelectionFormat, TableData, Text, TextView,
-    TextViewPlugin, TextViewState, TextViewStyle, html, markdown,
+    TextViewDefaults, TextViewPlugin, TextViewState, TextViewStyle, html, markdown,
 };
 pub use text_selection::{
     TextSelection, TextSelectionContentKey, TextSelectionCoverage, TextSelectionEndpoint,

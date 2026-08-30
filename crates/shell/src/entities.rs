@@ -297,9 +297,9 @@ impl EntityStore {
     /// Creates an input state and returns its handle.
     ///
     /// The editor style is installed here rather than left to the caller because
-    /// `InputEditorStyle::default()` is entirely transparent: an input built
-    /// without one renders invisible text, which is a failure no script author
-    /// could diagnose. The shell owns the default palette, so it owns this too.
+    /// `InputEditorStyle::default()` leaves its colors unset so Base can resolve
+    /// them from the active palette at paint time. `gpui-base` installs a
+    /// readable light palette by default, and embedders can replace it.
     pub fn create_input(
         &mut self,
         placeholder: Option<String>,

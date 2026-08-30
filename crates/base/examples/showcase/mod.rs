@@ -31,8 +31,8 @@ use gpui_base::{
     Popup, Scrollbar, ScrollbarMode, Select, Sheet, Slider, SliderIndicator, SliderThumb,
     SliderTrack, Switch, SwitchThumb, SwitchTrack, Tab, Table, TableBody, TableCell, TableHead,
     TableHeader, TableRow, Tabs, TextSelectionEvent, TextSelectionHandle, TextSelectionLayer,
-    Textarea, Toast, ToastTransitionStatus, Toggle, ToggleGroup, Tooltip, Tree, TreeItem,
-    TreeState, VirtualListScrollHandle, v_virtual_list,
+    TextViewState, Textarea, Toast, ToastTransitionStatus, Toggle, ToggleGroup, Tooltip, Tree,
+    TreeItem, TreeState, VirtualListScrollHandle, v_virtual_list,
 };
 use palette::{activate as activate_palette, canvas as example_canvas, example_rgb};
 #[cfg(target_family = "wasm")]
@@ -163,13 +163,14 @@ pub struct BaseShowcase {
     text_selection_auto_scroll: AutoScroll,
     text_selection_active: bool,
     text_selection_text: String,
+    text_view: gpui::Entity<TextViewState>,
     #[cfg(test)]
     text_selection_footer_bounds: Rc<std::cell::RefCell<Option<gpui::Bounds<gpui::Pixels>>>>,
 }
 
 impl BaseShowcase {
     pub fn new(component: impl Into<String>, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        activate_palette(window);
+        activate_palette(window, cx);
         let component = component.into();
         let input = cx.new(|cx| {
             let mut state = InputState::new(window, cx)
@@ -352,11 +353,12 @@ impl BaseShowcase {
             text_selection_auto_scroll: AutoScroll::default(),
             text_selection_active: false,
             text_selection_text: String::new(),
+            text_view: cx.new(|cx| TextViewState::markdown(components::TEXT_VIEW_MARKDOWN, cx)),
             #[cfg(test)]
             text_selection_footer_bounds: Rc::new(std::cell::RefCell::new(None)),
         };
         cx.observe_window_appearance(window, |this, window, cx| {
-            activate_palette(window);
+            activate_palette(window, cx);
             this.refresh_editor_styles(cx);
             cx.notify();
         })
@@ -439,7 +441,7 @@ impl BaseShowcase {
 
 impl Render for BaseShowcase {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        activate_palette(window);
+        activate_palette(window, cx);
         let content = match self.component.as_str() {
             "accordion" => self.accordion(cx).into_any_element(),
             "alert-dialog" => self.alert_dialog(cx).into_any_element(),
@@ -473,7 +475,7 @@ impl Render for BaseShowcase {
             "table" => self.table().into_any_element(),
             "tabs" => self.tabs(cx).into_any_element(),
             "text-selection" => self.text_selection(window, cx).into_any_element(),
-            "text-view" => self.text_view().into_any_element(),
+            "text-view" => self.text_view(window).into_any_element(),
             "textarea" => self.textarea().into_any_element(),
             "toast" => self.toast(cx).into_any_element(),
             "toggle" => self.toggle(cx).into_any_element(),
@@ -564,6 +566,9 @@ pub fn run(app: Application, component: impl Into<String>) {
         gpui_base::init(cx);
         #[cfg(not(target_family = "wasm"))]
         {
+            let http_client =
+                reqwest_client::ReqwestClient::user_agent("gpui-base/examples").unwrap();
+            cx.set_http_client(Arc::new(http_client));
             cx.bind_keys([KeyBinding::new("cmd-q", Quit, None)]);
             cx.on_action(|_: &Quit, cx| cx.quit());
             cx.on_window_closed(|cx, _| {

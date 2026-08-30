@@ -1129,7 +1129,21 @@ impl Paragraph {
 pub struct CodeBlock {
     lang: Option<SharedString>,
     state: Arc<Mutex<InlineState>>,
+    highlight_cache: Arc<Mutex<Option<CachedCodeBlockHighlights>>>,
     pub span: Option<Span>,
+}
+
+struct CachedCodeBlockHighlights {
+    highlighter: Arc<CodeBlockHighlighterFn>,
+    styles: Vec<(Range<usize>, HighlightStyle)>,
+}
+
+impl std::fmt::Debug for CachedCodeBlockHighlights {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CachedCodeBlockHighlights")
+            .field("styles", &self.styles)
+            .finish_non_exhaustive()
+    }
 }
 
 impl PartialEq for CodeBlock {
@@ -1165,8 +1179,34 @@ impl CodeBlock {
         Self {
             lang,
             state,
+            highlight_cache: Arc::new(Mutex::new(None)),
             span: span.map(|s| s.into()),
         }
+    }
+
+    fn highlighted_styles(
+        &self,
+        highlighter: &Arc<CodeBlockHighlighterFn>,
+    ) -> Vec<(Range<usize>, HighlightStyle)> {
+        if let Ok(cache) = self.highlight_cache.lock()
+            && let Some(cache) = cache.as_ref()
+            && Arc::ptr_eq(&cache.highlighter, highlighter)
+        {
+            return cache.styles.clone();
+        }
+
+        let code_len = self.code().len();
+        let styles = highlighter(self)
+            .into_iter()
+            .filter(|(range, _)| range.start <= range.end && range.end <= code_len)
+            .collect::<Vec<_>>();
+        if let Ok(mut cache) = self.highlight_cache.lock() {
+            *cache = Some(CachedCodeBlockHighlights {
+                highlighter: highlighter.clone(),
+                styles: styles.clone(),
+            });
+        }
+        styles
     }
 
     pub(super) fn selected_text(&self) -> String {
@@ -1238,7 +1278,6 @@ impl CodeBlock {
                     .w_full()
                     .min_w_0()
                     .p_3()
-                    .rounded(cx.theme().tokens.radius.md)
                     .bg(style.code_background)
                     .font_family(cx.theme().tokens.typography.mono.clone())
                     .text_size(cx.theme().tokens.typography.mono_md.size)
@@ -1251,15 +1290,7 @@ impl CodeBlock {
                         node_cx
                             .code_block_highlighter
                             .as_ref()
-                            .map(|highlighter| {
-                                let code_len = self.code().len();
-                                highlighter(self)
-                                    .into_iter()
-                                    .filter(|(range, _)| {
-                                        range.start <= range.end && range.end <= code_len
-                                    })
-                                    .collect()
-                            })
+                            .map(|highlighter| self.highlighted_styles(highlighter))
                             .unwrap_or_default(),
                         node_cx.link_click_handler.clone(),
                     ))
@@ -2113,29 +2144,24 @@ impl BlockNode {
             .pb(rems(1.))
             .w_full()
             .child(
-                // Scroll viewport: clips and scrolls horizontally (overflow-x
-                // is handled by `ScrollableMask`, so vertical wheel events keep
-                // bubbling to the parent TextView). No border — the frame is on
-                // the inner track so it wraps the table tightly.
+                // Scroll viewport owns the visible frame, including any
+                // caller-provided radius. Keeping the border here makes the
+                // rounded frame stable while the wider row track moves below it.
                 div()
                     .id(("table", options.ix))
+                    .bg(cx.theme().tokens.colors.surface)
+                    .border_1()
+                    .border_color(style.border)
                     .overflow_x_scroll()
                     .track_scroll(&scroll_handle)
                     .refine_style(&style.table)
                     .child(
-                        // Bordered track sized to `max(viewport, column floors)`:
+                        // Row track sized to `max(viewport, column floors)`:
                         // `min_w_full` fills the frame while the columns can still
                         // shrink-to-fit (their text wrapping), the definite
                         // `w(min_total_w)` keeps the floors once they are reached,
                         // letting the track exceed the viewport and scroll.
-                        div()
-                            .min_w_full()
-                            .w(px(min_total_w))
-                            .bg(cx.theme().tokens.colors.surface)
-                            .border_1()
-                            .border_color(style.border)
-                            .rounded(cx.theme().tokens.radius.md)
-                            .children(rows),
+                        div().min_w_full().w(px(min_total_w)).children(rows),
                     ),
             )
             // Custom actions row (e.g. copy / download) rendered below the
@@ -2228,7 +2254,6 @@ impl BlockNode {
                     .bg(cx.theme().tokens.colors.surface)
                     .border_1()
                     .border_color(style.border)
-                    .rounded(cx.theme().tokens.radius.md)
                     .overflow_hidden()
                     .children(rows)
                     .refine_style(&style.table),
@@ -2392,6 +2417,36 @@ impl BlockNode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn code_block_highlights_are_cached_by_highlighter_identity() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        let calls_for_highlighter = calls.clone();
+        let highlighter: Arc<CodeBlockHighlighterFn> = Arc::new(move |_| {
+            calls_for_highlighter.fetch_add(1, Ordering::Relaxed);
+            Vec::new()
+        });
+        let block = CodeBlock::new("fn main() {}".into(), Some("rust".into()), None::<Span>);
+
+        block.highlighted_styles(&highlighter);
+        block.highlighted_styles(&highlighter);
+        assert_eq!(calls.load(Ordering::Relaxed), 1);
+
+        let replacement: Arc<CodeBlockHighlighterFn> = Arc::new(|_| Vec::new());
+        block.highlighted_styles(&replacement);
+        assert!(Arc::ptr_eq(
+            &block
+                .highlight_cache
+                .lock()
+                .unwrap()
+                .as_ref()
+                .unwrap()
+                .highlighter,
+            &replacement
+        ));
+    }
 
     #[test]
     fn reconstruct_markdown_wraps_marked_runs() {

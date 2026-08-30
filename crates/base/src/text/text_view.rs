@@ -2,10 +2,10 @@ use std::{ops::Range, sync::Arc};
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, App, Bounds, ClickEvent, ContentMask, Element, ElementId, Entity, GlobalElementId,
-    Hitbox, HitboxBehavior, InspectorElementId, InteractiveElement, IntoElement, LayoutId,
-    MouseButton, ParentElement, Pixels, Refineable as _, SharedString, StatefulInteractiveElement,
-    StyleRefinement, Styled, Window, div, point, px,
+    AnyElement, App, Bounds, ClickEvent, ContentMask, Element, ElementId, Entity, Global,
+    GlobalElementId, Hitbox, HitboxBehavior, InspectorElementId, InteractiveElement, IntoElement,
+    LayoutId, MouseButton, ParentElement, Pixels, Refineable as _, SharedString, StyleRefinement,
+    Styled, Window, div, point, px,
 };
 
 use crate::StyledExt;
@@ -21,6 +21,47 @@ pub(crate) type CodeBlockActionsFn =
 
 pub(crate) type CodeBlockHighlighterFn =
     dyn Fn(&CodeBlock) -> Vec<(Range<usize>, gpui::HighlightStyle)> + Send + Sync;
+
+/// Application-wide defaults for TextViews that do not provide explicit
+/// presentation or syntax-highlighting overrides.
+#[derive(Clone, Default)]
+pub struct TextViewDefaults {
+    style: Option<TextViewStyle>,
+    code_block_highlighter: Option<Arc<CodeBlockHighlighterFn>>,
+}
+
+impl Global for TextViewDefaults {}
+
+impl TextViewDefaults {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn style(mut self, style: TextViewStyle) -> Self {
+        self.style = Some(style);
+        self
+    }
+
+    pub fn code_block_highlighter<F>(mut self, highlighter: F) -> Self
+    where
+        F: Fn(&CodeBlock) -> Vec<(Range<usize>, gpui::HighlightStyle)> + Send + Sync + 'static,
+    {
+        self.code_block_highlighter = Some(Arc::new(highlighter));
+        self
+    }
+
+    pub fn install(self, cx: &mut App) {
+        cx.set_global(self);
+    }
+
+    pub fn global(cx: &App) -> Self {
+        cx.try_global::<Self>().cloned().unwrap_or_default()
+    }
+
+    pub fn has_code_block_highlighter(&self) -> bool {
+        self.code_block_highlighter.is_some()
+    }
+}
 
 /// Type for the table actions generator function.
 pub(crate) type TableActionsFn =
@@ -71,7 +112,7 @@ pub struct TextView {
     format: Option<TextViewFormat>,
     text: Option<SharedString>,
     pub(crate) state: Option<Entity<TextViewState>>,
-    text_view_style: TextViewStyle,
+    text_view_style: Option<TextViewStyle>,
     style: StyleRefinement,
     selectable: bool,
     selection_format: SelectionFormat,
@@ -115,9 +156,9 @@ impl TextView {
             state: Some(state.clone()),
             format: None,
             text: None,
-            text_view_style: TextViewStyle::default(),
+            text_view_style: None,
             style: StyleRefinement::default(),
-            selectable: false,
+            selectable: true,
             selection_format: SelectionFormat::default(),
             scrollable: false,
             max_lines: None,
@@ -135,10 +176,10 @@ impl TextView {
             id: id.into(),
             format: Some(TextViewFormat::Markdown),
             text: Some(markdown.into()),
-            text_view_style: TextViewStyle::default(),
+            text_view_style: None,
             style: StyleRefinement::default(),
             state: None,
-            selectable: false,
+            selectable: true,
             selection_format: SelectionFormat::default(),
             scrollable: false,
             max_lines: None,
@@ -156,10 +197,10 @@ impl TextView {
             id: id.into(),
             format: Some(TextViewFormat::Html),
             text: Some(html.into()),
-            text_view_style: TextViewStyle::default(),
+            text_view_style: None,
             style: StyleRefinement::default(),
             state: None,
-            selectable: false,
+            selectable: true,
             selection_format: SelectionFormat::default(),
             scrollable: false,
             max_lines: None,
@@ -173,11 +214,11 @@ impl TextView {
 
     /// Set [`TextViewStyle`].
     pub fn style(mut self, style: TextViewStyle) -> Self {
-        self.text_view_style = style;
+        self.text_view_style = Some(style);
         self
     }
 
-    /// Set the text view to be selectable, default is false.
+    /// Set whether the text view is selectable, default is true.
     pub fn selectable(mut self, selectable: bool) -> Self {
         self.selectable = selectable;
         self
@@ -491,9 +532,20 @@ impl Element for TextView {
         // whole line, so it only applies to the fit-content mode.
         let max_lines = self.max_lines.filter(|_| !self.scrollable);
 
+        let defaults = TextViewDefaults::global(cx);
+        let text_view_style = self
+            .text_view_style
+            .clone()
+            .or(defaults.style)
+            .unwrap_or_else(|| TextViewStyle::from_theme(&crate::Theme::global(cx)));
+        let code_block_highlighter = self
+            .code_block_highlighter
+            .clone()
+            .or(defaults.code_block_highlighter);
+
         state.update(cx, |state, cx| {
             state.code_block_actions = self.code_block_actions.clone();
-            state.code_block_highlighter = self.code_block_highlighter.clone();
+            state.code_block_highlighter = code_block_highlighter.clone();
             state.table_actions = self.table_actions.clone();
             state.link_click_handler = self.link_click_handler.clone();
             state.set_markdown_extensions(self.markdown_extensions.clone(), cx);
@@ -501,10 +553,10 @@ impl Element for TextView {
             state.selection_format = self.selection_format;
             state.scrollable = self.scrollable;
             state.max_lines = max_lines;
-            if state.text_view_style != self.text_view_style {
+            if state.text_view_style != text_view_style {
                 state.selection_revision = state.selection_revision.wrapping_add(1);
             }
-            state.text_view_style = self.text_view_style.clone();
+            state.text_view_style = text_view_style.clone();
 
             if let Some(text) = self.text.clone() {
                 state.set_text(text.as_str(), cx);
@@ -512,6 +564,7 @@ impl Element for TextView {
         });
 
         let focus_handle = state.read(cx).focus_handle.clone();
+        let list_state = state.read(cx).list_state.clone();
         // Cap the box at `n` body-text lines (the effective text style may be
         // refined by this view's own style, e.g. `.text_sm()`); hidden
         // overflow also clips descendant hitboxes to the box during prepaint.
@@ -525,10 +578,10 @@ impl Element for TextView {
             .id(("text-view-scroll", state.entity_id()))
             .key_context("TextView")
             .track_focus(&focus_handle)
-            .when(self.scrollable, |this| this.size_full().overflow_y_scroll())
+            .when(self.scrollable, |this| this.size_full())
             .when_some(max_lines_cap, |this, cap| this.max_h(cap).overflow_hidden())
             .relative()
-            .text_color(self.text_view_style.foreground)
+            .text_color(text_view_style.foreground)
             .on_action(move |_: &crate::input::Copy, window, cx| {
                 let text = TextSelection::selected_text(window, cx).trim().to_string();
                 if text.is_empty() {
@@ -539,6 +592,11 @@ impl Element for TextView {
             })
             .on_action(window.listener_for(&state, TextViewState::on_action_select_all))
             .child(state.clone())
+            // Overlay controls must paint after the document, otherwise rich
+            // content and selection backgrounds cover the thumb and hitbox.
+            .when(self.scrollable, |this| {
+                this.child(crate::Scrollbar::vertical(&list_state))
+            })
             .refine_style(&self.style)
             .into_any_element();
         let layout_id = el.request_layout(window, cx);
@@ -685,6 +743,35 @@ mod tests {
         }
     }
 
+    #[gpui::test]
+    fn text_view_constructors_are_selectable_by_default(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let state = cx.update(|cx| cx.new(|cx| TextViewState::markdown("state", cx)));
+
+        assert!(TextView::new(&state).selectable);
+        assert!(TextView::markdown("markdown", "text").selectable);
+        assert!(TextView::html("html", "<p>text</p>").selectable);
+    }
+
+    #[gpui::test]
+    fn unstyled_text_view_uses_base_tokens_for_link_and_input_selection(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        cx.update(|cx| {
+            let colors = &mut crate::Theme::global_mut(cx).tokens.colors;
+            colors.primary = gpui::rgb(0x55aaff).into();
+            colors.accent = gpui::rgb(0x335577).into();
+        });
+        let (root, cx) = cx.add_window_view(|_, cx| TextViewTestRoot::new("[link](url)", cx));
+        let cx: &mut VisualTestContext = cx;
+
+        cx.run_until_parked();
+        root.read_with(cx, |root, cx| {
+            let style = &root.text_view.read(cx).text_view_style;
+            assert_eq!(style.link, gpui::rgb(0x55aaff).into());
+            assert_eq!(style.selection, gpui::rgb(0x335577).alpha(0.4).into());
+        });
+    }
+
     impl TextViewTestRoot {
         fn new(text: &str, cx: &mut Context<Self>) -> Self {
             let text = text.to_string();
@@ -705,6 +792,51 @@ mod tests {
                 )
                 .child(div().h(px(40.)).child("footer"))
         }
+    }
+
+    struct TableSelectionTestRoot {
+        text_view: Entity<TextViewState>,
+    }
+
+    impl Render for TableSelectionTestRoot {
+        fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+            div()
+                .debug_selector(|| "table-selection-root".into())
+                .w(px(520.))
+                .child(crate::TextSelectionLayer)
+                .child(TextView::new(&self.text_view))
+        }
+    }
+
+    #[gpui::test]
+    fn table_drag_selection_settles_without_requesting_idle_frames(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (_, cx) = cx.add_window_view(|_, cx| TableSelectionTestRoot {
+            text_view: cx.new(|cx| {
+                TextViewState::markdown(
+                    "| Header 1 | Header 2 |\n| --- | --- |\n| Cell A | Cell B |\n| Cell C | Cell D |",
+                    cx,
+                )
+            }),
+        });
+        let cx: &mut VisualTestContext = cx;
+
+        cx.run_until_parked();
+        let bounds = cx
+            .debug_bounds("table-selection-root")
+            .expect("table bounds");
+        let start = point(bounds.left() + px(24.), bounds.top() + px(16.));
+        let end = point(bounds.right() - px(24.), bounds.bottom() - px(16.));
+        cx.simulate_mouse_down(start, MouseButton::Left, Modifiers::default());
+        cx.simulate_mouse_move(end, MouseButton::Left, Modifiers::default());
+        cx.simulate_mouse_up(end, MouseButton::Left, Modifiers::default());
+
+        assert!(cx.update(|window, cx| crate::TextSelection::has_selection(window, cx)));
+        assert_eq!(
+            cx.update(|window, cx| window.simulate_next_frame(cx)),
+            0,
+            "finished table selection must not continuously request frames"
+        );
     }
 
     struct InlineImageTextViewTestRoot {

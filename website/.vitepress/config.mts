@@ -329,7 +329,9 @@ const config: UserConfig = {
   },
   markdown: {
     math: true,
-    defaultHighlightLang: "rs",
+    languages: ["rust"],
+    languageAlias: { rs: "rust" },
+    defaultHighlightLang: "rust",
     theme: {
       light: lightTheme,
       dark: darkTheme,

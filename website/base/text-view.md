@@ -26,18 +26,17 @@ impl Render for AppView {
         div()
             .size_full()
             .child(TextSelectionLayer)
-            .child(
-                TextView::markdown(
-                    "readme",
-                    "# Hello\n\nSelect and copy this **Markdown**.",
-                )
-                .selectable(true),
-            )
+            .child(TextView::markdown(
+                "readme",
+                "# Hello\n\nSelect and copy this **Markdown**.",
+            ))
     }
 }
 ```
 
 If the application already calls `gpui_component::init`, Base initialization is included. `gpui-component::Root` also installs the window selection layer.
+
+TextView is selectable by default. While dragging a selection near a viewport edge, the shared selection layer scrolls the related `overflow_*_scroll` region automatically; no TextView scroll or selection parameter is required. Use `.selectable(false)` only to disable selection explicitly.
 
 ## Markdown and HTML
 
@@ -46,15 +45,12 @@ Use the helpers for call-site-derived IDs, or constructors when an explicit stab
 ```rust
 use gpui_base::{html, markdown, TextView};
 
-let short_markdown = markdown("A **short** message.").selectable(true);
+let short_markdown = markdown("A **short** message.");
 let short_html = html("<p>A <strong>short</strong> message.</p>");
 
-let preview = TextView::markdown("document-preview", markdown_source)
-    .selectable(true)
-    .scrollable(true);
+let preview = TextView::markdown("document-preview", markdown_source).scrollable(true);
 
-let article = TextView::html("article", html_source)
-    .selectable(true);
+let article = TextView::html("article", html_source);
 ```
 
 `scrollable(true)` makes the view fill its container and scroll vertically. Without it, the view grows to fit its content. `max_lines(n)` clamps a non-scrollable preview to at most `n` body-text lines.
@@ -117,7 +113,7 @@ use gpui_base::{TextView, TextViewState};
 let document = cx.new(|cx| TextViewState::markdown(initial_source, cx));
 
 // Render
-TextView::new(&document).selectable(true)
+TextView::new(&document)
 
 // Later
 document.update(cx, |state, cx| state.set_text(updated_source, cx));

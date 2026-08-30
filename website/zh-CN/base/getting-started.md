@@ -50,6 +50,30 @@ Button::new("save")
 
 跨渲染保持每个 `ElementId` 稳定，GPUI 才能保留元素和焦点状态。Checkbox、Switch、Radio、Toggle 等受控组件会通过回调报告下一个值；把它存进视图，并在下一次渲染时传回。
 
+## 默认颜色 Token
+
+`gpui-base` 通过 `ColorTokens::light()` 和 `ColorTokens::dark()` 提供可直接使用的浅色、深色语义调色板。`ColorTokens::default()` 使用浅色调色板。两套颜色均使用 `Hsla`，并与 `gpui-component` 的默认浅色、深色主题保持相同的语义角色。
+
+```rust
+use gpui_base::{ColorTokens, SemanticThemeTokens, Theme};
+
+// 根据应用当前外观选择对应调色板。
+let colors = if is_dark {
+    ColorTokens::dark()
+} else {
+    ColorTokens::light()
+};
+
+Theme::global_mut(cx).tokens = SemanticThemeTokens {
+    colors,
+    ..Default::default()
+};
+```
+
+调色板描述的是语义角色，而不是某个组件的专用颜色：`background` 与 `foreground`、`surface` 与 `surface_foreground`、`primary`、`secondary`、`muted`、`accent`、`destructive`、`border`、`input` 和 `ring`，以及对应的前景色。Base 组件会从这些角色推导链接、文本选择等细节，不会额外增加 link 或 selection token。
+
+调用 `gpui_component::init` 时，当前浅色或深色主题会自动映射到同一套 Base token。只使用 `gpui-base` 的应用应在外观模式变化时安装对应的调色板。
+
 ## 运行共享示例
 
 ```sh

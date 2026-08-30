@@ -113,8 +113,11 @@ impl TextViewStyle {
             .foreground(theme.tokens.colors.foreground)
             .muted_foreground(theme.tokens.colors.muted_foreground)
             .link(theme.tokens.colors.primary);
+        style.selection = theme.tokens.colors.accent.alpha(0.4);
         style.code_background = theme.tokens.colors.accent;
         style.border = theme.tokens.colors.border;
+        style.inline_code.background_color = Some(theme.tokens.colors.accent);
+        style.is_dark = theme.appearance == crate::ThemeAppearance::Dark;
         style
     }
 
@@ -237,6 +240,10 @@ mod tests {
         assert!(style.inline_code.background_color.is_some());
         assert!(style.code_background.a > 0.0);
         assert!(style.border.a > 0.0);
+        assert_eq!(style.code_block.corner_radii.top_left, None);
+        assert_eq!(style.code_block.corner_radii.top_right, None);
+        assert_eq!(style.code_block.corner_radii.bottom_left, None);
+        assert_eq!(style.code_block.corner_radii.bottom_right, None);
     }
 
     #[test]
@@ -251,6 +258,7 @@ mod tests {
         let style = TextViewStyle::from_theme(&theme);
         assert_eq!(style.foreground, theme.tokens.colors.foreground);
         assert_eq!(style.link, theme.tokens.colors.primary);
+        assert_eq!(style.selection, theme.tokens.colors.accent.alpha(0.4));
         assert_eq!(style.code_background, theme.tokens.colors.accent);
         assert_eq!(style.border, theme.tokens.colors.border);
     }

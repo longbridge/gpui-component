@@ -24,7 +24,7 @@ use gpui_component::{
     status_bar::StatusBar,
     text::{
         MarkdownNode, MarkdownParseContext, MarkdownPlugin, SelectionFormat, TextViewStyle,
-        markdown, markdown_ast,
+        markdown, markdown_ast, text_view_style,
     },
     v_flex,
 };
@@ -1206,13 +1206,13 @@ impl Example {
 
     /// Build the markdown style: tables scroll horizontally unless `table_wrap`
     /// is on, in which case the default wrapping layout is used.
-    fn text_view_style(&self) -> TextViewStyle {
+    fn text_view_style(&self, theme: &gpui_component::Theme) -> TextViewStyle {
+        let mut style = text_view_style(theme);
         if self.table_wrap {
-            return TextViewStyle::default();
+            return style;
         }
-        let mut table = StyleRefinement::default();
-        table.overflow.x = Some(Overflow::Scroll);
-        TextViewStyle::default().table(table)
+        style.table.overflow.x = Some(Overflow::Scroll);
+        style
     }
 
     fn on_action_open(&mut self, _: &Open, window: &mut Window, cx: &mut Context<Self>) {
@@ -1409,7 +1409,7 @@ impl Render for Example {
                                             })
                                             // Tables scroll horizontally by default; the
                                             // status bar toggle switches to wrapping.
-                                            .style(self.text_view_style())
+                                            .style(self.text_view_style(cx.theme()))
                                             .flex_none()
                                             .p_5()
                                             .scrollable(true)
