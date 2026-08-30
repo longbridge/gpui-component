@@ -29,28 +29,18 @@ impl BaseShowcase {
             .h(px(560.))
             .max_h_full()
             .text_color(gpui::rgb(palette.foreground))
-            .border_1()
-            .border_color(gpui::rgb(palette.border))
-            .rounded_lg()
             .child(
                 div()
-                    .debug_selector(|| "text-view-content-inset".into())
-                    .h_full()
-                    .flex()
-                    .px(px(24.))
-                    .py(px(20.))
+                    .debug_selector(|| "text-view-markdown".into())
+                    .size_full()
+                    .min_h_0()
+                    .overflow_hidden()
                     .child(
-                        div()
-                            .debug_selector(|| "text-view-markdown".into())
-                            .flex_1()
-                            .min_h_0()
-                            .overflow_hidden()
-                            .child(
-                                TextView::new(&self.text_view)
-                                    .size_full()
-                                    .scrollable(true)
-                                    .style(style),
-                            ),
+                        TextView::new(&self.text_view)
+                            .size_full()
+                            .px_2()
+                            .scrollable(true)
+                            .style(style),
                     ),
             )
     }
@@ -96,8 +86,8 @@ mod tests {
             .debug_bounds("text-view-markdown")
             .expect("Markdown bounds");
 
-        assert_eq!(markdown.left() - example.left(), px(25.));
-        assert_eq!(example.right() - markdown.right(), px(25.));
+        assert_eq!(markdown.left(), example.left());
+        assert_eq!(markdown.right(), example.right());
     }
 
     #[gpui::test]
