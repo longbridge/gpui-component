@@ -574,6 +574,25 @@ impl Element for TextView {
             text_style.line_height_in_pixels(window.rem_size()) * max_lines as f32
         });
 
+        let mut root_style = self.style.clone();
+        let document = if self.scrollable {
+            // Padding belongs to the document, not the scroll viewport. Keeping
+            // it off the root lets overlay scrollbars stay on the viewport edge
+            // while the virtual list is laid out inside the requested inset.
+            let mut content_style = StyleRefinement::default();
+            content_style.padding = root_style.padding.clone();
+            root_style.padding = gpui::EdgesRefinement::default();
+
+            div()
+                .size_full()
+                .flex()
+                .refine_style(&content_style)
+                .child(div().flex_1().min_w_0().min_h_0().child(state.clone()))
+                .into_any_element()
+        } else {
+            state.clone().into_any_element()
+        };
+
         let mut el = div()
             .id(("text-view-scroll", state.entity_id()))
             .key_context("TextView")
@@ -591,13 +610,13 @@ impl Element for TextView {
                 cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
             })
             .on_action(window.listener_for(&state, TextViewState::on_action_select_all))
-            .child(state.clone())
+            .child(document)
             // Overlay controls must paint after the document, otherwise rich
             // content and selection backgrounds cover the thumb and hitbox.
             .when(self.scrollable, |this| {
                 this.child(crate::Scrollbar::vertical(&list_state))
             })
-            .refine_style(&self.style)
+            .refine_style(&root_style)
             .into_any_element();
         let layout_id = el.request_layout(window, cx);
         (layout_id, TextViewLayoutState { state, element: el })

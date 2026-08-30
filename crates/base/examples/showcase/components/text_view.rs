@@ -75,7 +75,8 @@ mod tests {
     #[gpui::test]
     fn text_view_showcase_renders_with_base_defaults(cx: &mut TestAppContext) {
         cx.update(gpui_base::init);
-        let (_, cx) = cx.add_window_view(|window, cx| BaseShowcase::new("text-view", window, cx));
+        let (view, cx) =
+            cx.add_window_view(|window, cx| BaseShowcase::new("text-view", window, cx));
         let cx: &mut VisualTestContext = cx;
 
         cx.run_until_parked();
@@ -85,9 +86,12 @@ mod tests {
         let markdown = cx
             .debug_bounds("text-view-markdown")
             .expect("Markdown bounds");
+        let document = view.read_with(cx, |view, cx| view.text_view.read(cx).bounds());
 
         assert_eq!(markdown.left(), example.left());
         assert_eq!(markdown.right(), example.right());
+        assert_eq!(document.left() - example.left(), px(8.));
+        assert_eq!(example.right() - document.right(), px(8.));
     }
 
     #[gpui::test]
