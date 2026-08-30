@@ -34,7 +34,7 @@ may add a theme adapter for applications initialized through
 `TextViewStyle::default()` is a usable style, not an empty customization bag.
 It supplies neutral defaults for body and heading typography, paragraph and
 list spacing, links, block quotes, inline and block code, tables, horizontal
-rules, selection highlights, and light/dark code highlighting. Base-only
+rules, selection highlights, and readable unhighlighted code blocks. Base-only
 applications can render HTML or Markdown without constructing a style.
 
 Defaults use GPUI primitives and Base semantic theme tokens. They must not read
@@ -43,8 +43,13 @@ tooltip and scrolling implementations. Every field remains overridable, and
 the component facade can derive an adapted style from its active theme to
 preserve the current appearance where practical.
 
-The default must respond to the current Base theme appearance. A caller may
-still pass an explicit style for fixed rendering or brand-specific choices.
+The default is a stable neutral light style and cannot require an `App`.
+`TextViewStyle::from_theme(&gpui_base::Theme)` derives an appearance-aware
+style when a caller wants current Base tokens; callers may also pass an
+explicit style for fixed rendering or brand-specific choices.
+Syntax highlighting is deliberately not enabled by default and Base does not
+own language grammars or a highlighter registry. Callers may inject precomputed
+highlight runs or provide a code-block renderer when they want highlighting.
 
 ## SelectableText
 
@@ -89,15 +94,18 @@ primitives:
 - code-block actions use optional render hooks rather than component Icon or
   Button types;
 - scrolling uses GPUI/Base scrolling behavior;
-- syntax highlighting and its default themes live in Base with the TextView.
+- code blocks use a neutral monospace default; optional syntax highlighting is
+  injected by the caller and does not add language dependencies to Base.
 
 No feature listed in the current TextView documentation is intentionally
 removed by the move.
 
 ## Compatibility and migration
 
-The canonical implementation and types live under `gpui_base::text` and are
-re-exported from the `gpui-base` root where appropriate. `gpui-component::text`
+The canonical implementation and types live under `gpui_base::text`.
+`TextView`, `TextViewState`, `TextViewStyle`, `Text`, `SelectionFormat`, the
+Markdown extension types, `markdown`, and `html` are also re-exported from the
+`gpui-base` root. `gpui-component::text`
 keeps re-exporting the same types and the `markdown(...)` and `html(...)`
 helpers, so existing imports continue to compile unless they relied on a
 previously private implementation detail.
@@ -137,3 +145,4 @@ Tests must prove the requested capabilities rather than only compilation:
 - Moving the full gpui-component theme, icon set, or overlay system into Base.
 - Introducing a second window-level selection coordinator.
 - Requiring every Base consumer to define a TextView style before rendering.
+- Enabling syntax highlighting or bundling language grammars by default.
