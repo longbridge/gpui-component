@@ -220,6 +220,42 @@ export function registeredExamples(surface) {
             ),
         },
         {
+          label: "Variants and sizes",
+          element: h_flex()
+            .gap(8)
+            .items_center()
+            .child(
+              asElement(
+                new DropdownButton("dd-secondary", "Secondary")
+                  .variant("secondary")
+                  .size("small")
+                  .menuItem("Rename", (_cx) => {}),
+              ),
+            )
+            .child(
+              asElement(
+                new DropdownButton("dd-danger", "Delete")
+                  .variant("danger")
+                  .menuItem("Delete forever", (_cx) => {}),
+              ),
+            )
+            .child(
+              asElement(
+                new DropdownButton("dd-outline", "More")
+                  .outline()
+                  .menuAnchor("bottomRight")
+                  .menuItem("Export", (_cx) => {}),
+              ),
+            )
+            .child(
+              asElement(
+                new DropdownButton("dd-disabled", "Unavailable")
+                  .disabled(true)
+                  .menuItem("Nothing", (_cx) => {}),
+              ),
+            ),
+        },
+        {
           label: "Menu-only trigger",
           element: h_flex()
             .gap(8)
@@ -454,12 +490,43 @@ export function registeredExamples(surface) {
               .child(asElement(new Radio("dense").label("Dense"))),
           ),
         },
+        {
+          label: "On its own, reporting its own click",
+          element: h_flex()
+            .gap(16)
+            .items_center()
+            .child(
+              asElement(
+                new Radio("radio-standalone")
+                  .label("Subscribe")
+                  .size("small")
+                  .checked(/** @type {boolean} */ (state("radio-standalone", false)))
+                  .onChange((checked, cx) => setState("radio-standalone", checked, cx)),
+              ),
+            )
+            .child(
+              asElement(
+                new Radio("radio-skipped")
+                  .label("Skipped by Tab")
+                  .accessibilityLabel("Not a tab stop")
+                  .tabStop(false),
+              ),
+            ),
+        },
       ];
     case "Slider":
       return [
         {
-          label: "Draggable value",
-          element: asElement(new Slider(SliderState())),
+          label: "Horizontal, and reversed",
+          element: v_flex()
+            .w_full()
+            .gap(16)
+            .child(asElement(new Slider(SliderState())))
+            .child(asElement(new Slider(SliderState()).reverse())),
+        },
+        {
+          label: "Vertical",
+          element: asElement(new Slider(SliderState()).vertical().h(120)),
         },
         {
           label: "Disabled",
@@ -932,6 +999,27 @@ export function registeredExamples(surface) {
               ),
           ),
         },
+        {
+          label: "One column, a fixed label width, and a small size",
+          element: asElement(
+            new Form()
+              .columns(1)
+              .labelWidth(120)
+              .size("small")
+              .child(
+                new Field()
+                  .label("Endpoint")
+                  .description("Where requests are sent.")
+                  .child(new Input(InputState()).ariaLabel("Endpoint")),
+              )
+              .child(
+                new Field()
+                  .label("Token")
+                  .required(true)
+                  .child(new Input(InputState()).ariaLabel("Token")),
+              ),
+          ),
+        },
       ];
 
     // -------------------------------------------------------------- overlays
@@ -952,6 +1040,27 @@ export function registeredExamples(surface) {
               .content(asElement(new Text("Shown without a click."))),
           ),
         },
+        {
+          label: "Anchored, kept open by the script, and not closed by the overlay",
+          element: v_flex()
+            .gap(8)
+            .child(
+              asElement(
+                new Popover("popover-controlled", "Controlled")
+                  .cardAnchor("topLeft")
+                  .appearance(true)
+                  .overlayClosable(false)
+                  .open(/** @type {boolean} */ (state("popover-open", false)))
+                  .onOpenChange((open, cx) => setState("popover-open", open, cx))
+                  .content(asElement(new Text("The script owns this one."))),
+              ),
+            )
+            .child(
+              div()
+                .text_size(11)
+                .child(`open: ${String(state("popover-open", false))}`),
+            ),
+        },
       ];
     case "HoverCard":
       return [
@@ -963,6 +1072,30 @@ export function registeredExamples(surface) {
               .openDelay(250)
               .child(asElement(new Text("Your account name is visible to collaborators."))),
           ),
+        },
+        {
+          label: "Anchored above, slower to dismiss, and reporting its state",
+          element: v_flex()
+            .gap(8)
+            .child(
+              asElement(
+                new HoverCard("hover-anchored")
+                  .triggerElement(
+                    asElement(new Button("hover-anchored-trigger").label("Storage")),
+                  )
+                  .cardAnchor("topLeft")
+                  .openDelay(120)
+                  .closeDelay(600)
+                  .appearance(true)
+                  .onOpenChange((open, cx) => setState("hover-open", open, cx))
+                  .child(asElement(new Text("42 GB of 100 GB used."))),
+              ),
+            )
+            .child(
+              div()
+                .text_size(11)
+                .child(`open: ${String(state("hover-open", false))}`),
+            ),
         },
       ];
     case "Tooltip":
@@ -981,6 +1114,26 @@ export function registeredExamples(surface) {
               .title("Project details")
               .content(asElement(new Text("Everything about this project."))),
           ),
+        },
+        {
+          label: "Reports which button closed it",
+          element: v_flex()
+            .gap(8)
+            .child(
+              asElement(
+                new Dialog("dialog-confirm", "Confirm something", (_message, _cx) => {})
+                  .title("Confirm")
+                  .onOk((cx) => setState("dialog-outcome", "ok", cx))
+                  .onCancel((cx) => setState("dialog-outcome", "cancel", cx))
+                  .onClose((cx) => setState("dialog-outcome", "closed", cx))
+                  .content(asElement(new Text("Press a button and watch the line below."))),
+              ),
+            )
+            .child(
+              div()
+                .text_size(11)
+                .child(`last outcome: ${String(state("dialog-outcome", "none"))}`),
+            ),
         },
       ];
     case "AlertDialog":
@@ -1172,6 +1325,28 @@ export function registeredExamples(surface) {
               .h(180),
           ),
         },
+        {
+          label: "Bordered, with a row header and selectable rows",
+          element: asElement(
+            new DataTable(
+              DataTableState(["name", "status"]),
+              () => [
+                { name: "Alpha", status: "Ready" },
+                { name: "Beta", status: "Building" },
+              ],
+              (row, column) =>
+                asElement(
+                  new Text(String(/** @type {Record<string, string>} */ (row)[column])),
+                ),
+            )
+              .bordered(true)
+              .rowHeader(true)
+              .rowSelectable(true)
+              .columnMovable(true)
+              .scrollbarVisible(true, false)
+              .h(150),
+          ),
+        },
       ];
     case "Command":
       return [
@@ -1199,6 +1374,43 @@ export function registeredExamples(surface) {
                 ),
               ),
           ),
+        },
+        {
+          label: "Reports typing, selection and dismissal",
+          element: v_flex()
+            .w_full()
+            .gap(8)
+            .child(
+              asElement(
+                new Command(CommandState())
+                  .placeholder("Type to filter")
+                  .searchable(true)
+                  .filterable(true)
+                  .maxHeight(140)
+                  .onQuery((query, cx) => setState("command-query", query, cx))
+                  .onSelect((section, row, cx) =>
+                    setState("command-at", `${section}:${row}`, cx),
+                  )
+                  .onConfirm((section, row, cx) =>
+                    setState("command-ran", `${section}:${row}`, cx),
+                  )
+                  .onCancel((cx) => setState("command-ran", "cancelled", cx))
+                  .child(
+                    asElement(
+                      new CommandGroup("Files")
+                        .child(asElement(new CommandItem("Open file").action("open")))
+                        .child(asElement(new CommandItem("Save file").action("save"))),
+                    ),
+                  ),
+              ),
+            )
+            .child(
+              div()
+                .text_size(11)
+                .child(
+                  `query ${String(state("command-query", ""))} · highlighted ${String(state("command-at", "none"))} · ran ${String(state("command-ran", "none"))}`,
+                ),
+            ),
         },
       ];
 
