@@ -92,14 +92,11 @@ impl GitDependencyStore {
             }
         }
 
-        let mut origin = git_command();
-        origin.args(["remote", "get-url", "origin"]);
-        origin.current_dir(&mirror);
-        let configured = output_text(name, "inspect cached origin", origin)?;
-        if configured.trim() != dependency.git() {
+        let configured = configured_origin(name, &mirror)?;
+        if configured != dependency.git() {
             bail!(
                 "Git dependency `{name}` cache origin is `{}`, expected `{}`; remove {} and retry",
-                configured.trim(),
+                configured,
                 dependency.git(),
                 mirror.display()
             );
@@ -230,6 +227,29 @@ fn output_text(name: &str, operation: &str, command: Command) -> Result<String> 
     })
 }
 
+fn configured_origin(name: &str, mirror: &Path) -> Result<String> {
+    let mut command = git_command();
+    command
+        .args(["config", "--null", "--get-all", "remote.origin.url"])
+        .current_dir(mirror);
+    let output = run_command(name, "inspect cached origin", command)?;
+    let Some(origin) = output.stdout.strip_suffix(&[0]) else {
+        bail!(
+            "Git dependency `{name}` cache origin config is malformed; remove {} and retry",
+            mirror.display()
+        );
+    };
+    if origin.is_empty() || origin.contains(&0) {
+        bail!(
+            "Git dependency `{name}` cache origin config must contain exactly one non-empty URL; remove {} and retry",
+            mirror.display()
+        );
+    }
+    String::from_utf8(origin.to_vec()).with_context(|| {
+        format!("git returned a non-UTF-8 cached origin URL while inspecting `{name}`")
+    })
+}
+
 fn digest(fields: &[(&str, &str)]) -> String {
     let mut digest = Sha256::new();
     for (kind, value) in fields {
@@ -287,7 +307,7 @@ impl Drop for CacheLock {
 
 #[cfg(test)]
 mod tests {
-    use super::{GitDependencyStore, dependency_cache_root};
+    use super::{GitDependencyStore, dependency_cache_root, digest};
     use crate::plugin::PluginManifest;
     use std::{
         ffi::OsString,
@@ -421,6 +441,10 @@ mod tests {
         }
 
         fn dependency(&self, selector: &str) -> crate::plugin::GitDependency {
+            self.dependency_at(&self.remote.to_string_lossy(), selector)
+        }
+
+        fn dependency_at(&self, git_url: &str, selector: &str) -> crate::plugin::GitDependency {
             let manifest = format!(
                 r#"{{
                     "id": "com.example.fixture",
@@ -433,7 +457,7 @@ mod tests {
                         }}
                     }}
                 }}"#,
-                serde_json::to_string(&self.remote).expect("remote path as JSON")
+                serde_json::to_string(git_url).expect("remote URL as JSON")
             );
             PluginManifest::parse(&manifest)
                 .expect("fixture manifest")
@@ -563,5 +587,41 @@ mod tests {
             .materialize("omarchy-ui", &dependency)
             .expect_err("a cache may not silently change repository identity");
         assert!(error.to_string().contains("cache origin"), "{error:#}");
+    }
+
+    #[test]
+    fn a_cached_mirror_accepts_its_raw_origin_when_git_rewrites_the_effective_url() {
+        let fixture = GitFixture::new();
+        fixture.commit("export const version = 1;", "first");
+        let raw_origin = "https://github.com/huacnlee/omarchy-ui";
+        let dependency = fixture.dependency_at(raw_origin, r#""branch": "main""#);
+        let store = GitDependencyStore::new(fixture.cache.clone());
+        let remote_key = digest(&[("git", raw_origin)]);
+        let mirror = fixture
+            .cache
+            .join("mirrors")
+            .join(format!("{remote_key}.git"));
+        std::fs::create_dir_all(mirror.parent().expect("mirror parent")).expect("mirror parent");
+        git(
+            mirror.parent().expect("mirror parent"),
+            &[
+                "clone",
+                "--mirror",
+                "--",
+                fixture.remote.to_str().expect("UTF-8 fixture remote"),
+                mirror.to_str().expect("UTF-8 mirror path"),
+            ],
+        );
+        git(&mirror, &["remote", "set-url", "origin", raw_origin]);
+        let rewrite_key = format!("url.{}.insteadOf", fixture.remote.display());
+        git(&mirror, &["config", &rewrite_key, raw_origin]);
+
+        let package = store
+            .materialize("omarchy-ui", &dependency)
+            .expect("a URL rewrite must not change the configured origin identity");
+        assert_eq!(
+            std::fs::read_to_string(package.entry).unwrap(),
+            "export const version = 1;"
+        );
     }
 }
