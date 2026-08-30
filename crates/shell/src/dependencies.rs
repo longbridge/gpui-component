@@ -26,9 +26,17 @@ pub(crate) struct MaterializedDependency {
 
 impl GitDependencyStore {
     pub(crate) fn for_user() -> Self {
-        let home = std::env::var_os("HOME")
-            .or_else(|| std::env::var_os("USERPROFILE"))
-            .map(PathBuf::from)
+        Self::for_user_with_environment(|variable| std::env::var_os(variable))
+    }
+
+    fn for_user_with_environment(environment: impl Fn(&str) -> Option<std::ffi::OsString>) -> Self {
+        let home = ["HOME", "USERPROFILE"]
+            .into_iter()
+            .find_map(|variable| {
+                environment(variable)
+                    .filter(|value| !value.is_empty())
+                    .map(PathBuf::from)
+            })
             .unwrap_or_else(std::env::temp_dir);
         Self::new(dependency_cache_root(&home))
     }
@@ -273,6 +281,7 @@ mod tests {
     use super::{GitDependencyStore, dependency_cache_root};
     use crate::plugin::PluginManifest;
     use std::{
+        ffi::OsString,
         path::{Path, PathBuf},
         process::Command,
         sync::{
@@ -288,6 +297,46 @@ mod tests {
         assert_eq!(
             dependency_cache_root(Path::new("/home/example")),
             PathBuf::from("/home/example/.gpui-shell/cache/dependencies")
+        );
+    }
+
+    #[test]
+    fn for_user_wires_home_to_the_shell_cache_root() {
+        let store = GitDependencyStore::for_user_with_environment(|variable| match variable {
+            "HOME" => Some(OsString::from("/home/example")),
+            _ => None,
+        });
+
+        assert_eq!(
+            store.root,
+            PathBuf::from("/home/example/.gpui-shell/cache/dependencies")
+        );
+    }
+
+    #[test]
+    fn for_user_uses_userprofile_when_home_is_missing() {
+        let store = GitDependencyStore::for_user_with_environment(|variable| match variable {
+            "USERPROFILE" => Some(OsString::from("C:\\Users\\example")),
+            _ => None,
+        });
+
+        assert_eq!(
+            store.root,
+            PathBuf::from("C:\\Users\\example/.gpui-shell/cache/dependencies")
+        );
+    }
+
+    #[test]
+    fn for_user_ignores_an_empty_home_before_userprofile() {
+        let store = GitDependencyStore::for_user_with_environment(|variable| match variable {
+            "HOME" => Some(OsString::new()),
+            "USERPROFILE" => Some(OsString::from("/profiles/example")),
+            _ => None,
+        });
+
+        assert_eq!(
+            store.root,
+            PathBuf::from("/profiles/example/.gpui-shell/cache/dependencies")
         );
     }
 
