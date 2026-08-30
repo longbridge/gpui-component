@@ -38,7 +38,7 @@ impl BaseShowcase {
                     .child(
                         TextView::new(&self.text_view)
                             .size_full()
-                            .px_2()
+                            .px_4()
                             .scrollable(true)
                             .style(style),
                     ),
@@ -90,8 +90,8 @@ mod tests {
 
         assert_eq!(markdown.left(), example.left());
         assert_eq!(markdown.right(), example.right());
-        assert_eq!(document.left() - example.left(), px(8.));
-        assert_eq!(example.right() - document.right(), px(8.));
+        assert_eq!(document.left() - example.left(), px(16.));
+        assert_eq!(example.right() - document.right(), px(16.));
     }
 
     #[gpui::test]
