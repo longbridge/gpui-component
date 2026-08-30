@@ -2102,7 +2102,7 @@ impl BlockNode {
                     // refinement comes last so it can override the defaults.
                     .when(row_ix == 0, |this| {
                         this.bg(style.code_background)
-                            .text_color(cx.theme().tokens.colors.foreground)
+                            .text_color(style.foreground)
                             .refine_style(&style.table_head)
                     })
                     .children(cells),
@@ -2211,7 +2211,7 @@ impl BlockNode {
                     // refinement comes last so it can override the defaults.
                     .when(row_ix == 0, |this| {
                         this.bg(style.code_background)
-                            .text_color(cx.theme().tokens.colors.foreground)
+                            .text_color(style.foreground)
                             .refine_style(&style.table_head)
                     })
                     .children(cells),

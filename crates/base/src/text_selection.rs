@@ -1735,6 +1735,13 @@ impl Element for TextSelectionLayer {
         window: &mut Window,
         cx: &mut App,
     ) -> Self::PrepaintState {
+        // Automatic participant order is paint order within this frame. Keep
+        // this lifecycle in base so base-only applications do not need a
+        // separate root component to reset it. Otherwise, registering the
+        // first of two selected TextViews temporarily reverses their order
+        // against the previous frame and alternates coverage forever.
+        GlobalState::init(cx);
+        GlobalState::global_mut(cx).begin_selection_frame();
         TextSelectionLayerPrepaintState(retain_text_selection_state(global_id, window, cx))
     }
 
@@ -1777,7 +1784,7 @@ fn retain_text_selection_state(
 fn paint_text_selection(state: &Entity<WindowSelectionState>, window: &mut Window, cx: &mut App) {
     if state.update(cx, |state, _| state.schedule_finish_frame()) {
         let state = state.downgrade();
-        window.on_next_frame(move |_, cx| {
+        window.defer(cx, move |_, cx| {
             let Some(state) = state.upgrade() else {
                 return;
             };
@@ -3207,7 +3214,6 @@ mod tests {
         let (_, cx) = cx.add_window_view(|_, _| SelectionElementOnlyView);
         cx.update(|window, cx| {
             let _ = window.draw(cx);
-            assert!(window.simulate_next_frame(cx) > 0);
             assert_eq!(window.simulate_next_frame(cx), 0);
             assert_eq!(window.simulate_next_frame(cx), 0);
             assert!(live_text_selection_state(window, cx).is_some());
