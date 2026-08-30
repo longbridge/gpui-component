@@ -88,8 +88,10 @@ export default class StoryGallery extends View {
       .child(
         v_flex()
           .flex_1()
+          // A wide child — a table, a chart — would otherwise refuse to shrink
+          // and push the sidebar off screen. The vertical axis needs no such
+          // line: the scroll area clips the axis it scrolls, so it may shrink.
           .min_w_0()
-          .min_h_0()
           .overflow_y_scrollbar()
           .p(28)
           .gap(20)
@@ -169,9 +171,6 @@ export default class StoryGallery extends View {
       .child(
         v_flex()
           .flex_1()
-          // A flex item's automatic minimum size is its content, so without
-          // this the list refuses to shrink and scrolls nothing.
-          .min_h_0()
           .overflow_y_scrollbar()
           .p(8)
           .gap(14)
