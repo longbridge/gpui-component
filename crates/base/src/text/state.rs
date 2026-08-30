@@ -8,8 +8,8 @@ use std::{
 
 use gpui::{
     App, AppContext as _, Bounds, Context, FocusHandle, IntoElement, KeyBinding, ListState,
-    ParentElement as _, Pixels, Point, Render, SharedString, Styled as _, Task, Window,
-    prelude::FluentBuilder as _, px,
+    ParentElement as _, Pixels, Point, Render, SharedString, StyleRefinement, Styled as _, Task,
+    Window, prelude::FluentBuilder as _, px,
 };
 
 use crate::{
@@ -93,6 +93,7 @@ pub struct TextViewState {
     pub(super) selectable: bool,
     pub(super) selection_format: SelectionFormat,
     pub(super) scrollable: bool,
+    pub(super) content_style: StyleRefinement,
     pub(super) max_lines: Option<usize>,
     /// Line spans reported by `Inline` during prepaint (collected only while
     /// [`Self::max_lines`] is set); cleared by `TextView` at each frame start.
@@ -190,6 +191,7 @@ impl TextViewState {
             selectable: false,
             selection_format: SelectionFormat::default(),
             scrollable: false,
+            content_style: StyleRefinement::default(),
             max_lines: None,
             line_spans: Arc::default(),
             clamped: false,
@@ -625,6 +627,7 @@ impl Render for TextViewState {
                     } else {
                         None
                     },
+                    &self.content_style,
                     &node_cx,
                     window,
                     cx,

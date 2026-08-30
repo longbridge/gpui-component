@@ -552,6 +552,7 @@ impl Element for TextView {
             state.selectable = self.selectable;
             state.selection_format = self.selection_format;
             state.scrollable = self.scrollable;
+            state.content_style = StyleRefinement::default();
             state.max_lines = max_lines;
             if state.text_view_style != text_view_style {
                 state.selection_revision = state.selection_revision.wrapping_add(1);
@@ -575,23 +576,15 @@ impl Element for TextView {
         });
 
         let mut root_style = self.style.clone();
-        let document = if self.scrollable {
+        if self.scrollable {
             // Padding belongs to the document, not the scroll viewport. Keeping
             // it off the root lets overlay scrollbars stay on the viewport edge
-            // while the virtual list is laid out inside the requested inset.
-            let mut content_style = StyleRefinement::default();
-            content_style.padding = root_style.padding.clone();
+            // while List itself includes the inset in item origins and widths.
+            state.update(cx, |state, _| {
+                state.content_style.padding = root_style.padding.clone();
+            });
             root_style.padding = gpui::EdgesRefinement::default();
-
-            div()
-                .size_full()
-                .flex()
-                .refine_style(&content_style)
-                .child(div().flex_1().min_w_0().min_h_0().child(state.clone()))
-                .into_any_element()
-        } else {
-            state.clone().into_any_element()
-        };
+        }
 
         let mut el = div()
             .id(("text-view-scroll", state.entity_id()))
@@ -610,7 +603,7 @@ impl Element for TextView {
                 cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
             })
             .on_action(window.listener_for(&state, TextViewState::on_action_select_all))
-            .child(document)
+            .child(state.clone())
             // Overlay controls must paint after the document, otherwise rich
             // content and selection backgrounds cover the thumb and hitbox.
             .when(self.scrollable, |this| {
