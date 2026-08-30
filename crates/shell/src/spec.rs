@@ -987,21 +987,18 @@ impl SpecArena {
         Ok(())
     }
 
-    pub(crate) fn can_push_op(&self, id: SpecId) -> Result<(), SpecError> {
-        self.check_live(id)
-    }
-
     /// Attaches `child` to `parent`, consuming the child.
     /// Marks a node as consumed by an op rather than by a parent, so it cannot
     /// also be added to the tree.
     pub fn claim(&mut self, id: SpecId) -> Result<(), SpecError> {
-        self.can_claim(id)?;
+        self.ensure_claimable(id)?;
         self.structure = mix(self.structure, mix(8, u64::from(id)));
         self.claimed[id as usize] = true;
         Ok(())
     }
 
-    pub(crate) fn can_claim(&self, id: SpecId) -> Result<(), SpecError> {
+    /// Whether [`Self::claim`] would succeed, without performing it.
+    pub(crate) fn ensure_claimable(&self, id: SpecId) -> Result<(), SpecError> {
         self.check_live(id)?;
         if self.claimed[id as usize] {
             return Err(SpecError::Claimed);
@@ -1136,7 +1133,7 @@ impl SpecArena {
         !self.mounted_views.is_empty()
     }
 
-    fn check_live(&self, id: SpecId) -> Result<(), SpecError> {
+    pub(crate) fn check_live(&self, id: SpecId) -> Result<(), SpecError> {
         let index = id as usize;
         if index >= self.nodes.len() || self.nodes[index].component.is_none() {
             return Err(SpecError::Expired);

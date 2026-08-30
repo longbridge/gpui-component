@@ -51,8 +51,40 @@ use std::{
     time::Duration,
 };
 
+// Failures raised by registered components while a subtree is being built.
+//
+// `materialize_node` returns an element rather than a `Result`, because a
+// component that fails still has to leave something on screen for the rest of
+// the frame. A caller that materializes a subtree *on behalf of an adapter* —
+// a deferred slot factory, a temporary build — needs the failure instead, so it
+// opens a frame here and reads back the first error recorded under it. Nothing
+// outside this file may push or pop; `with_error_frame` is the only way in.
 thread_local! {
     static FACTORY_MATERIALIZE_ERRORS: RefCell<Vec<Option<anyhow::Error>>> = const { RefCell::new(Vec::new()) };
+}
+
+/// Runs `build`, turning the first registered-component failure inside it into
+/// an `Err`.
+fn with_error_frame(build: impl FnOnce() -> AnyElement) -> anyhow::Result<AnyElement> {
+    FACTORY_MATERIALIZE_ERRORS.with(|errors| errors.borrow_mut().push(None));
+    // Pops the frame if `build` unwinds, so a panic cannot leave the stack one
+    // frame deep for every later build on this thread.
+    struct Frame(bool);
+    impl Drop for Frame {
+        fn drop(&mut self) {
+            if !self.0 {
+                FACTORY_MATERIALIZE_ERRORS.with(|errors| {
+                    errors.borrow_mut().pop();
+                });
+            }
+        }
+    }
+    let mut frame = Frame(false);
+    let element = build();
+    let error = FACTORY_MATERIALIZE_ERRORS
+        .with(|errors| errors.borrow_mut().pop().expect("this frame was pushed"));
+    frame.0 = true;
+    error.map_or(Ok(element), Err)
 }
 
 fn materialize_factory_subtree(
@@ -63,34 +95,17 @@ fn materialize_factory_subtree(
     window: &mut Window,
     cx: &mut App,
 ) -> anyhow::Result<AnyElement> {
-    FACTORY_MATERIALIZE_ERRORS.with(|errors| errors.borrow_mut().push(None));
-    struct FactoryFrame(bool);
-    impl Drop for FactoryFrame {
-        fn drop(&mut self) {
-            if !self.0 {
-                FACTORY_MATERIALIZE_ERRORS.with(|errors| {
-                    errors.borrow_mut().pop();
-                });
-            }
-        }
-    }
-    let mut frame = FactoryFrame(false);
-    let element = materialize_node(
-        runtime,
-        Some(snapshot),
-        snapshot.arena(),
-        root,
-        inherited,
-        window,
-        cx,
-    );
-    let error = FACTORY_MATERIALIZE_ERRORS
-        .with(|errors| errors.borrow_mut().pop().expect("factory error frame"));
-    frame.0 = true;
-    match error {
-        Some(error) => Err(error),
-        None => Ok(element),
-    }
+    with_error_frame(|| {
+        materialize_node(
+            runtime,
+            Some(snapshot),
+            snapshot.arena(),
+            root,
+            inherited,
+            window,
+            cx,
+        )
+    })
 }
 
 use smallvec::SmallVec;
@@ -125,7 +140,7 @@ use crate::{
 /// Eight because a quote row is six cells and a wrapper, which is the widest
 /// ordinary shape; past that the spill is one allocation for a node that was
 /// always going to be expensive.
-type Children = SmallVec<[AnyElement; 8]>;
+use crate::component_registry::Children;
 
 /// The named slots a node's ops filled, in the order the script filled them.
 ///
@@ -134,10 +149,10 @@ type Children = SmallVec<[AnyElement; 8]>;
 /// trigger and a content, a number input fills three. Two inline covers every
 /// component bound today and every one on the way; a third is one allocation on
 /// a node that already carries whole subtrees.
-type Slots = SmallVec<[(&'static str, AnyElement); 2]>;
+use crate::component_registry::Slots;
 
 /// The same list before the slots are materialized.
-type SlotSpecs = SmallVec<[(&'static str, SpecId); 2]>;
+use crate::component_registry::SlotSpecs;
 
 /// The children of a node whose component takes a *typed* child.
 ///
@@ -675,27 +690,7 @@ pub(crate) fn try_materialize_subtree(
     window: &mut Window,
     cx: &mut App,
 ) -> anyhow::Result<AnyElement> {
-    FACTORY_MATERIALIZE_ERRORS.with(|errors| errors.borrow_mut().push(None));
-    struct Frame(bool);
-    impl Drop for Frame {
-        fn drop(&mut self) {
-            if !self.0 {
-                FACTORY_MATERIALIZE_ERRORS.with(|errors| {
-                    errors.borrow_mut().pop();
-                });
-            }
-        }
-    }
-    let mut frame = Frame(false);
-    let element = materialize_subtree(runtime, arena, root, window, cx);
-    let error = FACTORY_MATERIALIZE_ERRORS.with(|errors| {
-        errors
-            .borrow_mut()
-            .pop()
-            .expect("temporary materialize error frame")
-    });
-    frame.0 = true;
-    error.map_or(Ok(element), Err)
+    with_error_frame(|| materialize_subtree(runtime, arena, root, window, cx))
 }
 
 /// Materializes one node, carrying the text color down the description.
@@ -885,31 +880,31 @@ fn materialize_registered_component(
             (*child, name)
         })
         .collect();
-    let slot_factories = snapshot
-        .into_iter()
-        .flat_map(|snapshot| {
-            slot_specs.iter().map(move |(name, slot)| {
-                let snapshot = snapshot.clone();
-                let runtime = Rc::downgrade(runtime);
-                let slot = *slot;
-                (
-                    *name,
-                    crate::ComponentElementFactory::new(move |window, cx| {
-                        let runtime = runtime.upgrade().ok_or_else(|| {
-                            anyhow::anyhow!("component element factory runtime has been released")
-                        })?;
-                        anyhow::ensure!(
-                            snapshot.belongs_to(&runtime),
-                            "component element factory belongs to a different runtime"
-                        );
-                        materialize_factory_subtree(
-                            &runtime, &snapshot, slot, inherited, window, cx,
-                        )
-                    }),
-                )
-            })
+    // A factory leases the snapshot and allocates an `Rc` per slot, and most
+    // adapters read their slots eagerly. So the request is handed the recipe
+    // rather than the product, and builds one only for a slot actually asked
+    // for by name.
+    let slot_factory_specs: crate::component_registry::SlotSpecs = match snapshot {
+        Some(_) => slot_specs.iter().copied().collect(),
+        None => SmallVec::new(),
+    };
+    let make_slot_factory = |slot: SpecId| {
+        let snapshot = snapshot.cloned();
+        let runtime = Rc::downgrade(runtime);
+        crate::ComponentElementFactory::new(move |window, cx| {
+            let runtime = runtime.upgrade().ok_or_else(|| {
+                anyhow::anyhow!("component element factory runtime has been released")
+            })?;
+            let snapshot = snapshot
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("component element factory has no snapshot"))?;
+            anyhow::ensure!(
+                snapshot.belongs_to(&runtime),
+                "component element factory belongs to a different runtime"
+            );
+            materialize_factory_subtree(&runtime, snapshot, slot, inherited, window, cx)
         })
-        .collect();
+    };
     let mut request =
         crate::MaterializeRequest::new(crate::component_registry::MaterializeRequestInit {
             component_name: component.name(),
@@ -918,17 +913,18 @@ fn materialize_registered_component(
             runtime,
             resolve_element: &mut resolve_element,
             style: refinement,
-            children: children.into_vec(),
+            children,
             child_specs,
-            slots: slots.into_vec(),
-            slot_factories,
+            slots,
+            slot_factory_specs,
+            make_slot_factory: &make_slot_factory,
             disabled: behavior.disabled,
             selected: behavior.selected,
             on_click: behavior.on_click,
             application_owner: snapshot.and_then(RenderSnapshot::application_owner),
         });
     request.attach_render_authority(window, cx);
-    match descriptor.materializer.materialize(request) {
+    match descriptor.materializer().materialize(request) {
         Ok(element) => element,
         Err(error) => {
             tracing::error!("failed to materialize `{}`: {error:#}", component.name());

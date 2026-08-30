@@ -1,22 +1,21 @@
+use super::Empty;
 use super::common::positive_usize;
-use super::common::{TypedChildElement, require_child, take_element};
+use super::common::{TypedChildElement, take_element};
+use super::require_child;
+use gpui_component::{
+    Sizable as _, Size,
+    table::{
+        Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, TableHeader, TableRow,
+    },
+};
 use gpui_shell::{
     ArgumentDescriptor, ArgumentSchema, ComponentArgument, ComponentDescriptor,
     ComponentMaterializer, ComponentPayload, ComponentRegistry, ConstructorDescriptor,
-    MaterializeRequest, MethodDescriptor, RegistryError, TypeScriptDescriptor, anyhow,
+    MaterializeRequest, MethodDescriptor, RegistryError, anyhow,
     gpui::{self, IntoElement as _, ParentElement as _, Refineable as _, Styled as _},
-    gpui_component::{
-        Sizable as _, Size,
-        table::{
-            Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, TableHeader,
-            TableRow,
-        },
-    },
 };
 use std::sync::Arc;
 
-#[derive(Clone, Copy)]
-struct Empty;
 #[derive(Clone)]
 enum TableOp {
     AccessibilityLabel(String),
@@ -35,10 +34,10 @@ fn take_typed<T: gpui::IntoElement + 'static>(
     expected: &'static str,
 ) -> anyhow::Result<Vec<T>> {
     request
-        .take_typed_children()
+        .take_typed_children()?
         .into_iter()
         .map(|mut child| {
-            require_child(parent, expected, child.component_name())?;
+            require_child(parent, child.component_name(), &[expected])?;
             let mut element = request.materialize_child(&mut child)?;
             take_element::<T>(&mut element, expected)
         })
@@ -95,7 +94,7 @@ impl ComponentMaterializer for RowMaterializer {
             .payload()
             .downcast_ref::<Empty>()
             .ok_or_else(|| anyhow::anyhow!("TableRow received an incompatible payload"))?;
-        let children = request.take_typed_children();
+        let children = request.take_typed_children()?;
         let mut row = TableRow::new();
         row.style().refine(&request.take_style());
         for mut child in children {
@@ -108,7 +107,7 @@ impl ComponentMaterializer for RowMaterializer {
                     row.child(take_element::<TableCell>(&mut element, "TableCell")?)
                 }
                 actual => {
-                    require_child("TableRow", "TableHead or TableCell", actual)?;
+                    require_child("TableRow", actual, &["TableHead", "TableCell"])?;
                     unreachable!()
                 }
             };
@@ -134,7 +133,7 @@ macro_rules! leaf_materializer {
                     .filter_map(|method| method.payload().downcast_ref::<CellOp>())
                 {
                     component = match op {
-                        CellOp::ColSpan(v) => component.col_span(*v),
+                        CellOp::ColSpan(value) => component.col_span(*value),
                         CellOp::Center => component.text_center(),
                         CellOp::Right => component.text_right(),
                     };
@@ -176,12 +175,12 @@ impl ComponentMaterializer for TableMaterializer {
             .filter_map(|method| method.payload().downcast_ref::<TableOp>())
         {
             table = match op {
-                TableOp::AccessibilityLabel(v) => table.accessibility_label(v.clone()),
-                TableOp::Size(v) => table.with_size(*v),
+                TableOp::AccessibilityLabel(value) => table.accessibility_label(value.clone()),
+                TableOp::Size(value) => table.with_size(*value),
             };
         }
         table.style().refine(&request.take_style());
-        for mut child in request.take_typed_children() {
+        for mut child in request.take_typed_children()? {
             let mut element = request.materialize_child(&mut child)?;
             table = match child.component_name() {
                 Some("TableHeader") => {
@@ -199,8 +198,8 @@ impl ComponentMaterializer for TableMaterializer {
                 actual => {
                     require_child(
                         "Table",
-                        "TableHeader, TableBody, TableFooter, or TableCaption",
                         actual,
+                        &["TableHeader", "TableBody", "TableFooter", "TableCaption"],
                     )?;
                     unreachable!()
                 }
@@ -214,35 +213,32 @@ fn empty_descriptor(
     name: &'static str,
     materializer: Arc<dyn ComponentMaterializer>,
 ) -> ComponentDescriptor {
-    ComponentDescriptor {
-        name,
-        constructors: vec![ConstructorDescriptor::new(name, vec![], |_| {
+    ComponentDescriptor::new(name, materializer)
+        .with_constructors(vec![ConstructorDescriptor::new(name, vec![], |_| {
             Ok(ComponentPayload::new(Empty))
-        })],
-        methods: vec![],
-        typescript: TypeScriptDescriptor::new("A typed structural child in a simple Table."),
-        materializer,
-    }
+        })])
+        .with_methods(vec![])
+        .with_documentation("A typed structural child in a simple Table.")
 }
 fn cell_methods() -> Vec<MethodDescriptor> {
     vec![
         MethodDescriptor::new(
             "colSpan",
             vec![ArgumentDescriptor::new("span", ArgumentSchema::Number)],
-            |a| match a {
-                [ComponentArgument::Number(v)] => cell_span(*v),
+            |arguments| match arguments {
+                [ComponentArgument::Number(value)] => cell_span(*value),
                 _ => Err("colSpan(span) expects a positive integer".into()),
             },
         )
-        .documented("Sets the number of columns occupied by the cell."),
+        .with_documentation("Sets the number of columns occupied by the cell."),
         MethodDescriptor::new("textCenter", vec![], |_| {
             Ok(ComponentPayload::new(CellOp::Center))
         })
-        .documented("Centers the cell content."),
+        .with_documentation("Centers the cell content."),
         MethodDescriptor::new("textRight", vec![], |_| {
             Ok(ComponentPayload::new(CellOp::Right))
         })
-        .documented("Right-aligns the cell content."),
+        .with_documentation("Right-aligns the cell content."),
     ]
 }
 fn cell_span(value: f64) -> Result<ComponentPayload, String> {
@@ -269,55 +265,54 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
             Arc::new(CellMaterializer) as Arc<dyn ComponentMaterializer>,
         ),
     ] {
-        let mut descriptor = empty_descriptor(name, materializer);
-        descriptor.methods = cell_methods();
-        registry.register(descriptor)?;
+        registry.register(empty_descriptor(name, materializer).with_methods(cell_methods()))?;
     }
     registry.register(empty_descriptor(
         "TableCaption",
         Arc::new(CaptionMaterializer),
     ))?;
-    registry.register(ComponentDescriptor {
-        name: "Table",
-        constructors: vec![ConstructorDescriptor::new("Table", vec![], |_| {
-            Ok(ComponentPayload::new(Empty))
-        })],
-        methods: vec![
-            MethodDescriptor::new(
-                "accessibilityLabel",
-                vec![ArgumentDescriptor::new("label", ArgumentSchema::String)],
-                |a| match a {
-                    [ComponentArgument::String(v)] => Ok(ComponentPayload::new(
-                        TableOp::AccessibilityLabel(v.clone()),
-                    )),
-                    _ => Err("Table.accessibilityLabel(label) expects a string".into()),
-                },
-            )
-            .documented("Sets the table's screen-reader accessible name."),
-            MethodDescriptor::new(
-                "size",
-                vec![ArgumentDescriptor::new(
-                    "size",
-                    ArgumentSchema::Enum(&["xsmall", "small", "medium", "large"]),
-                )],
-                |a| match a {
-                    [ComponentArgument::Enum(v)] => match v.as_str() {
-                        "xsmall" => Ok(ComponentPayload::new(TableOp::Size(Size::XSmall))),
-                        "small" => Ok(ComponentPayload::new(TableOp::Size(Size::Small))),
-                        "medium" => Ok(ComponentPayload::new(TableOp::Size(Size::Medium))),
-                        "large" => Ok(ComponentPayload::new(TableOp::Size(Size::Large))),
-                        _ => Err(format!("unsupported Table size `{v}`")),
+    registry.register(
+        ComponentDescriptor::new("Table", Arc::new(TableMaterializer))
+            .with_constructors(vec![ConstructorDescriptor::new("Table", vec![], |_| {
+                Ok(ComponentPayload::new(Empty))
+            })])
+            .with_methods(vec![
+                MethodDescriptor::new(
+                    "accessibilityLabel",
+                    vec![ArgumentDescriptor::new("label", ArgumentSchema::String)],
+                    |arguments| match arguments {
+                        [ComponentArgument::String(value)] => Ok(ComponentPayload::new(
+                            TableOp::AccessibilityLabel(value.clone()),
+                        )),
+                        _ => Err("Table.accessibilityLabel(label) expects a string".into()),
                     },
-                    _ => Err("Table.size(size) expects a size literal".into()),
-                },
-            )
-            .documented("Sets the table density and propagates it to typed descendants."),
-        ],
-        typescript: TypeScriptDescriptor::new(
-            "A simple stateless table composed from typed table-part children.",
-        ),
-        materializer: Arc::new(TableMaterializer),
-    })?;
+                )
+                .with_documentation("Sets the table's screen-reader accessible name."),
+                MethodDescriptor::new(
+                    "size",
+                    vec![ArgumentDescriptor::new(
+                        "size",
+                        ArgumentSchema::Enum(&["xsmall", "small", "medium", "large"]),
+                    )],
+                    |arguments| match arguments {
+                        [ComponentArgument::Enum(value)] => match value.as_str() {
+                            "xsmall" => Ok(ComponentPayload::new(TableOp::Size(Size::XSmall))),
+                            "small" => Ok(ComponentPayload::new(TableOp::Size(Size::Small))),
+                            "medium" => Ok(ComponentPayload::new(TableOp::Size(Size::Medium))),
+                            "large" => Ok(ComponentPayload::new(TableOp::Size(Size::Large))),
+                            _ => Err(format!("unsupported Table size `{value}`")),
+                        },
+                        _ => Err("Table.size(size) expects a size literal".into()),
+                    },
+                )
+                .with_documentation(
+                    "Sets the table density and propagates it to typed descendants.",
+                ),
+            ])
+            .with_documentation(
+                "A simple stateless table composed from typed table-part children.",
+            ),
+    )?;
     Ok(())
 }
 

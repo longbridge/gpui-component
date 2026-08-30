@@ -1,6 +1,0 @@
-# Deferred basic surfaces
-
-- `Image` is the GPUI `img` primitive, not a `gpui-component` constructor. Passing a script URL or filesystem path directly to `gpui::img` would bypass the shell network policy and application asset-root checks. It needs a shell-owned, policy-checked image-source token/resolver before this adapter can expose it.
-- `Setting` is infrastructure, not one renderable native type. The public module is a hierarchy of `SettingPage`, `SettingGroup`, `SettingItem`, and generic `SettingField<T>` values. A faithful binding needs shared typed-part carriers plus repeatable element factories for custom fields and explicit subscription/reset ownership.
-- `Settings` consumes that typed hierarchy. Registering the outer element alone would create an empty settings shell and falsely claim the story surface. It is deferred with `Setting` until the hierarchy above can be represented end to end.
-- A `DropdownButton` cannot currently accept an already registered `Button`: the existing Button materializer returns an erased `AnyElement`, not a typed native `Button`. This batch therefore exposes an honest adapter-owned labeled Button half and callback menu items; accepting an arbitrary registered Button needs a shared public typed-child carrier contract.

@@ -15,10 +15,6 @@
 //! `gpui-base/inspector`, which Cargo unifies across the embedding application's
 //! dependency graph.
 
-// Lets the shared CLI host use the same `gpui_shell::...` paths whether it is
-// compiled as this library module or as the standalone binary crate.
-extern crate self as gpui_shell;
-
 // # The surface a host may rely on
 //
 // Everything `pub` here is a promise. That is the point of the list being
@@ -65,7 +61,6 @@ pub mod dock;
 pub(crate) mod engine;
 pub(crate) mod entities;
 pub(crate) mod error;
-#[path = "bin/gpui-shell.rs"]
 pub mod host;
 pub mod host_modules;
 pub(crate) mod materialize;
@@ -97,7 +92,6 @@ pub use component_registry::*;
 pub use engine::{LoadedApplication, ShellRuntime};
 pub use error::ShellError;
 pub use gpui;
-pub use gpui_component;
 pub use host_modules::{
     HostArguments, HostError, HostModule, HostObject, HostResult, HostValue, RESERVED_SPECIFIERS,
 };
@@ -221,12 +215,13 @@ pub fn set_development_mode(enabled: bool) {
     engine::set_development_mode(enabled);
 }
 
-/// Initializes GPUI Component (which transitively initializes `gpui-base`) and
-/// the shell style reflection table.
+/// Initializes the base layer and style reflection table.
 ///
-/// Must be called once at application startup, before any script runs.
+/// Must be called once at application startup, before any script runs. A host
+/// that also renders a concrete component catalog initializes that catalog
+/// itself; the runtime deliberately knows nothing about one.
 pub fn init(cx: &mut App) {
-    gpui_component::init(cx);
+    gpui_base::init(cx);
     style::init();
 }
 
@@ -235,13 +230,10 @@ mod init_tests {
     use gpui::TestAppContext;
 
     #[gpui::test]
-    fn shell_init_installs_component_and_base_globals(cx: &mut TestAppContext) {
+    fn shell_init_installs_the_base_globals_without_a_component_catalog(cx: &mut TestAppContext) {
         cx.update(super::init);
 
-        cx.read(|cx| {
-            assert!(cx.has_global::<gpui_component::Theme>());
-            assert!(cx.has_global::<gpui_base::Theme>());
-        });
+        cx.read(|cx| assert!(cx.has_global::<gpui_base::Theme>()));
     }
 }
 

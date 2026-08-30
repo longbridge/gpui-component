@@ -1,11 +1,10 @@
 use std::sync::Arc;
 
+use gpui_component::skeleton::Skeleton;
 use gpui_shell::{
     ComponentDescriptor, ComponentMaterializer, ComponentPayload, ComponentRegistry,
-    ConstructorDescriptor, MaterializeRequest, MethodDescriptor, RegistryError,
-    TypeScriptDescriptor, anyhow,
+    ConstructorDescriptor, MaterializeRequest, MethodDescriptor, RegistryError, anyhow,
     gpui::{self, IntoElement as _, Refineable as _, Styled as _},
-    gpui_component::skeleton::Skeleton,
 };
 
 #[derive(Clone, Copy)]
@@ -42,20 +41,21 @@ impl ComponentMaterializer for SkeletonMaterializer {
 }
 
 pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
-    registry.register(ComponentDescriptor {
-        name: "Skeleton",
-        constructors: vec![ConstructorDescriptor::new("Skeleton", Vec::new(), |_| {
-            Ok(ComponentPayload::new(SkeletonPayload))
-        })],
-        methods: vec![
-            MethodDescriptor::new("secondary", Vec::new(), |_| {
-                Ok(ComponentPayload::new(Secondary))
-            })
-            .documented("Uses the secondary skeleton color."),
-        ],
-        typescript: TypeScriptDescriptor::new("An animated loading placeholder."),
-        materializer: Arc::new(SkeletonMaterializer),
-    })?;
+    registry.register(
+        ComponentDescriptor::new("Skeleton", Arc::new(SkeletonMaterializer))
+            .with_constructors(vec![ConstructorDescriptor::new(
+                "Skeleton",
+                Vec::new(),
+                |_| Ok(ComponentPayload::new(SkeletonPayload)),
+            )])
+            .with_methods(vec![
+                MethodDescriptor::new("secondary", Vec::new(), |_| {
+                    Ok(ComponentPayload::new(Secondary))
+                })
+                .with_documentation("Uses the secondary skeleton color."),
+            ])
+            .with_documentation("An animated loading placeholder."),
+    )?;
     Ok(())
 }
 

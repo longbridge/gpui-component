@@ -1,5 +1,9 @@
 //! Structured, stateless component bindings.
 
+pub(super) use super::support::{Empty, bool_method, require_child};
+
+pub(super) use super::typed_child::{Carrier, take};
+
 use gpui_shell::{ComponentRegistry, RegistryError};
 
 pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
@@ -20,14 +24,17 @@ mod tests {
 
     #[test]
     fn registers_structured_components_in_dependency_order() {
-        let mut registry =
-            ComponentRegistry::new(gpui_shell::COMPONENT_REGISTRY_API_VERSION).unwrap();
+        let mut registry = ComponentRegistry::new(
+            gpui_shell::COMPONENT_REGISTRY_API_VERSION,
+            gpui_shell::DEFAULT_COMPONENT_MODULE,
+        )
+        .unwrap();
         register(&mut registry).unwrap();
         let frozen = registry.freeze().unwrap();
         assert_eq!(
             frozen
                 .descriptors()
-                .map(|descriptor| descriptor.name)
+                .map(|descriptor| descriptor.name())
                 .collect::<Vec<_>>(),
             [
                 "DescriptionItem",
@@ -45,11 +52,11 @@ mod tests {
             ]
         );
         assert!(frozen.descriptors().all(|descriptor| {
-            descriptor.typescript.documentation.is_some()
+            descriptor.documentation().is_some()
                 && descriptor
-                    .methods
+                    .methods()
                     .iter()
-                    .all(|method| method.documentation.is_some())
+                    .all(|method| method.documentation().is_some())
         }));
     }
 }

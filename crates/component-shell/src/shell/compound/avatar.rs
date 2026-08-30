@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
+use gpui_component::{Sizable as _, Size, avatar::Avatar};
 use gpui_shell::{
     ArgumentDescriptor, ArgumentSchema, ComponentArgument, ComponentDescriptor,
     ComponentMaterializer, ComponentPayload, ComponentRegistry, ConstructorDescriptor,
-    MaterializeRequest, MethodDescriptor, RegistryError, TypeScriptDescriptor, anyhow,
+    MaterializeRequest, MethodDescriptor, RegistryError, anyhow,
     gpui::{self, IntoElement as _, ParentElement as _, Refineable as _, Styled as _},
-    gpui_component::{Sizable as _, Size, avatar::Avatar},
 };
 
 #[derive(Clone, Copy)]
@@ -67,32 +67,31 @@ fn size_method() -> MethodDescriptor {
             _ => Err("Avatar.size(size) expects a size literal".into()),
         },
     )
-    .documented("Sets the avatar's semantic size.")
+    .with_documentation("Sets the avatar's semantic size.")
 }
 
 pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
-    registry.register(ComponentDescriptor {
-        name: "Avatar",
-        constructors: vec![ConstructorDescriptor::new("Avatar", vec![], |_| {
-            Ok(ComponentPayload::new(AvatarPayload))
-        })],
-        methods: vec![
-            MethodDescriptor::new(
-                "name",
-                vec![ArgumentDescriptor::new("name", ArgumentSchema::String)],
-                |args| match args {
-                    [ComponentArgument::String(name)] => {
-                        Ok(ComponentPayload::new(AvatarOp::Name(name.clone())))
-                    }
-                    _ => Err("Avatar.name(name) expects a string".into()),
-                },
-            )
-            .documented("Sets the person's name and generated initials fallback."),
-            size_method(),
-        ],
-        typescript: TypeScriptDescriptor::new("A circular avatar with a name-derived fallback."),
-        materializer: Arc::new(AvatarMaterializer),
-    })?;
+    registry.register(
+        ComponentDescriptor::new("Avatar", Arc::new(AvatarMaterializer))
+            .with_constructors(vec![ConstructorDescriptor::new("Avatar", vec![], |_| {
+                Ok(ComponentPayload::new(AvatarPayload))
+            })])
+            .with_methods(vec![
+                MethodDescriptor::new(
+                    "name",
+                    vec![ArgumentDescriptor::new("name", ArgumentSchema::String)],
+                    |args| match args {
+                        [ComponentArgument::String(name)] => {
+                            Ok(ComponentPayload::new(AvatarOp::Name(name.clone())))
+                        }
+                        _ => Err("Avatar.name(name) expects a string".into()),
+                    },
+                )
+                .with_documentation("Sets the person's name and generated initials fallback."),
+                size_method(),
+            ])
+            .with_documentation("A circular avatar with a name-derived fallback."),
+    )?;
     Ok(())
 }
 

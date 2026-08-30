@@ -1,16 +1,16 @@
 use std::sync::Arc;
 
+use gpui_component::{
+    Disableable as _, Selectable as _, Sizable as _,
+    button::{Button, ButtonVariants as _, Toggle, ToggleVariants as _},
+    checkbox::Checkbox,
+    switch::Switch,
+};
 use gpui_shell::{
     ArgumentDescriptor, ArgumentSchema, ComponentArgument, ComponentDescriptor,
     ComponentMaterializer, ComponentPayload, ComponentRegistry, ConstructorDescriptor,
-    MaterializeRequest, MethodDescriptor, RegistryError, TypeScriptDescriptor, anyhow,
+    MaterializeRequest, MethodDescriptor, RegistryError, anyhow,
     gpui::{self, ParentElement as _},
-    gpui_component::{
-        Disableable as _, Selectable as _, Sizable as _,
-        button::{Button, ButtonVariants as _, Toggle, ToggleVariants as _},
-        checkbox::Checkbox,
-        switch::Switch,
-    },
 };
 
 use super::support::{self, CommonOp};
@@ -20,7 +20,7 @@ struct IdPayload(String);
 
 #[derive(Clone)]
 enum ButtonOp {
-    Size(gpui_shell::gpui_component::Size),
+    Size(gpui_component::Size),
     Label(String),
     Tooltip(String),
     Loading(bool),
@@ -106,7 +106,7 @@ impl ComponentMaterializer for ButtonMaterializer {
 macro_rules! variant_method {
     ($name:literal, $variant:expr, $docs:literal) => {
         MethodDescriptor::new($name, Vec::new(), |_| Ok(ComponentPayload::new($variant)))
-            .documented($docs)
+            .with_documentation($docs)
     };
 }
 
@@ -123,7 +123,7 @@ fn button_string(
             _ => Err(format!("Button.{name} expects one string")),
         },
     )
-    .documented(docs)
+    .with_documentation(docs)
 }
 
 fn button_loading() -> MethodDescriptor {
@@ -137,7 +137,7 @@ fn button_loading() -> MethodDescriptor {
             _ => Err("Button.loading expects one boolean".into()),
         },
     )
-    .documented("Sets the loading presentation.")
+    .with_documentation("Sets the loading presentation.")
 }
 
 fn button_size() -> MethodDescriptor {
@@ -150,23 +150,23 @@ fn button_size() -> MethodDescriptor {
         |args| match args {
             [ComponentArgument::Enum(value)] => match value.as_str() {
                 "xsmall" => Ok(ComponentPayload::new(ButtonOp::Size(
-                    gpui_shell::gpui_component::Size::XSmall,
+                    gpui_component::Size::XSmall,
                 ))),
                 "small" => Ok(ComponentPayload::new(ButtonOp::Size(
-                    gpui_shell::gpui_component::Size::Small,
+                    gpui_component::Size::Small,
                 ))),
                 "medium" => Ok(ComponentPayload::new(ButtonOp::Size(
-                    gpui_shell::gpui_component::Size::Medium,
+                    gpui_component::Size::Medium,
                 ))),
                 "large" => Ok(ComponentPayload::new(ButtonOp::Size(
-                    gpui_shell::gpui_component::Size::Large,
+                    gpui_component::Size::Large,
                 ))),
                 _ => Err(format!("unsupported Button size `{value}`")),
             },
             _ => Err("Button.size expects a semantic size literal".into()),
         },
     )
-    .documented("Sets the semantic control size.")
+    .with_documentation("Sets the semantic control size.")
 }
 
 struct CheckboxMaterializer;
@@ -241,11 +241,22 @@ impl ComponentMaterializer for ToggleMaterializer {
     }
 }
 
-fn state_methods() -> Vec<MethodDescriptor> {
+fn state_methods(component: &'static str) -> Vec<MethodDescriptor> {
     vec![
-        support::string_method("label", "Sets the visible control label.", CommonOp::Label),
-        support::string_method("tooltip", "Sets concise hover help.", CommonOp::Tooltip),
+        support::string_method(
+            component,
+            "label",
+            "Sets the visible control label.",
+            CommonOp::Label,
+        ),
+        support::string_method(
+            component,
+            "tooltip",
+            "Sets concise hover help.",
+            CommonOp::Tooltip,
+        ),
         support::bool_method(
+            component,
             "checked",
             "Sets the controlled checked state.",
             CommonOp::Checked,
@@ -255,10 +266,9 @@ fn state_methods() -> Vec<MethodDescriptor> {
 }
 
 pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
-    registry.register(ComponentDescriptor {
-        name: "Button",
-        constructors: vec![id_constructor("Button")],
-        methods: vec![
+    registry.register(ComponentDescriptor::new("Button", Arc::new(ButtonMaterializer))
+.with_constructors(vec![id_constructor("Button")])
+.with_methods(vec![
             button_string("label", "Sets the visible button label.", ButtonOp::Label),
             button_string("tooltip", "Sets concise hover help.", ButtonOp::Tooltip),
             button_loading(),
@@ -272,12 +282,10 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
             variant_method!("ghost", ButtonOp::Ghost, "Uses the quiet ghost variant."),
             variant_method!("link", ButtonOp::Link, "Uses the link-like visual variant."),
             variant_method!("compact", ButtonOp::Compact, "Uses compact internal spacing."),
-        ],
-        typescript: TypeScriptDescriptor::new(
+        ])
+.with_documentation(
             "A stateless command button. Shell disabled, selected, children, style, and onClick operations are honored.",
-        ),
-        materializer: Arc::new(ButtonMaterializer),
-    })?;
+        ))?;
     for (name, materializer) in [
         (
             "Checkbox",
@@ -292,19 +300,16 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
             Arc::new(ToggleMaterializer) as Arc<dyn ComponentMaterializer>,
         ),
     ] {
-        let mut methods = state_methods();
+        let mut methods = state_methods(name);
         if name == "Toggle" {
             methods.push(support::outline_method());
         }
-        registry.register(ComponentDescriptor {
-            name,
-            constructors: vec![id_constructor(name)],
-            methods,
-            typescript: TypeScriptDescriptor::new(
+        registry.register(ComponentDescriptor::new(name, materializer)
+.with_constructors(vec![id_constructor(name)])
+.with_methods(methods)
+.with_documentation(
                 "A controlled stateless boolean control. Provide checked explicitly; boolean change callbacks are not exposed until the shell callback facade can carry values.",
-            ),
-            materializer,
-        })?;
+            ))?;
     }
     Ok(())
 }

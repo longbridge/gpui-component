@@ -1,15 +1,28 @@
 //! JavaScript component bindings for [`gpui_shell`].
 //!
-//! This crate is the only place concrete `gpui-component` registrations belong.
-//! It deliberately depends on `gpui-shell`; the runtime stays usable without
-//! the complete component catalog.
+//! This crate is the only place concrete `gpui-component` knowledge belongs.
+//! The dependency edge runs one way: this crate uses both `gpui-shell` and
+//! `gpui-component`, and the runtime depends on neither this crate nor the
+//! component library, so it stays usable without a component catalog.
 
 mod shell;
 
+/// Initializes the component catalog and the shell runtime it registers into.
+///
+/// Must be called once at application startup, before any script runs. This is
+/// the entry point for a host that renders this catalog; [`gpui_shell::init`]
+/// alone installs the base layer without any concrete components.
+pub fn init(cx: &mut gpui_shell::gpui::App) {
+    gpui_component::init(cx);
+    gpui_shell::init(cx);
+}
+
 /// Builds and freezes the currently registered component catalog owned by this adapter.
 pub fn components() -> Result<gpui_shell::FrozenComponentRegistry, gpui_shell::RegistryError> {
-    let mut registry =
-        gpui_shell::ComponentRegistry::new(gpui_shell::COMPONENT_REGISTRY_API_VERSION)?;
+    let mut registry = gpui_shell::ComponentRegistry::new(
+        gpui_shell::COMPONENT_REGISTRY_API_VERSION,
+        gpui_shell::DEFAULT_COMPONENT_MODULE,
+    )?;
     register(&mut registry)?;
     registry.freeze()
 }
@@ -48,8 +61,8 @@ mod tests {
     use gpui_shell::{ArgumentSchema, COMPONENT_REGISTRY_API_VERSION, ComponentRegistry};
 
     #[test]
-    fn normal_dependency_surface_is_only_gpui_shell() {
-        let manifest = include_str!("../Cargo.toml");
+    fn the_runtime_does_not_depend_on_the_component_library() {
+        let manifest = include_str!("../../shell/Cargo.toml");
         let dependencies = manifest
             .split_once("[dependencies]")
             .expect("dependencies table")
@@ -57,30 +70,28 @@ mod tests {
             .split_once("[dev-dependencies]")
             .expect("dev-dependencies table")
             .0;
-        let names = dependencies
-            .lines()
-            .filter_map(|line| line.split_once('=').map(|(name, _)| name.trim()))
-            .map(|name| name.strip_suffix(".workspace").unwrap_or(name))
-            .filter(|name| !name.is_empty())
-            .collect::<Vec<_>>();
 
-        assert_eq!(names, ["gpui-shell"]);
+        assert!(
+            !dependencies.contains("gpui-component"),
+            "`gpui-shell` must stay free of the concrete component catalog; \
+             the adapter depends on both, not the runtime on one"
+        );
     }
 
-    #[test]
-    fn shell_reexports_the_adapter_component_and_rendering_dependencies() {
-        fn accepts_component(_: gpui_shell::gpui_component::Size) {}
-        fn accepts_element(_: gpui_shell::gpui::AnyElement) {}
+    #[gpui::test]
+    fn init_installs_the_component_catalog_globals(cx: &mut gpui::TestAppContext) {
+        cx.update(crate::init);
 
-        accepts_component(gpui_shell::gpui_component::Size::Medium);
-        accepts_element(gpui_shell::gpui::IntoElement::into_any_element(
-            gpui_shell::gpui::div(),
-        ));
+        cx.read(|cx| assert!(cx.has_global::<gpui_component::Theme>()));
     }
 
     #[test]
     fn register_exposes_the_first_leaf_component_batch_in_stable_order() {
-        let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+        let mut registry = ComponentRegistry::new(
+            COMPONENT_REGISTRY_API_VERSION,
+            gpui_shell::DEFAULT_COMPONENT_MODULE,
+        )
+        .unwrap();
 
         crate::register(&mut registry).unwrap();
 
@@ -90,7 +101,7 @@ mod tests {
             descriptors
                 .iter()
                 .take(3)
-                .map(|descriptor| descriptor.name)
+                .map(|descriptor| descriptor.name())
                 .collect::<Vec<_>>(),
             ["Spinner", "Separator", "Skeleton"]
         );
@@ -100,9 +111,9 @@ mod tests {
                 .take(3)
                 .flat_map(|descriptor| {
                     descriptor
-                        .constructors
+                        .constructors()
                         .iter()
-                        .map(|constructor| constructor.export)
+                        .map(|constructor| constructor.export())
                 })
                 .collect::<Vec<_>>(),
             [
@@ -114,10 +125,14 @@ mod tests {
                 "Skeleton",
             ]
         );
+        let undocumented = descriptors
+            .iter()
+            .filter(|descriptor| descriptor.documentation().is_none())
+            .map(|descriptor| descriptor.name())
+            .collect::<Vec<_>>();
         assert!(
-            descriptors
-                .iter()
-                .all(|descriptor| descriptor.typescript.documentation.is_some())
+            undocumented.is_empty(),
+            "every registered component needs documentation: {undocumented:?}"
         );
     }
 
@@ -132,19 +147,23 @@ mod tests {
 
     #[test]
     fn leaf_descriptors_publish_only_closed_honest_method_schemas() {
-        let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+        let mut registry = ComponentRegistry::new(
+            COMPONENT_REGISTRY_API_VERSION,
+            gpui_shell::DEFAULT_COMPONENT_MODULE,
+        )
+        .unwrap();
         crate::register(&mut registry).unwrap();
         let frozen = registry.freeze().unwrap();
 
         let spinner = frozen
             .descriptors()
-            .find(|item| item.name == "Spinner")
+            .find(|item| item.name() == "Spinner")
             .unwrap();
         assert_eq!(
             spinner
-                .methods
+                .methods()
                 .iter()
-                .map(|method| (method.name, method.arguments.as_slice()))
+                .map(|method| (method.name(), method.arguments()))
                 .collect::<Vec<_>>(),
             [
                 (
@@ -184,26 +203,26 @@ mod tests {
 
         let separator = frozen
             .descriptors()
-            .find(|item| item.name == "Separator")
+            .find(|item| item.name() == "Separator")
             .unwrap();
         assert_eq!(
             separator
-                .methods
+                .methods()
                 .iter()
-                .map(|method| method.name)
+                .map(|method| method.name())
                 .collect::<Vec<_>>(),
             ["label", "color", "dashed"]
         );
 
         let skeleton = frozen
             .descriptors()
-            .find(|item| item.name == "Skeleton")
+            .find(|item| item.name() == "Skeleton")
             .unwrap();
         assert_eq!(
             skeleton
-                .methods
+                .methods()
                 .iter()
-                .map(|method| method.name)
+                .map(|method| method.name())
                 .collect::<Vec<_>>(),
             ["secondary"]
         );
@@ -211,10 +230,10 @@ mod tests {
             .descriptors()
             .flat_map(|descriptor| {
                 descriptor
-                    .methods
+                    .methods()
                     .iter()
-                    .filter(|method| method.documentation.is_none())
-                    .map(move |method| format!("{}.{}", descriptor.name, method.name))
+                    .filter(|method| method.documentation().is_none())
+                    .map(move |method| format!("{}.{}", descriptor.name(), method.name()))
             })
             .collect::<Vec<_>>();
         assert!(
@@ -225,7 +244,11 @@ mod tests {
 
     #[test]
     fn runtime_typings_include_leaf_exports_and_methods() {
-        let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+        let mut registry = ComponentRegistry::new(
+            COMPONENT_REGISTRY_API_VERSION,
+            gpui_shell::DEFAULT_COMPONENT_MODULE,
+        )
+        .unwrap();
         crate::register(&mut registry).unwrap();
         let runtime =
             gpui_shell::ShellRuntime::new_isolated_with_components(registry.freeze().unwrap())

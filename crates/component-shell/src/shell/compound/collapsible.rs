@@ -1,8 +1,8 @@
+use gpui_component::collapsible::Collapsible;
 use gpui_shell::{
     ArgumentDescriptor, ArgumentSchema, ComponentArgument, ComponentDescriptor,
     ComponentMaterializer, ComponentPayload, ComponentRegistry, ConstructorDescriptor,
-    MaterializeRequest, MethodDescriptor, RegistryError, TypeScriptDescriptor, anyhow, gpui,
-    gpui_component::collapsible::Collapsible,
+    MaterializeRequest, MethodDescriptor, RegistryError, anyhow, gpui,
 };
 use std::sync::Arc;
 #[derive(Clone, Copy)]
@@ -25,50 +25,51 @@ impl ComponentMaterializer for CollapsibleMaterializer {
             .filter_map(|m| m.payload().downcast_ref::<CollapsibleOp>())
         {
             component = match op {
-                CollapsibleOp::Open(v) => component.open(*v),
+                CollapsibleOp::Open(value) => component.open(*value),
                 CollapsibleOp::MotionId(id) => component.motion_id(id.clone()),
             };
         }
-        if let Some(content) = request.take_slot("content") {
+        if let Some(content) = request.take_slot("content")? {
             component = component.content(content);
         }
         request.finish(component)
     }
 }
 pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
-    registry.register(ComponentDescriptor {
-        name: "Collapsible",
-        constructors: vec![ConstructorDescriptor::new("Collapsible", vec![], |_| {
-            Ok(ComponentPayload::new(CollapsiblePayload))
-        })],
-        methods: vec![
-            MethodDescriptor::new(
-                "open",
-                vec![ArgumentDescriptor::new("open", ArgumentSchema::Boolean)],
-                |a| match a {
-                    [ComponentArgument::Boolean(v)] => {
-                        Ok(ComponentPayload::new(CollapsibleOp::Open(*v)))
-                    }
-                    _ => Err("Collapsible.open(open) expects a boolean".into()),
-                },
-            )
-            .documented("Controls whether the content slot is revealed."),
-            MethodDescriptor::new(
-                "motionId",
-                vec![ArgumentDescriptor::new("id", ArgumentSchema::String)],
-                |a| match a {
-                    [ComponentArgument::String(v)] => {
-                        Ok(ComponentPayload::new(CollapsibleOp::MotionId(v.clone())))
-                    }
-                    _ => Err("Collapsible.motionId(id) expects a string".into()),
-                },
-            )
-            .documented("Adds stable identity for a reversible measured reveal."),
-        ],
-        typescript: TypeScriptDescriptor::new(
-            "A trigger container with optional named `content` reveal content.",
-        ),
-        materializer: Arc::new(CollapsibleMaterializer),
-    })?;
+    registry.register(
+        ComponentDescriptor::new("Collapsible", Arc::new(CollapsibleMaterializer))
+            .with_constructors(vec![ConstructorDescriptor::new(
+                "Collapsible",
+                vec![],
+                |_| Ok(ComponentPayload::new(CollapsiblePayload)),
+            )])
+            .with_methods(vec![
+                MethodDescriptor::new(
+                    "open",
+                    vec![ArgumentDescriptor::new("open", ArgumentSchema::Boolean)],
+                    |arguments| match arguments {
+                        [ComponentArgument::Boolean(value)] => {
+                            Ok(ComponentPayload::new(CollapsibleOp::Open(*value)))
+                        }
+                        _ => Err("Collapsible.open(open) expects a boolean".into()),
+                    },
+                )
+                .with_documentation("Controls whether the content slot is revealed."),
+                MethodDescriptor::new(
+                    "motionId",
+                    vec![ArgumentDescriptor::new("id", ArgumentSchema::String)],
+                    |arguments| match arguments {
+                        [ComponentArgument::String(value)] => Ok(ComponentPayload::new(
+                            CollapsibleOp::MotionId(value.clone()),
+                        )),
+                        _ => Err("Collapsible.motionId(id) expects a string".into()),
+                    },
+                )
+                .with_documentation("Adds stable identity for a reversible measured reveal."),
+            ])
+            .with_documentation(
+                "A trigger container with optional named `content` reveal content.",
+            ),
+    )?;
     Ok(())
 }

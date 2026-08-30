@@ -10,22 +10,21 @@
 //! can provide an honest searchable-list delegate rather than fabricated
 //! options.
 
+use gpui_component::{
+    Disableable as _,
+    calendar::{Calendar, CalendarState},
+    color_picker::{ColorPicker, ColorPickerState},
+    date_picker::{DatePicker, DatePickerState},
+    input::{Input, InputState, NumberInput, OtpInput, OtpState},
+    slider::{Slider, SliderState},
+};
 use gpui_shell::{
     ArgumentDescriptor, ArgumentSchema, ComponentArgument, ComponentDescriptor,
     ComponentMaterializer, ComponentPayload, ComponentRegistry, ConstructorDescriptor,
-    MaterializeRequest, MethodDescriptor, RegistryError, StateDescriptor, TypeScriptDescriptor,
-    anyhow,
+    MaterializeRequest, MethodDescriptor, RegistryError, StateDescriptor, anyhow,
     gpui::{
         self, AppContext as _, Entity, IntoElement as _, ParentElement as _, Refineable as _,
         Styled as _,
-    },
-    gpui_component::{
-        Disableable as _,
-        calendar::{Calendar, CalendarState},
-        color_picker::{ColorPicker, ColorPickerState},
-        date_picker::{DatePicker, DatePickerState},
-        input::{Input, InputState, NumberInput, OtpInput, OtpState},
-        slider::{Slider, SliderState},
     },
 };
 use std::sync::Arc;
@@ -36,17 +35,20 @@ mod tests {
 
     #[test]
     fn retained_forms_publish_matching_state_and_component_contracts() {
-        let mut registry =
-            ComponentRegistry::new(gpui_shell::COMPONENT_REGISTRY_API_VERSION).unwrap();
+        let mut registry = ComponentRegistry::new(
+            gpui_shell::COMPONENT_REGISTRY_API_VERSION,
+            gpui_shell::DEFAULT_COMPONENT_MODULE,
+        )
+        .unwrap();
         register(&mut registry).unwrap();
         let frozen = registry.freeze().unwrap();
         let states = frozen
             .states()
-            .map(|state| state.export)
+            .map(|state| state.export())
             .collect::<Vec<_>>();
         let components = frozen
             .descriptors()
-            .map(|descriptor| descriptor.name)
+            .map(|descriptor| descriptor.name())
             .collect::<Vec<_>>();
 
         assert_eq!(
@@ -72,34 +74,37 @@ mod tests {
                 "DatePicker"
             ]
         );
-        assert!(frozen.states().all(|state| state.documentation.is_some()));
+        assert!(frozen.states().all(|state| state.documentation().is_some()));
         assert!(frozen.descriptors().all(|descriptor| {
-            descriptor.typescript.documentation.is_some()
+            descriptor.documentation().is_some()
                 && descriptor
-                    .methods
+                    .methods()
                     .iter()
-                    .all(|method| method.documentation.is_some())
+                    .all(|method| method.documentation().is_some())
         }));
     }
 
     #[test]
     fn state_arguments_are_closed_and_component_state_kinds_match() {
-        let mut registry =
-            ComponentRegistry::new(gpui_shell::COMPONENT_REGISTRY_API_VERSION).unwrap();
+        let mut registry = ComponentRegistry::new(
+            gpui_shell::COMPONENT_REGISTRY_API_VERSION,
+            gpui_shell::DEFAULT_COMPONENT_MODULE,
+        )
+        .unwrap();
         register(&mut registry).unwrap();
         let frozen = registry.freeze().unwrap();
 
         let otp_state = frozen
             .states()
-            .find(|state| state.export == "OtpState")
+            .find(|state| state.export() == "OtpState")
             .unwrap();
-        assert_eq!(otp_state.arguments[0].schema, ArgumentSchema::Number);
+        assert_eq!(otp_state.arguments()[0].schema(), &ArgumentSchema::Number);
         for descriptor in frozen.descriptors() {
-            let constructor = &descriptor.constructors[0];
-            assert_eq!(constructor.arguments.len(), 1);
+            let constructor = &descriptor.constructors()[0];
+            assert_eq!(constructor.arguments().len(), 1);
             assert!(matches!(
-                constructor.arguments[0].schema,
-                ArgumentSchema::Entity(_)
+                constructor.arguments()[0].schema(),
+                &ArgumentSchema::Entity(_)
             ));
         }
     }
@@ -381,7 +386,7 @@ fn disabled_method(owner: &'static str) -> MethodDescriptor {
         vec![ArgumentDescriptor::new("disabled", ArgumentSchema::Boolean)],
         move |arguments| bool_op(arguments, &format!("{owner}.disabled"), FormOp::Disabled),
     )
-    .documented("Controls whether the form control accepts interaction.")
+    .with_documentation("Controls whether the form control accepts interaction.")
 }
 
 fn placeholder_method(owner: &'static str) -> MethodDescriptor {
@@ -399,7 +404,7 @@ fn placeholder_method(owner: &'static str) -> MethodDescriptor {
             )
         },
     )
-    .documented("Sets the empty-value prompt shown by the control.")
+    .with_documentation("Sets the empty-value prompt shown by the control.")
 }
 
 fn aria_label_method(owner: &'static str) -> MethodDescriptor {
@@ -408,7 +413,7 @@ fn aria_label_method(owner: &'static str) -> MethodDescriptor {
         vec![ArgumentDescriptor::new("label", ArgumentSchema::String)],
         move |arguments| string_op(arguments, &format!("{owner}.ariaLabel"), FormOp::AriaLabel),
     )
-    .documented("Sets the name announced by accessibility clients.")
+    .with_documentation("Sets the name announced by accessibility clients.")
 }
 
 fn component(
@@ -418,13 +423,10 @@ fn component(
     documentation: &'static str,
     materializer: impl ComponentMaterializer + 'static,
 ) -> ComponentDescriptor {
-    ComponentDescriptor {
-        name,
-        constructors: vec![state_constructor(name, state_kind)],
-        methods,
-        typescript: TypeScriptDescriptor::new(documentation),
-        materializer: Arc::new(materializer),
-    }
+    ComponentDescriptor::new(name, Arc::new(materializer))
+        .with_constructors(vec![state_constructor(name, state_kind)])
+        .with_methods(methods)
+        .with_documentation(documentation)
 }
 
 /// Registers retained form states and their delegate-free controls.
@@ -433,13 +435,13 @@ pub fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
         StateDescriptor::new("InputState", "InputState", vec![], |_, window, cx| {
             Ok(Box::new(cx.new(|cx| InputState::new(window, cx))))
         })
-        .documented("Retained editable text state shared by Input and NumberInput."),
+        .with_documentation("Retained editable text state shared by Input and NumberInput."),
     )?;
     registry.register_state(
         StateDescriptor::new("CalendarState", "CalendarState", vec![], |_, window, cx| {
             Ok(Box::new(cx.new(|cx| CalendarState::new(window, cx))))
         })
-        .documented("Retained calendar navigation and selection state."),
+        .with_documentation("Retained calendar navigation and selection state."),
     )?;
     registry.register_state(
         StateDescriptor::new(
@@ -451,13 +453,13 @@ pub fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
                 Ok(Box::new(cx.new(|cx| OtpState::new(length, window, cx))))
             },
         )
-        .documented("Retained fixed-length one-time-password editing state."),
+        .with_documentation("Retained fixed-length one-time-password editing state."),
     )?;
     registry.register_state(
         StateDescriptor::new("SliderState", "SliderState", vec![], |_, _, cx| {
             Ok(Box::new(cx.new(|_| SliderState::new())))
         })
-        .documented("Retained single-value slider state using the component defaults."),
+        .with_documentation("Retained single-value slider state using the component defaults."),
     )?;
     registry.register_state(
         StateDescriptor::new(
@@ -466,7 +468,7 @@ pub fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
             vec![],
             |_, window, cx| Ok(Box::new(cx.new(|cx| ColorPickerState::new(window, cx)))),
         )
-        .documented("Retained color selection and preview state."),
+        .with_documentation("Retained color selection and preview state."),
     )?;
     registry.register_state(
         StateDescriptor::new(
@@ -475,7 +477,7 @@ pub fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
             vec![],
             |_, window, cx| Ok(Box::new(cx.new(|cx| DatePickerState::new(window, cx)))),
         )
-        .documented("Retained single-date picker and calendar state."),
+        .with_documentation("Retained single-date picker and calendar state."),
     )?;
 
     registry.register(component(
@@ -507,7 +509,7 @@ pub fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
                         .map(|value| ComponentPayload::new(FormOp::Groups(value)))
                 },
             )
-            .documented("Splits the fixed-length code into the requested number of visual groups."),
+            .with_documentation("Splits the fixed-length code into the requested number of visual groups."),
             disabled_method("OtpInput"),
         ],
         "A retained fixed-length one-time-password field. Shell styles apply to its dedicated wrapper because OtpInput itself is not Styled; ordinary children are rejected.",
@@ -520,11 +522,11 @@ pub fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
             MethodDescriptor::new("vertical", vec![], |_| {
                 Ok(ComponentPayload::new(FormOp::Vertical))
             })
-            .documented("Uses a vertical track instead of the default horizontal track."),
+            .with_documentation("Uses a vertical track instead of the default horizontal track."),
             MethodDescriptor::new("reverse", vec![], |_| {
                 Ok(ComponentPayload::new(FormOp::Reverse))
             })
-            .documented("Reverses the filled side for a single-value slider."),
+            .with_documentation("Reverses the filled side for a single-value slider."),
             disabled_method("Slider"),
         ],
         "A retained numeric slider using SliderState defaults.",
@@ -539,7 +541,7 @@ pub fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
                 vec![ArgumentDescriptor::new("label", ArgumentSchema::String)],
                 |arguments| string_op(arguments, "ColorPicker.label", FormOp::Label),
             )
-            .documented("Sets the visible label above the picker."),
+            .with_documentation("Sets the visible label above the picker."),
             MethodDescriptor::new(
                 "accessibilityLabel",
                 vec![ArgumentDescriptor::new("label", ArgumentSchema::String)],
@@ -551,7 +553,7 @@ pub fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
                     )
                 },
             )
-            .documented("Sets the announced name independently of the visible label."),
+            .with_documentation("Sets the announced name independently of the visible label."),
         ],
         "A retained color picker with preview and commit behavior.",
         ColorPickerMaterializer,
@@ -568,7 +570,7 @@ pub fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
                         .map(|value| ComponentPayload::new(FormOp::Months(value)))
                 },
             )
-            .documented("Sets the positive number of adjacent months to display."),
+            .with_documentation("Sets the positive number of adjacent months to display."),
         ],
         "A retained calendar for date navigation and selection.",
         CalendarMaterializer,

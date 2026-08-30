@@ -1,17 +1,17 @@
+use gpui_component::{
+    IndexPath,
+    searchable_list::{SearchableListDelegate, SearchableListItem},
+    select::{Select, SelectEvent, SelectState},
+};
 use gpui_shell::{
     ArgumentDescriptor, ArgumentSchema, ComponentArgument, ComponentCallback,
     ComponentCallbackArgument, ComponentDataCallback, ComponentDataValue,
     ComponentDelegateSnapshot, ComponentDescriptor, ComponentElementCallback,
     ComponentMaterializer, ComponentPayload, ComponentRegistry, ConstructorDescriptor,
-    MaterializeRequest, MethodDescriptor, RegistryError, TypeScriptDescriptor, anyhow,
+    MaterializeRequest, MethodDescriptor, RegistryError, anyhow,
     gpui::{
         self, App, AppContext as _, Entity, IntoElement as _, ParentElement as _, Refineable as _,
         RenderOnce, SharedString, Styled as _, Subscription, Window,
-    },
-    gpui_component::{
-        IndexPath,
-        searchable_list::{SearchableListDelegate, SearchableListItem},
-        select::{Select, SelectEvent, SelectState},
     },
 };
 use std::{cell::RefCell, rc::Rc, sync::Arc};
@@ -238,7 +238,7 @@ impl ComponentMaterializer for Materializer {
             .ok_or_else(|| anyhow::anyhow!("Select incompatible payload"))?
             .clone();
         anyhow::ensure!(
-            request.take_typed_children().is_empty(),
+            request.take_typed_children()?.is_empty(),
             "Select does not accept children"
         );
         let rows = request.resolve_data_callback(&payload.rows)?;
@@ -262,6 +262,7 @@ impl ComponentMaterializer for Materializer {
 
 fn method(
     name: &'static str,
+    documentation: &'static str,
     schema: ArgumentSchema,
     make: fn(&ComponentArgument) -> Option<Op>,
 ) -> MethodDescriptor {
@@ -275,12 +276,12 @@ fn method(
                 .ok_or_else(|| format!("Select.{name} received an invalid value"))
         },
     )
+    .with_documentation(documentation)
 }
 
 pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
-    registry.register(ComponentDescriptor {
-        name: "Select",
-        constructors: vec![ConstructorDescriptor::new("Select", vec![
+    registry.register(ComponentDescriptor::new("Select", Arc::new(Materializer))
+.with_constructors(vec![ConstructorDescriptor::new("Select", vec![
             ArgumentDescriptor::new("id", ArgumentSchema::String),
             ArgumentDescriptor::new("rows", ArgumentSchema::Callback("() => readonly { id: string; label: string; disabled?: boolean }[]")),
             ArgumentDescriptor::new("renderRow", ArgumentSchema::Callback("(row: unknown) => Element | null")),
@@ -288,13 +289,11 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
         ], |args| match args {
             [ComponentArgument::String(id), rows @ ComponentArgument::Callback(_), render_row @ ComponentArgument::Callback(_), on_select @ ComponentArgument::Callback(_)] if !id.trim().is_empty() => Ok(ComponentPayload::new(Payload { id:id.clone(), rows:rows.clone(), render_row:render_row.clone(), on_select:on_select.clone() })),
             _ => Err("Select expects id, rows callback, row renderer, and selection callback".into()),
-        })],
-        methods: vec![
-            method("placeholder", ArgumentSchema::String, |arg| match arg { ComponentArgument::String(value) => Some(Op::Placeholder(value.clone())), _ => None }),
-            method("disabled", ArgumentSchema::Boolean, |arg| match arg { ComponentArgument::Boolean(value) => Some(Op::Disabled(*value)), _ => None }),
-        ],
-        typescript: TypeScriptDescriptor::new("Native retained single-value Select backed by immutable `{id,label,disabled?}` snapshots and a lazy row renderer."),
-        materializer: Arc::new(Materializer),
-    })?;
+        })])
+.with_methods(vec![
+            method("placeholder", "Sets the text shown while nothing is selected.", ArgumentSchema::String, |arg| match arg { ComponentArgument::String(value) => Some(Op::Placeholder(value.clone())), _ => None }),
+            method("disabled", "Disables the select.", ArgumentSchema::Boolean, |arg| match arg { ComponentArgument::Boolean(value) => Some(Op::Disabled(*value)), _ => None }),
+        ])
+.with_documentation("Native retained single-value Select backed by immutable `{id,label,disabled?}` snapshots and a lazy row renderer."))?;
     Ok(())
 }

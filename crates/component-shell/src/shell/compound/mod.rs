@@ -26,46 +26,54 @@ mod tests {
 
     #[test]
     fn registers_only_the_honestly_materializable_compound_batch() {
-        let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+        let mut registry = ComponentRegistry::new(
+            COMPONENT_REGISTRY_API_VERSION,
+            gpui_shell::DEFAULT_COMPONENT_MODULE,
+        )
+        .unwrap();
         register(&mut registry).unwrap();
         let frozen = registry.freeze().unwrap();
 
         assert_eq!(
             frozen
                 .descriptors()
-                .map(|descriptor| descriptor.name)
+                .map(|descriptor| descriptor.name())
                 .collect::<Vec<_>>(),
             ["Avatar", "Collapsible", "Pagination", "Progress", "Radio"]
         );
         assert!(
             frozen
                 .descriptors()
-                .flat_map(|descriptor| descriptor.methods.iter())
-                .all(|method| method.documentation.is_some())
+                .flat_map(|descriptor| descriptor.methods().iter())
+                .all(|method| method.documentation().is_some())
         );
     }
 
     #[test]
     fn numeric_and_controlled_arguments_have_closed_schemas() {
-        let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+        let mut registry = ComponentRegistry::new(
+            COMPONENT_REGISTRY_API_VERSION,
+            gpui_shell::DEFAULT_COMPONENT_MODULE,
+        )
+        .unwrap();
         register(&mut registry).unwrap();
         let frozen = registry.freeze().unwrap();
         let pagination = frozen
             .descriptors()
-            .find(|descriptor| descriptor.name == "Pagination")
+            .find(|descriptor| descriptor.name() == "Pagination")
             .unwrap();
 
         assert_eq!(
-            pagination.methods[0].arguments[0].schema,
-            ArgumentSchema::Number
+            pagination.methods()[0].arguments()[0].schema(),
+            &ArgumentSchema::Number
         );
         let radio = frozen
             .descriptors()
-            .find(|descriptor| descriptor.name == "Radio")
+            .find(|descriptor| descriptor.name() == "Radio")
             .unwrap();
         assert_eq!(
-            radio.methods[2].arguments[0].schema,
-            ArgumentSchema::Boolean
+            radio.methods()[2].arguments()[0].schema(),
+            &ArgumentSchema::Boolean
         );
     }
 }

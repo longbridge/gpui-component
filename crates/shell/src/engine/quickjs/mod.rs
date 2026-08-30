@@ -19,8 +19,6 @@ use std::{
     collections::{HashMap, HashSet, VecDeque},
     path::Path,
     rc::{Rc, Weak},
-    sync::atomic::{AtomicU64, Ordering},
-    time::{SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::{Context as _, Result, anyhow};
@@ -1156,7 +1154,7 @@ macro_rules! builtin_modules {
         /// is told which it is talking to rather than only that the import
         /// failed.
         fn builtin_specifiers() -> String {
-            [$($module::SPECIFIER),+, "gpui-component"]
+            [$($module::SPECIFIER),+, crate::DEFAULT_COMPONENT_MODULE]
                 .map(|specifier| format!("`{specifier}`"))
                 .join(", ")
         }
@@ -1169,7 +1167,7 @@ macro_rules! builtin_modules {
         /// [`crate::RESERVED_SPECIFIERS`] honest.
         #[cfg(test)]
         fn builtin_specifier_list() -> Vec<&'static str> {
-            vec![$($module::SPECIFIER),+, "gpui-component"]
+            vec![$($module::SPECIFIER),+, crate::DEFAULT_COMPONENT_MODULE]
         }
 
         /// Which module exports `name`, if any.
@@ -1192,6 +1190,27 @@ builtin_modules![
     (GpuiFpsModule, "gpui-fps", exports::GPUI_FPS),
 ];
 
+/// A value a script cannot derive, proving that a retained-state handle came
+/// from this runtime's own component module.
+///
+/// Retained state travels as an ordinary object, the way elements and entities
+/// already do, so the proof is what separates a handle the module produced from
+/// one a script wrote by hand. That means it must not be reconstructible from
+/// anything a script can observe — a process id, a clock, a counter — so it
+/// comes from `RandomState`'s OS-seeded keys, the same secret Rust relies on to
+/// keep hash maps from being collided on purpose.
+fn random_component_state_proof() -> String {
+    use std::hash::{BuildHasher as _, Hasher as _, RandomState};
+
+    let mut proof = String::from("gpui-shell-state-");
+    for round in 0..2u64 {
+        let mut hasher = RandomState::new().build_hasher();
+        hasher.write_u64(round);
+        proof.push_str(&format!("{:016x}", hasher.finish()));
+    }
+    proof
+}
+
 type AppEffectInstall =
     Box<dyn FnOnce(&mut App) -> crate::component_registry::ComponentAppEffectCleanup>;
 
@@ -1202,6 +1221,10 @@ struct InstalledAppEffect {
 
 struct ComponentAppEffectGeneration {
     application: Rc<ApplicationGeneration>,
+    /// The root view the effects were installed for. Retiring a generation
+    /// runs its cleanups through this view, so a reload does not have to wait
+    /// for the window to close before native state is restored.
+    view: WeakEntity<ScriptView>,
     pending: HashMap<String, String>,
     installed: HashMap<String, InstalledAppEffect>,
     _release: Subscription,
@@ -1427,17 +1450,9 @@ impl ShellRuntime {
         let context = JsContext::full(&js_runtime).map_err(js_setup_error)?;
 
         let app_modules = AppModules::default();
-        static NEXT_STATE_PROOF: AtomicU64 = AtomicU64::new(1);
-        let proof_sequence = NEXT_STATE_PROOF.fetch_add(1, Ordering::Relaxed);
-        let proof_time = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_nanos();
-        let component_state_proof = format!(
-            "gpui-shell-state-{}-{proof_time:x}-{proof_sequence:x}",
-            std::process::id()
-        );
+        let component_state_proof = random_component_state_proof();
         let component_module = RegisteredComponentModule {
+            specifier: components.module_specifier(),
             source: components.javascript_module_source(&component_state_proof),
         };
         // Order is the namespace policy. The runtime's own modules resolve
@@ -1593,6 +1608,7 @@ impl ShellRuntime {
             });
             slot.insert(ComponentAppEffectGeneration {
                 application: application.clone(),
+                view: view.downgrade(),
                 pending: HashMap::new(),
                 installed: HashMap::new(),
                 _release: release,
@@ -1664,6 +1680,42 @@ impl ShellRuntime {
         } else {
             cleanup(cx);
         }
+    }
+
+    /// Runs the cleanups an application generation installed, at the moment
+    /// that generation retires.
+    ///
+    /// Without this, a reload would leave the previous generation's native
+    /// state — menus, globals, window chrome — installed until the root view
+    /// was released, and the replacing generation could not reach it: keys are
+    /// scoped per generation, so the new install adds to the old rather than
+    /// replacing it. The release subscription remains the backstop for paths
+    /// that have no `App` to run cleanups against.
+    fn retire_component_app_effects(
+        &self,
+        application: &Rc<ApplicationGeneration>,
+        cx: &mut impl gpui::AppContext,
+    ) {
+        let application_key = Rc::as_ptr(application) as usize;
+        let Some(generation) = self
+            .component_app_effects
+            .borrow_mut()
+            .remove(&application_key)
+        else {
+            return;
+        };
+        let Some(view) = generation.view.upgrade() else {
+            // The view is already gone, so the release subscription has run.
+            return;
+        };
+        let mut generation = generation;
+        view.update(cx, |_, cx| {
+            for (_, mut effect) in generation.installed.drain() {
+                if let Some(cleanup) = effect.cleanup.take() {
+                    cleanup(cx);
+                }
+            }
+        });
     }
 
     fn cleanup_component_app_effects(&self, application_key: usize, cx: &mut App) {
@@ -1814,6 +1866,7 @@ impl ShellRuntime {
         application: &Rc<ApplicationGeneration>,
         cx: &mut impl gpui::AppContext,
     ) {
+        self.retire_component_app_effects(application, cx);
         self.release_component_states(application);
         let release = { self.entities().release_application(application) };
         self.purge_released_view_aliases(&release);
@@ -1822,6 +1875,11 @@ impl ShellRuntime {
         self.retire_templates(application);
     }
 
+    /// The `Drop`-path counterpart of [`Self::release_application_generation`].
+    ///
+    /// Application effects are deliberately left to the release subscription
+    /// here: their cleanups need an `App`, and this path exists precisely for
+    /// callers that have none.
     pub(crate) fn release_application_generation_without_context(
         &self,
         application: &Rc<ApplicationGeneration>,
@@ -2811,7 +2869,11 @@ impl ShellRuntime {
         // arena behind, so the snapshot owns its nodes outright rather than
         // sharing them with the next build.
         let arena = std::mem::take(&mut *self.arena.borrow_mut());
-        let snapshot = RenderSnapshot::new(self, callbacks, root, arena).with_application_owner(
+        let snapshot = RenderSnapshot::new(
+            self,
+            callbacks,
+            root,
+            arena,
             object.application_generation(),
             view.as_ref().map(Entity::downgrade),
         );
@@ -4686,6 +4748,9 @@ impl ShellRuntime {
 /// stops `import "../../../etc/passwd"` before it reaches the filesystem.
 #[derive(Clone)]
 struct RegisteredComponentModule {
+    /// The name this catalog answers to, or `None` for the empty catalog, which
+    /// answers to nothing.
+    specifier: Option<&'static str>,
     source: String,
 }
 
@@ -4697,7 +4762,7 @@ impl Resolver for RegisteredComponentModule {
         name: &str,
         _attributes: Option<ImportAttributes<'js>>,
     ) -> JsResult<String> {
-        if name == "gpui-component" {
+        if self.specifier == Some(name) {
             Ok(name.to_owned())
         } else {
             Err(JsError::new_resolving_message(
@@ -4716,7 +4781,7 @@ impl Loader for RegisteredComponentModule {
         name: &str,
         _attributes: Option<ImportAttributes<'js>>,
     ) -> JsResult<Module<'js, Declared>> {
-        if name != "gpui-component" {
+        if self.specifier != Some(name) {
             return Err(JsError::new_loading_message(
                 name,
                 "not the registered component module",
@@ -6532,8 +6597,8 @@ impl ShellRuntime {
                 behavior_count = index + 1;
             }
             for descriptor in self.components.descriptors() {
-                for method in &descriptor.methods {
-                    behaviors.set(behavior_count, method.name)?;
+                for method in descriptor.methods() {
+                    behaviors.set(behavior_count, method.name())?;
                     behavior_count += 1;
                 }
             }
@@ -7030,7 +7095,7 @@ impl ShellRuntime {
                 let state_runtime = runtime.clone();
                 let descriptor = descriptor.clone();
                 component_module.set(
-                    descriptor.export,
+                    descriptor.export(),
                     Func::from(move |ctx: Ctx<'_>, arguments: Arguments| -> JsResult<u64> {
                         let runtime = upgrade(&state_runtime, &ctx)?;
                         runtime.retained_state_transaction(&ctx, &descriptor, &arguments)
@@ -7038,25 +7103,25 @@ impl ShellRuntime {
                 )?;
             }
             for (id, descriptor) in self.components.registered() {
-                for constructor_descriptor in &descriptor.constructors {
+                for constructor_descriptor in descriptor.constructors() {
                     let constructor_runtime = runtime.clone();
-                    let component_name = descriptor.name;
+                    let component_name = descriptor.name();
                     let constructor = constructor_descriptor.clone();
                     component_module.set(
-                        constructor_descriptor.export,
+                        constructor_descriptor.export(),
                         Func::from(move |ctx: Ctx<'_>, arguments: Arguments| -> JsResult<SpecId> {
                             let runtime = upgrade(&constructor_runtime, &ctx)?;
-                            if let Some(deprecation) = &constructor.deprecation {
+                            if let Some(deprecation) = &constructor.deprecation() {
                                 runtime.warn_deprecated_export(
-                                    constructor.export,
-                                    deprecation.replacement,
-                                    deprecation.message,
+                                    constructor.export(),
+                                    deprecation.replacement(),
+                                    deprecation.message(),
                                 );
                             }
                             let payload = runtime.component_payload_transaction(
                                 &ctx,
-                                constructor.export,
-                                &constructor.arguments,
+                                constructor.export(),
+                                &constructor.arguments(),
                                 &arguments,
                                 |arguments| constructor.payload(arguments),
                             )?;
@@ -7198,13 +7263,13 @@ impl ShellRuntime {
         if registered_common_behavior && let Some(descriptor) = registered_method.as_ref() {
             self.arena
                 .borrow()
-                .can_push_op(id)
+                .check_live(id)
                 .map_err(|error| Exception::throw_type(ctx, &error.to_string()))?;
             let mut callback = None;
             self.component_payload_transaction(
                 ctx,
-                descriptor.name,
-                &descriptor.arguments,
+                descriptor.name(),
+                descriptor.arguments(),
                 &args,
                 |arguments| {
                     if method == "on_click"
@@ -7231,12 +7296,12 @@ impl ShellRuntime {
         if !registered_common_behavior && let Some(descriptor) = registered_method {
             self.arena
                 .borrow()
-                .can_push_op(id)
+                .check_live(id)
                 .map_err(|error| Exception::throw_type(ctx, &error.to_string()))?;
             let payload = self.component_payload_transaction(
                 ctx,
-                descriptor.name,
-                &descriptor.arguments,
+                descriptor.name(),
+                descriptor.arguments(),
                 &args,
                 |arguments| descriptor.record(arguments),
             )?;
@@ -7245,7 +7310,7 @@ impl ShellRuntime {
                 self.push_op(
                     id,
                     SpecOp::RegisteredMethod(crate::RecordedComponentMethod::new(
-                        descriptor.name,
+                        descriptor.name(),
                         payload,
                     )),
                 ),
@@ -7783,9 +7848,9 @@ impl ShellRuntime {
         let component_id = self.registered_component_id(id)?;
         self.components
             .descriptor(component_id)?
-            .methods
+            .methods()
             .iter()
-            .find(|descriptor| descriptor.name == method)
+            .find(|descriptor| descriptor.name() == method)
             .cloned()
     }
 
@@ -7871,8 +7936,8 @@ impl ShellRuntime {
         let result = (|| {
             let arguments = self.validate_component_arguments(
                 ctx,
-                descriptor.export,
-                &descriptor.arguments,
+                descriptor.export(),
+                descriptor.arguments(),
                 arguments,
             )?;
             let state = scope::with_current(|window, cx| {
@@ -7891,7 +7956,7 @@ impl ShellRuntime {
                 .map_err(|_| {
                     Exception::throw_type(ctx, "retained component state is already borrowed")
                 })?
-                .insert(descriptor.kind, owner, state)
+                .insert(descriptor.kind(), owner, state)
                 .map_err(|error| Exception::throw_range(ctx, &error))
         })();
         if result.is_err() {
@@ -7908,11 +7973,11 @@ impl ShellRuntime {
         descriptor: &ArgumentDescriptor,
         argument: Option<&Argument>,
     ) -> JsResult<ComponentArgument> {
-        if let ArgumentSchema::Optional(inner) = &descriptor.schema {
+        if let ArgumentSchema::Optional(inner) = &descriptor.schema() {
             return match argument {
                 None | Some(Argument::Value(Bridged::Nil)) => Ok(ComponentArgument::Optional(None)),
                 Some(argument) => self
-                    .validate_component_argument_kind(ctx, api, descriptor.name, inner, argument)
+                    .validate_component_argument_kind(ctx, api, descriptor.name(), inner, argument)
                     .map(|argument| ComponentArgument::Optional(Some(Box::new(argument)))),
             };
         }
@@ -7921,16 +7986,16 @@ impl ShellRuntime {
                 ctx,
                 &format!(
                     "{api}({}) expects {}",
-                    descriptor.name,
-                    schema_name(&descriptor.schema)
+                    descriptor.name(),
+                    schema_name(&descriptor.schema())
                 ),
             )
         })?;
         self.validate_component_argument_kind(
             ctx,
             api,
-            descriptor.name,
-            &descriptor.schema,
+            descriptor.name(),
+            &descriptor.schema(),
             argument,
         )
     }
@@ -7958,7 +8023,7 @@ impl ShellRuntime {
             (ArgumentSchema::Element, Argument::Element(id)) => {
                 self.arena
                     .borrow()
-                    .can_claim(*id)
+                    .ensure_claimable(*id)
                     .map_err(|error| Exception::throw_type(ctx, &error.to_string()))?;
                 Some(ComponentArgument::Element(*id))
             }

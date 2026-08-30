@@ -1,15 +1,14 @@
 use std::sync::Arc;
 
+use gpui_component::{
+    button::{Button, ButtonVariants as _},
+    popover::Popover,
+};
 use gpui_shell::{
     ArgumentDescriptor, ArgumentSchema, ComponentArgument, ComponentCallbackArgument,
     ComponentDescriptor, ComponentMaterializer, ComponentPayload, ComponentRegistry,
-    ConstructorDescriptor, MaterializeRequest, MethodDescriptor, RegistryError,
-    TypeScriptDescriptor, anyhow,
+    ConstructorDescriptor, MaterializeRequest, MethodDescriptor, RegistryError, anyhow,
     gpui::{self, Anchor, IntoElement as _, ParentElement as _, div},
-    gpui_component::{
-        button::{Button, ButtonVariants as _},
-        popover::Popover,
-    },
 };
 
 #[derive(Clone)]
@@ -118,76 +117,74 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
             move |arguments| boolean_op(name, arguments, wrap),
         )
     };
-    registry.register(ComponentDescriptor {
-        name: "Popover",
-        constructors: vec![ConstructorDescriptor::new(
-            "Popover",
-            vec![
-                ArgumentDescriptor::new("id", ArgumentSchema::String),
-                ArgumentDescriptor::new("label", ArgumentSchema::String),
-            ],
-            |arguments| match arguments {
-                [
-                    ComponentArgument::String(id),
-                    ComponentArgument::String(label),
-                ] if !id.trim().is_empty() && !label.trim().is_empty() => {
-                    Ok(ComponentPayload::new(PopoverPayload {
-                        id: id.clone(),
-                        label: label.clone(),
-                    }))
-                }
-                [ComponentArgument::String(_), ComponentArgument::String(_)] => {
-                    Err("Popover id and label must not be empty".into())
-                }
-                _ => Err("Popover(id, label) expects two strings".into()),
-            },
-        )],
-        methods: vec![
-            MethodDescriptor::new(
-                "anchor",
-                vec![ArgumentDescriptor::new(
-                    "anchor",
-                    ArgumentSchema::Enum(&[
-                        "topLeft",
-                        "topCenter",
-                        "topRight",
-                        "bottomLeft",
-                        "bottomCenter",
-                        "bottomRight",
-                        "leftCenter",
-                        "rightCenter",
-                    ]),
-                )],
-                anchor_op,
-            )
-            .documented("Positions the popover relative to its trigger."),
-            boolean("defaultOpen", PopoverOp::DefaultOpen)
-                .documented("Sets the initial uncontrolled open state."),
-            boolean("open", PopoverOp::Open).documented("Controls whether the popover is open."),
-            boolean("appearance", PopoverOp::Appearance)
-                .documented("Controls the native popover surface styling."),
-            boolean("overlayClosable", PopoverOp::OverlayClosable)
-                .documented("Controls whether pressing outside dismisses the popover."),
-            MethodDescriptor::new(
-                "onOpenChange",
-                vec![ArgumentDescriptor::new(
-                    "callback",
-                    ArgumentSchema::Callback("(open: boolean, cx: Context) => void"),
-                )],
+    registry.register(
+        ComponentDescriptor::new("Popover", Arc::new(PopoverMaterializer))
+            .with_constructors(vec![ConstructorDescriptor::new(
+                "Popover",
+                vec![
+                    ArgumentDescriptor::new("id", ArgumentSchema::String),
+                    ArgumentDescriptor::new("label", ArgumentSchema::String),
+                ],
                 |arguments| match arguments {
-                    [argument @ ComponentArgument::Callback(_)] => Ok(ComponentPayload::new(
-                        PopoverOp::OnOpenChange(argument.clone()),
-                    )),
-                    _ => Err("Popover.onOpenChange(callback) expects a callback".into()),
+                    [
+                        ComponentArgument::String(id),
+                        ComponentArgument::String(label),
+                    ] if !id.trim().is_empty() && !label.trim().is_empty() => {
+                        Ok(ComponentPayload::new(PopoverPayload {
+                            id: id.clone(),
+                            label: label.clone(),
+                        }))
+                    }
+                    [ComponentArgument::String(_), ComponentArgument::String(_)] => {
+                        Err("Popover id and label must not be empty".into())
+                    }
+                    _ => Err("Popover(id, label) expects two strings".into()),
                 },
-            )
-            .documented("Runs when pointer interaction changes the open state."),
-        ],
-        typescript: TypeScriptDescriptor::new(
-            "A button-triggered popover with lazy content(element).",
-        ),
-        materializer: Arc::new(PopoverMaterializer),
-    })?;
+            )])
+            .with_methods(vec![
+                MethodDescriptor::new(
+                    "anchor",
+                    vec![ArgumentDescriptor::new(
+                        "anchor",
+                        ArgumentSchema::Enum(&[
+                            "topLeft",
+                            "topCenter",
+                            "topRight",
+                            "bottomLeft",
+                            "bottomCenter",
+                            "bottomRight",
+                            "leftCenter",
+                            "rightCenter",
+                        ]),
+                    )],
+                    anchor_op,
+                )
+                .with_documentation("Positions the popover relative to its trigger."),
+                boolean("defaultOpen", PopoverOp::DefaultOpen)
+                    .with_documentation("Sets the initial uncontrolled open state."),
+                boolean("open", PopoverOp::Open)
+                    .with_documentation("Controls whether the popover is open."),
+                boolean("appearance", PopoverOp::Appearance)
+                    .with_documentation("Controls the native popover surface styling."),
+                boolean("overlayClosable", PopoverOp::OverlayClosable)
+                    .with_documentation("Controls whether pressing outside dismisses the popover."),
+                MethodDescriptor::new(
+                    "onOpenChange",
+                    vec![ArgumentDescriptor::new(
+                        "callback",
+                        ArgumentSchema::Callback("(open: boolean, cx: Context) => void"),
+                    )],
+                    |arguments| match arguments {
+                        [argument @ ComponentArgument::Callback(_)] => Ok(ComponentPayload::new(
+                            PopoverOp::OnOpenChange(argument.clone()),
+                        )),
+                        _ => Err("Popover.onOpenChange(callback) expects a callback".into()),
+                    },
+                )
+                .with_documentation("Runs when pointer interaction changes the open state."),
+            ])
+            .with_documentation("A button-triggered popover with lazy content(element)."),
+    )?;
     Ok(())
 }
 
@@ -197,14 +194,17 @@ mod tests {
 
     #[test]
     fn callback_schema_includes_the_script_context() {
-        let mut registry =
-            ComponentRegistry::new(gpui_shell::COMPONENT_REGISTRY_API_VERSION).unwrap();
+        let mut registry = ComponentRegistry::new(
+            gpui_shell::COMPONENT_REGISTRY_API_VERSION,
+            gpui_shell::DEFAULT_COMPONENT_MODULE,
+        )
+        .unwrap();
         register(&mut registry).unwrap();
         let frozen = registry.freeze().unwrap();
         let descriptor = frozen.descriptors().next().unwrap();
         assert_eq!(
-            descriptor.methods[5].arguments[0].schema,
-            ArgumentSchema::Callback("(open: boolean, cx: Context) => void")
+            descriptor.methods()[5].arguments()[0].schema(),
+            &ArgumentSchema::Callback("(open: boolean, cx: Context) => void")
         );
     }
 }

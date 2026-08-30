@@ -100,18 +100,18 @@ fn registered_inventory_matches_the_frozen_component_catalog() {
         .descriptors()
         .map(|descriptor| {
             (
-                descriptor.name.to_owned(),
+                descriptor.name().to_owned(),
                 descriptor
-                    .constructors
+                    .constructors()
                     .iter()
-                    .map(|constructor| constructor.export.to_owned())
+                    .map(|constructor| constructor.export().to_owned())
                     .collect::<BTreeSet<_>>(),
             )
         })
         .collect::<std::collections::BTreeMap<_, _>>();
     let actual_states = frozen
         .states()
-        .map(|state| (state.export.to_owned(), state.kind.to_owned()))
+        .map(|state| (state.export().to_owned(), state.kind().to_owned()))
         .collect::<std::collections::BTreeMap<_, _>>();
 
     let mut inventoried_descriptors = BTreeSet::new();

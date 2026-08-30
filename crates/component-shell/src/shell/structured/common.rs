@@ -1,5 +1,3 @@
-use gpui::IntoElement as _;
-
 pub(super) fn positive_usize(value: f64, label: &str) -> Result<usize, String> {
     if !value.is_finite() || value < 1.0 || value.fract() != 0.0 || value >= usize::MAX as f64 {
         return Err(format!(
@@ -28,95 +26,6 @@ use gpui::{
 };
 use gpui_shell::{anyhow, gpui};
 
-pub(super) fn require_child(
-    parent: &str,
-    expected: &'static str,
-    actual: Option<&'static str>,
-) -> anyhow::Result<()> {
-    anyhow::ensure!(
-        actual == Some(expected),
-        "{parent} accepts only registered {expected} children; received {}",
-        actual.unwrap_or("an ordinary element")
-    );
-    Ok(())
-}
-
-pub(super) struct OpaqueChildElement<T: 'static> {
-    value: Option<T>,
-}
-
-impl<T: 'static> OpaqueChildElement<T> {
-    pub(super) fn new(value: T) -> Self {
-        Self { value: Some(value) }
-    }
-    pub(super) fn take(&mut self) -> Option<T> {
-        self.value.take()
-    }
-}
-
-impl<T: 'static> gpui::IntoElement for OpaqueChildElement<T> {
-    type Element = Self;
-    fn into_element(self) -> Self::Element {
-        self
-    }
-}
-
-impl<T: 'static> Element for OpaqueChildElement<T> {
-    type RequestLayoutState = gpui::AnyElement;
-    type PrepaintState = ();
-    fn id(&self) -> Option<ElementId> {
-        None
-    }
-    fn source_location(&self) -> Option<&'static std::panic::Location<'static>> {
-        None
-    }
-    fn request_layout(
-        &mut self,
-        _: Option<&GlobalElementId>,
-        _: Option<&InspectorElementId>,
-        window: &mut Window,
-        cx: &mut gpui::App,
-    ) -> (LayoutId, Self::RequestLayoutState) {
-        let mut element = gpui::div().into_any_element();
-        let layout = element.request_layout(window, cx);
-        (layout, element)
-    }
-    fn prepaint(
-        &mut self,
-        _: Option<&GlobalElementId>,
-        _: Option<&InspectorElementId>,
-        _: Bounds<Pixels>,
-        element: &mut Self::RequestLayoutState,
-        window: &mut Window,
-        cx: &mut gpui::App,
-    ) {
-        element.prepaint(window, cx);
-    }
-    fn paint(
-        &mut self,
-        _: Option<&GlobalElementId>,
-        _: Option<&InspectorElementId>,
-        _: Bounds<Pixels>,
-        element: &mut Self::RequestLayoutState,
-        _: &mut (),
-        window: &mut Window,
-        cx: &mut gpui::App,
-    ) {
-        element.paint(window, cx);
-    }
-}
-
-pub(super) fn take_opaque<T: 'static>(
-    element: &mut gpui::AnyElement,
-    name: &str,
-) -> anyhow::Result<T> {
-    element
-        .downcast_mut::<OpaqueChildElement<T>>()
-        .ok_or_else(|| anyhow::anyhow!("registered {name} materialized an incompatible element"))?
-        .take()
-        .ok_or_else(|| anyhow::anyhow!("registered {name} child was already consumed"))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -135,36 +44,6 @@ mod tests {
         assert!(nonnegative_f32((f32::MAX as f64) * 2.0, "width").is_err());
         assert!(nonnegative_f32(-1.0, "width").is_err());
         assert!(nonnegative_f32(f64::NAN, "width").is_err());
-    }
-
-    #[test]
-    fn opaque_carrier_is_single_consumer_and_rejects_the_wrong_type() {
-        let mut element = OpaqueChildElement::new(String::from("value")).into_any_element();
-        assert_eq!(
-            take_opaque::<String>(&mut element, "Part").unwrap(),
-            "value"
-        );
-        assert!(take_opaque::<String>(&mut element, "Part").is_err());
-
-        let mut wrong = OpaqueChildElement::new(42_u32).into_any_element();
-        assert!(take_opaque::<String>(&mut wrong, "Part").is_err());
-    }
-
-    #[test]
-    fn typed_parent_validation_rejects_ordinary_and_wrong_registered_children() {
-        assert!(require_child("Form", "Field", Some("Field")).is_ok());
-        assert_eq!(
-            require_child("Form", "Field", None)
-                .unwrap_err()
-                .to_string(),
-            "Form accepts only registered Field children; received an ordinary element"
-        );
-        assert_eq!(
-            require_child("Table", "TableBody", Some("TableCell"))
-                .unwrap_err()
-                .to_string(),
-            "Table accepts only registered TableBody children; received TableCell"
-        );
     }
 }
 

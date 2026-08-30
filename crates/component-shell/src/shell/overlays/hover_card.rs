@@ -1,12 +1,11 @@
 use std::{sync::Arc, time::Duration};
 
+use gpui_component::hover_card::HoverCard;
 use gpui_shell::{
     ArgumentDescriptor, ArgumentSchema, ComponentArgument, ComponentCallbackArgument,
     ComponentDescriptor, ComponentMaterializer, ComponentPayload, ComponentRegistry,
-    ConstructorDescriptor, MaterializeRequest, MethodDescriptor, RegistryError,
-    TypeScriptDescriptor, anyhow,
+    ConstructorDescriptor, MaterializeRequest, MethodDescriptor, RegistryError, anyhow,
     gpui::{self, Anchor, IntoElement as _, ParentElement as _, div},
-    gpui_component::hover_card::HoverCard,
 };
 
 #[derive(Clone)]
@@ -142,95 +141,98 @@ fn open_change_operation(arguments: &[ComponentArgument]) -> Result<ComponentPay
 }
 
 pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
-    registry.register(ComponentDescriptor {
-        name: "HoverCard",
-        constructors: vec![ConstructorDescriptor::new(
-            "HoverCard",
-            vec![ArgumentDescriptor::new("id", ArgumentSchema::String)],
-            |arguments| match arguments {
-                [ComponentArgument::String(id)] => Ok(ComponentPayload::new(HoverCardPayload {
-                    id: non_empty_id(id)?,
-                })),
-                _ => Err("HoverCard(id) expects a string".into()),
-            },
-        )],
-        methods: vec![
-            MethodDescriptor::new(
-                "triggerElement",
-                vec![ArgumentDescriptor::new("element", ArgumentSchema::Element)],
+    registry.register(
+        ComponentDescriptor::new("HoverCard", Arc::new(HoverCardMaterializer))
+            .with_constructors(vec![ConstructorDescriptor::new(
+                "HoverCard",
+                vec![ArgumentDescriptor::new("id", ArgumentSchema::String)],
                 |arguments| match arguments {
-                    [argument @ ComponentArgument::Element(_)] => Ok(ComponentPayload::new(
-                        HoverCardOp::Trigger(argument.clone()),
-                    )),
-                    _ => Err("HoverCard.triggerElement(element) expects an element".into()),
-                },
-            )
-            .documented("Sets the element that owns the hover interaction."),
-            MethodDescriptor::new(
-                "cardAnchor",
-                vec![ArgumentDescriptor::new(
-                    "anchor",
-                    ArgumentSchema::Enum(&[
-                        "topLeft",
-                        "topCenter",
-                        "topRight",
-                        "bottomLeft",
-                        "bottomCenter",
-                        "bottomRight",
-                        "leftCenter",
-                        "rightCenter",
-                    ]),
-                )],
-                anchor_operation,
-            )
-            .documented("Positions the card relative to its trigger."),
-            MethodDescriptor::new(
-                "openDelay",
-                vec![ArgumentDescriptor::new(
-                    "milliseconds",
-                    ArgumentSchema::Number,
-                )],
-                |arguments| duration_operation("openDelay", arguments, HoverCardOp::OpenDelay),
-            )
-            .documented("Sets the hover-open delay in milliseconds (0–60000)."),
-            MethodDescriptor::new(
-                "closeDelay",
-                vec![ArgumentDescriptor::new(
-                    "milliseconds",
-                    ArgumentSchema::Number,
-                )],
-                |arguments| duration_operation("closeDelay", arguments, HoverCardOp::CloseDelay),
-            )
-            .documented("Sets the hover-close delay in milliseconds (0–60000)."),
-            MethodDescriptor::new(
-                "appearance",
-                vec![ArgumentDescriptor::new(
-                    "appearance",
-                    ArgumentSchema::Boolean,
-                )],
-                |arguments| match arguments {
-                    [ComponentArgument::Boolean(appearance)] => {
-                        Ok(ComponentPayload::new(HoverCardOp::Appearance(*appearance)))
+                    [ComponentArgument::String(id)] => {
+                        Ok(ComponentPayload::new(HoverCardPayload {
+                            id: non_empty_id(id)?,
+                        }))
                     }
-                    _ => Err("HoverCard.appearance(appearance) expects a boolean".into()),
+                    _ => Err("HoverCard(id) expects a string".into()),
                 },
-            )
-            .documented("Controls the component's popover surface styling."),
-            MethodDescriptor::new(
-                "onOpenChange",
-                vec![ArgumentDescriptor::new(
-                    "callback",
-                    ArgumentSchema::Callback("(open: boolean, cx: Context) => void"),
-                )],
-                open_change_operation,
-            )
-            .documented("Runs when pointer interaction opens or closes the card."),
-        ],
-        typescript: TypeScriptDescriptor::new(
-            "A hover-triggered card. Supply triggerElement(element) and lazy content(element).",
-        ),
-        materializer: Arc::new(HoverCardMaterializer),
-    })?;
+            )])
+            .with_methods(vec![
+                MethodDescriptor::new(
+                    "triggerElement",
+                    vec![ArgumentDescriptor::new("element", ArgumentSchema::Element)],
+                    |arguments| match arguments {
+                        [argument @ ComponentArgument::Element(_)] => Ok(ComponentPayload::new(
+                            HoverCardOp::Trigger(argument.clone()),
+                        )),
+                        _ => Err("HoverCard.triggerElement(element) expects an element".into()),
+                    },
+                )
+                .with_documentation("Sets the element that owns the hover interaction."),
+                MethodDescriptor::new(
+                    "cardAnchor",
+                    vec![ArgumentDescriptor::new(
+                        "anchor",
+                        ArgumentSchema::Enum(&[
+                            "topLeft",
+                            "topCenter",
+                            "topRight",
+                            "bottomLeft",
+                            "bottomCenter",
+                            "bottomRight",
+                            "leftCenter",
+                            "rightCenter",
+                        ]),
+                    )],
+                    anchor_operation,
+                )
+                .with_documentation("Positions the card relative to its trigger."),
+                MethodDescriptor::new(
+                    "openDelay",
+                    vec![ArgumentDescriptor::new(
+                        "milliseconds",
+                        ArgumentSchema::Number,
+                    )],
+                    |arguments| duration_operation("openDelay", arguments, HoverCardOp::OpenDelay),
+                )
+                .with_documentation("Sets the hover-open delay in milliseconds (0–60000)."),
+                MethodDescriptor::new(
+                    "closeDelay",
+                    vec![ArgumentDescriptor::new(
+                        "milliseconds",
+                        ArgumentSchema::Number,
+                    )],
+                    |arguments| {
+                        duration_operation("closeDelay", arguments, HoverCardOp::CloseDelay)
+                    },
+                )
+                .with_documentation("Sets the hover-close delay in milliseconds (0–60000)."),
+                MethodDescriptor::new(
+                    "appearance",
+                    vec![ArgumentDescriptor::new(
+                        "appearance",
+                        ArgumentSchema::Boolean,
+                    )],
+                    |arguments| match arguments {
+                        [ComponentArgument::Boolean(appearance)] => {
+                            Ok(ComponentPayload::new(HoverCardOp::Appearance(*appearance)))
+                        }
+                        _ => Err("HoverCard.appearance(appearance) expects a boolean".into()),
+                    },
+                )
+                .with_documentation("Controls the component's popover surface styling."),
+                MethodDescriptor::new(
+                    "onOpenChange",
+                    vec![ArgumentDescriptor::new(
+                        "callback",
+                        ArgumentSchema::Callback("(open: boolean, cx: Context) => void"),
+                    )],
+                    open_change_operation,
+                )
+                .with_documentation("Runs when pointer interaction opens or closes the card."),
+            ])
+            .with_documentation(
+                "A hover-triggered card. Supply triggerElement(element) and lazy content(element).",
+            ),
+    )?;
     Ok(())
 }
 
@@ -264,19 +266,22 @@ mod tests {
 
     #[test]
     fn descriptor_uses_closed_anchor_and_callback_schemas() {
-        let mut registry =
-            ComponentRegistry::new(gpui_shell::COMPONENT_REGISTRY_API_VERSION).unwrap();
+        let mut registry = ComponentRegistry::new(
+            gpui_shell::COMPONENT_REGISTRY_API_VERSION,
+            gpui_shell::DEFAULT_COMPONENT_MODULE,
+        )
+        .unwrap();
         register(&mut registry).unwrap();
         let frozen = registry.freeze().unwrap();
         let descriptor = frozen.descriptors().next().unwrap();
-        assert_eq!(descriptor.name, "HoverCard");
+        assert_eq!(descriptor.name(), "HoverCard");
         assert!(matches!(
-            descriptor.methods[1].arguments[0].schema,
-            ArgumentSchema::Enum(_)
+            descriptor.methods()[1].arguments()[0].schema(),
+            &ArgumentSchema::Enum(_)
         ));
         assert_eq!(
-            descriptor.methods[5].arguments[0].schema,
-            ArgumentSchema::Callback("(open: boolean, cx: Context) => void")
+            descriptor.methods()[5].arguments()[0].schema(),
+            &ArgumentSchema::Callback("(open: boolean, cx: Context) => void")
         );
     }
 

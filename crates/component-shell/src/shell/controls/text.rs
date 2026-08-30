@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
+use gpui_component::{kbd::Kbd, label::Label, link::Link};
 use gpui_shell::{
     ArgumentDescriptor, ArgumentSchema, ComponentArgument, ComponentDescriptor,
     ComponentMaterializer, ComponentPayload, ComponentRegistry, ConstructorDescriptor,
-    MaterializeRequest, MethodDescriptor, RegistryError, TypeScriptDescriptor, anyhow,
+    MaterializeRequest, MethodDescriptor, RegistryError, anyhow,
     gpui::{self, IntoElement as _, Keystroke, ParentElement as _, Refineable as _, Styled as _},
-    gpui_component::{kbd::Kbd, label::Label, link::Link},
 };
 
 #[derive(Clone)]
@@ -56,7 +56,7 @@ fn label_string_method(
             _ => Err(format!("Label.{name} expects one string")),
         },
     )
-    .documented(docs)
+    .with_documentation(docs)
 }
 
 struct LabelMaterializer;
@@ -139,41 +139,39 @@ impl ComponentMaterializer for KbdMaterializer {
 }
 
 pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
-    registry.register(ComponentDescriptor {
-        name: "Label",
-        constructors: vec![string_constructor("Label", "text")],
-        methods: vec![
-            label_string_method(
-                "secondary",
-                "Adds muted secondary text.",
-                LabelOp::Secondary,
+    registry.register(
+        ComponentDescriptor::new("Label", Arc::new(LabelMaterializer))
+            .with_constructors(vec![string_constructor("Label", "text")])
+            .with_methods(vec![
+                label_string_method(
+                    "secondary",
+                    "Adds muted secondary text.",
+                    LabelOp::Secondary,
+                ),
+                MethodDescriptor::new(
+                    "masked",
+                    vec![ArgumentDescriptor::new("masked", ArgumentSchema::Boolean)],
+                    |arguments| match arguments {
+                        [ComponentArgument::Boolean(value)] => {
+                            Ok(ComponentPayload::new(LabelOp::Masked(*value)))
+                        }
+                        _ => Err("Label.masked expects one boolean".into()),
+                    },
+                )
+                .with_documentation("Controls whether the main text is masked."),
+                label_string_method(
+                    "highlights",
+                    "Highlights matching text fragments.",
+                    LabelOp::Highlights,
+                ),
+            ])
+            .with_documentation(
+                "A text label with optional secondary, masking, and highlight presentation.",
             ),
-            MethodDescriptor::new(
-                "masked",
-                vec![ArgumentDescriptor::new("masked", ArgumentSchema::Boolean)],
-                |arguments| match arguments {
-                    [ComponentArgument::Boolean(value)] => {
-                        Ok(ComponentPayload::new(LabelOp::Masked(*value)))
-                    }
-                    _ => Err("Label.masked expects one boolean".into()),
-                },
-            )
-            .documented("Controls whether the main text is masked."),
-            label_string_method(
-                "highlights",
-                "Highlights matching text fragments.",
-                LabelOp::Highlights,
-            ),
-        ],
-        typescript: TypeScriptDescriptor::new(
-            "A text label with optional secondary, masking, and highlight presentation.",
-        ),
-        materializer: Arc::new(LabelMaterializer),
-    })?;
-    registry.register(ComponentDescriptor {
-        name: "Link",
-        constructors: vec![string_constructor("Link", "id")],
-        methods: vec![MethodDescriptor::new(
+    )?;
+    registry.register(ComponentDescriptor::new("Link", Arc::new(LinkMaterializer))
+.with_constructors(vec![string_constructor("Link", "id")])
+.with_methods(vec![MethodDescriptor::new(
             "href",
             vec![ArgumentDescriptor::new("href", ArgumentSchema::String)],
             |arguments| match arguments {
@@ -183,46 +181,43 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
                 _ => Err("Link.href expects one URL string".into()),
             },
         )
-        .documented("Sets the external URL opened when activated.")],
-        typescript: TypeScriptDescriptor::new(
+        .with_documentation("Sets the external URL opened when activated.")])
+.with_documentation(
             "An external-resource link. Ordinary children, shell style, disabled state, and onClick are honored.",
-        ),
-        materializer: Arc::new(LinkMaterializer),
-    })?;
-    registry.register(ComponentDescriptor {
-        name: "Kbd",
-        constructors: vec![ConstructorDescriptor::new(
-            "Kbd",
-            vec![ArgumentDescriptor::new("keystroke", ArgumentSchema::String)],
-            |arguments| match arguments {
-                [ComponentArgument::String(value)] => Keystroke::parse(value)
-                    .map(ComponentPayload::new)
-                    .map_err(|error| format!("invalid Kbd keystroke: {error}")),
-                _ => Err("Kbd expects one keystroke string".into()),
-            },
-        )],
-        methods: vec![
-            MethodDescriptor::new(
-                "appearance",
-                vec![ArgumentDescriptor::new(
-                    "appearance",
-                    ArgumentSchema::Boolean,
-                )],
+        ))?;
+    registry.register(
+        ComponentDescriptor::new("Kbd", Arc::new(KbdMaterializer))
+            .with_constructors(vec![ConstructorDescriptor::new(
+                "Kbd",
+                vec![ArgumentDescriptor::new("keystroke", ArgumentSchema::String)],
                 |arguments| match arguments {
-                    [ComponentArgument::Boolean(value)] => {
-                        Ok(ComponentPayload::new(KbdOp::Appearance(*value)))
-                    }
-                    _ => Err("Kbd.appearance expects one boolean".into()),
+                    [ComponentArgument::String(value)] => Keystroke::parse(value)
+                        .map(ComponentPayload::new)
+                        .map_err(|error| format!("invalid Kbd keystroke: {error}")),
+                    _ => Err("Kbd expects one keystroke string".into()),
                 },
-            )
-            .documented("Controls whether the keystroke uses keycap presentation."),
-            MethodDescriptor::new("outline", Vec::new(), |_| {
-                Ok(ComponentPayload::new(KbdOp::Outline))
-            })
-            .documented("Uses the outlined keycap presentation."),
-        ],
-        typescript: TypeScriptDescriptor::new("A platform-formatted keyboard shortcut keycap."),
-        materializer: Arc::new(KbdMaterializer),
-    })?;
+            )])
+            .with_methods(vec![
+                MethodDescriptor::new(
+                    "appearance",
+                    vec![ArgumentDescriptor::new(
+                        "appearance",
+                        ArgumentSchema::Boolean,
+                    )],
+                    |arguments| match arguments {
+                        [ComponentArgument::Boolean(value)] => {
+                            Ok(ComponentPayload::new(KbdOp::Appearance(*value)))
+                        }
+                        _ => Err("Kbd.appearance expects one boolean".into()),
+                    },
+                )
+                .with_documentation("Controls whether the keystroke uses keycap presentation."),
+                MethodDescriptor::new("outline", Vec::new(), |_| {
+                    Ok(ComponentPayload::new(KbdOp::Outline))
+                })
+                .with_documentation("Uses the outlined keycap presentation."),
+            ])
+            .with_documentation("A platform-formatted keyboard shortcut keycap."),
+    )?;
     Ok(())
 }

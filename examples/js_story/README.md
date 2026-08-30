@@ -20,7 +20,7 @@ node examples/js_story/fixtures/verify-coverage.mjs
 The gallery imports only public `gpui`, `gpui-base`, and `gpui-component`
 script modules. `catalog.js` explicitly imports each family module and every
 route records its Rust Story source. The inventory currently supplies 65 Story
-entries and 69 tracked catalog surfaces. The check fails if either side changes
+entries and 64 tracked catalog surfaces. The check fails if either side changes
 without matching catalog coverage and status.
 
 ## Registration status

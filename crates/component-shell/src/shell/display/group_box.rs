@@ -1,8 +1,8 @@
+use gpui_component::group_box::{GroupBox, GroupBoxVariant, GroupBoxVariants as _};
 use gpui_shell::{
     ArgumentDescriptor, ArgumentSchema, ComponentArgument, ComponentDescriptor,
     ComponentMaterializer, ComponentPayload, ComponentRegistry, ConstructorDescriptor,
-    MaterializeRequest, MethodDescriptor, RegistryError, TypeScriptDescriptor, anyhow, gpui,
-    gpui_component::group_box::{GroupBox, GroupBoxVariant, GroupBoxVariants as _},
+    MaterializeRequest, MethodDescriptor, RegistryError, anyhow, gpui,
 };
 use std::sync::Arc;
 #[derive(Clone)]
@@ -39,50 +39,51 @@ impl ComponentMaterializer for GroupBoxMaterializer {
     }
 }
 pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
-    registry.register(ComponentDescriptor {
-        name: "GroupBox",
-        constructors: vec![ConstructorDescriptor::new("GroupBox", Vec::new(), |_| {
-            Ok(ComponentPayload::new(GroupBoxPayload))
-        })],
-        methods: vec![
-            MethodDescriptor::new(
-                "title",
-                vec![ArgumentDescriptor::new("title", ArgumentSchema::String)],
-                |arguments| match arguments {
-                    [ComponentArgument::String(title)] => {
-                        Ok(ComponentPayload::new(GroupBoxOp::Title(title.clone())))
-                    }
-                    _ => Err("GroupBox.title(title) expects a string".into()),
-                },
-            )
-            .documented("Sets the group title."),
-            MethodDescriptor::new(
-                "variant",
-                vec![ArgumentDescriptor::new(
-                    "variant",
-                    ArgumentSchema::Enum(&["normal", "fill", "outline"]),
-                )],
-                |arguments| match arguments {
-                    [ComponentArgument::Enum(variant)] => match variant.as_str() {
-                        "normal" => Ok(ComponentPayload::new(GroupBoxOp::Variant(
-                            GroupBoxVariant::Normal,
-                        ))),
-                        "fill" => Ok(ComponentPayload::new(GroupBoxOp::Variant(
-                            GroupBoxVariant::Fill,
-                        ))),
-                        "outline" => Ok(ComponentPayload::new(GroupBoxOp::Variant(
-                            GroupBoxVariant::Outline,
-                        ))),
-                        _ => Err(format!("unsupported GroupBox variant `{variant}`")),
+    registry.register(
+        ComponentDescriptor::new("GroupBox", Arc::new(GroupBoxMaterializer))
+            .with_constructors(vec![ConstructorDescriptor::new(
+                "GroupBox",
+                Vec::new(),
+                |_| Ok(ComponentPayload::new(GroupBoxPayload)),
+            )])
+            .with_methods(vec![
+                MethodDescriptor::new(
+                    "title",
+                    vec![ArgumentDescriptor::new("title", ArgumentSchema::String)],
+                    |arguments| match arguments {
+                        [ComponentArgument::String(title)] => {
+                            Ok(ComponentPayload::new(GroupBoxOp::Title(title.clone())))
+                        }
+                        _ => Err("GroupBox.title(title) expects a string".into()),
                     },
-                    _ => Err("GroupBox.variant(variant) expects a variant literal".into()),
-                },
-            )
-            .documented("Sets the normal, fill, or outline presentation."),
-        ],
-        typescript: TypeScriptDescriptor::new("A titled container for grouping related content."),
-        materializer: Arc::new(GroupBoxMaterializer),
-    })?;
+                )
+                .with_documentation("Sets the group title."),
+                MethodDescriptor::new(
+                    "variant",
+                    vec![ArgumentDescriptor::new(
+                        "variant",
+                        ArgumentSchema::Enum(&["normal", "fill", "outline"]),
+                    )],
+                    |arguments| match arguments {
+                        [ComponentArgument::Enum(variant)] => match variant.as_str() {
+                            "normal" => Ok(ComponentPayload::new(GroupBoxOp::Variant(
+                                GroupBoxVariant::Normal,
+                            ))),
+                            "fill" => Ok(ComponentPayload::new(GroupBoxOp::Variant(
+                                GroupBoxVariant::Fill,
+                            ))),
+                            "outline" => Ok(ComponentPayload::new(GroupBoxOp::Variant(
+                                GroupBoxVariant::Outline,
+                            ))),
+                            _ => Err(format!("unsupported GroupBox variant `{variant}`")),
+                        },
+                        _ => Err("GroupBox.variant(variant) expects a variant literal".into()),
+                    },
+                )
+                .with_documentation("Sets the normal, fill, or outline presentation."),
+            ])
+            .with_documentation("A titled container for grouping related content."),
+    )?;
     Ok(())
 }
 #[cfg(test)]

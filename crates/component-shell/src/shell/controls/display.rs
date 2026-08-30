@@ -1,16 +1,16 @@
 use std::sync::Arc;
 
+use gpui_component::{
+    Sizable as _, Size,
+    badge::Badge,
+    tag::{Tag, TagVariant},
+    try_parse_color,
+};
 use gpui_shell::{
     ArgumentDescriptor, ArgumentSchema, ComponentArgument, ComponentDescriptor,
     ComponentMaterializer, ComponentPayload, ComponentRegistry, ConstructorDescriptor,
-    MaterializeRequest, MethodDescriptor, RegistryError, TypeScriptDescriptor, anyhow,
+    MaterializeRequest, MethodDescriptor, RegistryError, anyhow,
     gpui::{self, IntoElement as _, ParentElement as _, Refineable as _, Styled as _},
-    gpui_component::{
-        Sizable as _, Size,
-        badge::Badge,
-        tag::{Tag, TagVariant},
-        try_parse_color,
-    },
 };
 
 #[derive(Clone, Copy)]
@@ -18,7 +18,7 @@ struct UnitPayload;
 
 #[derive(Clone)]
 enum BadgeOp {
-    Size(gpui_shell::gpui_component::Size),
+    Size(gpui_component::Size),
     Dot,
     Count(usize),
     Max(usize),
@@ -51,7 +51,7 @@ fn natural_number(name: &'static str, make: fn(usize) -> BadgeOp) -> MethodDescr
             _ => Err(format!("Badge.{name} expects a non-negative integer")),
         },
     )
-    .documented(if name == "count" {
+    .with_documentation(if name == "count" {
         "Sets the displayed count; zero hides a numeric badge."
     } else {
         "Sets the largest count displayed before the plus suffix."
@@ -117,9 +117,7 @@ impl ComponentMaterializer for TagMaterializer {
     }
 }
 
-fn size_method<T: 'static + Send + Sync>(
-    make: fn(gpui_shell::gpui_component::Size) -> T,
-) -> MethodDescriptor {
+fn size_method<T: 'static + Send + Sync>(make: fn(gpui_component::Size) -> T) -> MethodDescriptor {
     MethodDescriptor::new(
         "size",
         vec![ArgumentDescriptor::new(
@@ -128,104 +126,98 @@ fn size_method<T: 'static + Send + Sync>(
         )],
         move |args| match args {
             [ComponentArgument::Enum(value)] => match value.as_str() {
-                "xsmall" => Ok(ComponentPayload::new(make(
-                    gpui_shell::gpui_component::Size::XSmall,
-                ))),
-                "small" => Ok(ComponentPayload::new(make(
-                    gpui_shell::gpui_component::Size::Small,
-                ))),
-                "medium" => Ok(ComponentPayload::new(make(
-                    gpui_shell::gpui_component::Size::Medium,
-                ))),
-                "large" => Ok(ComponentPayload::new(make(
-                    gpui_shell::gpui_component::Size::Large,
-                ))),
+                "xsmall" => Ok(ComponentPayload::new(make(gpui_component::Size::XSmall))),
+                "small" => Ok(ComponentPayload::new(make(gpui_component::Size::Small))),
+                "medium" => Ok(ComponentPayload::new(make(gpui_component::Size::Medium))),
+                "large" => Ok(ComponentPayload::new(make(gpui_component::Size::Large))),
                 _ => Err(format!("unsupported size `{value}`")),
             },
             _ => Err("size expects a semantic size literal".into()),
         },
     )
-    .documented("Sets the semantic component size.")
+    .with_documentation("Sets the semantic component size.")
 }
 
 pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
-    registry.register(ComponentDescriptor {
-        name: "Badge",
-        constructors: vec![nullary("Badge")],
-        methods: vec![
-            MethodDescriptor::new("dot", Vec::new(), |_| {
-                Ok(ComponentPayload::new(BadgeOp::Dot))
-            })
-            .documented("Displays a dot instead of a numeric count."),
-            natural_number("count", BadgeOp::Count),
-            natural_number("max", BadgeOp::Max),
-            MethodDescriptor::new(
-                "color",
-                vec![ArgumentDescriptor::new("color", ArgumentSchema::String)],
-                |arguments| match arguments {
-                    [ComponentArgument::String(value)] => try_parse_color(value)
-                        .map(BadgeOp::Color)
-                        .map(ComponentPayload::new)
-                        .map_err(|error| format!("invalid Badge color: {error}")),
-                    _ => Err("Badge.color expects a color string".into()),
-                },
-            )
-            .documented("Sets the badge background from a supported color token."),
-            size_method(BadgeOp::Size),
-        ],
-        typescript: TypeScriptDescriptor::new(
-            "A count or dot badge positioned over its ordinary children.",
-        ),
-        materializer: Arc::new(BadgeMaterializer),
-    })?;
-    registry.register(ComponentDescriptor {
-        name: "Tag",
-        constructors: vec![nullary("Tag")],
-        methods: vec![
-            MethodDescriptor::new(
-                "variant",
-                vec![ArgumentDescriptor::new(
-                    "variant",
-                    ArgumentSchema::Enum(&[
-                        "primary",
-                        "secondary",
-                        "danger",
-                        "success",
-                        "warning",
-                        "info",
-                    ]),
-                )],
-                |arguments| match arguments {
-                    [ComponentArgument::Enum(value)] => match value.as_str() {
-                        "primary" => Ok(ComponentPayload::new(TagOp::Variant(TagVariant::Primary))),
-                        "secondary" => {
-                            Ok(ComponentPayload::new(TagOp::Variant(TagVariant::Secondary)))
-                        }
-                        "danger" => Ok(ComponentPayload::new(TagOp::Variant(TagVariant::Danger))),
-                        "success" => Ok(ComponentPayload::new(TagOp::Variant(TagVariant::Success))),
-                        "warning" => Ok(ComponentPayload::new(TagOp::Variant(TagVariant::Warning))),
-                        "info" => Ok(ComponentPayload::new(TagOp::Variant(TagVariant::Info))),
-                        _ => Err(format!("unsupported Tag variant `{value}`")),
+    registry.register(
+        ComponentDescriptor::new("Badge", Arc::new(BadgeMaterializer))
+            .with_constructors(vec![nullary("Badge")])
+            .with_methods(vec![
+                MethodDescriptor::new("dot", Vec::new(), |_| {
+                    Ok(ComponentPayload::new(BadgeOp::Dot))
+                })
+                .with_documentation("Displays a dot instead of a numeric count."),
+                natural_number("count", BadgeOp::Count),
+                natural_number("max", BadgeOp::Max),
+                MethodDescriptor::new(
+                    "color",
+                    vec![ArgumentDescriptor::new("color", ArgumentSchema::String)],
+                    |arguments| match arguments {
+                        [ComponentArgument::String(value)] => try_parse_color(value)
+                            .map(BadgeOp::Color)
+                            .map(ComponentPayload::new)
+                            .map_err(|error| format!("invalid Badge color: {error}")),
+                        _ => Err("Badge.color expects a color string".into()),
                     },
-                    _ => Err("Tag.variant expects a supported variant".into()),
-                },
-            )
-            .documented("Sets the semantic tag variant."),
-            MethodDescriptor::new("outline", Vec::new(), |_| {
-                Ok(ComponentPayload::new(TagOp::Outline))
-            })
-            .documented("Uses the outline presentation."),
-            MethodDescriptor::new("roundedFull", Vec::new(), |_| {
-                Ok(ComponentPayload::new(TagOp::RoundedFull))
-            })
-            .documented("Uses pill-shaped corners."),
-            size_method(TagOp::Size),
-        ],
-        typescript: TypeScriptDescriptor::new(
-            "A compact semantic status tag that renders ordinary children.",
-        ),
-        materializer: Arc::new(TagMaterializer),
-    })?;
+                )
+                .with_documentation("Sets the badge background from a supported color token."),
+                size_method(BadgeOp::Size),
+            ])
+            .with_documentation("A count or dot badge positioned over its ordinary children."),
+    )?;
+    registry.register(
+        ComponentDescriptor::new("Tag", Arc::new(TagMaterializer))
+            .with_constructors(vec![nullary("Tag")])
+            .with_methods(vec![
+                MethodDescriptor::new(
+                    "variant",
+                    vec![ArgumentDescriptor::new(
+                        "variant",
+                        ArgumentSchema::Enum(&[
+                            "primary",
+                            "secondary",
+                            "danger",
+                            "success",
+                            "warning",
+                            "info",
+                        ]),
+                    )],
+                    |arguments| match arguments {
+                        [ComponentArgument::Enum(value)] => match value.as_str() {
+                            "primary" => {
+                                Ok(ComponentPayload::new(TagOp::Variant(TagVariant::Primary)))
+                            }
+                            "secondary" => {
+                                Ok(ComponentPayload::new(TagOp::Variant(TagVariant::Secondary)))
+                            }
+                            "danger" => {
+                                Ok(ComponentPayload::new(TagOp::Variant(TagVariant::Danger)))
+                            }
+                            "success" => {
+                                Ok(ComponentPayload::new(TagOp::Variant(TagVariant::Success)))
+                            }
+                            "warning" => {
+                                Ok(ComponentPayload::new(TagOp::Variant(TagVariant::Warning)))
+                            }
+                            "info" => Ok(ComponentPayload::new(TagOp::Variant(TagVariant::Info))),
+                            _ => Err(format!("unsupported Tag variant `{value}`")),
+                        },
+                        _ => Err("Tag.variant expects a supported variant".into()),
+                    },
+                )
+                .with_documentation("Sets the semantic tag variant."),
+                MethodDescriptor::new("outline", Vec::new(), |_| {
+                    Ok(ComponentPayload::new(TagOp::Outline))
+                })
+                .with_documentation("Uses the outline presentation."),
+                MethodDescriptor::new("roundedFull", Vec::new(), |_| {
+                    Ok(ComponentPayload::new(TagOp::RoundedFull))
+                })
+                .with_documentation("Uses pill-shaped corners."),
+                size_method(TagOp::Size),
+            ])
+            .with_documentation("A compact semantic status tag that renders ordinary children."),
+    )?;
     Ok(())
 }
 

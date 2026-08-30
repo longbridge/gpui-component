@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
+use gpui_component::{separator::Separator, try_parse_color};
 use gpui_shell::{
     ArgumentDescriptor, ArgumentSchema, ComponentArgument, ComponentDescriptor,
     ComponentMaterializer, ComponentPayload, ComponentRegistry, ConstructorDescriptor,
-    MaterializeRequest, MethodDescriptor, RegistryError, TypeScriptDescriptor, anyhow,
+    MaterializeRequest, MethodDescriptor, RegistryError, anyhow,
     gpui::{self, IntoElement as _, Refineable as _, Styled as _},
-    gpui_component::{separator::Separator, try_parse_color},
 };
 
 #[derive(Clone, Copy)]
@@ -73,47 +73,44 @@ fn constructor(export: &'static str, payload: SeparatorPayload) -> ConstructorDe
 }
 
 pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
-    registry.register(ComponentDescriptor {
-        name: "Separator",
-        constructors: vec![
-            constructor("Separator", SeparatorPayload::Horizontal),
-            constructor("VerticalSeparator", SeparatorPayload::Vertical),
-            constructor("DashedSeparator", SeparatorPayload::HorizontalDashed),
-            constructor("VerticalDashedSeparator", SeparatorPayload::VerticalDashed),
-        ],
-        methods: vec![
-            MethodDescriptor::new(
-                "label",
-                vec![ArgumentDescriptor::new("label", ArgumentSchema::String)],
-                |arguments| match arguments {
-                    [ComponentArgument::String(label)] => {
-                        Ok(ComponentPayload::new(SeparatorOp::Label(label.clone())))
-                    }
-                    _ => Err("Separator.label(label) expects a string".into()),
-                },
-            )
-            .documented("Displays text centered over the separator line."),
-            MethodDescriptor::new(
-                "color",
-                vec![ArgumentDescriptor::new("color", ArgumentSchema::String)],
-                |arguments| match arguments {
-                    [ComponentArgument::String(color)] => try_parse_color(color)
-                        .map(|color| ComponentPayload::new(SeparatorOp::Color(color)))
-                        .map_err(|error| format!("invalid Separator color: {error}")),
-                    _ => Err("Separator.color(color) expects a color string".into()),
-                },
-            )
-            .documented("Sets the separator line color."),
-            MethodDescriptor::new("dashed", Vec::new(), |_| {
-                Ok(ComponentPayload::new(SeparatorOp::Dashed))
-            })
-            .documented("Uses a dashed separator line."),
-        ],
-        typescript: TypeScriptDescriptor::new(
-            "A horizontal or vertical, solid or dashed separator.",
-        ),
-        materializer: Arc::new(SeparatorMaterializer),
-    })?;
+    registry.register(
+        ComponentDescriptor::new("Separator", Arc::new(SeparatorMaterializer))
+            .with_constructors(vec![
+                constructor("Separator", SeparatorPayload::Horizontal),
+                constructor("VerticalSeparator", SeparatorPayload::Vertical),
+                constructor("DashedSeparator", SeparatorPayload::HorizontalDashed),
+                constructor("VerticalDashedSeparator", SeparatorPayload::VerticalDashed),
+            ])
+            .with_methods(vec![
+                MethodDescriptor::new(
+                    "label",
+                    vec![ArgumentDescriptor::new("label", ArgumentSchema::String)],
+                    |arguments| match arguments {
+                        [ComponentArgument::String(label)] => {
+                            Ok(ComponentPayload::new(SeparatorOp::Label(label.clone())))
+                        }
+                        _ => Err("Separator.label(label) expects a string".into()),
+                    },
+                )
+                .with_documentation("Displays text centered over the separator line."),
+                MethodDescriptor::new(
+                    "color",
+                    vec![ArgumentDescriptor::new("color", ArgumentSchema::String)],
+                    |arguments| match arguments {
+                        [ComponentArgument::String(color)] => try_parse_color(color)
+                            .map(|color| ComponentPayload::new(SeparatorOp::Color(color)))
+                            .map_err(|error| format!("invalid Separator color: {error}")),
+                        _ => Err("Separator.color(color) expects a color string".into()),
+                    },
+                )
+                .with_documentation("Sets the separator line color."),
+                MethodDescriptor::new("dashed", Vec::new(), |_| {
+                    Ok(ComponentPayload::new(SeparatorOp::Dashed))
+                })
+                .with_documentation("Uses a dashed separator line."),
+            ])
+            .with_documentation("A horizontal or vertical, solid or dashed separator."),
+    )?;
     Ok(())
 }
 

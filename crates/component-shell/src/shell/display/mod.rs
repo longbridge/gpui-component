@@ -27,7 +27,11 @@ mod tests {
 
     #[test]
     fn registers_the_display_catalog_with_documented_callables() {
-        let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+        let mut registry = ComponentRegistry::new(
+            COMPONENT_REGISTRY_API_VERSION,
+            gpui_shell::DEFAULT_COMPONENT_MODULE,
+        )
+        .unwrap();
         register(&mut registry).unwrap();
         let frozen = registry.freeze().unwrap();
         let descriptors = frozen.descriptors().collect::<Vec<_>>();
@@ -35,7 +39,7 @@ mod tests {
         assert_eq!(
             descriptors
                 .iter()
-                .map(|entry| entry.name)
+                .map(|entry| entry.name())
                 .collect::<Vec<_>>(),
             [
                 "Alert",
@@ -49,13 +53,13 @@ mod tests {
         assert!(
             descriptors
                 .iter()
-                .all(|entry| entry.typescript.documentation.is_some())
+                .all(|entry| entry.documentation().is_some())
         );
         assert!(
             descriptors
                 .iter()
-                .flat_map(|entry| &entry.methods)
-                .all(|method| { method.documentation.is_some() })
+                .flat_map(|entry| entry.methods())
+                .all(|method| { method.documentation().is_some() })
         );
     }
 }

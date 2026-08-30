@@ -83,6 +83,8 @@ impl RenderSnapshot {
         generation: u64,
         root: SpecId,
         arena: SpecArena,
+        application: Option<Rc<crate::runtime::ApplicationGeneration>>,
+        view: Option<gpui::WeakEntity<crate::ScriptView>>,
     ) -> Self {
         Self {
             inner: Rc::new(SnapshotInner {
@@ -90,21 +92,10 @@ impl RenderSnapshot {
                 root,
                 arena,
                 runtime: Rc::downgrade(runtime),
-                application: None,
-                view: None,
+                application,
+                view,
             }),
         }
-    }
-
-    pub(crate) fn with_application_owner(
-        mut self,
-        application: Option<Rc<crate::runtime::ApplicationGeneration>>,
-        view: Option<gpui::WeakEntity<crate::ScriptView>>,
-    ) -> Self {
-        let inner = Rc::get_mut(&mut self.inner).expect("new snapshot is uniquely owned");
-        inner.application = application;
-        inner.view = view;
-        self
     }
 
     pub(crate) fn application_owner(

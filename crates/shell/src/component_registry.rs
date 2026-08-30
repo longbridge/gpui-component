@@ -124,12 +124,22 @@ impl RetainedStateStore {
     }
 }
 
+use anyhow::Context as _;
+use smallvec::SmallVec;
+
 use gpui::{
     AnyElement, App, ClickEvent, IntoElement, ParentElement, Refineable as _, StyleRefinement,
     Styled, Window,
 };
 
 pub const COMPONENT_REGISTRY_API_VERSION: u32 = 1;
+
+/// The specifier the shipped `gpui-component` adapter imports under.
+///
+/// A registry names its own module, because the runtime holds no opinion about
+/// which component library it is carrying. This constant only spares the usual
+/// caller from repeating the usual answer.
+pub const DEFAULT_COMPONENT_MODULE: &str = "gpui-component";
 
 #[derive(Clone)]
 /// An owned, repeatable recipe for one element description.
@@ -311,15 +321,24 @@ pub enum ArgumentSchema {
     Optional(Box<ArgumentSchema>),
 }
 
+/// One argument of a registered constructor, method, or state factory.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ArgumentDescriptor {
-    pub name: &'static str,
-    pub schema: ArgumentSchema,
+    name: &'static str,
+    schema: ArgumentSchema,
 }
 
 impl ArgumentDescriptor {
     pub const fn new(name: &'static str, schema: ArgumentSchema) -> Self {
         Self { name, schema }
+    }
+
+    pub fn name(&self) -> &'static str {
+        self.name
+    }
+
+    pub fn schema(&self) -> &ArgumentSchema {
+        &self.schema
     }
 }
 
@@ -339,10 +358,10 @@ type StateFactory = dyn Fn(&[ComponentArgument], &mut Window, &mut App) -> Resul
 
 #[derive(Clone)]
 pub struct StateDescriptor {
-    pub export: &'static str,
-    pub kind: &'static str,
-    pub arguments: Vec<ArgumentDescriptor>,
-    pub documentation: Option<&'static str>,
+    export: &'static str,
+    kind: &'static str,
+    arguments: Vec<ArgumentDescriptor>,
+    documentation: Option<&'static str>,
     factory: Arc<StateFactory>,
 }
 
@@ -372,9 +391,25 @@ impl StateDescriptor {
         }
     }
 
-    pub fn documented(mut self, documentation: &'static str) -> Self {
+    pub fn with_documentation(mut self, documentation: &'static str) -> Self {
         self.documentation = Some(documentation);
         self
+    }
+
+    pub fn export(&self) -> &'static str {
+        self.export
+    }
+
+    pub fn kind(&self) -> &'static str {
+        self.kind
+    }
+
+    pub fn arguments(&self) -> &[ArgumentDescriptor] {
+        &self.arguments
+    }
+
+    pub fn documentation(&self) -> Option<&'static str> {
+        self.documentation
     }
 
     pub(crate) fn create(
@@ -399,17 +434,28 @@ impl fmt::Debug for StateDescriptor {
     }
 }
 
+/// Why a constructor export should no longer be used, and what replaces it.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DeprecationDescriptor {
-    pub replacement: &'static str,
-    pub message: &'static str,
+    replacement: &'static str,
+    message: &'static str,
+}
+
+impl DeprecationDescriptor {
+    pub fn replacement(&self) -> &'static str {
+        self.replacement
+    }
+
+    pub fn message(&self) -> &'static str {
+        self.message
+    }
 }
 
 #[derive(Clone)]
 pub struct ConstructorDescriptor {
-    pub export: &'static str,
-    pub arguments: Vec<ArgumentDescriptor>,
-    pub deprecation: Option<DeprecationDescriptor>,
+    export: &'static str,
+    arguments: Vec<ArgumentDescriptor>,
+    deprecation: Option<DeprecationDescriptor>,
     factory: Arc<PayloadFactory>,
 }
 
@@ -430,12 +476,24 @@ impl ConstructorDescriptor {
         }
     }
 
-    pub fn deprecated(mut self, replacement: &'static str, message: &'static str) -> Self {
+    pub fn with_deprecation(mut self, replacement: &'static str, message: &'static str) -> Self {
         self.deprecation = Some(DeprecationDescriptor {
             replacement,
             message,
         });
         self
+    }
+
+    pub fn export(&self) -> &'static str {
+        self.export
+    }
+
+    pub fn arguments(&self) -> &[ArgumentDescriptor] {
+        &self.arguments
+    }
+
+    pub fn deprecation(&self) -> Option<&DeprecationDescriptor> {
+        self.deprecation.as_ref()
     }
 
     pub(crate) fn payload(
@@ -459,9 +517,9 @@ impl fmt::Debug for ConstructorDescriptor {
 
 #[derive(Clone)]
 pub struct MethodDescriptor {
-    pub name: &'static str,
-    pub arguments: Vec<ArgumentDescriptor>,
-    pub documentation: Option<&'static str>,
+    name: &'static str,
+    arguments: Vec<ArgumentDescriptor>,
+    documentation: Option<&'static str>,
     recorder: Arc<PayloadFactory>,
 }
 
@@ -482,9 +540,21 @@ impl MethodDescriptor {
         }
     }
 
-    pub fn documented(mut self, documentation: &'static str) -> Self {
+    pub fn with_documentation(mut self, documentation: &'static str) -> Self {
         self.documentation = Some(documentation);
         self
+    }
+
+    pub fn name(&self) -> &'static str {
+        self.name
+    }
+
+    pub fn arguments(&self) -> &[ArgumentDescriptor] {
+        &self.arguments
+    }
+
+    pub fn documentation(&self) -> Option<&'static str> {
+        self.documentation
     }
 
     pub(crate) fn record(
@@ -506,19 +576,6 @@ impl fmt::Debug for MethodDescriptor {
     }
 }
 
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub struct TypeScriptDescriptor {
-    pub documentation: Option<&'static str>,
-}
-
-impl TypeScriptDescriptor {
-    pub const fn new(documentation: &'static str) -> Self {
-        Self {
-            documentation: Some(documentation),
-        }
-    }
-}
-
 pub struct MaterializeRequest<'a> {
     component_name: &'static str,
     payload: &'a ComponentPayload,
@@ -529,14 +586,21 @@ pub struct MaterializeRequest<'a> {
     window: Option<&'a mut Window>,
     cx: Option<&'a mut App>,
     style: Option<StyleRefinement>,
-    children: Vec<AnyElement>,
-    child_specs: Vec<(u32, Option<&'static str>)>,
-    issued_children: Vec<(u64, u32)>,
+    children: Children,
+    /// Children this request has not resolved yet, oldest first. A cursor
+    /// rather than repeated `remove(0)`, so a component with many children
+    /// costs one pass instead of one shift per child.
+    child_specs: ChildSpecs,
+    resolved_child_specs: usize,
+    issued_children: SmallVec<[(u64, u32); 4]>,
     next_child_token: u64,
     request_id: u64,
     child_lane: ChildLane,
-    slots: Vec<(&'static str, AnyElement)>,
-    slot_factories: Vec<(&'static str, ComponentElementFactory)>,
+    slots: Slots,
+    /// Deferred slots, still unbuilt. A factory leases the snapshot and
+    /// allocates, so one is built only when an adapter asks for it by name.
+    slot_factory_specs: SlotSpecs,
+    make_slot_factory: &'a dyn Fn(u32) -> ComponentElementFactory,
     disabled: bool,
     selected: bool,
     on_click: Option<crate::spec::CallbackId>,
@@ -546,6 +610,11 @@ pub struct MaterializeRequest<'a> {
     )>,
 }
 
+pub(crate) type Children = SmallVec<[AnyElement; 8]>;
+pub(crate) type ChildSpecs = SmallVec<[(u32, Option<&'static str>); 8]>;
+pub(crate) type Slots = SmallVec<[(&'static str, AnyElement); 2]>;
+pub(crate) type SlotSpecs = SmallVec<[(&'static str, u32); 2]>;
+
 pub(crate) struct MaterializeRequestInit<'a> {
     pub component_name: &'static str,
     pub payload: &'a ComponentPayload,
@@ -554,10 +623,11 @@ pub(crate) struct MaterializeRequestInit<'a> {
     pub resolve_element:
         &'a mut dyn FnMut(u32, Option<&mut Window>, Option<&mut App>) -> anyhow::Result<AnyElement>,
     pub style: StyleRefinement,
-    pub children: Vec<AnyElement>,
-    pub child_specs: Vec<(u32, Option<&'static str>)>,
-    pub slots: Vec<(&'static str, AnyElement)>,
-    pub slot_factories: Vec<(&'static str, ComponentElementFactory)>,
+    pub children: Children,
+    pub child_specs: ChildSpecs,
+    pub slots: Slots,
+    pub slot_factory_specs: SlotSpecs,
+    pub make_slot_factory: &'a dyn Fn(u32) -> ComponentElementFactory,
     pub disabled: bool,
     pub selected: bool,
     pub on_click: Option<crate::spec::CallbackId>,
@@ -580,12 +650,14 @@ impl<'a> MaterializeRequest<'a> {
             style: Some(init.style),
             children: init.children,
             child_specs: init.child_specs,
-            issued_children: Vec::new(),
+            resolved_child_specs: 0,
+            issued_children: SmallVec::new(),
             next_child_token: 0,
             request_id: NEXT_MATERIALIZE_REQUEST_ID.fetch_add(1, Ordering::Relaxed),
             child_lane: ChildLane::Unclaimed,
             slots: init.slots,
-            slot_factories: init.slot_factories,
+            slot_factory_specs: init.slot_factory_specs,
+            make_slot_factory: init.make_slot_factory,
             disabled: init.disabled,
             selected: init.selected,
             on_click: init.on_click,
@@ -683,40 +755,51 @@ impl<'a> MaterializeRequest<'a> {
     }
 
     pub fn children_len(&self) -> usize {
-        self.children.len() + self.child_specs.len() + self.issued_children.len()
+        self.children.len() + self.remaining_child_specs() + self.issued_children.len()
+    }
+
+    fn remaining_child_specs(&self) -> usize {
+        self.child_specs.len() - self.resolved_child_specs
     }
 
     pub fn take_children(&mut self) -> anyhow::Result<Vec<AnyElement>> {
-        if self.child_lane == ChildLane::Typed {
-            tracing::warn!(
-                "{} already issued typed children; take_children is exclusive with take_typed_children",
-                self.component_name
-            );
-            return Ok(Vec::new());
-        }
+        anyhow::ensure!(
+            self.child_lane != ChildLane::Typed,
+            "{} already issued typed children; take_children is exclusive with take_typed_children",
+            self.component_name
+        );
         self.child_lane = ChildLane::Ordinary;
-        let mut children = std::mem::take(&mut self.children);
-        while let Some((id, _)) = self.child_specs.first().copied() {
+        let mut children = std::mem::take(&mut self.children).into_vec();
+        while self.resolved_child_specs < self.child_specs.len() {
+            let (id, _) = self.child_specs[self.resolved_child_specs];
+            // Resolved before the cursor advances: a child that fails stays
+            // unconsumed, so `Drop` still reports it.
             let child =
                 (self.resolve_element)(id, self.window.as_deref_mut(), self.cx.as_deref_mut())?;
-            self.child_specs.remove(0);
+            self.resolved_child_specs += 1;
             children.push(child);
         }
+        self.child_specs.clear();
+        self.resolved_child_specs = 0;
         Ok(children)
     }
 
     /// Takes opaque child tokens for adapters whose Rust component requires
     /// typed children. This is exclusive with [`Self::take_children`].
-    pub fn take_typed_children(&mut self) -> Vec<ComponentChild<'a>> {
-        if self.child_lane == ChildLane::Ordinary {
-            tracing::warn!(
-                "{} already materialized ordinary children; take_typed_children is exclusive with take_children",
-                self.component_name
-            );
-            return Vec::new();
-        }
+    ///
+    /// Mixing the two lanes is a programming error in the adapter, not a
+    /// script mistake, so it is reported rather than answered with an empty
+    /// list: silently rendering a component with none of its children, and
+    /// only a log line to say why, is the harder failure to find.
+    pub fn take_typed_children(&mut self) -> anyhow::Result<Vec<ComponentChild<'a>>> {
+        anyhow::ensure!(
+            self.child_lane != ChildLane::Ordinary,
+            "{} already materialized ordinary children; take_typed_children is exclusive with take_children",
+            self.component_name
+        );
         self.child_lane = ChildLane::Typed;
-        std::mem::take(&mut self.child_specs)
+        self.resolved_child_specs = 0;
+        Ok(std::mem::take(&mut self.child_specs)
             .into_iter()
             .map(|(id, component_name)| {
                 let token = self.next_child_token;
@@ -733,7 +816,7 @@ impl<'a> MaterializeRequest<'a> {
                     request_lifetime: PhantomData,
                 }
             })
-            .collect()
+            .collect())
     }
 
     /// Materializes one opaque child token exactly once.
@@ -754,7 +837,9 @@ impl<'a> MaterializeRequest<'a> {
         let id = self.issued_children[index].1;
         let element =
             (self.resolve_element)(id, self.window.as_deref_mut(), self.cx.as_deref_mut())?;
-        self.issued_children.remove(index);
+        // Order does not matter here — the token, not the position, identifies
+        // the child — so this avoids shifting the rest on every consumed child.
+        self.issued_children.swap_remove(index);
         Ok(element)
     }
 
@@ -763,27 +848,46 @@ impl<'a> MaterializeRequest<'a> {
     /// Slots remain separate from ordinary children because the registered
     /// component owns their placement. Any slot left unread is diagnosed when
     /// the request is dropped instead of disappearing silently.
-    pub fn take_slot(&mut self, name: &str) -> Option<AnyElement> {
+    ///
+    /// `Ok(None)` means the script wrote no such slot. A slot that exists but
+    /// cannot be built is an error rather than a second spelling of absence:
+    /// the two call for opposite responses from the adapter, and collapsing
+    /// them would let a script's element disappear without a diagnostic.
+    pub fn take_slot(&mut self, name: &str) -> anyhow::Result<Option<AnyElement>> {
         if let Some(index) = self.slots.iter().position(|(held, _)| *held == name) {
             if let Some(factory) = self
-                .slot_factories
+                .slot_factory_specs
                 .iter()
                 .position(|(held, _)| *held == name)
             {
-                self.slot_factories.remove(factory);
+                self.slot_factory_specs.remove(factory);
             }
-            return Some(self.slots.remove(index).1);
+            return Ok(Some(self.slots.remove(index).1));
         }
-        let factory = self.take_slot_factory(name)?;
-        let window = self.window.as_deref_mut()?;
-        let cx = self.cx.as_deref_mut()?;
-        match factory.build(window, cx) {
-            Ok(element) => Some(element),
-            Err(error) => {
-                tracing::error!("failed to materialize `{name}` slot: {error:#}");
-                None
-            }
+        if !self
+            .slot_factory_specs
+            .iter()
+            .any(|(held, _)| *held == name)
+        {
+            return Ok(None);
         }
+        // Checked before the factory is consumed. Taking it first and then
+        // failing to find the render authority would drop the script's element
+        // and leave `unread_parts` with nothing left to report.
+        anyhow::ensure!(
+            self.window.is_some() && self.cx.is_some(),
+            "the `{name}` slot is deferred and needs render Window and App authority to build"
+        );
+        let Some(factory) = self.take_slot_factory(name) else {
+            return Ok(None);
+        };
+        let (Some(window), Some(cx)) = (self.window.as_deref_mut(), self.cx.as_deref_mut()) else {
+            anyhow::bail!("the `{name}` slot lost its render authority");
+        };
+        factory
+            .build(window, cx)
+            .map(Some)
+            .with_context(|| format!("failed to materialize the `{name}` slot"))
     }
 
     /// Takes the next named slot as a repeatable owned factory.
@@ -793,13 +897,14 @@ impl<'a> MaterializeRequest<'a> {
     /// are returned in script order.
     pub fn take_slot_factory(&mut self, name: &str) -> Option<ComponentElementFactory> {
         let index = self
-            .slot_factories
+            .slot_factory_specs
             .iter()
             .position(|(held, _)| *held == name)?;
         if let Some(eager) = self.slots.iter().position(|(held, _)| *held == name) {
             self.slots.remove(eager);
         }
-        Some(self.slot_factories.remove(index).1)
+        let (_, spec) = self.slot_factory_specs.remove(index);
+        Some((self.make_slot_factory)(spec))
     }
 
     /// Takes all slots with `name`, preserving script order.
@@ -809,11 +914,11 @@ impl<'a> MaterializeRequest<'a> {
         while index < self.slots.len() {
             if self.slots[index].0 == name {
                 if let Some(factory) = self
-                    .slot_factories
+                    .slot_factory_specs
                     .iter()
                     .position(|(held, _)| *held == name)
                 {
-                    self.slot_factories.remove(factory);
+                    self.slot_factory_specs.remove(factory);
                 }
                 taken.push(self.slots.remove(index).1);
             } else {
@@ -832,12 +937,13 @@ impl<'a> MaterializeRequest<'a> {
     pub fn take_slot_factories(&mut self, name: &str) -> Vec<ComponentElementFactory> {
         let mut taken = Vec::new();
         let mut index = 0;
-        while index < self.slot_factories.len() {
-            if self.slot_factories[index].0 == name {
+        while index < self.slot_factory_specs.len() {
+            if self.slot_factory_specs[index].0 == name {
                 if let Some(eager) = self.slots.iter().position(|(held, _)| *held == name) {
                     self.slots.remove(eager);
                 }
-                taken.push(self.slot_factories.remove(index).1);
+                let (_, spec) = self.slot_factory_specs.remove(index);
+                taken.push((self.make_slot_factory)(spec));
             } else {
                 index += 1;
             }
@@ -871,12 +977,12 @@ impl<'a> MaterializeRequest<'a> {
     fn unread_parts(&self) -> (bool, usize, Vec<&'static str>) {
         (
             self.style.is_some(),
-            self.children.len() + self.child_specs.len() + self.issued_children.len(),
+            self.children.len() + self.remaining_child_specs() + self.issued_children.len(),
             self.slots
                 .iter()
                 .map(|(name, _)| *name)
                 .chain(
-                    self.slot_factories
+                    self.slot_factory_specs
                         .iter()
                         .filter(|(name, _)| !self.slots.iter().any(|(eager, _)| eager == name))
                         .map(|(name, _)| *name),
@@ -1421,12 +1527,66 @@ pub trait ComponentMaterializer: Send + Sync + 'static {
     fn materialize(&self, request: MaterializeRequest<'_>) -> anyhow::Result<AnyElement>;
 }
 
+/// One registered component: what a script can construct, what it can call on
+/// the result, and who turns the recording into an element.
+///
+/// Built rather than written as a literal, so that a later field is an added
+/// `with_` method instead of a break in every adapter that registers anything.
 pub struct ComponentDescriptor {
-    pub name: &'static str,
-    pub constructors: Vec<ConstructorDescriptor>,
-    pub methods: Vec<MethodDescriptor>,
-    pub typescript: TypeScriptDescriptor,
-    pub materializer: Arc<dyn ComponentMaterializer>,
+    name: &'static str,
+    constructors: Vec<ConstructorDescriptor>,
+    methods: Vec<MethodDescriptor>,
+    documentation: Option<&'static str>,
+    materializer: Arc<dyn ComponentMaterializer>,
+}
+
+impl ComponentDescriptor {
+    pub fn new(name: &'static str, materializer: Arc<dyn ComponentMaterializer>) -> Self {
+        Self {
+            name,
+            constructors: Vec::new(),
+            methods: Vec::new(),
+            documentation: None,
+            materializer,
+        }
+    }
+
+    pub fn with_constructors(mut self, constructors: Vec<ConstructorDescriptor>) -> Self {
+        self.constructors = constructors;
+        self
+    }
+
+    pub fn with_methods(mut self, methods: Vec<MethodDescriptor>) -> Self {
+        self.methods = methods;
+        self
+    }
+
+    /// The doc comment carried into `gpui.d.ts` for this component's element
+    /// interface and every one of its constructor exports.
+    pub fn with_documentation(mut self, documentation: &'static str) -> Self {
+        self.documentation = Some(documentation);
+        self
+    }
+
+    pub fn name(&self) -> &'static str {
+        self.name
+    }
+
+    pub fn constructors(&self) -> &[ConstructorDescriptor] {
+        &self.constructors
+    }
+
+    pub fn methods(&self) -> &[MethodDescriptor] {
+        &self.methods
+    }
+
+    pub fn documentation(&self) -> Option<&'static str> {
+        self.documentation
+    }
+
+    pub(crate) fn materializer(&self) -> &Arc<dyn ComponentMaterializer> {
+        &self.materializer
+    }
 }
 
 impl fmt::Debug for ComponentDescriptor {
@@ -1436,7 +1596,7 @@ impl fmt::Debug for ComponentDescriptor {
             .field("name", &self.name)
             .field("constructors", &self.constructors)
             .field("methods", &self.methods)
-            .field("typescript", &self.typescript)
+            .field("documentation", &self.documentation)
             .finish_non_exhaustive()
     }
 }
@@ -1480,6 +1640,10 @@ pub enum RegistryError {
         component: &'static str,
         method: &'static str,
     },
+    UndocumentedMethod {
+        component: &'static str,
+        method: &'static str,
+    },
     InvalidDeprecationReplacement {
         component: &'static str,
         export: &'static str,
@@ -1488,8 +1652,12 @@ pub enum RegistryError {
     EmptyConstructorList(&'static str),
     InvalidStateKind(&'static str),
     DuplicateStateKind(&'static str),
-    Frozen,
+    InvalidModuleSpecifier(&'static str),
 }
+
+/// Module names the runtime answers to itself. A component catalog may not
+/// claim one: the runtime's resolvers run first.
+const RUNTIME_MODULE_SPECIFIERS: &[&str] = &["gpui", "gpui-base", "gpui-shell", "gpui-fps"];
 
 impl fmt::Display for RegistryError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -1552,6 +1720,11 @@ impl fmt::Display for RegistryError {
                 formatter,
                 "component `{component}` callable `{callable}` has required argument `{argument}` after an optional argument"
             ),
+            Self::UndocumentedMethod { component, method } => write!(
+                formatter,
+                "component `{component}` method `{method}` has no documentation; \
+                 call MethodDescriptor::with_documentation"
+            ),
             Self::DuplicateMethod { component, method } => {
                 write!(
                     formatter,
@@ -1581,7 +1754,11 @@ impl fmt::Display for RegistryError {
             Self::DuplicateStateKind(kind) => {
                 write!(formatter, "state kind `{kind}` is already registered")
             }
-            Self::Frozen => formatter.write_str("component registry is frozen"),
+            Self::InvalidModuleSpecifier(specifier) => write!(
+                formatter,
+                "`{specifier}` is not a usable component module specifier; it must be non-empty \
+                 and must not be one of the runtime's own modules"
+            ),
         }
     }
 }
@@ -1589,40 +1766,49 @@ impl fmt::Display for RegistryError {
 impl std::error::Error for RegistryError {}
 
 pub struct ComponentRegistry {
+    module_specifier: &'static str,
     descriptors: Vec<Arc<ComponentDescriptor>>,
     names: HashSet<&'static str>,
     exports: HashSet<&'static str>,
     states: Vec<Arc<StateDescriptor>>,
     state_kinds: HashSet<&'static str>,
-    frozen: bool,
 }
 
 impl ComponentRegistry {
-    pub fn new(api_version: u32) -> Result<Self, RegistryError> {
+    /// Opens a registry whose components a script imports from
+    /// `module_specifier`.
+    ///
+    /// The name is the adapter's to choose — [`DEFAULT_COMPONENT_MODULE`] is
+    /// what the shipped one picks — but it may not be a name the runtime's own
+    /// modules already answer to, because those resolve first and the catalog
+    /// would be unreachable rather than overriding.
+    pub fn new(api_version: u32, module_specifier: &'static str) -> Result<Self, RegistryError> {
         if api_version != COMPONENT_REGISTRY_API_VERSION {
             return Err(RegistryError::IncompatibleApiVersion {
                 expected: COMPONENT_REGISTRY_API_VERSION,
                 actual: api_version,
             });
         }
+        if module_specifier.trim().is_empty()
+            || RUNTIME_MODULE_SPECIFIERS.contains(&module_specifier)
+        {
+            return Err(RegistryError::InvalidModuleSpecifier(module_specifier));
+        }
 
         Ok(Self {
+            module_specifier,
             descriptors: Vec::new(),
             names: HashSet::new(),
             exports: HashSet::new(),
             states: Vec::new(),
             state_kinds: HashSet::new(),
-            frozen: false,
         })
     }
 
     pub fn register(
         &mut self,
-        mut descriptor: ComponentDescriptor,
+        descriptor: ComponentDescriptor,
     ) -> Result<ComponentId, RegistryError> {
-        if self.frozen {
-            return Err(RegistryError::Frozen);
-        }
         if self.names.contains(descriptor.name) {
             return Err(RegistryError::DuplicateComponent(descriptor.name));
         }
@@ -1631,12 +1817,6 @@ impl ComponentRegistry {
         }
         if descriptor.constructors.is_empty() {
             return Err(RegistryError::EmptyConstructorList(descriptor.name));
-        }
-
-        for method in &mut descriptor.methods {
-            if method.documentation.is_none() {
-                method.documentation = Some("Configures this component.");
-            }
         }
 
         let mut methods = HashSet::new();
@@ -1649,6 +1829,16 @@ impl ComponentRegistry {
             }
             if !methods.insert(method.name) {
                 return Err(RegistryError::DuplicateMethod {
+                    component: descriptor.name,
+                    method: method.name,
+                });
+            }
+            // Every method becomes a line of `gpui.d.ts` that a script author
+            // reads in an editor. Filling a default sentence in here would make
+            // the published surface look documented without anyone having
+            // described it, so an omission is refused instead.
+            if method.documentation.is_none() {
+                return Err(RegistryError::UndocumentedMethod {
                     component: descriptor.name,
                     method: method.name,
                 });
@@ -1689,9 +1879,6 @@ impl ComponentRegistry {
     }
 
     pub fn register_state(&mut self, descriptor: StateDescriptor) -> Result<(), RegistryError> {
-        if self.frozen {
-            return Err(RegistryError::Frozen);
-        }
         if !is_javascript_identifier(descriptor.export) {
             return Err(RegistryError::InvalidExport(descriptor.export));
         }
@@ -1711,14 +1898,15 @@ impl ComponentRegistry {
         Ok(())
     }
 
-    pub fn freeze(&mut self) -> Result<FrozenComponentRegistry, RegistryError> {
-        if self.frozen {
-            return Err(RegistryError::Frozen);
-        }
-        self.frozen = true;
+    /// Publishes the catalog, consuming the builder.
+    ///
+    /// Taking `self` is what makes "a frozen registry cannot be registered
+    /// into" a fact about the type rather than a flag checked at run time.
+    pub fn freeze(self) -> Result<FrozenComponentRegistry, RegistryError> {
         Ok(FrozenComponentRegistry {
-            descriptors: self.descriptors.clone().into(),
-            states: self.states.clone().into(),
+            module_specifier: Some(self.module_specifier),
+            descriptors: self.descriptors.into(),
+            states: self.states.into(),
         })
     }
 }
@@ -1867,11 +2055,19 @@ fn is_javascript_identifier(name: &str) -> bool {
 
 #[derive(Clone, Default)]
 pub struct FrozenComponentRegistry {
+    /// `None` for the empty catalog the bare runtime ships, which declares no
+    /// module at all rather than an empty one.
+    module_specifier: Option<&'static str>,
     descriptors: Arc<[Arc<ComponentDescriptor>]>,
     states: Arc<[Arc<StateDescriptor>]>,
 }
 
 impl FrozenComponentRegistry {
+    /// The specifier a script imports this catalog's components from.
+    pub fn module_specifier(&self) -> Option<&'static str> {
+        self.module_specifier
+    }
+
     pub fn descriptors(&self) -> impl ExactSizeIterator<Item = &ComponentDescriptor> {
         self.descriptors.iter().map(Arc::as_ref)
     }
@@ -1933,6 +2129,10 @@ mod tests {
     use super::*;
     use gpui::div;
 
+    fn test_slot_factory(_: u32) -> ComponentElementFactory {
+        ComponentElementFactory::new(|_, _| Ok(div().into_any_element()))
+    }
+
     #[gpui::test]
     fn component_callback_reports_a_released_runtime(cx: &mut gpui::TestAppContext) {
         use gpui::{Empty, VisualTestContext};
@@ -1980,13 +2180,11 @@ mod tests {
             runtime: &runtime,
             resolve_element: &mut resolve_element,
             style: StyleRefinement::default(),
-            children: vec![div().into_any_element()],
-            child_specs: Vec::new(),
-            slots: vec![("trigger", div().into_any_element())],
-            slot_factories: vec![(
-                "trigger",
-                ComponentElementFactory::new(|_, _| Ok(div().into_any_element())),
-            )],
+            children: smallvec::smallvec![div().into_any_element()],
+            child_specs: SmallVec::new(),
+            slots: smallvec::smallvec![("trigger", div().into_any_element())],
+            slot_factory_specs: smallvec::smallvec![("trigger", 0)],
+            make_slot_factory: &test_slot_factory,
             disabled: false,
             selected: false,
             on_click: None,
@@ -1998,8 +2196,8 @@ mod tests {
             .expect_err("a request outside render has no Window/App authority");
         assert_eq!(error.to_string(), "render Window authority is unavailable");
         assert_eq!(request.unread_parts(), (true, 1, vec!["trigger"]));
-        assert!(request.take_slot("content").is_none());
-        assert!(request.take_slot("trigger").is_some());
+        assert!(request.take_slot("content").unwrap().is_none());
+        assert!(request.take_slot("trigger").unwrap().is_some());
         assert!(request.take_slot_factory("trigger").is_none());
         assert_eq!(request.take_children().unwrap().len(), 1);
         let _ = request.take_style();
@@ -2021,27 +2219,15 @@ mod tests {
             runtime: &runtime,
             resolve_element: &mut resolve_element,
             style: StyleRefinement::default(),
-            children: Vec::new(),
-            child_specs: Vec::new(),
-            slots: vec![
+            children: SmallVec::new(),
+            child_specs: SmallVec::new(),
+            slots: smallvec::smallvec![
                 ("content", div().into_any_element()),
                 ("content", div().into_any_element()),
                 ("trigger", div().into_any_element()),
             ],
-            slot_factories: vec![
-                (
-                    "content",
-                    ComponentElementFactory::new(|_, _| Ok(div().into_any_element())),
-                ),
-                (
-                    "content",
-                    ComponentElementFactory::new(|_, _| Ok(div().into_any_element())),
-                ),
-                (
-                    "content",
-                    ComponentElementFactory::new(|_, _| Ok(div().into_any_element())),
-                ),
-            ],
+            slot_factory_specs: smallvec::smallvec![("content", 0), ("content", 1), ("content", 2)],
+            make_slot_factory: &test_slot_factory,
             disabled: false,
             selected: false,
             on_click: None,
@@ -2050,8 +2236,8 @@ mod tests {
 
         assert_eq!(request.take_slots("content").len(), 2);
         assert_eq!(request.take_slot_factories("content").len(), 1);
-        assert!(request.take_slot("content").is_none());
-        assert!(request.take_slot("trigger").is_some());
+        assert!(request.take_slot("content").unwrap().is_none());
+        assert!(request.take_slot("trigger").unwrap().is_some());
         let _ = request.take_style();
         assert_eq!(request.unread_parts(), (false, 0, Vec::new()));
     }
@@ -2076,17 +2262,18 @@ mod tests {
             runtime: &runtime,
             resolve_element: &mut resolve_element,
             style: StyleRefinement::default(),
-            children: Vec::new(),
-            child_specs: vec![(7, Some("RegisteredChild"))],
-            slots: Vec::new(),
-            slot_factories: Vec::new(),
+            children: SmallVec::new(),
+            child_specs: smallvec::smallvec![(7, Some("RegisteredChild"))],
+            slots: SmallVec::new(),
+            slot_factory_specs: SmallVec::new(),
+            make_slot_factory: &test_slot_factory,
             disabled: false,
             selected: false,
             on_click: None,
             application_owner: None,
         });
 
-        let mut child = request.take_typed_children().pop().unwrap();
+        let mut child = request.take_typed_children().unwrap().pop().unwrap();
         assert_eq!(child.component_name(), Some("RegisteredChild"));
         assert!(request.materialize_child(&mut child).is_err());
         assert_eq!(request.unread_parts().1, 1);
@@ -2112,17 +2299,21 @@ mod tests {
             runtime: &runtime,
             resolve_element: &mut resolve_element,
             style: StyleRefinement::default(),
-            children: Vec::new(),
-            child_specs: vec![(7, Some("RepeatedChild")), (7, Some("RepeatedChild"))],
-            slots: Vec::new(),
-            slot_factories: Vec::new(),
+            children: SmallVec::new(),
+            child_specs: smallvec::smallvec![
+                (7, Some("RepeatedChild")),
+                (7, Some("RepeatedChild"))
+            ],
+            slots: SmallVec::new(),
+            slot_factory_specs: SmallVec::new(),
+            make_slot_factory: &test_slot_factory,
             disabled: false,
             selected: false,
             on_click: None,
             application_owner: None,
         });
 
-        let mut children = request.take_typed_children();
+        let mut children = request.take_typed_children().unwrap();
         let mut first = children.remove(0);
         let mut second = children.remove(0);
         assert!(request.materialize_child(&mut first).is_ok());
@@ -2147,17 +2338,21 @@ mod tests {
             runtime: &runtime,
             resolve_element: &mut ordinary_resolver,
             style: StyleRefinement::default(),
-            children: Vec::new(),
-            child_specs: vec![(1, None)],
-            slots: Vec::new(),
-            slot_factories: Vec::new(),
+            children: SmallVec::new(),
+            child_specs: smallvec::smallvec![(1, None)],
+            slots: SmallVec::new(),
+            slot_factory_specs: SmallVec::new(),
+            make_slot_factory: &test_slot_factory,
             disabled: false,
             selected: false,
             on_click: None,
             application_owner: None,
         });
         assert_eq!(ordinary.take_children().unwrap().len(), 1);
-        assert!(ordinary.take_typed_children().is_empty());
+        assert!(
+            ordinary.take_typed_children().is_err(),
+            "the typed lane must report the conflict, not answer with no children"
+        );
         assert_eq!(ordinary.child_lane, ChildLane::Ordinary);
 
         let mut typed_resolver =
@@ -2169,19 +2364,23 @@ mod tests {
             runtime: &runtime,
             resolve_element: &mut typed_resolver,
             style: StyleRefinement::default(),
-            children: Vec::new(),
-            child_specs: vec![(2, None)],
-            slots: Vec::new(),
-            slot_factories: Vec::new(),
+            children: SmallVec::new(),
+            child_specs: smallvec::smallvec![(2, None)],
+            slots: SmallVec::new(),
+            slot_factory_specs: SmallVec::new(),
+            make_slot_factory: &test_slot_factory,
             disabled: false,
             selected: false,
             on_click: None,
             application_owner: None,
         });
-        let mut child = typed.take_typed_children().pop().unwrap();
+        let mut child = typed.take_typed_children().unwrap().pop().unwrap();
         assert_eq!(child.component_name(), None, "built-ins stay opaque");
         assert!(typed.materialize_child(&mut child).is_ok());
-        assert!(typed.take_children().unwrap().is_empty());
+        assert!(
+            typed.take_children().is_err(),
+            "the ordinary lane must report the conflict too"
+        );
         assert_eq!(typed.child_lane, ChildLane::Typed);
     }
 
@@ -2207,10 +2406,11 @@ mod tests {
             runtime: &runtime,
             resolve_element: &mut resolve_element,
             style: StyleRefinement::default(),
-            children: Vec::new(),
-            child_specs: vec![(9, Some("FailingChild"))],
-            slots: Vec::new(),
-            slot_factories: Vec::new(),
+            children: SmallVec::new(),
+            child_specs: smallvec::smallvec![(9, Some("FailingChild"))],
+            slots: SmallVec::new(),
+            slot_factory_specs: SmallVec::new(),
+            make_slot_factory: &test_slot_factory,
             disabled: false,
             selected: false,
             on_click: None,
@@ -2243,10 +2443,11 @@ mod tests {
             runtime: &runtime_a,
             resolve_element: &mut resolver_a,
             style: StyleRefinement::default(),
-            children: Vec::new(),
-            child_specs: vec![(3, Some("Child"))],
-            slots: Vec::new(),
-            slot_factories: Vec::new(),
+            children: SmallVec::new(),
+            child_specs: smallvec::smallvec![(3, Some("Child"))],
+            slots: SmallVec::new(),
+            slot_factory_specs: SmallVec::new(),
+            make_slot_factory: &test_slot_factory,
             disabled: false,
             selected: false,
             on_click: None,
@@ -2259,10 +2460,11 @@ mod tests {
             runtime: &runtime_b,
             resolve_element: &mut resolver_b,
             style: StyleRefinement::default(),
-            children: Vec::new(),
-            child_specs: vec![(3, Some("Child"))],
-            slots: Vec::new(),
-            slot_factories: Vec::new(),
+            children: SmallVec::new(),
+            child_specs: smallvec::smallvec![(3, Some("Child"))],
+            slots: SmallVec::new(),
+            slot_factory_specs: SmallVec::new(),
+            make_slot_factory: &test_slot_factory,
             disabled: false,
             selected: false,
             on_click: None,
@@ -2275,17 +2477,18 @@ mod tests {
             runtime: &runtime_a,
             resolve_element: &mut resolver_c,
             style: StyleRefinement::default(),
-            children: Vec::new(),
-            child_specs: vec![(3, Some("Child"))],
-            slots: Vec::new(),
-            slot_factories: Vec::new(),
+            children: SmallVec::new(),
+            child_specs: smallvec::smallvec![(3, Some("Child"))],
+            slots: SmallVec::new(),
+            slot_factory_specs: SmallVec::new(),
+            make_slot_factory: &test_slot_factory,
             disabled: false,
             selected: false,
             on_click: None,
             application_owner: None,
         });
 
-        let mut child = request_a.take_typed_children().pop().unwrap();
+        let mut child = request_a.take_typed_children().unwrap().pop().unwrap();
         let error = request_b
             .materialize_child(&mut child)
             .err()
@@ -2311,13 +2514,9 @@ mod tests {
         name: &'static str,
         constructors: Vec<ConstructorDescriptor>,
     ) -> ComponentDescriptor {
-        ComponentDescriptor {
-            name,
-            constructors,
-            methods: Vec::new(),
-            typescript: TypeScriptDescriptor::default(),
-            materializer: Arc::new(EmptyMaterializer),
-        }
+        ComponentDescriptor::new(name, Arc::new(EmptyMaterializer))
+            .with_constructors(constructors)
+            .with_methods(Vec::new())
     }
 
     fn nullary(export: &'static str) -> ConstructorDescriptor {
@@ -2330,7 +2529,9 @@ mod tests {
 
     #[test]
     fn state_exports_share_the_component_export_namespace() {
-        let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+        let mut registry =
+            ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION, DEFAULT_COMPONENT_MODULE)
+                .unwrap();
         registry
             .register_state(state("InputState", "InputState"))
             .unwrap();
@@ -2345,7 +2546,9 @@ mod tests {
 
     #[test]
     fn state_descriptors_validate_export_kind_and_arguments() {
-        let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+        let mut registry =
+            ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION, DEFAULT_COMPONENT_MODULE)
+                .unwrap();
         assert_eq!(
             registry
                 .register_state(state("class", "State"))
@@ -2374,7 +2577,9 @@ mod tests {
             }
         );
 
-        let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+        let mut registry =
+            ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION, DEFAULT_COMPONENT_MODULE)
+                .unwrap();
         registry
             .register_state(state("FirstState", "SharedState"))
             .unwrap();
@@ -2388,7 +2593,9 @@ mod tests {
 
     #[test]
     fn frozen_registry_module_declares_state_exports() {
-        let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+        let mut registry =
+            ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION, DEFAULT_COMPONENT_MODULE)
+                .unwrap();
         registry
             .register_state(state("InputState", "InputState"))
             .unwrap();
@@ -2428,22 +2635,24 @@ mod tests {
 
     #[test]
     fn duplicate_methods_are_rejected_with_the_component_name() {
-        let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+        let mut registry =
+            ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION, DEFAULT_COMPONENT_MODULE)
+                .unwrap();
         let error = registry
-            .register(ComponentDescriptor {
-                name: "Button",
-                constructors: vec![nullary("Button")],
-                methods: vec![
-                    MethodDescriptor::new("disabled", Vec::new(), |_| {
-                        Ok(ComponentPayload::new(()))
-                    }),
-                    MethodDescriptor::new("disabled", Vec::new(), |_| {
-                        Ok(ComponentPayload::new(()))
-                    }),
-                ],
-                typescript: TypeScriptDescriptor::default(),
-                materializer: Arc::new(EmptyMaterializer),
-            })
+            .register(
+                ComponentDescriptor::new("Button", Arc::new(EmptyMaterializer))
+                    .with_constructors(vec![nullary("Button")])
+                    .with_methods(vec![
+                        MethodDescriptor::new("disabled", Vec::new(), |_| {
+                            Ok(ComponentPayload::new(()))
+                        })
+                        .with_documentation("Disables the button."),
+                        MethodDescriptor::new("disabled", Vec::new(), |_| {
+                            Ok(ComponentPayload::new(()))
+                        })
+                        .with_documentation("Disables the button, again."),
+                    ]),
+            )
             .unwrap_err();
 
         assert_eq!(
@@ -2457,7 +2666,9 @@ mod tests {
 
     #[test]
     fn duplicate_exports_inside_one_descriptor_are_rejected() {
-        let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+        let mut registry =
+            ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION, DEFAULT_COMPONENT_MODULE)
+                .unwrap();
         let error = registry
             .register(empty_descriptor(
                 "Button",
@@ -2471,7 +2682,9 @@ mod tests {
     #[test]
     fn invalid_and_reserved_javascript_exports_are_rejected() {
         for export in ["not-valid", "class"] {
-            let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+            let mut registry =
+                ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION, DEFAULT_COMPONENT_MODULE)
+                    .unwrap();
             let error = registry
                 .register(empty_descriptor("Button", vec![nullary(export)]))
                 .unwrap_err();
@@ -2481,23 +2694,25 @@ mod tests {
 
     #[test]
     fn method_and_argument_names_must_be_javascript_identifiers() {
-        let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+        let mut registry =
+            ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION, DEFAULT_COMPONENT_MODULE)
+                .unwrap();
         let error = registry
             .register(empty_descriptor("not-valid", vec![nullary("Button")]))
             .unwrap_err();
         assert_eq!(error, RegistryError::InvalidComponent("not-valid"));
 
-        let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+        let mut registry =
+            ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION, DEFAULT_COMPONENT_MODULE)
+                .unwrap();
         let error = registry
-            .register(ComponentDescriptor {
-                name: "Button",
-                constructors: vec![nullary("Button")],
-                methods: vec![MethodDescriptor::new("not-valid", Vec::new(), |_| {
-                    Ok(ComponentPayload::new(()))
-                })],
-                typescript: TypeScriptDescriptor::default(),
-                materializer: Arc::new(EmptyMaterializer),
-            })
+            .register(
+                ComponentDescriptor::new("Button", Arc::new(EmptyMaterializer))
+                    .with_constructors(vec![nullary("Button")])
+                    .with_methods(vec![MethodDescriptor::new("not-valid", Vec::new(), |_| {
+                        Ok(ComponentPayload::new(()))
+                    })]),
+            )
             .unwrap_err();
         assert_eq!(
             error,
@@ -2507,7 +2722,9 @@ mod tests {
             }
         );
 
-        let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+        let mut registry =
+            ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION, DEFAULT_COMPONENT_MODULE)
+                .unwrap();
         let error = registry
             .register(empty_descriptor(
                 "Button",
@@ -2530,7 +2747,9 @@ mod tests {
 
     #[test]
     fn required_arguments_cannot_follow_optional_arguments() {
-        let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+        let mut registry =
+            ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION, DEFAULT_COMPONENT_MODULE)
+                .unwrap();
         let error = registry
             .register(empty_descriptor(
                 "Button",
@@ -2586,7 +2805,9 @@ mod tests {
                 "callback signature must not be empty",
             ),
         ] {
-            let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+            let mut registry =
+                ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION, DEFAULT_COMPONENT_MODULE)
+                    .unwrap();
             let error = registry
                 .register(empty_descriptor(
                     "Button",
@@ -2611,7 +2832,9 @@ mod tests {
 
     #[test]
     fn one_signature_cannot_repeat_an_argument_name() {
-        let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+        let mut registry =
+            ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION, DEFAULT_COMPONENT_MODULE)
+                .unwrap();
         let error = registry
             .register(empty_descriptor(
                 "Button",
@@ -2638,13 +2861,15 @@ mod tests {
     #[test]
     fn deprecated_exports_must_name_another_export_from_the_same_descriptor() {
         for replacement in ["MissingButton", "OldButton"] {
-            let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+            let mut registry =
+                ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION, DEFAULT_COMPONENT_MODULE)
+                    .unwrap();
             let error = registry
                 .register(empty_descriptor(
                     "Button",
                     vec![
                         nullary("Button"),
-                        nullary("OldButton").deprecated(replacement, "Use Button."),
+                        nullary("OldButton").with_deprecation(replacement, "Use Button."),
                     ],
                 ))
                 .unwrap_err();

@@ -6,15 +6,18 @@ use std::{fs, ops::Deref, path::PathBuf};
 
 #[test]
 fn delegate_collection_catalog_exposes_retained_list_contract() {
-    let mut registry =
-        gpui_shell::ComponentRegistry::new(gpui_shell::COMPONENT_REGISTRY_API_VERSION).unwrap();
+    let mut registry = gpui_shell::ComponentRegistry::new(
+        gpui_shell::COMPONENT_REGISTRY_API_VERSION,
+        gpui_shell::DEFAULT_COMPONENT_MODULE,
+    )
+    .unwrap();
     delegate_collections::register(&mut registry).unwrap();
     let registry = registry.freeze().unwrap();
 
     assert_eq!(
         registry
             .descriptors()
-            .map(|item| item.name)
+            .map(|item| item.name())
             .collect::<Vec<_>>(),
         ["List"]
     );
@@ -35,8 +38,7 @@ impl gpui::Render for ScriptRoot {
 #[gpui::test]
 fn list_uses_a_fresh_immutable_snapshot_and_lazy_row_renderer(cx: &mut TestAppContext) {
     cx.update(|cx| {
-        gpui_shell::gpui_component::init(cx);
-        gpui_shell::init(cx);
+        gpui_component_shell::init(cx);
     });
     let root = std::env::temp_dir().join(format!("delegate-list-{}", std::process::id()));
     fs::create_dir_all(&root).unwrap();
@@ -54,8 +56,11 @@ export default class App extends View {
 }"#,
     )
     .unwrap();
-    let mut registry =
-        gpui_shell::ComponentRegistry::new(gpui_shell::COMPONENT_REGISTRY_API_VERSION).unwrap();
+    let mut registry = gpui_shell::ComponentRegistry::new(
+        gpui_shell::COMPONENT_REGISTRY_API_VERSION,
+        gpui_shell::DEFAULT_COMPONENT_MODULE,
+    )
+    .unwrap();
     delegate_collections::register(&mut registry).unwrap();
     let runtime =
         gpui_shell::ShellRuntime::new_isolated_with_components(registry.freeze().unwrap()).unwrap();

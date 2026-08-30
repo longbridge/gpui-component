@@ -59,8 +59,7 @@ fn draw(context: &mut VisualTestContext) {
 #[gpui::test]
 fn popover_content_is_lazy_and_open_changes_cross_the_registered_boundary(cx: &mut TestAppContext) {
     cx.update(|cx| {
-        gpui_shell::gpui_component::init(cx);
-        gpui_shell::init(cx);
+        gpui_component_shell::init(cx);
     });
     let app = TempApp::new(
         r#"
@@ -136,8 +135,7 @@ export default class LazyPopover extends View {
 #[gpui::test]
 fn hover_card_builds_lazy_content_only_after_hover_and_reports_lifecycle(cx: &mut TestAppContext) {
     cx.update(|cx| {
-        gpui_shell::gpui_component::init(cx);
-        gpui_shell::init(cx);
+        gpui_component_shell::init(cx);
     });
     let app = TempApp::new(
         r#"
@@ -205,8 +203,7 @@ export default class LazyHoverCard extends View {
 #[gpui::test]
 fn dropdown_menu_opens_real_items_and_dispatches_the_selected_callback(cx: &mut TestAppContext) {
     cx.update(|cx| {
-        gpui_shell::gpui_component::init(cx);
-        gpui_shell::init(cx);
+        gpui_component_shell::init(cx);
     });
     let app = TempApp::new(
         r#"

@@ -141,62 +141,65 @@ pub(crate) fn declarations_with_components(components: &crate::FrozenComponentRe
     out.push_str("declare module \"gpui-component\" {\n");
     out.push_str("  import { ClickEvent, Context, Element } from \"gpui\";\n");
     for state in components.states() {
-        push_jsdoc(&mut out, state.documentation, None, "  ");
+        push_jsdoc(&mut out, state.documentation(), None, "  ");
         out.push_str("  export interface ");
-        out.push_str(state.kind);
+        out.push_str(state.kind());
         out.push_str(" { readonly __gpuiComponentState: unique symbol }\n");
-        push_jsdoc(&mut out, state.documentation, None, "  ");
+        push_jsdoc(&mut out, state.documentation(), None, "  ");
         out.push_str("  export function ");
-        out.push_str(state.export);
+        out.push_str(state.export());
         out.push('(');
-        push_arguments(&mut out, &state.arguments);
+        push_arguments(&mut out, state.arguments());
         out.push_str("): ");
-        out.push_str(state.kind);
+        out.push_str(state.kind());
         out.push_str(";\n");
     }
     for descriptor in components.descriptors() {
-        push_jsdoc(&mut out, descriptor.typescript.documentation, None, "  ");
+        push_jsdoc(&mut out, descriptor.documentation(), None, "  ");
         out.push_str("  export type ");
-        out.push_str(descriptor.name);
+        out.push_str(descriptor.name());
         out.push_str("Element = ");
-        if descriptor.methods.is_empty() {
+        if descriptor.methods().is_empty() {
             out.push_str("Element & {\n");
         } else {
             out.push_str("Omit<Element, ");
-            for (index, method) in descriptor.methods.iter().enumerate() {
+            for (index, method) in descriptor.methods().iter().enumerate() {
                 if index != 0 {
                     out.push_str(" | ");
                 }
                 out.push('"');
-                out.push_str(method.name);
+                out.push_str(method.name());
                 out.push('"');
             }
             out.push_str("> & {\n");
         }
-        for method in &descriptor.methods {
-            push_jsdoc(&mut out, method.documentation, None, "    ");
+        for method in descriptor.methods() {
+            push_jsdoc(&mut out, method.documentation(), None, "    ");
             out.push_str("    ");
-            out.push_str(method.name);
+            out.push_str(method.name());
             out.push('(');
-            push_arguments(&mut out, &method.arguments);
+            push_arguments(&mut out, &method.arguments());
             out.push_str("): ");
-            out.push_str(descriptor.name);
+            out.push_str(descriptor.name());
             out.push_str("Element;\n");
         }
         out.push_str("  }\n");
-        for constructor in &descriptor.constructors {
+        for constructor in descriptor.constructors() {
             push_jsdoc(
                 &mut out,
-                descriptor.typescript.documentation,
-                constructor.deprecation.as_ref().map(|entry| entry.message),
+                descriptor.documentation(),
+                constructor
+                    .deprecation()
+                    .as_ref()
+                    .map(|entry| entry.message()),
                 "  ",
             );
             out.push_str("  export const ");
-            out.push_str(constructor.export);
+            out.push_str(constructor.export());
             out.push_str(": { new(");
-            push_arguments(&mut out, &constructor.arguments);
+            push_arguments(&mut out, &constructor.arguments());
             out.push_str("): ");
-            out.push_str(descriptor.name);
+            out.push_str(descriptor.name());
             out.push_str("Element };\n");
         }
     }
@@ -219,12 +222,12 @@ fn push_arguments(out: &mut String, arguments: &[crate::ArgumentDescriptor]) {
         if index > 0 {
             out.push_str(", ");
         }
-        out.push_str(argument.name);
-        if matches!(argument.schema, crate::ArgumentSchema::Optional(_)) {
+        out.push_str(argument.name());
+        if matches!(argument.schema(), crate::ArgumentSchema::Optional(_)) {
             out.push('?');
         }
         out.push_str(": ");
-        out.push_str(&argument_type(&argument.schema));
+        out.push_str(&argument_type(&argument.schema()));
     }
 }
 
@@ -462,7 +465,7 @@ fn directories_importing_builtins(root: &Path) -> Vec<PathBuf> {
 const BUILTIN_SPECIFIERS: [&str; 5] = [
     "gpui",
     "gpui-base",
-    "gpui-component",
+    crate::DEFAULT_COMPONENT_MODULE,
     "gpui-shell",
     "gpui-fps",
 ];
@@ -3530,8 +3533,11 @@ mod tests {
 
     #[test]
     fn registered_state_factories_are_declared_from_the_runtime_catalog() {
-        let mut registry =
-            crate::ComponentRegistry::new(crate::COMPONENT_REGISTRY_API_VERSION).unwrap();
+        let mut registry = crate::ComponentRegistry::new(
+            crate::COMPONENT_REGISTRY_API_VERSION,
+            crate::DEFAULT_COMPONENT_MODULE,
+        )
+        .unwrap();
         registry
             .register_state(
                 crate::StateDescriptor::new(
@@ -3543,7 +3549,7 @@ mod tests {
                     )],
                     |_, _, _| Ok(Box::new(())),
                 )
-                .documented("Retained input state."),
+                .with_documentation("Retained input state."),
             )
             .unwrap();
 

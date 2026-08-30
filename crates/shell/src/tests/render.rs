@@ -89,7 +89,6 @@ fn a_registered_component_payload_reaches_its_materializer(cx: &mut TestAppConte
     use crate::{
         COMPONENT_REGISTRY_API_VERSION, ComponentDescriptor, ComponentMaterializer,
         ComponentPayload, ComponentRegistry, ConstructorDescriptor, MaterializeRequest,
-        TypeScriptDescriptor,
         snapshot::RenderSnapshot,
         spec::{Component, RegisteredComponentSpec, SpecArena},
     };
@@ -104,7 +103,7 @@ fn a_registered_component_payload_reaches_its_materializer(cx: &mut TestAppConte
                 .expect_err("a scoped overlay error must cross the service seam");
             assert_eq!(error.to_string(), "synthetic overlay failed");
             let has_window = request.with_window_app(|window, cx| {
-                Ok(cx.has_global::<gpui_component::Theme>() && window.bounds().size.width > px(0.))
+                Ok(cx.has_global::<gpui_base::Theme>() && window.bounds().size.width > px(0.))
             })?;
             assert!(
                 has_window,
@@ -121,17 +120,21 @@ fn a_registered_component_payload_reaches_its_materializer(cx: &mut TestAppConte
 
     cx.update(|cx| crate::init(cx));
     let calls = Arc::new(AtomicUsize::new(0));
-    let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+    let mut registry = ComponentRegistry::new(
+        COMPONENT_REGISTRY_API_VERSION,
+        crate::DEFAULT_COMPONENT_MODULE,
+    )
+    .unwrap();
     let id = registry
-        .register(ComponentDescriptor {
-            name: "TestBox",
-            constructors: vec![ConstructorDescriptor::new("TestBox", Vec::new(), |_| {
-                Ok(ComponentPayload::new(()))
-            })],
-            methods: Vec::new(),
-            typescript: TypeScriptDescriptor::default(),
-            materializer: Arc::new(TestBoxMaterializer(calls.clone())),
-        })
+        .register(
+            ComponentDescriptor::new("TestBox", Arc::new(TestBoxMaterializer(calls.clone())))
+                .with_constructors(vec![ConstructorDescriptor::new(
+                    "TestBox",
+                    Vec::new(),
+                    |_| Ok(ComponentPayload::new(())),
+                )])
+                .with_methods(Vec::new()),
+        )
         .unwrap();
     let runtime = ShellRuntime::new_isolated_with_components(registry.freeze().unwrap()).unwrap();
 
@@ -147,7 +150,7 @@ fn a_registered_component_payload_reaches_its_materializer(cx: &mut TestAppConte
         ComponentPayload::new(String::from("alpha")),
     )));
     arena.attach(root, child).unwrap();
-    let snapshot = RenderSnapshot::new(&runtime, 0, root, arena);
+    let snapshot = RenderSnapshot::new(&runtime, 0, root, arena, None, None);
     let window = cx.add_window(|_, _| Empty);
     let mut context = VisualTestContext::from_window(*window.deref(), cx);
 
@@ -176,7 +179,7 @@ fn a_registered_slot_factory_rebuilds_after_its_request_and_snapshot_owner_retur
     use crate::{
         COMPONENT_REGISTRY_API_VERSION, ComponentDescriptor, ComponentElementFactory,
         ComponentMaterializer, ComponentPayload, ComponentRegistry, ConstructorDescriptor,
-        MaterializeRequest, TypeScriptDescriptor,
+        MaterializeRequest,
         snapshot::RenderSnapshot,
         spec::{Component, RegisteredComponentSpec, SpecArena, SpecOp},
     };
@@ -194,7 +197,7 @@ fn a_registered_slot_factory_rebuilds_after_its_request_and_snapshot_owner_retur
             let factory = request
                 .take_slot_factory("content")
                 .ok_or_else(|| anyhow::anyhow!("missing content factory"))?;
-            assert!(request.take_slot("content").is_none());
+            assert!(request.take_slot("content").unwrap().is_none());
             DELAYED_FACTORY.with(|held| *held.borrow_mut() = Some(factory));
             let failing = request
                 .take_slot_factory("failing")
@@ -233,46 +236,44 @@ fn a_registered_slot_factory_rebuilds_after_its_request_and_snapshot_owner_retur
     }
 
     cx.update(|cx| crate::init(cx));
-    let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+    let mut registry = ComponentRegistry::new(
+        COMPONENT_REGISTRY_API_VERSION,
+        crate::DEFAULT_COMPONENT_MODULE,
+    )
+    .unwrap();
     let id = registry
-        .register(ComponentDescriptor {
-            name: "DelayedOverlay",
-            constructors: vec![ConstructorDescriptor::new(
-                "DelayedOverlay",
-                Vec::new(),
-                |_| Ok(ComponentPayload::new(())),
-            )],
-            methods: Vec::new(),
-            typescript: TypeScriptDescriptor::default(),
-            materializer: Arc::new(DelayedOverlay),
-        })
+        .register(
+            ComponentDescriptor::new("DelayedOverlay", Arc::new(DelayedOverlay))
+                .with_constructors(vec![ConstructorDescriptor::new(
+                    "DelayedOverlay",
+                    Vec::new(),
+                    |_| Ok(ComponentPayload::new(())),
+                )])
+                .with_methods(Vec::new()),
+        )
         .unwrap();
     let failing_calls = Arc::new(AtomicUsize::new(0));
     let failing_id = registry
-        .register(ComponentDescriptor {
-            name: "FailingSlot",
-            constructors: vec![ConstructorDescriptor::new(
-                "FailingSlot",
-                Vec::new(),
-                |_| Ok(ComponentPayload::new(())),
-            )],
-            methods: Vec::new(),
-            typescript: TypeScriptDescriptor::default(),
-            materializer: Arc::new(FailingSlot(failing_calls.clone())),
-        })
+        .register(
+            ComponentDescriptor::new("FailingSlot", Arc::new(FailingSlot(failing_calls.clone())))
+                .with_constructors(vec![ConstructorDescriptor::new(
+                    "FailingSlot",
+                    Vec::new(),
+                    |_| Ok(ComponentPayload::new(())),
+                )])
+                .with_methods(Vec::new()),
+        )
         .unwrap();
     let nested_id = registry
-        .register(ComponentDescriptor {
-            name: "NestedFactorySlot",
-            constructors: vec![ConstructorDescriptor::new(
-                "NestedFactorySlot",
-                Vec::new(),
-                |_| Ok(ComponentPayload::new(())),
-            )],
-            methods: Vec::new(),
-            typescript: TypeScriptDescriptor::default(),
-            materializer: Arc::new(NestedFactorySlot),
-        })
+        .register(
+            ComponentDescriptor::new("NestedFactorySlot", Arc::new(NestedFactorySlot))
+                .with_constructors(vec![ConstructorDescriptor::new(
+                    "NestedFactorySlot",
+                    Vec::new(),
+                    |_| Ok(ComponentPayload::new(())),
+                )])
+                .with_methods(Vec::new()),
+        )
         .unwrap();
     let runtime = ShellRuntime::new_isolated_with_components(registry.freeze().unwrap()).unwrap();
     let mut arena = SpecArena::new();
@@ -299,7 +300,7 @@ fn a_registered_slot_factory_rebuilds_after_its_request_and_snapshot_owner_retur
         .push_op(root, SpecOp::Slot("failing", failing))
         .unwrap();
     arena.push_op(root, SpecOp::Slot("nested", nested)).unwrap();
-    let snapshot = RenderSnapshot::new(&runtime, 7, root, arena);
+    let snapshot = RenderSnapshot::new(&runtime, 7, root, arena, None, None);
     let window = cx.add_window(|_, _| Empty);
     let mut context = VisualTestContext::from_window(*window.deref(), cx);
 
@@ -413,7 +414,7 @@ fn descriptor_drives_runtime_and_typescript(cx: &mut TestAppContext) {
     use crate::{
         ArgumentDescriptor, ArgumentSchema, COMPONENT_REGISTRY_API_VERSION, ComponentArgument,
         ComponentDescriptor, ComponentMaterializer, ComponentPayload, ComponentRegistry,
-        ConstructorDescriptor, MaterializeRequest, MethodDescriptor, TypeScriptDescriptor,
+        ConstructorDescriptor, MaterializeRequest, MethodDescriptor,
     };
 
     struct TestBoxMaterializer(Arc<Mutex<Vec<String>>>);
@@ -436,19 +437,26 @@ fn descriptor_drives_runtime_and_typescript(cx: &mut TestAppContext) {
 
     cx.update(|cx| crate::init(cx));
     let materialized = Arc::new(Mutex::new(Vec::new()));
-    let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+    let mut registry = ComponentRegistry::new(
+        COMPONENT_REGISTRY_API_VERSION,
+        crate::DEFAULT_COMPONENT_MODULE,
+    )
+    .unwrap();
     registry
-        .register(ComponentDescriptor {
-            name: "TestBox",
-            constructors: vec![ConstructorDescriptor::new(
+        .register(
+            ComponentDescriptor::new(
+                "TestBox",
+                Arc::new(TestBoxMaterializer(materialized.clone())),
+            )
+            .with_constructors(vec![ConstructorDescriptor::new(
                 "TestBox",
                 vec![ArgumentDescriptor::new("id", ArgumentSchema::String)],
                 |arguments| match arguments {
                     [ComponentArgument::String(id)] => Ok(ComponentPayload::new(id.clone())),
                     _ => Err("TestBox.new(id) expects a string".into()),
                 },
-            )],
-            methods: vec![
+            )])
+            .with_methods(vec![
                 MethodDescriptor::new(
                     "tone",
                     vec![ArgumentDescriptor::new("value", ArgumentSchema::String)],
@@ -459,11 +467,11 @@ fn descriptor_drives_runtime_and_typescript(cx: &mut TestAppContext) {
                         _ => Err("tone(value) expects a string".into()),
                     },
                 )
-                .documented("Sets the visual tone."),
-            ],
-            typescript: TypeScriptDescriptor::new("A test component."),
-            materializer: Arc::new(TestBoxMaterializer(materialized.clone())),
-        })
+                .with_documentation("A test-only method.")
+                .with_documentation("Sets the visual tone."),
+            ])
+            .with_documentation("A test component."),
+        )
         .unwrap();
     let components = registry.freeze().unwrap();
     let declarations = crate::typings::declarations_with_components(&components);
@@ -515,7 +523,7 @@ fn registered_method_schema_overrides_legacy_dispatch(cx: &mut TestAppContext) {
     use crate::{
         ArgumentDescriptor, ArgumentSchema, COMPONENT_REGISTRY_API_VERSION, ComponentDescriptor,
         ComponentMaterializer, ComponentPayload, ComponentRegistry, ConstructorDescriptor,
-        MaterializeRequest, MethodDescriptor, TypeScriptDescriptor,
+        MaterializeRequest, MethodDescriptor,
     };
     use gpui::{AnyElement, IntoElement as _, div};
     use std::sync::Arc;
@@ -528,21 +536,28 @@ fn registered_method_schema_overrides_legacy_dispatch(cx: &mut TestAppContext) {
     }
 
     cx.update(crate::init);
-    let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+    let mut registry = ComponentRegistry::new(
+        COMPONENT_REGISTRY_API_VERSION,
+        crate::DEFAULT_COMPONENT_MODULE,
+    )
+    .unwrap();
     registry
-        .register(ComponentDescriptor {
-            name: "StrictBox",
-            constructors: vec![ConstructorDescriptor::new("StrictBox", Vec::new(), |_| {
-                Ok(ComponentPayload::new(()))
-            })],
-            methods: vec![MethodDescriptor::new(
-                "disabled",
-                vec![ArgumentDescriptor::new("value", ArgumentSchema::Boolean)],
-                |_| Ok(ComponentPayload::new(())),
-            )],
-            typescript: TypeScriptDescriptor::default(),
-            materializer: Arc::new(EmptyMaterializer),
-        })
+        .register(
+            ComponentDescriptor::new("StrictBox", Arc::new(EmptyMaterializer))
+                .with_constructors(vec![ConstructorDescriptor::new(
+                    "StrictBox",
+                    Vec::new(),
+                    |_| Ok(ComponentPayload::new(())),
+                )])
+                .with_methods(vec![
+                    MethodDescriptor::new(
+                        "disabled",
+                        vec![ArgumentDescriptor::new("value", ArgumentSchema::Boolean)],
+                        |_| Ok(ComponentPayload::new(())),
+                    )
+                    .with_documentation("A test-only method."),
+                ]),
+        )
         .unwrap();
     let runtime = ShellRuntime::new_isolated_with_components(registry.freeze().unwrap()).unwrap();
     let view_type = runtime
@@ -578,7 +593,7 @@ fn registered_argument_conversion_has_recursive_depth_and_aggregate_budgets(
     use crate::{
         ArgumentDescriptor, ArgumentSchema, COMPONENT_REGISTRY_API_VERSION, ComponentDescriptor,
         ComponentMaterializer, ComponentPayload, ComponentRegistry, ConstructorDescriptor,
-        MaterializeRequest, TypeScriptDescriptor,
+        MaterializeRequest,
     };
     use gpui::{AnyElement, IntoElement as _, div};
     use std::sync::Arc;
@@ -591,19 +606,21 @@ fn registered_argument_conversion_has_recursive_depth_and_aggregate_budgets(
     }
 
     cx.update(crate::init);
-    let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+    let mut registry = ComponentRegistry::new(
+        COMPONENT_REGISTRY_API_VERSION,
+        crate::DEFAULT_COMPONENT_MODULE,
+    )
+    .unwrap();
     registry
-        .register(ComponentDescriptor {
-            name: "BudgetBox",
-            constructors: vec![ConstructorDescriptor::new(
-                "BudgetBox",
-                vec![ArgumentDescriptor::new("value", ArgumentSchema::String)],
-                |_| Ok(ComponentPayload::new(())),
-            )],
-            methods: Vec::new(),
-            typescript: TypeScriptDescriptor::default(),
-            materializer: Arc::new(EmptyMaterializer),
-        })
+        .register(
+            ComponentDescriptor::new("BudgetBox", Arc::new(EmptyMaterializer))
+                .with_constructors(vec![ConstructorDescriptor::new(
+                    "BudgetBox",
+                    vec![ArgumentDescriptor::new("value", ArgumentSchema::String)],
+                    |_| Ok(ComponentPayload::new(())),
+                )])
+                .with_methods(Vec::new()),
+        )
         .unwrap();
     let runtime = ShellRuntime::new_isolated_with_components(registry.freeze().unwrap()).unwrap();
     let window = cx.add_window(|_, _| Empty);
@@ -640,7 +657,7 @@ fn failed_registered_factory_does_not_claim_elements_or_persist_callbacks(cx: &m
     use crate::{
         ArgumentDescriptor, ArgumentSchema, COMPONENT_REGISTRY_API_VERSION, ComponentDescriptor,
         ComponentMaterializer, ComponentPayload, ComponentRegistry, ConstructorDescriptor,
-        MaterializeRequest, MethodDescriptor, TypeScriptDescriptor,
+        MaterializeRequest, MethodDescriptor,
     };
     use gpui::{AnyElement, IntoElement as _, div};
     use std::sync::Arc;
@@ -653,42 +670,56 @@ fn failed_registered_factory_does_not_claim_elements_or_persist_callbacks(cx: &m
     }
 
     cx.update(crate::init);
-    let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+    let mut registry = ComponentRegistry::new(
+        COMPONENT_REGISTRY_API_VERSION,
+        crate::DEFAULT_COMPONENT_MODULE,
+    )
+    .unwrap();
     registry
-        .register(ComponentDescriptor {
-            name: "RejectBox",
-            constructors: vec![
-                ConstructorDescriptor::new(
-                    "RejectBox",
-                    vec![
-                        ArgumentDescriptor::new("child", ArgumentSchema::Element),
-                        ArgumentDescriptor::new("handler", ArgumentSchema::Callback("() => void")),
-                    ],
-                    |_| Err("RejectBox deliberately rejects its payload".into()),
-                ),
-                ConstructorDescriptor::new("MethodBox", Vec::new(), |_| {
-                    Ok(ComponentPayload::new(()))
-                }),
-                ConstructorDescriptor::new(
-                    "ValidateBox",
-                    vec![
-                        ArgumentDescriptor::new("handler", ArgumentSchema::Callback("() => void")),
-                        ArgumentDescriptor::new("enabled", ArgumentSchema::Boolean),
-                    ],
-                    |_| Ok(ComponentPayload::new(())),
-                ),
-            ],
-            methods: vec![MethodDescriptor::new(
-                "reject",
-                vec![
-                    ArgumentDescriptor::new("child", ArgumentSchema::Element),
-                    ArgumentDescriptor::new("handler", ArgumentSchema::Callback("() => void")),
-                ],
-                |_| Err("reject deliberately rejects its payload".into()),
-            )],
-            typescript: TypeScriptDescriptor::default(),
-            materializer: Arc::new(EmptyMaterializer),
-        })
+        .register(
+            ComponentDescriptor::new("RejectBox", Arc::new(EmptyMaterializer))
+                .with_constructors(vec![
+                    ConstructorDescriptor::new(
+                        "RejectBox",
+                        vec![
+                            ArgumentDescriptor::new("child", ArgumentSchema::Element),
+                            ArgumentDescriptor::new(
+                                "handler",
+                                ArgumentSchema::Callback("() => void"),
+                            ),
+                        ],
+                        |_| Err("RejectBox deliberately rejects its payload".into()),
+                    ),
+                    ConstructorDescriptor::new("MethodBox", Vec::new(), |_| {
+                        Ok(ComponentPayload::new(()))
+                    }),
+                    ConstructorDescriptor::new(
+                        "ValidateBox",
+                        vec![
+                            ArgumentDescriptor::new(
+                                "handler",
+                                ArgumentSchema::Callback("() => void"),
+                            ),
+                            ArgumentDescriptor::new("enabled", ArgumentSchema::Boolean),
+                        ],
+                        |_| Ok(ComponentPayload::new(())),
+                    ),
+                ])
+                .with_methods(vec![
+                    MethodDescriptor::new(
+                        "reject",
+                        vec![
+                            ArgumentDescriptor::new("child", ArgumentSchema::Element),
+                            ArgumentDescriptor::new(
+                                "handler",
+                                ArgumentSchema::Callback("() => void"),
+                            ),
+                        ],
+                        |_| Err("reject deliberately rejects its payload".into()),
+                    )
+                    .with_documentation("A test-only method."),
+                ]),
+        )
         .unwrap();
     let runtime = ShellRuntime::new_isolated_with_components(registry.freeze().unwrap()).unwrap();
     let view_type = runtime
@@ -730,7 +761,7 @@ fn registered_entity_arguments_validate_the_actual_entity_kind(cx: &mut TestAppC
     use crate::{
         ArgumentDescriptor, ArgumentSchema, COMPONENT_REGISTRY_API_VERSION, ComponentDescriptor,
         ComponentMaterializer, ComponentPayload, ComponentRegistry, ConstructorDescriptor,
-        MaterializeRequest, MethodDescriptor, TypeScriptDescriptor,
+        MaterializeRequest, MethodDescriptor,
     };
     use gpui::{AnyElement, IntoElement as _, div};
     use std::sync::Arc;
@@ -743,41 +774,46 @@ fn registered_entity_arguments_validate_the_actual_entity_kind(cx: &mut TestAppC
     }
 
     cx.update(crate::init);
-    let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+    let mut registry = ComponentRegistry::new(
+        COMPONENT_REGISTRY_API_VERSION,
+        crate::DEFAULT_COMPONENT_MODULE,
+    )
+    .unwrap();
     registry
-        .register(ComponentDescriptor {
-            name: "FocusBox",
-            constructors: vec![ConstructorDescriptor::new(
-                "FocusBox",
-                vec![ArgumentDescriptor::new(
-                    "focus",
-                    ArgumentSchema::Entity("FocusHandle"),
-                )],
-                |_| Ok(ComponentPayload::new(())),
-            )],
-            methods: vec![
-                MethodDescriptor::new(
-                    "disabled",
-                    vec![ArgumentDescriptor::new("disabled", ArgumentSchema::Boolean)],
-                    |_| Ok(ComponentPayload::new(())),
-                ),
-                MethodDescriptor::new(
-                    "selected",
-                    vec![ArgumentDescriptor::new("selected", ArgumentSchema::Boolean)],
-                    |_| Ok(ComponentPayload::new(())),
-                ),
-                MethodDescriptor::new(
-                    "on_click",
+        .register(
+            ComponentDescriptor::new("FocusBox", Arc::new(EmptyMaterializer))
+                .with_constructors(vec![ConstructorDescriptor::new(
+                    "FocusBox",
                     vec![ArgumentDescriptor::new(
-                        "handler",
-                        ArgumentSchema::Callback("(event, cx) => void"),
+                        "focus",
+                        ArgumentSchema::Entity("FocusHandle"),
                     )],
                     |_| Ok(ComponentPayload::new(())),
-                ),
-            ],
-            typescript: TypeScriptDescriptor::default(),
-            materializer: Arc::new(EmptyMaterializer),
-        })
+                )])
+                .with_methods(vec![
+                    MethodDescriptor::new(
+                        "disabled",
+                        vec![ArgumentDescriptor::new("disabled", ArgumentSchema::Boolean)],
+                        |_| Ok(ComponentPayload::new(())),
+                    )
+                    .with_documentation("A test-only method."),
+                    MethodDescriptor::new(
+                        "selected",
+                        vec![ArgumentDescriptor::new("selected", ArgumentSchema::Boolean)],
+                        |_| Ok(ComponentPayload::new(())),
+                    )
+                    .with_documentation("A test-only method."),
+                    MethodDescriptor::new(
+                        "on_click",
+                        vec![ArgumentDescriptor::new(
+                            "handler",
+                            ArgumentSchema::Callback("(event, cx) => void"),
+                        )],
+                        |_| Ok(ComponentPayload::new(())),
+                    )
+                    .with_documentation("A test-only method."),
+                ]),
+        )
         .unwrap();
     let runtime = ShellRuntime::new_isolated_with_components(registry.freeze().unwrap()).unwrap();
     let view_type = runtime
@@ -816,7 +852,7 @@ fn materialize_request_resolves_opaque_component_arguments(cx: &mut TestAppConte
     use crate::{
         ArgumentDescriptor, ArgumentSchema, COMPONENT_REGISTRY_API_VERSION, ComponentArgument,
         ComponentCallback, ComponentDescriptor, ComponentMaterializer, ComponentPayload,
-        ComponentRegistry, ConstructorDescriptor, MaterializeRequest, TypeScriptDescriptor,
+        ComponentRegistry, ConstructorDescriptor, MaterializeRequest,
     };
     use gpui::{AnyElement, IntoElement as _, ParentElement as _, div};
     use std::{cell::RefCell, sync::Arc};
@@ -843,23 +879,25 @@ fn materialize_request_resolves_opaque_component_arguments(cx: &mut TestAppConte
     }
 
     cx.update(crate::init);
-    let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+    let mut registry = ComponentRegistry::new(
+        COMPONENT_REGISTRY_API_VERSION,
+        crate::DEFAULT_COMPONENT_MODULE,
+    )
+    .unwrap();
     registry
-        .register(ComponentDescriptor {
-            name: "ResolvedBox",
-            constructors: vec![ConstructorDescriptor::new(
-                "ResolvedBox",
-                vec![
-                    ArgumentDescriptor::new("child", ArgumentSchema::Element),
-                    ArgumentDescriptor::new("focus", ArgumentSchema::Entity("FocusHandle")),
-                    ArgumentDescriptor::new("handler", ArgumentSchema::Callback("() => void")),
-                ],
-                |arguments| Ok(ComponentPayload::new(arguments.to_vec())),
-            )],
-            methods: Vec::new(),
-            typescript: TypeScriptDescriptor::default(),
-            materializer: Arc::new(ResolvingMaterializer),
-        })
+        .register(
+            ComponentDescriptor::new("ResolvedBox", Arc::new(ResolvingMaterializer))
+                .with_constructors(vec![ConstructorDescriptor::new(
+                    "ResolvedBox",
+                    vec![
+                        ArgumentDescriptor::new("child", ArgumentSchema::Element),
+                        ArgumentDescriptor::new("focus", ArgumentSchema::Entity("FocusHandle")),
+                        ArgumentDescriptor::new("handler", ArgumentSchema::Callback("() => void")),
+                    ],
+                    |arguments| Ok(ComponentPayload::new(arguments.to_vec())),
+                )])
+                .with_methods(Vec::new()),
+        )
         .unwrap();
     let runtime = ShellRuntime::new_isolated_with_components(registry.freeze().unwrap()).unwrap();
     let view_type = runtime
@@ -923,7 +961,7 @@ fn registered_component_state_is_created_once_and_updated_during_materialization
     use crate::{
         ArgumentDescriptor, ArgumentSchema, COMPONENT_REGISTRY_API_VERSION, ComponentArgument,
         ComponentDescriptor, ComponentMaterializer, ComponentPayload, ComponentRegistry,
-        ConstructorDescriptor, MaterializeRequest, StateDescriptor, TypeScriptDescriptor,
+        ConstructorDescriptor, MaterializeRequest, StateDescriptor,
     };
     use gpui::{AnyElement, IntoElement as _, div};
     use std::cell::RefCell;
@@ -956,7 +994,11 @@ fn registered_component_state_is_created_once_and_updated_during_materialization
     let created = Arc::new(AtomicUsize::new(0));
     let observed = Arc::new(AtomicUsize::new(0));
     let factory_created = created.clone();
-    let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+    let mut registry = ComponentRegistry::new(
+        COMPONENT_REGISTRY_API_VERSION,
+        crate::DEFAULT_COMPONENT_MODULE,
+    )
+    .unwrap();
     registry
         .register_state(StateDescriptor::new(
             "CounterState",
@@ -977,20 +1019,18 @@ fn registered_component_state_is_created_once_and_updated_during_materialization
         ))
         .unwrap();
     registry
-        .register(ComponentDescriptor {
-            name: "StatefulBox",
-            constructors: vec![ConstructorDescriptor::new(
-                "StatefulBox",
-                vec![ArgumentDescriptor::new(
-                    "state",
-                    ArgumentSchema::Entity("CounterState"),
-                )],
-                |arguments| Ok(ComponentPayload::new(arguments[0].clone())),
-            )],
-            methods: vec![],
-            typescript: TypeScriptDescriptor::default(),
-            materializer: Arc::new(Adapter(observed.clone())),
-        })
+        .register(
+            ComponentDescriptor::new("StatefulBox", Arc::new(Adapter(observed.clone())))
+                .with_constructors(vec![ConstructorDescriptor::new(
+                    "StatefulBox",
+                    vec![ArgumentDescriptor::new(
+                        "state",
+                        ArgumentSchema::Entity("CounterState"),
+                    )],
+                    |arguments| Ok(ComponentPayload::new(arguments[0].clone())),
+                )])
+                .with_methods(vec![]),
+        )
         .unwrap();
     let runtime = ShellRuntime::new_isolated_with_components(registry.freeze().unwrap()).unwrap();
     let class = runtime
@@ -1100,7 +1140,11 @@ fn failed_registered_state_factory_rolls_back_without_retaining_a_slot(cx: &mut 
     };
 
     cx.update(crate::init);
-    let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+    let mut registry = ComponentRegistry::new(
+        COMPONENT_REGISTRY_API_VERSION,
+        crate::DEFAULT_COMPONENT_MODULE,
+    )
+    .unwrap();
     registry
         .register_state(StateDescriptor::new(
             "BrokenState",
@@ -1143,7 +1187,11 @@ fn failed_application_load_releases_states_created_during_module_evaluation(
     use crate::{COMPONENT_REGISTRY_API_VERSION, ComponentRegistry, StateDescriptor};
 
     cx.update(crate::init);
-    let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+    let mut registry = ComponentRegistry::new(
+        COMPONENT_REGISTRY_API_VERSION,
+        crate::DEFAULT_COMPONENT_MODULE,
+    )
+    .unwrap();
     registry
         .register_state(StateDescriptor::new(
             "LoadState",
@@ -1201,7 +1249,11 @@ fn successful_application_reload_purges_old_state_and_keeps_new_generation(
     use crate::{COMPONENT_REGISTRY_API_VERSION, ComponentRegistry, StateDescriptor};
 
     cx.update(crate::init);
-    let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+    let mut registry = ComponentRegistry::new(
+        COMPONENT_REGISTRY_API_VERSION,
+        crate::DEFAULT_COMPONENT_MODULE,
+    )
+    .unwrap();
     registry
         .register_state(StateDescriptor::new(
             "ReloadState",
@@ -1279,7 +1331,6 @@ fn registered_parent_can_inspect_and_materialize_a_registered_typed_child(cx: &m
     use crate::{
         COMPONENT_REGISTRY_API_VERSION, ComponentDescriptor, ComponentMaterializer,
         ComponentPayload, ComponentRegistry, ConstructorDescriptor, MaterializeRequest,
-        TypeScriptDescriptor,
     };
     use gpui::{AnyElement, ParentElement as _, div};
     use std::{cell::RefCell, sync::Arc};
@@ -1298,7 +1349,7 @@ fn registered_parent_can_inspect_and_materialize_a_registered_typed_child(cx: &m
     struct ParentMaterializer;
     impl ComponentMaterializer for ParentMaterializer {
         fn materialize(&self, mut request: MaterializeRequest<'_>) -> anyhow::Result<AnyElement> {
-            let mut children = request.take_typed_children();
+            let mut children = request.take_typed_children().unwrap();
             anyhow::ensure!(children.len() == 1);
             let mut child = children.pop().unwrap();
             CHILD_NAME.with(|name| *name.borrow_mut() = child.component_name());
@@ -1311,19 +1362,19 @@ fn registered_parent_can_inspect_and_materialize_a_registered_typed_child(cx: &m
         name: &'static str,
         materializer: Arc<dyn ComponentMaterializer>,
     ) -> ComponentDescriptor {
-        ComponentDescriptor {
-            name,
-            constructors: vec![ConstructorDescriptor::new(name, Vec::new(), |_| {
+        ComponentDescriptor::new(name, materializer)
+            .with_constructors(vec![ConstructorDescriptor::new(name, Vec::new(), |_| {
                 Ok(ComponentPayload::new(()))
-            })],
-            methods: Vec::new(),
-            typescript: TypeScriptDescriptor::default(),
-            materializer,
-        }
+            })])
+            .with_methods(Vec::new())
     }
 
     cx.update(crate::init);
-    let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+    let mut registry = ComponentRegistry::new(
+        COMPONENT_REGISTRY_API_VERSION,
+        crate::DEFAULT_COMPONENT_MODULE,
+    )
+    .unwrap();
     registry
         .register(descriptor("TypedLeaf", Arc::new(LeafMaterializer)))
         .unwrap();
@@ -1375,7 +1426,7 @@ fn registered_button_receives_common_parts_and_dispatches_click(cx: &mut TestApp
     use crate::{
         ArgumentDescriptor, ArgumentSchema, COMPONENT_REGISTRY_API_VERSION, ComponentDescriptor,
         ComponentMaterializer, ComponentPayload, ComponentRegistry, ConstructorDescriptor,
-        MaterializeRequest, MethodDescriptor, TypeScriptDescriptor,
+        MaterializeRequest, MethodDescriptor,
     };
 
     #[derive(Default)]
@@ -1408,29 +1459,38 @@ fn registered_button_receives_common_parts_and_dispatches_click(cx: &mut TestApp
     cx.update(crate::init);
     let observed = Arc::new(Observed::default());
     let observed_clicks = Arc::clone(&observed);
-    let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+    let mut registry = ComponentRegistry::new(
+        COMPONENT_REGISTRY_API_VERSION,
+        crate::DEFAULT_COMPONENT_MODULE,
+    )
+    .unwrap();
     registry
-        .register(ComponentDescriptor {
-            name: "AdapterButton",
-            constructors: vec![ConstructorDescriptor::new(
+        .register(
+            ComponentDescriptor::new(
+                "AdapterButton",
+                Arc::new(AdapterButton(Arc::clone(&observed))),
+            )
+            .with_constructors(vec![ConstructorDescriptor::new(
                 "AdapterButton",
                 vec![ArgumentDescriptor::new("id", ArgumentSchema::String)],
                 |arguments| match arguments {
                     [crate::ComponentArgument::String(id)] => Ok(ComponentPayload::new(id.clone())),
                     _ => unreachable!("argument schema validated before payload construction"),
                 },
-            )],
-            methods: vec![
+            )])
+            .with_methods(vec![
                 MethodDescriptor::new(
                     "disabled",
                     vec![ArgumentDescriptor::new("disabled", ArgumentSchema::Boolean)],
                     |_| Ok(ComponentPayload::new(())),
-                ),
+                )
+                .with_documentation("A test-only method."),
                 MethodDescriptor::new(
                     "selected",
                     vec![ArgumentDescriptor::new("selected", ArgumentSchema::Boolean)],
                     |_| Ok(ComponentPayload::new(())),
-                ),
+                )
+                .with_documentation("A test-only method."),
                 MethodDescriptor::new(
                     "on_click",
                     vec![ArgumentDescriptor::new(
@@ -1443,31 +1503,34 @@ fn registered_button_receives_common_parts_and_dispatches_click(cx: &mut TestApp
                             .fetch_add(1, Ordering::SeqCst);
                         Ok(ComponentPayload::new(()))
                     },
-                ),
-            ],
-            typescript: TypeScriptDescriptor::default(),
-            materializer: Arc::new(AdapterButton(Arc::clone(&observed))),
-        })
+                )
+                .with_documentation("A test-only method."),
+            ]),
+        )
         .unwrap();
     registry
-        .register(ComponentDescriptor {
-            name: "RejectClick",
-            constructors: vec![ConstructorDescriptor::new(
+        .register(
+            ComponentDescriptor::new(
+                "RejectClick",
+                Arc::new(AdapterButton(Arc::clone(&observed))),
+            )
+            .with_constructors(vec![ConstructorDescriptor::new(
                 "RejectClick",
                 Vec::new(),
                 |_| Ok(ComponentPayload::new(String::from("reject"))),
-            )],
-            methods: vec![MethodDescriptor::new(
-                "on_click",
-                vec![ArgumentDescriptor::new(
-                    "handler",
-                    ArgumentSchema::Callback("(event, cx) => void"),
-                )],
-                |_| Err("click recorder refused the handler".into()),
-            )],
-            typescript: TypeScriptDescriptor::default(),
-            materializer: Arc::new(AdapterButton(Arc::clone(&observed))),
-        })
+            )])
+            .with_methods(vec![
+                MethodDescriptor::new(
+                    "on_click",
+                    vec![ArgumentDescriptor::new(
+                        "handler",
+                        ArgumentSchema::Callback("(event, cx) => void"),
+                    )],
+                    |_| Err("click recorder refused the handler".into()),
+                )
+                .with_documentation("A test-only method."),
+            ]),
+        )
         .unwrap();
     let runtime = ShellRuntime::new_isolated_with_components(registry.freeze().unwrap()).unwrap();
     cx.update(|cx| runtime.set_global(cx));
@@ -1599,7 +1662,6 @@ fn deprecated_alias_constructs_the_same_component_and_warns_once(cx: &mut TestAp
     use crate::{
         COMPONENT_REGISTRY_API_VERSION, ComponentDescriptor, ComponentMaterializer,
         ComponentPayload, ComponentRegistry, ConstructorDescriptor, MaterializeRequest,
-        TypeScriptDescriptor,
     };
     use gpui::{AnyElement, IntoElement as _, div};
     use std::sync::Arc;
@@ -1612,23 +1674,26 @@ fn deprecated_alias_constructs_the_same_component_and_warns_once(cx: &mut TestAp
     }
 
     cx.update(crate::init);
-    let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+    let mut registry = ComponentRegistry::new(
+        COMPONENT_REGISTRY_API_VERSION,
+        crate::DEFAULT_COMPONENT_MODULE,
+    )
+    .unwrap();
     registry
-        .register(ComponentDescriptor {
-            name: "TestBox",
-            constructors: vec![
-                ConstructorDescriptor::new("TestBox", Vec::new(), |_| {
-                    Ok(ComponentPayload::new(()))
-                }),
-                ConstructorDescriptor::new("OldTestBox", Vec::new(), |_| {
-                    Ok(ComponentPayload::new(()))
-                })
-                .deprecated("TestBox", "Use TestBox instead."),
-            ],
-            methods: Vec::new(),
-            typescript: TypeScriptDescriptor::new("A test box."),
-            materializer: Arc::new(EmptyMaterializer),
-        })
+        .register(
+            ComponentDescriptor::new("TestBox", Arc::new(EmptyMaterializer))
+                .with_constructors(vec![
+                    ConstructorDescriptor::new("TestBox", Vec::new(), |_| {
+                        Ok(ComponentPayload::new(()))
+                    }),
+                    ConstructorDescriptor::new("OldTestBox", Vec::new(), |_| {
+                        Ok(ComponentPayload::new(()))
+                    })
+                    .with_deprecation("TestBox", "Use TestBox instead."),
+                ])
+                .with_methods(Vec::new())
+                .with_documentation("A test box."),
+        )
         .unwrap();
     let components = registry.freeze().unwrap();
     let declarations = crate::typings::declarations_with_components(&components);
@@ -1663,7 +1728,6 @@ fn isolated_runtimes_write_their_own_component_declarations() {
     use crate::{
         COMPONENT_REGISTRY_API_VERSION, ComponentDescriptor, ComponentMaterializer,
         ComponentPayload, ComponentRegistry, ConstructorDescriptor, MaterializeRequest,
-        TypeScriptDescriptor,
     };
     use gpui::{AnyElement, IntoElement as _, div};
     use std::sync::Arc;
@@ -1676,17 +1740,19 @@ fn isolated_runtimes_write_their_own_component_declarations() {
     }
 
     let runtime = |export: &'static str| {
-        let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION).unwrap();
+        let mut registry = ComponentRegistry::new(
+            COMPONENT_REGISTRY_API_VERSION,
+            crate::DEFAULT_COMPONENT_MODULE,
+        )
+        .unwrap();
         registry
-            .register(ComponentDescriptor {
-                name: export,
-                constructors: vec![ConstructorDescriptor::new(export, Vec::new(), |_| {
-                    Ok(ComponentPayload::new(()))
-                })],
-                methods: Vec::new(),
-                typescript: TypeScriptDescriptor::default(),
-                materializer: Arc::new(EmptyMaterializer),
-            })
+            .register(
+                ComponentDescriptor::new(export, Arc::new(EmptyMaterializer))
+                    .with_constructors(vec![ConstructorDescriptor::new(export, Vec::new(), |_| {
+                        Ok(ComponentPayload::new(()))
+                    })])
+                    .with_methods(Vec::new()),
+            )
             .unwrap();
         ShellRuntime::new_isolated_with_components(registry.freeze().unwrap()).unwrap()
     };
@@ -9686,4 +9752,95 @@ export default class SparseSizes extends View {
         error.to_string().contains("item_sizes"),
         "the error must identify the oversized argument: {error}"
     );
+}
+
+/// An application effect installs native state that outlives the render that
+/// asked for it. Retiring the generation that asked must take that state back
+/// down: keys are scoped per generation, so a reload cannot replace the
+/// previous generation's install, and waiting for the root view to be released
+/// would leave a reloading application accumulating one install per reload.
+#[gpui::test]
+fn retiring_an_application_generation_runs_its_app_effect_cleanups(cx: &mut TestAppContext) {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+
+    cx.update(crate::init);
+    let runtime = ShellRuntime::new_isolated().unwrap();
+    let directory = std::env::temp_dir().join(format!(
+        "gpui-shell-app-effect-retire-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&directory);
+    std::fs::create_dir_all(&directory).unwrap();
+    std::fs::write(
+        directory.join("main.js"),
+        "export default class Effectful { render() { return \"effect\"; } }\n",
+    )
+    .unwrap();
+
+    let window = cx.add_window(|_, _| Empty);
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    let view_type = context
+        .update(|window, cx| {
+            let (_scope, _) = crate::scope::enter_runtime(
+                &runtime,
+                window,
+                cx,
+                crate::scope::ScopePhase::Event,
+                None,
+            );
+            runtime.load_app(&directory, "main.js")
+        })
+        .unwrap();
+    let object = context
+        .update(|window, cx| runtime.instantiate(&view_type, window, cx))
+        .unwrap();
+    let application = object.application_generation().unwrap();
+    let runtime_for_view = runtime.clone();
+    let view = context.update(|_, cx| cx.new(|_| ScriptView::new(runtime_for_view, object)));
+
+    let installs = Arc::new(AtomicUsize::new(0));
+    let cleanups = Arc::new(AtomicUsize::new(0));
+    let install_count = installs.clone();
+    let cleanup_count = cleanups.clone();
+    context
+        .update(|window, cx| {
+            runtime.schedule_component_app_effect(
+                application.clone(),
+                view.downgrade(),
+                "menu-bar".to_owned(),
+                "revision-1".to_owned(),
+                window,
+                cx,
+                Box::new(move |_| {
+                    install_count.fetch_add(1, Ordering::SeqCst);
+                    Box::new(move |_: &mut gpui::App| {
+                        cleanup_count.fetch_add(1, Ordering::SeqCst);
+                    })
+                }),
+            )
+        })
+        .unwrap();
+    context.run_until_parked();
+    assert_eq!(
+        installs.load(Ordering::SeqCst),
+        1,
+        "the effect must install"
+    );
+    assert_eq!(
+        cleanups.load(Ordering::SeqCst),
+        0,
+        "an installed effect stays installed while its generation is live"
+    );
+
+    context.update(|_, cx| runtime.release_application_generation(&application, cx));
+
+    assert_eq!(
+        cleanups.load(Ordering::SeqCst),
+        1,
+        "retiring the generation must run the cleanup, not wait for the view"
+    );
+    let _ = std::fs::remove_dir_all(&directory);
 }

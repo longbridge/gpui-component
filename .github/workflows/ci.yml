@@ -116,6 +116,39 @@ jobs:
       - name: Lint GPUI Shell
         run: cargo clippy -p gpui-shell --all-targets -- -D warnings
 
+  gpui-component-shell:
+    name: GPUI Component Shell
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          components: clippy
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install system dependencies
+        run: script/bootstrap
+      - name: Setup | Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: component-shell-cargo-x86_64-linux-gnu-${{ hashFiles('**/Cargo.lock') }}
+      - name: Test component bindings
+        run: cargo test -p gpui-component-shell --all-targets
+      - name: Lint component bindings
+        run: cargo clippy -p gpui-component-shell --all-targets -- -D warnings
+      # The inventory test proves every public component is registered or
+      # explicitly deferred; this proves the JavaScript gallery covers what the
+      # inventory claims. Without it the two drift silently.
+      - name: Verify story coverage against the component inventory
+        run: node examples/js_story/fixtures/verify-coverage.mjs
+
   gpui-shell-standard-runtime:
     name: GPUI Shell Standard Runtime (${{ matrix.target }})
     strategy:

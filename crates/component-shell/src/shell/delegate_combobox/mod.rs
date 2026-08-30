@@ -1,16 +1,16 @@
+use gpui_component::{
+    IndexPath,
+    combobox::{Combobox, ComboboxEvent, ComboboxState},
+    searchable_list::{SearchableListDelegate, SearchableListItem},
+};
 use gpui_shell::{
     ArgumentDescriptor, ArgumentSchema, ComponentArgument, ComponentCallback,
     ComponentCallbackArgument, ComponentDataCallback, ComponentDataValue, ComponentDescriptor,
     ComponentMaterializer, ComponentPayload, ComponentRegistry, ConstructorDescriptor,
-    MaterializeRequest, MethodDescriptor, RegistryError, TypeScriptDescriptor, anyhow,
+    MaterializeRequest, MethodDescriptor, RegistryError, anyhow,
     gpui::{
         self, App, AppContext as _, Entity, IntoElement as _, ParentElement as _, Refineable as _,
         RenderOnce, SharedString, Styled as _, Subscription, Task, Window,
-    },
-    gpui_component::{
-        IndexPath,
-        combobox::{Combobox, ComboboxEvent, ComboboxState},
-        searchable_list::{SearchableListDelegate, SearchableListItem},
     },
 };
 use std::{cell::RefCell, rc::Rc, sync::Arc};
@@ -253,8 +253,8 @@ impl RenderOnce for Bound {
     }
 }
 
-struct Mat;
-impl ComponentMaterializer for Mat {
+struct ComboboxMaterializer;
+impl ComponentMaterializer for ComboboxMaterializer {
     fn materialize(&self, mut request: MaterializeRequest<'_>) -> anyhow::Result<gpui::AnyElement> {
         let payload = request
             .payload()
@@ -262,7 +262,7 @@ impl ComponentMaterializer for Mat {
             .ok_or_else(|| anyhow::anyhow!("Combobox incompatible payload"))?
             .clone();
         anyhow::ensure!(
-            request.take_typed_children().is_empty(),
+            request.take_typed_children()?.is_empty(),
             "Combobox does not accept children"
         );
         let rows = request.resolve_data_callback(&payload.rows)?;
@@ -285,6 +285,7 @@ impl ComponentMaterializer for Mat {
 }
 fn method(
     name: &'static str,
+    documentation: &'static str,
     schema: ArgumentSchema,
     make: fn(&ComponentArgument) -> Option<Op>,
 ) -> MethodDescriptor {
@@ -298,11 +299,11 @@ fn method(
                 .ok_or_else(|| format!("Combobox.{name} received an invalid value"))
         },
     )
+    .with_documentation(documentation)
 }
 pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
-    registry.register(ComponentDescriptor {
-        name: "Combobox",
-        constructors: vec![ConstructorDescriptor::new("Combobox", vec![
+    registry.register(ComponentDescriptor::new("Combobox", Arc::new(ComboboxMaterializer))
+.with_constructors(vec![ConstructorDescriptor::new("Combobox", vec![
             ArgumentDescriptor::new("id", ArgumentSchema::String),
             ArgumentDescriptor::new("rows", ArgumentSchema::Callback("() => readonly { id: string; label: string; disabled?: boolean }[]")),
             ArgumentDescriptor::new("onChange", ArgumentSchema::Callback("(value: string, cx: Context) => void")),
@@ -310,16 +311,14 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
         ], |args| match args {
             [ComponentArgument::String(id), rows @ ComponentArgument::Callback(_), change @ ComponentArgument::Callback(_), confirm @ ComponentArgument::Callback(_)] if !id.trim().is_empty() => Ok(ComponentPayload::new(Payload { id:id.clone(), rows:rows.clone(), on_change:change.clone(), on_confirm:confirm.clone() })),
             _ => Err("Combobox expects id, rows, onChange, and onConfirm callbacks".into()),
-        })],
-        methods: vec![
-            method("placeholder", ArgumentSchema::String, |arg| match arg { ComponentArgument::String(v) => Some(Op::Placeholder(v.clone())), _ => None }),
-            method("searchPlaceholder", ArgumentSchema::String, |arg| match arg { ComponentArgument::String(v) => Some(Op::SearchPlaceholder(v.clone())), _ => None }),
-            method("searchable", ArgumentSchema::Boolean, |arg| match arg { ComponentArgument::Boolean(v) => Some(Op::Searchable(*v)), _ => None }),
-            method("disabled", ArgumentSchema::Boolean, |arg| match arg { ComponentArgument::Boolean(v) => Some(Op::Disabled(*v)), _ => None }),
-        ],
-        typescript: TypeScriptDescriptor::new("Native retained single-select searchable Combobox backed by immutable `{id,label,disabled?}` snapshots."),
-        materializer: Arc::new(Mat),
-    })?;
+        })])
+.with_methods(vec![
+            method("placeholder", "Sets the text shown while nothing is selected.", ArgumentSchema::String, |arg| match arg { ComponentArgument::String(value) => Some(Op::Placeholder(value.clone())), _ => None }),
+            method("searchPlaceholder", "Sets the text shown in the empty search field.", ArgumentSchema::String, |arg| match arg { ComponentArgument::String(value) => Some(Op::SearchPlaceholder(value.clone())), _ => None }),
+            method("searchable", "Shows the search field above the item list.", ArgumentSchema::Boolean, |arg| match arg { ComponentArgument::Boolean(value) => Some(Op::Searchable(*value)), _ => None }),
+            method("disabled", "Disables the combobox.", ArgumentSchema::Boolean, |arg| match arg { ComponentArgument::Boolean(value) => Some(Op::Disabled(*value)), _ => None }),
+        ])
+.with_documentation("Native retained single-select searchable Combobox backed by immutable `{id,label,disabled?}` snapshots."))?;
     Ok(())
 }
 
@@ -331,11 +330,11 @@ pub(crate) mod test_probe {
         static CHANGES: RefCell<Vec<Vec<String>>> = const { RefCell::new(Vec::new()) };
         static CONFIRMS: RefCell<Vec<Vec<String>>> = const { RefCell::new(Vec::new()) };
     }
-    pub(super) fn change(v: Vec<String>) {
-        CHANGES.with(|x| x.borrow_mut().push(v));
+    pub(super) fn change(value: Vec<String>) {
+        CHANGES.with(|x| x.borrow_mut().push(value));
     }
-    pub(super) fn confirm(v: Vec<String>) {
-        CONFIRMS.with(|x| x.borrow_mut().push(v));
+    pub(super) fn confirm(value: Vec<String>) {
+        CONFIRMS.with(|x| x.borrow_mut().push(value));
     }
     pub(crate) fn take_changes() -> Vec<Vec<String>> {
         CHANGES.with(|x| std::mem::take(&mut *x.borrow_mut()))

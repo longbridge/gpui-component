@@ -6,14 +6,17 @@ use std::{fs, ops::Deref};
 
 #[test]
 fn select_catalog_exposes_native_retained_contract() {
-    let mut registry =
-        gpui_shell::ComponentRegistry::new(gpui_shell::COMPONENT_REGISTRY_API_VERSION).unwrap();
+    let mut registry = gpui_shell::ComponentRegistry::new(
+        gpui_shell::COMPONENT_REGISTRY_API_VERSION,
+        gpui_shell::DEFAULT_COMPONENT_MODULE,
+    )
+    .unwrap();
     delegate_select::register(&mut registry).unwrap();
     let registry = registry.freeze().unwrap();
     assert_eq!(
         registry
             .descriptors()
-            .map(|item| item.name)
+            .map(|item| item.name())
             .collect::<Vec<_>>(),
         ["Select"]
     );
@@ -33,8 +36,7 @@ impl gpui::Render for ScriptRoot {
 #[gpui::test]
 fn select_native_click_emits_selected_stable_value(cx: &mut TestAppContext) {
     cx.update(|cx| {
-        gpui_shell::gpui_component::init(cx);
-        gpui_shell::init(cx);
+        gpui_component_shell::init(cx);
     });
     let root = std::env::temp_dir().join(format!("delegate-select-{}", std::process::id()));
     fs::create_dir_all(&root).unwrap();
@@ -47,8 +49,11 @@ export default class App extends View {
     ], row => div().child(row.label), value => { globalThis.__selected = value; }).placeholder("Choose"));
   }
 }"#).unwrap();
-    let mut registry =
-        gpui_shell::ComponentRegistry::new(gpui_shell::COMPONENT_REGISTRY_API_VERSION).unwrap();
+    let mut registry = gpui_shell::ComponentRegistry::new(
+        gpui_shell::COMPONENT_REGISTRY_API_VERSION,
+        gpui_shell::DEFAULT_COMPONENT_MODULE,
+    )
+    .unwrap();
     delegate_select::register(&mut registry).unwrap();
     let runtime =
         gpui_shell::ShellRuntime::new_isolated_with_components(registry.freeze().unwrap()).unwrap();

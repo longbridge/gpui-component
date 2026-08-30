@@ -6,15 +6,18 @@ use std::{fs, ops::Deref};
 
 #[test]
 fn combobox_catalog_exposes_native_single_select_contract() {
-    let mut registry =
-        gpui_shell::ComponentRegistry::new(gpui_shell::COMPONENT_REGISTRY_API_VERSION).unwrap();
+    let mut registry = gpui_shell::ComponentRegistry::new(
+        gpui_shell::COMPONENT_REGISTRY_API_VERSION,
+        gpui_shell::DEFAULT_COMPONENT_MODULE,
+    )
+    .unwrap();
     delegate_combobox::register(&mut registry).unwrap();
     assert_eq!(
         registry
             .freeze()
             .unwrap()
             .descriptors()
-            .map(|item| item.name)
+            .map(|item| item.name())
             .collect::<Vec<_>>(),
         ["Combobox"]
     );
@@ -34,8 +37,7 @@ impl gpui::Render for ScriptRoot {
 #[gpui::test]
 fn combobox_native_click_emits_change_and_confirm_for_stable_value(cx: &mut TestAppContext) {
     cx.update(|cx| {
-        gpui_shell::gpui_component::init(cx);
-        gpui_shell::init(cx);
+        gpui_component_shell::init(cx);
     });
     let root = std::env::temp_dir().join(format!("delegate-combobox-{}", std::process::id()));
     fs::create_dir_all(&root).unwrap();
@@ -51,8 +53,11 @@ export default class App extends View { render() {
 } }"#,
     )
     .unwrap();
-    let mut registry =
-        gpui_shell::ComponentRegistry::new(gpui_shell::COMPONENT_REGISTRY_API_VERSION).unwrap();
+    let mut registry = gpui_shell::ComponentRegistry::new(
+        gpui_shell::COMPONENT_REGISTRY_API_VERSION,
+        gpui_shell::DEFAULT_COMPONENT_MODULE,
+    )
+    .unwrap();
     delegate_combobox::register(&mut registry).unwrap();
     let runtime =
         gpui_shell::ShellRuntime::new_isolated_with_components(registry.freeze().unwrap()).unwrap();

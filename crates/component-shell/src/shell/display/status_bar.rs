@@ -1,8 +1,8 @@
+use gpui_component::status_bar::StatusBar;
 use gpui_shell::{
     ComponentDescriptor, ComponentMaterializer, ComponentPayload, ComponentRegistry,
-    ConstructorDescriptor, MaterializeRequest, RegistryError, TypeScriptDescriptor, anyhow,
+    ConstructorDescriptor, MaterializeRequest, RegistryError, anyhow,
     gpui::{self, IntoElement as _, ParentElement as _, Refineable as _, Styled as _},
-    gpui_component::status_bar::StatusBar,
 };
 use std::sync::Arc;
 #[derive(Clone)]
@@ -19,10 +19,10 @@ impl StatusBarMaterializer {
 impl ComponentMaterializer for StatusBarMaterializer {
     fn materialize(&self, mut request: MaterializeRequest<'_>) -> anyhow::Result<gpui::AnyElement> {
         let mut component = Self::component(request.payload())?;
-        if let Some(left) = request.take_slot("left") {
+        if let Some(left) = request.take_slot("left")? {
             component = component.left(left)
         }
-        if let Some(right) = request.take_slot("right") {
+        if let Some(right) = request.take_slot("right")? {
             component = component.right(right)
         }
         component.style().refine(&request.take_style());
@@ -31,7 +31,10 @@ impl ComponentMaterializer for StatusBarMaterializer {
     }
 }
 pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
-    registry.register(ComponentDescriptor{name:"StatusBar",constructors:vec![ConstructorDescriptor::new("StatusBar",Vec::new(),|_|Ok(ComponentPayload::new(StatusBarPayload)))],methods:Vec::new(),typescript:TypeScriptDescriptor::new("A three-region status bar; ordinary children fill the center and named left/right slots pin content to each edge."),materializer:Arc::new(StatusBarMaterializer)})?;
+    registry.register(ComponentDescriptor::new("StatusBar", Arc::new(StatusBarMaterializer))
+.with_constructors(vec![ConstructorDescriptor::new("StatusBar",Vec::new(),|_|Ok(ComponentPayload::new(StatusBarPayload)))])
+.with_methods(Vec::new())
+.with_documentation("A three-region status bar; ordinary children fill the center and named left/right slots pin content to each edge."))?;
     Ok(())
 }
 #[cfg(test)]

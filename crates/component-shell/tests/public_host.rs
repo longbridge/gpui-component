@@ -55,8 +55,7 @@ fn mount(
     std::rc::Rc<gpui_shell::ShellRuntime>,
 ) {
     cx.update(|cx| {
-        gpui_shell::gpui_component::init(cx);
-        gpui_shell::init(cx);
+        gpui_component_shell::init(cx);
     });
     let app = TempApp::new(source);
     let runtime = gpui_component_shell::new_isolated_runtime().expect("runtime");
@@ -255,8 +254,7 @@ export default class InvalidOtpState extends View {
 }
 "#;
     cx.update(|cx| {
-        gpui_shell::gpui_component::init(cx);
-        gpui_shell::init(cx);
+        gpui_component_shell::init(cx);
     });
     let app = TempApp::new(source);
     let runtime = gpui_component_shell::new_isolated_runtime().expect("runtime");
@@ -274,8 +272,7 @@ export default class InvalidOtpState extends View {
 #[gpui_shell::gpui::test]
 fn loaded_applications_are_single_mount_and_runtime_bound(cx: &mut TestAppContext) {
     cx.update(|cx| {
-        gpui_shell::gpui_component::init(cx);
-        gpui_shell::init(cx);
+        gpui_component_shell::init(cx);
     });
     let app = TempApp::new(
         r#"
@@ -313,8 +310,7 @@ export default class Reusable extends View { render() { return div().child("ok")
 #[gpui_shell::gpui::test]
 fn failed_owner_mount_consumes_the_loaded_application(cx: &mut TestAppContext) {
     cx.update(|cx| {
-        gpui_shell::gpui_component::init(cx);
-        gpui_shell::init(cx);
+        gpui_component_shell::init(cx);
     });
     let app = TempApp::new(
         r#"

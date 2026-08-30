@@ -3598,6 +3598,7 @@ name = "gpui-component-shell"
 version = "0.1.0"
 dependencies = [
  "gpui",
+ "gpui-component",
  "gpui-shell",
  "serde_json",
 ]
@@ -3679,7 +3680,6 @@ dependencies = [
  "chrono",
  "gpui",
  "gpui-base",
- "gpui-component",
  "gpui-fps",
  "gpui_platform",
  "instant",

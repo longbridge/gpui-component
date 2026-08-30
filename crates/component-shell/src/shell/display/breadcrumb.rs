@@ -1,9 +1,9 @@
+use gpui_component::breadcrumb::Breadcrumb;
 use gpui_shell::{
     ArgumentDescriptor, ArgumentSchema, ComponentArgument, ComponentDescriptor,
     ComponentMaterializer, ComponentPayload, ComponentRegistry, ConstructorDescriptor,
-    MaterializeRequest, RegistryError, TypeScriptDescriptor, anyhow,
+    MaterializeRequest, RegistryError, anyhow,
     gpui::{self, IntoElement as _, Refineable as _, Styled as _},
-    gpui_component::breadcrumb::Breadcrumb,
 };
 use std::sync::Arc;
 
@@ -29,32 +29,29 @@ impl ComponentMaterializer for BreadcrumbMaterializer {
     }
 }
 pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
-    registry.register(ComponentDescriptor {
-        name: "Breadcrumb",
-        constructors: vec![ConstructorDescriptor::new(
-            "Breadcrumb",
-            vec![ArgumentDescriptor::new(
-                "labels",
-                ArgumentSchema::Array(Box::new(ArgumentSchema::String)),
-            )],
-            |arguments| match arguments {
-                [ComponentArgument::Array(labels)] => labels
-                    .iter()
-                    .map(|label| match label {
-                        ComponentArgument::String(label) => Ok(label.clone()),
-                        _ => Err("Breadcrumb(labels) expects an array of strings".into()),
-                    })
-                    .collect::<Result<Vec<_>, String>>()
-                    .map(|labels| ComponentPayload::new(BreadcrumbPayload(labels))),
-                _ => Err("Breadcrumb(labels) expects an array of strings".into()),
-            },
-        )],
-        methods: Vec::new(),
-        typescript: TypeScriptDescriptor::new(
-            "A navigation trail built from an ordered array of labels.",
-        ),
-        materializer: Arc::new(BreadcrumbMaterializer),
-    })?;
+    registry.register(
+        ComponentDescriptor::new("Breadcrumb", Arc::new(BreadcrumbMaterializer))
+            .with_constructors(vec![ConstructorDescriptor::new(
+                "Breadcrumb",
+                vec![ArgumentDescriptor::new(
+                    "labels",
+                    ArgumentSchema::Array(Box::new(ArgumentSchema::String)),
+                )],
+                |arguments| match arguments {
+                    [ComponentArgument::Array(labels)] => labels
+                        .iter()
+                        .map(|label| match label {
+                            ComponentArgument::String(label) => Ok(label.clone()),
+                            _ => Err("Breadcrumb(labels) expects an array of strings".into()),
+                        })
+                        .collect::<Result<Vec<_>, String>>()
+                        .map(|labels| ComponentPayload::new(BreadcrumbPayload(labels))),
+                    _ => Err("Breadcrumb(labels) expects an array of strings".into()),
+                },
+            )])
+            .with_methods(Vec::new())
+            .with_documentation("A navigation trail built from an ordered array of labels."),
+    )?;
     Ok(())
 }
 #[cfg(test)]

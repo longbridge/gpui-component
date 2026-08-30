@@ -1,14 +1,14 @@
 use std::sync::Arc;
 
+use gpui_component::{
+    Sizable as _, Size,
+    alert::{Alert, AlertVariant},
+};
 use gpui_shell::{
     ArgumentDescriptor, ArgumentSchema, ComponentArgument, ComponentDescriptor,
     ComponentMaterializer, ComponentPayload, ComponentRegistry, ConstructorDescriptor,
-    MaterializeRequest, MethodDescriptor, RegistryError, TypeScriptDescriptor, anyhow,
+    MaterializeRequest, MethodDescriptor, RegistryError, anyhow,
     gpui::{self, IntoElement as _, Refineable as _, Styled as _},
-    gpui_component::{
-        Sizable as _, Size,
-        alert::{Alert, AlertVariant},
-    },
 };
 
 use super::common::{ensure_no_children, non_empty_id, size_operation};
@@ -90,26 +90,23 @@ fn constructor(export: &'static str, variant: AlertVariant) -> ConstructorDescri
 }
 
 pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
-    registry.register(ComponentDescriptor {
-        name: "Alert",
-        constructors: vec![
+    registry.register(ComponentDescriptor::new("Alert", Arc::new(AlertMaterializer))
+.with_constructors(vec![
             constructor("Alert", AlertVariant::Default), constructor("InfoAlert", AlertVariant::Info),
             constructor("SuccessAlert", AlertVariant::Success), constructor("WarningAlert", AlertVariant::Warning),
             constructor("ErrorAlert", AlertVariant::Error),
-        ],
-        methods: vec![
+        ])
+.with_methods(vec![
             MethodDescriptor::new("title", vec![ArgumentDescriptor::new("title", ArgumentSchema::String)], |arguments| match arguments {
                 [ComponentArgument::String(title)] => Ok(ComponentPayload::new(AlertOp::Title(title.clone()))), _ => Err("Alert.title(title) expects a string".into()),
-            }).documented("Sets the alert title."),
-            MethodDescriptor::new("banner", Vec::new(), |_| Ok(ComponentPayload::new(AlertOp::Banner))).documented("Uses the full-width banner presentation."),
+            }).with_documentation("Sets the alert title."),
+            MethodDescriptor::new("banner", Vec::new(), |_| Ok(ComponentPayload::new(AlertOp::Banner))).with_documentation("Uses the full-width banner presentation."),
             MethodDescriptor::new("visible", vec![ArgumentDescriptor::new("visible", ArgumentSchema::Boolean)], |arguments| match arguments {
                 [ComponentArgument::Boolean(visible)] => Ok(ComponentPayload::new(AlertOp::Visible(*visible))), _ => Err("Alert.visible(visible) expects a boolean".into()),
-            }).documented("Controls whether the alert is rendered."),
-            MethodDescriptor::new("size", vec![ArgumentDescriptor::new("size", ArgumentSchema::Enum(&["xsmall", "small", "medium", "large"]))], |arguments| size_operation("Alert", arguments, AlertOp::Size)).documented("Sets the alert's semantic size."),
-        ],
-        typescript: TypeScriptDescriptor::new("A message banner with semantic default, info, success, warning, and error constructors."),
-        materializer: Arc::new(AlertMaterializer),
-    })?;
+            }).with_documentation("Controls whether the alert is rendered."),
+            MethodDescriptor::new("size", vec![ArgumentDescriptor::new("size", ArgumentSchema::Enum(&["xsmall", "small", "medium", "large"]))], |arguments| size_operation("Alert", arguments, AlertOp::Size)).with_documentation("Sets the alert's semantic size."),
+        ])
+.with_documentation("A message banner with semantic default, info, success, warning, and error constructors."))?;
     Ok(())
 }
 

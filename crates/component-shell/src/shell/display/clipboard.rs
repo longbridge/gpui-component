@@ -1,9 +1,9 @@
+use gpui_component::clipboard::Clipboard;
 use gpui_shell::{
     ArgumentDescriptor, ArgumentSchema, ComponentArgument, ComponentDescriptor,
     ComponentMaterializer, ComponentPayload, ComponentRegistry, ConstructorDescriptor,
-    MaterializeRequest, MethodDescriptor, RegistryError, TypeScriptDescriptor, anyhow,
+    MaterializeRequest, MethodDescriptor, RegistryError, anyhow,
     gpui::{self, ParentElement as _},
-    gpui_component::clipboard::Clipboard,
 };
 use std::sync::Arc;
 
@@ -58,38 +58,39 @@ fn string_method(
             _ => Err(format!("Clipboard.{name}({name}) expects a string")),
         },
     )
-    .documented(documentation)
+    .with_documentation(documentation)
 }
 pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
-    registry.register(ComponentDescriptor {
-        name: "Clipboard",
-        constructors: vec![ConstructorDescriptor::new(
-            "Clipboard",
-            vec![ArgumentDescriptor::new("id", ArgumentSchema::String)],
-            |arguments| match arguments {
-                [ComponentArgument::String(id)] => Ok(ComponentPayload::new(ClipboardPayload {
-                    id: non_empty_id("Clipboard", id)?,
-                })),
-                _ => Err("Clipboard(id) expects a string".into()),
-            },
-        )],
-        methods: vec![
-            string_method(
-                "value",
-                "Sets the text copied when the button is pressed.",
-                ClipboardOp::Value,
+    registry.register(
+        ComponentDescriptor::new("Clipboard", Arc::new(ClipboardMaterializer))
+            .with_constructors(vec![ConstructorDescriptor::new(
+                "Clipboard",
+                vec![ArgumentDescriptor::new("id", ArgumentSchema::String)],
+                |arguments| match arguments {
+                    [ComponentArgument::String(id)] => {
+                        Ok(ComponentPayload::new(ClipboardPayload {
+                            id: non_empty_id("Clipboard", id)?,
+                        }))
+                    }
+                    _ => Err("Clipboard(id) expects a string".into()),
+                },
+            )])
+            .with_methods(vec![
+                string_method(
+                    "value",
+                    "Sets the text copied when the button is pressed.",
+                    ClipboardOp::Value,
+                ),
+                string_method(
+                    "tooltip",
+                    "Sets the copy button tooltip.",
+                    ClipboardOp::Tooltip,
+                ),
+            ])
+            .with_documentation(
+                "A button that copies a configured string to the system clipboard.",
             ),
-            string_method(
-                "tooltip",
-                "Sets the copy button tooltip.",
-                ClipboardOp::Tooltip,
-            ),
-        ],
-        typescript: TypeScriptDescriptor::new(
-            "A button that copies a configured string to the system clipboard.",
-        ),
-        materializer: Arc::new(ClipboardMaterializer),
-    })?;
+    )?;
     Ok(())
 }
 #[cfg(test)]

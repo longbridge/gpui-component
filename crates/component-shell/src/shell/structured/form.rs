@@ -1,15 +1,15 @@
-use super::common::{
-    TypedChildElement, nonnegative_f32, positive_u16, require_child, take_element,
+use super::bool_method;
+use super::common::{TypedChildElement, nonnegative_f32, positive_u16, take_element};
+use super::require_child;
+use gpui_component::{
+    Sizable as _, Size,
+    form::{Field, h_form, v_form},
 };
 use gpui_shell::{
     ArgumentDescriptor, ArgumentSchema, ComponentArgument, ComponentDescriptor,
     ComponentMaterializer, ComponentPayload, ComponentRegistry, ConstructorDescriptor,
-    MaterializeRequest, MethodDescriptor, RegistryError, TypeScriptDescriptor, anyhow,
+    MaterializeRequest, MethodDescriptor, RegistryError, anyhow,
     gpui::{self, IntoElement as _, ParentElement as _, Refineable as _, Styled as _, px},
-    gpui_component::{
-        Sizable as _, Size,
-        form::{Field, h_form, v_form},
-    },
 };
 use std::sync::Arc;
 
@@ -44,15 +44,15 @@ impl ComponentMaterializer for FieldMaterializer {
             .filter_map(|method| method.payload().downcast_ref::<FieldOp>())
         {
             field = match op {
-                FieldOp::Label(v) => field.label(v.clone()),
-                FieldOp::Description(v) => field.description(v.clone()),
-                FieldOp::Required(v) => field.required(*v),
-                FieldOp::Visible(v) => field.visible(*v),
-                FieldOp::LabelIndent(v) => field.label_indent(*v),
+                FieldOp::Label(value) => field.label(value.clone()),
+                FieldOp::Description(value) => field.description(value.clone()),
+                FieldOp::Required(value) => field.required(*value),
+                FieldOp::Visible(value) => field.visible(*value),
+                FieldOp::LabelIndent(value) => field.label_indent(*value),
                 FieldOp::Align(Align::Start) => field.items_start(),
                 FieldOp::Align(Align::Center) => field.items_center(),
                 FieldOp::Align(Align::End) => field.items_end(),
-                FieldOp::ColSpan(v) => field.col_span(*v),
+                FieldOp::ColSpan(value) => field.col_span(*value),
             };
         }
         field.style().refine(&request.take_style());
@@ -88,13 +88,13 @@ impl ComponentMaterializer for FormMaterializer {
             .filter_map(|method| method.payload().downcast_ref::<FormOp>())
         {
             form = match op {
-                FormOp::Columns(v) => form.columns(*v),
-                FormOp::LabelWidth(v) => form.label_width(px(*v)),
-                FormOp::Size(v) => form.with_size(*v),
+                FormOp::Columns(value) => form.columns(*value),
+                FormOp::LabelWidth(value) => form.label_width(px(*value)),
+                FormOp::Size(value) => form.with_size(*value),
             };
         }
-        for mut child in request.take_typed_children() {
-            require_child("Form", "Field", child.component_name())?;
+        for mut child in request.take_typed_children()? {
+            require_child("Form", child.component_name(), &["Field"])?;
             let mut element = request.materialize_child(&mut child)?;
             form = form.child(take_element::<Field>(&mut element, "Field")?);
         }
@@ -103,16 +103,6 @@ impl ComponentMaterializer for FormMaterializer {
     }
 }
 
-fn bool_method(name: &'static str, make: fn(bool) -> FieldOp) -> MethodDescriptor {
-    MethodDescriptor::new(
-        name,
-        vec![ArgumentDescriptor::new(name, ArgumentSchema::Boolean)],
-        move |a| match a {
-            [ComponentArgument::Boolean(v)] => Ok(ComponentPayload::new(make(*v))),
-            _ => Err(format!("Field.{name}({name}) expects a boolean")),
-        },
-    )
-}
 fn form_columns(a: &[ComponentArgument]) -> Result<ComponentPayload, String> {
     match a {
         [ComponentArgument::Number(value)] => positive_u16(*value, "Form.columns")
@@ -122,130 +112,143 @@ fn form_columns(a: &[ComponentArgument]) -> Result<ComponentPayload, String> {
 }
 
 pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
-    registry.register(ComponentDescriptor {
-        name: "Field",
-        constructors: vec![ConstructorDescriptor::new("Field", vec![], |_| {
-            Ok(ComponentPayload::new(FieldPayload))
-        })],
-        methods: vec![
-            MethodDescriptor::new(
-                "label",
-                vec![ArgumentDescriptor::new("label", ArgumentSchema::String)],
-                |a| match a {
-                    [ComponentArgument::String(v)] => {
-                        Ok(ComponentPayload::new(FieldOp::Label(v.clone())))
-                    }
-                    _ => Err("Field.label(label) expects a string".into()),
-                },
-            )
-            .documented("Sets the field label."),
-            MethodDescriptor::new(
-                "description",
-                vec![ArgumentDescriptor::new(
+    registry.register(
+        ComponentDescriptor::new("Field", Arc::new(FieldMaterializer))
+            .with_constructors(vec![ConstructorDescriptor::new("Field", vec![], |_| {
+                Ok(ComponentPayload::new(FieldPayload))
+            })])
+            .with_methods(vec![
+                MethodDescriptor::new(
+                    "label",
+                    vec![ArgumentDescriptor::new("label", ArgumentSchema::String)],
+                    |arguments| match arguments {
+                        [ComponentArgument::String(value)] => {
+                            Ok(ComponentPayload::new(FieldOp::Label(value.clone())))
+                        }
+                        _ => Err("Field.label(label) expects a string".into()),
+                    },
+                )
+                .with_documentation("Sets the field label."),
+                MethodDescriptor::new(
                     "description",
-                    ArgumentSchema::String,
-                )],
-                |a| match a {
-                    [ComponentArgument::String(v)] => {
-                        Ok(ComponentPayload::new(FieldOp::Description(v.clone())))
-                    }
-                    _ => Err("Field.description(description) expects a string".into()),
-                },
-            )
-            .documented("Sets supporting text below the control."),
-            bool_method("required", FieldOp::Required).documented("Marks the field as required."),
-            bool_method("visible", FieldOp::Visible).documented("Controls field visibility."),
-            bool_method("labelIndent", FieldOp::LabelIndent)
-                .documented("Keeps unlabeled horizontal fields aligned with labeled fields."),
-            MethodDescriptor::new(
-                "align",
-                vec![ArgumentDescriptor::new(
+                    vec![ArgumentDescriptor::new(
+                        "description",
+                        ArgumentSchema::String,
+                    )],
+                    |arguments| match arguments {
+                        [ComponentArgument::String(value)] => {
+                            Ok(ComponentPayload::new(FieldOp::Description(value.clone())))
+                        }
+                        _ => Err("Field.description(description) expects a string".into()),
+                    },
+                )
+                .with_documentation("Sets supporting text below the control."),
+                bool_method(
+                    "Field",
+                    "required",
+                    "Marks the field as required.",
+                    FieldOp::Required,
+                ),
+                bool_method(
+                    "Field",
+                    "visible",
+                    "Controls field visibility.",
+                    FieldOp::Visible,
+                ),
+                bool_method(
+                    "Field",
+                    "labelIndent",
+                    "Keeps unlabeled horizontal fields aligned with labeled fields.",
+                    FieldOp::LabelIndent,
+                ),
+                MethodDescriptor::new(
                     "align",
-                    ArgumentSchema::Enum(&["start", "center", "end"]),
-                )],
-                |a| match a {
-                    [ComponentArgument::Enum(v)] => match v.as_str() {
-                        "start" => Ok(ComponentPayload::new(FieldOp::Align(Align::Start))),
-                        "center" => Ok(ComponentPayload::new(FieldOp::Align(Align::Center))),
-                        "end" => Ok(ComponentPayload::new(FieldOp::Align(Align::End))),
-                        _ => Err(format!("unsupported Field alignment `{v}`")),
+                    vec![ArgumentDescriptor::new(
+                        "align",
+                        ArgumentSchema::Enum(&["start", "center", "end"]),
+                    )],
+                    |arguments| match arguments {
+                        [ComponentArgument::Enum(value)] => match value.as_str() {
+                            "start" => Ok(ComponentPayload::new(FieldOp::Align(Align::Start))),
+                            "center" => Ok(ComponentPayload::new(FieldOp::Align(Align::Center))),
+                            "end" => Ok(ComponentPayload::new(FieldOp::Align(Align::End))),
+                            _ => Err(format!("unsupported Field alignment `{value}`")),
+                        },
+                        _ => Err("Field.align(align) expects an alignment literal".into()),
                     },
-                    _ => Err("Field.align(align) expects an alignment literal".into()),
-                },
-            )
-            .documented("Aligns the label and control within the field."),
-            MethodDescriptor::new(
-                "colSpan",
-                vec![ArgumentDescriptor::new("span", ArgumentSchema::Number)],
-                |a| match a {
-                    [ComponentArgument::Number(v)] => positive_u16(*v, "Field.colSpan")
-                        .map(|v| ComponentPayload::new(FieldOp::ColSpan(v))),
-                    _ => Err(
-                        "Field.colSpan expects an exactly representable positive integer".into(),
-                    ),
-                },
-            )
-            .documented("Sets the field's grid-column span."),
-        ],
-        typescript: TypeScriptDescriptor::new(
-            "A typed form field containing ordinary control children.",
-        ),
-        materializer: Arc::new(FieldMaterializer),
-    })?;
-    registry.register(ComponentDescriptor {
-        name: "Form",
-        constructors: vec![
-            ConstructorDescriptor::new("Form", vec![], |_| {
-                Ok(ComponentPayload::new(FormPayload::Vertical))
-            }),
-            ConstructorDescriptor::new("VForm", vec![], |_| {
-                Ok(ComponentPayload::new(FormPayload::Vertical))
-            }),
-            ConstructorDescriptor::new("HForm", vec![], |_| {
-                Ok(ComponentPayload::new(FormPayload::Horizontal))
-            }),
-        ],
-        methods: vec![
-            MethodDescriptor::new(
-                "columns",
-                vec![ArgumentDescriptor::new("columns", ArgumentSchema::Number)],
-                form_columns,
-            )
-            .documented("Sets the form grid's column count."),
-            MethodDescriptor::new(
-                "labelWidth",
-                vec![ArgumentDescriptor::new("width", ArgumentSchema::Number)],
-                |a| match a {
-                    [ComponentArgument::Number(v)] => nonnegative_f32(*v, "Form.labelWidth")
-                        .map(|v| ComponentPayload::new(FormOp::LabelWidth(v))),
-                    _ => Err("Form.labelWidth(width) expects a nonnegative finite number".into()),
-                },
-            )
-            .documented("Sets the horizontal form label width in pixels."),
-            MethodDescriptor::new(
-                "size",
-                vec![ArgumentDescriptor::new(
+                )
+                .with_documentation("Aligns the label and control within the field."),
+                MethodDescriptor::new(
+                    "colSpan",
+                    vec![ArgumentDescriptor::new("span", ArgumentSchema::Number)],
+                    |arguments| match arguments {
+                        [ComponentArgument::Number(value)] => positive_u16(*value, "Field.colSpan")
+                            .map(|value| ComponentPayload::new(FieldOp::ColSpan(value))),
+                        _ => Err(
+                            "Field.colSpan expects an exactly representable positive integer"
+                                .into(),
+                        ),
+                    },
+                )
+                .with_documentation("Sets the field's grid-column span."),
+            ])
+            .with_documentation("A typed form field containing ordinary control children."),
+    )?;
+    registry.register(
+        ComponentDescriptor::new("Form", Arc::new(FormMaterializer))
+            .with_constructors(vec![
+                ConstructorDescriptor::new("Form", vec![], |_| {
+                    Ok(ComponentPayload::new(FormPayload::Vertical))
+                }),
+                ConstructorDescriptor::new("VForm", vec![], |_| {
+                    Ok(ComponentPayload::new(FormPayload::Vertical))
+                }),
+                ConstructorDescriptor::new("HForm", vec![], |_| {
+                    Ok(ComponentPayload::new(FormPayload::Horizontal))
+                }),
+            ])
+            .with_methods(vec![
+                MethodDescriptor::new(
+                    "columns",
+                    vec![ArgumentDescriptor::new("columns", ArgumentSchema::Number)],
+                    form_columns,
+                )
+                .with_documentation("Sets the form grid's column count."),
+                MethodDescriptor::new(
+                    "labelWidth",
+                    vec![ArgumentDescriptor::new("width", ArgumentSchema::Number)],
+                    |arguments| match arguments {
+                        [ComponentArgument::Number(value)] => {
+                            nonnegative_f32(*value, "Form.labelWidth")
+                                .map(|value| ComponentPayload::new(FormOp::LabelWidth(value)))
+                        }
+                        _ => {
+                            Err("Form.labelWidth(width) expects a nonnegative finite number".into())
+                        }
+                    },
+                )
+                .with_documentation("Sets the horizontal form label width in pixels."),
+                MethodDescriptor::new(
                     "size",
-                    ArgumentSchema::Enum(&["xsmall", "small", "medium", "large"]),
-                )],
-                |a| match a {
-                    [ComponentArgument::Enum(v)] => match v.as_str() {
-                        "xsmall" => Ok(ComponentPayload::new(FormOp::Size(Size::XSmall))),
-                        "small" => Ok(ComponentPayload::new(FormOp::Size(Size::Small))),
-                        "medium" => Ok(ComponentPayload::new(FormOp::Size(Size::Medium))),
-                        "large" => Ok(ComponentPayload::new(FormOp::Size(Size::Large))),
-                        _ => Err(format!("unsupported Form size `{v}`")),
+                    vec![ArgumentDescriptor::new(
+                        "size",
+                        ArgumentSchema::Enum(&["xsmall", "small", "medium", "large"]),
+                    )],
+                    |arguments| match arguments {
+                        [ComponentArgument::Enum(value)] => match value.as_str() {
+                            "xsmall" => Ok(ComponentPayload::new(FormOp::Size(Size::XSmall))),
+                            "small" => Ok(ComponentPayload::new(FormOp::Size(Size::Small))),
+                            "medium" => Ok(ComponentPayload::new(FormOp::Size(Size::Medium))),
+                            "large" => Ok(ComponentPayload::new(FormOp::Size(Size::Large))),
+                            _ => Err(format!("unsupported Form size `{value}`")),
+                        },
+                        _ => Err("Form.size(size) expects a size literal".into()),
                     },
-                    _ => Err("Form.size(size) expects a size literal".into()),
-                },
-            )
-            .documented("Sets the form density."),
-        ],
-        typescript: TypeScriptDescriptor::new(
-            "A vertical or horizontal form accepting Field children.",
-        ),
-        materializer: Arc::new(FormMaterializer),
-    })?;
+                )
+                .with_documentation("Sets the form density."),
+            ])
+            .with_documentation("A vertical or horizontal form accepting Field children."),
+    )?;
     Ok(())
 }
 

@@ -1,14 +1,16 @@
-use super::common::{OpaqueChildElement, positive_usize, require_child, take_opaque};
+use super::common::positive_usize;
+use super::require_child;
+use super::{Carrier, take};
+use gpui_component::{
+    Sizable as _, Size,
+    description_list::{DescriptionItem, DescriptionList},
+};
 use gpui_shell::{
     ArgumentDescriptor, ArgumentSchema, ComponentArgument, ComponentDescriptor,
     ComponentMaterializer, ComponentPayload, ComponentRegistry, ConstructorDescriptor,
-    MaterializeRequest, MethodDescriptor, RegistryError, TypeScriptDescriptor, anyhow, gpui,
+    MaterializeRequest, MethodDescriptor, RegistryError, anyhow, gpui,
     gpui::{
         IntoElement as _, ParentElement as _, Refineable as _, StyleRefinement, Styled as _, div,
-    },
-    gpui_component::{
-        Sizable as _, Size,
-        description_list::{DescriptionItem, DescriptionList},
     },
 };
 use std::sync::Arc;
@@ -39,7 +41,7 @@ impl ComponentMaterializer for ItemMaterializer {
                 ItemOp::Span(span) => item.span(*span),
             };
         }
-        Ok(OpaqueChildElement::new(item).into_any_element())
+        Ok(Carrier::new(item).into_any_element())
     }
 }
 
@@ -85,9 +87,9 @@ impl ListConfig {
     fn apply(&mut self, op: &ListOp) {
         match op {
             ListOp::Vertical => self.vertical = true,
-            ListOp::Bordered(v) => self.bordered = *v,
-            ListOp::Columns(v) => self.columns = *v,
-            ListOp::Size(v) => self.size = *v,
+            ListOp::Bordered(value) => self.bordered = *value,
+            ListOp::Columns(value) => self.columns = *value,
+            ListOp::Size(value) => self.size = *value,
         }
     }
 }
@@ -113,13 +115,14 @@ impl ComponentMaterializer for ListMaterializer {
         .bordered(config.bordered)
         .columns(config.columns)
         .with_size(config.size);
-        for mut child in request.take_typed_children() {
-            require_child("DescriptionList", "DescriptionItem", child.component_name())?;
+        for mut child in request.take_typed_children()? {
+            require_child(
+                "DescriptionList",
+                child.component_name(),
+                &["DescriptionItem"],
+            )?;
             let mut element = request.materialize_child(&mut child)?;
-            list = list.child(take_opaque::<DescriptionItem>(
-                &mut element,
-                "DescriptionItem",
-            )?);
+            list = list.child(take::<DescriptionItem>(&mut element, "DescriptionItem")?);
         }
         let mut wrapper = div().child(list);
         wrapper.style().refine(&request.take_style());
@@ -167,92 +170,88 @@ fn size(
 }
 
 pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
-    registry.register(ComponentDescriptor {
-        name: "DescriptionItem",
-        constructors: vec![ConstructorDescriptor::new(
+    registry.register(ComponentDescriptor::new("DescriptionItem", Arc::new(ItemMaterializer))
+.with_constructors(vec![ConstructorDescriptor::new(
             "DescriptionItem",
             vec![ArgumentDescriptor::new("label", ArgumentSchema::String)],
-            |a| match a {
-                [ComponentArgument::String(v)] => Ok(ComponentPayload::new(ItemPayload(v.clone()))),
+            |arguments| match arguments {
+                [ComponentArgument::String(value)] => Ok(ComponentPayload::new(ItemPayload(value.clone()))),
                 _ => Err("DescriptionItem(label) expects a string".into()),
             },
-        )],
-        methods: vec![
+        )])
+.with_methods(vec![
             MethodDescriptor::new(
                 "value",
                 vec![ArgumentDescriptor::new("value", ArgumentSchema::String)],
-                |a| match a {
-                    [ComponentArgument::String(v)] => {
-                        Ok(ComponentPayload::new(ItemOp::Value(v.clone())))
+                |arguments| match arguments {
+                    [ComponentArgument::String(value)] => {
+                        Ok(ComponentPayload::new(ItemOp::Value(value.clone())))
                     }
                     _ => Err("DescriptionItem.value(value) expects a string".into()),
                 },
             )
-            .documented("Sets the item's textual value."),
+            .with_documentation("Sets the item's textual value."),
             MethodDescriptor::new(
                 "span",
                 vec![ArgumentDescriptor::new("span", ArgumentSchema::Number)],
                 |a| {
-                    positive_usize_payload(a, "DescriptionItem.span", |v| {
-                        ComponentPayload::new(ItemOp::Span(v))
+                    positive_usize_payload(a, "DescriptionItem.span", |value| {
+                        ComponentPayload::new(ItemOp::Span(value))
                     })
                 },
             )
-            .documented("Sets how many description-list columns the item spans."),
-        ],
-        typescript: TypeScriptDescriptor::new(
+            .with_documentation("Sets how many description-list columns the item spans."),
+        ])
+.with_documentation(
             "A typed label/value child for DescriptionList. It accepts value(string) and span(number), but no children or common style methods because the native item is not an independently rendered element.",
-        ),
-        materializer: Arc::new(ItemMaterializer),
-    })?;
-    registry.register(ComponentDescriptor {
-        name: "DescriptionList",
-        constructors: vec![ConstructorDescriptor::new(
-            "DescriptionList",
-            vec![],
-            |_| Ok(ComponentPayload::new(ListPayload)),
-        )],
-        methods: vec![
-            MethodDescriptor::new("vertical", vec![], |_| {
-                Ok(ComponentPayload::new(ListOp::Vertical))
-            })
-            .documented("Uses the vertical label/value layout."),
-            MethodDescriptor::new(
-                "bordered",
-                vec![ArgumentDescriptor::new("bordered", ArgumentSchema::Boolean)],
-                |a| match a {
-                    [ComponentArgument::Boolean(v)] => {
-                        Ok(ComponentPayload::new(ListOp::Bordered(*v)))
-                    }
-                    _ => Err("DescriptionList.bordered(bordered) expects a boolean".into()),
-                },
-            )
-            .documented("Controls the horizontal-layout border."),
-            MethodDescriptor::new(
-                "columns",
-                vec![ArgumentDescriptor::new("columns", ArgumentSchema::Number)],
-                columns_payload,
-            )
-            .documented("Sets the column count from 1 through 10."),
-            MethodDescriptor::new(
-                "size",
-                vec![ArgumentDescriptor::new(
+        ))?;
+    registry.register(
+        ComponentDescriptor::new("DescriptionList", Arc::new(ListMaterializer))
+            .with_constructors(vec![ConstructorDescriptor::new(
+                "DescriptionList",
+                vec![],
+                |_| Ok(ComponentPayload::new(ListPayload)),
+            )])
+            .with_methods(vec![
+                MethodDescriptor::new("vertical", vec![], |_| {
+                    Ok(ComponentPayload::new(ListOp::Vertical))
+                })
+                .with_documentation("Uses the vertical label/value layout."),
+                MethodDescriptor::new(
+                    "bordered",
+                    vec![ArgumentDescriptor::new("bordered", ArgumentSchema::Boolean)],
+                    |arguments| match arguments {
+                        [ComponentArgument::Boolean(value)] => {
+                            Ok(ComponentPayload::new(ListOp::Bordered(*value)))
+                        }
+                        _ => Err("DescriptionList.bordered(bordered) expects a boolean".into()),
+                    },
+                )
+                .with_documentation("Controls the horizontal-layout border."),
+                MethodDescriptor::new(
+                    "columns",
+                    vec![ArgumentDescriptor::new("columns", ArgumentSchema::Number)],
+                    columns_payload,
+                )
+                .with_documentation("Sets the column count from 1 through 10."),
+                MethodDescriptor::new(
                     "size",
-                    ArgumentSchema::Enum(&["xsmall", "small", "medium", "large"]),
-                )],
-                |a| {
-                    size(a, "DescriptionList.size", |v| {
-                        ComponentPayload::new(ListOp::Size(v))
-                    })
-                },
-            )
-            .documented("Sets the description-list density."),
-        ],
-        typescript: TypeScriptDescriptor::new(
-            "A structured label/value list accepting DescriptionItem children.",
-        ),
-        materializer: Arc::new(ListMaterializer),
-    })?;
+                    vec![ArgumentDescriptor::new(
+                        "size",
+                        ArgumentSchema::Enum(&["xsmall", "small", "medium", "large"]),
+                    )],
+                    |a| {
+                        size(a, "DescriptionList.size", |value| {
+                            ComponentPayload::new(ListOp::Size(value))
+                        })
+                    },
+                )
+                .with_documentation("Sets the description-list density."),
+            ])
+            .with_documentation(
+                "A structured label/value list accepting DescriptionItem children.",
+            ),
+    )?;
     Ok(())
 }
 

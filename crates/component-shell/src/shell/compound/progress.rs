@@ -1,9 +1,9 @@
+use gpui_component::{Sizable as _, Size, progress::Progress};
 use gpui_shell::{
     ArgumentDescriptor, ArgumentSchema, ComponentArgument, ComponentDescriptor,
     ComponentMaterializer, ComponentPayload, ComponentRegistry, ConstructorDescriptor,
-    MaterializeRequest, MethodDescriptor, RegistryError, TypeScriptDescriptor, anyhow,
+    MaterializeRequest, MethodDescriptor, RegistryError, anyhow,
     gpui::{self, IntoElement as _, ParentElement as _, Refineable as _, Styled as _},
-    gpui_component::{Sizable as _, Size, progress::Progress},
 };
 use std::sync::Arc;
 
@@ -66,74 +66,72 @@ fn unary(
             _ => Err(format!("Progress.{name}({name}) expects one argument")),
         },
     )
-    .documented(documentation)
+    .with_documentation(documentation)
 }
 pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
-    registry.register(ComponentDescriptor {
-        name: "Progress",
-        constructors: vec![ConstructorDescriptor::new(
-            "Progress",
-            vec![ArgumentDescriptor::new("id", ArgumentSchema::String)],
-            |args| match args {
-                [ComponentArgument::String(id)] => nonempty_id(id, "Progress")
-                    .map(ProgressPayload)
-                    .map(ComponentPayload::new),
-                _ => Err("Progress(id) expects a string id".into()),
-            },
-        )],
-        methods: vec![
-            unary(
-                "value",
-                ArgumentSchema::Number,
-                "Sets percentage progress; the component clamps it to 0–100.",
-                |a| match a {
-                    ComponentArgument::Number(v) => {
-                        finite_f32(*v, "Progress.value(value)").map(ProgressOp::Value)
-                    }
-                    _ => Err(
-                        "Progress.value(value) expects a finite number representable as f32".into(),
-                    ),
+    registry.register(
+        ComponentDescriptor::new("Progress", Arc::new(ProgressMaterializer))
+            .with_constructors(vec![ConstructorDescriptor::new(
+                "Progress",
+                vec![ArgumentDescriptor::new("id", ArgumentSchema::String)],
+                |args| match args {
+                    [ComponentArgument::String(id)] => nonempty_id(id, "Progress")
+                        .map(ProgressPayload)
+                        .map(ComponentPayload::new),
+                    _ => Err("Progress(id) expects a string id".into()),
                 },
-            ),
-            unary(
-                "loading",
-                ArgumentSchema::Boolean,
-                "Enables indeterminate loading animation.",
-                |a| match a {
-                    ComponentArgument::Boolean(v) => Ok(ProgressOp::Loading(*v)),
-                    _ => Err("Progress.loading(loading) expects a boolean".into()),
-                },
-            ),
-            unary(
-                "accessibilityLabel",
-                ArgumentSchema::String,
-                "Sets the accessible name.",
-                |a| match a {
-                    ComponentArgument::String(v) => Ok(ProgressOp::Label(v.clone())),
-                    _ => Err("Progress.accessibilityLabel(label) expects a string".into()),
-                },
-            ),
-            unary(
-                "size",
-                ArgumentSchema::Enum(&["xsmall", "small", "medium", "large"]),
-                "Sets the semantic size.",
-                |a| match a {
-                    ComponentArgument::Enum(v) => match v.as_str() {
-                        "xsmall" => Ok(ProgressOp::Size(Size::XSmall)),
-                        "small" => Ok(ProgressOp::Size(Size::Small)),
-                        "medium" => Ok(ProgressOp::Size(Size::Medium)),
-                        "large" => Ok(ProgressOp::Size(Size::Large)),
-                        _ => Err(format!("unsupported Progress size `{v}`")),
+            )])
+            .with_methods(vec![
+                unary(
+                    "value",
+                    ArgumentSchema::Number,
+                    "Sets percentage progress; the component clamps it to 0–100.",
+                    |arguments| match arguments {
+                        ComponentArgument::Number(value) => {
+                            finite_f32(*value, "Progress.value(value)").map(ProgressOp::Value)
+                        }
+                        _ => Err(
+                            "Progress.value(value) expects a finite number representable as f32"
+                                .into(),
+                        ),
                     },
-                    _ => Err("Progress.size(size) expects a size literal".into()),
-                },
-            ),
-        ],
-        typescript: TypeScriptDescriptor::new(
-            "A linear determinate or indeterminate progress indicator.",
-        ),
-        materializer: Arc::new(ProgressMaterializer),
-    })?;
+                ),
+                unary(
+                    "loading",
+                    ArgumentSchema::Boolean,
+                    "Enables indeterminate loading animation.",
+                    |arguments| match arguments {
+                        ComponentArgument::Boolean(value) => Ok(ProgressOp::Loading(*value)),
+                        _ => Err("Progress.loading(loading) expects a boolean".into()),
+                    },
+                ),
+                unary(
+                    "accessibilityLabel",
+                    ArgumentSchema::String,
+                    "Sets the accessible name.",
+                    |arguments| match arguments {
+                        ComponentArgument::String(value) => Ok(ProgressOp::Label(value.clone())),
+                        _ => Err("Progress.accessibilityLabel(label) expects a string".into()),
+                    },
+                ),
+                unary(
+                    "size",
+                    ArgumentSchema::Enum(&["xsmall", "small", "medium", "large"]),
+                    "Sets the semantic size.",
+                    |arguments| match arguments {
+                        ComponentArgument::Enum(value) => match value.as_str() {
+                            "xsmall" => Ok(ProgressOp::Size(Size::XSmall)),
+                            "small" => Ok(ProgressOp::Size(Size::Small)),
+                            "medium" => Ok(ProgressOp::Size(Size::Medium)),
+                            "large" => Ok(ProgressOp::Size(Size::Large)),
+                            _ => Err(format!("unsupported Progress size `{value}`")),
+                        },
+                        _ => Err("Progress.size(size) expects a size literal".into()),
+                    },
+                ),
+            ])
+            .with_documentation("A linear determinate or indeterminate progress indicator."),
+    )?;
     Ok(())
 }
 #[cfg(test)]

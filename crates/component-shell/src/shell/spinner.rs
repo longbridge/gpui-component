@@ -1,14 +1,14 @@
 use std::sync::Arc;
 
+use gpui_component::{IconName, Sizable as _, Size, spinner::Spinner, try_parse_color};
 use gpui_shell::{
     ArgumentDescriptor, ArgumentSchema, ComponentArgument, ComponentDescriptor,
     ComponentMaterializer, ComponentPayload, ComponentRegistry, ConstructorDescriptor,
-    MaterializeRequest, MethodDescriptor, RegistryError, TypeScriptDescriptor, anyhow,
+    MaterializeRequest, MethodDescriptor, RegistryError, anyhow,
     gpui::{
         self, IntoElement as _, ParentElement as _, Refineable as _, Styled as _, ease_in_out,
         ease_out_quint, linear,
     },
-    gpui_component::{IconName, Sizable as _, Size, spinner::Spinner, try_parse_color},
 };
 
 #[derive(Clone, Copy)]
@@ -64,84 +64,89 @@ impl ComponentMaterializer for SpinnerMaterializer {
 }
 
 pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
-    registry.register(ComponentDescriptor {
-        name: "Spinner",
-        constructors: vec![ConstructorDescriptor::new("Spinner", Vec::new(), |_| {
-            Ok(ComponentPayload::new(SpinnerPayload))
-        })],
-        methods: vec![
-            MethodDescriptor::new(
-                "size",
-                vec![ArgumentDescriptor::new(
+    registry.register(
+        ComponentDescriptor::new("Spinner", Arc::new(SpinnerMaterializer))
+            .with_constructors(vec![ConstructorDescriptor::new(
+                "Spinner",
+                Vec::new(),
+                |_| Ok(ComponentPayload::new(SpinnerPayload)),
+            )])
+            .with_methods(vec![
+                MethodDescriptor::new(
                     "size",
-                    ArgumentSchema::Enum(&["xsmall", "small", "medium", "large"]),
-                )],
-                |arguments| match arguments {
-                    [ComponentArgument::Enum(size)] => match size.as_str() {
-                        "xsmall" => Ok(ComponentPayload::new(SpinnerOp::Size(Size::XSmall))),
-                        "small" => Ok(ComponentPayload::new(SpinnerOp::Size(Size::Small))),
-                        "medium" => Ok(ComponentPayload::new(SpinnerOp::Size(Size::Medium))),
-                        "large" => Ok(ComponentPayload::new(SpinnerOp::Size(Size::Large))),
-                        _ => Err(format!("unsupported Spinner size `{size}`")),
+                    vec![ArgumentDescriptor::new(
+                        "size",
+                        ArgumentSchema::Enum(&["xsmall", "small", "medium", "large"]),
+                    )],
+                    |arguments| match arguments {
+                        [ComponentArgument::Enum(size)] => match size.as_str() {
+                            "xsmall" => Ok(ComponentPayload::new(SpinnerOp::Size(Size::XSmall))),
+                            "small" => Ok(ComponentPayload::new(SpinnerOp::Size(Size::Small))),
+                            "medium" => Ok(ComponentPayload::new(SpinnerOp::Size(Size::Medium))),
+                            "large" => Ok(ComponentPayload::new(SpinnerOp::Size(Size::Large))),
+                            _ => Err(format!("unsupported Spinner size `{size}`")),
+                        },
+                        _ => Err("Spinner.size(size) expects a size literal".into()),
                     },
-                    _ => Err("Spinner.size(size) expects a size literal".into()),
-                },
-            )
-            .documented("Sets the spinner's semantic size."),
-            MethodDescriptor::new(
-                "icon",
-                vec![ArgumentDescriptor::new(
+                )
+                .with_documentation("Sets the spinner's semantic size."),
+                MethodDescriptor::new(
                     "icon",
-                    ArgumentSchema::Enum(&["loader", "loaderCircle"]),
-                )],
-                |arguments| match arguments {
-                    [ComponentArgument::Enum(icon)] => match icon.as_str() {
-                        "loader" => Ok(ComponentPayload::new(SpinnerOp::Icon(IconName::Loader))),
-                        "loaderCircle" => Ok(ComponentPayload::new(SpinnerOp::Icon(
-                            IconName::LoaderCircle,
-                        ))),
-                        _ => Err(format!("unsupported Spinner icon `{icon}`")),
+                    vec![ArgumentDescriptor::new(
+                        "icon",
+                        ArgumentSchema::Enum(&["loader", "loaderCircle"]),
+                    )],
+                    |arguments| match arguments {
+                        [ComponentArgument::Enum(icon)] => match icon.as_str() {
+                            "loader" => {
+                                Ok(ComponentPayload::new(SpinnerOp::Icon(IconName::Loader)))
+                            }
+                            "loaderCircle" => Ok(ComponentPayload::new(SpinnerOp::Icon(
+                                IconName::LoaderCircle,
+                            ))),
+                            _ => Err(format!("unsupported Spinner icon `{icon}`")),
+                        },
+                        _ => Err("Spinner.icon(icon) expects an icon literal".into()),
                     },
-                    _ => Err("Spinner.icon(icon) expects an icon literal".into()),
-                },
-            )
-            .documented("Selects the icon rotated by the spinner."),
-            MethodDescriptor::new(
-                "color",
-                vec![ArgumentDescriptor::new("color", ArgumentSchema::String)],
-                |arguments| match arguments {
-                    [ComponentArgument::String(color)] => try_parse_color(color)
-                        .map(|color| ComponentPayload::new(SpinnerOp::Color(color)))
-                        .map_err(|error| format!("invalid Spinner color: {error}")),
-                    _ => Err("Spinner.color(color) expects a color string".into()),
-                },
-            )
-            .documented("Sets the spinner icon color."),
-            MethodDescriptor::new(
-                "ease",
-                vec![ArgumentDescriptor::new(
+                )
+                .with_documentation("Selects the icon rotated by the spinner."),
+                MethodDescriptor::new(
+                    "color",
+                    vec![ArgumentDescriptor::new("color", ArgumentSchema::String)],
+                    |arguments| match arguments {
+                        [ComponentArgument::String(color)] => try_parse_color(color)
+                            .map(|color| ComponentPayload::new(SpinnerOp::Color(color)))
+                            .map_err(|error| format!("invalid Spinner color: {error}")),
+                        _ => Err("Spinner.color(color) expects a color string".into()),
+                    },
+                )
+                .with_documentation("Sets the spinner icon color."),
+                MethodDescriptor::new(
                     "ease",
-                    ArgumentSchema::Enum(&["linear", "easeInOut", "easeOutQuint"]),
-                )],
-                |arguments| match arguments {
-                    [ComponentArgument::Enum(ease)] => match ease.as_str() {
-                        "linear" => Ok(ComponentPayload::new(SpinnerOp::Ease(SpinnerEase::Linear))),
-                        "easeInOut" => Ok(ComponentPayload::new(SpinnerOp::Ease(
-                            SpinnerEase::EaseInOut,
-                        ))),
-                        "easeOutQuint" => Ok(ComponentPayload::new(SpinnerOp::Ease(
-                            SpinnerEase::EaseOutQuint,
-                        ))),
-                        _ => Err(format!("unsupported Spinner easing `{ease}`")),
+                    vec![ArgumentDescriptor::new(
+                        "ease",
+                        ArgumentSchema::Enum(&["linear", "easeInOut", "easeOutQuint"]),
+                    )],
+                    |arguments| match arguments {
+                        [ComponentArgument::Enum(ease)] => match ease.as_str() {
+                            "linear" => {
+                                Ok(ComponentPayload::new(SpinnerOp::Ease(SpinnerEase::Linear)))
+                            }
+                            "easeInOut" => Ok(ComponentPayload::new(SpinnerOp::Ease(
+                                SpinnerEase::EaseInOut,
+                            ))),
+                            "easeOutQuint" => Ok(ComponentPayload::new(SpinnerOp::Ease(
+                                SpinnerEase::EaseOutQuint,
+                            ))),
+                            _ => Err(format!("unsupported Spinner easing `{ease}`")),
+                        },
+                        _ => Err("Spinner.ease(ease) expects an easing literal".into()),
                     },
-                    _ => Err("Spinner.ease(ease) expects an easing literal".into()),
-                },
-            )
-            .documented("Sets the spinner rotation easing curve."),
-        ],
-        typescript: TypeScriptDescriptor::new("A cycling loading spinner."),
-        materializer: Arc::new(SpinnerMaterializer),
-    })?;
+                )
+                .with_documentation("Sets the spinner rotation easing curve."),
+            ])
+            .with_documentation("A cycling loading spinner."),
+    )?;
     Ok(())
 }
 

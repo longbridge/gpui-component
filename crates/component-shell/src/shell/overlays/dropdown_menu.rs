@@ -1,14 +1,14 @@
 use std::sync::Arc;
 
+use gpui_component::{
+    button::Button,
+    menu::{DropdownMenu as _, PopupMenuItem},
+};
 use gpui_shell::{
     ArgumentDescriptor, ArgumentSchema, ComponentArgument, ComponentDescriptor,
     ComponentMaterializer, ComponentPayload, ComponentRegistry, ConstructorDescriptor,
-    MaterializeRequest, MethodDescriptor, RegistryError, TypeScriptDescriptor, anyhow,
+    MaterializeRequest, MethodDescriptor, RegistryError, anyhow,
     gpui::{self, IntoElement as _, Refineable as _, Styled as _},
-    gpui_component::{
-        button::Button,
-        menu::{DropdownMenu as _, PopupMenuItem},
-    },
 };
 
 #[derive(Clone)]
@@ -69,63 +69,63 @@ impl ComponentMaterializer for DropdownMenuMaterializer {
 }
 
 pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
-    registry.register(ComponentDescriptor {
-        name: "DropdownMenu",
-        constructors: vec![ConstructorDescriptor::new(
-            "DropdownMenu",
-            vec![
-                ArgumentDescriptor::new("id", ArgumentSchema::String),
-                ArgumentDescriptor::new("label", ArgumentSchema::String),
-            ],
-            |arguments| match arguments {
-                [
-                    ComponentArgument::String(id),
-                    ComponentArgument::String(label),
-                ] if !id.trim().is_empty() && !label.trim().is_empty() => {
-                    Ok(ComponentPayload::new(DropdownMenuPayload {
-                        id: id.clone(),
-                        label: label.clone(),
-                    }))
-                }
-                [ComponentArgument::String(_), ComponentArgument::String(_)] => {
-                    Err("DropdownMenu id and label must not be empty".into())
-                }
-                _ => Err("DropdownMenu(id, label) expects two strings".into()),
-            },
-        )],
-        methods: vec![
-            MethodDescriptor::new(
-                "item",
+    registry.register(
+        ComponentDescriptor::new("DropdownMenu", Arc::new(DropdownMenuMaterializer))
+            .with_constructors(vec![ConstructorDescriptor::new(
+                "DropdownMenu",
                 vec![
+                    ArgumentDescriptor::new("id", ArgumentSchema::String),
                     ArgumentDescriptor::new("label", ArgumentSchema::String),
-                    ArgumentDescriptor::new(
-                        "callback",
-                        ArgumentSchema::Callback("(cx: Context) => void"),
-                    ),
                 ],
                 |arguments| match arguments {
                     [
+                        ComponentArgument::String(id),
                         ComponentArgument::String(label),
-                        callback @ ComponentArgument::Callback(_),
-                    ] if !label.trim().is_empty() => Ok(ComponentPayload::new(MenuItemOp {
-                        label: label.clone(),
-                        callback: callback.clone(),
-                    })),
-                    [ComponentArgument::String(_), ComponentArgument::Callback(_)] => {
-                        Err("DropdownMenu.item label must not be empty".into())
+                    ] if !id.trim().is_empty() && !label.trim().is_empty() => {
+                        Ok(ComponentPayload::new(DropdownMenuPayload {
+                            id: id.clone(),
+                            label: label.clone(),
+                        }))
                     }
-                    _ => Err(
-                        "DropdownMenu.item(label, callback) expects a string and callback".into(),
-                    ),
+                    [ComponentArgument::String(_), ComponentArgument::String(_)] => {
+                        Err("DropdownMenu id and label must not be empty".into())
+                    }
+                    _ => Err("DropdownMenu(id, label) expects two strings".into()),
                 },
-            )
-            .documented("Appends a command item in script order."),
-        ],
-        typescript: TypeScriptDescriptor::new(
-            "A button-triggered native popup menu containing closed command items.",
-        ),
-        materializer: Arc::new(DropdownMenuMaterializer),
-    })?;
+            )])
+            .with_methods(vec![
+                MethodDescriptor::new(
+                    "item",
+                    vec![
+                        ArgumentDescriptor::new("label", ArgumentSchema::String),
+                        ArgumentDescriptor::new(
+                            "callback",
+                            ArgumentSchema::Callback("(cx: Context) => void"),
+                        ),
+                    ],
+                    |arguments| match arguments {
+                        [
+                            ComponentArgument::String(label),
+                            callback @ ComponentArgument::Callback(_),
+                        ] if !label.trim().is_empty() => Ok(ComponentPayload::new(MenuItemOp {
+                            label: label.clone(),
+                            callback: callback.clone(),
+                        })),
+                        [ComponentArgument::String(_), ComponentArgument::Callback(_)] => {
+                            Err("DropdownMenu.item label must not be empty".into())
+                        }
+                        _ => Err(
+                            "DropdownMenu.item(label, callback) expects a string and callback"
+                                .into(),
+                        ),
+                    },
+                )
+                .with_documentation("Appends a command item in script order."),
+            ])
+            .with_documentation(
+                "A button-triggered native popup menu containing closed command items.",
+            ),
+    )?;
     Ok(())
 }
 
@@ -135,14 +135,17 @@ mod tests {
 
     #[test]
     fn item_callback_schema_includes_the_script_context() {
-        let mut registry =
-            ComponentRegistry::new(gpui_shell::COMPONENT_REGISTRY_API_VERSION).unwrap();
+        let mut registry = ComponentRegistry::new(
+            gpui_shell::COMPONENT_REGISTRY_API_VERSION,
+            gpui_shell::DEFAULT_COMPONENT_MODULE,
+        )
+        .unwrap();
         register(&mut registry).unwrap();
         let frozen = registry.freeze().unwrap();
         let descriptor = frozen.descriptors().next().unwrap();
         assert_eq!(
-            descriptor.methods[0].arguments[1].schema,
-            ArgumentSchema::Callback("(cx: Context) => void")
+            descriptor.methods()[0].arguments()[1].schema(),
+            &ArgumentSchema::Callback("(cx: Context) => void")
         );
     }
 

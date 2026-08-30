@@ -51,8 +51,7 @@ fn mount(
     source: &str,
 ) -> (VisualTestContext, Entity<gpui_shell::ScriptView>) {
     cx.update(|cx| {
-        gpui_shell::gpui_component::init(cx);
-        gpui_shell::init(cx);
+        gpui_component_shell::init(cx);
     });
     let app = TempApp::new(source);
     let runtime = gpui_component_shell::new_isolated_runtime().expect("runtime");

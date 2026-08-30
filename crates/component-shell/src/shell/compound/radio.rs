@@ -1,8 +1,8 @@
+use gpui_component::{Sizable as _, Size, radio::Radio};
 use gpui_shell::{
     ArgumentDescriptor, ArgumentSchema, ComponentArgument, ComponentDescriptor,
     ComponentMaterializer, ComponentPayload, ComponentRegistry, ConstructorDescriptor,
-    MaterializeRequest, MethodDescriptor, RegistryError, TypeScriptDescriptor, anyhow, gpui,
-    gpui_component::{Sizable as _, Size, radio::Radio},
+    MaterializeRequest, MethodDescriptor, RegistryError, anyhow, gpui,
 };
 use std::sync::Arc;
 
@@ -33,11 +33,11 @@ impl ComponentMaterializer for RadioMaterializer {
             .filter_map(|m| m.payload().downcast_ref::<RadioOp>())
         {
             radio = match op {
-                RadioOp::Label(v) => radio.label(v.clone()),
-                RadioOp::A11y(v) => radio.accessibility_label(v.clone()),
-                RadioOp::Checked(v) => radio.checked(*v),
-                RadioOp::TabStop(v) => radio.tab_stop(*v),
-                RadioOp::Size(v) => radio.with_size(*v),
+                RadioOp::Label(value) => radio.label(value.clone()),
+                RadioOp::A11y(value) => radio.accessibility_label(value.clone()),
+                RadioOp::Checked(value) => radio.checked(*value),
+                RadioOp::TabStop(value) => radio.tab_stop(*value),
+                RadioOp::Size(value) => radio.with_size(*value),
             }
         }
         crate::shell::typed_compound::finish_part(&mut request, radio)
@@ -52,84 +52,83 @@ fn method(
     MethodDescriptor::new(
         name,
         vec![ArgumentDescriptor::new(name, schema)],
-        move |a| match a {
-            [v] => f(v).map(ComponentPayload::new),
+        move |arguments| match arguments {
+            [value] => f(value).map(ComponentPayload::new),
             _ => Err(format!("Radio.{name}({name}) expects one argument")),
         },
     )
-    .documented(doc)
+    .with_documentation(doc)
 }
 pub(super) fn register(r: &mut ComponentRegistry) -> Result<(), RegistryError> {
-    r.register(ComponentDescriptor {
-        name: "Radio",
-        constructors: vec![ConstructorDescriptor::new(
-            "Radio",
-            vec![ArgumentDescriptor::new("id", ArgumentSchema::String)],
-            |a| match a {
-                [ComponentArgument::String(id)] => nonempty_id(id, "Radio")
-                    .map(RadioPayload)
-                    .map(ComponentPayload::new),
-                _ => Err("Radio(id) expects a string id".into()),
-            },
-        )],
-        methods: vec![
-            method(
-                "label",
-                ArgumentSchema::String,
-                "Sets the visible label.",
-                |v| match v {
-                    ComponentArgument::String(x) => Ok(RadioOp::Label(x.clone())),
-                    _ => Err("Radio.label(label) expects a string".into()),
+    r.register(
+        ComponentDescriptor::new("Radio", Arc::new(RadioMaterializer))
+            .with_constructors(vec![ConstructorDescriptor::new(
+                "Radio",
+                vec![ArgumentDescriptor::new("id", ArgumentSchema::String)],
+                |arguments| match arguments {
+                    [ComponentArgument::String(id)] => nonempty_id(id, "Radio")
+                        .map(RadioPayload)
+                        .map(ComponentPayload::new),
+                    _ => Err("Radio(id) expects a string id".into()),
                 },
-            ),
-            method(
-                "accessibilityLabel",
-                ArgumentSchema::String,
-                "Overrides the announced name.",
-                |v| match v {
-                    ComponentArgument::String(x) => Ok(RadioOp::A11y(x.clone())),
-                    _ => Err("Radio.accessibilityLabel(label) expects a string".into()),
-                },
-            ),
-            method(
-                "checked",
-                ArgumentSchema::Boolean,
-                "Controls checked state.",
-                |v| match v {
-                    ComponentArgument::Boolean(x) => Ok(RadioOp::Checked(*x)),
-                    _ => Err("Radio.checked(checked) expects a boolean".into()),
-                },
-            ),
-            method(
-                "tabStop",
-                ArgumentSchema::Boolean,
-                "Controls keyboard tab-stop participation.",
-                |v| match v {
-                    ComponentArgument::Boolean(x) => Ok(RadioOp::TabStop(*x)),
-                    _ => Err("Radio.tabStop(tabStop) expects a boolean".into()),
-                },
-            ),
-            method(
-                "size",
-                ArgumentSchema::Enum(&["xsmall", "small", "medium", "large"]),
-                "Sets semantic size.",
-                |v| match v {
-                    ComponentArgument::Enum(x) => match x.as_str() {
-                        "xsmall" => Ok(RadioOp::Size(Size::XSmall)),
-                        "small" => Ok(RadioOp::Size(Size::Small)),
-                        "medium" => Ok(RadioOp::Size(Size::Medium)),
-                        "large" => Ok(RadioOp::Size(Size::Large)),
-                        _ => Err(format!("unsupported Radio size `{x}`")),
+            )])
+            .with_methods(vec![
+                method(
+                    "label",
+                    ArgumentSchema::String,
+                    "Sets the visible label.",
+                    |value| match value {
+                        ComponentArgument::String(x) => Ok(RadioOp::Label(x.clone())),
+                        _ => Err("Radio.label(label) expects a string".into()),
                     },
-                    _ => Err("Radio.size(size) expects a size literal".into()),
-                },
+                ),
+                method(
+                    "accessibilityLabel",
+                    ArgumentSchema::String,
+                    "Overrides the announced name.",
+                    |value| match value {
+                        ComponentArgument::String(x) => Ok(RadioOp::A11y(x.clone())),
+                        _ => Err("Radio.accessibilityLabel(label) expects a string".into()),
+                    },
+                ),
+                method(
+                    "checked",
+                    ArgumentSchema::Boolean,
+                    "Controls checked state.",
+                    |value| match value {
+                        ComponentArgument::Boolean(x) => Ok(RadioOp::Checked(*x)),
+                        _ => Err("Radio.checked(checked) expects a boolean".into()),
+                    },
+                ),
+                method(
+                    "tabStop",
+                    ArgumentSchema::Boolean,
+                    "Controls keyboard tab-stop participation.",
+                    |value| match value {
+                        ComponentArgument::Boolean(x) => Ok(RadioOp::TabStop(*x)),
+                        _ => Err("Radio.tabStop(tabStop) expects a boolean".into()),
+                    },
+                ),
+                method(
+                    "size",
+                    ArgumentSchema::Enum(&["xsmall", "small", "medium", "large"]),
+                    "Sets semantic size.",
+                    |value| match value {
+                        ComponentArgument::Enum(x) => match x.as_str() {
+                            "xsmall" => Ok(RadioOp::Size(Size::XSmall)),
+                            "small" => Ok(RadioOp::Size(Size::Small)),
+                            "medium" => Ok(RadioOp::Size(Size::Medium)),
+                            "large" => Ok(RadioOp::Size(Size::Large)),
+                            _ => Err(format!("unsupported Radio size `{x}`")),
+                        },
+                        _ => Err("Radio.size(size) expects a size literal".into()),
+                    },
+                ),
+            ])
+            .with_documentation(
+                "A controlled radio control; selected and disabled common behavior is supported.",
             ),
-        ],
-        typescript: TypeScriptDescriptor::new(
-            "A controlled radio control; selected and disabled common behavior is supported.",
-        ),
-        materializer: Arc::new(RadioMaterializer),
-    })?;
+    )?;
     Ok(())
 }
 

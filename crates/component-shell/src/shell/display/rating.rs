@@ -1,10 +1,10 @@
 use super::common::{ensure_no_children, non_empty_id, size_operation};
+use gpui_component::{Size, rating::Rating, try_parse_color};
 use gpui_shell::{
     ArgumentDescriptor, ArgumentSchema, ComponentArgument, ComponentDescriptor,
     ComponentMaterializer, ComponentPayload, ComponentRegistry, ConstructorDescriptor,
-    MaterializeRequest, MethodDescriptor, RegistryError, TypeScriptDescriptor, anyhow,
+    MaterializeRequest, MethodDescriptor, RegistryError, anyhow,
     gpui::{self, IntoElement as _, Refineable as _, Styled as _},
-    gpui_component::{Size, rating::Rating, try_parse_color},
 };
 use std::sync::Arc;
 #[derive(Clone)]
@@ -84,7 +84,7 @@ fn count_method(
             _ => Err(format!("Rating.{name}({name}) expects a number")),
         },
     )
-    .documented(documentation)
+    .with_documentation(documentation)
 }
 
 fn rating_count(value: f64, name: &str) -> Result<usize, String> {
@@ -98,51 +98,48 @@ fn rating_count(value: f64, name: &str) -> Result<usize, String> {
     Ok(value as usize)
 }
 pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
-    registry.register(ComponentDescriptor {
-        name: "Rating",
-        constructors: vec![ConstructorDescriptor::new(
-            "Rating",
-            vec![ArgumentDescriptor::new("id", ArgumentSchema::String)],
-            |arguments| match arguments {
-                [ComponentArgument::String(id)] => Ok(ComponentPayload::new(RatingPayload {
-                    id: non_empty_id("Rating", id)?,
-                })),
-                _ => Err("Rating(id) expects a string".into()),
-            },
-        )],
-        methods: vec![
-            count_method(
-                "value",
-                "Sets the current number of active stars.",
-                RatingOp::Value,
-            ),
-            count_method("max", "Sets the maximum number of stars.", RatingOp::Max),
-            MethodDescriptor::new(
-                "color",
-                vec![ArgumentDescriptor::new("color", ArgumentSchema::String)],
+    registry.register(
+        ComponentDescriptor::new("Rating", Arc::new(RatingMaterializer))
+            .with_constructors(vec![ConstructorDescriptor::new(
+                "Rating",
+                vec![ArgumentDescriptor::new("id", ArgumentSchema::String)],
                 |arguments| match arguments {
-                    [ComponentArgument::String(color)] => try_parse_color(color)
-                        .map(|color| ComponentPayload::new(RatingOp::Color(color)))
-                        .map_err(|error| format!("invalid Rating color: {error}")),
-                    _ => Err("Rating.color(color) expects a color string".into()),
+                    [ComponentArgument::String(id)] => Ok(ComponentPayload::new(RatingPayload {
+                        id: non_empty_id("Rating", id)?,
+                    })),
+                    _ => Err("Rating(id) expects a string".into()),
                 },
-            )
-            .documented("Sets the active star color."),
-            MethodDescriptor::new(
-                "size",
-                vec![ArgumentDescriptor::new(
+            )])
+            .with_methods(vec![
+                count_method(
+                    "value",
+                    "Sets the current number of active stars.",
+                    RatingOp::Value,
+                ),
+                count_method("max", "Sets the maximum number of stars.", RatingOp::Max),
+                MethodDescriptor::new(
+                    "color",
+                    vec![ArgumentDescriptor::new("color", ArgumentSchema::String)],
+                    |arguments| match arguments {
+                        [ComponentArgument::String(color)] => try_parse_color(color)
+                            .map(|color| ComponentPayload::new(RatingOp::Color(color)))
+                            .map_err(|error| format!("invalid Rating color: {error}")),
+                        _ => Err("Rating.color(color) expects a color string".into()),
+                    },
+                )
+                .with_documentation("Sets the active star color."),
+                MethodDescriptor::new(
                     "size",
-                    ArgumentSchema::Enum(&["xsmall", "small", "medium", "large"]),
-                )],
-                |arguments| size_operation("Rating", arguments, RatingOp::Size),
-            )
-            .documented("Sets the rating's semantic size."),
-        ],
-        typescript: TypeScriptDescriptor::new(
-            "An interactive star rating with configurable value and maximum.",
-        ),
-        materializer: Arc::new(RatingMaterializer),
-    })?;
+                    vec![ArgumentDescriptor::new(
+                        "size",
+                        ArgumentSchema::Enum(&["xsmall", "small", "medium", "large"]),
+                    )],
+                    |arguments| size_operation("Rating", arguments, RatingOp::Size),
+                )
+                .with_documentation("Sets the rating's semantic size."),
+            ])
+            .with_documentation("An interactive star rating with configurable value and maximum."),
+    )?;
     Ok(())
 }
 #[cfg(test)]

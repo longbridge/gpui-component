@@ -1,18 +1,19 @@
+pub(super) use super::support::require_child;
+
+use gpui_component::{
+    Selectable as _, Sizable as _, Size,
+    accordion::{Accordion, AccordionItem},
+    radio::{Radio, RadioGroup},
+    stepper::{Stepper, StepperItem},
+    tab::{Tab, TabBar, TabVariant},
+};
 use gpui_shell::{
     ArgumentDescriptor, ArgumentSchema, ComponentArgument, ComponentCallbackArgument,
     ComponentDescriptor, ComponentMaterializer, ComponentPayload, ComponentRegistry,
-    ConstructorDescriptor, MaterializeRequest, MethodDescriptor, RegistryError,
-    TypeScriptDescriptor, anyhow,
+    ConstructorDescriptor, MaterializeRequest, MethodDescriptor, RegistryError, anyhow,
     gpui::{
         self, Axis, Bounds, Element, ElementId, GlobalElementId, InspectorElementId,
         IntoElement as _, LayoutId, Pixels, Refineable as _, Window,
-    },
-    gpui_component::{
-        Selectable as _, Sizable as _, Size,
-        accordion::{Accordion, AccordionItem},
-        radio::{Radio, RadioGroup},
-        stepper::{Stepper, StepperItem},
-        tab::{Tab, TabBar, TabVariant},
     },
 };
 use std::sync::Arc;
@@ -23,11 +24,11 @@ mod tests {
 
     #[test]
     fn wrong_registered_child_identity_is_rejected() {
-        assert!(require_child("Accordion", "AccordionItem", Some("Tab")).is_err());
-        let nested = require_child("Accordion", "AccordionItem", None).unwrap_err();
+        assert!(require_child("Accordion", Some("Tab"), &["AccordionItem"]).is_err());
+        let nested = require_child("Accordion", None, &["AccordionItem"]).unwrap_err();
         assert!(nested.to_string().contains("ordinary element"), "{nested}");
-        assert!(require_child("RadioGroup", "Radio", None).is_err());
-        assert!(require_child("Stepper", "StepperItem", Some("StepperItem")).is_ok());
+        assert!(require_child("RadioGroup", None, &["Radio"]).is_err());
+        assert!(require_child("Stepper", Some("StepperItem"), &["StepperItem"]).is_ok());
     }
 
     #[test]
@@ -69,13 +70,16 @@ mod tests {
 
     #[test]
     fn batch_publishes_closed_documented_descriptors() {
-        let mut registry =
-            ComponentRegistry::new(gpui_shell::COMPONENT_REGISTRY_API_VERSION).unwrap();
+        let mut registry = ComponentRegistry::new(
+            gpui_shell::COMPONENT_REGISTRY_API_VERSION,
+            gpui_shell::DEFAULT_COMPONENT_MODULE,
+        )
+        .unwrap();
         register(&mut registry).unwrap();
         let frozen = registry.freeze().unwrap();
         let names = frozen
             .descriptors()
-            .map(|descriptor| descriptor.name)
+            .map(|descriptor| descriptor.name())
             .collect::<Vec<_>>();
 
         assert_eq!(
@@ -91,38 +95,25 @@ mod tests {
             ]
         );
         assert!(frozen.descriptors().all(|descriptor| {
-            descriptor.typescript.documentation.is_some()
+            descriptor.documentation().is_some()
                 && descriptor
-                    .methods
+                    .methods()
                     .iter()
-                    .all(|method| method.documentation.is_some())
+                    .all(|method| method.documentation().is_some())
         }));
         let tab_bar = frozen
             .descriptors()
-            .find(|descriptor| descriptor.name == "TabBar")
+            .find(|descriptor| descriptor.name() == "TabBar")
             .unwrap();
         assert_eq!(
-            tab_bar.constructors[0].arguments[0].schema,
-            ArgumentSchema::String
+            tab_bar.constructors()[0].arguments()[0].schema(),
+            &ArgumentSchema::String
         );
         assert_eq!(
-            tab_bar.methods[1].arguments[0].schema,
-            ArgumentSchema::Enum(&["tab", "outline", "pill", "segmented", "underline"])
+            tab_bar.methods()[1].arguments()[0].schema(),
+            &ArgumentSchema::Enum(&["tab", "outline", "pill", "segmented", "underline"])
         );
     }
-}
-
-fn require_child(
-    parent: &str,
-    expected: &'static str,
-    actual: Option<&'static str>,
-) -> anyhow::Result<()> {
-    anyhow::ensure!(
-        actual == Some(expected),
-        "{parent} accepts only registered {expected} children; received {}",
-        actual.unwrap_or("an ordinary element")
-    );
-    Ok(())
 }
 
 fn take_element<T: gpui::IntoElement + 'static>(
@@ -314,7 +305,7 @@ fn size_method<T: Send + Sync + 'static>(
             _ => Err(format!("{component}.size(size) expects a semantic size")),
         },
     )
-    .documented("Sets the semantic component size.")
+    .with_documentation("Sets the semantic component size.")
 }
 
 #[derive(Clone, Copy)]
@@ -375,9 +366,9 @@ impl ComponentMaterializer for AccordionMaterializer {
             .methods()
             .filter_map(|method| method.payload().downcast_ref::<AccordionOp>().copied())
             .collect::<Vec<_>>();
-        let mut children = request.take_typed_children();
+        let mut children = request.take_typed_children()?;
         for child in &children {
-            require_child("Accordion", "AccordionItem", child.component_name())?;
+            require_child("Accordion", child.component_name(), &["AccordionItem"])?;
         }
         let mut accordion = Accordion::new(id).disabled(request.disabled());
         for operation in operations {
@@ -422,9 +413,9 @@ impl ComponentMaterializer for RadioGroupMaterializer {
             .methods()
             .filter_map(|method| method.payload().downcast_ref::<RadioGroupOp>().cloned())
             .collect::<Vec<_>>();
-        let mut children = request.take_typed_children();
+        let mut children = request.take_typed_children()?;
         for child in &children {
-            require_child("RadioGroup", "Radio", child.component_name())?;
+            require_child("RadioGroup", child.component_name(), &["Radio"])?;
         }
         let mut group = match payload.axis {
             Axis::Horizontal => RadioGroup::horizontal(payload.id),
@@ -519,9 +510,9 @@ impl ComponentMaterializer for TabBarMaterializer {
             .methods()
             .filter_map(|method| method.payload().downcast_ref::<TabBarOp>().cloned())
             .collect::<Vec<_>>();
-        let mut children = request.take_typed_children();
+        let mut children = request.take_typed_children()?;
         for child in &children {
-            require_child("TabBar", "Tab", child.component_name())?;
+            require_child("TabBar", child.component_name(), &["Tab"])?;
         }
         let mut bar = TabBar::new(id);
         for operation in operations {
@@ -607,9 +598,9 @@ impl ComponentMaterializer for StepperMaterializer {
             .methods()
             .filter_map(|method| method.payload().downcast_ref::<StepperOp>().cloned())
             .collect::<Vec<_>>();
-        let mut children = request.take_typed_children();
+        let mut children = request.take_typed_children()?;
         for child in &children {
-            require_child("Stepper", "StepperItem", child.component_name())?;
+            require_child("Stepper", child.component_name(), &["StepperItem"])?;
         }
         let mut stepper = Stepper::new(id).disabled(request.disabled());
         for operation in operations {
@@ -655,7 +646,7 @@ fn bool_method<T: Send + Sync + 'static>(
         vec![ArgumentDescriptor::new(name, ArgumentSchema::Boolean)],
         move |arguments| bool_payload(arguments, &format!("{component}.{name}({name})"), &make),
     )
-    .documented(documentation)
+    .with_documentation(documentation)
 }
 
 fn index_callback_method<T: Send + Sync + 'static>(
@@ -670,7 +661,7 @@ fn index_callback_method<T: Send + Sync + 'static>(
         )],
         move |arguments| index_callback_payload(arguments, component, &make),
     )
-    .documented("Reports the newly selected zero-based index.")
+    .with_documentation("Reports the newly selected zero-based index.")
 }
 
 fn index_callback_payload<T: Send + Sync + 'static>(
@@ -685,45 +676,43 @@ fn index_callback_payload<T: Send + Sync + 'static>(
 }
 
 pub(crate) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
-    registry.register(ComponentDescriptor {
-        name: "AccordionItem",
-        constructors: vec![ConstructorDescriptor::new("AccordionItem", vec![], |_| {
-            Ok(ComponentPayload::new(AccordionItemPayload))
-        })],
-        methods: vec![
-            MethodDescriptor::new(
-                "title",
-                vec![ArgumentDescriptor::new("title", ArgumentSchema::Element)],
-                |arguments| match arguments {
-                    [value @ ComponentArgument::Element(_)] => {
-                        Ok(ComponentPayload::new(AccordionItemOp::Title(value.clone())))
-                    }
-                    _ => Err("AccordionItem.title(title) expects an element".into()),
-                },
-            )
-            .documented("Sets the interactive title row element."),
-            bool_method(
+    registry.register(
+        ComponentDescriptor::new("AccordionItem", Arc::new(AccordionItemMaterializer))
+            .with_constructors(vec![ConstructorDescriptor::new(
                 "AccordionItem",
-                "open",
-                "Controls expanded state.",
-                AccordionItemOp::Open,
-            ),
-            bool_method(
-                "AccordionItem",
-                "disabled",
-                "Disables this item.",
-                AccordionItemOp::Disabled,
-            ),
-        ],
-        typescript: TypeScriptDescriptor::new(
-            "An accordion part accepted only as a direct Accordion child.",
-        ),
-        materializer: Arc::new(AccordionItemMaterializer),
-    })?;
-    registry.register(ComponentDescriptor {
-        name: "Accordion",
-        constructors: vec![id_constructor("Accordion", AccordionPayload)],
-        methods: vec![
+                vec![],
+                |_| Ok(ComponentPayload::new(AccordionItemPayload)),
+            )])
+            .with_methods(vec![
+                MethodDescriptor::new(
+                    "title",
+                    vec![ArgumentDescriptor::new("title", ArgumentSchema::Element)],
+                    |arguments| match arguments {
+                        [value @ ComponentArgument::Element(_)] => {
+                            Ok(ComponentPayload::new(AccordionItemOp::Title(value.clone())))
+                        }
+                        _ => Err("AccordionItem.title(title) expects an element".into()),
+                    },
+                )
+                .with_documentation("Sets the interactive title row element."),
+                bool_method(
+                    "AccordionItem",
+                    "open",
+                    "Controls expanded state.",
+                    AccordionItemOp::Open,
+                ),
+                bool_method(
+                    "AccordionItem",
+                    "disabled",
+                    "Disables this item.",
+                    AccordionItemOp::Disabled,
+                ),
+            ])
+            .with_documentation("An accordion part accepted only as a direct Accordion child."),
+    )?;
+    registry.register(ComponentDescriptor::new("Accordion", Arc::new(AccordionMaterializer))
+.with_constructors(vec![id_constructor("Accordion", AccordionPayload)])
+.with_methods(vec![
             bool_method(
                 "Accordion",
                 "multiple",
@@ -737,217 +726,206 @@ pub(crate) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
                 AccordionOp::Bordered,
             ),
             size_method("Accordion", AccordionOp::Size),
-        ],
-        typescript: TypeScriptDescriptor::new(
+        ])
+.with_documentation(
             "A typed accordion container accepting only AccordionItem children. Toggle callbacks are not exposed: the real component requires a Send + Sync handler, while shell callbacks are runtime-local.",
-        ),
-        materializer: Arc::new(AccordionMaterializer),
-    })?;
-    registry.register(ComponentDescriptor {
-        name: "RadioGroup",
-        constructors: vec![
-            id_constructor("RadioGroup", |id| RadioGroupPayload {
-                id,
-                axis: Axis::Vertical,
-            }),
-            ConstructorDescriptor::new(
-                "HorizontalRadioGroup",
-                vec![ArgumentDescriptor::new("id", ArgumentSchema::String)],
-                |arguments| match arguments {
-                    [ComponentArgument::String(id)] if !id.trim().is_empty() => {
-                        Ok(ComponentPayload::new(RadioGroupPayload {
-                            id: id.clone(),
-                            axis: Axis::Horizontal,
-                        }))
-                    }
-                    _ => Err("HorizontalRadioGroup(id) expects a nonempty string id".into()),
-                },
-            ),
-        ],
-        methods: vec![
-            MethodDescriptor::new(
-                "selectedIndex",
-                vec![ArgumentDescriptor::new("index", ArgumentSchema::Number)],
-                |arguments| {
-                    index_payload(
-                        arguments,
-                        "RadioGroup.selectedIndex(index)",
-                        RadioGroupOp::Selected,
-                    )
-                },
-            )
-            .documented("Controls the selected zero-based radio index."),
-            bool_method(
-                "RadioGroup",
-                "disabled",
-                "Disables the group.",
-                RadioGroupOp::Disabled,
-            ),
-            index_callback_method("RadioGroup", RadioGroupOp::OnChange),
-        ],
-        typescript: TypeScriptDescriptor::new(
-            "A controlled radio set accepting only registered Radio children.",
-        ),
-        materializer: Arc::new(RadioGroupMaterializer),
-    })?;
-    registry.register(ComponentDescriptor {
-        name: "Tab",
-        constructors: vec![ConstructorDescriptor::new("Tab", vec![], |_| {
-            Ok(ComponentPayload::new(TabPayload))
-        })],
-        methods: vec![
-            MethodDescriptor::new(
-                "label",
-                vec![ArgumentDescriptor::new("label", ArgumentSchema::String)],
-                |arguments| {
-                    string_payload(arguments, "Tab.label(label)", |value| {
-                        ComponentPayload::new(TabOp::Label(value))
-                    })
-                },
-            )
-            .documented("Sets the visible tab label."),
-            MethodDescriptor::new(
-                "ariaLabel",
-                vec![ArgumentDescriptor::new("label", ArgumentSchema::String)],
-                |arguments| {
-                    string_payload(arguments, "Tab.ariaLabel(label)", |value| {
-                        ComponentPayload::new(TabOp::AriaLabel(value))
-                    })
-                },
-            )
-            .documented("Sets the accessible tab label."),
-            bool_method("Tab", "disabled", "Disables the tab.", TabOp::Disabled),
-            bool_method(
-                "Tab",
-                "selected",
-                "Controls selected state.",
-                TabOp::Selected,
-            ),
-        ],
-        typescript: TypeScriptDescriptor::new("A tab accepted only as a direct TabBar child."),
-        materializer: Arc::new(TabMaterializer),
-    })?;
-    registry.register(ComponentDescriptor {
-        name: "TabBar",
-        constructors: vec![
-            id_constructor("TabBar", TabBarPayload),
-            ConstructorDescriptor::new(
-                "Tabs",
-                vec![ArgumentDescriptor::new("id", ArgumentSchema::String)],
-                |arguments| match arguments {
-                    [ComponentArgument::String(id)] if !id.trim().is_empty() => {
-                        Ok(ComponentPayload::new(TabBarPayload(id.clone())))
-                    }
-                    _ => Err("Tabs(id) expects a nonempty string id".into()),
-                },
-            )
-            .deprecated(
-                "TabBar",
-                "Use TabBar; Tabs is retained as a compatibility alias.",
-            ),
-        ],
-        methods: vec![
-            MethodDescriptor::new(
-                "selectedIndex",
-                vec![ArgumentDescriptor::new("index", ArgumentSchema::Number)],
-                |arguments| {
-                    index_payload(arguments, "TabBar.selectedIndex(index)", TabBarOp::Selected)
-                },
-            )
-            .documented("Controls the selected zero-based tab index."),
-            MethodDescriptor::new(
-                "variant",
-                vec![ArgumentDescriptor::new(
+        ))?;
+    registry.register(
+        ComponentDescriptor::new("RadioGroup", Arc::new(RadioGroupMaterializer))
+            .with_constructors(vec![
+                id_constructor("RadioGroup", |id| RadioGroupPayload {
+                    id,
+                    axis: Axis::Vertical,
+                }),
+                ConstructorDescriptor::new(
+                    "HorizontalRadioGroup",
+                    vec![ArgumentDescriptor::new("id", ArgumentSchema::String)],
+                    |arguments| match arguments {
+                        [ComponentArgument::String(id)] if !id.trim().is_empty() => {
+                            Ok(ComponentPayload::new(RadioGroupPayload {
+                                id: id.clone(),
+                                axis: Axis::Horizontal,
+                            }))
+                        }
+                        _ => Err("HorizontalRadioGroup(id) expects a nonempty string id".into()),
+                    },
+                ),
+            ])
+            .with_methods(vec![
+                MethodDescriptor::new(
+                    "selectedIndex",
+                    vec![ArgumentDescriptor::new("index", ArgumentSchema::Number)],
+                    |arguments| {
+                        index_payload(
+                            arguments,
+                            "RadioGroup.selectedIndex(index)",
+                            RadioGroupOp::Selected,
+                        )
+                    },
+                )
+                .with_documentation("Controls the selected zero-based radio index."),
+                bool_method(
+                    "RadioGroup",
+                    "disabled",
+                    "Disables the group.",
+                    RadioGroupOp::Disabled,
+                ),
+                index_callback_method("RadioGroup", RadioGroupOp::OnChange),
+            ])
+            .with_documentation("A controlled radio set accepting only registered Radio children."),
+    )?;
+    registry.register(
+        ComponentDescriptor::new("Tab", Arc::new(TabMaterializer))
+            .with_constructors(vec![ConstructorDescriptor::new("Tab", vec![], |_| {
+                Ok(ComponentPayload::new(TabPayload))
+            })])
+            .with_methods(vec![
+                MethodDescriptor::new(
+                    "label",
+                    vec![ArgumentDescriptor::new("label", ArgumentSchema::String)],
+                    |arguments| {
+                        string_payload(arguments, "Tab.label(label)", |value| {
+                            ComponentPayload::new(TabOp::Label(value))
+                        })
+                    },
+                )
+                .with_documentation("Sets the visible tab label."),
+                MethodDescriptor::new(
+                    "ariaLabel",
+                    vec![ArgumentDescriptor::new("label", ArgumentSchema::String)],
+                    |arguments| {
+                        string_payload(arguments, "Tab.ariaLabel(label)", |value| {
+                            ComponentPayload::new(TabOp::AriaLabel(value))
+                        })
+                    },
+                )
+                .with_documentation("Sets the accessible tab label."),
+                bool_method("Tab", "disabled", "Disables the tab.", TabOp::Disabled),
+                bool_method(
+                    "Tab",
+                    "selected",
+                    "Controls selected state.",
+                    TabOp::Selected,
+                ),
+            ])
+            .with_documentation("A tab accepted only as a direct TabBar child."),
+    )?;
+    registry.register(
+        ComponentDescriptor::new("TabBar", Arc::new(TabBarMaterializer))
+            .with_constructors(vec![
+                id_constructor("TabBar", TabBarPayload),
+                ConstructorDescriptor::new(
+                    "Tabs",
+                    vec![ArgumentDescriptor::new("id", ArgumentSchema::String)],
+                    |arguments| match arguments {
+                        [ComponentArgument::String(id)] if !id.trim().is_empty() => {
+                            Ok(ComponentPayload::new(TabBarPayload(id.clone())))
+                        }
+                        _ => Err("Tabs(id) expects a nonempty string id".into()),
+                    },
+                )
+                .with_deprecation(
+                    "TabBar",
+                    "Use TabBar; Tabs is retained as a compatibility alias.",
+                ),
+            ])
+            .with_methods(vec![
+                MethodDescriptor::new(
+                    "selectedIndex",
+                    vec![ArgumentDescriptor::new("index", ArgumentSchema::Number)],
+                    |arguments| {
+                        index_payload(arguments, "TabBar.selectedIndex(index)", TabBarOp::Selected)
+                    },
+                )
+                .with_documentation("Controls the selected zero-based tab index."),
+                MethodDescriptor::new(
                     "variant",
-                    ArgumentSchema::Enum(&["tab", "outline", "pill", "segmented", "underline"]),
-                )],
-                |arguments| match arguments {
-                    [ComponentArgument::Enum(value)] => {
-                        let variant = match value.as_str() {
-                            "tab" => TabVariant::Tab,
-                            "outline" => TabVariant::Outline,
-                            "pill" => TabVariant::Pill,
-                            "segmented" => TabVariant::Segmented,
-                            "underline" => TabVariant::Underline,
-                            _ => return Err(format!("unsupported TabBar variant `{value}`")),
-                        };
-                        Ok(ComponentPayload::new(TabBarOp::Variant(variant)))
-                    }
-                    _ => Err("TabBar.variant(variant) expects a variant literal".into()),
-                },
-            )
-            .documented("Sets one of the component's five tab variants."),
-            bool_method(
-                "TabBar",
-                "menu",
-                "Enables the overflow menu.",
-                TabBarOp::Menu,
+                    vec![ArgumentDescriptor::new(
+                        "variant",
+                        ArgumentSchema::Enum(&["tab", "outline", "pill", "segmented", "underline"]),
+                    )],
+                    |arguments| match arguments {
+                        [ComponentArgument::Enum(value)] => {
+                            let variant = match value.as_str() {
+                                "tab" => TabVariant::Tab,
+                                "outline" => TabVariant::Outline,
+                                "pill" => TabVariant::Pill,
+                                "segmented" => TabVariant::Segmented,
+                                "underline" => TabVariant::Underline,
+                                _ => return Err(format!("unsupported TabBar variant `{value}`")),
+                            };
+                            Ok(ComponentPayload::new(TabBarOp::Variant(variant)))
+                        }
+                        _ => Err("TabBar.variant(variant) expects a variant literal".into()),
+                    },
+                )
+                .with_documentation("Sets one of the component's five tab variants."),
+                bool_method(
+                    "TabBar",
+                    "menu",
+                    "Enables the overflow menu.",
+                    TabBarOp::Menu,
+                ),
+                size_method("TabBar", TabBarOp::Size),
+                index_callback_method("TabBar", TabBarOp::OnChange),
+            ])
+            .with_documentation(
+                "A typed tab list accepting only Tab children; Tabs is a deprecated alias.",
             ),
-            size_method("TabBar", TabBarOp::Size),
-            index_callback_method("TabBar", TabBarOp::OnChange),
-        ],
-        typescript: TypeScriptDescriptor::new(
-            "A typed tab list accepting only Tab children; Tabs is a deprecated alias.",
-        ),
-        materializer: Arc::new(TabBarMaterializer),
-    })?;
-    registry.register(ComponentDescriptor {
-        name: "StepperItem",
-        constructors: vec![ConstructorDescriptor::new("StepperItem", vec![], |_| {
-            Ok(ComponentPayload::new(StepperItemPayload))
-        })],
-        methods: vec![bool_method(
-            "StepperItem",
-            "disabled",
-            "Disables this step independently of its parent.",
-            StepperItemOp::Disabled,
-        )],
-        typescript: TypeScriptDescriptor::new(
-            "A step part accepted only as a direct Stepper child.",
-        ),
-        materializer: Arc::new(StepperItemMaterializer),
-    })?;
-    registry.register(ComponentDescriptor {
-        name: "Stepper",
-        constructors: vec![id_constructor("Stepper", StepperPayload)],
-        methods: vec![
-            MethodDescriptor::new(
-                "selectedIndex",
-                vec![ArgumentDescriptor::new("index", ArgumentSchema::Number)],
-                |arguments| {
-                    index_payload(
-                        arguments,
-                        "Stepper.selectedIndex(index)",
-                        StepperOp::Selected,
-                    )
-                },
-            )
-            .documented("Controls the current zero-based step."),
-            bool_method(
-                "Stepper",
-                "vertical",
-                "Switches between vertical and horizontal layout.",
-                StepperOp::Vertical,
-            ),
-            bool_method(
-                "Stepper",
-                "textCenter",
-                "Centers each step's text in horizontal layouts.",
-                StepperOp::TextCenter,
-            ),
-            bool_method(
-                "Stepper",
+    )?;
+    registry.register(
+        ComponentDescriptor::new("StepperItem", Arc::new(StepperItemMaterializer))
+            .with_constructors(vec![ConstructorDescriptor::new(
+                "StepperItem",
+                vec![],
+                |_| Ok(ComponentPayload::new(StepperItemPayload)),
+            )])
+            .with_methods(vec![bool_method(
+                "StepperItem",
                 "disabled",
-                "Disables every step.",
-                StepperOp::Disabled,
-            ),
-            size_method("Stepper", StepperOp::Size),
-            index_callback_method("Stepper", StepperOp::OnChange),
-        ],
-        typescript: TypeScriptDescriptor::new(
-            "A typed progress stepper accepting only StepperItem children.",
-        ),
-        materializer: Arc::new(StepperMaterializer),
-    })?;
+                "Disables this step independently of its parent.",
+                StepperItemOp::Disabled,
+            )])
+            .with_documentation("A step part accepted only as a direct Stepper child."),
+    )?;
+    registry.register(
+        ComponentDescriptor::new("Stepper", Arc::new(StepperMaterializer))
+            .with_constructors(vec![id_constructor("Stepper", StepperPayload)])
+            .with_methods(vec![
+                MethodDescriptor::new(
+                    "selectedIndex",
+                    vec![ArgumentDescriptor::new("index", ArgumentSchema::Number)],
+                    |arguments| {
+                        index_payload(
+                            arguments,
+                            "Stepper.selectedIndex(index)",
+                            StepperOp::Selected,
+                        )
+                    },
+                )
+                .with_documentation("Controls the current zero-based step."),
+                bool_method(
+                    "Stepper",
+                    "vertical",
+                    "Switches between vertical and horizontal layout.",
+                    StepperOp::Vertical,
+                ),
+                bool_method(
+                    "Stepper",
+                    "textCenter",
+                    "Centers each step's text in horizontal layouts.",
+                    StepperOp::TextCenter,
+                ),
+                bool_method(
+                    "Stepper",
+                    "disabled",
+                    "Disables every step.",
+                    StepperOp::Disabled,
+                ),
+                size_method("Stepper", StepperOp::Size),
+                index_callback_method("Stepper", StepperOp::OnChange),
+            ])
+            .with_documentation("A typed progress stepper accepting only StepperItem children."),
+    )?;
     Ok(())
 }

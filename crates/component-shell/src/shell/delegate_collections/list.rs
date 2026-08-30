@@ -1,15 +1,15 @@
+use gpui_component::{
+    IndexPath,
+    list::{List, ListDelegate, ListItem, ListState},
+};
 use gpui_shell::{
     ArgumentDescriptor, ArgumentSchema, ComponentArgument, ComponentDataCallback,
     ComponentDataValue, ComponentDelegateSnapshot, ComponentDescriptor, ComponentElementCallback,
     ComponentMaterializer, ComponentPayload, ComponentRegistry, ConstructorDescriptor,
-    MaterializeRequest, RegistryError, TypeScriptDescriptor, anyhow,
+    MaterializeRequest, RegistryError, anyhow,
     gpui::{
         self, App, AppContext as _, Entity, IntoElement as _, ParentElement as _, Refineable as _,
         RenderOnce, SharedString, Styled as _, Window,
-    },
-    gpui_component::{
-        IndexPath,
-        list::{List, ListDelegate, ListItem, ListState},
     },
 };
 use std::sync::Arc;
@@ -167,7 +167,7 @@ impl ComponentMaterializer for Materializer {
         let rows = request.resolve_data_callback(&payload.rows)?;
         let render_row = request.resolve_element_callback(&payload.render_row)?;
         anyhow::ensure!(
-            request.take_typed_children().is_empty(),
+            request.take_typed_children()?.is_empty(),
             "List does not accept children; rows come from its immutable delegate snapshot"
         );
         Ok(BoundList {
@@ -181,9 +181,8 @@ impl ComponentMaterializer for Materializer {
 }
 
 pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
-    registry.register(ComponentDescriptor {
-        name: "List",
-        constructors: vec![ConstructorDescriptor::new(
+    registry.register(ComponentDescriptor::new("List", Arc::new(Materializer))
+.with_constructors(vec![ConstructorDescriptor::new(
             "List",
             vec![
                 ArgumentDescriptor::new("id", ArgumentSchema::String),
@@ -205,12 +204,10 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
                     })),
                 _ => Err("List expects a non-empty id, rows callback, and row renderer".into()),
             },
-        )],
-        methods: vec![],
-        typescript: TypeScriptDescriptor::new(
+        )])
+.with_methods(vec![])
+.with_documentation(
             "Native retained List backed by an immutable rows snapshot. Each row is lazily rendered; object rows should provide a stable string `id`.",
-        ),
-        materializer: Arc::new(Materializer),
-    })?;
+        ))?;
     Ok(())
 }
