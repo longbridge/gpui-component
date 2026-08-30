@@ -2215,7 +2215,15 @@ impl<M: InputModeKind> Element for TextElement<M> {
                 line_y,
             );
 
-            // Paint the actual line
+            // Glyph backgrounds live on a separate pass from underline/text.
+            _ = line.paint_background(
+                p,
+                line_height,
+                text_align,
+                Some(prepaint.last_layout.content_width),
+                window,
+                cx,
+            );
             _ = line.paint(
                 p,
                 line_height,

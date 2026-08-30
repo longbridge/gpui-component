@@ -746,6 +746,27 @@ impl LineLayout {
         size(width, self.wrapped_lines.len() * line_height)
     }
 
+    pub(crate) fn paint_background(
+        &self,
+        pos: Point<Pixels>,
+        line_height: Pixels,
+        text_align: TextAlign,
+        align_width: Option<Pixels>,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        for (ix, line) in self.wrapped_lines.iter().enumerate() {
+            _ = line.paint_background(
+                pos + point(self.line_indent(ix), ix * line_height),
+                line_height,
+                text_align,
+                align_width,
+                window,
+                cx,
+            );
+        }
+    }
+
     pub(crate) fn paint(
         &self,
         pos: Point<Pixels>,
