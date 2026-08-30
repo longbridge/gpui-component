@@ -7,9 +7,9 @@ use std::{
 use gpui::{
     AnyElement, App, DefiniteLength, Div, ElementId, FontStyle, FontWeight, HighlightStyle, Hsla,
     Image, ImageFormat, InteractiveElement as _, IntoElement, Length, ObjectFit, Overflow,
-    ParentElement, ScrollHandle, SharedString, SharedUri, StatefulInteractiveElement, Styled,
-    StyledImage as _, WhiteSpace, Window, div, img, prelude::FluentBuilder as _, px, relative,
-    rems,
+    ParentElement, Pixels, ScrollHandle, SharedString, SharedUri, StatefulInteractiveElement,
+    Styled, StyledImage as _, WhiteSpace, Window, div, img, prelude::FluentBuilder as _, px,
+    relative, rems,
 };
 use markdown::mdast;
 
@@ -1776,6 +1776,7 @@ impl BlockNode {
         options: NodeRenderOptions,
         checked: Option<bool>,
         style: &TextViewStyle,
+        line_height: Pixels,
     ) -> Div {
         h_flex()
             .w_full()
@@ -1797,22 +1798,29 @@ impl BlockNode {
                 this.child(
                     div()
                         .flex()
-                        .mt(rems(0.3125))
                         .mr_1p5()
-                        .size(rems(0.875))
+                        .h(line_height)
+                        .flex_none()
                         .items_center()
                         .justify_center()
-                        .border_1()
-                        .border_color(style.foreground)
-                        .when(checked, |this| {
-                            this.bg(style.foreground).child(
-                                img(Arc::new(Image::from_bytes(
-                                    ImageFormat::Svg,
-                                    check_svg.to_vec(),
-                                )))
-                                .size(rems(0.625)),
-                            )
-                        }),
+                        .child(
+                            div()
+                                .flex()
+                                .size(rems(0.875))
+                                .items_center()
+                                .justify_center()
+                                .border_1()
+                                .border_color(style.foreground)
+                                .when(checked, |this| {
+                                    this.bg(style.foreground).child(
+                                        img(Arc::new(Image::from_bytes(
+                                            ImageFormat::Svg,
+                                            check_svg.to_vec(),
+                                        )))
+                                        .size(rems(0.625)),
+                                    )
+                                }),
+                        ),
                 )
             })
             .child(div().flex_1().min_w_0().overflow_hidden().child(content))
@@ -1882,6 +1890,7 @@ impl BlockNode {
                                     options,
                                     *checked,
                                     &node_cx.style,
+                                    window.line_height(),
                                 ));
                             }
                             BlockNode::List { .. } => {
@@ -1923,6 +1932,7 @@ impl BlockNode {
                                         options,
                                         *checked,
                                         &node_cx.style,
+                                        window.line_height(),
                                     ));
                                 } else {
                                     // Indent continuation blocks to align with a
