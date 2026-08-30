@@ -4810,6 +4810,57 @@ mod tests {
         });
     }
 
+    /// Unfolding by offset opens only the folds hiding that offset: sibling
+    /// folds stay closed, candidates survive, and an offset on a fold's
+    /// header line (still visible) leaves the fold alone.
+    #[gpui::test]
+    fn test_unfold_ranges_containing(cx: &mut TestAppContext) {
+        let view = InputView::<EditorMode>::new(cx);
+        let mut cx = VisualTestContext::from_window(view.window_handle.into(), cx);
+        let input = view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.set_value("a\nb\nc\nd\ne\nf\ng\nh", window, cx);
+                state.apply_highlighter_fold_candidates(
+                    vec![
+                        crate::input::FoldRange::new(0, 3),
+                        crate::input::FoldRange::new(4, 6),
+                    ],
+                    cx,
+                );
+                state.display_map.set_folded(0, true);
+                state.display_map.set_folded(4, true);
+            });
+        });
+
+        // An offset on the first fold's header line is visible, nothing opens.
+        cx.update(|_, cx| {
+            input.update(cx, |state, cx| {
+                let offset = state.text.line_start_offset(0);
+                state.unfold_ranges_containing(offset, cx);
+            });
+            input.read_with(cx, |state, _| {
+                assert!(state.display_map.is_folded_at(0));
+                assert!(state.display_map.is_folded_at(4));
+            });
+        });
+
+        // An offset hidden inside the first fold opens it, and only it.
+        cx.update(|_, cx| {
+            input.update(cx, |state, cx| {
+                let offset = state.text.line_start_offset(2);
+                state.unfold_ranges_containing(offset, cx);
+            });
+            input.read_with(cx, |state, _| {
+                assert!(!state.display_map.is_folded_at(0));
+                assert!(state.display_map.is_folded_at(4));
+                // The opened range is still a candidate for refolding.
+                assert!(state.display_map.is_fold_candidate(0));
+            });
+        });
+    }
+
     /// Losing focus hides the hover popover but keeps the decorations.
     ///
     /// Both used to be dropped by one call, so clicking away threw away
@@ -5207,6 +5258,32 @@ impl InputBaseState<crate::input::EditorMode> {
         }
         if !folding {
             self.display_map.clear_folds();
+        }
+        cx.notify();
+    }
+
+    /// Unfold any folded ranges that hide the given byte offset.
+    ///
+    /// Use this to reveal a position before acting on it (e.g. before
+    /// [`Self::set_cursor_position`], which stops at a fold boundary),
+    /// without touching folds elsewhere in the buffer. Fold candidates are
+    /// kept, so the opened ranges can be folded again from the gutter.
+    /// An offset on a fold's header line is already visible, so that fold
+    /// stays closed.
+    pub fn unfold_ranges_containing(&mut self, offset: usize, cx: &mut Context<Self>) {
+        let line = self.text.offset_to_point(offset).row;
+        let covering: Vec<usize> = self
+            .display_map
+            .folded_ranges()
+            .iter()
+            .filter(|fold| line > fold.start_line && line <= fold.end_line)
+            .map(|fold| fold.start_line)
+            .collect();
+        if covering.is_empty() {
+            return;
+        }
+        for start_line in covering {
+            self.display_map.set_folded(start_line, false);
         }
         cx.notify();
     }
